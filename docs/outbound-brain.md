@@ -12,6 +12,10 @@ Use exploration for new property segments, but measure incremental cost per veri
 
 Offer **Standard hours** and **24/7 analysis** after funding. 24/7 means background data analysis and permitted non-contact work can run outside ordinary hours. It may use more credits only within a separately shown and authorized daily cap. Outbound calling/texting obeys the contact's local legal window, consent status, suppression list, and channel policy regardless of the user's mode. Missing jurisdiction/consent information blocks the contact. Pause stops both research and outreach, except essential deadline notices and audit records.
 
+## Buyer outreach and channel release
+
+Seller-facing outreach must identify iCash X and its actual role as a prospective property buyer or authorized representative. It must not claim to sell a service to the owner or conceal the nature of the contact. The fact that iCash X seeks to buy property does not, by itself, authorize AI-generated voice calls or automated SMS. The FCC treats AI-generated voices as artificial/prerecorded voices under the TCPA. Keep AI cold dialing and automated texting disabled by default until counsel approves a jurisdiction and channel-specific policy, including the required consent or applicable exemption, number type, do-not-contact suppression, identification, local hours, and recording consent. A contact's opt-out immediately suppresses further outreach on the relevant channels. Re-evaluate the policy at every attempt; never infer permission from public owner data. Maintain evidence and a policy version for each decision.
+
 ## Photos, repairs, equity, and signers
 
 - Photos and seller-described condition produce an **estimated repair range with confidence and evidence links**; they do not prove structural condition or determine a final price by themselves.
