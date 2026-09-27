@@ -18,7 +18,7 @@ The Vercel and Railway projects still need to be linked to this repository. No v
 
 The `lib/outbound-brain.ts` allocator ranks verified closing and seller intent above cold prospecting, protects a follow-up reserve, applies a daily cap and gross-margin floor, and refuses unauthorized work. `lib/closing-workflow.ts` gates seller contracts, buyer terms, title verification, escrow deposit instructions, and close confirmation. These pure functions do not dispatch any operation by themselves. The production worker must reserve/settle customer credits transactionally with idempotency keys and verify every provider event.
 
-See `docs/cost-model-and-controls.md`, `docs/outbound-brain.md`, and `docs/closing-workflow.md`. The customer-facing draft is `/costs-and-disclosures`; counsel must approve final terms and market-specific rules before live outreach.
+See `docs/cost-model-and-controls.md`, `docs/outbound-brain.md`, `docs/property-data-benchmark.md`, `docs/conversion-and-experience.md`, and `docs/closing-workflow.md`. The customer-facing draft is `/costs-and-disclosures`; counsel must approve final terms and market-specific rules before live outreach.
 
 ## Verify
 

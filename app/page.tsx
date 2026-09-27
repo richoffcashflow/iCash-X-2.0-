@@ -23,7 +23,7 @@ export default function Home() {
       {view === "home" && <>
         <div className="status-line"><span className="status-dot" /> PAUSED · NO CREDITS ADDED</div>
         <h1>Let's get a<br />deal moving.</h1>
-        <p className="lead">Pick what you want. Add credits. iCash X handles the outbound work and shows you real progress.</p>
+        <p className="lead">Choose the deals you want. iCash X finds owners, talks to sellers, works offers within your limits, finds buyers, and coordinates closing. You see every real milestone.</p>
         <div className="setup-card">
           <span className="field-label">I WANT DEALS ON</span>
           <div className="type-options" role="group" aria-label="Property type">

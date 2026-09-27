@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import { nextDestination } from '../lib/entry-router.ts';
+const base={authenticated:true,setupComplete:true,balanceCents:10000,paused:false,activeOpportunities:2,needsUserAction:false,lowCreditThresholdCents:2500};
+assert.equal(nextDestination({...base,authenticated:false}).reason,'new');
+assert.equal(nextDestination({...base,balanceCents:0}).reason,'fund');
+assert.equal(nextDestination({...base,balanceCents:1800}).reason,'fund');
+assert.equal(nextDestination({...base,balanceCents:1800,needsUserAction:true,nextActionUrl:'/opportunities/42'}).path,'/opportunities/42');
+assert.equal(nextDestination({...base,paused:true}).reason,'resume');
+assert.equal(nextDestination({...base,nextActionUrl:'//evil.example',needsUserAction:true}).reason,'working');
+console.log('returning-user routing checks passed');
