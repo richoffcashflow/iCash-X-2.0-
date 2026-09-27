@@ -1,6 +1,6 @@
 # Seller to title to closing — operating specification
 
-The user chooses Houses or Land and a market, funds credits, approves a daily limit, and can Pause at any time. iCash X uses its own provider accounts. No buyer or seller activity starts until production gates pass.
+The user chooses Houses or Land, provides a legal name or company name for contract preparation, funds credits, approves a daily limit, and can Pause at any time. Derive an initial market from verified checkout geography where possible; request one short confirmation only if ambiguous. iCash X uses its own provider accounts. No buyer or seller activity starts until production gates pass.
 
 ## Stages
 
@@ -27,3 +27,7 @@ Prioritize a real seller answer, due follow-up, signed contract, verified buyer 
 ## Required reviews
 
 Market-specific wholesaling/assignment rules, buyer closing-cost allocation, deposit language, escrow custody, AI voice and telemarketing consent, state recording consent, title company agreements, and privacy/retention. These rules cannot be replaced by a generic disclaimer.
+
+## Contract preference at the milestone
+
+When a genuine seller contract is ready, ask once: **Review before sending** or **Prepare and send within my approved terms**. The second choice authorizes preparation and sending only. It never authorizes the system to forge a signature or exceed offer limits. Obtain the actual authorized signer’s e-signature through the approved signing flow. Store the legal individual/company name as entered, verify signing authority for entities, and let the title agent confirm vesting before closing.
