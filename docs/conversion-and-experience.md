@@ -2,9 +2,11 @@
 
 ## First visit
 
-Ad → one-screen Houses/Land and contract name → a clear funding checkout with exact customer credit rates, proposed $100 first pack, daily limit, disclosures, and payment → authenticated workspace → automatic start after all platform preflight checks pass. Derive the first market from verified billing geography or targeting only as a suggestion; ask one short confirmation if ambiguous. No lead list, vendor API key, campaign, script, CRM, or prompt setup.
+Ad → one-screen Houses/Land → free, plainly labeled fictional simulation using the actual ranking function → funding choice with exact customer credit rates, proposed $100 first pack, daily limit, disclosures, and payment → authenticated workspace → automatic start after all platform preflight checks pass. Ask for legal contract identity only when needed to issue a real agreement, not before the free experience. Derive the first market from verified billing geography or targeting only as a suggestion; ask one short confirmation if ambiguous. No lead list, vendor API key, campaign, script, CRM, or prompt setup.
 
-The free preview should demonstrate actual analysis with a small capped allowance when data licensing and provider cost allow it. Label a sample walkthrough as an example. Do not invent live outreach, earnings, or seller interest. Collect only essential details before checkout; contract preference appears when a real contract is ready.
+The free simulation must repeat **SIMULATION / NOT A LIVE DEAL** on the card and explain that the seller, agreement, buyer, and $20,000 gross spread are fictional. The ranking score runs real deterministic product logic over illustrative data. It is not a payout claim. Once provider rights and costs are known, test a small live research allowance after account creation, with no paid calls. Do not invent live activity. Collect only essential details before checkout; contract preference appears when a real contract is ready.
+
+The forward path has one primary action per stage. Back is available, but no global menu distracts from the free experience. Save the selected property type when authenticated; only a trusted server-side account snapshot can route a returning visitor into activity, a needed decision, resume, or a low-credit funding step. A browser ad parameter cannot identify the user.
 
 ## Returning ad visitor
 
@@ -17,6 +19,8 @@ Show truthful milestones: seller replied, owner/signers confirmed, offer reviewe
 ## Optimization
 
 Track ad click, content view, registration, first property analysis, funding, activation, meaningful seller conversation, qualified seller, contract, buyer, title, and close as separate events. Send Meta Purchase only for a settled credit payment with its true amount and event ID deduplication. Optimize on actual gross profit and downstream closed-deal cohorts as data matures, with holdouts for onboarding, pack, and message tests. Do not make the product spend credits merely to improve engagement or ad metrics.
+
+The fictional free run is measured as `simulation_started` and `simulation_completed`, separate from `first_property_analyzed` and every real transaction milestone. Never send a simulated contract, buyer, closing, or gross spread as a Meta conversion. Funnel optimization should compare free-run completion, registration, first funded purchase, genuine automation activation, retained credit use, and actual gross profit by cohort. Store attribution only where permitted and join conversion events to verified account/payment records before server-side reporting.
 
 ## Failure paths
 

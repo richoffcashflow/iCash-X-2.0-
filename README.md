@@ -4,7 +4,7 @@ Outbound-only wholesaling platform. The customer chooses Houses or Land, enters 
 
 ## State of this repository
 
-This is the Vercel-ready mobile app shell plus tested pure credit allocation and closing workflow gates. It has no sign-up, payment processing, live property data, calling, messaging, contracts, or title integrations yet. The preview makes no charges or outreach and shows no fabricated activity. Do not point paid ads at it as a working product.
+This is a Vercel-deployed guided free simulation plus tested pure credit allocation and closing workflow gates. The sample deal and $20,000 gross spread are explicitly fictional; the ranking score uses real deterministic code. It has no sign-up, payment processing, live property data, calling, messaging, contracts, or title integrations yet. The preview makes no charges or outreach and shows no fabricated live activity. Do not point paid ads at it as a working autonomous product.
 
 ## Deployments
 
@@ -12,7 +12,7 @@ This is the Vercel-ready mobile app shell plus tested pure credit allocation and
 - **Railway**: durable worker for property ranking, outreach, follow-up, buyer matching, and title/closing coordination. Worker must be restart safe, idempotent, and fail closed.
 - **Database**: tenant-scoped Postgres records, customer credit ledger, provider cost ledger, consent/suppression, opportunity state, event outbox, audit logs, and contracts.
 
-The Vercel and Railway projects still need to be linked to this repository. No vendor credentials belong in git or browser code.
+Vercel's `i-cash-x-2-0` project and Railway's `iCash X / worker` service are linked to this repository. Railway runs a standby health endpoint with no job dispatch. There is not yet a shared queue or database connecting the web app to the worker. No vendor credentials belong in git or browser code.
 
 ## Operational controls
 
