@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import { allocateCredits } from '../lib/outbound-brain.ts';
+const now = Date.now();
+const action = (id, stage, charge=100) => ({id,stage,customerChargeCents:charge,estimatedProviderCostCents:20,evidenceAt:now,dueAt:now,permitted:true});
+const base = {balanceCents:10000,fundedAmountCents:10000,userDailyLimitCents:2000,spentTodayCents:0,now};
+const plan = allocateCredits({...base,actions:[action('cold','prospecting'),action('warm','seller_interested')]});
+assert.equal(plan.dailyLimitCents,1200);
+assert.equal(plan.selected[0].id,'warm');
+assert.ok(plan.selected.reduce((n,a)=>n+a.reservedCents,0) <= 1200);
+assert.equal(allocateCredits({...base,spentTodayCents:1200,actions:[action('one','closing')]}).selected.length,0);
+assert.equal(allocateCredits({...base,actions:[{...action('blocked','closing'),permitted:false}]}).selected.length,0);
+assert.equal(allocateCredits({...base,actions:[{...action('loss','closing'),estimatedProviderCostCents:80}]}).skipped[0].reason,'below margin floor');
+assert.equal(allocateCredits({...base,balanceCents:2600,actions:[action('cold','prospecting',200),action('hot','closing',200)]}).selected.some(a=>a.id==='cold'),false);
+assert.equal(allocateCredits({...base,actions:[action('same','closing'),action('same','closing')]}).selected.length,1);
+assert.throws(()=>allocateCredits({...base,balanceCents:-1,actions:[]}));
+console.log('credit pacing checks passed');
