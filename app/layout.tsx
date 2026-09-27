@@ -1,4 +1,4 @@
 import type { Metadata } from "next";
-import "./funnel.css";
-export const metadata: Metadata = { title: "iCash X | AI for Real Estate Wholesaling", description: "See how an AI wholesaling operation can find opportunities, work permitted seller conversations, and move deals toward closing. Try the free simulation.", icons: { icon: "/favicon.svg" } };
+import "./bot-funnel.css";
+export const metadata: Metadata = { title: "iCash X | Real Estate Wholesaling, Made Easy", description: "Try the iCash X AI wholesaling bot in a free sandbox. See how it finds opportunities, works permitted seller conversations, and moves deals toward closing.", icons: { icon: "/favicon.svg" } };
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="en"><body>{children}</body></html>; }

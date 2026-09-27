@@ -1,10 +1,10 @@
 # iCash X
 
-Outbound-only wholesaling platform. The customer chooses Houses or Land, enters a legal individual or company name, funds iCash X credits, approves a daily spending limit, and can pause work. The initial market is inferred from verified checkout geography where possible, with one confirmation only if ambiguous. iCash X owns and operates the DealMachine, Twilio, Blooio, and ElevenLabs integrations. Customers do not configure vendor APIs, lists, campaigns, or prompts.
+Outbound-first wholesaling platform. The customer tries a free bot sandbox, funds iCash X credits, approves a daily spending limit, and can pause work. The bot searches houses and land without asking the customer to select a type. The initial market is inferred from verified checkout geography where possible, with one confirmation only if ambiguous. iCash X owns and operates the DealMachine, Twilio, Blooio, and ElevenLabs integrations. Customers do not configure vendor APIs, lists, campaigns, or prompts.
 
 ## State of this repository
 
-This is a Vercel-deployed guided free simulation plus tested pure credit allocation and closing workflow gates. The sample deal and $20,000 gross spread are explicitly fictional; the ranking score uses real deterministic code. It has no sign-up, payment processing, live property data, calling, messaging, contracts, or title integrations yet. The preview makes no charges or outreach and shows no fabricated live activity. Do not point paid ads at it as a working autonomous product.
+This is a Vercel-deployed guided free AI bot sandbox plus tested pure credit allocation and closing workflow gates. The sample deal and $20,000 gross spread are explicitly fictional; the ranking score uses real deterministic code. It has no sign-up, payment processing, live property data, calling, messaging, contracts, or title integrations yet. The preview makes no charges or outreach and shows no fabricated live activity. Do not point paid ads at it as a working autonomous product.
 
 ## Deployments
 

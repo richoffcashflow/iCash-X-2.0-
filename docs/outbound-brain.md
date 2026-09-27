@@ -1,6 +1,6 @@
 # Outbound brain — product and worker specification
 
-The customer chooses Houses or Land and funds an iCash X balance. A verified billing ZIP or market signal can suggest the first market; ask one short question only when the market is ambiguous. iCash X selects records and decides the next action. The customer does not manage lists, campaigns, prompts, or providers.
+The customer funds an iCash X balance. The bot searches both houses and land, selecting records and deciding the next action. A verified billing ZIP or market signal can suggest the first market; ask one short question only when the market is ambiguous. The customer does not manage lists, campaigns, prompts, or providers.
 
 ## Optimize for closed deals, not activity volume
 

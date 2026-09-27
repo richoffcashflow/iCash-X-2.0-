@@ -1,6 +1,6 @@
 # Seller to title to closing — operating specification
 
-The user chooses Houses or Land, provides a legal name or company name for contract preparation, funds credits, approves a daily limit, and can Pause at any time. Derive an initial market from verified checkout geography where possible; request one short confirmation only if ambiguous. iCash X uses its own provider accounts. No buyer or seller activity starts until production gates pass.
+The bot searches houses and land. The user funds credits, approves a daily limit, and can Pause at any time. Request a legal name or company name only when a real contract is being prepared. Derive an initial market from verified checkout geography where possible; request one short confirmation only if ambiguous. iCash X uses its own provider accounts. No buyer or seller activity starts until production gates pass.
 
 ## Stages
 
