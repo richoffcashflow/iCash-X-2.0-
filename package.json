@@ -9,7 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --experimental-strip-types tests/outbound-brain.test.mjs && node --experimental-strip-types tests/closing-workflow.test.mjs"
+    "test": "node --experimental-strip-types tests/outbound-brain.test.mjs && node --experimental-strip-types tests/closing-workflow.test.mjs && node --experimental-strip-types tests/prospect-policy.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import { rankProspect, allowedWork } from '../lib/prospect-policy.ts';
+const now = Date.now();
+const e = (value,confidence=0.9,updatedAt=now) => ({value,confidence,updatedAt});
+const base = {id:'p1',equityRatio:e(.75),repairSeverity:e(.8),sellerIntent:e(.9),buyerFit:e(.8),requiredSignersIdentified:true,requiredSignersAligned:true,titleReviewed:true};
+assert.equal(rankProspect(base,now).canPrepareOffer,true);
+assert.equal(rankProspect({...base,requiredSignersAligned:false},now).canPrepareOffer,false);
+assert.equal(rankProspect({...base,equityRatio:e(.8,.2)},now).canPrepareOffer,false);
+assert.ok(rankProspect({...base,sellerIntent:e(.9,.9,now-365*86400000)},now).score < rankProspect(base,now).score);
+assert.deepEqual(allowedWork('always_analyzing',true,false,false),{research:true,outreach:false});
+assert.deepEqual(allowedWork('always_analyzing',true,true,true),{research:false,outreach:false});
+console.log('prospect and schedule checks passed');

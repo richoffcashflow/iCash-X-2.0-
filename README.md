@@ -1,6 +1,6 @@
 # iCash X
 
-Outbound-only wholesaling platform. The customer chooses Houses or Land and a market, funds iCash X credits, approves a daily spending limit, and can pause work. iCash X owns and operates the DealMachine, Twilio, Blooio, and ElevenLabs integrations. Customers do not configure vendor APIs, lists, campaigns, or prompts.
+Outbound-only wholesaling platform. The customer chooses Houses or Land, enters a legal individual or company name, funds iCash X credits, approves a daily spending limit, and can pause work. The initial market is inferred from verified checkout geography where possible, with one confirmation only if ambiguous. iCash X owns and operates the DealMachine, Twilio, Blooio, and ElevenLabs integrations. Customers do not configure vendor APIs, lists, campaigns, or prompts.
 
 ## State of this repository
 
@@ -18,8 +18,8 @@ The Vercel and Railway projects still need to be linked to this repository. No v
 
 The `lib/outbound-brain.ts` allocator ranks verified closing and seller intent above cold prospecting, protects a follow-up reserve, applies a daily cap and gross-margin floor, and refuses unauthorized work. `lib/closing-workflow.ts` gates seller contracts, buyer terms, title verification, escrow deposit instructions, and close confirmation. These pure functions do not dispatch any operation by themselves. The production worker must reserve/settle customer credits transactionally with idempotency keys and verify every provider event.
 
-See `docs/cost-model-and-controls.md` and `docs/closing-workflow.md`. The customer-facing draft is `/costs-and-disclosures`; counsel must approve final terms and market-specific rules before live outreach.
+See `docs/cost-model-and-controls.md`, `docs/outbound-brain.md`, and `docs/closing-workflow.md`. The customer-facing draft is `/costs-and-disclosures`; counsel must approve final terms and market-specific rules before live outreach.
 
 ## Verify
 
-`npm test` checks pacing, authorization, margin, duplicate, reserve, pause, title, deposit, and close gates. `npm run build` validates the Next.js app.
+`npm test` checks pacing, authorization, margin, duplicate, reserve, pause, title, deposit, prospect ranking, and schedule gates. `npm run build` validates the Next.js app.
