@@ -77,7 +77,7 @@ export function allocateCredits(input: AllocationInput): Allocation {
     else if (a.estimatedProviderCostCents > Math.floor(a.customerChargeCents * (1 - p.minimumGrossMarginFraction))) reason = "below margin floor";
     else if (selected.length >= p.maxQueuedActions) reason = "queue limit";
     else if (a.customerChargeCents > remaining) reason = "daily credit limit";
-    else if (a.stage === "prospecting" && input.balanceCents - input.spentTodayCents - selected.reduce((sum,s) => sum + s.reservedCents,0) - a.customerChargeCents < protectedForActiveDealsCents) reason = "protected follow-up reserve";
+    else if (a.stage === "prospecting" && input.balanceCents - selected.reduce((sum,s) => sum + s.reservedCents,0) - a.customerChargeCents < protectedForActiveDealsCents) reason = "protected follow-up reserve";
     else if (a.stage === "prospecting" && prospectingUsed + a.customerChargeCents > prospectingBudget) reason = "prospecting share";
     if (reason) { skipped.push({ id: a.id, reason }); continue; }
     seen.add(a.id);
