@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import { nextClosingStage } from '../lib/closing-workflow.ts';
+const base = {outreachPaused:false,sellerAgreementApproved:true,sellerContractSigned:true,buyerAgreementApproved:true,buyerAgreementSigned:true,buyerClosingCostsInSignedTerms:true,depositTermsInSignedAgreement:true,escrowAgentVerified:true,titleInstructionsVerified:true,paymentLinkFromEscrow:true,depositConfirmedByEscrow:true,closeConfirmedByTitle:true};
+assert.equal(nextClosingStage('seller_interest','draft_seller_contract',base),'seller_contract_draft');
+assert.equal(nextClosingStage('title_opened','send_deposit_instructions',base),'deposit_instructions_sent');
+assert.throws(()=>nextClosingStage('title_opened','send_deposit_instructions',{...base,paymentLinkFromEscrow:false}));
+assert.throws(()=>nextClosingStage('title_opened','send_deposit_instructions',{...base,outreachPaused:true}));
+assert.throws(()=>nextClosingStage('buyer_terms_review','buyer_signed',{...base,buyerClosingCostsInSignedTerms:false}));
+assert.throws(()=>nextClosingStage('closing_scheduled','confirm_closed',{...base,closeConfirmedByTitle:false}));
+console.log('closing workflow checks passed');
