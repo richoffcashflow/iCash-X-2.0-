@@ -20,7 +20,7 @@ console.log('Equity, unknown debt, lien indicators and overlapping balances pass
 assert.equal(gate(screen({},null),{sellerOfferCents:10000000,sellerCostReserveCents:0,checkedAt:1}).status,'hold');
 assert.equal(gate(screen({total_estimated_loan_balance:150000},null),{sellerOfferCents:10000000,sellerCostReserveCents:0,checkedAt:1}).status,'hold');
 assert.equal(gate(screen({total_estimated_loan_balance:50000},null),{sellerOfferCents:10000000,sellerCostReserveCents:null,checkedAt:1}).status,'hold');
-assert.equal(gate(screen({total_estimated_loan_balance:50000},null),{sellerOfferCents:10000000,sellerCostReserveCents:500000,checkedAt:1}).status,'eligible');
+assert.equal(gate(screen({estimated_value:200000,total_estimated_loan_balance:50000},null),{sellerOfferCents:10000000,sellerCostReserveCents:500000,checkedAt:1}).status,'eligible');
 import {allocateCredits} from '../lib/outbound-brain.ts';
 import {costCategories} from '../lib/cost-guard.ts';
 const base={companyAvailableBudgetCents:10000,companyProtectedReserveCents:1000,balanceCents:100000,fundedAmountCents:100000,userDailyLimitCents:10000,spentTodayCents:0,now:100000000,actions:[]};
@@ -30,3 +30,13 @@ assert.equal(allocateCredits({...base,actions:[{...action,financialCheck:{status
 assert.equal(allocateCredits({...base,actions:[{...action,financialCheck:{status:'eligible',checkedAt:1,reason:'stale'}}]}).selected.length,0);
 assert.equal(allocateCredits({...base,actions:[{...action,financialCheck:{status:'eligible',checkedAt:base.now,reason:'checked'}}]}).selected.length,1);
 console.log('Pre-call financial gate and credit allocation block failed, absent and stale screening');
+
+import {minimumEquityGate} from '../lib/equity-screen.ts';
+assert.equal(minimumEquityGate({estimated_equity_percentage:70}).eligible,true);
+assert.equal(minimumEquityGate({estimated_equity_percentage:69.999}).eligible,false);
+assert.equal(minimumEquityGate({estimated_value:100000,total_estimated_loan_balance:30000}).eligible,true);
+assert.equal(minimumEquityGate({estimated_value:100000,total_estimated_loan_balance:30001}).eligible,false);
+assert.equal(minimumEquityGate({estimated_equity_percentage:90,estimated_value:100000,total_estimated_loan_balance:60000}).eligible,false);
+assert.equal(minimumEquityGate({}).eligible,false);
+assert.equal(minimumEquityGate({estimated_equity_percentage:'80'}).eligible,false);
+assert.equal(minimumEquityGate({estimated_equity_percentage:101}).eligible,false);

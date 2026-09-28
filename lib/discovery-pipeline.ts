@@ -1,12 +1,12 @@
 /** Bounded property-only acquisition. Dependencies are server-owned; never accept rates from a browser. */
-export const discoveryFields=['dm_property_id','full_address','address','city','state','zip','estimated_value','estimated_equity_amount','total_estimated_loan_balance','has_active_lien','has_hoa_lien','num_total_active_liens','num_total_open_liens','total_open_lien_amount','is_tax_delinquent','is_free_and_clear','estimated_repair_cost','estimated_repair_cost_low','estimated_repair_cost_high','building_condition','living_area_sqft','num_bedrooms','num_bathrooms','year_built'];
+export const discoveryFields=['dm_property_id','full_address','address','city','state','zip','estimated_value','estimated_equity_percentage','estimated_equity_amount','total_estimated_loan_balance','has_active_lien','has_hoa_lien','num_total_active_liens','num_total_open_liens','total_open_lien_amount','is_tax_delinquent','is_free_and_clear','estimated_repair_cost','estimated_repair_cost_low','estimated_repair_cost_high','building_condition','living_area_sqft','num_bedrooms','num_bathrooms','year_built'];
 export type DiscoveryConfig={zip:string;page:number;perPage:number;unitCostMicros:number;quotedDataCostMicros:number};
 type Dependencies={request:(body:object)=>Promise<unknown>;reserveAndClaim:()=>Promise<boolean>;persist:(result:DiscoveryResult)=>Promise<void>};
 export type DiscoveryResult={creditsUsed:number;peopleCredits:number;estimatedCredits:number;hasNextPage:boolean;fetchedAt:string;rows:Record<string,unknown>[]};
 const integer=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 export async function discoverPage(c:DiscoveryConfig,d:Dependencies){
  if(!/^\d{5}$/.test(c.zip)||!integer(c.page)||c.page<1||!integer(c.perPage)||c.perPage<1||c.perPage>10||!integer(c.unitCostMicros)||c.unitCostMicros===0||!integer(c.quotedDataCostMicros))throw new Error('DISCOVERY_CONFIGURATION_INVALID');
- const body={locations:[{type:'zip_code',code:c.zip}],anchor:'properties',contact_audience:'none',filters:[{filter_id:'property_type',operator:'contains_any',value:['Single Family']}],fields:discoveryFields,page:c.page,per_page:c.perPage};
+ const body={locations:[{type:'zip_code',code:c.zip}],anchor:'properties',contact_audience:'none',filters:[{filter_id:'property_type',operator:'contains_any',value:['Single Family']},{filter_id:'equity_percent',operator:'greater_than_or_equal',value:70}],fields:discoveryFields,page:c.page,per_page:c.perPage};
  const estimate=await d.request({...body,estimate_cost:true}) as {estimated_credits?:{this_page?:unknown;breakdown?:{people?:unknown}}};
  const credits=estimate?.estimated_credits?.this_page;
  if(!integer(credits)||credits>c.perPage||estimate?.estimated_credits?.breakdown?.people!==0)throw new Error('DISCOVERY_ESTIMATE_INVALID');

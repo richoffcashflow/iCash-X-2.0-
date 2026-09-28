@@ -5,6 +5,7 @@ const raw={data:[{dm_property_id:'prop_123',address:'Fixture only',city:'Example
 let calls=[],saved,claimed=false;
 const deps={request:async b=>{calls.push(b);if(b.estimate_cost)return {estimated_credits:{this_page:5,breakdown:{people:0}}};assert.equal(claimed,true);return raw;},reserveAndClaim:async()=>{claimed=true;return true;},persist:async r=>{saved=r;}};
 assert.equal((await discoverPage(c,deps)).status,'screening_queued');
+assert.deepEqual(calls[0].filters.find(f=>f.filter_id==='equity_percent'),{filter_id:'equity_percent',operator:'greater_than_or_equal',value:70});
 assert.equal(calls.length,2);assert.equal(calls[0].contact_audience,'none');assert.deepEqual({...calls[0],estimate_cost:false},calls[1]);assert.equal(saved.rows[0].contacts,undefined);assert.equal(saved.creditsUsed,1);
 claimed=false;calls=[];await assert.rejects(discoverPage({...c,quotedDataCostMicros:49999},deps),{message:'DISCOVERY_RATE_TOO_LOW'});assert.equal(claimed,false);assert.equal(calls.length,1);
 calls=[];assert.equal((await discoverPage(c,{...deps,reserveAndClaim:async()=>false})).status,'held');assert.equal(calls.length,1);

@@ -21,3 +21,7 @@ The existing Railway worker processes the saved snapshots. Qualified preliminary
 Production build; mock-provider tests proving estimate-before-reserve-before-fetch, no contact requests, no timeout retries, cost holds and overrun handling; rollback-only SQL tests proving receipt/queue/cursor atomic persistence, duplicate protection, request limit and service-only access. No paid provider request was made.
 
 Sources: https://api.docs.dealmachine.com/concepts/searching ; https://api.docs.dealmachine.com/concepts/credits ; https://api.docs.dealmachine.com/concepts/response-format . Official llms-full snapshot reviewed for endpoint request and receipt schemas.
+
+## High-equity acquisition policy
+
+Search now uses documented `equity_percent`, `greater_than_or_equal`, 70 and requests `estimated_equity_percentage`. Estimate and paid requests use the same filter. All returned property receipts are retained for billing even if a record later fails screening. Screening and owner-enrichment rechecks use the lowest available equity estimate from provider percentage, equity/value, or (value-debt)/value. Unknown, invalid and below-70% estimates hold further enrichment/call eligibility. Exactly 70% passes this filter only; repairs, assignment fee, seller reserve, liens, permissions and cost gates still apply. This is separate from the 70%-of-ARV offer formula. Before enabling an existing discovery configuration, start a fresh revision/page cursor for the changed filter. No paid queries were used for verification.

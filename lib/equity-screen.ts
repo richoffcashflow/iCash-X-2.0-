@@ -2,6 +2,15 @@
 function money(v:unknown,signed=false){if(typeof v!=='number'||!Number.isFinite(v)||(!signed&&v<0))return null;const n=Math.round(v*100);return Number.isSafeInteger(n)?n:null;}
 function bool(v:unknown){return typeof v==='boolean'?v:null;}
 function count(v:unknown){return typeof v==='number'&&Number.isSafeInteger(v)&&v>=0?v:null;}
+/** Use the lowest available estimate; never round a sub-70% value up to eligibility. */
+export function minimumEquityGate(d:Record<string,unknown>){
+ const pct=d.estimated_equity_percentage;const values:number[]=[];
+ if(pct!==undefined&&pct!==null){if(typeof pct!=='number'||!Number.isFinite(pct)||pct>100)return {eligible:false,percent:null,reason:'Invalid provider equity percentage.'};values.push(pct);}
+ const value=money(d.estimated_value),equity=money(d.estimated_equity_amount,true),loan=money(d.total_estimated_loan_balance);
+ if(value!==null&&value>0){if(equity!==null){if(equity>value)return {eligible:false,percent:null,reason:'Equity exceeds estimated property value.'};values.push(equity/value*100);}if(loan!==null)values.push((value-loan)/value*100);}
+ const percent=values.length?Math.min(...values):null;
+ return {eligible:percent!==null&&percent>=70,percent,reason:percent===null?'Equity percentage is unknown; hold before enrichment.':percent<70?'Estimated equity is below the 70% acquisition minimum.':'Estimated equity meets the 70% acquisition minimum.'};
+}
 export function screenEquity(d:Record<string,unknown>,buyerCeilingCents:number|null){
  const equityCents=money(d.estimated_equity_amount,true),valueCents=money(d.estimated_value);
  const reportedLoanCents=money(d.total_estimated_loan_balance);
@@ -24,7 +33,7 @@ export function screenEquity(d:Record<string,unknown>,buyerCeilingCents:number|n
  if(taxDelinquent===true)reasons.push('Provider reports delinquent taxes; obtain current amounts.');
  if(loanCents===null)reasons.push('Mortgage balance is unknown, not zero.');
  reasons.push('Confirm actual payoff, other debts, seller proceeds and all required owners with title before closing.');
- return {status,equityCents,estimatedLoanBalanceCents:loanCents,loanSource:reportedLoanCents!==null?'reported_estimate':derivedLoanCents!==null?'derived_from_value_minus_equity':'unknown',
+ return {status,equityMinimum:minimumEquityGate(d),equityCents,estimatedLoanBalanceCents:loanCents,loanSource:reportedLoanCents!==null?'reported_estimate':derivedLoanCents!==null?'derived_from_value_minus_equity':'unknown',
   lienAmountCents,activeLiens,openLiens,activeLien,hoaLien,taxDelinquent,freeAndClear,
   // Lien totals may include mortgages: never add overlapping totals automatically.
   lienAndMortgageTotalsCombined:false,titleStatus:'unverified' as const,payoffVerified:false as const,
@@ -40,6 +49,7 @@ export function sellerCallFinancialGate(screen:ReturnType<typeof screenEquity>,i
  let reason='';
  if(!Number.isFinite(input.checkedAt))throw new Error('Invalid screening time');
  if(screen.status==='conflicting_data')reason='Resolve conflicting property records before calling.';
+ else if(!screen.equityMinimum.eligible)reason=screen.equityMinimum.reason;
  else if(!money(input.sellerOfferCents)||input.sellerOfferCents===0)reason='No viable seller offer budget after repairs and assignment fee.';
  else if(screen.estimatedLoanBalanceCents===null)reason='Verify missing debt data before spending on a call.';
  else if(!money(input.sellerCostReserveCents))reason='Set the seller closing-cost reserve before calling.';
