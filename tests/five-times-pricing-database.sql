@@ -16,6 +16,23 @@ begin
   perform public.icash_reserve_operation(a,k||':low',low_rate,now()+interval '1 hour');
   raise exception 'TEST_EXPECTED_MARGIN_HOLD';
  exception when others then if sqlerrm<>'Margin floor' then raise; end if; end;
+ -- Exhausted available balance blocks another job before provider dispatch.
+ update public.icash_wallets set balance_cents=60 where account_id=a;
+ begin
+  perform public.icash_reserve_operation(a,k||':empty',r,now()+interval '1 hour');
+  raise exception 'TEST_EXPECTED_CREDIT_HOLD';
+ exception when others then if sqlerrm<>'Insufficient credits' then raise; end if; end;
+ if (select reserved_micros from public.icash_operating_budget where id=1)<>120000 then raise exception 'Rejected work leaked company reserve'; end if;
+ if not public.icash_claim_operation(k) then raise exception 'Prepaid operation should still be claimable'; end if;
+ perform public.icash_settle_operation(k,60,120000,'fixture:zero-balance');
+ if (select balance_cents<>0 or reserved_cents<>0 from public.icash_wallets where account_id=a) then raise exception 'Expected exact zero wallet'; end if;
+ begin
+  perform public.icash_reserve_operation(a,k||':zero',r,now()+interval '1 hour');
+  raise exception 'TEST_EXPECTED_ZERO_HOLD';
+ exception when others then if sqlerrm<>'Insufficient credits' then raise; end if; end;
+ if public.icash_claim_operation(k) then raise exception 'Settled work must not dispatch twice'; end if;
+ -- Restore fixture funding for the separate company liquidity assertion.
+ update public.icash_wallets set balance_cents=10000 where account_id=a;
  -- No daily dollar cap still preserves total company liquidity.
  update public.icash_operating_budget set funded_micros=1120000 where id=1;
  begin
