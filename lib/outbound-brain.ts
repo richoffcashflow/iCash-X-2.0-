@@ -11,6 +11,8 @@ export type CandidateAction = {
   estimatedProviderCostCents: number;
   evidenceAt: number; // UTC timestamp from a real event
   dueAt: number;
+  operation?: 'seller_call' | 'other';
+  financialCheck?: {status:'eligible'|'hold';checkedAt:number;reason:string}; // server-authored, persisted underwriting result
   permitted: boolean; // policy, consent, quiet hours, and user authorization already checked
 };
 export type PacingPolicy = {
@@ -72,6 +74,7 @@ export function allocateCredits(input: AllocationInput): Allocation {
     let reason = "";
     if (!a.id || seen.has(a.id)) reason = "duplicate or missing action ID";
     else if (!integerCents(a.customerChargeCents) || a.customerChargeCents === 0 || !integerCents(a.estimatedProviderCostCents) || !Number.isFinite(a.evidenceAt) || !Number.isFinite(a.dueAt)) reason = "invalid estimate";
+    else if (a.operation === 'seller_call' && (!a.financialCheck || a.financialCheck.status !== 'eligible' || !Number.isFinite(a.financialCheck.checkedAt) || a.financialCheck.checkedAt > input.now || input.now - a.financialCheck.checkedAt > 86400000)) reason = "financial screening required before seller call";
     else if (!a.permitted) reason = "not permitted";
     else if (a.dueAt > input.now) reason = "not due";
     else if (a.estimatedProviderCostCents > Math.floor(a.customerChargeCents * (1 - p.minimumGrossMarginFraction))) reason = "below margin floor";

@@ -110,3 +110,15 @@ At the operator's request, `estimated_value` is used as the preliminary ARV inpu
 Open “Use a real property” on the private test page, enter a known property ID, and start the test. Verify that the speaker and address match, ask about repairs, and inspect the saved conversation and callback. The browser context path is separate from imported phone calls: importing does not attach property context retroactively or update the provider agent prompt. No sellers, SMS, contracts or actual callbacks are triggered.
 
 Automated tests use explicit fixtures to cover ID mismatch, missing/malformed values, conservative repair ranges, ARV mapping, offer gating, no-contact requests and no retry after a network failure. A live provider conversation with this context still needs owner acceptance testing.
+
+
+### Equity and title screening
+
+Private property lookups request documented mortgage-balance, active/HOA lien, lien-count, lien-amount, tax-delinquency and free-and-clear fields alongside equity. Missing and malformed flags remain unknown. Negative equity is retained. An explicit mortgage estimate takes precedence over a separately labeled value-minus-equity fallback. Comparing debt with the preliminary ceiling flags review before further spending; it does not approve or reject a deal. This priority is reference context, not yet a wired live acquisition spending gate.
+
+Lien totals are kept separate from mortgage balances to avoid double counting. A false lien flag or a free-and-clear estimate never establishes clear title. Actual payoff, closing adjustments, ownership/required signers and lien releases remain unverified. The private voice reference includes natural qualification questions; it cannot order title or settle a lien. Older saved sessions do not acquire these checks retroactively.
+
+
+### Pre-call spending gate
+
+`sellerCallFinancialGate` accepts a server-computed seller offer budget (after assignment fee) and seller closing-cost reserve. It holds missing debt, conflicting records, unbudgeted liens/taxes, missing cost reserves and a debt shortfall. It never approves contracts or establishes clean title. `allocateCredits` refuses actions tagged `seller_call` unless their persisted financial check is eligible and at most 24 hours old; missing, future or stale checks reserve no credits. Live dispatch is still disabled and must identify every real seller call with this operation type and recompute checks before dispatch. The existing configurable provider margin floor and daily pacing apply afterward. These are estimated provider margins, not verified all-in profitability.
