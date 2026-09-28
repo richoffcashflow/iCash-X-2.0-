@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {voiceResult} from '../lib/voice-result.ts';
+import {elevenRequest,voiceTestAgent} from '../lib/elevenlabs.ts';
+const now=Date.parse('2026-09-28T15:00:00Z');
+const expected={conversationId:'conv_test',agentId:'agent_test'};
+const fields={callback_requested:true,callback_confirmed:true,callback_at:'2026-09-29T14:00:00-05:00',callback_timezone:'America/Chicago',callback_quote:'Yes, September 29 at 2 PM Central.',opted_out:false};
+function sample(override={}){return {conversation_id:expected.conversationId,agent_id:expected.agentId,status:'done',transcript:[{role:'user',message:fields.callback_quote}],analysis:{transcript_summary:'Requested a callback.',data_collection_results:Object.fromEntries(Object.entries({...fields,...override}).map(([k,value])=>[k,{value}]))},metadata:{cost:100,call_duration_secs:20}};}
+assert.equal(voiceResult(sample(),expected,now).dueAt,'2026-09-29T19:00:00.000Z');
+assert.equal(voiceResult(sample(),expected,now).providerCostUsd,null);
+for(const invalid of [{callback_confirmed:false},{callback_confirmed:'true'},{callback_at:'2026-09-29T14:00:00-06:00'},{callback_at:'2026-09-29T14:00:00'},{callback_at:'2026-02-30T14:00:00-05:00'},{callback_timezone:'invalid'},{callback_quote:'invented evidence'},{callback_at:'2026-09-27T14:00:00-05:00'}])assert.equal(voiceResult(sample(invalid),expected,now).callbackStatus,'needs_confirmation');
+assert.equal(voiceResult(sample({opted_out:true}),expected,now).callbackStatus,'blocked_opt_out');
+assert.equal(voiceResult(sample({callback_requested:false}),expected,now).callbackStatus,'not_requested');
+assert.equal(voiceResult({...sample(),status:'processing'},expected,now),null);
+assert.throws(()=>voiceResult(sample(),{...expected,agentId:'another_tenant'}),/ID_MISMATCH/);
+assert.throws(()=>voiceResult(sample(),{...expected,conversationId:'another_call'}),/ID_MISMATCH/);
+const config=voiceTestAgent('voice');assert.equal(config.platform_settings.auth.enable_auth,true);assert.equal(config.conversation_config.conversation.max_duration_seconds,180);assert.equal(config.platform_settings.call_limits.bursting_enabled,false);
+process.env.ELEVENLABS_API_KEY='fixture_not_a_real_key';let attempts=0;
+await assert.rejects(()=>elevenRequest('/v1/convai/agents/create',{},async()=>{attempts++;throw Error('do not leak secret');}),/WRITE_UNKNOWN_NO_RETRY/);assert.equal(attempts,1);
+await assert.rejects(()=>elevenRequest('/v1/convai/agents',undefined,async()=>Response.json({secret:'nope'},{status:401})),/^Error: VOICE_HTTP_401$/);
+console.log('Voice callback evidence, timezone, opt-out, provider isolation and no-retry checks passed.');
