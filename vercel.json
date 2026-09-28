@@ -1,1 +1,1 @@
-{"buildCommand":"pnpm build"}
+{"buildCommand":"node --experimental-strip-types scripts/check-v4-agent.mjs && pnpm build"}
