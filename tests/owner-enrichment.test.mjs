@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {enrichOwners} from '../lib/owner-enrichment.ts';
+import {automationTick} from '../worker/runner.mjs';
+const now=Date.now();
+const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:100000,raw:{data:{dm_property_id:'prop_123',full_address:'Fixture',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}}};
+const input={snapshot,creditCap:5,unitCostMicros:10000,quotedDataCostMicros:50000};
+let claimed=false,calls=0,saved;
+const d={reserveAndClaim:async()=>{claimed=true;return true;},fetchOwners:async id=>{calls++;assert.equal(claimed,true);assert.equal(id,'prop_123');return {data:{dm_property_id:id,contacts:[{dm_person_id:'per_123',full_name:'Fixture',phones:[{number:'5555555555',do_not_call:true}]}]},credits:{used:2,people:1}};},persist:async r=>{saved=r;}};
+assert.equal((await enrichOwners(input,d,now)).status,'contacts_saved');assert.equal(calls,1);assert.equal(saved.contacts[0].phones[0].doNotCall,true);assert.equal(saved.contacts[0].phones[0].permission,'unverified');assert.equal(saved.outreachAuthorized,false);
+claimed=false;calls=0;assert.equal((await enrichOwners({...input,snapshot:{...snapshot,sellerCostReserveCents:undefined}},d,now)).status,'financial_hold');assert.equal(claimed,false);assert.equal(calls,0);
+await assert.rejects(enrichOwners({...input,quotedDataCostMicros:49999},d,now));assert.equal(claimed,false);
+await assert.rejects(enrichOwners(input,{...d,fetchOwners:async()=>{calls++;throw new Error('timeout');}},now));assert.equal(calls,1);
+let sends=0;assert.equal(await automationTick(async()=>null,async()=>{sends++;}),false);assert.equal(sends,0);
+const token='12345678-1234-1234-1234-123456789012'.repeat(2);
+assert.equal(await automationTick(async()=>({token}),async(url,opt)=>{sends++;assert.equal(url,'https://www.geticashx.com/api/internal/automation');assert.equal(opt.redirect,'error');assert.equal(opt.headers.Authorization,'Bearer '+token);return new Response('{}');}),true);
+await assert.rejects(automationTick(async()=>({token}),async()=>{throw new Error('timeout');}));
+console.log('Owner enrichment financial/cost gates, DNC preservation, no outreach and scheduler no-retry passed');

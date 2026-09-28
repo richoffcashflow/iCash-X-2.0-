@@ -13,7 +13,7 @@ The existing Railway worker processes the saved snapshots. Qualified preliminary
 - Verified `property_search` rate with all cost categories, company cash allocation and enabled operating budget.
 - Approved tenant market/data rights and conservative seller closing reserve.
 - API key already configured on Vercel. Real provider schema/field support still needs verification before activation; unit/database tests used fixtures and spent no vendor credits.
-- No UI auto-trigger or unattended discovery scheduler is wired in this release; the service entry point is ready for that connection. `workReady` remains false.
+- The Railway unattended scheduler is now wired through one-use database tickets; see automation-release.md. It requires enabled account configuration and operating budget. Customer UI result wiring is still pending and `workReady` remains false.
 - Configure a new revision when changing search criteria; avoid modifying a configuration while it has unreconciled dispatches.
 
 ## Verification

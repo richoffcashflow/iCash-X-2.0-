@@ -12,9 +12,19 @@ export function createRpc(url,key,transport=fetch){
  const base=new URL(url);
  if(base.protocol!=='https:'||!base.hostname.endsWith('.supabase.co')||!key)throw new Error('Invalid worker configuration');
  return async(name,args)=>{
-  if(!['icash_claim_screening','icash_finish_screening'].includes(name))throw new Error('Unsupported worker operation');
+  if(!['icash_claim_screening','icash_finish_screening','icash_next_automation'].includes(name))throw new Error('Unsupported worker operation');
   const response=await transport(new URL('/rest/v1/rpc/'+name,base),{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify(args),redirect:'error',signal:AbortSignal.timeout(15000)});
   if(!response.ok)throw new Error('SCREENING_DATABASE_UNAVAILABLE');
   const body=await response.text();return body?JSON.parse(body):null;
  };
+}
+
+/** One-use ticket is minted in the shared DB; the API key stays on Vercel. No external call retries. */
+export async function automationTick(rpc,transport=fetch){
+ const ticket=await rpc('icash_next_automation',{});
+ if(!ticket)return false;
+ if(typeof ticket.token!=='string'||!/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}){2}$/.test(ticket.token))throw new Error('INVALID_AUTOMATION_TICKET');
+ const r=await transport('https://www.geticashx.com/api/internal/automation',{method:'POST',headers:{Authorization:'Bearer '+ticket.token},redirect:'error',signal:AbortSignal.timeout(55000)});
+ if(!r.ok)throw new Error('AUTOMATION_HELD');
+ return true;
 }
