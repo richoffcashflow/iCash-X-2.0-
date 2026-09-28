@@ -28,19 +28,22 @@ if (process.env.VERCEL_ENV !== 'preview' || process.env.VERCEL_GIT_COMMIT_REF !=
     const result = await request('/fields?source_type=properties&search='+term+'&per_page=250');
     if (result) report({query:term,fields:Array.isArray(result.data)?result.data.filter(f=>['estimated_repair_cost','estimated_repair_cost_range','building_condition','building_quality','last_sale_date','last_sale_price'].includes(f.field_id)).map(f=>({id:f.field_id,type:f.type,description:f.description,filterable:f.is_filterable})):null,hasNextPage:result.pagination?.has_next_page??null});
    }
-   const property=await request(propertyPath);
-   if(property){
-    const d=property.data??{};
-    const wanted=['estimated_repair_cost','estimated_repair_cost_range','estimated_repair_cost_low','estimated_repair_cost_high','repair_cost_low','repair_cost_high','building_condition','living_area_sqft'];
-    report({propertyCheck:'prop_179843131',values:Object.fromEntries(wanted.filter(k=>Object.hasOwn(d,k)).map(k=>[k,d[k]])),credits:typeof property.credits?.used==='number'?property.credits.used:null,contactsReturned:Array.isArray(d.contacts)&&d.contacts.length>0});
+   async function rpc(method,params,id,session){
+    const headers={Authorization:'Bearer '+key,'Content-Type':'application/json',Accept:'application/json, text/event-stream','MCP-Protocol-Version':'2025-03-26'};
+    if(session) headers['Mcp-Session-Id']=session;
+    const response=await fetch('https://mcp.dealmachine.com',{method:'POST',headers,body:JSON.stringify({jsonrpc:'2.0',...(id===undefined?{}:{id}),method,params}),redirect:'error',signal:AbortSignal.timeout(15000)});
+    const text=await response.text();
+    let payload={};
+    try { payload=text.trim().startsWith('{')?JSON.parse(text):JSON.parse(text.split('\n').find(l=>l.startsWith('data: '))?.slice(6)??'{}'); } catch {}
+    return {status:response.status,session:response.headers.get('mcp-session-id'),payload};
    }
-   const mcp=await fetch('https://mcp.dealmachine.com',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json',Accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params:{}}),redirect:'error',signal:AbortSignal.timeout(15000)});
-   if(mcp.ok){
-    const body=await mcp.text();
-    const payload=body.trim().startsWith('{')?JSON.parse(body):JSON.parse(body.split('\n').find(l=>l.startsWith('data: '))?.slice(6)??'{}');
-    const tool=payload.result?.tools?.find(t=>t.name==='dealmachine_comps');
-    report({compsTool:tool?{name:tool.name,description:tool.description,inputSchema:tool.inputSchema}:null});
-   }else report({compsMetadataStatus:mcp.status});
+   const init=await rpc('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'icash-x-verification',version:'1.0.0'}},1);
+   if(init.status===200){
+    await rpc('notifications/initialized',{},undefined,init.session);
+    const listed=await rpc('tools/list',{},2,init.session);
+    const tool=listed.payload.result?.tools?.find(t=>t.name==='dealmachine_comps');
+    report({compsTool:tool?{name:tool.name,description:tool.description,inputSchema:tool.inputSchema}:null,status:listed.status,errorCode:listed.payload.error?.code});
+   }else report({compsMetadataStatus:init.status,errorCode:init.payload.error?.code});
   }
  } catch { report({status:'failed',reason:'Network or invalid response; sensitive details suppressed'}); }
 }
