@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {workspacePriority} from '../lib/workspace-priority.ts';
+const now=1000000;
+const base={tenantId:'one',ownerId:'seller-a',status:'active',sellerSigned:true,stage:'buyer',needsUser:false,deadlineAt:null,promiseScore:90,scoreVerified:true,closedAt:null};
+const deals=[{...base,id:'buyer'},{...base,id:'closing',stage:'closing'},{...base,id:'urgent',deadlineAt:now-1},{...base,id:'decision',needsUser:true},{...base,id:'lead',sellerSigned:false,stage:'research'},{...base,id:'other',tenantId:'two',needsUser:true},{...base,id:'closed',status:'closed',closedAt:now-10},{...base,id:'fake-closed',status:'closed',closedAt:null}];
+const result=workspacePriority('one',deals,now);
+assert.deepEqual(result.pinned,['decision','urgent','closing','buyer']);
+assert.equal(result.featuredLead,'lead');
+assert.equal(result.closingCount,1);
+assert.equal(result.verifiedClosedCount,1);
+assert.equal(result.ownerThreads['seller-a'].length,5);
+assert.equal(JSON.stringify(result).includes('other'),false);
+assert.equal(workspacePriority('one',[{...base,id:'lead',sellerSigned:false,scoreVerified:false}],now).featuredLead,null);
+console.log('multi-deal priority and isolation checks passed');
