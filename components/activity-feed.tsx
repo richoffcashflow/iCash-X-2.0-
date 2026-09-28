@@ -1,13 +1,16 @@
 "use client";
-
 import { Check, Radio } from "lucide-react";
-
-export type ActivityItem = { id: string; title: string; detail: string; stage: string; explanation?: string; conversation?: { speaker: string; message: string }[] };
-
-/** Live callers must supply persisted, verified events. This view invents no events or balances. */
-export function ActivityFeed({ events, mode, onInspect }: { events: ActivityItem[]; mode: "demo" | "live"; onInspect?: () => void }) {
-  return <div className="stream-log" role="region" aria-label={mode === "demo" ? "Sample activity history" : "Live activity history"} tabIndex={0}>
-    <div className="stream-log-heading"><Radio size={13}/><span>{mode === "demo" ? "SAMPLE ACTIVITY" : "ACTIVITY"}</span><span>{events.length} events</span></div>
-    <ol>{[...events].reverse().map((event,index)=><li key={event.id} className={index === 0 ? "stream-event newest" : "stream-event"}><span className="stream-event-icon"><Check size={13}/></span><div><span className="stream-event-stage">{mode === "demo" ? "DEMO · " : ""}{event.stage}</span><strong>{event.title}</strong><p>{event.detail}</p>{event.explanation && <details className="event-explainer" onToggle={event=>{if(event.currentTarget.open)onInspect?.();}}><summary>What does this mean?</summary><p>{event.explanation}</p></details>}{event.conversation && <details className="event-conversation" onToggle={event=>{if(event.currentTarget.open)onInspect?.();}}><summary>Read conversation</summary><div className="conversation-thread">{event.conversation.map((line,i)=><div key={i} className={line.speaker === "Seller" ? "seller-line" : "bot-line"}><span>{mode === "demo" ? "SAMPLE · " : ""}{line.speaker}</span><p>{line.message}</p></div>)}</div>{mode === "demo" && <div className="conversation-handoff"><span>When live, you can take over here.</span><div><button disabled>Call seller</button><button disabled>Text seller</button></div><small>Demo only. No real seller is connected.</small></div>}</details>}</div></li>)}</ol>
-  </div>;
+export type ActivityItem = { id:string; title:string; detail:string; stage:string; explanation?:string; conversation?:{speaker:string;message:string}[] };
+/** Only persisted provider events may be supplied in live mode. */
+export function ActivityFeed({events,mode,onInspect}:{events:ActivityItem[];mode:"demo"|"live";onInspect?:()=>void}) {
+ const recent=[...events].reverse();
+ const milestoneIds=new Set(["interest","contract","buyer_agreement","deposit","closed"]);
+ const highlights=recent.filter(e=>milestoneIds.has(e.id)).slice(0,2);
+ function rows(items:ActivityItem[]) {
+  return <ol>{items.map(event=><li key={event.id} className="stream-event"><span className="stream-event-icon"><Check size={13}/></span><div><strong>{event.title}</strong><p>{event.detail}</p>{event.explanation && <details className="event-explainer" onToggle={e=>{if(e.currentTarget.open)onInspect?.();}}><summary>What does this mean?</summary><p>{event.explanation}</p></details>}{event.conversation && <details className="event-conversation" onToggle={e=>{if(e.currentTarget.open)onInspect?.();}}><summary>Read conversation</summary><div className="conversation-thread">{event.conversation.map((line,i)=><div key={i} className={line.speaker==="Seller"?"seller-line":"bot-line"}><span>{line.speaker}</span><p>{line.message}</p></div>)}</div>{mode==="demo" && <small>Fictional conversation. No seller is connected.</small>}</details>}</div></li>)}</ol>;
+ }
+ return <div className="activity-summary">
+  {highlights.length>0 && <div className="milestone-list"><div className="stream-log-heading"><Radio size={13}/><span>{mode==="demo"?"SAMPLE MILESTONES":"MILESTONES"}</span></div>{rows(highlights)}</div>}
+  <details className="activity-history" onToggle={e=>{if(e.currentTarget.open)onInspect?.();}}><summary>View all activity <span>{events.length}</span></summary><div className="stream-log" role="region" aria-label={mode==="demo"?"Sample activity history":"Live activity history"} tabIndex={0}>{rows(recent)}</div></details>
+ </div>;
 }
