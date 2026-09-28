@@ -62,6 +62,21 @@ try{
   existing={id:sid,conversation_id:convId,state:'issued'};
   report.audioChunksReceived=audioChunks;report.agentTurns=agentTurns;
  }
+ if(existing.state==='reserved'&&!existing.conversation_id){
+  // Reconcile the one isolated test after a socket timeout. Never start another conversation on an unknown outcome.
+  const page=await elevenRequest(`/v1/convai/conversations?agent_id=${cfg.agent_id}&page_size=10`);
+  const candidates=(page.conversations??[]).filter(c=>c.agent_id===cfg.agent_id&&c.start_time_unix_secs*1000>=Date.parse(existing.created_at)-10000&&c.start_time_unix_secs*1000<=Date.parse(existing.created_at)+180000);
+  report.recoveryCandidates=candidates.length;
+  if(candidates.length===1){
+   const c=await elevenRequest(`/v1/convai/conversations/${candidates[0].conversation_id}`);
+   if(c.agent_id!==cfg.agent_id)throw Error('VOICE_ID_MISMATCH');
+   await db(`icash_voice_test_sessions?id=eq.${existing.id}&state=eq.reserved`,'PATCH',{conversation_id:c.conversation_id,state:'issued'});
+   existing={...existing,conversation_id:c.conversation_id,state:'issued'};
+   report.agentMessages=c.transcript?.filter(t=>t.role==='agent').length??0;
+   report.userMessages=c.transcript?.filter(t=>t.role==='user').length??0;
+   report.providerStatus=c.status;
+  }
+ }
  if(existing.state==='complete'){report.savedResult=existing.result;}
  else if(existing.conversation_id){
   for(let i=0;i<8;i++){
