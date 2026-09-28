@@ -1,10 +1,9 @@
 /** Server-side policy primitives. Persist identity and validate inputs before provider dispatch. */
 export type DealScope = { tenantId:string; dealId:string };
-export const ASSISTANT_NAME = "Alex";
-export type AssistantIdentity = { tenantId:string; principal:string; verified:boolean };
+export type AssistantIdentity = { tenantId:string; name:string; principal:string; verified:boolean };
 export function assistantIntroduction(identity:AssistantIdentity, tenantId:string) {
-  if (!tenantId || identity.tenantId!==tenantId || !identity.verified || !identity.principal.trim()) return null;
-  return `I'm ${ASSISTANT_NAME}, an AI assistant working on behalf of ${identity.principal}.`;
+  if (!tenantId || identity.tenantId!==tenantId || !identity.verified || !identity.name.trim() || !identity.principal.trim()) return null;
+  return `I'm ${identity.name}, an AI assistant working on behalf of ${identity.principal}.`;
 }
 export type MemoryFact = DealScope & { id:string; value:string; sourceId:string; verified:boolean; expiresAt:number };
 /** Never blend property facts, even when the seller owns multiple properties. */

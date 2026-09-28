@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import {assistantIntroduction,verifiedDealMemory,assistantActionDecision as decide} from '../lib/assistant-policy.ts';
-const identity={tenantId:'a',principal:'Sample Property Group',verified:true};
+const identity={tenantId:'a',name:'Alex',principal:'Sample Property Group',verified:true};
 assert.match(assistantIntroduction(identity,'a'),/AI assistant.*Sample Property Group/);
 assert.equal(assistantIntroduction(identity,'b'),null);
+assert.match(assistantIntroduction({...identity,tenantId:'b',name:'Jordan'},'b'),/I'm Jordan/);
+assert.equal(assistantIntroduction({...identity,name:''},'a'),null);
 const scope={tenantId:'a',dealId:'1'};
 const fact={...scope,id:'f',value:'Seller requested callback',sourceId:'call1',verified:true,expiresAt:200};
 assert.deepEqual(verifiedDealMemory(scope,[fact,{...fact,tenantId:'b'},{...fact,dealId:'2'},{...fact,verified:false},{...fact,expiresAt:100}],100),[fact]);
