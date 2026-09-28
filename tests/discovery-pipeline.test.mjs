@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {discoverPage} from '../lib/discovery-pipeline.ts';
+const c={zip:'75201',page:1,perPage:5,unitCostMicros:10000,quotedDataCostMicros:50000};
+const raw={data:[{dm_property_id:'prop_123',address:'Fixture only',city:'Example',state:'TX',estimated_value:200000,contacts:[{private:'omit'}]}],credits:{used:1,people:0},pagination:{has_next_page:false}};
+let calls=[],saved,claimed=false;
+const deps={request:async b=>{calls.push(b);if(b.estimate_cost)return {estimated_credits:{this_page:5,breakdown:{people:0}}};assert.equal(claimed,true);return raw;},reserveAndClaim:async()=>{claimed=true;return true;},persist:async r=>{saved=r;}};
+assert.equal((await discoverPage(c,deps)).status,'screening_queued');
+assert.equal(calls.length,2);assert.equal(calls[0].contact_audience,'none');assert.deepEqual({...calls[0],estimate_cost:false},calls[1]);assert.equal(saved.rows[0].contacts,undefined);assert.equal(saved.creditsUsed,1);
+claimed=false;calls=[];await assert.rejects(discoverPage({...c,quotedDataCostMicros:49999},deps),{message:'DISCOVERY_RATE_TOO_LOW'});assert.equal(claimed,false);assert.equal(calls.length,1);
+calls=[];assert.equal((await discoverPage(c,{...deps,reserveAndClaim:async()=>false})).status,'held');assert.equal(calls.length,1);
+let paid=0;await assert.rejects(discoverPage(c,{...deps,request:async b=>{if(b.estimate_cost)return {estimated_credits:{this_page:1,breakdown:{people:0}}};paid++;throw new Error('timeout');}}));assert.equal(paid,1);
+assert.equal((await discoverPage(c,{...deps,request:async()=>({estimated_credits:{this_page:0,breakdown:{people:0}}})})).status,'empty');
+await assert.rejects(discoverPage(c,{...deps,request:async()=>({estimated_credits:{this_page:1,breakdown:{people:1}}})}),{message:'DISCOVERY_ESTIMATE_INVALID'});
+assert.equal((await discoverPage(c,{...deps,request:async b=>b.estimate_cost?{estimated_credits:{this_page:1,breakdown:{people:0}}}:{...raw,credits:{used:2,people:0}}})).status,'needs_reconciliation');
+console.log('Discovery estimate/reservation order, no contacts, timeout no-retry, overrun receipt and cost holds passed');
