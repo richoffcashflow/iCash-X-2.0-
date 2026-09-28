@@ -23,3 +23,5 @@ See `docs/cost-model-and-controls.md`, `docs/outbound-brain.md`, `docs/property-
 ## Verify
 
 `npm test` checks pacing, authorization, margin, duplicate, reserve, pause, title, deposit, prospect ranking, and schedule gates. `npm run build` validates the Next.js app.
+
+Buyer matching, contact dispatch gates, deal lifecycle, and callback eligibility now have tested pure policies in `lib/buyer-engine.ts`, `lib/deal-operations.ts`, and `lib/callback-policy.ts`. They are not connected to a provider or durable job store. The preview demonstrates these stages using fictional data.

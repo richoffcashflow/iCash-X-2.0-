@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {callbackDecision} from '../lib/callback-policy.ts';
+const job={id:'callback-1',opportunityId:'deal-1',dueAt:100000,sellerTimeZone:'America/Chicago',timeConfirmed:true,completed:false,canceled:false};
+const ctx={now:100000,permitted:true,contactWindowOpen:true,humanTakeover:false,botPaused:false,creditsReserved:true,exclusiveLease:true,maxLatenessMs:60000};
+assert.equal(callbackDecision(job,ctx),'ready');
+assert.equal(callbackDecision(job,{...ctx,now:99999}),'scheduled');
+assert.equal(callbackDecision({...job,timeConfirmed:false},ctx),'needs_confirmation');
+assert.equal(callbackDecision({...job,sellerTimeZone:'not-a-zone'},ctx),'needs_confirmation');
+assert.equal(callbackDecision({...job,completed:true},ctx),'do_not_dispatch');
+assert.equal(callbackDecision({...job,canceled:true},ctx),'do_not_dispatch');
+for(const [override,result] of [[{permitted:false},'blocked_by_permission'],[{now:160001},'missed_callback_review'],[{humanTakeover:true},'paused'],[{creditsReserved:false},'needs_credits'],[{contactWindowOpen:false},'outside_contact_hours'],[{exclusiveLease:false},'already_claimed']]) assert.equal(callbackDecision(job,{...ctx,...override}),result);
+console.log('callback dispatch checks passed');
