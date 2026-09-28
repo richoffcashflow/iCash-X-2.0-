@@ -1,1 +1,1 @@
-{"buildCommand":"node --experimental-strip-types scripts/elevenlabs-verify.mjs && pnpm build"}
+{"buildCommand":"pnpm build"}

@@ -33,7 +33,11 @@ Provider credit units and provider-reported USD costs remain separate. Missing U
 - Vercel authenticated GET checks: Agents 200, Voices 200.
 - Local callback tests, typecheck and build passed.
 - Migration applied; anon access and authenticated RPC execution denied as expected.
-- Provider diagnostic confirmed `stage=create_private_agent`, `VOICE_HTTP_401_CONVAI_WRITE`. The key in Vercel lacks ElevenAgents Write (`convai_write`). No agent was created and no conversation ran. Enable that permission on the same key, or replace the Vercel value with the correctly scoped key. Reset the provisioning claim only after this definitive authorization rejection is resolved. The feature is not yet verified end-to-end and seller calling remains disabled.
+- Owner corrected ElevenAgents Write. Agent creation then rejected `platform_settings.analysis_llm=gpt-4.1-mini`; the API accepts a narrower set than the SDK type implied. Omitting this override uses the provider-supported analysis default. Live agent dialogue is still configured for gpt-4.1-mini.
+- A private agent was successfully created with authentication enabled and a 180-second maximum.
+- The synthetic WebSocket check timed out after its first user message. Recovery retrieved the exact isolated conversation and persisted its transcript and provider summary without initiating a duplicate call. The 61-second conversation reported 667 provider credit units / $0.066680670765539 provider USD cost. These are provider units, not customer credits.
+- The summary mentioned a callback but the user had not completed the confirmation exchange. The application correctly persisted `needs_confirmation` with no due date. Confirmed callback scheduling has passed deterministic fixture tests, but has NOT passed a real microphone conversation yet. Provider has-audio fields describe retained audio availability; because recording is disabled, they are not proof that speech synthesis or recognition failed.
+- Automatic approval review rejected issuing an owner access grant valid for 48 hours / 3 sessions because scope, duration and recipient need explicit approval. No owner access token was granted. Obtain approval before issuing it; do not circumvent this with another access method.
 - Automatic preview verification was removed after diagnosis so unrelated rebuilds do not perform provider mutations. Re-enable the explicit verification build command only for the next authorized acceptance run.
 
 Official references:
