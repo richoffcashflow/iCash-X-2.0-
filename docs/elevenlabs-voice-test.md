@@ -77,3 +77,15 @@ Sources:
 - https://elevenlabs.io/docs/overview/models
 - https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4
 - https://elevenlabs.io/pricing/agents
+
+## Owner feedback and cost tuning — 2026-09-28
+
+The owner approved the Chris/v4 Turbo sound, then requested a relaxed young-adult conversational style and female voices in the account pool. The private prompt now uses everyday acquisitions phrasing without forced slang, flirtation, fake laughter, or claims about being human or a particular age. Customer assignment already permits approved premade Sarah/Jessica voices alongside Chris/Eric/Brian; selection depends on actual provider availability and is persisted per account. The private test keeps the approved Chris voice.
+
+Cost preference supersedes the earlier speculative-generation experiment: turn speculative generation OFF while retaining eager turn-taking, spelling patience, v4 Turbo and the inexpensive gpt-4.1-mini dialogue model. Responses remain capped at 120 output tokens; private calls remain capped at 180 seconds, concurrency one, with bursting disabled. Do not interpret these private-test caps as a production operating budget. Keep measured provider cost separate from customer pricing; no gross-margin target has been validated by these configuration changes alone.
+
+## Next telephony connection
+
+Owner-selected live call policy is a 10-minute target / 15-minute hard maximum, stored in `config/voice-call-policy.ts`. It is not yet enforced on live calls because live dispatch is not connected. Do not pad calls to reach the target. End unproductive conversations sooner and reserve the configured customer credits before dialing. Enforce the hard limit at both the provider-agent and carrier levels, with actual-cost reconciliation and no automatic burst spending. The private test remains capped at three minutes.
+
+Next: connect a paid Twilio account and a voice-enabled business number through ElevenLabs' native Twilio integration, then run an explicitly authorized call to the owner's number. Verify call status, transcript, summary, confirmed callback, and actual ElevenLabs + LLM + carrier costs. Twilio phone-number import requires account credentials entered securely in the provider dashboard, never in chat or source code. Contract-link texting and e-signature delivery remain separate integrations and acceptance checks.
