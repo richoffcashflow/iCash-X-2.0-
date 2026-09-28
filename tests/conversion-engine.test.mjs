@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import { conversionOffer } from '../lib/conversion-engine.ts';
+const pack={amountCents:2000,label:'$20'};
+assert.equal(conversionOffer({mode:'demo',complete:false},pack),null);
+const demo=conversionOffer({mode:'demo',complete:true},pack);
+assert.equal(demo.reason,'preview_complete');
+assert.equal(demo.title,'Free preview complete.');
+const live={mode:'live',verified:true,pausedForCredits:true,balanceCents:20,nextChargeCents:50,activeOpportunities:2};
+assert.equal(conversionOffer(live,pack).reason,'credits_required');
+assert.equal(conversionOffer({...live,verified:false},pack),null);
+assert.equal(conversionOffer({...live,pausedForCredits:false},pack),null);
+assert.equal(conversionOffer({...live,balanceCents:50},pack),null);
+assert.equal(conversionOffer({...live,balanceCents:NaN},pack),null);
+assert.equal(conversionOffer({...live,activeOpportunities:-1},pack),null);
+console.log('conversion evidence checks passed');

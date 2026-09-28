@@ -4,7 +4,7 @@ Outbound-first wholesaling platform. The customer lands directly in one workspac
 
 ## State of this repository
 
-This is a Vercel-deployed, one-page guided bot sandbox plus tested pure allowance, credit allocation, and closing workflow gates. The free example runs automatically inline with pause/resume/restart, adding an event every 4.2 seconds. Add Credits expands in the balance card. No typing, page navigation, or setup is required. The sample deal and $20,000 gross spread are explicitly fictional; all events and figures are illustrative. The free live allowance gate exists in code but is not wired to accounts or provider jobs. It has no sign-up, payment processing, live property data, calling, messaging, contracts, or title integrations yet. The preview makes no charges or outreach and shows no fabricated live activity. Do not point paid ads at it as a working autonomous product.
+This is a Vercel-deployed, one-page guided bot sandbox plus tested pure allowance, credit allocation, and closing workflow gates. The free example runs automatically inline with pause/resume/restart, using 1.6-second events and 2.8-second milestone pauses. Add Credits expands in the balance card. No typing, page navigation, or setup is required. The sample deal and $20,000 gross spread are explicitly fictional; all events and figures are illustrative. The free live allowance gate exists in code but is not wired to accounts or provider jobs. It has no sign-up, payment processing, live property data, calling, messaging, contracts, or title integrations yet. The preview makes no charges or outreach and shows no fabricated live activity. Do not point paid ads at it as a working autonomous product.
 
 ## Deployments
 
