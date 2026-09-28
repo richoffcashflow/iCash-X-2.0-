@@ -11,7 +11,7 @@ async function request(key:string,path:string,fetcher:Transport,body?:unknown) {
   if(!key.trim()) throw new Error('CONTIGUITY_KEY_MISSING');
   let response:Response;
   try { response=await fetcher(`https://api.contiguity.com${path}`,{
-    method:body===undefined?'GET':'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},
+    method:body===undefined?'GET':'POST',headers:{Authorization:`Token ${key}`,'Content-Type':'application/json'},
     body:body===undefined?undefined:JSON.stringify(body),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(15000)
   }); } catch { throw new Error(body===undefined?'CONTIGUITY_UNREACHABLE':'CONTIGUITY_SEND_UNKNOWN_DO_NOT_RETRY'); }
   if(!response.ok) throw new Error(`CONTIGUITY_HTTP_${response.status}`);

@@ -21,3 +21,6 @@ Official sources:
 https://docs.contiguity.com/api-reference/product/leases/leased-all
 https://docs.contiguity.com/api-reference/product/imessage/send
 https://docs.contiguity.com/api-reference/webhook/signing
+
+## Auth verification follow-up
+2026-09-28: the introduction specifies Token while generated endpoint docs specify Bearer. A Vercel read-only check using Token authenticated successfully: GET /entitlements/ returned 200 and zero granted entitlements; GET /numbers/leased returned 403. Adapter now uses the verified Token format. A failed leased-number check alone does not establish an invalid key or absence of a leased number. No messages sent. Account access to leasing/iMessage remains unverified.
