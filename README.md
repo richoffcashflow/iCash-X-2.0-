@@ -1,6 +1,6 @@
 # iCash X
 
-Outbound-first wholesaling platform. The customer lands directly in one workspace: credit balance at the top, activity below, and inline funding. A free fictional example runs in the activity card. The production flow will offer a small real free bot allowance after account creation. Funding expands the bot's work only with an approved daily limit; the user can pause it. The bot searches houses and land without asking the customer to select a type. iCash X owns and operates the DealMachine, Twilio, Blooio, and ElevenLabs integrations. Customers do not configure vendor APIs, lists, campaigns, or prompts.
+Outbound-first wholesaling platform. The customer lands directly in one workspace: credit balance at the top, activity below, and inline funding. A free fictional example runs in the activity card. The production flow will offer a small real free bot allowance through a server-issued anonymous session. Funding expands the bot's work only with an approved daily limit; the user can pause it. The bot searches houses and land without asking the customer to select a type. iCash X owns and operates the DealMachine, Twilio, Blooio, and ElevenLabs integrations. Customers do not configure vendor APIs, lists, campaigns, or prompts.
 
 ## State of this repository
 

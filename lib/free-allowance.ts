@@ -16,7 +16,7 @@ export function checkFreeAllowance(input: {
   usage: FreeUsage;
   operation: FreeOperation;
   estimatedProviderCostCents: number;
-  signedIn: boolean;
+  sessionEligible: boolean; // server-issued, rate-limited grant; no customer account required
   paused: boolean;
   providerReady: boolean;
   permitted: boolean;
@@ -28,7 +28,7 @@ export function checkFreeAllowance(input: {
   const remainingOperations = Math.max(0, grant.maxOperations - usage.operationCount);
   const remainingProviderCostCents = Math.max(0, grant.maxProviderCostCents - usage.lifetimeProviderCostCents);
   let reason = "";
-  if (!input.signedIn) reason = "account required for live work";
+  if (!input.sessionEligible) reason = "eligible session required for live work";
   else if (input.paused) reason = "bot paused";
   else if (!input.providerReady) reason = "provider unavailable";
   else if (!input.permitted) reason = "operation not permitted";
