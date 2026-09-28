@@ -1,0 +1,47 @@
+begin;
+do $$
+declare
+ u uuid:=gen_random_uuid(); v uuid:=gen_random_uuid(); unverified uuid:=gen_random_uuid();
+ a uuid; b uuid; o uuid:=gen_random_uuid(); t uuid:=gen_random_uuid(); n bigint; rejected boolean;
+begin
+ insert into auth.users(id,email,email_confirmed_at,aud,role) values(u,'funding-owner-'||u||'@example.com',now(),'authenticated','authenticated'),(v,'funding-other-'||v||'@example.com',now(),'authenticated','authenticated'),(unverified,'funding-unverified-'||unverified||'@example.com',null,'authenticated','authenticated');
+ rejected:=false;
+ begin perform public.icash_claim_funding(u,'live');exception when others then rejected:=true;end;
+ if not rejected then raise exception 'Unfunded account created';end if;
+ insert into public.icash_funding_orders(id,mode,guest_hash,pack_code,price_cents,credit_cents) values(o,'live',repeat('a',64),'start',2000,2000),(t,'test',repeat('b',64),'start',2000,2000);
+ rejected:=false;
+ begin perform public.icash_settle_funding(o,'test','cs_test_wrong','pi_wrong',2000,'funding-owner-'||u||'@example.com',null);exception when others then rejected:=true;end;
+ if not rejected then raise exception 'Mode mismatch accepted';end if;
+ rejected:=false;
+ begin perform public.icash_settle_funding(o,'live','cs_live_fixture_'||o,'pi_fixture_'||o,100,'funding-owner-'||u||'@example.com',null);exception when others then rejected:=true;end;
+ if not rejected then raise exception 'Wrong amount accepted';end if;
+ perform public.icash_settle_funding(o,'live','cs_live_fixture_'||o,'pi_fixture_'||o,2000,'funding-owner-'||u||'@example.com','+12025550146');
+ perform public.icash_settle_funding(o,'live','cs_live_fixture_'||o,'pi_fixture_'||o,2000,'funding-owner-'||u||'@example.com','+12025550146');
+ rejected:=false;
+ begin perform public.icash_claim_funding(v,'live');exception when others then rejected:=true;end;
+ if not rejected then raise exception 'Wrong email claimed order';end if;
+ a:=public.icash_claim_funding(u,'live');
+ if public.icash_claim_funding(u,'live')<>a then raise exception 'Duplicate account';end if;
+ select balance_cents into n from public.icash_wallets where account_id=a;
+ if n<>2000 then raise exception 'Incorrect balance %',n;end if;
+ select count(*) into n from public.icash_credit_ledger where account_id=a;
+ if n<>1 then raise exception 'Duplicate credit entries';end if;
+ perform public.icash_settle_funding(t,'test','cs_test_fixture_'||t,'pi_fixture_'||t,2000,'funding-other-'||v||'@example.com',null);
+ b:=public.icash_claim_funding(v,'test');
+ select balance_cents into n from public.icash_wallets where account_id=b;
+ if n<>0 then raise exception 'Test funds entered live wallet';end if;
+ if (public.icash_funding_account_totals(b,'test')->>'creditCents')::bigint<>2000 then raise exception 'Test balance missing';end if;
+ rejected:=false;
+ begin perform public.icash_claim_funding(unverified,'test');exception when others then rejected:=true;end;
+ if not rejected then raise exception 'Unverified account accepted';end if;
+ update public.icash_accounts set bot_paused=false,daily_limit_cents=1000 where id=a;
+ perform public.icash_flag_billing_issue('evt_fixture_'||o,'pi_fixture_'||o,'charge.refunded');
+ if not (select bot_paused from public.icash_accounts where id=a) then raise exception 'Billing hold failed to pause';end if;
+ rejected:=false;
+ begin update public.icash_accounts set bot_paused=false where id=a;exception when others then rejected:=true;end;
+ if not rejected then raise exception 'Billing hold bypassed';end if;
+ if not public.icash_take_request('test:'||u,1,60) or public.icash_take_request('test:'||u,1,60) then raise exception 'Rate limit failed';end if;
+ if has_table_privilege('anon','public.icash_funding_orders','SELECT') or has_table_privilege('authenticated','public.icash_funding_orders','UPDATE') or has_function_privilege('authenticated','public.icash_claim_funding(uuid,text)','EXECUTE') then raise exception 'Unsafe public grants';end if;
+end $$;
+select 'PASS: fulfillment idempotency, ownership, mode isolation, verified-email gate, refund pause, rate limits and service-only access' as result;
+rollback;
