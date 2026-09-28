@@ -1,3 +1,4 @@
+import {fullCostReserve,type CostQuote} from './cost-guard.ts';
 /**
  * Pure credit allocation policy. No provider calls, charges, or user data live here.
  * All monetary values are integer cents. The server must reserve and settle funds
@@ -9,6 +10,7 @@ export type CandidateAction = {
   stage: WorkStage;
   customerChargeCents: number;
   estimatedProviderCostCents: number;
+  costQuote?: CostQuote;
   evidenceAt: number; // UTC timestamp from a real event
   dueAt: number;
   operation?: 'seller_call' | 'other';
@@ -39,12 +41,14 @@ export type AllocationInput = {
   now: number;
   actions: CandidateAction[];
   policy?: PacingPolicy;
+  companyAvailableBudgetCents?: number;
+  companyProtectedReserveCents?: number;
 };
 export type Allocation = {
   dailyLimitCents: number;
   remainingTodayCents: number;
   protectedForActiveDealsCents: number;
-  selected: { id: string; stage: WorkStage; reservedCents: number }[];
+  selected: { id: string; stage: WorkStage; reservedCents: number; reservedCostCents:number; rateVersion:string }[];
   skipped: { id: string; reason: string }[];
 };
 const weights: Record<WorkStage, number> = {
@@ -61,6 +65,9 @@ export function allocateCredits(input: AllocationInput): Allocation {
   if (![p.maxDailyFundedFraction, p.maxDailyBalanceFraction, p.protectedFundedFraction, p.minimumGrossMarginFraction, p.activeProspectingFraction].every(fraction) || !Number.isSafeInteger(p.maxQueuedActions) || p.maxQueuedActions < 0) throw new Error("Invalid pacing policy");
 
   const dailyLimitCents = Math.min(input.userDailyLimitCents, Math.floor(input.fundedAmountCents * p.maxDailyFundedFraction), Math.floor(input.balanceCents * p.maxDailyBalanceFraction));
+  const companyBudget=input.companyAvailableBudgetCents,companyReserve=input.companyProtectedReserveCents;
+  const companyConfigured=companyBudget!==undefined&&companyReserve!==undefined&&integerCents(companyBudget)&&integerCents(companyReserve);
+  let companyRemaining=companyConfigured?Math.max(0,companyBudget!-companyReserve!):0;
   let remaining = Math.max(0, Math.min(input.balanceCents, dailyLimitCents - input.spentTodayCents));
   const protectedForActiveDealsCents = Math.min(input.balanceCents, Math.floor(input.fundedAmountCents * p.protectedFundedFraction));
   const hasActive = input.actions.some(a => a.permitted && activeStages.has(a.stage));
@@ -72,19 +79,26 @@ export function allocateCredits(input: AllocationInput): Allocation {
   const ranked = [...input.actions].sort((a,b) => weights[b.stage] - weights[a.stage] || a.dueAt - b.dueAt || b.evidenceAt - a.evidenceAt || a.id.localeCompare(b.id));
   for (const a of ranked) {
     let reason = "";
+    const cost=fullCostReserve(a.costQuote,input.now);
     if (!a.id || seen.has(a.id)) reason = "duplicate or missing action ID";
     else if (!integerCents(a.customerChargeCents) || a.customerChargeCents === 0 || !integerCents(a.estimatedProviderCostCents) || !Number.isFinite(a.evidenceAt) || !Number.isFinite(a.dueAt)) reason = "invalid estimate";
     else if (a.operation === 'seller_call' && (!a.financialCheck || a.financialCheck.status !== 'eligible' || !Number.isFinite(a.financialCheck.checkedAt) || a.financialCheck.checkedAt > input.now || input.now - a.financialCheck.checkedAt > 86400000)) reason = "financial screening required before seller call";
     else if (!a.permitted) reason = "not permitted";
     else if (a.dueAt > input.now) reason = "not due";
-    else if (a.estimatedProviderCostCents > Math.floor(a.customerChargeCents * (1 - p.minimumGrossMarginFraction))) reason = "below margin floor";
+    else if (!companyConfigured) reason = "company budget not configured";
+    else if (!cost.ok) reason = cost.reason;
+    else if (cost.reserveCents < a.estimatedProviderCostCents) reason = "full cost quote understates provider cost";
+    else if (cost.reserveCents > Math.floor(a.customerChargeCents * (1 - p.minimumGrossMarginFraction))) reason = "below margin floor";
+    else if (cost.reserveCents > companyRemaining) reason = "company cost budget exhausted";
     else if (selected.length >= p.maxQueuedActions) reason = "queue limit";
     else if (a.customerChargeCents > remaining) reason = "daily credit limit";
     else if (a.stage === "prospecting" && input.balanceCents - selected.reduce((sum,s) => sum + s.reservedCents,0) - a.customerChargeCents < protectedForActiveDealsCents) reason = "protected follow-up reserve";
     else if (a.stage === "prospecting" && prospectingUsed + a.customerChargeCents > prospectingBudget) reason = "prospecting share";
     if (reason) { skipped.push({ id: a.id, reason }); continue; }
+    if(!cost.ok) continue;
     seen.add(a.id);
-    selected.push({ id: a.id, stage: a.stage, reservedCents: a.customerChargeCents });
+    selected.push({ id: a.id, stage: a.stage, reservedCents: a.customerChargeCents, reservedCostCents:cost.reserveCents,rateVersion:cost.rateVersion });
+    companyRemaining-=cost.reserveCents;
     remaining -= a.customerChargeCents;
     if (a.stage === "prospecting") prospectingUsed += a.customerChargeCents;
   }

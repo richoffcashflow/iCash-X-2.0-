@@ -22,8 +22,9 @@ assert.equal(gate(screen({total_estimated_loan_balance:150000},null),{sellerOffe
 assert.equal(gate(screen({total_estimated_loan_balance:50000},null),{sellerOfferCents:10000000,sellerCostReserveCents:null,checkedAt:1}).status,'hold');
 assert.equal(gate(screen({total_estimated_loan_balance:50000},null),{sellerOfferCents:10000000,sellerCostReserveCents:500000,checkedAt:1}).status,'eligible');
 import {allocateCredits} from '../lib/outbound-brain.ts';
-const base={balanceCents:100000,fundedAmountCents:100000,userDailyLimitCents:10000,spentTodayCents:0,now:100000000,actions:[]};
-const action={id:'call',stage:'qualification',customerChargeCents:100,estimatedProviderCostCents:10,evidenceAt:1,dueAt:1,permitted:true,operation:'seller_call'};
+import {costCategories} from '../lib/cost-guard.ts';
+const base={companyAvailableBudgetCents:10000,companyProtectedReserveCents:1000,balanceCents:100000,fundedAmountCents:100000,userDailyLimitCents:10000,spentTodayCents:0,now:100000000,actions:[]};
+const action={id:'call',stage:'qualification',customerChargeCents:100,estimatedProviderCostCents:10,evidenceAt:1,dueAt:1,permitted:true,operation:'seller_call',costQuote:{rateVersion:'fixture',checkedAt:base.now,expiresAt:base.now+60000,bufferBasisPoints:0,amountsMicros:Object.fromEntries(costCategories.map(k=>[k,k==='twilio'?100000:0]))}};
 assert.equal(allocateCredits({...base,actions:[action]}).selected.length,0);
 assert.equal(allocateCredits({...base,actions:[{...action,financialCheck:{status:'hold',checkedAt:base.now,reason:'debt'}}]}).selected.length,0);
 assert.equal(allocateCredits({...base,actions:[{...action,financialCheck:{status:'eligible',checkedAt:1,reason:'stale'}}]}).selected.length,0);

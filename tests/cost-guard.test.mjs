@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import {costCategories,fullCostReserve} from '../lib/cost-guard.ts';
+import {allocateCredits} from '../lib/outbound-brain.ts';
+const now=100000;
+const quote=(micros=100000)=>({rateVersion:'verified-fixture',checkedAt:now,expiresAt:now+60000,bufferBasisPoints:2000,amountsMicros:Object.fromEntries(costCategories.map(k=>[k,k==='elevenlabs'?micros:0]))});
+assert.equal(fullCostReserve(undefined,now).ok,false);
+for(const k of costCategories){const q=quote();q.amountsMicros[k]=null;assert.equal(fullCostReserve(q,now).ok,false);}
+assert.equal(fullCostReserve(quote(1),now).reserveCents,1);
+assert.equal(fullCostReserve(quote(),now).reserveCents,12);
+assert.equal(fullCostReserve({...quote(),expiresAt:now},now).ok,false);
+assert.equal(fullCostReserve({...quote(),checkedAt:now+1},now).ok,false);
+const a={id:'one',stage:'qualification',customerChargeCents:100,estimatedProviderCostCents:10,evidenceAt:now,dueAt:now,permitted:true,costQuote:quote()};
+const base={balanceCents:10000,fundedAmountCents:10000,userDailyLimitCents:2000,spentTodayCents:0,companyAvailableBudgetCents:30,companyProtectedReserveCents:10,now};
+const result=allocateCredits({...base,actions:[a,{...a,id:'two'}]});
+assert.equal(result.selected.length,1);assert.equal(result.selected[0].reservedCostCents,12);
+assert.equal(result.skipped[0].reason,'company cost budget exhausted');
+assert.equal(allocateCredits({...base,companyAvailableBudgetCents:undefined,actions:[a]}).selected.length,0);
+const expensive=quote();expensive.amountsMicros.railway=300000;
+assert.equal(allocateCredits({...base,actions:[{...a,costQuote:expensive}]}).skipped[0].reason,'below margin floor');
+assert.equal(allocateCredits({...base,actions:[{...a,costQuote:undefined}]}).selected.length,0);
+console.log('All-in cost coverage, overhead margin, tiny costs, expiry and company reserves passed');

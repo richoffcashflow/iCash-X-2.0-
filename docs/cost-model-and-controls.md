@@ -44,3 +44,14 @@ The server must perform an atomic reservation before dispatch and a single settl
 - [FTC Telemarketing Sales Rule](https://www.ftc.gov/legal-library/browse/rules/telemarketing-sales-rule)
 - [FTC Do Not Call guidance](https://www.ftc.gov/business-guidance/resources/qa-telemarketers-sellers-about-dnc-provisions-tsr-0)
 - [Texas Real Estate Commission on equitable interests](https://www.trec.texas.gov/article/sale-equitable-interests-real-estate-clarified)
+
+
+## All-in allocation guard (2026-09-28)
+
+The pure allocation engine now requires a current, versioned cost quote and a configured company spending budget/protected reserve for every action. Unknown cost categories, expired quotes, insufficient company funds or a margin below the configured floor hold the operation. Customer credit reservations and company cost reservations are separate outputs. Sub-cent costs are represented in USD micros and rounded up only after aggregation and a configurable contingency buffer. The margin floor now applies to the buffered full cost allocation, not just the direct vendor charge; call it an all-in contribution target rather than accounting gross margin.
+
+Required categories: DealMachine, ElevenLabs, Twilio, SMS/iMessage provider, email/Resend, OpenAI/other LLMs, Vercel, Railway, Supabase, GitHub, payment processing, title/e-signatures, support/shared overhead, paid acquisition, refund/dispute reserve and other. Zero is permitted only when a reviewed rate configuration establishes no attributable charge (for example, a bundled LLM already counted under ElevenLabs). Missing values must be null and block dispatch. Do not double count bundled charges. No account-specific prices or invoice amounts have been invented.
+
+Monthly minimums, seats, phone-number rental, storage, egress, build minutes and idle infrastructure belong in the company budget even when no customer is active. Allocate a conservative share to operations using realistic usage, not hoped-for volume; reconcile actual invoices and avoid counting the same cost twice. Funding is not earned profit: unconsumed credits, processor fees, refunds/chargebacks, taxes and outstanding vendor liabilities must remain covered by a cash reserve. Include paid failed attempts and unreconciled requests. Unknown outcomes retain reservations; settlement needs provider receipts and idempotency.
+
+**Launch blocker:** these are tested allocation policies, not a connected all-provider billing collector. Actual invoices, rate configuration, shared-cost allocation, atomic company/customer reservations, settlement and dispatch-time rechecks must be connected before autonomous outreach. Private acceptance tests retain their existing small session allowance and do not use customer wallets. The policies do not stop an external provider's recurring subscription or guarantee profitability.
