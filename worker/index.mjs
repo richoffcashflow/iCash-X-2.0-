@@ -1,19 +1,19 @@
-import http from "node:http";
-
-// Railway's worker stays dormant until the durable queue, tenant budgets,
-// provider credentials, and channel release policies are connected.
-// Never turn this process into a polling loop that can spend credits by itself.
-const port = Number(process.env.PORT || 3001);
-const server = http.createServer((request, response) => {
-  if (request.url === "/health") {
-    response.writeHead(200, { "content-type": "application/json" });
-    response.end(JSON.stringify({ status: "standby", outreachEnabled: false }));
-    return;
-  }
-  response.writeHead(404);
-  response.end();
+import http from 'node:http';
+import {createRpc,tick} from './runner.mjs';
+const configured=Boolean(process.env.SUPABASE_URL&&process.env.SUPABASE_SECRET_KEY);
+const active=configured&&process.env.SCREENING_WORKER_ENABLED==='true';
+let stopping=false,timer,failures=0;
+const rpc=active?createRpc(process.env.SUPABASE_URL,process.env.SUPABASE_SECRET_KEY):null;
+async function loop(){
+ if(stopping||!rpc)return;
+ let worked=false;
+ try{worked=await tick(rpc);failures=0;}catch{failures=Math.min(failures+1,6);console.error('Screening database unavailable; backing off');}
+ if(!stopping)timer=setTimeout(loop,failures?Math.min(60000,1000*2**failures):worked?250:15000);
+}
+const server=http.createServer((req,res)=>{
+ if(req.url!=='/health'){res.writeHead(404);res.end();return;}
+ res.writeHead(failures>=3?503:200,{'content-type':'application/json'});
+ res.end(JSON.stringify({status:active?(failures?'degraded':'screening'):'standby',outreachEnabled:false}));
 });
-
-server.listen(port, "0.0.0.0", () => {
-  console.log(`iCash X worker in standby on port ${port}`);
-});
+server.listen(Number(process.env.PORT||3001),'0.0.0.0',()=>{if(active)void loop();});
+for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{stopping=true;clearTimeout(timer);server.close();});

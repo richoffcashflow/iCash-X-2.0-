@@ -1,5 +1,6 @@
 FROM node:22-alpine
 WORKDIR /app
-COPY index.mjs ./index.mjs
+COPY worker ./worker
+COPY lib ./lib
 EXPOSE 3001
-CMD ["node", "index.mjs"]
+CMD ["node", "--experimental-strip-types", "worker/index.mjs"]
