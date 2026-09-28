@@ -97,3 +97,16 @@ Private voice-test page now imports an ElevenLabs conversation ID without starti
 One atomic session update saves the completed result, verbatim seller notes, stable activity IDs, callback status, and confirmed timestamp. Repeated reads return the persisted result. Provider prose is explicitly labeled as an unverified summary; it never sets listing status, offer authority, or live scheduling. Callback records remain test-only, with no dispatcher. The customer home feed and live seller callbacks are not connected by this change.
 
 Owner reports changing the private opener in ElevenLabs to “Hey, is now a good time to talk about the property?” The source configuration now matches. The source prompt removes the repetitive acknowledgment/question pattern; this prompt edit is not pushed into the provider automatically. Do not run a tuning build just to deploy this result feature.
+
+
+## Property context acceptance test (2026-09-28)
+
+The private browser test optionally accepts a DealMachine property ID. Starting reserves one of the existing limited voice sessions before any billable lookup. Exactly one GET property request uses `enrich=true`, `contact_audience=none`, and explicit fields. No contacts are purchased and failed/unknown requests are never automatically retried. An unknown lookup consumes the reserved test allowance; inspect it before starting another attempt.
+
+The response is reduced to property facts, estimates, timestamp and provider-reported credit counts, saved to the same service-role-only session, and passed through the ElevenLabs SDK contextual update. No raw contacts, API keys or provider errors reach the browser. Dollar cost is unknown until reconciled with actual billing; vendor credits are not customer credits. Snapshots are private session evidence, not a cross-tenant cache.
+
+At the operator's request, `estimated_value` is used as the preliminary ARV input for screening. The API calls this field estimated market value; the application preserves `sourceField=estimated_value`, `usage=screening_assumption` and `reviewed=false`. A preliminary buyer ceiling uses 70% of this input minus the upper valid repair estimate (or the single estimate if no range exists), before assignment fee. Missing, invalid or nonviable inputs produce no ceiling. It never approves an offer. The existing offer policy still requires reviewed evidence and subtracts the assignment fee.
+
+Open “Use a real property” on the private test page, enter a known property ID, and start the test. Verify that the speaker and address match, ask about repairs, and inspect the saved conversation and callback. The browser context path is separate from imported phone calls: importing does not attach property context retroactively or update the provider agent prompt. No sellers, SMS, contracts or actual callbacks are triggered.
+
+Automated tests use explicit fixtures to cover ID mismatch, missing/malformed values, conservative repair ranges, ARV mapping, offer gating, no-contact requests and no retry after a network failure. A live provider conversation with this context still needs owner acceptance testing.

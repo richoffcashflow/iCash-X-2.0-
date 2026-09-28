@@ -9,4 +9,4 @@ export async function voiceTestAccess(req:Request){
  if(!a||a.revoked||Date.parse(a.expires_at)<=Date.now())throw new Error('VOICE_TEST_ACCESS_DENIED');
  return hash;
 }
-export type VoiceTestSession={id:string;agent_id:string;conversation_id:string|null;state:string;result:unknown;created_at:string};
+export type VoiceTestSession={id:string;agent_id:string;conversation_id:string|null;state:string;result:unknown;created_at:string;property_context:import('./property-context').PropertyContext|null};
