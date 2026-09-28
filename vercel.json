@@ -1,0 +1,1 @@
+{"buildCommand":"node scripts/elevenlabs-check.mjs && pnpm build"}
