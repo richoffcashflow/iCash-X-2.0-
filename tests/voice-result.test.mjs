@@ -28,3 +28,23 @@ assert.deepEqual(saved.activity,voiceResult(claimed,expected,now).activity);
 assert.ok(saved.activity.some(e=>e.title==='Practice callback recorded'));
 assert.ok(!voiceResult(sample({callback_confirmed:false}),expected,now).activity.some(e=>e.title==='Practice callback recorded'));
 console.log('Verbatim seller evidence and deterministic practice activity passed.');
+
+const relative=sample({callback_confirmed:false,callback_at:'',callback_timezone:'',callback_quote:'Yeah.'});
+relative.metadata.start_time_unix_secs=Date.parse('2026-09-28T17:15:00Z')/1000;
+relative.transcript=[{role:'user',message:'Call me tomorrow at 2 PM.'},{role:'agent',message:'Okay, so that is two PM Central time tomorrow. Does that time work?',time_in_call_secs:26},{role:'user',message:'Yeah.',time_in_call_secs:38}];
+const rnow=Date.parse('2026-09-28T19:30:00Z');
+assert.equal(voiceResult(relative,expected,rnow).dueAt,'2026-09-29T19:00:00.000Z');
+assert.equal(voiceResult(relative,expected,rnow).callbackEvidence.quote,'Yeah.');
+assert.equal(voiceResult({...relative,metadata:{}},expected,rnow).callbackStatus,'needs_confirmation');
+for(const tail of ['Actually call tomorrow at 3 PM.',"Don't call me.",'Cancel that.']){
+ const changed={...relative,transcript:[...relative.transcript,{role:'user',message:tail}]};
+ assert.equal(voiceResult(changed,expected,rnow).dueAt,null);
+}
+const {relativeCallback}=await import('../lib/relative-callback.ts');
+const turns=(message)=>[{role:'agent',message,seconds:10},{role:'user',message:'Yes.',seconds:15}];
+assert.equal(relativeCallback(turns('Tomorrow at two PM Central?'),Date.parse('2026-10-31T15:00:00Z')/1000,Date.parse('2026-10-31T16:00:00Z')).dueAt,'2026-11-01T20:00:00.000Z');
+assert.equal(relativeCallback(turns('Tomorrow at one AM Central?'),Date.parse('2026-10-31T15:00:00Z')/1000,Date.parse('2026-10-31T16:00:00Z')),null);
+assert.equal(relativeCallback(turns('Tomorrow at two AM Central?'),Date.parse('2027-03-13T15:00:00Z')/1000,Date.parse('2027-03-13T16:00:00Z')),null);
+assert.equal(relativeCallback(turns('Tomorrow at two PM?'),relative.metadata.start_time_unix_secs,rnow),null);
+assert.equal(relativeCallback(turns('Tomorrow at two or three PM Central?'),relative.metadata.start_time_unix_secs,rnow),null);
+console.log('Relative callback, source date, later changes, and daylight-saving checks passed.');
