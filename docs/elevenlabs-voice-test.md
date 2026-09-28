@@ -62,3 +62,18 @@ Rules for live integration:
 Customer identity storage and automatic voice assignment are implemented, but not yet wired into live seller calling. The current private test uses only the isolated iCash X identity.
 
 - Private agent tuning verified 2026-09-28: Chris — Charming, Down-to-Earth; eleven_v3_conversational; speed 0.97. Short conversational delivery prompt; private auth and 180-second limit preserved. No calls were initiated by tuning. Subjective audio quality still requires the owner’s microphone test.
+
+## V4 and conversation behavior — 2026-09-28
+
+The official model guide lists `eleven_v4_turbo`, while the public OpenAPI `TTSConversationalModel` enum still omitted it during this check. The actual authenticated PATCH of the isolated private agent returned 200, and a subsequent GET confirmed `eleven_v4_turbo`, the original voice, authentication enabled, and the 180-second cap. No calls were initiated. The API response takes precedence over the stale enum for this verified integration.
+
+The private-test prompt now leads a concise acquisitions discussion: seller motivation, relevant condition facts, timeline, ownership, targeted objection handling, and an explicit next-step request. It must not invent an offer or claim that a contract/message was sent. Real offer presentation and contract-link texting remain unconnected. They require reviewed underwriting, an authorized ceiling, agreed terms, owner checks, an approved contract/e-signature integration, an enabled messaging provider, and actual send/delivery/signature receipts. No seller call is enabled by these changes.
+
+A subsequent authenticated update and GET verified v4 Turbo with Chris, eager turn-taking, speculative response generation, interruption events, automatic spelling patience, and the exact revised acquisitions prompt. Authentication and the 180-second cap remained enabled. The preview build passed. Speculative generation can increase LLM usage; it is confined to the capped private test and must be measured before production rollout. No zero-latency claim is warranted. V4 does not support the old speed/style sliders; natural pacing is directed through the dialogue instructions.
+
+Public ElevenAgents pricing reviewed: standard additional call minutes $0.08/minute, LLM usage additional, external carrier billed separately. This is published general pricing, not a verified account-specific v4 invoice. Actual v4 audio quality, end-to-end latency, and cost still require a completed acceptance conversation.
+
+Sources:
+- https://elevenlabs.io/docs/overview/models
+- https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4
+- https://elevenlabs.io/pricing/agents
