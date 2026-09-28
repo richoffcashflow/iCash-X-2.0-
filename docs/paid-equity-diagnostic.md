@@ -1,0 +1,1 @@
+Authorized by owner September 28, 2026. One property-only search, estimate capped at one provider credit. Durable claim prevents paid replay. No customer credits or outreach. Run only on paid-equity-diagnostic preview branch. Aggregate report excludes seller and property identities.
