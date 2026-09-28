@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import Stripe from 'stripe';
+import {paidSessionMatches,previewPayments,stripeTest} from '../lib/stripe-test.ts';
+const order={id:'order',price_cents:2000,stripe_session_id:'cs_test_ok'};
+const session={id:'cs_test_ok',livemode:false,mode:'payment',status:'complete',payment_status:'paid',currency:'usd',amount_total:2000,metadata:{icash_test_order:'order'},payment_intent:'pi_ok'};
+assert.equal(paidSessionMatches(session,order),true);
+for(const patch of [{livemode:true},{amount_total:20},{currency:'eur'},{payment_status:'unpaid'},{metadata:{icash_test_order:'other'}},{id:'cs_test_other'},{payment_intent:null}]) assert.equal(paidSessionMatches({...session,...patch},order),false);
+process.env.VERCEL_ENV='production';process.env.STRIPE_SECRET_KEY='sk_test_fake';assert.equal(previewPayments(),false);assert.throws(()=>stripeTest());
+const stripe=new Stripe('sk_test_fake');const payload=JSON.stringify({id:'evt_test',object:'event',type:'checkout.session.completed',livemode:false,data:{object:session}});const secret='whsec_fixture';const header=stripe.webhooks.generateTestHeaderString({payload,secret});assert.equal(stripe.webhooks.constructEvent(payload,header,secret).id,'evt_test');assert.throws(()=>stripe.webhooks.constructEvent(payload+' ',header,secret));
+console.log('Stripe test gates, payment validation and webhook signature checks passed');
