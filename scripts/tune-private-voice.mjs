@@ -11,8 +11,8 @@ try {
  if(before.name!=='iCash X — private voice verification'||!before.platform_settings?.auth?.enable_auth||before.conversation_config?.conversation?.max_duration_seconds!==180)throw Error('PRIVATE_AGENT_GUARDS_MISSING');
  const {voices}=await elevenRequest('/v1/voices');
  // Choose only a provider premade voice available to this account, never a customer's clone.
- const voice=['Chris','Eric'].map(name=>voices.find(v=>v.category==='premade'&&v.name===name)).find(Boolean);
- if(!voice)throw Error('CONVERSATIONAL_PREMADE_VOICE_UNAVAILABLE');
+ const voice=['Chris','Eric'].map(name=>voices.find(v=>v.category==='premade'&&(v.name===name||v.name.startsWith(name+' ')))).find(Boolean);
+ if(!voice){console.log('AVAILABLE_PREMADE_VOICES',JSON.stringify(voices.filter(v=>v.category==='premade').map(v=>({name:v.name,labels:v.labels}))));throw Error('CONVERSATIONAL_PREMADE_VOICE_UNAVAILABLE');}
  const desired=voiceTestAgent(voice.voice_id).conversation_config;
  const result=await fetch(`https://api.elevenlabs.io${path}`,{method:'PATCH',headers:{'xi-api-key':process.env.ELEVENLABS_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({conversation_config:{agent:desired.agent,tts:desired.tts}}),signal:AbortSignal.timeout(20000),redirect:'error'});
  if(!result.ok)throw Error(`VOICE_UPDATE_HTTP_${result.status}`);
