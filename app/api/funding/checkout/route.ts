@@ -14,8 +14,8 @@ export async function POST(req:Request){
  if(!acceptedFundingTerms(consent))return NextResponse.json({error:"Accept the current purchase terms to continue."},{status:400});
  const choice=consent as {packCode?:unknown;days?:unknown};
  const packCode=typeof choice.packCode==="string"&&/^[a-z_]{1,30}$/.test(choice.packCode)?choice.packCode:"start";
- const runDays=typeof choice.days==="number"?choice.days:7;
- if(!Number.isInteger(runDays)||runDays<1||runDays>30)return NextResponse.json({error:"Choose 1–30 days."},{status:400});
+ const runDays=typeof choice.days==="number"?choice.days:3;
+ if(!Number.isInteger(runDays)||runDays<3||runDays>30)return NextResponse.json({error:"Choose 3–30 days."},{status:400});
  const mode=fundingMode()!;const origin=req.headers.get("origin")!;
  const jar=await cookies();let token=jar.get("icash_funding_guest")?.value;
  if(!validGuest(token)){token=randomBytes(32).toString("hex");jar.set("icash_funding_guest",token,{httpOnly:true,secure:true,sameSite:"lax",path:"/",maxAge:86400*30});}
