@@ -1,10 +1,10 @@
 # iCash X
 
-Outbound-first wholesaling platform. The customer opens a prompt without sign-in, sees a clearly labeled sample deal, then gets a small real free bot allowance after creating an account. Funding expands the bot's work only with an approved daily limit; the user can pause it. The bot searches houses and land without asking the customer to select a type. iCash X owns and operates the DealMachine, Twilio, Blooio, and ElevenLabs integrations. Customers do not configure vendor APIs, lists, campaigns, or prompts.
+Outbound-first wholesaling platform. The customer taps one start button without sign-in, sees a clearly labeled sample deal, then gets a small real free bot allowance after creating an account. Funding expands the bot's work only with an approved daily limit; the user can pause it. The bot searches houses and land without asking the customer to select a type. iCash X owns and operates the DealMachine, Twilio, Blooio, and ElevenLabs integrations. Customers do not configure vendor APIs, lists, campaigns, or prompts.
 
 ## State of this repository
 
-This is a Vercel-deployed, one-page guided bot sandbox plus tested pure allowance, credit allocation, and closing workflow gates. The open prompt starts the same fictional walkthrough; it is not a general AI chat yet. The sample deal and $20,000 gross spread are explicitly fictional; the ranking score uses real deterministic code. The free live allowance gate exists in code but is not wired to accounts or provider jobs. It has no sign-up, payment processing, live property data, calling, messaging, contracts, or title integrations yet. The preview makes no charges or outreach and shows no fabricated live activity. Do not point paid ads at it as a working autonomous product.
+This is a Vercel-deployed, one-page guided bot sandbox plus tested pure allowance, credit allocation, and closing workflow gates. The one-button entry starts a fictional walkthrough. No typing or setup is required. The sample deal and $20,000 gross spread are explicitly fictional; the ranking score uses real deterministic code. The free live allowance gate exists in code but is not wired to accounts or provider jobs. It has no sign-up, payment processing, live property data, calling, messaging, contracts, or title integrations yet. The preview makes no charges or outreach and shows no fabricated live activity. Do not point paid ads at it as a working autonomous product.
 
 ## Deployments
 
