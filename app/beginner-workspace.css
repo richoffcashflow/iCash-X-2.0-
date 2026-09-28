@@ -57,3 +57,25 @@ summary:focus-visible {outline:2px solid #111;outline-offset:-3px}
 .operation-empty .demo-button {background:#111;color:#fff;border-color:#111}
 .operation-empty .demo-button:hover {background:#333}
 @media(max-width:380px){.balance-top {gap:8px}.balance-top strong {flex-wrap:wrap;gap:3px 7px}.fund-button {padding:0 10px}.promising-body h3 {font-size:20px}}
+
+
+/* Beginner entry: balance first, one dominant action, readable on a phone. */
+.console-header{display:flex;align-items:center;justify-content:space-between;padding:0 max(20px,calc((100vw - 636px)/2));background:#090909}
+.console-header>div{margin:0;padding:0;width:auto;max-width:none;gap:14px}
+.header-access{min-height:44px;padding:8px 14px;border:1px solid #555;border-radius:999px;background:transparent;color:#fff;font:inherit;font-size:14px;flex:none}
+.console-main{width:100%;max-width:680px;padding-top:24px}
+.balance-panel>p{font-size:14px;line-height:1.5;color:#626262;margin-top:12px}
+.balance-add{background:#fff;color:#111;border:1px solid #d5d5d5;box-shadow:none}
+.balance-add:hover{background:#f5f5f5;color:#111}
+.operation-empty{padding:32px 26px 26px}
+.operation-empty .entry-title{font-size:clamp(30px,5.5vw,40px);font-weight:750;letter-spacing:-.045em;line-height:1.12;margin:0 0 16px;max-width:430px}
+.operation-empty>p{font-size:17px;line-height:1.55;color:#555;margin:0 0 24px;max-width:475px}
+.operation-empty .first-action{background:#111;color:#fff;min-height:56px;font-size:16px;font-weight:700;padding:14px 16px;border:1px solid #111;gap:10px}
+.operation-empty .first-action:hover{background:#292929}
+.operation-empty>small{font-size:13px;line-height:1.5;margin-top:13px;color:#666}
+.operation-empty>p.sample-label{font-size:12px;line-height:1.5;color:#747474;text-align:center;margin:12px 0 0}
+.stream-status{letter-spacing:0;font-size:12px}.stream-status>span:last-child{font-size:11px;color:#666}
+.stream-current p,.needs-you-card p{font-size:14px;line-height:1.5}.stream-note{font-size:12px;color:#666;line-height:1.5}
+.account-access{display:grid;gap:16px;max-width:440px}.account-access label{display:grid;gap:8px;font-size:15px;font-weight:600}.account-access input{width:100%;min-height:48px;border:1px solid #bbb;border-radius:12px;padding:12px 14px;font:inherit;font-size:16px;background:#fff;color:#111}.account-access input:focus-visible{outline:2px solid #111;outline-offset:2px}.account-access button{min-height:48px}.funding-note{font-size:13px;line-height:1.5;color:#666}
+@media(max-width:520px){.console-header{padding:0 18px}.console-header>div{padding:0;gap:10px}.console-header>div>span{font-size:9px}.console-main{padding:18px 16px 12px}.balance-panel{padding:16px;margin-bottom:16px}.balance-top strong{font-size:32px}.balance-top strong>span{font-size:12px}.balance-panel>p{font-size:13px;margin-top:10px}.operation-empty{padding:25px 20px 22px}.operation-empty .entry-title{font-size:32px;margin-bottom:14px}.operation-empty>p{font-size:16px;margin-bottom:22px}.operation-empty .first-action{font-size:15px;min-height:56px}.operation-empty>small{font-size:12px}.stream-status{flex-wrap:wrap}.stream-current h3{font-size:23px}}
+@media(max-width:350px){.console-header>div>span{display:none}.operation-empty .entry-title{font-size:29px}.operation-empty .first-action{font-size:14px}.balance-top{gap:10px}.balance-top strong>span{display:block}.stream-status>span:last-child{margin-left:0;width:100%}}

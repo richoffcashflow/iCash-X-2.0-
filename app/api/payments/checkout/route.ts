@@ -6,9 +6,9 @@ export const runtime="nodejs";
 export async function POST(req:Request) {
  if(!previewPayments()) return NextResponse.json({error:"Live payments are not enabled."},{status:403});
  const expectedOrigin=process.env.VERCEL_URL?`https://${process.env.VERCEL_URL}`:new URL(req.url).origin;
- if(req.headers.get("origin")!==expectedOrigin) return NextResponse.json({error:"Open this deployment directly to test checkout."},{status:403});
+ if(req.headers.get("origin")!==expectedOrigin) return NextResponse.json({error:"Please reopen iCash X and try again."},{status:403});
  const setup=paymentSetup();
- if(!setup.stripe||!setup.database) return NextResponse.json({error:"Test payment setup is incomplete."},{status:503});
+ if(!setup.stripe||!setup.database) return NextResponse.json({error:"Test payments are not ready yet."},{status:503});
  const jar=await cookies();
  let token=jar.get("icash_test_guest")?.value;
  if(!token || !/^[a-f0-9]{64}$/.test(token)) {token=randomBytes(32).toString("hex");jar.set("icash_test_guest",token,{httpOnly:true,secure:true,sameSite:"lax",path:"/",maxAge:86400});}
