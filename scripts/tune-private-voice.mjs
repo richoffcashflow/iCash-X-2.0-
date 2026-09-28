@@ -14,9 +14,10 @@ try {
  const voice=['Chris','Eric'].map(name=>voices.find(v=>v.category==='premade'&&(v.name===name||v.name.startsWith(name+' ')))).find(Boolean);
  if(!voice){console.log('AVAILABLE_PREMADE_VOICES',JSON.stringify(voices.filter(v=>v.category==='premade').map(v=>({name:v.name,labels:v.labels}))));throw Error('CONVERSATIONAL_PREMADE_VOICE_UNAVAILABLE');}
  const desired=voiceTestAgent(voice.voice_id).conversation_config;
- const result=await fetch(`https://api.elevenlabs.io${path}`,{method:'PATCH',headers:{'xi-api-key':process.env.ELEVENLABS_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({conversation_config:{agent:desired.agent,tts:desired.tts}}),signal:AbortSignal.timeout(20000),redirect:'error'});
+ const result=await fetch(`https://api.elevenlabs.io${path}`,{method:'PATCH',headers:{'xi-api-key':process.env.ELEVENLABS_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({conversation_config:{agent:desired.agent,tts:desired.tts,turn:desired.turn,conversation:desired.conversation}}),signal:AbortSignal.timeout(20000),redirect:'error'});
  if(!result.ok)throw Error(`VOICE_UPDATE_HTTP_${result.status}`);
  const after=await elevenRequest(path);
  if(after.conversation_config?.tts?.voice_id!==voice.voice_id||after.conversation_config?.tts?.model_id!==desired.tts.model_id||!after.platform_settings?.auth?.enable_auth||after.conversation_config?.conversation?.max_duration_seconds!==180)throw Error('VOICE_UPDATE_VERIFICATION_FAILED');
- console.log('ICASH_VOICE_TUNED',JSON.stringify({voice:voice.name,model:after.conversation_config.tts.model_id,speed:after.conversation_config.tts.speed,private:true,callsStarted:0}));
+ if(after.conversation_config.turn?.turn_eagerness!=='eager'||!after.conversation_config.turn?.speculative_turn||!after.conversation_config.conversation?.client_events?.includes('interruption')||after.conversation_config.agent?.prompt?.prompt!==desired.agent.prompt.prompt)throw Error('VOICE_BEHAVIOR_VERIFICATION_FAILED');
+ console.log('ICASH_VOICE_TUNED',JSON.stringify({voice:voice.name,model:after.conversation_config.tts.model_id,turnEagerness:after.conversation_config.turn?.turn_eagerness,speculativeTurn:after.conversation_config.turn?.speculative_turn,interruptions:after.conversation_config.conversation?.client_events?.includes('interruption'),private:true,callsStarted:0}));
 }catch(error){console.error('ICASH_VOICE_TUNE_FAILED',/^([A-Z_0-9]+)$/.test(error.message)?error.message:'UNKNOWN_OUTCOME_CHECK_AGENT_BEFORE_RETRY');process.exitCode=1;}
