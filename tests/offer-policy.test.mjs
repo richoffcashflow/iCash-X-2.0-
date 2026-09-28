@@ -10,4 +10,6 @@ assert.equal(calculateHouseOffer({...input,repairs:evidence(30000000)}).status,'
 assert.throws(()=>calculateHouseOffer({...input,ruleBasisPoints:7500}));
 assert.throws(()=>calculateHouseOffer({...input,assignmentFeeCents:NaN}));
 assert.equal(calculateHouseOffer({...input,arv:evidence(101),repairs:evidence(0),assignmentFeeCents:0}).maxSellerOfferCents,70);
+assert.equal(calculateHouseOffer({...input,assignmentFeeCents:undefined}).maxSellerOfferCents,15000000);
+assert.equal(calculateHouseOffer({...input,assignmentFeeCents:undefined}).assignmentFeeCents,1000000);
 console.log('House offer policy checks passed');
