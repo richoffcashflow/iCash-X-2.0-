@@ -1,0 +1,23 @@
+import {NextResponse} from 'next/server';
+import {currentUser} from '@/lib/account-auth';
+import {allowedOrigin} from '@/lib/funding-policy';
+import {db} from '@/lib/stripe-test';
+import {elevenRequest} from '@/lib/elevenlabs';
+import {identityNames,chooseAccountVoice} from '@/lib/customer-identity';
+const headers={'Cache-Control':'private, no-store'};
+export async function POST(req:Request){
+ if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
+ try{
+  const user=await currentUser(true);
+  if(!user)return NextResponse.json({error:'Sign in to save your name.'},{status:401,headers});
+  const raw=await req.text();if(raw.length>2048)return NextResponse.json({error:'Name is too long.'},{status:400,headers});
+  let names;try{names=identityNames(JSON.parse(raw));}catch{return NextResponse.json({error:'Enter your first and last name. Company is optional.'},{status:400,headers});}
+  const [account]=await db<{id:string}[]>(`icash_accounts?owner_user_id=eq.${user.id}&select=id&limit=1`);
+  if(!account)return NextResponse.json({error:'Finish setting up your funded account first.'},{status:409,headers});
+  const [existing]=await db<{voice_id:string;voice_name:string}[]>(`icash_customer_identities?account_id=eq.${account.id}&select=voice_id,voice_name`);
+  let voice=existing;
+  if(!voice){const catalog=await elevenRequest<{voices:{voice_id:string;name:string;category:string}[]}>('/v1/voices');const selected=chooseAccountVoice(account.id,catalog.voices);voice={voice_id:selected.voice_id,voice_name:selected.name};}
+  const identity=await db('rpc/icash_save_customer_identity','POST',{p_user:user.id,p_first:names.first_name,p_last:names.last_name,p_company:names.company_name,p_voice:voice.voice_id,p_voice_name:voice.voice_name});
+  return NextResponse.json({identity},{headers});
+ }catch{return NextResponse.json({error:'Could not save your details. Please try again.'},{status:503,headers});}
+}

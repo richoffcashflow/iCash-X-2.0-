@@ -37,7 +37,7 @@ Provider credit units and provider-reported USD costs remain separate. Missing U
 - A private agent was successfully created with authentication enabled and a 180-second maximum.
 - The synthetic WebSocket check timed out after its first user message. Recovery retrieved the exact isolated conversation and persisted its transcript and provider summary without initiating a duplicate call. The 61-second conversation reported 667 provider credit units / $0.066680670765539 provider USD cost. These are provider units, not customer credits.
 - The summary mentioned a callback but the user had not completed the confirmation exchange. The application correctly persisted `needs_confirmation` with no due date. Confirmed callback scheduling has passed deterministic fixture tests, but has NOT passed a real microphone conversation yet. Provider has-audio fields describe retained audio availability; because recording is disabled, they are not proof that speech synthesis or recognition failed.
-- Automatic approval review rejected issuing an owner access grant valid for 48 hours / 3 sessions because scope, duration and recipient need explicit approval. No owner access token was granted. Obtain approval before issuing it; do not circumvent this with another access method.
+- After explicit owner approval, a private grant was issued for 48 hours / 3 sessions. Never commit the raw capability or extend its allowance without authorization.
 - Automatic preview verification was removed after diagnosis so unrelated rebuilds do not perform provider mutations. Re-enable the explicit verification build command only for the next authorized acceptance run.
 
 Official references:
@@ -45,3 +45,20 @@ Official references:
 - https://elevenlabs.io/docs/api-reference/conversations/get-webrtc-token
 - https://elevenlabs.io/docs/api-reference/conversations/get
 - https://elevenlabs.io/docs/eleven-agents/libraries/java-script
+
+## Account identity requirements
+
+Customer seller calling remains disabled pending acceptance. Account details now saves first/last name, optional company, and a stable provider-premade voice assignment through an authenticated same-origin endpoint. The server derives the account from the verified user; client-supplied account IDs are ignored. Database upserts preserve the original voice even during concurrent first saves. No legal-name verification or signing authority is granted by saving these details.
+
+Rules for live integration:
+
+- Ask for first name, last name, and optional company name in one compact inline form. A company is not required. Use the confirmed company name when present; otherwise use the confirmed first and last name. Never infer a company or LLC from an email address or append LLC automatically.
+- Keep assistant name separate from the represented customer. For example: “I’m Alex, an AI assistant working on behalf of Jordan Smith.” The assistant must not claim to be Jordan.
+- Assign each account a voice automatically from a small approved, licensed conversational voice pool. Persist the selected voice ID and assistant name; use the same identity on follow-ups. Voices may be reused across accounts, but all customers should not default to the identical voice. Do not rotate voices per call or to circumvent contact controls.
+- Optional voice changes belong behind account details, not in the activation funnel. Apply a change to future conversations only. Freeze the identity snapshot on each conversation so transcripts remain attributable to the original identity.
+- Company/display-name edits do not rewrite signed contracts or grant signing authority. Contract party details require separate validation before use.
+- Never overwrite a shared provider agent with one customer's identity during concurrent calls. Use tenant-scoped agents or authenticated server-controlled session configuration and enforce tenant isolation.
+
+Customer identity storage and automatic voice assignment are implemented, but not yet wired into live seller calling. The current private test uses only the isolated iCash X identity.
+
+- Private agent tuning verified 2026-09-28: Chris — Charming, Down-to-Earth; eleven_v3_conversational; speed 0.97. Short conversational delivery prompt; private auth and 180-second limit preserved. No calls were initiated by tuning. Subjective audio quality still requires the owner’s microphone test.

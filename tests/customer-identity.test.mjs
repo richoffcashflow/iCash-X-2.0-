@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {identityNames,chooseAccountVoice} from '../lib/customer-identity.ts';
+assert.equal(identityNames({first_name:' Jordan ',last_name:'Smith',company_name:''}).principal,'Jordan Smith');
+assert.equal(identityNames({first_name:'Jordan',last_name:'Smith',company_name:'Oak Homes'}).principal,'Oak Homes');
+assert.throws(()=>identityNames({first_name:'',last_name:'Smith'}));
+assert.throws(()=>identityNames({first_name:'{{instructions}}',last_name:'Smith'}));
+const pool=[{voice_id:'a',name:'Chris - Conversational',category:'premade'},{voice_id:'b',name:'Sarah',category:'premade'},{voice_id:'c',name:'Chris',category:'cloned'}];
+assert.equal(chooseAccountVoice('account-a',pool).voice_id,chooseAccountVoice('account-a',[...pool].reverse()).voice_id);
+assert.equal(new Set(Array.from({length:20},(_,i)=>chooseAccountVoice(`account-${i}`,pool).voice_id)).size,2);
+assert.throws(()=>chooseAccountVoice('account-a',[pool[2]]));
+console.log('Customer identity fallback and stable approved voice assignment passed.');
