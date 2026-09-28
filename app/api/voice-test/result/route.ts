@@ -13,7 +13,7 @@ export async function GET(req:Request){
  try{
   const [s]=await db<VoiceTestSession[]>(`icash_voice_test_sessions?id=eq.${id}&token_hash=eq.${hash}&select=*`);
   if(!s)return NextResponse.json({error:'Test not found.'},{status:404,headers:voiceHeaders});
-  if(s.state==='complete'&&(s.result as {resultVersion?:number})?.resultVersion===2)return NextResponse.json({status:'complete',result:s.result},{headers:voiceHeaders});
+  if(s.state==='complete'&&(s.result as {resultVersion?:number})?.resultVersion===3)return NextResponse.json({status:'complete',result:s.result},{headers:voiceHeaders});
   if(!s.conversation_id)return NextResponse.json({status:'unavailable'},{headers:voiceHeaders});
   if(Date.now()-Date.parse(s.created_at)>24*3600000)return NextResponse.json({status:'needs_review'},{headers:voiceHeaders});
   if(s.state!=='complete'&&!await db<boolean>('rpc/icash_voice_test_poll','POST',{p_id:id,p_hash:hash}))return NextResponse.json({status:'processing'},{headers:voiceHeaders});

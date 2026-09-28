@@ -48,3 +48,6 @@ assert.equal(relativeCallback(turns('Tomorrow at two AM Central?'),Date.parse('2
 assert.equal(relativeCallback(turns('Tomorrow at two PM?'),relative.metadata.start_time_unix_secs,rnow),null);
 assert.equal(relativeCallback(turns('Tomorrow at two or three PM Central?'),relative.metadata.start_time_unix_secs,rnow),null);
 console.log('Relative callback, source date, later changes, and daylight-saving checks passed.');
+
+relative.transcript.push({role:'agent',message:"Perfect, I've got you down for a practice callback tomorrow at two PM Central. Before we wrap up, is there anything else about the house?",time_in_call_secs:39},{role:'user',message:'Not at this.',time_in_call_secs:49});
+assert.equal(voiceResult(relative,expected,rnow).dueAt,'2026-09-29T19:00:00.000Z');

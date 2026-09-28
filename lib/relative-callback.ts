@@ -19,6 +19,7 @@ export function relativeCallback(turns:Turn[],startSeconds:number|undefined,now:
   const times=[...text.matchAll(/\b(1[0-2]|[1-9]|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?::([0-5]\d))?\s*(a\.?m\.?|p\.?m\.?)\b/g)];
   const zoneMatches=[...text.matchAll(/\b(central|eastern|mountain|pacific)\b/g)];
   if(days.length!==1||times.length!==1||zoneMatches.length!==1)continue;
+  if(!/\b(confirm|does that|is that|would that|will that|work for you|sound good|sound right)\b/.test(text)&&! /^(today|tomorrow) at [^?.!]+\?$/.test(text.trim()))continue;
   // A fully specified but unanswered or rejected readback supersedes an earlier one.
   candidate=null;
   const next=turns[i+1];
