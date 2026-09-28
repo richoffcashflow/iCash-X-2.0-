@@ -10,7 +10,7 @@ import { AccountAccess } from "@/components/account-access";
 import { DemoRunner } from "@/components/demo-runner";
 
 export default function Home() {
-  type Account={signedIn:boolean;mode?:"test"|"live";email?:string;phone?:string;balanceCents?:number;assistantName?:string;paused?:boolean;billingReview?:boolean};
+  type Account={signedIn:boolean;signInReady?:boolean;mode?:"test"|"live";email?:string;phone?:string;balanceCents?:number;assistantName?:string;paused?:boolean;billingReview?:boolean};
   const [account,setAccount]=useState<Account|null>(null);
   const [accountError,setAccountError]=useState(false);
   const [signInOpen,setSignInOpen]=useState(false);
@@ -27,7 +27,7 @@ export default function Home() {
     <header className="console-header"><div><Image src="/icash-x-logo.png" alt="iCash X" width={111} height={62} priority /><span>{account?.signedIn?(account.mode==="test"?"TEST ACCOUNT":"YOUR WORKSPACE"):"PREVIEW MODE"}</span></div><button className="header-access" onClick={()=>account?.signedIn?void signOut():setSignInOpen(v=>!v)}>{account?.signedIn?"Sign out":"Sign in"}</button></header>
     <main className="console-main">
       <h1 className="sr-only">iCash X AI wholesaling workspace</h1>
-      {signInOpen&&<section className="balance-panel"><h2>Welcome back</h2><AccountAccess onSignedIn={()=>void refreshAccount()}/></section>}
+      {signInOpen&&<section className="balance-panel"><h2>Welcome back</h2><AccountAccess ready={account?.signInReady===true} onSignedIn={()=>void refreshAccount()}/></section>}
       {accountError&&<p role="alert">Could not load your account. <button onClick={()=>void refreshAccount()}>Retry</button></p>}
       <section className="balance-panel" aria-labelledby="balance-label">
         <div className="balance-top"><div><span id="balance-label">Credits for your bot</span><strong>{account?.signedIn?`$${((account.balanceCents??0)/100).toFixed(2)}`:"$0"}<span>{account?.signedIn?(account.mode==="test"?"test balance":"available"):"demo balance"}</span></strong></div><button className="fund-button" aria-expanded={fundingOpen} aria-controls="inline-funding" onClick={()=>setFundingOpen(value=>!value)}>Add {previewCreditPacks[0].label} <Plus size={18}/></button></div>
