@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {normalizeDealMachineRepairs as normalize} from '../lib/dealmachine-repairs.ts';
+const at='2026-09-28T05:30:00Z';
+// Sanitized values observed from the authorized live lookup; no contact data.
+const observed={dm_property_id:'prop_179843131',estimated_repair_cost:71190,building_condition:'Average',living_area_sqft:2034};
+const actual=normalize(observed,at);
+assert.equal(actual.baselineCents,7119000);
+assert.equal(actual.rangeCents,null);
+assert.equal(actual.rangeStatus,'missing');
+assert.equal(actual.reviewed,false);
+assert.equal(normalize({...observed,estimated_repair_cost:null},at).baselineCents,null);
+assert.equal(normalize({...observed,estimated_repair_cost:'71190'},at).baselineCents,null);
+assert.equal(normalize({...observed,estimated_repair_cost:-1},at).baselineCents,null);
+assert.equal(normalize({...observed,estimated_repair_cost:Infinity},at).baselineCents,null);
+assert.equal(normalize({...observed,estimated_repair_cost:Number.MAX_SAFE_INTEGER},at).baselineCents,null);
+assert.equal(normalize({...observed,estimated_repair_cost_low:0,estimated_repair_cost_high:0},at).rangeStatus,'invalid');
+assert.equal(normalize({...observed,estimated_repair_cost_low:90000,estimated_repair_cost_high:50000},at).rangeCents,null);
+assert.deepEqual(normalize({...observed,estimated_repair_cost_low:50000,estimated_repair_cost_high:90000},at).rangeCents,{low:5000000,high:9000000});
+assert.throws(()=>normalize({...observed,dm_property_id:'bad'},at));
+console.log('DealMachine repair normalization checks passed');
