@@ -6,7 +6,7 @@ export type DiscoveryResult={creditsUsed:number;peopleCredits:number;estimatedCr
 const integer=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 export async function discoverPage(c:DiscoveryConfig,d:Dependencies){
  if(!/^\d{5}$/.test(c.zip)||!integer(c.page)||c.page<1||!integer(c.perPage)||c.perPage<1||c.perPage>10||!integer(c.unitCostMicros)||c.unitCostMicros===0||!integer(c.quotedDataCostMicros))throw new Error('DISCOVERY_CONFIGURATION_INVALID');
- const body={locations:[{type:'zip_code',code:c.zip}],anchor:'properties',contact_audience:'none',filters:[{filter_id:'property_type',operator:'contains_any',value:['Single Family']},{filter_id:'equity_percent',operator:'greater_than_or_equal',value:70}],fields:discoveryFields,page:c.page,per_page:c.perPage};
+ const body={locations:[{type:'zip_code',code:c.zip}],anchor:'properties',contact_audience:'none',filters:[{filter_id:'property_type',operator:'contains_any',value:[1]},{filter_id:'estimated_equity_percentage',operator:'greater_than_or_equal',value:70}],fields:discoveryFields,page:c.page,per_page:c.perPage};
  const estimate=await d.request({...body,estimate_cost:true}) as {estimated_credits?:{this_page?:unknown;breakdown?:{people?:unknown}}};
  const credits=estimate?.estimated_credits?.this_page;
  if(!integer(credits)||credits>c.perPage||estimate?.estimated_credits?.breakdown?.people!==0)throw new Error('DISCOVERY_ESTIMATE_INVALID');

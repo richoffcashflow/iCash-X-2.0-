@@ -10,9 +10,6 @@ let report={status:'skipped'};
 if(process.env.VERCEL_ENV==='production'&&process.env.VERCEL_GIT_COMMIT_REF==='main'){
  try{
  if(!process.env.DEALMACHINE_API_KEY||!process.env.SUPABASE_SECRET_KEY||!process.env.SUPABASE_URL)throw new Error('PREVIEW_CREDENTIALS_MISSING');
- const paths=['/filters?source_type=properties&search=equity&per_page=250','/filters?source_type=properties&search=property_type&per_page=250','/fields?source_type=properties&search=equity&per_page=250'];
- metadata=[];for(const path of paths){const r=await fetch('https://api.v2.dealmachine.com/v1'+path,{headers:{Authorization:'Bearer '+process.env.DEALMACHINE_API_KEY},redirect:'error',signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error('METADATA_HTTP_'+r.status);metadata.push({path,data:await r.json()});}
- throw new Error('METADATA_REVIEW');
  const [job]=await db('id=eq.'+id);
  if(!job||job.state!=='authorized'){report={status:'already_used_or_not_authorized'};}
  else{
