@@ -1,0 +1,6 @@
+allowBuilds:
+  esbuild: false
+  fsevents: false
+  sharp: false
+  unrs-resolver: false
+  workerd: false
