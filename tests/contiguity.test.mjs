@@ -11,7 +11,7 @@ await assert.rejects(()=>sendContiguityTest(input,{ICASH_CONTIGUITY_TEST_SEND:'t
 assert.equal(calls,0);
 const env={ICASH_CONTIGUITY_TEST_SEND:'true',CONTIGUITY_FROM:input.from,CONTIGUITY_TEST_TO:input.to,CONTIGUITY_API_KEY:'test'};
 await assert.rejects(()=>sendContiguityTest(input,env,async()=>{calls++;throw Error('SECRET');}),/UNKNOWN_DO_NOT_RETRY/);assert.equal(calls,1);
-const r=await sendContiguityTest(input,env,async(url,opts)=>{assert.equal(url,'https://api.contiguity.com/send/imessage');assert.equal(opts.redirect,'error');assert.deepEqual(JSON.parse(opts.body).fallback,{when:[]});return Response.json({object:'response',data:{message_id:'imsg_test'}});});assert.equal(r.status,'accepted');
+const r=await sendContiguityTest(input,env,async(url,opts)=>{assert.equal(url,'https://api.contiguity.com/send/imessage');assert.equal(opts.redirect,'error');assert.equal(opts.headers.Authorization,'Token test');assert.deepEqual(JSON.parse(opts.body).fallback,{when:[]});return Response.json({object:'response',data:{message_id:'imsg_test'}});});assert.equal(r.status,'accepted');
 const p=await contiguityPreflight('test',async(url,opts)=>{assert.equal(opts.method,'GET');assert.equal(url,'https://api.contiguity.com/numbers/leased');return Response.json({object:'response',data:{numbers:[{number:{e164:input.from},lease_status:'paused',capabilities:{channels:['imessage']}}]}});});assert.equal(p.activeIMessageNumbers,0);
 await assert.rejects(()=>contiguityPreflight('test',async()=>Response.json({error:'secret'},{status:401})),/^Error: CONTIGUITY_HTTP_401$/);
 const raw=Buffer.from('{"test":true}'),now=1700000000000,secret='secret';
