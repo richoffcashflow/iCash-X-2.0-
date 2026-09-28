@@ -1,1 +1,1 @@
-{"buildCommand":"pnpm build"}
+{"buildCommand":"node --experimental-strip-types scripts/tune-private-voice.mjs && pnpm build"}
