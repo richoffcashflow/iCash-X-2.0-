@@ -6,7 +6,12 @@ export async function elevenRequest<T>(path:string, body?:unknown, fetcher:typeo
   let r:Response;
   try{r=await fetcher(`https://api.elevenlabs.io${path}`,{method:body===undefined?'GET':'POST',headers:{'xi-api-key':key,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(20000),redirect:'error',cache:'no-store'});}
   catch{throw new Error(body===undefined?'VOICE_UNREACHABLE':'VOICE_WRITE_UNKNOWN_NO_RETRY');}
-  if(!r.ok)throw new Error(`VOICE_HTTP_${r.status}`);
+  if(!r.ok){
+   // Only known permission identifiers are safe to surface; never log provider bodies.
+   let permission='';
+   try{const d=await r.json();const m=typeof d?.detail?.message==='string'?d.detail.message:'';permission=['convai_write','convai_read','voices_read','text_to_speech'].find(p=>m.includes(p))??'';}catch{}
+   throw new Error(`VOICE_HTTP_${r.status}${permission?'_'+permission.toUpperCase():''}`);
+  }
   return r.json();
 }
 

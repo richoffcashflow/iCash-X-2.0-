@@ -14,13 +14,16 @@ try{
  if(!cfg.agent_id){
   const claimed=await db('icash_voice_test_config?id=eq.1&provisioning_claimed=eq.false','PATCH',{provisioning_claimed:true});
   if(!claimed.length)throw Error('VOICE_PROVISIONING_REVIEW_REQUIRED');
+  report.stage='read_voices';
   const voices=await elevenRequest('/v1/voices');
   const voice=voices.voices?.find(v=>v.category==='premade'&&v.name==='Adam')??voices.voices?.find(v=>v.category==='premade');
   if(!voice)throw Error('VOICE_PREMADE_VOICE_MISSING');
+  report.stage='create_private_agent';
   const agent=await elevenRequest('/v1/convai/agents/create',voiceTestAgent(voice.voice_id));
   if(!agent.agent_id)throw Error('VOICE_AGENT_ID_MISSING');
   [cfg]=await db('icash_voice_test_config?id=eq.1','PATCH',{agent_id:agent.agent_id,enabled:true});
  }
+ report.stage='verify_private_agent';
  const agent=await elevenRequest(`/v1/convai/agents/${cfg.agent_id}`);
  if(!agent.platform_settings?.auth?.enable_auth||agent.conversation_config?.conversation?.max_duration_seconds!==180)throw Error('VOICE_AGENT_GUARDS_MISSING');
  report.privateAgentReady=true;

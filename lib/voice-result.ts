@@ -1,7 +1,7 @@
 export type VoiceConversation={conversation_id:string;agent_id:string;status:string;has_user_audio?:boolean;has_response_audio?:boolean;transcript?:{role:string;message?:string|null;time_in_call_secs?:number}[];analysis?:{transcript_summary?:string;data_collection_results?:Record<string,{value?:unknown}>};metadata?:{start_time_unix_secs?:number;call_duration_secs?:number;cost?:number;cost_fiat?:number}};
 export function voiceResult(c:VoiceConversation, expected:{conversationId:string;agentId:string}, now=Date.now()) {
  if(c.conversation_id!==expected.conversationId||c.agent_id!==expected.agentId)throw new Error('VOICE_ID_MISMATCH');
- if(c.status!=='done'||!c.analysis)return null;
+ if(c.status!=='done'||!c.analysis||!c.analysis.transcript_summary?.trim())return null;
  const transcript=(c.transcript??[]).filter(t=>['agent','user'].includes(t.role)&&typeof t.message==='string').map(t=>({role:t.role,message:t.message!,seconds:t.time_in_call_secs??0}));
  const fields=c.analysis.data_collection_results??{};
  const value=(name:string)=>fields[name]?.value;
