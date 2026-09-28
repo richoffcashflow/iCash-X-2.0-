@@ -6,6 +6,10 @@ export async function enrichForAccount(accountId:string,screeningId:string){
  if(!c?.enabled||!c.contacts_enabled||!c.contact_rate_id||Date.parse(c.data_rights_until)<=Date.now())return {status:'not_ready'};
  const [job]=await db<{snapshot:unknown;state:string}[]>(`icash_screening_jobs?id=eq.${screeningId}&account_id=eq.${accountId}&select=snapshot,state`);
  if(job?.state!=='complete')return {status:'financial_hold'};
+ const propertyId=(job.snapshot as {propertyId?:string})?.propertyId;
+ if(!propertyId||!/^prop_\d+$/.test(propertyId))return {status:'financial_hold'};
+ const [control]=await db<{manual:boolean}[]>(`icash_property_controls?account_id=eq.${accountId}&property_id=eq.${propertyId}&select=manual`);
+ if(control?.manual)return {status:'manual_control'};
  const [rate]=await db<{operation:string;enabled:boolean;expires_at:string;costs_micros:{dealmachine:number}}[]>(`icash_operation_rates?id=eq.${c.contact_rate_id}&select=operation,enabled,expires_at,costs_micros`);
  if(!rate?.enabled||rate.operation!=='owner_enrichment'||Date.parse(rate.expires_at)<=Date.now())return {status:'rate_required'};
  const key=process.env.DEALMACHINE_API_KEY;if(!key||!/^dm_sk_live_[A-Za-z0-9_-]+$/.test(key))return {status:'provider_not_configured'};

@@ -10,6 +10,7 @@ export async function GET(){
  const mode=fundingMode();const user=await currentUser(true);
  if(!user||!mode)return NextResponse.json({signedIn:false,signInReady:process.env.ICASH_AUTH_EMAIL_READY==="true"},{headers});
  const id=await db<string>("rpc/icash_claim_funding","POST",{p_user:user.id,p_mode:mode});
+ if(mode==="live")await db("rpc/icash_apply_funding_pacing","POST",{p_account:id});
  const [a]=await db<{id:string;assistant_name:string;bot_paused:boolean;daily_limit_cents:number}[]>(`icash_accounts?id=eq.${id}&select=id,assistant_name,bot_paused,daily_limit_cents`);
  const [identity]=await db<CustomerIdentity[]>(`icash_customer_identities?account_id=eq.${id}&select=first_name,last_name,company_name,principal,voice_id,voice_name`);
  const [wallet]=await db<{balance_cents:number;reserved_cents:number}[]>(`icash_wallets?account_id=eq.${id}&select=balance_cents,reserved_cents`);
