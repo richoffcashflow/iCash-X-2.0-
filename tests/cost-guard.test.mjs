@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {costCategories,fullCostReserve} from '../lib/cost-guard.ts';
+import {costCategories,fullCostReserve,minimumCostBasedCharge} from '../lib/cost-guard.ts';
 import {allocateCredits} from '../lib/outbound-brain.ts';
 const now=100000;
 const quote=(micros=100000)=>({rateVersion:'verified-fixture',checkedAt:now,expiresAt:now+60000,bufferBasisPoints:2000,amountsMicros:Object.fromEntries(costCategories.map(k=>[k,k==='elevenlabs'?micros:0]))});
@@ -19,3 +19,12 @@ const expensive=quote();expensive.amountsMicros.railway=300000;
 assert.equal(allocateCredits({...base,actions:[{...a,costQuote:expensive}]}).skipped[0].reason,'below margin floor');
 assert.equal(allocateCredits({...base,actions:[{...a,costQuote:undefined}]}).selected.length,0);
 console.log('All-in cost coverage, overhead margin, tiny costs, expiry and company reserves passed');
+
+assert.equal(minimumCostBasedCharge(100,8000),500);
+assert.equal(minimumCostBasedCharge(1,8000),5);
+const exact={...a,costQuote:{...quote(200000),bufferBasisPoints:0},estimatedProviderCostCents:20};
+const enough={...base,companyAvailableBudgetCents:1000};
+assert.equal(allocateCredits({...enough,actions:[exact]}).selected.length,1);
+assert.equal(allocateCredits({...enough,actions:[{...exact,customerChargeCents:99}]}).skipped[0].reason,'below margin floor');
+assert.equal(allocateCredits({...enough,actions:[{...exact,customerChargeCents:100,costQuote:undefined}]}).selected.length,0);
+console.log('Exactly 5x passes; below 5x and unknown costs are blocked');

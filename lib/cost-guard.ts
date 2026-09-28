@@ -12,3 +12,12 @@ export function fullCostReserve(quote:CostQuote|undefined,now:number){
  if(reserve>BigInt(Number.MAX_SAFE_INTEGER)||total>BigInt(Number.MAX_SAFE_INTEGER))return {ok:false as const,reason:'cost exceeds safe range'};
  return {ok:true as const,reserveCents:Number(reserve),estimatedTotalMicros:Number(total),rateVersion:quote.rateVersion};
 }
+
+/** Draft a minimum customer charge from a reviewed buffered cost. Database policy remains authoritative. */
+export function minimumCostBasedCharge(reserveCents:number,marginBasisPoints:number){
+ if(!Number.isSafeInteger(reserveCents)||reserveCents<0||!Number.isInteger(marginBasisPoints)||marginBasisPoints<0||marginBasisPoints>=10000)throw new Error('Invalid pricing inputs');
+ const divisor=BigInt(10000-marginBasisPoints);
+ const price=(BigInt(reserveCents)*BigInt(10000)+divisor-BigInt(1))/divisor;
+ if(price>BigInt(Number.MAX_SAFE_INTEGER))throw new Error('Price exceeds safe range');
+ return Number(price);
+}

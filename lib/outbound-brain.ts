@@ -29,7 +29,7 @@ export const launchPolicy: PacingPolicy = {
   maxDailyFundedFraction: 0.15,
   maxDailyBalanceFraction: 0.12,
   protectedFundedFraction: 0.25,
-  minimumGrossMarginFraction: 0.65,
+  minimumGrossMarginFraction: 0.8,
   activeProspectingFraction: 0.3,
   maxQueuedActions: 30,
 };
@@ -88,7 +88,7 @@ export function allocateCredits(input: AllocationInput): Allocation {
     else if (!companyConfigured) reason = "company budget not configured";
     else if (!cost.ok) reason = cost.reason;
     else if (cost.reserveCents < a.estimatedProviderCostCents) reason = "full cost quote understates provider cost";
-    else if (cost.reserveCents > Math.floor(a.customerChargeCents * (1 - p.minimumGrossMarginFraction))) reason = "below margin floor";
+    else if (BigInt(cost.reserveCents)*BigInt(10000) > BigInt(a.customerChargeCents)*BigInt(10000-Math.round(p.minimumGrossMarginFraction*10000))) reason = "below margin floor";
     else if (cost.reserveCents > companyRemaining) reason = "company cost budget exhausted";
     else if (selected.length >= p.maxQueuedActions) reason = "queue limit";
     else if (a.customerChargeCents > remaining) reason = "daily credit limit";

@@ -75,3 +75,10 @@ The owner-selected tax planning reserve is stored in `icash_operating_budget.tax
 Estimated available cash is limited by both remaining profit and cleared cash after unspent customer funds, unpaid bills/commitments, protected reserves and the tax reserve. Input balances and obligations must cover the same reconciled period without overlapping amounts; prior distributions reduce the profit limit. Missing numbers return unavailable, never invented profit. Operating cash funding is not a verified bank balance. No owner profit dashboard or withdrawal is enabled until bank/processor balances and complete costs are connected.
 
 Receipt retry comparisons use USD micro precision while retaining original evidence, preventing harmless JSON floating-point differences from becoming false billing conflicts. The shared REST adapter accepts empty successful RPC responses (204). Both cases have regression coverage.
+
+
+## Current pricing policy: 5x fully loaded cost
+
+The owner approved an 80% all-in pre-tax margin floor (minimum price = 5 × buffered fully loaded cost). The authoritative database setting is `minimum_margin_bps=8000`; both reservation and actual settlement checks use it. The allocator default matches and uses integer comparisons so an exact 80% margin is not rejected by binary floating-point rounding. `minimumCostBasedCharge` calculates a proposed minimum price from the reviewed cost and database margin configuration. Unknown costs still block work. Pack face values and customer balances are unchanged; this is an operation-pricing rule, not a promise of a deal or actual realized profit.
+
+The fixed company daily dollar cap is now disabled with `daily_limit_micros=NULL`. This is not unlimited spending: company funded cash, protected reserves, customer available credits, customer daily pacing/limits, financial screening and outreach authorization remain required. A zero cap still means stop; a positive cap can be restored through admin database configuration. The operating engine remains disabled until rates, available cash and live channel dispatch are configured.
