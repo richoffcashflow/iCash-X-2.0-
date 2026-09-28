@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { ArrowRight, LockKeyhole, Plus, Sparkles } from "lucide-react";
 import { previewCreditPacks } from "@/config/credit-packs";
+import { readDemoProgress } from "@/lib/demo-progress";
 import { DemoRunner } from "@/components/demo-runner";
 
 export default function Home() {
   const [started, setStarted] = useState(false);
   const [fundingOpen, setFundingOpen] = useState(false);
+  useEffect(()=>{if(readDemoProgress())setStarted(true);},[]);
   function start() { setStarted(true); }
   function openFunding() { setFundingOpen(true); window.requestAnimationFrame(()=>document.getElementById("inline-funding")?.scrollIntoView({behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",block:"center"})); }
 
