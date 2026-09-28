@@ -1,3 +1,4 @@
+import {recordPropertyCost} from '@/lib/operating-costs';
 import {NextResponse} from 'next/server';
 import {db} from '@/lib/stripe-test';
 import {elevenRequest} from '@/lib/elevenlabs';
@@ -24,6 +25,7 @@ export async function POST(req:Request){
    await db(`icash_voice_test_sessions?id=eq.${id}&token_hash=eq.${hash}&state=eq.reserved`,'PATCH',{property_lookup_status:'reserved'});
    property=await loadTestProperty(propertyId,process.env.DEALMACHINE_API_KEY!);
    await db(`icash_voice_test_sessions?id=eq.${id}&token_hash=eq.${hash}&state=eq.reserved`,'PATCH',{property_context:property,property_lookup_status:'complete'});
+   await recordPropertyCost(id,property.vendorCreditsUsed);
   }
   // No automatic retry: unknown provider outcomes retain the reservation and cannot create duplicate sessions.
   const token=await elevenRequest<{token:string;conversation_id:string}>(`/v1/convai/conversation/token?agent_id=${encodeURIComponent(s.agent_id)}`);
