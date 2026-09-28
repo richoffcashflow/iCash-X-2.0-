@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { ArrowRight, Plus } from "lucide-react";
+import { ArrowRight, Plus, X } from "lucide-react";
 import { previewCreditPacks } from "@/config/credit-packs";
 import { readDemoProgress } from "@/lib/demo-progress";
 import { FundingCheckout } from "@/components/funding-checkout";
@@ -21,17 +21,20 @@ export default function Home() {
   const [fundingOpen, setFundingOpen] = useState(false);
   useEffect(()=>{if(readDemoProgress())setStarted(true);if(new URLSearchParams(window.location.search).has("payment"))setFundingOpen(true);},[]);
   function start() { setStarted(true); }
+  function toggleSignIn(){setSignInOpen(value=>!value);setFundingOpen(false);}
+  function closeSignIn(){setSignInOpen(false);window.requestAnimationFrame(()=>document.getElementById("balance-sign-in")?.focus());}
   function openFunding() { setFundingOpen(true); window.requestAnimationFrame(()=>document.getElementById("inline-funding")?.scrollIntoView({behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",block:"center"})); }
 
   return <div className="console-shell">
-    <header className="console-header"><div><Image src="/icash-x-logo.png" alt="iCash X" width={111} height={62} priority /><span>{account?.signedIn?(account.mode==="test"?"TEST ACCOUNT":"YOUR ACCOUNT"):"FREE SAMPLE"}</span></div><button className="header-access" onClick={()=>account?.signedIn?void signOut():setSignInOpen(v=>!v)}>{account?.signedIn?"Sign out":"Sign in"}</button></header>
+    <header className="console-header"><div><Image src="/icash-x-logo.png" alt="iCash X" width={111} height={62} priority /><span>{account?.signedIn?(account.mode==="test"?"TEST ACCOUNT":"YOUR ACCOUNT"):"FREE SAMPLE"}</span></div>{account?.signedIn&&<button className="header-access" onClick={()=>void signOut()}>Sign out</button>}</header>
     <main className="console-main">
       <h1 className="sr-only">iCash X AI wholesaling workspace</h1>
-      {signInOpen&&<section className="balance-panel"><h2>Welcome back</h2><AccountAccess ready={account?.signInReady===true} onSignedIn={()=>void refreshAccount()}/></section>}
       {accountError&&<p role="alert">Could not load your account. <button onClick={()=>void refreshAccount()}>Retry</button></p>}
       <section className="balance-panel" aria-labelledby="balance-label">
-        <div className="balance-top"><div><span id="balance-label">Your balance</span><strong>{account?.signedIn?`$${((account.balanceCents??0)/100).toFixed(2)}`:"$0"}<span>{account?.signedIn?(account.mode==="test"?"test balance":"available"):"available"}</span></strong></div><button className={`fund-button ${account?.signedIn?"":"balance-add"}`} aria-expanded={fundingOpen} aria-controls="inline-funding" onClick={()=>setFundingOpen(value=>!value)}>Add {previewCreditPacks[0].label} <Plus size={18}/></button></div>
+        <div className="balance-heading"><span id="balance-label">Your balance</span>{!account?.signedIn&&<button id="balance-sign-in" className="balance-sign-in" aria-expanded={signInOpen} aria-controls="inline-sign-in" onClick={toggleSignIn}>Sign in <ArrowRight size={15} aria-hidden="true"/></button>}</div>
+        <div className="balance-top"><div><strong>{account?.signedIn?`$${((account.balanceCents??0)/100).toFixed(2)}`:"$0"}<span>{account?.signedIn?(account.mode==="test"?"test balance":"available"):"available"}</span></strong></div><button className={`fund-button ${account?.signedIn?"":"balance-add"}`} aria-expanded={fundingOpen} aria-controls="inline-funding" onClick={()=>{setFundingOpen(value=>!value);setSignInOpen(false);}}>Add {previewCreditPacks[0].label} <Plus size={18}/></button></div>
         <p>Funds your bot’s work. No monthly subscription.</p>
+        {signInOpen&&!account?.signedIn&&<div className="inline-sign-in" id="inline-sign-in" role="region" aria-labelledby="sign-in-title" onKeyDown={e=>{if(e.key==="Escape")closeSignIn();}}><div className="sign-in-heading"><h2 id="sign-in-title">Welcome back</h2><button aria-label="Close sign-in" onClick={closeSignIn}><X size={19}/></button></div><AccountAccess ready={account?.signInReady===true} onSignedIn={()=>void refreshAccount()}/></div>}
         {fundingOpen && <div className="inline-funding" id="inline-funding"><div><strong>Start with {previewCreditPacks[0].label}</strong><span>One-time payment</span></div><p>You choose a daily spending limit. Your bot stops when the money runs out. A deal is never guaranteed.</p><FundingCheckout onSignedIn={()=>{setFundingOpen(false);void refreshAccount();}}/><small>Real payments are not open yet. Test payments do not pay for real work.</small></div>}
       </section>
       <section className="operation-panel" aria-label="Your AI real estate assistant">
