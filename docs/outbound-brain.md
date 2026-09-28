@@ -28,3 +28,13 @@ An optional later inbound path can accept seller-initiated calls or responses an
 ## Reliability
 
 Railway worker pulls durable queued jobs. Each job has tenant ID, property/opportunity ID, evidence snapshot, due time, consent decision, policy version, expected cost, user credit reservation, and idempotency key. Recheck all gates immediately before dispatch; lock the job; use retry/backoff and dead-letter status. Twilio, Blooio, ElevenLabs, and DealMachine credentials remain server-side in iCash X accounts. Webhooks are authenticated and deduplicated. Persist all genuine movements to the activity feed. Never synthesize seller replies or status events to increase engagement.
+
+## House offer ceiling
+
+`lib/offer-policy.ts` implements the user's 70% policy: maximum seller offer = 70% of reviewed after-repair value minus reviewed repairs minus the planned assignment fee. Use low ARV and high repairs when inputs are ranges; round down to cents. A lower percentage can be supplied by policy, but this helper rejects percentages above 70%. Missing, invalid, or unreviewed estimates block calculation; negative ceilings produce no viable offer. Land requires separate underwriting. This is a ceiling, not an opening offer or authorization to send/sign. The helper is not yet connected to a live offer dispatcher.
+
+DealMachine's rehab estimator and wholesale calculator are documented in its product. API access to repair estimates is not yet confirmed; do not invent a response field or treat estimated property value as verified ARV. Preserve source, date, scope, confidence and review evidence in the future persisted estimate record; seller photos and claims can inform that review.
+
+Sources reviewed September 28, 2026:
+- https://www.dealmachine.com/tools/rehab-estimator
+- https://help.next.dealmachine.com/en/articles/15902494-wholesaling-calculator

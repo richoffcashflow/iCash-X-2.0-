@@ -34,3 +34,7 @@ The published terms (effective July 14, 2026), sections 2(b) and 2(e), describe 
 - https://docs.dealmachine.com/
 - https://dealmachine.com/pricing
 - https://dealmachine.com/terms-of-service
+
+## Implemented preflight (not a live acquisition integration)
+
+`npm run dealmachine:preflight -- 75201` checks usage, a ZIP-scoped count, and an estimate-only search in a trusted server runtime with DEALMACHINE_API_KEY injected. Omit ZIP for usage only. No property/contact retrieval is exposed, no retries are automatic, redirects are refused, and provider errors are sanitized. Tests use mocked transport; no authenticated provider check has run. Remaining work includes authenticated verification, durable global rate limits and credit reservations before any billable retrieval.
