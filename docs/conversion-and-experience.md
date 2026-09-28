@@ -25,3 +25,9 @@ The fictional free run is measured as `simulation_started` and `simulation_compl
 ## Failure paths
 
 If payment succeeds but the worker is not ready, credit the ledger, keep the operation paused, explain the exact blocker, and provide a path to support/refund handling. If a provider fails mid-operation, release unused reservations, retry idempotently, preserve all legal deadlines, and notify only when the user must act. If an ad click cannot identify a returning user, show the standard entry path and recover their account securely; never use ad parameters as identity.
+
+## One-page app entry
+
+The opening page is the workspace: balance first, live activity directly below. A free example runs inside the activity card and is labeled fictional. Add Credits expands inline in the balance card. No type selection, chat input, campaign setup, external funding page, or plan grid. Credit explanations expand inline. Live free allowance remains unavailable until account, grant ledger, provider data and dispatch exist.
+
+The primary acquisition conversion is a successfully settled credit purchase with accurate value and currency, verified server-side and deduplicated with the browser event. Add Credits clicks and demo completion are diagnostics, not purchases. This preview has no payment or Meta Purchase dispatch. Preserve pause, spending controls, and accessible disclosures in the same workspace.

@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { ArrowRight, Check, LockKeyhole, RotateCcw } from "lucide-react";
+import { ArrowRight, Check, LockKeyhole, RotateCcw, Plus, Sparkles } from "lucide-react";
 import { previewCreditPacks } from "@/config/credit-packs";
 import { rankProspect, type Prospect } from "@/lib/prospect-policy";
 
@@ -46,45 +45,29 @@ export default function Home() {
   const [started, setStarted] = useState(false);
   const [move, setMove] = useState(0);
   const [score, setScore] = useState(0);
-  const [finished, setFinished] = useState(false);
-  function start() { setScore(sampleRank()); setStarted(true); setMove(0); setFinished(false); }
-  function next() { if (move < moves.length - 1) setMove(value => value + 1); else setFinished(true); }
+  const [fundingOpen, setFundingOpen] = useState(false);
+  function start() { setScore(sampleRank()); setStarted(true); setMove(0); }
 
-  return <div className="entry-shell">
-    <header className="entry-header"><Image src="/icash-x-logo.png" alt="iCash X" width={111} height={62} priority /><span>PRODUCT PREVIEW</span></header>
-    <main className={started ? "entry-main is-running" : "entry-main"}>
-      {!started ? <>
-        <section className="entry-hero" aria-labelledby="entry-title">
-          <span className="entry-eyebrow">AI FOR REAL ESTATE WHOLESALING</span>
-          <h1 id="entry-title">Put your AI<br />to work.</h1>
-          <p>Find properties. Talk to sellers. Work toward a deal. Your bot handles the steps.</p>
-          <button className="entry-cta" onClick={start}>Try the bot free <ArrowRight size={20} /></button>
-          <div className="entry-reassurance">Free demo • No sign-up • No card</div>
-        </section>
-      </> : <section className="guided-workspace" aria-label="Guided product preview">
-        <div className="guided-heading"><button className="restart-link" onClick={start}><RotateCcw size={14}/> Restart example</button><span>FICTIONAL EXAMPLE</span></div>
-        <div className="guided-card">
-          <div className="guided-top"><span className="entry-avatar">X</span><div><strong>iCash X</strong><span>{finished ? "Example complete" : `Step ${move + 1} of 4`}</span></div><span className="example-tag">DEMO</span></div>
-          {!finished ? <>
-            <div className="guided-progress" aria-label={`Step ${move + 1} of 4`}>{moves.map((item,i)=><span key={item.name} className={i<=move ? "done" : ""}/>)}</div>
-            <div className="guided-body" key={move} aria-live="polite">
-              <h1>{moves[move].name}</h1>
-              <p className="guided-copy">{moves[move].action(score)}</p>
-              {"seller" in moves[move] && <div className="guided-quote"><span>SAMPLE SELLER</span><p>“{moves[move].seller}”</p></div>}
-              <div className="guided-lesson"><Check size={17}/><span>{moves[move].lesson}</span></div>
-            </div>
-            <div className="guided-action"><button className="entry-cta dark" onClick={next}>{move === 3 ? "What happens next?" : "Continue"}<ArrowRight size={20}/></button><span>Go at your own pace.</span></div>
-          </> : <div className="guided-finish">
-            <span className="finish-icon"><Check size={26}/></span><h1>Now you get it.</h1><p>Your bot works. You watch the progress, set the budget, and stay in control.</p>
-            <div className="free-summary"><strong>Start free.</strong><p>The live version will include a small allowance for real property research. No card needed.</p></div>
-            <button className="entry-cta dark" disabled>Live free access opens soon <LockKeyhole size={17}/></button>
-            <p className="connection-note">This preview is ready. Live accounts and property data are still being connected.</p>
-            <div className="later-funding"><span>NEED MORE LATER?</span><strong>Fund your bot from {previewCreditPacks[0].label}.</strong><p>Only when you choose. The bot pauses at your limit.</p></div>
-          </div>}
-        </div>
-        <p className="guided-disclosure">This example uses fictional people and deal outcomes. No seller is contacted. No earnings or deals are guaranteed.</p>
-      </section>}
+  return <div className="console-shell">
+    <header className="console-header"><div><Image src="/icash-x-logo.png" alt="iCash X" width={111} height={62} priority /><span>PREVIEW MODE</span></div></header>
+    <main className="console-main">
+      <h1 className="sr-only">iCash X AI wholesaling workspace</h1>
+      <section className="balance-panel" aria-labelledby="balance-label">
+        <div className="balance-top"><div><span id="balance-label">Credits for your bot</span><strong>$0<span>demo balance</span></strong></div><button className="fund-button" aria-expanded={fundingOpen} aria-controls="inline-funding" onClick={()=>setFundingOpen(value=>!value)}>Add credits <Plus size={18}/></button></div>
+        <p>Credits pay for property research and permitted calls or messages.</p>
+        {fundingOpen && <div className="inline-funding" id="inline-funding"><div><strong>Start with {previewCreditPacks[0].label}</strong><span>One-time credit purchase</span></div><p>You approve the daily limit. The bot pauses when it runs out. More credits never guarantee a deal.</p><button className="fund-button full" disabled>Payments open soon <LockKeyhole size={17}/></button><small>Checkout is not connected. You cannot be charged in this preview.</small></div>}
+      </section>
+      <section className="operation-panel" aria-labelledby="operation-title">
+        <div className="operation-top"><span className="bot-icon">X</span><div><h2 id="operation-title">Live activity</h2><span>{started ? "Sample activity · no live work" : "Live bot not connected yet"}</span></div><span className="mode-badge">{started ? "DEMO" : "PREVIEW"}</span></div>
+        {!started ? <div className="operation-empty"><h3>Your bot works. You follow along.</h3><p>iCash X helps find properties, talk to sellers, and work toward closing. Try a free example here.</p><button className="demo-button" onClick={start}>Run a free example <ArrowRight size={18}/></button><small>No typing. No sign-up. No card.</small></div> : <div className="operation-example">
+          <div className="example-progress"><span>EXAMPLE {move+1} OF 4</span><button onClick={start} aria-label="Restart sample deal"><RotateCcw size={15}/>Restart</button></div>
+          <div className="example-step" aria-live="polite"><h3>{moves[move].name}</h3><p>{moves[move].action(score)}</p>{"seller" in moves[move] && <blockquote><span>SAMPLE SELLER</span>“{moves[move].seller}”</blockquote>}<div className="example-lesson"><Check size={16}/><span>{moves[move].lesson}</span></div></div>
+          {move < 3 ? <button className="demo-button" onClick={()=>setMove(value=>value+1)}>Next step <ArrowRight size={18}/></button> : <div className="example-done"><Check size={18}/><span>Example complete. Your real bot's activity will appear here.</span></div>}
+          <small className="example-note">Fictional example. No real contact, contract, or payout.</small>
+        </div>}
+      </section>
+      <div className="free-access-note"><Sparkles size={18}/><p><strong>Free to start. Fund more work when you choose.</strong><span>Live free use will have a small limit. Accounts and property data are still being connected.</span></p></div>
     </main>
-    <footer className="entry-footer"><span>iCash X</span><Link href="/costs-and-disclosures">How credits work</Link></footer>
+    <footer className="console-footer"><details className="inline-disclosures"><summary>How credits work & important details</summary><div><p><strong>Credits:</strong> One-time funding starts at $20 in this preview. Exact operation rates and free limits will be shown before checkout is enabled. iCash X charges can differ from its provider costs.</p><p><strong>Your control:</strong> Approve a daily limit and pause at any time. Auto-reload requires separate opt-in. Free use stops at its limit and does not silently become paid use.</p><p><strong>Results:</strong> No property, contract, buyer, closing, or income is guaranteed. Demo people and outcomes are fictional. AI estimates and documents need appropriate verification.</p><p><strong>Live work:</strong> Contact permissions, local rules, owner authority, and approved contract terms must pass before work is dispatched. Being a property buyer does not by itself exempt AI calls from applicable rules.</p><p>This is a product preview. Accounts, live data, outreach, and payments are not connected. Final rates and terms remain pending.</p></div></details></footer>
   </div>;
 }
