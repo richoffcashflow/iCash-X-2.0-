@@ -79,3 +79,11 @@ summary:focus-visible {outline:2px solid #111;outline-offset:-3px}
 .account-access{display:grid;gap:16px;max-width:440px}.account-access label{display:grid;gap:8px;font-size:15px;font-weight:600}.account-access input{width:100%;min-height:48px;border:1px solid #bbb;border-radius:12px;padding:12px 14px;font:inherit;font-size:16px;background:#fff;color:#111}.account-access input:focus-visible{outline:2px solid #111;outline-offset:2px}.account-access button{min-height:48px}.funding-note{font-size:13px;line-height:1.5;color:#666}
 @media(max-width:520px){.console-header{padding:0 18px}.console-header>div{padding:0;gap:10px}.console-header>div>span{font-size:9px}.console-main{padding:18px 16px 12px}.balance-panel{padding:16px;margin-bottom:16px}.balance-top strong{font-size:32px}.balance-top strong>span{font-size:12px}.balance-panel>p{font-size:13px;margin-top:10px}.operation-empty{padding:25px 20px 22px}.operation-empty .entry-title{font-size:32px;margin-bottom:14px}.operation-empty>p{font-size:16px;margin-bottom:22px}.operation-empty .first-action{font-size:15px;min-height:56px}.operation-empty>small{font-size:12px}.stream-status{flex-wrap:wrap}.stream-current h3{font-size:23px}}
 @media(max-width:350px){.console-header>div>span{display:none}.operation-empty .entry-title{font-size:29px}.operation-empty .first-action{font-size:14px}.balance-top{gap:10px}.balance-top strong>span{display:block}.stream-status>span:last-child{margin-left:0;width:100%}}
+/* Show the work the assistant handles, in plain language. */
+.operation-empty>p.capability-intro{font-size:16px;margin-bottom:16px}
+.capability-list{list-style:none;margin:0 0 24px;padding:0;display:grid;gap:12px;text-align:left}
+.capability-list li{display:flex;align-items:flex-start;gap:10px;font-size:15px;line-height:1.45;color:#303030}
+.capability-list li>span{flex:none;width:24px;font-size:19px;line-height:1.15}
+.current-emoji{display:inline-block;margin-right:10px;font-size:.92em;vertical-align:baseline}
+.stream-event-icon.activity-emoji{border:0;border-radius:0;background:transparent;font-size:20px;width:25px;height:26px;line-height:1}
+@media(max-width:520px){.capability-list{gap:10px;margin-bottom:22px}.capability-list li{font-size:14px}.operation-empty>p.capability-intro{font-size:15px;margin-bottom:16px}.current-emoji{margin-right:8px}}
