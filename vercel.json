@@ -1,1 +1,1 @@
-{"buildCommand":"pnpm build"}
+{"buildCommand": "node --experimental-strip-types scripts/paid-equity-diagnostic.mjs && pnpm build"}
