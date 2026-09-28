@@ -18,3 +18,13 @@ process.env.ELEVENLABS_API_KEY='fixture_not_a_real_key';let attempts=0;
 await assert.rejects(()=>elevenRequest('/v1/convai/agents/create',{},async()=>{attempts++;throw Error('do not leak secret');}),/WRITE_UNKNOWN_NO_RETRY/);assert.equal(attempts,1);
 await assert.rejects(()=>elevenRequest('/v1/convai/agents',undefined,async()=>Response.json({secret:'nope'},{status:401})),/^Error: VOICE_HTTP_401$/);
 console.log('Voice callback evidence, timezone, opt-out, provider isolation and no-retry checks passed.');
+
+const claimed=sample();claimed.analysis.transcript_summary='Listed for $150,000. Callback scheduled.';claimed.transcript.unshift({role:'user',message:"The roof needs work. I am asking $150,000."});
+const saved=voiceResult(claimed,expected,now);
+assert.equal(saved.sellerNotes[0].text,"The roof needs work. I am asking $150,000.");
+assert.equal(saved.sellerCallingEnabled,false);
+assert.equal(new Set(saved.activity.map(e=>e.id)).size,saved.activity.length);
+assert.deepEqual(saved.activity,voiceResult(claimed,expected,now).activity);
+assert.ok(saved.activity.some(e=>e.title==='Practice callback recorded'));
+assert.ok(!voiceResult(sample({callback_confirmed:false}),expected,now).activity.some(e=>e.title==='Practice callback recorded'));
+console.log('Verbatim seller evidence and deterministic practice activity passed.');
