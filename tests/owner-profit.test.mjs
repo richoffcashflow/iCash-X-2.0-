@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {ownerProfit} from '../lib/owner-profit.ts';
+const i={earnedRevenueCents:1000000,operatingCostsCents:200000,marketingCostsCents:300000,interestCents:0,depreciationAmortizationCents:0,clearedCashCents:1000000,unspentCustomerFundsCents:0,unpaidBillsAndCommitmentsCents:0,protectedCashCents:0,priorOwnerDrawsCents:0,taxReserveBasisPoints:3500};
+assert.equal(ownerProfit(i).ebitdaCents,500000);assert.equal(ownerProfit(i).taxReserveCents,175000);assert.equal(ownerProfit(i).estimatedAvailableCents,325000);
+assert.equal(ownerProfit({...i,unspentCustomerFundsCents:900000}).estimatedAvailableCents,0);
+assert.equal(ownerProfit({...i,operatingCostsCents:null}).estimatedAvailableCents,null);
+assert.equal(ownerProfit({...i,marketingCostsCents:1000000}).taxReserveCents,0);
+assert.equal(ownerProfit({...i,priorOwnerDrawsCents:300000}).estimatedAvailableCents,25000);
+assert.equal(ownerProfit({...i,interestCents:10000}).ebitdaCents,500000);
+console.log('Marketing deduction, 35% planning reserve, prepaid liabilities and cash limits passed');

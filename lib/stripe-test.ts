@@ -14,7 +14,8 @@ export async function db<T>(path:string,method="GET",body?:unknown):Promise<T> {
  if(!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) throw new Error("Database not configured");
  const response=await fetch(`${process.env.SUPABASE_URL}/rest/v1/${path}`,{method,headers:{apikey:process.env.SUPABASE_SECRET_KEY,Authorization:`Bearer ${process.env.SUPABASE_SECRET_KEY}`,"Content-Type":"application/json",Prefer:"return=representation"},body:body===undefined?undefined:JSON.stringify(body),cache:"no-store",signal:AbortSignal.timeout(15000)});
  if(!response.ok) throw new Error("Database request failed");
- return response.json();
+ const payload=await response.text();
+ return (payload?JSON.parse(payload):null) as T;
 }
 export function paidSessionMatches(session:Stripe.Checkout.Session,order:TestOrder) {
  return !session.livemode && session.id.startsWith("cs_test_") && session.mode==="payment" && session.status==="complete" && session.payment_status==="paid" && session.currency==="usd" && session.amount_total===order.price_cents && session.metadata?.icash_test_order===order.id && (!order.stripe_session_id || order.stripe_session_id===session.id) && typeof session.payment_intent==="string";
