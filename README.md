@@ -1,10 +1,10 @@
 # iCash X
 
-Outbound-first wholesaling platform. The customer tries a free bot sandbox, funds iCash X credits, approves a daily spending limit, and can pause work. The bot searches houses and land without asking the customer to select a type. The initial market is inferred from verified checkout geography where possible, with one confirmation only if ambiguous. iCash X owns and operates the DealMachine, Twilio, Blooio, and ElevenLabs integrations. Customers do not configure vendor APIs, lists, campaigns, or prompts.
+Outbound-first wholesaling platform. The customer opens a prompt without sign-in, sees a clearly labeled sample deal, then gets a small real free bot allowance after creating an account. Funding expands the bot's work only with an approved daily limit; the user can pause it. The bot searches houses and land without asking the customer to select a type. iCash X owns and operates the DealMachine, Twilio, Blooio, and ElevenLabs integrations. Customers do not configure vendor APIs, lists, campaigns, or prompts.
 
 ## State of this repository
 
-This is a Vercel-deployed guided free AI bot sandbox plus tested pure credit allocation and closing workflow gates. The sample deal and $20,000 gross spread are explicitly fictional; the ranking score uses real deterministic code. It has no sign-up, payment processing, live property data, calling, messaging, contracts, or title integrations yet. The preview makes no charges or outreach and shows no fabricated live activity. Do not point paid ads at it as a working autonomous product.
+This is a Vercel-deployed, one-page guided bot sandbox plus tested pure allowance, credit allocation, and closing workflow gates. The open prompt starts the same fictional walkthrough; it is not a general AI chat yet. The sample deal and $20,000 gross spread are explicitly fictional; the ranking score uses real deterministic code. The free live allowance gate exists in code but is not wired to accounts or provider jobs. It has no sign-up, payment processing, live property data, calling, messaging, contracts, or title integrations yet. The preview makes no charges or outreach and shows no fabricated live activity. Do not point paid ads at it as a working autonomous product.
 
 ## Deployments
 
@@ -16,7 +16,7 @@ Vercel's `i-cash-x-2-0` project and Railway's `iCash X / worker` service are lin
 
 ## Operational controls
 
-The `lib/outbound-brain.ts` allocator ranks verified closing and seller intent above cold prospecting, protects a follow-up reserve, applies a daily cap and gross-margin floor, and refuses unauthorized work. `lib/closing-workflow.ts` gates seller contracts, buyer terms, title verification, escrow deposit instructions, and close confirmation. These pure functions do not dispatch any operation by themselves. The production worker must reserve/settle customer credits transactionally with idempotency keys and verify every provider event.
+The `lib/free-allowance.ts` gate restricts allowed operations and checks lifetime, daily, and quantity ceilings from server configuration. The `lib/outbound-brain.ts` allocator ranks verified closing and seller intent above cold prospecting, protects a follow-up reserve, applies a daily cap and gross-margin floor, and refuses unauthorized work. `lib/closing-workflow.ts` gates seller contracts, buyer terms, title verification, escrow deposit instructions, and close confirmation. These pure functions do not dispatch any operation by themselves. The production worker must reserve/settle provider costs or customer credits transactionally with idempotency keys and verify every provider event.
 
 See `docs/cost-model-and-controls.md`, `docs/outbound-brain.md`, `docs/property-data-benchmark.md`, `docs/conversion-and-experience.md`, and `docs/closing-workflow.md`. The customer-facing draft is `/costs-and-disclosures`; counsel must approve final terms and market-specific rules before live outreach.
 
