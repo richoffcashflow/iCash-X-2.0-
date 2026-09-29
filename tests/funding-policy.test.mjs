@@ -19,3 +19,9 @@ for(const origin of ['https://unique.vercel.app','https://branch.vercel.app','ht
 for(const origin of ['https://evil.com','null','http://unique.vercel.app','https://unique.vercel.app.evil.com'])assert.equal(allowedOrigin(new Request('https://unique.vercel.app',{headers:{origin}}),env),false);
 assert.equal(allowedOrigin(new Request('https://unique.vercel.app'),env),false);
 console.log('Funding: mode isolation, paid-session checks, rollout gates, email normalization and origin checks passed.');
+const taxedOrder={...order,price_cents:2200,credit_cents:2000,processing_fee_cents:200,tax_required:true};
+const taxedSession={...session,amount_subtotal:2200,amount_total:2382,automatic_tax:{enabled:true,status:'complete'},total_details:{amount_tax:182,amount_discount:0,amount_shipping:0}};
+assert.equal(fundingSessionMatches(taxedSession,taxedOrder),true);
+for(const change of [{amount_total:2200},{amount_subtotal:2000},{automatic_tax:{enabled:true,status:'failed'}},{total_details:{amount_tax:182,amount_discount:100,amount_shipping:0}},{total_details:{amount_tax:-1}},{automatic_tax:{enabled:false,status:'complete'}}])assert.equal(fundingSessionMatches({...taxedSession,...change},taxedOrder),false);
+assert.equal(fundingSessionMatches({...taxedSession,amount_total:2200,total_details:{amount_tax:0,amount_discount:0,amount_shipping:0}},taxedOrder),true);
+console.log('Fee/tax subtotal reconciliation and incomplete-tax rejection passed.');

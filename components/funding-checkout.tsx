@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {processingFeeCents,processingFeePercent} from '@/lib/funding-fees';
 import {maximumFundingDays} from '@/lib/funding-duration';
 import {AccountAccess} from '@/components/account-access';
 import {fundingTermsVersion,fundingTermsText} from '@/lib/funding-consent';
@@ -13,9 +14,10 @@ export function FundingCheckout({onSignedIn,initialCode="start"}:{onSignedIn:()=
  const selected=packs.find(p=>p.code===code);const amount=selected?.price_cents??2000;
  const maxDays=maximumFundingDays(amount);
  const total=amount*days;
+ const fee=processingFeeCents(total),subtotal=total+fee;
  const perDay=amount/100;
  const pace=perDay<5?{level:1,title:"🌱 A light start",note:"A small daily budget leaves less room for paid activity."}:perDay<25?{level:2,title:"⚡ Build momentum",note:"More daily budget gives your bot more room to work."}:perDay<100?{level:3,title:"🔥 Step up the activity",note:"More capacity for property research and seller follow-up."}:{level:4,title:"🚀 Let’s put it to work",note:"Your larger daily budget can support more acquisition activity."};
- async function checkout(){setBusy(true);setError('');try{const r=await fetch('/api/funding/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accepted,version:fundingTermsVersion,packCode:code,days,totalCents:total})});const d=await r.json();if(!r.ok)throw new Error(d.error);const url=new URL(d.url);if(url.protocol!=='https:'||url.hostname!=='checkout.stripe.com')throw new Error('Could not open secure checkout.');window.location.assign(url.href);}catch(e){setError(e instanceof Error?e.message:'Please retry.');setBusy(false);}}
+ async function checkout(){setBusy(true);setError('');try{const r=await fetch('/api/funding/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accepted,version:fundingTermsVersion,packCode:code,days,totalCents:subtotal})});const d=await r.json();if(!r.ok)throw new Error(d.error);const url=new URL(d.url);if(url.protocol!=='https:'||url.hostname!=='checkout.stripe.com')throw new Error('Could not open secure checkout.');window.location.assign(url.href);}catch(e){setError(e instanceof Error?e.message:'Please retry.');setBusy(false);}}
  if(!status)return <p role="status">Checking funding…{error&&<button onClick={()=>void refresh()}>Retry</button>}</p>;
  return <div className="boost-widget">
   {status.mode==='test'&&<p className="boost-caption">Test mode · No real money or live work.</p>}
@@ -24,11 +26,19 @@ export function FundingCheckout({onSignedIn,initialCode="start"}:{onSignedIn:()=
    <div className="boost-duration"><label htmlFor="boost-days">Estimated days <strong>{days} {days===1?'day':'days'}</strong></label><input id="boost-days" type="range" min="1" max={maxDays} step="1" value={days} disabled={busy} aria-valuetext={`${days} days`} onChange={e=>{setDays(Number(e.target.value));setAccepted(false);}}/><div className="boost-range-labels" aria-hidden="true"><span>1 day</span><span>{maxDays} days</span></div></div>
    <p className="boost-average" aria-live="polite">Total budget <strong>${(total/100).toLocaleString()}</strong></p>
    <p className="boost-average" aria-live="polite">Average spend <strong>${(total/100/days).toLocaleString()}/day</strong></p>
+   <p className="boost-average">Processing fee ({processingFeePercent}%) <strong>${(fee/100).toFixed(2)}</strong></p>
+   <p className="boost-average">Subtotal <strong>${(subtotal/100).toFixed(2)}</strong></p>
+   <p className="boost-caption">Applicable sales tax calculated at checkout. Fees and tax do not add bot credits.</p>
    <div className="boost-pace" data-level={pace.level}><strong>{pace.title}</strong><p>{pace.note}</p><div className="boost-pace-meter" aria-hidden="true">{[1,2,3,4].map(n=><span key={n} data-active={n<=pace.level}/>)}</div><small>Budget capacity—not a prediction of deals or closing speed.</small></div>
    <p className="boost-caption">${(amount/100).toLocaleString()}/day × {days} {days===1?'day':'days'}. One-time payment. Budget may run out sooner.</p>
+   <section className="auto-reload-card" aria-label="Auto-reload">
+    <div className="auto-reload-heading"><div><strong>Keep my bot working</strong><span>Auto-reload</span></div><button type="button" role="switch" aria-checked="false" aria-label="Auto-reload unavailable until automatic billing is ready" disabled className="auto-reload-switch"><span/></button></div>
+    <p>When my balance falls below <strong>$5</strong>, add <strong>$20</strong>.</p>
+    <small>$22 per reload, plus applicable tax. Off until you authorize it. Automatic billing is not available yet.</small>
+   </section>
    <label className="funding-consent"><input type="checkbox" checked={accepted} disabled={busy} onChange={e=>setAccepted(e.target.checked)}/><span>I agree to the purchase terms.</span></label>
-   <details className="boost-terms"><summary>Purchase terms</summary><p>You authorize a one-time ${(total/100).toFixed(2)} purchase, with an estimated duration of {days} days. You authorize use of the full purchased budget sooner when work is available. The bot stops at your available balance; no automatic reload is authorized. Unused credits stay yours. Results are not guaranteed.</p><p>{fundingTermsText}</p><p>Checkout collects a phone number for account and deal coordination, not marketing-text consent.</p></details>
-   <button className="fund-button full" disabled={busy||!status.enabled||!accepted||(status.mode==='live'&&!selected?.enabled)} onClick={()=>void checkout()}>{busy?'Opening Stripe…':`${status.mode==='test'?'Test funding':'Fund my bot'} — $${(total/100).toLocaleString()}`}</button>
+   <details className="boost-terms"><summary>Purchase terms</summary><p>You authorize a one-time ${(subtotal/100).toFixed(2)} purchase plus applicable sales tax, with an estimated duration of {days} days. You authorize use of the full purchased budget sooner when work is available. The bot stops at your available balance; no automatic reload is authorized. Unused credits stay yours. Results are not guaranteed.</p><p>{fundingTermsText}</p><p>Checkout collects a phone number for account and deal coordination, not marketing-text consent.</p></details>
+   <button className="fund-button full" disabled={busy||!status.enabled||!accepted||(status.mode==='live'&&!selected?.enabled)} onClick={()=>void checkout()}>{busy?'Opening Stripe…':`${status.mode==='test'?'Test funding':'Fund my bot'} — $${(subtotal/100).toFixed(2)} + tax`}</button>
    {!status.enabled&&<p className="boost-caption" role="status">Funding opens when live work is ready.</p>}
   </>}
   {error&&<p role="alert">{error}<button className="demo-button" onClick={()=>void refresh()}>Retry</button></p>}
