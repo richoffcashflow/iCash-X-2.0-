@@ -14,6 +14,8 @@ export async function GET(req:Request){
  const candidates=await db<{buyer_id:string;discovered_at:string}[]>(`icash_buyer_candidates?deal_id=eq.${deal.id}&rights_until=gt.${new Date().toISOString()}&select=buyer_id,discovered_at&order=discovered_at.desc&limit=50`);
  const candidateIds=candidates.map(c=>c.buyer_id).join(',');
  const candidateNames=candidateIds?await db<{id:string;display_name:string}[]>(`icash_buyer_profiles?account_id=eq.${accountId}&id=in.(${candidateIds})&select=id,display_name`):[];
- return NextResponse.json({candidates:candidateNames.map(c=>({id:c.id,name:c.display_name})),job,documents,buyers:matches.map(m=>({...m,name:buyers.find(b=>b.id===m.buyer_id)?.display_name??'Buyer'}))},{headers:{'Cache-Control':'private, no-store'}});
+ const [title]=await db<{state:string}[]>(`icash_title_requests?account_id=eq.${accountId}&deal_id=eq.${deal.id}&select=state`);
+ const [titleContact]=await db<{email:string}[]>(`icash_title_contacts?account_id=eq.${accountId}&deal_id=eq.${deal.id}&enabled=eq.true&verified_until=gt.${new Date().toISOString()}&select=email`);
+ return NextResponse.json({title:title?.state??null,titleReady:!!titleContact&&!!process.env.RESEND_API_KEY&&!!process.env.ICASH_TITLE_FROM_EMAIL,candidates:candidateNames.map(c=>({id:c.id,name:c.display_name})),job,documents,buyers:matches.map(m=>({...m,name:buyers.find(b=>b.id===m.buyer_id)?.display_name??'Buyer'}))},{headers:{'Cache-Control':'private, no-store'}});
  }catch{return NextResponse.json({error:'Could not load deal progress.'},{status:503});}
 }

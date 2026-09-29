@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+let state='ready',allow=true,sends=0,timeout=false,records=[];
+const db=async(path,method,body)=>{records.push({path,method,body});if(method==='PATCH'){state=body.state;return [];}if(path==='rpc/icash_claim_title_request'){if(allow)state='dispatching';return allow;}return [{id:'job',account_id:'account',deal_id:'deal',purchase_envelope_id:'purchase',recipient:'escrow@example.invalid',property_address:'Fixture',rate_id:'rate',verified_until:'2099-01-01',state}];};
+globalThis.__title={db,reserveOperation:async()=>{},completedSigningPdf:async()=>new Uint8Array([1,2,3]).buffer};
+const realFetch=globalThis.fetch;globalThis.fetch=async()=>{sends++;if(timeout)throw Error('timeout');return {ok:true,json:async()=>({id:'email_fixture'})};};
+process.env.RESEND_API_KEY='fixture';process.env.ICASH_TITLE_FROM_EMAIL='fixture@example.invalid';
+let source=ts.transpileModule(readFileSync('lib/title-service.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
+const {dispatchTitleRequest}=await import('data:text/javascript;base64,'+Buffer.from('const {db,reserveOperation,completedSigningPdf}=globalThis.__title;\n'+source).toString('base64'));
+assert.equal((await dispatchTitleRequest('account','job')).status,'title_request_sent');assert.equal(sends,1);await dispatchTitleRequest('account','job');assert.equal(sends,1);
+state='ready';allow=false;await dispatchTitleRequest('account','job');assert.equal(sends,1);
+state='ready';allow=true;timeout=true;assert.equal((await dispatchTitleRequest('account','job')).status,'title_delivery_needs_reconciliation');await dispatchTitleRequest('account','job');assert.equal(sends,2);
+assert(!records.some(r=>r.body?.stage==='title_open'||r.body?.stage==='closed'));
+globalThis.fetch=realFetch;delete globalThis.__title;delete process.env.RESEND_API_KEY;delete process.env.ICASH_TITLE_FROM_EMAIL;
+console.log('Title delivery: claim gate, no replay, ambiguous delivery hold, no fabricated closing status passed. No emails sent.');

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import {createHash,randomBytes} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
-import {callEligibility,verifiedOfferCeiling} from '../lib/live-dispatch-policy.ts';
+import {buyerCallInstructions} from '../lib/buyer-call-policy.ts';
+import {contactEligibility,callEligibility,verifiedOfferCeiling} from '../lib/live-dispatch-policy.ts';
 import {evaluateLaunch} from '../lib/launch-readiness-policy.ts';
 import {productionDealInstructions,acquisitionOpeners} from '../lib/deal-conversation.ts';
 const now=Date.parse('2026-09-29T16:00:00Z');
@@ -19,8 +20,8 @@ assert.equal(verifiedOfferCeiling(9000000,{max_offer_cents:8000000,expires_at:ne
 assert.equal(verifiedOfferCeiling(9000000,undefined,now),null);
 assert.equal(verifiedOfferCeiling(9000000,{max_offer_cents:8000000,expires_at:new Date(now-1).toISOString()},now),null);
 const config={conversation:{max_duration_seconds:600},agent:{prompt:{tool_ids:['callback','handoff']}}};
-const c={enabled:true,agent_id:'agent_fixture',phone_number_id:'number',agent_config_hash:createHash('sha256').update(JSON.stringify(config)).digest('hex'),reviewed_until:new Date(now+100000).toISOString(),seller_rate_id:'rate',max_duration_seconds:600,required_tool_ids:['callback','handoff']};
-let records=[],postCount=0,allowClaim=true,paused=false,timeout=false,jobState='issued',practice=false,quoteSeconds=600;
+const c={enabled:true,agent_id:'agent_fixture',phone_number_id:'number',agent_config_hash:createHash('sha256').update(JSON.stringify(config)).digest('hex'),reviewed_until:new Date(now+100000).toISOString(),seller_rate_id:'rate',buyer_rate_id:'buyer-rate',max_duration_seconds:600,required_tool_ids:['callback','handoff']};
+let buyerApproved=true;let records=[],postCount=0,allowClaim=true,paused=false,timeout=false,jobState='issued',practice=false,quoteSeconds=600;
 const db=async(path,method,body)=>{
  records.push({path,method,body});
  if(method==='PATCH'){if(body.state==='held'&&path.includes(`state=eq.${jobState}`))jobState='held';return [];}
@@ -31,16 +32,17 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_customer_identities'))return [{principal:'Fixture Buyer',voice_id:'voice'}];
  if(path.startsWith('icash_accounts'))return [{assistant_name:'Alex',bot_paused:paused}];
  if(path.startsWith('icash_voice_test_config'))return practice?[{agent_id:c.agent_id}]:[];
- if(path.startsWith('icash_operation_rates'))return [{operation:'seller_call',enabled:true,expires_at:c.reviewed_until,voice_max_duration_seconds:quoteSeconds}];
+ if(path==='rpc/icash_buyer_voice_context')return buyerApproved?{dealId:'deal',address:'Fixture',askingPriceCents:10000000,repairsCents:100000,packageId:'doc'}:null;
+ if(path.startsWith('icash_operation_rates'))return [{operation:permission.party==='buyer'?'buyer_call':'seller_call',enabled:true,expires_at:c.reviewed_until,voice_max_duration_seconds:quoteSeconds}];
  if(path.startsWith('icash_offer_authorities'))return [];
  if(path==='rpc/icash_claim_voice_job'){if(allowClaim)jobState='dispatching';return allowClaim;}
  if(path==='icash_live_conversations')return [];
  throw Error('Unexpected request '+path);
 };
 const elevenRequest=async(path,body)=>{if(!body)return {conversation_config:config};postCount++;if(timeout)throw Error('timeout');return {success:true,conversation_id:'conv_fixture',callSid:'CA'+'1'.repeat(32)};};
-globalThis.__voiceTest={createHash,randomBytes,db,elevenRequest,reserveOperation:async()=>records.push({reserve:true}),callEligibility,verifiedOfferCeiling,productionDealInstructions,acquisitionOpeners};
+globalThis.__voiceTest={createHash,randomBytes,db,elevenRequest,reserveOperation:async()=>records.push({reserve:true}),contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,productionDealInstructions,acquisitionOpeners};
 let source=ts.transpileModule(readFileSync(new URL('../lib/live-dispatch-service.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-source='const {createHash,randomBytes,db,elevenRequest,reserveOperation,callEligibility,verifiedOfferCeiling,productionDealInstructions,acquisitionOpeners}=globalThis.__voiceTest;\n'+source;
+source='const {createHash,randomBytes,db,elevenRequest,reserveOperation,contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,productionDealInstructions,acquisitionOpeners}=globalThis.__voiceTest;\n'+source;
 const {dispatchLiveVoice}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 process.env.ELEVENLABS_API_KEY='fixture-no-network';
 const reset=()=>{records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;};
@@ -53,5 +55,7 @@ reset();allowClaim=false;await dispatchLiveVoice('account','job');assert.equal(p
 reset();timeout=true;assert.equal((await dispatchLiveVoice('account','job')).status,'provider_outcome_unknown_no_retry');assert.equal(jobState,'held');await dispatchLiveVoice('account','job');assert.equal(postCount,1,'uncertain dial must never retry');
 const readiness=evaluateLaunch({cashReserve:true,discovery:true,voice:true,contactPermission:true,productionContracts:true,unresolvedDispatches:false},{data:true,voice:true,email:true,billing:true});assert.equal(readiness.acquisitionReady,true);assert.equal(readiness.ready,false);assert(readiness.blockers.includes('allProviderCostSettlement'));
 assert(evaluateLaunch({cashReserve:true,discovery:true,voice:true,contactPermission:true,productionContracts:true,unresolvedDispatches:false},{data:true,voice:false,email:true,billing:true}).blockers.includes('voiceProvider'));
+reset();permission={...permission,party:'buyer'};assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);
+reset();buyerApproved=false;assert.equal((await dispatchLiveVoice('account','job')).status,'buyer_marketing_release_required');assert.equal(postCount,0);
 delete globalThis.__voiceTest;delete process.env.ELEVENLABS_API_KEY;Date.now=realNow;
 console.log('Voice dispatch: permissions, hours, fresh underwriting, reviewed offer ceilings, full-duration costs, Stop, practice-agent isolation, uncertain-call no-retry and honest launch readiness passed. No provider traffic.');
