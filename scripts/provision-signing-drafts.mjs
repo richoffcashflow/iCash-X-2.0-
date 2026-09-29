@@ -7,7 +7,7 @@ async function db(path,method='GET',body){
 if(key&&process.env.SUPABASE_SECRET_KEY&&process.env.SUPABASE_URL){
  for(const kind of ['purchase','assignment']){
   const payload=JSON.parse(await readFile(new URL(`../config/signing-templates/${kind}.json`,import.meta.url),'utf8'));
-  const revisionKey=`${payload.external_id}-layout-v2`;
+  const revisionKey=`${payload.external_id}-layout-v3`;
   try{
    const existing=await db(`icash_template_drafts?key=eq.${payload.external_id}&select=result`);
    const expectedId=existing?.[0]?.result?.id;
