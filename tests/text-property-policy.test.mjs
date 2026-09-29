@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {propertyQuestionAllowed} from '../lib/text-property-policy.ts';
+import {safeTextReplies} from '../lib/text-ai-policy.ts';
+const now=Date.now(),p={address:'Fixture',fetchedAt:new Date(now).toISOString(),ceilingCents:5410000,titleReview:true};
+assert(propertyQuestionAllowed('ask_flexibility',p,[],now));
+assert(propertyQuestionAllowed('ask_payoff',p,[],now));
+assert(!propertyQuestionAllowed('ask_flexibility',null,[],now));
+assert(!propertyQuestionAllowed('ask_flexibility',{...p,ceilingCents:0},[],now));
+assert(!propertyQuestionAllowed('ask_payoff',{...p,titleReview:false},[],now));
+assert(!propertyQuestionAllowed('ask_flexibility',{...p,fetchedAt:new Date(now-86400001).toISOString()},[],now));
+assert(!propertyQuestionAllowed('ask_flexibility',p,[{direction:'outgoing',body:'iCash X AI practice. '+safeTextReplies.ask_flexibility}],now));
+assert(propertyQuestionAllowed('handoff',p,[],now));
+console.log('Property questions: fresh context, missing/invalid price ceiling, title flag and repeat guards passed');

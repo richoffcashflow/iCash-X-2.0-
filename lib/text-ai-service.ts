@@ -1,3 +1,4 @@
+import {propertyQuestionAllowed,type TextProperty} from './text-property-policy.ts';
 import {db} from '@/lib/stripe-test';
 import {analyzeText,safeTextReplies} from './text-ai-policy.ts';
 import {dispatchTextMessage} from '@/lib/text-message-service';
@@ -10,7 +11,10 @@ export async function processTextAi(accountId:string,jobId:string){
  try{
   const input=await db<{model:string;context:unknown;messages:{direction:string;body:string}[]}|null>('rpc/icash_claim_text_ai','POST',{p_account:accountId,p_job:jobId});
   if(!input)return {status:'text_ai_held'};claimed=true;
-  const {analysis,usage,providerId}=await analyzeText(input,process.env.OPENAI_API_KEY);
+  const [job]=await db<{thread_id:string}[]>(`icash_text_ai_jobs?id=eq.${jobId}&account_id=eq.${accountId}&select=thread_id`);
+  const property=job?await db<TextProperty|null>('rpc/icash_text_property_context','POST',{p_account:accountId,p_thread:job.thread_id}):null;
+  const {analysis,usage,providerId}=await analyzeText({...input,context:{qualification:input.context,property,preliminarySellerCeilingCents:property?.ceilingCents??null,offerAuthorized:false}},process.env.OPENAI_API_KEY);
+  if(!propertyQuestionAllowed(analysis.action,property,input.messages))analysis.action='review';
   await db('rpc/icash_save_text_ai','POST',{p_account:accountId,p_job:jobId,p_analysis:analysis,p_reply:analysis.reply,p_provider:providerId,p_usage:usage});
   if(analysis.humanRequested||analysis.callbackRequested)return {status:'text_ai_handoff'};
   const safe=safeTextReplies[analysis.action];
