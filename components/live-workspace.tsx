@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {workMilestone} from '@/lib/work-milestone';
 import {FulfillmentDetails} from '@/components/fulfillment-details';
 import {SigningControls,SigningAttention,type SigningEnvelope} from '@/components/signing-controls';
 import {dealTermsSchema,type DealTerms,type DocumentKind} from '@/lib/deal-documents';
@@ -11,10 +12,7 @@ type Work={signatureActions:{id:string;kind:string;test_mode:boolean}[];signing:
 function milestone(property:Property,work:Work){
  const deal=work.deals.find(d=>d.screening_id===property.id);
  const signatures=work.signing.filter(e=>e.deal_id===deal?.id&&!e.test_mode);
- if(work.handoffs.some(h=>h.screening_id===property.id)||signatures.some(e=>e.state==='customer_signature_needed'))return '🙋 Needs you';
- if(signatures.some(e=>e.kind==='assignment'&&e.state==='completed'))return '🤝 Buyer agreement signed';
- if(signatures.some(e=>e.kind==='purchase'&&e.state==='completed'))return '📝 Under contract';
- return property.result.financialCheck.status==='eligible'?'🏠 Property found':'🔎 Property reviewed';
+ return workMilestone({stage:deal?.stage,needsHuman:work.handoffs.some(h=>h.screening_id===property.id),needsSignature:signatures.some(e=>e.state==='customer_signature_needed'),purchaseSigned:signatures.some(e=>e.kind==='purchase'&&e.state==='completed'),assignmentSigned:signatures.some(e=>e.kind==='assignment'&&e.state==='completed'),eligible:property.result.financialCheck.status==='eligible'});
 }
 async function post(path:string,data:unknown){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const out=await r.json();if(!r.ok)throw new Error(out.error||'Please retry.');return out;}
 export function LiveWorkspace({principal}:{principal:string}){
@@ -26,7 +24,7 @@ export function LiveWorkspace({principal}:{principal:string}){
  {work?.properties.map(p=><article className="live-property" key={p.id}><div className="live-property-heading"><strong>{p.result.property.address}</strong><span>{milestone(p,work)}</span></div><details><summary>View deal</summary><small>🔎 Analyzed {new Date(p.completed_at).toLocaleString()}</small>{work.contacts.some(c=>c.screening_id===p.id)&&<p>👤 Owner information received</p>}<p>{p.result.financialCheck.reason}</p>{p.result.preliminarySellerCeilingCents!==null&&<p>Preliminary seller ceiling: ${(p.result.preliminarySellerCeilingCents/100).toLocaleString()}. This is not an agreed offer.</p>}{work.conversations?.filter(c=>c.screening_id===p.id).map(c=><details key={c.id}><summary>💬 {c.party==='seller'?'Seller':'Buyer'} conversation</summary><p>{c.result.summary}</p><div className="conversation-messages">{c.result.transcript.map((t,i)=><p key={i} className={t.role==='agent'?'agent-message':'contact-message'}><small>{t.role==='agent'?'iCash X':c.party==='seller'?'Seller':'Buyer'}</small>{t.message}</p>)}</div></details>)}
  {work.callbacks?.filter(c=>c.screening_id===p.id).map(c=><p key={c.id}>📅 Requested callback: {new Date(c.due_at).toLocaleString(undefined,{timeZone:c.timezone})} ({c.timezone}). {c.state==='held_for_human'?'Waiting for you.':c.state==='canceled'?'Canceled.':c.state==='missed'?'Time passed—needs review.':c.state==='dispatched'?'Call dispatched.':'Saved; automatic dialing is not confirmed.'}</p>)}
  <DealTools signing={work.signing??[]} signingConfigured={work.signingConfigured} property={p} principal={principal} initial={work.deals.find(d=>d.screening_id===p.id)} initialManual={work.controls?.some(c=>c.property_id===p.result.property.propertyId)??false}/></details></article>)}
- {work&&(page>0||work.hasMore)&&<div className="live-pages"><button disabled={page===0} onClick={()=>setPage(p=>p-1)}>Newer</button><span>Page {page+1}</span><button disabled={!work.hasMore} onClick={()=>setPage(p=>p+1)}>Older</button></div>}</div>;
+ {work&&(page>0||work.hasMore)&&<div className="live-pages"><button disabled={page===0} onClick={()=>setPage(p=>p-1)}>Previous</button><span>Page {page+1}</span><button disabled={!work.hasMore} onClick={()=>setPage(p=>p+1)}>More properties</button></div>}</div>;
 }
 function DealTools({property,principal,initial,initialManual,signing,signingConfigured}:{property:Property;principal:string;initial?:Deal;initialManual:boolean;signing:SigningEnvelope[];signingConfigured:boolean}){
  const [manual,setManual]=useState(initialManual);

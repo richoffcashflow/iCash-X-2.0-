@@ -7,7 +7,7 @@ export async function GET(req:Request){
  try{
   const {accountId}=await workAccount();const page=Math.min(10000,Math.max(0,Number(new URL(req.url).searchParams.get('page'))||0));if(!Number.isInteger(page))throw new Error();
   const properties=await 
-   db<Array<{id:string;state:string;result:{property:{propertyId:string;address:string;screeningBuyerCeilingCents:number|null;financialScreening:{status:string}};financialCheck:{status:string;reason:string};preliminarySellerCeilingCents:number|null};completed_at:string}>>(`icash_screening_jobs?account_id=eq.${accountId}&state=eq.complete&select=id,state,result,completed_at&order=completed_at.desc&limit=7&offset=${page*6}`);
+   db<Array<{id:string;state:string;result:{property:{propertyId:string;address:string;screeningBuyerCeilingCents:number|null;financialScreening:{status:string}};financialCheck:{status:string;reason:string};preliminarySellerCeilingCents:number|null};completed_at:string}>>('rpc/icash_prioritized_work','POST',{p_account:accountId,p_page:page});
   const visible=properties.slice(0,6);
   const ids=visible.map(p=>p.id).join(',');
   const propertyIds=visible.map(p=>p.result.property.propertyId).filter(id=>/^prop_[a-zA-Z0-9]+$/.test(id)).join(',');
