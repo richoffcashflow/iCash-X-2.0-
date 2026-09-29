@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+// Isolate external adapters: these tests never contact Stripe or make charges.
+let calls=[],failCancel=false;
+const plan={id:'plan',mode:'test',guest_hash:'a'.repeat(64),account_id:'account',stripe_subscription_id:'sub_ok',stripe_session_id:null,state:'active'};
+const sub={id:'sub_ok',metadata:{icash_daily_plan:'plan'},status:'active',livemode:false};
+const quote={id:'quote',plan_id:'plan',budget_cents:1000,credit_cents:1000,fee_cents:0,budget_price:'price_ok',fee_price:null};
+let invoice={id:'in_ok',parent:{subscription_details:{subscription:'sub_ok'}},livemode:false,status:'paid',amount_remaining:0,currency:'usd',subtotal:1000,total:1000,amount_paid:1000,total_taxes:[],total_discount_amounts:[],customer_email:'test@example.invalid',customer_phone:null};
+const stripe={subscriptions:{retrieve:async()=>sub,cancel:async()=>{calls.push('stripe-cancel');if(failCancel)throw Error('network');return {...sub,status:'canceled'};}},invoices:{retrieve:async()=>invoice,list:async()=>({data:[{id:'in_unpaid'}]}),voidInvoice:async()=>calls.push('void-unpaid'),listLineItems:async()=>({has_more:false,data:[{quantity:1,amount:1000,pricing:{price_details:{price:'price_ok'}}}]})},invoicePayments:{list:async()=>({has_more:false,data:[{payment:{payment_intent:'pi_ok'}}]})},paymentIntents:{retrieve:async()=>({status:'succeeded',amount_received:1000,currency:'usd',livemode:false,id:'pi_ok'})}};
+const db=async(path,method,body)=>{calls.push({path,method,body});if(path.startsWith('icash_daily_plans')&&(!method||method==='GET'))return [plan];if(path.startsWith('icash_daily_quotes'))return [quote];return [];};
+globalThis.__dailyTest={db,fundingStripe:()=>stripe,fundingEnabled:()=>false,fundingMode:()=> 'test',processingFeeCents:()=>0,dailyConsent:'test'};
+let source=ts.transpileModule(readFileSync(new URL('../lib/daily-billing.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+source=source.replace(/^import .* from .*;$/gm,'').replace(/^export \{.*\} from .*;$/gm,'');
+source='const {db,fundingStripe,fundingEnabled,fundingMode,processingFeeCents,dailyConsent}=globalThis.__dailyTest;\n'+source;
+const {stopDaily,settleDailyInvoice,syncDailySubscription}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+await stopDaily(plan);
+assert.equal(calls[0].body.state,'stop_requested');assert(calls.find(c=>c.body?.bot_paused===true));assert(calls.indexOf('stripe-cancel')>0);assert(calls.includes('void-unpaid'));assert.equal(calls.at(-1).body.state,'stopped');
+calls=[];failCancel=true;await assert.rejects(()=>stopDaily(plan));assert.equal(calls[0].body.state,'stop_requested');assert(!calls.some(c=>c.body?.state==='stopped'));failCancel=false;
+calls=[];await settleDailyInvoice('in_ok');assert(calls.some(c=>c.path==='rpc/icash_settle_daily_invoice'&&c.body.p_amount===1000&&c.body.p_tax===0));
+calls=[];invoice={...invoice,amount_paid:999};await assert.rejects(()=>settleDailyInvoice('in_ok'));assert(!calls.some(c=>c.path==='rpc/icash_settle_daily_invoice'));
+calls=[];await syncDailySubscription({...sub,status:'past_due'});assert(calls.includes('stripe-cancel'));assert(calls.some(c=>c.body?.bot_paused===true));
+delete globalThis.__dailyTest;
+console.log('Daily billing: stop ordering, cancellation retry, unpaid invoice cleanup, paid-only grants, failed-payment cancellation passed.');

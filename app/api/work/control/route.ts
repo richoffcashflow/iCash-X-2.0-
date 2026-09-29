@@ -2,11 +2,14 @@ import {NextResponse} from 'next/server';
 import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
 import {allowedOrigin} from '@/lib/funding-policy';
+import {stopDaily,type DailyPlan} from '@/lib/daily-billing';
+import {fundingMode} from '@/lib/funding-policy';
 import {z} from 'zod';
 const input=z.object({action:z.enum(['pause','resume','takeover','return_to_bot']),screeningId:z.string().uuid().optional()}).strict();
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403});
  try{const {accountId,userId}=await workAccount();const raw=await req.text();if(raw.length>512)throw new Error();const i=input.parse(JSON.parse(raw));
  await db('rpc/icash_set_work_control','POST',{p_user:userId,p_account:accountId,p_action:i.action,p_screening:i.screeningId??null});
- return NextResponse.json({saved:true});}catch{return NextResponse.json({error:'Could not update your bot. Please retry.'},{status:400});}
+ if(i.action==='pause'){const plans=await db<DailyPlan[]>(`icash_daily_plans?account_id=eq.${accountId}&mode=eq.${fundingMode()}&state=neq.stopped&select=*`);for(const p of plans)await stopDaily(p);}
+ return NextResponse.json({saved:true});}catch{return NextResponse.json({error:'Could not confirm the full update. Your bot may be paused while billing cancellation retries. Please retry.'},{status:400});}
 }
