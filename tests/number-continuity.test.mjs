@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {sameBusinessNumber,consistentTextSenders} from '../lib/number-continuity.ts';
+assert.equal(sameBusinessNumber('+14243948384','+14243948384'),true);
+assert.equal(sameBusinessNumber('+14243948384','+17372583478'),false);
+assert.equal(sameBusinessNumber(undefined,undefined),false);
+assert.equal(sameBusinessNumber('4243948384','4243948384'),false);
+assert.equal(consistentTextSenders('+14243948384',[]),true);
+assert.equal(consistentTextSenders('+14243948384',[{sender:'+17372583478'}]),false);
+assert.equal(consistentTextSenders('+14243948384',[{sender:'+14243948384'},{sender:'+17372583478'}]),false);
+console.log('Number continuity checks passed');

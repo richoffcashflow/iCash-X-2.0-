@@ -1,4 +1,5 @@
 import {createHash,randomBytes} from 'node:crypto';
+import {sameBusinessNumber,consistentTextSenders} from './number-continuity.ts';
 import {boundedVoiceSmsContext,voiceSmsInstructions} from './voice-sms-context.ts';
 import {db} from '@/lib/stripe-test';
 import {elevenRequest} from '@/lib/elevenlabs';
@@ -17,6 +18,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const [snapshot]=p?await db<{snapshot:unknown}[]>(`icash_screening_jobs?id=eq.${p.screening_id}&account_id=eq.${accountId}&state=eq.complete&select=snapshot`):[];
  if(!c?.enabled||!(Date.parse(c.reviewed_until)>Date.now())||!p||!snapshot||!process.env.ELEVENLABS_API_KEY)return hold('voice_configuration_required');
  if(createHash('sha256').update(p.phone).digest('hex')!==p.contact_key)return hold('contact_binding_invalid');
+ const suppressed=await db<{phone:string}[]>(`icash_text_suppressions?phone=eq.${encodeURIComponent(p.phone)}&select=phone&limit=1`);if(suppressed.length)return hold('contact_opted_out');
  const contact=contactEligibility(p);if(!contact.ready){if(contact.reason==='outside_contact_hours'){await db(`icash_voice_jobs?id=eq.${j.id}&state=eq.issued`,'PATCH',{state:'ready',due_at:new Date(Date.now()+30*60000).toISOString()});return {status:contact.reason};}return hold(contact.reason);}
  const eligible=p.party==='seller'?callEligibility(p,snapshot.snapshot):null;
  if(eligible&&!eligible.ready)return hold(eligible.reason);
@@ -26,6 +28,13 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const [identity]=await db<{principal:string;voice_id:string}[]>(`icash_customer_identities?account_id=eq.${accountId}&select=principal,voice_id`);
  const [account]=await db<{assistant_name:string;bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=assistant_name,bot_paused`);
  if(!identity?.principal||!account||account.bot_paused)return hold('identity_or_start_required');
+ // Verify the actual provider caller ID before reserving credits or placing a call.
+ const businessNumber=process.env.CONTIGUITY_FROM;
+ const threads=await db<{sender:string}[]>(`icash_text_threads?account_id=eq.${accountId}&recipient=eq.${encodeURIComponent(p.phone)}&select=sender`);
+ if(!consistentTextSenders(businessNumber,threads))return hold('business_number_mismatch');
+ let phone:{phone_number:string};
+ try{phone=await elevenRequest<{phone_number:string}>(`/v1/convai/phone-numbers/${encodeURIComponent(c.phone_number_id)}`);}catch{return hold('business_number_verification_required');}
+ if(!sameBusinessNumber(businessNumber,phone.phone_number))return hold('business_number_mismatch');
  const agent=await elevenRequest<{conversation_config:{tts?:{voice_id?:string};conversation?:{max_duration_seconds?:number};agent?:{prompt?:{tool_ids?:string[]}}};platform_settings?:unknown}>(`/v1/convai/agents/${c.agent_id}`);
  const voiceOverride=agent.conversation_config.tts?.voice_id!==identity.voice_id;
  if(voiceOverride&&!c.approved_voice_ids?.includes(identity.voice_id))return hold('voice_selection_setup_required');

@@ -21,3 +21,7 @@ assert.equal(verifyContiguityWebhook(Buffer.from('{}'),sig,secret,now),false);
 assert.equal(verifyContiguityWebhook(raw,sig,secret,now+301000),false);
 assert.equal(verifyContiguityWebhook(raw,'t=1700000000,v1=ab',secret,now),false);
 console.log('Contiguity transport safety checks passed');
+
+const {isMessageOptOut}=await import('../lib/contiguity.ts');
+for(const text of ['STOP','UNSUBSCRIBE','please delete me','remove me','stop contacting me'])assert(isMessageOptOut(text));
+assert(!isMessageOptOut('Can you stop by tomorrow?'));

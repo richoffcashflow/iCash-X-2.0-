@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {workspaceStatus} from '../lib/workspace-status.ts';
+const a={identity:{principal:'QA'},balanceCents:1000,workReady:true};
+assert.equal(workspaceStatus(a).label,'READY');
+assert.equal(workspaceStatus({...a,activeWork:true}).label,'WORKING');
+assert.equal(workspaceStatus({...a,activeWork:true,paused:true}).label,'PAUSED');
+assert.equal(workspaceStatus({...a,balanceCents:0}).label,'NO AVAILABLE CREDITS');
+assert.equal(workspaceStatus({...a,workReady:false}).label,'SETUP PENDING');
+assert.equal(workspaceStatus({...a,identity:null}).label,'NEEDS YOU');
+console.log('Workspace status follows actual state and prioritizes holds.');
