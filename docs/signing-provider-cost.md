@@ -21,3 +21,13 @@ Pricing sources reviewed:
 - https://stripe.com/billing/pricing — Billing pay-as-you-go 0.7%
 
 Approved templates 6101264 (purchase) and 6101265 (assignment) have clean headers and verified readonly term mappings. Owner approval is recorded; this is not counsel certification. Routing is limited to existing TX single-counterparty configuration. Multi-owner and other-state variants are not silently enabled. Auto-sign remains separately gated.
+
+## Documentation baseline authorized 2026-09-29
+
+The owner authorized published prices plus estimated allocations instead of waiting for invoices. The $5 signing rate is now enabled and linked to the approved templates; operating cash and mode gates remain. This does not enable the overall business or turn estimates into actual costs.
+
+DocuSeal confirms $0.20 per completed submission even with multiple files/signers, plus at least one $20/month Pro seat: https://www.docuseal.com/pricing . Reserve at dispatch; reconcile completion before counting the provider fee as incurred. The published-rate check timestamp means the quote was reviewed, not that billed overhead was verified.
+
+Fixed-cost planning assumes 10,000 total billable operations/month (not a forecast): Vercel $20, Railway Pro $20 minimum usage commitment, Supabase $25, Resend $20, DocuSeal $20. The $0.05 combined hosting/email/support allowance is a planning reserve, not measured per-request cost. Fixed fees and included usage must not be double-counted; excess usage needs tracking. Lower volume, CAC, disputes or provider price changes can consume company profit. Review baseline after 30 days.
+
+Sources: https://vercel.com/pricing ; https://railway.com/pricing ; https://supabase.com/pricing ; https://resend.com/pricing .
