@@ -4,7 +4,7 @@ import {db} from '@/lib/stripe-test';
 import {dispatchReservedOperation} from '@/lib/operating-costs';
 import {signingReadiness,signingTermsHash,signingFields,verifiedSigningStatus,type Signer,type SigningKind,type ProviderDocument} from './signing-policy.ts';
 import {dealTermsSchema} from './deal-documents.ts';
-type Template={provider:string;customer_signature_field:string|null;automated_signing_reviewed:boolean;id:string;provider_template_id:string;placeholder_names:string[];field_map:Record<string,string>;test_mode:boolean;rate_id:string|null;reviewed_until:string};
+type Template={max_legal_description_chars:number;customer_consent_field:string|null;provider:string;customer_signature_field:string|null;automated_signing_reviewed:boolean;id:string;provider_template_id:string;placeholder_names:string[];field_map:Record<string,string>;test_mode:boolean;rate_id:string|null;reviewed_until:string};
 type Envelope={id:string;account_id:string;deal_id:string;terms:unknown;kind:SigningKind;terms_hash:string;template_id:string;provider_id:string|null;state:string;test_mode:boolean;recipients:{id:string;email:string;name:string;placeholder_name:string}[]};
 async function request(path:string,body?:unknown,testMode=false,method='POST'){
  const key=testMode?process.env.DOCUSEAL_TEST_API_KEY:process.env.DOCUSEAL_API_KEY;if(!key)throw new Error('Signing setup is not finished.');
@@ -23,8 +23,9 @@ export async function sendForSignatures(i:{accountId:string;userId:string;custom
  if(!(testMode?process.env.DOCUSEAL_TEST_API_KEY:process.env.DOCUSEAL_API_KEY))throw new Error('Signing key for this mode is not configured.');
  const [template]=await db<Template[]>(`icash_signing_templates?state_code=eq.${terms.state}&kind=eq.${i.kind}&signer_count=eq.${i.signers.length}&test_mode=eq.${testMode}&provider=eq.docuseal&enabled=eq.true&select=*`);
  if(!template||Date.parse(template.reviewed_until)<=Date.now())throw new Error('A reviewed signing template is needed for this state and signer count.');
- if(i.autoSignature&&(!template.automated_signing_reviewed||!template.customer_signature_field))throw new Error('Auto-signing authorization is not enabled for this template.');
- const values=signingFields(terms);
+ if(terms.legalDescription.length>template.max_legal_description_chars)throw new Error('Legal description needs an attached exhibit before signing.');
+ if(i.autoSignature&&(!template.automated_signing_reviewed||!template.customer_signature_field||!template.customer_consent_field))throw new Error('Auto-signing authorization is not enabled for this template.');
+ const values=signingFields(terms,i.kind);
  // Every term must be deliberately mapped; silently dropping a term is not acceptable.
  if(Object.keys(values).some(k=>!template.field_map[k])||new Set(Object.values(template.field_map)).size!==Object.keys(values).length)throw new Error('Contract field mapping needs review.');
  const recipients=[...i.signers,{name:identity.principal,email:i.customerEmail}].map((s,n)=>({...s,id:String(n+1),placeholder_name:template.placeholder_names[n],delivery_method:'email'}));
@@ -54,7 +55,7 @@ export async function refreshSigning(accountId:string,id:string){
  let state=verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients});
  if(state==='customer_signature_needed'){
   const [reviewedTemplate]=await db<Template[]>(`icash_signing_templates?id=eq.${e.template_id}&select=*`);
-  const expectedFields=signingFields(dealTermsSchema.parse(e.terms));
+  const expectedFields=signingFields(dealTermsSchema.parse(e.terms),e.kind);
   const actualFields=raw.submitters.flatMap(s=>s.values??[]);
   if(Object.entries(expectedFields).some(([key,value])=>!actualFields.some(f=>f.field===reviewedTemplate.field_map[key]&&String(f.value??'')===value)))throw new Error('Agreement field values need review before signing.');
   await db('rpc/icash_save_signing_status','POST',{p_id:e.id,p_state:state,p_evidence:d});
@@ -63,7 +64,7 @@ export async function refreshSigning(accountId:string,id:string){
    const [template]=await db<Template[]>(`icash_signing_templates?id=eq.${e.template_id}&select=*`);
    const customer=raw.submitters.find(s=>s.external_id===`${e.id}:${e.recipients.at(-1)!.id}`)!;
    // One claim, one write. Unknown completion is resolved with GET on later polls, never re-signed blindly.
-   await request(`submitters/${numericId(customer.id)}`,{completed:true,fields:[{name:template.customer_signature_field,default_value:signature,readonly:true}]},e.test_mode,'PUT');
+   await request(`submitters/${numericId(customer.id)}`,{completed:true,fields:[{name:template.customer_signature_field,default_value:signature,readonly:true},{name:template.customer_consent_field,default_value:true,readonly:true}]},e.test_mode,'PUT');
    raw=await (await request(`submissions/${numericId(e.provider_id)}`,undefined,e.test_mode)).json();d=normalize(raw,e);
    state=verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients});
   }

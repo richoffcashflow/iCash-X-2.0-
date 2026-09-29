@@ -13,7 +13,7 @@ export function signingReadiness(kind:SigningKind,t:DealTerms,parties:Signer[],p
  if(parties.length<1||parties.length>8||new Set(parties.map(p=>p.email.toLowerCase())).size!==parties.length)throw new Error('Enter each required signer with a separate email.');
  return true;
 }
-export function signingFields(t:DealTerms){return Object.fromEntries(Object.entries(t).map(([k,v])=>[k,k.endsWith('Cents')?(v===null?'':(Number(v)/100).toFixed(2)):v===null?'':String(v)]));}
+export function signingFields(t:DealTerms,kind:SigningKind='purchase'){const excluded=new Set(kind==='purchase'?['assignee','assignmentFeeCents','assignmentDepositCents','payoutMethod','payoutHandle','priceSource']:['earnestCents','inspectionDays','payoutMethod','payoutHandle','priceSource']);return Object.fromEntries(Object.entries(t).filter(([k])=>!excluded.has(k)).map(([k,v])=>[k,k.endsWith('Cents')?(v===null?'':(Number(v)/100).toFixed(2)):v===null?'':String(v)]));}
 export type ProviderDocument={id:string;test_mode:boolean;status:string;apply_signing_order:boolean;metadata?:Record<string,string>;recipients:{id:string;email:string;status:string;signing_order:number}[]};
 /** A browser callback, a pasted signature or a manually completed envelope never counts. */
 export function verifiedSigningStatus(d:ProviderDocument,e:{providerId:string;id:string;termsHash:string;testMode:boolean;recipients:{id:string;email:string}[]}){

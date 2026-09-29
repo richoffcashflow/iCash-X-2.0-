@@ -1,1 +1,1 @@
-{"buildCommand": "node scripts/check-signing-connection.mjs && pnpm build"}
+{"buildCommand": "node scripts/provision-signing-drafts.mjs && node scripts/check-signing-connection.mjs && pnpm build"}
