@@ -21,7 +21,7 @@ begin
  update public.icash_text_messages set state='delivered' where id=opener;
  if (select first_reply_at from public.icash_seller_opener_assignments where thread_id=th) is null then raise exception 'Late delivery lost response';end if;
  ctx:=public.icash_voice_sms_context(original.account_id,permission);
- if jsonb_array_length(ctx->'messages')<>3 then raise exception 'Context not connected: %',ctx;end if;
+ if jsonb_array_length(ctx->'messages') is distinct from 3 then raise exception 'Context not connected: %',ctx;end if;
  if public.icash_voice_sms_context(gen_random_uuid(),permission) is not null then raise exception 'Tenant leak';end if;
  update public.icash_contact_permissions set phone='+12025550197' where id=permission;
  if public.icash_voice_sms_context(original.account_id,permission) is not null then raise exception 'Wrong phone history';end if;
