@@ -1,12 +1,10 @@
-import {NextResponse,after} from 'next/server';
+import {NextResponse} from 'next/server';
 import {setupOwner,readBotSetup} from '@/lib/bot-setup-server';
 import {allowedOrigin} from '@/lib/funding-policy';
-import {limitRequest} from '@/lib/funding';
 import {db} from '@/lib/stripe-test';
 import {brandSvg,type BrandDesign} from '@/lib/brand-design';
-import {generateBrandImages,readBrandImage,type BrandImage} from '@/lib/brand-image';
+import {readBrandImage,type BrandImage} from '@/lib/brand-image';
 import {setupThemes} from '@/lib/bot-setup';
-export const maxDuration=180;
 const headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'};
 type Job={brand_name:string;state:string;designs:(BrandDesign|BrandImage)[]|null;updated_at:string;render_version:number};
 async function saved(id:string,name:string){const [j]=await db<Job[]>(`icash_brand_jobs?setup_id=eq.${id}&select=brand_name,state,designs,updated_at,render_version`);if(j?.state==='creating'&&Date.now()-Date.parse(j.updated_at)>240000){await db(`icash_brand_jobs?setup_id=eq.${id}&state=eq.creating`,'PATCH',{state:'unavailable'});j.state='unavailable';}return j?.brand_name===name?j:null;}
@@ -18,15 +16,8 @@ export async function GET(req:Request){try{
  const requested=new URL(req.url).searchParams.get('theme');const theme=requested&&Object.hasOwn(setupThemes,requested)?requested as keyof typeof setupThemes:s.profile.theme??'ink';return new Response(brandSvg(design,setupThemes[theme].color),{headers:{...headers,'Content-Type':'image/svg+xml','Content-Security-Policy':"default-src 'none'; sandbox"}});}
  return NextResponse.json(payload(j),{headers});
  }catch{return NextResponse.json({state:'unavailable'},{status:503,headers});}}
+// Kept for stale tabs: logo generation is retired and never starts a paid job.
 export async function POST(req:Request){
- if(!allowedOrigin(req))return NextResponse.json({}, {status:403});
- try{const owner=await setupOwner();const s=await readBotSetup(owner);if(!s?.profile.displayName||!owner.hash)throw Error();
- const j=await saved(s.id,s.profile.displayName);if(j?.render_version===2)return NextResponse.json(payload(j),{headers});
- await limitRequest(req,'free-brand-images',owner.hash,5,86400);
- if(!process.env.OPENAI_API_KEY)return NextResponse.json({state:'unavailable'},{headers});
- if(!await db<boolean>('rpc/icash_claim_brand_images','POST',{p_setup:s.id,p_name:s.profile.displayName})){const existing=await saved(s.id,s.profile.displayName);return NextResponse.json(existing?payload(existing):{state:'limit_reached',designs:null},{headers});}
- const id=s.id,name=s.profile.displayName;
- after(async()=>{try{const result=await generateBrandImages(id,name);await db(`icash_brand_jobs?setup_id=eq.${id}&state=eq.creating&render_version=eq.2`,'PATCH',{...result,state:'ready',updated_at:new Date().toISOString()});}catch(e){await db(`icash_brand_jobs?setup_id=eq.${id}&state=eq.creating&render_version=eq.2`,'PATCH',{state:'unavailable',error_code:e instanceof Error?e.message.slice(0,100):'generation_failed',updated_at:new Date().toISOString()}).catch(()=>{});}});
- return NextResponse.json({state:'creating',designs:null},{status:202,headers});
- }catch{return NextResponse.json({state:'unavailable'},{status:503,headers});}
+ if(!allowedOrigin(req))return NextResponse.json({}, {status:403,headers});
+ return NextResponse.json({state:'retired',designs:null},{status:410,headers});
 }

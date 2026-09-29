@@ -52,3 +52,22 @@
 @media(max-width:600px){.setup-shell .console-main{padding:28px 22px 12px}.setup-shell .console-header{min-height:62px;padding:0 20px}.setup-shell .console-footer{padding:8px 22px 22px}.setup-form h1{font-size:34px;letter-spacing:-1.2px}.setup-intro{font-size:15px}.setup-entry .setup-eyebrow{font-size:9px;letter-spacing:1.2px}.setup-entry-form{margin-top:24px}.setup-process{margin-top:24px;padding-top:18px}.setup-complete h1{font-size:30px}.setup-reveal{padding:16px}.setup-colors{gap:10px}.setup-free{font-size:12px}}
 @media(max-width:360px){.setup-shell .console-main{padding-left:18px;padding-right:18px}.setup-form h1{font-size:30px}.deal-steps-simple{gap:12px 8px}.deal-steps-simple>span{font-size:12px}}
 @media(prefers-reduced-motion:reduce){.setup-step-enter{animation:none}}
+
+/* Preset setup: one required field, optional changes on the final page. */
+.setup-preset-note{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;line-height:1.5;color:#626262;margin:12px 0 0}
+.setup-preset-note svg{color:#187251;flex:none}
+.setup-preferences{padding:20px;border:1px solid #dedee2;border-radius:14px;background:#fafafa;margin:0 0 20px}
+.setup-preferences h2{font-size:20px;letter-spacing:-.4px;margin:0 0 6px}
+.setup-preferences .setup-hint{margin:0 0 20px}
+.setup-preferences-fields{border:0;min-width:0;padding:0;margin:0}
+.setup-preferences-fields>.setup-label:not(:first-child){margin-top:20px}
+.setup-preferences select{appearance:auto;padding:12px;font-size:14px}
+.setup-preference-voice{display:flex;gap:8px;min-width:0}.setup-preference-voice select{min-width:0;flex:1}
+.setup-preview-button{display:grid;place-items:center;flex:0 0 52px;border:1px solid #ddd;border-radius:12px;background:white;color:#333}
+.setup-preset-colors{margin-top:24px;margin-bottom:12px}
+.setup-preference-extras label{display:flex;gap:10px;align-items:center;min-height:44px;font-size:14px}
+.setup-preference-extras input{height:20px;width:20px;accent-color:var(--bot-color)}
+.setup-preference-actions{display:flex;gap:10px;margin-top:20px}.setup-preference-actions .setup-primary{flex:1}
+.setup-cancel{padding:12px 18px;min-height:52px;border:1px solid #ddd;background:white;border-radius:12px;font:inherit;font-size:14px;color:#555}
+.setup-reveal-line>span{min-width:0;overflow-wrap:anywhere}.setup-reveal-line button{flex-shrink:0}
+@media(max-width:380px){.setup-preferences{padding:16px}.setup-preset-note{font-size:11px}.setup-reveal-line{flex-wrap:wrap}}

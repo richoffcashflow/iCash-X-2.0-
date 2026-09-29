@@ -1,48 +1,137 @@
 'use client';
 import {useEffect,useRef,useState,type CSSProperties} from 'react';
-import {ArrowLeft,ArrowRight,Check,Globe2,MapPin,Play,Pause,LoaderCircle,SlidersHorizontal} from 'lucide-react';
+import {ArrowRight,Check,Play,Pause,LoaderCircle,SlidersHorizontal} from 'lucide-react';
 import {DealExplainer} from './deal-explainer';
-import {BotBrand,BotMark} from './bot-brand';
+import {BotBrand} from './bot-brand';
 import {FundingCheckout} from './funding-checkout';
-import {defaultBotProfile,setupThemes,setupProfileSchema,nextSetupStage,type BotProfile,type BotSetup,type SetupVoice} from '@/lib/bot-setup';
+import {defaultBotProfile,setupThemes,setupProfileSchema,resumeSetupStage,type BotProfile,type BotSetup,type SetupVoice} from '@/lib/bot-setup';
 import {launchMarketCandidates} from '@/config/launch-market-candidates';
-const steps=['Name','Logo','Voice','Plan'];
+
 const voices=[{key:'sarah',name:'Sarah',description:'Warm & conversational'},{key:'chris',name:'Chris',description:'Relaxed & direct'},{key:'jessica',name:'Jessica',description:'Clear & friendly'}] as const;
+function track(event:string){void fetch('/api/setup/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event}),keepalive:true}).catch(()=>{});}
+
 export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=>void;onSignedIn:()=>void}){
- const [setup,setSetup]=useState<BotSetup|null>(null),[profile,setProfile]=useState<BotProfile>(defaultBotProfile),[step,setStep]=useState(0),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[catalog,setCatalog]=useState<SetupVoice[]>([]),[audioError,setAudioError]=useState(''),[playing,setPlaying]=useState('');
- const [designs,setDesigns]=useState<{title:string;paths?:string[];imageUrl?:string}[]>([]),[logoState,setLogoState]=useState('empty');
- const [logoReload,setLogoReload]=useState(0);
- const logoName=useRef('');const nameEdited=useRef(false);
- useEffect(()=>{if(step!==1||!setup?.profile.displayName||logoName.current===setup.profile.displayName)return;logoName.current=setup.profile.displayName;let cancelled=false;let timer:ReturnType<typeof setTimeout>;setLogoState('creating');setDesigns([]);const apply=(d:{state:string;designs?:{title:string;paths?:string[];imageUrl?:string}[]})=>{if(cancelled)return;setLogoState(d.state);if(d.designs){setDesigns(d.designs);setProfile(p=>({...p,aiLogo:p.aiLogo??0}));}if(d.state==='creating')timer=setTimeout(()=>{void fetch('/api/setup/logo').then(r=>{if(!r.ok)throw Error();return r.json();}).then(apply).catch(()=>{if(!cancelled)setLogoState('connection_error');});},3000);};void fetch('/api/setup/logo',{method:'POST'}).then(r=>{if(!r.ok)throw Error();return r.json();}).then(apply).catch(()=>{if(!cancelled)setLogoState('connection_error');});return()=>{cancelled=true;clearTimeout(timer);logoName.current='';};},[step,setup?.profile.displayName,logoReload]);
- const audio=useRef<HTMLAudioElement|null>(null),heading=useRef<HTMLHeadingElement>(null),ready=useRef(false),init=useRef<Promise<BotSetup>|null>(null);
- function track(event:string){void fetch('/api/setup/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event}),keepalive:true}).catch(()=>{});}
- async function load(){setLoading(true);setError('');try{
-  // Share the initialization promise across Strict Mode effect replays.
-  if(!init.current)init.current=fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'init'})}).then(async r=>{const d=await r.json();if(!r.ok||!d.setup)throw Error(d.error??'Could not open your setup.');return d.setup;});
-  const s=await init.current;setSetup(s);setProfile(p=>({...defaultBotProfile,...s.profile,...(nameEdited.current?{displayName:p.displayName,aiLogo:null}:{})}));if(!nameEdited.current)setStep(s.stage);if(s.stage>0)track('returned');
- }catch{init.current=null;setError('Connection interrupted. Your entries are still here.');}finally{setLoading(false);}}
- useEffect(()=>{void load();void fetch('/api/setup/voices').then(r=>r.json()).then(d=>setCatalog(d.voices??[])).catch(()=>setCatalog([]));return()=>{audio.current?.pause();};},[]);
+ const [setup,setSetup]=useState<BotSetup|null>(null);
+ const [profile,setProfile]=useState<BotProfile>(defaultBotProfile);
+ const [step,setStep]=useState(0),[editing,setEditing]=useState(false);
+ const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState('');
+ const [audioError,setAudioError]=useState(''),[playing,setPlaying]=useState(''),[previewLoading,setPreviewLoading]=useState('');
+ const nameEdited=useRef(false),audio=useRef<HTMLAudioElement|null>(null),previewRequest=useRef(0);
+ const heading=useRef<HTMLHeadingElement>(null),ready=useRef(false),init=useRef<Promise<BotSetup>|null>(null);
+ const catalog=useRef<Promise<SetupVoice[]>|null>(null);
+
+ async function load(){
+  setLoading(true);setError('');
+  try{
+   // Reuse initialization across Strict Mode replays and early form submissions.
+   if(!init.current)init.current=fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'init'})}).then(async r=>{const d=await r.json();if(!r.ok||!d.setup)throw Error();return d.setup;});
+   const s=await init.current;
+   setSetup(s);
+   setProfile(p=>({...defaultBotProfile,...s.profile,aiLogo:null,...(nameEdited.current?{displayName:p.displayName}:{})}));
+   if(!nameEdited.current)setStep(resumeSetupStage(s));
+   if(s.stage>0)track('returned');
+  }catch{init.current=null;setError('Connection interrupted. Your entries are still here.');}
+  finally{setLoading(false);}
+ }
+ useEffect(()=>{void load();return()=>{previewRequest.current++;audio.current?.pause();};},[]);
  useEffect(()=>{onBrand(profile);},[profile,onBrand]);
- useEffect(()=>{if(!setup)return;track(['name_viewed','style_viewed','voice_viewed','market_viewed','funding_viewed'][step]);if(ready.current)heading.current?.focus();ready.current=true;audio.current?.pause();setPlaying('');},[step,setup?.id]);
- function change<K extends keyof BotProfile>(key:K,value:BotProfile[K]){if(key==='displayName')nameEdited.current=true;setProfile(p=>({...p,[key]:value,...(key==='displayName'?{aiLogo:null}:{})}));setError('');}
- async function advance(){if(busy)return;if(!setup&&!init.current){void load();return;}setError('');const parsed=setupProfileSchema.safeParse(profile);if(!parsed.success){setError(step===0?'Enter your first name or business name.':'Choose a city and state, or use Nationwide.');return;}
-  setBusy(true);try{const current=setup??await init.current;if(!current)throw Error('Could not connect. Please retry.');const next=nextSetupStage(step,current.flow_variant);const r=await fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save',profile:parsed.data,stage:next,revision:current.revision})});const d=await r.json();if(!r.ok)throw Error(d.error);setSetup(d.setup);setStep(next);}catch(e){setError(e instanceof Error?e.message:'Could not save. Please retry.');}finally{setBusy(false);}}
- async function play(key:string){change('voice',key as BotProfile['voice']);setAudioError('');if(playing===key){audio.current?.pause();setPlaying('');return;}audio.current?.pause();const voice=catalog.find(v=>v.key===key);if(!voice){setAudioError('This preview is temporarily unavailable. Your voice choice can still be saved.');return;}const a=new Audio(voice.previewUrl);audio.current=a;a.onended=()=>setPlaying('');a.onerror=()=>{setPlaying('');setAudioError('Could not play the preview. Tap play to retry.');};try{await a.play();setPlaying(key);track('voice_played');}catch{setPlaying('');setAudioError('Could not play the preview. Tap play to retry.');}}
- const theme=setupThemes[profile.theme];const style={'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties;
+ useEffect(()=>{
+  if(!setup)return;
+  track(step===0?'name_viewed':'funding_viewed');
+  if(ready.current)heading.current?.focus();
+  ready.current=true;
+ },[step,setup?.id]);
 
- return <section className={`bot-setup ${step===4?'setup-complete':step===0?'setup-entry':''}`} style={style} aria-label="Build your real estate bot">
-  <div className="setup-progress"><span>{step===4?<><Check size={14}/> Setup saved</>:<>Make it yours {setup?.flow_variant!=='quick'&&<b>{step+1} / 4</b>}</>}</span>{step<4&&setup?.flow_variant!=='quick'?<div aria-label={`Step ${step+1} of 4`}>{steps.map((name,i)=><i key={name} className={i<=step?'active':''}/>)}</div>:step===4?<button onClick={()=>{setStep(setup?.flow_variant==='quick'?1:0);}}><SlidersHorizontal size={14}/> Customize</button>:null}</div>
-  <div className="setup-layout">
-   <div className="setup-form setup-step-enter" key={step}>
-    {step<4&&step>0&&<button className="setup-back" disabled={busy} onClick={()=>{setStep(step-1);setError('');}}><ArrowLeft size={15}/> Back</button>}
-    {step===0&&<><span className="setup-eyebrow">REAL ESTATE WHOLESALING, MADE EASY</span><h1 ref={heading} tabIndex={-1}>Your own AI bot.<br/>Built for real estate.</h1><p className="setup-intro">Find sellers. Work out offers. Find cash buyers.<br/>Your AI helps you through the deal.</p><form className="setup-entry-form" onSubmit={e=>{e.preventDefault();void advance();}}><label className="setup-label" htmlFor="bot-name">Your name or business name</label><input className="setup-input" id="bot-name" autoComplete="organization" maxLength={64} value={profile.displayName} onChange={e=>change('displayName',e.target.value)} placeholder="e.g. Jordan or Oak Street Properties" required/><button className="setup-primary" disabled={busy||!profile.displayName.trim()}>{busy?<><LoaderCircle size={18} className="setup-spin"/> Saving your setup…</>:<>Build my free bot<ArrowRight size={18}/></>}</button><p className="setup-free">Free setup. No card needed.<span>A paid daily budget starts outreach.</span></p></form><div className="setup-process"><span className="setup-process-label">ONE DEAL, FOUR STEPS</span><DealExplainer compact/><details className="setup-details"><summary>How do I earn money?</summary><p>You agree to buy a property, then transfer the contract to a cash buyer for an assignment fee. You receive the fee if the deal closes. Costs reduce what you keep. Deals and income aren’t guaranteed.</p><DealExplainer/></details></div></>}
-    {step===1&&<><h1 ref={heading} tabIndex={-1}>Give it your look.</h1><p className="setup-intro">Made for {profile.displayName}.</p><fieldset className="setup-fieldset"><legend>Color</legend><div className="setup-colors">{Object.entries(setupThemes).map(([key,t])=><button key={key} aria-label={t.name} aria-pressed={profile.theme===key} onClick={()=>change('theme',key as BotProfile['theme'])}><span style={{background:t.color}}>{profile.theme===key&&<Check size={20}/>}</span><small>{t.name}</small></button>)}</div></fieldset><fieldset className="setup-fieldset"><legend>Your logo</legend>{['empty','creating'].includes(logoState)?<p className="setup-logo-status" role="status"><LoaderCircle className="setup-spin" size={18}/> Designing your logos. You can keep going.</p>:designs.length>0?<div className="setup-logos">{designs.map((d,i)=><button key={i} aria-pressed={profile.aiLogo===i} onClick={()=>change('aiLogo',i)}>{d.imageUrl?<img src={d.imageUrl} width={160} height={160} alt={`${profile.displayName} logo ${i+1}`}/>:<svg viewBox="0 0 100 100" width="60" height="60" fill="none" stroke={theme.color} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d.paths?.map((path,n)=><path key={n} d={path}/>)}</svg>}<strong className={`setup-logo-wordmark logo-style-${i}`}>{profile.displayName}</strong><span>{d.title}</span>{profile.aiLogo===i&&<Check size={14} className="logo-selected"/>}</button>)}</div>:<div className="setup-logo-status"><BotMark profile={{...profile,aiLogo:null}}/><div><p>{logoState==='limit_reached'?'Free logo design limit reached. Your business name is ready.':logoState==='connection_error'?"Couldn't load your logos.":'Your business name is ready. Custom artwork is unavailable right now.'}</p>{logoState==='connection_error'&&<button type="button" className="setup-retry" onClick={()=>{logoName.current='';setLogoReload(n=>n+1);}}>Reload logos</button>}</div></div>}</fieldset><button className="setup-primary" disabled={busy} onClick={()=>void advance()}>{busy?'Saving your look…':'Continue'}<ArrowRight size={18}/></button></>}
-    {step===2&&<><h1 ref={heading} tabIndex={-1}>Choose your bot’s voice.</h1><p className="setup-intro">Hear how your bot will sound on seller calls.</p><div className="setup-voices" role="group" aria-label="AI voice">{voices.map(v=><div key={v.key} className={profile.voice===v.key?'selected':''}><button className="setup-voice-choice" aria-pressed={profile.voice===v.key} onClick={()=>change('voice',v.key)}><span className="setup-voice-avatar">{v.name[0]}</span><span><strong>{v.name}{v.key==='sarah'&&<small>Recommended</small>}</strong><span>{v.description}</span></span><span className="setup-radio">{profile.voice===v.key&&<Check size={12}/>}</span></button><button className="setup-voice-play" aria-label={`${playing===v.key?'Pause':'Play'} ${v.name} preview`} onClick={()=>void play(v.key)}>{playing===v.key?<Pause size={17}/>:<Play size={17}/>}</button></div>)}</div><p className="setup-hint">Tap play to hear and select a voice.</p>{audioError&&<p role="status" className="setup-error">{audioError}</p>}<button className="setup-primary" disabled={busy} onClick={()=>void advance()}>{busy?'Saving your voice…':'Continue'}<ArrowRight size={18}/></button></>}
-    {step===3&&<><h1 ref={heading} tabIndex={-1}>Where should we look?</h1><p className="setup-intro">Let your bot choose, or pick your city.</p><div className="setup-markets"><button aria-pressed={profile.marketMode==='nationwide'} onClick={()=>{change('marketMode','nationwide');change('market','Nationwide');}}><Globe2 size={22}/><span><strong>Nationwide</strong><small>Let the bot choose</small></span>{profile.marketMode==='nationwide'&&<Check size={18}/>}</button><button aria-pressed={profile.marketMode==='city'} onClick={()=>{change('marketMode','city');change('market','');}}><MapPin size={22}/><span><strong>A specific city</strong><small>Choose your area</small></span>{profile.marketMode==='city'&&<Check size={18}/>}</button></div>{profile.marketMode==='city'&&<><label className="setup-label" htmlFor="bot-city">City and state</label><input className="setup-input" id="bot-city" list="setup-cities" placeholder="e.g. Houston, TX" value={profile.market} onChange={e=>change('market',e.target.value)} maxLength={80}/><datalist id="setup-cities">{launchMarketCandidates.map(m=><option key={m.id} value={`${m.name}, ${m.states.join('-')}`}/>)}</datalist></>}<div className="setup-toolkit"><details className="setup-details setup-included"><summary><span>Contracts &amp; buyer matching</span><small>Customize</small></summary><label><input type="checkbox" checked={profile.contracts} onChange={e=>change('contracts',e.target.checked)}/><span><strong>Free contract templates</strong><small>Set the terms with sellers and buyers.</small></span></label><label><input type="checkbox" checked={profile.buyers} onChange={e=>change('buyers',e.target.checked)}/><span><strong>Find cash buyers</strong><small>Match buyers after you have a signed seller agreement.</small></span></label></details><details className="setup-details"><summary>How it works · Preview contracts</summary><div className="setup-deal-example"><span>Agree with seller <b>$100,000</b></span><ArrowRight size={18}/><span>Assign to buyer <b>$120,000</b></span></div><p><strong>Example: $20,000 gross spread.</strong> Costs reduce what you keep. This is an illustration, not a deal or earnings promise.</p>{profile.contracts&&<div className="setup-document-links"><a href="/api/setup/documents?kind=purchase" target="_blank" rel="noopener">Preview seller agreement ↗</a><a href="/api/setup/documents?kind=assignment" target="_blank" rel="noopener">Preview buyer agreement ↗</a></div>}<p>Templates are unsigned drafts. Property details, legal names and required local terms must be completed before signing.</p></details></div><p className="setup-hint">Local requirements apply. No guaranteed deals.</p><button className="setup-primary" disabled={busy||(profile.marketMode==='city'&&profile.market.trim().length<2)} onClick={()=>void advance()}>{busy?<><LoaderCircle size={18} className="setup-spin"/> Saving your bot…</>:<>Finish setup<ArrowRight size={18}/></>}</button></>}
-    {step===4&&<><span className="setup-eyebrow">MADE FOR {profile.displayName.toUpperCase()}</span><h1 ref={heading} tabIndex={-1}>Your bot setup is ready.</h1><p className="setup-intro">Setup is saved. Outreach hasn’t started.</p><div className="setup-reveal"><BotBrand profile={profile}/><div className="setup-reveal-line"><span>{profile.market}</span><button onClick={()=>void play(profile.voice)} aria-label="Preview your selected AI voice">{playing===profile.voice?<Pause size={15}/>:<Play size={15}/>} Hear your bot</button></div><details className="setup-details setup-saved-details"><summary>What’s included</summary><div className="setup-business-checks"><span><Check size={15}/> Your brand saved</span><span><Check size={15}/> Seller voice selected</span>{profile.contracts&&<span><Check size={15}/> Contract templates included</span>}{profile.buyers&&<span><Check size={15}/> Buyer matching selected</span>}</div></details>{profile.contracts&&<details className="setup-details"><summary>Preview your branded contracts</summary><div className="setup-document-links"><a href="/api/setup/documents?kind=purchase" target="_blank" rel="noopener">Seller agreement ↗</a><a href="/api/setup/documents?kind=assignment" target="_blank" rel="noopener">Buyer agreement ↗</a></div><p>Unsigned templates. Deal details and required local terms come before signing.</p></details>}</div>{audioError&&<p className="setup-error" role="status">{audioError}</p>}<div className="setup-funding"><FundingCheckout onSignedIn={onSignedIn}/></div><details className="setup-details"><summary>How your bot works</summary><DealExplainer/><p>When live access is available, funding pays for property research, permitted seller outreach and follow-up. Identity, contact permissions and market checks must pass before your bot starts.</p><p>Agreements use your verified legal name or company, not just the display name above. Contracts, buyers and closing coordination depend on the actual deal. No deal or earnings are guaranteed.</p></details></>}
-    {error&&<div role="alert" className="setup-error">{error}{!setup&&<button className="setup-retry" disabled={loading} onClick={()=>void load()}>{loading?'Reconnecting…':'Reconnect'}</button>}</div>}
-   </div>
-  </div>
-
+ async function save(value:BotProfile){
+  if(busy)return false;
+  const parsed=setupProfileSchema.safeParse({...value,aiLogo:null});
+  if(!parsed.success){setError(!value.displayName.trim()?'Enter your first name or business name.':'Check your name and city, then try again.');return false;}
+  setError('');setBusy(true);
+  try{
+   if(!setup&&!init.current){await load();}
+   const current=setup??await init.current;
+   if(!current)throw Error('Could not connect. Tap Reconnect to try again.');
+   const r=await fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save',profile:parsed.data,stage:4,revision:current.revision})});
+   const d=await r.json();if(!r.ok||!d.setup)throw Error(d.error??'Could not save. Please retry.');
+   setSetup(d.setup);setProfile({...defaultBotProfile,...d.setup.profile,aiLogo:null});setStep(4);setEditing(false);
+   return true;
+  }catch(e){setError(e instanceof Error?e.message:'Could not save. Please retry.');return false;}
+  finally{setBusy(false);}
+ }
+ async function play(key:BotProfile['voice']){
+  const request=++previewRequest.current;
+  setAudioError('');audio.current?.pause();
+  if(playing===key||previewLoading===key){setPlaying('');setPreviewLoading('');return;}
+  setPlaying('');setPreviewLoading(key);
+  try{
+   // Load free catalog previews only when requested; no generated audio or call.
+   if(!catalog.current)catalog.current=fetch('/api/setup/voices').then(async r=>{if(!r.ok)throw Error();const d=await r.json();return d.voices??[];});
+   const voice=(await catalog.current).find(v=>v.key===key);
+   if(request!==previewRequest.current)return;
+   if(!voice)throw Error();
+   const a=new Audio(voice.previewUrl);audio.current=a;
+   a.onended=()=>{if(request===previewRequest.current)setPlaying('');};
+   a.onerror=()=>{if(request===previewRequest.current){setPlaying('');setAudioError('Could not play the preview. Tap play to retry.');}};
+   await a.play();
+   if(request!==previewRequest.current){a.pause();return;}
+   setPlaying(key);track('voice_played');
+  }catch{catalog.current=null;if(request===previewRequest.current)setAudioError('Voice preview unavailable. Your saved voice is unchanged.');}
+  finally{if(request===previewRequest.current)setPreviewLoading('');}
+ }
+ function toggleEditing(){
+  previewRequest.current++;audio.current?.pause();setPlaying('');setPreviewLoading('');setAudioError('');setError('');setEditing(v=>!v);
+ }
+ const theme=setupThemes[profile.theme];
+ const style={'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties;
+ return <section className={`bot-setup ${step===4?'setup-complete':'setup-entry'}`} style={style} aria-label="Build your real estate bot">
+  {step===4&&<div className="setup-progress"><span><Check size={14}/> Setup saved</span><button type="button" disabled={busy} aria-expanded={editing} aria-controls="setup-preferences" onClick={toggleEditing}><SlidersHorizontal size={14}/>{editing?'Close':'Customize'}</button></div>}
+  <div className="setup-layout"><div className="setup-form setup-step-enter" key={step}>
+   {step===0?<>
+    <span className="setup-eyebrow">REAL ESTATE WHOLESALING, MADE EASY</span>
+    <h1 ref={heading} tabIndex={-1}>Your own AI bot.<br/>Built for real estate.</h1>
+    <p className="setup-intro">Find sellers. Work out offers. Find cash buyers.<br/>Your AI helps you through the deal.</p>
+    <form className="setup-entry-form" onSubmit={e=>{e.preventDefault();void save(profile);}}>
+     <label className="setup-label" htmlFor="bot-name">Your name or business name</label>
+     <input className="setup-input" id="bot-name" autoComplete="organization" maxLength={64} value={profile.displayName} onChange={e=>{nameEdited.current=true;setProfile(p=>({...p,displayName:e.target.value}));setError('');}} placeholder="e.g. Jordan or Oak Street Properties" required disabled={busy}/>
+     <button className="setup-primary" disabled={busy||!profile.displayName.trim()}>{busy?<><LoaderCircle size={18} className="setup-spin"/> Saving your setup…</>:<>Build my free bot<ArrowRight size={18}/></>}</button>
+     <p className="setup-preset-note"><Check size={14}/> Voice, contracts &amp; buyer matching preset.</p>
+     <p className="setup-free">Free setup. No card needed.<span>A paid daily budget starts outreach.</span></p>
+    </form>
+    <div className="setup-process"><span className="setup-process-label">ONE DEAL, FOUR STEPS</span><DealExplainer compact/><details className="setup-details"><summary>How do I earn money?</summary><p>You agree to buy a property, then transfer the contract to a cash buyer for an assignment fee. You receive the fee if the deal closes. Costs reduce what you keep. Deals and income aren’t guaranteed.</p><DealExplainer/></details></div>
+   </>:<>
+    <span className="setup-eyebrow">MADE FOR {profile.displayName.toUpperCase()}</span>
+    <h1 ref={heading} tabIndex={-1}>Your bot setup is ready.</h1>
+    <p className="setup-intro">Setup is saved. Outreach hasn’t started.</p>
+    {editing&&<BotPreferences profile={profile} busy={busy} playing={playing} previewLoading={previewLoading} onPlay={play} onSave={save} onCancel={toggleEditing}/>}
+    <div className="setup-reveal">
+     <BotBrand profile={profile}/>
+     <div className="setup-reveal-line"><span>{profile.market}</span><button type="button" onClick={()=>void play(profile.voice)} aria-label="Preview your selected AI voice">{previewLoading===profile.voice?<LoaderCircle className="setup-spin" size={15}/>:playing===profile.voice?<Pause size={15}/>:<Play size={15}/>} Hear your bot</button></div>
+     <details className="setup-details setup-saved-details"><summary>What’s included</summary><div className="setup-business-checks"><span><Check size={15}/> Your name saved</span><span><Check size={15}/> AI voice selected</span>{profile.contracts&&<span><Check size={15}/> Contract templates included</span>}{profile.buyers&&<span><Check size={15}/> Buyer matching selected</span>}</div></details>
+     {profile.contracts&&<details className="setup-details"><summary>Preview your contracts</summary><div className="setup-document-links"><a href="/api/setup/documents?kind=purchase" target="_blank" rel="noopener">Seller agreement ↗</a><a href="/api/setup/documents?kind=assignment" target="_blank" rel="noopener">Buyer agreement ↗</a></div><p>Unsigned templates. Deal details and required local terms come before signing.</p></details>}
+    </div>
+    {audioError&&<p className="setup-error" role="status">{audioError}</p>}
+    {error&&<p role="alert" className="setup-error">{error}</p>}
+    <div className="setup-funding"><FundingCheckout onSignedIn={onSignedIn}/></div>
+    <details className="setup-details"><summary>How your bot works</summary><DealExplainer/><p>When live access is available, funding pays for property research, permitted seller outreach and follow-up. Identity, contact permissions and market checks must pass before your bot starts.</p><p>Agreements use your verified legal name or company, not just the display name above. Contracts, buyers and closing coordination depend on the actual deal. No deal or earnings are guaranteed.</p></details>
+   </>}
+   {step===0&&error&&<div role="alert" className="setup-error">{error}{!setup&&<button className="setup-retry" disabled={loading||busy} onClick={()=>void load()}>{loading?'Reconnecting…':'Reconnect'}</button>}</div>}
+  </div></div>
  </section>;
+}
+
+function BotPreferences({profile,busy,playing,previewLoading,onPlay,onSave,onCancel}:{profile:BotProfile;busy:boolean;playing:string;previewLoading:string;onPlay:(key:BotProfile['voice'])=>Promise<void>;onSave:(profile:BotProfile)=>Promise<boolean>;onCancel:()=>void}){
+ const [draft,setDraft]=useState(profile);
+ function change<K extends keyof BotProfile>(key:K,value:BotProfile[K]){setDraft(p=>({...p,[key]:value}));}
+ return <form id="setup-preferences" className="setup-preferences" onSubmit={e=>{e.preventDefault();void onSave(draft);}}>
+  <h2>Make it yours</h2><p className="setup-hint">Everything is preset. Change only what you want.</p>
+  <fieldset disabled={busy} className="setup-preferences-fields">
+   <label className="setup-label" htmlFor="edit-bot-name">Name</label><input className="setup-input" id="edit-bot-name" maxLength={64} value={draft.displayName} onChange={e=>change('displayName',e.target.value)} required/>
+   <label className="setup-label" htmlFor="edit-bot-market">Where to find deals</label><select className="setup-input" id="edit-bot-market" value={draft.marketMode} onChange={e=>{const city=e.target.value==='city';setDraft(p=>({...p,marketMode:city?'city':'nationwide',market:city?'':'Nationwide'}));}}><option value="nationwide">Nationwide · let the bot choose</option><option value="city">Choose a city</option></select>
+   {draft.marketMode==='city'&&<><label className="setup-label" htmlFor="edit-bot-city">City and state</label><input className="setup-input" id="edit-bot-city" list="setup-cities" placeholder="e.g. Houston, TX" value={draft.market} onChange={e=>change('market',e.target.value)} minLength={2} maxLength={80} required/><datalist id="setup-cities">{launchMarketCandidates.map(m=><option key={m.id} value={`${m.name}, ${m.states.join('-')}`}/>)}</datalist></>}
+   <label className="setup-label" htmlFor="edit-bot-voice">AI voice</label><div className="setup-preference-voice"><select className="setup-input" id="edit-bot-voice" value={draft.voice} onChange={e=>change('voice',e.target.value as BotProfile['voice'])}>{voices.map(v=><option key={v.key} value={v.key}>{v.name} · {v.description}</option>)}</select><button type="button" className="setup-preview-button" aria-label={`Preview ${draft.voice}`} onClick={()=>void onPlay(draft.voice)}>{previewLoading===draft.voice?<LoaderCircle size={18} className="setup-spin"/>:playing===draft.voice?<Pause size={18}/>:<Play size={18}/>}</button></div>
+   <fieldset className="setup-fieldset setup-preset-colors"><legend>Color</legend><div className="setup-colors">{Object.entries(setupThemes).map(([key,t])=><button type="button" key={key} aria-label={t.name} aria-pressed={draft.theme===key} onClick={()=>change('theme',key as BotProfile['theme'])}><span style={{background:t.color}}>{draft.theme===key&&<Check size={18}/>}</span><small>{t.name}</small></button>)}</div></fieldset>
+   <details className="setup-details setup-preference-extras"><summary>Included tools</summary><label><input type="checkbox" checked={draft.contracts} onChange={e=>change('contracts',e.target.checked)}/> Contract templates</label><label><input type="checkbox" checked={draft.buyers} onChange={e=>change('buyers',e.target.checked)}/> Cash-buyer matching</label></details>
+   <div className="setup-preference-actions"><button type="button" className="setup-cancel" onClick={onCancel}>Cancel</button><button className="setup-primary" disabled={busy}>{busy?'Saving…':'Save changes'}</button></div>
+  </fieldset>
+ </form>;
 }

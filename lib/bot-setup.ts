@@ -9,4 +9,6 @@ export function botInitials(name:string){return name.trim().split(/\s+/).filter(
 export function normalizeBotProfile(value:unknown){return setupProfileSchema.parse(value);}
 export const setupEvents=['name_viewed','style_viewed','voice_viewed','market_viewed','funding_viewed','voice_played','checkout_clicked','checkout_opened','checkout_failed','returned'] as const;
 
-export function nextSetupStage(stage:number,flow:'guided'|'quick'='guided'){return stage===0&&flow==='quick'?4:Math.min(4,stage+1);}
+// Every setup now uses presets. Legacy intermediate stages resume on the final page.
+export function nextSetupStage(_stage:number,_flow:'guided'|'quick'='quick'){return 4;}
+export function resumeSetupStage(setup:Pick<BotSetup,'stage'|'profile'>){return setup.stage>0&&!!setup.profile.displayName?.trim()?4:0;}

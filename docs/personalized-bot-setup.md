@@ -1,30 +1,15 @@
-# Personalized bot setup
+# Preset bot setup
 
-The guest homepage is a four-step, single-page flow: display name, color/logo, voice, and preferred market. The balance and funding widget are absent until the last step. Setup is free and the entry states that running uses a paid daily budget. Names generate three deterministic logo styles without image-generation API charges. Mobile shows one capability per step; desktop displays the full capability preview. No messages, signatures, properties or earnings are fabricated.
+The guest homepage now asks for one required field: a name or business name. Saving opens the final setup and daily-budget page directly. Sarah, Onyx, nationwide search, contract templates and buyer matching are preset. An optional Customize panel lets visitors edit name, market, voice, color and included tools without going through separate screens. Changes are saved explicitly; Cancel discards the draft.
 
-Setup is saved server-side after each step behind a random HttpOnly guest capability shared with funding. Revisions reject stale-tab writes. After a paid order is verified and claimed, the setup attaches to that account. Signing out rotates an already-claimed guest capability on the next setup, preventing account-profile disclosure. Setup name is a display name, not a legal principal or signature. Existing verified identity capture remains required for contracts. Market preference is saved; an approved market/ZIP mapping is still required before live acquisition. No property counts are invented or reused from other tenants.
+Logo generation is removed. POST /api/setup/logo returns 410 without starting an image job, including for old tabs. Existing artwork remains stored and its owner-protected GET route remains available. The UI uses a standard house icon, and contract previews use the saved name without generated artwork. No image-generation charges or polling are incurred by setup.
 
-Three premade ElevenLabs voice previews are selected from the provider catalog, cached for a day, and played only on tap. No TTS synthesis or phone calls occur during preview. The saved voice preference is used when saving verified identity. Live voice dispatch uses that voice if it matches the agent default or is in the reviewed approved_voice_ids list; otherwise it holds rather than silently using a different voice. Provider Voice ID overrides also must be enabled by the production configuration process. No production configuration is enabled here.
+Existing saved preferences are retained. Older intermediate stages resume on the final page; saved setups reopen there. Profiles continue to accept legacy logo fields for backward compatibility, but the current flow saves aiLogo as null. No account, outreach, purchase, signature or property result is fabricated. Display names are not verified legal identities.
 
-Guest returns resume at the last completed stage; completed setups open funding. Existing funded accounts retain their workspace. Stripe’s daily budget and explicit renewal consent are unchanged. Free setup never starts billing.
+The final page preserves the daily slider, due-today amount, recurring-charge disclosure, explicit consent and ability to stop billing. Free setup does not start billing. Production readiness and contact-permission checks are unchanged.
 
-Funnel events are deduplicated per setup and step. Names are stored in the setup profile, not analytics payloads. Server saves produce completion events; real settled live orders produce purchase metrics. The private icash_setup_funnel_report() reports mature 24-hour cohorts over the last 31 days, including each completed step, checkout opens, buyers and gross purchase revenue. This is conversion/revenue reporting, not profit or Meta attribution. Fresh cohorts are excluded to avoid premature drop-off conclusions.
+Voice catalog data is fetched only after a visitor requests a preview. Preview audio is prerecorded and makes no phone call or synthesis request. Selecting a different preview does not silently change the saved voice. Rapid preview requests cancel stale playback.
 
-Two reviewed CTA texts start evenly randomized. After at least 200 mature visitors per version and separation of approximate two-standard-error purchase-rate bounds, new sessions favor the leader 80/20. Assignment never changes mid-setup. This is a bounded allocation heuristic, not autonomous UI rewriting or a proven statistical improvement. It cannot change prices, billing consent, or operational controls.
+Setup saves use revision checks to reject stale-tab writes. The guest cookie is HttpOnly and account isolation is unchanged. Name and completion events come from saved data; purchases still require actual settled orders. New setups are no longer randomized into the guided-vs-quick test. Historical cohorts are preserved, but that retired experiment must not be used to claim a conversion improvement after this rollout because all visitors now receive the preset UI.
 
-Production verification: all four saves and restore-to-funding passed against the deployed API; all three provider preview URLs were returned. TypeScript and rollback database checks passed. The local browser renderer could not run because the environment denied its socket; mobile visual verification remains outstanding. Conversion allocation is cached for 15 minutes with indexed cohort lookups.
-
-
-## Business-builder update
-- Removed the duplicate preview card; all steps use one centered form.
-- Server-side AI generates three validated vector logo choices, with saved results and initials fallback. Provider names are omitted from customer setup. No generated image asset is required.
-- Model usage is stored with each logo job. Maximum 100 attempts globally per UTC day, two per setup (only on a changed name), plus request limits. Duplicate requests never regenerate. Failed/stale requests use the initials fallback. These are free acquisition costs, not customer credit charges.
-- Contract and buyer preferences default on and are saved in the setup profile. They express selected setup preferences; they do not independently enable production outreach.
-- Branded seller and buyer template previews reuse the existing document renderer, leave legal parties and deal terms blank, and remain clearly unsigned drafts. Display name is never substituted for verified legal identity.
-- Funding remains last, with paid usage disclosed before setup. No fake market research, property counts, messages, signed contracts or profits are shown.
-- Validation: TypeScript, schema/XSS tests, rollback DB claim/dedup/access checks. Browser visual verification remains unavailable in this execution environment.
-
-
-## Image logo upgrade
-Logo creation now uses OpenAI Images API (gpt-image-2.5-flare, three medium 1024px JPEGs) instead of asking a text model to draw paths. Private Supabase Storage holds image assets; the owned setup endpoint serves them. Old vector logos remain readable, with one automatic image upgrade when reopening the logo step. Generation uses Next after with bounded duration, no automatic paid retries, daily and per-setup caps, and stored provider usage. User-visible cards show larger marks and typeset business names.
-Official references: https://developers.openai.com/api/docs/guides/image-generation and https://supabase.com/docs/reference/self-hosting-storage/upload-a-new-object .
+Validation: TypeScript; profile, default and legacy-session resume tests. Browser verification follows the deployed release without funding or outreach.
