@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {allowedOrigin} from '../lib/funding-policy.ts';
+const req=(url,origin)=>new Request(url,{method:'POST',headers:origin?{origin}:{}});
+assert(allowedOrigin(req('https://www.geticashx.com/api/setup','https://www.geticashx.com'),{}));
+assert(allowedOrigin(req('https://i-cash-x-2-0.vercel.app/api/setup','https://i-cash-x-2-0.vercel.app'),{}));
+assert(!allowedOrigin(req('https://www.geticashx.com/api/setup','https://attacker.example'),{}));
+assert(!allowedOrigin(req('https://www.geticashx.com/api/setup','null'),{}));
+assert(!allowedOrigin(req('https://www.geticashx.com/api/setup',null),{}));
+assert(!allowedOrigin(req('http://www.geticashx.com/api/setup','http://www.geticashx.com'),{}));
+console.log('Same-origin alias requests pass; foreign, null, missing, and insecure origins rejected.');

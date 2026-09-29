@@ -28,5 +28,10 @@ export function normalizeEmail(value:unknown) {
 export function allowedOrigin(req:Request,env:NodeJS.ProcessEnv=process.env) {
  const allowed=[env.VERCEL_URL,env.VERCEL_BRANCH_URL,env.VERCEL_PROJECT_PRODUCTION_URL].filter(Boolean).map(h=>`https://${h}`);
  if(env.ICASH_APP_ORIGIN) {try {const u=new URL(env.ICASH_APP_ORIGIN);if(u.protocol==="https:")allowed.push(u.origin);}catch{/* Fail closed. */}}
- return !!req.headers.get("origin") && allowed.includes(req.headers.get("origin")!);
+ // Vercel can serve this application through custom and deployment aliases.
+ // Compare against the actual HTTPS request origin, not only build-time aliases.
+ // Cross-origin browser requests still fail; never allow a missing/null Origin.
+ const origin=req.headers.get("origin");if(!origin||origin==='null')return false;
+ try {const target=new URL(req.url);if(target.protocol==='https:'&&origin===target.origin)return true;}catch{return false;}
+ return allowed.includes(origin);
 }
