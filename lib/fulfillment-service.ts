@@ -1,3 +1,5 @@
+import {discoverTitlePlaces} from './title-search-service.ts';
+import {qualifyTitleCompanies} from './title-directory-service.ts';
 import {discoverBuyersForDeal} from './buyer-discovery-service.ts';
 import {z} from 'zod';
 import {db} from '@/lib/stripe-test';
@@ -27,7 +29,9 @@ export async function prepareFulfillment(accountId:string,jobId:string){
  }
  let buyerDiscovery:{status:string;canContinue:boolean};
  try{buyerDiscovery=await discoverBuyersForDeal(accountId,job.deal_id);}catch{buyerDiscovery={status:'buyer_search_needs_review',canContinue:false};}
- const result={buyerDiscovery,buyerStatus,buyerCount:matches.length,titleStatus:'request_prepared_not_sent',contractStatus:'verified_purchase',sent:false,depositReceived:false,closed:false};
+ let titleQualification:{status:string};try{titleQualification=await qualifyTitleCompanies(accountId,job.deal_id);}catch{titleQualification={status:'title_inquiry_held'};}
+ let titleSearch:{status:string}={status:'directory_candidates_available'};if(titleQualification.status==='no_title_inquiry_pending'){try{titleSearch=await discoverTitlePlaces(accountId,job.deal_id);}catch{titleSearch={status:'title_search_needs_review'};}}
+ const result={titleSearch,titleQualification,buyerDiscovery,buyerStatus,buyerCount:matches.length,titleStatus:'request_prepared_not_sent',contractStatus:'verified_purchase',sent:false,depositReceived:false,closed:false};
  await db('rpc/icash_save_fulfillment','POST',{p_job:job.id,p_result:result,p_documents:documents,p_matches:matches});
  return {status:'fulfillment_prepared'};
 }
