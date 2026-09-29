@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {createHash,randomBytes} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
+import {sameBusinessNumber,consistentTextSenders} from '../lib/number-continuity.ts';
+import {boundedVoiceSmsContext,voiceSmsInstructions} from '../lib/voice-sms-context.ts';
 import {buyerCallInstructions} from '../lib/buyer-call-policy.ts';
 import {contactEligibility,callEligibility,verifiedOfferCeiling} from '../lib/live-dispatch-policy.ts';
 import {evaluateLaunch} from '../lib/launch-readiness-policy.ts';
@@ -19,13 +21,18 @@ assert.equal(callEligibility(permission,{...snapshot,fetchedAt:new Date(now-8640
 assert.equal(verifiedOfferCeiling(9000000,{max_offer_cents:8000000,expires_at:new Date(now+1000).toISOString()},now),8000000);
 assert.equal(verifiedOfferCeiling(9000000,undefined,now),null);
 assert.equal(verifiedOfferCeiling(9000000,{max_offer_cents:8000000,expires_at:new Date(now-1).toISOString()},now),null);
-const config={conversation:{max_duration_seconds:600},agent:{prompt:{tool_ids:['callback','handoff']}}};
+const config={tts:{voice_id:'voice'},conversation:{max_duration_seconds:600},agent:{prompt:{tool_ids:['callback','handoff']}}};
 const c={enabled:true,agent_id:'agent_fixture',phone_number_id:'number',agent_config_hash:createHash('sha256').update(JSON.stringify(config)).digest('hex'),reviewed_until:new Date(now+100000).toISOString(),seller_rate_id:'rate',buyer_rate_id:'buyer-rate',max_duration_seconds:600,required_tool_ids:['callback','handoff']};
-let buyerApproved=true;let records=[],postCount=0,allowClaim=true,paused=false,timeout=false,jobState='issued',practice=false,quoteSeconds=600;
+let buyerApproved=true,callbackId=null,providerNumber='+14243948384',suppressed=false,paced=true;let records=[],postCount=0,allowClaim=true,paused=false,timeout=false,jobState='issued',practice=false,quoteSeconds=600;
 const db=async(path,method,body)=>{
  records.push({path,method,body});
+ if(path==='rpc/icash_hold_voice_job'){if(jobState===(body.p_after_claim?'dispatching':'issued'))jobState='held';return true;}
+ if(path.startsWith('icash_text_suppressions'))return suppressed?[{phone:permission.phone}]:[];
+ if(path.startsWith('icash_text_threads'))return [{sender:'+14243948384'}];
+ if(path==='rpc/icash_voice_sms_context')return null;
+ if(path==='rpc/icash_reserve_paced_voice')return paced;
  if(method==='PATCH'){if(body.state==='held'&&path.includes(`state=eq.${jobState}`))jobState='held';return [];}
- if(path.startsWith('icash_voice_jobs'))return [{id:'job',account_id:'account',permission_id:'permission',callback_id:null,state:jobState}];
+ if(path.startsWith('icash_voice_jobs'))return [{id:'job',account_id:'account',permission_id:'permission',callback_id:callbackId,state:jobState}];
  if(path.startsWith('icash_voice_configs'))return [c];
  if(path.startsWith('icash_contact_permissions'))return [permission];
  if(path.startsWith('icash_screening_jobs'))return [{snapshot}];
@@ -39,13 +46,13 @@ const db=async(path,method,body)=>{
  if(path==='icash_live_conversations')return [];
  throw Error('Unexpected request '+path);
 };
-const elevenRequest=async(path,body)=>{if(!body)return {conversation_config:config};postCount++;if(timeout)throw Error('timeout');return {success:true,conversation_id:'conv_fixture',callSid:'CA'+'1'.repeat(32)};};
-globalThis.__voiceTest={createHash,randomBytes,db,elevenRequest,reserveOperation:async()=>records.push({reserve:true}),contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,productionDealInstructions,acquisitionOpeners};
+const elevenRequest=async(path,body)=>{if(path.includes('/phone-numbers/'))return {phone_number:providerNumber};if(!body)return {conversation_config:config};postCount++;if(timeout)throw Error('timeout');return {success:true,conversation_id:'conv_fixture',callSid:'CA'+'1'.repeat(32)};};
+globalThis.__voiceTest={sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation:async()=>records.push({reserve:true}),contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,productionDealInstructions,acquisitionOpeners};
 let source=ts.transpileModule(readFileSync(new URL('../lib/live-dispatch-service.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-source='const {createHash,randomBytes,db,elevenRequest,reserveOperation,contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,productionDealInstructions,acquisitionOpeners}=globalThis.__voiceTest;\n'+source;
+source='const {sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation,contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,productionDealInstructions,acquisitionOpeners}=globalThis.__voiceTest;\n'+source;
 const {dispatchLiveVoice}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
-process.env.ELEVENLABS_API_KEY='fixture-no-network';
-const reset=()=>{records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;};
+process.env.ELEVENLABS_API_KEY='fixture-no-network';process.env.CONTIGUITY_FROM='+14243948384';
+const reset=()=>{buyerApproved=true;records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;callbackId=null;providerNumber='+14243948384';suppressed=false;paced=true;};
 assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);
 const saved=records.find(r=>r.path==='icash_live_conversations');assert.match(saved.body.tool_token_hash,/^[a-f0-9]{64}$/);assert(!JSON.stringify(saved).includes('secret__'));
 reset();paused=true;await dispatchLiveVoice('account','job');assert.equal(postCount,0);assert(!records.some(r=>r.reserve));
@@ -57,5 +64,9 @@ const readiness=evaluateLaunch({cashReserve:true,discovery:true,voice:true,conta
 assert(evaluateLaunch({cashReserve:true,discovery:true,voice:true,contactPermission:true,productionContracts:true,unresolvedDispatches:false},{data:true,voice:false,email:true,billing:true}).blockers.includes('voiceProvider'));
 reset();permission={...permission,party:'buyer'};assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);
 reset();buyerApproved=false;assert.equal((await dispatchLiveVoice('account','job')).status,'buyer_marketing_release_required');assert.equal(postCount,0);
-delete globalThis.__voiceTest;delete process.env.ELEVENLABS_API_KEY;Date.now=realNow;
+reset();providerNumber='+12125550100';assert.equal((await dispatchLiveVoice('account','job')).status,'business_number_mismatch');assert.equal(postCount,0);
+reset();suppressed=true;assert.equal((await dispatchLiveVoice('account','job')).status,'contact_opted_out');assert.equal(postCount,0);
+reset();paced=false;buyerApproved=true;assert.equal((await dispatchLiveVoice('account','job')).status,'waiting_for_daytime_budget');assert.equal(postCount,0);
+reset();callbackId='callback';permission={...permission,timezone:'Pacific/Honolulu'};assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');assert.equal(jobState,'held');assert(!records.some(r=>r.method==='PATCH'&&r.body?.due_at),'Do not silently move an agreed callback');
+delete process.env.CONTIGUITY_FROM;delete globalThis.__voiceTest;delete process.env.ELEVENLABS_API_KEY;Date.now=realNow;
 console.log('Voice dispatch: permissions, hours, fresh underwriting, reviewed offer ceilings, full-duration costs, Stop, practice-agent isolation, uncertain-call no-retry and honest launch readiness passed. No provider traffic.');

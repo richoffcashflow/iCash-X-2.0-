@@ -12,14 +12,14 @@ type Permission=VoicePermission&{id:string;account_id:string;screening_id:string
 export async function dispatchLiveVoice(accountId:string,jobId:string){
  const [j]=await db<Job[]>(`icash_voice_jobs?id=eq.${jobId}&account_id=eq.${accountId}&select=*`);if(!j||j.state!=='issued')return {status:'held'};
  let ownsDispatch=false;
- const hold=async(reason:string)=>{await db(`icash_voice_jobs?id=eq.${j.id}&state=eq.${ownsDispatch?'dispatching':'issued'}`,'PATCH',{state:'held',outcome:reason,updated_at:new Date().toISOString()});return {status:reason};};
+ const hold=async(reason:string)=>{await db('rpc/icash_hold_voice_job','POST',{p_account:accountId,p_job:j.id,p_reason:reason,p_after_claim:ownsDispatch});return {status:reason};};
  const [c]=await db<Config[]>(`icash_voice_configs?account_id=eq.${accountId}&select=*`);
  const [p]=await db<Permission[]>(`icash_contact_permissions?id=eq.${j.permission_id}&account_id=eq.${accountId}&select=*`);
  const [snapshot]=p?await db<{snapshot:unknown}[]>(`icash_screening_jobs?id=eq.${p.screening_id}&account_id=eq.${accountId}&state=eq.complete&select=snapshot`):[];
  if(!c?.enabled||!(Date.parse(c.reviewed_until)>Date.now())||!p||!snapshot||!process.env.ELEVENLABS_API_KEY)return hold('voice_configuration_required');
  if(createHash('sha256').update(p.phone).digest('hex')!==p.contact_key)return hold('contact_binding_invalid');
  const suppressed=await db<{phone:string}[]>(`icash_text_suppressions?phone=eq.${encodeURIComponent(p.phone)}&select=phone&limit=1`);if(suppressed.length)return hold('contact_opted_out');
- const contact=contactEligibility(p);if(!contact.ready){if(contact.reason==='outside_contact_hours'){await db(`icash_voice_jobs?id=eq.${j.id}&state=eq.issued`,'PATCH',{state:'ready',due_at:new Date(Date.now()+30*60000).toISOString()});return {status:contact.reason};}return hold(contact.reason);}
+ const contact=contactEligibility(p);if(!contact.ready){if(contact.reason==='outside_contact_hours'&&!j.callback_id){await db(`icash_voice_jobs?id=eq.${j.id}&state=eq.issued`,'PATCH',{state:'ready',due_at:new Date(Date.now()+30*60000).toISOString()});return {status:contact.reason};}return hold(contact.reason);}
  const eligible=p.party==='seller'?callEligibility(p,snapshot.snapshot):null;
  if(eligible&&!eligible.ready)return hold(eligible.reason);
  const buyerContext=p.party==='buyer'?await db<BuyerCallContext|null>('rpc/icash_buyer_voice_context','POST',{p_permission:p.id}):null;
