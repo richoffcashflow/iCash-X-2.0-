@@ -98,6 +98,7 @@ alter table public.icash_automation_tickets add column fulfillment_job_id uuid r
 create function public.icash_next_automation() returns jsonb language plpgsql set search_path='' as $$
 declare j public.icash_fulfillment_jobs;t public.icash_automation_tickets;
 begin
+ perform pg_advisory_xact_lock(726341927);
  perform public.icash_queue_fulfillment();
  -- Limit preparation tickets to one per minute globally so reconciliation/calls are not starved.
  if not exists(select 1 from public.icash_automation_tickets where kind='fulfillment' and created_at>now()-interval '1 minute') then
