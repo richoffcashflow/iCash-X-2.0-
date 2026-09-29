@@ -28,4 +28,6 @@ begin
  if public.icash_claim_market_research(a,j) is not null then raise exception 'Request cap exceeded';end if;
  if has_function_privilege('anon','public.icash_claim_market_research(uuid,uuid)','execute') then raise exception 'Public claim access';end if;
 end $$;
+-- Exercise scheduler SQL as well as claim/save RPCs; all tickets roll back.
+select public.icash_next_automation() is not null as scheduler_returned;
 rollback;

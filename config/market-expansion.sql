@@ -97,9 +97,9 @@ begin
  select s.id,s.account_id,cycle,'counts',s.city,s.state,z.zip from public.icash_market_shortlist z where z.city=s.city and z.state=s.state;
  update public.icash_market_research_scopes set next_scan_at=now()+interval '7 days' where id=s.id;
  end if;end loop;
- select q.* into j from public.icash_market_research_jobs q join public.icash_market_research_scopes s on s.id=q.scope_id and s.enabled
+ select q.* into j from public.icash_market_research_jobs q join public.icash_market_research_scopes scope on scope.id=q.scope_id and scope.enabled
  where q.state<>'complete' and q.attempts<3 and q.next_attempt_at<=now()
- order by q.next_attempt_at,q.created_at,q.id for update of q skip locked limit 1;
+ order by case when q.kind='locations' then 0 else 1 end,q.next_attempt_at,q.created_at,q.id for update of q skip locked limit 1;
  if not found then return prior;end if;
  update public.icash_market_research_jobs set state='issued',updated_at=now(),next_attempt_at=now()+interval '15 minutes' where id=j.id;
  insert into public.icash_automation_tickets(account_id,kind,market_research_job_id) values(j.account_id,'market_research',j.id) returning * into t;
