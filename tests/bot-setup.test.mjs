@@ -7,3 +7,9 @@ for(const p of [{...defaultBotProfile},{...defaultBotProfile,displayName:'<scrip
 assert(!setupEvents.includes('purchase'));
 assert(!setupEvents.includes('setup_completed'));
 console.log('Setup validation: names, preset themes/voices and server-only completion/payment events passed');
+const {nextSetupStage}=await import('../lib/bot-setup.ts');
+assert.equal(nextSetupStage(0,'quick'),4);
+assert.equal(nextSetupStage(0,'guided'),1);
+assert.equal(nextSetupStage(1,'quick'),2);
+assert.equal(nextSetupStage(3,'quick'),4);
+console.log('Quick setup skips optional steps; customization still progresses normally.');

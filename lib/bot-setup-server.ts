@@ -12,8 +12,8 @@ export async function setupOwner(create=false){
  return {hash:validGuest(token)?guestHash(token):null,accountId:account?.id??null};
 }
 export async function readBotSetup(owner:Awaited<ReturnType<typeof setupOwner>>){
- if(owner.accountId){const [row]=await db<BotSetup[]>(`icash_bot_setups?account_id=eq.${owner.accountId}&select=id,profile,stage,revision,variant,updated_at`);if(row)return row;}
- if(owner.hash){const [row]=await db<BotSetup[]>(`icash_bot_setups?guest_hash=eq.${owner.hash}&account_id=is.null&select=id,profile,stage,revision,variant,updated_at`);return row??null;}
+ if(owner.accountId){const [row]=await db<BotSetup[]>(`icash_bot_setups?account_id=eq.${owner.accountId}&select=id,profile,stage,revision,variant,flow_variant,flow_experiment,updated_at`);if(row)return row;}
+ if(owner.hash){const [row]=await db<BotSetup[]>(`icash_bot_setups?guest_hash=eq.${owner.hash}&account_id=is.null&select=id,profile,stage,revision,variant,flow_variant,flow_experiment,updated_at`);return row??null;}
  return null;
 }
 export async function setupEvent(name:string){
