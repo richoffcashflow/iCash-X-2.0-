@@ -1,18 +1,17 @@
 'use client';
 import {useEffect,useState} from 'react';
 import {processingFeeCents,processingFeePercent} from '@/lib/funding-fees';
-import {maximumFundingDays} from '@/lib/funding-duration';
 import {AccountAccess} from '@/components/account-access';
 import {fundingTermsVersion,fundingTermsText} from '@/lib/funding-consent';
 type Pack={code:string;price_cents:number;credit_cents:number;enabled:boolean};
 type Funding={mode:'test'|'live'|null;enabled:boolean;packs?:Pack[];priceCents?:number;paidCents?:number;needsClaim?:boolean;email?:string};
 export function FundingCheckout({onSignedIn,initialCode="start"}:{onSignedIn:()=>void;initialCode?:string}){
- const [status,setStatus]=useState<Funding|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[accepted,setAccepted]=useState(false),[code,setCode]=useState(initialCode),[days,setDays]=useState(1);
+ const [status,setStatus]=useState<Funding|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[accepted,setAccepted]=useState(false),[code,setCode]=useState(initialCode);
  async function refresh(){try{const r=await fetch('/api/funding/status',{cache:'no-store'});if(!r.ok)throw new Error();setStatus(await r.json());}catch{setError('Could not check funding. Please retry.');}}
  useEffect(()=>{void refresh();},[]);
  const packs=(status?.packs??[]).filter(p=>p.price_cents>=2000);
  const selected=packs.find(p=>p.code===code);const amount=selected?.price_cents??2000;
- const maxDays=maximumFundingDays(amount);
+ const days=1;
  const total=amount*days;
  const fee=processingFeeCents(total),subtotal=total+fee;
  const perDay=amount/100;
@@ -22,22 +21,19 @@ export function FundingCheckout({onSignedIn,initialCode="start"}:{onSignedIn:()=
  return <div className="boost-widget">
   {status.mode==='test'&&<p className="boost-caption">Test mode · No real money or live work.</p>}
   {status.needsClaim?<><h3>Keep your balance</h3><p>Verify your email once. We’ll remember this browser.</p><AccountAccess initialEmail={status.email??''} onSignedIn={onSignedIn}/></>:<>
-   <div className="boost-duration boost-budget-slider"><label htmlFor="boost-amount">Daily budget <strong>${(amount/100).toLocaleString()}</strong></label><input id="boost-amount" type="range" min="0" max={Math.max(0,packs.length-1)} step="1" value={Math.max(0,packs.findIndex(p=>p.code===code))} disabled={busy||packs.length<2} aria-valuetext={`$${(amount/100).toLocaleString()} per day`} onChange={e=>{const pack=packs[Number(e.target.value)];if(pack){setCode(pack.code);setDays(d=>Math.min(d,maximumFundingDays(pack.price_cents)));setAccepted(false);}}}/><div className="boost-range-labels" aria-hidden="true"><span>$20</span><span>${((packs.at(-1)?.price_cents??2000)/100).toLocaleString()}</span></div></div>
-   <div className="boost-duration"><label htmlFor="boost-days">Estimated days <strong>{days} {days===1?'day':'days'}</strong></label><input id="boost-days" type="range" min="1" max={maxDays} step="1" value={days} disabled={busy} aria-valuetext={`${days} days`} onChange={e=>{setDays(Number(e.target.value));setAccepted(false);}}/><div className="boost-range-labels" aria-hidden="true"><span>1 day</span><span>{maxDays} days</span></div></div>
-   <p className="boost-average" aria-live="polite">Total budget <strong>${(total/100).toLocaleString()}</strong></p>
-   <p className="boost-average" aria-live="polite">Average spend <strong>${(total/100/days).toLocaleString()}/day</strong></p>
+   <div className="boost-duration boost-budget-slider"><label htmlFor="boost-amount">Daily budget <strong>${(amount/100).toLocaleString()}/day</strong></label><input id="boost-amount" type="range" min="0" max={Math.max(0,packs.length-1)} step="1" value={Math.max(0,packs.findIndex(p=>p.code===code))} disabled={busy||packs.length<2} aria-valuetext={`$${(amount/100).toLocaleString()} per day`} onChange={e=>{const pack=packs[Number(e.target.value)];if(pack){setCode(pack.code);setAccepted(false);}}}/><div className="boost-range-labels" aria-hidden="true"><span>$20</span><span>${((packs.at(-1)?.price_cents??2000)/100).toLocaleString()}</span></div></div>
    <p className="boost-average">Processing fee ({processingFeePercent}%) <strong>${(fee/100).toFixed(2)}</strong></p>
-   <p className="boost-average">Subtotal <strong>${(subtotal/100).toFixed(2)}</strong></p>
+   <p className="boost-average">Due today before tax <strong>${(subtotal/100).toFixed(2)}</strong></p>
    <p className="boost-caption">Applicable sales tax calculated at checkout. Fees and tax do not add bot credits.</p>
    <div className="boost-pace" data-level={pace.level}><strong>{pace.title}</strong><p>{pace.note}</p><div className="boost-pace-meter" aria-hidden="true">{[1,2,3,4].map(n=><span key={n} data-active={n<=pace.level}/>)}</div><small>Budget capacity—not a prediction of deals or closing speed.</small></div>
-   <p className="boost-caption">${(amount/100).toLocaleString()}/day × {days} {days===1?'day':'days'}. One-time payment. Budget may run out sooner.</p>
+   <p className="boost-caption">Fund one day to start. No recurring charge. Your bot stops when its available balance runs out.</p>
    <section className="auto-reload-card" aria-label="Auto-reload">
     <div className="auto-reload-heading"><div><strong>Keep my bot working</strong><span>Auto-reload</span></div><button type="button" role="switch" aria-checked="false" aria-label="Auto-reload unavailable until automatic billing is ready" disabled className="auto-reload-switch"><span/></button></div>
     <p>When my balance falls below <strong>$5</strong>, add <strong>$20</strong>.</p>
     <small>$22 per reload, plus applicable tax. Off until you authorize it. Automatic billing is not available yet.</small>
    </section>
    <label className="funding-consent"><input type="checkbox" checked={accepted} disabled={busy} onChange={e=>setAccepted(e.target.checked)}/><span>I agree to the purchase terms.</span></label>
-   <details className="boost-terms"><summary>Purchase terms</summary><p>You authorize a one-time ${(subtotal/100).toFixed(2)} purchase plus applicable sales tax, with an estimated duration of {days} days. You authorize use of the full purchased budget sooner when work is available. The bot stops at your available balance; no automatic reload is authorized. Unused credits stay yours. Results are not guaranteed.</p><p>{fundingTermsText}</p><p>Checkout collects a phone number for account and deal coordination, not marketing-text consent.</p></details>
+   <details className="boost-terms"><summary>Purchase terms</summary><p>You authorize a one-time ${(subtotal/100).toFixed(2)} purchase plus applicable sales tax, to fund one day of your selected budget. You authorize use of the full purchased budget sooner when work is available. The bot stops at your available balance; no automatic reload is authorized. Unused credits stay yours. Results are not guaranteed.</p><p>{fundingTermsText}</p><p>Checkout collects a phone number for account and deal coordination, not marketing-text consent.</p></details>
    <button className="fund-button full" disabled={busy||!status.enabled||!accepted||(status.mode==='live'&&!selected?.enabled)} onClick={()=>void checkout()}>{busy?'Opening Stripe…':`${status.mode==='test'?'Test funding':'Fund my bot'} — $${(subtotal/100).toFixed(2)} + tax`}</button>
    {!status.enabled&&<p className="boost-caption" role="status">Funding opens when live work is ready.</p>}
   </>}
