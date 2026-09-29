@@ -24,7 +24,7 @@ export async function POST(req:Request){
  const j=await saved(s.id,s.profile.displayName);if(j?.render_version===2)return NextResponse.json(payload(j),{headers});
  await limitRequest(req,'free-brand-images',owner.hash,5,86400);
  if(!process.env.OPENAI_API_KEY)return NextResponse.json({state:'unavailable'},{headers});
- if(!await db<boolean>('rpc/icash_claim_brand_images','POST',{p_setup:s.id,p_name:s.profile.displayName}))return NextResponse.json(payload(await saved(s.id,s.profile.displayName)),{headers});
+ if(!await db<boolean>('rpc/icash_claim_brand_images','POST',{p_setup:s.id,p_name:s.profile.displayName})){const existing=await saved(s.id,s.profile.displayName);return NextResponse.json(existing?payload(existing):{state:'limit_reached',designs:null},{headers});}
  const id=s.id,name=s.profile.displayName;
  after(async()=>{try{const result=await generateBrandImages(id,name);await db(`icash_brand_jobs?setup_id=eq.${id}&state=eq.creating&render_version=eq.2`,'PATCH',{...result,state:'ready',updated_at:new Date().toISOString()});}catch(e){await db(`icash_brand_jobs?setup_id=eq.${id}&state=eq.creating&render_version=eq.2`,'PATCH',{state:'unavailable',error_code:e instanceof Error?e.message.slice(0,100):'generation_failed',updated_at:new Date().toISOString()}).catch(()=>{});}});
  return NextResponse.json({state:'creating',designs:null},{status:202,headers});
