@@ -24,3 +24,8 @@ Sources:
 https://www.docuseal.com/docs/api
 https://www.docuseal.com/guides/pre-fill-pdf-document-form-fields-with-api
 https://www.docuseal.com/pricing
+
+## Test templates created 2026-09-28
+Purchase template 6099487 and assignment template 6099488 were created in the platform test account and all four pages of each PDF were visually checked. Each includes required electronic-consent and signature fields for both parties. Test-only TX routing is configured for one counterparty plus Customer; this routing is technical test setup, not Texas legal approval. Multi-owner/party versions require additional template variants and are blocked by signer-count selection until provided. Automatic signing remains disabled at template level pending the controlled provider signing test.
+
+Template field maps now include only contract-relevant keys for their kind (not payout preferences or internal price-source metadata). Deal notes are limited to 1,200 characters; the provided legal-description layout supports at most 2,000 characters before the service requires a separate exhibit. The real description must still be reviewed for completeness. Cancellation/default language covers seller or buyer withdrawal requests, underlying-contract survival, notices, escrow disputes and exceptions; automatic termination notices, deposit release and replacement assignments are not implemented.

@@ -81,7 +81,7 @@ export async function completedSigningPdf(accountId:string,id:string,audit=false
  const d=normalize(raw,e);const state=verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients});
  if(!['completed','test_completed'].includes(state))throw new Error('Completed signatures required.');
  const docs=audit?null:await (await request(`submissions/${numericId(e.provider_id)}/documents?merge=true`,undefined,e.test_mode)).json() as {url:string}[];
- const url=new URL(audit?(raw.audit_log_url??''):(docs?.[0]?.url??''));if(url.protocol!=='https:'||url.hostname!=='docuseal.com'||!url.pathname.startsWith('/blobs/'))throw new Error('Combined PDF not ready.');
+ const url=new URL(audit?(raw.audit_log_url??''):(docs?.[0]?.url??''));if(url.protocol!=='https:'||url.hostname!=='docuseal.com'||!['/blobs/','/file/'].some(prefix=>url.pathname.startsWith(prefix)))throw new Error('Combined PDF not ready.');
  const r=await fetch(url,{redirect:'error',cache:'no-store',signal:AbortSignal.timeout(25000)});
  if(!r.ok||!r.headers.get('content-type')?.includes('application/pdf'))throw new Error('Signed PDF is not ready.');
  const bytes=await r.arrayBuffer();if(bytes.byteLength>20*1024*1024)throw new Error('PDF too large.');return bytes;
