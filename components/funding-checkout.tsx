@@ -30,7 +30,7 @@ export function FundingCheckout({onSignedIn,initialCode="budget_ten"}:{onSignedI
    <label className="funding-consent"><input type="checkbox" checked={accepted} disabled={busy} onChange={e=>setAccepted(e.target.checked)}/><span>I authorize ${(subtotal/100).toFixed(2)} per day until I stop my bot.</span></label>
    {daily?.plan?.nextCharge&&<p className="boost-caption">Next renewal: {new Date(daily.plan.nextCharge*1000).toLocaleString()}. Budget changes start then.</p>}
    <details className="boost-terms"><summary>Daily billing terms</summary><p>{dailyConsent}</p></details>
-   <button className="fund-button full" disabled={busy||!daily?.ready||!accepted} onClick={()=>void checkout()}>{busy?'Opening Stripe…':`${daily?.plan?.state==='active'?'Save daily budget':'Start bot'} — $${(subtotal/100).toFixed(2)}/day`}</button>
+   <button className="fund-button full" disabled={busy||!daily?.ready||!accepted} onClick={()=>void checkout()}>{busy?'Opening secure checkout…':`${daily?.plan?.state==='active'?'Save daily budget':'Start bot'} — $${(subtotal/100).toFixed(2)}/day`}</button>
    {notice&&<p role="status">{notice}</p>}
    {!daily?.ready&&<p className="boost-caption" role="status">Funding opens when live work is ready.</p>}
   </>}

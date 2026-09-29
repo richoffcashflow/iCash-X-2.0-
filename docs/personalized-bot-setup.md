@@ -13,3 +13,13 @@ Funnel events are deduplicated per setup and step. Names are stored in the setup
 Two reviewed CTA texts start evenly randomized. After at least 200 mature visitors per version and separation of approximate two-standard-error purchase-rate bounds, new sessions favor the leader 80/20. Assignment never changes mid-setup. This is a bounded allocation heuristic, not autonomous UI rewriting or a proven statistical improvement. It cannot change prices, billing consent, or operational controls.
 
 Production verification: all four saves and restore-to-funding passed against the deployed API; all three provider preview URLs were returned. TypeScript and rollback database checks passed. The local browser renderer could not run because the environment denied its socket; mobile visual verification remains outstanding. Conversion allocation is cached for 15 minutes with indexed cohort lookups.
+
+
+## Business-builder update
+- Removed the duplicate preview card; all steps use one centered form.
+- Server-side AI generates three validated vector logo choices, with saved results and initials fallback. Provider names are omitted from customer setup. No generated image asset is required.
+- Model usage is stored with each logo job. Maximum 100 attempts globally per UTC day, two per setup (only on a changed name), plus request limits. Duplicate requests never regenerate. Failed/stale requests use the initials fallback. These are free acquisition costs, not customer credit charges.
+- Contract and buyer preferences default on and are saved in the setup profile. They express selected setup preferences; they do not independently enable production outreach.
+- Branded seller and buyer template previews reuse the existing document renderer, leave legal parties and deal terms blank, and remain clearly unsigned drafts. Display name is never substituted for verified legal identity.
+- Funding remains last, with paid usage disclosed before setup. No fake market research, property counts, messages, signed contracts or profits are shown.
+- Validation: TypeScript, schema/XSS tests, rollback DB claim/dedup/access checks. Browser visual verification remains unavailable in this execution environment.
