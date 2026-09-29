@@ -1,0 +1,13 @@
+# Title reply receiving
+
+The production receiver is `/api/webhooks/title-email`. Configure Resend Receiving for a dedicated mailbox/subdomain and subscribe this URL to `email.received`. Set `RESEND_RECEIVING_WEBHOOK_SECRET` to that endpoint's signing secret, `ICASH_TITLE_REPLY_EMAIL` to the receiving address, and use a `RESEND_API_KEY` authorized to retrieve received emails. Sending-domain verification alone does not enable receiving. Do not replace existing mailbox MX records; use a dedicated receiving subdomain. Receiving setup and a live inbound delivery have not been verified.
+
+New outgoing title requests and qualification inquiries include stable subject references and an explicit reply address. Existing untagged messages must be handled manually. The receiver verifies raw-body Svix signatures with a five-minute tolerance, retrieves the email from Resend, checks the destination mailbox and DMARC result, and binds only exact known senders to account-owned requests. Unknown senders/authentication failures are stored privately for operations review without tenant exposure. Multiple thread tags are rejected. Sender changes require independent review.
+
+A unique provider email ID prevents duplicate persistence. Transient retrieval/database errors return 503 for provider retry. Stored plaintext is bounded at 20,000 characters; HTML and attachments are not rendered or downloaded. Incoming message contents never become executable agent instructions. No paid voice/data tests or outbound messages were sent.
+
+Customer deal details show up to ten latest verified-sender title replies under a collapsed section. All replies currently require review. This release does NOT automatically approve partners, parse deadlines into scheduled tasks, acknowledge replies, send follow-ups, process opt-outs, confirm title opening, change wire instructions, verify deposits, or mark closing complete. Qualification replies and quarantined messages require operations review in the private database/receiving inbox. No dedicated operations inbox UI is included. No customer credits are charged for reply ingestion; hosting and provider receiving costs remain platform expenses.
+
+Validation: official Svix signature vector, tampered and stale/future signatures, subject isolation, email address validation; existing mocked dispatch/retry guards; Next production compilation; database duplicate and privilege checks. A real delivery is still required after configuration.
+
+Sources checked: https://resend.com/docs/webhooks/verify-webhooks-requests ; https://resend.com/docs/api-reference/emails/retrieve-received-email ; https://docs.svix.com/receiving/verifying-payloads/how-manual

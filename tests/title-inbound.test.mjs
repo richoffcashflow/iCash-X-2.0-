@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {verifyTitleWebhook,titleEmailAddress,titleReference} from '../lib/title-inbound-policy.ts';
+const body='{"event_type":"ping","data":{"success":true}}';
+const h=new Headers({'svix-id':'msg_loFOjxBNrRLzqYUf','svix-timestamp':'1731705121','svix-signature':'v1,rAvfW3dJ/X/qxhsaXPOyyCGmRKsaKWcsNccKXlIktD0='});
+const secret='whsec_plJ3nmyCDGBKInavdOK15jsl';
+assert.equal(verifyTitleWebhook(body,h,secret,1731705121000).event_type,'ping');
+assert.throws(()=>verifyTitleWebhook(body+' ',h,secret,1731705121000));
+assert.throws(()=>verifyTitleWebhook(body,h,secret,1731705521000));
+assert.throws(()=>verifyTitleWebhook(body,h,secret,1731704721000));
+assert.equal(titleEmailAddress('Closer <OFFICE@example.com>'),'office@example.com');
+assert.equal(titleEmailAddress('x@example.com\r\nBcc:y@example.com'),'');
+const tag='[ICX-T:12345678-1234-1234-1234-123456789abc]';
+assert.equal(titleReference('Re: '+tag).kind,'T');assert.equal(titleReference(tag+tag),null);assert.equal(titleReference('reference fake'),null);
+console.log('Official signature vector, tampering, replay window, address and thread isolation checks passed. No email sent.');
