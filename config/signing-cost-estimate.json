@@ -1,0 +1,35 @@
+{
+  "version": "signing-planning-2026-09-29",
+  "status": "estimate_not_verified",
+  "enabled": false,
+  "operation": "contract_signing",
+  "chargeCents": 500,
+  "documentCount": 1,
+  "costsMicros": {
+    "dealmachine": 0,
+    "elevenlabs": 0,
+    "twilio": 0,
+    "messaging": 0,
+    "email": 5000,
+    "llm": 0,
+    "vercel": 10000,
+    "railway": 10000,
+    "supabase": 10000,
+    "github": 5000,
+    "payments": 330000,
+    "title_and_signing": 200000,
+    "support_and_overhead": 10000,
+    "acquisition": 50000,
+    "refund_and_dispute_reserve": 50000,
+    "other": 0
+  },
+  "bufferBasisPoints": 2000,
+  "marginBasisPoints": 8334,
+  "assumptions": {
+    "docuseal": "Owner reported $0.20 per document; one billable document assumed.",
+    "payments": "6.6% allocation: domestic card 2.9% + $0.30 per $10 funding payment + Billing 0.7%; not a separate Stripe charge for signing.",
+    "allocations": "Hosting, email, support, acquisition and dispute figures are planning allowances, not measured bills.",
+    "scope": "One agreement with one counterparty and customer; no calls, SMS, enrichment or LLM invoked by signing itself.",
+    "activation": "Requires actual allocation/billing reconciliation, operating funds and live signing mode. Never use this estimate as actual ledger evidence."
+  }
+}
