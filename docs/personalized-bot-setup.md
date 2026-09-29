@@ -23,3 +23,8 @@ Production verification: all four saves and restore-to-funding passed against th
 - Branded seller and buyer template previews reuse the existing document renderer, leave legal parties and deal terms blank, and remain clearly unsigned drafts. Display name is never substituted for verified legal identity.
 - Funding remains last, with paid usage disclosed before setup. No fake market research, property counts, messages, signed contracts or profits are shown.
 - Validation: TypeScript, schema/XSS tests, rollback DB claim/dedup/access checks. Browser visual verification remains unavailable in this execution environment.
+
+
+## Image logo upgrade
+Logo creation now uses OpenAI Images API (gpt-image-2.5-flare, three medium 1024px JPEGs) instead of asking a text model to draw paths. Private Supabase Storage holds image assets; the owned setup endpoint serves them. Old vector logos remain readable, with one automatic image upgrade when reopening the logo step. Generation uses Next after with bounded duration, no automatic paid retries, daily and per-setup caps, and stored provider usage. User-visible cards show larger marks and typeset business names.
+Official references: https://developers.openai.com/api/docs/guides/image-generation and https://supabase.com/docs/reference/self-hosting-storage/upload-a-new-object .
