@@ -1,54 +1,39 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import Image from "next/image";
-import { ArrowRight, Plus, X } from "lucide-react";
-import { readDemoProgress } from "@/lib/demo-progress";
-import { FundingCheckout } from "@/components/funding-checkout";
-import { AccountAccess } from "@/components/account-access";
-import { CustomerIdentity } from "@/components/customer-identity";
-import type { CustomerIdentity as Identity } from "@/lib/customer-identity";
+'use client';
+import {useCallback,useEffect,useState,type CSSProperties} from 'react';
+import Image from 'next/image';
+import {Plus,X} from 'lucide-react';
+import {FundingCheckout} from '@/components/funding-checkout';
+import {AccountAccess} from '@/components/account-access';
+import {CustomerIdentity} from '@/components/customer-identity';
+import type {CustomerIdentity as Identity} from '@/lib/customer-identity';
 import {BudgetSummary} from '@/components/budget-summary';
-import {LiveWorkspace} from "@/components/live-workspace";
-import { DemoRunner } from "@/components/demo-runner";
-
-export default function Home() {
-  type Account={identity?:Identity|null;signedIn:boolean;signInReady?:boolean;mode?:"test"|"live";email?:string;phone?:string;balanceCents?:number;assistantName?:string;paused?:boolean;billingReview?:boolean};
-  const [account,setAccount]=useState<Account|null>(null);
-  const [controlBusy,setControlBusy]=useState(false);
-  async function toggleBot(){setControlBusy(true);try{const r=await fetch("/api/work/control",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:account?.paused?"resume":"pause"})});if(!r.ok)throw new Error();await refreshAccount();}catch{setAccountError(true);}finally{setControlBusy(false);}}
-  const [accountError,setAccountError]=useState(false);
-  const [signInOpen,setSignInOpen]=useState(false);
-  async function refreshAccount(){try{const r=await fetch("/api/account",{cache:"no-store"});if(!r.ok)throw new Error();setAccount(await r.json());setAccountError(false);setSignInOpen(false);}catch{setAccountError(true);}}
-  async function signOut(){const r=await fetch("/api/auth/logout",{method:"POST"});if(r.ok){setAccount({signedIn:false});setFundingOpen(false);}else setAccountError(true);}
-  useEffect(()=>{void refreshAccount();},[]);
-  const [started, setStarted] = useState(false);
-  const [fundingCode,setFundingCode]=useState("budget_ten");
-  const [fundingOpen, setFundingOpen] = useState(false);
-  useEffect(()=>{if(readDemoProgress())setStarted(true);if(new URLSearchParams(window.location.search).has("payment"))setFundingOpen(true);},[]);
-  function start() { setStarted(true); }
-  function toggleSignIn(){setSignInOpen(value=>!value);setFundingOpen(false);}
-  function closeSignIn(){setSignInOpen(false);window.requestAnimationFrame(()=>document.getElementById("balance-sign-in")?.focus());}
-  function openFunding(code="budget_ten") { setFundingCode(code);setFundingOpen(true); window.requestAnimationFrame(()=>document.getElementById("inline-funding")?.scrollIntoView({behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",block:"center"})); }
-
-  return <div className="console-shell">
-    <header className="console-header"><div><Image src="/icash-x-logo.png" alt="iCash X" width={111} height={62} priority /><b className="brand-version">2.0</b><span>{account?.signedIn?(account.mode==="test"?"TEST ACCOUNT":"YOUR ACCOUNT"):"FREE TEST"}</span></div>{account?.signedIn?<button className="header-access" onClick={()=>void signOut()}>Sign out</button>:<button id="balance-sign-in" className="header-access" aria-expanded={signInOpen} aria-controls="inline-sign-in" onClick={toggleSignIn}>Sign in</button>}</header>
-    <main className="console-main">
-      <h1 className="sr-only">iCash X AI wholesaling workspace</h1>
-      {accountError&&<p role="alert">Could not load your account. <button onClick={()=>void refreshAccount()}>Retry</button></p>}
-      <section className="balance-panel" aria-labelledby="balance-label">
-        <div className="balance-heading"><span id="balance-label">Your balance</span></div>
-        <div className="balance-top"><div><strong>{account?.signedIn?`$${((account.balanceCents??0)/100).toFixed(2)}`:"Free"}<span>{account?.signedIn?(account.mode==="test"?"test balance":"available"):"available"}</span></strong></div><button className={`fund-button ${account?.signedIn?"":"balance-add"}`} aria-expanded={fundingOpen} aria-controls="inline-funding" onClick={()=>{setFundingOpen(value=>!value);setSignInOpen(false);}}>Fund my AI bot <Plus size={18}/></button></div>
-
-        {signInOpen&&!account?.signedIn&&<div className="inline-sign-in" id="inline-sign-in" role="region" aria-labelledby="sign-in-title" onKeyDown={e=>{if(e.key==="Escape")closeSignIn();}}><div className="sign-in-heading"><h2 id="sign-in-title">Welcome back</h2><button aria-label="Close sign-in" onClick={closeSignIn}><X size={19}/></button></div><AccountAccess ready={account?.signInReady===true} onSignedIn={()=>void refreshAccount()}/></div>}
-        {fundingOpen && <div className="inline-funding" id="inline-funding"><div><strong>Fund your bot</strong><span>No monthly subscription</span></div><p>Choose your daily budget. Stop your bot anytime.</p><FundingCheckout key={fundingCode} initialCode={fundingCode} onSignedIn={()=>{setFundingOpen(false);void refreshAccount();}}/><small>Real payments are not open yet. Test payments do not pay for real work.</small></div>}
-      </section>
-      <section className="operation-panel" aria-label="Your AI real estate bot">
-        {account?.signedIn&&<div className="operation-top"><span className="bot-icon">X</span><div><h2 id="operation-title">{account?.signedIn?account.assistantName:"Your bot"}</h2><span>{account?.signedIn?"Your balance is saved":started ? "Test activity · fictional people and properties" : "See how your bot works"}</span></div><span className="mode-badge">{account?.signedIn?(account.paused?"PAUSED":"SETUP PENDING"):"TEST"}</span></div>}
-        {account?.signedIn?<div className="operation-empty"><h3>{account.billingReview?"Your payment needs a review":account.paused?"Your bot is paused.":"Your bot is awaiting live setup."}</h3><p>{account.billingReview?"Your bot is paused while a payment issue is reviewed.":"Live acquisition is still being configured. Your saved work and documents are below."}</p><button className="demo-button" disabled={controlBusy} onClick={()=>void toggleBot()}>{controlBusy?"Saving…":account.paused?"Resume bot":"Stop bot"}</button><BudgetSummary onFund={openFunding}/><LiveWorkspace principal={account.identity?.principal??""}/><details><summary>Account details</summary><p>{account.email}</p>{account.phone&&<p>{account.phone}</p>}<CustomerIdentity identity={account.identity??null} onSaved={()=>void refreshAccount()}/><p>Manage daily billing from your budget. Stop bot cancels future daily renewals.</p></details></div>:!account?<div className="operation-empty"><p role="status">{accountError?"Your workspace could not load. Tap Retry above.":"Opening your workspace…"}</p></div>:!started ? <div className="operation-empty"><h2 className="entry-title">Your AI real estate bot.</h2><p className="capability-intro">Watch your AI bot find a property, talk to the seller, and find a buyer. Then choose a budget to put it to work.</p><button className="demo-button first-action" onClick={start}>Test for free <ArrowRight size={18}/></button><small>No typing. No sign-up. No card.</small><p className="sample-label">Test mode · Fictional people and properties. No real calls or deals.</p></div> : <DemoRunner onFund={openFunding} />}
-      </section>
-    </main>
-    <footer className="console-footer"><details className="inline-disclosures"><summary>How it works & help</summary><div><p><strong>New to wholesaling?</strong> It means securing a property agreement and arranging a sale or assignment to another buyer. A signed contract is a step toward closing, not a payment.</p><p><strong>Need help?</strong> Open the property card to see the conversation and next step. Live human support is not connected in this preview.</p><p><strong>Your balance:</strong> Add money once and use it for bot services as needed. No monthly subscription. Prices for each type of work will be shown before real payments open. Our prices include a margin above our service costs.</p><p><strong>Your control:</strong> Approve a daily limit and pause at any time. Auto-reload requires separate opt-in. Free use stops at its limit and does not silently become paid use.</p><p><strong>Results:</strong> No property, contract, buyer, closing, or income is guaranteed. Test people and outcomes are fictional. AI estimates and documents need appropriate verification.</p><p><strong>Live work:</strong> Contact permissions, local rules, owner authority, and approved contract terms must pass before work is dispatched. Being a property buyer does not by itself exempt AI calls from applicable rules.</p><p>You can try the free test now. Real payments and bot work are not open yet. Use Sign in above to access your account.</p></div></details></footer>
-  </div>;
+import {LiveWorkspace} from '@/components/live-workspace';
+import {BotSetupFlow} from '@/components/bot-setup';
+import {BotBrand} from '@/components/bot-brand';
+import {setupThemes,type BotProfile} from '@/lib/bot-setup';
+type Account={identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;phone?:string;balanceCents?:number;assistantName?:string;paused?:boolean;billingReview?:boolean;workReady?:boolean};
+export default function Home(){
+ const [account,setAccount]=useState<Account|null>(null),[accountError,setAccountError]=useState(false),[signInOpen,setSignInOpen]=useState(false),[fundingOpen,setFundingOpen]=useState(false),[fundingCode,setFundingCode]=useState('budget_ten'),[controlBusy,setControlBusy]=useState(false),[draftBrand,setDraftBrand]=useState<BotProfile|null>(null);
+ const updateBrand=useCallback((profile:BotProfile)=>setDraftBrand(profile),[]);
+ async function refreshAccount(){try{const r=await fetch('/api/account',{cache:'no-store'});if(!r.ok)throw Error();setAccount(await r.json());setAccountError(false);setSignInOpen(false);}catch{setAccountError(true);}}
+ useEffect(()=>{void refreshAccount();if(new URLSearchParams(window.location.search).has('payment'))setFundingOpen(true);},[]);
+ async function toggleBot(){setControlBusy(true);try{const r=await fetch('/api/work/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:account?.paused?'resume':'pause'})});if(!r.ok)throw Error();await refreshAccount();}catch{setAccountError(true);}finally{setControlBusy(false);}}
+ async function signOut(){const r=await fetch('/api/auth/logout',{method:'POST'});if(r.ok){setAccount({signedIn:false});setDraftBrand(null);setFundingOpen(false);}else setAccountError(true);}
+ function openFunding(code='budget_ten'){setFundingCode(code);setFundingOpen(true);requestAnimationFrame(()=>document.getElementById('inline-funding')?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'}));}
+ const guest=!account?.signedIn;const profile=account?.signedIn?account.botSetup?.profile:draftBrand;const theme=setupThemes[profile?.theme??'ink'];
+ return <div className={`console-shell ${guest?'setup-shell':'personalized-workspace'}`} style={{'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties}>
+  <header className="console-header"><div>{profile?.displayName?<BotBrand profile={profile} compact/>:<><Image src="/icash-x-logo.png" alt="iCash X" width={111} height={62} priority/><b className="brand-version">2.0</b></>}</div>{account?.signedIn?<button className="header-access" onClick={()=>void signOut()}>Sign out</button>:<button id="balance-sign-in" className="header-access" aria-expanded={signInOpen} aria-controls="inline-sign-in" onClick={()=>setSignInOpen(v=>!v)}>Sign in</button>}</header>
+  <main className="console-main">
+   {accountError&&<p role="alert">Could not load your account. <button onClick={()=>void refreshAccount()}>Retry</button></p>}
+   {signInOpen&&guest&&<section className="inline-sign-in setup-sign-in" id="inline-sign-in" aria-labelledby="sign-in-title"><div className="sign-in-heading"><h2 id="sign-in-title">Welcome back</h2><button aria-label="Close sign-in" onClick={()=>{setSignInOpen(false);document.getElementById('balance-sign-in')?.focus();}}><X size={19}/></button></div><AccountAccess ready={account?.signInReady===true} onSignedIn={()=>void refreshAccount()}/></section>}
+   {!account?<div className="setup-loading" role="status">{accountError?'Tap Retry to open your workspace.':'Opening your workspace…'}</div>:guest?<BotSetupFlow onBrand={updateBrand} onSignedIn={()=>void refreshAccount()}/>:<>
+    <h1 className="sr-only">{profile?.displayName||'iCash X'} AI real estate workspace</h1>
+    <section className="balance-panel" aria-labelledby="balance-label"><div className="balance-heading"><span id="balance-label">Your balance</span></div><div className="balance-top"><strong>${((account.balanceCents??0)/100).toFixed(2)}<span>{account.mode==='test'?'test balance':'available'}</span></strong><button className="fund-button" aria-expanded={fundingOpen} aria-controls="inline-funding" onClick={()=>setFundingOpen(v=>!v)}>Fund my AI bot<Plus size={18}/></button></div>
+     {fundingOpen&&<div className="inline-funding" id="inline-funding"><div><strong>Your daily budget</strong><span>Stop anytime</span></div><FundingCheckout key={fundingCode} initialCode={fundingCode} onSignedIn={()=>{setFundingOpen(false);void refreshAccount();}}/></div>}
+    </section>
+    <section className="operation-panel" aria-label="Your AI real estate bot"><div className="operation-top"><span className="bot-icon">X</span><div><h2>{account.assistantName}</h2><span>{profile?.displayName?`Working for ${profile.displayName}`:'Your balance is saved'}</span></div><span className="mode-badge">{account.paused?'PAUSED':account.workReady?'READY':'SETUP PENDING'}</span></div><div className="operation-empty"><h3>{account.billingReview?'Your payment needs a review':account.paused?'Your bot is paused.':account.workReady?'Your bot is ready for eligible work.':'Your bot is awaiting live setup.'}</h3><p>{account.billingReview?'Your bot is paused while a payment issue is reviewed.':account.workReady?'Your saved work and next steps are below.':'Live acquisition is still being configured. Your saved work and documents are below.'}</p><button className="demo-button" disabled={controlBusy} onClick={()=>void toggleBot()}>{controlBusy?'Saving…':account.paused?'Resume bot':'Stop bot'}</button><BudgetSummary onFund={openFunding}/><LiveWorkspace principal={account.identity?.principal??''}/><details><summary>Account details</summary><p>{account.email}</p>{account.phone&&<p>{account.phone}</p>}<CustomerIdentity identity={account.identity??null} onSaved={()=>void refreshAccount()}/><p>Manage daily billing from your budget. Stop bot cancels future daily renewals.</p></details></div></section>
+   </>}
+  </main>
+  <footer className="console-footer"><details className="inline-disclosures"><summary>How it works & help</summary><div><p><strong>What your bot does:</strong> iCash X helps research properties, work permitted seller conversations, prepare agreements, match buyers and coordinate closing. Actual work depends on funding and completed operating checks.</p><p><strong>Free setup:</strong> Personalize your bot without a card. Setting it up does not start calls, send contracts or create deals.</p><p><strong>Your control:</strong> You choose and explicitly authorize a paid daily budget before billing starts. Daily charges continue until you stop your bot. Pausing or stopping remains available from your workspace.</p><p><strong>Results:</strong> No property, contract, buyer, closing or income is guaranteed. Estimates, legal names and documents require appropriate verification.</p><p><strong>Privacy:</strong> Setup choices are stored to restore your progress. We measure step completion and verified purchases to improve the product. Your name and company are not included in funnel event payloads.</p></div></details></footer>
+ </div>;
 }
-

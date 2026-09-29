@@ -1,3 +1,4 @@
+import {setupEvent} from '@/lib/bot-setup-server';
 import {liveFundingReady} from "@/lib/launch-readiness";
 import {NextResponse} from 'next/server';
 import {cookies} from 'next/headers';
@@ -39,11 +40,12 @@ export async function POST(req:Request){
  return NextResponse.json({saved:true,message:'Daily budget saved. Your new amount starts at the next daily renewal; no charge now.'});
  }
  if(i.action!=='start')throw new Error();
- if(p){if(p.stripe_session_id){const session=await stripe.checkout.sessions.retrieve(p.stripe_session_id);if(session.status==='open'&&session.url)return NextResponse.json({url:session.url});if(session.status==='complete'){const subId=typeof session.subscription==='string'?session.subscription:session.subscription?.id;if(subId){const sub=await stripe.subscriptions.retrieve(subId);await syncDailySubscription(sub);const inv=typeof sub.latest_invoice==='string'?sub.latest_invoice:sub.latest_invoice?.id;if(inv)await settleDailyInvoice(inv);}return NextResponse.json({error:'Your daily plan already exists. Refresh to manage it.'},{status:409});}}
+ if(p){if(p.stripe_session_id){const session=await stripe.checkout.sessions.retrieve(p.stripe_session_id);if(session.status==='open'&&session.url){await setupEvent('checkout_opened');return NextResponse.json({url:session.url});}if(session.status==='complete'){const subId=typeof session.subscription==='string'?session.subscription:session.subscription?.id;if(subId){const sub=await stripe.subscriptions.retrieve(subId);await syncDailySubscription(sub);const inv=typeof sub.latest_invoice==='string'?sub.latest_invoice:sub.latest_invoice?.id;if(inv)await settleDailyInvoice(inv);}return NextResponse.json({error:'Your daily plan already exists. Refresh to manage it.'},{status:409});}}
  return NextResponse.json({error:'A daily plan is already being prepared. Stop it before starting another.'},{status:409});}
  const [plan]=await db<DailyPlan[]>('icash_daily_plans','POST',{mode,guest_hash:guestHash(token!),account_id:account?.id??null,consent_version:dailyConsentVersion,consent_text:dailyConsent});
  const q=await dailyQuote(plan,i.packCode);const origin=req.headers.get('origin')!;
  const s=await stripe.checkout.sessions.create({mode:'subscription',customer_email:user?.email,automatic_tax:{enabled:false},payment_method_types:['card'],phone_number_collection:{enabled:true},line_items:[{price:q.budget_price,quantity:1}],subscription_data:{metadata:{icash_daily_plan:plan.id}},metadata:{icash_daily_plan:plan.id},custom_text:{submit:{message:'Renews every day until you stop your bot. No separately added processing fee or tax.'}},success_url:`${origin}/?payment=funded`,cancel_url:`${origin}/?payment=canceled`},{idempotencyKey:`daily-checkout:${plan.id}`});
  if(s.livemode!==(mode==='live')||!s.url)throw new Error();const [saved]=await db<DailyPlan[]>(`icash_daily_plans?id=eq.${plan.id}`,'PATCH',{stripe_session_id:s.id,checkout_url:s.url});if(saved.state==='stop_requested'||saved.state==='stopped'){await stopDaily(saved);throw new Error('Plan stopped');}
+ await setupEvent('checkout_opened');
  return NextResponse.json({url:s.url});
  }catch{return NextResponse.json({error:'Could not update daily billing. No extra attempt will be made automatically. Please refresh.'},{status:503});}}

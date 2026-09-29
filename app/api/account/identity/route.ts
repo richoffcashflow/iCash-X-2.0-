@@ -1,3 +1,4 @@
+import {setupVoices} from '@/lib/setup-voices';
 import {NextResponse} from 'next/server';
 import {currentUser} from '@/lib/account-auth';
 import {allowedOrigin} from '@/lib/funding-policy';
@@ -16,6 +17,8 @@ export async function POST(req:Request){
   if(!account)return NextResponse.json({error:'Finish setting up your funded account first.'},{status:409,headers});
   const [existing]=await db<{voice_id:string;voice_name:string}[]>(`icash_customer_identities?account_id=eq.${account.id}&select=voice_id,voice_name`);
   let voice=existing;
+  const [setup]=await db<{profile:{voice?:string}}[]>(`icash_bot_setups?account_id=eq.${account.id}&select=profile`);
+  if(setup?.profile.voice){const selected=(await setupVoices()).find(v=>v.key===setup.profile.voice);if(selected)voice={voice_id:selected.voiceId,voice_name:selected.name};}
   if(!voice){const catalog=await elevenRequest<{voices:{voice_id:string;name:string;category:string}[]}>('/v1/voices');const selected=chooseAccountVoice(account.id,catalog.voices);voice={voice_id:selected.voice_id,voice_name:selected.name};}
   const identity=await db('rpc/icash_save_customer_identity','POST',{p_user:user.id,p_first:names.first_name,p_last:names.last_name,p_company:names.company_name,p_voice:voice.voice_id,p_voice_name:voice.voice_name});
   return NextResponse.json({identity},{headers});
