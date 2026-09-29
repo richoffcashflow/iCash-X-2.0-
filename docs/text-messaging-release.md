@@ -25,3 +25,8 @@ https://docs.contiguity.com/api-reference/product/text/mms
 https://docs.contiguity.com/api-reference/webhook/example-v2
 https://docs.contiguity.com/api-reference/webhook/signing
 https://docs.contiguity.com/api-reference/product/leases/configure
+
+## September 29 verified inbound and conversation update
+Production received the owner's Hello message at 12:53:44 UTC through the signed webhook. This verifies incoming SMS persistence, not outbound delivery or automatic customer assignment. The message remains unassigned because no verified deal thread exists for that sender.
+
+Deal messages now display separate contact conversations, with each reply form inside its own thread. Previously all contacts' messages were interleaved. Open message panels refresh every ten seconds without overlapping requests; refresh stops when closed and skips requests while the page is hidden. Nested conversation toggles cannot close the parent panel. Failed refreshes retain existing messages and retry. No outbound send, SMS pricing, permission grant or operating-budget change was made for this update.
