@@ -1,6 +1,6 @@
 /** Capacity ceiling, not a promise of lead quality or conversion. One blended quote must cover the complete cycle. */
 export function fundingForecast(budgetCents:number,days:number,cycleChargeCents:number|null,conversion?:{sampleSize:number;qualifiedLow:number;qualifiedHigh:number}){
- if(!Number.isSafeInteger(budgetCents)||budgetCents<2000||!Number.isInteger(days)||days<1||days>30)throw new Error('Invalid funding selection');
+ if(!Number.isSafeInteger(budgetCents)||budgetCents<2000||!Number.isInteger(days)||days<1||days>7)throw new Error('Invalid funding selection');
  const dailyLimitCents=Math.floor(budgetCents/days);
  if(cycleChargeCents===null||!Number.isSafeInteger(cycleChargeCents)||cycleChargeCents<=0)return {dailyLimitCents,cycles:null,qualified:null};
  const cycles=Math.floor(budgetCents/cycleChargeCents);
