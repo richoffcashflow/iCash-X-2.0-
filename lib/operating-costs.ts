@@ -1,3 +1,4 @@
+import {validateCostManifest,type CostComponents} from './cost-manifest.ts';
 import {db} from '@/lib/stripe-test';
 import type {sellerCallFinancialGate} from '@/lib/equity-screen';
 function serverOnly(){if(typeof window!=='undefined')throw new Error('Operating costs are server-only');}
@@ -17,11 +18,13 @@ export async function dispatchReservedOperation<T>(input:Parameters<typeof reser
  return dispatch();
 }
 /** Call only after all billable components are reconciled, not from an LLM or a single provider's partial receipt. */
-export async function settleOperation(input:{operationKey:string;customerChargeCents:number;actualCostMicros:number;evidenceRef:string}){
+export async function settleOperation(input:{operationKey:string;customerChargeCents:number;components:CostComponents;evidenceRef:string}){
  serverOnly();
- if(![input.customerChargeCents,input.actualCostMicros].every(n=>Number.isSafeInteger(n)&&n>=0)||!input.evidenceRef.trim())throw new Error('Verified settlement required');
- return db('rpc/icash_settle_operation','POST',{p_operation:input.operationKey,p_charge:input.customerChargeCents,p_actual_micros:input.actualCostMicros,p_evidence:input.evidenceRef});
+ if(!Number.isSafeInteger(input.customerChargeCents)||input.customerChargeCents<0||input.evidenceRef.trim().length<10)throw new Error('Verified settlement required');
+ const {components}=validateCostManifest(input.components);
+ return db('rpc/icash_settle_complete_costs','POST',{p_operation:input.operationKey,p_charge:input.customerChargeCents,p_components:components,p_evidence:input.evidenceRef});
 }
+
 export async function recordVoiceCost(conversationId:string,value:unknown){
  serverOnly();if(typeof value!=='number'||!Number.isFinite(value)||value<0)return false;
  if(!/^conv_[a-zA-Z0-9_-]+$/.test(conversationId))throw new Error('Invalid conversation');

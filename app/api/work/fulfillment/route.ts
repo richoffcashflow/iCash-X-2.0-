@@ -1,0 +1,16 @@
+import {NextResponse} from 'next/server';
+import {workAccount} from '@/lib/work-account';
+import {db} from '@/lib/stripe-test';
+export const dynamic='force-dynamic';
+export async function GET(req:Request){
+ try{
+ const {accountId}=await workAccount();const dealId=new URL(req.url).searchParams.get('dealId');if(!dealId||!/^[a-f0-9-]{36}$/i.test(dealId))return NextResponse.json({error:'Choose a deal.'},{status:400});
+ const [deal]=await db<{id:string}[]>(`icash_deal_files?id=eq.${dealId}&account_id=eq.${accountId}&select=id`);if(!deal)return NextResponse.json({error:'Deal not found.'},{status:404});
+ const [job]=await db<{id:string;state:string;result:unknown;updated_at:string}[]>(`icash_fulfillment_jobs?deal_id=eq.${deal.id}&account_id=eq.${accountId}&select=id,state,result,updated_at`);
+ const documents=job?await db<unknown[]>(`icash_deal_documents?deal_id=eq.${deal.id}&fulfillment_job_id=eq.${job.id}&select=id,kind,html&limit=2`):[];
+ const matches=await db<{buyer_id:string;rank:number;ready:boolean}[]>(`icash_buyer_matches?deal_id=eq.${deal.id}&select=buyer_id,rank,ready&order=rank&limit=50`);
+ const ids=matches.map(m=>m.buyer_id).join(',');
+ const buyers=ids?await db<{id:string;display_name:string}[]>(`icash_buyer_profiles?account_id=eq.${accountId}&id=in.(${ids})&select=id,display_name`):[];
+ return NextResponse.json({job,documents,buyers:matches.map(m=>({...m,name:buyers.find(b=>b.id===m.buyer_id)?.display_name??'Buyer'}))},{headers:{'Cache-Control':'private, no-store'}});
+ }catch{return NextResponse.json({error:'Could not load deal progress.'},{status:503});}
+}

@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {validateCostManifest} from '../lib/cost-manifest.ts';
+import {costCategories} from '../lib/cost-guard.ts';
+const parts=Object.fromEntries(costCategories.map(c=>[c,{amountMicros:c==='elevenlabs'?123456:0,evidenceRef:'fixture:verified-allocation'}]));
+assert.equal(validateCostManifest(parts).totalMicros,123456);
+const missing={...parts};delete missing.twilio;assert.throws(()=>validateCostManifest(missing));
+assert.throws(()=>validateCostManifest({...parts,other:{amountMicros:-1,evidenceRef:'fixture:verified'}}));
+assert.throws(()=>validateCostManifest({...parts,other:{amountMicros:1.5,evidenceRef:'fixture:verified'}}));
+assert.throws(()=>validateCostManifest({...parts,twilio:{amountMicros:0,evidenceRef:''}}));
+assert.throws(()=>validateCostManifest({...parts,other:{amountMicros:Number.MAX_SAFE_INTEGER,evidenceRef:'fixture:verified'}}));
+console.log('Cost manifests: all categories required, explicit zero evidence, precision and overflow checks passed.');
