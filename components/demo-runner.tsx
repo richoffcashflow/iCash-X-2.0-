@@ -1,71 +1,23 @@
 "use client";
-
-import { useEffect, useState } from "react";
-import { Pause, Play, RotateCcw, ArrowRight, House, Check } from "lucide-react";
-import { DEMO_PROPERTY } from "@/lib/demo-property";
-import { PropertyMedia } from "./property-media";
-import { SellerEvidence } from "./seller-evidence";
-import { DealProgressCard } from "./deal-progress-card";
-import { ActivityFeed, type ActivityItem } from "./activity-feed";
-import { conversionOffer } from "@/lib/conversion-engine";
-import { readDemoProgress, saveDemoProgress } from "@/lib/demo-progress";
-import { previewCreditPacks } from "@/config/credit-packs";
-
-const steps: ActivityItem[] = [
-  { id:"search", stage:"Research", emoji:"🔎", title:"Looking for a property deal", detail:"Your bot checks sample properties so you do not have to build a lead list." },
-  { id:"rank", stage:"Research", emoji:"🏠", title:"A property worth a closer look", detail:"Your bot compares the property’s condition, likely value, and buyer demand before moving ahead." },
-  { id:"owner", stage:"Owner", emoji:"👥", title:"Checking who owns the property", detail:"There are two owners in this sample. Both need to agree to sell." },
-  { id:"permission", stage:"Contact", emoji:"✅", title:"Checking whether it can contact the owner", detail:"Your bot checks contact permission, the right time to call, and the spending limit." },
-  { id:"call", stage:"Conversation", emoji:"📞", title:"Calling the sample seller", detail:"Your bot starts the conversation for you. This sample does not place a real call." },
-  { id:"answer", stage:"Conversation", emoji:"💬", title:"The seller is open to talking", detail:"Your bot asks about the home, repairs, and why the owner might sell.", conversation:[{speaker:"iCash X",message:"What would make selling worthwhile for you?"},{speaker:"Seller",message:"I may sell. The kitchen needs work, and my sister is also on the deed."},{speaker:"iCash X",message:"Thanks. We would need both owners involved. What timing works for you?"}] },
-  { id:"interest", stage:"Qualification", emoji:"📅", title:"Follow-up booked", detail:"“Call tomorrow at 3 PM.” Your bot saves the time and time zone so you do not have to remember. Time moves faster in this sample." },
-  { id:"analysis", stage:"Analysis", emoji:"🧮", title:"Checking the numbers before an offer", detail:"After the sample follow-up, your bot reviews repairs and property value to work out an offer within your limit." },
-  { id:"offer", stage:"Offer", emoji:"🤝", title:"Discussing a price with the seller", detail:"Your bot works within your approved $119,000 sample limit. A higher amount needs your approval." },
-  { id:"contract", stage:"Contract", emoji:"📝", title:"Sample purchase agreement signed", detail:"Both owners agree to the fictional $115,000 purchase. This is a step toward closing—not a completed sale.", explanation:"Under contract means the buyer and seller signed an agreement. The sale is not closed yet. Deadlines and contract conditions still apply." },
-  { id:"buyers", stage:"Buyer", emoji:"🔎", title:"Looking for a cash buyer", detail:"Your bot looks for buyers interested in this property type, area, and price." },
-  { id:"buyer", stage:"Buyer", emoji:"🙋", title:"A sample buyer is interested", detail:"The fictional buyer offers $135,000. Your bot helps check the buyer’s funds and terms before moving ahead." },
-  { id:"buyer_agreement", stage:"Buyer", emoji:"✍️", title:"Sample buyer agreement signed", detail:"The buyer’s agreement and funds are assumed verified in this sample. Other interested buyers stay on file." },
-  { id:"title", stage:"Closing", emoji:"🏢", title:"Getting the closing company involved", detail:"The closing company checks ownership and handles the paperwork and agreed funds. Your bot helps coordinate the next steps.", explanation:"The title or closing company checks ownership, handles the agreed funds, and coordinates the final paperwork." },
-  { id:"deposit", stage:"Escrow", emoji:"✅", title:"Sample buyer deposit confirmed", detail:"The closing company confirms it received the buyer’s deposit. Sending a payment link alone does not count." },
-  { id:"schedule", stage:"Closing", emoji:"🗓️", title:"Sample closing date set", detail:"Your bot tracks the remaining paperwork and deadlines. No real appointment has been booked." },
-  { id:"closed", stage:"Complete", emoji:"🎉", title:"Sample deal closed", detail:"A fictional $20,000 difference before costs and taxes. This walkthrough shows the process—not real earnings or a promised result." },
-];
-
-export function DemoRunner({ onFund }: { onFund: () => void }) {
-  const [count, setCount] = useState(1);
-  const [restored, setRestored] = useState(false);
-  const [limitConfirmed, setLimitConfirmed] = useState(false);
-  const [paused, setPaused] = useState(false);
-  const [run, setRun] = useState(0);
-  const [visible, setVisible] = useState(true);
-  const complete = count === steps.length;
-  const needsYou = count === 9 && !limitConfirmed;
-  const running = restored && !paused && visible && !complete && !needsYou;
-  useEffect(()=>{ const saved=readDemoProgress(); if(saved){setCount(saved.count);setLimitConfirmed(saved.limitConfirmed);setPaused(true);} setRestored(true); },[]);
-  useEffect(()=>{if(restored) saveDemoProgress(count,limitConfirmed);},[count,limitConfirmed,restored]);
-  const offer = conversionOffer({mode:"demo",complete},previewCreditPacks[0]);
-  useEffect(()=>{
-    const update = ()=>setVisible(!document.hidden);
-    update(); document.addEventListener("visibilitychange",update);
-    return ()=>document.removeEventListener("visibilitychange",update);
-  },[]);
-  useEffect(()=>{
-    if (!running) return;
-    const timer = window.setTimeout(()=>setCount(value=>Math.min(value+1,steps.length)),["interest","contract","buyer","closed"].includes(steps[count-1].id) ? 2800 : 1600);
-    return ()=>window.clearTimeout(timer);
-  },[count,running,run]);
-  function restart() { setCount(1); setLimitConfirmed(false); setPaused(false); setRun(value=>value+1); }
-  return <div className="demo-stream">
-    <div className="stream-status"><span className={running ? "stream-dot moving" : "stream-dot"}/><strong>{complete ? "Sample complete" : needsYou ? "Needs you" : running ? "Working · sample" : "Paused · sample"}</strong><span>{needsYou ? "1 decision" : "No action needed"}</span></div>
-    {!needsYou && <div className="stream-current" aria-live="polite" aria-atomic="true"><h3><span className="current-emoji" aria-hidden="true">{steps[count-1].emoji}</span>{steps[count-1].title}</h3><p>{needsYou ? "Review this offer — about 1 minute. Your bot waits for your decision." : steps[count-1].detail}</p></div>}
-    {needsYou && <div className="needs-you-card"><span>REVIEW THIS OFFER · SAMPLE</span><h3><span aria-hidden="true">✋ </span>The seller asks for $120,000.</h3><p>Your limit is $119,000. Keep it there so your bot cannot agree to a higher price.</p><button className="fund-button full" onClick={()=>{setLimitConfirmed(true);setPaused(false);setCount(10);}}>Keep my $119,000 limit <Check size={17}/></button><small>In this sample, further negotiation reaches $115,000. Real sellers may decline.</small></div>}
-
-    <div className="stream-controls">{!complete && !needsYou && <button className="demo-button" onClick={()=>setPaused(value=>!value)}>{paused ? <Play size={17}/> : <Pause size={17}/>}{paused ? "Resume sample" : "Pause sample"}</button>}<button className={complete ? "demo-button" : "stream-restart"} onClick={restart} aria-label="Restart sample"><RotateCcw size={17}/>{complete && "Run again"}</button></div>
-    {offer && <div className="sample-funding"><button className="fund-button full" onClick={onFund}>See funding options <ArrowRight size={18}/></button><small>Real payments are not open yet.</small></div>}
-    {count >= 10 && <DealProgressCard onInspect={()=>{if(!complete)setPaused(true);}} snapshot={{sellerSigned:true,marketingAuthorized:true,buyerSigned:count>=13,depositConfirmedByEscrow:count>=15,titleOpened:count>=14,closingScheduled:count>=16,closedByTitle:count>=17,proceedsConfirmed:false,failed:false,buyerWithdrew:false,titleIssue:false,deadlineAt:null}}/>}
-    {count >= 2 && count < 10 && <details className="property-focus" onToggle={event=>{if(event.currentTarget.open)setPaused(true);}}><summary><span className="focus-house" aria-hidden="true">🏠</span><span><strong>{DEMO_PROPERTY.address}</strong><small>{count>=6?"Seller responded":"Promising property"} · sample</small></span><span className="focus-open">Details</span></summary><div className="focus-details"><PropertyMedia photo={DEMO_PROPERTY.photo}/><div className="promising-body"><h3>{DEMO_PROPERTY.address}</h3><p>{DEMO_PROPERTY.location}</p><p>{DEMO_PROPERTY.description}</p><p>{count >= 6 ? "The owner is open to a conversation. Your bot is checking the details." : "A possible fit based on sample equity, condition, and buyer demand."}</p><span className="lead-next">{count >= 7 ? "Next: follow up at the agreed time" : count >= 6 ? "Next: confirm timing and other owners" : "Next: check the owner and contact permission"}</span></div><details className="property-numbers" onToggle={event=>{if(event.currentTarget.open)setPaused(true);}}><summary>Property numbers</summary><dl><div><dt>Repair estimate</dt><dd>{count>=8 ? "$25,000 · sample" : "Not verified yet"}</dd></div><div><dt>Offer limit</dt><dd>$119,000 · sample</dd></div><div><dt>Contract</dt><dd>Not signed yet</dd></div></dl></details><SellerEvidence available={count>=6} callbackBooked={count>=7} onInspect={()=>setPaused(true)}/></div></details>}
-    <ActivityFeed events={steps.slice(0,count)} mode="demo" onInspect={()=>setPaused(true)}/>
-    <p className="stream-note">Fictional sample. No real calls, charges, or earnings.</p>
-  </div>;
+import {useEffect,useState} from 'react';
+import {ArrowRight,Check,Pause,Play,RotateCcw} from 'lucide-react';
+import {DEMO_PROPERTY} from '@/lib/demo-property';
+import {readDemoProgress,saveDemoProgress} from '@/lib/demo-progress';
+import {PropertyMedia} from './property-media';
+const stages=[{title:'Find a house',detail:'Start with a property that may be worth a closer look.'},{title:'Check the numbers',detail:'Compare the estimated value, repairs, and an offer limit.'},{title:'Know the next step',detail:'Ask the owner whether they want to sell. A property record cannot tell us that.'}];
+export function DemoRunner({onFund,fundingOpen=false}:{onFund:()=>void;fundingOpen?:boolean}){
+ const [step,setStep]=useState(0),[ready,setReady]=useState(false),[paused,setPaused]=useState(false),[visible,setVisible]=useState(true);
+ useEffect(()=>{const saved=readDemoProgress();if(saved)setStep(Math.min(2,saved.count-1));setReady(true);const update=()=>setVisible(!document.hidden);update();document.addEventListener('visibilitychange',update);return()=>document.removeEventListener('visibilitychange',update);},[]);
+ useEffect(()=>{if(ready)saveDemoProgress(step+1,false);},[ready,step]);
+ useEffect(()=>{if(!ready||paused||!visible||step===2)return;const timer=setTimeout(()=>setStep(s=>Math.min(2,s+1)),step===0?2400:4200);return()=>clearTimeout(timer);},[ready,paused,visible,step]);
+ return <div className="simple-result">
+  <div className="result-heading"><div><span className="entry-kicker">YOUR FREE WALKTHROUGH</span><h1>See what your bot does.</h1></div><span className="sample-pill">Sample</span></div>
+  <article className="result-property"><PropertyMedia photo={DEMO_PROPERTY.photo}/><div className="result-body"><span className="property-location">{DEMO_PROPERTY.location}</span><h2>{DEMO_PROPERTY.address}</h2><p className="property-description">3 beds · 2 baths · Sample property</p>
+   <ol className="simple-steps">{stages.map((stage,i)=><li key={stage.title} data-active={i===step} data-done={i<step}><span className="step-marker">{i<step?<Check size={15}/>:i+1}</span><div><strong>{stage.title}</strong>{i===step&&<p role="status">{stage.detail}</p>}</div></li>)}</ol>
+   {step>=1&&<dl className="simple-numbers"><div><dt>Value after repairs</dt><dd>$220,000</dd></div><div><dt>Estimated repairs</dt><dd>$25,000</dd></div><div><dt>Example offer limit</dt><dd>$119,000</dd></div></dl>}
+   {step===2&&<div className="next-action"><strong>Next: talk to the owner.</strong><p>This shows the process. No real owner has been contacted.</p>{!fundingOpen&&<button className="fund-button full" onClick={onFund}>See how funding works <ArrowRight size={18}/></button>}</div>}
+  </div></article>
+  <div className="result-bottom"><small>Fictional property and numbers. No calls or charges.</small>{step<2?<button aria-label={paused?'Resume walkthrough':'Pause walkthrough'} onClick={()=>setPaused(p=>!p)}>{paused?<Play size={16}/>:<Pause size={16}/>}</button>:<button aria-label="Replay walkthrough" onClick={()=>{setStep(0);setPaused(false);}}><RotateCcw size={16}/></button>}</div>
+  <details className="plain-explainer"><summary>What happens after the seller says yes?</summary><p>Agree on a price → sign a purchase agreement → find a buyer → work with the closing company. You earn a fee only if the transaction closes on the agreed terms. Your bot may need your approval along the way.</p></details>
+ </div>;
 }
-
