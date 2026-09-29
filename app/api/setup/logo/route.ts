@@ -12,7 +12,7 @@ async function saved(id:string,name:string){const [j]=await db<Job[]>(`icash_bra
 export async function GET(req:Request){try{
  const s=await readBotSetup(await setupOwner());if(!s?.profile.displayName)throw Error();const j=await saved(s.id,s.profile.displayName);const choice=new URL(req.url).searchParams.get('choice');
  if(choice!==null){const n=Number(choice);if(!Number.isInteger(n)||n<0||n>2||j?.state!=='ready'||!j.designs?.[n])return new Response(null,{status:404,headers});
- const color=setupThemes[s.profile.theme??'ink'].color;return new Response(brandSvg(j.designs[n],color),{headers:{...headers,'Content-Type':'image/svg+xml','Content-Security-Policy':"default-src 'none'; style-src 'none'; sandbox",'X-Content-Type-Options':'nosniff'}});}
+ const requested=new URL(req.url).searchParams.get('theme');const theme=requested&&Object.hasOwn(setupThemes,requested)?requested as keyof typeof setupThemes:s.profile.theme??'ink';const color=setupThemes[theme].color;return new Response(brandSvg(j.designs[n],color),{headers:{...headers,'Content-Type':'image/svg+xml','Content-Security-Policy':"default-src 'none'; style-src 'none'; sandbox",'X-Content-Type-Options':'nosniff'}});}
  return NextResponse.json({state:j?.state??'empty',designs:j?.state==='ready'?j.designs:null},{headers});
  }catch{return NextResponse.json({state:'unavailable'},{status:503,headers});}}
 export async function POST(req:Request){
