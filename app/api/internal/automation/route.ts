@@ -1,3 +1,4 @@
+import {dispatchTitleFollowup} from '@/lib/title-followup-service';
 import {prepareFulfillment} from '@/lib/fulfillment-service';
 import {NextResponse} from 'next/server';
 import {db} from '@/lib/stripe-test';
@@ -13,12 +14,12 @@ export async function POST(request:Request){
  const headers={'Cache-Control':'private, no-store'};
  const token=request.headers.get('authorization')?.replace(/^Bearer /,'');
  if(!token||!/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}){2}$/.test(token))return NextResponse.json({error:'Unauthorized'},{status:401,headers});
- let ticket:{id:string;accountId:string;kind:string;screeningId:string|null;liveCallId:string|null;signingId:string|null;voiceJobId:string|null;fulfillmentJobId:string|null}|null=null;
+ let ticket:{id:string;accountId:string;kind:string;screeningId:string|null;liveCallId:string|null;signingId:string|null;voiceJobId:string|null;fulfillmentJobId:string|null;titleTaskId:string|null}|null=null;
  try{
   ticket=await db('rpc/icash_consume_automation','POST',{p_token:token});
   if(!ticket)return NextResponse.json({error:'Expired or consumed'},{status:401,headers});
-  const result=ticket.kind==='fulfillment'&&ticket.fulfillmentJobId?await prepareFulfillment(ticket.accountId,ticket.fulfillmentJobId):ticket.kind==='voice_dispatch'&&ticket.voiceJobId?await dispatchLiveVoice(ticket.accountId,ticket.voiceJobId):ticket.kind==='signing_result'&&ticket.signingId?await refreshSigning(ticket.accountId,ticket.signingId):ticket.kind==='voice_result'&&ticket.liveCallId?await reconcileLiveConversation(ticket.accountId,ticket.liveCallId):ticket.kind==='discovery'?await discoverForAccount(ticket.accountId):ticket.kind==='contacts'&&ticket.screeningId?await enrichForAccount(ticket.accountId,ticket.screeningId):{status:'held'};
-  const success=['fulfillment_prepared','call_started','outside_contact_hours','screening_queued','empty','contacts_saved','conversation_saved','awaiting_conversation','awaiting_counterparty','customer_signature_needed','completed','test_completed'].includes(result.status);
+  const result=ticket.kind==='title_followup'&&ticket.titleTaskId?await dispatchTitleFollowup(ticket.accountId,ticket.titleTaskId):ticket.kind==='fulfillment'&&ticket.fulfillmentJobId?await prepareFulfillment(ticket.accountId,ticket.fulfillmentJobId):ticket.kind==='voice_dispatch'&&ticket.voiceJobId?await dispatchLiveVoice(ticket.accountId,ticket.voiceJobId):ticket.kind==='signing_result'&&ticket.signingId?await refreshSigning(ticket.accountId,ticket.signingId):ticket.kind==='voice_result'&&ticket.liveCallId?await reconcileLiveConversation(ticket.accountId,ticket.liveCallId):ticket.kind==='discovery'?await discoverForAccount(ticket.accountId):ticket.kind==='contacts'&&ticket.screeningId?await enrichForAccount(ticket.accountId,ticket.screeningId):{status:'held'};
+  const success=['title_followup_sent','fulfillment_prepared','call_started','outside_contact_hours','screening_queued','empty','contacts_saved','conversation_saved','awaiting_conversation','awaiting_counterparty','customer_signature_needed','completed','test_completed'].includes(result.status);
   await db('rpc/icash_finish_automation','POST',{p_id:ticket.id,p_success:success,p_outcome:result.status});
   return NextResponse.json({status:result.status},{headers});
  }catch{
