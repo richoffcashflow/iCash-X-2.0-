@@ -13,7 +13,7 @@ const steps:ActivityItem[]=[
  {id:'approval',stage:'Review',emoji:'✋',title:'Review your test deal',detail:'Check the seller price and buyer price, then approve this fictional deal to continue.'},
  {id:'closed',stage:'Complete',emoji:'🎉',title:'You closed your first test deal!',detail:'In this test, the closing company completed the paperwork and funding. No real sale or payment occurred.'}
 ];
-const delays=[7000,7000,7000,9000];
+const delays=[5000,5000,5000,5000];
 export function DemoRunner({onFund}:{onFund:()=>void}){
  const [count,setCount]=useState(1),[restored,setRestored]=useState(false),[approved,setApproved]=useState(false),[paused,setPaused]=useState(false),[visible,setVisible]=useState(true);
  const complete=count===5,needsYou=count===4&&!approved;
@@ -22,7 +22,7 @@ export function DemoRunner({onFund}:{onFund:()=>void}){
  useEffect(()=>{if(restored)saveDemoProgress(count,approved);},[count,approved,restored]);
  useEffect(()=>{if(!running)return;const timer=setTimeout(()=>setCount(c=>Math.min(c+1,5)),delays[count-1]);return()=>clearTimeout(timer);},[running,count]);
  return <div className="demo-stream">
-  <div className="stream-status"><span className={running?'stream-dot moving':'stream-dot'}/><strong>{complete?'Test complete':needsYou?'Your approval':running?'Working · test':'Paused · test'}</strong><span>{complete?'Finished':needsYou?'1 quick decision':'About 30 seconds'}</span></div>
+  <div className="stream-status"><span className={running?'stream-dot moving':'stream-dot'}/><strong>{complete?'Test complete':needsYou?'Your approval':running?'Working · test':'Paused · test'}</strong><span>{complete?'Finished':needsYou?'1 quick decision':'About 20 seconds'}</span></div>
   <div className="test-progress" role="progressbar" aria-label="Test deal progress" aria-valuemin={0} aria-valuemax={4} aria-valuenow={count-1} aria-valuetext={`Step ${count} of 5: ${steps[count-1].stage}`}>{steps.slice(1).map((s,i)=><span key={s.id} data-done={count>i+1}/>)}</div>
   <p className="test-mode-note">Fictional test · No real calls or earnings.</p>
   {!needsYou&&<div className={`stream-current ${complete?'test-celebration':''}`} aria-live="polite" aria-atomic="true"><h3><span className="current-emoji" aria-hidden="true">{approved&&count===4?'🏢':steps[count-1].emoji}</span>{approved&&count===4?'Your bot is coordinating closing':steps[count-1].title}</h3><p>{approved&&count===4?'The test skips ahead through title checks, signed papers, and confirmed funds. Real closings take longer.':steps[count-1].detail}</p>{complete&&<div className="test-result"><strong>$20,000</strong><span>Test difference · Before costs and taxes</span></div>}</div>}
