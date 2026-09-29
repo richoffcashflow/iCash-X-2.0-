@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {textPayload,sendContiguityText,parseTextWebhook,isMessageOptOut} from '../lib/contiguity.ts';
+const p={from:'+14243948384',to:'+12125550123',message:'Hello',attachments:[]};
+assert.equal(textPayload(p).fast_track,false);
+assert.throws(()=>textPayload({...p,attachments:['http://example.invalid/a.jpg']}));
+assert.throws(()=>textPayload({...p,attachments:['https://user:secret@example.invalid/a.jpg']}));
+assert.throws(()=>textPayload({...p,attachments:Array(4).fill('https://example.invalid/a.jpg')}));
+let calls=0;await assert.rejects(()=>sendContiguityText(p,'fixture',async()=>{calls++;throw Error();}));assert.equal(calls,1);
+const r=await sendContiguityText(p,'fixture',async(url,opts)=>{assert.equal(url,'https://api.contiguity.com/send/text');assert.equal(opts.headers.Authorization,'Token fixture');assert.equal(JSON.parse(opts.body).from,p.from);return Response.json({object:'response',data:{message_id:'text_fixture'}});});assert.equal(r.status,'accepted');
+for(const text of ['STOP','Stop!','unsubscribe','Please stop texting me','remove me from your list'])assert(isMessageOptOut(text));
+assert(!isMessageOptOut('What time can you stop by?'));
+const e={id:'evt_fixture',type:'text.incoming.sms',timestamp:1700000000,data:{from:p.to,to:p.from,body:'STOP'}};assert(parseTextWebhook(e).optOut);
+assert.throws(()=>parseTextWebhook({...e,type:'text.delivery.confirmed'}));
+assert.equal(parseTextWebhook({...e,type:'numbers.substitution',data:{original_number:p.from,used_number:p.to,message_id:'text_fixture'}}).data.from,p.from);
+console.log('SMS/MMS payload, attachment bounds, no retry, STOP, receipt and substitution parsing checks passed. No real messages.');

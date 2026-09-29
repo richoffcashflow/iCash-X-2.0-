@@ -1,5 +1,5 @@
 {
-  "buildCommand": "node scripts/check-buyer-search.mjs && node scripts/check-signing-connection.mjs && pnpm build",
+  "buildCommand": "node scripts/check-buyer-search.mjs && node scripts/check-signing-connection.mjs && node scripts/check-text-connection.mjs && pnpm build",
   "crons": [
     {
       "path": "/api/billing/reconcile",

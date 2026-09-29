@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {DealMessages} from './deal-messages';
 import {TitleTasks,type TitleTask} from './title-tasks';
 type Progress={titleTasks?:TitleTask[];titleReplies?:{id:string;sender:string;subject:string;body_text:string;received_at:string;needs_review:boolean}[];title?:string|null;titleReady?:boolean;candidates?:{id:string;name:string}[];job?:{state:string;updated_at:string;result?:{buyerStatus:string;buyerCount:number}};documents:{id:string;kind:string;html:string}[];buyers:{buyer_id:string;name:string;rank:number;ready:boolean}[]};
 export function FulfillmentDetails({dealId}:{dealId:string}){
@@ -14,6 +15,7 @@ export function FulfillmentDetails({dealId}:{dealId:string}){
  {data.buyers.length>5&&<p>{data.buyers.length-5} more matches saved.</p>}
  {!!data.candidates?.length&&<details><summary>{data.candidates.length} potential buyers found</summary><p>Found through ownership records. Buying interest, funds and contact permission are not yet confirmed.</p><ul>{data.candidates.slice(0,5).map(c=><li key={c.id}>{c.name}</li>)}</ul></details>}
  {data.title==='sent'?<p>📨 Title opening requested. Awaiting the closing office’s confirmation.</p>:data.titleReady&&(!data.title||data.title==='ready')?<button disabled={sending} onClick={async()=>{setSending(true);try{const r=await fetch('/api/work/title',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dealId,confirmed:true})});const d=await r.json();if(!r.ok)throw Error(d.error);setTitleMessage(d.status==='title_request_sent'?'Title request sent. Awaiting confirmation.':'Request held for review.');}catch(e){setTitleMessage(e instanceof Error?e.message:'Request needs review.');}finally{setSending(false);}}}>{sending?'Sending…':'Send signed agreement to verified title contact'}</button>:data.title&&<p>Title request needs review.</p>}
+ <DealMessages dealId={dealId}/>
  {data.titleTasks&&<TitleTasks key={dealId} initialTasks={data.titleTasks}/>}
  {!!data.titleReplies?.length&&<details><summary>📩 Title replies ({data.titleReplies.length}) — review needed</summary>{data.titleReplies.map(reply=><article key={reply.id}><p><strong>{reply.sender}</strong> · {new Date(reply.received_at).toLocaleString()}</p><p>{reply.subject}</p><p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',maxHeight:240,overflowY:'auto'}}>{reply.body_text}</p></article>)}<small>Messages are shown as received. Verify deadlines and payment instructions with your closer.</small></details>}
  {titleMessage&&<p role="status">{titleMessage}</p>}

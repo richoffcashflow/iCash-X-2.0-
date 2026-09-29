@@ -46,3 +46,30 @@ export function verifyContiguityWebhook(raw:Buffer,header:string|null,secret:str
   const expected=createHmac('sha256',secret).update(m[1]+'.').update(raw).digest();
   return timingSafeEqual(expected,Buffer.from(m[2],'hex'));
 }
+
+export function textPayload(input:unknown){
+ return z.object({from:phone,to:phone,message:z.string().trim().max(1000),attachments:z.array(z.string().url().refine(v=>{const u=new URL(v);return u.protocol==='https:'&&!u.username&&!u.password&&/\.(jpg|jpeg|png|webp|pdf)$/i.test(u.pathname);})).max(3).default([])}).strict().refine(v=>v.message.length>0||v.attachments.length>0).transform(v=>({...v,fast_track:false})).parse(input);
+}
+/** Called only after a durable, funded one-use database claim. No provider retries. */
+export async function sendContiguityText(input:unknown,key:string,fetcher:Transport=fetch){
+ const payload=textPayload(input);const result=await request(key,'/send/text',fetcher,payload);
+ const parsed=z.object({object:z.literal('response'),data:z.object({message_id:z.string().min(1).max(200)})}).safeParse(result);
+ if(!parsed.success)throw Error('CONTIGUITY_SEND_UNKNOWN_DO_NOT_RETRY');
+ return {messageId:parsed.data.data.message_id,status:'accepted' as const};
+}
+export function isMessageOptOut(text:string){
+ return /^(stop|stopall|unsubscribe|cancel|end|quit|revoke|opt\s*out)[.!\s]*$/i.test(text.trim())||/\b(do not|don't|dont|stop)\s+(texting|messaging|contacting|text|message|contact)\s*(me|us)?\b/i.test(text)||/\b(remove|take)\s+me\s+(off|from)\b/i.test(text);
+}
+const messageEvent=z.object({id:z.string().min(1).max(200),type:z.string().min(1).max(100),timestamp:z.number().finite(),data:z.object({from:phone,to:phone,body:z.string().max(20000).optional(),message_id:z.string().max(200).optional(),attachments:z.array(z.object({url:z.string().url().max(3000),mime:z.string().max(150).optional(),filename:z.string().max(250).optional()})).max(20).optional()})});
+export function parseTextWebhook(input:unknown){
+ const envelope=z.object({type:z.string(),data:z.unknown()}).passthrough().parse(input);
+ if(envelope.type==='numbers.substitution'){
+  const d=z.object({original_number:phone,used_number:phone,message_id:z.string().min(1).max(200)}).parse(envelope.data);
+  input={...envelope,data:{from:d.original_number,to:d.used_number,message_id:d.message_id}};
+ }
+ const event=messageEvent.parse(input);
+ if(!['text.incoming.sms','text.incoming.mms','text.delivery.confirmed','text.delivery.failed','text.cancelled','numbers.substitution'].includes(event.type))throw Error('Unsupported text event');
+ if(event.type.startsWith('text.incoming')&&event.data.body===undefined&&!event.data.attachments?.length)throw Error('Empty incoming message');
+ if(!event.type.startsWith('text.incoming')&&!event.data.message_id)throw Error('Missing message ID');
+ return {...event,optOut:event.type.startsWith('text.incoming')&&isMessageOptOut(event.data.body??'')};
+}
