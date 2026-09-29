@@ -11,11 +11,14 @@ export async function GET(req:Request){
   const visible=properties.slice(0,6);
   const ids=visible.map(p=>p.id).join(',');
   const propertyIds=visible.map(p=>p.result.property.propertyId).filter(id=>/^prop_[a-zA-Z0-9]+$/.test(id)).join(',');
-  const [deals,contacts,controls]=ids?await Promise.all([
+  const [deals,contacts,controls,conversations,callbacks]=ids?await Promise.all([
    db<unknown[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=in.(${ids})&select=id,screening_id,terms,stage,updated_at`),
    db<unknown[]>(`icash_owner_contacts?account_id=eq.${accountId}&screening_id=in.(${ids})&select=screening_id,created_at`),
-   propertyIds?db<unknown[]>(`icash_property_controls?account_id=eq.${accountId}&property_id=in.(${propertyIds})&manual=eq.true&select=property_id`):Promise.resolve([])
-  ]):[[],[],[]];
-  return NextResponse.json({properties:properties.slice(0,6),hasMore:properties.length>6,deals,contacts,controls,page},{headers});
+   propertyIds?db<unknown[]>(`icash_property_controls?account_id=eq.${accountId}&property_id=in.(${propertyIds})&manual=eq.true&select=property_id`):Promise.resolve([]),
+   db<unknown[]>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=in.(${ids})&state=eq.complete&select=id,screening_id,party,result,completed_at&order=completed_at.desc&limit=24`),
+   db<unknown[]>(`icash_live_callbacks?account_id=eq.${accountId}&screening_id=in.(${ids})&select=id,screening_id,due_at,timezone,state&order=due_at&limit=24`)
+  ]):[[],[],[],[],[]];
+  const handoffs=await db<unknown[]>(`icash_handoffs?account_id=eq.${accountId}&state=neq.resolved&select=id,screening_id,party,reason,summary,next_action,state&order=created_at&limit=6`);
+  return NextResponse.json({properties:properties.slice(0,6),hasMore:properties.length>6,deals,contacts,controls,conversations,callbacks,handoffs,page},{headers});
  }catch{return NextResponse.json({error:'Could not load your work. Sign in and retry.'},{status:503,headers});}
 }

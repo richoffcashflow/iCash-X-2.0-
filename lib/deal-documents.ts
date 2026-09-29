@@ -1,14 +1,14 @@
 import {z} from 'zod';
 const text=z.string().trim().max(1000).default('');
 const money=z.number().int().nonnegative().max(100000000000).nullable().default(null);
-export const dealTermsSchema=z.object({seller:text,buyer:text,assignee:text,address:text,legalDescription:text,state:z.string().trim().max(2).default(''),priceCents:money,assignmentFeeCents:money,earnestCents:money,assignmentDepositCents:money,inspectionDays:z.number().int().min(0).max(90).default(10),effectiveDate:z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/).default(''),closingDate:z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/).default(''),escrowAgent:text,titleEmail:z.union([z.literal(''),z.string().email().max(254)]).default(''),payoutMethod:z.enum(['wire','ach','check','zelle','cash_app']).default('wire'),payoutHandle:z.string().max(120).default(''),priceSource:z.enum(['proposed','seller_reported']).default('proposed')}).strict();
+export const dealTermsSchema=z.object({seller:text,buyer:text,assignee:text,address:text,legalDescription:z.string().trim().max(12000).default(''),state:z.string().trim().max(2).default(''),priceCents:money,assignmentFeeCents:money,earnestCents:money,assignmentDepositCents:money,inspectionDays:z.number().int().min(0).max(90).default(10),effectiveDate:z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/).default(''),closingDate:z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/).default(''),escrowAgent:text,titleEmail:z.union([z.literal(''),z.string().email().max(254)]).default(''),payoutMethod:z.enum(['wire','ach','check','zelle','cash_app']).default('wire'),payoutHandle:z.string().max(120).default(''),priceSource:z.enum(['proposed','seller_reported']).default('proposed')}).strict();
 export type DealTerms=z.infer<typeof dealTermsSchema>;
 export type DocumentKind='purchase'|'assignment'|'buyer_package'|'title_packet';
 const blank=(s:string)=>s||'____________________';
 const usd=(n:number|null)=>n===null?'$____________':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(n/100);
 export function documentSections(kind:DocumentKind,t:DealTerms){
  const property=`Property: ${blank(t.address)}. Legal description: ${blank(t.legalDescription)}. State: ${blank(t.state)}.`;
- const close=`Closing on or before ${blank(t.closingDate)}, through ${blank(t.escrowAgent)}. Any extension requires a written agreement.`;
+ const close=`${t.closingDate?'Closing on or before '+t.closingDate:'Proposed closing: within 30 calendar days after the effective date, subject to the parties’ agreement'}, through ${blank(t.escrowAgent)}. Any extension requires a written agreement.`;
  const costs='Buyer pays transaction closing charges that the parties may legally allocate to Buyer. Seller remains responsible for existing mortgages, liens, unpaid obligations and any charges law requires Seller to pay, unless separately agreed in writing. Taxes and other prorations must be stated in the closing statement.';
  if(kind==='purchase')return {title:'Purchase and Sale Agreement',sections:[
  ['Parties and property',`Seller: ${blank(t.seller)}. Buyer: ${blank(t.buyer)}. ${property}`],
