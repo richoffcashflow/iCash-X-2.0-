@@ -20,3 +20,15 @@ export async function dispatchTitleRequest(accountId:string,jobId:string){
   return {status:'title_delivery_needs_reconciliation'};
  }
 }
+
+/** Reuses the existing signed-agreement, contact, pause and spend checks. */
+export async function coordinateTitleOpening(accountId:string,dealId:string){
+ const [setting]=await db<{enabled:boolean}[]>('icash_title_followup_settings?id=eq.1&select=enabled');
+ if(!setting?.enabled)return {status:'title_automation_paused'};
+ const [contact]=await db<{email:string}[]>(`icash_title_contacts?account_id=eq.${accountId}&deal_id=eq.${dealId}&enabled=eq.true&verified_until=gt.${new Date().toISOString()}&select=email`);
+ if(!contact)return {status:'verified_title_contact_required'};
+ const job=await db<{id:string;state:string}>('rpc/icash_prepare_title_request','POST',{p_account:accountId,p_deal:dealId});
+ if(job.state==='sent')return {status:'title_request_already_sent'};
+ if(job.state!=='ready')return {status:'title_delivery_needs_reconciliation'};
+ return dispatchTitleRequest(accountId,job.id);
+}

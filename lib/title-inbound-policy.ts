@@ -14,6 +14,6 @@ export function titleEmailAddress(value:unknown){
 }
 export function titleReference(subject:unknown){
  if(typeof subject!=='string')return null;
- const refs=[...subject.matchAll(/\[ICX-([TQ]):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi)];
+ const refs=[...subject.matchAll(/\[ICX-([TQM]):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi)];
  return refs.length===1?{kind:refs[0][1].toUpperCase(),id:refs[0][2].toLowerCase()}:null;
 }

@@ -94,19 +94,24 @@ export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=
      <label className="setup-label" htmlFor="bot-name">Your name or business name</label>
      <input className="setup-input" id="bot-name" autoComplete="organization" maxLength={64} value={profile.displayName} onChange={e=>{nameEdited.current=true;setProfile(p=>({...p,displayName:e.target.value}));setError('');}} placeholder="e.g. Jordan or Oak Street Properties" required disabled={busy}/>
      <button className="setup-primary" disabled={busy||!profile.displayName.trim()}>{busy?<><LoaderCircle size={18} className="setup-spin"/> Saving your setup…</>:<>Build my free bot<ArrowRight size={18}/></>}</button>
-     <p className="setup-preset-note"><Check size={14}/> Voice, contracts &amp; buyer matching preset.</p>
-     <p className="setup-free">Free setup. No card needed.<span>A paid daily budget starts outreach.</span></p>
+     <p className="setup-free"><span>A paid daily budget starts outreach.</span></p>
     </form>
     <div className="setup-process"><span className="setup-process-label">ONE DEAL, FOUR STEPS</span><DealExplainer compact/><details className="setup-details"><summary>How do I earn money?</summary><p>You agree to buy a property, then transfer the contract to a cash buyer for an assignment fee. You receive the fee if the deal closes. Costs reduce what you keep. Deals and income aren’t guaranteed.</p><DealExplainer/></details></div>
    </>:<>
     <span className="setup-eyebrow">MADE FOR {profile.displayName.toUpperCase()}</span>
     <h1 ref={heading} tabIndex={-1}>Your bot setup is ready.</h1>
-    <p className="setup-intro">Setup is saved. Outreach hasn’t started.</p>
+    <p className="setup-intro">Set up for you. Outreach hasn’t started.</p>
     {editing&&<BotPreferences profile={profile} busy={busy} playing={playing} previewLoading={previewLoading} onPlay={play} onSave={save} onCancel={toggleEditing}/>}
     <div className="setup-reveal">
      <BotBrand profile={profile}/>
      <div className="setup-reveal-line"><span>{profile.market}</span><button type="button" onClick={()=>void play(profile.voice)} aria-label="Preview your selected AI voice">{previewLoading===profile.voice?<LoaderCircle className="setup-spin" size={15}/>:playing===profile.voice?<Pause size={15}/>:<Play size={15}/>} Hear your bot</button></div>
-     <details className="setup-details setup-saved-details"><summary>What’s included</summary><div className="setup-business-checks"><span><Check size={15}/> Your name saved</span><span><Check size={15}/> AI voice selected</span>{profile.contracts&&<span><Check size={15}/> Contract templates included</span>}{profile.buyers&&<span><Check size={15}/> Buyer matching selected</span>}</div></details>
+     <div className="setup-built-progress" aria-label="Your saved setup">
+      <span><Check size={15}/><span><strong>{voices.find(v=>v.key===profile.voice)?.name} selected</strong><small>Your bot’s voice for conversations</small></span></span>
+      <span><Check size={15}/><span><strong>{profile.marketMode==='nationwide'?'Nationwide search selected':profile.market+' selected'}</strong><small>Your saved search preference</small></span></span>
+      {profile.contracts&&<span><Check size={15}/><span><strong>Contract templates included</strong><small>Preview them below with your name</small></span></span>}
+      {profile.buyers&&<span><Check size={15}/><span><strong>Buyer matching selected</strong><small>Find buyers after a signed seller agreement</small></span></span>}
+     </div>
+
      {profile.contracts&&<details className="setup-details"><summary>Preview your contracts</summary><div className="setup-document-links"><a href="/api/setup/documents?kind=purchase" target="_blank" rel="noopener">Seller agreement ↗</a><a href="/api/setup/documents?kind=assignment" target="_blank" rel="noopener">Buyer agreement ↗</a></div><p>Unsigned templates. Deal details and required local terms come before signing.</p></details>}
     </div>
     {audioError&&<p className="setup-error" role="status">{audioError}</p>}

@@ -1,37 +1,30 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
-type Thread={id:string;recipient:string;paused:boolean};
+type Thread={id:string;recipient:string;paused:boolean;party?:string};
 type Message={id:string;thread_id:string;direction:string;body:string;state:string;created_at:string;attachments?:{url:string;filename?:string}[]};
 type Ai={id:string;thread_id:string;state:string;reply:string|null;analysis:{summary?:string;callbackRequested?:boolean;facts?:{kind:string;quote:string}[]}|null};
-type Data={threads:Thread[];messages:Message[];ai?:Ai[]};
-export function DealMessages({dealId}:{dealId:string}){
- const [open,setOpen]=useState(false),[data,setData]=useState<Data|null>(null),[error,setError]=useState('');
+type Data={threads:Thread[];messages:Message[];ai?:Ai[];threadId?:string;nextThread:string|null;next:{before:string;beforeId:string}|null};
+export function DealMessages({dealId,active=true}:{dealId:string;active?:boolean}){
+ const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[threadId,setThreadId]=useState(''),[afterThread,setAfterThread]=useState(''),[page,setPage]=useState<{before:string;beforeId:string}|null>(null),[refresh,setRefresh]=useState(0);
  useEffect(()=>{
-  if(!open)return;
-  const controller=new AbortController();let timer:ReturnType<typeof setTimeout>;
-  setData(null);setError('');
-  const refresh=async()=>{
-   try{
-    if(document.visibilityState==='hidden')return;
-    const response=await fetch(`/api/work/messages?dealId=${dealId}`,{signal:controller.signal,cache:'no-store'});
-    if(!response.ok)throw Error();
-    const next=await response.json() as Data;
-    if(!controller.signal.aborted){setData(next);setError('');}
-   }catch{if(!controller.signal.aborted)setError('Messages could not refresh. We’ll try again shortly.');}
-   finally{if(!controller.signal.aborted)timer=setTimeout(refresh,10000);}
-  };
-  void refresh();return()=>{controller.abort();clearTimeout(timer);};
- },[open,dealId]);
- return <details onToggle={e=>{if(e.target===e.currentTarget)setOpen(e.currentTarget.open);}}>
-  <summary>💬 Text messages</summary>
-  {open&&<>{error&&<p role="status">{error}</p>}{!data&&!error&&<p>Loading…</p>}
-  {data&&!data.threads.length&&<p>No contacts linked to this deal yet.</p>}
-  {data?.threads.map(thread=><Conversation key={`${dealId}:${thread.id}`} thread={thread} ai={data.ai?.find(item=>item.thread_id===thread.id)} messages={data.messages.filter(message=>message.thread_id===thread.id).slice().reverse()}/>)}</>}
- </details>;
+  if(!active)return;const controller=new AbortController();let inFlight=false;
+  async function load(){if(document.hidden||inFlight)return;inFlight=true;try{
+   const q=new URLSearchParams({dealId,...(afterThread?{afterThread}:{}),...(threadId?{threadId}:{}),...page});const response=await fetch(`/api/work/messages?${q}`,{signal:controller.signal,cache:'no-store'});if(!response.ok)throw Error();const next=await response.json() as Data;if(!controller.signal.aborted){setData(next);setError('');}
+  }catch{if(!controller.signal.aborted)setError('Messages could not refresh. Your draft is still here.');}finally{inFlight=false;}}
+  void load();const timer=setInterval(load,15000);document.addEventListener('visibilitychange',load);return()=>{controller.abort();clearInterval(timer);document.removeEventListener('visibilitychange',load);};
+ },[active,dealId,threadId,page,afterThread,refresh]);
+ const current=data?.threads.find(t=>t.id===data.threadId);
+ return <div className="deal-texts">{error&&<p role="status">{error}</p>}{!data&&!error&&<p role="status">Loading texts…</p>}
+ {data&&!data.threads.length&&<p>No text conversation linked to this property yet.</p>}
+ {data&&data.threads.length>1&&<label>Contact<select value={data.threadId} onChange={e=>{setThreadId(e.target.value);setPage(null);}}>{data.threads.map(t=><option key={t.id} value={t.id}>{t.party==='buyer'?'Buyer':'Seller'} · {t.recipient}</option>)}</select></label>}
+ <div className="history-pages">{afterThread&&<button onClick={()=>{setAfterThread('');setThreadId('');setPage(null);setData(null);}}>First contacts</button>}{data?.nextThread&&<button onClick={()=>{setAfterThread(data.nextThread!);setThreadId('');setPage(null);setData(null);}}>More contacts</button>}</div>
+ {current&&<Conversation key={current.id} thread={current} ai={data?.ai?.[0]} messages={data?.messages.slice().reverse()??[]} onSent={()=>{setPage(null);setRefresh(v=>v+1);}}/>}
+ <div className="history-pages">{page&&<button onClick={()=>setPage(null)}>Latest texts</button>}{data?.next&&<button onClick={()=>setPage(data.next)}>Older texts</button>}</div>
+ </div>;
 }
-function Conversation({thread,messages,ai}:{thread:Thread;messages:Message[];ai?:Ai}){
+function Conversation({thread,messages,ai,onSent}:{thread:Thread;messages:Message[];ai?:Ai;onSent:()=>void}){
  const [draft,setDraft]=useState('');
- return <details><summary style={{minHeight:44,padding:'12px 0'}}>Conversation with {thread.recipient}</summary>
+ return <div><p className="conversation-recipient">{thread.party==='buyer'?'Buyer':'Seller'} · {thread.recipient}</p><div className="message-history" aria-label="Text history">
   {!messages.length&&<p>No messages yet.</p>}
   {messages.map(message=><article key={message.id} style={{margin:'8px 0',padding:12,borderRadius:16,background:message.direction==='outgoing'?'#111':'#f1f1f1',color:message.direction==='outgoing'?'#fff':'#111',maxWidth:'90%',marginLeft:message.direction==='outgoing'?'auto':0,overflowWrap:'anywhere'}}>
    <p style={{whiteSpace:'pre-wrap'}}>{message.body}</p>
@@ -41,15 +34,16 @@ function Conversation({thread,messages,ai}:{thread:Thread;messages:Message[];ai?
    })}
    <small>{message.direction==='outgoing'?message.state==='accepted'?'Accepted by provider':message.state.replaceAll('_',' '):'Received'} · {new Date(message.created_at).toLocaleString()}</small>
   </article>)}
-  {ai&&<aside style={{padding:12,borderRadius:12,background:'#f5f5f5',margin:'12px 0'}}><strong>{ai.state==='handoff'?'Needs you':ai.state==='needs_review'?'AI reply needs review':'AI draft'}</strong>{ai.analysis?.summary&&<p>{ai.analysis.summary}</p>}{ai.analysis?.callbackRequested&&<p>Callback requested. Not booked yet.</p>}{ai.reply&&<><p>{ai.reply}</p><button type="button" onClick={()=>setDraft(ai.reply!)} style={{minHeight:44}}>Edit reply</button></>}</aside>}
-  <TextComposer thread={thread} draft={draft}/>
- </details>;
+  </div>{ai&&<aside style={{padding:12,borderRadius:12,background:'#f5f5f5',margin:'12px 0'}}><strong>{ai.state==='handoff'?'Needs you':ai.state==='needs_review'?'AI reply needs review':'AI draft'}</strong>{ai.analysis?.summary&&<p>{ai.analysis.summary}</p>}{ai.analysis?.callbackRequested&&<p>Callback requested. Not booked yet.</p>}{ai.reply&&<><p>{ai.reply}</p><button type="button" onClick={()=>setDraft(ai.reply!)} style={{minHeight:44}}>Edit reply</button></>}</aside>}
+  <TextComposer thread={thread} draft={draft} onSent={onSent}/>
+ </div>;
 }
-function TextComposer({thread,draft}:{thread:Thread;draft:string}){
+function TextComposer({thread,draft,onSent}:{thread:Thread;draft:string;onSent:()=>void}){
  const [message,setMessage]=useState(''),[busy,setBusy]=useState(false),[status,setStatus]=useState(''),[held,setHeld]=useState(false);
  const request=useRef<{key:string;body:string}|null>(null);
  useEffect(()=>{if(draft)setMessage(draft);},[draft]);
- return <form onSubmit={async event=>{
+ const maxLength=/[^A-Za-z0-9 .,!?]/.test(message)?35:160;
+ return <form className="message-composer" onSubmit={async event=>{
   event.preventDefault();if(busy||held||thread.paused)return;setBusy(true);setStatus('');
   const body=message.trim();if(!body){setBusy(false);return;}
   if(!request.current||request.current.body!==body)request.current={key:crypto.randomUUID(),body};
@@ -58,12 +52,12 @@ function TextComposer({thread,draft}:{thread:Thread;draft:string}){
    if(!response.ok)throw Error();
    if(result.status==='message_accepted'){setStatus('Accepted by the provider. Delivery is not confirmed yet.');setMessage('');request.current=null;}
    else{setStatus('Message held. Contact permission, sender setup or available budget needs review.');setHeld(true);}
-  }catch{setStatus('Send status is uncertain. Check the conversation before sending again.');setHeld(true);}finally{setBusy(false);}
+  }catch{setStatus('Send status is uncertain. Check the conversation before sending again.');setHeld(true);}finally{setBusy(false);onSent();}
  }}>
   <label>Reply to {thread.recipient}<textarea value={message} onChange={event=>setMessage(event.target.value)} maxLength={160} required disabled={busy||held||thread.paused} style={{display:'block',width:'100%',minHeight:88,boxSizing:'border-box'}}/></label>
-  <button disabled={busy||held||thread.paused||!message.trim()||message.length>160} style={{minHeight:44}}>{busy?'Sending…':'Send text'}</button>
+  <button disabled={busy||held||thread.paused||!message.trim()||message.length>maxLength} style={{minHeight:44}}>{busy?'Sending…':'Send text'}</button>
   {thread.paused&&<p>Messaging is paused for this contact.</p>}{status&&<p role="status">{status}</p>}
-  {message.length>160&&<p>Shorten this draft to 160 characters before sending.</p>}
+  {message.length>maxLength&&<p>Shorten this draft to {maxLength} characters before sending.</p>}
   <small>Sending uses credits and respects contact hours.</small>
  </form>;
 }

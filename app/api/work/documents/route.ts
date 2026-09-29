@@ -15,3 +15,13 @@ export async function POST(req:Request){
   return NextResponse.json({id:doc.id,html,filename:`icash-${kind}-draft.html`},{headers:{'Cache-Control':'private, no-store'}});
  }catch{return NextResponse.json({error:'Could not prepare your document.'},{status:400});}
 }
+
+export async function GET(req:Request){
+ const headers={'Cache-Control':'private, no-store'};
+ try{const {accountId}=await workAccount();const id=z.string().uuid().parse(new URL(req.url).searchParams.get('id'));
+ const [meta]=await db<{deal_id:string}[]>(`icash_deal_documents?id=eq.${id}&select=deal_id`);if(!meta)throw Error();
+ const [deal]=await db<{id:string}[]>(`icash_deal_files?id=eq.${meta.deal_id}&account_id=eq.${accountId}&select=id`);if(!deal)throw Error();
+ const [doc]=await db<{html:string;kind:string}[]>(`icash_deal_documents?id=eq.${id}&deal_id=eq.${deal.id}&select=html,kind`);if(!doc)throw Error();
+ return NextResponse.json({html:doc.html,filename:`icash-${doc.kind}-draft.html`},{headers});
+ }catch{return NextResponse.json({error:'Document unavailable.'},{status:404,headers});}
+}

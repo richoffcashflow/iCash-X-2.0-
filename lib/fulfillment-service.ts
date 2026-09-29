@@ -1,3 +1,4 @@
+import {coordinateTitleOpening} from './title-service.ts';
 import {discoverTitlePlaces} from './title-search-service.ts';
 import {qualifyTitleCompanies} from './title-directory-service.ts';
 import {discoverBuyersForDeal} from './buyer-discovery-service.ts';
@@ -33,5 +34,8 @@ export async function prepareFulfillment(accountId:string,jobId:string){
  let titleSearch:{status:string}={status:'directory_candidates_available'};if(titleQualification.status==='no_title_inquiry_pending'){try{titleSearch=await discoverTitlePlaces(accountId,job.deal_id);}catch{titleSearch={status:'title_search_needs_review'};}}
  const result={titleSearch,titleQualification,buyerDiscovery,buyerStatus,buyerCount:matches.length,titleStatus:'request_prepared_not_sent',contractStatus:'verified_purchase',sent:false,depositReceived:false,closed:false};
  await db('rpc/icash_save_fulfillment','POST',{p_job:job.id,p_result:result,p_documents:documents,p_matches:matches});
+ // Document preparation is durable before attempting delivery; ambiguous sends stay held.
+ let titleOpening:{status:string};try{titleOpening=await coordinateTitleOpening(accountId,job.deal_id);}catch{titleOpening={status:'title_request_held'};}
+ await db(`icash_fulfillment_jobs?id=eq.${job.id}&account_id=eq.${accountId}&state=eq.complete`,'PATCH',{result:{...result,titleStatus:titleOpening.status}});
  return {status:'fulfillment_prepared'};
 }

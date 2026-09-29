@@ -1,9 +1,11 @@
 import {NextResponse} from 'next/server';
 import {workAccount} from '@/lib/work-account';
+import {allowedOrigin} from '@/lib/funding-policy';
 import {db} from '@/lib/stripe-test';
 import {dispatchTitleRequest} from '@/lib/title-service';
 export const maxDuration=60;
 export async function POST(req:Request){
+ if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403});
  try{
  const {accountId}=await workAccount();const b=await req.json();
  if(b.confirmed!==true||typeof b.dealId!=='string'||!/^[a-f0-9-]{36}$/i.test(b.dealId))return NextResponse.json({error:'Confirm the title request.'},{status:400});
