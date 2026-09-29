@@ -16,7 +16,7 @@ export async function discoverForAccount(accountId:string){
  const operationKey=`discovery:${accountId}:${c.revision}:${c.next_page}`;
  const [existing]=await db<{state:string}[]>(`icash_operation_spend?operation_key=eq.${operationKey}&select=state`);
  if(existing&&existing.state!=='reserved')return {status:'awaiting_reconciliation'};
- return discoverPage({zip:c.zip,page:c.next_page,perPage:c.per_page,unitCostMicros:c.property_credit_micros,quotedDataCostMicros:rate.costs_micros.dealmachine},{
+ const result=await discoverPage({zip:c.zip,page:c.next_page,perPage:c.per_page,unitCostMicros:c.property_credit_micros,quotedDataCostMicros:rate.costs_micros.dealmachine},{
   request:async body=>{
    if(!await db<boolean>('rpc/icash_take_dealmachine_request','POST',{}))throw new Error('DISCOVERY_RATE_LIMIT');
    try{
@@ -30,4 +30,6 @@ export async function discoverForAccount(accountId:string){
   },
   persist:async result=>{await db('rpc/icash_save_discovery','POST',{p_account:accountId,p_operation:operationKey,p_revision:c.revision,p_page:c.next_page,p_result:result});},
  });
+ if(result.status==='empty')await db('rpc/icash_mark_inventory_empty','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});
+ return result;
 }
