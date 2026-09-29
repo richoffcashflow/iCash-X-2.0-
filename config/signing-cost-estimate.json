@@ -1,9 +1,9 @@
 {
-  "version": "signing-docs-5x-2026-09-29",
-  "status": "pricing_revision_requested",
-  "enabled": false,
+  "version": "signing-account-margin-2026-09-29",
+  "status": "published_rates_with_estimated_allocations",
+  "enabled": true,
   "operation": "contract_signing",
-  "chargeCents": 325,
+  "chargeCents": 100,
   "documentCount": 1,
   "costsMicros": {
     "dealmachine": 0,
@@ -16,22 +16,23 @@
     "railway": 10000,
     "supabase": 10000,
     "github": 5000,
-    "payments": 214500,
+    "payments": 66000,
     "title_and_signing": 200000,
     "support_and_overhead": 10000,
-    "acquisition": 32500,
-    "refund_and_dispute_reserve": 32500,
+    "acquisition": 10000,
+    "refund_and_dispute_reserve": 10000,
     "other": 0
   },
   "bufferBasisPoints": 2000,
   "marginBasisPoints": 8000,
   "assumptions": {
     "docuseal": "Published $0.20 per completed submission, including multiple files/signers; Pro seat $20/month allocated in overhead.",
-    "payments": "6.6% of $3.25: domestic card 2.9% + $0.30 allocated per $10 funding payment + Billing 0.7%; no separate Stripe transaction.",
+    "payments": "6.6% allocation of $1 signing usage under $10 recurring domestic-card funding; not a separate card charge.",
     "allocations": "Hosting, email, support, acquisition and dispute figures are planning allowances, not measured bills.",
     "scope": "One agreement with one counterparty and customer; no calls, SMS, enrichment or LLM invoked by signing itself.",
     "activation": "Documentation-based quote authorized by owner. Invoices not required to configure. Available operating funds and live signing mode still required. Estimates never represent actual settled costs.",
-    "fixedCostAllocation": "Planning volume: 10,000 total billable operations/month, not a forecast. Baseline seats: Vercel $20, Railway Pro $20 minimum usage commitment, Supabase $25, Resend $20, DocuSeal $20. Existing allowances total $0.05/operation, or $500 at that volume. Below expected volume fixed costs can exceed recovery; company reserves must cover the gap. GitHub allowance is a reserve, not a claim of subscription price. No margin guarantee."
+    "fixedCostAllocation": "Planning volume: 10,000 total billable operations/month, not a forecast. Baseline seats: Vercel $20, Railway Pro $20 minimum usage commitment, Supabase $25, Resend $20, DocuSeal $20. Existing allowances total $0.05/operation, or $500 at that volume. Below expected volume fixed costs can exceed recovery; company reserves must cover the gap. GitHub allowance is a reserve, not a claim of subscription price. No margin guarantee.",
+    "margin": "5x estimated all-in cost target across each account, backed by settled operation revenue only. Outstanding costs reserve headroom; no cross-account subsidy."
   },
   "sources": [
     "https://www.docuseal.com/pricing",

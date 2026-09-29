@@ -37,3 +37,11 @@ Sources: https://vercel.com/pricing ; https://railway.com/pricing ; https://supa
 Owner requested lower pricing and 5x on 2026-09-29. Signing charge: $3.25 per agreement. Baseline cost: $0.5295 ($0.20 DocuSeal, $0.05 combined hosting/email/support, $0.2145 payment allocation, $0.0325 acquisition allocation and $0.0325 refund/dispute reserve). A 20% buffer rounded up reserves $0.64; five times that reserve is $3.20. $3.25 exceeds the target. The operating margin floor is now 80% (5x), replacing 83.34% (approximately 6x). Earlier $5 figures above are historical. Estimates remain estimates; fixed costs and advertising can exceed allowances at low volume.
 
 Owner rejected the per-action economics after this change. The $3.25 rate is disabled; no new signing charge is active. Next model should separate low-priced signing from portfolio-level margin targets and measure paid acquisition separately. Do not enable a $1 rate under the existing all-in 80% per-operation guard: that would fail admission.
+
+## Released account-level pricing
+
+Signing is $1 per agreement. Documentation baseline plus allocations total $0.336, rounded reserve with 20% buffer $0.41. This operation cannot independently meet 5x; it may consume only available margin from the same account's settled prior operations. The account admission check includes unsettled operations at their full reserved cost and gives them no speculative revenue. Refunds or reduced settlements lower headroom when recorded. If headroom is insufficient, the operation is held, never automatically repriced. No customer balance transfers or future top-ups subsidize the calculation. Actual overrun still holds company spending; account margin shortfalls pause that account. Company-wide EBITDA and advertising profitability are not guaranteed by this guard.
+
+When scheduled callbacks or contracted deals exist, new property searches cannot spend the last 20% of the daily credit limit. This is a search spending floor, not a guarantee every future callback is funded; other existing wallet reservations and daily limits still apply.
+
+Verified with rollback SQL: per-account margin, no cross-account subsidy, reservation headroom, duplicate settlement and Stop behavior. No paid calls, messages or documents were generated.
