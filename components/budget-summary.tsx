@@ -12,7 +12,7 @@ export function BudgetSummary({onFund}:{onFund:(code?:string)=>void}){
  const options=[last,smaller,bigger].filter((p):p is NonNullable<typeof p>=>!!p);
  return <section className="budget-summary">
  {(exhausted||held)&&<><h3>{exhausted?'Your credits are used up':'Your remaining credits are reserved'}</h3><p>{exhausted?'Add credits to resume paid bot work. Your saved work stays here.':'Already-started work may finish. Final usage is still being confirmed.'}</p></>}
- <details open={exhausted||held}><summary>Your work summary</summary><p>{s.analyzed} properties analyzed · {s.screeningCandidates} preliminary candidates · {s.activeContracts} active signed contracts</p><p>{s.explanation}</p><a className="summary-download" href="/api/work/summary?format=pdf">Download PDF summary</a><small>All recorded account activity. Pending results may change.</small>
+ <details open={exhausted||held}><summary>Your work summary</summary><p>{s.analyzed} properties analyzed · {s.screeningCandidates} properties worth a closer look · {s.activeContracts} signed deals still in progress</p><p>{s.explanation}</p><a className="summary-download" href="/api/work/summary?format=pdf">Download PDF summary</a><small>All recorded account activity. Pending results may change.</small>
  {exhausted&&s.canFund&&<><p>Add credits to resume.</p><div className="summary-refills">{options.map(p=><button key={p.code} disabled={!p.enabled} onClick={()=>onFund(p.code)}>Add ${(p.price_cents/100).toLocaleString()}</button>)}</div><small>More credits fund additional activity. A deal is not guaranteed.</small></>}
  {exhausted&&!s.canFund&&<p>Live funding is unavailable. You can still download and review your work.</p>}
  </details>{error&&<p role="status">{error}</p>}
