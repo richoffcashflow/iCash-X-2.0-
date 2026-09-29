@@ -1,7 +1,6 @@
 import {createHash,randomBytes} from 'node:crypto';
 import {db} from '@/lib/stripe-test';
 import {elevenRequest} from '@/lib/elevenlabs';
-import {reserveOperation} from '@/lib/operating-costs';
 import {buyerCallInstructions,type BuyerCallContext} from './buyer-call-policy.ts';
 import {contactEligibility,callEligibility,verifiedOfferCeiling,type VoicePermission} from './live-dispatch-policy.ts';
 import {productionDealInstructions,acquisitionOpeners} from './deal-conversation.ts';
@@ -37,7 +36,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const [authority]=await db<{max_offer_cents:number;expires_at:string}[]>(`icash_offer_authorities?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&select=max_offer_cents,expires_at`);
  const ceiling=verifiedOfferCeiling(eligible?.ready?eligible.screening.preliminarySellerCeilingCents:null,authority);
  const operationKey=`voice:${j.id}`;
- await reserveOperation({accountId,operationKey,rateId,permissionUntil:p.permission_until,financialCheck:eligible?.ready?eligible.screening.financialCheck:undefined});
+ if(!await db<boolean>('rpc/icash_reserve_paced_voice','POST',{p_account:accountId,p_job:j.id,p_rate:rateId,p_permission_until:p.permission_until,p_financial_checked_at:eligible?.ready?new Date(eligible.screening.financialCheck.checkedAt).toISOString():null,p_financial_eligible:eligible?.ready&&eligible.screening.financialCheck.status==='eligible'}))return {status:'waiting_for_daytime_budget'};
  if(!await db<boolean>('rpc/icash_claim_voice_job','POST',{p_job:j.id}))return hold('dispatch_permission_changed');
  ownsDispatch=true;
  const token=randomBytes(32).toString('hex');
