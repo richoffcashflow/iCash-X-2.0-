@@ -1,5 +1,5 @@
 'use client';
-import {useCallback,useEffect,useState,type CSSProperties} from 'react';
+import {useCallback,useEffect,useState,useRef,type CSSProperties} from 'react';
 import Image from 'next/image';
 import {workspaceStatus} from '@/lib/workspace-status';
 import {Plus,X} from 'lucide-react';
@@ -15,9 +15,11 @@ import {setupThemes,type BotProfile} from '@/lib/bot-setup';
 type Account={identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;phone?:string;balanceCents?:number;assistantName?:string;paused?:boolean;billingReview?:boolean;workReady?:boolean;activeWork?:boolean};
 export default function Home(){
  const [account,setAccount]=useState<Account|null>(null),[accountError,setAccountError]=useState(false),[signInOpen,setSignInOpen]=useState(false),[fundingOpen,setFundingOpen]=useState(false),[fundingCode,setFundingCode]=useState('budget_ten'),[controlBusy,setControlBusy]=useState(false),[draftBrand,setDraftBrand]=useState<BotProfile|null>(null);
+ const refreshInFlight=useRef(false);
  const updateBrand=useCallback((profile:BotProfile)=>setDraftBrand(profile),[]);
- async function refreshAccount(){try{const r=await fetch('/api/account',{cache:'no-store'});if(!r.ok)throw Error();setAccount(await r.json());setAccountError(false);setSignInOpen(false);}catch{setAccountError(true);}}
+ async function refreshAccount(){if(refreshInFlight.current)return;refreshInFlight.current=true;try{const r=await fetch('/api/account',{cache:'no-store'});if(!r.ok)throw Error();setAccount(await r.json());setAccountError(false);setSignInOpen(false);}catch{setAccountError(true);}finally{refreshInFlight.current=false;}}
  useEffect(()=>{void refreshAccount();if(new URLSearchParams(window.location.search).get('payment')==='funded')setFundingOpen(true);},[]);
+ useEffect(()=>{if(!account?.signedIn)return;const update=()=>{if(!document.hidden)void refreshAccount();};const timer=setInterval(update,30000);document.addEventListener('visibilitychange',update);return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',update);};},[account?.signedIn]);
  async function toggleBot(){setControlBusy(true);try{const r=await fetch('/api/work/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:account?.paused?'resume':'pause'})});if(!r.ok)throw Error();await refreshAccount();}catch{setAccountError(true);}finally{setControlBusy(false);}}
  async function signOut(){const r=await fetch('/api/auth/logout',{method:'POST'});if(r.ok){setAccount({signedIn:false});setDraftBrand(null);setFundingOpen(false);}else setAccountError(true);}
  function openFunding(code='budget_ten'){setFundingCode(code);setFundingOpen(true);requestAnimationFrame(()=>document.getElementById('inline-funding')?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'}));}

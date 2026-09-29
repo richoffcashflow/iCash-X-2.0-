@@ -7,7 +7,7 @@ import {currentUser} from '@/lib/account-auth';
 import {db,guestHash} from '@/lib/stripe-test';
 import {allowedOrigin,fundingMode} from '@/lib/funding-policy';
 import {fundingStripe,limitRequest,validGuest} from '@/lib/funding';
-import {dailyConsent,dailyConsentVersion,dailyQuote,dailyReady,stopDaily,syncDailySubscription,settleDailyInvoice,type DailyPlan} from '@/lib/daily-billing';
+import {dailyConsent,dailyConsentVersion,dailyQuote,dailyReady,stopDaily,syncDailySubscription,settleDailyInvoice,reconcileDailyCheckout,type DailyPlan} from '@/lib/daily-billing';
 import {processingFeeCents} from '@/lib/funding-fees';
 export const dynamic='force-dynamic';
 async function owner(create=false){
@@ -19,8 +19,8 @@ async function owner(create=false){
  const plans=filter?await db<DailyPlan[]>(`icash_daily_plans?${filter}&mode=eq.${fundingMode()}&state=neq.stopped&order=created_at.desc&limit=1`):[];
  return {token,user,account,p:plans[0]};
 }
-export async function GET(){try{const {p}=await owner();let budgetCents:number|null=null,nextCharge:number|null=null;
- if(p?.stripe_subscription_id){const sub=await fundingStripe().subscriptions.retrieve(p.stripe_subscription_id);await syncDailySubscription(sub);const item=sub.items.data[0];nextCharge=item?.current_period_end??null;const priceIds=sub.items.data.map(i=>i.price.id).join(',');const [q]=await db<{budget_cents:number}[]>(`icash_daily_quotes?plan_id=eq.${p.id}&budget_price=in.(${priceIds})&select=budget_cents`);budgetCents=q?.budget_cents??null;}
+export async function GET(){try{const {p:ownedPlan}=await owner();let p=ownedPlan?await reconcileDailyCheckout(ownedPlan):undefined;let budgetCents:number|null=null,nextCharge:number|null=null;
+ if(p?.stripe_subscription_id){const sub=await fundingStripe().subscriptions.retrieve(p.stripe_subscription_id);await syncDailySubscription(sub);const item=sub.items.data[0];nextCharge=item?.current_period_end??null;const priceIds=sub.items.data.map(i=>i.price.id).join(',');const [q]=await db<{budget_cents:number}[]>(`icash_daily_quotes?plan_id=eq.${p.id}&budget_price=in.(${priceIds})&select=budget_cents`);budgetCents=q?.budget_cents??null;const [saved]=await db<DailyPlan[]>(`icash_daily_plans?id=eq.${p.id}&select=*`);p=saved??p;}
  return NextResponse.json({ready:dailyReady()&&await liveFundingReady(),plan:p?{state:p.state,budgetCents,nextCharge}:null,consentVersion:dailyConsentVersion},{headers:{'Cache-Control':'private, no-store'}});
  }catch{return NextResponse.json({error:'Could not load daily billing.'},{status:503});}}
 export async function POST(req:Request){

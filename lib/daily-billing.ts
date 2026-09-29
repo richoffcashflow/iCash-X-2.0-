@@ -61,3 +61,21 @@ export async function settleDailyInvoice(invoiceId:string){
  const pi=await stripe.paymentIntents.retrieve(paymentId);if(pi.status!=='succeeded'||pi.amount_received!==i.total||pi.currency!=='usd'||pi.livemode!==i.livemode)throw new Error('Payment mismatch');
  await db('rpc/icash_settle_daily_invoice','POST',{p_plan:p.id,p_quote:q.id,p_invoice:i.id,p_payment:pi.id,p_amount:i.total,p_tax:tax,p_email:i.customer_email,p_phone:i.customer_phone});
 }
+
+/** Only call with a plan resolved from the authenticated account or secure guest cookie. */
+export async function reconcileDailyCheckout(p:DailyPlan){
+ if(p.state!=='pending'||!p.stripe_session_id)return p;
+ const stripe=fundingStripe();
+ const session=await stripe.checkout.sessions.retrieve(p.stripe_session_id);
+ if(session.id!==p.stripe_session_id||session.mode!=='subscription'||session.metadata?.icash_daily_plan!==p.id||session.livemode!==(p.mode==='live'))throw new Error('Checkout binding mismatch');
+ if(session.status!=='complete'||session.payment_status!=='paid')return p;
+ const subId=typeof session.subscription==='string'?session.subscription:session.subscription?.id;
+ if(!subId||(p.stripe_subscription_id&&p.stripe_subscription_id!==subId))throw new Error('Checkout subscription mismatch');
+ const sub=await stripe.subscriptions.retrieve(subId);
+ if(sub.metadata.icash_daily_plan!==p.id||sub.livemode!==session.livemode)throw new Error('Checkout owner mismatch');
+ await syncDailySubscription(sub);
+ const invoiceId=typeof sub.latest_invoice==='string'?sub.latest_invoice:sub.latest_invoice?.id;
+ if(invoiceId)await settleDailyInvoice(invoiceId);
+ const [saved]=await db<DailyPlan[]>(`icash_daily_plans?id=eq.${p.id}&select=*`);
+ return saved??p;
+}
