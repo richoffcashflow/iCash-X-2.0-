@@ -16,3 +16,13 @@
 .bot-setup .setup-logos{grid-template-columns:1fr;gap:12px}.bot-setup .setup-logos button{display:grid;grid-template-columns:96px 1fr auto;align-items:center;text-align:left;gap:16px;min-height:116px;padding:10px 16px;background:white}.setup-logos img{width:96px;height:96px;object-fit:contain;border-radius:8px}.setup-logo-wordmark{font-size:21px;line-height:1.2;letter-spacing:-.6px;overflow-wrap:anywhere;color:#171717}.logo-style-1{font-family:Georgia,serif;font-weight:500}.logo-style-2{font-weight:800;letter-spacing:-.8px}.bot-setup .setup-logos button>span{display:none}.bot-setup .setup-logos .logo-selected{position:static}.bot-setup .setup-logo-status{min-height:110px}
 
 .setup-retry{display:block;min-height:44px;margin-top:8px;border:1px solid #ddd;border-radius:9px;padding:8px 16px;background:white;color:#222;font:inherit;cursor:pointer}
+
+/* Carry the selected brand color through setup and the funded workspace. */
+.console-shell.setup-shell,.console-shell.personalized-workspace{background:var(--bot-soft,#f2f2f3);transition:background-color .16s ease}
+.console-shell .console-header{background:var(--bot-color,#18181b);color:#fff;transition:background-color .16s ease}
+.console-shell .console-header .setup-brand>div>span{color:#fff;opacity:.85;letter-spacing:0}
+.console-shell .console-header .header-access{border-color:rgba(255,255,255,.55);color:#fff;background:transparent}
+.console-shell .console-header .header-access:hover,.console-shell .console-header .header-access:focus-visible{background:rgba(255,255,255,.14)}
+.console-shell .console-header .setup-mark img{width:100%;height:100%;object-fit:contain;display:block}
+.console-shell .console-header .setup-mark{overflow:hidden;flex-shrink:0}
+@media(prefers-reduced-motion:reduce){.console-shell.setup-shell,.console-shell.personalized-workspace,.console-shell .console-header{transition:none}}
