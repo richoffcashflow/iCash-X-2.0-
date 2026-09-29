@@ -31,3 +31,9 @@ DocuSeal confirms $0.20 per completed submission even with multiple files/signer
 Fixed-cost planning assumes 10,000 total billable operations/month (not a forecast): Vercel $20, Railway Pro $20 minimum usage commitment, Supabase $25, Resend $20, DocuSeal $20. The $0.05 combined hosting/email/support allowance is a planning reserve, not measured per-request cost. Fixed fees and included usage must not be double-counted; excess usage needs tracking. Lower volume, CAC, disputes or provider price changes can consume company profit. Review baseline after 30 days.
 
 Sources: https://vercel.com/pricing ; https://railway.com/pricing ; https://supabase.com/pricing ; https://resend.com/pricing .
+
+## Superseding 5x baseline
+
+Owner requested lower pricing and 5x on 2026-09-29. Signing charge: $3.25 per agreement. Baseline cost: $0.5295 ($0.20 DocuSeal, $0.05 combined hosting/email/support, $0.2145 payment allocation, $0.0325 acquisition allocation and $0.0325 refund/dispute reserve). A 20% buffer rounded up reserves $0.64; five times that reserve is $3.20. $3.25 exceeds the target. The operating margin floor is now 80% (5x), replacing 83.34% (approximately 6x). Earlier $5 figures above are historical. Estimates remain estimates; fixed costs and advertising can exceed allowances at low volume.
+
+Owner rejected the per-action economics after this change. The $3.25 rate is disabled; no new signing charge is active. Next model should separate low-priced signing from portfolio-level margin targets and measure paid acquisition separately. Do not enable a $1 rate under the existing all-in 80% per-operation guard: that would fail admission.
