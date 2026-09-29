@@ -1,0 +1,54 @@
+/* Current entry flow: deliberately loaded after the legacy workspace styles. */
+.setup-shell{background:#fff!important}
+.setup-shell .console-main{max-width:536px;padding:36px 28px 12px}
+.setup-shell .console-header{min-height:68px}
+.setup-shell .console-header>div{min-width:0}
+.setup-shell .console-footer{max-width:536px;padding:14px 28px 28px}
+.setup-shell .inline-disclosures{border-top:1px solid #eee}
+.bot-setup{max-width:480px;margin:auto}
+.setup-layout{display:block}.setup-form{padding:0;width:100%}
+.setup-entry .setup-progress{display:none}
+.setup-entry .setup-eyebrow{font-size:10px;letter-spacing:1.4px;margin:0 0 16px;text-align:center;color:#666}
+.setup-form h1{font-size:42px;font-weight:700;line-height:1.12;letter-spacing:-1.7px;overflow-wrap:anywhere}
+.setup-entry h1{text-align:center;margin-bottom:16px}
+.setup-intro{font-size:16px;line-height:1.55;color:#626262;margin:0 0 24px;max-width:none}
+.setup-entry .setup-intro{text-align:center}
+.setup-entry-form{margin-top:28px}
+.setup-label{font-size:14px;font-weight:600;margin-bottom:10px}
+.setup-input{height:56px;font-size:16px;padding:16px;border-radius:12px;border-color:#d5d5d5;background:#fff;box-shadow:0 2px 4px #00000003}
+.setup-input::placeholder{font-size:14px;color:#858585}
+.setup-primary{min-height:56px;font-size:16px;border-radius:12px;font-weight:650}
+.setup-entry-form .setup-primary{margin-top:12px}
+.setup-primary:disabled{opacity:1;background:#e9e9eb;color:#777}
+.setup-free{font-size:13px;line-height:1.55;color:#444;margin:14px 0 0}
+.setup-free span{display:block;font-size:12px;color:#6b6b6b;margin-top:4px}
+.setup-process{margin-top:28px;padding-top:22px;border-top:1px solid #eaeaea}
+.setup-process-label{font-size:10px;letter-spacing:1.3px;color:#777;font-weight:650}
+.deal-steps-simple{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;margin:16px 0 8px}
+.deal-steps-simple>span{display:flex;gap:8px;align-items:center;font-size:13px;font-weight:500;line-height:1.4;color:#444}
+.deal-steps-simple b{display:grid;place-items:center;width:23px;height:23px;flex:none;background:#f1f1f3;border-radius:50%;font-size:11px;color:#666}
+.setup-details{font-size:14px;line-height:1.6;color:#555;margin-top:12px}
+.setup-details summary{display:flex;justify-content:space-between;gap:12px;min-height:44px;font-size:13px;cursor:pointer;list-style:none}
+.setup-details summary::after{content:'+';font-size:18px;color:#777;font-weight:400}
+.setup-details[open]>summary::after{content:'−'}
+.setup-details summary::-webkit-details-marker{display:none}
+.setup-details p{margin:8px 0 14px}
+.setup-progress{margin-bottom:22px}.setup-progress>button,.setup-back{min-height:44px;font-size:13px}
+.setup-fieldset legend{font-size:14px}.setup-hint{font-size:12px;color:#666}
+.setup-voice-choice strong{font-size:15px}.setup-voice-choice span>span{font-size:13px;line-height:1.45;color:#666}
+.setup-voice-choice strong small{font-size:10px}.setup-markets strong{font-size:15px}.setup-markets small{font-size:13px;color:#666}
+.setup-reveal{padding:18px;border-radius:14px;box-shadow:none;margin-bottom:18px}
+.setup-reveal-line{margin-top:8px}.setup-business-checks{font-size:13px;gap:12px;margin:10px 0}
+.setup-complete .setup-eyebrow{font-size:10px}.setup-complete h1{font-size:34px;letter-spacing:-1px}
+.setup-funding{padding:0;border:0;border-radius:0;box-shadow:none}
+.setup-funding .boost-widget{padding:0;margin:0}
+.budget-explainer{padding:14px 16px;background:#f7f7f8;border-radius:12px;margin:16px 0;color:#333}
+.budget-explainer strong{font-size:14px}.budget-explainer p{font-size:13px;line-height:1.6;color:#555;margin:5px 0 0}
+.billing-renewal{font-size:13px!important;line-height:1.6!important;color:#444!important}
+.deal-explainer{margin:14px 0;text-align:left}.deal-explainer ol{display:grid;gap:16px;list-style:none;margin:0;padding:0}
+.deal-explainer li{display:flex;gap:12px;align-items:flex-start}.deal-explainer li>b{display:grid;place-items:center;flex:0 0 26px;height:26px;border-radius:50%;background:#f0f0f2;font-size:12px}
+.deal-explainer strong{display:block;font-size:14px;line-height:1.5}.deal-explainer span,.deal-explainer>p{display:block;font-size:13px;line-height:1.55;color:#555}
+.deal-next-step{padding:12px;background:#f7f7f8;border-radius:10px;font-size:14px;line-height:1.55}
+@media(max-width:600px){.setup-shell .console-main{padding:28px 22px 12px}.setup-shell .console-header{min-height:62px;padding:0 20px}.setup-shell .console-footer{padding:8px 22px 22px}.setup-form h1{font-size:34px;letter-spacing:-1.2px}.setup-intro{font-size:15px}.setup-entry .setup-eyebrow{font-size:9px;letter-spacing:1.2px}.setup-entry-form{margin-top:24px}.setup-process{margin-top:24px;padding-top:18px}.setup-complete h1{font-size:30px}.setup-reveal{padding:16px}.setup-colors{gap:10px}.setup-free{font-size:12px}}
+@media(max-width:360px){.setup-shell .console-main{padding-left:18px;padding-right:18px}.setup-form h1{font-size:30px}.deal-steps-simple{gap:12px 8px}.deal-steps-simple>span{font-size:12px}}
+@media(prefers-reduced-motion:reduce){.setup-step-enter{animation:none}}
