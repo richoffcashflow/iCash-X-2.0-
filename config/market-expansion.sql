@@ -2,6 +2,7 @@
 create table public.icash_market_research_scopes(
  id uuid primary key default gen_random_uuid(),account_id uuid not null references public.icash_accounts(id),
  city text not null check(length(city) between 2 and 80),state text not null check(state ~ '^[A-Z]{2}$'),
+ location_query text check(length(location_query) between 1 and 80),
  enabled boolean not null default false,next_scan_at timestamptz not null default now(),unique(account_id,city,state)
 );
 create table public.icash_market_research_jobs(
@@ -47,7 +48,7 @@ begin
  where public.icash_market_research_usage.requests_reserved+n<=50;
  if not found then return null;end if;
  update public.icash_market_research_jobs set state='running',attempts=attempts+1,updated_at=now(),next_attempt_at=now()+interval '15 minutes' where id=j.id;
- return jsonb_build_object('id',j.id,'kind',j.kind,'city',j.city,'state',j.state_code,'zip',j.zip,'page',j.page);
+ return jsonb_build_object('id',j.id,'kind',j.kind,'city',j.city,'query',coalesce((select scope.location_query from public.icash_market_research_scopes scope where scope.id=j.scope_id),j.city),'state',j.state_code,'zip',j.zip,'page',j.page);
 end $$;
 create function public.icash_save_market_research(p_account uuid,p_job uuid,p_result jsonb) returns void language plpgsql set search_path='' as $$
 declare j public.icash_market_research_jobs;loc jsonb;n integer;total bigint;equity bigint;buyers bigint;

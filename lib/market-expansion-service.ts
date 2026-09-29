@@ -1,6 +1,6 @@
 import {db} from './stripe-test';
 import {marketCountBodies,marketCounts,marketLocations} from './market-expansion';
-type Job={id:string;kind:'locations'|'counts';city:string;state:string;zip:string|null;page:number};
+type Job={id:string;kind:'locations'|'counts';city:string;query:string;state:string;zip:string|null;page:number};
 export async function expandMarket(account:string,id:string){
  const key=process.env.DEALMACHINE_API_KEY;if(!key)return {status:'market_provider_missing'};
  const j=await db<Job|null>('rpc/icash_claim_market_research','POST',{p_account:account,p_job:id});if(!j)return {status:'market_research_held'};
@@ -11,7 +11,7 @@ export async function expandMarket(account:string,id:string){
  };
  try{
   if(j.kind==='locations'){
-   const query=new URLSearchParams({q:j.city,state:j.state,type:'zip_code',per_page:'50',page:String(j.page)});
+   const query=new URLSearchParams({q:j.query,state:j.state,type:'zip_code',per_page:'50',page:String(j.page)});
    const result=marketLocations.parse(await request('/locations?'+query));
    if(result.pagination.page!==j.page||result.data.some(v=>v.state!==j.state))throw Error('Market scope mismatch');
    await db('rpc/icash_save_market_research','POST',{p_account:account,p_job:id,p_result:{locations:result.data,nextPage:result.pagination.total_pages>j.page&&j.page<4?j.page+1:null}});
