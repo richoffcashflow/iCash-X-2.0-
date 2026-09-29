@@ -1,3 +1,4 @@
+import {liveFundingReady} from "@/lib/launch-readiness";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { randomBytes } from "node:crypto";
@@ -11,7 +12,7 @@ import {processingFeeCents} from '@/lib/funding-fees';
 export const runtime="nodejs";
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:"Open iCash X directly and try again."},{status:403});
- if(!fundingEnabled())return NextResponse.json({error:"Funding is not open yet."},{status:503});
+ if(!(await liveFundingReady()))return NextResponse.json({error:"Funding is not open yet."},{status:503});
  let consent;try{const raw=await req.text();if(raw.length>512)throw new Error();consent=JSON.parse(raw);}catch{return NextResponse.json({error:"Accept the purchase terms to continue."},{status:400});}
  if(!acceptedFundingTerms(consent))return NextResponse.json({error:"Accept the current purchase terms to continue."},{status:400});
  const choice=consent as {packCode?:unknown;days?:unknown;totalCents?:unknown};

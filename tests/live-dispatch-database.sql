@@ -1,0 +1,47 @@
+begin;
+do $$
+declare u uuid:=gen_random_uuid();a uuid:=gen_random_uuid();r uuid;s uuid;s2 uuid;p uuid;p2 uuid;j uuid;j2 uuid;lc uuid;costs jsonb;z text;k text:='voice-fixture:'||gen_random_uuid();due timestamptz:=date_trunc('second',now()+interval '1 hour');cb jsonb;
+begin
+ insert into auth.users(id,email) values(u,u||'@example.invalid');
+ insert into public.icash_accounts(id,owner_user_id,assistant_name,bot_paused,daily_limit_cents) values(a,u,'Fixture',false,10000);
+ insert into public.icash_wallets(account_id,balance_cents,reserved_cents,currency) values(a,10000,0,'USD');
+ select jsonb_object_agg(c,case when c='elevenlabs' then 100000 else 0 end) into costs from unnest(array['dealmachine','elevenlabs','twilio','messaging','email','llm','vercel','railway','supabase','github','payments','title_and_signing','support_and_overhead','acquisition','refund_and_dispute_reserve','other']) c;
+ insert into public.icash_operation_rates(operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled,voice_max_duration_seconds) values('seller_call',k,100,costs,'rollback fixture only',now()-interval '1 minute',now()+interval '1 hour',true,600) returning id into r;
+ update public.icash_operating_budget set enabled=true,funded_micros=10000000,protected_micros=1000000,reserved_micros=0,spent_micros=0,daily_limit_micros=null where id=1;
+ insert into public.icash_voice_configs(account_id,enabled,agent_id,phone_number_id,agent_config_hash,reviewed_until,seller_rate_id,required_tool_ids) values(a,true,'agent_fixture','fixture',repeat('a',64),now()+interval '1 hour',r,array['callback','handoff']);
+ insert into public.icash_screening_jobs(account_id,event_key,snapshot,state,result) values(a,k,'{"propertyId":"prop_123"}','complete','{"financialCheck":{"status":"eligible"}}') returning id into s;
+ insert into public.icash_screening_jobs(account_id,event_key,snapshot,state,result) values(a,k||'2','{"propertyId":"prop_124"}','complete','{"financialCheck":{"status":"eligible"}}') returning id into s2;
+ select name into z from pg_timezone_names where extract(hour from now() at time zone name) between 11 and 15 limit 1;
+ insert into public.icash_contact_permissions(account_id,screening_id,party,phone,contact_key,timezone,permission_evidence,permission_until,dnc_checked_at,dnc_clear) values(a,s,'seller','+12125550123',repeat('b',64),z,'rollback permission fixture',now()+interval '1 day',now(),true) returning id into p;
+ insert into public.icash_contact_permissions(account_id,screening_id,party,phone,contact_key,timezone,permission_evidence,permission_until,dnc_checked_at,dnc_clear) values(a,s2,'seller','+12125550124',repeat('c',64),z,'rollback permission fixture',now()+interval '1 day',now(),true) returning id into p2;
+ insert into public.icash_voice_jobs(account_id,permission_id,state) values(a,p,'issued') returning id into j;
+ perform public.icash_reserve_operation(a,'voice:'||j,r,now()+interval '1 hour',now(),true);
+ update public.icash_accounts set bot_paused=true where id=a;
+ if public.icash_claim_voice_job(j) then raise exception 'Paused bot dialed';end if;
+ update public.icash_accounts set bot_paused=false where id=a;
+ update public.icash_contact_permissions set revoked_at=now() where id=p;
+ if public.icash_claim_voice_job(j) then raise exception 'Revoked permission dialed';end if;
+ update public.icash_contact_permissions set revoked_at=null where id=p;
+ if not public.icash_claim_voice_job(j) then raise exception 'Valid call claim failed';end if;
+ if public.icash_claim_voice_job(j) then raise exception 'Replayed call claim';end if;
+ if not exists(select 1 from public.icash_operation_spend where operation_key='voice:'||j and state='dispatched') then raise exception 'Operation not atomically claimed';end if;
+ update public.icash_voice_jobs set state='held',outcome='provider_outcome_unknown_no_retry' where id=j;
+ insert into public.icash_voice_jobs(account_id,permission_id,state) values(a,p2,'issued') returning id into j2;
+ perform public.icash_reserve_operation(a,'voice:'||j2,r,now()+interval '1 hour',now(),true);
+ if public.icash_claim_voice_job(j2) then raise exception 'Unknown call outcome allowed another call';end if;
+ insert into public.icash_live_conversations(account_id,screening_id,party,agent_id,conversation_id,operation_key,contact_key,strategy_key,tool_token_hash,tool_expires_at) values(a,s,'seller','agent_fixture','conv_fixture'||replace(a::text,'-',''),'voice:'||j,repeat('b',64),'cash_interest',repeat('d',64),now()+interval '1 hour') returning id into lc;
+ begin
+ perform public.icash_live_callback_tool(repeat('e',64),'conv_fixture'||replace(a::text,'-',''),due,z,'Exact agreed time read back','Yes, confirmed');
+ raise exception 'TEST_EXPECTED_TOKEN_REJECTION';
+ exception when others then if sqlerrm<>'Callback not confirmed' then raise;end if;end;
+ cb:=public.icash_live_callback_tool(repeat('d',64),'conv_fixture'||replace(a::text,'-',''),due,z,'Exact agreed time read back','Yes, confirmed');
+ if not (cb->>'saved')::boolean then raise exception 'Callback not saved';end if;
+ perform public.icash_queue_voice_jobs();
+ if exists(select 1 from public.icash_voice_jobs where callback_id=(cb->>'callbackId')::uuid) then raise exception 'Unverified transcript scheduled';end if;
+ update public.icash_live_conversations set state='complete',result=jsonb_build_object('callbackDueAt',due) where id=lc;
+ perform public.icash_queue_voice_jobs();
+ perform public.icash_queue_voice_jobs();
+ if (select count(*) from public.icash_voice_jobs where callback_id=(cb->>'callbackId')::uuid)<>1 then raise exception 'Callback missing or duplicated';end if;
+ if has_function_privilege('anon','public.icash_claim_voice_job(uuid)','EXECUTE') or has_function_privilege('authenticated','public.icash_launch_checks(uuid)','EXECUTE') or has_table_privilege('authenticated','public.icash_contact_permissions','SELECT') then raise exception 'Service data exposed';end if;
+end $$;
+rollback;

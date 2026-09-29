@@ -1,3 +1,4 @@
+import {launchReadiness} from "@/lib/launch-readiness";
 import type { CustomerIdentity } from "@/lib/customer-identity";
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/account-auth";
@@ -19,6 +20,6 @@ export async function GET(){
  // Sandbox balances are order totals, never spendable live-wallet grants.
  const balance=mode==="test"?totals.creditCents:wallet.balance_cents-wallet.reserved_cents;
  const reviews=await db<{event_id:string}[]>(`icash_billing_reviews?account_id=eq.${id}&resolved_at=is.null&select=event_id&limit=1`);
- return NextResponse.json({signedIn:true,identity:identity??null,mode,email:user.email,phone:totals.phone,balanceCents:balance,reservedCents:mode==="test"?0:wallet.reserved_cents,assistantName:a.assistant_name,paused:a.bot_paused,dailyLimitCents:a.daily_limit_cents,billingReview:reviews.length>0,workReady:false},{headers});
+ return NextResponse.json({signedIn:true,identity:identity??null,mode,email:user.email,phone:totals.phone,balanceCents:balance,reservedCents:mode==="test"?0:wallet.reserved_cents,assistantName:a.assistant_name,paused:a.bot_paused,dailyLimitCents:a.daily_limit_cents,billingReview:reviews.length>0,workReady:mode==="live"&&(await launchReadiness(id)).ready},{headers});
  }catch{return NextResponse.json({error:"Your account is temporarily unavailable. Please retry."},{status:503,headers});}
 }

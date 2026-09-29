@@ -1,3 +1,4 @@
+import {liveFundingReady} from "@/lib/launch-readiness";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db,guestHash } from "@/lib/stripe-test";
@@ -18,6 +19,6 @@ export async function GET(){
  if(pending?.stripe_session_id){const s=await fundingStripe().checkout.sessions.retrieve(pending.stripe_session_id);if(s.payment_status==="paid"){await settleFunding(s);pending.state="paid";pending.payer_email=s.customer_details?.email??undefined;}}
  }
  const paid=orders.filter(o=>o.state==="paid");
- return NextResponse.json({mode,enabled:fundingEnabled(),packs,planning,forecast:{cycleChargeCents:null,qualified:null},priceCents:pack?.price_cents??null,creditCents:pack?.credit_cents??null,paidCents:paid.reduce((n,o)=>n+o.credit_cents,0),needsClaim:paid.some(o=>!o.credited_at),email:paid[0]?.payer_email??null},{headers});
+ return NextResponse.json({mode,enabled:await liveFundingReady(),packs,planning,forecast:{cycleChargeCents:null,qualified:null},priceCents:pack?.price_cents??null,creditCents:pack?.credit_cents??null,paidCents:paid.reduce((n,o)=>n+o.credit_cents,0),needsClaim:paid.some(o=>!o.credited_at),email:paid[0]?.payer_email??null},{headers});
  }catch{return NextResponse.json({enabled:false,error:"Could not check funding. Please retry."},{status:503,headers});}
 }

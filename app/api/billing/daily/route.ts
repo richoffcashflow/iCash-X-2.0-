@@ -1,3 +1,4 @@
+import {liveFundingReady} from "@/lib/launch-readiness";
 import {NextResponse} from 'next/server';
 import {cookies} from 'next/headers';
 import {randomBytes} from 'node:crypto';
@@ -19,13 +20,13 @@ async function owner(create=false){
 }
 export async function GET(){try{const {p}=await owner();let budgetCents:number|null=null,nextCharge:number|null=null;
  if(p?.stripe_subscription_id){const sub=await fundingStripe().subscriptions.retrieve(p.stripe_subscription_id);await syncDailySubscription(sub);const item=sub.items.data[0];nextCharge=item?.current_period_end??null;const priceIds=sub.items.data.map(i=>i.price.id).join(',');const [q]=await db<{budget_cents:number}[]>(`icash_daily_quotes?plan_id=eq.${p.id}&budget_price=in.(${priceIds})&select=budget_cents`);budgetCents=q?.budget_cents??null;}
- return NextResponse.json({ready:dailyReady(),plan:p?{state:p.state,budgetCents,nextCharge}:null,consentVersion:dailyConsentVersion},{headers:{'Cache-Control':'private, no-store'}});
+ return NextResponse.json({ready:dailyReady()&&await liveFundingReady(),plan:p?{state:p.state,budgetCents,nextCharge}:null,consentVersion:dailyConsentVersion},{headers:{'Cache-Control':'private, no-store'}});
  }catch{return NextResponse.json({error:'Could not load daily billing.'},{status:503});}}
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403});
  try{const raw=await req.text();if(raw.length>1024)throw new Error();const i=JSON.parse(raw);const {p,token,user,account}=await owner(true);await limitRequest(req,'daily-billing',token!,8,600);
  if(i.action==='stop'){if(p)await stopDaily(p);return NextResponse.json({stopped:true});}
- if(!dailyReady())return NextResponse.json({error:'Daily billing opens when live work and tax setup are ready.'},{status:503});
+ if(!dailyReady()||!await liveFundingReady())return NextResponse.json({error:'Daily billing opens when live work is ready.'},{status:503});
  if(i.accepted!==true||i.version!==dailyConsentVersion||typeof i.packCode!=='string'||!/^[a-z0-9_]{1,30}$/.test(i.packCode))throw new Error();
  const mode=fundingMode()!;const [pack]=await db<{price_cents:number}[]>(`icash_credit_packs?code=eq.${i.packCode}${mode==='live'?'&enabled=eq.true':''}&select=price_cents`);
  if(!pack||pack.price_cents<1000||pack.price_cents>100000||i.totalCents!==pack.price_cents+processingFeeCents(pack.price_cents))return NextResponse.json({error:'Refresh and confirm the daily total.'},{status:400});
