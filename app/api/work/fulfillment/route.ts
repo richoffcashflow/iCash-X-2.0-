@@ -11,6 +11,9 @@ export async function GET(req:Request){
  const matches=await db<{buyer_id:string;rank:number;ready:boolean}[]>(`icash_buyer_matches?deal_id=eq.${deal.id}&select=buyer_id,rank,ready&order=rank&limit=50`);
  const ids=matches.map(m=>m.buyer_id).join(',');
  const buyers=ids?await db<{id:string;display_name:string}[]>(`icash_buyer_profiles?account_id=eq.${accountId}&id=in.(${ids})&select=id,display_name`):[];
- return NextResponse.json({job,documents,buyers:matches.map(m=>({...m,name:buyers.find(b=>b.id===m.buyer_id)?.display_name??'Buyer'}))},{headers:{'Cache-Control':'private, no-store'}});
+ const candidates=await db<{buyer_id:string;discovered_at:string}[]>(`icash_buyer_candidates?deal_id=eq.${deal.id}&rights_until=gt.${new Date().toISOString()}&select=buyer_id,discovered_at&order=discovered_at.desc&limit=50`);
+ const candidateIds=candidates.map(c=>c.buyer_id).join(',');
+ const candidateNames=candidateIds?await db<{id:string;display_name:string}[]>(`icash_buyer_profiles?account_id=eq.${accountId}&id=in.(${candidateIds})&select=id,display_name`):[];
+ return NextResponse.json({candidates:candidateNames.map(c=>({id:c.id,name:c.display_name})),job,documents,buyers:matches.map(m=>({...m,name:buyers.find(b=>b.id===m.buyer_id)?.display_name??'Buyer'}))},{headers:{'Cache-Control':'private, no-store'}});
  }catch{return NextResponse.json({error:'Could not load deal progress.'},{status:503});}
 }

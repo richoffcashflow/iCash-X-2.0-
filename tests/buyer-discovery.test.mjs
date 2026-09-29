@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {buyerSearchBody,discoverBuyerPage} from '../lib/buyer-discovery.ts';
+const config={zip:'75201',page:1,perPage:10,since:'2025-09-29',unitCostMicros:10000,quotedCostMicros:100000};
+assert.equal(buyerSearchBody(config).anchor,'people');assert.deepEqual(buyerSearchBody(config).fields,['full_address']);
+let paid=0,claims=0,saved;
+const person={dm_person_id:'per_fixture',full_name:'Fixture buyer',property:{dm_property_id:'prop_123',full_address:'Fixture only'},phones:[{number:'2125550123',do_not_call:true}],emails:[]};
+const request=async body=>{if(body.estimate_cost)return {estimated_credits:{this_page:2,breakdown:{properties:0,people:2}}};paid++;return {data:[person,person],credits:{used:1,properties:0,people:1},pagination:{has_next_page:false}};};
+const deps={request,claim:async()=>{claims++;return true;},persist:async r=>{saved=r;}};
+assert.equal((await discoverBuyerPage(config,deps)).status,'buyers_saved');assert.equal(paid,1);assert.equal(claims,1);assert.equal(saved.candidates.length,1);assert.equal(saved.candidates[0].phones[0].doNotCall,true);assert(!('criteriaConfirmedAt' in saved.candidates[0]));
+paid=0;claims=0;await assert.rejects(()=>discoverBuyerPage({...config,quotedCostMicros:1000},deps));assert.equal(paid,0);assert.equal(claims,0);
+assert.equal((await discoverBuyerPage(config,{...deps,claim:async()=>false})).status,'held');assert.equal(paid,0);
+await assert.rejects(()=>discoverBuyerPage(config,{...deps,request:async()=>({estimated_credits:{this_page:2,breakdown:{properties:1,people:1}}})}));
+const uncertain={...deps,request:async body=>{if(body.estimate_cost)return request(body);paid++;throw Error('timeout');}};paid=0;await assert.rejects(()=>discoverBuyerPage(config,uncertain));assert.equal(paid,1,'No implicit retry after ambiguous paid request');
+console.log('Buyer discovery: owner-only cost estimate, cost cap, claim gate, person deduplication, DNC retention and no implicit paid retry passed.');

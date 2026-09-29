@@ -17,9 +17,9 @@ const db=async(path,method,body)=>{
  if(path==='rpc/icash_save_fulfillment'){writes.push(body);return null;}
  throw Error('Unexpected call: '+path);
 };
-globalThis.__fulfillment={z,db,planBuyerOutreach,dealTermsSchema,renderDealDocument};
+globalThis.__fulfillment={discoverBuyersForDeal:async()=>({status:'buyer_search_configuration_required',canContinue:false}),z,db,planBuyerOutreach,dealTermsSchema,renderDealDocument};
 let source=ts.transpileModule(readFileSync(new URL('../lib/fulfillment-service.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-const {prepareFulfillment}=await import('data:text/javascript;base64,'+Buffer.from('const {z,db,planBuyerOutreach,dealTermsSchema,renderDealDocument}=globalThis.__fulfillment;\n'+source).toString('base64'));
+const {prepareFulfillment}=await import('data:text/javascript;base64,'+Buffer.from('const {discoverBuyersForDeal,z,db,planBuyerOutreach,dealTermsSchema,renderDealDocument}=globalThis.__fulfillment;\n'+source).toString('base64'));
 assert.equal((await prepareFulfillment('account','job')).status,'fulfillment_prepared');assert.equal(writes[0].p_matches.length,1);assert.equal(writes[0].p_documents.length,2);assert.equal(writes[0].p_result.sent,false);assert.equal(writes[0].p_result.closed,false);
 writes=[];signed=false;assert.equal((await prepareFulfillment('account','job')).status,'signed_purchase_required');assert.equal(writes.length,0);
 signed=true;authority=false;await prepareFulfillment('account','job');assert.equal(writes[0].p_matches.length,0);assert.equal(writes[0].p_result.buyerStatus,'marketing_review_required');

@@ -1,3 +1,4 @@
+import {discoverBuyersForDeal} from './buyer-discovery-service.ts';
 import {z} from 'zod';
 import {db} from '@/lib/stripe-test';
 import {planBuyerOutreach,type Buyer} from './buyer-engine.ts';
@@ -24,7 +25,9 @@ export async function prepareFulfillment(accountId:string,jobId:string){
   matches=plan.matches.slice(0,50).map((m,i)=>({...m,rank:i+1,sourceRef:valid.find(b=>b.id===m.id)!.source_ref}));
   buyerStatus=matches.length?'matches_ready_outreach_not_sent':'buyer_sourcing_required';
  }
- const result={buyerStatus,buyerCount:matches.length,titleStatus:'request_prepared_not_sent',contractStatus:'verified_purchase',sent:false,depositReceived:false,closed:false};
+ let buyerDiscovery:{status:string;canContinue:boolean};
+ try{buyerDiscovery=await discoverBuyersForDeal(accountId,job.deal_id);}catch{buyerDiscovery={status:'buyer_search_needs_review',canContinue:false};}
+ const result={buyerDiscovery,buyerStatus,buyerCount:matches.length,titleStatus:'request_prepared_not_sent',contractStatus:'verified_purchase',sent:false,depositReceived:false,closed:false};
  await db('rpc/icash_save_fulfillment','POST',{p_job:job.id,p_result:result,p_documents:documents,p_matches:matches});
  return {status:'fulfillment_prepared'};
 }
