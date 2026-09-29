@@ -10,7 +10,8 @@ export async function GET(req:Request){
  const threads=await db<{id:string;recipient:string;paused:boolean}[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${dealId}&select=id,recipient,paused&limit=20`);
  const ids=threads.map(t=>t.id).join(',');
  const messages=ids?await db<unknown[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=in.(${ids})&select=id,thread_id,direction,body,state,attachments,created_at&order=created_at.desc&limit=100`):[];
- return NextResponse.json({threads,messages},{headers:{'Cache-Control':'private, no-store'}});
+ const ai=ids?await db<unknown[]>(`icash_text_ai_jobs?account_id=eq.${accountId}&thread_id=in.(${ids})&state=in.(drafted,handoff,needs_review)&select=id,thread_id,state,reply,analysis,created_at&order=created_at.desc&limit=20`):[];
+ return NextResponse.json({threads,messages,ai},{headers:{'Cache-Control':'private, no-store'}});
  }catch{return NextResponse.json({error:'Messages unavailable'},{status:400});}
 }
 export async function POST(req:Request){
