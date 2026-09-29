@@ -1,0 +1,11 @@
+# Title deadlines and follow-up reminders
+
+Title requests accepted by the sending provider now create one in-app follow-up reminder two weekdays later. Weekends are skipped; holidays are not. Dates use America/Chicago for scheduling and remain date-only. A verified-sender reply cancels that reminder and creates a reply-review task. Replayed email IDs and repeated sent-state updates do not create duplicates.
+
+The reply trigger suggests at most five explicit YYYY-MM-DD dates on lines mentioning a deadline, due date, closing or expiration. Quoted history is skipped when common quote markers are encountered. Invalid or implausible dates are ignored. Suggestions require confirmation; ambiguous/natural-language dates remain in the reply-review task for a person to inspect. The original message excerpt remains visible. Email never changes contract terms, wire instructions, deposit status, title acceptance or closing status.
+
+Tasks are shown within the existing deal details, capped at 50 active tasks per response. Users can confirm a proposed date, mark a task done or dismiss it. The server uses the authenticated account, checks ownership and active deal stage, and rejects cross-account updates. All database tables are service-only with RLS. Terminal deal transitions cancel outstanding tasks.
+
+These are in-app reminders, not automatically sent follow-up emails, push notifications or calendar bookings. There is no paid provider operation or customer credit charge for scheduling. Existing sent requests are not backfilled in this migration. Closed deals do not resume tasks automatically on reopening. Qualification-only replies remain in the operations inbox. The full autonomous closing executor remains unfinished.
+
+Validation: production build; database transaction rolled back after testing request scheduling, weekday dates, repeated status updates, verified vs impostor sender, duplicate incoming IDs, quoted history exclusion, date confirmation, customer isolation and restricted table access. No outgoing messages or paid calls used. A real tagged-reply delivery from Resend through the webhook into an actual owned deal is still pending; the user's 200 connection check alone does not establish this end-to-end path.
