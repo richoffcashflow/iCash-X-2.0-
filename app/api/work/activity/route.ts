@@ -19,6 +19,9 @@ export async function GET(req:Request){
    db<unknown[]>(`icash_live_callbacks?account_id=eq.${accountId}&screening_id=in.(${ids})&select=id,screening_id,due_at,timezone,state&order=due_at&limit=24`)
   ]):[[],[],[],[],[]];
   const handoffs=await db<unknown[]>(`icash_handoffs?account_id=eq.${accountId}&state=neq.resolved&select=id,screening_id,party,reason,summary,next_action,state&order=created_at&limit=6`);
-  return NextResponse.json({properties:properties.slice(0,6),hasMore:properties.length>6,deals,contacts,controls,conversations,callbacks,handoffs,page},{headers});
+  const dealIds=(deals as {id:string}[]).map(d=>d.id).join(',');
+  const signing=dealIds?await db<unknown[]>(`icash_signing_envelopes?account_id=eq.${accountId}&deal_id=in.(${dealIds})&select=id,deal_id,kind,state,test_mode,updated_at`):[];
+  const signatureActions=await db<{id:string;kind:string;test_mode:boolean}[]>(`icash_signing_envelopes?account_id=eq.${accountId}&state=eq.customer_signature_needed&select=id,kind,test_mode&order=created_at&limit=6`);
+  return NextResponse.json({signatureActions,signing,signingConfigured:!!(process.env.DOCUSEAL_API_KEY||process.env.DOCUSEAL_TEST_API_KEY),properties:properties.slice(0,6),hasMore:properties.length>6,deals,contacts,controls,conversations,callbacks,handoffs,page},{headers});
  }catch{return NextResponse.json({error:'Could not load your work. Sign in and retry.'},{status:503,headers});}
 }

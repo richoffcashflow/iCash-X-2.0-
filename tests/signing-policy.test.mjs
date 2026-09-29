@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import {signingTermsHash,verifiedSigningStatus,signingReadiness,signingFields} from '../lib/signing-policy.ts';
+import {dealTermsSchema} from '../lib/deal-documents.ts';
+const terms=dealTermsSchema.parse({seller:'Seller One',buyer:'Customer One',address:'Fixture',legalDescription:'Lot 1',state:'TX',priceCents:100000,priceSource:'seller_reported'});
+assert.equal(signingFields(terms).priceCents,'1000.00');
+assert.notEqual(signingTermsHash(terms),signingTermsHash({...terms,priceCents:100001}));
+assert.throws(()=>signingReadiness('purchase',{...terms,legalDescription:''},[{name:'Seller One',email:'seller@example.invalid'}],'Customer One','draft'));
+const e={providerId:'provider',id:'envelope',termsHash:'hash',testMode:false,recipients:[{id:'1',email:'seller@example.invalid'},{id:'2',email:'customer@example.invalid'}]};
+const d={id:'provider',test_mode:false,status:'Pending',apply_signing_order:true,metadata:{icash_envelope:'envelope',terms_hash:'hash'},recipients:[{id:'1',email:'seller@example.invalid',status:'signed',signing_order:1},{id:'2',email:'customer@example.invalid',status:'sent',signing_order:2}]};
+assert.equal(verifiedSigningStatus(d,e),'customer_signature_needed');
+assert.equal(verifiedSigningStatus({...d,status:'Completed',recipients:d.recipients.map(r=>({...r,status:'signed'}))},e),'completed');
+assert.equal(verifiedSigningStatus({...d,status:'Manually completed'},e),'needs_review');
+assert.equal(verifiedSigningStatus({...d,test_mode:true,status:'Completed',recipients:d.recipients.map(r=>({...r,status:'signed'}))},{...e,testMode:true}),'test_completed');
+assert.throws(()=>verifiedSigningStatus({...d,test_mode:true},e));
+assert.throws(()=>verifiedSigningStatus({...d,metadata:{icash_envelope:'wrong',terms_hash:'hash'}},e));
+assert.throws(()=>verifiedSigningStatus({...d,recipients:[{...d.recipients[0],status:'sent'},{...d.recipients[1],status:'signed'}]},e));
+assert.throws(()=>verifiedSigningStatus({...d,recipients:d.recipients.slice(1)},e));
+console.log('Signing order, test isolation, verified parties, document binding and manual-completion rejection passed.');
+
+const {normalizeDocuseal}=await import('../lib/docuseal-policy.ts');
+const env={provider_id:'100',id:'envelope',test_mode:false,terms_hash:'hash',recipients:e.recipients};
+const submission={id:100,submitters_order:'preserved',completed_at:null,submitters:[{id:1,submission_id:100,email:e.recipients[0].email,external_id:'envelope:1',status:'completed',completed_at:'2026-09-29T00:00:00Z',metadata:{terms_hash:'hash'}},{id:2,submission_id:100,email:e.recipients[1].email,external_id:'envelope:2',status:'awaiting',completed_at:null,metadata:{terms_hash:'hash'}}]};
+assert.equal(verifiedSigningStatus(normalizeDocuseal(submission,env),{...e,providerId:'100'}),'customer_signature_needed');
+assert.throws(()=>normalizeDocuseal({...submission,submitters_order:'random'},env));
+assert.throws(()=>normalizeDocuseal({...submission,submitters:[{...submission.submitters[0],metadata:{terms_hash:'changed'}},submission.submitters[1]]},env));
+console.log('DocuSeal submission and signer normalization checks passed.');
