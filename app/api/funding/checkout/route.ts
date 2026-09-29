@@ -28,7 +28,7 @@ export async function POST(req:Request){
  const accountId=accounts[0]?.id??null;const hash=guestHash(token);
  const stripe=fundingStripe();
  const [pack]=await db<{code:string;price_cents:number;credit_cents:number}[]>(`icash_credit_packs?code=eq.${packCode}${mode==="live"?"&enabled=eq.true":""}&select=code,price_cents,credit_cents`);
- if(!pack||pack.price_cents<2000)throw new Error("No enabled pack");
+ if(!pack||pack.price_cents<1000)throw new Error("No enabled pack");
  const budgetPrice=pack.price_cents*runDays,fee=processingFeeCents(budgetPrice),totalPrice=budgetPrice+fee,totalCredits=pack.credit_cents*runDays;
  if(!Number.isSafeInteger(totalPrice)||!Number.isSafeInteger(totalCredits)||choice.totalCents!==totalPrice)return NextResponse.json({error:"Budget changed. Refresh and confirm your total."},{status:400});
  if(runDays>maximumFundingDays(pack.price_cents))return NextResponse.json({error:"Choose fewer days for this budget."},{status:400});

@@ -23,13 +23,13 @@ export default function Home() {
   async function signOut(){const r=await fetch("/api/auth/logout",{method:"POST"});if(r.ok){setAccount({signedIn:false});setFundingOpen(false);}else setAccountError(true);}
   useEffect(()=>{void refreshAccount();},[]);
   const [started, setStarted] = useState(false);
-  const [fundingCode,setFundingCode]=useState("start");
+  const [fundingCode,setFundingCode]=useState("budget_ten");
   const [fundingOpen, setFundingOpen] = useState(false);
   useEffect(()=>{if(readDemoProgress())setStarted(true);if(new URLSearchParams(window.location.search).has("payment"))setFundingOpen(true);},[]);
   function start() { setStarted(true); }
   function toggleSignIn(){setSignInOpen(value=>!value);setFundingOpen(false);}
   function closeSignIn(){setSignInOpen(false);window.requestAnimationFrame(()=>document.getElementById("balance-sign-in")?.focus());}
-  function openFunding(code="start") { setFundingCode(code);setFundingOpen(true); window.requestAnimationFrame(()=>document.getElementById("inline-funding")?.scrollIntoView({behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",block:"center"})); }
+  function openFunding(code="budget_ten") { setFundingCode(code);setFundingOpen(true); window.requestAnimationFrame(()=>document.getElementById("inline-funding")?.scrollIntoView({behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",block:"center"})); }
 
   return <div className="console-shell">
     <header className="console-header"><div><Image src="/icash-x-logo.png" alt="iCash X" width={111} height={62} priority /><b className="brand-version">2.0</b><span>{account?.signedIn?(account.mode==="test"?"TEST ACCOUNT":"YOUR ACCOUNT"):"FREE TEST"}</span></div>{account?.signedIn?<button className="header-access" onClick={()=>void signOut()}>Sign out</button>:<button id="balance-sign-in" className="header-access" aria-expanded={signInOpen} aria-controls="inline-sign-in" onClick={toggleSignIn}>Sign in</button>}</header>
@@ -41,7 +41,7 @@ export default function Home() {
         <div className="balance-top"><div><strong>{account?.signedIn?`$${((account.balanceCents??0)/100).toFixed(2)}`:"Free"}<span>{account?.signedIn?(account.mode==="test"?"test balance":"available"):"available"}</span></strong></div><button className={`fund-button ${account?.signedIn?"":"balance-add"}`} aria-expanded={fundingOpen} aria-controls="inline-funding" onClick={()=>{setFundingOpen(value=>!value);setSignInOpen(false);}}>Fund my AI bot <Plus size={18}/></button></div>
 
         {signInOpen&&!account?.signedIn&&<div className="inline-sign-in" id="inline-sign-in" role="region" aria-labelledby="sign-in-title" onKeyDown={e=>{if(e.key==="Escape")closeSignIn();}}><div className="sign-in-heading"><h2 id="sign-in-title">Welcome back</h2><button aria-label="Close sign-in" onClick={closeSignIn}><X size={19}/></button></div><AccountAccess ready={account?.signInReady===true} onSignedIn={()=>void refreshAccount()}/></div>}
-        {fundingOpen && <div className="inline-funding" id="inline-funding"><div><strong>Fund your bot</strong><span>No monthly subscription</span></div><p>Choose your budget and estimated days. Your bot stops when your balance runs out.</p><FundingCheckout key={fundingCode} initialCode={fundingCode} onSignedIn={()=>{setFundingOpen(false);void refreshAccount();}}/><small>Real payments are not open yet. Test payments do not pay for real work.</small></div>}
+        {fundingOpen && <div className="inline-funding" id="inline-funding"><div><strong>Fund your bot</strong><span>No monthly subscription</span></div><p>Choose your daily budget. Stop your bot anytime.</p><FundingCheckout key={fundingCode} initialCode={fundingCode} onSignedIn={()=>{setFundingOpen(false);void refreshAccount();}}/><small>Real payments are not open yet. Test payments do not pay for real work.</small></div>}
       </section>
       <section className="operation-panel" aria-label="Your AI real estate bot">
         {account?.signedIn&&<div className="operation-top"><span className="bot-icon">X</span><div><h2 id="operation-title">{account?.signedIn?account.assistantName:"Your bot"}</h2><span>{account?.signedIn?"Your balance is saved":started ? "Test activity · fictional people and properties" : "See how your bot works"}</span></div><span className="mode-badge">{account?.signedIn?(account.paused?"PAUSED":"SETUP PENDING"):"TEST"}</span></div>}

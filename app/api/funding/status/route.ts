@@ -7,8 +7,8 @@ export const dynamic="force-dynamic";
 export async function GET(){
  const headers={"Cache-Control":"private, no-store"};const mode=fundingMode();
  try{
- const packs=await db<{code:string;price_cents:number;credit_cents:number;enabled:boolean}[]>("icash_credit_packs?price_cents=gte.2000&select=code,price_cents,credit_cents,enabled&order=price_cents&limit=250");
- const pack=packs.find(p=>p.code==="start");
+ const packs=await db<{code:string;price_cents:number;credit_cents:number;enabled:boolean}[]>("icash_credit_packs?price_cents=gte.1000&select=code,price_cents,credit_cents,enabled&order=price_cents&limit=250");
+ const pack=packs.find(p=>p.code==="budget_ten");
  const [planning]=await db("icash_planning_estimates?id=eq.1&select=lookup_cents,voice_minute_cents,lookup_share_percent,call_minutes_low,call_minutes_high") as import("@/lib/funding-forecast").PlanningPrices[];
  const token=(await cookies()).get("icash_funding_guest")?.value;
  let orders:FundingOrder[]=[];
