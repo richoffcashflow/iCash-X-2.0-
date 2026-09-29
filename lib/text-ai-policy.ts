@@ -20,7 +20,7 @@ export async function analyzeText(input:{model:string;context:unknown;messages:{
    {role:'user',content:JSON.stringify({context:input.context,messages})}
   ],response_format:{type:'json_schema',json_schema:{name:'seller_sms_analysis',strict:true,schema:{type:'object',additionalProperties:false,properties:{action:{type:'string',enum:textActions},reply:{type:'string'},summary:{type:'string'},facts:{type:'array',items:{type:'object',additionalProperties:false,properties:{kind:{type:'string',enum:['condition','price','timing','owners','occupancy','callback']},quote:{type:'string'}},required:['kind','quote']}}},required:['action','reply','summary','facts']}}}})
  });
- if(!response.ok)throw Error('TEXT_AI_PROVIDER_FAILED');
+ if(!response.ok)throw Error(`TEXT_AI_PROVIDER_HTTP_${response.status}`);
  const result=await response.json();if(result.choices?.[0]?.finish_reason!=='stop')throw Error('TEXT_AI_INCOMPLETE');
  return {analysis:validateTextAnalysis(JSON.parse(result.choices[0].message.content),messages.filter(m=>m.direction==='incoming').map(m=>m.body)),usage:result.usage??null,providerId:typeof result.id==='string'?result.id:null};
 }
