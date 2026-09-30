@@ -1,7 +1,7 @@
 'use client';
 import {useCallback,useEffect,useState,useRef,type CSSProperties} from 'react';
 import Image from 'next/image';
-import {productRiskNotice} from '@/lib/product-disclosures';
+import {SetupWorkspaceBackdrop} from '@/components/setup-workspace-backdrop';
 import {workspaceStatus} from '@/lib/workspace-status';
 import {DealExplainer} from '@/components/deal-explainer';
 import {Plus,X} from 'lucide-react';
@@ -28,6 +28,7 @@ export default function Home(){
  const status=workspaceStatus(account??{});
  const guest=!account?.signedIn;const profile=account?.signedIn?account.botSetup?.profile:draftBrand;const theme=setupThemes[profile?.theme??'ink'];
  return <div className={`console-shell ${guest?'setup-shell':'personalized-workspace'}`} style={{'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties}>
+  {guest&&<SetupWorkspaceBackdrop/>}
   <header className="console-header"><div>{profile?.displayName?<BotBrand profile={profile} compact/>:<><Image src="/icash-x-logo.png" alt="iCash X" width={111} height={62} priority/><b className="brand-version">2.0</b></>}</div>{account?.signedIn?<button className="header-access" onClick={()=>void signOut()}>Sign out</button>:<button id="balance-sign-in" className="header-access" aria-expanded={signInOpen} aria-controls="inline-sign-in" onClick={()=>setSignInOpen(v=>!v)}>Sign in</button>}</header>
   <main className="console-main">
    {accountError&&<p role="alert">Could not load your account. <button onClick={()=>void refreshAccount()}>Retry</button></p>}
@@ -40,7 +41,7 @@ export default function Home(){
     <section className="operation-panel" aria-label="Your AI real estate bot"><div className="operation-top"><span className="bot-icon">X</span><div><h2>{account!.assistantName}</h2><span>{profile?.displayName?`Working for ${profile.displayName}`:'Your balance is saved'}</span></div><span className="mode-badge">{status.label}</span></div><div className="operation-empty"><h3>{status.title}</h3><p>{status.detail}</p>{!account!.identity&&<button className="fund-button" onClick={()=>{const details=document.getElementById('account-details') as HTMLDetailsElement|null;if(details){details.open=true;details.scrollIntoView({behavior:'smooth',block:'start'});}}}>Add my contract name</button>}<button className="demo-button" disabled={controlBusy} onClick={()=>void toggleBot()}>{controlBusy?'Saving…':account!.paused?'Resume bot':'Stop bot & daily billing'}</button><BudgetSummary onFund={openFunding}/><details className="setup-details"><summary>How a deal works</summary><DealExplainer/></details><LiveWorkspace principal={account!.identity?.principal??''}/><details id="account-details"><summary>Account details</summary><p>{account!.email}</p>{account!.phone&&<p>{account!.phone}</p>}<CustomerIdentity identity={account!.identity??null} onSaved={()=>void refreshAccount()}/><p>Manage daily billing from your budget. Stop bot cancels future daily renewals.</p></details></div></section>
    </>}
   </main>
-  <footer className="product-disclosure"><p>{guest?'Free setup. Paid usage starts outreach. No deals or profit guaranteed. Your budget may be spent without a closing. Real estate transactions can lose money.':productRiskNotice}</p><a href="/costs-and-disclosures">Costs, risks & disclosures</a></footer>
+  <footer className="product-disclosure"><p>Paid usage. Results aren’t guaranteed. Real estate involves risk.</p><a href="/costs-and-disclosures">Costs, risks & disclosures</a></footer>
 
  </div>;
 }
