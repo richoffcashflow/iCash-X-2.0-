@@ -15,3 +15,5 @@
 .console-shell{padding-bottom:env(safe-area-inset-bottom,0px)}
 @media(max-width:520px){.deal-fields{grid-template-columns:minmax(0,1fr)}.workspace-primary-actions{gap:12px;margin:18px 0}.operation-empty{padding:20px 16px}.operation-top{gap:10px}.balance-top>.fund-button{min-height:48px}.contract-review-guide{padding:16px}.contract-review-facts>div{grid-template-columns:minmax(90px,1fr) minmax(0,1.4fr)}}
 @media(max-width:370px){.balance-top{display:grid;grid-template-columns:minmax(0,1fr)}.balance-top>.fund-button{width:100%}.mode-badge{font-size:8px;padding:6px;max-width:40%}}
+
+.funding-terms-link{display:inline-flex;align-items:center;min-height:44px;font-size:12px;color:#666;text-decoration:underline;text-underline-offset:3px}

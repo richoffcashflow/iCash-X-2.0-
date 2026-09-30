@@ -19,7 +19,7 @@ export async function POST(req:Request){
  if(!acceptedFundingTerms(consent))return NextResponse.json({error:"Accept the current purchase terms to continue."},{status:400});
  const choice=consent as {packCode?:unknown;days?:unknown;totalCents?:unknown};
  const packCode=typeof choice.packCode==="string"&&/^[a-z0-9_]{1,30}$/.test(choice.packCode)?choice.packCode:"start";
- if(privateCheck&&(choice.packCode!=='budget_ten'||choice.days!==1||choice.totalCents!==1000))return NextResponse.json({error:'Private payment checks are limited to $10, once per checkout, with no renewal.'},{status:400});
+ if(privateCheck&&(choice.packCode!=='private_check_three'||choice.days!==1||choice.totalCents!==300))return NextResponse.json({error:'Private payment checks are limited to $3, once per checkout, with no renewal.'},{status:400});
  const runDays=typeof choice.days==="number"?choice.days:1;
  if(!Number.isInteger(runDays)||runDays<1||runDays>7)return NextResponse.json({error:"Choose 1–7 days."},{status:400});
  const mode=fundingMode()!;const origin=req.headers.get("origin")!;
@@ -32,10 +32,10 @@ export async function POST(req:Request){
  const accountId=accounts[0]?.id??null;const hash=guestHash(token);
  const stripe=fundingStripe();
  const [pack]=await db<{code:string;price_cents:number;credit_cents:number}[]>(`icash_credit_packs?code=eq.${packCode}${mode==="live"&&!privateCheck?"&enabled=eq.true":""}&select=code,price_cents,credit_cents`);
- if(!pack||pack.price_cents<1000)throw new Error("No enabled pack");
+ if(!pack||(privateCheck?(pack.price_cents!==300||pack.credit_cents!==300):pack.price_cents<1000))throw new Error("No enabled pack");
  const budgetPrice=pack.price_cents*runDays,fee=processingFeeCents(budgetPrice),totalPrice=budgetPrice+fee,totalCredits=pack.credit_cents*runDays;
  if(!Number.isSafeInteger(totalPrice)||!Number.isSafeInteger(totalCredits)||choice.totalCents!==totalPrice)return NextResponse.json({error:"Budget changed. Refresh and confirm your total."},{status:400});
- if(runDays>maximumFundingDays(pack.price_cents))return NextResponse.json({error:"Choose fewer days for this budget."},{status:400});
+ if(!privateCheck&&runDays>maximumFundingDays(pack.price_cents))return NextResponse.json({error:"Choose fewer days for this budget."},{status:400});
  const old=await db<FundingOrder[]>(`icash_funding_orders?guest_hash=eq.${hash}&mode=eq.${mode}&state=eq.pending&order=created_at.desc&limit=1`);
  let order:FundingOrder|undefined=old[0];
  if(order && order.account_id!==accountId)return NextResponse.json({error:"Finish or cancel the checkout already open in this browser before switching accounts."},{status:409});
