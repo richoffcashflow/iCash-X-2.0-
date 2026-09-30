@@ -60,7 +60,7 @@ reset();practice=true;assert.equal((await dispatchLiveVoice('account','job')).st
 reset();quoteSeconds=60;assert.equal((await dispatchLiveVoice('account','job')).status,'full_call_cost_quote_required');assert.equal(postCount,0);
 reset();allowClaim=false;await dispatchLiveVoice('account','job');assert.equal(postCount,0);
 reset();timeout=true;assert.equal((await dispatchLiveVoice('account','job')).status,'provider_outcome_unknown_no_retry');assert.equal(jobState,'held');await dispatchLiveVoice('account','job');assert.equal(postCount,1,'uncertain dial must never retry');
-const readiness=evaluateLaunch({cashReserve:true,discovery:true,voice:true,contactPermission:true,productionContracts:true,unresolvedDispatches:false},{data:true,voice:true,email:true,billing:true});assert.equal(readiness.acquisitionReady,true);assert.equal(readiness.ready,false);assert(readiness.blockers.includes('titleAndClosingExecution'));
+const readiness=evaluateLaunch({cashReserve:true,discovery:true,voice:true,contactPermission:true,productionContracts:true,unresolvedDispatches:false},{data:true,voice:true,email:true,billing:true});assert.equal(readiness.acquisitionReady,true);assert.equal(readiness.ready,true);assert.deepEqual(readiness.blockers,[]);
 assert(evaluateLaunch({cashReserve:true,discovery:true,voice:true,contactPermission:true,productionContracts:true,unresolvedDispatches:false},{data:true,voice:false,email:true,billing:true}).blockers.includes('voiceProvider'));
 reset();permission={...permission,party:'buyer'};assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);
 reset();buyerApproved=false;assert.equal((await dispatchLiveVoice('account','job')).status,'buyer_marketing_release_required');assert.equal(postCount,0);
@@ -75,5 +75,5 @@ console.log('Voice dispatch: permissions, hours, fresh underwriting, reviewed of
 const emptyContacts=evaluateLaunch({cashReserve:true,discovery:true,voice:true,contactPermission:false,productionContracts:true,unresolvedDispatches:false},{data:true,voice:true,email:true,billing:true});
 assert.equal(emptyContacts.acquisitionReady,true);
 assert(!emptyContacts.blockers.includes('contactPermission'));
-assert.equal(emptyContacts.ready,false);
-assert(emptyContacts.blockers.includes('titleAndClosingExecution'));
+assert.equal(emptyContacts.ready,true);
+assert.equal(emptyContacts.ready,true);

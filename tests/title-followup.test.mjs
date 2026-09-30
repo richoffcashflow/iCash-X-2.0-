@@ -1,13 +1,14 @@
+import {titleConfirmationInstructions} from '../lib/title-confirmation-instructions.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 let state='issued',allowed=true,sends=0,timeout=false;const records=[];
 const db=async(path,method,body)=>{records.push({path,method,body});if(path==='rpc/icash_claim_title_followup'){if(!allowed||state!=='issued')return null;state='dispatching';return {requestId:'request',recipient:'closer@example.invalid',address:'Fixture'};}if(method==='PATCH'){if(path.includes('email_state=eq.issued')&&state!=='issued')return [];if(path.includes('email_state=eq.dispatching')&&state!=='dispatching')return [];if(body.email_state)state=body.email_state;}return [];};
-globalThis.__followup={db,titleEmailAddress:v=>v??''};
+globalThis.__followup={titleConfirmationInstructions,db,titleEmailAddress:v=>v??''};
 const oldFetch=globalThis.fetch;globalThis.fetch=async(url,opts)=>{sends++;assert.equal(JSON.parse(opts.body).to[0],'closer@example.invalid');assert.equal(opts.headers['Idempotency-Key'],'title-followup-task');if(timeout)throw Error('timeout');return {ok:true,json:async()=>({id:'fixture-email'})};};
 process.env.RESEND_API_KEY='fixture';process.env.ICASH_TITLE_FROM_EMAIL='office@example.invalid';process.env.ICASH_TITLE_REPLY_EMAIL='reply@example.invalid';
 const source=ts.transpileModule(readFileSync('lib/title-followup-service.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-const {dispatchTitleFollowup}=await import('data:text/javascript;base64,'+Buffer.from('const {db,titleEmailAddress}=globalThis.__followup;\n'+source).toString('base64'));
+const {dispatchTitleFollowup}=await import('data:text/javascript;base64,'+Buffer.from('const {titleConfirmationInstructions,db,titleEmailAddress}=globalThis.__followup;\n'+source).toString('base64'));
 allowed=false;await dispatchTitleFollowup('account','task');assert.equal(sends,0);
 allowed=true;state='issued';assert.equal((await dispatchTitleFollowup('account','task')).status,'title_followup_sent');assert.equal(sends,1);
 await dispatchTitleFollowup('account','task');assert.equal(sends,1);
