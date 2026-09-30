@@ -70,3 +70,10 @@ reset();paced=false;buyerApproved=true;assert.equal((await dispatchLiveVoice('ac
 reset();callbackId='callback';permission={...permission,timezone:'Pacific/Honolulu'};assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');assert.equal(jobState,'held');assert(!records.some(r=>r.method==='PATCH'&&r.body?.due_at),'Do not silently move an agreed callback');
 delete process.env.CONTIGUITY_FROM;delete globalThis.__voiceTest;delete process.env.ELEVENLABS_API_KEY;Date.now=realNow;
 console.log('Voice dispatch: permissions, hours, fresh underwriting, reviewed offer ceilings, full-duration costs, Stop, practice-agent isolation, uncertain-call no-retry and honest launch readiness passed. No provider traffic.');
+
+// Empty permission records do not block the platform; dispatch still checks each contact.
+const emptyContacts=evaluateLaunch({cashReserve:true,discovery:true,voice:true,contactPermission:false,productionContracts:true,unresolvedDispatches:false},{data:true,voice:true,email:true,billing:true});
+assert.equal(emptyContacts.acquisitionReady,true);
+assert(!emptyContacts.blockers.includes('contactPermission'));
+assert.equal(emptyContacts.ready,false);
+assert(emptyContacts.blockers.includes('allProviderCostSettlement'));
