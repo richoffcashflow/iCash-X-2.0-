@@ -1,9 +1,10 @@
 'use client';
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
 export type SigningEnvelope={id:string;deal_id:string;kind:'purchase'|'assignment';state:string;test_mode:boolean};
 const labels:Record<string,string>={creating:'Preparing signing request',awaiting_counterparty:'Waiting for the other party to sign',customer_signature_needed:'Action required: review and sign',completed:'All signatures verified',test_completed:'Test signing completed',needs_review:'Signing request needs review'};
-export function SigningControls({dealId,save,envelopes,configured,stage}:{dealId:string;save:()=>Promise<string>;envelopes:SigningEnvelope[];configured:boolean;stage:string}){
+export function SigningControls({dealId,save,envelopes,configured,stage,reviewVersion}:{dealId:string;save:()=>Promise<string>;envelopes:SigningEnvelope[];configured:boolean;stage:string;reviewVersion:string}){
  const [signers,setSigners]=useState([{name:'',email:''}]),[confirmed,setConfirmed]=useState(false),[autoSign,setAutoSign]=useState(false),[signature,setSignature]=useState(''),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
+ useEffect(()=>{setConfirmed(false);setAutoSign(false);setSignature('');},[reviewVersion]);
  const kind=stage==='draft'?'purchase':'assignment';
  async function action(body:unknown){const r=await fetch('/api/work/signing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.error);return d;}
  async function run(fn:()=>Promise<void>){setBusy(true);setMessage('');try{await fn();}catch(e){setMessage(e instanceof Error?e.message:'Please retry.');}finally{setBusy(false);}}
@@ -13,5 +14,5 @@ export function SigningControls({dealId,save,envelopes,configured,stage}:{dealId
 }
 export function SigningAttention({envelope:e}:{envelope:{id:string;kind:string;test_mode:boolean}}){
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
- return <section className="needs-you"><strong>✍️ Action required: review & sign</strong><p>{e.kind==='purchase'?'The seller signatures are complete. Your signature is next.':'The cash buyer has signed. Your signature is next.'}{e.test_mode?' This is a test document.':''}</p><button disabled={busy} onClick={async()=>{setBusy(true);try{const r=await fetch('/api/work/signing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'link',id:e.id})});const d=await r.json();if(!r.ok)throw new Error(d.error);window.location.assign(d.url);}catch(err){setError(err instanceof Error?err.message:'Please retry.');setBusy(false);}}}>Review & sign</button>{error&&<p role="alert">{error}</p>}</section>;
+ return <section className="needs-you"><strong>✍️ Action required: review & sign</strong><p>{e.kind==='purchase'?'The seller signatures are complete. Your signature is next. Read the full agreement before accepting.':'The cash buyer has signed. Your signature is next. Read the full agreement before accepting.'}{e.test_mode?' This is a test document.':''}</p><details><summary>What happens when I sign?</summary><p>{e.kind==='purchase'?'You accept the purchase terms, including your deadlines and earnest-money obligations.':'You accept the assignment terms, including the fee, buyer deposit and closing-cost allocation.'} If anything differs from what you agreed, do not sign. Open the property’s contracts to review or handle it yourself.</p></details><button disabled={busy} onClick={async()=>{setBusy(true);try{const r=await fetch('/api/work/signing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'link',id:e.id})});const d=await r.json();if(!r.ok)throw new Error(d.error);window.location.assign(d.url);}catch(err){setError(err instanceof Error?err.message:'Please retry.');setBusy(false);}}}>Review & sign</button>{error&&<p role="alert">{error}</p>}</section>;
 }
