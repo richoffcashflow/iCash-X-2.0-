@@ -17,3 +17,28 @@
 @media(max-width:370px){.balance-top{display:grid;grid-template-columns:minmax(0,1fr)}.balance-top>.fund-button{width:100%}.mode-badge{font-size:8px;padding:6px;max-width:40%}}
 
 .funding-terms-link{display:inline-flex;align-items:center;min-height:44px;font-size:12px;color:#666;text-decoration:underline;text-underline-offset:3px}
+
+/* Communication controls use explicit colors; parent paragraph rules must not dim bubbles. */
+.deal-communications{margin:22px 0;padding:18px;border:1px solid #e4e4e7;border-radius:20px;background:#fff;color:#18181b}
+.message-channels{display:flex;gap:6px;padding:4px;background:#f4f4f5;border-radius:12px;margin-bottom:18px}
+.message-channels button{flex:1;min-height:44px;border:0;border-radius:9px;background:transparent;color:#52525b;font-size:15px;font-weight:600}
+.message-channels button[aria-pressed=true]{background:#fff;color:#18181b;box-shadow:0 1px 4px #00000014}
+.conversation-recipient{font-size:13px!important;color:#52525b!important;margin:0 0 14px!important}
+.message-history{max-height:440px;overflow-y:auto;overscroll-behavior:contain;padding:4px 0 12px;scrollbar-width:thin}
+.message-bubble{margin:10px 0;padding:14px 16px;border-radius:18px;max-width:88%;width:fit-content;overflow-wrap:anywhere;box-sizing:border-box}
+.message-bubble.message-outgoing{margin-left:auto;background:#18181b;color:#fff;border-bottom-right-radius:5px}
+.message-bubble.message-incoming{background:#f4f4f5;color:#18181b;border-bottom-left-radius:5px}
+.console-main .message-bubble .message-body{color:inherit!important;font-size:16px!important;line-height:1.6!important;margin:0!important;text-align:left}
+.console-main .message-bubble small{display:block;margin-top:9px;font-size:11px;line-height:1.5;color:inherit!important;opacity:.8}
+.message-composer{display:grid;gap:12px;margin-top:18px;padding-top:18px;border-top:1px solid #e4e4e7;clear:both}
+.message-composer label{display:grid;gap:8px;font-size:14px;font-weight:600;color:#27272a}
+.message-composer textarea,.message-composer input,.message-composer select{width:100%;min-width:0;box-sizing:border-box;background:#fff;color:#18181b;border:1px solid #d4d4d8;border-radius:12px;padding:12px 14px;font-family:inherit;font-size:16px;font-weight:400;line-height:1.5}
+.message-composer textarea{min-height:104px;resize:vertical;font-size:16px}
+.message-composer textarea::placeholder{color:#71717a;opacity:1}
+.console-main .message-composer button,.console-main .takeover-button{min-height:48px;padding:12px 18px;border-radius:12px;background:#18181b;color:#fff;border:1px solid #18181b;font-weight:600;font-size:15px}
+.console-main .takeover-button{width:100%;margin:18px 0 4px;background:#fff;color:#18181b;border:1.5px solid #71717a}
+.console-main .message-composer button:disabled,.console-main .takeover-button:disabled{background:#e4e4e7;color:#52525b;border-color:#d4d4d8;cursor:not-allowed}
+.message-composer :focus-visible,.message-channels :focus-visible,.takeover-button:focus-visible{outline:3px solid #2563eb;outline-offset:3px}
+.message-ai-note{margin:18px 0 0;padding:12px 14px;border-radius:12px;background:#fafafa;border:1px solid #e4e4e7}.message-ai-note summary{min-height:44px;align-content:center;font-size:14px}.message-ai-note button{min-height:44px;padding:10px 14px;background:#fff;color:#18181b;border:1px solid #a1a1aa;border-radius:10px}
+.workspace-attention{margin:20px 0 28px;padding:18px;border:1px solid #e4e4e7;border-radius:16px;background:#fafafa}.attention-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}.attention-heading h4{margin:0;font-size:16px}.attention-heading span{font-size:12px;color:#71717a}
+@media(max-width:520px){.deal-communications{padding:14px;margin:18px 0}.message-bubble{max-width:94%;padding:12px 14px}.message-history{max-height:360px}.workspace-attention{padding:16px}}

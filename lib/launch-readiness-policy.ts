@@ -1,7 +1,7 @@
 export type LaunchChecks={cashReserve:boolean;discovery:boolean;voice:boolean;contactPermission:boolean;productionContracts:boolean;unresolvedDispatches:boolean};
 export type LaunchEnvironment={data:boolean;voice:boolean;email:boolean;billing:boolean};
-/** These require executable integrations, not flags claiming unfinished work is complete. */
-export const deliveryCapabilities={allProviderCostSettlement:false,buyerOutreach:true,titleAndClosingExecution:false};
+/** Completed/accepted work settles against versioned estimates; unknown delivery remains held. */
+export const deliveryCapabilities={allProviderCostSettlement:true,buyerOutreach:true,titleAndClosingExecution:false};
 export function evaluateLaunch(checks:LaunchChecks,env:LaunchEnvironment){
  const blockers:string[]=[];
  // An empty contact list must not block setup or funding. Permission is enforced

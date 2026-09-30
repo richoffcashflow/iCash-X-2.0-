@@ -1,3 +1,4 @@
+import {sendRequestedBuyerPackages} from './buyer-package-email';
 import {coordinateTitleOpening} from './title-service.ts';
 import {discoverTitlePlaces} from './title-search-service.ts';
 import {qualifyTitleCompanies} from './title-directory-service.ts';
@@ -37,5 +38,7 @@ export async function prepareFulfillment(accountId:string,jobId:string){
  // Document preparation is durable before attempting delivery; ambiguous sends stay held.
  let titleOpening:{status:string};try{titleOpening=await coordinateTitleOpening(accountId,job.deal_id);}catch{titleOpening={status:'title_request_held'};}
  await db(`icash_fulfillment_jobs?id=eq.${job.id}&account_id=eq.${accountId}&state=eq.complete`,'PATCH',{result:{...result,titleStatus:titleOpening.status}});
+ let buyerEmail:{status:string;accepted:number};try{buyerEmail=await sendRequestedBuyerPackages(accountId,job.deal_id);}catch{buyerEmail={status:'buyer_email_needs_review',accepted:0};}
+ await db(`icash_fulfillment_jobs?id=eq.${job.id}&account_id=eq.${accountId}&state=eq.complete`,'PATCH',{result:{...result,titleStatus:titleOpening.status,buyerEmail}});
  return {status:'fulfillment_prepared'};
 }

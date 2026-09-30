@@ -1,0 +1,26 @@
+begin;
+do $$
+declare u uuid:=gen_random_uuid();a uuid:=gen_random_uuid();rate uuid;costs jsonb;n bigint;k text:='estimate-test:'||gen_random_uuid();
+begin
+ insert into auth.users(id,email) values(u,'estimate-'||u||'@example.invalid');
+ insert into public.icash_accounts(id,owner_user_id,assistant_name,bot_paused,daily_limit_cents) values(a,u,'Fixture',false,10000);
+ insert into public.icash_wallets(account_id,balance_cents,reserved_cents,currency) values(a,10000,0,'USD');
+ select jsonb_object_agg(c,case when c='dealmachine' then 10000 else 0 end) into costs from unnest(array['dealmachine','elevenlabs','twilio','messaging','email','llm','vercel','railway','supabase','github','payments','title_and_signing','support_and_overhead','acquisition','refund_and_dispute_reserve','other']) c;
+ insert into public.icash_operation_rates(operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled) values('property_search',k,10,costs,'fixture:rollback-only',now()-interval '1 minute',now()+interval '1 hour',true) returning id into rate;
+ update public.icash_operating_budget set enabled=true,require_company_reserve=false where id=1;
+ perform public.icash_reserve_operation(a,k,rate,now()+interval '1 hour');
+ if public.icash_settle_estimated_operation(k) then raise exception 'Undispatched work charged';end if;
+ perform public.icash_claim_operation(k);
+ if public.icash_settle_estimated_operation(k) then raise exception 'Unconfirmed work charged';end if;
+ insert into public.icash_discovery_results(operation_key,account_id,result) values(k,a,'{}');
+ if not public.icash_settle_estimated_operation(k) then raise exception 'Completed work not settled';end if;
+ select balance_cents into n from public.icash_wallets where account_id=a;
+ if n<>9995 then raise exception 'Expected five cents, got %',n;end if;
+ perform public.icash_settle_estimated_operation(k);
+ if (select balance_cents from public.icash_wallets where account_id=a)<>n then raise exception 'Duplicate debit';end if;
+ if (select reserved_cents from public.icash_wallets where account_id=a)<>0 then raise exception 'Reservation leaked';end if;
+ if (select cost_basis from public.icash_operation_spend where operation_key=k)<>'estimated' then raise exception 'Estimate mislabeled';end if;
+ if (public.icash_provision_funded_account(a)->>'status')<>'funding_required' then raise exception 'Unfunded setup allowed';end if;
+end $$;
+rollback;
+select 'Passed: no charge before receipt, 5x estimate, one debit, release unused reserve, estimate label, unfunded provisioning blocked; fixtures rolled back' as result;

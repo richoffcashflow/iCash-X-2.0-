@@ -1,3 +1,4 @@
+import {sendRequestedBuyerPackages} from './buyer-package-email';
 import {propertyQuestionAllowed,type TextProperty} from './text-property-policy.ts';
 import {db} from '@/lib/stripe-test';
 import {analyzeText,safeTextReplies} from './text-ai-policy.ts';
@@ -16,6 +17,7 @@ export async function processTextAi(accountId:string,jobId:string){
   const {analysis,usage,providerId}=await analyzeText({...input,context:{qualification:input.context,property,preliminarySellerCeilingCents:property?.ceilingCents??null,offerAuthorized:false}},process.env.OPENAI_API_KEY);
   if(!propertyQuestionAllowed(analysis.action,property,input.messages))analysis.action='review';
   await db('rpc/icash_save_text_ai','POST',{p_account:accountId,p_job:jobId,p_analysis:analysis,p_reply:analysis.reply,p_provider:providerId,p_usage:usage});
+  if(job&&!analysis.humanRequested){const [thread]=await db<{deal_id:string;party:string}[]>(`icash_text_threads?id=eq.${job.thread_id}&account_id=eq.${accountId}&select=deal_id,party`);if(thread?.party==='buyer')try{await sendRequestedBuyerPackages(accountId,thread.deal_id);}catch{/* Buyer email status remains in the mailbox; never blindly retry a send. */}}
   if(analysis.humanRequested||analysis.callbackRequested)return {status:'text_ai_handoff'};
   const safe=safeTextReplies[analysis.action];
   if(safe){

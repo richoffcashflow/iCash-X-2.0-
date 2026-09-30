@@ -1,0 +1,37 @@
+begin;
+do $$
+declare u uuid:=gen_random_uuid();a uuid:=gen_random_uuid();s uuid;d uuid;t uuid;m uuid;key text:='reply-fixture:'||gen_random_uuid();ev jsonb;
+begin
+ insert into auth.users(id,email) values(u,key||'@example.invalid');
+ insert into public.icash_accounts(id,owner_user_id,assistant_name,bot_paused,daily_limit_cents) values(a,u,'Fixture',true,1000);
+ insert into public.icash_screening_jobs(account_id,event_key,snapshot,state,result) values(a,key,'{"propertyId":"prop_123"}','complete','{"property":{"propertyId":"prop_123","address":"Fixture"}}') returning id into s;
+ insert into public.icash_deal_files(account_id,screening_id,terms,stage) values(a,s,'{"address":"Fixture"}','under_contract') returning id into d;
+ insert into public.icash_text_threads(account_id,deal_id,sender,recipient,paused,party) values(a,d,'+14243948384','+12125550987',false,'seller') returning id into t;
+ ev:=jsonb_build_object('id',key||':one','type','text.incoming.sms','timestamp',extract(epoch from now()),'data',jsonb_build_object('from','+12125550987','to','+14243948384','body','Call tomorrow at 2 PM Central','message_id',key||':provider'));
+ perform public.icash_ingest_text_event(ev,false);
+ if not exists(select 1 from public.icash_text_attention where thread_id=t and kind='callback' and quote='Call tomorrow at 2 PM Central') then raise exception 'Callback evidence missing';end if;
+ if exists(select 1 from public.icash_text_ai_jobs where thread_id=t and state in ('pending','issued','analyzing')) then raise exception 'Unnecessary model spend';end if;
+ if not exists(select 1 from public.icash_property_controls where account_id=a and manual) then raise exception 'Property not paused';end if;
+ perform public.icash_ingest_text_event(jsonb_set(ev,'{id}',to_jsonb(key||':duplicate-event')),false);
+ if (select count(*) from public.icash_text_messages where thread_id=t)<>1 then raise exception 'Provider message replay duplicated';end if;
+ if not public.icash_manual_handoff_reply(a,t) then raise exception 'Human callback reply blocked';end if;
+ if public.icash_manual_handoff_reply(gen_random_uuid(),t) then raise exception 'Cross-tenant access';end if;
+ insert into public.icash_text_suppressions(phone,reason) values('+12125550987','fixture');
+ if public.icash_manual_handoff_reply(a,t) then raise exception 'Opt-out bypass';end if;
+ delete from public.icash_text_suppressions where phone='+12125550987';
+ update public.icash_text_threads set paused=false,party='buyer' where id=t;
+ insert into public.icash_text_messages(thread_id,account_id,direction,body,state) values(t,a,'incoming','I am backing out of the purchase','received');
+ if not exists(select 1 from public.icash_text_attention where thread_id=t and kind='withdrawal' and party='buyer') then raise exception 'Buyer withdrawal missing';end if;
+ if (select stage from public.icash_deal_files where id=d)<>'under_contract' then raise exception 'Contract silently changed';end if;
+ update public.icash_text_threads set paused=false,party='seller' where id=t;
+ insert into public.icash_text_messages(thread_id,account_id,direction,body,state) values(t,a,'incoming','Not interested, thanks','received');
+ if not (select paused from public.icash_text_threads where id=t) then raise exception 'Decline did not pause';end if;
+ update public.icash_text_messages set created_at=now()+interval '1 minute' where thread_id=t and body='Not interested, thanks';
+ if public.icash_manual_handoff_reply(a,t) then raise exception 'Decline bypass';end if;
+ if public.icash_text_signal('Needs a roof. Asking $150,000.','seller') is not null then raise exception 'Normal qualification held';end if;
+ if public.icash_text_signal('Do not call me','seller')='callback' then raise exception 'Negative callback requested';end if;
+ if public.icash_text_signal('I want a human','seller')<>'human' then raise exception 'Human request missed';end if;
+ if exists(select 1 from public.icash_operation_spend where account_id=a) then raise exception 'Signal spent credits';end if;
+ if has_table_privilege('authenticated','public.icash_text_attention','SELECT') or has_function_privilege('anon','public.icash_capture_text_signal()','EXECUTE') then raise exception 'Private attention exposed';end if;
+end $$;
+rollback;
