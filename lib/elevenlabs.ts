@@ -1,10 +1,10 @@
 /** Server-only provider adapter. Never return provider errors, credentials or raw responses to public clients. */
-export async function elevenRequest<T>(path:string, body?:unknown, fetcher:typeof fetch=fetch):Promise<T> {
+export async function elevenRequest<T>(path:string, body?:unknown, fetcher:typeof fetch=fetch,signal?:AbortSignal):Promise<T> {
   if(typeof window!=='undefined')throw new Error('VOICE_SERVER_ONLY');
   const key=process.env.ELEVENLABS_API_KEY;
   if(!key)throw new Error('VOICE_KEY_MISSING');
   let r:Response;
-  try{r=await fetcher(`https://api.elevenlabs.io${path}`,{method:body===undefined?'GET':'POST',headers:{'xi-api-key':key,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(20000),redirect:'error',cache:'no-store'});}
+  try{r=await fetcher(`https://api.elevenlabs.io${path}`,{method:body===undefined?'GET':'POST',headers:{'xi-api-key':key,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(20000)]):AbortSignal.timeout(20000),redirect:'error',cache:'no-store'});}
   catch{throw new Error(body===undefined?'VOICE_UNREACHABLE':'VOICE_WRITE_UNKNOWN_NO_RETRY');}
   if(!r.ok){
    // Only known permission identifiers are safe to surface; never log provider bodies.

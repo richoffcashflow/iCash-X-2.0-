@@ -1,3 +1,4 @@
+import {readVoiceUsagePolicies,settlePendingVoiceUsage} from '@/lib/voice-usage-service';
 import {dispatchTextMessage} from '@/lib/text-message-service';
 import {expandMarket} from '@/lib/market-expansion-service';
 import {processTextAi} from '@/lib/text-ai-service';
@@ -14,6 +15,7 @@ export const dynamic='force-dynamic';
 export const maxDuration=60;
 /** Short-lived, one-use DB capabilities; no credentials or account IDs accepted from requests. */
 export async function POST(request:Request){
+ const billingDeadline=AbortSignal.timeout(45000);
  const headers={'Cache-Control':'private, no-store'};
  const token=request.headers.get('authorization')?.replace(/^Bearer /,'');
  if(!token||!/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}){2}$/.test(token))return NextResponse.json({error:'Unauthorized'},{status:401,headers});
@@ -25,7 +27,10 @@ export async function POST(request:Request){
   const success=['market_research_saved','waiting_for_daytime_budget','text_ai_drafted','text_ai_handoff','message_accepted','title_followup_sent','fulfillment_prepared','call_started','outside_contact_hours','screening_queued','empty','contacts_saved','conversation_saved','awaiting_conversation','awaiting_counterparty','customer_signature_needed','completed','test_completed'].includes(result.status);
   await db('rpc/icash_finish_automation','POST',{p_id:ticket.id,p_success:success,p_outcome:result.status});
   try{await db('rpc/icash_settle_pending_estimates','POST',{p_account:ticket.accountId,p_limit:25});}catch{/* Scheduled reconciliation retries without changing a completed job. */}
-  return NextResponse.json({status:result.status},{headers});
+  let billing;
+  try{billing=await settlePendingVoiceUsage(db,ticket.accountId,readVoiceUsagePolicies(process.env.VOICE_USAGE_POLICIES_JSON),reconcileLiveConversation,billingDeadline);}
+  catch{billing={status:'review_required'};} // Billing failure never rewrites a successful primary action.
+  return NextResponse.json({status:result.status,billing},{headers});
  }catch{
   if(ticket)try{await db('rpc/icash_finish_automation','POST',{p_id:ticket.id,p_success:false,p_outcome:'held_for_reconciliation'});}catch{/* Preserve consumed capability on database failure. */}
   return NextResponse.json({status:'held_for_reconciliation'},{status:503,headers});
