@@ -1,3 +1,4 @@
+import {acquisitionContractCoverage} from '@/lib/contract-coverage-service';
 import {db} from '@/lib/stripe-test';
 import {dispatchReservedOperation} from '@/lib/operating-costs';
 import {discoverPage} from './discovery-pipeline.ts';
@@ -6,6 +7,8 @@ type Config={account_id:string;enabled:boolean;zip:string;rate_id:string;propert
 export async function discoverForAccount(accountId:string){
  const [c]=await db<Config[]>(`icash_discovery_configs?account_id=eq.${accountId}&select=*`);
  if(!c?.enabled||c.exhausted||Date.parse(c.data_rights_until)<=Date.now())return {status:'not_ready'};
+ const coverage=await acquisitionContractCoverage(c.zip);
+ if(!coverage.supported)return {status:'contract_coverage_required',message:coverage.reason};
  const [account]=await db<{bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=bot_paused`);
  const [wallet]=await db<{balance_cents:number;reserved_cents:number}[]>(`icash_wallets?account_id=eq.${accountId}&select=balance_cents,reserved_cents`);
  if(!account||account.bot_paused||!wallet||wallet.balance_cents<=wallet.reserved_cents)return {status:'paused'};

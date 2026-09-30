@@ -15,3 +15,33 @@ console.log('Contract prefills preserve edits, exclude conditions and conflictin
 
 assert.equal(contractPreparation([msg('I accept $100,000'),msg('I changed my mind')],'draft',terms).patch.priceCents,undefined);
 assert.equal(contractPreparation([{...msg('My legal name is Buyer One','buyer'),partyKey:'one'},{...msg('I agree to a deposit of $5,000','buyer'),partyKey:'two'}],'under_contract',terms).patch.assignmentDepositCents,undefined);
+
+// A mentioned/asked/rejected amount is not acceptance. Source excerpts do not grant authority.
+const {validateTextAnalysis}=await import('../lib/text-ai-policy.ts');
+const amountCases=[
+ ['I am asking $150,000.',false],
+ ['My neighbor sold for $150,000.',false],
+ ['Would you accept $150,000?',false],
+ ["I won't accept $150,000.",false],
+ ['I won’t accept $150,000.',false],
+ ['I accept $150,000 if you close tomorrow.',false],
+ ['I accept $150,000.',true],
+];
+for(const [body,mayPrefill] of amountCases){
+ const analyzed=validateTextAnalysis({action:'review',reply:'',summary:'Seller accepted.',facts:[{kind:'price',quote:'$150,000'}]},[body]);
+ assert.equal(analyzed.facts[0].quote,body);
+ const prepared=contractPreparation([msg(analyzed.facts[0].quote)],'draft',terms);
+ assert.equal(prepared.patch.priceCents,mayPrefill?15000000:undefined,body);
+ assert.equal(prepared.patch.priceSource,undefined,'even an explicit acceptance only assists draft preparation');
+ assert.equal(prepared.requiresReview,true);
+}
+for(const refusal of ["I won't accept $150,000.",'I won’t accept $150,000.','I will not sell for that.','I reject your offer.','I cannot agree to that price.']){
+ const prepared=contractPreparation([msg('I accept $150,000.'),msg(refusal)],'draft',terms);
+ assert.equal(prepared.patch.priceCents,undefined,refusal);
+ assert(prepared.conflicts.includes('priceCents'),refusal);
+}
+const {signingReadiness}=await import('../lib/signing-policy.ts');
+const accepted=contractPreparation([msg('I accept $150,000.')],'draft',terms);
+const draft=dealTermsSchema.parse({...accepted.patch,seller:'Fixture seller',buyer:'Fixture principal',address:'Fixture only',legalDescription:'Fixture legal description',state:'TX'});
+assert.throws(()=>signingReadiness('purchase',draft,[{name:'Fixture seller',email:'seller@example.invalid'}],'Fixture principal','draft'),/Confirm the agreed price/,'extracted acceptance never sets the separate explicit price confirmation required to send');
+console.log('Price statements: asking, mentioned, rejected, conditional and accepted amounts stay distinct; full quotes, later rejection and separate signing confirmation passed.');

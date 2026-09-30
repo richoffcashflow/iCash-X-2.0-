@@ -1,7 +1,9 @@
 import {z} from 'zod';
+import {validCalendarDate} from './document-dates.ts';
 const text=z.string().trim().max(1000).default('');
 const money=z.number().int().nonnegative().max(100000000000).nullable().default(null);
-export const dealTermsSchema=z.object({dealNotes:z.string().trim().max(1200).default(''),seller:text,buyer:text,assignee:text,address:text,legalDescription:z.string().trim().max(12000).default(''),state:z.string().trim().max(2).default(''),priceCents:money,assignmentFeeCents:money,earnestCents:money,assignmentDepositCents:money,inspectionDays:z.number().int().min(0).max(90).default(10),effectiveDate:z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/).default(''),closingDate:z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/).default(''),escrowAgent:text,titleEmail:z.union([z.literal(''),z.string().email().max(254)]).default(''),payoutMethod:z.enum(['wire','ach','check','zelle','cash_app']).default('wire'),payoutHandle:z.string().max(120).default(''),priceSource:z.enum(['proposed','seller_reported']).default('proposed')}).strict();
+const date=z.string().refine(value=>value===''||validCalendarDate(value),'Enter a real calendar date in YYYY-MM-DD format.').default('');
+export const dealTermsSchema=z.object({dealNotes:z.string().trim().max(1200).default(''),seller:text,buyer:text,assignee:text,address:text,legalDescription:z.string().trim().max(12000).default(''),state:z.string().trim().max(2).default(''),priceCents:money,assignmentFeeCents:money,earnestCents:money,assignmentDepositCents:money,inspectionDays:z.number().int().min(0).max(90).default(10),effectiveDate:date,closingDate:date,escrowAgent:text,titleEmail:z.union([z.literal(''),z.string().email().max(254)]).default(''),payoutMethod:z.enum(['wire','ach','check','zelle','cash_app']).default('wire'),payoutHandle:z.string().max(120).default(''),priceSource:z.enum(['proposed','seller_reported']).default('proposed')}).strict();
 export type DealTerms=z.infer<typeof dealTermsSchema>;
 export type DocumentKind='purchase'|'assignment'|'buyer_package'|'title_packet';
 const blank=(s:string)=>s||'____________________';

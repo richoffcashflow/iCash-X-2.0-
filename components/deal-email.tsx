@@ -20,7 +20,7 @@ export function DealEmail({dealId,active}:{dealId:string;active:boolean}){
  {error&&<p role="status">{error}</p>}{!data&&!error&&<p role="status">Loading email…</p>}
  {data&&<><div className="message-history" aria-label="Email history">{!data.messages.length?<p>No email yet.</p>:data.messages.slice().reverse().map(m=><details className="email-item" key={m.id}><summary><span>{m.direction==='incoming'?'↙':'↗'} {m.subject.replace(/\[ICX-M:[^\]]+\]\s*/gi,'')}</span><small>{emailSendLabel(m.state)}</small></summary><p className="email-address">{m.direction==='incoming'?'From':'To'}: {m.recipient}</p><p className="email-body">{m.body_text}</p><small>{new Date(m.created_at).toLocaleString()}</small></details>)}</div>
  <div className="history-pages">{page&&<button onClick={()=>{setPage(null);setData(null);}}>Latest email</button>}{data.next&&<button onClick={()=>{setPage(data.next);setData(null);}}>Older email</button>}</div>
- {data.contacts.length?<form className="message-composer" onSubmit={async e=>{
+ {data.contacts.length?<form className="message-composer" data-unsaved-draft={subject.trim()||body.trim()?'true':undefined} onSubmit={async e=>{
  e.preventDefault();if(busy||held||!selected||!data.rate||!data.configured)return;setBusy(true);setStatus('');
  const fingerprint=JSON.stringify([contact,subject.trim(),body.trim(),data.rate.id]);if(!request.current||request.current.fingerprint!==fingerprint)request.current={key:crypto.randomUUID(),fingerprint};
  try{const r=await fetch('/api/work/emails',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dealId,contactKey:contact,requestKey:request.current.key,rateId:data.rate.id,subject:subject.trim(),message:body.trim()})});const result=await r.json();
@@ -35,6 +35,6 @@ export function DealEmail({dealId,active}:{dealId:string;active:boolean}){
  <button type="submit" disabled={busy||held||!selected||!subject.trim()||!body.trim()||!data.configured||!data.rate}>{busy?'Sending…':`Send email${data.rate?` · $${(data.rate.charge_cents/100).toFixed(2)}`:''}`}</button>
  {!data.configured||!data.rate?<small>Email setup is not ready. Your draft has not been sent.</small>:<small>Sent with your business name. Uses your available balance.</small>}
  </form>:<p>Email appears here when a seller, buyer or closing contact has a verified address linked to this deal.</p>}
- </>}{status&&<p role="status">{status}</p>}
+ {held&&<button className="workspace-quiet" type="button" onClick={()=>{setPage(null);setRefresh(v=>v+1);setStatus('Checking the latest email history. Confirm the recorded status before sending again.');}}>Check latest status</button>}</>}{status&&<p role="status">{status}</p>}
  </div>;
 }

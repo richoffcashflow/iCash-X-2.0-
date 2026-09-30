@@ -23,7 +23,7 @@ export async function GET(){
  db<{event_id:string}[]>(`icash_billing_reviews?account_id=eq.${id}&resolved_at=is.null&select=event_id&limit=1`),
  mode==='live'?launchReadiness(id):Promise.resolve({ready:false}),
  db<{id:string}[]>(`icash_live_conversations?account_id=eq.${id}&state=eq.waiting&created_at=gte.${encodeURIComponent(new Date(Date.now()-15*60_000).toISOString())}&select=id&limit=1`),
- db<{id:string}[]>(`icash_screening_jobs?account_id=eq.${id}&state=in.(issued,dispatching)&select=id&limit=1`),
+ db<{id:string}[]>(`icash_screening_jobs?account_id=eq.${id}&state=in.(queued,running)&select=id&limit=1`),
  db<{id:string}[]>(`icash_daily_plans?account_id=eq.${id}&mode=eq.${mode}&state=neq.stopped&select=id&limit=1`)
  ]);
  // Sandbox balances are order totals, never spendable live-wallet grants.

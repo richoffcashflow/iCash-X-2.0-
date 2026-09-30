@@ -42,7 +42,7 @@ const db=async(path,method,body)=>{
  if(path==='rpc/icash_buyer_voice_context')return buyerApproved?{dealId:'deal',address:'Fixture',askingPriceCents:10000000,repairsCents:100000,packageId:'doc'}:null;
  if(path.startsWith('icash_operation_rates'))return [{operation:permission.party==='buyer'?'buyer_call':'seller_call',enabled:true,expires_at:c.reviewed_until,voice_max_duration_seconds:quoteSeconds}];
  if(path.startsWith('icash_offer_authorities'))return [];
- if(path==='rpc/icash_claim_voice_job'){if(allowClaim)jobState='dispatching';return allowClaim;}
+ if(path==='rpc/icash_claim_reviewed_voice_job'){if(allowClaim)jobState='dispatching';return allowClaim;}
  if(path==='icash_live_conversations')return [];
  throw Error('Unexpected request '+path);
 };

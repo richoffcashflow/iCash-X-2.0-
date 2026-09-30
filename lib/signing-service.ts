@@ -2,7 +2,7 @@ import {normalizeDocuseal as normalize,type Submission} from './docuseal-policy.
 import {z} from 'zod';
 import {db} from '@/lib/stripe-test';
 import {dispatchReservedOperation} from '@/lib/operating-costs';
-import {signingReadiness,signingTermsHash,signingFields,verifiedSigningStatus,type Signer,type SigningKind,type ProviderDocument} from './signing-policy.ts';
+import {signingReadiness,signingDocumentReadiness,signingTermsHash,signingFields,verifiedSigningStatus,type Signer,type SigningKind,type ProviderDocument} from './signing-policy.ts';
 import {dealTermsSchema} from './deal-documents.ts';
 type Template={max_legal_description_chars:number;customer_consent_field:string|null;provider:string;customer_signature_field:string|null;automated_signing_reviewed:boolean;id:string;provider_template_id:string;placeholder_names:string[];field_map:Record<string,string>;test_mode:boolean;rate_id:string|null;reviewed_until:string};
 type Envelope={id:string;account_id:string;deal_id:string;terms:unknown;kind:SigningKind;terms_hash:string;template_id:string;provider_id:string|null;state:string;test_mode:boolean;recipients:{id:string;email:string;name:string;placeholder_name:string}[]};
@@ -35,6 +35,7 @@ export async function sendForSignatures(i:{accountId:string;userId:string;custom
  try{
   if(signingTermsHash(envelope.terms)!==envelope.terms_hash)throw new Error('Contract changed. Review required before sending.');
   const send=async()=>{
+   signingReadiness(i.kind,dealTermsSchema.parse(envelope.terms),i.signers,identity.principal,deal.stage);
    if(i.autoSignature)await db('icash_signature_authorizations','POST',{envelope_id:envelope.id,account_id:i.accountId,actor_user_id:i.userId,terms_hash:envelope.terms_hash,signature_text:i.autoSignature,expires_at:new Date(Math.min(Date.now()+30*86400000,Date.parse(template.reviewed_until))).toISOString()});
    const raw=await (await request('submissions',{template_id:Number(numericId(template.provider_template_id)),order:'preserved',send_email:true,send_sms:false,submitters:recipients.map((r,n)=>({name:r.name,email:r.email,role:r.placeholder_name,order:n,external_id:`${envelope.id}:${r.id}`,metadata:{terms_hash:envelope.terms_hash},require_email_2fa:true,fields:n===0?Object.entries(values).map(([k,v])=>({name:template.field_map[k],default_value:v,readonly:true})):[]}))},testMode)).json();
    if(!Array.isArray(raw)||raw.length!==recipients.length||raw.some(r=>r.submission_id!==raw[0].submission_id))throw new Error('Signature response needs review.');
@@ -59,11 +60,14 @@ export async function refreshSigning(accountId:string,id:string){
   const actualFields=raw.submitters.flatMap(s=>s.values??[]);
   if(Object.entries(expectedFields).some(([key,value])=>!actualFields.some(f=>f.field===reviewedTemplate.field_map[key]&&String(f.value??'')===value)))throw new Error('Agreement field values need review before signing.');
   await db('rpc/icash_save_signing_status','POST',{p_id:e.id,p_state:state,p_evidence:d});
+  // A send-time pass does not authorize an expired or incomplete agreement to be signed days later.
+  signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms));
   const signature=await db<string|null>('rpc/icash_claim_auto_signature','POST',{p_account:accountId,p_envelope:e.id,p_hash:e.terms_hash});
   if(signature){
    const [template]=await db<Template[]>(`icash_signing_templates?id=eq.${e.template_id}&select=*`);
    const customer=raw.submitters.find(s=>s.external_id===`${e.id}:${e.recipients.at(-1)!.id}`)!;
    // One claim, one write. Unknown completion is resolved with GET on later polls, never re-signed blindly.
+   signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms));
    await request(`submitters/${numericId(customer.id)}`,{completed:true,fields:[{name:template.customer_signature_field,default_value:signature,readonly:true},{name:template.customer_consent_field,default_value:true,readonly:true}]},e.test_mode,'PUT');
    raw=await (await request(`submissions/${numericId(e.provider_id)}`,undefined,e.test_mode)).json();d=normalize(raw,e);
    state=verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients});
@@ -92,6 +96,7 @@ export async function customerSigningLink(accountId:string,id:string,email:strin
  const raw=await (await request(`submissions/${numericId(e.provider_id)}`,undefined,e.test_mode)).json() as Submission;const d=normalize(raw,e);
  const status=verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients});
  if(status!=='customer_signature_needed')throw new Error('Waiting for the other party to sign.');
+ signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms));
  const last=e.recipients.at(-1)!;const r=raw.submitters.find(x=>x.external_id===`${e.id}:${last.id}`);
  if(!r||r.email.toLowerCase()!==email.toLowerCase()||!/^[a-zA-Z0-9_-]+$/.test(r.slug))throw new Error('Use the signing email sent to your verified address.');
  return {url:`https://docuseal.com/s/${r.slug}`};

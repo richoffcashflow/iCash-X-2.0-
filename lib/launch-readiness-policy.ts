@@ -10,5 +10,5 @@ export function evaluateLaunch(checks:LaunchChecks,env:LaunchEnvironment){
  for(const [key,ready] of Object.entries({dataProvider:env.data,voiceProvider:env.voice,emailAccess:env.email,billing:env.billing,...operationalChecks,...deliveryCapabilities})){
   if(key==='unresolvedDispatches'){if(ready)blockers.push(key);}else if(ready!==true)blockers.push(key);
  }
- return {ready:blockers.length===0,acquisitionReady:env.data&&env.voice&&checks.cashReserve&&checks.discovery&&checks.voice&&!checks.unresolvedDispatches,blockers};
+ return {ready:blockers.length===0,acquisitionReady:env.data&&env.voice&&checks.cashReserve&&checks.discovery&&checks.voice&&checks.productionContracts&&!checks.unresolvedDispatches,blockers};
 }

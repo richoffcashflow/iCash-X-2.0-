@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import {signingTermsHash,verifiedSigningStatus,signingReadiness,signingFields} from '../lib/signing-policy.ts';
+import {signingTermsHash,verifiedSigningStatus,signingReadiness,signingDocumentReadiness,signingFields} from '../lib/signing-policy.ts';
 import {dealTermsSchema} from '../lib/deal-documents.ts';
+import {validCalendarDate,calendarDaysAfter,deadlineDateStatus} from '../lib/document-dates.ts';
 const terms=dealTermsSchema.parse({seller:'Seller One',buyer:'Customer One',address:'Fixture',legalDescription:'Lot 1',state:'TX',priceCents:100000,priceSource:'seller_reported'});
 assert.equal(signingFields(terms).priceCents,'1000.00');
 assert.notEqual(signingTermsHash(terms),signingTermsHash({...terms,priceCents:100001}));
@@ -24,3 +25,41 @@ assert.equal(verifiedSigningStatus(normalizeDocuseal(submission,env),{...e,provi
 assert.throws(()=>normalizeDocuseal({...submission,submitters_order:'random'},env));
 assert.throws(()=>normalizeDocuseal({...submission,submitters:[{...submission.submitters[0],metadata:{terms_hash:'changed'}},submission.submitters[1]]},env));
 console.log('DocuSeal submission and signer normalization checks passed.');
+
+const now=Date.parse('2026-09-30T12:00:00Z');
+const complete={...terms,earnestCents:0};
+const parties=[{name:'Seller One',email:'seller@example.invalid'}];
+const ready=(patch={},kind='purchase',stage='draft')=>signingReadiness(kind,{...complete,...patch},parties,'Customer One',stage,now);
+assert.equal(ready(),true,'explicit zero earnest and the existing signature-relative date defaults are valid');
+assert.equal(signingFields(complete).earnestCents,'0.00','zero is deliberate and does not render as a blank');
+assert.throws(()=>ready({earnestCents:null}),/Enter the agreed earnest/);
+assert.throws(()=>ready({earnestCents:undefined}),/Enter the agreed earnest/);
+assert.throws(()=>ready({earnestCents:10000}),/escrow or title company/);
+assert.equal(ready({earnestCents:10000,escrowAgent:'Fixture escrow'}),true);
+for(const amount of [-1,0.1,NaN,Infinity,Number.MAX_SAFE_INTEGER+1])assert.throws(()=>ready({earnestCents:amount}));
+for(const date of ['2026-02-30','2026-04-31','1900-02-29','2025-02-29','0000-01-01','2026-13-01','2026-00-01','2026-09-00','2026-9-30','2026-09-30T00:00:00Z']){
+ assert.equal(validCalendarDate(date),false,date);
+ assert.throws(()=>dealTermsSchema.parse({effectiveDate:date}),undefined,date);
+ assert.throws(()=>ready({closingDate:date}),undefined,date);
+}
+for(const date of ['2000-02-29','2024-02-29','2026-02-28','2026-12-31'])assert.equal(validCalendarDate(date),true,date);
+assert.equal(calendarDaysAfter('2024-02-28',1),'2024-02-29');
+assert.equal(calendarDaysAfter('2024-02-28',2),'2024-03-01');
+assert.equal(calendarDaysAfter('2026-12-31',1),'2027-01-01');
+assert.equal(calendarDaysAfter('2026-03-07',2),'2026-03-09','DST does not alter calendar-day arithmetic');
+assert.throws(()=>ready({effectiveDate:'2026-10-05',closingDate:'2026-10-04'}),/before the contract effective/);
+assert.equal(ready({effectiveDate:'2026-10-05',closingDate:'2026-10-05'}),true,'equal calendar dates are not silently forbidden');
+assert.throws(()=>ready({closingDate:'2026-09-29'}),/deadline has passed/);
+assert.throws(()=>ready({closingDate:'2026-09-30'}),/timezone/,'today is ambiguous without a stored contract timezone');
+assert.equal(ready({closingDate:'2026-10-02'}),true);
+assert.throws(()=>ready({effectiveDate:'2026-08-01',closingDate:''}),/deadline has passed/,'known expired relative deadline must not bypass validation');
+const assignment={assignee:'Fixture buyer',assignmentFeeCents:0,assignmentDepositCents:0,escrowAgent:'Fixture escrow',effectiveDate:'2026-09-20',closingDate:'2026-10-15'};
+assert.equal(ready(assignment,'assignment','under_contract'),true,'historical underlying effective dates remain valid');
+assert.throws(()=>ready({...assignment,assignmentDepositCents:null},'assignment','under_contract'));
+assert.throws(()=>ready({...assignment,escrowAgent:''},'assignment','under_contract'));
+assert.throws(()=>signingDocumentReadiness('purchase',{...complete,closingDate:'2026-10-01'},Date.parse('2026-10-03T12:00:00Z')),/deadline has passed/,'final signing check uses its current time');
+assert.equal(deadlineDateStatus('2026-09-29',Date.parse('2026-09-30T11:59:59Z')),'timezone_review','deadline is still today at UTC-12');
+assert.equal(deadlineDateStatus('2026-09-29',Date.parse('2026-09-30T12:00:00Z')),'past','deadline is past in every timezone');
+assert.equal(deadlineDateStatus('2026-10-01',Date.parse('2026-09-30T23:00:00Z')),'current_or_future','future UTC date may already be today at UTC+14');
+assert.throws(()=>deadlineDateStatus('2026-10-01',NaN));
+console.log('Signing completeness: deliberate zero vs blank, payable escrow, real/leap dates, order, preserved 30-day defaults, global timezone boundaries and final-sign expiry passed.');

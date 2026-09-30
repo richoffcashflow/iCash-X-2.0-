@@ -130,12 +130,12 @@ export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=
      <div className="setup-reveal-line"><span>{profile.market}</span><button type="button" onClick={()=>void play(profile.voice)} aria-label="Preview your selected AI voice">{previewLoading===profile.voice?<LoaderCircle className="setup-spin" size={15}/>:playing===profile.voice?<Pause size={15}/>:<Play size={15}/>} Hear your bot</button></div>
      <div className="setup-built-progress" aria-label="Your saved setup">
       <span><Check size={15}/><span><strong>{voices.find(v=>v.key===profile.voice)?.name} selected</strong><small>Your bot’s voice for conversations</small></span></span>
-      <span><Check size={15}/><span><strong>{profile.marketMode==='nationwide'?'Nationwide search selected':profile.market+' selected'}</strong><small>Your saved search preference</small></span></span>
-      {profile.contracts&&<span><Check size={15}/><span><strong>Contract templates included</strong><small>Preview your unsigned templates below</small></span></span>}
+      <span><Check size={15}/><span><strong>{profile.marketMode==='nationwide'?'Nationwide research preference':profile.market+' selected'}</strong><small>Live work depends on supported markets and checks</small></span></span>
+      {profile.contracts&&<span><Check size={15}/><span><strong>Unsigned contract previews</strong><small>Signing is limited to reviewed markets and owner counts</small></span></span>}
       {profile.buyers&&<span><Check size={15}/><span><strong>Buyer matching selected</strong><small>Find buyers after a signed seller agreement</small></span></span>}
      </div>
 
-     {profile.contracts&&<details className="setup-details"><summary>Preview your contracts</summary><div className="setup-document-links"><a href="/api/setup/documents?kind=purchase" target="_blank" rel="noopener">Seller agreement ↗</a><a href="/api/setup/documents?kind=assignment" target="_blank" rel="noopener">Buyer agreement ↗</a></div><p>Unsigned templates. Deal details and required local terms come before signing.</p></details>}
+     {profile.contracts&&<details className="setup-details"><summary>Preview your contracts</summary><div className="setup-document-links"><a href="/api/setup/documents?kind=purchase" target="_blank" rel="noopener">Seller agreement ↗</a><a href="/api/setup/documents?kind=assignment" target="_blank" rel="noopener">Buyer agreement ↗</a></div><p>Unsigned previews, not approval for every state. Reviewed templates, all required owners and local requirements must be confirmed before signing.</p></details>}
     </div>
     {audioError&&<p className="setup-error" role="status">{audioError}</p>}
     {error&&<p role="alert" className="setup-error">{error}</p>}

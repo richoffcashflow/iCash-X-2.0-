@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import {z} from 'zod';
+import {contractCapability} from '../lib/contract-coverage.ts';
+import {authorityReviewStatus} from '../lib/authority-review-status.ts';
+const account='00000000-0000-4000-8000-000000000001',screening='00000000-0000-4000-8000-000000000002',deal='00000000-0000-4000-8000-000000000003',envelope='00000000-0000-4000-8000-000000000004';
+let paths=[],owner=true,found=true,suppressed=false;
+const tomorrow=new Date(Date.now()+86400000).toISOString(),yesterday=new Date(Date.now()-86400000).toISOString();
+const mocks={z,authorityReviewStatus,contractCapability,readContractCoverage:async()=>({scope:'reviewed_templates',states:[{state:'TX',signerCounts:[1]}]}),NextResponse:{json:(body,options={})=>({body,status:options.status??200})},workAccount:async()=>{if(!owner)throw Error();return {accountId:account};},db:async(path,method)=>{
+ assert(!method||method==='GET','Diagnostics must never write or dispatch');paths.push(path);
+ const table=path.split('?')[0];
+ if(!['icash_text_suppressions','icash_contact_suppressions'].includes(table))assert(path.includes(table==='icash_accounts'?`id=eq.${account}`:`account_id=eq.${account}`));
+ if(table==='icash_screening_jobs')return found?[{id:screening}]:[];
+ if(table==='icash_customer_identities')return [{principal:'Fixture principal'}];
+ if(table==='icash_accounts')return [{bot_paused:false}];
+ if(table==='icash_wallets')return [{balance_cents:1000,reserved_cents:100}];
+ if(table==='icash_contact_permissions')return [{phone:'+12125550100',contact_key:'a'.repeat(64),permission_until:tomorrow,dnc_checked_at:yesterday,dnc_clear:true,revoked_at:null}];
+ if(table==='icash_offer_authorities')return [{max_offer_cents:100000,expires_at:tomorrow}];
+ if(table==='icash_deal_files')return [{id:deal,terms:{state:'TX',priceCents:100000,assignmentFeeCents:10000}}];
+ if(table==='icash_text_suppressions')return suppressed?[{phone:'+12125550100'}]:[];
+ if(table==='icash_contact_suppressions')return [];
+ if(table==='icash_signing_envelopes'){assert(path.includes('test_mode=eq.false'));assert(path.includes('state=eq.completed'));return [{id:envelope}];}
+ if(table==='icash_disposition_authorities')return [{purchase_envelope_id:envelope,asking_price_cents:110000,expires_at:tomorrow}];
+ throw Error('Unexpected read '+table);
+}};
+globalThis.__reviewFixture=mocks;
+let source=ts.transpileModule(readFileSync(new URL('../app/api/work/review-status/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
+source='const {'+Object.keys(mocks).join(',')+'}=globalThis.__reviewFixture;\n'+source;
+const {GET}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const get=id=>GET(new Request('https://www.geticashx.com/api/work/review-status?screeningId='+id));
+let r=await get(screening);assert.equal(r.status,200);assert(r.body.items.every(x=>x.status==='recorded'));assert(!JSON.stringify(r.body).includes('+12125550100'));assert(!JSON.stringify(r.body).includes('a'.repeat(64)));
+suppressed=true;r=await get(screening);assert.equal(r.body.items.find(x=>x.key==='contact_permission').status,'review_required');
+found=false;paths=[];r=await get(screening);assert.equal(r.status,404);assert.equal(paths.length,1,'No authority records fetched for missing/foreign property');
+owner=false;paths=[];r=await get(screening);assert.equal(r.status,503);assert.equal(paths.length,0);
+owner=true;paths=[];r=await get('invalid');assert.equal(r.status,503);assert.equal(paths.length,0);
+delete globalThis.__reviewFixture;
+console.log('Review status route: authenticated tenant ownership, no writes, verified-signature filters, suppression and no raw contact leakage passed.');

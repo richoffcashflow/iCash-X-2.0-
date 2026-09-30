@@ -1,6 +1,10 @@
 import type {DealTerms} from './deal-documents.ts';
 export type TermMessage={id:string;party:'seller'|'buyer';body:string;partyKey?:string};
 type Field='seller'|'assignee'|'priceCents'|'assignmentDepositCents'|'closingDate';
+/** A prior affirmative price statement cannot survive a later refusal merely because its amount still matches. */
+function rejectsPrice(body:string){
+ return /\b(?:(?:won['’]t|wouldn['’]t|can['’]t|cannot|couldn['’]t|don['’]t|do not|will not|would not|could not|not|never)\s+(?:accept|agree|sell)|(?:reject|decline|rejecting|declining|rejected|declined)\s+(?:(?:that|the|your|this)\s+)?(?:offer|price|amount|\$))/i.test(body);
+}
 /** Narrow extraction for draft assistance only. Never sets agreement, ownership or signing authority. */
 export function contractPreparation(messages:TermMessage[],stage:string,current:DealTerms){
  const found=new Map<Field,{value:string|number;quote:string;sourceId:string}[]>();
@@ -21,6 +25,7 @@ export function contractPreparation(messages:TermMessage[],stage:string,current:
   const party=['assignee','assignmentDepositCents'].includes(field)?'buyer':'seller';
   const partyMessages=messages.filter(m=>m.party===party);
   if(new Set(partyMessages.map(m=>m.partyKey??'unspecified')).size>1||partyMessages.some(m=>/\b(cancel|withdraw|changed my mind|no longer|not selling|backing out|don.t agree)\b/i.test(m.body))){conflicts.push(field);continue;}
+  if(field==='priceCents'&&partyMessages.some(m=>rejectsPrice(m.body))){conflicts.push(field);continue;}
   if(stage!=='draft'&&!['assignee','assignmentDepositCents'].includes(field))continue;
   if(!['draft','under_contract'].includes(stage))continue;
   if(new Set(values.map(v=>v.value)).size!==1){conflicts.push(field);continue;}

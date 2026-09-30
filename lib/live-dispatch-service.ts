@@ -45,12 +45,12 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const rateId=p.party==='buyer'?c.buyer_rate_id:c.seller_rate_id;if(!rateId)return hold('full_call_cost_quote_required');
  const [rate]=await db<{operation:string;enabled:boolean;expires_at:string;voice_max_duration_seconds:number|null}[]>(`icash_operation_rates?id=eq.${rateId}&select=operation,enabled,expires_at,voice_max_duration_seconds`);
  if(!rate?.enabled||rate.operation!==(p.party==='buyer'?'buyer_call':'seller_call')||!(Date.parse(rate.expires_at)>Date.now())||!rate.voice_max_duration_seconds||rate.voice_max_duration_seconds<c.max_duration_seconds)return hold('full_call_cost_quote_required');
- const [authority]=await db<{max_offer_cents:number;expires_at:string}[]>(`icash_offer_authorities?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&select=max_offer_cents,expires_at`);
+ const [authority]=await db<{max_offer_cents:number;expires_at:string;review_request_id:string|null}[]>(`icash_offer_authorities?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&select=max_offer_cents,expires_at,review_request_id`);
  const ceiling=verifiedOfferCeiling(eligible?.ready?eligible.screening.preliminarySellerCeilingCents:null,authority);
  const smsContext=p.party==='seller'?boundedVoiceSmsContext(await db<unknown>('rpc/icash_voice_sms_context','POST',{p_account:accountId,p_permission:p.id})):null;
  const operationKey=`voice:${j.id}`;
  if(!await db<boolean>('rpc/icash_reserve_paced_voice','POST',{p_account:accountId,p_job:j.id,p_rate:rateId,p_permission_until:p.permission_until,p_financial_checked_at:eligible?.ready?new Date(eligible.screening.financialCheck.checkedAt).toISOString():null,p_financial_eligible:eligible?.ready&&eligible.screening.financialCheck.status==='eligible'}))return {status:'waiting_for_daytime_budget'};
- if(!await db<boolean>('rpc/icash_claim_voice_job','POST',{p_job:j.id}))return hold('dispatch_permission_changed');
+ if(!await db<boolean>('rpc/icash_claim_reviewed_voice_job','POST',{p_job:j.id,p_offer_snapshot:ceiling===null?null:authority,p_buyer_snapshot:buyerContext}))return hold('dispatch_permission_changed');
  ownsDispatch=true;
  const token=randomBytes(32).toString('hex');
  const strategy=parseInt(createHash('sha256').update(`${accountId}:${p.contact_key}`).digest('hex').slice(0,8),16)%2===0?'cash_interest':'flexible_timing';

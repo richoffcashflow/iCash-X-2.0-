@@ -13,11 +13,15 @@ export async function processTextAi(accountId:string,jobId:string){
   const input=await db<{model:string;context:unknown;messages:{direction:string;body:string}[]}|null>('rpc/icash_claim_text_ai','POST',{p_account:accountId,p_job:jobId});
   if(!input)return {status:'text_ai_held'};claimed=true;
   const [job]=await db<{thread_id:string}[]>(`icash_text_ai_jobs?id=eq.${jobId}&account_id=eq.${accountId}&select=thread_id`);
-  const property=job?await db<TextProperty|null>('rpc/icash_text_property_context','POST',{p_account:accountId,p_thread:job.thread_id}):null;
-  const {analysis,usage,providerId}=await analyzeText({...input,context:{qualification:input.context,property,preliminarySellerCeilingCents:property?.ceilingCents??null,offerAuthorized:false}},process.env.OPENAI_API_KEY);
+  const [thread]=job?await db<{deal_id:string;party:string}[]>(`icash_text_threads?id=eq.${job.thread_id}&account_id=eq.${accountId}&select=deal_id,party`):[];
+  if(!thread||!['seller','buyer'].includes(thread.party))throw Error('TEXT_PARTY_REVIEW_REQUIRED');
+  const party=thread.party as 'seller'|'buyer';
+  const [identity]=await db<{principal:string}[]>(`icash_customer_identities?account_id=eq.${accountId}&select=principal`);
+  const property=party==='seller'?await db<TextProperty|null>('rpc/icash_text_property_context','POST',{p_account:accountId,p_thread:job.thread_id}):null;
+  const {analysis,usage,providerId}=await analyzeText({...input,party,context:{principal:identity?.principal??null,qualification:input.context,property,preliminarySellerCeilingCents:property?.ceilingCents??null,offerAuthorized:false}},process.env.OPENAI_API_KEY);
   if(!propertyQuestionAllowed(analysis.action,property,input.messages))analysis.action='review';
   await db('rpc/icash_save_text_ai','POST',{p_account:accountId,p_job:jobId,p_analysis:analysis,p_reply:analysis.reply,p_provider:providerId,p_usage:usage});
-  if(job&&!analysis.humanRequested){const [thread]=await db<{deal_id:string;party:string}[]>(`icash_text_threads?id=eq.${job.thread_id}&account_id=eq.${accountId}&select=deal_id,party`);if(thread?.party==='buyer')try{await sendRequestedBuyerPackages(accountId,thread.deal_id);}catch{/* Buyer email status remains in the mailbox; never blindly retry a send. */}}
+  if(party==='buyer'&&!analysis.humanRequested&&!analysis.callbackRequested&&!analysis.optedOut&&!analysis.declined)try{await sendRequestedBuyerPackages(accountId,thread.deal_id);}catch{/* Buyer email status remains in the mailbox; never blindly retry a send. */}
   if(analysis.humanRequested||analysis.callbackRequested)return {status:'text_ai_handoff'};
   const safe=safeTextReplies[analysis.action];
   if(safe){
