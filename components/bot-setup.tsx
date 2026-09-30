@@ -16,6 +16,19 @@ export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=
  const [step,setStep]=useState(0),[editing,setEditing]=useState(false);
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState('');
  const [audioError,setAudioError]=useState(''),[playing,setPlaying]=useState(''),[previewLoading,setPreviewLoading]=useState('');
+ const [nameFocused,setNameFocused]=useState(false),[nameHint,setNameHint]=useState('e.g. Jordan');
+ const hasName=profile.displayName.length>0;
+ useEffect(()=>{
+  if(step!==0||nameFocused||hasName){setNameHint('Your first name or business name');return;}
+  const motion=window.matchMedia('(prefers-reduced-motion: reduce)');
+  let timer:ReturnType<typeof setTimeout>|undefined;let stopped=false;
+  const examples=['Your first name, e.g. Jordan','Your business, e.g. Oak Street'];let phrase=0,index=0;
+  const stop=()=>{stopped=true;clearTimeout(timer);setNameHint('Your first name or business name');};
+  const tick=()=>{if(stopped)return;if(document.hidden){timer=setTimeout(tick,400);return;}index++;setNameHint(examples[phrase].slice(0,index));if(index<examples[phrase].length)timer=setTimeout(tick,65);else if(phrase===0){phrase=1;index=0;timer=setTimeout(tick,1100);}};
+  if(motion.matches)stop();else timer=setTimeout(tick,450);
+  const onMotion=()=>{if(motion.matches)stop();};motion.addEventListener('change',onMotion);
+  return()=>{stopped=true;clearTimeout(timer);motion.removeEventListener('change',onMotion);};
+ },[step,nameFocused,hasName]);
  const nameEdited=useRef(false),audio=useRef<HTMLAudioElement|null>(null),previewRequest=useRef(0);
  const heading=useRef<HTMLHeadingElement>(null),ready=useRef(false),init=useRef<Promise<BotSetup>|null>(null);
  const [notice,setNotice]=useState<{title:string;detail:string}|null>(null);
@@ -97,7 +110,7 @@ export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=
     <p className="setup-intro">Find sellers. Work out offers. Find cash buyers.<br/>Your AI helps you through the deal.</p>
     <form className="setup-entry-form" onSubmit={e=>{e.preventDefault();void save(profile);}}>
      <label className="setup-label" htmlFor="bot-name">Your name or business name</label>
-     <input className="setup-input" id="bot-name" autoComplete="organization" maxLength={64} value={profile.displayName} onChange={e=>{nameEdited.current=true;setProfile(p=>({...p,displayName:e.target.value}));setError('');}} placeholder="e.g. Jordan or Oak Street Properties" required disabled={busy}/>
+     <input className="setup-input" id="bot-name" autoComplete="organization" maxLength={64} value={profile.displayName} onChange={e=>{nameEdited.current=true;setProfile(p=>({...p,displayName:e.target.value}));setError('');}} placeholder={nameHint} onFocus={()=>setNameFocused(true)} required disabled={busy}/>
      <button className="setup-primary" disabled={busy||!profile.displayName.trim()}>{busy?<><LoaderCircle size={18} className="setup-spin"/> Saving your setup…</>:<>Build my free bot<ArrowRight size={18}/></>}</button>
     </form>
    </>:<>
