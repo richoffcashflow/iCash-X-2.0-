@@ -6,7 +6,7 @@ const agent={agent_id:config.agent_id,branch_id:config.branch_id,version_id:conf
 const branch={id:config.branch_id,agent_id:config.agent_id,name:config.branch_name,is_archived:false,current_live_percentage:0};
 const phone={phone_number_id:config.phone_number_id,phone_number:'+12145550199',provider:'twilio'};
 const check=(a=agent,b=branch,p=phone)=>inspectOwnerVoice(config,a,b,p,phone.phone_number);
-assert.equal(check().guarded,true);config.reviewed_config_hash=check().hash;assert.equal(check().reviewed,true);
+assert.equal(check().guarded,true);assert(Object.values(check().checks).every(v=>v===true));assert.equal(check({...agent,branch_id:'agtbrch_main'}).checks.branchConfigIdentity,false);config.reviewed_config_hash=check().hash;assert.equal(check().reviewed,true);
 for(const mutate of [a=>a.conversation_config.conversation.max_duration_seconds=600,a=>a.platform_settings.privacy.record_voice=true,a=>a.platform_settings.auth.enable_auth=false,a=>a.conversation_config.agent.prompt.tool_ids=['tool_external'],a=>a.conversation_config.agent.prompt.mcp_server_ids=['mcp_external'],a=>a.workflow={nodes:{external:{type:'tool'}},edges:[]},a=>a.branch_id='agtbrch_main']){const a=structuredClone(agent);mutate(a);assert.equal(check(a).guarded,false);}
 assert.equal(check(agent,{...branch,current_live_percentage:100}).guarded,false);
 assert.equal(check(agent,branch,{...phone,phone_number:'+12145550198'}).guarded,false);
@@ -22,7 +22,7 @@ try{
  for(const change of [{branch_id:'agtbrch_main'},{version_id:'agtvrsn_unreviewed'},{has_audio:true},{metadata:{call_duration_secs:61}}]){const before=conversation;conversation={...conversation,...change};assert.equal((await service.ownerVoiceStatus(owner)).status,'needs_review_no_retry');conversation=before;}
  runs=[];
 
- assert.equal((await service.ownerVoiceStatus(owner)).canCall,true);assert.equal(writes,0);
+ const status=await service.ownerVoiceStatus(owner);assert.equal(status.canCall,true);assert(Object.values(status.checks).every(v=>typeof v==='boolean'));assert(!JSON.stringify(status).includes('first_message'));assert.equal(writes,0);
  assert.equal((await service.startOwnerVoiceAcceptance(owner)).status,'provider_accepted');assert.equal(writes,1);
  assert.equal((await service.startOwnerVoiceAcceptance(owner)).status,'already_claimed_or_changed');assert.equal(writes,1);
  claimed=false;unknown=true;finishFails=true;assert.equal((await service.startOwnerVoiceAcceptance(owner)).status,'needs_review_no_retry');assert.equal(writes,2);assert.equal((await service.startOwnerVoiceAcceptance(owner)).status,'already_claimed_or_changed');assert.equal(writes,2);

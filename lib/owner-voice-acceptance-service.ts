@@ -23,7 +23,7 @@ export async function ownerVoiceStatus(owner:Owner){
  }
  if(Date.parse(config.expires_at)<=Date.now())return {status:'expired',canCall:false,destination};
  const review=await inspect(config);
- return {status:!review.guarded?'provider_guards_required':!review.reviewed?'provider_review_required':!config.enabled?'awaiting_release':'ready',canCall:config.enabled&&review.reviewed,destination,maxDurationSeconds:60,ringingTimeoutSeconds:20,expiresAt:config.expires_at,observedConfigHash:review.guarded?review.hash:null,observedVersionId:review.guarded?review.version:null};
+ return {status:!review.guarded?'provider_guards_required':!review.reviewed?'provider_review_required':!config.enabled?'awaiting_release':'ready',canCall:config.enabled&&review.reviewed,checks:review.checks,destination,maxDurationSeconds:60,ringingTimeoutSeconds:20,expiresAt:config.expires_at,observedConfigHash:review.guarded?review.hash:null,observedVersionId:review.guarded?review.version:null};
 }
 export async function startOwnerVoiceAcceptance(owner:Owner){
  const config=await configFor(owner);
