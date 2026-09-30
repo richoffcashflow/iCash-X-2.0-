@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {buyerQualificationPayloadSchema,buyerQualificationSubmitSchema,buyerQualificationDecisionSchema,validateBuyerQualificationTimes,buyerQualificationView} from '../lib/buyer-qualification.ts';
+import {planBuyerOutreach} from '../lib/buyer-engine.ts';
+const id='00000000-0000-4000-8000-000000000001',now=Date.now();
+const payload={buyerId:id,dealId:id,markets:['Dallas'],propertyTypes:['house'],maxPriceCents:12000000,maxRepairCents:5000000,criteriaObservedAt:new Date(now-1000).toISOString(),expiresAt:new Date(now+86400000).toISOString(),sourceName:'Fixture buyer evidence',sourceReference:'Recorded buyer statement reference',buyerStatement:'Buyer reports these criteria; not verified proof of funds.'};
+assert(buyerQualificationPayloadSchema.safeParse(payload).success);validateBuyerQualificationTimes(payload,now);
+for(const addition of [{permitted:true},{proofOfFundsVerifiedAt:now},{authorityVerified:true},{rateId:id},{accountId:id},{completedDeals:4}])assert(!buyerQualificationPayloadSchema.safeParse({...payload,...addition}).success);
+assert(!buyerQualificationSubmitSchema.safeParse({idempotencyKey:id,payload,accountId:id}).success);
+for(const changed of [{criteriaObservedAt:new Date(now+1).toISOString()},{criteriaObservedAt:new Date(now-31*86400000).toISOString()},{expiresAt:new Date(now).toISOString()},{expiresAt:new Date(now+31*86400000).toISOString()},{markets:['Dallas','dallas']},{propertyTypes:['house','house']}])assert.throws(()=>validateBuyerQualificationTimes({...payload,...changed},now));
+const verification={criteriaConfirmed:true,fundsVerified:true,signatoryVerified:true,reviewReference:'Human review source reference',validUntil:payload.expiresAt,fundsReference:'Independently reviewed funds reference',fundsObservedAt:payload.criteriaObservedAt,fundsAmountCents:12000000,currency:'USD',signatoryName:'Fixture Authorized Signer',authorityReference:'Reviewed signatory source reference',authorityObservedAt:payload.criteriaObservedAt};
+assert(buyerQualificationDecisionSchema.safeParse({requestId:id,decision:'approved',note:'Reviewed current sources',verification}).success);
+for(const changed of [{fundsVerified:false},{criteriaConfirmed:false},{signatoryVerified:false},{rateId:id},{reviewerId:id},{currency:'EUR'}])assert(!buyerQualificationDecisionSchema.safeParse({requestId:id,decision:'approved',note:'Reviewed current sources',verification:{...verification,...changed}}).success);
+const row={id,buyer_id:id,deal_id:id,state:'approved',expires_at:new Date(now-1).toISOString(),created_at:payload.criteriaObservedAt,payload,decision_note:null,verification,reviewed_by:id};
+const view=buyerQualificationView(row,now);assert.equal(view.state,'expired');assert.equal(view.verification,undefined);assert.equal(view.reviewed_by,undefined);
+const b={id,entityId:id,markets:['Dallas'],propertyTypes:['house'],maxPriceCents:12000000,maxRepairCents:5000000,criteriaConfirmedAt:now,permitted:false,proofOfFundsVerifiedAt:now,authorityVerified:true,completedDeals:null,failedDeals:null,estimatedContactChargeCents:1000};
+const plan=planBuyerOutreach({market:'Dallas',propertyType:'house',askingPriceCents:10000000,repairsCents:4000000,sellerContractSigned:true,marketingAuthorized:true},[b],now,5000,1000);
+assert.equal(plan.matches[0].score,70);assert.equal(plan.matches[0].ready,true);assert.deepEqual(plan.outreach,[]);
+console.log('Buyer qualification policy: strict unverified intake, bounded evidence, explicit human attestations, private review DTO, unknown history and no implied contact grant passed.');

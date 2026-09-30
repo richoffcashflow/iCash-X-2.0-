@@ -3,11 +3,11 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import ts from 'typescript';
 import {dealTermsSchema} from '../lib/deal-documents.ts';
-let paused=false,manual=false,signed=true,prior=[],writes=[],sends=0;
+let stage='under_contract',paused=false,manual=false,signed=true,prior=[],writes=[],sends=0;
 const terms=dealTermsSchema.parse({address:'Fixture only',priceCents:10000000,assignmentFeeCents:2000000});
 const db=async(path,method,body)=>{
  if(path.startsWith('icash_accounts'))return [{owner_user_id:'owner',bot_paused:paused}];
- if(path.startsWith('icash_deal_files'))return [{terms,stage:'under_contract',screening_id:'screen'}];
+ if(path.startsWith('icash_deal_files'))return [{terms,stage,screening_id:'screen'}];
  if(path.startsWith('icash_disposition_authorities'))return [{purchase_envelope_id:'purchase',asking_price_cents:12000000,expires_at:'2099-01-01'}];
  if(path==='rpc/icash_deal_email_contacts')return [{contact_key:'buyer-request:request',party:'buyer',email:'fixture@example.invalid'},{contact_key:'signer:other',party:'buyer',email:'other@example.invalid'}];
  if(path.startsWith('icash_operation_rates'))return [{id:'rate'}];
@@ -30,3 +30,8 @@ paused=false;manual=true;await sendRequestedBuyerPackages('account','deal');asse
 manual=false;signed=false;await sendRequestedBuyerPackages('account','deal');assert.equal(sends,1);
 delete globalThis.__package;
 console.log('Requested buyer packages: exact deal/prices, explicit request, no duplicate, uncertain-delivery hold, pause/takeover and signed-contract checks passed. No email sent.');
+
+// Title milestones do not invalidate the same signed purchase and requested package.
+paused=false;manual=false;signed=true;prior=[];
+for(stage of ['title_open','closing'])assert.equal((await sendRequestedBuyerPackages('account','deal')).accepted,1);
+for(stage of ['draft','closed','cancelled'])assert.equal((await sendRequestedBuyerPackages('account','deal')).accepted,0);

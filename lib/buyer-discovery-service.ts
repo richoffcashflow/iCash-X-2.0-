@@ -7,7 +7,7 @@ export async function discoverBuyersForDeal(accountId:string,dealId:string){
  const [deal]=await db<{screening_id:string;stage:string}[]>(`icash_deal_files?id=eq.${dealId}&account_id=eq.${accountId}&select=screening_id,stage`);
  const [account]=await db<{bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=bot_paused`);
  const [signed]=await db<{id:string}[]>(`icash_signing_envelopes?deal_id=eq.${dealId}&account_id=eq.${accountId}&kind=eq.purchase&state=eq.completed&test_mode=eq.false&select=id&limit=1`);
- if(!deal||!signed||account?.bot_paused!==false||!['under_contract','buyer_selected'].includes(deal.stage))return {status:'buyer_search_held',canContinue:false};
+ if(!deal||!signed||account?.bot_paused!==false||!['under_contract','buyer_selected','title_open','closing'].includes(deal.stage))return {status:'buyer_search_held',canContinue:false};
  const [screen]=await db<{snapshot:{propertyId:string;raw?:{data?:{zip?:string}}}}[]>(`icash_screening_jobs?id=eq.${deal.screening_id}&account_id=eq.${accountId}&select=snapshot`);
  if(!screen||!/^prop_[A-Za-z0-9]+$/.test(screen.snapshot.propertyId))return {status:'buyer_search_held',canContinue:false};
  const dealZip=screen.snapshot.raw?.data?.zip;

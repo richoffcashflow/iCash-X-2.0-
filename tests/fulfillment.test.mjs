@@ -13,14 +13,14 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_signing_envelopes'))return signed?[{id:'envelope'}]:[];
  if(path.startsWith('icash_disposition_authorities'))return authority?[{purchase_envelope_id:'envelope',expires_at:new Date(now+100000).toISOString(),market:'Dallas',property_type:'house',asking_price_cents:11000000,repairs_cents:4000000,retain_credit_cents:100}]:[];
  if(path.startsWith('icash_wallets'))return [{balance_cents:1000,reserved_cents:0}];
- if(path.startsWith('icash_buyer_profiles'))return [{id:'buyer1',entity_key:'same',criteria,source_ref:'fixture:buyer-record'},{id:'buyer2',entity_key:'same',criteria,source_ref:'fixture:duplicate-record'},{id:'buyer3',entity_key:'invalid',criteria:{...criteria,authorityVerified:'false'},source_ref:'fixture:invalid'}];
+ if(path==='rpc/icash_reviewed_buyers'){assert.equal(method,'POST');assert.deepEqual(body,{p_account:'account',p_deal:'deal'});return [{id:'buyer1',entity_key:'same',criteria,source_ref:'fixture:buyer-record'},{id:'buyer2',entity_key:'same',criteria,source_ref:'fixture:duplicate-record'},{id:'buyer3',entity_key:'invalid',criteria:{...criteria,authorityVerified:'false'},source_ref:'fixture:invalid'}].map(b=>({...b,qualification_request_id:'review-'+b.id}));}
  if(path==='rpc/icash_save_fulfillment'){writes.push(body);return null;}
  throw Error('Unexpected call: '+path);
 };
 globalThis.__fulfillment={discoverTitlePlaces:async()=>({status:'google_places_key_required'}),qualifyTitleCompanies:async()=>({status:'title_mailbox_required'}),discoverBuyersForDeal:async()=>({status:'buyer_search_configuration_required',canContinue:false}),z,db,planBuyerOutreach,dealTermsSchema,renderDealDocument};
 let source=ts.transpileModule(readFileSync(new URL('../lib/fulfillment-service.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
 const {prepareFulfillment}=await import('data:text/javascript;base64,'+Buffer.from('const {discoverTitlePlaces,qualifyTitleCompanies,discoverBuyersForDeal,z,db,planBuyerOutreach,dealTermsSchema,renderDealDocument}=globalThis.__fulfillment;\n'+source).toString('base64'));
-assert.equal((await prepareFulfillment('account','job')).status,'fulfillment_prepared');assert.equal(writes[0].p_matches.length,1);assert.equal(writes[0].p_documents.length,2);assert.equal(writes[0].p_result.sent,false);assert.equal(writes[0].p_result.closed,false);
+assert.equal((await prepareFulfillment('account','job')).status,'fulfillment_prepared');assert.equal(writes[0].p_matches.length,1);assert.equal(writes[0].p_matches[0].qualificationRequestId,'review-buyer1');assert.equal(writes[0].p_documents.length,2);assert.equal(writes[0].p_result.sent,false);assert.equal(writes[0].p_result.closed,false);
 writes=[];signed=false;assert.equal((await prepareFulfillment('account','job')).status,'signed_purchase_required');assert.equal(writes.length,0);
 signed=true;authority=false;await prepareFulfillment('account','job');assert.equal(writes[0].p_matches.length,0);assert.equal(writes[0].p_result.buyerStatus,'marketing_review_required');
 delete globalThis.__fulfillment;

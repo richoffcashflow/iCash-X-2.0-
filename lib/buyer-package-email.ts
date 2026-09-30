@@ -12,7 +12,7 @@ export async function sendRequestedBuyerPackages(accountId:string,dealId:string)
   db<{contact_key:string;email:string;party:string}[]>('rpc/icash_deal_email_contacts','POST',{p_account:accountId,p_deal:dealId}),
   db<{id:string}[]>(`icash_operation_rates?operation=eq.manual_email&enabled=eq.true&expires_at=gt.${new Date().toISOString()}&select=id&order=verified_at.desc&limit=1`),
  ]);
- if(!account||account.bot_paused||!deal||!['under_contract','buyer_selected'].includes(deal.stage)||!authority||Date.parse(authority.expires_at)<=Date.now()||!rate)return {status:'buyer_package_held',accepted:0};
+ if(!account||account.bot_paused||!deal||!['under_contract','buyer_selected','title_open','closing'].includes(deal.stage)||!authority||Date.parse(authority.expires_at)<=Date.now()||!rate)return {status:'buyer_package_held',accepted:0};
  const t=dealTermsSchema.parse(deal.terms);
  if(t.priceCents===null||t.assignmentFeeCents===null||authority.asking_price_cents!==t.priceCents+t.assignmentFeeCents)return {status:'buyer_package_terms_required',accepted:0};
  const [signed]=await db<{id:string}[]>(`icash_signing_envelopes?id=eq.${authority.purchase_envelope_id}&account_id=eq.${accountId}&deal_id=eq.${dealId}&kind=eq.purchase&state=eq.completed&test_mode=eq.false&select=id`);
