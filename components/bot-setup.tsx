@@ -94,9 +94,7 @@ export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=
      <label className="setup-label" htmlFor="bot-name">Your name or business name</label>
      <input className="setup-input" id="bot-name" autoComplete="organization" maxLength={64} value={profile.displayName} onChange={e=>{nameEdited.current=true;setProfile(p=>({...p,displayName:e.target.value}));setError('');}} placeholder="e.g. Jordan or Oak Street Properties" required disabled={busy}/>
      <button className="setup-primary" disabled={busy||!profile.displayName.trim()}>{busy?<><LoaderCircle size={18} className="setup-spin"/> Saving your setup…</>:<>Build my free bot<ArrowRight size={18}/></>}</button>
-     <p className="setup-free"><span>A paid daily budget starts outreach.</span></p>
     </form>
-    <div className="setup-process"><span className="setup-process-label">ONE DEAL, FOUR STEPS</span><DealExplainer compact/><details className="setup-details"><summary>How do I earn money?</summary><p>You agree to buy a property, then transfer the contract to a cash buyer for an assignment fee. You receive the fee if the deal closes. Costs reduce what you keep. Deals and income aren’t guaranteed.</p><DealExplainer/></details></div>
    </>:<>
     <span className="setup-eyebrow">MADE FOR {profile.displayName.toUpperCase()}</span>
     <h1 ref={heading} tabIndex={-1}>Your bot setup is ready.</h1>
