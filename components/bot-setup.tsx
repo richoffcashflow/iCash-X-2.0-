@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useRef,useState,type CSSProperties} from 'react';
-import {ArrowRight,Check,Play,Pause,LoaderCircle,SlidersHorizontal} from 'lucide-react';
+import {ArrowRight,Check,Play,Pause,LoaderCircle,SlidersHorizontal,X} from 'lucide-react';
 import {DealExplainer} from './deal-explainer';
 import {BotBrand} from './bot-brand';
 import {FundingCheckout} from './funding-checkout';
@@ -18,6 +18,8 @@ export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=
  const [audioError,setAudioError]=useState(''),[playing,setPlaying]=useState(''),[previewLoading,setPreviewLoading]=useState('');
  const nameEdited=useRef(false),audio=useRef<HTMLAudioElement|null>(null),previewRequest=useRef(0);
  const heading=useRef<HTMLHeadingElement>(null),ready=useRef(false),init=useRef<Promise<BotSetup>|null>(null);
+ const [notice,setNotice]=useState<{title:string;detail:string}|null>(null);
+ useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(null),6500);return()=>clearTimeout(timer);},[notice]);
  const catalog=useRef<Promise<SetupVoice[]>|null>(null);
 
  async function load(){
@@ -54,6 +56,7 @@ export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=
    const r=await fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save',profile:parsed.data,stage:4,revision:current.revision})});
    const d=await r.json();if(!r.ok||!d.setup)throw Error(d.error??'Could not save. Please retry.');
    setSetup(d.setup);setProfile({...defaultBotProfile,...d.setup.profile,aiLogo:null});setStep(4);setEditing(false);
+   setNotice({title:"Your bot setup is saved",detail:`${d.setup.profile.displayName} · ${d.setup.profile.market}. Outreach hasn’t started.`});
    return true;
   }catch(e){setError(e instanceof Error?e.message:'Could not save. Please retry.');return false;}
   finally{setBusy(false);}
@@ -75,6 +78,7 @@ export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=
    await a.play();
    if(request!==previewRequest.current){a.pause();return;}
    setPlaying(key);track('voice_played');
+   setNotice({title:'Hear your AI voice',detail:'This is a voice preview, not a live seller call.'});
   }catch{catalog.current=null;if(request===previewRequest.current)setAudioError('Voice preview unavailable. Your saved voice is unchanged.');}
   finally{if(request===previewRequest.current)setPreviewLoading('');}
  }
@@ -84,6 +88,7 @@ export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=
  const theme=setupThemes[profile.theme];
  const style={'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties;
  return <section className={`bot-setup ${step===4?'setup-complete':'setup-entry'}`} style={style} aria-label="Build your real estate bot">
+  {notice&&<aside className="setup-toast" aria-label="Setup update"><Check size={20} aria-hidden="true"/><div role="status" aria-live="polite"><strong>{notice.title}</strong><p>{notice.detail}</p></div><button type="button" aria-label="Dismiss setup update" onClick={()=>setNotice(null)}><X size={18}/></button></aside>}
   {step===4&&<div className="setup-progress"><span><Check size={14}/> Setup saved</span><button type="button" disabled={busy} aria-expanded={editing} aria-controls="setup-preferences" onClick={toggleEditing}><SlidersHorizontal size={14}/>{editing?'Close':'Customize'}</button></div>}
   <div className="setup-layout"><div className="setup-form setup-step-enter" key={step}>
    {step===0?<>
