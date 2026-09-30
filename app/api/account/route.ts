@@ -3,12 +3,12 @@ import type { CustomerIdentity } from "@/lib/customer-identity";
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/account-auth";
 import { db } from "@/lib/stripe-test";
-import { fundingMode } from "@/lib/funding-policy";
+import {accountMode} from "@/lib/account-mode";
 export const dynamic="force-dynamic";
 export async function GET(){
  const headers={"Cache-Control":"private, no-store"};
  try{
- const mode=fundingMode();const user=await currentUser(true);
+ const mode=accountMode();const user=await currentUser(true);
  if(!user||!mode)return NextResponse.json({signedIn:false,signInReady:process.env.ICASH_AUTH_EMAIL_READY==="true"},{headers});
  const id=await db<string>("rpc/icash_claim_funding","POST",{p_user:user.id,p_mode:mode});
  if(mode==="live")await db("rpc/icash_apply_funding_pacing","POST",{p_account:id});

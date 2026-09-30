@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { db } from "@/lib/stripe-test";
-import { fundingMode } from "@/lib/funding-policy";
+import {accountMode} from "@/lib/account-mode";
 class AuthRequestError extends Error { constructor(public status:number){super("Account authentication unavailable");} }
 type AuthUser={id:string;email?:string;email_confirmed_at?:string};
 type AuthSession={access_token:string;refresh_token:string;expires_in:number;user:AuthUser};
@@ -28,7 +28,7 @@ export async function currentUser(refresh=false):Promise<AuthUser|null> {
 export async function verifyEmail(email:string,token:string) {
  const s=await authRequest<AuthSession>("verify",{email,token,type:"email"});
  if(!s.user.email_confirmed_at)throw new Error("Verify your email first");
- const mode=fundingMode();if(!mode)throw new Error("Account mode unavailable");
+ const mode=accountMode();if(!mode)throw new Error("Account mode unavailable");
  await db("rpc/icash_claim_funding","POST",{p_user:s.user.id,p_mode:mode});
  await saveSession(s);
 }
