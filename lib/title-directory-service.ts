@@ -2,7 +2,7 @@ import {db} from '@/lib/stripe-test';
 import {reserveOperation} from '@/lib/operating-costs';
 export async function qualifyTitleCompanies(accountId:string,dealId:string){
  await db('rpc/icash_queue_title_qualification','POST',{p_account:accountId,p_deal:dealId});
- if(!process.env.RESEND_API_KEY||!process.env.ICASH_TITLE_FROM_EMAIL||!process.env.ICASH_TITLE_REPLY_EMAIL)return {status:'title_mailbox_required'};
+ if(!process.env.RESEND_API_KEY||!process.env.RESEND_RECEIVING_WEBHOOK_SECRET||!process.env.ICASH_TITLE_FROM_EMAIL||!process.env.ICASH_TITLE_REPLY_EMAIL)return {status:'title_mailbox_required'};
  const [j]=await db<{id:string;company_id:string;market:string;state_code:string}[]>(`icash_title_qualification_jobs?account_id=eq.${accountId}&state=eq.ready&order=created_at&limit=1`);if(!j)return {status:'no_title_inquiry_pending'};
  const [c]=await db<{name:string;public_email:string;contact_checked_until:string}[]>(`icash_title_directory?id=eq.${j.company_id}&select=name,public_email,contact_checked_until`);
  const [r]=await db<{id:string}[]>(`icash_operation_rates?operation=eq.title_qualification&enabled=eq.true&expires_at=gt.${new Date().toISOString()}&order=verified_at.desc&limit=1&select=id`);

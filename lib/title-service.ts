@@ -6,7 +6,7 @@ type TitleJob={id:string;account_id:string;deal_id:string;purchase_envelope_id:s
 /** Requests opening only. Provider email acceptance never establishes title opened or closing. */
 export async function dispatchTitleRequest(accountId:string,jobId:string){
  const [j]=await db<TitleJob[]>(`icash_title_requests?id=eq.${jobId}&account_id=eq.${accountId}&select=*`);
- if(!j||j.state!=='ready'||!process.env.RESEND_API_KEY||!process.env.ICASH_TITLE_FROM_EMAIL||!process.env.ICASH_TITLE_REPLY_EMAIL)return {status:'title_configuration_required'};
+ if(!j||j.state!=='ready'||!process.env.RESEND_API_KEY||!process.env.RESEND_RECEIVING_WEBHOOK_SECRET||!process.env.ICASH_TITLE_FROM_EMAIL||!process.env.ICASH_TITLE_REPLY_EMAIL)return {status:'title_configuration_required'};
  const pdf=await completedSigningPdf(accountId,j.purchase_envelope_id);
  const attachments=[{filename:'executed-purchase-agreement.pdf',content:Buffer.from(pdf).toString('base64')}];
  // Only signed, live agreements belonging to this exact account and deal may leave it.
