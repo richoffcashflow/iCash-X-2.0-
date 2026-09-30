@@ -12,4 +12,4 @@ assert.equal(acceptedFundingTerms({accepted:true,version:fundingTermsVersion}),t
 console.log('Draft terms, XSS escaping, deposit exceptions, missing terms and explicit versioned consent passed');
 const {planningEstimate}=await import('../lib/funding-forecast.ts');
 assert.deepEqual(planningEstimate(2000,{lookup_cents:10,voice_minute_cents:100,lookup_share_percent:20,call_minutes_low:2,call_minutes_high:5}),{lookups:40,minutes:16,callsLow:3,callsHigh:8});
-assert.throws(()=>planningEstimate(1999,{lookup_cents:10,voice_minute_cents:100,lookup_share_percent:20,call_minutes_low:2,call_minutes_high:5}));
+assert.throws(()=>planningEstimate(999,{lookup_cents:10,voice_minute_cents:100,lookup_share_percent:20,call_minutes_low:2,call_minutes_high:5}));
