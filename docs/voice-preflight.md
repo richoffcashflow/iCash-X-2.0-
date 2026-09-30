@@ -15,7 +15,7 @@ It verifies the stored review expiry and exact provider conversation-config hash
 5. Configure inbound initiation authentication through the supported secure credential setup with explicit approval. Verify forwarding, route binding, overrides and provider failure behavior before enabling inbound service.
 6. Obtain authorization for a bounded paid test to a specified owned/test number, then verify dial, disclosure, callback/handoff, saved result, exact provider costs and reconciliation. No live test has been performed by this preflight.
 
-As of the 2026-09-30 inspection, the ElevenLabs cloud-browser session required sign-in; provider production state could not be verified. Database audit reported zero production voice configurations and no seller/buyer rate rows. These are runtime setup gaps, not proof that the provider account has no agents or telephone resources.
+At the 2026-09-30 inspection, database audit reported zero production voice configurations and no seller/buyer rate rows. Subsequent authenticated provider UI review confirmed a distinct Production agent, two callback/handoff tools with matching routes and per-call capability variables, both outbound public and inbound Twilio numbers, a 600-second cap, required runtime overrides, authentication enabled, bursting disabled, and the inbound initiation URL. This establishes existing provider resources, not a matching runtime hash, verified costs, functioning forwarding or a completed call. The account was on the Free plan, which the provider explicitly excludes from commercial use; an optional Starter checkout was opened but no subscription was purchased by the inspection.
 
 ## Provider references checked 2026-09-30
 
@@ -24,3 +24,14 @@ As of the 2026-09-30 inspection, the ElevenLabs cloud-browser session required s
 - [Agent costs](https://elevenlabs.io/docs/help-center/product/eleven-agents/how-much-does-eleven-agents-cost): account-plan voice usage and separately passed-through LLM costs
 
 The check intentionally does not invent a dollar rate from these public pages.
+
+## Bootstrap hash inspection before a configuration exists
+
+Run `node scripts/voice-provider-inspect.mjs <agent-id> <phone-id>` only in the existing trusted server runtime. This performs two GETs and emits a sanitized `ICASH_VOICE_PROVIDER_INSPECTION` record with the exact SHA-256 used by dispatch, duration, voice and tool IDs, authentication status, Twilio provider status and caller-ID match. It does not output the underlying prompt or platform settings. IDs are validated before network access; all failures are generic. The test suite uses fixtures only.
+
+For a one-time build diagnostic, prepend that command to the existing build command, inspect the private build log, then restore the build command. Do not install it as an unauthenticated API endpoint or publish log output. A provider read does not authorize or enable an account. This inspection is not performed automatically by normal builds.
+
+Current official billing docs distinguish new prepaid PAYG from legacy usage billing: new subscriptions can purchase extra prepaid credits lasting 12 months, while legacy Starter subscriptions cannot. Never enable automatic top-ups or additional charges without an explicit budget. Starter was displayed as $6 USD/month plus applicable tax, 75 included call minutes, six concurrent calls and a commercial license. Hosting was $0.08/minute; LLM and telephony costs remain additional. Cancellation takes effect at the end of the cycle; refund eligibility requires a request within 14 days with no quota used. Check the final checkout before any purchase.
+
+- [Commercial-license restriction](https://help.elevenlabs.io/hc/en-us/articles/13313564601361-Can-I-publish-the-content-I-generate-on-the-platform)
+- [Current billing, PAYG and cancellation](https://elevenlabs.io/docs/overview/administration/billing)

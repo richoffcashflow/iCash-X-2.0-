@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {costCategories} from '../lib/cost-guard.ts';
+
+// These are source-contract checks, NOT a PostgreSQL execution substitute.
+const read=name=>readFileSync(new URL(`../${name}`,import.meta.url),'utf8');
+const sql=read('config/funded-voice-provisioning.sql');
+const original=read('config/funded-account-provisioning.sql');
+const databaseTests=read('tests/funded-voice-provisioning-database.sql');
+const wrapper=sql.split('create function public.icash_provision_funded_account(p_account uuid)')[1]
+ .split('revoke all on function')[0];
+assert.match(sql,/^begin;$/m);
+assert.match(sql,/commit;\s*$/);
+assert.match(sql,/id integer primary key check\(id=1\)/);
+assert.match(sql,/enabled boolean not null default false/);
+assert.match(sql,/alter table public\.icash_voice_production_template enable row level security/);
+assert.match(sql,/revoke all on public\.icash_voice_production_template from public,anon,authenticated/);
+assert.match(sql,/grant select,insert,update,delete on public\.icash_voice_production_template to service_role/);
+assert.doesNotMatch(sql,/insert into public\.icash_voice_production_template/i);
+assert.doesNotMatch(sql,/security definer/i);
+assert.match(sql,/isfinite\(reviewed_at\) and isfinite\(reviewed_until\) and reviewed_until>reviewed_at/);
+assert.match(sql,/icash_voice_template_ids_valid\(required_tool_ids,2\)/);
+assert.match(sql,/icash_voice_template_ids_valid\(approved_voice_ids,0\)/);
+assert.match(sql,/count\(distinct id\)=cardinality\(p_ids\)/);
+assert.match(sql,/coalesce\(array_ndims\(p_ids\),1\)=1/);
+
+const categories=sql.match(/foreach cat in array array\[([^\]]+)\]/)[1].match(/'([^']+)'/g).map(v=>v.slice(1,-1));
+assert.deepEqual(categories,[...costCategories]);
+assert.match(sql,/count\(\*\) from jsonb_object_keys\(p_costs\)\)<>16/);
+assert.match(sql,/jsonb_typeof\(p_costs->cat\) is distinct from 'number'/);
+assert.match(sql,/n<0 or n<>trunc\(n\) or n>9007199254740991/);
+assert.match(sql,/return total<=9007199254740991/);
+
+assert.match(sql,/alter function public\.icash_provision_funded_account\(uuid\) rename to icash_provision_before_voice_template/);
+assert.match(wrapper,/result:=public\.icash_provision_before_voice_template\(p_account\)/);
+for(const text of [wrapper,original])assert.match(text,/pg_advisory_xact_lock\(hashtextextended\(p_account::text,7301\)\)/);
+assert.match(wrapper,/account_id=p_account and mode='live' and state='paid' and credited_at is not null/);
+const fundingLookup=wrapper.match(/perform 1 from public\.icash_funding_orders[\s\S]+?;/)[0];
+assert.doesNotMatch(fundingLookup,/for (?:share|update)/i,'Funding trigger already owns the row; avoid advisory/funding-row lock inversion');
+assert(wrapper.indexOf('existing_configuration_preserved')<wrapper.indexOf('select * into t from public.icash_voice_production_template'));
+assert.match(wrapper,/t\.reviewed_at>checked_at or t\.reviewed_until<=checked_at/);
+assert.match(wrapper,/icash_voice_test_config where agent_id=t\.agent_id/);
+assert.match(wrapper,/icash_voice_test_sessions where agent_id=t\.agent_id/);
+assert.match(wrapper,/seller\.operation is distinct from 'seller_call' or buyer\.operation is distinct from 'buyer_call'/);
+assert.match(wrapper,/foreach r in array array\[seller,buyer\]/);
+assert.match(wrapper,/r\.enabled is distinct from true or r\.verified_at>checked_at or r\.expires_at<=checked_at/);
+assert.match(wrapper,/coalesce\(r\.voice_max_duration_seconds,0\)<t\.max_duration_seconds/);
+assert.match(wrapper,/not public\.icash_voice_template_costs_valid\(r\.costs_micros\)/);
+assert.match(wrapper,/until_at:=least\(t\.reviewed_until,seller\.expires_at,buyer\.expires_at\)/);
+assert.match(wrapper,/on conflict\(account_id\) do nothing/);
+assert.doesNotMatch(wrapper,/\b(?:update|delete from) public\./i);
+assert.deepEqual([...wrapper.matchAll(/insert into public\.(\w+)/g)].map(m=>m[1]),['icash_voice_configs']);
+assert.match(sql,/revoke all on function public\.icash_provision_before_voice_template\(uuid\),public\.icash_provision_funded_account\(uuid\) from public,anon,authenticated/);
+assert.match(databaseTests,/^begin;$/m);
+assert.match(databaseTests,/rollback;\s*$/);
+assert.doesNotMatch(databaseTests,/^commit;/m);
+assert.match(databaseTests,/foreach side in array array\['seller','buyer'\]/);
+assert.match(databaseTests,/set local role service_role/);
+assert.match(databaseTests,/set local role authenticated/);
+assert.match(databaseTests,/Manual disabled\/expired configuration overwritten/);
+assert.match(databaseTests,/update public\.icash_funding_orders set credited_at=credited_at where id=o/);
+console.log('Funded voice provisioning static contracts passed; PostgreSQL rollback tests require a separate database run.');

@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {inspectVoiceProvider} from '../scripts/voice-provider-inspect.mjs';
+const config={agent:{prompt:{prompt:'private prompt never printed',tool_ids:['tool_callback','tool_handoff']}},tts:{voice_id:'voicefixture'},conversation:{max_duration_seconds:600}};
+const env={ELEVENLABS_API_KEY:'do-not-print-key',CONTIGUITY_FROM:'+14243948384'};
+let requests=[];
+const fetcher=async(url,options)=>{assert.equal(options.method,'GET');assert.equal(options.redirect,'error');requests.push(url);return Response.json(url.includes('/agents/')?{conversation_config:config,platform_settings:{auth:{enable_auth:true},secret:'not-in-output'}}:{provider:'twilio',phone_number:env.CONTIGUITY_FROM});};
+const args={agentId:'agent_fixture',phoneId:'phnum_fixture',env,fetcher};
+const result=await inspectVoiceProvider(args);assert.equal(result.verified,true);assert.equal(result.callsPlaced,0);assert.equal(result.callerIdMatches,true);assert.equal(result.conversationConfigHash,createHash('sha256').update(JSON.stringify(config)).digest('hex'));
+assert(!JSON.stringify(result).includes('private prompt'));assert(!JSON.stringify(result).includes('not-in-output'));assert(!JSON.stringify(result).includes(env.ELEVENLABS_API_KEY));assert.equal(requests.length,2);
+requests=[];assert.equal((await inspectVoiceProvider({...args,agentId:'agent_fixture?secret=true'})).verified,false);assert.equal(requests.length,0);
+assert.equal((await inspectVoiceProvider({...args,env:{}})).error,'VOICE_PROVIDER_ENVIRONMENT_MISSING');
+assert.equal((await inspectVoiceProvider({...args,fetcher:async()=>{throw Error('secret');}})).error,'PROVIDER_READ_FAILED');
+assert.equal((await inspectVoiceProvider({...args,fetcher:async()=>new Response('private error',{status:401})})).error,'PROVIDER_READ_FAILED');
+console.log('Voice provider inspection: GET-only, exact configuration hash, ID validation, bounded fields and secret-free failures passed. No provider traffic.');
