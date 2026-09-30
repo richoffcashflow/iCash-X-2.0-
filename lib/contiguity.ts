@@ -58,7 +58,8 @@ export async function sendContiguityText(input:unknown,key:string,fetcher:Transp
  return {messageId:parsed.data.data.message_id,status:'accepted' as const};
 }
 export function isMessageOptOut(text:string){
- return /^(stop|stopall|unsubscribe|cancel|end|quit|revoke|opt\s*out)[.!\s]*$/i.test(text.trim())||/^(please\s+)?(unsubscribe|remove|delete)\s+me[.!\s]*$/i.test(text.trim())||/\b(do not|don't|dont|stop)\s+(texting|messaging|contacting|text|message|contact)\s*(me|us)?\b/i.test(text)||/\b(remove|take)\s+me\s+(off|from)\b/i.test(text);
+ text=text.replace(/[’‘]/g,"'");
+ return /^(stop|stopall|unsubscribe|cancel|end|quit|revoke|opt\s*out)[.!\s]*$/i.test(text.trim())||/^(please\s+)?(unsubscribe|remove|delete)\s+me[.!\s]*$/i.test(text.trim())||/\b(do not|don't|dont|stop)\s+(texting|messaging|contacting|calling|text|message|contact|call)\s*(me|us)?\b/i.test(text)||/\b(remove|take)\s+me\s+(off|from)\b/i.test(text);
 }
 const messageEvent=z.object({id:z.string().min(1).max(200),type:z.string().min(1).max(100),timestamp:z.number().finite(),data:z.object({from:phone,to:phone,body:z.string().max(20000).optional(),message_id:z.string().max(200).optional(),attachments:z.array(z.object({url:z.string().url().max(3000),mime:z.string().max(150).optional(),filename:z.string().max(250).optional()})).max(20).optional()})});
 export function parseTextWebhook(input:unknown){

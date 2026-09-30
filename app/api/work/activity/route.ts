@@ -19,12 +19,13 @@ export async function GET(req:Request){
    db<unknown[]>(`icash_live_callbacks?account_id=eq.${accountId}&screening_id=in.(${ids})&select=id,screening_id,due_at,timezone,state&order=due_at&limit=24`)
   ]):[[],[],[],[],[]];
   const dealIds=(deals as {id:string}[]).map(d=>d.id).join(',');
-  const [callRequests,handoffs,signing,signatureActions]=await Promise.all([
+  const [textAttention,callRequests,handoffs,signing,signatureActions]=await Promise.all([
+   db<unknown[]>(`icash_text_attention?account_id=eq.${accountId}&state=eq.open&select=id,screening_id,deal_id,kind,party,quote,timezone&order=created_at&limit=6`),
    ids?db<unknown[]>(`icash_sms_call_requests?account_id=eq.${accountId}&screening_id=in.(${ids})&state=eq.needs_review&select=id,screening_id,requested_at,state&order=requested_at.desc&limit=24`):Promise.resolve([]),
    db<unknown[]>(`icash_handoffs?account_id=eq.${accountId}&state=neq.resolved&select=id,screening_id,party,reason,summary,next_action,state&order=created_at&limit=6`),
    dealIds?db<unknown[]>(`icash_signing_envelopes?account_id=eq.${accountId}&deal_id=in.(${dealIds})&select=id,deal_id,kind,state,test_mode,updated_at`):Promise.resolve([]),
    db<{id:string;kind:string;test_mode:boolean}[]>(`icash_signing_envelopes?account_id=eq.${accountId}&state=eq.customer_signature_needed&select=id,kind,test_mode&order=created_at&limit=6`)
   ]);
-  return NextResponse.json({signatureActions,signing,signingConfigured:!!(process.env.DOCUSEAL_API_KEY||process.env.DOCUSEAL_TEST_API_KEY),properties:properties.slice(0,6),hasMore:properties.length>6,deals,contacts,controls,conversations,callbacks,callRequests,handoffs,page},{headers});
+  return NextResponse.json({textAttention,signatureActions,signing,signingConfigured:!!(process.env.DOCUSEAL_API_KEY||process.env.DOCUSEAL_TEST_API_KEY),properties:properties.slice(0,6),hasMore:properties.length>6,deals,contacts,controls,conversations,callbacks,callRequests,handoffs,page},{headers});
  }catch{return NextResponse.json({error:'Could not load your work. Sign in and retry.'},{status:503,headers});}
 }

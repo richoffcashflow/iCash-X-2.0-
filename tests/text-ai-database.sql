@@ -29,7 +29,7 @@ begin
  if (select body not like 'I am the AI assistant%' from public.icash_text_messages where id=o) then raise exception 'Missing disclosure';end if;
  insert into public.icash_text_messages(thread_id,account_id,direction,body,state) values(t,a,'incoming','Please call me tomorrow','received');
  if not (select paused from public.icash_text_threads where id=t) then raise exception 'Handoff did not pause';end if;
- if not exists(select 1 from public.icash_text_ai_jobs where thread_id=t and state='handoff') then raise exception 'Missing callback review';end if;
+ if not exists(select 1 from public.icash_text_attention where thread_id=t and kind='callback' and state='open') then raise exception 'Missing callback review';end if;
  if public.icash_claim_text(a,o,'+14243948384') is not null then raise exception 'Handoff send bypass';end if;
  insert into public.icash_text_messages(direction,body,state) values('incoming','Unknown sender','received') returning id into m;
  if exists(select 1 from public.icash_text_ai_jobs where message_id=m) then raise exception 'Unknown sender processed';end if;

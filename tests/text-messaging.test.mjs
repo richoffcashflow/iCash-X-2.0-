@@ -13,3 +13,5 @@ const e={id:'evt_fixture',type:'text.incoming.sms',timestamp:1700000000,data:{fr
 assert.throws(()=>parseTextWebhook({...e,type:'text.delivery.confirmed'}));
 assert.equal(parseTextWebhook({...e,type:'numbers.substitution',data:{original_number:p.from,used_number:p.to,message_id:'text_fixture'}}).data.from,p.from);
 console.log('SMS/MMS payload, attachment bounds, no retry, STOP, receipt and substitution parsing checks passed. No real messages.');
+
+for(const text of ["Do not call me", "Don’t call me again", "Stop calling us"]){assert(isMessageOptOut(text),text);}

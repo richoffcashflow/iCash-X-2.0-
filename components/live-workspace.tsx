@@ -12,11 +12,12 @@ type Property={id:string;completed_at:string;result:{property:{address:string;pr
 type Deal={id:string;screening_id:string;terms:DealTerms;stage:string};
 type Handoff={id:string;screening_id:string;party:string;reason:string;summary:string;next_action:string;state:string};
 type Conversation={id:string;screening_id:string;party:string;summary?:string};
-type Work={callRequests?:{id:string;screening_id:string;requested_at:string;state:string}[];signatureActions:{id:string;kind:string;test_mode:boolean}[];signing:SigningEnvelope[];signingConfigured:boolean;handoffs:Handoff[];conversations:Conversation[];callbacks:{id:string;screening_id:string;due_at:string;timezone:string;state:string}[];properties:Property[];deals:Deal[];contacts:{screening_id:string}[];hasMore:boolean;controls:{property_id:string}[]};
+type TextAttention={id:string;screening_id:string;deal_id:string;kind:string;party:string;quote:string;timezone:string};
+type Work={textAttention?:TextAttention[];callRequests?:{id:string;screening_id:string;requested_at:string;state:string}[];signatureActions:{id:string;kind:string;test_mode:boolean}[];signing:SigningEnvelope[];signingConfigured:boolean;handoffs:Handoff[];conversations:Conversation[];callbacks:{id:string;screening_id:string;due_at:string;timezone:string;state:string}[];properties:Property[];deals:Deal[];contacts:{screening_id:string}[];hasMore:boolean;controls:{property_id:string}[]};
 function milestone(property:Property,work:Work){
  const deal=work.deals.find(d=>d.screening_id===property.id);
  const signatures=work.signing.filter(e=>e.deal_id===deal?.id&&!e.test_mode);
- return workMilestone({stage:deal?.stage,needsHuman:work.handoffs.some(h=>h.screening_id===property.id)||!!work.callRequests?.some(c=>c.screening_id===property.id),needsSignature:signatures.some(e=>e.state==='customer_signature_needed'),purchaseSigned:signatures.some(e=>e.kind==='purchase'&&e.state==='completed'),assignmentSigned:signatures.some(e=>e.kind==='assignment'&&e.state==='completed'),eligible:property.result.financialCheck.status==='eligible'});
+ return workMilestone({stage:deal?.stage,needsHuman:!!work.textAttention?.some(a=>a.screening_id===property.id)||work.handoffs.some(h=>h.screening_id===property.id)||!!work.callRequests?.some(c=>c.screening_id===property.id),needsSignature:signatures.some(e=>e.state==='customer_signature_needed'),purchaseSigned:signatures.some(e=>e.kind==='purchase'&&e.state==='completed'),assignmentSigned:signatures.some(e=>e.kind==='assignment'&&e.state==='completed'),eligible:property.result.financialCheck.status==='eligible'});
 }
 async function post(path:string,data:unknown){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const out=await r.json();if(!r.ok)throw new Error(out.error||'Please retry.');return out;}
 export function LiveWorkspace({principal}:{principal:string}){
@@ -43,12 +44,24 @@ function PropertyNextStep({property,work}:{property:Property;work:Work}){
 function WorkspaceAttention({work}:{work:Work}){
  const [handled,setHandled]=useState<string[]>([]);
  const requests=[
+  ...(work.textAttention??[]).map(a=>({id:'text:'+a.id,node:<TextAttentionCard item={a} onHandled={()=>setHandled(v=>[...v,'text:'+a.id])}/>})),
   ...work.signatureActions.map(e=>({id:'sign:'+e.id,node:<SigningAttention envelope={e}/>})),
   ...work.handoffs.filter(h=>h.state==='open').map(h=>({id:'human:'+h.id,node:<><p className="attention-address">{work.properties.find(p=>p.id===h.screening_id)?.result.property.address??'Property conversation'}</p><HandoffCard handoff={h} onHandled={()=>setHandled(v=>[...v,'human:'+h.id])}/></>})),
-  ...(work.callRequests??[]).map(c=>({id:'call:'+c.id,node:<><p className="attention-address">{work.properties.find(p=>p.id===c.screening_id)?.result.property.address??'Seller conversation'}</p><CallRequest id={c.id} onHandled={()=>setHandled(v=>[...v,'call:'+c.id])}/></>}))
+  ...(work.callRequests??[]).filter(c=>!work.textAttention?.some(a=>a.screening_id===c.screening_id&&a.kind==='callback')).map(c=>({id:'call:'+c.id,node:<><p className="attention-address">{work.properties.find(p=>p.id===c.screening_id)?.result.property.address??'Seller conversation'}</p><CallRequest id={c.id} onHandled={()=>setHandled(v=>[...v,'call:'+c.id])}/></>}))
  ].filter(r=>!handled.includes(r.id));
  if(!requests.length)return <p className="attention-clear">✓ No new requests in this view.</p>;
  return <section className="workspace-attention" aria-label="Needs you"><div className="attention-heading"><h4>Needs you</h4><span>Start here</span></div><div key={requests[0].id}>{requests[0].node}</div>{requests.length>1&&<details><summary>See more requests ({requests.length-1})</summary>{requests.slice(1).map(r=><div className="attention-item" key={r.id}>{r.node}</div>)}</details>}</section>;
+}
+function TextAttentionCard({item,onHandled}:{item:TextAttention;onHandled:()=>void}){
+ const [busy,setBusy]=useState(false),[error,setError]=useState('');
+ const copy:Record<string,{title:string;next:string}>={
+ withdrawal:{title:`${item.party==='buyer'?'Buyer':'Seller'} may be backing out`,next:'Check the signed agreement and closing deadline. Contact your closer before finding a replacement buyer. No contract or deposit has been changed.'},
+ human:{title:'A person was requested',next:'Open the property messages and take over the conversation. Automatic work on this property is paused.'},
+ callback:{title:'A callback was requested',next:`Confirm the date, time and timezone in messages. The thread timezone is ${item.timezone}; an appointment is not booked yet.`},
+ declined:{title:'Outreach paused',next:'They declined or reported a wrong number. Review the message before doing any further work on this property.'}
+ };
+ const view=copy[item.kind]??{title:'Message needs review',next:'Open the property messages.'};
+ return <article><strong>{view.title}</strong><blockquote className="reply-quote">{item.quote}</blockquote><p>{view.next}</p><button disabled={busy} onClick={async()=>{setBusy(true);try{await post('/api/work/text-attention',{id:item.id});onHandled();}catch{setError('Could not save. Please retry.');setBusy(false);}}}>I’ll handle this</button><small>Marking this seen keeps automatic work paused.</small>{error&&<p role="alert">{error}</p>}</article>;
 }
 function DealTools({property,principal,initial,initialManual,signing,signingConfigured}:{property:Property;principal:string;initial?:Deal;initialManual:boolean;signing:SigningEnvelope[];signingConfigured:boolean}){
  const [manual,setManual]=useState(initialManual);
