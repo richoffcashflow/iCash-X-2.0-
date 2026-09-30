@@ -1,6 +1,7 @@
 'use client';
 import {useCallback,useEffect,useState,useRef,type CSSProperties} from 'react';
 import Image from 'next/image';
+import {productRiskNotice} from '@/lib/product-disclosures';
 import {workspaceStatus} from '@/lib/workspace-status';
 import {DealExplainer} from '@/components/deal-explainer';
 import {Plus,X} from 'lucide-react';
@@ -39,6 +40,7 @@ export default function Home(){
     <section className="operation-panel" aria-label="Your AI real estate bot"><div className="operation-top"><span className="bot-icon">X</span><div><h2>{account!.assistantName}</h2><span>{profile?.displayName?`Working for ${profile.displayName}`:'Your balance is saved'}</span></div><span className="mode-badge">{status.label}</span></div><div className="operation-empty"><h3>{status.title}</h3><p>{status.detail}</p>{!account!.identity&&<button className="fund-button" onClick={()=>{const details=document.getElementById('account-details') as HTMLDetailsElement|null;if(details){details.open=true;details.scrollIntoView({behavior:'smooth',block:'start'});}}}>Add my contract name</button>}<button className="demo-button" disabled={controlBusy} onClick={()=>void toggleBot()}>{controlBusy?'Saving…':account!.paused?'Resume bot':'Stop bot & daily billing'}</button><BudgetSummary onFund={openFunding}/><details className="setup-details"><summary>How a deal works</summary><DealExplainer/></details><LiveWorkspace principal={account!.identity?.principal??''}/><details id="account-details"><summary>Account details</summary><p>{account!.email}</p>{account!.phone&&<p>{account!.phone}</p>}<CustomerIdentity identity={account!.identity??null} onSaved={()=>void refreshAccount()}/><p>Manage daily billing from your budget. Stop bot cancels future daily renewals.</p></details></div></section>
    </>}
   </main>
+  <footer className="product-disclosure"><p>{productRiskNotice}</p><a href="/costs-and-disclosures">Costs, risks & disclosures</a></footer>
 
  </div>;
 }

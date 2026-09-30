@@ -1,2 +1,3 @@
-export const dailyConsentVersion='daily-2026-09-29.2';
-export const dailyConsent='I authorize a recurring daily charge for my selected bot budget with no separately added processing fee or tax. Charges renew every 24 hours from the initial billing time until I stop the bot. Budget changes apply at the next renewal. Stopping cancels future renewals; a payment already in progress may complete. Unused credits remain on my account. No deal or earnings are guaranteed.';
+import {productRiskNotice} from './product-disclosures.ts';
+export const dailyConsentVersion='daily-2026-09-29.3';
+export const dailyConsent='I authorize a recurring daily charge for my selected bot budget with no separately added processing fee or tax. Charges renew every 24 hours from the initial billing time until I stop the bot. Budget changes apply at the next renewal. Stopping cancels future renewals; a payment already in progress may complete. Unused credits remain on my account. No deal or earnings are guaranteed.'+' '+productRiskNotice+' I understand these risks. This acknowledgment does not waive mandatory consumer rights.';

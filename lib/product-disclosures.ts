@@ -1,0 +1,2 @@
+export const productRiskNotice='No deals, buyers, closings or profit are guaranteed. You pay for software activity, and your entire budget may be used without closing a deal. Real estate transactions can lose money, including deposits and other costs.';
+export const contractRiskNotice='Signing creates obligations. Review prices, deadlines, deposits, cancellation terms and all required parties. Estimates and AI summaries can be wrong. Your fee is not earned or paid just because a contract is signed.';
