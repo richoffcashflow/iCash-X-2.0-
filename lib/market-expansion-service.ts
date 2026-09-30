@@ -2,6 +2,7 @@ import {db} from './stripe-test';
 import {marketCountBodies,marketCounts,marketLocations} from './market-expansion';
 type Job={id:string;kind:'locations'|'counts';city:string;query:string;state:string;zip:string|null;page:number};
 export async function expandMarket(account:string,id:string){
+ if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
  const key=process.env.DEALMACHINE_API_KEY;if(!key)return {status:'market_provider_missing'};
  const j=await db<Job|null>('rpc/icash_claim_market_research','POST',{p_account:account,p_job:id});if(!j)return {status:'market_research_held'};
  const request=async(path:string,body?:object)=>{

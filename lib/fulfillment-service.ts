@@ -11,6 +11,7 @@ const buyerCriteria=z.object({markets:z.array(z.string()),propertyTypes:z.array(
 type Job={id:string;deal_id:string;purchase_envelope_id:string;state:string};
 type Authority={purchase_envelope_id:string;expires_at:string;market:string;property_type:string;asking_price_cents:number;repairs_cents:number;retain_credit_cents:number};
 export async function prepareFulfillment(accountId:string,jobId:string){
+ if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
  const [job]=await db<Job[]>(`icash_fulfillment_jobs?id=eq.${jobId}&account_id=eq.${accountId}&select=*`);
  if(!job||job.state!=='issued')return {status:'held'};
  const [deal]=await db<{terms:unknown;stage:string}[]>(`icash_deal_files?id=eq.${job.deal_id}&account_id=eq.${accountId}&select=terms,stage`);

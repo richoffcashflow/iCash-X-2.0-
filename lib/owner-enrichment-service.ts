@@ -2,6 +2,7 @@ import {db} from '@/lib/stripe-test';
 import {dispatchReservedOperation} from '@/lib/operating-costs';
 import {enrichOwners} from './owner-enrichment.ts';
 export async function enrichForAccount(accountId:string,screeningId:string){
+ if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
  const [c]=await db<{enabled:boolean;contacts_enabled:boolean;contact_rate_id:string;contact_credit_cap:number;property_credit_micros:number;data_rights_until:string}[]>(`icash_discovery_configs?account_id=eq.${accountId}&select=*`);
  if(!c?.enabled||!c.contacts_enabled||!c.contact_rate_id||Date.parse(c.data_rights_until)<=Date.now())return {status:'not_ready'};
  const [job]=await db<{snapshot:unknown;state:string}[]>(`icash_screening_jobs?id=eq.${screeningId}&account_id=eq.${accountId}&select=snapshot,state`);

@@ -1,17 +1,17 @@
 import type Stripe from 'stripe';
 import {db} from '@/lib/stripe-test';
 import {fundingStripe} from '@/lib/funding';
-import {fundingEnabled,fundingMode} from '@/lib/funding-policy';
+import {earlyAccessFundingEnabled,fundingEnabled,fundingMode} from '@/lib/funding-policy';
 import {processingFeeCents} from '@/lib/funding-fees';
 import {dailyConsent} from '@/lib/daily-consent';
 export {dailyConsent,dailyConsentVersion} from '@/lib/daily-consent';
 export type DailyPlan={id:string;mode:'test'|'live';guest_hash:string;account_id:string|null;stripe_subscription_id:string|null;stripe_session_id:string|null;state:string;checkout_url:string|null;created_at:string};
 type Quote={id:string;plan_id:string;pack_code:string;budget_cents:number;credit_cents:number;fee_cents:number;budget_price:string;fee_price:string|null};
-export function dailyReady(){return fundingEnabled()&&!!process.env.CRON_SECRET&&process.env.ICASH_DAILY_BILLING_READY==='true';}
-export async function dailyQuote(p:DailyPlan,code:string){
+export function dailyReady(){return (fundingEnabled()||earlyAccessFundingEnabled())&&!!process.env.CRON_SECRET&&process.env.ICASH_DAILY_BILLING_READY==='true';}
+export async function dailyQuote(p:DailyPlan,code:string,consentText:string=dailyConsent){
  const [pack]=await db<{code:string;price_cents:number;credit_cents:number}[]>(`icash_credit_packs?code=eq.${code}${p.mode==='live'?'&enabled=eq.true':''}&select=code,price_cents,credit_cents`);
  if(!pack||pack.price_cents<1000||pack.price_cents>100000)throw new Error('Budget unavailable');
- const [q]=await db<Quote[]>('icash_daily_quotes','POST',{plan_id:p.id,pack_code:code,budget_cents:pack.price_cents,credit_cents:pack.credit_cents,fee_cents:processingFeeCents(pack.price_cents),consent_text:dailyConsent});
+ const [q]=await db<Quote[]>('icash_daily_quotes','POST',{plan_id:p.id,pack_code:code,budget_cents:pack.price_cents,credit_cents:pack.credit_cents,fee_cents:processingFeeCents(pack.price_cents),consent_text:consentText});
  const stripe=fundingStripe();
  const product=await stripe.products.create({name:'iCash X daily bot budget',metadata:{icash_daily_quote:q.id}},{idempotencyKey:`daily-product:${q.id}`});
  const base={currency:'usd',tax_behavior:'exclusive' as const,recurring:{interval:'day' as const},product:product.id};

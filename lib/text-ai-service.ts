@@ -4,6 +4,7 @@ import {db} from '@/lib/stripe-test';
 import {analyzeText,safeTextReplies} from './text-ai-policy.ts';
 import {dispatchTextMessage} from '@/lib/text-message-service';
 export async function processTextAi(accountId:string,jobId:string){
+ if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
  if(!process.env.OPENAI_API_KEY){
   await db(`icash_text_ai_jobs?id=eq.${jobId}&account_id=eq.${accountId}&state=eq.issued`,'PATCH',{state:'pending',next_attempt_at:new Date(Date.now()+3600000).toISOString()});
   return {status:'text_ai_configuration_required'};

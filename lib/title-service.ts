@@ -5,6 +5,7 @@ import {completedSigningPdf} from '@/lib/signing-service';
 type TitleJob={id:string;account_id:string;deal_id:string;purchase_envelope_id:string;recipient:string;rate_id:string;verified_until:string;state:string;property_address:string};
 /** Requests opening only. Provider email acceptance never establishes title opened or closing. */
 export async function dispatchTitleRequest(accountId:string,jobId:string){
+ if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
  const [j]=await db<TitleJob[]>(`icash_title_requests?id=eq.${jobId}&account_id=eq.${accountId}&select=*`);
  if(!j||j.state!=='ready'||!process.env.RESEND_API_KEY||!process.env.RESEND_RECEIVING_WEBHOOK_SECRET||!process.env.ICASH_TITLE_FROM_EMAIL||!process.env.ICASH_TITLE_REPLY_EMAIL)return {status:'title_configuration_required'};
  const pdf=await completedSigningPdf(accountId,j.purchase_envelope_id);

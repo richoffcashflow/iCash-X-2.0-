@@ -4,6 +4,7 @@ import {dealEmailConfigured,dispatchDealEmail} from './deal-email-service';
 import {dealTermsSchema} from './deal-documents';
 /** Only fulfill an explicit buyer request; no scraped email blast or repeated package sends. */
 export async function sendRequestedBuyerPackages(accountId:string,dealId:string){
+ if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready',accepted:0};
  if(!dealEmailConfigured())return {status:'buyer_email_configuration_required',accepted:0};
  const [[account],[deal],[authority],contacts,[rate]]=await Promise.all([
   db<{owner_user_id:string;bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=owner_user_id,bot_paused`),

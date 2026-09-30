@@ -10,6 +10,7 @@ export async function POST(req:Request){
  const headers={'Cache-Control':'private, no-store'};
  const secret=process.env.ELEVENLABS_INBOUND_WEBHOOK_SECRET;
  if(!inboundAuthorized(req.headers.get('authorization'),secret))return NextResponse.json({error:'Unauthorized'},{status:401,headers});
+ if(process.env.ICASH_LIVE_WORK_READY!=='true')return NextResponse.json({error:'Call routing unavailable'},{status:503,headers});
  try{
   if(Number(req.headers.get('content-length')??0)>4096)throw new Error('Invalid request');
   const raw=await req.text();if(Buffer.byteLength(raw)>4096)throw new Error('Invalid request');

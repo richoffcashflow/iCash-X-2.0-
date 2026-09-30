@@ -1,3 +1,4 @@
+process.env.ICASH_LIVE_WORK_READY='true'; // Ready-state provider fixtures only.
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';

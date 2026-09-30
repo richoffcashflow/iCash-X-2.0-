@@ -3,6 +3,7 @@ import {elevenRequest} from '@/lib/elevenlabs';
 import {db} from '@/lib/stripe-test';
 import {sendContiguityText,textPayload} from '@/lib/contiguity';
 export async function dispatchTextMessage(accountId:string,messageId:string){
+ if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
  const from=process.env.CONTIGUITY_FROM,key=process.env.CONTIGUITY_API_KEY;
  if(!from||!key||!process.env.CONTIGUITY_WEBHOOK_SECRET)return {status:'messaging_configuration_required'};
  // Verify stored attachment shape before committing to a charged dispatch.

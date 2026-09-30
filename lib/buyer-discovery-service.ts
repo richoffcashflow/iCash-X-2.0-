@@ -2,6 +2,7 @@ import {db} from '@/lib/stripe-test';
 import {discoverBuyerPage} from './buyer-discovery.ts';
 type Config={enabled:boolean;rate_id:string;unit_cost_micros:number;rights_until:string;revision:string;since:string;zip:string;max_pages:number;per_page:number};
 export async function discoverBuyersForDeal(accountId:string,dealId:string){
+ if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready',canContinue:false};
  const [config]=await db<Config[]>(`icash_buyer_search_configs?account_id=eq.${accountId}&select=*`);
  if(!config?.enabled||!(Date.parse(config.rights_until)>Date.now())||!process.env.DEALMACHINE_API_KEY)return {status:'buyer_search_configuration_required',canContinue:false};
  const [deal]=await db<{screening_id:string;stage:string}[]>(`icash_deal_files?id=eq.${dealId}&account_id=eq.${accountId}&select=screening_id,stage`);

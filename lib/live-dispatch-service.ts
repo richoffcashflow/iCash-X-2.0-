@@ -10,6 +10,7 @@ type Job={id:string;account_id:string;permission_id:string;callback_id:string|nu
 type Config={approved_voice_ids:string[];enabled:boolean;agent_id:string;phone_number_id:string;agent_config_hash:string;reviewed_until:string;seller_rate_id:string;buyer_rate_id:string|null;max_duration_seconds:number;required_tool_ids:string[]};
 type Permission=VoicePermission&{id:string;account_id:string;screening_id:string;party:'seller'|'buyer';contact_key:string};
 export async function dispatchLiveVoice(accountId:string,jobId:string){
+ if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
  const [j]=await db<Job[]>(`icash_voice_jobs?id=eq.${jobId}&account_id=eq.${accountId}&select=*`);if(!j||j.state!=='issued')return {status:'held'};
  let ownsDispatch=false;
  const hold=async(reason:string)=>{await db('rpc/icash_hold_voice_job','POST',{p_account:accountId,p_job:j.id,p_reason:reason,p_after_claim:ownsDispatch});return {status:reason};};

@@ -38,6 +38,7 @@ const {db:baseDb,rpc,q,calls}=databaseAdapter(pg);
 // Reproduce the one PostgREST embedded relation used by actual coverage service.
 const db=async(path,...args)=>{const rows=await baseDb(path,...args);if(path.includes('rate:icash_operation_rates'))for(const row of rows)row.rate=(await q('select * from icash_operation_rates where id=$1',[row.rate_id])).rows[0]??null;return rows;};
 const originalFetch=globalThis.fetch,originalEnv={...process.env};
+process.env.ICASH_LIVE_WORK_READY='true'; // Explicitly ready, isolated provider fixtures.
 const report=[],external=[];
 const pass=(stage,detail)=>{report.push({stage,status:'SIMULATED PASS',detail});console.log('SIMULATED PASS:',stage,'—',detail);};
 const note=(stage,status,detail)=>{report.push({stage,status,detail});console.log(status+':',stage,'—',detail);};

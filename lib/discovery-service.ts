@@ -5,6 +5,7 @@ import {discoverPage} from './discovery-pipeline.ts';
 type Config={account_id:string;enabled:boolean;zip:string;rate_id:string;property_credit_micros:number;data_rights_until:string;per_page:number;next_page:number;revision:string;exhausted:boolean};
 /** Called only with a server-resolved authenticated account. All policy lives in service-only DB rows. */
 export async function discoverForAccount(accountId:string){
+ if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
  const [c]=await db<Config[]>(`icash_discovery_configs?account_id=eq.${accountId}&select=*`);
  if(!c?.enabled||c.exhausted||Date.parse(c.data_rights_until)<=Date.now())return {status:'not_ready'};
  const coverage=await acquisitionContractCoverage(c.zip);

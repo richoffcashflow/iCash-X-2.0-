@@ -20,6 +20,7 @@ export async function sendForSignatures(i:{accountId:string;userId:string;custom
  const terms=dealTermsSchema.parse(deal.terms);signingReadiness(i.kind,terms,i.signers,identity.principal,deal.stage);
  if(i.signers.some(s=>s.email.toLowerCase()===i.customerEmail.toLowerCase()))throw new Error('Each party must use their own email.');
  const testMode=process.env.DOCUSEAL_MODE!=='live';
+ if(!testMode&&process.env.ICASH_LIVE_WORK_READY!=='true')throw new Error('Live work is not ready.');
  if(!(testMode?process.env.DOCUSEAL_TEST_API_KEY:process.env.DOCUSEAL_API_KEY))throw new Error('Signing key for this mode is not configured.');
  const [template]=await db<Template[]>(`icash_signing_templates?state_code=eq.${terms.state}&kind=eq.${i.kind}&signer_count=eq.${i.signers.length}&test_mode=eq.${testMode}&provider=eq.docuseal&enabled=eq.true&select=*`);
  if(!template||Date.parse(template.reviewed_until)<=Date.now())throw new Error('A reviewed signing template is needed for this state and signer count.');
@@ -62,6 +63,8 @@ export async function refreshSigning(accountId:string,id:string){
   await db('rpc/icash_save_signing_status','POST',{p_id:e.id,p_state:state,p_evidence:d});
   // A send-time pass does not authorize an expired or incomplete agreement to be signed days later.
   signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms));
+  // Poll/save existing evidence while new live signatures remain blocked.
+  if(!e.test_mode&&process.env.ICASH_LIVE_WORK_READY!=='true')return {status:state};
   const signature=await db<string|null>('rpc/icash_claim_auto_signature','POST',{p_account:accountId,p_envelope:e.id,p_hash:e.terms_hash});
   if(signature){
    const [template]=await db<Template[]>(`icash_signing_templates?id=eq.${e.template_id}&select=*`);

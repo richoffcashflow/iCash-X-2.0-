@@ -1,11 +1,11 @@
 import {currentUser} from '@/lib/account-auth';
 import {fundingReturnSummary} from '@/lib/funding-return';
 import {privatePaymentCheckAllowed} from '@/lib/private-payment-check';
-import {liveFundingReady} from "@/lib/launch-readiness";
+import {customerFundingReady} from "@/lib/launch-readiness";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db,guestHash } from "@/lib/stripe-test";
-import { fundingMode,fundingEnabled,type FundingOrder } from "@/lib/funding-policy";
+import { earlyAccessFundingEnabled,fundingMode,type FundingOrder } from "@/lib/funding-policy";
 import { fundingStripe,settleFunding,validGuest } from "@/lib/funding";
 export const dynamic="force-dynamic";
 export async function GET(req:Request){
@@ -41,6 +41,6 @@ export async function GET(req:Request){
  }
  }
  const summary=fundingReturnSummary(orders,!!user);
- return NextResponse.json({privatePaymentCheck:await privatePaymentCheckAllowed(),mode,enabled:await liveFundingReady(),packs,planning,forecast:{cycleChargeCents:null,qualified:null},priceCents:pack?.price_cents??null,creditCents:pack?.credit_cents??null,...summary},{headers});
+ return NextResponse.json({privatePaymentCheck:await privatePaymentCheckAllowed(),mode,enabled:await customerFundingReady(),earlyAccess:earlyAccessFundingEnabled(),packs,planning,forecast:{cycleChargeCents:null,qualified:null},priceCents:pack?.price_cents??null,creditCents:pack?.credit_cents??null,...summary},{headers});
  }catch{return NextResponse.json({enabled:false,error:"Could not check funding. Please retry."},{status:503,headers});}
 }

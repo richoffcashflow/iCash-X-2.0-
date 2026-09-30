@@ -1,6 +1,6 @@
 import {readContractCoverage} from './contract-coverage-service';
 import {db} from '@/lib/stripe-test';
-import {fundingEnabled,fundingMode} from '@/lib/funding-policy';
+import {earlyAccessFundingEnabled,fundingEnabled,fundingMode} from '@/lib/funding-policy';
 import {evaluateLaunch,type LaunchChecks} from './launch-readiness-policy.ts';
 export async function launchReadiness(accountId:string|null=null){
  try{
@@ -18,4 +18,8 @@ export async function launchReadiness(accountId:string|null=null){
 export async function liveFundingReady(){
  if(!fundingEnabled())return false;
  return fundingMode()==='test'||(await launchReadiness()).ready;
+}
+/** Payment checkout readiness only; does not represent live-work readiness. */
+export async function customerFundingReady(){
+ return earlyAccessFundingEnabled()||await liveFundingReady();
 }

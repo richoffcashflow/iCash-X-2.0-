@@ -5,6 +5,7 @@ function serverOnly(){if(typeof window!=='undefined')throw new Error('Operating 
 /** Only server-resolved account IDs, permissions and underwriting belong here. No client-supplied quotes. */
 export async function reserveOperation(input:{accountId:string;operationKey:string;rateId:string;permissionUntil:string;financialCheck?:ReturnType<typeof sellerCallFinancialGate>}){
  serverOnly();
+ if(process.env.ICASH_LIVE_WORK_READY!=='true')throw new Error('Live work is not ready.');
  return db<{operationKey:string;state:string;reservedMicros:number}>('rpc/icash_reserve_operation','POST',{
   p_account:input.accountId,p_operation:input.operationKey,p_rate:input.rateId,p_permission_until:input.permissionUntil,
   p_financial_checked_at:input.financialCheck?new Date(input.financialCheck.checkedAt).toISOString():null,

@@ -7,7 +7,7 @@ let signedIn=true,guest=true,settled=false,paths=[],retrieved=0,planMatch=false,
 const receipt={id:'order',state:'pending',credit_cents:300,stripe_session_id:'cs_live_current',credited_at:null,payer_email:'test@example.invalid'};
 const mocks={
  currentUser:async()=>signedIn?{id:'owner'}:null,
- privatePaymentCheckAllowed:async()=>false,liveFundingReady:async()=>false,
+ privatePaymentCheckAllowed:async()=>false,customerFundingReady:async()=>false,earlyAccessFundingEnabled:()=>false,
  NextResponse:{json:(body,options={})=>({body,status:options.status??200})},
  cookies:async()=>({get:()=>guest?{value:'a'.repeat(64)}:undefined}),
  guestHash:()=> 'cookiehash',fundingMode:()=> 'live',fundingEnabled:()=>false,

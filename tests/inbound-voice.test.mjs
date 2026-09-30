@@ -1,3 +1,4 @@
+process.env.ICASH_LIVE_WORK_READY='true'; // Ready-state inbound fixture; admission suite verifies the hold.
 import assert from 'node:assert/strict';
 import {inboundAuthorized,inboundCallSchema,inboundCapability,inboundInitiation} from '../lib/inbound-voice.ts';
 const secret='fixture-secret-'.repeat(4);

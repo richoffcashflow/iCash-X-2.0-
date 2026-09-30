@@ -1,6 +1,7 @@
 import {db} from '@/lib/stripe-test';
 import {reserveOperation} from '@/lib/operating-costs';
 export async function qualifyTitleCompanies(accountId:string,dealId:string){
+ if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
  await db('rpc/icash_queue_title_qualification','POST',{p_account:accountId,p_deal:dealId});
  if(!process.env.RESEND_API_KEY||!process.env.RESEND_RECEIVING_WEBHOOK_SECRET||!process.env.ICASH_TITLE_FROM_EMAIL||!process.env.ICASH_TITLE_REPLY_EMAIL)return {status:'title_mailbox_required'};
  const [j]=await db<{id:string;company_id:string;market:string;state_code:string}[]>(`icash_title_qualification_jobs?account_id=eq.${accountId}&state=eq.ready&order=created_at&limit=1`);if(!j)return {status:'no_title_inquiry_pending'};

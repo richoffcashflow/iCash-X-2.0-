@@ -11,6 +11,11 @@ export function fundingEnabled(env:NodeJS.ProcessEnv=process.env) {
  return !!mode && !!env.SUPABASE_URL && !!env.SUPABASE_SECRET_KEY && !!env.STRIPE_WEBHOOK_SECRET && env.ICASH_AUTH_EMAIL_READY==="true" &&
  (mode==="test" || (env.ICASH_LIVE_PAYMENTS_ENABLED==="true" && env.ICASH_LIVE_WORK_READY==="true"));
 }
+/** Explicit customer-funding override. Never use this to authorize live work. */
+export function earlyAccessFundingEnabled(env:NodeJS.ProcessEnv=process.env) {
+ return fundingMode(env)==="live" && !!env.SUPABASE_URL && !!env.SUPABASE_SECRET_KEY && !!env.STRIPE_WEBHOOK_SECRET &&
+ env.ICASH_AUTH_EMAIL_READY==="true" && env.ICASH_LIVE_PAYMENTS_ENABLED==="true" && env.ICASH_EARLY_ACCESS_FUNDING_ENABLED==="true";
+}
 export function fundingSessionMatches(s:Stripe.Checkout.Session,o:FundingOrder) {
  const tax=s.total_details?.amount_tax??0;
  const amounts=o.tax_required? s.automatic_tax?.enabled===true&&s.automatic_tax.status==="complete"&&Number.isSafeInteger(tax)&&tax>=0&&s.amount_subtotal===o.price_cents&&(s.total_details?.amount_discount??0)===0&&(s.total_details?.amount_shipping??0)===0&&s.amount_total===o.price_cents+tax : s.amount_total===o.price_cents;
