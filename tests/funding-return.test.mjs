@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {fundingReturnSummary} from '../lib/funding-return.ts';
+const paid={state:'paid',credit_cents:300,credited_at:'2026-09-30T03:44:44Z',payer_email:'test@example.invalid'};
+assert.deepEqual(fundingReturnSummary([],true),{paidCents:0,needsClaim:false,email:null});
+assert.equal(fundingReturnSummary([{...paid,state:'pending'}],true).paidCents,0);
+assert.equal(fundingReturnSummary([paid],true).needsClaim,false);
+assert.equal(fundingReturnSummary([paid],false).needsClaim,true);
+assert.equal(fundingReturnSummary([{...paid,credited_at:null}],true).needsClaim,true);
+assert.equal(fundingReturnSummary([paid,{...paid,state:'expired'}],true).paidCents,300);
+console.log('Payment returns require paid receipts and verified access; pending and expired orders never grant access.');
