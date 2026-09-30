@@ -1,0 +1,13 @@
+{
+  "edges": {},
+  "nodes": {
+    "start_node": {
+      "type": "start",
+      "position": {"x": 0, "y": 0},
+      "edge_order": [],
+      "parent_subgraph_id": null
+    }
+  },
+  "subgraphs": {},
+  "prevent_subagent_loops": false
+}

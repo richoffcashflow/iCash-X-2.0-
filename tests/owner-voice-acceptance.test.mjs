@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
-import {inspectOwnerVoice,ownerVoiceBody,ownerVoiceConfirmation} from '../lib/owner-voice-acceptance.ts';
+import {readFileSync} from 'node:fs';
+import {inspectOwnerVoice,ownerVoiceBody,ownerVoiceConfirmation,ownerWorkflowIsInert} from '../lib/owner-voice-acceptance.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 const config={id:1,account_id:'account',owner_user_id:'owner',phone:'+12145550123',agent_id:'agent_fixture',phone_number_id:'phnum_fixture',branch_id:'agtbrch_fixture',branch_name:'owner-test-fixture',reviewed_config_hash:null,reviewed_version_id:'agtvrsn_fixture',enabled:true,expires_at:new Date(Date.now()+3600000).toISOString()};
 const agent={agent_id:config.agent_id,branch_id:config.branch_id,version_id:config.reviewed_version_id,conversation_config:{agent:{first_message:'AI test only',prompt:{tool_ids:[],tools:[],mcp_server_ids:[],knowledge_base:[]}},conversation:{max_duration_seconds:60}},platform_settings:{auth:{enable_auth:true},privacy:{record_voice:false}}};
+// Sanitized JSON copied from the provider's explicit Workflow > Copy as JSON UI.
+const scaffold=JSON.parse(readFileSync('tests/fixtures/owner-start-workflow.json','utf8'));
+assert.equal(ownerWorkflowIsInert(scaffold),true);assert.equal(ownerWorkflowIsInert(null),true);assert.equal(ownerWorkflowIsInert({nodes:{},edges:{}}),true);
+for(const mutate of [w=>w.nodes.start_node.type='agent',w=>w.nodes.start_node.type='tool',w=>w.nodes.start_node.type='phone_number',w=>w.nodes.start_node.type='unknown',w=>w.nodes.other={type:'start'},w=>w.edges.next={source:'start_node',target:'other'},w=>w.nodes.start_node.edge_order=['next'],w=>w.subgraphs.nested={nodes:{}},w=>w.nodes.start_node.parent_subgraph_id='nested',w=>w.nodes.start_node.tool_id='tool_external',w=>w.external_action=true]){const w=structuredClone(scaffold);mutate(w);assert.equal(ownerWorkflowIsInert(w),false);}
+agent.workflow=scaffold;
 const branch={id:config.branch_id,agent_id:config.agent_id,name:config.branch_name,is_archived:false,current_live_percentage:0};
 const phone={phone_number_id:config.phone_number_id,phone_number:'+12145550199',provider:'twilio'};
 const check=(a=agent,b=branch,p=phone)=>inspectOwnerVoice(config,a,b,p,phone.phone_number);
