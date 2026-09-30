@@ -18,7 +18,7 @@ export async function GET(req:Request){
   }
   const [threads,cancellations,deployment]=await Promise.all([
    db('icash_support_threads?select=id,account_id,subject,status,updated_at&order=updated_at.desc&limit=100'),
-   db('icash_support_cancel_requests?state=in.(processing,needs_review)&select=id,account_id,mode,state,result,updated_at&order=updated_at.desc&limit=30'),supportDeploymentHealth()
+   db('icash_support_cancel_requests?or=(state.in.(processing,needs_review),and(state.neq.cancelled,receipt_state.in.(claimed,needs_review,suppressed,rate_limited)))&select=id,account_id,mode,state,result,receipt_state,updated_at&order=updated_at.desc&limit=30'),supportDeploymentHealth()
   ]);
   return NextResponse.json({threads,cancellations,deployment},{headers});
  }catch(e){return failure(e);}

@@ -63,3 +63,8 @@ assert.equal(deadlineDateStatus('2026-09-29',Date.parse('2026-09-30T12:00:00Z'))
 assert.equal(deadlineDateStatus('2026-10-01',Date.parse('2026-09-30T23:00:00Z')),'current_or_future','future UTC date may already be today at UTC+14');
 assert.throws(()=>deadlineDateStatus('2026-10-01',NaN));
 console.log('Signing completeness: deliberate zero vs blank, payable escrow, real/leap dates, order, preserved 30-day defaults, global timezone boundaries and final-sign expiry passed.');
+
+// Title can legitimately open or schedule closing before an assignment is signed.
+for(const stage of ['under_contract','buyer_selected','title_open','closing'])assert.equal(ready(assignment,'assignment',stage),true);
+for(const stage of ['draft','closed','cancelled','stopped','unknown'])assert.throws(()=>ready(assignment,'assignment',stage));
+console.log('Assignment signing supports active title stages and rejects completed/ineligible deals.');

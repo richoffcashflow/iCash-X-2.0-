@@ -1,4 +1,4 @@
-import {createHash, createHmac, timingSafeEqual} from 'node:crypto';
+import {createHash} from 'node:crypto';
 import {z} from 'zod';
 export const supportId = z.string().uuid();
 export const supportTopics = ['work','billing','setup','cancel','human','general'] as const;
@@ -30,21 +30,14 @@ export function supportAnswer(topic:SupportTopic,evidence:SupportEvidence[],ai:b
  return `${intro}\n\n${details}\n\n${ending}${ai?'':'\n\nAI is unavailable right now; these are direct account checks.'}`;
 }
 export function hashCancelNonce(nonce:string){return createHash('sha256').update(nonce).digest('hex');}
-const cancelClaims=z.object({mode:z.enum(['test','live']),requestId:supportId,accountId:supportId,userId:supportId,nonce:z.string().regex(/^[a-f0-9]{64}$/),expiresAt:z.number().int().positive()}).strict();
-export type CancelClaims=z.infer<typeof cancelClaims>;
-export function signCancelToken(claims:CancelClaims,secret:string){
- if(secret.length<32)throw Error('CANCEL_CONFIRMATION_UNAVAILABLE');
- const payload=Buffer.from(JSON.stringify(cancelClaims.parse(claims))).toString('base64url');
- return `${payload}.${createHmac('sha256',secret).update(payload).digest('base64url')}`;
-}
-export function verifyCancelToken(token:string,secret:string,accountId:string,userId:string,now=Date.now()){
- if(secret.length<32||token.length>1500)throw Error('INVALID_CONFIRMATION');
- const [payload,signature,...extra]=token.split('.');if(!payload||!signature||extra.length)throw Error('INVALID_CONFIRMATION');
- const expected=createHmac('sha256',secret).update(payload).digest();const actual=Buffer.from(signature,'base64url');
- if(actual.length!==expected.length||!timingSafeEqual(actual,expected))throw Error('INVALID_CONFIRMATION');
- const claims=cancelClaims.parse(JSON.parse(Buffer.from(payload,'base64url').toString()));
- if(claims.accountId!==accountId||claims.userId!==userId||claims.expiresAt<=now||claims.expiresAt>now+15*60_000)throw Error('INVALID_CONFIRMATION');
- return claims;
+const cancelNonce=z.string().regex(/^[a-f0-9]{64}$/);
+/** Ephemeral confirmation only. The database, never client claims, binds owner/account/mode/expiry. */
+export function createCancelToken(requestId:string,nonce:string){return `${supportId.parse(requestId)}.${cancelNonce.parse(nonce)}`;}
+/** Parsing grants no authority: only an authenticated, atomic DB claim can consume the nonce hash. */
+export function parseCancelToken(token:string){
+ if(token.length!==101)throw Error('INVALID_CONFIRMATION');
+ const [requestId,nonce,...extra]=token.split('.');if(extra.length)throw Error('INVALID_CONFIRMATION');
+ return {requestId:supportId.parse(requestId),nonce:cancelNonce.parse(nonce)};
 }
 /** Email is an untrusted cancellation request, not authorization. Body/HTML never reach an agent. */
 export function isCancelEmail(subject:unknown){return typeof subject==='string'&&/^\s*(?:cancel|cancel my account)\s*[.!]?\s*$/i.test(subject);}

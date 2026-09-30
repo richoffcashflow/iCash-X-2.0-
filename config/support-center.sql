@@ -24,6 +24,14 @@ create table if not exists public.icash_support_cancel_requests(
  result text,created_at timestamptz not null default now(),updated_at timestamptz not null default now()
 );
 create index if not exists icash_support_cancellations_account on public.icash_support_cancel_requests(account_id,created_at desc);
+-- Additive receipt audit fields: no cancellation authority and no credential.
+alter table public.icash_support_cancel_requests add column if not exists receipt_state text not null default 'pending' check(receipt_state in ('pending','claimed','accepted','needs_review','suppressed','rate_limited'));
+alter table public.icash_support_cancel_requests add column if not exists receipt_recipient text;
+alter table public.icash_support_cancel_requests add column if not exists receipt_claimed_at timestamptz;
+alter table public.icash_support_cancel_requests add column if not exists receipt_completed_at timestamptz;
+alter table public.icash_support_cancel_requests add column if not exists receipt_provider_id uuid;
+create index if not exists icash_support_receipt_budget on public.icash_support_cancel_requests(receipt_claimed_at) where receipt_claimed_at is not null;
+
 create or replace function public.icash_support_begin_message(p_account uuid,p_user uuid,p_thread uuid,p_request uuid,p_message text)
 returns jsonb language plpgsql set search_path='' as $$
 declare t public.icash_support_threads;m public.icash_support_messages;response public.icash_support_messages;
@@ -84,6 +92,42 @@ begin
  if (select count(*) from public.icash_support_cancel_requests where account_id=a and source='email' and created_at>now()-interval '1 hour')>=3 then return;end if;
  insert into public.icash_support_cancel_requests(account_id,user_id,mode,source,provider_email_id) values(a,u,p_mode,'email',p_provider) on conflict(provider_email_id) do nothing;
 end $$;
+-- Transactional receipt only. Never returns an email address taken from the inbound message.
+create or replace function public.icash_support_claim_cancel_receipt(p_provider uuid,p_mode text)
+returns jsonb language plpgsql security invoker set search_path='' as $$
+declare r public.icash_support_cancel_requests;a uuid;owner_id uuid;email_address text;suppressed boolean:=false;
+begin
+ if p_provider is null or p_mode is null or p_mode not in ('test','live') then return null;end if;
+ -- One fixed advisory lock serializes the global receipt budget across accounts.
+ perform pg_catalog.pg_advisory_xact_lock(741924830105::bigint);
+ select account_id into a from public.icash_support_cancel_requests where provider_email_id=p_provider and mode=p_mode and source='email';
+ if a is null then return null;end if;
+ select owner_user_id into owner_id from public.icash_accounts where id=a for update;
+ select * into r from public.icash_support_cancel_requests where provider_email_id=p_provider and account_id=a and mode=p_mode and source='email' for update;
+ if not found or r.state<>'awaiting_confirmation' or r.receipt_state<>'pending' then return null;end if;
+ select lower(trim(email)) into email_address from auth.users where id=owner_id and id=r.user_id and email_confirmed_at is not null;
+ if email_address is null then update public.icash_support_cancel_requests set receipt_state='needs_review',receipt_completed_at=now() where id=r.id;return null;end if;
+ -- Honor existing bounce/complaint suppression without making optional alerts a prerequisite.
+ if pg_catalog.to_regclass('public.icash_attention_email_preferences') is not null then
+  execute 'select exists(select 1 from public.icash_attention_email_preferences where account_id=$1 and lower(consent_email)=$2 and suppressed_at is not null)' into suppressed using a,email_address;
+ end if;
+ if suppressed then update public.icash_support_cancel_requests set receipt_state='suppressed',receipt_completed_at=now() where id=r.id;return null;end if;
+ if (select count(*) from public.icash_support_cancel_requests where receipt_claimed_at>now()-interval '24 hours')>=100
+ or (select count(*) from public.icash_support_cancel_requests where account_id=a and receipt_claimed_at>now()-interval '24 hours')>=3
+ or exists(select 1 from public.icash_support_cancel_requests where account_id=a and receipt_claimed_at>now()-interval '1 hour') then
+  update public.icash_support_cancel_requests set receipt_state='rate_limited',receipt_completed_at=now() where id=r.id;return null;
+ end if;
+ update public.icash_support_cancel_requests set receipt_state='claimed',receipt_recipient=email_address,receipt_claimed_at=now() where id=r.id;
+ return jsonb_build_object('id',r.id,'recipient',email_address);
+end $$;
+create or replace function public.icash_support_finish_cancel_receipt(p_request uuid,p_provider uuid)
+returns void language plpgsql security invoker set search_path='' as $$
+begin
+ update public.icash_support_cancel_requests set receipt_state=case when p_provider is null then 'needs_review' else 'accepted' end,receipt_provider_id=p_provider,receipt_completed_at=now()
+ where id=p_request and source='email' and receipt_state='claimed' and receipt_claimed_at is not null;
+end $$;
+revoke all on function public.icash_support_claim_cancel_receipt(uuid,text),public.icash_support_finish_cancel_receipt(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.icash_support_claim_cancel_receipt(uuid,text),public.icash_support_finish_cancel_receipt(uuid,uuid) to service_role;
 create or replace function public.icash_support_prepare_cancel(p_account uuid,p_user uuid,p_mode text,p_request uuid,p_nonce text)
 returns uuid language plpgsql set search_path='' as $$
 declare r public.icash_support_cancel_requests;
@@ -105,7 +149,9 @@ declare r public.icash_support_cancel_requests;
 begin
  perform 1 from public.icash_accounts where id=p_account and owner_user_id=p_user for update;if not found then raise exception 'Account unavailable';end if;
  select * into r from public.icash_support_cancel_requests where id=p_request and account_id=p_account and user_id=p_user and mode=p_mode for update;
- if not found or r.state<>'awaiting_confirmation' or r.consumed_at is not null or r.expires_at<=now() or r.nonce_hash is distinct from p_nonce then return false;end if;
+ if not found or p_mode is null or p_mode not in ('test','live') or p_nonce is null or p_nonce!~'^[a-f0-9]{64}$'
+ or r.state<>'awaiting_confirmation' or r.consumed_at is not null or r.expires_at is null or r.expires_at<=now()
+ or r.nonce_hash is null or r.nonce_hash is distinct from p_nonce then return false;end if;
  update public.icash_support_cancel_requests set state='processing',consumed_at=now(),confirmed_at=now(),updated_at=now() where id=r.id;
  update public.icash_accounts set bot_paused=true where id=p_account;
  -- This is the existing durable daily-renewal stop queue; a crash cannot undo the pause/stop intent.

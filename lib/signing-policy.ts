@@ -27,7 +27,7 @@ export function signingReadiness(kind:SigningKind,t:DealTerms,parties:Signer[],p
  if(!principal||t.buyer!==principal)throw new Error('Save your legal name before signing.');
  if(!t.address.trim()||!t.legalDescription.trim()||!t.seller.trim()||!/^[A-Z]{2}$/.test(t.state)||!t.priceCents||t.priceSource!=='seller_reported')throw new Error('Confirm the agreed price, seller names, state and legal description first.');
  if(kind==='purchase'&&stage!=='draft')throw new Error('This purchase agreement is already executed.');
- if(kind==='assignment'&&(!['under_contract','buyer_selected'].includes(stage)||!t.assignee||t.assignmentFeeCents===null||t.assignmentDepositCents===null||!t.escrowAgent))throw new Error('A signed purchase agreement, buyer, fee, deposit and escrow company are required.');
+ if(kind==='assignment'&&(!['under_contract','buyer_selected','title_open','closing'].includes(stage)||!t.assignee||t.assignmentFeeCents===null||t.assignmentDepositCents===null||!t.escrowAgent))throw new Error('A signed purchase agreement, buyer, fee, deposit and escrow company are required.');
  signingDocumentReadiness(kind,t,now);
  if(parties.length<1||parties.length>8||new Set(parties.map(p=>p.email.toLowerCase())).size!==parties.length)throw new Error('Enter each required signer with a separate email.');
  return true;

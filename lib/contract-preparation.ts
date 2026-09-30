@@ -27,7 +27,7 @@ export function contractPreparation(messages:TermMessage[],stage:string,current:
   if(new Set(partyMessages.map(m=>m.partyKey??'unspecified')).size>1||partyMessages.some(m=>/\b(cancel|withdraw|changed my mind|no longer|not selling|backing out|don.t agree)\b/i.test(m.body))){conflicts.push(field);continue;}
   if(field==='priceCents'&&partyMessages.some(m=>rejectsPrice(m.body))){conflicts.push(field);continue;}
   if(stage!=='draft'&&!['assignee','assignmentDepositCents'].includes(field))continue;
-  if(!['draft','under_contract'].includes(stage))continue;
+  if(!['draft','under_contract','title_open','closing'].includes(stage))continue;
   if(new Set(values.map(v=>v.value)).size!==1){conflicts.push(field);continue;}
   if(current[field]!==null&&current[field]!=='')continue;
   const v=values.at(-1)!;Object.assign(patch,{[field]:v.value});evidence.push({field,quote:v.quote,sourceId:v.sourceId});

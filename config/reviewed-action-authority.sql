@@ -174,7 +174,13 @@ begin
  else
   select * into d from public.icash_deal_files where id=(p->>'dealId')::uuid and account_id=r.account_id and screening_id=r.screening_id and stage in ('under_contract','buyer_selected') and seller_signed_at is not null for share;
   if not found then raise exception 'Executed active purchase required';end if;
-  select * into e from public.icash_signing_envelopes where id=(p->>'purchaseEnvelopeId')::uuid and account_id=r.account_id and deal_id=d.id and kind='purchase' and state='completed' and not test_mode and terms=d.terms and terms_hash=p->>'termsHash' for share;
+  select * into e from public.icash_signing_envelopes where id=(p->>'purchaseEnvelopeId')::uuid and account_id=r.account_id and deal_id=d.id and kind='purchase' and state='completed' and not test_mode
+   -- Assignment-only fields are deliberately editable after purchase execution.
+   -- Bind every purchase term to the unchanged signed snapshot, while validating
+   -- the current fee/asking price below. The original envelope/hash stays intact.
+   and terms-array['assignee','assignmentFeeCents','assignmentDepositCents','payoutMethod','payoutHandle']
+       =d.terms-array['assignee','assignmentFeeCents','assignmentDepositCents','payoutMethod','payoutHandle']
+   and terms_hash=p->>'termsHash' for share;
   if not found or e.provider_id is null or e.terms->>'state' is distinct from p->>'stateCode' then raise exception 'Current actual purchase and terms hash required';end if;
   if coalesce(v->>'signedDocumentHash','') !~ '^[a-f0-9]{64}$' or v->>'signedDocumentCheckedAt' is null or (v->>'signedDocumentCheckedAt')::timestamptz not between now()-interval '5 minutes' and now() or not public.icash_authority_text(v,'marketingRightsReference') then raise exception 'Provider verified signed PDF and marketing rights required';end if;
   if e.provider_evidence->>'id' is distinct from e.provider_id::text or e.provider_evidence->>'test_mode' is distinct from 'false' or lower(e.provider_evidence->>'status') is distinct from 'completed' or e.provider_evidence->>'apply_signing_order' is distinct from 'true' or e.provider_evidence->'metadata'->>'icash_envelope' is distinct from e.id::text or e.provider_evidence->'metadata'->>'terms_hash' is distinct from e.terms_hash or jsonb_typeof(e.recipients) is distinct from 'array' or jsonb_array_length(e.recipients)<2 or jsonb_typeof(e.provider_evidence->'recipients') is distinct from 'array' or jsonb_array_length(e.provider_evidence->'recipients')<>jsonb_array_length(e.recipients) then raise exception 'Verified real signatures required';end if;

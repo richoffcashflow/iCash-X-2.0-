@@ -45,3 +45,10 @@ const accepted=contractPreparation([msg('I accept $150,000.')],'draft',terms);
 const draft=dealTermsSchema.parse({...accepted.patch,seller:'Fixture seller',buyer:'Fixture principal',address:'Fixture only',legalDescription:'Fixture legal description',state:'TX'});
 assert.throws(()=>signingReadiness('purchase',draft,[{name:'Fixture seller',email:'seller@example.invalid'}],'Fixture principal','draft'),/Confirm the agreed price/,'extracted acceptance never sets the separate explicit price confirmation required to send');
 console.log('Price statements: asking, mentioned, rejected, conditional and accepted amounts stay distinct; full quotes, later rejection and separate signing confirmation passed.');
+
+for(const stage of ['title_open','closing']){
+ const empty=dealTermsSchema.parse({});
+ const result=contractPreparation([{id:'title-stage-buyer',party:'buyer',body:'My legal name is Fixture Buyer'},{id:'title-stage-deposit',party:'buyer',body:'I agree to a deposit of $5,000.'},{id:'forbidden-purchase',party:'seller',body:'I accept $90,000.'}],stage,empty);
+ assert.equal(result.patch.assignee,'Fixture Buyer');assert.equal(result.patch.assignmentDepositCents,500000);assert.equal(result.patch.priceCents,undefined);
+}
+console.log('Title-stage preparation fills only assignment fields, never purchase terms.');
