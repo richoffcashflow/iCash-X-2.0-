@@ -17,7 +17,7 @@ export async function GET(req:Request){
  const [deal]=await db<{id:string}[]>(`icash_deal_files?account_id=eq.${accountId}&id=eq.${dealId}&select=id`);if(!deal)throw Error();
  const [contacts,rows,rates]=await Promise.all([
  db<unknown[]>('rpc/icash_deal_email_contacts','POST',{p_account:accountId,p_deal:dealId}),
- db<{id:string;created_at:string}[]>(`icash_deal_emails?account_id=eq.${accountId}&deal_id=eq.${dealId}&select=id,direction,recipient,contact_key,subject,body_text,state,created_at&order=created_at.desc,id.desc&limit=21${before?`&or=(created_at.lt.${encodeURIComponent(before)},and(created_at.eq.${encodeURIComponent(before)},id.lt.${beforeId}))`:''}`),
+ db<{id:string;created_at:string}[]>(`icash_deal_emails?account_id=eq.${accountId}&deal_id=eq.${dealId}&select=id,direction,recipient,contact_key,subject,body_text,state,delivery_state,created_at&order=created_at.desc,id.desc&limit=21${before?`&or=(created_at.lt.${encodeURIComponent(before)},and(created_at.eq.${encodeURIComponent(before)},id.lt.${beforeId}))`:''}`),
  db<{id:string;charge_cents:number}[]>(`icash_operation_rates?operation=eq.manual_email&enabled=eq.true&expires_at=gt.${new Date().toISOString()}&select=id,charge_cents&order=verified_at.desc&limit=1`)]);
  const messages=rows.slice(0,20),last=messages.at(-1);
  return NextResponse.json({contacts,messages,configured:dealEmailConfigured(),rate:rates[0]??null,next:rows.length>20&&last?{before:last.created_at,beforeId:last.id}:null},{headers});

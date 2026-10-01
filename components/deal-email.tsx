@@ -2,7 +2,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {emailSendLabel} from '@/lib/deal-email-policy';
 type Contact={contact_key:string;email:string;display_name:string;party:string};
-type Mail={id:string;direction:string;recipient:string;subject:string;body_text:string;state:string;created_at:string};
+type Mail={id:string;direction:string;recipient:string;subject:string;body_text:string;state:string;delivery_state?:string;created_at:string};
 type Cursor={before:string;beforeId:string};
 type Data={contacts:Contact[];messages:Mail[];configured:boolean;rate:{id:string;charge_cents:number}|null;next:Cursor|null};
 export function DealEmail({dealId,active}:{dealId:string;active:boolean}){
@@ -18,7 +18,7 @@ export function DealEmail({dealId,active}:{dealId:string;active:boolean}){
  const selected=data?.contacts.find(c=>c.contact_key===contact);
  return <div className="deal-mailbox" hidden={!active}>
  {error&&<p role="status">{error}</p>}{!data&&!error&&<p role="status">Loading email…</p>}
- {data&&<><div className="message-history" aria-label="Email history">{!data.messages.length?<p>No email yet.</p>:data.messages.slice().reverse().map(m=><details className="email-item" key={m.id}><summary><span>{m.direction==='incoming'?'↙':'↗'} {m.subject.replace(/\[ICX-M:[^\]]+\]\s*/gi,'')}</span><small>{emailSendLabel(m.state)}</small></summary><p className="email-address">{m.direction==='incoming'?'From':'To'}: {m.recipient}</p><p className="email-body">{m.body_text}</p><small>{new Date(m.created_at).toLocaleString()}</small></details>)}</div>
+ {data&&<><div className="message-history" aria-label="Email history">{!data.messages.length?<p>No email yet.</p>:data.messages.slice().reverse().map(m=><details className="email-item" key={m.id}><summary><span>{m.direction==='incoming'?'↙':'↗'} {m.subject.replace(/\[ICX-M:[^\]]+\]\s*/gi,'')}</span><small>{emailSendLabel(m.state,m.delivery_state)}</small></summary><p className="email-address">{m.direction==='incoming'?'From':'To'}: {m.recipient}</p><p className="email-body">{m.body_text}</p><small>{new Date(m.created_at).toLocaleString()}</small></details>)}</div>
  <div className="history-pages">{page&&<button onClick={()=>{setPage(null);setData(null);}}>Latest email</button>}{data.next&&<button onClick={()=>{setPage(data.next);setData(null);}}>Older email</button>}</div>
  {data.contacts.length?<form className="message-composer" data-unsaved-draft={subject.trim()||body.trim()?'true':undefined} onSubmit={async e=>{
  e.preventDefault();if(busy||held||!selected||!data.rate||!data.configured)return;setBusy(true);setStatus('');

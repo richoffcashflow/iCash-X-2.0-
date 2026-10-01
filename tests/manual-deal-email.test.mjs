@@ -1,3 +1,4 @@
+import {customerEmailDomains,customerEmailIdentity} from '../lib/customer-email-identity.ts';
 process.env.ICASH_LIVE_WORK_READY='true'; // Ready-state provider fixtures only.
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -14,9 +15,9 @@ assert.equal(titleReference('[ICX-M:'+id+']').kind,'M');
 assert.equal(titleReference('[ICX-M:'+id+'] [ICX-T:'+id+']'),null);
 let state='ready',claim=true,sends=0,timeout=false,records=[];
 const db=async(path,method,body)=>{records.push({path,method,body});if(method==='PATCH'){state=body.state;return [];}if(path==='rpc/icash_claim_deal_email'){if(!claim)return null;state='dispatching';return {id,to:'closer@example.invalid',subject:'Closing date',text:'Please confirm.',principal:'Acme'};}return [{state}];};
-globalThis.__email={db,titleEmailAddress,emailFromName};
+globalThis.__email={customerEmailDomains,customerEmailIdentity,db,titleEmailAddress,emailFromName};
 let source=ts.transpileModule(readFileSync('lib/deal-email-service.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-const {dispatchDealEmail}=await import('data:text/javascript;base64,'+Buffer.from('const {db,titleEmailAddress,emailFromName}=globalThis.__email;\n'+source).toString('base64'));
+const {dispatchDealEmail}=await import('data:text/javascript;base64,'+Buffer.from('const {customerEmailDomains,customerEmailIdentity,db,titleEmailAddress,emailFromName}=globalThis.__email;\n'+source).toString('base64'));
 const oldFetch=globalThis.fetch;globalThis.fetch=async(url,options)=>{sends++;assert.equal(options.headers['Idempotency-Key'],'deal-email-'+id);assert.equal(JSON.parse(options.body).reply_to,'reply@example.invalid');if(timeout)throw Error('timeout');return {ok:true,json:async()=>({id})};};
 process.env.RESEND_API_KEY='fixture';process.env.RESEND_RECEIVING_WEBHOOK_SECRET='fixture';process.env.ICASH_TITLE_FROM_EMAIL='mail@example.invalid';process.env.ICASH_TITLE_REPLY_EMAIL='reply@example.invalid';
 assert.equal((await dispatchDealEmail('account',id)).status,'email_accepted');await dispatchDealEmail('account',id);assert.equal(sends,1);

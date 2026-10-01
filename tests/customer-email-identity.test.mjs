@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {customerEmailIdentity,customerReplyReference,customerEmailDomains} from '../lib/customer-email-identity.ts';
+const a='12345678-1234-4234-8234-123456789abc',b='22345678-1234-4234-8234-123456789abc';
+const env={ICASH_CUSTOMER_EMAIL_READY:'true',ICASH_CUSTOMER_EMAIL_DOMAIN:'mail.example.com',ICASH_CUSTOMER_REPLY_DOMAIN:'reply.example.com',RESEND_RECEIVING_WEBHOOK_SECRET:'whsec_test-value-not-live'};
+const identity=customerEmailIdentity(a,'ABC Homes',b,env);
+assert(identity.from.startsWith('ABC Homes <contact-'));
+assert(!identity.from.includes('iCash'));assert(identity.replyTo.split('@')[0].length<=64);
+assert.deepEqual(customerReplyReference([identity.replyTo],env),{kind:'M',id:b});
+assert.equal(customerReplyReference([identity.replyTo,identity.replyTo],env),null);
+assert.equal(customerReplyReference([identity.replyTo.replace('r-','r-0')],env),null);
+assert.equal(customerReplyReference([identity.replyTo.replace('@reply.example.com','@evil.example.com')],env),null);
+assert.equal(customerReplyReference([identity.replyTo],{...env,RESEND_RECEIVING_WEBHOOK_SECRET:'different'}),null);
+assert.notEqual(identity.from,customerEmailIdentity(b,'ABC Homes',b,env).from);
+assert.equal(customerEmailDomains({...env,ICASH_CUSTOMER_EMAIL_READY:'false'}),null);
+assert.equal(customerEmailDomains({...env,ICASH_CUSTOMER_EMAIL_DOMAIN:'evil.com\r\nBcc: x@y.com'}),null);
+assert.throws(()=>customerEmailIdentity('not-an-account','ABC',b,env));
+console.log('Customer mail: stable distinct identities, signed reply matching, tamper/duplicate rejection and explicit readiness passed.');
