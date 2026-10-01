@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import {z} from 'zod';
+let calls=[],failRead=false,failFirst=false,failRpc=false;
+const deps={z,NextResponse:{json:(body,o={})=>({body,status:o.status??200})},allowedOrigin:()=>true,workAccount:async()=>({accountId:'account',userId:'owner'}),fundingMode:()=> 'live',db:async(path,method,body)=>{calls.push({path,body});if(path==='rpc/icash_pause_work_and_billing'){if(failRpc)throw Error('rollback');return;}if(failRead)throw Error('read failed');return [{id:'first'},{id:'second'}];},stopDaily:async p=>{calls.push({stop:p.id});if(failFirst&&p.id==='first')throw Error('provider failure');}};
+globalThis.__durableStop=deps;
+const source=ts.transpileModule(readFileSync(new URL('../app/api/work/control/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
+const {POST}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__durableStop;\n'+source).toString('base64'));delete globalThis.__durableStop;
+const request=()=>new Request('https://example.invalid/api/work/control',{method:'POST',body:JSON.stringify({action:'pause'})});
+process.env.ICASH_LIVE_WORK_READY='false';
+assert.equal((await POST(request())).status,200);assert.equal(calls[0].path,'rpc/icash_pause_work_and_billing');assert.deepEqual(calls[0].body,{p_user:'owner',p_account:'account',p_mode:'live'});assert.deepEqual(calls.filter(x=>x.stop).map(x=>x.stop),['first','second']);
+calls=[];failRead=true;let result=await POST(request());assert.equal(result.status,503);assert.equal(result.body.paused,true);assert.equal(result.body.billingStopRequested,true);assert.equal(calls[0].path,'rpc/icash_pause_work_and_billing');failRead=false;
+calls=[];failFirst=true;result=await POST(request());assert.equal(result.status,503);assert.deepEqual(calls.filter(x=>x.stop).map(x=>x.stop),['first','second']);failFirst=false;
+calls=[];failRpc=true;result=await POST(request());assert.equal(result.status,400);assert.equal(result.body.paused,undefined);assert.equal(calls.length,1);
+console.log('Durable Stop: saved intent precedes reads; read failure and first-provider failure remain retryable; later plans still attempted; no false pause confirmation on rollback.');

@@ -6,10 +6,12 @@ import {randomUUID,createHash} from 'node:crypto';
 import {createJourneyDb} from '../tests/helpers/simulated-journey-db.mjs';
 import {databaseAdapter} from '../tests/helpers/simulated-journey-services.mjs';
 import {outreachCampaignPolicy} from '../lib/outreach-campaign.ts';
+const flatPricing=process.argv.includes('--flat-pricing');
 const {pg}=await createJourneyDb(process.argv[2]);
 const {q,rpc}=databaseAdapter(pg);const one=async(s,p=[])=>{const r=await q(s,p);assert.equal(r.rows.length,1);return r.rows[0];};
 try{
  for(const name of ['text-ai','market-expansion','seller-opener-experiments','seller-opener-delivery-order','sms-inbound-campaign','sms-contact-intake'])await pg.exec(readFileSync(new URL('../config/'+name+'.sql',import.meta.url),'utf8'));
+ if(flatPricing)await pg.exec(readFileSync(new URL('../config/sms-flat-customer-pricing.sql',import.meta.url),'utf8'));
  console.log('SIMULATION schema loaded');
  const user=randomUUID(),account=randomUUID(),otherUser=randomUUID(),other=randomUUID();
  await q('insert into auth.users(id,email) values($1,$2),($3,$4)',[user,'campaign@example.invalid',otherUser,'other@example.invalid']);
@@ -29,7 +31,17 @@ try{
  await q("update icash_outreach_campaigns set enabled=true,reviewed_principal='SIMULATION buying business' where account_id=$1",[account]); // SIMULATION operator release, never customer attestation.
  console.log('SIMULATION acknowledgment: explicit, owner/version bound, immutable, idempotent; no recipient permission created');
  const costs={dealmachine:0,elevenlabs:0,twilio:0,messaging:1000,email:0,llm:0,vercel:0,railway:0,supabase:0,github:0,payments:0,title_and_signing:0,support_and_overhead:0,acquisition:0,refund_and_dispute_reserve:0,other:0};
- const sms=(await one("insert into icash_operation_rates(operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled) values('sms_send','SIMULATION SMS',10,$1,'SIMULATION permitted pricing',now()-interval '1 minute',now()+interval '1 day',true) returning id",[costs])).id;
+ if(flatPricing){costs.messaging=10000;costs.llm=20000;await q("update icash_communication_prices set customer_micros=100000 where operation='sms_segment'");}
+ const sms=(await one(flatPricing?"insert into icash_operation_rates(operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled,buffer_bps,flat_customer_price_cents) values('sms_send','SIMULATION flat SMS',10,$1,'SIMULATION owner flat 10 cents; cost 3 cents',now()-interval '1 minute',now()+interval '1 day',true,2000,10) returning id":"insert into icash_operation_rates(operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled) values('sms_send','SIMULATION SMS',10,$1,'SIMULATION permitted pricing',now()-interval '1 minute',now()+interval '1 day',true) returning id",[costs])).id;
+ if(flatPricing){
+  assert.equal(await rpc('icash_sms_intake_rate_current',{p_rate:sms}),true);
+  const copy=async(cost,override,operation='sms_send',charge=10)=>(await one("insert into icash_operation_rates(operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled,buffer_bps,flat_customer_price_cents) values($1,$2,$3,$4,'SIMULATION pricing boundary',now()-interval '1 minute',now()+interval '1 day',true,2000,$5) returning id",[operation,randomUUID(),charge,cost,override])).id;
+  const standard=await copy(costs,null);assert.equal(await rpc('icash_sms_intake_rate_current',{p_rate:standard}),false,'10c cannot silently pass original 5x policy');await q('update icash_operation_rates set enabled=false where id=$1',[standard]);
+  for(const bad of [{...costs,llm:80000},{...costs,llm:null}]){const id=await copy(bad,10);assert.equal(await rpc('icash_sms_intake_rate_current',{p_rate:id}),false);await q('update icash_operation_rates set enabled=false where id=$1',[id]);}
+  await assert.rejects(copy(costs,10,'incoming_call'),/constraint/);
+  await assert.rejects(copy(costs,9),/constraint/);
+  await q('begin');try{await assert.rejects(q('update icash_operation_rates set flat_customer_price_cents=null where id=$1',[sms]),/new rate version/);}finally{await q('rollback');}
+ }
  const incoming=(await one("insert into icash_operation_rates(operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled,voice_max_duration_seconds) values('incoming_call','SIMULATION incoming',100,$1,'SIMULATION incoming pricing',now()-interval '1 minute',now()+interval '1 day',true,600) returning id",[{...costs,messaging:0,elevenlabs:100000}])).id;
  const expiredRate=async id=>(await one("insert into icash_operation_rates(operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled,voice_max_duration_seconds) select operation,version||' expired',charge_cents,costs_micros,evidence_ref,now()-interval '1 day',now()-interval '1 second',true,voice_max_duration_seconds from icash_operation_rates where id=$1 returning id",[id])).id;
  const expiredSms=await expiredRate(sms),expiredIncoming=await expiredRate(incoming);
@@ -111,6 +123,19 @@ try{
  const opener=await rpc('icash_queue_seller_opener',{p_account:account,p_thread:thread});assert(opener);
  assert(await rpc('icash_claim_text',{p_account:account,p_message:opener,p_sender:sender}));
  await rpc('icash_accept_text',{p_account:account,p_message:opener,p_provider:'SIMULATION accepted opener'});
+ if(flatPricing){
+  const op='text:'+opener;const before=await one('select balance_cents from icash_wallets where account_id=$1',[account]);
+  const reserved=await one('select * from icash_operation_spend where operation_key=$1',[op]);
+  assert.equal(Number(reserved.charge_cap_cents),10);assert.equal(Number(reserved.reserved_micros),36000);assert.equal(Number(reserved.standard_cost_multiplier),1);assert.equal(Number(reserved.customer_price_micros),100000);
+  await q("update icash_communication_prices set customer_micros=180000 where operation='sms_segment'");
+  assert.equal(await rpc('icash_settle_estimated_operation',{p_operation:op}),true);
+  assert.equal(await rpc('icash_settle_estimated_operation',{p_operation:op}),true);
+  const settled=await one('select * from icash_operation_spend where operation_key=$1',[op]);assert.equal(Number(settled.charged_cents),10);assert.equal(Number(settled.actual_micros),30000);assert.equal(settled.cost_basis,'estimated');
+  assert.equal(Number((await one('select balance_cents from icash_wallets where account_id=$1',[account])).balance_cents),Number(before.balance_cents)-10);
+  assert.equal((await one('select bot_paused from icash_accounts where id=$1',[account])).bot_paused,false);
+  await q("update icash_communication_prices set customer_micros=100000 where operation='sms_segment'");
+  console.log('SIMULATION flat SMS: 10c immutable charge, 3c estimate, 3.6c cost reserve, duplicate settlement, old snapshot and other-channel isolation passed');
+ }
  const inboundArgs={p_caller:phone,p_called:called,p_agent:'agent_fixture',p_call_sid:'CA'+'1'.repeat(32),p_conversation:'conv_fixtureincoming',p_binding_hash:'b'.repeat(64),p_token_hash:'c'.repeat(64),p_agent_hash:hash};
  assert.equal(await rpc('icash_begin_inbound_voice',inboundArgs),null,'No incoming routing before an invitation');
  assert.match((await one('select body from icash_text_messages where id=$1',[opener])).body,/Reply STOP to opt out\./);
