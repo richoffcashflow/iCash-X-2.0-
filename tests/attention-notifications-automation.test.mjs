@@ -1,4 +1,4 @@
-import {liveWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '../lib/live-work-admission.ts';
+import {automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '../lib/live-work-admission.ts';
 process.env.ICASH_LIVE_WORK_READY='true'; // Ready-state provider fixtures only.
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -6,7 +6,7 @@ import ts from 'typescript';
 let kind='discovery', alertFailure=true, alertCalls=0;
 const records=[], signals=[];
 process.env.ICASH_ATTENTION_EMAIL_ENABLED='true';
-const mocks={liveWorkReady,newLiveWorkKinds,deferUnstartedAutomation,
+const mocks={automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation,
   NextResponse:{json:(body,options={})=>({body,status:options.status??200})},
   db:async(path,_method,body)=>{records.push({path,body}); if(path==='rpc/icash_consume_automation')return {id:'ticket',accountId:'account',kind};return null;},
   discoverForAccount:async()=>({status:'screening_queued'}),

@@ -1,14 +1,20 @@
+import {liveWorkReady,smsWorkEnabled} from './live-work-admission.ts';
 import {sameBusinessNumber} from './number-continuity.ts';
 import {elevenRequest} from '@/lib/elevenlabs';
 import {db} from '@/lib/stripe-test';
 import {sendContiguityText,textPayload} from '@/lib/contiguity';
 export async function dispatchTextMessage(accountId:string,messageId:string){
- if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
+ if(!smsWorkEnabled())return {status:'live_work_not_ready'};
  const from=process.env.CONTIGUITY_FROM,key=process.env.CONTIGUITY_API_KEY;
  if(!from||!key||!process.env.CONTIGUITY_WEBHOOK_SECRET)return {status:'messaging_configuration_required'};
  // Verify stored attachment shape before committing to a charged dispatch.
  const [m]=await db<{body:string;attachments:string[];thread_id:string}[]>(`icash_text_messages?id=eq.${messageId}&account_id=eq.${accountId}&state=eq.ready&select=body,attachments,thread_id`);
  if(!m)return {status:'message_held'};
+ // Never invite a recipient into an unavailable incoming-AI channel.
+ if(!liveWorkReady()){
+  const invitations=await db<{id:string}[]>(`icash_sms_inbound_invitations?account_id=eq.${accountId}&message_id=eq.${messageId}&select=id&limit=1`);
+  if(invitations.length)return {status:'inbound_invitation_not_ready'};
+ }
  const [thread]=await db<{recipient:string;sender:string}[]>(`icash_text_threads?id=eq.${m.thread_id}&account_id=eq.${accountId}&select=recipient,sender`);if(!thread)return {status:'message_held'};
  if(!sameBusinessNumber(from,thread.sender))return {status:'business_number_mismatch'};
  const [voice]=await db<{phone_number_id:string;enabled:boolean}[]>(`icash_voice_configs?account_id=eq.${accountId}&select=phone_number_id,enabled`);

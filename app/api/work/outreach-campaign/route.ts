@@ -1,3 +1,4 @@
+import {smsWorkEnabled} from '@/lib/live-work-admission';
 import {NextResponse} from 'next/server';
 import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
@@ -9,7 +10,7 @@ const headers={'Cache-Control':'private, no-store'};
 const input=z.object({accepted:z.literal(true),version:z.string().max(80),mode:z.literal('sms_inbound')}).strict();
 async function status(accountId:string,userId:string){
  const state=await db<{configured:boolean;released:boolean;acknowledgment:{acceptedAt:string;version:string}|null}>('rpc/icash_sms_inbound_campaign_status','POST',{p_account:accountId,p_user:userId});
- return {...state,policy:outreachCampaignPolicy,liveWorkReady:process.env.ICASH_LIVE_WORK_READY==='true'};
+ return {...state,policy:outreachCampaignPolicy,liveWorkReady:process.env.ICASH_LIVE_WORK_READY==='true',smsChannelEnabled:smsWorkEnabled()};
 }
 export async function GET(){try{const {accountId,userId}=await workAccount();return NextResponse.json(await status(accountId,userId),{headers});}catch{return NextResponse.json({error:'Sign in to check your campaign acknowledgment.'},{status:401,headers});}}
 export async function POST(req:Request){

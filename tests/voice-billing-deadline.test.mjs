@@ -1,4 +1,4 @@
-import {liveWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '../lib/live-work-admission.ts';
+import {automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '../lib/live-work-admission.ts';
 process.env.ICASH_LIVE_WORK_READY='true'; // Ready-state provider fixtures only.
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -21,13 +21,13 @@ const db=async(path,_method,body)=>{
  if(path==='rpc/icash_consume_automation')return {id:'ticket',accountId:'account',kind:'discovery'};
  return true;
 };
-globalThis.__billingRoute={liveWorkReady,newLiveWorkKinds,deferUnstartedAutomation,
+globalThis.__billingRoute={automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation,
  db,NextResponse:{json:(body,options)=>({body,options})},readVoiceUsagePolicies:()=>[],
  discoverForAccount:async()=>({status:'screening_queued'}),reconcileLiveConversation:async()=>({}),
  settlePendingVoiceUsage:async(_db,account,_policies,_reconcile,signal)=>{assert.equal(account,'account');assert(signal instanceof AbortSignal);throw new DOMException('Timed out','TimeoutError');},
 };
 let source=ts.transpileModule(readFileSync(new URL('../app/api/internal/automation/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-source='const {liveWorkReady,newLiveWorkKinds,deferUnstartedAutomation,db,NextResponse,readVoiceUsagePolicies,discoverForAccount,reconcileLiveConversation,settlePendingVoiceUsage}=globalThis.__billingRoute;\n'+source;
+source='const {automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation,db,NextResponse,readVoiceUsagePolicies,discoverForAccount,reconcileLiveConversation,settlePendingVoiceUsage}=globalThis.__billingRoute;\n'+source;
 const {POST}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const originalTimeout=AbortSignal.timeout;
 try{

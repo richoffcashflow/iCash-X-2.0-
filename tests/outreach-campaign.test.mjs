@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {z} from 'zod';
+import {smsWorkEnabled} from '../lib/live-work-admission.ts';
 import {outreachCampaignPolicy} from '../lib/outreach-campaign.ts';
 const sql=readFileSync(new URL('../config/sms-inbound-campaign.sql',import.meta.url),'utf8');
 assert(sql.includes(outreachCampaignPolicy.text));assert(outreachCampaignPolicy.text.includes('not recipient consent or legal clearance'));
@@ -10,9 +11,9 @@ let owner={accountId:'account-fixture',userId:'owner-fixture'},calls=[],recorded
 const workAccount=async()=>{if(!owner)throw Error('SIGN_IN_REQUIRED');return owner;};
 const db=async(path,method,body)=>{calls.push({path,method,body});if(path==='rpc/icash_record_sms_inbound_campaign'){recorded=true;return {};}
  assert.equal(path,'rpc/icash_sms_inbound_campaign_status');assert.equal(body.p_account,owner.accountId);assert.equal(body.p_user,owner.userId);return {configured:recorded,released:false,acknowledgment:recorded?{acceptedAt:'2026-09-30T23:30:00Z',version:outreachCampaignPolicy.version}:null};};
-globalThis.__campaign={NextResponse:{json:Response.json},workAccount,db,allowedOrigin:r=>r.headers.get('origin')==='https://example.invalid',outreachCampaignPolicy,z};
+globalThis.__campaign={smsWorkEnabled,NextResponse:{json:Response.json},workAccount,db,allowedOrigin:r=>r.headers.get('origin')==='https://example.invalid',outreachCampaignPolicy,z};
 let code=ts.transpileModule(readFileSync(new URL('../app/api/work/outreach-campaign/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-const route=await import('data:text/javascript;base64,'+Buffer.from('const {NextResponse,workAccount,db,allowedOrigin,outreachCampaignPolicy,z}=globalThis.__campaign;\n'+code).toString('base64'));
+const route=await import('data:text/javascript;base64,'+Buffer.from('const {smsWorkEnabled,NextResponse,workAccount,db,allowedOrigin,outreachCampaignPolicy,z}=globalThis.__campaign;\n'+code).toString('base64'));
 process.env.ICASH_LIVE_WORK_READY='false';
 const req=(body,origin='https://example.invalid')=>new Request('https://example.invalid/api/work/outreach-campaign',{method:'POST',headers:{origin},body:JSON.stringify(body)});
 let response=await route.GET();assert.equal(response.status,200);assert.equal((await response.json()).configured,false);
@@ -20,7 +21,7 @@ const body={accepted:true,mode:'sms_inbound',version:outreachCampaignPolicy.vers
 assert.equal((await route.POST(req(body,'https://evil.invalid'))).status,403);
 for(const bad of [{...body,accepted:false},{...body,accountId:'other'},{...body,mode:'outbound'},{...body,accepted:undefined}])assert.equal((await route.POST(req(bad))).status,400);
 assert.equal((await route.POST(req({...body,version:'old'}))).status,409);assert.equal(recorded,false);
-response=await route.POST(req(body));assert.equal(response.status,200);const result=await response.json();assert.equal(result.saved,true);assert.equal(result.configured,true);assert.equal(result.released,false);assert.equal(result.liveWorkReady,false);assert.deepEqual(result.policy,outreachCampaignPolicy);
+response=await route.POST(req(body));assert.equal(response.status,200);const result=await response.json();assert.equal(result.saved,true);assert.equal(result.configured,true);assert.equal(result.released,false);assert.equal(result.liveWorkReady,false);assert.equal(result.smsChannelEnabled,false);assert.deepEqual(result.policy,outreachCampaignPolicy);
 assert.deepEqual(calls.find(c=>c.path==='rpc/icash_record_sms_inbound_campaign').body,{p_account:'account-fixture',p_user:'owner-fixture',p_version:outreachCampaignPolicy.version,p_accepted:true});
 owner=null;assert.equal((await route.GET()).status,401);assert.equal((await route.POST(req(body))).status,400);
 assert(calls.every(c=>c.path.startsWith('rpc/icash_')));delete globalThis.__campaign;

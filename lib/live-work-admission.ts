@@ -1,5 +1,8 @@
 /** Funding availability is not permission to start live provider work. */
 export function liveWorkReady(env:NodeJS.ProcessEnv=process.env){return env.ICASH_LIVE_WORK_READY==='true';}
+/** SMS is independently releasable; this never admits voice, contracts or lead purchases. */
+export function smsWorkEnabled(env:NodeJS.ProcessEnv=process.env){return liveWorkReady(env)||env.ICASH_SMS_WORK_READY==='true';}
+export function automationWorkReady(kind:string,env:NodeJS.ProcessEnv=process.env){return liveWorkReady(env)||(kind==='seller_opener'&&smsWorkEnabled(env));}
 export const newLiveWorkKinds=new Set(['seller_opener','market_research','text_ai','title_followup','fulfillment','voice_dispatch','discovery','contacts']);
 type Ticket={id:string;accountId:string;kind:string;screeningId?:string|null;voiceJobId?:string|null;fulfillmentJobId?:string|null;titleTaskId?:string|null;textAiJobId?:string|null;marketResearchJobId?:string|null;openerMessageId?:string|null};
 type Database=<T=unknown>(path:string,method?:string,body?:unknown)=>Promise<T>;
