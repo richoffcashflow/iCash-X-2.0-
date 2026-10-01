@@ -4,17 +4,18 @@ const date=z.string().datetime({offset:true});
 const money=z.number().int().positive().max(100000000000);
 const base={screeningId:z.string().uuid(),purpose:z.string().trim().min(12).max(500),sourceName:z.string().trim().min(3).max(100),evidenceReference:reference,evidenceObservedAt:date,expiresAt:date,stateCode:z.string().regex(/^[A-Z]{2}$/)};
 export const authorityPayloadSchema=z.discriminatedUnion('kind',[
- z.object({...base,kind:z.literal('contact_permission'),channel:z.literal('voice'),party:z.enum(['seller','buyer']),buyerId:z.string().uuid().nullable(),phone:z.string().regex(/^\+1[2-9][0-9]{9}$/),timezone:z.string().min(1).max(100),localStartHour:z.number().int().min(9).max(19),localEndHour:z.number().int().min(10).max(20)}).strict(),
+ z.object({...base,kind:z.literal('contact_permission'),channel:z.enum(['voice','sms']),party:z.enum(['seller','buyer']),buyerId:z.string().uuid().nullable(),phone:z.string().regex(/^\+1[2-9][0-9]{9}$/),timezone:z.string().min(1).max(100),localStartHour:z.number().int().min(9).max(19),localEndHour:z.number().int().min(10).max(20)}).strict(),
  z.object({...base,kind:z.literal('offer_ceiling'),channel:z.literal('offer'),maxCents:money}).strict(),
  z.object({...base,kind:z.literal('marketing_release'),channel:z.literal('buyer_marketing'),dealId:z.string().uuid(),purchaseEnvelopeId:z.string().uuid(),termsHash:z.string().regex(/^[a-f0-9]{64}$/),maxCents:money,market:z.string().trim().min(2).max(100),propertyType:z.enum(['house','land']),repairsCents:z.number().int().min(0).max(100000000000),marketingScope:z.literal('assignment_interest')}).strict(),
 ]);
 export type AuthorityPayload=z.infer<typeof authorityPayloadSchema>;
 export const authoritySubmitSchema=z.object({idempotencyKey:z.string().uuid(),payload:authorityPayloadSchema}).strict();
-export const authorityDecisionSchema=z.object({requestId:z.string().uuid(),decision:z.enum(['approved','needs_information','declined','revoked']),note:z.string().trim().min(12).max(1000),verification:z.object({marketReviewId:z.string().uuid(),reviewReference:reference,reviewedAt:date,validUntil:date,consentReference:reference.optional(),consentObservedAt:date.optional(),dncReceiptId:z.string().uuid().optional(),underwritingReference:reference.optional(),underwritingMaxCents:money.optional(),marketingRightsReference:reference.optional()}).strict().optional()}).strict();
+export const authorityDecisionSchema=z.object({requestId:z.string().uuid(),decision:z.enum(['approved','needs_information','declined','revoked']),note:z.string().trim().min(12).max(1000),verification:z.object({marketReviewId:z.string().uuid(),reviewReference:reference,reviewedAt:date,validUntil:date,consentReference:reference.optional(),consentObservedAt:date.optional(),dncReceiptId:z.string().uuid().optional(),underwritingReference:reference.optional(),underwritingMaxCents:money.optional(),marketingRightsReference:reference.optional(),smsConsentConfirmed:z.literal(true).optional(),smsConsentBusiness:z.string().trim().min(1).max(200).optional(),smsPriorContactReference:reference.optional()}).strict().optional()}).strict();
 export function validateAuthorityTimes(payload:AuthorityPayload,now=Date.now()){
  if(Date.parse(payload.evidenceObservedAt)>now||Date.parse(payload.evidenceObservedAt)<now-365*86400000)throw new Error('Use dated, current evidence.');
  if(Date.parse(payload.expiresAt)<=now||Date.parse(payload.expiresAt)>now+90*86400000)throw new Error('Choose an expiry within 90 days.');
  if(payload.kind==='contact_permission'){
+  if(payload.channel==='sms'&&(payload.party!=='seller'||payload.buyerId))throw new Error('Seller SMS scope required.');
   if(payload.localStartHour>=payload.localEndHour)throw new Error('Choose a valid contact window.');
   try{new Intl.DateTimeFormat('en-US',{timeZone:payload.timezone}).format(now);}catch{throw new Error('Choose a valid time zone.');}
   if((payload.party==='buyer')!==!!payload.buyerId)throw new Error('Select the matching buyer record.');

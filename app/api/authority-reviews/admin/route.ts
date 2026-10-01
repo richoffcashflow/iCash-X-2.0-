@@ -27,6 +27,10 @@ export async function POST(req:Request){
  if(input.decision==='approved'){
  const [request]=await db<(AuthorityReviewRow&{account_id:string})[]>(`icash_authority_review_requests?id=eq.${input.requestId}&select=*`);
  if(!request)return NextResponse.json({error:'Review not found.'},{status:404,headers});
+ if(request.payload.kind==='contact_permission'&&request.payload.channel==='sms'){
+ const sender=process.env.CONTIGUITY_FROM;if(!sender||!/^\+1[2-9][0-9]{9}$/.test(sender))throw Error('SMS_SENDER_REQUIRED');
+ verification={...verification,smsSender:sender};
+ }
  if(request.payload.kind==='marketing_release'){
  const payload=request.payload;
  const [envelope]=await db<{terms:unknown;terms_hash:string}[]>(`icash_signing_envelopes?id=eq.${payload.purchaseEnvelopeId}&account_id=eq.${request.account_id}&deal_id=eq.${payload.dealId}&select=terms,terms_hash`);

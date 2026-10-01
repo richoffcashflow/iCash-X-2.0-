@@ -32,5 +32,14 @@ const verification={marketReviewId:uuid(8),reviewReference:'Real source review r
 r=await admin.POST(req('/api/authority-reviews/admin',{requestId,decision:'approved',note:'Trusted review decision',verification:{...verification,signedDocumentHash:'fake'}}));assert.equal(r.status,400);assert.equal(calls.length,0);
 row={...row,kind:'marketing_release',payload:{...payload,kind:'marketing_release',dealId:uuid(10),purchaseEnvelopeId:uuid(11),termsHash:'a'.repeat(64)}};
 r=await admin.POST(req('/api/authority-reviews/admin',{requestId,decision:'approved',note:'Trusted review decision',verification}));assert.equal(r.status,200);assert.equal(pdfCalls,1);const approved=calls.at(-1);assert.equal(approved.path,'rpc/icash_decide_authority_review');assert.match(approved.body.p_verification.signedDocumentHash,/^[a-f0-9]{64}$/);assert.equal(approved.body.p_verification.signedDocumentHash,createHash('sha256').update('Actual fixture PDF bytes').digest('hex'));
+
+row={...row,kind:'contact_permission',payload:{...payload,kind:'contact_permission',channel:'sms'}};
+const smsVerification={...verification,smsConsentConfirmed:true,smsConsentBusiness:'Fixture principal',smsPriorContactReference:'Actual prior contact source',consentReference:'Actual SMS recipient consent',consentObservedAt:new Date().toISOString(),dncReceiptId:uuid(7)};
+const oldFrom=process.env.CONTIGUITY_FROM;delete process.env.CONTIGUITY_FROM;calls=[];
+r=await admin.POST(req('/api/authority-reviews/admin',{requestId,decision:'approved',note:'SMS source review completed',verification:smsVerification}));assert.equal(r.status,503);assert(!calls.some(c=>c.path==='rpc/icash_decide_authority_review'));
+process.env.CONTIGUITY_FROM='+14243948384';calls=[];
+r=await admin.POST(req('/api/authority-reviews/admin',{requestId,decision:'approved',note:'SMS source review completed',verification:smsVerification}));assert.equal(r.status,200);assert.equal(calls.at(-1).body.p_verification.smsSender,'+14243948384');
+calls=[];r=await admin.POST(req('/api/authority-reviews/admin',{requestId,decision:'approved',note:'SMS source review completed',verification:{...smsVerification,smsSender:'+12145550123'}}));assert.equal(r.status,400);assert.equal(calls.length,0);
+if(oldFrom===undefined)delete process.env.CONTIGUITY_FROM;else process.env.CONTIGUITY_FROM=oldFrom;
 delete globalThis.__authorityOwner;delete globalThis.__authorityAdmin;
 console.log('Authority routes: tenant-only reads/RPC, authenticated writes, same-origin CSRF, spoofed admin/IDs/hash rejection, provider PDF hash before atomic decision and owner withdrawal passed.');
