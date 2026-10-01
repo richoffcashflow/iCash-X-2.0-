@@ -48,6 +48,6 @@ h.respond(()=>Promise.resolve(new Response(JSON.stringify({...saved,liveWorkRead
 assert.throws(()=>policy.parseCampaignStatus({...fixture,released:undefined}),'missing release state fails closed');
 h.respond(()=>Promise.reject(Error('Network unavailable')));find(tree,node=>node.type==='button'&&text(node)==='Refresh campaign status').props.onClick();await tick();tree=h.render();assert.ok(find(tree,node=>node.props?.role==='alert'));assert.equal(h.statuses.at(-1),null,'failed refresh cannot leave parent start eligible');assert.doesNotMatch(text(tree),/Acknowledgment saved/,'do not present stale status as verified');h.unmount();
 const aborted=harness();aborted.respond(()=>new Promise(()=>{}));aborted.render();aborted.mount();aborted.unmount();assert.equal(aborted.calls[0].options.signal.aborted,true);
-const page=readFileSync(new URL('../app/page.tsx',import.meta.url),'utf8');assert.match(page,/<OutreachCampaignAcknowledgment onStatus=\{setCampaign\}\/><BudgetSummary/);
+const page=readFileSync(new URL('../app/page.tsx',import.meta.url),'utf8');assert.match(page,/<OutreachCampaignAcknowledgment onStatus=\{setCampaign\}\/>/);assert(page.indexOf('<LiveWorkspace')<page.indexOf('<OutreachCampaignAcknowledgment'),'work precedes collapsed campaign settings');
 assert.ok(h.calls.every(c=>c.url==='/api/work/outreach-campaign'),'UI cannot activate or charge');
 console.log('Campaign UI state and component handler tests passed: explicit acknowledgment, keyboard-native controls, loading, errors, version changes, repeated clicks, server verification, and unmount.');

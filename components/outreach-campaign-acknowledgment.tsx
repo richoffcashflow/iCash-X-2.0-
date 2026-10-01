@@ -53,14 +53,16 @@ export function OutreachCampaignAcknowledgment({onStatus}:{onStatus?:(status:Out
   const current = hasCurrentCampaignAcknowledgment(status);
   const recorded = current && status?.configured;
   const busy = state.phase === 'loading' || state.phase === 'saving';
-  return <section className="space-y-3 rounded-2xl border p-4 text-sm" aria-labelledby="outreach-campaign-heading" aria-busy={busy}>
+  return <details id="outreach-campaign-details" className="workspace-campaign-settings">
+    <summary><span>Campaign setup</span><small>{state.error?'Status unavailable':busy?'Checking…':recorded?status?.released?'Configured':'Awaiting release':'Review needed'}</small></summary>
+    <section className="campaign-settings-content space-y-3 text-sm" aria-labelledby="outreach-campaign-heading" aria-busy={busy}>
     <h3 id="outreach-campaign-heading" className="font-semibold">SMS-to-inbound campaign</h3>
     {status?.smsChannelEnabled && !status.liveWorkReady && <p>SMS channel enabled. Campaign release and your Run control still apply; AI calls remain held.</p>}
     {busy && <p role="status">{state.phase === 'saving' ? 'Saving your acknowledgment…' : 'Checking saved campaign status…'}</p>}
     {state.phase === 'ready' && status && <p role="status">{recorded
       ? !status.released ? 'Awaiting campaign release.' : status.liveWorkReady ? 'Setup checks ready · per-contact checks still apply.' : status.smsChannelEnabled ? 'SMS enabled · per-contact checks still apply. AI call invitations are held.' : 'Setup pending · outreach paused.'
       : current ? 'Select your campaign to continue.' : status.acknowledgment ? 'Updated acknowledgment needed · outreach paused.' : 'Campaign acknowledgment needed · outreach paused.'}</p>}
-    <details id="outreach-campaign-details" className="space-y-3">
+    <details className="space-y-3">
       <summary className="cursor-pointer font-medium">{recorded?'Campaign details':'Review campaign responsibilities'}</summary>
       <p>Ask about interest in a cash offer by permitted SMS. After a positive reply, invite the recipient to call your AI assistant.</p>
       {status && <>
@@ -79,5 +81,5 @@ export function OutreachCampaignAcknowledgment({onStatus}:{onStatus?:(status:Out
     </details>
     {state.error && <p role="alert">{state.error}</p>}
     <button type="button" className="underline" disabled={busy} onClick={() => void load()}>Refresh campaign status</button>
-  </section>;
+  </section></details>;
 }
