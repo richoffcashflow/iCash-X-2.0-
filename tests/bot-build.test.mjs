@@ -22,3 +22,10 @@ await assert.rejects(()=>saveBotBuild(profile,setup,{retry:true,signal,request:a
 assert.equal(attempts,1,'Failed reconciliation must not submit a stale revision');
 await assert.rejects(()=>saveBotBuild(profile,setup,{retry:false,signal,request:async()=>Response.json({})}),/Could not save/);
 console.log('Bot creation: successful save, retry revision recovery, failed recovery and invalid responses passed');
+
+const changed={...setup,revision:5,profile:{...profile,market:'Austin, TX',marketMode:'city'}};
+const retried=[];
+await saveBotBuild({...profile,market:'Nationwide'},setup,{retry:true,nameOnly:true,signal,request:async(url,options)=>{retried.push(options);return Response.json({setup:options.method==='POST'?{...changed,revision:6}:changed});}});
+const retryBody=JSON.parse(retried[1].body);assert.equal(retryBody.revision,5);assert.equal(retryBody.profile.market,'Austin, TX');assert.equal(retryBody.profile.marketMode,'city');assert.equal(retryBody.profile.displayName,'Scout');
+let changedSessionCalls=0;await assert.rejects(()=>saveBotBuild(profile,setup,{retry:true,nameOnly:true,signal,request:async()=>{changedSessionCalls++;return Response.json({setup:{...changed,id:'other-setup'}});}}),/session changed/);assert.equal(changedSessionCalls,1,'different setup session must not receive a save');
+console.log('Name-only retry preserves fresh server market and rejects a changed setup session.');

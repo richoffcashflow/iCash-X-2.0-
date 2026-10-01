@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {earlyAccessDailyDisclosure} from '../lib/funding-consent.ts';
+const source=readFileSync(new URL('../components/funding-checkout.tsx',import.meta.url),'utf8');
+assert.ok(!source.includes('Live-work checks unfinished'),'omit redundant development-status heading');
+assert.match(source,/aria-label="Funding availability and daily billing"><p>\{earlyAccessDailyDisclosure\}<\/p>/,'material availability disclosure remains at the payment decision');
+assert.match(source,/\[earlyAccessAccepted,setEarlyAccessAccepted\]=useState\(false\)/);
+assert.match(source,/checked=\{earlyAccessAccepted\}/);
+assert.match(source,/I understand live work is not fully ready and daily charges continue until I stop them\./);
+assert.match(source,/disabled=\{busy\|\|!selected\|\|!daily\?\.ready\|\|!accepted\|\|\(earlyAccess&&!earlyAccessAccepted\)\}/,'all checkout gates remain');
+assert.match(earlyAccessDailyDisclosure,/Funding does not start or unlock them\./);
+assert.match(earlyAccessDailyDisclosure,/Daily charges renew every 24 hours even while live work is unavailable/);
+assert.match(source,/Renews every day\./);
+console.log('Checkout copy remains concise while preserving material availability, daily renewal, unchecked consent and payment gates.');
