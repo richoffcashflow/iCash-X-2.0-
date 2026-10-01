@@ -1,3 +1,4 @@
+import {discoveryAccountReadiness} from '@/lib/discovery-channel-readiness';
 import {smsAccountReady} from '@/lib/sms-channel-readiness';
 import {NextResponse} from 'next/server';
 import {workAccount} from '@/lib/work-account';
@@ -10,7 +11,7 @@ const input=z.object({action:z.enum(['pause','resume','takeover','return_to_bot'
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403});
  try{const {accountId,userId}=await workAccount();const raw=await req.text();if(raw.length>512)throw new Error();const i=input.parse(JSON.parse(raw));
- if(['resume','return_to_bot'].includes(i.action)&&process.env.ICASH_LIVE_WORK_READY!=='true'&&!(i.action==='resume'&&await smsAccountReady(accountId,userId)))return NextResponse.json({error:'Live work is not ready. Funding does not start or unlock it.'},{status:503});
+ if(['resume','return_to_bot'].includes(i.action)&&process.env.ICASH_LIVE_WORK_READY!=='true'&&!(i.action==='resume'&&(await smsAccountReady(accountId,userId)||(await discoveryAccountReadiness(accountId,userId)).ready)))return NextResponse.json({error:'Live work is not ready. Funding does not start or unlock it.'},{status:503});
  if(i.action==='pause'){
   const mode=fundingMode();
   await db('rpc/icash_pause_work_and_billing','POST',{p_user:userId,p_account:accountId,p_mode:mode});

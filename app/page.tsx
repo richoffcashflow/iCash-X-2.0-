@@ -18,7 +18,7 @@ import {LiveWorkspace} from '@/components/live-workspace';
 import {BotSetupFlow} from '@/components/bot-setup';
 import {BotBrand} from '@/components/bot-brand';
 import {setupThemes,type BotProfile} from '@/lib/bot-setup';
-type Account={identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;phone?:string;balanceCents?:number;assistantName?:string;paused?:boolean;billingActive?:boolean;billingReview?:boolean;workReady?:boolean;smsWorkReady?:boolean;activeWork?:boolean};
+type Account={identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;phone?:string;balanceCents?:number;assistantName?:string;paused?:boolean;billingActive?:boolean;billingReview?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;activeWork?:boolean};
 export default function Home(){
  const [account,setAccount]=useState<Account|null>(null),[accountError,setAccountError]=useState(false),[signInOpen,setSignInOpen]=useState(false),[fundingOpen,setFundingOpen]=useState(false),[fundingCode,setFundingCode]=useState('budget_ten'),[controlBusy,setControlBusy]=useState(false),[controlError,setControlError]=useState(''),[draftBrand,setDraftBrand]=useState<BotProfile|null>(null);
  const [campaign,setCampaign]=useState<OutreachCampaignStatus|null>(null);

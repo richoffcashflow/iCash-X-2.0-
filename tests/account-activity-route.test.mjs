@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
-let screeningState='running',paths=[],fullReady=true,smsReady=false;
-const mocks={liveWorkReady:()=>fullReady,smsAccountReady:async(account,user)=>{assert.equal(account,'account');assert.equal(user,'user');return smsReady;},launchReadiness:async()=>({ready:true}),accountMode:()=> 'live',currentUser:async()=>({id:'user',email:'fixture@example.invalid'}),NextResponse:{json:(body,options={})=>({body,status:options.status??200})},db:async(path,method,body)=>{
+let screeningState='running',paths=[],fullReady=true,smsReady=false,discoveryReady=false;
+const mocks={discoveryAccountReadiness:async(account,user)=>{assert.equal(account,'account');assert.equal(user,'user');return {ready:discoveryReady,quote:discoveryReady?{chargeCents:84,maxProperties:5,costBasis:'planning_estimate'}:null};},liveWorkReady:()=>fullReady,smsAccountReady:async(account,user)=>{assert.equal(account,'account');assert.equal(user,'user');return smsReady;},launchReadiness:async()=>({ready:true}),accountMode:()=> 'live',currentUser:async()=>({id:'user',email:'fixture@example.invalid'}),NextResponse:{json:(body,options={})=>({body,status:options.status??200})},db:async(path,method,body)=>{
  paths.push(path);
  if(path==='rpc/icash_claim_funding')return 'account';
  if(path.startsWith('rpc/icash_funding_account_totals'))return {creditCents:1000,phone:null};
@@ -20,5 +20,6 @@ const {GET}=await import('data:text/javascript;base64,'+Buffer.from(source).toSt
 for(const state of ['queued','running']){screeningState=state;const r=await GET();assert.equal(r.status,200);assert.equal(r.body.activeWork,true,state);assert.equal(r.body.balanceCents,800);}
 screeningState='complete';const r=await GET();assert.equal(r.body.activeWork,false);assert(paths.some(p=>p.includes('state=in.(queued,running)')));
 fullReady=false;smsReady=true;const sms=await GET();assert.equal(sms.body.workReady,false);assert.equal(sms.body.smsWorkReady,true);smsReady=false;assert.equal((await GET()).body.smsWorkReady,false);
+discoveryReady=true;const discovery=await GET();assert.equal(discovery.body.workReady,false);assert.equal(discovery.body.smsWorkReady,false);assert.equal(discovery.body.discoveryWorkReady,true);assert.deepEqual(discovery.body.discoveryQuote,{chargeCents:84,maxProperties:5,costBasis:'planning_estimate'});
 delete globalThis.__accountActivity;
 console.log('Account activity uses real queued/running screening states, completed work idle and net available balance.');
