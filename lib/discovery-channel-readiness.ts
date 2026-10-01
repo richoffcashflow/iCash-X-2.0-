@@ -1,6 +1,6 @@
 import {db} from '@/lib/stripe-test';
-import {acquisitionContractCoverage} from '@/lib/contract-coverage-service';
-import {discoveryWorkEnabled} from './live-work-admission.ts';
+import {acquisitionContractCoverage,propertyResearchMarketKnown} from '@/lib/contract-coverage-service';
+import {discoveryWorkEnabled,liveWorkReady} from './live-work-admission.ts';
 import {fullCostReserve,type CostQuote} from './cost-guard.ts';
 type Readiness={ready:boolean;quote:{chargeCents:number;maxProperties:number;costBasis:'planning_estimate'}|null};
 const held:Readiness={ready:false,quote:null};
@@ -40,7 +40,7 @@ export async function discoveryAccountReadiness(accountId:string,userId:string):
    if(!activation?.enabled||!integer(activation.customer_cap_cents)||!funding.length||lifetime+rate.charge_cents>activation.customer_cap_cents)return held;
   }else if(![budget.funded_micros,budget.spent_micros,budget.protected_micros,budget.reserved_micros].every(integer)
    ||budget.funded_micros-budget.spent_micros-budget.protected_micros-budget.reserved_micros<cost.reserveCents*10000)return held;
-  if(!(await acquisitionContractCoverage(config.zip)).supported)return held;
+  if(liveWorkReady()?!(await acquisitionContractCoverage(config.zip)).supported:!await propertyResearchMarketKnown(config.zip))return held;
   return {ready:true,quote:{chargeCents:rate.charge_cents,maxProperties:config.per_page,costBasis:'planning_estimate'}};
  }catch{return held;}
 }

@@ -12,3 +12,10 @@ export async function acquisitionContractCoverage(zip:string){
  const state=markets.length===1?markets[0].state:null;
  return {...contractCapability(coverage,state,1),state,coverage};
 }
+
+/** Property-only research needs a configured market, not an executable purchase agreement. */
+export async function propertyResearchMarketKnown(zip:string){
+ if(!/^\d{5}$/.test(zip))return false;
+ const markets=await db<{state:string}[]>(`icash_market_shortlist?zip=eq.${zip}&select=state&limit=2`);
+ return markets.length===1&&/^[A-Z]{2}$/.test(markets[0].state);
+}
