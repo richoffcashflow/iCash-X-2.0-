@@ -1,0 +1,53 @@
+// SIMULATION ONLY: minimal synthetic tables, real production billing functions, no network/provider calls.
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {pathToFileURL} from 'node:url';
+import {isAbsolute} from 'node:path';
+import {randomUUID} from 'node:crypto';
+assert(process.argv[2]&&isAbsolute(process.argv[2]),'Supply existing official PGlite module path');
+const {PGlite}=await import(pathToFileURL(process.argv[2]).href);
+const pg=await PGlite.create();
+const q=(sql,params=[])=>pg.query(sql,params);
+try{
+ await pg.exec(`create role anon;create role authenticated;create role service_role;
+ create table icash_accounts(id uuid primary key,daily_limit_cents bigint not null default 0,bot_paused boolean not null default false);
+ create table icash_credit_packs(code text primary key);
+ create table icash_operating_budget(id integer primary key,minimum_margin_bps integer);insert into icash_operating_budget values(1,0);
+ create table icash_funding_orders(id uuid primary key default gen_random_uuid(),mode text,guest_hash text,account_id uuid references icash_accounts(id),pack_code text,price_cents bigint,credit_cents bigint,state text,stripe_payment_id text unique,payer_email text,payer_phone text,paid_at timestamptz,credited_at timestamptz,run_days integer,flexible_pacing boolean,pacing_applied_at timestamptz,processing_fee_cents bigint,tax_required boolean,tax_cents bigint,charged_total_cents bigint,created_at timestamptz not null default now());
+ create table icash_billing_reviews(event_id text primary key,payment_id text not null,reason text,account_id uuid,resolved_at timestamptz);
+ create table fixture_credits(account_id uuid,event_key text unique,amount bigint);
+ create function public.icash_post_credit(a uuid,k text,kind text,amount bigint,payment text) returns void language sql as $$insert into public.fixture_credits values(a,k,amount) on conflict(event_key) do nothing$$;`);
+ await pg.exec(readFileSync(new URL('../config/daily-billing.sql',import.meta.url),'utf8'));
+ await pg.exec(readFileSync(new URL('../config/daily-invoice-recovery.sql',import.meta.url),'utf8'));
+ const existing=readFileSync(new URL('../supabase/migrations/20260928031246_icash_verified_funding_and_accounts.sql',import.meta.url),'utf8');const hold=existing.match(/create function public\.icash_guard_billing_hold\(\)[\s\S]*?create trigger icash_billing_hold_before_resume[^;]+;/)?.[0];assert(hold,'Use the unchanged production resume guard');await pg.exec(hold);
+ const a=randomUUID(),other=randomUUID(),plan=randomUUID(),foreignPlan=randomUUID(),ten=randomUUID(),twentyFive=randomUUID(),foreignQuote=randomUUID();
+ await q('insert into icash_accounts(id) values($1),($2)',[a,other]);
+ await q("insert into icash_credit_packs values('ten'),('twentyfive')");
+ for(const [id,account] of [[plan,a],[foreignPlan,other]])await q("insert into icash_daily_plans(id,mode,guest_hash,account_id,state,consent_version,consent_text) values($1,'live',$2,$3,'active','fixture','fixture')",[id,id,account]);
+ for(const [id,p,code,amount] of [[ten,plan,'ten',1000],[twentyFive,plan,'twentyfive',2500],[foreignQuote,foreignPlan,'ten',1000]])await q('insert into icash_daily_quotes(id,plan_id,pack_code,budget_cents,credit_cents,fee_cents,consent_text) values($1,$2,$3,$4,$4,0,\'fixture\')',[id,p,code,amount]);
+ const settle=(invoice,quote=ten,amount=1000,period='2026-10-01T00:00:00Z',paid=period,p=plan,payment='pi_'+invoice)=>q('select icash_settle_daily_invoice_v2($1,$2,$3,$4,$5,0,\'fixture@example.invalid\',null,$6,$7)',[p,quote,'in_'+invoice,payment,amount,period,paid]);
+ const budget=async()=>Number((await q('select daily_limit_cents from icash_accounts where id=$1',[a])).rows[0].daily_limit_cents);
+ const credit=async()=>Number((await q('select coalesce(sum(amount),0) total from fixture_credits where account_id=$1',[a])).rows[0].total);
+ await settle('current');assert.equal(await budget(),1000);assert.equal(await credit(),1000);
+ await settle('older',twentyFive,2500,'2026-09-30T00:00:00Z','2026-10-02T00:00:00Z');
+ assert.equal(await credit(),3500);assert.equal(await budget(),1000,'Delayed older-period payment must not replace current daily amount');
+ for(let n=0;n<2;n++){await settle('current');await settle('older',twentyFive,2500,'2026-09-30T00:00:00Z','2026-10-02T00:00:00Z');}assert.equal(await credit(),3500,'Retries credit once');
+ await q('select icash_daily_claim($1)',[a]);assert.equal(await budget(),1000,'Account refresh preserves provider cycle order');
+ await assert.rejects(settle('current',foreignQuote,1000,'2026-10-01T00:00:00Z','2026-10-01T00:00:00Z',foreignPlan),/receipt mismatch/);
+ await assert.rejects(settle('current',ten,1000,'2026-10-02T00:00:00Z'),/receipt mismatch/);
+ await assert.rejects(settle('current',ten,1000,'2026-10-01T00:00:00Z','2026-10-01T00:00:00Z',plan,'pi_different'),/receipt mismatch/);
+ await assert.rejects(settle('missingchronology',ten,1000,null,'2026-10-01T00:00:00Z'),/chronology mismatch/);
+ await q("update icash_daily_plans set state='stop_requested' where id=$1",[plan]);await settle('beforestop',twentyFive,2500,'2026-09-29T00:00:00Z');assert.equal((await q('select state from icash_daily_plans where id=$1',[plan])).rows[0].state,'stop_requested');assert.equal(await budget(),1000);
+ await q("update icash_daily_plans set state='stopped' where id=$1",[plan]);await settle('stoppedhistory',twentyFive,2500,'2026-09-28T00:00:00Z');assert.equal((await q('select state from icash_daily_plans where id=$1',[plan])).rows[0].state,'stopped');assert.equal(await budget(),1000);
+ await q('select icash_settle_daily_invoice($1,$2,\'in_legacy\',\'pi_legacy\',2500,0,\'fixture@example.invalid\',null)',[plan,twentyFive]);assert.equal(await budget(),1000,'Legacy unknown chronology does not override verified current period');const before=await credit();
+ await settle('legacy',twentyFive,2500,'2026-10-03T00:00:00Z');assert.equal(await credit(),before,'Enriching a legacy receipt does not post credit again');assert.equal(await budget(),2500);
+ await settle('current');assert.equal(await budget(),2500);await q('select icash_daily_claim($1)',[a]);assert.equal(await budget(),2500);
+ await q("insert into icash_billing_reviews(event_id,payment_id,reason) values('evt_preexisting','pi_reviewed','charge.refunded')");await settle('reviewed',foreignQuote,1000,'2026-10-01T00:00:00Z','2026-10-01T00:00:00Z',foreignPlan);await settle('reviewed',foreignQuote,1000,'2026-10-01T00:00:00Z','2026-10-01T00:00:00Z',foreignPlan);
+ assert.equal((await q("select account_id from icash_billing_reviews where event_id='evt_preexisting'")).rows[0].account_id,other);assert.equal((await q('select bot_paused from icash_accounts where id=$1',[other])).rows[0].bot_paused,true);assert.equal((await q('select state from icash_daily_plans where id=$1',[foreignPlan])).rows[0].state,'stop_requested');assert.equal(Number((await q('select sum(amount) total from fixture_credits where account_id=$1',[other])).rows[0].total),1000,'Out-of-order refund hold preserves payment credit idempotency');
+ await assert.rejects(q('update icash_accounts set bot_paused=false where id=$1',[other]),/Payment review required/);
+ await q("insert into icash_billing_reviews(event_id,payment_id,reason) values('evt_stopped','pi_stoppedreview','charge.dispute.created')");await settle('stoppedreview',twentyFive,2500,'2026-09-27T00:00:00Z');assert.equal((await q('select state from icash_daily_plans where id=$1',[plan])).rows[0].state,'stopped');assert.equal((await q('select bot_paused from icash_accounts where id=$1',[a])).rows[0].bot_paused,true);
+ for(const role of ['anon','authenticated'])assert.equal((await q("select has_function_privilege($1,'public.icash_settle_daily_invoice_v2(uuid,uuid,text,text,bigint,bigint,text,text,timestamptz,timestamptz)','execute') allowed",[role])).rows[0].allowed,false);
+ assert.equal((await q("select billing_period_start,paid_at from icash_funding_orders where stripe_invoice_id='in_older'")).rows[0].paid_at.toISOString(),'2026-10-02T00:00:00.000Z');
+ for(const [name,account] of [['icash_settle_daily_invoice_v2','a'],['icash_daily_claim','p_account']]){const definition=(await q('select pg_get_functiondef(oid) body from pg_proc where proname=$1',[name])).rows[0].body;const lock=definition.indexOf('where id='+account+' for update');const chronology=definition.indexOf('select credit_cents into last_budget');assert(lock>=0&&lock<chronology,'Account lock must precede chronology SELECT across plans/claims');}
+ console.log('SIMULATION: actual billing functions preserve exactly-once credits, delayed older-cycle ordering, account-claim order, immutable replay bindings, Stop state, out-of-order refund/dispute holds and actual Run rejection, legacy RPC/receipt compatibility, and service-only v2 grants.');
+}catch(error){console.error(error.message);process.exitCode=1;}finally{await pg.close();}

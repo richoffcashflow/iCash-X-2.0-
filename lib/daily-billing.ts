@@ -5,7 +5,7 @@ import {earlyAccessFundingEnabled,fundingEnabled,fundingMode} from '@/lib/fundin
 import {processingFeeCents} from '@/lib/funding-fees';
 import {dailyConsent} from '@/lib/daily-consent';
 export {dailyConsent,dailyConsentVersion} from '@/lib/daily-consent';
-export type DailyPlan={id:string;mode:'test'|'live';guest_hash:string;account_id:string|null;stripe_subscription_id:string|null;stripe_session_id:string|null;state:string;checkout_url:string|null;created_at:string};
+export type DailyPlan={id:string;mode:'test'|'live';guest_hash:string;account_id:string|null;stripe_subscription_id:string|null;stripe_session_id:string|null;state:string;checkout_url:string|null;created_at:string;invoice_reconcile_cursor?:string|null};
 type Quote={id:string;plan_id:string;pack_code:string;budget_cents:number;credit_cents:number;fee_cents:number;budget_price:string;fee_price:string|null};
 export function dailyReady(){return (fundingEnabled()||earlyAccessFundingEnabled())&&!!process.env.CRON_SECRET&&process.env.ICASH_DAILY_BILLING_READY==='true';}
 export async function dailyQuote(p:DailyPlan,code:string,consentText:string=dailyConsent){
@@ -41,12 +41,15 @@ export async function syncDailySubscription(sub:Stripe.Subscription){
  if(sub.status!=='canceled')await stopDaily({...p,stripe_subscription_id:sub.id});
  }
 }
-export async function settleDailyInvoice(invoiceId:string){
+export async function settleDailyInvoice(invoiceId:string,expectedPlan?:DailyPlan){
  const stripe=fundingStripe();const i=await stripe.invoices.retrieve(invoiceId);
- const sid=i.parent?.subscription_details?.subscription;const subId=typeof sid==='string'?sid:sid?.id;if(!subId)return;
- const sub=await stripe.subscriptions.retrieve(subId);const planId=sub.metadata.icash_daily_plan;if(!planId)return;
- const [p]=await db<DailyPlan[]>(`icash_daily_plans?id=eq.${planId}&select=*`);if(!p||i.livemode!==(p.mode==='live')||i.livemode!==(fundingMode()==='live'))throw new Error('Invoice mode mismatch');
- await syncDailySubscription(sub);
+ const sid=i.parent?.subscription_details?.subscription;const subId=typeof sid==='string'?sid:sid?.id;if(!subId){if(expectedPlan)throw new Error('Invoice subscription missing');return;}
+ const sub=await stripe.subscriptions.retrieve(subId);const planId=sub.metadata.icash_daily_plan;if(!planId){if(expectedPlan)throw new Error('Invoice plan missing');return;}
+ const [p]=await db<DailyPlan[]>(`icash_daily_plans?id=eq.${planId}&select=*`);if(!p||i.id!==invoiceId||sub.id!==subId||sub.livemode!==i.livemode||i.livemode!==(p.mode==='live')||i.livemode!==(fundingMode()==='live'))throw new Error('Invoice mode mismatch');
+ if(expectedPlan&&(p.id!==expectedPlan.id||p.mode!==expectedPlan.mode||p.account_id!==expectedPlan.account_id||p.guest_hash!==expectedPlan.guest_hash||p.stripe_subscription_id!==expectedPlan.stripe_subscription_id||subId!==expectedPlan.stripe_subscription_id))throw new Error('Invoice owner mismatch');
+ if(expectedPlan?.state==='stopped'){
+  if(p.state!=='stopped')throw new Error('Stopped plan changed');
+ }else await syncDailySubscription(sub);
  if(i.status!=='paid'||i.amount_remaining!==0||i.currency!=='usd')throw new Error('Invoice not ready');
  const lines=await stripe.invoices.listLineItems(i.id,{limit:10});if(lines.has_more||lines.data.length!==1)throw new Error('Unexpected invoice lines');
  const ids=lines.data.map(l=>l.pricing?.price_details?.price);if(ids.some(id=>typeof id!=='string'||!/^price_[a-zA-Z0-9]+$/.test(id)))throw new Error('Price missing');
@@ -59,7 +62,52 @@ export async function settleDailyInvoice(invoiceId:string){
  const payments=await stripe.invoicePayments.list({invoice:i.id,status:'paid',limit:10});if(payments.has_more||payments.data.length!==1)throw new Error('Payment requires review');
  const payment=payments.data[0].payment.payment_intent;const paymentId=typeof payment==='string'?payment:payment?.id;if(!paymentId)throw new Error('Payment missing');
  const pi=await stripe.paymentIntents.retrieve(paymentId);if(pi.status!=='succeeded'||pi.amount_received!==i.total||pi.currency!=='usd'||pi.livemode!==i.livemode)throw new Error('Payment mismatch');
- await db('rpc/icash_settle_daily_invoice','POST',{p_plan:p.id,p_quote:q.id,p_invoice:i.id,p_payment:pi.id,p_amount:i.total,p_tax:tax,p_email:i.customer_email,p_phone:i.customer_phone});
+ const periodStart=budget.period?.start,paidAt=i.status_transitions?.paid_at;
+ if(!Number.isSafeInteger(periodStart)||periodStart<=0||!Number.isSafeInteger(paidAt)||!paidAt||paidAt<=0)throw new Error('Invoice chronology missing');
+ await db('rpc/icash_settle_daily_invoice_v2','POST',{p_plan:p.id,p_quote:q.id,p_invoice:i.id,p_payment:pi.id,p_amount:i.total,p_tax:tax,p_email:i.customer_email,p_phone:i.customer_phone,p_cycle_start:new Date(periodStart*1000).toISOString(),p_paid_at:new Date(paidAt*1000).toISOString()});
+}
+
+/** Bounded recovery of missed paid webhooks, checkpointing each verified invoice. */
+export async function reconcileDailyInvoices(p:DailyPlan,deadline=Date.now()+45_000){
+ const withinDeadline=()=>{if(Date.now()>=deadline)throw new Error('Reconciliation deadline reached');};
+ withinDeadline();
+ if(!p.stripe_subscription_id)throw new Error('Subscription missing');
+ const stripe=fundingStripe(),sub=await stripe.subscriptions.retrieve(p.stripe_subscription_id);
+ if(sub.id!==p.stripe_subscription_id||sub.metadata.icash_daily_plan!==p.id||sub.livemode!==(p.mode==='live')||p.mode!==fundingMode())throw new Error('Subscription owner mismatch');
+ if(p.state!=='stopped')await syncDailySubscription(sub);
+ const latest=typeof sub.latest_invoice==='string'?sub.latest_invoice:sub.latest_invoice?.id;
+ // Always handle the current cycle before spending the bounded budget on history.
+ if(latest&&sub.status==='active'&&p.state!=='stopped'){
+  withinDeadline();
+  if(!/^in_[A-Za-z0-9]+$/.test(latest))throw new Error('Latest invoice invalid');
+  const known=p.account_id?await db<{id:string;stripe_payment_id:string}[]>(`icash_funding_orders?daily_plan_id=eq.${p.id}&stripe_invoice_id=eq.${latest}&mode=eq.${p.mode}&account_id=eq.${p.account_id}&guest_hash=eq.${p.guest_hash}&state=eq.paid&credited_at=not.is.null&billing_period_start=not.is.null&paid_at=not.is.null&stripe_payment_id=not.is.null&select=id,stripe_payment_id&limit=1`):[];
+  const payment=known[0]?.stripe_payment_id;
+  const reviews=payment&&/^pi_[A-Za-z0-9]+$/.test(payment)?await db<{event_id:string}[]>(`icash_billing_reviews?payment_id=eq.${payment}&resolved_at=is.null&select=event_id&limit=1`):null;
+  if(!reviews||reviews.length){
+   const invoice=await stripe.invoices.retrieve(latest),parent=invoice.parent?.subscription_details?.subscription;
+   if(invoice.id!==latest||(typeof parent==='string'?parent:parent?.id)!==sub.id||invoice.livemode!==sub.livemode)throw new Error('Latest invoice mismatch');
+   if(invoice.status==='paid')await settleDailyInvoice(latest,p);
+  }
+ }
+ let cursor=p.invoice_reconcile_cursor??null;
+ if(cursor&&!/^in_[A-Za-z0-9]+$/.test(cursor))throw new Error('Invoice cursor invalid');
+ const checkpoint=async(next:string|null)=>{
+  if(next&&!/^in_[A-Za-z0-9]+$/.test(next))throw new Error('Invoice cursor invalid');
+  const saved=await db<DailyPlan[]>(`icash_daily_plans?id=eq.${p.id}&mode=eq.${p.mode}&stripe_subscription_id=eq.${sub.id}&account_id=${p.account_id?'eq.'+p.account_id:'is.null'}&invoice_reconcile_cursor=${cursor?'eq.'+cursor:'is.null'}`,'PATCH',{invoice_reconcile_cursor:next});
+  if(saved.length!==1)throw new Error('Invoice checkpoint changed');
+  cursor=next;
+ };
+ for(let page=0;page<2;page++){
+  withinDeadline();
+  const pageStart=cursor;
+  const invoices=await stripe.invoices.list({subscription:sub.id,status:'paid',limit:10,...(cursor?{starting_after:cursor}:{})});
+  if(invoices.has_more&&!invoices.data.length)throw new Error('Invoice pagination stalled');
+  // Never skip a failed/unprocessed invoice; successful work survives even a first-page cutoff.
+  for(const invoice of invoices.data){withinDeadline();await settleDailyInvoice(invoice.id,p);await checkpoint(invoice.id);}
+  if(!invoices.has_more){await checkpoint(null);return {historyPending:false};}
+  if(cursor===pageStart)throw new Error('Invoice pagination stalled');
+ }
+ return {historyPending:true};
 }
 
 /** Only call with a plan resolved from the authenticated account or secure guest cookie. */

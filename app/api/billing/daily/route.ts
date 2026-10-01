@@ -10,6 +10,7 @@ import {allowedOrigin,earlyAccessFundingEnabled,fundingMode} from '@/lib/funding
 import {fundingStripe,limitRequest,validGuest} from '@/lib/funding';
 import {dailyConsent,dailyConsentVersion,dailyQuote,dailyReady,stopDaily,syncDailySubscription,settleDailyInvoice,reconcileDailyCheckout,type DailyPlan} from '@/lib/daily-billing';
 import {processingFeeCents} from '@/lib/funding-fees';
+import {dailyCheckoutMatches,type DailyCheckoutQuote} from '@/lib/daily-checkout-guard';
 export const dynamic='force-dynamic';
 async function owner(create=false){
  const jar=await cookies();let token=jar.get('icash_funding_guest')?.value;
@@ -34,7 +35,7 @@ export async function POST(req:Request){
  const consentVersion=earlyAccess?`${dailyConsentVersion}:early:${earlyAccessTermsVersion}`:dailyConsentVersion;
  const consentText=earlyAccess?`${dailyConsent} Early-access acknowledgment: ${earlyAccessDailyDisclosure}`:dailyConsent;
  if(i.accepted!==true||i.version!==dailyConsentVersion||typeof i.packCode!=='string'||!/^[a-z0-9_]{1,30}$/.test(i.packCode))throw new Error();
- const mode=fundingMode()!;const [pack]=await db<{price_cents:number}[]>(`icash_credit_packs?code=eq.${i.packCode}${mode==='live'?'&enabled=eq.true':''}&select=price_cents`);
+ const mode=fundingMode()!;const [pack]=await db<{price_cents:number;credit_cents:number}[]>(`icash_credit_packs?code=eq.${i.packCode}${mode==='live'?'&enabled=eq.true':''}&select=price_cents,credit_cents`);
  if(!pack||pack.price_cents<1000||pack.price_cents>100000||i.totalCents!==pack.price_cents+processingFeeCents(pack.price_cents))return NextResponse.json({error:'Refresh and confirm the daily total.'},{status:400});
  const stripe=fundingStripe();
  if(i.action==='change'){
@@ -45,7 +46,11 @@ export async function POST(req:Request){
  return NextResponse.json({saved:true,message:'Daily budget saved. Your new amount starts at the next daily renewal; no charge now.'});
  }
  if(i.action!=='start')throw new Error();
- if(p){if(p.stripe_session_id){const session=await stripe.checkout.sessions.retrieve(p.stripe_session_id);if(session.status==='open'&&session.url){if(earlyAccess&&session.metadata?.icash_early_access_terms_version!==earlyAccessTermsVersion)return NextResponse.json({error:'Your open checkout has older disclosures. Stop the pending plan, then start again to review the current terms.'},{status:409});await setupEvent('checkout_opened');return NextResponse.json({url:session.url});}if(session.status==='complete'){const subId=typeof session.subscription==='string'?session.subscription:session.subscription?.id;if(subId){const sub=await stripe.subscriptions.retrieve(subId);await syncDailySubscription(sub);const inv=typeof sub.latest_invoice==='string'?sub.latest_invoice:sub.latest_invoice?.id;if(inv)await settleDailyInvoice(inv);}return NextResponse.json({error:'Your daily plan already exists. Refresh to manage it.'},{status:409});}}
+ if(p){if(p.stripe_session_id){const session=await stripe.checkout.sessions.retrieve(p.stripe_session_id,{expand:['line_items']});if(session.status==='open'&&session.url){
+ const price=session.line_items?.data[0]?.price?.id;
+ const quotes=price&&/^price_[A-Za-z0-9]+$/.test(price)?await db<DailyCheckoutQuote[]>(`icash_daily_quotes?plan_id=eq.${p.id}&budget_price=eq.${price}&select=plan_id,pack_code,budget_cents,credit_cents,fee_cents,budget_price,consent_text`):[];
+ if(quotes.length!==1||!dailyCheckoutMatches(session,p,quotes[0],{packCode:i.packCode,budgetCents:pack.price_cents,creditCents:pack.credit_cents,feeCents:processingFeeCents(pack.price_cents),consentVersion,consentText})||(earlyAccess&&session.metadata?.icash_early_access_terms_version!==earlyAccessTermsVersion))return NextResponse.json({error:'Your open checkout has different budget or purchase terms. Stop the pending plan, then start again to review your current choice.'},{status:409});
+ await setupEvent('checkout_opened');return NextResponse.json({url:session.url});}if(session.status==='complete'){const subId=typeof session.subscription==='string'?session.subscription:session.subscription?.id;if(subId){const sub=await stripe.subscriptions.retrieve(subId);await syncDailySubscription(sub);const inv=typeof sub.latest_invoice==='string'?sub.latest_invoice:sub.latest_invoice?.id;if(inv)await settleDailyInvoice(inv);}return NextResponse.json({error:'Your daily plan already exists. Refresh to manage it.'},{status:409});}}
  return NextResponse.json({error:'A daily plan is already being prepared. Stop it before starting another.'},{status:409});}
  const [plan]=await db<DailyPlan[]>('icash_daily_plans','POST',{mode,guest_hash:guestHash(token!),account_id:account?.id??null,consent_version:consentVersion,consent_text:consentText});
  const q=await dailyQuote(plan,i.packCode,consentText);const origin=req.headers.get('origin')!;
