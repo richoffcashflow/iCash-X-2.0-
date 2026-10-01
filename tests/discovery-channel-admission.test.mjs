@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {z} from 'zod';
 import {loadService} from './helpers/simulated-journey-services.mjs';
-import {discoveryWorkEnabled,liveWorkReady,smsWorkEnabled,automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '../lib/live-work-admission.ts';
+import {discoveryWorkEnabled,contactWorkEnabled,liveWorkReady,smsWorkEnabled,automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '../lib/live-work-admission.ts';
 import {fullCostReserve,costCategories} from '../lib/cost-guard.ts';
 import {workspaceNextAction,workspaceStatus} from '../lib/workspace-status.ts';
 assert.equal(discoveryWorkEnabled({}),false);assert.equal(discoveryWorkEnabled({ICASH_DISCOVERY_WORK_READY:'TRUE'}),false);
@@ -17,7 +17,7 @@ const rows={
  icash_operation_rates:[{enabled:true,operation:'property_search',version:'planning',charge_cents:84,costs_micros:{...Object.fromEntries(costCategories.map(k=>[k,0])),dealmachine:100000,other:40000},buffer_bps:2000,verified_at:past,expires_at:future}],
 };
 let writes=0,covered=false,knownMarket=true;const db=async(path,method='GET')=>{assert.equal(method,'GET','readiness must be read-only');return structuredClone(rows[path.split('?')[0]]??[]);};
-const readiness=await loadService('lib/discovery-channel-readiness.ts',{db,discoveryWorkEnabled,liveWorkReady,fullCostReserve,propertyResearchMarketKnown:async()=>knownMarket,acquisitionContractCoverage:async()=>({supported:covered})});
+const readiness=await loadService('lib/discovery-channel-readiness.ts',{db,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady,fullCostReserve,propertyResearchMarketKnown:async()=>knownMarket,acquisitionContractCoverage:async()=>({supported:covered})});
 const ready=await readiness.discoveryAccountReadiness('account','owner');assert.equal(ready.ready,true);assert.deepEqual(ready.quote,{chargeCents:84,maxProperties:5,costBasis:'planning_estimate'});
 assert.equal((await readiness.discoveryAccountReadiness('account','wrong-owner')).ready,false);
 for(const [table,key,value] of [
@@ -34,7 +34,7 @@ let marketRows=[{state:'TN'}];const market=await loadService('lib/contract-cover
 assert.equal(await market.propertyResearchMarketKnown('38118'),true);assert.equal(await market.propertyResearchMarketKnown('bad'),false);
 for(const rows of [[],[{state:'TN'},{state:'TX'}],[{state:''}],[{state:'Tennessee'}],[{state:null}]]){marketRows=rows;assert.equal(await market.propertyResearchMarketKnown('38118'),false);}
 const response={json:(body,o={})=>({body,status:o.status??200})};
-const control=await loadService('app/api/work/control/route.ts',{NextResponse:response,z,allowedOrigin:()=>true,workAccount:async()=>({accountId:'account',userId:'owner'}),smsAccountReady:async()=>false,discoveryAccountReadiness:readiness.discoveryAccountReadiness,db:async(path,_method,body)=>{writes++;assert.equal(path,'rpc/icash_set_work_control');assert.deepEqual(body,{p_user:'owner',p_account:'account',p_action:'resume',p_screening:null});},stopDaily:async()=>{},fundingMode:()=> 'live'});
+const control=await loadService('app/api/work/control/route.ts',{NextResponse:response,z,contactAccountReadiness:async()=>({ready:false}),allowedOrigin:()=>true,workAccount:async()=>({accountId:'account',userId:'owner'}),smsAccountReady:async()=>false,discoveryAccountReadiness:readiness.discoveryAccountReadiness,db:async(path,_method,body)=>{writes++;assert.equal(path,'rpc/icash_set_work_control');assert.deepEqual(body,{p_user:'owner',p_account:'account',p_action:'resume',p_screening:null});},stopDaily:async()=>{},fundingMode:()=> 'live'});
 const request=action=>new Request('https://example.invalid/api/work/control',{method:'POST',body:JSON.stringify({action})});
 assert.equal((await control.POST(request('resume'))).status,200);assert.equal(writes,1);
 assert.equal((await control.POST(request('return_to_bot'))).status,503);assert.equal(writes,1);
@@ -52,6 +52,6 @@ const automatic=()=>automation.POST(new Request('https://example.invalid/api/int
 assert.equal((await automatic()).body.status,'screening_queued');assert.equal(dispatches,1);
 for(kind of newLiveWorkKinds){if(kind!=='discovery')assert.equal((await automatic()).body.status,'live_work_not_ready',kind);}assert.equal(dispatches,1);
 for(const [file,fn] of Object.entries({'owner-enrichment-service':'enrichForAccount','live-dispatch-service':'dispatchLiveVoice','text-ai-service':'processTextAi','fulfillment-service':'prepareFulfillment','title-service':'dispatchTitleRequest'})){
- const service=await loadService('lib/'+file+'.ts',{z,db:async()=>{throw Error('Sibling work must stay held');}});assert.equal((await service[fn]('account','job')).status,'live_work_not_ready');
+ const service=await loadService('lib/'+file+'.ts',{z,contactWorkEnabled,db:async()=>{throw Error('Sibling work must stay held');}});assert.equal((await service[fn]('account','job')).status,'live_work_not_ready');
 }
 console.log('Property-only admission: actual readiness/Run/automation boundaries, scoped owner/quote/day/lifetime checks, five-record bound, unreleased campaign separation, and held sibling services passed.');

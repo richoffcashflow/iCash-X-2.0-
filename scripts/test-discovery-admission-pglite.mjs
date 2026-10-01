@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import {createJourneyDb} from '../tests/helpers/simulated-journey-db.mjs';
 import {databaseAdapter,loadService} from '../tests/helpers/simulated-journey-services.mjs';
-import {discoveryWorkEnabled,liveWorkReady,automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '../lib/live-work-admission.ts';
+import {discoveryWorkEnabled,contactWorkEnabled,liveWorkReady,automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '../lib/live-work-admission.ts';
 import {contractCapability,reviewedContractCoverage} from '../lib/contract-coverage.ts';
 import {discoverPage} from '../lib/discovery-pipeline.ts';
 import {validateCostManifest} from '../lib/cost-manifest.ts';
@@ -25,11 +25,11 @@ try{
  const rate=(await one("select id from icash_operation_rates where operation='property_search' and enabled")).id;
  const ownerRate=(await one("select id from icash_operation_rates where operation='owner_enrichment' and enabled")).id;
  const config=await one("insert into icash_discovery_configs(account_id,enabled,auto_enabled,zip,rate_id,property_credit_micros,data_rights_until,seller_cost_reserve_cents,per_page,contacts_enabled,contact_rate_id) values($1,true,true,'38118',$2,10000,now()+interval '1 day',0,5,true,$3) returning *",[account,rate,ownerRate]);
- const costs=await loadService('lib/operating-costs.ts',{db,validateCostManifest,discoveryWorkEnabled,liveWorkReady});
+ const costs=await loadService('lib/operating-costs.ts',{db,validateCostManifest,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady});
  const market=await loadService('lib/contract-coverage-service.ts',{db,contractCapability,reviewedContractCoverage});
  assert.equal(await market.propertyResearchMarketKnown('38118'),true);
  assert.equal((await market.acquisitionContractCoverage('38118')).supported,false,'No Tennessee contract templates exist in this fixture');
- const discovery=await loadService('lib/discovery-service.ts',{db,discoveryWorkEnabled,liveWorkReady,dispatchReservedOperation:costs.dispatchReservedOperation,discoverPage,...market});
+ const discovery=await loadService('lib/discovery-service.ts',{db,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady,dispatchReservedOperation:costs.dispatchReservedOperation,discoverPage,...market});
  globalThis.fetch=async(url,options)=>{
   assert.equal(url,'https://api.v2.dealmachine.com/v1/properties/search');const b=JSON.parse(options.body);
   assert.equal(b.per_page,5);assert.equal(b.contact_audience,'none');assert.equal(b.anchor,'properties');
@@ -44,7 +44,7 @@ try{
  const signing=await loadService('lib/signing-service.ts',{z,db:async path=>path.startsWith('icash_deal_files')?[{terms:{},stage:'draft'}]:path.startsWith('icash_customer_identities')?[{principal:'SIMULATION'}]:(()=>{throw Error('No template/dispatch after live signing hold');})(),dealTermsSchema:{parse:()=>({state:'TN',legalDescription:'SIMULATION'})},signingReadiness:()=>{}});
  await assert.rejects(()=>signing.sendForSignatures({accountId:account,userId:user,customerEmail:'simulation@example.invalid',dealId:randomUUID(),kind:'purchase',signers:[]}),/Live work is not ready/);
  const response={json:(body,o={})=>({body,status:o.status??200})};
- const control=await loadService('app/api/work/control/route.ts',{NextResponse:response,z,allowedOrigin:()=>true,workAccount:async()=>({accountId:account,userId:user}),smsAccountReady:async()=>false,discoveryAccountReadiness:async()=>({ready:true}),db,stopDaily:async()=>{},fundingMode:()=> 'live'});
+ const control=await loadService('app/api/work/control/route.ts',{NextResponse:response,z,contactAccountReadiness:async()=>({ready:false}),allowedOrigin:()=>true,workAccount:async()=>({accountId:account,userId:user}),smsAccountReady:async()=>false,discoveryAccountReadiness:async()=>({ready:true}),db,stopDaily:async()=>{},fundingMode:()=> 'live'});
  assert.equal((await control.POST(new Request('https://example.invalid/api/work/control',{method:'POST',body:JSON.stringify({action:'resume'})}))).status,200);
  assert.equal((await one('select bot_paused from icash_accounts where id=$1',[account])).bot_paused,false);
  // Real reservation SQL, not a mocked affordability decision.

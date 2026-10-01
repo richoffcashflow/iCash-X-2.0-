@@ -94,8 +94,8 @@ try{
   return adapter.db(path,method,body);
  };
  const {reserveOperation}=await loadService('lib/operating-costs.ts',{db,...liveWorkAdmission});
- const {enrichForAccount}=await loadService('lib/owner-enrichment-service.ts',{db,reserveOperation,enrichOwners,runScreeningJob});
- process.env.ICASH_LIVE_WORK_READY='true';process.env.DEALMACHINE_API_KEY='dm_sk_live_fixture';
+ const {enrichForAccount}=await loadService('lib/owner-enrichment-service.ts',{db,reserveOperation,enrichOwners,runScreeningJob,...liveWorkAdmission});
+ process.env.ICASH_LIVE_WORK_READY='false';process.env.ICASH_CONTACT_WORK_READY='true';process.env.DEALMACHINE_API_KEY='dm_sk_live_fixture';
  globalThis.fetch=async(url,options)=>{
   if(options.method==='GET'){
    previewCalls++;assert.equal(url,'https://api.v2.dealmachine.com/v1/properties/prop_123?enrich=false&contact_audience=owners');

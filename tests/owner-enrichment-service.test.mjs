@@ -13,14 +13,14 @@ const rights=new Date(Date.now()+3600000).toISOString();
 const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date().toISOString(),sellerCostReserveCents:100000,raw:{data:{dm_property_id:'prop_123',full_address:'Fixture',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}}};
 let state;
 function reset(){
- state={config:{enabled:true,contacts_enabled:true,contact_rate_id:'rate',contact_credit_cap:25,property_credit_micros:10000,data_rights_until:rights},job:{state:'complete',snapshot:structuredClone(snapshot)},rate:{operation:'owner_enrichment',enabled:true,expires_at:rights,costs_micros:{dealmachine:250000}},manual:false,requests:[],dbCalls:[],observations:[],saved:[],claimed:false,reserved:false,reserveCount:0,paidCount:0,previewCount:0,denyReserve:null,denyClaim:false,denyRateSlot:0,afterPreview:null,beforeFinalClaim:null,previewTransform:null,paidTransform:null,paidError:null,previewError:null,owners:Array.from({length:30},(_,i)=>({dm_person_id:'per_'+i,full_name:'Fixture',is_likely_owner:true,is_in_owner_family:false,is_resident:false,is_likely_renter:false}))};
+ state={config:{enabled:true,contacts_enabled:true,contact_rate_id:'rate',contact_credit_cap:25,property_credit_micros:10000,data_rights_until:rights},job:{state:'complete',completed_at:new Date().toISOString(),result:runScreeningJob(snapshot),snapshot:structuredClone(snapshot)},rate:{operation:'owner_enrichment',enabled:true,expires_at:rights,costs_micros:{dealmachine:250000}},manual:false,requests:[],dbCalls:[],observations:[],saved:[],claimed:false,reserved:false,reserveCount:0,paidCount:0,previewCount:0,denyReserve:null,denyClaim:false,denyRateSlot:0,afterPreview:null,beforeFinalClaim:null,previewTransform:null,paidTransform:null,paidError:null,previewError:null,owners:Array.from({length:30},(_,i)=>({dm_person_id:'per_'+i,full_name:'Fixture',is_likely_owner:true,is_in_owner_family:false,is_resident:false,is_likely_renter:false}))};
 }
 const db=async(path,method,body)=>{
  state.dbCalls.push({path,method,body});
- if(path===`icash_discovery_configs?account_id=eq.${accountId}&select=*`)return [structuredClone(state.config)];
- if(path===`icash_screening_jobs?id=eq.${screeningId}&account_id=eq.${accountId}&select=snapshot,state`)return state.job?[structuredClone(state.job)]:[];
+ if(path.startsWith(`icash_discovery_configs?account_id=eq.${accountId}&select=`))return [structuredClone(state.config)];
+ if(path.startsWith(`icash_screening_jobs?id=eq.${screeningId}&account_id=eq.${accountId}&select=`))return state.job?[structuredClone(state.job)]:[];
  if(path===`icash_property_controls?account_id=eq.${accountId}&property_id=eq.prop_123&select=manual`)return [{manual:state.manual}];
- if(path==='icash_operation_rates?id=eq.rate&select=operation,enabled,expires_at,costs_micros')return [structuredClone(state.rate)];
+ if(path.startsWith('icash_operation_rates?id=eq.rate&select='))return [structuredClone(state.rate)];
  if(path==='rpc/icash_take_dealmachine_request'){
   const slots=state.dbCalls.filter(c=>c.path===path).length;
   return slots!==state.denyRateSlot;
@@ -84,8 +84,8 @@ async function loadActual(path,bindings,key){
 const previous={key:process.env.DEALMACHINE_API_KEY,ready:process.env.ICASH_LIVE_WORK_READY,fetch:globalThis.fetch};
 process.env.DEALMACHINE_API_KEY='dm_sk_live_fixture';process.env.ICASH_LIVE_WORK_READY='true';globalThis.fetch=transport;
 try{
- const {reserveOperation}=await loadActual('../lib/operating-costs.ts',{db,...liveWorkAdmission},'__ownerCostsFixture');
- const {enrichForAccount}=await loadActual('../lib/owner-enrichment-service.ts',{db,enrichOwners,runScreeningJob,reserveOperation},'__ownerServiceFixture');
+ const {reserveOperation,dispatchReservedOperation}=await loadActual('../lib/operating-costs.ts',{db,...liveWorkAdmission},'__ownerCostsFixture');
+ const {enrichForAccount}=await loadActual('../lib/owner-enrichment-service.ts',{db,enrichOwners,runScreeningJob,reserveOperation,...liveWorkAdmission},'__ownerServiceFixture');
  const run=()=>enrichForAccount(accountId,screeningId);
  reset();assert.equal((await run()).status,'contacts_saved');
  assert.equal(state.paidCount,1);assert.equal(state.previewCount,1);assert.equal(state.observations.length,4);
@@ -138,7 +138,13 @@ try{
   if(state.observations[0].p_amount===26)assert.equal(state.observations[1].p_amount,26,'Overrun receipt stays visible');
   await assert.rejects(run(),/already dispatched/);assert.equal(state.paidCount,1);
  }
- reset();process.env.ICASH_LIVE_WORK_READY='false';assert.equal((await run()).status,'live_work_not_ready');assert.equal(state.dbCalls.length,0);assert.equal(state.paidCount,0);
+ reset();process.env.ICASH_LIVE_WORK_READY='false';delete process.env.ICASH_CONTACT_WORK_READY;assert.equal((await run()).status,'live_work_not_ready');assert.equal(state.dbCalls.length,0);assert.equal(state.paidCount,0);
+ process.env.ICASH_CONTACT_WORK_READY='true';reset();assert.equal((await run()).status,'contacts_saved');assert.equal(state.paidCount,1);assert.equal(state.reserveCount,1);
+ const input={accountId,screeningId,operationKey,rateId:'rate',permissionUntil:rights,operation:'owner_enrichment'};
+ await assert.rejects(()=>dispatchReservedOperation(input,async()=>{throw Error('Generic dispatch must never send contacts');}),/atomic screening claim/);
+ for(const patch of [{operation:undefined},{operation:'property_search'},{screeningId:undefined},{operationKey:'owners:another-account:another-screening'},{rateId:'other-rate'}]){reset();await assert.rejects(()=>reserveOperation({...input,...patch}));assert.equal(state.reserveCount,0);}
+ reset();state.job.result.financialCheck.status='hold';await assert.rejects(()=>reserveOperation(input),/Owned eligible screening/);assert.equal(state.reserveCount,0);
+ delete process.env.ICASH_CONTACT_WORK_READY;
 }finally{
  globalThis.fetch=previous.fetch;
  if(previous.key===undefined)delete process.env.DEALMACHINE_API_KEY;else process.env.DEALMACHINE_API_KEY=previous.key;

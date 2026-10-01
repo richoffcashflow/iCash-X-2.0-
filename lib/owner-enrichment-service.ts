@@ -1,10 +1,11 @@
+import {contactWorkEnabled} from './live-work-admission.ts';
 import {db} from '@/lib/stripe-test';
 import {reserveOperation} from '@/lib/operating-costs';
 import {enrichOwners} from './owner-enrichment.ts';
 import {runScreeningJob} from './screening-job.ts';
 const future=(value:string)=>Number.isFinite(Date.parse(value))&&Date.parse(value)>Date.now();
 export async function enrichForAccount(accountId:string,screeningId:string){
- if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
+ if(!contactWorkEnabled())return {status:'live_work_not_ready'};
  const [c]=await db<{enabled:boolean;contacts_enabled:boolean;contact_rate_id:string;contact_credit_cap:number;property_credit_micros:number;data_rights_until:string}[]>(`icash_discovery_configs?account_id=eq.${accountId}&select=*`);
  if(!c?.enabled||!c.contacts_enabled||!c.contact_rate_id||!future(c.data_rights_until))return {status:'not_ready'};
  const jobPath=`icash_screening_jobs?id=eq.${screeningId}&account_id=eq.${accountId}&select=snapshot,state`;
@@ -37,7 +38,7 @@ export async function enrichForAccount(accountId:string,screeningId:string){
    if(current?.state!=='complete'||JSON.stringify(current.snapshot)!==frozenSnapshot||manual?.manual||!config?.enabled||!config.contacts_enabled||config.contact_rate_id!==c.contact_rate_id||config.contact_credit_cap!==c.contact_credit_cap||config.property_credit_micros!==c.property_credit_micros||config.data_rights_until!==c.data_rights_until||!future(config.data_rights_until)||!future(rate.expires_at))return false;
    if(runScreeningJob(current.snapshot).financialCheck.status!=='eligible')return false;
    // The atomic dispatcher retains wallet/day/lifetime reservations on uncertain outcomes.
-   await reserveOperation({accountId,operationKey,rateId:c.contact_rate_id,permissionUntil:c.data_rights_until});
+   await reserveOperation({accountId,operationKey,rateId:c.contact_rate_id,permissionUntil:c.data_rights_until,operation:'owner_enrichment',screeningId});
    const claimed=await db<boolean>('rpc/icash_claim_owner_enrichment','POST',{p_account:accountId,p_screening:screeningId,p_operation:operationKey,
     p_snapshot:job.snapshot,p_rate:c.contact_rate_id,p_credit_cap:c.contact_credit_cap,p_unit_cost_micros:c.property_credit_micros,
     p_quoted_data_cost_micros:rate.costs_micros.dealmachine,p_rights_until:c.data_rights_until});
