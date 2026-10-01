@@ -15,7 +15,7 @@ type Property=WorkspaceProperty;
 type Deal={id:string;screening_id:string;terms:DealTerms;stage:string};
 type Handoff={address?:string|null;id:string;screening_id:string;party:string;reason:string;summary:string;next_action:string;state:string};
 type Conversation={id:string;screening_id:string;party:string;summary?:string};
-type TextAttention={address?:string|null;id:string;screening_id:string;deal_id:string;kind:string;party:string;quote:string;timezone:string};
+type TextAttention={address?:string|null;id:string;message_id:string;screening_id:string;deal_id:string;kind:string;party:string;quote:string;timezone:string};
 type Work={propertyAttentionIds?:string[];textAttention?:TextAttention[];callRequests?:{address?:string|null;id:string;screening_id:string;requested_at:string;state:string}[];signatureActions:{id:string;kind:string;test_mode:boolean;screening_id?:string|null;address?:string|null}[];signing:SigningEnvelope[];signingConfigured:boolean;handoffs:Handoff[];conversations:Conversation[];callbacks:{id:string;screening_id:string;due_at:string;timezone:string;state:string}[];properties:Property[];deals:Deal[];contacts:{screening_id:string}[];hasMore:boolean;controls:{property_id:string}[];attentionHasMore?:boolean;searchSupported?:boolean;retainedIds?:string[]};
 function milestone(property:Property,work:Work){
  const deal=work.deals.find(d=>d.screening_id===property.id);
@@ -92,7 +92,7 @@ function WorkspaceAttention({work,page,onPage,onOpen,onRefresh}:{work:Work;page:
  const [handled,setHandled]=useState<string[]>([]),[expanded,setExpanded]=useState(false);
  function done(id:string){setHandled(v=>[...v,id]);onPage(0);onRefresh();}
  const requests=[
-  ...(work.textAttention??[]).map(a=>({id:'text:'+a.id,propertyId:a.screening_id,address:a.address,priority:a.kind==='withdrawal'?0:a.kind==='human'?2:3,title:a.kind==='withdrawal'?'Review a change of plans':a.kind==='callback'?'Confirm a callback':'Review a message',node:<TextAttentionCard item={a} onHandled={()=>done('text:'+a.id)}/>})),
+  ...(work.textAttention??[]).map(a=>({id:'text:'+a.id+':'+a.message_id,propertyId:a.screening_id,address:a.address,priority:a.kind==='withdrawal'?0:a.kind==='human'?2:3,title:a.kind==='withdrawal'?'Review a change of plans':a.kind==='callback'?'Confirm a callback':'Review a message',node:<TextAttentionCard item={a} onHandled={()=>done('text:'+a.id+':'+a.message_id)}/>})),
   ...work.signatureActions.map(e=>({id:'sign:'+e.id,propertyId:e.screening_id??'',address:e.address,priority:1,title:'Review & sign an agreement',node:<SigningAttention envelope={e}/>})),
   ...work.handoffs.filter(h=>h.state==='open').map(h=>({id:'human:'+h.id,propertyId:h.screening_id,address:h.address,priority:2,title:'A person was requested',node:<HandoffCard handoff={h} onHandled={()=>done('human:'+h.id)}/>})),
   ...(work.callRequests??[]).filter(c=>c.state==='needs_review'&&!work.textAttention?.some(a=>a.screening_id===c.screening_id&&a.kind==='callback')).map(c=>({id:'call:'+c.id,propertyId:c.screening_id,address:c.address,priority:3,title:'Confirm a callback',node:<CallRequest id={c.id} onHandled={()=>done('call:'+c.id)}/>}))
@@ -109,10 +109,11 @@ function TextAttentionCard({item,onHandled}:{item:TextAttention;onHandled:()=>vo
  withdrawal:{title:`${item.party==='buyer'?'Buyer':'Seller'} may be backing out`,next:'Check the signed agreement and closing deadline. Contact your closer before finding a replacement buyer. No contract or deposit has been changed.'},
  human:{title:'A person was requested',next:'Open the property messages and take over the conversation. Automatic work on this property is paused.'},
  callback:{title:'A callback was requested',next:`Confirm the date, time and timezone in messages. The thread timezone is ${item.timezone}; an appointment is not booked yet.`},
+ campaign_reply:{title:'Seller reply needs review',next:'Review this SMS reply and decide the next permitted step. Check the conversation for the latest delivery and contact status. This message does not establish ownership or authorize an offer.'},
  declined:{title:'Outreach paused',next:'They declined or reported a wrong number. Review the message before doing any further work on this property.'}
  };
  const view=copy[item.kind]??{title:'Message needs review',next:'Open the property messages.'};
- return <article><strong>{view.title}</strong><blockquote className="reply-quote">{item.quote}</blockquote><p>{view.next}</p><button disabled={busy} onClick={async()=>{setBusy(true);try{await post('/api/work/text-attention',{id:item.id});onHandled();}catch{setError('Could not save. Please retry.');setBusy(false);}}}>I’ll handle this</button><small>Marking this seen keeps automatic work paused.</small>{error&&<p role="alert">{error}</p>}</article>;
+ return <article><strong>{view.title}</strong><blockquote className="reply-quote">{item.quote}</blockquote><p>{view.next}</p><button disabled={busy} onClick={async()=>{setBusy(true);try{await post('/api/work/text-attention',{id:item.id,messageId:item.message_id});onHandled();}catch(e){setError(e instanceof Error?e.message:'Could not save. Please refresh.');setBusy(false);}}}>I’ll handle this</button><small>{item.kind==='campaign_reply'?'Marking this seen does not send a message or change work controls.':'Marking this seen keeps automatic work paused.'}</small>{error&&<p role="alert">{error}</p>}</article>;
 }
 function DealTools({property,principal,initial,manual,onManual,signing,signingConfigured}:{property:Property;principal:string;initial?:Deal;manual:boolean;onManual:()=>void;signing:SigningEnvelope[];signingConfigured:boolean}){
  const [terms,setTerms]=useState<DealTerms>(()=>initial?.terms??dealTermsSchema.parse({address:property.result.property.address,buyer:principal,legalDescription:property.result.property.legalDescription??''}));

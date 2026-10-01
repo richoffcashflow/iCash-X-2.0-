@@ -16,6 +16,7 @@ const mocks={z,authorityReviewStatus,contractCapability,readContractCoverage:asy
  if(table==='icash_accounts')return [{bot_paused:false}];
  if(table==='icash_wallets')return [{balance_cents:1000,reserved_cents:100}];
  if(table==='icash_contact_permissions')return [{phone:'+12125550100',contact_key:'a'.repeat(64),permission_until:tomorrow,dnc_checked_at:yesterday,dnc_clear:true,revoked_at:null}];
+ if(table==='icash_text_threads')return [];
  if(table==='icash_offer_authorities')return [{max_offer_cents:100000,expires_at:tomorrow}];
  if(table==='icash_deal_files')return [{id:deal,terms:{state:'TX',priceCents:100000,assignmentFeeCents:10000}}];
  if(table==='icash_text_suppressions')return suppressed?[{phone:'+12125550100'}]:[];
@@ -29,7 +30,7 @@ let source=ts.transpileModule(readFileSync(new URL('../app/api/work/review-statu
 source='const {'+Object.keys(mocks).join(',')+'}=globalThis.__reviewFixture;\n'+source;
 const {GET}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const get=id=>GET(new Request('https://www.geticashx.com/api/work/review-status?screeningId='+id));
-let r=await get(screening);assert.equal(r.status,200);assert(r.body.items.every(x=>x.status==='recorded'));assert(!JSON.stringify(r.body).includes('+12125550100'));assert(!JSON.stringify(r.body).includes('a'.repeat(64)));
+let r=await get(screening);assert.equal(r.status,200);assert(r.body.items.filter(x=>x.key!=='sms_contact_permission').every(x=>x.status==='recorded'));assert.equal(r.body.items.find(x=>x.key==='sms_contact_permission').status,'review_required');assert(!JSON.stringify(r.body).includes('+12125550100'));assert(!JSON.stringify(r.body).includes('a'.repeat(64)));
 suppressed=true;r=await get(screening);assert.equal(r.body.items.find(x=>x.key==='contact_permission').status,'review_required');
 found=false;paths=[];r=await get(screening);assert.equal(r.status,404);assert.equal(paths.length,1,'No authority records fetched for missing/foreign property');
 owner=false;paths=[];r=await get(screening);assert.equal(r.status,503);assert.equal(paths.length,0);

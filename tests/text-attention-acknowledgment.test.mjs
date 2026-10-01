@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import {z} from 'zod';
+const id='00000000-0000-4000-8000-000000000001',messageA='00000000-0000-4000-8000-000000000002',messageB='00000000-0000-4000-8000-000000000003';
+let current=messageB,acknowledged=false,signedIn=true,calls=[];
+const deps={z,NextResponse:{json:(body,o={})=>({body,status:o.status??200})},allowedOrigin:()=>true,workAccount:async()=>{if(!signedIn)throw Error('SIGN_IN');return {accountId:'owner-account'};},db:async(path,method,body)=>{calls.push({path,method,body});assert.equal(method,'PATCH');const p=new URLSearchParams(path.split('?')[1]);assert.equal(p.get('account_id'),'eq.owner-account');assert.equal(p.get('id'),'eq.'+id);assert.equal(body.state,'acknowledged');if(p.get('message_id')!=='eq.'+current)return [];acknowledged=true;return [{id}];}};
+globalThis.__attentionAck=deps;
+let source=ts.transpileModule(readFileSync(new URL('../app/api/work/text-attention/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
+const {POST}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__attentionAck;\n'+source).toString('base64'));delete globalThis.__attentionAck;
+const req=body=>new Request('https://example.invalid/api/work/text-attention',{method:'POST',body:JSON.stringify(body)});
+assert.equal((await POST(req({id,messageId:messageA}))).status,409);assert.equal(acknowledged,false,'old card cannot acknowledge unseen new reply');
+assert.equal((await POST(req({id,messageId:messageB}))).status,200);assert.equal(acknowledged,true);
+assert.equal((await POST(req({id,messageId:messageB}))).status,200,'same viewed revision is idempotent');
+calls=[];for(const body of [{id},{id,messageId:messageB,accountId:'other'},{id,messageId:'bad'}])assert.equal((await POST(req(body))).status,400);assert.equal(calls.length,0);
+signedIn=false;assert.equal((await POST(req({id,messageId:messageB}))).status,400);assert.equal(calls.length,0);
+console.log('Attention acknowledgment: atomic message revision/tenant condition, stale 409, retry safety, strict body and authenticated owner passed.');

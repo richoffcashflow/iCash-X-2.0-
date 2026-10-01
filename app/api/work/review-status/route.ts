@@ -30,8 +30,16 @@ export async function GET(req:Request){
  db<{id:string}[]>(`icash_signing_envelopes?account_id=eq.${accountId}&deal_id=eq.${deal.id}&kind=eq.purchase&state=eq.completed&test_mode=eq.false&select=id`),
  db<{purchase_envelope_id:string;asking_price_cents:number;expires_at:string}[]>(`icash_disposition_authorities?account_id=eq.${accountId}&deal_id=eq.${deal.id}&select=purchase_envelope_id,asking_price_cents,expires_at`)
  ]):[[],[]];
+ const smsThreads=deal?await db<{id:string}[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${deal.id}&party=eq.seller&sms_review_request_id=not.is.null&select=id&order=permission_until.desc,id&limit=100`):[];
+ // The existing predicate checks exact review revision, business, DNC source, suppression and current price.
+ // Use bounded batches; status records evidence without treating the current hour as permanent authority.
+ let smsPermissionCurrent=false;
+ for(let offset=0;offset<smsThreads.length&&!smsPermissionCurrent;offset+=10){
+  const results=await Promise.all(smsThreads.slice(offset,offset+10).map(t=>db<boolean>('rpc/icash_sms_thread_review_current','POST',{p_account:accountId,p_thread:t.id,p_check_hour:false})));
+  smsPermissionCurrent=results.some(value=>value===true);
+ }
  const authority=marketing[0],wallet=wallets[0];
- const items=authorityReviewStatus({identity:!!identities[0]?.principal,availableCents:wallet?wallet.balance_cents-wallet.reserved_cents:0,paused:accounts[0]?.bot_paused!==false,permissions:permissions.map(p=>({...p,suppressed:textSuppression.some(s=>s.phone===p.phone)||voiceSuppression.some(s=>s.contact_key===p.contact_key)})),offer:offers[0]??null,purchaseSigned:purchases.length>0,marketing:authority?{expires_at:authority.expires_at,purchaseMatches:purchases.some(p=>p.id===authority.purchase_envelope_id),priceMatches:Number.isSafeInteger(deal.terms.priceCents)&&Number.isSafeInteger(deal.terms.assignmentFeeCents)&&authority.asking_price_cents===deal.terms.priceCents!+deal.terms.assignmentFeeCents!}:null,now:Date.now()});
+ const items=authorityReviewStatus({identity:!!identities[0]?.principal,availableCents:wallet?wallet.balance_cents-wallet.reserved_cents:0,paused:accounts[0]?.bot_paused!==false,smsPermissionCurrent,permissions:permissions.map(p=>({...p,suppressed:textSuppression.some(s=>s.phone===p.phone)||voiceSuppression.some(s=>s.contact_key===p.contact_key)})),offer:offers[0]??null,purchaseSigned:purchases.length>0,marketing:authority?{expires_at:authority.expires_at,purchaseMatches:purchases.some(p=>p.id===authority.purchase_envelope_id),priceMatches:Number.isSafeInteger(deal.terms.priceCents)&&Number.isSafeInteger(deal.terms.assignmentFeeCents)&&authority.asking_price_cents===deal.terms.priceCents!+deal.terms.assignmentFeeCents!}:null,now:Date.now()});
  const contractCoverage=await readContractCoverage();
  const capability=contractCapability(contractCoverage,deal?.terms.state??null,1);
  items.push({key:'contract_templates',title:'Contract market coverage',status:capability.supported?'recorded':'review_required',detail:capability.reason+' This check covers one required seller; additional owners need the matching reviewed documents.',action:capability.supported?'none':'operator_review'});

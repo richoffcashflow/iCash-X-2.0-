@@ -44,7 +44,7 @@ export async function GET(req:Request){
   const dealIds=deals.map(d=>d.id).join(',');
   const queuePage=`&limit=${pageSize+1}&offset=${attentionPage*pageSize}`;
   const [textRows,callRows,handoffRows,signing,signatureRows]=await Promise.all([
-   db<Attention[]>(`icash_text_attention?account_id=eq.${accountId}&state=eq.open&select=id,screening_id,deal_id,kind,party,quote,timezone&order=created_at,id${queuePage}`),
+   db<Attention[]>(`icash_text_attention?account_id=eq.${accountId}&state=eq.open&select=id,message_id,screening_id,deal_id,kind,party,quote,timezone&order=created_at,id${queuePage}`),
    db<Attention[]>(`icash_sms_call_requests?account_id=eq.${accountId}&state=eq.needs_review&select=id,screening_id,requested_at,state&order=requested_at,id${queuePage}`),
    db<Attention[]>(`icash_handoffs?account_id=eq.${accountId}&state=eq.open&select=id,screening_id,party,reason,summary,next_action,state&order=created_at,id${queuePage}`),
    dealIds?db<unknown[]>(`icash_signing_envelopes?account_id=eq.${accountId}&deal_id=in.(${dealIds})&select=id,deal_id,kind,state,test_mode,updated_at`):Promise.resolve([]),

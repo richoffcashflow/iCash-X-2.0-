@@ -18,3 +18,8 @@ for(const change of [{purchaseMatches:false},{priceMatches:false},{expires_at:pa
 assert.equal(item({...base,availableCents:1000,paused:true},'budget').status,'blocked');
 assert(!authorityReviewStatus({...base,permissions:[permission],offer:{max_offer_cents:100000,expires_at:future},purchaseSigned:true,marketing}).some(x=>x.status==='ready'),'Recorded evidence is not unconditional dispatch readiness');
 console.log('Authority diagnostics: missing/expired/revoked/suppressed permissions, fresh DNC, bounded offer, exact signed-marketing gates passed.');
+
+assert.equal(item({...base,smsPermissionCurrent:true},'sms_contact_permission').status,'recorded');
+assert.equal(item({...base,smsPermissionCurrent:true},'contact_permission').status,'review_required','SMS does not assert voice permission');
+assert.equal(item({...base,permissions:[permission]},'sms_contact_permission').status,'review_required','Voice does not assert SMS permission');
+assert.equal(item({...base,smsPermissionCurrent:false},'sms_contact_permission').status,'review_required');

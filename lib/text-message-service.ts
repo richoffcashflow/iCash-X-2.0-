@@ -12,8 +12,8 @@ export async function dispatchTextMessage(accountId:string,messageId:string){
  if(!m)return {status:'message_held'};
  // Never invite a recipient into an unavailable incoming-AI channel.
  if(!liveWorkReady()){
-  const invitations=await db<{id:string}[]>(`icash_sms_inbound_invitations?account_id=eq.${accountId}&message_id=eq.${messageId}&select=id&limit=1`);
-  if(invitations.length)return {status:'inbound_invitation_not_ready'};
+  const invitations=await db<{id:string;reply_id:string}[]>(`icash_sms_inbound_invitations?account_id=eq.${accountId}&message_id=eq.${messageId}&select=id,reply_id&limit=1`);
+  if(invitations.length){await db('rpc/icash_review_sms_campaign_reply','POST',{p_account:accountId,p_message:invitations[0].reply_id});return {status:'inbound_invitation_not_ready'};}
  }
  const [thread]=await db<{recipient:string;sender:string}[]>(`icash_text_threads?id=eq.${m.thread_id}&account_id=eq.${accountId}&select=recipient,sender`);if(!thread)return {status:'message_held'};
  if(!sameBusinessNumber(from,thread.sender))return {status:'business_number_mismatch'};
