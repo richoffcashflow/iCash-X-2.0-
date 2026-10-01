@@ -2,52 +2,32 @@
 import {useEffect,useRef,useState,type CSSProperties} from 'react';
 import {ArrowRight,Check,LoaderCircle} from 'lucide-react';
 import {BotBuilding,type BotBuildPhase} from './bot-building';
-import {saveBotBuild} from '@/lib/bot-build';
+import {saveBotBuild,waitForBotCreationTransition,type SetupEditableField} from '@/lib/bot-build';
 import {BotBrand} from './bot-brand';
 import {FundingCheckout} from './funding-checkout';
-import {DemoRunner} from './demo-runner';
-import {practiceBudgets,practiceScope,readPracticeSelection,savePracticeSelection,type PracticeBudget} from '@/lib/practice-funnel';
-import {defaultBotProfile,setupThemes,setupProfileSchema,type BotProfile,type BotSetup} from '@/lib/bot-setup';
+import {defaultBotProfile,setupThemes,setupProfileSchema,type BotProfile,type BotSetup,type SetupVoice} from '@/lib/bot-setup';
 
 function track(event:string){void fetch('/api/setup/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event}),keepalive:true}).catch(()=>{});}
-
 export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=>void;onSignedIn:()=>void}){
  const [buildPhase,setBuildPhase]=useState<BotBuildPhase|null>(null);
  const saveInFlight=useRef(false),saveController=useRef<AbortController|null>(null),mounted=useRef(true),retryBuild=useRef(false);
+ const edited=useRef(new Set<SetupEditableField>());
  const [setup,setSetup]=useState<BotSetup|null>(null),[profile,setProfile]=useState<BotProfile>(defaultBotProfile);
- const [screen,setScreen]=useState<'entry'|'demo'|'funding'>('entry');
+ const [screen,setScreen]=useState<'entry'|'funding'>('entry');
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState('');
- const [budgets,setBudgets]=useState<PracticeBudget[]|null>(null),[budgetCode,setBudgetCode]=useState(''),[budgetError,setBudgetError]=useState(''),[budgetRetry,setBudgetRetry]=useState(0);
- const [nameFocused,setNameFocused]=useState(false),[nameHint,setNameHint]=useState('e.g. Scout');
- const nameEdited=useRef(false),budgetEdited=useRef(false);
+ const [voices,setVoices]=useState<SetupVoice[]|null>(null),[voiceError,setVoiceError]=useState(''),[voiceRetry,setVoiceRetry]=useState(0);
  const heading=useRef<HTMLHeadingElement>(null),ready=useRef(false),init=useRef<Promise<BotSetup>|null>(null);
- const hasName=profile.displayName.length>0;
- const selected=budgets?.find(budget=>budget.code===budgetCode)??null;
+ const selectedVoice=voices?.find(voice=>voice.key===profile.voice);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;saveController.current?.abort();};},[]);
- useEffect(()=>{
-  if(screen!=='entry'||nameFocused||hasName){setNameHint('Give your bot a name');return;}
-  const motion=window.matchMedia('(prefers-reduced-motion: reduce)');
-  let timer:ReturnType<typeof setTimeout>|undefined;let stopped=false;
-  const examples=['e.g. Scout','e.g. Atlas'];let phrase=0,index=0;
-  const stop=()=>{stopped=true;clearTimeout(timer);setNameHint('Give your bot a name');};
-  const tick=()=>{if(stopped)return;if(document.hidden){timer=setTimeout(tick,400);return;}index++;setNameHint(examples[phrase].slice(0,index));if(index<examples[phrase].length)timer=setTimeout(tick,65);else if(phrase===0){phrase=1;index=0;timer=setTimeout(tick,1100);}};
-  if(motion.matches)stop();else timer=setTimeout(tick,450);
-  const onMotion=()=>{if(motion.matches)stop();};motion.addEventListener('change',onMotion);
-  return()=>{stopped=true;clearTimeout(timer);motion.removeEventListener('change',onMotion);};
- },[screen,nameFocused,hasName]);
  async function load(){
   setLoading(true);setError('');
   try{
    if(!init.current)init.current=fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'init'}),signal:AbortSignal.timeout(20000)}).then(async r=>{const d=await r.json();if(!r.ok||!d.setup)throw Error();return d.setup;});
-   const s=await init.current;
-   if(!mounted.current)return;
+   const s=await init.current;if(!mounted.current)return;
    setSetup(s);
-   setProfile(p=>({...defaultBotProfile,...s.profile,aiLogo:null,...(nameEdited.current?{displayName:p.displayName}:{})}));
-   if(!nameEdited.current){
-    const saved=readPracticeSelection(s.id);
-    if(saved&&!budgetEdited.current){setBudgetCode(saved.code);if(s.stage>0&&s.profile.displayName?.trim())setScreen(saved.screen);}
-   }
-   // Payment confirmation wins over any name edits made while setup was loading.
+   setProfile(p=>({...defaultBotProfile,...s.profile,...Object.fromEntries([...edited.current].map(field=>[field,p[field]])),aiLogo:null}));
+   if(!edited.current.size&&s.stage>0&&s.profile.displayName?.trim())setScreen('funding');
+   // Payment confirmation always wins, including edits made while setup was loading.
    if(new URLSearchParams(window.location.search).get('payment')==='funded')setScreen('funding');
    if(s.stage>0)track('returned');
   }catch{init.current=null;if(mounted.current)setError('Connection interrupted. Your entries are still here.');}
@@ -55,76 +35,66 @@ export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=
  }
  useEffect(()=>{if(new URLSearchParams(window.location.search).get('payment')==='funded')setScreen('funding');void load();},[]);
  useEffect(()=>{
-  const controller=new AbortController();setBudgetError('');
-  fetch('/api/funding/status',{cache:'no-store',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(20000)])}).then(async response=>{
-   const data=await response.json();if(!response.ok)throw Error('Could not load budget options.');
-   const options=practiceBudgets(data);if(!options.length)throw Error('Budget options are currently unavailable.');
-   if(!controller.signal.aborted){setBudgets(options);setBudgetCode(current=>current||options[0].code);}
-  }).catch(e=>{if(!controller.signal.aborted){setBudgets(null);setBudgetError(e instanceof Error?e.message:'Could not load budget options.');}});
+  const controller=new AbortController();setVoiceError('');
+  fetch('/api/setup/voices',{cache:'no-store',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(20000)])}).then(async response=>{
+   const data=await response.json();if(!response.ok||!Array.isArray(data.voices))throw Error('Could not load available voices.');
+   const available=data.voices.filter((voice:SetupVoice)=>voice&&setupProfileSchema.shape.voice.safeParse(voice.key).success&&typeof voice.name==='string'&&voice.name.trim());
+   if(!available.length)throw Error('Voice options are currently unavailable.');
+   if(!controller.signal.aborted)setVoices(available);
+  }).catch(e=>{if(!controller.signal.aborted){setVoices(null);setVoiceError(e instanceof Error?e.message:'Could not load available voices.');}});
   return()=>controller.abort();
- },[budgetRetry]);
+ },[voiceRetry]);
  useEffect(()=>{onBrand(profile);},[profile,onBrand]);
- useEffect(()=>{
-  if(!setup)return;
-  if(screen==='entry')track('name_viewed');else if(screen==='funding')track('funding_viewed');
-  if(ready.current)heading.current?.focus();ready.current=true;
- },[screen,setup?.id]);
- async function save(value:BotProfile){
-  if(saveInFlight.current)return false;
-  if(!selected){setError('Choose an available practice budget before running the simulation.');return false;}
-  const parsed=setupProfileSchema.safeParse({...value,aiLogo:null});
-  if(!parsed.success){setError(!value.displayName.trim()?'Enter a name for your bot.':'Check your bot’s name and market, then try again.');return false;}
+ useEffect(()=>{if(!setup)return;track(screen==='entry'?'name_viewed':'funding_viewed');if(ready.current)heading.current?.focus();ready.current=true;},[screen,setup?.id]);
+ async function save(){
+  if(saveInFlight.current||loading)return false;
+  if(!selectedVoice){setError('Choose an available voice before creating your bot.');return false;}
+  const parsed=setupProfileSchema.safeParse({...profile,aiLogo:null});
+  if(!parsed.success){setError(!profile.displayName.trim()?'Enter a name for your bot.':'Enter a valid market and choose an available voice.');return false;}
   saveInFlight.current=true;setError('');setBusy(true);setBuildPhase('saving');
   const started=Date.now();const controller=new AbortController();saveController.current=controller;
   const timeout=setTimeout(()=>controller.abort(),20000);
   try{
-   if(!setup&&!init.current)await load();
    const current=setup??await init.current;if(!current)throw Error('Could not connect. Try again to restore your setup.');
-   // Merge current persisted preferences so an early name submission cannot erase a saved market.
-   const savedProfile=setupProfileSchema.parse({...defaultBotProfile,...current.profile,displayName:parsed.data.displayName,aiLogo:null});
-   const saved=await saveBotBuild(savedProfile,current,{retry:retryBuild.current,signal:controller.signal,nameOnly:true});
+   const fields=[...new Set<SetupEditableField>(['displayName',...edited.current])];
+   const savedProfile=setupProfileSchema.parse({...defaultBotProfile,...current.profile,...Object.fromEntries(fields.map(field=>[field,parsed.data[field]])),aiLogo:null});
+   const saved=await saveBotBuild(savedProfile,current,{retry:retryBuild.current,signal:controller.signal,editedFields:fields});
    if(!mounted.current||controller.signal.aborted)return false;
    setSetup(saved);setProfile({...defaultBotProfile,...saved.profile,aiLogo:null});setBuildPhase('saved');
-   savePracticeSelection(saved.id,selected.code,'demo');
-   const minimum=window.matchMedia('(prefers-reduced-motion: reduce)').matches?0:1000;
-   await new Promise(resolve=>setTimeout(resolve,Math.max(0,minimum-(Date.now()-started))));
-   if(!mounted.current)return false;
-   retryBuild.current=false;setScreen('demo');setBuildPhase(null);return true;
+   await waitForBotCreationTransition(started,controller.signal,window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+   if(!mounted.current||controller.signal.aborted)return false;
+   retryBuild.current=false;setScreen('funding');setBuildPhase(null);return true;
   }catch(e){if(mounted.current){retryBuild.current=true;setError(controller.signal.aborted?'The connection took too long. Try again to check and save your setup.':e instanceof Error&&e.message?e.message:'Could not save. Please retry.');setBuildPhase('error');}return false;}
   finally{clearTimeout(timeout);saveInFlight.current=false;if(mounted.current)setBusy(false);}
  }
- function fund(){if(!setup||!selected)return;savePracticeSelection(setup.id,selected.code,'funding');setScreen('funding');}
  const theme=setupThemes[profile.theme];const style={'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties;
- if(buildPhase)return <section className="bot-setup setup-building" aria-label="Build your real estate bot"><BotBuilding profile={profile} phase={buildPhase} error={error} onRetry={()=>void save(profile)} onBack={()=>{setBuildPhase(null);setError('');requestAnimationFrame(()=>heading.current?.focus());}}/></section>;
- const paymentReturn=typeof window!=='undefined'&&new URLSearchParams(window.location.search).get('payment')==='funded';
+ if(buildPhase)return <section className="bot-setup setup-building" aria-label="Build your real estate bot"><BotBuilding profile={profile} phase={buildPhase} error={error} onRetry={()=>void save()} onBack={()=>{setBuildPhase(null);setError('');requestAnimationFrame(()=>heading.current?.focus());}}/></section>;
  return <section className={`bot-setup setup-funnel ${screen==='entry'?'setup-entry':'setup-complete'}`} style={style} aria-label="Build your real estate bot">
   <div className="setup-layout"><div className="setup-form setup-step-enter" key={screen}>
    {screen==='entry'?<>
-    <span className="setup-eyebrow">YOUR BOT. YOUR FIRST PRACTICE DEAL.</span>
-    <h1 ref={heading} tabIndex={-1}>Meet your AI bot.</h1>
-    <p className="setup-intro">Give it a name and a practice budget. Watch a fictional deal from start to finish.</p>
-    <form className="setup-entry-form" onSubmit={e=>{e.preventDefault();void save(profile);}}>
+    <span className="setup-eyebrow">YOUR AI REAL ESTATE BOT</span>
+    <h1 ref={heading} tabIndex={-1}>Create your bot.</h1>
+    <p className="setup-intro">Choose its name, market, and voice. Set your budget next.</p>
+    <form className="setup-entry-form" onSubmit={e=>{e.preventDefault();void save();}}>
      <label className="setup-label" htmlFor="bot-name">Your bot’s name</label>
-     <input className="setup-input" id="bot-name" autoComplete="off" maxLength={64} value={profile.displayName} onChange={e=>{nameEdited.current=true;setProfile(p=>({...p,displayName:e.target.value}));setError('');}} placeholder={nameHint} onFocus={()=>setNameFocused(true)} required disabled={busy}/>
-     <label className="setup-label practice-budget-label" htmlFor="practice-budget">Practice budget <span>No payment</span></label>
-     <select className="setup-input" id="practice-budget" value={selected?.code??''} disabled={busy||!budgets} required aria-describedby="practice-budget-note" onChange={e=>{budgetEdited.current=true;setBudgetCode(e.target.value);setError('');}}>
-      {!selected&&<option value="" disabled>{budgets?'Choose a practice budget':'Loading budget options…'}</option>}
-      {budgets?.map(budget=><option key={budget.code} value={budget.code}>${(budget.priceCents/100).toLocaleString()} practice budget</option>)}
+     <input className="setup-input" id="bot-name" autoComplete="off" maxLength={64} value={profile.displayName} onChange={e=>{edited.current.add('displayName');setProfile(p=>({...p,displayName:e.target.value}));setError('');}} placeholder="e.g. Scout" required disabled={busy}/>
+     <label className="setup-label practice-budget-label" htmlFor="bot-market">Market</label>
+     <input className="setup-input" id="bot-market" autoComplete="off" maxLength={80} value={profile.market} onChange={e=>{edited.current.add('market');edited.current.add('marketMode');const market=e.target.value;setProfile(p=>({...p,market,marketMode:market.trim().toLowerCase()==='nationwide'?'nationwide':'city'}));setError('');}} placeholder="City, state or Nationwide" aria-describedby="bot-market-note" required disabled={busy}/>
+     <p className="practice-note" id="bot-market-note">A research preference. Outreach and contracts still depend on market and permission checks.</p>
+     <label className="setup-label" htmlFor="bot-voice">Voice</label>
+     <select className="setup-input" id="bot-voice" value={selectedVoice?.key??''} disabled={busy||!voices} required onChange={e=>{if(!voices?.some(voice=>voice.key===e.target.value))return;edited.current.add('voice');setProfile(p=>({...p,voice:e.target.value as BotProfile['voice']}));setError('');}}>
+      {!selectedVoice&&<option value="" disabled>{voices?'Choose a voice':'Loading available voices…'}</option>}
+      {voices?.map(voice=><option key={voice.key} value={voice.key}>{voice.name}</option>)}
      </select>
-     <p id="practice-budget-note" className="practice-note">Simulation only. No real charges, outreach, or earnings. Your chosen amount carries into the real daily-budget review later.</p>
-     {budgetError&&<p role="alert" className="setup-error">{budgetError} <button type="button" className="setup-retry" onClick={()=>setBudgetRetry(n=>n+1)}>Retry budget options</button></p>}
-     <button className="setup-primary" disabled={busy||loading||!profile.displayName.trim()||!selected}>{busy?<><LoaderCircle size={18} className="setup-spin"/> Saving your setup…</>:<>Create &amp; run demo<ArrowRight size={18}/></>}</button>
+     {voiceError&&<p role="alert" className="setup-error">{voiceError} <button type="button" className="setup-retry" onClick={()=>setVoiceRetry(n=>n+1)}>Retry voices</button></p>}
+     <button className="setup-primary" disabled={busy||loading||!profile.displayName.trim()||!profile.market.trim()||!selectedVoice}>{busy?<><LoaderCircle size={18} className="setup-spin"/> Saving your setup…</>:<>Create my bot<ArrowRight size={18}/></>}</button>
+     <p className="practice-note">Free setup. No charges or outreach.</p>
     </form>
-    {profile.market&&<p className="practice-note">Research preference: {profile.market}</p>}
    </>:<>
     <div className="setup-progress"><span><Check size={14}/> Bot setup saved</span></div>
-    <h1 className="setup-ready-title" ref={heading} tabIndex={-1}>{screen==='demo'?`${profile.displayName} is running a simulation.`:'Fund your bot.'}</h1>
-    <div className="funnel-bot-summary"><BotBrand profile={profile}/><span>{profile.market}{selected?` · $${(selected.priceCents/100).toLocaleString()} ${screen==='demo'?'practice budget':'daily budget selected'}`:''}</span></div>
-    {screen==='funding'&&(selected||paymentReturn)?<div className="setup-funding"><p className="practice-note">Review the current price and daily renewal terms below. Your practice budget is not money in your account.</p><FundingCheckout initialCode={selected?.code??'budget_ten'} onSignedIn={onSignedIn}/></div>
-    :selected&&setup?<>
-     <div className="funnel-fund-cta"><div><strong>Ready for the next step?</strong><span>Skip the simulation anytime. Review real billing before paying.</span></div><button type="button" className="fund-button" onClick={fund}>Fund my bot<ArrowRight size={17}/></button></div>
-     <DemoRunner key={practiceScope(setup.id,selected.code)} scope={practiceScope(setup.id,selected.code)} botName={profile.displayName} practiceBudgetCents={selected.priceCents}/>
-    </>:<div className="practice-recovery" role="status"><p>{budgetError||(!budgets?'Checking your saved practice budget…':'Your previous budget is no longer available. Choose an available practice budget to continue.')}</p>{budgetError?<button type="button" className="setup-retry" onClick={()=>setBudgetRetry(n=>n+1)}>Retry budget options</button>:budgets&&<button type="button" className="setup-retry" onClick={()=>setScreen('entry')}>Review practice budget</button>}</div>}
+    <h1 className="setup-ready-title" ref={heading} tabIndex={-1}>Fund your bot.</h1>
+    {profile.displayName&&<div className="funnel-bot-summary"><BotBrand profile={profile}/><span>{profile.market}{selectedVoice?` · ${selectedVoice.name}`:''}</span></div>}
+    <div className="setup-funding"><FundingCheckout onSignedIn={onSignedIn}/></div>
    </>}
    {error&&<div role="alert" className="setup-error">{error}{!setup&&<button className="setup-retry" disabled={loading||busy} onClick={()=>void load()}>{loading?'Reconnecting…':'Reconnect'}</button>}</div>}
   </div></div>

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {saveBotBuild} from '../lib/bot-build.ts';
+import {saveBotBuild,waitForBotCreationTransition} from '../lib/bot-build.ts';
 import {defaultBotProfile} from '../lib/bot-setup.ts';
 const profile={...defaultBotProfile,displayName:'Scout'};
 const setup={id:'setup',profile,stage:0,revision:1};
@@ -29,3 +29,14 @@ await saveBotBuild({...profile,market:'Nationwide'},setup,{retry:true,nameOnly:t
 const retryBody=JSON.parse(retried[1].body);assert.equal(retryBody.revision,5);assert.equal(retryBody.profile.market,'Austin, TX');assert.equal(retryBody.profile.marketMode,'city');assert.equal(retryBody.profile.displayName,'Scout');
 let changedSessionCalls=0;await assert.rejects(()=>saveBotBuild(profile,setup,{retry:true,nameOnly:true,signal,request:async()=>{changedSessionCalls++;return Response.json({setup:{...changed,id:'other-setup'}});}}),/session changed/);assert.equal(changedSessionCalls,1,'different setup session must not receive a save');
 console.log('Name-only retry preserves fresh server market and rejects a changed setup session.');
+
+const changedChoices=[];
+await saveBotBuild({...profile,market:'San Antonio, TX',marketMode:'city',voice:'chris'},setup,{retry:true,editedFields:['displayName','market','marketMode','voice'],signal,request:async(url,options)=>{changedChoices.push(options);return Response.json({setup:changed});}});
+assert.equal(JSON.parse(changedChoices[1].body).profile.market,'San Antonio, TX');assert.equal(JSON.parse(changedChoices[1].body).profile.voice,'chris');
+const {mock}=await import('node:test');mock.timers.enable({apis:['setTimeout','Date'],now:1000});
+let transitionDone=false;const transition=waitForBotCreationTransition(1000,new AbortController().signal,false).then(()=>{transitionDone=true;});
+mock.timers.tick(4999);await Promise.resolve();assert.equal(transitionDone,false);mock.timers.tick(1);await transition;assert.equal(transitionDone,true);
+const interrupted=new AbortController();const pending=waitForBotCreationTransition(Date.now(),interrupted.signal,false);interrupted.abort();await assert.rejects(pending,/Creation interrupted/);
+await waitForBotCreationTransition(Date.now(),new AbortController().signal,true);
+await waitForBotCreationTransition(Date.now()-6000,new AbortController().signal,false);
+mock.timers.reset();console.log('Creation transition: five-second minimum, reduced motion, slow-save completion, cancellation and edited choices passed.');
