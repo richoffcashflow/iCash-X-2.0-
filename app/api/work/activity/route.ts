@@ -6,6 +6,24 @@ export const dynamic='force-dynamic';
 const pageSize=6;
 type Property={id:string;state:string;result:{property:{propertyId:string;address:string};financialCheck:{status:string;reason:string};preliminarySellerCeilingCents:number|null};completed_at:string};
 type Attention={id:string;screening_id?:string|null;deal_id?:string|null;[key:string]:unknown};
+type ContactRow={account_id:string;screening_id:string;created_at:unknown;lookup_at:unknown;people:unknown};
+const record=(value:unknown):value is Record<string,unknown>=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+const contactText=(value:unknown,max:number)=>typeof value==='string'?value.trim().slice(0,max)||null:null;
+const contactTime=(value:unknown)=>typeof value==='string'&&Number.isFinite(Date.parse(value))?new Date(value).toISOString():null;
+function purchasedContacts(rows:ContactRow[],accountId:string,visible:Property[]){
+ const ids=new Set(visible.map(p=>p.id));
+ // This table is written only by the DealMachine owner lookup. Never forward raw
+ // provider results, match guesses, email addresses or claimed permissions.
+ return rows.filter(row=>row.account_id===accountId&&ids.has(row.screening_id)).map(row=>({
+  screening_id:row.screening_id,created_at:contactTime(row.created_at),fetchedAt:contactTime(row.lookup_at),source:'DealMachine',ownershipVerified:false,outreachAuthorized:false,
+  contacts:(Array.isArray(row.people)?row.people:[]).slice(0,25).filter(record).map(person=>({
+   name:contactText(person.name,200),
+   phones:(Array.isArray(person.phones)?person.phones:[]).slice(0,20).filter(record).map(phone=>({
+    number:contactText(phone.number,30),type:contactText(phone.type,30),doNotCall:typeof phone.doNotCall==='boolean'?phone.doNotCall:null
+   }))
+  }))
+ }));
+}
 function pageNumber(value:string|null){if(value===null)return 0;if(!/^\d{1,5}$/.test(value))throw Error('Invalid page');const page=Number(value);if(page>10000)throw Error('Invalid page');return page;}
 export async function GET(req:Request){
  const headers={'Cache-Control':'private, no-store'};
@@ -28,13 +46,14 @@ export async function GET(req:Request){
   const visible=properties.slice(0,pageSize);
   const ids=visible.map(p=>p.id).join(',');
   const propertyIds=visible.map(p=>p.result.property.propertyId).filter(id=>/^prop_[a-zA-Z0-9]+$/.test(id)).join(',');
-  const [deals,contacts,controls,conversations,callbacks]=ids?await Promise.all([
+  const [deals,contactRows,controls,conversations,callbacks]=ids?await Promise.all([
    db<{id:string;screening_id:string}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=in.(${ids})&select=id,screening_id,terms,stage,updated_at`),
-   db<unknown[]>(`icash_owner_contacts?account_id=eq.${accountId}&screening_id=in.(${ids})&select=screening_id,created_at`),
+   db<ContactRow[]>(`icash_owner_contacts?account_id=eq.${accountId}&screening_id=in.(${ids})&select=account_id,screening_id,created_at,lookup_at:result->>fetchedAt,people:result->contacts&limit=${pageSize}`),
    propertyIds?db<unknown[]>(`icash_property_controls?account_id=eq.${accountId}&property_id=in.(${propertyIds})&manual=eq.true&select=property_id`):Promise.resolve([]),
    db<unknown[]>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=in.(${ids})&state=eq.complete&select=id,screening_id,party,completed_at,summary:result->>summary&order=completed_at.desc,id.desc&limit=24`),
    db<unknown[]>(`icash_live_callbacks?account_id=eq.${accountId}&screening_id=in.(${ids})&select=id,screening_id,due_at,timezone,state&order=due_at,id&limit=24`)
   ]):[[],[],[],[],[]];
+  const contacts=purchasedContacts(contactRows,accountId,visible);
   // Existence joins return each visible property once, regardless of request volume
   // or the separately selected attention page. Empty embeds avoid transferring messages.
   const propertyAttentionRows=ids?await Promise.all([

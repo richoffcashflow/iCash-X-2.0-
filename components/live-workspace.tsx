@@ -16,7 +16,8 @@ type Deal={id:string;screening_id:string;terms:DealTerms;stage:string};
 type Handoff={address?:string|null;id:string;screening_id:string;party:string;reason:string;summary:string;next_action:string;state:string};
 type Conversation={id:string;screening_id:string;party:string;summary?:string};
 type TextAttention={address?:string|null;id:string;message_id:string;screening_id:string;deal_id:string;kind:string;party:string;quote:string;timezone:string};
-type Work={propertyAttentionIds?:string[];textAttention?:TextAttention[];callRequests?:{address?:string|null;id:string;screening_id:string;requested_at:string;state:string}[];signatureActions:{id:string;kind:string;test_mode:boolean;screening_id?:string|null;address?:string|null}[];signing:SigningEnvelope[];signingConfigured:boolean;handoffs:Handoff[];conversations:Conversation[];callbacks:{id:string;screening_id:string;due_at:string;timezone:string;state:string}[];properties:Property[];deals:Deal[];contacts:{screening_id:string}[];hasMore:boolean;controls:{property_id:string}[];attentionHasMore?:boolean;searchSupported?:boolean;retainedIds?:string[]};
+type PurchasedLookup={screening_id:string;created_at?:string|null;fetchedAt?:string|null;source?:string;ownershipVerified?:false;outreachAuthorized?:false;contacts?:{name:string|null;phones:{number:string|null;type:string|null;doNotCall:boolean|null}[]}[]};
+type Work={propertyAttentionIds?:string[];textAttention?:TextAttention[];callRequests?:{address?:string|null;id:string;screening_id:string;requested_at:string;state:string}[];signatureActions:{id:string;kind:string;test_mode:boolean;screening_id?:string|null;address?:string|null}[];signing:SigningEnvelope[];signingConfigured:boolean;handoffs:Handoff[];conversations:Conversation[];callbacks:{id:string;screening_id:string;due_at:string;timezone:string;state:string}[];properties:Property[];deals:Deal[];contacts:PurchasedLookup[];hasMore:boolean;controls:{property_id:string}[];attentionHasMore?:boolean;searchSupported?:boolean;retainedIds?:string[]};
 function milestone(property:Property,work:Work){
  const deal=work.deals.find(d=>d.screening_id===property.id);
  const signatures=work.signing.filter(e=>e.deal_id===deal?.id&&!e.test_mode);
@@ -78,11 +79,24 @@ function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefre
     {work.handoffs.filter(h=>h.screening_id===p.id).map(h=><HandoffCard key={h.id} handoff={h}/>)}
     {work.callRequests?.filter(c=>c.screening_id===p.id).map(c=><CallRequest key={c.id} id={c.id}/>)}
     {work.callbacks.filter(c=>c.screening_id===p.id).map(c=><p key={c.id}>Requested callback: {safeLocalTime(c.due_at,c.timezone)} ({c.timezone}). {c.state==='held_for_human'?'Waiting for you.':c.state==='canceled'?'Canceled.':c.state==='missed'?'Time passed; needs review.':c.state==='dispatched'?'Call dispatched.':'Saved; automatic dialing is not confirmed.'}</p>)}
-    <details className="property-research"><summary>Property research & numbers</summary><small>Analyzed {safeLocalTime(p.completed_at)}</small>{work.contacts.some(c=>c.screening_id===p.id)&&<p>Owner information received</p>}<p>{p.result.financialCheck.reason}</p>{p.result.preliminarySellerCeilingCents!==null&&<p>Estimated highest seller offer: ${(p.result.preliminarySellerCeilingCents/100).toLocaleString()}. This is not an agreed offer.</p>}</details>
+    <details className="property-research"><summary>Property research & numbers</summary><small>Analyzed {safeLocalTime(p.completed_at)}</small>{work.contacts.filter(c=>c.screening_id===p.id).map(c=><PurchasedContacts key={c.screening_id} lookup={c}/>)}<p>{p.result.financialCheck.reason}</p>{p.result.preliminarySellerCeilingCents!==null&&<p>Estimated highest seller offer: ${(p.result.preliminarySellerCeilingCents/100).toLocaleString()}. This is not an agreed offer.</p>}</details>
     <PropertyReviewStatus screeningId={p.id}/><DealTools signing={work.signing} signingConfigured={work.signingConfigured} property={p} principal={principal} initial={deal} manual={manual} onManual={()=>{setManual(true);onRefresh();}}/>
    </div></Activity>}
   </details>
  </article>;
+}
+function PurchasedContacts({lookup}:{lookup:PurchasedLookup}){
+ const contacts=lookup.contacts??[];
+ return <section aria-label="Purchased contact lookup"><h5>Purchased contact lookup</h5>
+  <p>Source: {lookup.source??'Source unavailable'} · {lookup.fetchedAt?`Looked up ${safeLocalTime(lookup.fetchedAt)}`:lookup.created_at?`Lookup recorded ${safeLocalTime(lookup.created_at)}`:'Lookup time unavailable'}</p>
+  <p>Ownership unverified. Outreach permission unverified. Source DNC flags are not legal clearance to call or text.</p>
+  {contacts.length?<ul>{contacts.map((contact,index)=><li key={index}><strong>{contact.name??'Name unavailable'}</strong>
+   {contact.phones.length?<ul>{contact.phones.map((phone,phoneIndex)=><li key={phoneIndex}>
+    <span>{phone.number??'Phone number unavailable'} · {phone.type??'Phone type unavailable'}</span>
+    <p>{phone.doNotCall===true?'Source DNC: flagged. Do not contact.':phone.doNotCall===false?'Source DNC: not flagged. Outreach permission remains unverified.':'Source DNC: unknown. Outreach permission remains unverified.'}</p>
+   </li>)}</ul>:<p>No phone numbers returned.</p>}
+  </li>)}</ul>:<p>No contact details returned.</p>}
+ </section>;
 }
 function PropertyNextStep({property,work}:{property:Property;work:Work}){
  const deal=work.deals.find(d=>d.screening_id===property.id),summary=dealCardSummary(deal,work.signing);
