@@ -18,6 +18,7 @@ export function propertyAnalysisView(result: unknown) {
  const source = property.source === 'dealmachine' ? 'DealMachine' : text(property.source) ?? 'Saved property research';
  return {
   cashOfferCeilingCents: money(saved.preliminarySellerCeilingCents),
+  offerNeedsUpdate: money(saved.preliminarySellerCeilingCents) !== null && saved.calculationVersion !== 'provider_repair_scalar_v1',
   arvCents,
   repairs: {baselineCents, rangeCents, status: repairStatus, condition: text(repairs.condition, 100), source: repairs.provider === 'dealmachine' ? 'DealMachine' : source},
   source,

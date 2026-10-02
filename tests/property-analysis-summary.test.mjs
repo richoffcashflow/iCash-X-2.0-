@@ -47,7 +47,7 @@ const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.
 const mod={exports:{}};
 new Function('require','module','exports',compiled)(name=>name==='@/lib/property-analysis-view'?analysis:require(name),mod,mod.exports);
 const text=node=>typeof node==='string'?node:typeof node==='number'?String(node):Array.isArray(node)?node.map(text).join(' '):node&&typeof node==='object'?text(node.props?.children):'';
-let rendered=text(mod.exports.PropertyAnalysisSummary({result}));
+let rendered=text(mod.exports.PropertyAnalysisSummary({result:{...result,calculationVersion:'provider_repair_scalar_v1'}}));
 assert.match(rendered,/Cash offer estimate.*\$90,000/);
 assert.match(rendered,/Estimated repairs.*\$40,000/);
 assert.match(rendered,/Value after repairs.*\$200,000/);
@@ -64,3 +64,5 @@ console.log('Property analysis summary: saved cash ceiling, repairs, ARV provena
 assert.equal(analysis.propertyAnalysisView({property:{repairs:{rangeCents:{low:100,high:900}}}}).repairs.baselineCents,null,'a range never supplies a missing scalar');
 assert.equal(analysis.propertyAnalysisView({property:{repairs:{baselineCents:0}}}).repairs.baselineCents,0);
 assert.doesNotMatch(source,/repairs\.rangeCents/,'the visible estimate never displays a range');
+
+const stale=text(mod.exports.PropertyAnalysisSummary({result}));assert.match(stale,/Cash offer estimate.*Needs update/);assert.match(stale,/earlier saved offer estimate/);assert.equal(analysis.propertyAnalysisView(result).offerNeedsUpdate,true);assert.equal(analysis.propertyAnalysisView({...result,calculationVersion:'provider_repair_scalar_v1'}).offerNeedsUpdate,false);
