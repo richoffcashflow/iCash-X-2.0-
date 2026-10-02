@@ -1,3 +1,5 @@
+import {beginOwnerInbound} from '@/lib/owner-inbound-acceptance-service';
+import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {NextResponse} from 'next/server';
 import {db} from '@/lib/stripe-test';
 import {createHash} from 'node:crypto';
@@ -10,11 +12,18 @@ export async function POST(req:Request){
  const headers={'Cache-Control':'private, no-store'};
  const secret=process.env.ELEVENLABS_INBOUND_WEBHOOK_SECRET;
  if(!inboundAuthorized(req.headers.get('authorization'),secret))return NextResponse.json({error:'Unauthorized'},{status:401,headers});
- if(process.env.ICASH_LIVE_WORK_READY!=='true')return NextResponse.json({error:'Call routing unavailable'},{status:503,headers});
+ if(process.env.ICASH_LIVE_WORK_READY!=='true'&&process.env.ICASH_OWNER_INBOUND_TEST_ENABLED!=='true')return NextResponse.json({error:'Call routing unavailable'},{status:503,headers});
  try{
   if(Number(req.headers.get('content-length')??0)>4096)throw new Error('Invalid request');
   const raw=await req.text();if(Buffer.byteLength(raw)>4096)throw new Error('Invalid request');
   const call=inboundCallSchema.parse(JSON.parse(raw));
+  // This exact owner/ingress pair never falls through to business routing.
+  // Its separate release flag does not enable global work or seller permissions.
+  if(call.caller_id===ownerInboundTarget.ownerPhone&&call.called_number===ownerInboundTarget.ingressNumber&&call.agent_id===ownerInboundTarget.agentId){
+   const result=await beginOwnerInbound(call);
+   return NextResponse.json(result??{error:'Call routing unavailable'},{status:result?200:409,headers});
+  }
+  if(process.env.ICASH_LIVE_WORK_READY!=='true')return NextResponse.json({error:'Call routing unavailable'},{status:503,headers});
   const cap=inboundCapability(call,secret!);
   // Fetch no customer data until the called number and agent are explicitly registered.
   const routes=await db<{agent_id:string}[]>(`icash_inbound_voice_routes?called_number=eq.${encodeURIComponent(call.called_number)}&agent_id=eq.${call.agent_id}&enabled=eq.true&select=agent_id&limit=1`);

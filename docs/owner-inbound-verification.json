@@ -1,0 +1,79 @@
+{
+  "scope": "Local code validation complete; publication pending. Existing production schema installed disabled; no configuration, environment, credential, provider or call changes.",
+  "baseSnapshot": "Verified current main including shipped property-card UI",
+  "baseCommitProvidedByParent": "b0f80322edc583d65adcfb05b6e7e0d9d9b5bd39",
+  "finalChecks": [
+    {
+      "command": "npm test",
+      "result": "passed",
+      "suites": 118,
+      "afterFinalInitiationAndQueueChanges": true,
+      "afterAccountConfigurationRemediation": true
+    },
+    {
+      "command": "node --experimental-strip-types tests/owner-inbound-providers.test.mjs",
+      "result": "passed",
+      "assertions": 253,
+      "network": "synthetic injected fetch only"
+    },
+    {
+      "command": "node --experimental-strip-types tests/owner-inbound-acceptance.test.mjs",
+      "result": "passed",
+      "coverage": "policy, provider binding, challenge attempts, no early conversation GET, service lifecycle, owner auth/CSRF, business HOLD; missing/malformed/mismatched trusted account, matching foreign config and receipt, no side effects when trust unavailable, cancellation during configuration outage"
+    },
+    {
+      "command": "node scripts/test-owner-inbound-acceptance-pglite.mjs /tmp/icash-voice-pglite/node_modules/@electric-sql/pglite/dist/index.js",
+      "result": "passed",
+      "scenarios": 22,
+      "coverage": "Rendered schema preserves exact account pin and all 22 original service-only access, budget, lifecycle, settlement, replay and rate-validity scenarios; synthetic runtime account input"
+    },
+    {
+      "command": "NODE_OPTIONS=--max-old-space-size=640 node_modules/.bin/tsc --noEmit",
+      "result": "passed; final webpack TypeScript phase also passed"
+    },
+    {
+      "command": "CIRCLE_NODE_TOTAL=1 NODE_OPTIONS=--max-old-space-size=640 node_modules/.bin/next build --webpack",
+      "result": "passed including TypeScript and 43 static pages; one build worker",
+      "afterFinalInitiationAndQueueChanges": true,
+      "afterAccountConfigurationRemediation": true
+    },
+    {
+      "command": "npm run build",
+      "result": "blocked",
+      "reason": "Turbopack rejects dependency symlink outside filesystem root; no OOM. Installed webpack fallback passed"
+    },
+    {
+      "command": "node tests/owner-inbound-schema.test.mjs",
+      "result": "passed",
+      "coverage": "Strict private account input, one placeholder, exact SQL equality, missing/malformed/ambiguous/unresolved rejection"
+    }
+  ],
+  "notRun": [
+    "real multi-session PostgreSQL locks/deadlocks/concurrency (server/client/driver unavailable; manual isolated protocol supplied)",
+    "authenticated interactive browser UI flows",
+    "provider receipt availability/source forwarding proof",
+    "controlled authenticated webhook proof",
+    "live call or supplier billing validation"
+  ],
+  "configurationState": "No seed and default disabled. Production migration 20261001221349_disabled_owner_inbound_acceptance already applied; do not repeat. Validated exact-account CHECK verified unchanged; zero configuration rows. Server TWILIO_ACCOUNT_SID availability remains unverified. Existing planning estimate is not an approved spend cap.",
+  "releaseGates": [
+    "fresh inbound-v2 reviewed branch/version/hash and current no-queue/no-burst settings; queue/call limits may be agent-wide",
+    "Twilio source forwarding evidence and authoritative current Contiguity state",
+    "reviewed customer USD wallet cap plus supplier overhead/extras evidence",
+    "Remaining publication, configuration, forwarding and paid-call approvals; do not repeat installed migration"
+  ],
+  "logs": {
+    "aggregate": "/tmp/icash-owner-inbound-configfix-tests.log",
+    "sql": "/tmp/icash-owner-inbound-configfix-sql.log",
+    "build": "/tmp/icash-owner-inbound-configfix-build.log",
+    "typecheck": "/tmp/icash-owner-inbound-configfix-types.log"
+  },
+  "accountConfigurationRemediation": {
+    "rawAccountIdentifierInSource": false,
+    "source": "Existing server TWILIO_ACCOUNT_SID; no value set by this work",
+    "binding": "Exact server/account-config/provider receipt equality plus independently installed literal DB CHECK",
+    "schema": "Explicit private deployment input for fresh installs only; renders identical original SQL statements",
+    "tests": "Runtime-generated synthetic account identifier; no live credentials or provider calls",
+    "review": "Independent security review found no blocking defects"
+  }
+}
