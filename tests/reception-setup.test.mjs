@@ -75,3 +75,5 @@ for(const fields of [{call_profile:undefined},{call_profile:'arbitrary'},{max_du
 const changed=fixture(),cr=await changed.review();Object.assign(changed.s.config,quickProfile);assert.equal((await changed.apply('prepare_branch',token(cr,'prepare_branch'))).status,'blocked');assert.equal(writes(changed).length,0);
 const source=readFileSync('lib/reception-setup.ts','utf8');assert(!source.includes('process.env'));assert(!source.includes('/twilio/register-call'));assert(!source.includes('/v1/convai/secrets'));assert(!source.includes('console.'));
 console.log('Reception setup: fixed target, owner-review signatures, durable claims/snapshot, disabled preparation, provider readback, preservation/drift checks, exact restore, no calls or credentials');
+
+assert.equal(body.conversation_config.agent.max_conversation_duration_message,null);assert.equal(body.conversation_config.conversation.max_conversation_duration_message,undefined);

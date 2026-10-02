@@ -80,7 +80,7 @@ export function inspectReceptionAgent(c:ReceptionConfig,input:unknown,branchInpu
   identity:a.agent_id===c.agent_id&&a.branch_id===c.branch_id&&identifier(c.branch_id,'agtbrch')&&identifier(a.version_id,'agtvrsn')&&a.version_id===c.reviewed_version_id,
   separateBranch:identifier(a.main_branch_id,'agtbrch')&&a.main_branch_id!==c.branch_id&&c.branch_id!=='agtbrch_8901m3sw5tn6fvkae4d334netswh',
   branch:b.id===c.branch_id&&b.agent_id===c.agent_id&&b.is_archived===false&&b.current_live_percentage===0&&b.draft_exists===false,
-  boundedDuration:Number.isInteger(c.max_duration_seconds)&&c.max_duration_seconds>=60&&c.max_duration_seconds<=600&&obj(conversation.conversation).max_duration_seconds===c.max_duration_seconds&&!obj(conversation.conversation).max_conversation_duration_message,
+  boundedDuration:Number.isInteger(c.max_duration_seconds)&&c.max_duration_seconds>=60&&c.max_duration_seconds<=600&&obj(conversation.conversation).max_duration_seconds===c.max_duration_seconds&&!agent.max_conversation_duration_message,
   audio:obj(conversation.asr).user_input_audio_format==='ulaw_8000'&&obj(conversation.tts).agent_output_audio_format==='ulaw_8000',
   disclosedReception:agent.first_message===receptionGreeting&&prompt.prompt===receptionPrompt,
   finiteResponseTokens:Number.isInteger(prompt.max_tokens)&&Number(prompt.max_tokens)>=1&&Number(prompt.max_tokens)<=150,
