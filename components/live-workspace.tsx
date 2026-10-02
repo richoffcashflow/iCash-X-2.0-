@@ -10,7 +10,7 @@ import {DealCommunications} from '@/components/deal-communications';
 import {FulfillmentDetails} from '@/components/fulfillment-details';
 import {SigningControls,SigningAttention,type SigningEnvelope} from '@/components/signing-controls';
 import {dealTermsSchema,type DealTerms,type DocumentKind} from '@/lib/deal-documents';
-import {filterProperties,needsAttention,propertyGroup,safeLocalTime,type WorkspaceFilter,type WorkspaceProperty} from './workspace-view';
+import {filterProperties,needsAttention,propertyAddressLines,propertyGroup,propertyResearchDate,safeLocalTime,type WorkspaceFilter,type WorkspaceProperty} from './workspace-view';
 type Property=WorkspaceProperty;
 type Deal={id:string;screening_id:string;terms:DealTerms;stage:string};
 type Handoff={address?:string|null;id:string;screening_id:string;party:string;reason:string;summary:string;next_action:string;state:string};
@@ -57,7 +57,7 @@ export function LiveWorkspace({principal}:{principal:string}){
    <p className="workspace-scope">{focusedId?'One requested property.':`Page ${page+1} · ${visible.length} shown${work?.hasMore?' · More properties on the next page':''}.`} Stage filters apply to this page.{work?.retainedIds?.length?' Your open work is kept here until you finish.':''}</p>
    {focusedId&&<button className="workspace-quiet" onClick={()=>{if(!leaveDrafts())return;setFocusedId('');setActiveId('');setVisited([]);setWork(null);setLoading(true);}}>Back to all properties</button>}
    {work&&!visible.length&&<div className="workspace-empty"><strong>{query||filter!=='all'?'No matching properties in this view':'No properties to show yet'}</strong><p>{query||filter!=='all'?'Try another address or reset the filters. Your other saved work has not changed.':'Your bot’s status above explains what happens next. Analyzed properties and their conversations will appear here.'}</p>{(query||filter!=='all')&&<button className="workspace-quiet" onClick={()=>{setQuery('');setFilter('all');}}>Clear filters</button>}</div>}
-   {work&&work.properties.map(p=><PropertyCard hidden={!visible.some(v=>v.id===p.id)} key={p.id} property={p} work={work} principal={principal} active={activeId===p.id} visited={visited.includes(p.id)} onToggle={open=>{if(open){setActiveId(p.id);setVisited(v=>v.includes(p.id)?v:[...v,p.id]);}else setActiveId(id=>id===p.id?'':id);}} onRefresh={()=>setRefresh(v=>v+1)}/>)}
+   <div className="property-list">{work&&work.properties.map(p=><PropertyCard hidden={!visible.some(v=>v.id===p.id)} key={p.id} property={p} work={work} principal={principal} active={activeId===p.id} visited={visited.includes(p.id)} onToggle={open=>{if(open){setActiveId(p.id);setVisited(v=>v.includes(p.id)?v:[...v,p.id]);}else setActiveId(id=>id===p.id?'':id);}} onRefresh={()=>setRefresh(v=>v+1)}/>)}</div>
    {work&&!focusedId&&(page>0||work.hasMore)&&<nav className="live-pages" aria-label="Property pages"><button disabled={page===0} onClick={()=>changePage(page-1)}>Previous</button><span>Page {page+1}</span><button disabled={!work.hasMore} onClick={()=>changePage(page+1)}>Next properties</button></nav>}
   </section>
  </div>;
@@ -67,21 +67,28 @@ function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefre
  const [manual,setManual]=useState(initialManual),[controlBusy,setControlBusy]=useState(false),[controlMessage,setControlMessage]=useState('');
  useEffect(()=>setManual(initialManual),[initialManual]);
  const deal=work.deals.find(d=>d.screening_id===p.id),calls=work.conversations.filter(c=>c.screening_id===p.id);
+ const address=propertyAddressLines(p.result.property.address),researched=propertyResearchDate(p.completed_at);
  async function control(){if(controlBusy)return;setControlBusy(true);setControlMessage('');try{await post('/api/work/control',{action:manual?'return_to_bot':'takeover',screeningId:p.id});setManual(!manual);setControlMessage(manual?'Bot control restored. Setup, credits and contact permissions still apply.':'You have control. New automatic work is paused for this property. Already-started work may finish.');onRefresh();}catch{setControlMessage('Could not confirm the control change. Refresh and check before continuing.');}finally{setControlBusy(false);}}
- return <article hidden={hidden} className="live-property" id={`property-${p.id}`} data-needs-attention={needsAttention(p.id,work)}>
-  <div className="live-property-heading"><strong>{p.result.property.address}</strong><span>{milestone(p,work).replace(/^[^A-Za-z]+/,'')}</span></div>
-  {manual&&<span className="property-manual-label">Paused for this property</span>}
-  <details open={active} onToggle={e=>{if(e.target===e.currentTarget)onToggle(e.currentTarget.open);}}><summary>{active?'Close property':'Open property & conversations'}</summary>
+ return <article hidden={hidden} className="live-property" id={`property-${p.id}`} aria-labelledby={`property-address-${p.id}`} data-needs-attention={needsAttention(p.id,work)} data-expanded={active}>
+  <details className="property-disclosure" open={active} onToggle={e=>{if(e.target===e.currentTarget)onToggle(e.currentTarget.open);}}>
+   <summary className="property-summary">
+    <span className="property-summary-main">
+     <span className="property-address" id={`property-address-${p.id}`}><strong>{address.street}</strong>{address.location&&<span>{address.location}</span>}</span>
+     <span className="property-summary-status"><span className="property-status">{milestone(p,work).replace(/^[^A-Za-z]+/,'')}</span>{manual&&<span className="property-manual-label">Paused for this property</span>}</span>
+     {(researched||calls.length>0)&&<span className="property-recorded-meta">{researched&&<span>Researched {researched}</span>}{calls.length>0&&<span>{calls.length} saved call{calls.length===1?'':'s'}</span>}</span>}
+    </span>
+    <span className="property-open-control"><span>{active?'Close':'View details'}</span><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
+   </summary>
    {visited&&<Activity mode={active&&!hidden?'visible':'hidden'}><div className="property-details">
-    <PropertyNextStep property={p} work={work}/>
+    <div className="property-overview"><PropertyNextStep property={p} work={work}/>
     <div className="property-control"><span><b>{manual?'You’re in control':'Bot-managed property'}</b><small>{manual?'New automated outreach is paused.':'Take over to pause new automated work.'}</small></span><button className="takeover-button" disabled={controlBusy} onClick={()=>void control()}>{controlBusy?'Saving…':manual?'Return to bot':'Take over'}</button></div>
-    {controlMessage&&<p className="control-result" role="status">{controlMessage}</p>}
+    {controlMessage&&<p className="control-result" role="status">{controlMessage}</p>}</div>
     <section className="property-conversations" aria-label="Property conversations"><h4>Conversations</h4><p className="live-caption">Messages, call records and replies stay with this property.</p>{deal?<DealCommunications dealId={deal.id} active={active}/>:<p className="workspace-empty">No text or email thread is linked yet. Conversations appear when outreach has been recorded.</p>}{calls.length>0&&<details className="property-call-list"><summary>Completed calls ({calls.length})</summary>{calls.map(c=><CallConversation key={c.id} id={c.id} party={c.party} summary={c.summary}/>)}</details>}</section>
     {work.handoffs.filter(h=>h.screening_id===p.id).map(h=><HandoffCard key={h.id} handoff={h}/>)}
     {work.callRequests?.filter(c=>c.screening_id===p.id).map(c=><CallRequest key={c.id} id={c.id}/>)}
     {work.callbacks.filter(c=>c.screening_id===p.id).map(c=><p key={c.id}>Requested callback: {safeLocalTime(c.due_at,c.timezone)} ({c.timezone}). {c.state==='held_for_human'?'Waiting for you.':c.state==='canceled'?'Canceled.':c.state==='missed'?'Time passed; needs review.':c.state==='dispatched'?'Call dispatched.':'Saved; automatic dialing is not confirmed.'}</p>)}
-    <details className="property-research"><summary>Research & contact details</summary><small>Analyzed {safeLocalTime(p.completed_at)}</small>{work.contacts.filter(c=>c.screening_id===p.id).map(c=><PurchasedContacts key={c.screening_id} lookup={c}/>)}<p>{p.result.financialCheck.reason}</p>{p.result.preliminarySellerCeilingCents!==null&&<p>Estimated highest seller offer: ${(p.result.preliminarySellerCeilingCents/100).toLocaleString()}. This is not an agreed offer.</p>}</details>
-    <PropertyReviewStatus screeningId={p.id}/><DealTools signing={work.signing} signingConfigured={work.signingConfigured} property={p} principal={principal} initial={deal} manual={manual} onManual={()=>{setManual(true);onRefresh();}}/>
+    <section className="property-resources" aria-labelledby={`property-resources-${p.id}`}><h4 id={`property-resources-${p.id}`}>Property details</h4><details className="property-research"><summary>Research & contact details</summary><small>Analyzed {safeLocalTime(p.completed_at)}</small>{work.contacts.filter(c=>c.screening_id===p.id).map(c=><PurchasedContacts key={c.screening_id} lookup={c}/>)}<p>{p.result.financialCheck.reason}</p>{p.result.preliminarySellerCeilingCents!==null&&<p>Estimated highest seller offer: ${(p.result.preliminarySellerCeilingCents/100).toLocaleString()}. This is not an agreed offer.</p>}</details>
+    <PropertyReviewStatus screeningId={p.id}/><DealTools signing={work.signing} signingConfigured={work.signingConfigured} property={p} principal={principal} initial={deal} manual={manual} onManual={()=>{setManual(true);onRefresh();}}/></section>
    </div></Activity>}
   </details>
  </article>;

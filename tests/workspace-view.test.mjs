@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {filterProperties,needsAttention,propertyGroup,messageSpeaker,safeLocalTime} from '../components/workspace-view.ts';
+import {filterProperties,needsAttention,propertyAddressLines,propertyGroup,propertyResearchDate,messageSpeaker,safeLocalTime} from '../components/workspace-view.ts';
 import {makeWorkspaceFixture,uuid} from './fixtures/workspace-volume.mjs';
 const work=makeWorkspaceFixture({count:10000});
 assert.equal(work.properties.length,6,'a high-volume fixture remains bounded');
@@ -22,6 +22,14 @@ assert.equal(messageSpeaker('outgoing','seller'),'From your bot number','unknown
 assert.equal(messageSpeaker('incoming','buyer'),'Buyer');
 assert.equal(safeLocalTime('bad'),'Time unavailable');
 assert.ok(safeLocalTime('2026-09-30T12:00:00Z','invalid/timezone').length);
+assert.deepEqual(propertyAddressLines('3462 MCKENZIE ST, MEMPHIS, TN 38118'),{street:'3462 MCKENZIE ST',location:'MEMPHIS, TN 38118'});
+assert.deepEqual(propertyAddressLines('1 Example St, Unit 2, Demo City, TX 75001'),{street:'1 Example St, Unit 2',location:'Demo City, TX 75001'});
+assert.deepEqual(propertyAddressLines('1 Example St'),{street:'1 Example St',location:''},'missing location is never invented');
+assert.deepEqual(propertyAddressLines('1 Example St, '),{street:'1 Example St, ',location:''},'incomplete addresses preserve recorded text');
+assert.deepEqual(propertyAddressLines('1 Example St, Demo City'),{street:'1 Example St',location:'Demo City'});
+assert.equal(propertyResearchDate('bad'),null,'invalid dates do not become invented research dates');
+assert.equal(propertyResearchDate(''),null);
+assert.ok(propertyResearchDate('2026-09-30T12:00:00Z').includes('2026'));
 const deep=makeWorkspaceFixture({screeningId:uuid(43)});assert.equal(deep.properties[0].id,uuid(43));assert.equal(deep.hasMore,false);
 assert.equal(makeWorkspaceFixture({attentionPage:1}).textAttention.length,6);assert.equal(makeWorkspaceFixture({attentionPage:2}).textAttention.length,1);assert.equal(makeWorkspaceFixture({attentionPage:2}).attentionHasMore,false);
 assert.equal(makeWorkspaceFixture({count:0}).properties.length,0);

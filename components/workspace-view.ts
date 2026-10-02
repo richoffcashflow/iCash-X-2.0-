@@ -32,3 +32,15 @@ export function safeLocalTime(value:string,timezone?:string) {
  const date=new Date(value);if(!Number.isFinite(date.getTime()))return 'Time unavailable';
  try{return date.toLocaleString(undefined,timezone?{timeZone:timezone}:undefined);}catch{return date.toLocaleString();}
 }
+
+/** Split only recorded address text; never infer missing city/state or rewrite proper names. */
+export function propertyAddressLines(address:string) {
+ const parts=address.split(',').map(part=>part.trim());
+ if(parts.length<2||parts.some(part=>!part))return {street:address,location:''};
+ const locationStart=parts.length>2?parts.length-2:1;
+ return {street:parts.slice(0,locationStart).join(', '),location:parts.slice(locationStart).join(', ')};
+}
+export function propertyResearchDate(value:string) {
+ const date=new Date(value);
+ return Number.isFinite(date.getTime())?date.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):null;
+}

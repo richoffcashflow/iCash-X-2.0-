@@ -3,11 +3,11 @@ import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {renderToStaticMarkup} from 'react-dom/server';
 import ts from 'typescript';
-import {safeLocalTime} from '../components/workspace-view.ts';
+import {safeLocalTime,propertyAddressLines,propertyResearchDate} from '../components/workspace-view.ts';
 const require=createRequire(import.meta.url);
 const code=ts.transpileModule(readFileSync(new URL('../components/live-workspace.tsx',import.meta.url),'utf8')+'\nexport {PurchasedContacts,PropertyCard};',{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
 const mod={exports:{}};
-new Function('require','module','exports',code)(name=>name==='react'?{useState:v=>[v,()=>{}],useEffect(){},Activity:'Activity'}:name==='react/jsx-runtime'?require(name):name==='./workspace-view'?{safeLocalTime,needsAttention:()=>false}:name==='@/lib/work-milestone'?{workMilestone:()=> 'Research received'}:{},mod,mod.exports);
+new Function('require','module','exports',code)(name=>name==='react'?{useState:v=>[v,()=>{}],useEffect(){},Activity:'Activity'}:name==='react/jsx-runtime'?require(name):name==='./workspace-view'?{safeLocalTime,propertyAddressLines,propertyResearchDate,needsAttention:()=>false}:name==='@/lib/work-milestone'?{workMilestone:()=> 'Research received'}:{},mod,mod.exports);
 const lookup={screening_id:'owned',created_at:'2026-10-01T01:02:03Z',fetchedAt:'2026-10-01T01:01:02Z',source:'DealMachine',ownershipVerified:false,outreachAuthorized:false,contacts:[
  {name:'Synthetic Person',phones:[{number:'+12025550101',type:'Mobile',doNotCall:true},{number:'+12025550102',type:'Landline',doNotCall:false},{number:'+12025550103',type:null,doNotCall:null},{number:null,type:null}]},
  {name:null,phones:[]}
