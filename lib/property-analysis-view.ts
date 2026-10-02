@@ -7,17 +7,18 @@ const timestamp = (value: unknown): string | null => typeof value === 'string' &
 /** Presentation of saved screening evidence only. Never calculates or authorizes an offer. */
 export function propertyAnalysisView(result: unknown) {
  const saved = record(result), property = record(saved.property), arv = record(property.arvEstimate), repairs = record(property.repairs), range = record(repairs.rangeCents);
- const baselineCents = money(repairs.baselineCents), low = money(range.low), high = money(range.high);
- const suppliedRange = repairs.rangeCents != null || repairs.rangeStatus === 'available' || repairs.rangeStatus === 'invalid';
+ const baselineCents = repairs.estimateStatus === 'invalid' ? null : money(repairs.baselineCents), low = money(range.low), high = money(range.high);
  const validRange = repairs.rangeStatus !== 'invalid' && low !== null && high !== null && low <= high && (baselineCents === null || low <= baselineCents && baselineCents <= high);
  const rangeCents = validRange ? {low, high} : null;
- const repairStatus = suppliedRange && !validRange ? 'invalid' as const : rangeCents ? 'range' as const : baselineCents !== null ? 'baseline' as const : 'missing' as const;
+ // Only the provider scalar is the repair estimate. Historical ranges are audit data.
+ const repairStatus = repairs.estimateStatus === 'invalid' ? 'invalid' as const : baselineCents !== null ? 'baseline' as const : 'missing' as const;
  // Both fields are already normalized cents from the provider's estimated_value.
  // An explicitly missing ARV estimate must not be replaced by a stale fallback.
  const arvCents = Object.hasOwn(arv, 'cents') ? money(arv.cents) : money(property.estimatedMarketValueCents);
  const source = property.source === 'dealmachine' ? 'DealMachine' : text(property.source) ?? 'Saved property research';
  return {
   cashOfferCeilingCents: money(saved.preliminarySellerCeilingCents),
+  offerNeedsUpdate: money(saved.preliminarySellerCeilingCents) !== null && saved.calculationVersion !== 'provider_repair_scalar_v1',
   arvCents,
   repairs: {baselineCents, rangeCents, status: repairStatus, condition: text(repairs.condition, 100), source: repairs.provider === 'dealmachine' ? 'DealMachine' : source},
   source,

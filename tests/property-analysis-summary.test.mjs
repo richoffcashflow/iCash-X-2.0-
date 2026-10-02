@@ -37,7 +37,7 @@ assert.deepEqual(withRepairs({baselineCents:400,rangeCents:{low:300,high:500},ra
 assert.equal(withRepairs({baselineCents:0}).status,'baseline','recorded zero is not missing');
 for(const range of [{low:500,high:300},{low:300,high:350},{low:'300',high:500},{low:300,high:Infinity}]){
  const repairs=withRepairs({baselineCents:400,rangeCents:range,rangeStatus:'available'});
- assert.equal(repairs.status,'invalid');assert.equal(repairs.rangeCents,null);assert.equal(repairs.baselineCents,400);
+ assert.equal(repairs.status,'baseline');assert.equal(repairs.rangeCents,null);assert.equal(repairs.baselineCents,400);
 }
 assert.equal(withRepairs({baselineCents:400,rangeCents:{low:300,high:500},rangeStatus:'invalid'}).rangeCents,null);
 assert.equal(analysis.propertyAnalysisView({...result,comps:[{price:200000}],property:{...property,comparables:[{estimated_value:200000}]}}).comparableSalesStatus,'not_recorded','unverified loose provider arrays are not reported as actual sales');
@@ -47,16 +47,22 @@ const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.
 const mod={exports:{}};
 new Function('require','module','exports',compiled)(name=>name==='@/lib/property-analysis-view'?analysis:require(name),mod,mod.exports);
 const text=node=>typeof node==='string'?node:typeof node==='number'?String(node):Array.isArray(node)?node.map(text).join(' '):node&&typeof node==='object'?text(node.props?.children):'';
-let rendered=text(mod.exports.PropertyAnalysisSummary({result}));
-assert.match(rendered,/Estimated cash offer.*\$90,000/);
+let rendered=text(mod.exports.PropertyAnalysisSummary({result:{...result,calculationVersion:'provider_repair_scalar_v1'}}));
+assert.match(rendered,/Cash offer estimate.*\$90,000/);
 assert.match(rendered,/Estimated repairs.*\$40,000/);
-assert.match(rendered,/Value after repairs \(ARV\).*\$200,000/);
-assert.match(rendered,/not a sent, agreed or approved offer/);
-assert.match(rendered,/have not verified what this home would sell for after repairs/);
-assert.doesNotMatch(rendered,/DealMachine/i);assert.match(rendered,/Property data/);assert.match(rendered,/Oct 1, 2026/);
-assert.match(rendered,/Nearby sold homes \(comps\).*Not recorded/);
+assert.match(rendered,/Value after repairs.*\$200,000/);
+assert.match(rendered,/not an approved offer or an inspection/);
+assert.match(rendered,/has not been verified/);
+assert.doesNotMatch(rendered,/DealMachine/i);assert.match(rendered,/Oct 1, 2026/);
+assert.match(rendered,/No verified nearby sales are saved/);
 rendered=text(mod.exports.PropertyAnalysisSummary({result:null}));
 assert.doesNotMatch(rendered,/\$0/,'missing estimates are never fabricated zeroes');
 assert.match(rendered,/Not available/);
 assert.doesNotMatch(source,/\bfetch\s*\(/,'presentation must never initiate a paid lookup');
 console.log('Property analysis summary: saved cash ceiling, repairs, ARV provenance, invalid/missing values and honest unavailable comps passed.');
+
+assert.equal(analysis.propertyAnalysisView({property:{repairs:{rangeCents:{low:100,high:900}}}}).repairs.baselineCents,null,'a range never supplies a missing scalar');
+assert.equal(analysis.propertyAnalysisView({property:{repairs:{baselineCents:0}}}).repairs.baselineCents,0);
+assert.doesNotMatch(source,/repairs\.rangeCents/,'the visible estimate never displays a range');
+
+const stale=text(mod.exports.PropertyAnalysisSummary({result}));assert.match(stale,/Cash offer estimate.*Needs update/);assert.match(stale,/earlier saved offer estimate/);assert.equal(analysis.propertyAnalysisView(result).offerNeedsUpdate,true);assert.equal(analysis.propertyAnalysisView({...result,calculationVersion:'provider_repair_scalar_v1'}).offerNeedsUpdate,false);

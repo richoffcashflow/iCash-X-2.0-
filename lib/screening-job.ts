@@ -14,7 +14,7 @@ export function runScreeningJob(snapshot: unknown, now=Date.now()) {
  const financialCheck=s.propertyType!=='house'
   ?{status:'hold' as const,checkedAt:now,reason:'Separate land underwriting required.'}
   :sellerCallFinancialGate(property.financialScreening,{sellerOfferCents,sellerCostReserveCents:reserve??null,checkedAt:now});
- return {property,financialCheck,preliminarySellerCeilingCents:sellerOfferCents,
+ return {property,financialCheck,preliminarySellerCeilingCents:sellerOfferCents,calculationVersion:'provider_repair_scalar_v1' as const,
   nextAction:financialCheck.status==='eligible'?'permission_and_cost_check':'review',
   offerAuthorized:false,outreachAuthorized:false};
 }
