@@ -24,6 +24,6 @@ export async function POST(request:Request){try{
  let value:unknown;try{value=JSON.parse(await boundedBody(request,4096));}catch{return reply('Invalid review confirmation.',400);}
  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).sort().join(',')!=='action,confirm,reviewToken')return reply('Only a fixed action and its review are accepted.',400);
  const b=value as {action:unknown;confirm:unknown;reviewToken:unknown};
- if(b.confirm!==true||typeof b.action!=='string'||!['prepare_branch','prepare_branch_retry','configure_branch','route','restore'].includes(b.action)||typeof b.reviewToken!=='string'||b.reviewToken.length>2048)return reply('Explicit confirmation and a current signed review are required.',400);
+ if(b.confirm!==true||typeof b.action!=='string'||!['prepare_branch','prepare_branch_retry','prepare_branch_retry_2','prepare_branch_retry_3','configure_branch','route','restore'].includes(b.action)||typeof b.reviewToken!=='string'||b.reviewToken.length>2048)return reply('Explicit confirmation and a current signed review are required.',400);
  return NextResponse.json(await applyReceptionSetup(env(),deps,b.action as SetupAction,b.reviewToken),{headers});
  }catch(e){return failure(e);}}

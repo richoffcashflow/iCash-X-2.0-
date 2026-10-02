@@ -67,6 +67,13 @@ export function verifyReceptionPostcall(raw:string,header:string|null,secret:str
  if(!m||Math.abs(now-Number(m[1])*1000)>30*60*1000)return false;
  return equal(createHmac('sha256',secret).update(m[1]+'.'+raw).digest('hex'),m[2]);
 }
+/** The current provider schema omits parent_subgraph_id for an unparented start.
+ * Accept its absence or explicit null without relaxing any executable fields. */
+export function receptionWorkflowIsInert(value:unknown){
+ const workflow=obj(value),nodes=obj(workflow.nodes),node=obj(nodes.start_node);
+ if(Object.keys(nodes).length===1&&Object.hasOwn(nodes,'start_node')&&node.parent_subgraph_id===undefined)return ownerWorkflowIsInert({...workflow,nodes:{start_node:{...node,parent_subgraph_id:null}}});
+ return ownerWorkflowIsInert(value);
+}
 /** The hash covers the whole executable provider snapshot, not just the prompt.
  * A dedicated frozen branch is required; owner tests and Main are never repurposed. */
 export function inspectReceptionAgent(c:ReceptionConfig,input:unknown,branchInput:unknown){
@@ -88,7 +95,7 @@ export function inspectReceptionAgent(c:ReceptionConfig,input:unknown,branchInpu
   noLanguagePresets:empty(conversation.language_presets),
   noClientExecutionOverrides:obj(platform.overrides).enable_procedure_ids_from_client!==true&&obj(platform.overrides).enable_starting_workflow_node_id_from_client!==true,
   noPostcallExport:empty(obj(obj(platform.workspace_overrides).webhooks).events)&&empty(obj(obj(platform.workspace_overrides).webhooks).post_call_webhook_id)&&obj(obj(platform.workspace_overrides).webhooks).send_audio!==true,
-  noData:empty(prompt.knowledge_base)&&obj(prompt.rag).enabled!==true&&empty(prompt.custom_llm)&&empty(a.procedures)&&ownerWorkflowIsInert(a.workflow),
+  noData:empty(prompt.knowledge_base)&&obj(prompt.rag).enabled!==true&&empty(prompt.custom_llm)&&empty(a.procedures)&&receptionWorkflowIsInert(a.workflow),
   privateAgent:obj(platform.auth).enable_auth===true,
   noRecording:privacy.record_voice===false,
   ...receptionSharedCapacityChecks(platform),
