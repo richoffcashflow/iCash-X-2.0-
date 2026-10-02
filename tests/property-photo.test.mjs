@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {dealMachinePhoto} from '../lib/property-photo.ts';
+import {dealMachinePhoto,coordinatePropertyPhoto} from '../lib/property-photo.ts';
 import {loadPropertyPhoto} from '../lib/dealmachine-photo.ts';
 import {cachedPropertyPhoto} from '../lib/property-photo-cache.ts';
 import {propertyContext} from '../lib/property-context.ts';
@@ -27,3 +27,9 @@ const draft={id:'d',stage:'draft',terms:{seller:'',priceCents:15000000,priceSour
 assert.equal(showPropertyContract(undefined,[]),false);assert.equal(showPropertyContract(draft,[]),false);assert.equal(showPropertyContract({...draft,terms:{...draft.terms,seller:'Example Seller',priceSource:'seller_reported'}},[]),true);
 assert.equal(showPropertyContract(draft,[{deal_id:'d'}]),true);assert.equal(showPropertyContract({...draft,stage:'closed'},[]),true);assert.equal(showPropertyContract(draft,[{deal_id:'other'}]),false);
 console.log('Property photos and contract visibility: provider-only imagery, free lookup, mismatch/error fallback, bounded account cache and stage-aware contracts passed');
+
+assert.equal(coordinatePropertyPhoto(35.12,-89.93).url,'https://img.dealmachine.com/sv/35.12,-89.93.jpg');
+for(const pair of [[null,null],[0,0],['35.12',-89.93],[91,-89],[35,-181],[NaN,-89],[35,Infinity]])assert.equal(coordinatePropertyPhoto(...pair),null);
+const coordinateTransport=async()=>({ok:true,json:async()=>({data:{dm_property_id:'prop_123',latitude:35.12,longitude:-89.93}})});
+assert.equal((await loadPropertyPhoto('prop_123','dm_sk_live_fixture',coordinateTransport)).fallbackUrl,'https://img.dealmachine.com/sat/35.12,-89.93.jpg');
+assert.equal(await loadPropertyPhoto('prop_456','dm_sk_live_fixture',coordinateTransport),null);
