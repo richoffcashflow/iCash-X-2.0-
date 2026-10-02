@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import ts from 'typescript';
 import * as status from '../lib/workspace-status.ts';
+import * as progress from '../lib/workspace-progress.ts';
 const require=createRequire(import.meta.url);
 const code=file=>ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
 const all=root=>!root||typeof root!=='object'?[]:Array.isArray(root)?root.flatMap(all):[root,...all(root.props?.children)];
@@ -12,7 +13,7 @@ function page(account,campaign,error=false){
  let cursor=0;const slots=[account,error,false,false,'budget_ten',false,'',null,false,campaign];
  const hooks={useState:()=>[slots[cursor++],()=>{}],useRef:value=>({current:value}),useCallback:fn=>fn,useEffect(){}};
  const mod={exports:{}};
- new Function('require','module','exports',code('app/page.tsx'))(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/workspace-status'?status:name==='@/lib/bot-setup'?{setupThemes:{ink:{color:'#111',soft:'#eee'}}}:name==='next/image'?{__esModule:true,default:component('Image')}:new Proxy({},{get:(_target,key)=>component(String(key))}),mod,mod.exports);
+ new Function('require','module','exports',code('app/page.tsx'))(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/workspace-status'?status:name==='@/lib/workspace-progress'?progress:name==='@/lib/bot-setup'?{setupThemes:{ink:{color:'#111',soft:'#eee'}}}:name==='next/image'?{__esModule:true,default:component('Image')}:new Proxy({},{get:(_target,key)=>component(String(key))}),mod,mod.exports);
  return mod.exports.default();
 }
 const campaign={policy:{version:'v1'},acknowledgment:{version:'v1'},configured:true,released:false,liveWorkReady:false,smsChannelEnabled:true};
@@ -31,15 +32,15 @@ function beneathDetails(root,target,inside=false){if(root===target)return inside
 assert.equal(beneathDetails(tree,stop),false,'Stop is never hidden in an expander');
 tree=page({...account,smsWorkReady:true},{...campaign,released:true},true);assert(all(tree).find(n=>n.type==='button'&&text(n)==='Start SMS outreach').props.disabled,'stale Start remains blocked');
 
-function budget(summary){let index=0;const mod={exports:{}};new Function('require','module','exports',code('components/budget-summary.tsx'))(name=>name==='react'?{useEffect(){},useState:()=>[index++===0?summary:'',()=>{}]}:require(name),mod,mod.exports);return mod.exports.BudgetSummary({onFund(){throw Error('Unexpected funding action');}});}
+function budget(summary){let index=0;const mod={exports:{}};new Function('require','module','exports',code('components/budget-summary.tsx'))(name=>name==='react'?{useEffect(){},useState:()=>[index++===0?summary:'',()=>{}]}:name==='@/lib/workspace-progress'?progress:require(name),mod,mod.exports);return mod.exports.BudgetSummary({onFund(){throw Error('Unexpected funding action');}});}
 const summary={spentCents:1750,analyzed:5,reservedCents:0,fundedCents:10000,balanceCents:8250,packs:[],screeningCandidates:3,activeContracts:0,explanation:'Synthetic account totals'};
-tree=budget(summary);assert.match(text(tree),/17.50/);assert.match(text(tree),/spent to date/);assert.match(text(tree),/5\s+properties researched/);
-assert.equal(all(tree).find(n=>n.type==='details').props.open,false,'advanced totals start collapsed');
-assert.equal(beneathDetails(tree,all(tree).find(n=>n.props?.['aria-label']==='Recorded work and spending')),false,'settled spend stays visible');
+tree=budget(summary);assert.match(text(tree),/17.50/);assert.match(text(tree),/spent to date/);assert.match(text(tree),/5\s+property analyses completed/);
+assert.equal(all(tree).find(n=>n.type==='details').props.open,undefined,'advanced totals start collapsed');
+assert.equal(beneathDetails(tree,all(tree).find(n=>n.props?.['aria-label']==='Recorded work and spending')),true,'settled spend remains accessible under the summary');
 tree=budget({...summary,spentCents:undefined});assert.match(text(tree),/Unavailable/);assert.doesNotMatch(text(tree),/\$0.00.*spent/,'missing spend is not fabricated zero');
-tree=budget({...summary,balanceCents:0});assert.equal(all(tree).find(n=>n.type==='details').props.open,true,'exhausted-budget explanation is visible');
+tree=page({...account,balanceCents:0,smsWorkReady:true},{...campaign,released:true});assert.match(text(tree),/Your available credits are used up|Your bot is paused/);assert.match(text(tree),/Review funding/,'zero-balance funding stays visible');
 const source=readFileSync(new URL('../components/live-workspace.tsx',import.meta.url),'utf8');
 assert(source.indexOf('<PropertyNextStep property={p}')>source.indexOf('<div className="property-details"'),'detailed next steps moved inside property disclosure');
 assert(source.indexOf('className="property-control"')>source.indexOf('<div className="property-details"'),'property controls remain inside opened details');
 assert(source.includes('Paused for this property'));assert(source.includes('Owner & contact'));
-console.log('PASS simplified workspace: one primary action, visible recorded balance/spend, early activity, accessible settings, Stop outside details/on refresh failure, stale Start hold, expanded exhausted-budget detail and retained property controls');
+console.log('PASS progress-aware simplified workspace: one primary action, visible recorded balance/spend, early activity, accessible settings, Stop outside details/on refresh failure, stale Start hold, expanded exhausted-budget detail and retained property controls');

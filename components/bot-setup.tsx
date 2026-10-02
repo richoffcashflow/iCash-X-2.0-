@@ -5,6 +5,7 @@ import {BotBuilding,type BotBuildPhase} from './bot-building';
 import {saveBotBuild,waitForBotCreationTransition,type SetupEditableField} from '@/lib/bot-build';
 import {BotBrand} from './bot-brand';
 import {FundingCheckout} from './funding-checkout';
+import {FreeSampleWorkspace} from './free-sample-workspace';
 import {defaultBotProfile,setupThemes,setupProfileSchema,type BotProfile,type BotSetup} from '@/lib/bot-setup';
 
 function track(event:string){void fetch('/api/setup/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event}),keepalive:true}).catch(()=>{});}
@@ -13,7 +14,8 @@ export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=
  const saveInFlight=useRef(false),saveController=useRef<AbortController|null>(null),mounted=useRef(true),retryBuild=useRef(false);
  const edited=useRef(new Set<SetupEditableField>());
  const [setup,setSetup]=useState<BotSetup|null>(null),[profile,setProfile]=useState<BotProfile>(defaultBotProfile);
- const [screen,setScreen]=useState<'entry'|'funding'>('entry');
+ const [screen,setScreen]=useState<'entry'|'sample'|'funding'>('entry');
+ function navigate(next:'entry'|'sample'|'funding',replace=false){setScreen(next);const hash=next==='entry'?'#setup':next==='sample'?'#example':'#funding';if(window.location.hash!==hash)window.history[replace?'replaceState':'pushState'](window.history.state,'',hash);}
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState('');
  const heading=useRef<HTMLHeadingElement>(null),ready=useRef(false),init=useRef<Promise<BotSetup>|null>(null);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;saveController.current?.abort();};},[]);
@@ -24,16 +26,16 @@ export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=
    const s=await init.current;if(!mounted.current)return;
    setSetup(s);
    setProfile(p=>({...defaultBotProfile,...s.profile,...Object.fromEntries([...edited.current].map(field=>[field,p[field]])),aiLogo:null}));
-   if(!edited.current.size&&s.stage>0&&s.profile.displayName?.trim())setScreen('funding');
+   if(!edited.current.size&&s.stage>0&&s.profile.displayName?.trim()){setScreen(window.location.hash==='#funding'?'funding':window.location.hash==='#setup'?'entry':'sample');if(!window.location.hash&&new URLSearchParams(window.location.search).get('payment')!=='funded')window.history.replaceState(window.history.state,'','#example');}
    // Payment confirmation always wins, including edits made while setup was loading.
    if(new URLSearchParams(window.location.search).get('payment')==='funded')setScreen('funding');
    if(s.stage>0)track('returned');
   }catch{init.current=null;if(mounted.current)setError('Connection interrupted. Your entries are still here.');}
   finally{if(mounted.current)setLoading(false);}
  }
- useEffect(()=>{if(new URLSearchParams(window.location.search).get('payment')==='funded')setScreen('funding');void load();},[]);
+ useEffect(()=>{if(new URLSearchParams(window.location.search).get('payment')==='funded')setScreen('funding');void load();const sync=()=>setScreen(window.location.hash==='#funding'?'funding':window.location.hash==='#example'?'sample':'entry');window.addEventListener('popstate',sync);window.addEventListener('hashchange',sync);return()=>{window.removeEventListener('popstate',sync);window.removeEventListener('hashchange',sync);};},[]);
  useEffect(()=>{onBrand(profile);},[profile,onBrand]);
- useEffect(()=>{if(!setup)return;track(screen==='entry'?'name_viewed':'funding_viewed');if(ready.current)heading.current?.focus();ready.current=true;},[screen,setup?.id]);
+ useEffect(()=>{if(!setup)return;if(screen!=='sample')track(screen==='entry'?'name_viewed':'funding_viewed');if(ready.current)heading.current?.focus();ready.current=true;},[screen,setup?.id]);
  async function save(){
   if(saveInFlight.current||loading)return false;
   const parsed=setupProfileSchema.safeParse({...profile,aiLogo:null});
@@ -50,7 +52,7 @@ export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=
    setSetup(saved);setProfile({...defaultBotProfile,...saved.profile,aiLogo:null});setBuildPhase('saved');
    await waitForBotCreationTransition(started,controller.signal,window.matchMedia('(prefers-reduced-motion: reduce)').matches);
    if(!mounted.current||controller.signal.aborted)return false;
-   retryBuild.current=false;setScreen('funding');setBuildPhase(null);return true;
+   retryBuild.current=false;navigate('sample');setBuildPhase(null);return true;
   }catch(e){if(mounted.current){retryBuild.current=true;setError(controller.signal.aborted?'The connection took too long. Try again to check and save your setup.':e instanceof Error&&e.message?e.message:'Could not save. Please retry.');setBuildPhase('error');}return false;}
   finally{clearTimeout(timeout);saveInFlight.current=false;if(mounted.current)setBusy(false);}
  }
@@ -61,16 +63,22 @@ export function BotSetupFlow({onBrand,onSignedIn}:{onBrand:(profile:BotProfile)=
    {screen==='entry'?<>
     <span className="setup-eyebrow">YOUR AI REAL ESTATE BOT</span>
     <h1 ref={heading} tabIndex={-1}>Create your bot.</h1>
-    <p className="setup-intro">Give it a name. Set your budget after your bot is created.</p>
+    <p className="setup-intro">Give it a name. Try a free deal example before you choose a budget.</p>
     <form className="setup-entry-form" onSubmit={e=>{e.preventDefault();void save();}}>
      <label className="setup-label" htmlFor="bot-name">Your bot’s name</label>
      <input className="setup-input" id="bot-name" autoComplete="off" maxLength={64} value={profile.displayName} onChange={e=>{edited.current.add('displayName');setProfile(p=>({...p,displayName:e.target.value}));setError('');}} placeholder="e.g. Scout" required disabled={busy}/>
      <button className="setup-primary" disabled={busy||loading||!profile.displayName.trim()}>{busy?<><LoaderCircle size={18} className="setup-spin"/> Saving your setup…</>:<>Create my bot<ArrowRight size={18}/></>}</button>
      <p className="practice-note">Free setup. No charges or outreach.</p>
     </form>
+   </>:screen==='sample'?<>
+    <div className="setup-progress"><span><Check size={14}/> Your bot is created</span></div>
+    <h1 className="sr-only" ref={heading} tabIndex={-1}>Your free sample workspace</h1>
+    <FreeSampleWorkspace botName={profile.displayName||'Your bot'} onContinue={()=>navigate('funding')}/>
+    <button type="button" className="sample-reset" onClick={()=>navigate('entry')}>Edit bot name</button>
    </>:<>
     <div className="setup-progress"><span><Check size={14}/> Your bot is created</span></div>
-    <h1 className="setup-ready-title" ref={heading} tabIndex={-1}>Fund your bot.</h1>
+    <button type="button" className="sample-reset" onClick={()=>navigate('sample',true)}>Back to free example</button>
+    <h1 className="setup-ready-title" ref={heading} tabIndex={-1}>Review your funding.</h1>
     {profile.displayName&&<div className="funnel-bot-summary"><BotBrand profile={profile}/><span>Setup saved · funding and required checks come next</span></div>}
     <div className="setup-funding"><FundingCheckout onSignedIn={onSignedIn}/></div>
    </>}
