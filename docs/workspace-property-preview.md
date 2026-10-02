@@ -21,3 +21,7 @@ Contract preparation is hidden during initial property research. Existing signin
 ## Verification
 
 Tests use synthetic data. Photo route tests cover tenant ownership, actual stored property IDs, mismatched provider records, invalid origins, provider failure, and private responses. Cache tests cover deduplication and account separation. Contract visibility and presentation tests cover early hidden controls and existing contract access. Production provider images and visual browser behavior must be separately checked after an authorized preview deployment.
+
+## Customer-facing labels
+
+Customer labels use “Property photo,” “Property data” and “Contact data.” The provider name stays in normalized records, API provenance, tests and internal implementation, but is not rendered as an application-added customer badge or explanation. Provider images are still displayed whole with object-fit:contain; original image bytes, copyright marks and proprietary notices are not cropped, covered, removed or altered. This does not establish broader white-label licensing rights. The public terms reviewed October 2, 2026 prohibit removing proprietary notices (section 2(e)): https://www.dealmachine.com/terms-of-service . No separate requirement for our own added badge was found in the image API documentation; any applicable contracted display attribution remains a release requirement.

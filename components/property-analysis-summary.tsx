@@ -11,7 +11,7 @@ export function PropertyAnalysisSummary({result}: {result: unknown}) {
    <div className="property-analysis-metric"><dt>Estimated repairs</dt><dd>{repairValue}</dd><small>{repairs.status === 'invalid' ? 'Repair range is inconsistent and needs review.' : repairs.status === 'range' ? 'Provider estimate range; not an inspection.' : repairs.status === 'baseline' ? 'Provider baseline estimate; no repair range recorded.' : 'No repair estimate recorded.'}{repairs.rangeCents && repairs.baselineCents !== null ? ` Baseline: ${analysisMoney(repairs.baselineCents)}.` : ''}</small></div>
    <div className="property-analysis-metric"><dt>Value after repairs (ARV)</dt><dd>{analysisMoney(view.arvCents)}</dd><small>{view.arvCents === null ? 'No estimated value recorded.' : 'Based on the saved property-value estimate. We have not verified what this home would sell for after repairs.'}</small></div>
   </dl>
-  <p className="property-analysis-source">Source: {view.source}{date && <> · Data recorded <time dateTime={view.fetchedAt!}>{date}</time></>}{repairs.condition && <> · Reported condition: {repairs.condition}</>}</p>
+  <p className="property-analysis-source">Property data{date && <> · Data recorded <time dateTime={view.fetchedAt!}>{date}</time></>}{repairs.condition && <> · Reported condition: {repairs.condition}</>}</p>
   <div className="property-analysis-comps"><strong>Nearby sold homes (comps)</strong><span>Not recorded</span><p>No verified nearby sales are saved with these numbers.</p></div>
  </section>;
 }

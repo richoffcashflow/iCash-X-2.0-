@@ -105,7 +105,7 @@ function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefre
 function PurchasedContacts({lookup}:{lookup:PurchasedLookup}){
  const contacts=lookup.contacts??[];
  return <section aria-label="Purchased contact lookup"><h5>Purchased contact lookup</h5>
-  <p>Source: {lookup.source??'Source unavailable'} · {lookup.fetchedAt?`Looked up ${safeLocalTime(lookup.fetchedAt)}`:lookup.created_at?`Lookup recorded ${safeLocalTime(lookup.created_at)}`:'Lookup time unavailable'}</p>
+  <p>Contact data · {lookup.fetchedAt?`Looked up ${safeLocalTime(lookup.fetchedAt)}`:lookup.created_at?`Lookup recorded ${safeLocalTime(lookup.created_at)}`:'Lookup time unavailable'}</p>
   <p>Ownership unverified. Outreach permission unverified. Source DNC flags are not legal clearance to call or text.</p>
   {contacts.length?<ul>{contacts.map((contact,index)=><li key={index}><strong>{contact.name??'Name unavailable'}</strong>
    {contact.phones.length?<ul>{contact.phones.map((phone,phoneIndex)=><li key={phoneIndex}>

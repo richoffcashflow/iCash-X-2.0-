@@ -14,10 +14,10 @@ const lookup={screening_id:'owned',created_at:'2026-10-01T01:02:03Z',fetchedAt:'
  {name:null,phones:[]}
 ]};
 const render=lookup=>renderToStaticMarkup(mod.exports.PurchasedContacts({lookup}));
-let html=render(lookup);
-for(const content of ['Purchased contact lookup','Synthetic Person','+12025550101','Mobile','+12025550102','Landline','Source: DealMachine',safeLocalTime(lookup.fetchedAt),'Ownership unverified','Outreach permission unverified','Source DNC flags are not legal clearance to call or text','Source DNC: flagged. Do not contact.','Source DNC: not flagged. Outreach permission remains unverified.','Source DNC: unknown. Outreach permission remains unverified.','Name unavailable','Phone number unavailable','Phone type unavailable','No phone numbers returned.'])assert.ok(html.includes(content),content);
+let html=render(lookup);assert.doesNotMatch(html,/DealMachine/i);
+for(const content of ['Purchased contact lookup','Synthetic Person','+12025550101','Mobile','+12025550102','Landline','Contact data',safeLocalTime(lookup.fetchedAt),'Ownership unverified','Outreach permission unverified','Source DNC flags are not legal clearance to call or text','Source DNC: flagged. Do not contact.','Source DNC: not flagged. Outreach permission remains unverified.','Source DNC: unknown. Outreach permission remains unverified.','Name unavailable','Phone number unavailable','Phone type unavailable','No phone numbers returned.'])assert.ok(html.includes(content),content);
 assert.doesNotMatch(html,/<button|<form|href=|tel:|mailto:|eligible to contact|cleared/i,'Lookup is a read-only research display');
-html=render({screening_id:'legacy'});assert.match(html,/Source unavailable/);assert.match(html,/Lookup time unavailable/);assert.match(html,/No contact details returned/);assert.match(html,/Ownership unverified/);
+html=render({screening_id:'legacy'});assert.match(html,/Contact data/);assert.match(html,/Lookup time unavailable/);assert.match(html,/No contact details returned/);assert.match(html,/Ownership unverified/);
 html=render({...lookup,fetchedAt:null,contacts:[]});assert.ok(html.includes('Lookup recorded '+safeLocalTime(lookup.created_at)));assert.match(html,/No contact details returned/);
 html=render({...lookup,contacts:[{name:'<script>synthetic</script>',phones:[{number:'<img src=x>',type:'<script>',doNotCall:false}]}]});assert.doesNotMatch(html,/<script>|<img /);assert.match(html,/&lt;script&gt;/);
 const all=root=>!root||typeof root!=='object'?[]:Array.isArray(root)?root.flatMap(all):[root,...all(root.props?.children)];

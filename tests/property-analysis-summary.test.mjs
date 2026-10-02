@@ -53,7 +53,7 @@ assert.match(rendered,/Estimated repairs.*\$40,000/);
 assert.match(rendered,/Value after repairs \(ARV\).*\$200,000/);
 assert.match(rendered,/not a sent, agreed or approved offer/);
 assert.match(rendered,/have not verified what this home would sell for after repairs/);
-assert.match(rendered,/DealMachine/);assert.match(rendered,/Oct 1, 2026/);
+assert.doesNotMatch(rendered,/DealMachine/i);assert.match(rendered,/Property data/);assert.match(rendered,/Oct 1, 2026/);
 assert.match(rendered,/Nearby sold homes \(comps\).*Not recorded/);
 rendered=text(mod.exports.PropertyAnalysisSummary({result:null}));
 assert.doesNotMatch(rendered,/\$0/,'missing estimates are never fabricated zeroes');
