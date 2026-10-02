@@ -136,10 +136,15 @@ export function createOwnerInboundProviders(
         cache: 'no-store', redirect: 'error', credentials: 'omit', signal,
       });
     } catch {
-      throw Error('OWNER_INBOUND_PROVIDER_UNAVAILABLE');
+      throw Object.assign(Error('OWNER_INBOUND_PROVIDER_UNAVAILABLE'), { providerFailure: 'network' });
     }
     // No retry, no regional fallback, and no raw provider error text in exceptions.
-    if (!response.ok || response.redirected || (response.url && response.url !== url)) {
+    if (!response.ok) {
+      // Preserve only the HTTP status for owner-only diagnostics, never a body,
+      // URL, Authorization value or raw provider error. Existing error code stays.
+      throw Object.assign(Error('OWNER_INBOUND_PROVIDER_UNAVAILABLE'), { providerHttpStatus: response.status });
+    }
+    if (response.redirected || (response.url && response.url !== url)) {
       throw Error('OWNER_INBOUND_PROVIDER_UNAVAILABLE');
     }
     let receipt: Receipt | null;

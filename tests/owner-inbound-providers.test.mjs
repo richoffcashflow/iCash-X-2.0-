@@ -126,6 +126,13 @@ for (const response of [
   const p = createOwnerInboundProviders(config, { env, fetcher: async () => { tries++; return response(); } });
   await rejects(() => p.conversation(conversationId), /^Error: OWNER_INBOUND_PROVIDER_(?:UNAVAILABLE|RECEIPT_INVALID)$/); equal(tries, 1);
 }
+// Diagnostics retain only numeric HTTP status or a fixed network marker.
+for (const status of [401,403,404,429,500]) {
+ const p=createOwnerInboundProviders(config,{env,fetcher:async()=>Response.json({error:'DO_NOT_EXPOSE_PRIVATE_BODY'},{status})});
+ await rejects(()=>p.twilio(callSid),error=>error.message==='OWNER_INBOUND_PROVIDER_UNAVAILABLE'&&error.providerHttpStatus===status&&!JSON.stringify(error).includes('DO_NOT_EXPOSE_PRIVATE_BODY'));
+}
+const network=createOwnerInboundProviders(config,{env,fetcher:async()=>{throw Error('DO_NOT_EXPOSE_PRIVATE_NETWORK_ERROR');}});
+await rejects(()=>network.twilio(callSid),error=>error.message==='OWNER_INBOUND_PROVIDER_UNAVAILABLE'&&error.providerFailure==='network'&&!JSON.stringify(error).includes('DO_NOT_EXPOSE_PRIVATE_NETWORK_ERROR'));
 const controller = new AbortController(); controller.abort();
 const aborted = createOwnerInboundProviders(config, { env, signal: controller.signal, fetcher: async (_url, { signal }) => { check(signal.aborted); signal.throwIfAborted(); } });
 await rejects(() => aborted.agent(), /PROVIDER_UNAVAILABLE/);

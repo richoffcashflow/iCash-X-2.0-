@@ -9,13 +9,23 @@ function owner(o:Owner){if(!isAudioOwner(o))throw Error('OWNER_REQUIRED');}
 function trustedAccountSid(){const sid=process.env.TWILIO_ACCOUNT_SID?.trim();if(!sid)throw Error('AUDIO_TWILIO_ACCOUNT_MISSING');if(!validOwnerInboundAccountSid(sid))throw Error('AUDIO_TWILIO_ACCOUNT_INVALID');return sid;}
 function providers(){
  const sid=trustedAccountSid();
- return createOwnerInboundProviders({agentId:target.agentId,branchId:target.branchId,phoneNumberId:target.phoneNumberId,twilioAccountSid:sid,elevenLabsRegion:'us',twilioRegion:'us1'},{env:{ELEVENLABS_API_KEY:process.env.ELEVENLABS_API_KEY,TWILIO_ACCOUNT_SID:sid,TWILIO_AUTH_TOKEN:process.env.TWILIO_AUTH_TOKEN?.trim()}});
+ const token=process.env.TWILIO_AUTH_TOKEN?.trim();if(!token)throw Error('AUDIO_TWILIO_TOKEN_MISSING');
+ return createOwnerInboundProviders({agentId:target.agentId,branchId:target.branchId,phoneNumberId:target.phoneNumberId,twilioAccountSid:sid,elevenLabsRegion:'us',twilioRegion:'us1'},{env:{ELEVENLABS_API_KEY:process.env.ELEVENLABS_API_KEY,TWILIO_ACCOUNT_SID:sid,TWILIO_AUTH_TOKEN:token}});
 }
 const latest=async()=>{const [r]=await db<AudioRun[]>('icash_owner_audio_once?id=eq.1&select=*&limit=1');return r;};
 function summary(r:AudioRun){return {status:r.state==='armed'&&Date.parse(r.expires_at)<=Date.now()?'expired':r.state,canArm:false,canCancel:r.state==='armed',canReconcile:['claimed','inspecting','needs_review'].includes(r.state)&&!!r.call_sid&&!!r.conversation_id,expiresAt:r.expires_at,result:r.result,maxDurationSeconds:60,customerCreditCharge:false,forwardingVerified:false};}
 async function review(){
  const api=providers();
- const read=async(call:()=>Promise<unknown>,code:string)=>{try{return await call();}catch{throw Error(code);}};
+ const read=async(call:()=>Promise<unknown>,code:string)=>{try{return await call();}catch(error){
+  if(code==='AUDIO_TWILIO_READ_UNAVAILABLE'&&error instanceof Error){
+   const status=(error as Error&{providerHttpStatus?:unknown}).providerHttpStatus;
+   if(error.message==='OWNER_INBOUND_PROVIDER_UNAVAILABLE'&&typeof status==='number'&&Number.isInteger(status)&&status>=100&&status<=599)throw Error(`AUDIO_TWILIO_HTTP_${status}`);
+   if(error.message==='OWNER_INBOUND_PROVIDER_UNAVAILABLE'&&(error as Error&{providerFailure?:unknown}).providerFailure==='network')throw Error('AUDIO_TWILIO_NETWORK_FAILURE');
+   if(error.message==='OWNER_INBOUND_PROVIDER_CREDENTIALS_UNAVAILABLE')throw Error('AUDIO_TWILIO_TOKEN_INVALID');
+   if(error.message==='OWNER_INBOUND_PROVIDER_RECEIPT_INVALID')throw Error('AUDIO_TWILIO_RESPONSE_INVALID');
+  }
+  throw Error(code);
+ }};
  const priorSid='CAc7bc8aa402619ced824617d1efa894d9';
  const [agent,branch,phone,incoming,prior]=await Promise.all([read(api.agent,'AUDIO_PRIVATE_AGENT_READ_UNAVAILABLE'),read(api.branch,'AUDIO_BRANCH_READ_UNAVAILABLE'),read(api.phone,'AUDIO_PHONE_READ_UNAVAILABLE'),read(api.incomingAgent,'AUDIO_MAIN_READ_UNAVAILABLE'),read(()=>api.twilio(priorSid),'AUDIO_TWILIO_READ_UNAVAILABLE')]);
  const receipt=prior as Record<string,unknown>;
