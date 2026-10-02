@@ -13,7 +13,11 @@ const schema=z.discriminatedUnion('action',[
  z.object({action:z.literal('cancel')}).strict(),z.object({action:z.literal('reconcile')}).strict(),
 ]);
 function requestAllowed(req:Request,write=false){const u=new URL(req.url);return !u.search&&req.headers.get('host')===u.host&&['same-origin','none',null].includes(req.headers.get('sec-fetch-site'))&&(write?req.headers.get('origin')===u.origin:!req.headers.has('origin')||req.headers.get('origin')===u.origin);}
-function failure(e:unknown){return reply('held',e instanceof Error&&['SIGN_IN_REQUIRED','ACCOUNT_REQUIRED'].includes(e.message)?401:503);}
+function failure(e:unknown){
+ const key=e instanceof Error?e.message:'';
+ const reasons:Record<string,string>={AUDIO_PRIVATE_AGENT_READ_UNAVAILABLE:'private_agent_read_unavailable',AUDIO_BRANCH_READ_UNAVAILABLE:'branch_read_unavailable',AUDIO_PHONE_READ_UNAVAILABLE:'phone_read_unavailable',AUDIO_MAIN_READ_UNAVAILABLE:'main_read_unavailable',SIGN_IN_REQUIRED:'sign_in_required',ACCOUNT_REQUIRED:'sign_in_required',AUDIO_NOT_CONFIGURED:'twilio_account_configuration_unavailable','Database not configured':'database_configuration_unavailable','Database request failed':'database_access_unavailable',OWNER_INBOUND_PROVIDER_UNAVAILABLE:'provider_unavailable',OWNER_INBOUND_PROVIDER_RECEIPT_INVALID:'provider_receipt_invalid',OWNER_INBOUND_PROVIDER_CREDENTIALS_UNAVAILABLE:'provider_credentials_unavailable',OWNER_INBOUND_PROVIDER_CONFIG_INVALID:'provider_configuration_invalid',AUDIO_REVIEW_CHANGED:'provider_review_changed',AUDIO_ALREADY_CONSUMED:'test_already_consumed',AUDIO_ARM_UNCONFIRMED:'arm_outcome_unknown'};
+ return NextResponse.json({status:'held',canArm:false,reason:Object.hasOwn(reasons,key)?reasons[key]:'readiness_unavailable'},{status:['SIGN_IN_REQUIRED','ACCOUNT_REQUIRED'].includes(key)?401:503,headers});
+}
 export async function GET(req:Request){try{const o=await workAccount();if(!isAudioOwner(o))return reply('owner_required',403);if(!requestAllowed(req))return reply('invalid_request',403);return NextResponse.json(await audioOnceStatus(o),{headers});}catch(e){return failure(e);}}
 export async function POST(req:Request){
  try{

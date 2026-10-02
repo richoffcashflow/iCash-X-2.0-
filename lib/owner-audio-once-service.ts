@@ -12,7 +12,12 @@ function providers(){
 }
 const latest=async()=>{const [r]=await db<AudioRun[]>('icash_owner_audio_once?id=eq.1&select=*&limit=1');return r;};
 function summary(r:AudioRun){return {status:r.state==='armed'&&Date.parse(r.expires_at)<=Date.now()?'expired':r.state,canArm:false,canCancel:r.state==='armed',canReconcile:['claimed','inspecting','needs_review'].includes(r.state)&&!!r.call_sid&&!!r.conversation_id,expiresAt:r.expires_at,result:r.result,maxDurationSeconds:60,customerCreditCharge:false,forwardingVerified:false};}
-async function review(){const api=providers(),[agent,branch,phone,incoming]=await Promise.all([api.agent(),api.branch(),api.phone(),api.incomingAgent()]);return {api,review:inspectAudioOnce(agent,branch,phone,incoming)};}
+async function review(){
+ const api=providers();
+ const read=async(call:()=>Promise<unknown>,code:string)=>{try{return await call();}catch{throw Error(code);}};
+ const [agent,branch,phone,incoming]=await Promise.all([read(api.agent,'AUDIO_PRIVATE_AGENT_READ_UNAVAILABLE'),read(api.branch,'AUDIO_BRANCH_READ_UNAVAILABLE'),read(api.phone,'AUDIO_PHONE_READ_UNAVAILABLE'),read(api.incomingAgent,'AUDIO_MAIN_READ_UNAVAILABLE')]);
+ return {api,review:inspectAudioOnce(agent,branch,phone,incoming)};
+}
 export async function audioOnceStatus(o:Owner){
  owner(o);const run=await latest();if(run)return summary(run);
  const {review:r}=await review();
