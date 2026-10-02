@@ -36,3 +36,5 @@ assert(ui.includes('Owner quick-test setup value'));assert(ui.includes('!action&
 for(const label of ['Twilio uses reception routing','Original phone routing saved','Dedicated branch reviewed'])assert(ui.includes(label));assert(ui.includes("review.checks[key]?'Yes':'No'"));
 
 assert(ui.includes('Retry the corrected isolated branch request'));assert(ui.includes('Provider validation evidence'));assert(!ui.includes('providerFailure.message'));
+
+assert(ui.includes('Branch policy checks'));assert(ui.includes('Branch field shapes'));assert(!ui.includes('JSON.stringify(review)'));
