@@ -6,16 +6,20 @@ type Owner={accountId:string;userId:string};
 const target=ownerInboundTarget;
 const params=(o:Owner)=>({p_account:o.accountId,p_user:o.userId});
 function owner(o:Owner){if(!isAudioOwner(o))throw Error('OWNER_REQUIRED');}
+function trustedAccountSid(){const sid=process.env.TWILIO_ACCOUNT_SID?.trim();if(!sid)throw Error('AUDIO_TWILIO_ACCOUNT_MISSING');if(!validOwnerInboundAccountSid(sid))throw Error('AUDIO_TWILIO_ACCOUNT_INVALID');return sid;}
 function providers(){
- const sid=process.env.TWILIO_ACCOUNT_SID;if(!validOwnerInboundAccountSid(sid))throw Error('AUDIO_NOT_CONFIGURED');
- return createOwnerInboundProviders({agentId:target.agentId,branchId:target.branchId,phoneNumberId:target.phoneNumberId,twilioAccountSid:sid,elevenLabsRegion:'us',twilioRegion:'us1'},{env:{ELEVENLABS_API_KEY:process.env.ELEVENLABS_API_KEY,TWILIO_ACCOUNT_SID:sid,TWILIO_AUTH_TOKEN:process.env.TWILIO_AUTH_TOKEN}});
+ const sid=trustedAccountSid();
+ return createOwnerInboundProviders({agentId:target.agentId,branchId:target.branchId,phoneNumberId:target.phoneNumberId,twilioAccountSid:sid,elevenLabsRegion:'us',twilioRegion:'us1'},{env:{ELEVENLABS_API_KEY:process.env.ELEVENLABS_API_KEY,TWILIO_ACCOUNT_SID:sid,TWILIO_AUTH_TOKEN:process.env.TWILIO_AUTH_TOKEN?.trim()}});
 }
 const latest=async()=>{const [r]=await db<AudioRun[]>('icash_owner_audio_once?id=eq.1&select=*&limit=1');return r;};
 function summary(r:AudioRun){return {status:r.state==='armed'&&Date.parse(r.expires_at)<=Date.now()?'expired':r.state,canArm:false,canCancel:r.state==='armed',canReconcile:['claimed','inspecting','needs_review'].includes(r.state)&&!!r.call_sid&&!!r.conversation_id,expiresAt:r.expires_at,result:r.result,maxDurationSeconds:60,customerCreditCharge:false,forwardingVerified:false};}
 async function review(){
  const api=providers();
  const read=async(call:()=>Promise<unknown>,code:string)=>{try{return await call();}catch{throw Error(code);}};
- const [agent,branch,phone,incoming]=await Promise.all([read(api.agent,'AUDIO_PRIVATE_AGENT_READ_UNAVAILABLE'),read(api.branch,'AUDIO_BRANCH_READ_UNAVAILABLE'),read(api.phone,'AUDIO_PHONE_READ_UNAVAILABLE'),read(api.incomingAgent,'AUDIO_MAIN_READ_UNAVAILABLE')]);
+ const priorSid='CAc7bc8aa402619ced824617d1efa894d9';
+ const [agent,branch,phone,incoming,prior]=await Promise.all([read(api.agent,'AUDIO_PRIVATE_AGENT_READ_UNAVAILABLE'),read(api.branch,'AUDIO_BRANCH_READ_UNAVAILABLE'),read(api.phone,'AUDIO_PHONE_READ_UNAVAILABLE'),read(api.incomingAgent,'AUDIO_MAIN_READ_UNAVAILABLE'),read(()=>api.twilio(priorSid),'AUDIO_TWILIO_READ_UNAVAILABLE')]);
+ const receipt=prior as Record<string,unknown>;
+ if(!receipt||receipt.sid!==priorSid||receipt.account_sid!==trustedAccountSid()||receipt.from!==target.ownerPhone||receipt.to!==target.ingressNumber||receipt.direction!=='inbound')throw Error('AUDIO_TWILIO_RECEIPT_MISMATCH');
  return {api,review:inspectAudioOnce(agent,branch,phone,incoming)};
 }
 export async function audioOnceStatus(o:Owner){
@@ -44,7 +48,7 @@ export async function beginAudioOnce(call:OwnerInboundCall){
  try{
   const api=providers(),[agent,branch,phone,twilio,incoming]=await Promise.all([api.agent(),api.branch(),api.phone(),api.twilio(call.call_sid),api.incomingAgent()]);
   const r=inspectAudioOnce(agent,branch,phone,incoming);
-  if(!r.safe||r.hash!==run.config_hash||r.version!==run.version_id||!inspectAudioCall(run,twilio,process.env.TWILIO_ACCOUNT_SID))throw Error('AUDIO_HELD');
+  if(!r.safe||r.hash!==run.config_hash||r.version!==run.version_id||!inspectAudioCall(run,twilio,trustedAccountSid()))throw Error('AUDIO_HELD');
   const claimed=await db<AudioRun|null>('rpc/icash_claim_owner_audio_once','POST',{p_call_sid:call.call_sid,p_conversation:call.conversation_id,p_hash:r.hash,p_version:r.version});
   if(!claimed)throw Error('AUDIO_CLAIM_UNCONFIRMED');
   return audioOnceInitiation(claimed);
@@ -57,7 +61,7 @@ export async function reconcileAudioOnceRun(o:Owner){
   const api=providers(),[twilio,conversation]=await Promise.all([api.twilio(run.call_sid),api.conversation(run.conversation_id)]);
   const t=twilio as {status?:string},v=conversation as {status?:string};
   if(['ringing','queued','in-progress'].includes(t.status??'')||['initiated','in-progress','processing'].includes(v.status??''))return {...summary(run),status:'provider_processing'};
-  const result=reconcileAudioOnce(run,twilio,conversation,process.env.TWILIO_ACCOUNT_SID),completed=await finish(run,result);
+  const result=reconcileAudioOnce(run,twilio,conversation,trustedAccountSid()),completed=await finish(run,result);
   if(!completed)throw Error('AUDIO_RESULT_UNCONFIRMED');return summary(completed);
  }catch{return {...summary(run),status:'needs_review',canArm:false};}
 }
