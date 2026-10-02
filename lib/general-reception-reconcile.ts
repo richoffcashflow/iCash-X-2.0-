@@ -1,7 +1,19 @@
-import {createHmac} from 'node:crypto';
+import {createHash,createHmac} from 'node:crypto';
 import {boundedBody,receptionReceiptProfile,receptionCompletionArgs,receptionTarget,type ReceptionEnv,type ReceptionDeps} from './general-reception.ts';
 const obj=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const hold=(reason:string)=>({status:'held',reason,message:'Call verification is still held for review ('+reason.replaceAll('_',' ')+'). The customer reservation remains held.',settled:false,providerMarginVerified:false});
+// Only called after both canonical GET receipts pass the exact call binding.
+// USD micros are exact; unknown units, credits and excess precision remain held.
+function knownProviderCosts(call:Record<string,unknown>,conversation:Record<string,unknown>){
+ const micros=(v:string)=>{if(!/^(?:0|[1-9]\d{0,9})(?:\.\d{1,6})?$/.test(v))return null;const [a,b='']=v.split('.'),n=Number(a)*1000000+Number(b.padEnd(6,'0'));return Number.isSafeInteger(n)?n:null;};
+ const price=call.price,fiat=obj(conversation.metadata).cost_fiat;
+ const twilioUsdMicros=call.status==='completed'&&call.price_unit==='USD'&&typeof price==='string'&&(/^-/.test(price)||/^0(?:\.0+)?$/.test(price))?micros(price.replace(/^-/,'')):null;
+ const elevenLabsUsdMicros=conversation.status==='done'&&typeof fiat==='number'&&Number.isFinite(fiat)&&fiat>=0?micros(String(fiat)):null;
+ const sum=twilioUsdMicros!==null&&elevenLabsUsdMicros!==null?twilioUsdMicros+elevenLabsUsdMicros:null;
+ return {currency:'USD',twilioUsdMicros,elevenLabsUsdMicros,providerSubtotalUsdMicros:sum!==null&&Number.isSafeInteger(sum)?sum:null,
+  twilioReceiptHash:createHash('sha256').update(JSON.stringify(call)).digest('hex'),elevenLabsReceiptHash:createHash('sha256').update(JSON.stringify(conversation)).digest('hex'),
+  allInCostVerified:false,scope:'twilio_call_connectivity_and_elevenlabs_conversation_only'};
+}
 /** Called only by the fixed authenticated owner control, never by caller requests.
  * No new webhook secret is needed: both receipts are obtained over authenticated
  * fixed-origin provider APIs using existing server credentials. No provider writes. */
@@ -37,6 +49,6 @@ export async function reconcileReception(env:ReceptionEnv,deps:ReceptionDeps){
   const args=receptionCompletionArgs(data);if(!args)return hold('completion_binding_invalid');
   const finished=await deps.rpc('icash_finish_general_reception',args,signal);
   if(!finished)return hold('ledger_binding_conflict');
-  return {status:data.status==='done'?'completed':'failed',durationSeconds:duration,customerChargeCapCents:profile.customerChargeCapCents,settled:false,providerMarginVerified:false,message:'Call completion verified from both providers. Cost reconciliation is still held; no charge above the reservation is authorized.'};
+  return {status:data.status==='done'?'completed':'failed',durationSeconds:duration,customerChargeCapCents:profile.customerChargeCapCents,costEvidence:knownProviderCosts(call,data),settled:false,providerMarginVerified:false,message:'Call completion verified from both providers. Cost reconciliation is still held; no charge above the reservation is authorized.'};
  }catch{return hold('provider_receipt_unavailable');}
 }

@@ -22,3 +22,7 @@ assert.equal((await reconcileReception({},{})).reason,'provider_configuration_mi
 console.log('Reception readback: authenticated fixed-origin provider GETs, unique lookup, exact nonce/CallSID/branch/version/carrier binding, no secret creation, uncertain holds and exact profile reservation passed');
 
 const quick=fixture(s=>Object.assign(s.receipt,{call_profile:'owner_quick_test',rate_id:receptionProfiles.owner_quick_test.rateId,max_duration_seconds:60,customer_charge_cap_cents:65}));assert.equal((await quick.run()).customerChargeCapCents,65);assert.equal((await fixture(s=>{s.conversation.metadata.call_duration_secs=500;}).run()).status,'completed');
+
+const priced=await fixture(s=>{s.carrier.price='-0.0085';s.carrier.price_unit='USD';s.conversation.metadata.cost_fiat=0.029;}).run();assert.equal(priced.costEvidence.twilioUsdMicros,8500);assert.equal(priced.costEvidence.elevenLabsUsdMicros,29000);assert.equal(priced.costEvidence.providerSubtotalUsdMicros,37500);assert.equal(priced.costEvidence.allInCostVerified,false);assert.equal(priced.settled,false);
+for(const price of ['0.0085','-0.0000001','-1e-3',null]){const p=await fixture(s=>{s.carrier.price=price;s.carrier.price_unit='USD';s.conversation.metadata.cost=123;}).run();assert.equal(p.costEvidence.twilioUsdMicros,null);assert.equal(p.costEvidence.elevenLabsUsdMicros,null);}
+assert.equal((await fixture(s=>{s.carrier.price='0';s.carrier.price_unit='USD';s.conversation.metadata.cost_fiat=0;}).run()).costEvidence.providerSubtotalUsdMicros,0);
