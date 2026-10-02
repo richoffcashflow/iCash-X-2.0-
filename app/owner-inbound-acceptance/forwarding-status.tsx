@@ -19,23 +19,23 @@ export default function ForwardingStatus(){
    if(!response.ok){const error=z.object({status:z.string()}).safeParse(body);setMessage(error.success&&Object.hasOwn(errors,error.data.status)?errors[error.data.status]:'Forwarding status is unavailable. Try checking again later.');return;}
    const parsed=resultSchema.safeParse(body);
    if(!parsed.success){setMessage('Forwarding status is unknown because the response could not be verified.');return;}
-   setResult(parsed.data);setMessage('Read-only forwarding status received.');
+   setResult(parsed.data);setMessage('Contiguity API forwarding status received.');
   }catch{if(mounted.current)setMessage('Forwarding status is unavailable. Try checking again later.');}
   finally{if(inFlight.current===controller)inFlight.current=null;if(mounted.current)setBusy(false);}
  }
  return <section aria-label="Source number forwarding status" style={{border:'1px solid #bbb',borderRadius:8,padding:16,marginBlock:20}}>
   <h2>Call forwarding</h2>
-  <p>This check reads the current Contiguity setting. It does not change forwarding or start a call.</p>
+  <p>This check reads Contiguity's reported API setting. Manual carrier changes may not appear in its cache. It does not change forwarding or start a call.</p>
   <button type="button" disabled={busy} onClick={refresh}>{busy?'Checking forwarding…':'Check forwarding status'}</button>
   <p role="status" aria-live="polite">{message}</p>
   {result&&<dl>
    <dt>Leased source</dt><dd>{result.sourcePhone}</dd>
-   <dt>Forwarding</dt><dd>{result.enabled?'Enabled':'Disabled'}</dd>
-   <dt>Provider status</dt><dd>{result.providerStatus==='active'?'Active on the line':'Queued; change is pending'}</dd>
+   <dt>API-reported forwarding</dt><dd>{result.enabled?'Enabled':'Disabled'}</dd>
+   <dt>API change status</dt><dd>{result.providerStatus==='active'?'Active (API state)':'Queued; change is pending'}</dd>
    <dt>Destination</dt><dd>{result.destination??'None'}</dd>
    <dt>Expected Twilio destination</dt><dd>{result.expectedDestination}</dd>
    {result.estimatedCompletion!==null&&<><dt>Estimated completion</dt><dd>{new Date(result.estimatedCompletion).toLocaleString()}</dd></>}
-   <dt>Route configuration</dt><dd>{result.routeConfigured?'Active forwarding matches the expected destination':'Not confirmed active at the expected destination'}</dd>
+   <dt>API-reported route</dt><dd>{result.routeConfigured?'API reports active forwarding to the expected destination':'API does not confirm active forwarding to the expected destination'}</dd>
    <dt>Checked</dt><dd>{new Date(result.checkedAt).toLocaleString()}</dd>
   </dl>}
   <p>This forwarding check does not verify an end-to-end call or forwarding charges. See the private audio test result below for call verification.</p>
