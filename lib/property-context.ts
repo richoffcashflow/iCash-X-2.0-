@@ -1,3 +1,4 @@
+import {dealMachinePhoto} from './property-photo.ts';
 import {screenEquity} from './equity-screen.ts';
 import {normalizeDealMachineRepairs} from './dealmachine-repairs.ts';
 import {calculateHouseOffer} from './offer-policy.ts';
@@ -17,6 +18,7 @@ export function propertyContext(raw:unknown,id:string,fetchedAt:string){
  const screening=arvCents!==null&&repairCents!==null?Number(BigInt(arvCents)*BigInt(7000)/BigInt(10000)-BigInt(repairCents)):null;
  const arvEstimate={cents:arvCents,sourceField:'estimated_value' as const,reviewed:false as const,usage:'screening_assumption' as const};
  return {propertyId:id,source:'dealmachine' as const,fetchedAt,address,legalDescription:text(d.legal_description,12000),legalDescriptionSource:'dealmachine.legal_description' as const,legalDescriptionVerified:false as const,
+  images:(()=>{const photo=dealMachinePhoto(d.images);return photo?{[photo.view]:photo.url}:null;})(),
   bedrooms:number(d.num_bedrooms),bathrooms:number(d.num_bathrooms),livingAreaSqft:number(d.living_area_sqft),yearBuilt:number(d.year_built),
   estimatedMarketValueCents:arvCents,arvEstimate,estimatedEquityCents:screenEquity(d,screening).equityCents,
   financialScreening:screenEquity(d,screening),

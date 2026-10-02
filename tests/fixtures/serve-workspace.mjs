@@ -3,6 +3,7 @@
 // Open http://localhost:3006/?fixture=volume (or empty, error, guest).
 import http from 'node:http';
 import {makeWorkspaceFixture,fixtureAccount,uuid} from './workspace-volume.mjs';
+const appPort=Number(process.env.APP_PORT||3005),port=Number(process.env.PORT||3006);
 let scenario='volume';let setup={id:uuid(9999),revision:0,stage:0,profile:{displayName:'',theme:'ink',logo:'monogram',voice:'sarah',market:'Nationwide',marketMode:'nationwide',aiLogo:null,contracts:true,buyers:true}};const manualIds=new Set(),handled=new Set();
 function json(res,value,status=200){res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(value));}
 http.createServer(async(req,res)=>{
@@ -15,6 +16,7 @@ http.createServer(async(req,res)=>{
   if(url.pathname==='/api/billing/daily')return json(res,{ready:false,plan:null});
   if(url.pathname==='/api/account')return json(res,scenario==='guest'?{signedIn:false,signInReady:false}:{...fixtureAccount,paused:scenario!=='running',activeWork:scenario==='running',smsWorkReady:scenario==='running'});
   if(url.pathname==='/api/work/outreach-campaign')return req.method==='GET'?json(res,{policy:{version:'fixture-policy-v1',text:'FICTIONAL QA responsibilities. No recipient permission or real campaign is created.',mode:'sms_inbound'},acknowledgment:{version:'fixture-policy-v1',acceptedAt:'2026-10-01T12:00:00.000Z'},configured:true,released:scenario==='running',liveWorkReady:false,smsChannelEnabled:true}):json(res,{error:'QA only: campaign saves disabled.'},409);
+  if(url.pathname==='/api/work/property-photo')return json(res,{photo:null});
   if(url.pathname==='/api/work/activity')return scenario==='error'?json(res,{error:'Fictional QA network failure.'},503):json(res,makeWorkspaceFixture({count:scenario==='empty'?0:scenario==='paused'?6:48,page:Number(url.searchParams.get('page')||0),attentionPage:Number(url.searchParams.get('attentionPage')||0),query:url.searchParams.get('query')||'',screeningId:url.searchParams.get('screeningId')||'',manualIds:[...manualIds],handled:[...handled]}));
   if(url.pathname==='/api/work/control'){if(body.action==='pause')scenario='paused';else if(body.action==='resume')return json(res,{error:'QA only: starting is disabled.'},409);else body.action==='takeover'?manualIds.add(body.screeningId):manualIds.delete(body.screeningId);return json(res,{saved:true});}
   if(url.pathname==='/api/work/text-attention'){handled.add(body.id);return json(res,{saved:true});}
@@ -30,5 +32,5 @@ http.createServer(async(req,res)=>{
   if(url.pathname==='/api/work/review-status')return json(res,{items:[{key:'contact_permission',title:'Contact permission',status:'review_required',detail:'This fictional fixture has no verified outreach permission.',action:'operator_review'}]});
   return json(res,{error:'This action is disabled in the local QA fixture.'},503);
  }
- const upstream=http.request({hostname:'localhost',port:3005,path:req.url,method:req.method,headers:req.headers},r=>{res.writeHead(r.statusCode,r.headers);r.pipe(res);});upstream.on('error',()=>{res.writeHead(502);res.end('Start the local Next.js server on port 3005.');});req.pipe(upstream);
-}).listen(3006,'127.0.0.1',()=>console.log('Fictional UI QA only: http://localhost:3006/?fixture=volume. All API calls are intercepted.'));
+ const upstream=http.request({hostname:'localhost',port:appPort,path:req.url,method:req.method,headers:req.headers},r=>{res.writeHead(r.statusCode,r.headers);r.pipe(res);});upstream.on('error',()=>{res.writeHead(502);res.end('Start the local Next.js server on port 3005.');});req.pipe(upstream);
+}).listen(port,'127.0.0.1',()=>console.log(`Fictional UI QA only: http://localhost:${port}/?fixture=volume. All API calls are intercepted.`));
