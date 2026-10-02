@@ -1,3 +1,4 @@
+import {propertyReceptionPolicy,propertyReceptionPolicyHash,propertyReceptionGreeting,propertyReceptionPrompt} from '../lib/reception-property-context.ts';
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 import {readFileSync} from 'node:fs';
@@ -31,6 +32,7 @@ function fixture(options={}){
  };
  const rpc=async(name,body)=>{
   rpcCalls.push({name,body});
+  if(name==='icash_reception_property_context'){assert(reservation,'No context before admission');if(options.contextThrows)throw Error('read unavailable');return options.propertyContext??null;}
   if(name==='icash_get_general_reception_config')return options.missingConfig?null:c;
   if(name==='icash_reserve_general_reception'){
    if(options.denied||dedup.has(body.p_call_sid))return {allowed:false};
@@ -89,3 +91,23 @@ for(const node of [{type:'start',position:{x:0,y:0},edge_order:['execute']},{typ
 
 {const f=fixture({mutate:({c,agent,branch})=>{agent.platform_settings.workspace_overrides={webhooks:{post_call_webhook_id:null,events:['transcript'],send_audio:false}};c.config_hash=inspectReceptionAgent(c,agent,branch).hash;}});assert.match(await(await f.handler.inbound(request())).text(),/<Connect>/);}
 for(const workspace of [{},{webhooks:{}},{webhooks:{post_call_webhook_id:'hook_external'}},{webhooks:{post_call_webhook_id:''}}]){const f=fixture({workspace});assert.equal(await(await f.handler.inbound(request())).text(),rejectTwiml);assert(!f.reservation);}
+
+// A policy opt-in must match a separately reviewed provider branch and exact hash.
+const propertyMutation=({c,agent,branch})=>{
+ Object.assign(c,{context_policy:propertyReceptionPolicy,context_policy_hash:propertyReceptionPolicyHash,context_approval_reference:'local explicit review only'});
+ agent.conversation_config.agent.first_message=propertyReceptionGreeting;agent.conversation_config.agent.prompt.prompt=propertyReceptionPrompt;
+ c.config_hash=inspectReceptionAgent(c,agent,branch).hash;
+};
+for(const propertyContext of [{status:'matched',address:'45 Oak Road',returningName:'Jane',maxOfferCents:42}, {status:'ambiguous',addresses:['Private']},null]){
+ const f=fixture({mutate:propertyMutation,propertyContext});assert.match(await(await f.handler.inbound(request())).text(),/<Connect>/);
+ const names=f.rpcCalls.map(c=>c.name);assert(names.indexOf('icash_reception_property_context')>names.indexOf('icash_reserve_general_reception'));
+ const body=JSON.parse(f.calls.find(c=>c.init.method==='POST').init.body),vars=body.conversation_initiation_client_data.dynamic_variables;
+ assert(vars.icash_property_greeting.includes(propertyContext?.status==='matched'?'Hi Jane.':'Which property'));
+ assert(!JSON.stringify(vars).includes('maxOfferCents'));assert(!JSON.stringify(vars).includes('Private'));
+ assert.equal(f.calls.filter(c=>c.init.method==='POST').length,1);
+}
+const readFailure=fixture({mutate:propertyMutation,contextThrows:true});assert.match(await(await readFailure.handler.inbound(request())).text(),/<Connect>/);assert.equal(readFailure.rpcCalls.filter(c=>c.name==='icash_reserve_general_reception').length,1);
+const deniedContext=fixture({mutate:propertyMutation,denied:true});await deniedContext.handler.inbound(request());assert(!deniedContext.rpcCalls.some(c=>c.name==='icash_reception_property_context'));
+for(const mutate of [x=>{propertyMutation(x);x.c.context_policy_hash='invalid';},x=>{propertyMutation(x);x.agent.conversation_config.agent.first_message=receptionGreeting;},x=>{propertyMutation(x);x.c.context_approval_reference='';}]){const f=fixture({mutate});assert.equal(await(await f.handler.inbound(request())).text(),rejectTwiml);assert(!f.rpcCalls.some(c=>c.name==='icash_reserve_general_reception'));}
+const upgradedQuick=fixture({mutate:x=>{quickMutation(x);propertyMutation(x);},propertyContext:{status:'matched',address:'45 Oak Road'}});assert.match(await(await upgradedQuick.handler.inbound(request())).text(),/<Connect>/);assert.equal(upgradedQuick.reservation.customer_charge_cap_cents,65);assert.equal(upgradedQuick.reservation.max_duration_seconds,60);
+console.log('Active reception property upgrade: separately reviewed fingerprint, admitted account context lookup, safe failure/ambiguity, exactly-once registration and preserved owner-test cap passed');

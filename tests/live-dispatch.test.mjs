@@ -8,7 +8,7 @@ import {boundedVoiceSmsContext,voiceSmsInstructions} from '../lib/voice-sms-cont
 import {buyerCallInstructions} from '../lib/buyer-call-policy.ts';
 import {contactEligibility,callEligibility,verifiedOfferCeiling} from '../lib/live-dispatch-policy.ts';
 import {evaluateLaunch} from '../lib/launch-readiness-policy.ts';
-import {productionDealInstructions,acquisitionOpeners} from '../lib/deal-conversation.ts';
+import {sellerFirstMessage,sellerCallPrompt} from '../lib/seller-call-context.ts';
 const now=Date.parse('2026-09-29T16:00:00Z');
 const realNow=Date.now;Date.now=()=>now;
 const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:100000,raw:{data:{dm_property_id:'prop_123',full_address:'Fixture only',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}}};
@@ -24,6 +24,7 @@ assert.equal(verifiedOfferCeiling(9000000,undefined,now),null);
 assert.equal(verifiedOfferCeiling(9000000,{max_offer_cents:8000000,expires_at:new Date(now-1).toISOString()},now),null);
 const config={tts:{voice_id:'voice'},conversation:{max_duration_seconds:600},agent:{prompt:{tool_ids:['callback','handoff']}}};
 const c={enabled:true,agent_id:'agent_fixture',phone_number_id:'number',agent_config_hash:createHash('sha256').update(JSON.stringify(config)).digest('hex'),reviewed_until:new Date(now+100000).toISOString(),seller_rate_id:'rate',buyer_rate_id:'buyer-rate',max_duration_seconds:600,required_tool_ids:['callback','handoff']};
+let outboundBody,contextOverrides=true;
 let buyerApproved=true,callbackId=null,providerNumber='+14243948384',suppressed=false,paced=true;let records=[],postCount=0,allowClaim=true,paused=false,timeout=false,jobState='issued',practice=false,quoteSeconds=600;
 const db=async(path,method,body)=>{
  records.push({path,method,body});
@@ -44,17 +45,24 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_operation_rates'))return [{operation:permission.party==='buyer'?'buyer_call':'seller_call',enabled:true,expires_at:c.reviewed_until,voice_max_duration_seconds:quoteSeconds}];
  if(path.startsWith('icash_offer_authorities'))return [];
  if(path==='rpc/icash_claim_reviewed_voice_job'){if(allowClaim)jobState='dispatching';return allowClaim;}
+ if(path.startsWith('icash_live_conversations?')){assert(path.includes('account_id=eq.account&screening_id=eq.screening&contact_key=eq.'));assert(path.includes('party=eq.seller&state=eq.complete&operation_key=like.voice:*'));return [];}
  if(path==='icash_live_conversations')return [];
  throw Error('Unexpected request '+path);
 };
-const elevenRequest=async(path,body)=>{if(path.includes('/phone-numbers/'))return {phone_number:providerNumber};if(!body)return {conversation_config:config};postCount++;if(timeout)throw Error('timeout');return {success:true,conversation_id:'conv_fixture',callSid:'CA'+'1'.repeat(32)};};
-globalThis.__voiceTest={sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation:async()=>records.push({reserve:true}),contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,productionDealInstructions,acquisitionOpeners};
+const elevenRequest=async(path,body)=>{if(path.includes('/phone-numbers/'))return {phone_number:providerNumber};if(!body)return {conversation_config:config,platform_settings:{overrides:{conversation_config_override:{agent:{first_message:contextOverrides,prompt:{prompt:contextOverrides}}}}}};outboundBody=body;postCount++;if(timeout)throw Error('timeout');return {success:true,conversation_id:'conv_fixture',callSid:'CA'+'1'.repeat(32)};};
+globalThis.__voiceTest={sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation:async()=>records.push({reserve:true}),contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt};
 let source=ts.transpileModule(readFileSync(new URL('../lib/live-dispatch-service.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-source='const {sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation,contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,productionDealInstructions,acquisitionOpeners}=globalThis.__voiceTest;\n'+source;
+source='const {sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation,contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt}=globalThis.__voiceTest;\n'+source;
 const {dispatchLiveVoice}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 process.env.ELEVENLABS_API_KEY='fixture-no-network';process.env.CONTIGUITY_FROM='+14243948384';
-const reset=()=>{buyerApproved=true;records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;callbackId=null;providerNumber='+14243948384';suppressed=false;paced=true;};
+const reset=()=>{contextOverrides=true;outboundBody=undefined;buyerApproved=true;records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;callbackId=null;providerNumber='+14243948384';suppressed=false;paced=true;};
 assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);
+assert.match(outboundBody.conversation_initiation_client_data.conversation_config_override.agent.first_message,/Is this the owner of Fixture only/);
+assert.equal(outboundBody.conversation_initiation_client_data.dynamic_variables.approved_offer_ceiling,'NOT AUTHORIZED');
+assert(!JSON.stringify(outboundBody.conversation_initiation_client_data.dynamic_variables).includes('maxOfferCents'));
+assert.match(outboundBody.conversation_initiation_client_data.conversation_config_override.agent.prompt.prompt,/PRIVATE SERVER NEGOTIATION AUTHORITY/);
+reset();contextOverrides=false;assert.equal((await dispatchLiveVoice('account','job')).status,'property_context_override_review_required');assert.equal(postCount,0);assert(!records.some(r=>r.path==='rpc/icash_reserve_paced_voice'));
+reset();await dispatchLiveVoice('account','job');
 const saved=records.find(r=>r.path==='icash_live_conversations');assert.match(saved.body.tool_token_hash,/^[a-f0-9]{64}$/);assert(!JSON.stringify(saved).includes('secret__'));
 reset();paused=true;await dispatchLiveVoice('account','job');assert.equal(postCount,0);assert(!records.some(r=>r.reserve));
 reset();practice=true;assert.equal((await dispatchLiveVoice('account','job')).status,'practice_agent_blocked');assert.equal(postCount,0);

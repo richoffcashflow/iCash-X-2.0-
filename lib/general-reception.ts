@@ -1,3 +1,4 @@
+import {propertyReceptionEnabled,propertyReceptionGreeting,propertyReceptionPrompt,propertyReceptionVariables} from './reception-property-context.ts';
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
 import {ownerWorkflowIsInert} from './owner-voice-acceptance.ts';
 
@@ -84,20 +85,22 @@ export function receptionWorkspacePostcallAbsent(input:unknown){
  * A dedicated frozen branch is required; owner tests and Main are never repurposed. */
 export function inspectReceptionAgent(c:ReceptionConfig,input:unknown,branchInput:unknown,workspacePostcallAbsent=false){
  const a=obj(input),b=obj(branchInput),conversation=obj(a.conversation_config),agent=obj(conversation.agent),prompt=obj(agent.prompt),platform=obj(a.platform_settings),privacy=obj(platform.privacy),overrides=obj(obj(platform.overrides).conversation_config_override);
+ const propertyAware=propertyReceptionEnabled(c);
+ const expectedGreeting=propertyAware?propertyReceptionGreeting:receptionGreeting,expectedPrompt=propertyAware?propertyReceptionPrompt:receptionPrompt;
  const tools=prompt.tools,builtins=prompt.built_in_tools;
  const safeEnd=(v:unknown)=>obj(v).type==='system'&&obj(v).name==='end_call'&&obj(obj(v).params).system_tool_type==='end_call';
  const safeBuiltins=empty(builtins)||(builtins!==null&&typeof builtins==='object'&&!Array.isArray(builtins)&&Object.entries(obj(builtins)).every(([name,value])=>value===null||value===undefined||(name==='end_call'&&safeEnd(value))));
  const snapshot={main_branch_id:a.main_branch_id,agent_id:a.agent_id,branch_id:a.branch_id,version_id:a.version_id,conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null};
  const hash=createHash('sha256').update(JSON.stringify(canonical(snapshot))).digest('hex');
- const checks={target:c.account_id===receptionTarget.accountId&&c.owner_user_id===receptionTarget.ownerUserId&&c.called_number===receptionTarget.calledNumber&&c.agent_id===receptionTarget.agentId,
+ const checks={contextPolicy:c.context_policy===undefined||c.context_policy==='message_only'||propertyAware,target:c.account_id===receptionTarget.accountId&&c.owner_user_id===receptionTarget.ownerUserId&&c.called_number===receptionTarget.calledNumber&&c.agent_id===receptionTarget.agentId,
   identity:a.agent_id===c.agent_id&&a.branch_id===c.branch_id&&identifier(c.branch_id,'agtbrch')&&identifier(a.version_id,'agtvrsn')&&a.version_id===c.reviewed_version_id,
   separateBranch:identifier(a.main_branch_id,'agtbrch')&&a.main_branch_id!==c.branch_id&&c.branch_id!=='agtbrch_8901m3sw5tn6fvkae4d334netswh',
   branch:b.id===c.branch_id&&b.agent_id===c.agent_id&&b.is_archived===false&&b.current_live_percentage===0&&b.draft_exists===false,
   boundedDuration:Number.isInteger(c.max_duration_seconds)&&c.max_duration_seconds>=60&&c.max_duration_seconds<=600&&obj(conversation.conversation).max_duration_seconds===c.max_duration_seconds&&!agent.max_conversation_duration_message,
   audio:obj(conversation.asr).user_input_audio_format==='ulaw_8000'&&obj(conversation.tts).agent_output_audio_format==='ulaw_8000',
-  greetingMatches:agent.first_message===receptionGreeting,
-  promptMatches:prompt.prompt===receptionPrompt,
-  disclosedReception:agent.first_message===receptionGreeting&&prompt.prompt===receptionPrompt,
+  greetingMatches:agent.first_message===expectedGreeting,
+  promptMatches:prompt.prompt===expectedPrompt,
+  disclosedReception:agent.first_message===expectedGreeting&&prompt.prompt===expectedPrompt,
   finiteResponseTokens:Number.isInteger(prompt.max_tokens)&&Number(prompt.max_tokens)>=1&&Number(prompt.max_tokens)<=150,
   safeBuiltins,
   noExternalToolIds:empty(prompt.tool_ids),
@@ -131,7 +134,7 @@ async function eleven(env:ReceptionEnv,fetcher:typeof fetch,path:string,body?:un
  const raw=await boundedBody(response,256*1024);
  return path==='/v1/convai/twilio/register-call'?raw:JSON.parse(raw);
 }
-export function receptionRegisterBody(c:ReceptionConfig,from:string,callSid:string,nonce:string){return {agent_id:c.agent_id,from_number:from,to_number:c.called_number,direction:'inbound',conversation_initiation_client_data:{branch_id:c.branch_id,user_id:'icash-reception:'+nonce,conversation_config_override:{conversation:{max_duration_seconds:c.max_duration_seconds}},dynamic_variables:{icash_reception_lane:'general-v1',icash_reception_call_sid:callSid,icash_reception_receipt_nonce:nonce}}};}
+export function receptionRegisterBody(c:ReceptionConfig,from:string,callSid:string,nonce:string,propertyContext:unknown=null){return {agent_id:c.agent_id,from_number:from,to_number:c.called_number,direction:'inbound',conversation_initiation_client_data:{branch_id:c.branch_id,user_id:'icash-reception:'+nonce,conversation_config_override:{conversation:{max_duration_seconds:c.max_duration_seconds}},dynamic_variables:{...(propertyReceptionEnabled(c)?propertyReceptionVariables(propertyContext):{}),icash_reception_lane:'general-v1',icash_reception_call_sid:callSid,icash_reception_receipt_nonce:nonce}}};}
 
 /** Parse only an already-authenticated provider receipt (HMAC or authenticated GET).
  * This pure parser never establishes authenticity on its own. */
@@ -177,9 +180,14 @@ export function createReceptionHandlers(env:ReceptionEnv,deps:ReceptionDeps){
     const admission=obj(await deps.rpc('icash_reserve_general_reception',{p_call_sid:form.get('CallSid'),p_called_number:form.get('To'),p_caller_hash:callerHash,p_receipt_nonce:nonce,p_config_hash:c.config_hash,p_reviewed_version_id:c.reviewed_version_id},deadline));
     const receipt=obj(admission.receipt);
     if(admission.allowed!==true||receipt.operation_key!=='reception:'+form.get('CallSid')||receipt.customer_charge_cap_cents!==profile.customerChargeCapCents||receipt.call_profile!==c.call_profile||receipt.rate_id!==profile.rateId||receipt.receipt_nonce!==nonce||receipt.call_sid!==form.get('CallSid')||receipt.config_hash!==c.config_hash||receipt.reviewed_version_id!==c.reviewed_version_id||receipt.branch_id!==c.branch_id||receipt.agent_id!==c.agent_id||receipt.max_duration_seconds!==c.max_duration_seconds)return reject();
+    // Read-only lookup uses the admitted receipt's account, never a caller-provided tenant.
+    let propertyContext:unknown=null;
+    if(propertyReceptionEnabled(c)){
+     try{propertyContext=await deps.rpc('icash_reception_property_context',{p_call_sid:form.get('CallSid'),p_nonce:nonce,p_contact_key:createHash('sha256').update(from).digest('hex')},deadline);}catch{/* Unknown stays generic; no second admission or lookup. */}
+    }
     // Exactly once. Any timeout, malformed reply or uncertain result keeps the full reserve and concurrency lock.
     deadline.throwIfAborted();
-    const twiml=await eleven(env,fetcher,'/v1/convai/twilio/register-call',receptionRegisterBody(c,from,form.get('CallSid')!,nonce),deadline);
+    const twiml=await eleven(env,fetcher,'/v1/convai/twilio/register-call',receptionRegisterBody(c,from,form.get('CallSid')!,nonce,propertyContext),deadline);
     if(typeof twiml!=='string'||twiml.length>64000||!/^\s*(?:<\?xml[^>]*>\s*)?<Response(?:\s|>)/.test(twiml)||!twiml.includes('<Connect')||!twiml.includes('<Stream'))return reject();
     return new Response(twiml,{status:200,headers:xmlHeaders});
    }catch{return reject();}

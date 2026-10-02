@@ -34,6 +34,15 @@ export async function POST(req:Request){
    p_conversation:call.conversation_id,p_binding_hash:cap.bindingHash,p_token_hash:cap.hash,p_agent_hash:agentHash,
   });
   if(!result)return NextResponse.json({error:'Call routing unavailable'},{status:409,headers});
-  return NextResponse.json(inboundInitiation(result.maxSeconds,cap.token),{headers});
+  // Admission still owns all routing and cost controls. Load only the public
+  // address and supported greeting name from that durable binding before speech; caller ID proves no identity.
+  // Missing context must not cause guesses, a new tenant lookup, or another charge.
+  let context:Parameters<typeof inboundInitiation>[2]=null;
+  try{
+   context=await db<Parameters<typeof inboundInitiation>[2]>('rpc/icash_inbound_property_context','POST',{
+    p_call_sid:call.call_sid,p_conversation:call.conversation_id,p_binding_hash:cap.bindingHash,p_token_hash:cap.hash,
+   });
+  }catch{/* Unknown/missing context falls back to asking the caller for the address. */}
+  return NextResponse.json(inboundInitiation(result.maxSeconds,cap.token,context),{headers});
  }catch{return NextResponse.json({error:'Call routing unavailable'},{status:409,headers});}
 }
