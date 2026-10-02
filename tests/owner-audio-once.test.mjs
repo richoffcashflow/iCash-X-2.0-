@@ -1,0 +1,49 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {z} from 'zod';
+import * as p from '../lib/owner-audio-once.ts';
+import {ownerInboundTarget as target,ownerInboundChallenge,validOwnerInboundAccountSid} from '../lib/owner-inbound-acceptance.ts';
+import {loadService} from './helpers/simulated-journey-services.mjs';
+const now=Date.now(),sid='AC'+'3'.repeat(32),code=ownerInboundChallenge(),owner={accountId:target.accountId,userId:target.ownerUserId};
+const agent={agent_id:target.agentId,branch_id:target.branchId,version_id:'agtvrsn_fixture',main_branch_id:'agtbrch_main',conversation_config:{agent:{prompt:{tools:[],tool_ids:[],mcp_server_ids:[],knowledge_base:[]}},conversation:{max_duration_seconds:60}},platform_settings:{auth:{enable_auth:true},privacy:{record_voice:false},overrides:{conversation_config_override:{agent:{first_message:true,prompt:{prompt:true}}}},queueing_config:{enabled:true,wait_timeout_seconds:30},call_limits:{bursting_enabled:false}}};
+const branch={id:target.branchId,agent_id:target.agentId,name:'private owner fixture',is_archived:false,current_live_percentage:0};
+const phone={phone_number_id:target.phoneNumberId,phone_number:target.ingressNumber,provider:'twilio',assigned_agent:{agent_id:target.agentId,branch_id:null}};
+const incoming={...agent,branch_id:'agtbrch_main',platform_settings:{queueing_config:{enabled:true,wait_timeout_seconds:30},call_limits:{bursting_enabled:false},overrides:{enable_conversation_initiation_client_data_from_webhook:true},workspace_overrides:{conversation_initiation_client_data_webhook:{url:'https://www.geticashx.com/api/internal/voice/inbound',request_headers:{Authorization:{secret_id:'secret_fixture'}}}}}};
+agent.platform_settings.workspace_overrides=structuredClone(incoming.platform_settings.workspace_overrides);
+const review=p.inspectAudioOnce(agent,branch,phone,incoming);assert(review.safe);
+for(const mutation of [a=>a.conversation_config.conversation.max_duration_seconds=61,a=>a.platform_settings.queueing_config.wait_timeout_seconds=31,a=>a.platform_settings.overrides.conversation_config_override.agent.first_message=false,a=>a.platform_settings.overrides.conversation_config_override.agent.prompt.prompt=false,a=>a.platform_settings.privacy.record_voice=true,a=>a.conversation_config.agent.prompt.tools=[{type:'webhook',name:'seller'}],a=>a.procedures={dangerous:true}]){const a=structuredClone(agent);mutation(a);assert(!p.inspectAudioOnce(a,branch,phone,incoming).safe);}
+let run={id:1,state:'inspecting',config_hash:review.hash,version_id:review.version,branch_name:review.branchName,challenge_salt:code.salt,challenge_hash:code.hash,armed_at:new Date(now-1000).toISOString(),expires_at:new Date(now+299000).toISOString(),call_sid:'CA'+'1'.repeat(32),conversation_id:'conv_fixture',claimed_at:new Date(now).toISOString(),result:null};
+const tw={sid:run.call_sid,account_sid:sid,from:target.ownerPhone,to:target.ingressNumber,direction:'inbound',date_created:new Date(now).toISOString(),status:'in-progress',duration:'25',forwarded_from:null};
+assert(p.inspectAudioCall(run,tw,sid,now));assert(!p.inspectAudioCall(run,{...tw,forwarded_from:'+12145550123'},sid,now));assert(!p.inspectAudioCall(run,{...tw,account_sid:'AC'+'2'.repeat(32)},sid,now));assert(!p.inspectAudioCall(run,tw,undefined,now));assert(!p.inspectAudioCall(run,tw,sid,Date.parse(run.expires_at)));
+assert.throws(()=>p.audioOnceInitiation(run));run.state='claimed';const initiation=p.audioOnceInitiation(run);assert.equal(initiation.branch_id,target.branchId);assert(!JSON.stringify(initiation).includes(code.code));assert(!JSON.stringify(initiation).includes('secret__icash_call_token'));assert.equal(initiation.conversation_config_override.conversation,undefined);
+const conv={conversation_id:run.conversation_id,agent_id:target.agentId,branch_id:target.branchId,version_id:run.version_id,status:'done',has_audio:false,metadata:{start_time_unix_secs:Math.floor(now/1000),call_duration_secs:25,phone_call:{type:'twilio',call_sid:run.call_sid,direction:'inbound',external_number:target.ownerPhone,agent_number:target.ingressNumber}},transcript:[{role:'user',message:code.code}]};tw.status='completed';
+assert.equal(p.reconcileAudioOnce(run,{...tw,duration:'90'},conv,sid,now).status,'passed');
+assert.equal(p.reconcileAudioOnce(run,{...tw,duration:'91'},conv,sid,now).status,'needs_review');
+assert.deepEqual(p.reconcileAudioOnce(run,tw,conv,sid,now),{status:'passed',forwarding:'unverified',durationSeconds:25,challenge:'passed'});
+assert.equal(p.reconcileAudioOnce(run,{...tw,forwarded_from:target.sourceNumber},conv,sid,now).forwarding,'verified');
+assert.equal(p.reconcileAudioOnce(run,{...tw,sid:'CA'+'9'.repeat(32),forwarded_from:target.sourceNumber},conv,sid,now).forwarding,'unverified');
+for(const change of [v=>v.version_id='agtvrsn_wrong',v=>v.metadata.call_duration_secs=61,v=>v.has_audio=true,v=>v.transcript[0].tool_calls=[{}],v=>v.metadata.phone_call.call_sid='CA'+'8'.repeat(32)]){const c=structuredClone(conv);change(c);assert.equal(p.reconcileAudioOnce(run,tw,c,sid,now).status,'needs_review');}
+assert.equal(p.reconcileAudioOnce(run,tw,{...conv,transcript:[{role:'agent',message:code.code}]},sid,now).status,'failed');
+assert.equal(p.reconcileAudioOnce(run,tw,{...conv,transcript:[{role:'user',message:'wrong'},{role:'user',message:'wrong'},{role:'user',message:'wrong'},{role:'user',message:code.code}]},sid,now).status,'failed');
+assert(p.isAudioOwner(owner));assert(!p.isAudioOwner({...owner,userId:'foreign'}));
+
+let stored=null,calls=[],providerFailure=false;
+const api={incomingAgent:async()=>incoming,agent:async()=>{if(providerFailure)throw Error('secret');return agent;},branch:async()=>branch,phone:async()=>phone,twilio:async()=>({...tw,status:'in-progress'}),conversation:async()=>conv};
+const db=async(path,method,body)=>{calls.push(path);assert(!/credit|wallet|live_conversation|callback|handoff/.test(path));if(path.startsWith('icash_owner_audio_once?'))return stored?[stored]:[];if(path==='rpc/icash_arm_owner_audio_once'){if(stored)return null;stored={...run,state:'armed',call_sid:null,conversation_id:null,challenge_salt:body.p_salt,challenge_hash:body.p_challenge_hash};return stored;}if(path==='rpc/icash_attempt_owner_audio_once'){if(stored?.state!=='armed')return null;stored={...stored,state:'inspecting',call_sid:body.p_call_sid,conversation_id:body.p_conversation};return stored;}if(path==='rpc/icash_claim_owner_audio_once'){stored={...stored,state:'claimed'};return stored;}if(path==='rpc/icash_finish_owner_audio_once'){stored={...stored,state:body.p_result.status,result:body.p_result};return stored;}if(path==='rpc/icash_cancel_owner_audio_once'){stored={...stored,state:'cancelled'};return stored;}throw Error(path);};
+const service=await loadService('lib/owner-audio-once-service.ts',{db,createOwnerInboundProviders:()=>api,ownerInboundTarget:target,ownerInboundChallenge,validOwnerInboundAccountSid,...p,process:{env:{TWILIO_ACCOUNT_SID:sid}}});
+assert((await service.audioOnceStatus(owner)).canArm);await assert.rejects(()=>service.armAudioOnce({...owner,userId:'bad'},review.hash,review.version));
+const armed=await service.armAudioOnce(owner,review.hash,review.version);assert.match(armed.challenge,/^\d{8}$/);assert(!(JSON.stringify(await service.audioOnceStatus(owner))).includes(armed.challenge));await assert.rejects(()=>service.armAudioOnce(owner,review.hash,review.version));
+const event={caller_id:target.ownerPhone,called_number:target.ingressNumber,agent_id:target.agentId,call_sid:run.call_sid,conversation_id:run.conversation_id};
+assert.equal(await service.beginAudioOnce({...event,caller_id:'+12145550123'}),null);
+assert.equal((await service.beginAudioOnce(event)).branch_id,target.branchId);assert.equal(await service.beginAudioOnce(event),null);
+stored={...run,state:'armed',call_sid:null,conversation_id:null};providerFailure=true;assert.equal(await service.beginAudioOnce(event),null);assert.equal(stored.state,'needs_review');assert.equal(await service.beginAudioOnce(event),null);providerFailure=false;
+assert(calls.every(path=>!path.includes('credit')));
+
+let identity=owner,mutations=0;
+const route=await loadService('app/api/owner-inbound-acceptance/audio-once/route.ts',{NextResponse:{json:Response.json},z,workAccount:async()=>identity,isAudioOwner:p.isAudioOwner,ownerAudioOnceConfirmation:p.ownerAudioOnceConfirmation,audioOnceStatus:async()=>({status:'ready',canArm:true}),armAudioOnce:async()=>{mutations++;return armed;},cancelAudioOnce:async()=>{mutations++;return{};},reconcileAudioOnceRun:async()=>{mutations++;return{};}});
+const url='https://example.test/api/owner-inbound-acceptance/audio-once',body={action:'arm',confirmation:p.ownerAudioOnceConfirmation,configHash:review.hash,versionId:review.version};
+const req=(value=body,headers={})=>new Request(url,{method:'POST',headers:{host:'example.test',origin:'https://example.test','content-type':'application/json',...headers},body:JSON.stringify(value)});
+identity={...owner,userId:'other'};assert.equal((await route.POST(req())).status,403);identity=owner;
+assert.equal((await route.POST(req(body,{origin:'https://foreign.test'}))).status,403);assert.equal((await route.POST(req({...body,phone:'other'}))).status,400);assert.equal((await route.POST(req(body,{'content-length':'9999'}))).status,400);assert.equal(mutations,0);assert.equal((await route.POST(req())).status,200);assert.equal(mutations,1);
+const serviceSource=readFileSync('lib/owner-audio-once-service.ts','utf8');assert(!/fetch\(|outbound|icash_begin_inbound_voice|icash_finish_credit/.test(serviceSource));
+console.log('One-use audio policy/service/routes passed: provider60, queue30, safe tools, atomic consumption, challenge proof, no forged forwarding, no wallet mutations, strict owner/CSRF');

@@ -44,7 +44,7 @@ invitation=true;assert.equal((await text.dispatchTextMessage('account','message'
 invitation=false;claim=false;assert.equal((await text.dispatchTextMessage('account','message')).status,'message_held');assert.equal(provider,0);
 claim=true;assert.equal((await text.dispatchTextMessage('account','message')).status,'message_accepted');assert.equal(provider,1);assert.equal(accepted,1);
 // A real route still rejects incoming calls before data or costs despite SMS flag being on.
-const inbound=await load('app/api/internal/voice/inbound/route.ts',{NextResponse:response,inboundAuthorized:()=>true,db:async()=>{throw Error('No incoming reservation');}});assert.equal((await inbound.POST(req('resume'))).status,503);
+const inbound=await load('app/api/internal/voice/inbound/route.ts',{NextResponse:response,inboundAuthorized:()=>true,db:async()=>{throw Error('No incoming reservation');}});assert.equal((await inbound.POST(req('resume'))).status,409);
 // Other real services remain held, not just the automation-kind selector.
 for(const [file,fn] of Object.entries({'live-dispatch-service':'dispatchLiveVoice','discovery-service':'discoverForAccount','text-ai-service':'processTextAi','fulfillment-service':'prepareFulfillment','title-service':'dispatchTitleRequest'})){
  const service=await load('lib/'+file+'.ts',{z,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady,db:async()=>{throw Error('No other work');}});assert.equal((await service[fn]('account','job')).status,'live_work_not_ready');

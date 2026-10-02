@@ -190,6 +190,7 @@ export function createOwnerInboundProviders(
   };
   return Object.freeze({
     agent: () => eleven(`/v1/convai/agents/${encodeURIComponent(agentId)}?branch_id=${encodeURIComponent(branchId)}`, 'agent'),
+    incomingAgent: () => eleven(`/v1/convai/agents/${encodeURIComponent(agentId)}`, 'agent'),
     branch: () => eleven(`/v1/convai/agents/${encodeURIComponent(agentId)}/branches/${encodeURIComponent(branchId)}`, 'branch'),
     phone: () => readPhone(),
     readPhone,

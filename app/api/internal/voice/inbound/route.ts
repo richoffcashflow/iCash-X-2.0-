@@ -1,4 +1,4 @@
-import {beginOwnerInbound} from '@/lib/owner-inbound-acceptance-service';
+import {beginAudioOnce} from '@/lib/owner-audio-once-service';
 import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {NextResponse} from 'next/server';
 import {db} from '@/lib/stripe-test';
@@ -12,7 +12,6 @@ export async function POST(req:Request){
  const headers={'Cache-Control':'private, no-store'};
  const secret=process.env.ELEVENLABS_INBOUND_WEBHOOK_SECRET;
  if(!inboundAuthorized(req.headers.get('authorization'),secret))return NextResponse.json({error:'Unauthorized'},{status:401,headers});
- if(process.env.ICASH_LIVE_WORK_READY!=='true'&&process.env.ICASH_OWNER_INBOUND_TEST_ENABLED!=='true')return NextResponse.json({error:'Call routing unavailable'},{status:503,headers});
  try{
   if(Number(req.headers.get('content-length')??0)>4096)throw new Error('Invalid request');
   const raw=await req.text();if(Buffer.byteLength(raw)>4096)throw new Error('Invalid request');
@@ -20,7 +19,7 @@ export async function POST(req:Request){
   // This exact owner/ingress pair never falls through to business routing.
   // Its separate release flag does not enable global work or seller permissions.
   if(call.caller_id===ownerInboundTarget.ownerPhone&&call.called_number===ownerInboundTarget.ingressNumber&&call.agent_id===ownerInboundTarget.agentId){
-   const result=await beginOwnerInbound(call);
+   const result=await beginAudioOnce(call);
    return NextResponse.json(result??{error:'Call routing unavailable'},{status:result?200:409,headers});
   }
   if(process.env.ICASH_LIVE_WORK_READY!=='true')return NextResponse.json({error:'Call routing unavailable'},{status:503,headers});

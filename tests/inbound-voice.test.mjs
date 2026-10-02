@@ -1,7 +1,7 @@
 process.env.ICASH_LIVE_WORK_READY='true'; // Ready-state inbound fixture; admission suite verifies the hold.
 import assert from 'node:assert/strict';
 import {ownerInboundTarget} from '../lib/owner-inbound-acceptance.ts';
-const beginOwnerInbound=async()=>{throw Error('Must not call owner path for seller fixture');};
+const beginAudioOnce=async()=>{throw Error('Must not call owner path for seller fixture');};
 import {inboundAuthorized,inboundCallSchema,inboundCapability,inboundInitiation} from '../lib/inbound-voice.ts';
 const secret='0'.repeat(64);
 const call={caller_id:'+12125550123',called_number:'+17816093521',agent_id:'agent_fixture',call_sid:'CA'+'1'.repeat(32),conversation_id:'conv_fixture'};
@@ -27,9 +27,9 @@ const {default:ts}=await import('typescript');
 let databaseCalls=0,providerCalls=0,registered=true,match=true,lastBody;
 const db=async(path,method,body)=>{databaseCalls++;if(path.startsWith('icash_inbound_voice_routes'))return registered?[{agent_id:call.agent_id}]:[];lastBody=body;return match?{maxSeconds:600}:null;};
 const elevenRequest=async()=>{providerCalls++;return {conversation_config:{conversation:{max_duration_seconds:600}}};};
-globalThis.__inboundFixture={NextResponse:{json:Response.json},ownerInboundTarget,beginOwnerInbound,createHash,db,elevenRequest,inboundAuthorized,inboundCallSchema,inboundCapability,inboundInitiation};
+globalThis.__inboundFixture={NextResponse:{json:Response.json},ownerInboundTarget,beginAudioOnce,createHash,db,elevenRequest,inboundAuthorized,inboundCallSchema,inboundCapability,inboundInitiation};
 let source=ts.transpileModule(readFileSync(new URL('../app/api/internal/voice/inbound/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-source='const {NextResponse,ownerInboundTarget,beginOwnerInbound,createHash,db,elevenRequest,inboundAuthorized,inboundCallSchema,inboundCapability,inboundInitiation}=globalThis.__inboundFixture;\n'+source;
+source='const {NextResponse,ownerInboundTarget,beginAudioOnce,createHash,db,elevenRequest,inboundAuthorized,inboundCallSchema,inboundCapability,inboundInitiation}=globalThis.__inboundFixture;\n'+source;
 const {POST}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 process.env.ELEVENLABS_INBOUND_WEBHOOK_SECRET=secret;
 const req=(body=call,auth='Bearer '+secret)=>new Request('https://example.invalid/api/internal/voice/inbound',{method:'POST',headers:{authorization:auth,'content-type':'application/json'},body:JSON.stringify(body)});
