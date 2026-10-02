@@ -14,10 +14,10 @@ const ownerBranch='agtbrch_8901m3sw5tn6fvkae4d334netswh';
 export const receptionBranchName='iCash X general reception v1';
 const fallbackUrl='https://www.geticashx.com/api/reception/fallback',postcallUrl='https://www.geticashx.com/api/reception/postcall';
 type Obj=Record<string,unknown>;
-export type SetupAction='prepare_branch'|'configure_branch'|'route'|'restore';
+export type SetupAction='prepare_branch'|'prepare_branch_retry'|'configure_branch'|'route'|'restore';
 export type ReceptionSetupEnv={ELEVENLABS_API_KEY?:string;ELEVENLABS_INBOUND_WEBHOOK_SECRET?:string;RECEPTION_POSTCALL_SECRET?:string;ELEVENLABS_WEBHOOK_SECRET?:string;TWILIO_ACCOUNT_SID?:string;TWILIO_AUTH_TOKEN?:string;RECEPTION_ENABLED?:string};
 export type ReceptionSetupDeps={fetcher?:typeof fetch;rpc:(name:string,body?:Obj)=>Promise<unknown>;now?:()=>number};
-export type ReceptionSetupReview={status:'review'|'blocked'|'verified'|'outcome_unknown';message:string;blockers:string[];checks:Record<string,boolean>;actions:{action:SetupAction;reviewToken:string;expiresAt:string}[];branch?:{id:string;version:string;configHash:string};profile?:{name:string;maxDurationSeconds:number;customerChargeCapCents:number};checkedAt:string};
+export type ReceptionSetupReview={status:'review'|'blocked'|'verified'|'outcome_unknown';message:string;blockers:string[];checks:Record<string,boolean>;actions:{action:SetupAction;reviewToken:string;expiresAt:string}[];branch?:{id:string;version:string;configHash:string};profile?:{name:string;maxDurationSeconds:number;customerChargeCapCents:number};providerFailure?:{status:number|null;validationPaths:string[]};checkedAt:string};
 const obj=(v:unknown):Obj=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Obj:{};
 const id=(v:unknown,prefix:string):v is string=>typeof v==='string'&&new RegExp(`^${prefix}_[A-Za-z0-9]{1,160}$`).test(v);
 const empty=(v:unknown)=>v==null||(Array.isArray(v)?v.length===0:typeof v==='object'&&Object.keys(obj(v)).length===0);
@@ -31,11 +31,31 @@ const errors=new Set(['configuration_unavailable','database_unavailable','provid
 const reason=(e:unknown)=>e instanceof Error&&errors.has(e.message)?e.message:'provider_unavailable';
 function result(deps:ReceptionSetupDeps,status:ReceptionSetupReview['status'],message:string,extra:Partial<ReceptionSetupReview>={}):ReceptionSetupReview{return {status,message,blockers:[],checks:{},actions:[],checkedAt:new Date(deps.now?.()??Date.now()).toISOString(),...extra};}
 function signing(env:ReceptionSetupEnv){if(typeof window!=='undefined'||!goodSecret(env.ELEVENLABS_INBOUND_WEBHOOK_SECRET))fail('configuration_unavailable');return env.ELEVENLABS_INBOUND_WEBHOOK_SECRET;}
+// Provider error payloads are untrusted and can echo credentials, prompts or
+// customer input. Only known structural field names and bounded array indexes
+// may leave this module. Never expose msg, input, ctx, URL, or the response body.
+const validationFields=new Set(['body','parent_version_id','name','description','include_draft','conversation_config','asr','user_input_audio_format','tts','voice_id','model_id','agent_output_audio_format','agent','first_message','language','max_conversation_duration_message','prompt','llm','max_tokens','tools','tool_ids','built_in_tools','transfer_to_agent','end_call','language_detection','transfer_to_number','skip_turn','play_keypad_touch_tone','voicemail_detection','params','system_tool_type','type','mcp_server_ids','native_mcp_server_ids','knowledge_base','rag','enabled','custom_llm','conversation','max_duration_seconds','language_presets','platform_settings','overrides','enable_conversation_initiation_client_data_from_webhook','enable_procedure_ids_from_client','enable_starting_workflow_node_id_from_client','conversation_config_override','workspace_overrides','conversation_initiation_client_data_webhook','webhooks','post_call_webhook_id','events','transcript_format','send_audio','data_collection','evaluation','criteria','workflow','nodes','edges','subgraphs','prevent_subagent_loops']);
+function validationPaths(value:unknown){
+ const detail=obj(value).detail;if(!Array.isArray(detail)||detail.length>32)return [];
+ const paths:string[]=[];
+ for(const entry of detail){const loc=obj(entry).loc;if(!Array.isArray(loc)||!loc.length||loc.length>16||loc[0]!=='body')continue;
+  if(!loc.every(part=>typeof part==='string'?validationFields.has(part):typeof part==='number'&&Number.isSafeInteger(part)&&part>=0&&part<=999))continue;
+  const path=loc.join('.');if(path.length<=512&&!paths.includes(path))paths.push(path);
+ }
+ return paths.slice(0,16);
+}
+class ProviderFailure extends Error{status:number|null;validationPaths:string[];constructor(code:string,status:number|null,paths:string[]=[]){super(code);this.status=status;this.validationPaths=paths;}}
+function providerFailure(e:unknown):Pick<ReceptionSetupReview,'providerFailure'>{return e instanceof ProviderFailure?{providerFailure:{status:e.status,validationPaths:e.validationPaths}}:{};}
 function providers(env:ReceptionSetupEnv,deps:ReceptionSetupDeps){
  const fetcher=deps.fetcher??fetch;
  async function request(url:string,headers:Record<string,string>,method='GET',body?:string){
-  let r:Response;try{r=await fetcher(url,{method,headers,body,cache:'no-store',redirect:'error',credentials:'omit',signal:AbortSignal.timeout(8000)});}catch{fail('provider_unavailable');}
-  if(!r!.ok||r!.redirected||(r!.url&&r!.url!==url))fail(r!.status===401||r!.status===403?'provider_access_denied':'provider_unavailable');
+  let r:Response;try{r=await fetcher(url,{method,headers,body,cache:'no-store',redirect:'error',credentials:'omit',signal:AbortSignal.timeout(8000)});}catch{throw new ProviderFailure('provider_unavailable',null);}
+  if(!r.ok||r.redirected||(r.url&&r.url!==url)){
+   const status=Number.isSafeInteger(r.status)&&r.status>=100&&r.status<=599?r.status:null;let paths:string[]=[];
+   if(status===422&&url.startsWith(origin+agentPath)&&/^application\/json(?:;|$)/i.test(r.headers.get('content-type')??''))try{paths=validationPaths(JSON.parse(await boundedBody(r,32768)));}catch{/* Keep only the verified HTTP status. */}
+   else try{await r.body?.cancel();}catch{/* No provider content is retained. */}
+   throw new ProviderFailure(status===401||status===403?'provider_access_denied':'provider_unavailable',status,paths);
+  }
   if(!/^application\/json(?:;|$)/i.test(r!.headers.get('content-type')??''))fail('provider_receipt_invalid');
   try{const parsed=JSON.parse(await boundedBody(r!,1024*1024));if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))fail('provider_receipt_invalid');return parsed as Obj;}catch{fail('provider_receipt_invalid');}
  }
@@ -68,7 +88,7 @@ function sourceSafe(main:Obj){return sharedSettingsSafe(main)&&empty(main.proced
 // are read-only preconditions, never included in either provider write.
 // https://elevenlabs.io/docs/eleven-agents/operate/versioning#per-agent-settings
 // Explicit replacement of executable surfaces, retaining only selected voice/LLM
-// settings. No inherited prompts, tools, KB, dynamic variables or language presets.
+// settings. Executable tools and KB are cleared; merged provider state is read back.
 export function receptionBranchBody(main:Obj,hookId:string|null,config:Obj){
  const selected=profile(config);
  const conversation=obj(main.conversation_config),tts=obj(conversation.tts),prompt=obj(obj(conversation.agent).prompt);
@@ -78,7 +98,7 @@ export function receptionBranchBody(main:Obj,hookId:string|null,config:Obj){
  // Null each documented field: an empty object can deep-merge and retain tools.
  const built_in_tools:Obj=Object.fromEntries(builtInNames.map(name=>[name,null]));
  built_in_tools.end_call={type:'system',name:'end_call',description:'',params:{system_tool_type:'end_call'}};
- return {conversation_config:{asr:{user_input_audio_format:'ulaw_8000'},tts:{voice_id:tts.voice_id,model_id:tts.model_id??'eleven_turbo_v2',agent_output_audio_format:'ulaw_8000'},agent:{first_message:receptionGreeting,language:'en',max_conversation_duration_message:null,prompt:{prompt:receptionPrompt,llm:prompt.llm,max_tokens:120,tools:[],tool_ids:[],built_in_tools,mcp_server_ids:[],native_mcp_server_ids:[],knowledge_base:[],rag:{enabled:false},custom_llm:null}},conversation:{max_duration_seconds:selected.maxDurationSeconds},language_presets:{}},platform_settings:{overrides:{enable_conversation_initiation_client_data_from_webhook:false,enable_procedure_ids_from_client:false,enable_starting_workflow_node_id_from_client:false,conversation_config_override:{conversation:{max_duration_seconds:true}}},workspace_overrides:{conversation_initiation_client_data_webhook:null,webhooks:{post_call_webhook_id:hookId,events:hookId?['transcript']:[],transcript_format:'json',send_audio:false}},data_collection:{},evaluation:{criteria:[]}},workflow:{nodes:{},edges:{},subgraphs:{}}};
+ return {conversation_config:{asr:{user_input_audio_format:'ulaw_8000'},tts:{voice_id:tts.voice_id,model_id:tts.model_id??'eleven_turbo_v2',agent_output_audio_format:'ulaw_8000'},agent:{first_message:receptionGreeting,language:'en',max_conversation_duration_message:'',prompt:{prompt:receptionPrompt,llm:prompt.llm,max_tokens:120,tools:[],tool_ids:[],built_in_tools,mcp_server_ids:[],native_mcp_server_ids:[],knowledge_base:[],rag:{enabled:false},custom_llm:null}},conversation:{max_duration_seconds:selected.maxDurationSeconds},language_presets:{}},platform_settings:{overrides:{enable_conversation_initiation_client_data_from_webhook:false,enable_procedure_ids_from_client:false,enable_starting_workflow_node_id_from_client:false,conversation_config_override:{conversation:{max_duration_seconds:true}}},workspace_overrides:{conversation_initiation_client_data_webhook:null,webhooks:{post_call_webhook_id:hookId,events:hookId?['transcript']:[],transcript_format:'json',send_audio:false}},data_collection:{},evaluation:{criteria:[]}},workflow:{nodes:{},edges:{}}};
 }
 type Snapshot={main:Obj;owner:Obj;branches:Obj[];branch:Obj|null;branchMeta:Obj|null;state:Obj;config:Obj;phone:Obj|null;hookId:string|null;postcallConfigured:boolean;blockers:string[]};
 async function snapshot(env:ReceptionSetupEnv,deps:ReceptionSetupDeps):Promise<Snapshot>{
@@ -115,6 +135,7 @@ function attempts(s:Snapshot){return obj(s.state.attempts);}
 function allowed(s:Snapshot,env:ReceptionSetupEnv,action:SetupAction){
  if(attempts(s)[action])return false;
  if(action==='prepare_branch')return !s.branch&&s.config.enabled===false&&sourceSafe(s.main);
+ if(action==='prepare_branch_retry'){const original=obj(attempts(s).prepare_branch);return original.state==='rejected'&&original.provider_status===422&&typeof original.finished_at==='string'&&Number.isFinite(Date.parse(original.finished_at))&&!Object.values(attempts(s)).some(v=>obj(v).state==='started')&&!s.branch&&s.config.branch_id===null&&s.config.enabled===false&&sourceSafe(s.main);}
  if(action==='configure_branch')return !!s.branch&&s.config.branch_id===s.branch.branch_id&&s.config.enabled===false&&sourceSafe(s.main)&&empty(s.branch.procedures)&&(s.config.receipt_mode==='provider_readback'||(!!s.hookId&&s.postcallConfigured));
  const phone=s.phone;if(!phone||phone.voice_application_sid||phone.trunk_sid)return false;
  if(action==='restore')return !!s.state.original_phone&&equal(phoneOther(phone),phoneOther(obj(s.state.original_phone)))&&equal(routing(phone),desiredRouting)&&typeof s.state.route_started_at==='string'&&(Date.now()-Date.parse(s.state.route_started_at))>30_000;
@@ -122,7 +143,7 @@ function allowed(s:Snapshot,env:ReceptionSetupEnv,action:SetupAction){
  return inspectReceptionAgent(s.config as ReceptionConfig,s.branch,s.branchMeta).safe&&!equal(routing(phone),desiredRouting);
 }
 type Token={v:1;action:SetupAction;fingerprint:string;nonce:string;expires:number};
-const actions:SetupAction[]=['prepare_branch','configure_branch','route','restore'];
+const actions:SetupAction[]=['prepare_branch','prepare_branch_retry','configure_branch','route','restore'];
 function fingerprint(s:Snapshot,action:SetupAction){return digest(action==='restore'?{phone:s.phone,original:s.state.original_phone,routeStarted:s.state.route_started_at}:s);}
 function signature(raw:string,key:string){return createHmac('sha256',key).update('icash-reception-setup-v1\0'+raw).digest('base64url');}
 function issue(s:Snapshot,action:SetupAction,secret:string,now:number){const t:Token={v:1,action,fingerprint:fingerprint(s,action),nonce:randomBytes(16).toString('hex'),expires:now+120_000};const encoded=Buffer.from(JSON.stringify(t)).toString('base64url');return {action,reviewToken:encoded+'.'+signature(encoded,secret),expiresAt:new Date(t.expires).toISOString()};}
@@ -155,8 +176,8 @@ export async function reviewReceptionSetup(env:ReceptionSetupEnv,deps:ReceptionS
  }catch(e){
   // Emergency restoration must remain available during an ElevenLabs outage or
   // unrelated Main/branch drift. It only needs the fixed phone and saved state.
-  try{const s=await restoreSnapshot(env,deps);if(allowed(s,env,'restore'))return result(deps,'review','Full readiness is unavailable. The saved original phone routing can still be restored.',{blockers:[reason(e)],checks:{twilioReadback:true,originalRoutingSaved:true},actions:[issue(s,'restore',signing(env),deps.now?.()??Date.now())]});}catch{/* Preserve the original redacted readiness failure. */}
-  return result(deps,'blocked','Readiness could not be verified. No change was sent.',{blockers:[reason(e)]});}
+  try{const s=await restoreSnapshot(env,deps);if(allowed(s,env,'restore'))return result(deps,'review','Full readiness is unavailable. The saved original phone routing can still be restored.',{blockers:[reason(e)],checks:{twilioReadback:true,originalRoutingSaved:true},actions:[issue(s,'restore',signing(env),deps.now?.()??Date.now())],...providerFailure(e)});}catch{/* Preserve the original redacted readiness failure. */}
+  return result(deps,'blocked','Readiness could not be verified. No change was sent.',{blockers:[reason(e)],...providerFailure(e)});}
 }
 export async function applyReceptionSetup(env:ReceptionSetupEnv,deps:ReceptionSetupDeps,action:SetupAction,raw:unknown):Promise<ReceptionSetupReview>{
  let dispatched=false;
@@ -166,10 +187,11 @@ export async function applyReceptionSetup(env:ReceptionSetupEnv,deps:ReceptionSe
   if((deps.now?.()??Date.now())>=token.expires)fail('review_expired');
   const claimed=await deps.rpc('icash_claim_reception_setup',{p_action:action,p_nonce:token.nonce,p_fingerprint:token.fingerprint,p_original_phone:action==='route'?s.phone:null});if(claimed!==true)fail('attempt_already_claimed');
   const api=providers(env,deps);let out:Obj={};dispatched=true;
-  if(action==='prepare_branch'||action==='configure_branch'){
+  const createsBranch=action==='prepare_branch'||action==='prepare_branch_retry';
+  if(createsBranch||action==='configure_branch'){
    const body=receptionBranchBody(s.main,s.config.receipt_mode==='provider_readback'?null:s.postcallConfigured?s.hookId:null,s.config);
-   const receipt=action==='prepare_branch'?await api.eleven(agentPath+'/branches','POST',{parent_version_id:s.main.version_id,name:receptionBranchName,description:'Isolated message-only general reception. Never Main or the owner audio test. Enablement is separately gated.',...body,include_draft:false}):await api.eleven(agentPath+'?branch_id='+s.branch!.branch_id,'PATCH',body);
-   const branchId=action==='prepare_branch'?receipt.created_branch_id:s.branch!.branch_id;
+   const receipt=createsBranch?await api.eleven(agentPath+'/branches','POST',{parent_version_id:s.main.version_id,name:receptionBranchName,description:'Isolated message-only general reception. Never Main or the owner audio test. Enablement is separately gated.',...body,include_draft:false}):await api.eleven(agentPath+'?branch_id='+s.branch!.branch_id,'PATCH',body);
+   const branchId=createsBranch?receipt.created_branch_id:s.branch!.branch_id;
    if(!id(branchId,'agtbrch')||branchId===s.main.branch_id||branchId===ownerBranch)fail('verification_failed');
    const after=await snapshot(env,deps);
    if(!equal(after.main,s.main)||!equal(after.owner,s.owner)||!equal(after.phone,s.phone)||!after.branch||!after.branchMeta||after.branch.branch_id!==branchId||!safeBranch(after.branch,after.branchMeta,after.config).safe)fail('verification_failed');
@@ -186,6 +208,6 @@ export async function applyReceptionSetup(env:ReceptionSetupEnv,deps:ReceptionSe
    if(!equal(normalized(actual),normalized(expected)))fail('verification_failed');
   }
   if(await deps.rpc('icash_complete_reception_setup',{p_action:action,p_nonce:token.nonce,p_result:out})!==true)fail('verification_failed');
-  return result(deps,'verified',action==='prepare_branch'||action==='configure_branch'?'The isolated branch was prepared and read back. Main, the owner branch and phone routing were unchanged. Calls still need separate enablement.':action==='route'?'The fixed phone now uses the reception entry point and reject-only fallback. Read-back verified the change.':'The saved original voice routing was restored and read back.');
- }catch(e){return result(deps,dispatched?'outcome_unknown':'blocked',dispatched?'The write may have reached the provider. Use read-only refresh; do not repeat the write. Its durable attempt remains held for reconciliation.':'The action was held. No provider change was sent.',{blockers:[reason(e)]});}
+  return result(deps,'verified',createsBranch||action==='configure_branch'?'The isolated branch was prepared and read back. Main, the owner branch and phone routing were unchanged. Calls still need separate enablement.':action==='route'?'The fixed phone now uses the reception entry point and reject-only fallback. Read-back verified the change.':'The saved original voice routing was restored and read back.');
+ }catch(e){return result(deps,dispatched?'outcome_unknown':'blocked',dispatched?'The write may have reached the provider. Use read-only refresh; do not repeat the write. Its durable attempt remains held for reconciliation.':'The action was held. No provider change was sent.',{blockers:[reason(e)],...providerFailure(e)});}
 }

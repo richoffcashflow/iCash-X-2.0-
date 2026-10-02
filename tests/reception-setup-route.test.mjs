@@ -22,7 +22,7 @@ assert.equal((await route.POST(request('POST',{headers:{'content-type':'text/pla
 assert.equal((await route.POST(request('POST',{headers:{'content-length':'not-number'}}))).status,400);assert.deepEqual(events,[]);
 let res=await route.GET(request());assert.deepEqual(await res.json(),{...ready,ownerQuickTestCallerRestriction:restriction});assert.equal(res.headers.get('cache-control'),'private, no-store, max-age=0');assert.deepEqual(events,['review']);
 res=await route.POST(request('POST'));assert.equal(res.status,200);assert.deepEqual(events,['review',{action:'prepare_branch',token}]);
-for(const action of ['configure_branch','route','restore']){res=await route.POST(request('POST',{body:JSON.stringify({action,confirm:true,reviewToken:token})}));assert.equal(res.status,200);assert.equal(events.at(-1).action,action);}
+for(const action of ['prepare_branch_retry','configure_branch','route','restore']){res=await route.POST(request('POST',{body:JSON.stringify({action,confirm:true,reviewToken:token})}));assert.equal(res.status,200);assert.equal(events.at(-1).action,action);}
 ready.status='blocked';res=await route.GET(request());assert.equal((await res.json()).ownerQuickTestCallerRestriction,restriction);ready.status='review';
 assert.equal(route.DELETE,undefined);assert.equal(route.PATCH,undefined);
 const ui=readFileSync('app/owner-reception/reception-setup.tsx','utf8'),page=readFileSync('app/owner-reception/page.tsx','utf8');assert(ui.includes('if(running.current)return'));assert(ui.includes('Confirm change'));assert(ui.includes('Cancel'));assert(ui.includes("setReview(null)"));assert(!ui.includes('localStorage'));assert(ui.includes('delete data.ownerQuickTestCallerRestriction;setReview(data)'));assert(!ui.includes('review.ownerQuickTestCallerRestriction'));assert(!ui.includes('sessionStorage'));assert(!ui.includes('process.env'));assert(ui.includes("data.status==='no_call'"));assert(!ui.includes("r.ok?'Provider receipt check completed"));
@@ -34,3 +34,5 @@ console.log('Reception setup route/UI: exact owner, CSRF, bounded fixed-action r
 assert(ui.includes('Owner quick-test setup value'));assert(ui.includes('!action&&r.ok'));assert(ui.includes('setCallerRestriction(\'\')'));assert(ui.includes('overflowWrap'));assert(!ui.includes('sessionStorage'));
 
 for(const label of ['Twilio uses reception routing','Original phone routing saved','Dedicated branch reviewed'])assert(ui.includes(label));assert(ui.includes("review.checks[key]?'Yes':'No'"));
+
+assert(ui.includes('Retry the corrected isolated branch request'));assert(ui.includes('Provider validation evidence'));assert(!ui.includes('providerFailure.message'));
