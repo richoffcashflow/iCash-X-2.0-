@@ -21,3 +21,26 @@ Local policy/service/HTTP tests use synthetic receipts. PGlite exercises the act
 Provider documentation describes startup failures but does not offer a universal non-2xx/timeout failure contract. The prior real401 call failed; other callback failure modes remain untested. Readiness validates Main callback configuration and reports its tool counts; this does not constitute runtime fail-closed verification.
 
 No wallet, credit reservation, operation-spend, automation ticket, callback/handoff capability, or business conversation is created by this flow. Existing billing reconciliation requires independently created business operation/conversation records and cannot discover this isolated row as billable customer work.
+
+## Temporary phone branch isolation
+
+Before arming, the incoming phone must be pinned to the existing private 60-second,
+no-business-tools branch. Main remains unchanged. The owner-only routing panel
+prepares a signed snapshot before a branch-only provider PATCH, rechecks immediately
+before sending it, and verifies readback. The original null or explicit Main branch
+is retained in an immutable server-side singleton before the provider write; this
+tab's session storage is only a convenience. The review button recovers the saved
+review after a refresh, lost tab, or server restart. Pin can only be attempted once.
+Never automatically retry an uncertain change: inspect the current assignment.
+After the test ends, is cancelled, or expires, restore the original assignment
+promptly and verify the provider readback. This is operator-driven restoration,
+not an automatic timer. Keep the tab open until restoration is verified.
+
+Official phone routing precedence is webhook branch, then phone-pinned branch,
+then default. Pinning removes the unsafe Main default from this test path; it does
+not independently prove provider call rejection when a webhook fails. The app's
+one-ever gate remains authoritative for successful initiation responses.
+Sources: https://elevenlabs.io/docs/api-reference/phone-numbers/update and
+https://elevenlabs.io/docs/eleven-agents/integrate/environment-variables .
+
+Arming and restoration are serialized by a shared database row lock. Once restoration starts, a stale arm cannot create an allowance. Pending, cancelled or uncertain calls wait through the five-minute window plus a 90-second tail; verified completed results can restore sooner. A short pin-settling hold also applies. This is a conservative operational guard, not a provider guarantee about delayed writes.

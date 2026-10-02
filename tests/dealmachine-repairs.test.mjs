@@ -18,3 +18,15 @@ assert.equal(normalize({...observed,estimated_repair_cost_low:90000,estimated_re
 assert.deepEqual(normalize({...observed,estimated_repair_cost_low:50000,estimated_repair_cost_high:90000},at).rangeCents,{low:5000000,high:9000000});
 assert.throws(()=>normalize({...observed,dm_property_id:'bad'},at));
 console.log('DealMachine repair normalization checks passed');
+
+assert.equal(actual.sourceField,'estimated_repair_cost');
+assert.equal(actual.estimateStatus,'available');
+assert.equal(normalize({...observed,estimated_repair_cost:0},at).baselineCents,0);
+assert.equal(normalize({...observed,estimated_repair_cost:0},at).estimateStatus,'available');
+for(const missing of [null,undefined])assert.equal(normalize({...observed,estimated_repair_cost:missing},at).estimateStatus,'missing');
+for(const invalid of ['71190',-1,Infinity,NaN,0.001,Number.MAX_SAFE_INTEGER])assert.equal(normalize({...observed,estimated_repair_cost:invalid},at).estimateStatus,'invalid');
+assert.equal(normalize({...observed,estimated_repair_cost:123.45},at).baselineCents,12345);
+const rangeOnly=normalize({dm_property_id:observed.dm_property_id,estimated_repair_cost_low:50000,estimated_repair_cost_high:90000},at);
+assert.equal(rangeOnly.baselineCents,null);
+assert.equal(rangeOnly.estimateStatus,'missing');
+assert.deepEqual(rangeOnly.rangeCents,{low:5000000,high:9000000},'Legacy range is preserved for audit only');

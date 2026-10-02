@@ -17,10 +17,10 @@ export function DealMessages({dealId,active=true}:{dealId:string;active?:boolean
  },[active,dealId,threadId,page,afterThread,refresh]);
  const current=data?.threads.find(t=>t.id===data.threadId);
  return <div className="deal-texts">{error&&<p role="status">{error} <button className="workspace-quiet" onClick={()=>setRefresh(v=>v+1)}>Retry</button></p>}{!data&&!error&&<p role="status">Loading texts…</p>}
- {data&&!data.threads.length&&<p>No text conversation linked to this property yet.</p>}
+ {data&&!data.threads.length&&<p>No texts yet. A permitted text conversation is needed before you can send.</p>}
  {data&&data.threads.length>1&&<label>Contact<select value={data.threadId} onChange={e=>{setThreadId(e.target.value);setPage(null);}}>{data.threads.map(t=><option key={t.id} value={t.id}>{t.party==='buyer'?'Buyer':'Seller'} · {t.recipient}</option>)}</select></label>}
  <div className="history-pages">{afterThread&&<button onClick={()=>{setAfterThread('');setThreadId('');setPage(null);setData(null);}}>First contacts</button>}{data?.nextThread&&<button onClick={()=>{setAfterThread(data.nextThread!);setThreadId('');setPage(null);setData(null);}}>More contacts</button>}</div>
- {current&&<><div className="message-legend"><span><i/>Seller / buyer</span><span><i/>Your bot number</span></div><label className="message-search">Find in loaded texts<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search this message page"/></label><Conversation key={current.id} draft={drafts[current.id]??''} onDraft={value=>setDrafts(d=>({...d,[current.id]:value}))} search={search} thread={current} ai={data?.ai?.[0]} messages={data?.messages.slice().reverse()??[]} onSent={()=>{setPage(null);setRefresh(v=>v+1);}}/></>}
+ {current&&<><details className="conversation-search"><summary>Search texts</summary><label className="message-search">Find in loaded texts<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search this message page"/></label></details><Conversation key={current.id} draft={drafts[current.id]??''} onDraft={value=>setDrafts(d=>({...d,[current.id]:value}))} search={search} thread={current} ai={data?.ai?.[0]} messages={data?.messages.slice().reverse()??[]} onSent={()=>{setPage(null);setRefresh(v=>v+1);}}/></>}
  <div className="history-pages">{page&&<button onClick={()=>setPage(null)}>Latest texts</button>}{data?.next&&<button onClick={()=>setPage(data.next)}>Older texts</button>}</div>
  </div>;
 }
@@ -61,6 +61,6 @@ function TextComposer({thread,message,setMessage,onSent}:{thread:Thread;message:
   <button className="message-send" disabled={busy||held||replyBlocked||!message.trim()||message.length>maxLength}>{busy?'Sending…':'Send text'}</button>
   {held&&<button type="button" className="message-check-status" onClick={()=>{onSent();setStatus('Checking the latest recorded texts. Review history before attempting another send; delivery has not been assumed.');}}>Check latest status</button>}{replyBlocked&&<p>Messaging is paused for this contact.</p>}{status&&<p role="status">{status}</p>}
   {message.length>maxLength&&<p>Shorten this draft to {maxLength} characters before sending.</p>}
-  <small>Sending uses credits and respects contact hours. Take over on the property card to pause new automated work. Your draft stays here while you switch between contacts on this property.</small>
+  <small>Sending uses credits. Contact permissions and hours still apply.</small>
  </form>;
 }

@@ -1,6 +1,6 @@
 /** Presentation-only grouping over authenticated records. Never predicts deal progress. */
 export type WorkspaceFilter = 'all' | 'attention' | 'active' | 'history';
-export type WorkspaceProperty = {id:string;completed_at:string;result:{property:{address:string;propertyId:string;legalDescription?:string|null;images?:unknown};financialCheck:{status:string;reason:string};preliminarySellerCeilingCents:number|null}};
+export type WorkspaceProperty = {id:string;completed_at:string;result:{property:{address:string;propertyId:string;legalDescription?:string|null;images?:unknown;bedrooms?:number|null;bathrooms?:number|null;livingAreaSqft?:number|null;yearBuilt?:number|null};financialCheck:{status:string;reason:string};preliminarySellerCeilingCents:number|null}};
 export type WorkspaceDeal = {id:string;screening_id:string;stage:string};
 export type WorkspaceEvidence = {
  propertyAttentionIds?:string[];

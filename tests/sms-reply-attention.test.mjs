@@ -23,7 +23,7 @@ slots=[];let work={textAttention:[{...item,screening_id:'property',message_id:'r
 const renderQueue=()=>{cursor=0;return mod.exports.WorkspaceAttention({work,page:0,onPage:()=>{},onOpen:()=>{},onRefresh:()=>{}});};
 let queue=renderQueue();assert.match(text(queue),/1 request shown/);
 const oldKey=all(queue).find(n=>n.type==='details').key;
-all(queue).find(n=>n.type===mod.exports.TextAttentionCard).props.onHandled();queue=renderQueue();assert.match(text(queue),/No open requests/);
+all(queue).find(n=>n.type===mod.exports.TextAttentionCard).props.onHandled();queue=renderQueue();assert.equal(queue,null,'empty attention panel stays out of the workspace');
 work={...work,textAttention:[{...work.textAttention[0],message_id:'reply-B',quote:'A newer reply'}]};queue=renderQueue();assert.match(text(queue),/1 request shown/);assert.notEqual(all(queue).find(n=>n.type==='details').key,oldKey,'new reply gets a fresh child key and busy state');
 assert.equal(all(queue).find(n=>n.type===mod.exports.TextAttentionCard).props.item.message_id,'reply-B');
 console.log('Attention queue: a later reply on the same row reappears after its predecessor was handled.');

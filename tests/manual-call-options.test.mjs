@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {z} from 'zod';
+import ts from 'typescript';
+import {contactEligibility} from '../lib/live-dispatch-policy.ts';
+const account='10000000-0000-4000-8000-000000000001',screen='20000000-0000-4000-8000-000000000001',phone='+12025550101';
+const key=createHash('sha256').update(phone).digest('hex');
+const currentHour=new Date().getUTCHours(),zone=`Etc/GMT${currentHour-12>=0?'+':''}${currentHour-12}`;
+let authorized=true,exists=true,permissions=[],textBlocks=[],callBlocks=[],lookups=[],queries=[];
+const good={phone,contact_key:key,timezone:zone,local_start_hour:9,local_end_hour:20,permission_until:new Date(Date.now()+86400000).toISOString(),dnc_checked_at:new Date().toISOString(),dnc_clear:true,revoked_at:null};
+const mocks={z,createHash,contactEligibility,NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method)=>{assert.equal(method,undefined,'read-only route never mutates state');queries.push(path);if(path.startsWith('icash_screening_jobs')){assert(path.includes(`account_id=eq.${account}`));assert(path.includes(`id=eq.${screen}`));return exists?[{id:screen}]:[];}if(path.startsWith('icash_contact_permissions')){assert(path.includes(`account_id=eq.${account}`));assert(path.includes(`screening_id=eq.${screen}`));return permissions;}if(path.startsWith('icash_text_suppressions'))return textBlocks;if(path.startsWith('icash_contact_suppressions'))return callBlocks;if(path.startsWith('icash_owner_contacts')){assert(path.includes(`account_id=eq.${account}`));assert(path.includes(`screening_id=eq.${screen}`));return lookups;}throw Error('Unexpected table');}};
+globalThis.__manualCall=mocks;
+let source=ts.transpileModule(readFileSync(new URL('../app/api/work/manual-call/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
+const {GET}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(mocks).join(',')+'}=globalThis.__manualCall;\n'+source).toString('base64'));
+const get=()=>GET(new Request('https://example.test/api/work/manual-call?screeningId='+screen));
+let r=await get();assert.equal(r.status,200);assert.deepEqual(r.body.contacts,[]);
+permissions=[good];r=await get();assert.equal(r.body.contacts[0].available,true);assert.match(r.body.contacts[0].reason,/You place the call/);
+for(const patch of [{revoked_at:new Date().toISOString()},{dnc_clear:false},{permission_until:'2000-01-01'},{dnc_checked_at:'2000-01-01'},{contact_key:'x'},{timezone:'bad'},{local_start_hour:21}]){permissions=[{...good,...patch}];r=await get();assert.equal(r.body.contacts[0].available,false);}
+permissions=[good];textBlocks=[{phone}];r=await get();assert.equal(r.body.contacts[0].available,false);textBlocks=[];callBlocks=[{contact_key:key}];r=await get();assert.equal(r.body.contacts[0].available,false);callBlocks=[];
+lookups=[{people:[{phones:[{number:phone,doNotCall:true}]}]}];r=await get();assert.equal(r.body.contacts[0].available,false);lookups=[];
+exists=false;queries=[];r=await get();assert.equal(r.status,404);assert.equal(queries.length,1);exists=true;authorized=false;queries=[];r=await get();assert.equal(r.status,503);assert.equal(queries.length,0);
+const ui=readFileSync(new URL('../components/manual-call-options.tsx',import.meta.url),'utf8');assert.match(ui,/href=\{`tel:/);assert.doesNotMatch(ui,/method:\s*['"]POST|dispatch|window\.location/);assert.match(ui,/Date\.now\(\)-checked>30000/);assert.match(ui,/Open my phone dialer/);
+const email=readFileSync(new URL('../components/deal-communications.tsx',import.meta.url),'utf8');assert.match(email,/emailVisited&&<DealEmail/,'closing email keeps its unsent draft mounted');
+delete globalThis.__manualCall;
+console.log('Manual dialer: read-only tenant/property scope, permission expiry, DNC, source flags, opt-out, suppression, malformed records, no side effects, explicit user tel action and stale recheck passed.');
