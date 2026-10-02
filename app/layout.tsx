@@ -5,5 +5,6 @@ import "./conversion-clean.css";
 import "./ui-reliability.css";
 import "./bot-building.css";
 import "./workspace-volume.css";
+import "./workspace-simple-cards.css";
 export const metadata: Metadata = { title: "iCash X | Real Estate Wholesaling, Made Easy", description: "Set up your personalized AI real estate bot for free. Choose your bot’s name, with voice, contracts and buyer matching preset. Choose a daily budget when live work is available.", icons: { icon: "/favicon.svg" } };
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="en"><body>{children}</body></html>; }
