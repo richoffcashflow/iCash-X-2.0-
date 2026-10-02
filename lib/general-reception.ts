@@ -74,9 +74,15 @@ export function receptionWorkflowIsInert(value:unknown){
  if(Object.keys(nodes).length===1&&Object.hasOwn(nodes,'start_node')&&node.parent_subgraph_id===undefined)return ownerWorkflowIsInert({...workflow,nodes:{start_node:{...node,parent_subgraph_id:null}}});
  return ownerWorkflowIsInert(value);
 }
+/** Explicit destination absence from the authenticated workspace settings GET.
+ * Default event selections do not create a webhook destination. Missing proof fails closed. */
+export function receptionWorkspacePostcallAbsent(input:unknown){
+ const webhooks=obj(obj(input).webhooks);
+ return Object.hasOwn(webhooks,'post_call_webhook_id')&&webhooks.post_call_webhook_id===null;
+}
 /** The hash covers the whole executable provider snapshot, not just the prompt.
  * A dedicated frozen branch is required; owner tests and Main are never repurposed. */
-export function inspectReceptionAgent(c:ReceptionConfig,input:unknown,branchInput:unknown){
+export function inspectReceptionAgent(c:ReceptionConfig,input:unknown,branchInput:unknown,workspacePostcallAbsent=false){
  const a=obj(input),b=obj(branchInput),conversation=obj(a.conversation_config),agent=obj(conversation.agent),prompt=obj(agent.prompt),platform=obj(a.platform_settings),privacy=obj(platform.privacy),overrides=obj(obj(platform.overrides).conversation_config_override);
  const tools=prompt.tools,builtins=prompt.built_in_tools;
  const safeEnd=(v:unknown)=>obj(v).type==='system'&&obj(v).name==='end_call'&&obj(obj(v).params).system_tool_type==='end_call';
@@ -100,7 +106,8 @@ export function inspectReceptionAgent(c:ReceptionConfig,input:unknown,branchInpu
   noTools:safeBuiltins&&empty(prompt.tool_ids)&&empty(prompt.mcp_server_ids)&&empty(prompt.native_mcp_server_ids)&&(empty(tools)||(Array.isArray(tools)&&tools.every(safeEnd))),
   noLanguagePresets:empty(conversation.language_presets),
   noClientExecutionOverrides:obj(platform.overrides).enable_procedure_ids_from_client!==true&&obj(platform.overrides).enable_starting_workflow_node_id_from_client!==true,
-  noPostcallExport:empty(obj(obj(platform.workspace_overrides).webhooks).events)&&empty(obj(obj(platform.workspace_overrides).webhooks).post_call_webhook_id)&&obj(obj(platform.workspace_overrides).webhooks).send_audio!==true,
+  workspacePostcallAbsent,
+  noPostcallExport:workspacePostcallAbsent&&Array.isArray(obj(obj(platform.workspace_overrides).webhooks).events)&&['[]','["transcript"]'].includes(JSON.stringify(obj(obj(platform.workspace_overrides).webhooks).events))&&obj(obj(platform.workspace_overrides).webhooks).post_call_webhook_id===null&&obj(obj(platform.workspace_overrides).webhooks).send_audio===false,
   noKnowledgeBase:empty(prompt.knowledge_base),
   noRag:obj(prompt.rag).enabled!==true,
   noCustomLlm:empty(prompt.custom_llm),
@@ -157,14 +164,14 @@ export function createReceptionHandlers(env:ReceptionEnv,deps:ReceptionDeps){
     if(c.call_profile==='owner_quick_test'&&!equal(callerHash,String(c.owner_caller_hash)))return reject();
     const path=`/v1/convai/agents/${c.agent_id}`;
     const callUrl=`https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Calls/${form.get('CallSid')}.json`;
-    const [agent,listed,call]=await Promise.all([eleven(env,fetcher,path+`?branch_id=${c.branch_id}`,undefined,deadline),eleven(env,fetcher,path+'/branches?include_archived=true&limit=100',undefined,deadline),fetcher(callUrl,{headers:{Authorization:'Basic '+Buffer.from(env.TWILIO_ACCOUNT_SID+':'+env.TWILIO_AUTH_TOKEN).toString('base64')},redirect:'error',cache:'no-store',signal:AbortSignal.any([deadline,AbortSignal.timeout(3500)])}).then(async r=>{if(!r.ok||r.url&&r.url!==callUrl)throw Error('CALL_UNAVAILABLE');return obj(JSON.parse(await boundedBody(r,32768)));})]);
+    const [agent,listed,call,workspace]=await Promise.all([eleven(env,fetcher,path+`?branch_id=${c.branch_id}`,undefined,deadline),eleven(env,fetcher,path+'/branches?include_archived=true&limit=100',undefined,deadline),fetcher(callUrl,{headers:{Authorization:'Basic '+Buffer.from(env.TWILIO_ACCOUNT_SID+':'+env.TWILIO_AUTH_TOKEN).toString('base64')},redirect:'error',cache:'no-store',signal:AbortSignal.any([deadline,AbortSignal.timeout(3500)])}).then(async r=>{if(!r.ok||r.url&&r.url!==callUrl)throw Error('CALL_UNAVAILABLE');return obj(JSON.parse(await boundedBody(r,32768)));}),eleven(env,fetcher,'/v1/convai/settings',undefined,deadline)]);
     // Twilio signatures have no timestamp. Independently reject stale signed webhook replays.
     const age=(deps.now?.()??Date.now())-Date.parse(String(call.date_created));
     if(call.sid!==form.get('CallSid')||call.account_sid!==env.TWILIO_ACCOUNT_SID||call.to!==c.called_number||call.from!==from||call.direction!=='inbound'||call.status!=='ringing'||!Number.isFinite(age)||age<0||age>120000)return reject();
     const rows=obj(listed).results,meta=obj(obj(listed).meta);
     if(!Array.isArray(rows)||rows.length>=100||(meta.total!==undefined&&meta.total!==rows.length))return reject();
     const matched=rows.filter(row=>obj(row).id===c.branch_id);
-    if(matched.length!==1||!inspectReceptionAgent(c,agent,matched[0]).safe)return reject();
+    if(matched.length!==1||!inspectReceptionAgent(c,agent,matched[0],receptionWorkspacePostcallAbsent(workspace)).safe)return reject();
     deadline.throwIfAborted();
     const nonce=randomBytes(32).toString('hex');
     const admission=obj(await deps.rpc('icash_reserve_general_reception',{p_call_sid:form.get('CallSid'),p_called_number:form.get('To'),p_caller_hash:callerHash,p_receipt_nonce:nonce,p_config_hash:c.config_hash,p_reviewed_version_id:c.reviewed_version_id},deadline));

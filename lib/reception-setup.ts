@@ -1,6 +1,6 @@
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
 import {ownerInboundTarget} from './owner-inbound-acceptance.ts';
-import {boundedBody,inspectReceptionAgent,receptionGreeting,receptionPrompt,receptionTarget,receptionUrl,resolveReceptionProfile,receptionSharedCapacityChecks,type ReceptionConfig} from './general-reception.ts';
+import {boundedBody,inspectReceptionAgent,receptionGreeting,receptionPrompt,receptionTarget,receptionUrl,resolveReceptionProfile,receptionSharedCapacityChecks,receptionWorkspacePostcallAbsent,type ReceptionConfig} from './general-reception.ts';
 
 // Fixed owner-only deployment preparation. No credentials, calls, generic proxy,
 // branch promotion, account activation or budget approval can be created here.
@@ -79,7 +79,7 @@ async function readPhone(api:ReturnType<typeof providers>,env:ReceptionSetupEnv)
 }
 function profile(config:Obj){return resolveReceptionProfile(config)??fail('profile_configuration_invalid');}
 function localConfig(agent:Obj,config:Obj):ReceptionConfig{const selected=profile(config);return {...config,account_id:receptionTarget.accountId,owner_user_id:receptionTarget.ownerUserId,called_number:receptionTarget.calledNumber,enabled:false,agent_id:receptionTarget.agentId,branch_id:String(agent.branch_id),reviewed_version_id:String(agent.version_id),config_hash:'',max_duration_seconds:selected.maxDurationSeconds};}
-function safeBranch(agent:Obj,branch:Obj,config:Obj){const c=localConfig(agent,config),check=inspectReceptionAgent(c,agent,branch);c.config_hash=check.hash;const reviewed=inspectReceptionAgent(c,agent,branch);return {c,safe:reviewed.safe,checks:reviewed.checks};}
+function safeBranch(agent:Obj,branch:Obj,config:Obj,workspacePostcallAbsent:boolean){const c=localConfig(agent,config),check=inspectReceptionAgent(c,agent,branch,workspacePostcallAbsent);c.config_hash=check.hash;const reviewed=inspectReceptionAgent(c,agent,branch,workspacePostcallAbsent);return {c,safe:reviewed.safe,checks:reviewed.checks};}
 // Read-only structural diagnostics. Values, arbitrary map keys, prompts, tool
 // arguments, URLs, names, IDs and credentials never enter this response.
 function branchPolicyShape(agent:Obj):NonNullable<ReceptionSetupReview['branchPolicyShape']>{
@@ -118,13 +118,13 @@ export function receptionBranchBody(main:Obj,hookId:string|null,config:Obj){
  built_in_tools.end_call={type:'system',name:'end_call',description:'',params:{system_tool_type:'end_call'}};
  return {conversation_config:{asr:{user_input_audio_format:'ulaw_8000'},tts:{voice_id:tts.voice_id,model_id:tts.model_id??'eleven_turbo_v2',agent_output_audio_format:'ulaw_8000'},agent:{first_message:receptionGreeting,language:'en',max_conversation_duration_message:'',prompt:{prompt:receptionPrompt,llm:prompt.llm,max_tokens:120,tools:[],tool_ids:[],built_in_tools,mcp_server_ids:[],native_mcp_server_ids:[],knowledge_base:[],rag:{enabled:false},custom_llm:null}},conversation:{max_duration_seconds:selected.maxDurationSeconds},language_presets:{}},platform_settings:{overrides:{enable_conversation_initiation_client_data_from_webhook:false,enable_procedure_ids_from_client:false,enable_starting_workflow_node_id_from_client:false,conversation_config_override:{conversation:{max_duration_seconds:true}}},workspace_overrides:{conversation_initiation_client_data_webhook:null,webhooks:{post_call_webhook_id:hookId,events:hookId?['transcript']:[],transcript_format:'json',send_audio:false}},data_collection:{},evaluation:{criteria:[]}},workflow:{nodes:{start_node:{type:'start',position:{x:0,y:0},edge_order:[]}},edges:{},prevent_subagent_loops:true}};
 }
-type Snapshot={main:Obj;owner:Obj;branches:Obj[];branch:Obj|null;branchMeta:Obj|null;state:Obj;config:Obj;phone:Obj|null;hookId:string|null;postcallConfigured:boolean;blockers:string[]};
+type Snapshot={main:Obj;owner:Obj;branches:Obj[];branch:Obj|null;branchMeta:Obj|null;state:Obj;config:Obj;phone:Obj|null;hookId:string|null;postcallConfigured:boolean;blockers:string[];workspacePostcallAbsent:boolean};
 async function snapshot(env:ReceptionSetupEnv,deps:ReceptionSetupDeps):Promise<Snapshot>{
  signing(env);const api=providers(env,deps);
  let state:Obj,config:Obj;try{state=obj(await deps.rpc('icash_get_reception_setup'));config=obj(await deps.rpc('icash_get_general_reception_config'));}catch{fail('database_unavailable');}
  if(state.schema_version!==1||config.account_id!==receptionTarget.accountId||config.owner_user_id!==receptionTarget.ownerUserId||config.called_number!==receptionTarget.calledNumber)fail('database_unavailable');
  profile(config);
- const [main,owner,listed]=await Promise.all([api.eleven(agentPath),api.eleven(agentPath+'?branch_id='+ownerBranch),api.eleven(agentPath+'/branches?include_archived=true&limit=100')]);
+ const [main,owner,listed,workspace]=await Promise.all([api.eleven(agentPath),api.eleven(agentPath+'?branch_id='+ownerBranch),api.eleven(agentPath+'/branches?include_archived=true&limit=100'),api.eleven('/v1/convai/settings')]);
  if(main.agent_id!==receptionTarget.agentId||!id(main.main_branch_id,'agtbrch')||main.branch_id!==main.main_branch_id||!id(main.version_id,'agtvrsn')||main.branch_id===ownerBranch||owner.agent_id!==receptionTarget.agentId||owner.branch_id!==ownerBranch||owner.main_branch_id!==main.main_branch_id)fail('provider_receipt_invalid');
  const rows=listed.results;if(!Array.isArray(rows)||!rows.length||rows.length>=100||(obj(listed.meta).total!==undefined&&obj(listed.meta).total!==rows.length))fail('provider_receipt_invalid');
  const branches=rows.map(obj);if(new Set(branches.map(b=>b.id)).size!==branches.length||branches.some(b=>b.agent_id!==receptionTarget.agentId||!id(b.id,'agtbrch')||b.draft_exists!==false||typeof b.is_archived!=='boolean'||b.current_live_percentage!==(b.id===main.branch_id?100:0)))fail('provider_receipt_invalid');
@@ -139,31 +139,35 @@ async function snapshot(env:ReceptionSetupEnv,deps:ReceptionSetupDeps):Promise<S
  if(!postcallConfigured&&config.receipt_mode!=='provider_readback')blockers.push('existing_postcall_hmac_secret_missing');
  if(config.receipt_mode!=='provider_readback')try{const hooks=await api.eleven('/v1/workspace/webhooks?include_usages=false');if(!Array.isArray(hooks.webhooks))fail('provider_receipt_invalid');const matches=hooks.webhooks.map(obj).filter(h=>h.webhook_url===postcallUrl&&h.auth_type==='hmac'&&h.is_disabled===false&&h.is_auto_disabled===false);if(matches.length===1&&typeof matches[0].webhook_id==='string'&&/^[A-Za-z0-9_-]{1,160}$/.test(matches[0].webhook_id))hookId=matches[0].webhook_id;}catch{blockers.push('postcall_webhook_readback_unavailable');}
  if(!hookId&&config.receipt_mode!=='provider_readback')blockers.push('existing_reception_postcall_webhook_missing');
- return {main:stable(main),owner:stable(owner),branches:branches.map(stable).sort((a,b)=>String(a.id).localeCompare(String(b.id))),branch:branch?stable(branch):null,branchMeta,state,config,phone,hookId,postcallConfigured,blockers};
+ return {main:stable(main),owner:stable(owner),branches:branches.map(stable).sort((a,b)=>String(a.id).localeCompare(String(b.id))),branch:branch?stable(branch):null,branchMeta,state,config,phone,hookId,postcallConfigured,blockers,workspacePostcallAbsent:receptionWorkspacePostcallAbsent(workspace)};
 }
 async function restoreSnapshot(env:ReceptionSetupEnv,deps:ReceptionSetupDeps):Promise<Snapshot>{
  signing(env);let state:Obj;try{state=obj(await deps.rpc('icash_get_reception_setup'));}catch{fail('database_unavailable');}
  if(state.schema_version!==1)fail('database_unavailable');
  const phone=await readPhone(providers(env,deps),env),original=obj(state.original_phone);
  if(original.phone_number!==receptionTarget.calledNumber||original.account_sid!==env.TWILIO_ACCOUNT_SID||original.sid!==phone.sid)fail('action_not_ready');
- return {main:{},owner:{},branches:[],branch:null,branchMeta:null,state,config:{},phone,hookId:null,postcallConfigured:false,blockers:[]};
+ return {main:{},owner:{},branches:[],branch:null,branchMeta:null,state,config:{},phone,hookId:null,postcallConfigured:false,blockers:[],workspacePostcallAbsent:false};
 }
 function hookReady(s:Snapshot){if(s.config.receipt_mode==='provider_readback')return true;const w=obj(obj(obj(s.branch?.platform_settings).workspace_overrides).webhooks);return s.postcallConfigured&&s.hookId!==null&&w.post_call_webhook_id===s.hookId&&equal(w.events,['transcript'])&&w.transcript_format==='json'&&w.send_audio===false;}
 function attempts(s:Snapshot){return obj(s.state.attempts);}
 const preparationActions:SetupAction[]=['prepare_branch','prepare_branch_retry','prepare_branch_retry_2','prepare_branch_retry_3'];
 function allowed(s:Snapshot,env:ReceptionSetupEnv,action:SetupAction){
  if(attempts(s)[action])return false;
+ if(action!=='restore'&&!s.workspacePostcallAbsent)return false;
  if(action==='prepare_branch')return !s.branch&&s.config.enabled===false&&sourceSafe(s.main);
  if(preparationActions.includes(action)){const index=preparationActions.indexOf(action);return index>0&&preparationActions.slice(0,index).every(a=>{const prior=obj(attempts(s)[a]);return prior.state==='rejected'&&prior.provider_status===422&&typeof prior.finished_at==='string'&&Number.isFinite(Date.parse(prior.finished_at));})&&!preparationActions.slice(index).some(a=>attempts(s)[a])&&!Object.values(attempts(s)).some(v=>obj(v).state==='started')&&!s.branch&&s.config.branch_id===null&&s.config.enabled===false&&sourceSafe(s.main);}
  if(action==='configure_branch')return !!s.branch&&s.config.branch_id===s.branch.branch_id&&s.config.enabled===false&&sourceSafe(s.main)&&empty(s.branch.procedures)&&(s.config.receipt_mode==='provider_readback'||(!!s.hookId&&s.postcallConfigured));
  const phone=s.phone;if(!phone||phone.voice_application_sid||phone.trunk_sid)return false;
  if(action==='restore')return !!s.state.original_phone&&equal(phoneOther(phone),phoneOther(obj(s.state.original_phone)))&&equal(routing(phone),desiredRouting)&&typeof s.state.route_started_at==='string'&&(Date.now()-Date.parse(s.state.route_started_at))>30_000;
- if(s.state.original_phone||!s.branch||!s.branchMeta||!safeBranch(s.branch,s.branchMeta,s.config).safe||!hookReady(s)||s.config.enabled!==true||env.RECEPTION_ENABLED!=='true')return false;
- return inspectReceptionAgent(s.config as ReceptionConfig,s.branch,s.branchMeta).safe&&!equal(routing(phone),desiredRouting);
+ if(s.state.original_phone||!s.branch||!s.branchMeta||!safeBranch(s.branch,s.branchMeta,s.config,s.workspacePostcallAbsent).safe||!hookReady(s)||s.config.enabled!==true||env.RECEPTION_ENABLED!=='true')return false;
+ return inspectReceptionAgent(s.config as ReceptionConfig,s.branch,s.branchMeta,s.workspacePostcallAbsent).safe&&!equal(routing(phone),desiredRouting);
 }
 type Token={v:1;action:SetupAction;fingerprint:string;nonce:string;expires:number};
 const actions:SetupAction[]=[...preparationActions,'configure_branch','route','restore'];
-function fingerprint(s:Snapshot,action:SetupAction){return digest(action==='restore'?{phone:s.phone,original:s.state.original_phone,routeStarted:s.state.route_started_at}:s);}
+// Workspace absence is fresh policy evidence, not part of the historical create
+// snapshot. Excluding only this new field preserves held-attempt reconstruction.
+// Every review/apply/readback and actual admission re-fetches and validates it.
+function fingerprint(s:Snapshot,action:SetupAction){const {workspacePostcallAbsent:_,...historical}=s;return digest(action==='restore'?{phone:s.phone,original:s.state.original_phone,routeStarted:s.state.route_started_at}:historical);}
 function signature(raw:string,key:string){return createHmac('sha256',key).update('icash-reception-setup-v1\0'+raw).digest('base64url');}
 function issue(s:Snapshot,action:SetupAction,secret:string,now:number){const t:Token={v:1,action,fingerprint:fingerprint(s,action),nonce:randomBytes(16).toString('hex'),expires:now+120_000};const encoded=Buffer.from(JSON.stringify(t)).toString('base64url');return {action,reviewToken:encoded+'.'+signature(encoded,secret),expiresAt:new Date(t.expires).toISOString()};}
 function verify(raw:unknown,action:SetupAction,secret:string,now:number):Token{
@@ -195,10 +199,10 @@ function reconstructedPreCreate(s:Snapshot):Pick<ReceptionSetupReview,'preCreate
  return {preCreateEvidence:{action,fingerprint:fingerprint(before,action)}};
 }
 export async function reviewReceptionSetup(env:ReceptionSetupEnv,deps:ReceptionSetupDeps):Promise<ReceptionSetupReview>{
- try{const s=await snapshot(env,deps),valid=!!s.branch&&!!s.branchMeta&&safeBranch(s.branch,s.branchMeta,s.config).safe,offered=actions.filter(a=>allowed(s,env,a)).map(a=>issue(s,a,signing(env),deps.now?.()??Date.now()));
-  const blockers=[...s.blockers];if(s.config.enabled!==true||env.RECEPTION_ENABLED!=='true')blockers.push('separate_funding_and_enablement_required');if(!sourceSafe(s.main))blockers.push(sharedSettingsSafe(s.main)?'source_voice_llm_or_procedures_unverified':'shared_agent_safety_settings_require_separate_review');if(s.branch&&!valid)blockers.push('branch_policy_readback_failed');if(Object.values(attempts(s)).some(v=>obj(v).state==='started'))blockers.push('prior_write_requires_read_only_reconciliation');
-  const branchReview=s.branch&&s.branchMeta?safeBranch(s.branch,s.branchMeta,s.config):null,c=branchReview?.c;
-  return result(deps,'review','Review the fixed reception setup. Preparation never enables calls or changes customer funding.',{blockers,profile:{name:String(s.config.call_profile),maxDurationSeconds:profile(s.config).maxDurationSeconds,customerChargeCapCents:profile(s.config).customerChargeCapCents},checks:{database:true,provider:true,...sharedSettingsChecks(s.main),sharedAgentSettingsSafe:sharedSettingsSafe(s.main),dedicatedBranch:valid,postcallSecretConfigured:s.postcallConfigured,postcallHookReady:hookReady(s),providerReadbackMode:s.config.receipt_mode==='provider_readback',twilioReadback:!!s.phone,twilioUsesReception:!!s.phone&&equal(routing(s.phone),desiredRouting),originalRoutingSaved:!!s.state.original_phone},actions:offered,...reconstructedPreCreate(s),...(c&&branchReview&&s.branch?{branch:{id:c.branch_id,version:c.reviewed_version_id,configHash:c.config_hash},branchChecks:branchReview.checks,branchPolicyShape:branchPolicyShape(s.branch)}:{})});
+ try{const s=await snapshot(env,deps),valid=!!s.branch&&!!s.branchMeta&&safeBranch(s.branch,s.branchMeta,s.config,s.workspacePostcallAbsent).safe,offered=actions.filter(a=>allowed(s,env,a)).map(a=>issue(s,a,signing(env),deps.now?.()??Date.now()));
+  const blockers=[...s.blockers];if(!s.workspacePostcallAbsent)blockers.push('workspace_postcall_destination_unverified');if(s.config.enabled!==true||env.RECEPTION_ENABLED!=='true')blockers.push('separate_funding_and_enablement_required');if(!sourceSafe(s.main))blockers.push(sharedSettingsSafe(s.main)?'source_voice_llm_or_procedures_unverified':'shared_agent_safety_settings_require_separate_review');if(s.branch&&!valid)blockers.push('branch_policy_readback_failed');if(Object.values(attempts(s)).some(v=>obj(v).state==='started'))blockers.push('prior_write_requires_read_only_reconciliation');
+  const branchReview=s.branch&&s.branchMeta?safeBranch(s.branch,s.branchMeta,s.config,s.workspacePostcallAbsent):null,c=branchReview?.c;
+  return result(deps,'review','Review the fixed reception setup. Preparation never enables calls or changes customer funding.',{blockers,profile:{name:String(s.config.call_profile),maxDurationSeconds:profile(s.config).maxDurationSeconds,customerChargeCapCents:profile(s.config).customerChargeCapCents},checks:{database:true,provider:true,workspacePostcallAbsent:s.workspacePostcallAbsent,...sharedSettingsChecks(s.main),sharedAgentSettingsSafe:sharedSettingsSafe(s.main),dedicatedBranch:valid,postcallSecretConfigured:s.postcallConfigured,postcallHookReady:hookReady(s),providerReadbackMode:s.config.receipt_mode==='provider_readback',twilioReadback:!!s.phone,twilioUsesReception:!!s.phone&&equal(routing(s.phone),desiredRouting),originalRoutingSaved:!!s.state.original_phone},actions:offered,...reconstructedPreCreate(s),...(c&&branchReview&&s.branch?{branch:{id:c.branch_id,version:c.reviewed_version_id,configHash:c.config_hash},branchChecks:branchReview.checks,branchPolicyShape:branchPolicyShape(s.branch)}:{})});
  }catch(e){
   // Emergency restoration must remain available during an ElevenLabs outage or
   // unrelated Main/branch drift. It only needs the fixed phone and saved state.
@@ -220,9 +224,9 @@ export async function applyReceptionSetup(env:ReceptionSetupEnv,deps:ReceptionSe
    const branchId=createsBranch?receipt.created_branch_id:s.branch!.branch_id;
    if(!id(branchId,'agtbrch')||branchId===s.main.branch_id||branchId===ownerBranch)fail('verification_failed');
    const after=await snapshot(env,deps);
-   if(!equal(after.main,s.main)||!equal(after.owner,s.owner)||!equal(after.phone,s.phone)||!after.branch||!after.branchMeta||after.branch.branch_id!==branchId||!safeBranch(after.branch,after.branchMeta,after.config).safe)fail('verification_failed');
+   if(!equal(after.main,s.main)||!equal(after.owner,s.owner)||!equal(after.phone,s.phone)||!after.branch||!after.branchMeta||after.branch.branch_id!==branchId||!safeBranch(after.branch,after.branchMeta,after.config,after.workspacePostcallAbsent).safe)fail('verification_failed');
    const beforeOthers=s.branches.filter(b=>b.id!==branchId),afterOthers=after.branches.filter(b=>b.id!==branchId);if(!equal(beforeOthers,afterOthers))fail('verification_failed');
-   const c=safeBranch(after.branch,after.branchMeta,after.config).c;out={branch_id:c.branch_id,reviewed_version_id:c.reviewed_version_id,config_hash:c.config_hash,call_profile:c.call_profile,rate_id:c.rate_id,max_duration_seconds:c.max_duration_seconds,customer_charge_cap_cents:c.customer_charge_cap_cents};
+   const c=safeBranch(after.branch,after.branchMeta,after.config,after.workspacePostcallAbsent).c;out={branch_id:c.branch_id,reviewed_version_id:c.reviewed_version_id,config_hash:c.config_hash,call_profile:c.call_profile,rate_id:c.rate_id,max_duration_seconds:c.max_duration_seconds,customer_charge_cap_cents:c.customer_charge_cap_cents};
   }else{
    const original=obj(s.state.original_phone),desired=action==='route'?desiredRouting:routing(original),phone=s.phone!;
    const params=new URLSearchParams({VoiceUrl:String(desired.voice_url??''),VoiceMethod:String(desired.voice_method),VoiceFallbackUrl:String(desired.voice_fallback_url??''),VoiceFallbackMethod:String(desired.voice_fallback_method)});
