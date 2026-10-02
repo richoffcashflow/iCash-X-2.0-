@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+import ts from 'typescript';
+import {renderToStaticMarkup} from 'react-dom/server';
+import * as types from '../lib/operator-exception-types.ts';
+const require=createRequire(import.meta.url);
+const source=readFileSync(new URL('../components/operator-exceptions.tsx',import.meta.url),'utf8');
+const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
+const now='2026-10-02T00:45:00Z',id='00000000-0000-4000-8000-000000000001';
+const item={key:'billing:'+id,recordId:id,accountId:id,source:'billing',state:'stop_requested',priority:'attention',title:'Cancellation is not yet confirmed',detail:'The plan has a saved stop request.',nextStep:'Check provider cancellation before further changes.',recordedAt:now};
+const snapshot={enabled:true,observedAt:now,partial:false,dateTimezone:'America/Chicago',scope:'provisioned_support_operator',sections:[{source:'billing',label:types.exceptionLabels.billing,status:'checked',items:[item],hasMore:true,page:0}]};
+let values=[],index=0,effects=[],changes=[];
+function render(overrides={}){
+ values=[overrides.opened??true,overrides.source??'',overrides.page??0,0,overrides.result===undefined?snapshot:overrides.result,overrides.busy??false,overrides.error??''];index=0;effects=[];changes=[];
+ const mod={exports:{}};
+ new Function('require','module','exports',code)(name=>name==='react'?{useState:()=>{const current=index++;return [values[current],v=>changes.push([current,v])];},useEffect:fn=>effects.push(fn),useRef:()=>({current:0})}:name==='react/jsx-runtime'?require(name):name==='@/lib/operator-exception-types'?types:{},mod,mod.exports);
+ return mod.exports.OperatorExceptions();
+}
+const all=node=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(all):[node,...all(node.props?.children)];
+let tree=render(),html=renderToStaticMarkup(tree),nodes=all(tree);
+assert.match(html,/Cancellation is not yet confirmed/);assert.match(html,/not an all-clear/);assert.match(html,/20 recorded items/);assert.match(html,/No work is retried/);assert.match(html,/Recorded evidence/);
+assert.equal(nodes.filter(n=>n.type==='button'&&/^(retry|release|refund|send|resume|cancel)\b/i.test(String(n.props.children))).length,0,'No consequential action controls');
+assert(nodes.some(n=>n.type==='label'&&n.props.htmlFor==='operator-source'));
+assert(nodes.some(n=>n.type==='button'&&n.props['aria-expanded']===true));
+assert(nodes.some(n=>n.type==='button'&&String(n.props.children).includes('Next')));
+html=renderToStaticMarkup(render({opened:false}));assert.doesNotMatch(html,/Cancellation is not yet confirmed|Recorded evidence/);assert.match(html,/Review operations/);
+html=renderToStaticMarkup(render({result:{enabled:false}}));assert.match(html,/have not been enabled/);assert.doesNotMatch(html,/No matching records/);
+html=renderToStaticMarkup(render({result:null,error:'Access denied'}));assert.match(html,/No current health result/);assert.doesNotMatch(html,/Cancellation is not yet confirmed/);
+html=renderToStaticMarkup(render({result:{...snapshot,partial:true,sections:[{...snapshot.sections[0],status:'unavailable',items:[]}]}}));assert.match(html,/Missing results do not mean/);assert.doesNotMatch(html,/No matching records/);
+html=renderToStaticMarkup(render({source:'billing',page:1,result:snapshot}));assert.match(html,/Previous page/);assert.match(html,/live records can change between pages/);
+html=renderToStaticMarkup(render({result:{...snapshot,sections:[{...snapshot.sections[0],items:[],hasMore:false}]}}));assert.match(html,/No matching records in this checked page/);
+html=renderToStaticMarkup(render({source:'billing',page:1000,result:{...snapshot,sections:[{...snapshot.sections[0],page:1000}]}}));assert.doesNotMatch(html,/>Next /);assert.match(html,/bounded page limit/);
+html=renderToStaticMarkup(render({source:'billing',page:2,result:null,error:'Unavailable'}));assert.match(html,/Previous page/);assert.match(html,/First page/);
+assert.match(source,/controller\.abort\(\)/);assert.match(source,/sequence\.current===request/);assert.match(source,/setResult\(null\)/);assert.doesNotMatch(source,/dangerouslySetInnerHTML|setInterval|method:\s*['"](?:POST|PATCH|DELETE)/);
+// Execute the actual effect and ensure a response arriving after close/unmount is discarded.
+render();let finish;let request;
+const priorFetch=globalThis.fetch;globalThis.fetch=(url,options)=>{request={url,options};return new Promise(resolve=>finish=resolve);};
+const cleanup=effects[0]();assert.equal(request.options.cache,'no-store');assert(request.options.signal instanceof AbortSignal);assert(request.url.startsWith('/api/support/admin/operations?'));
+cleanup();assert(request.options.signal.aborted);const before=changes.length;
+finish({ok:true,json:async()=>snapshot});await new Promise(resolve=>setTimeout(resolve,0));assert.equal(changes.length,before,'Unmounted requests cannot restore old account data');globalThis.fetch=priorFetch;
+console.log('Operator exceptions UI passed: evidence-only display, default-off/unavailable states, accessible controls, bounded pagination, no action controls and aborted/stale response protection.');

@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import {z} from 'zod';
+import {exceptionQuery} from '../lib/operator-exceptions.ts';
+const text=readFileSync(new URL('../app/api/support/admin/operations/route.ts',import.meta.url),'utf8');
+const compiled=ts.transpileModule(text,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .*;\s*$/gm,'');
+let authorized=false,expiredAfterRead=false,authChecks=0,reads=0;
+const mocks={z,exceptionQuery,NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},db:()=>{throw Error('Unexpected direct db access');},requireTrustedOperator:async scope=>{authChecks++;assert.equal(scope,'support');if(!authorized||expiredAfterRead&&authChecks>1)throw Error('OPERATOR_REQUIRED');return {userId:'operator'};},collectOperatorExceptions:async(db,query,now,signal)=>{reads++;assert(now instanceof Date);assert(signal instanceof AbortSignal);return {observedAt:now.toISOString(),sections:[],partial:false};}};
+globalThis.__operatorExceptionsRoute=mocks;
+const route=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(mocks).join(',')+'}=globalThis.__operatorExceptionsRoute;\n'+compiled).toString('base64'));
+const get=path=>route.GET(new Request('https://www.geticashx.com/api/support/admin/operations'+path));
+process.env.ICASH_OPERATOR_EXCEPTIONS_ENABLED='true';let response=await get('');assert.equal(response.status,403);assert.equal(reads,0);
+authorized=true;delete process.env.ICASH_OPERATOR_EXCEPTIONS_ENABLED;response=await get('');assert.deepEqual(response.body,{enabled:false});assert.equal(reads,0);assert.equal(response.headers['Cache-Control'],'private, no-store');
+process.env.ICASH_OPERATOR_EXCEPTIONS_ENABLED='true';
+for(const query of ['?accountId=foreign','?source=unknown','?page=1','?source=billing&page=-1','?source=billing&page=1001','?source=billing&source=costs','?source=billing&page=0&page=1']){response=await get(query);assert.equal(response.status,400,query);assert.equal(reads,0);}
+authChecks=0;response=await get('?source=billing&page=1');assert.equal(response.status,200);assert.equal(reads,1);assert.equal(authChecks,2);assert(response.body.enabled);
+expiredAfterRead=true;authChecks=0;response=await get('');assert.equal(response.status,403,'Revocation while scanning must prevent returning data');assert(!response.body.enabled);assert(!response.body.sections);
+assert.equal(route.POST,undefined);assert.equal(route.PATCH,undefined);assert.equal(route.DELETE,undefined);assert.doesNotMatch(text,/allowedOrigin|fetch\(|"POST"|'POST'|"PATCH"|'PATCH'/);
+console.log('Operator exceptions API passed: provisioned scope before reads, default-off, strict query limits, no account override, no-store, reauthorization after scans and GET-only behavior.');

@@ -1,15 +1,16 @@
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
+import {supportNextStep} from './support-self-service.ts';
 export const supportId = z.string().uuid();
 export const supportTopics = ['work','billing','setup','cancel','human','general'] as const;
 export type SupportTopic = typeof supportTopics[number];
-export type SupportEvidence = {key:string; source:string; status:'ok'|'attention'|'unknown'; detail:string; observedAt:string};
+export type SupportEvidence = {key:string; source:string; status:'ok'|'attention'|'unknown'; detail:string; observedAt:string; code?:string};
 export const supportMessageInput = z.object({requestId:supportId,threadId:supportId.optional(),message:z.string().trim().min(1).max(2000)}).strict();
 export const supportStatusInput = z.object({requestId:supportId,threadId:supportId,status:z.enum(['open','escalated','waiting_on_customer','resolved']),reply:z.string().trim().min(1).max(3000).optional()}).strict();
 /** Only these literal topics influence diagnostics. Model output is never an executable instruction. */
 export function supportTopic(text:string):SupportTopic {
  if(/\b(human|person|owner|agent|escalate)\b/i.test(text))return 'human';
- if(/\b(cancel|stop|delete|refund)\b/i.test(text))return 'cancel';
+ if(/\b(cancel|delete|refund)\b/i.test(text)||/^(?:please\s+)?stop[.!?\s]*$/i.test(text.trim())||/\b(?:want to|please|help me|can you)\s+stop\b|\bstop (?:my |the |future )?(?:bot|work|renewals|billing|plan|subscription)\b/i.test(text))return 'cancel';
  if(/\b(bill|billing|charge|charged|payment|credit|balance|renewal)\b/i.test(text))return 'billing';
  if(/\b(sign.?in|setup|start|login)\b/i.test(text))return 'setup';
  return 'work';
@@ -22,12 +23,12 @@ export function redactSupportQuestion(text:string){
  .replace(/\b\d[\d\s().+\-]{5,}\d\b/g,'[number removed]');
 }
 export function supportAnswer(topic:SupportTopic,evidence:SupportEvidence[],ai:boolean){
- const wanted=topic==='billing'?['billing','credits']:topic==='setup'?['readiness','work']:topic==='cancel'?['work','billing']:['work','readiness','screening','voice','billing'];
+ const wanted=topic==='billing'?['billing','payments','credits']:topic==='setup'?['readiness','work']:topic==='cancel'?['work','billing']:['work','credits','readiness','screening','voice','billing'];
  const relevant=evidence.filter(e=>wanted.includes(e.key));
  const intro=topic==='cancel'?'To stop future bot work and daily renewals, use “Review cancellation” below and confirm. Chat messages alone do not cancel anything. Deletion and refunds need a separate support review.':topic==='human'?'You can send this conversation and its status checks to the support team using “Ask the team”.':'Here is what I could verify from your account:';
- const details=relevant.map(e=>e.detail).join('\n');
+ const details=relevant.map(e=>{const next=supportNextStep(e);return e.detail+(next?' Next: '+next.text:'');}).join('\n\n');
  const ending=relevant.some(e=>e.status!=='ok')?'If this does not explain the issue, choose “Ask the team”. Your conversation and these checks will be included.':'If something still seems wrong, tell me what you expected and what happened.';
- return `${intro}\n\n${details}\n\n${ending}${ai?'':'\n\nAI is unavailable right now; these are direct account checks.'}`;
+ return `${intro}\n\n${details||'Account checks could not be verified. Refresh the status checks or ask the team; no account changes were made.'}\n\n${ending}${ai?'':'\n\nAI is unavailable right now; these are direct account checks.'}`;
 }
 export function hashCancelNonce(nonce:string){return createHash('sha256').update(nonce).digest('hex');}
 const cancelNonce=z.string().regex(/^[a-f0-9]{64}$/);
