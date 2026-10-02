@@ -20,3 +20,7 @@ resolve({ok:true,json:async()=>({photo:{view:'street_view',url:props.images.stre
 console.log('Property thumbnail: image attributes, missing/broken fallback, changed-image recovery and stale-response abort passed');
 
 const css=readFileSync(new URL('../app/workspace-volume.css',import.meta.url),'utf8');assert.match(css,/flex:0 0 80px;width:80px/);assert.match(css,/flex-basis:56px;width:56px/);assert.match(css,/object-fit:contain/);
+state=[];globalThis.fetch=async()=>({ok:true,json:async()=>({photo:{view:'street_view',url:'https://img.dealmachine.com/sv/35,-90.jpg',fallbackUrl:'https://img.dealmachine.com/sat/35,-90.jpg'}})});
+render({...props,images:undefined});effects[0]();await new Promise(done=>setImmediate(done));
+img=all(render({...props,images:undefined})).find(n=>n.type==='Image');img.props.onError();
+img=all(render({...props,images:undefined})).find(n=>n.type==='Image');assert.match(img.props.alt,/Satellite view/);assert.equal(img.props.src,'https://img.dealmachine.com/sat/35,-90.jpg');img.props.onError();assert(!all(render({...props,images:undefined})).some(n=>n.type==='Image'),'Both failed images stop without a retry loop');globalThis.fetch=originalFetch;

@@ -1,4 +1,4 @@
-import {dealMachinePhoto} from './property-photo.ts';
+import {dealMachinePhoto,coordinatePropertyPhoto} from './property-photo.ts';
 import {propertyIdPattern} from './property-context.ts';
 /** Free base-field preview only. No enrichment, contacts, retries or writes. */
 export async function loadPropertyPhoto(id:string,key:string|undefined,transport:typeof fetch=fetch){
@@ -11,7 +11,7 @@ export async function loadPropertyPhoto(id:string,key:string|undefined,transport
   if(!response.ok){report('provider_http_error',response.status);return null;}
   const body=await response.json();
   if(body?.data?.dm_property_id!==id){report('property_mismatch');return null;}
-  const photo=dealMachinePhoto(body.data.images);
+  const photo=dealMachinePhoto(body.data.images)??coordinatePropertyPhoto(body.data.latitude,body.data.longitude);
   if(!photo){const keys=(value:unknown)=>value&&typeof value==='object'?Object.keys(value).filter(k=>/^[a-zA-Z_]{1,40}$/.test(k)).slice(0,60):[];console.info('property_photo_shape',JSON.stringify({root:keys(body),data:keys(body.data),included:keys(body.included),relationships:keys(body.data.relationships)}));}
   report(photo?'photo_available':body.data.images?'image_format_unavailable':'images_missing');
   return photo;
