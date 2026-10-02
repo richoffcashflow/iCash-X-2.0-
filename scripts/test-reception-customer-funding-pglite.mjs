@@ -15,10 +15,11 @@ const foundation='supabase/migrations/20260928015041_icash_accounts_deals_credit
 const credit='supabase/migrations/20260928015153_icash_atomic_credits_and_engine_evidence.sql';
 const costs='supabase/migrations/20260928195902_atomic_operating_costs.sql';
 const account='48dfb798-8c1a-404f-88c0-c396cc067062', owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7';
+const normalRate='e827a7c9-8648-4999-885c-f136fd07100e';
 const rate='f93ace00-83fc-4d09-a37c-6d9d9f0a38f0', otherRate='f93ace00-83fc-4d09-a37c-6d9d9f0a38f1';
 const hash='a'.repeat(64),caller='b'.repeat(64),agent='agent_receptionFixture',branch='agtbrch_receptionFixture',version='agtvrsn_receptionFixture';
 const sid=n=>'CA'+n.toString(16).padStart(32,'0'),nonce=n=>n.toString(16).padStart(64,'0');
-const q=async(sql,args=[])=>{try{return await db.query(sql,args);}catch(e){if(!['42501','P0001','25P02'].includes(e.code))console.error('SQL ERROR',e.message,sql);throw e;}};
+const q=async(sql,args=[])=>{try{return await db.query(sql,args);}catch(e){if(!['42501','P0001','25P02','23514'].includes(e.code))console.error('SQL ERROR',e.message,sql);throw e;}};
 const value=async(sql,args=[])=>Object.values((await q(sql,args)).rows[0])[0];
 const reserve=(n=1,over={})=>value('select public.icash_reserve_general_reception($1,$2,$3,$4,$5,$6)',[over.call??sid(n),over.to??'+17816093521',over.caller??caller,over.nonce??nonce(n),over.hash??hash,over.version??version]);
 const finish=(n=1,over={})=>value('select public.icash_finish_general_reception($1,$2,$3,$4,$5,$6,$7,$8)',[over.call??sid(n),over.nonce??nonce(n),over.agent??agent,over.version??version,over.branch??branch,over.conv??`conv_test${n}`,over.state??'completed',JSON.stringify(over.statements??[])]);
@@ -28,10 +29,12 @@ const ok=(a,message)=>{assert.ok(a,message);assertions++;};
 async function admin(f){await q('reset role');try{return await f();}finally{await q('set local role service_role');}}
 async function denies(f,re=/permission denied|must be owner/i){await q('savepoint deny');try{await assert.rejects(f,re);assertions++;}finally{await q('rollback to savepoint deny');await q('release savepoint deny');}}
 async function scenario(name,f){await q('begin');try{await q('set local role service_role');await f();scenarios++;console.log('PASS '+name);}finally{await q('rollback');}}
-async function prepare(extra=''){
+async function prepare(extra='',profile='owner_quick_test'){
  await admin(()=>q(`update icash_reception_private.config set config_hash=$1,agent_id=$2,branch_id=$3,reviewed_version_id=$4,
+ call_profile=$5,rate_id=$6,max_duration_seconds=$7,customer_charge_cap_cents=$8,
+ owner_quick_test_enabled=$9,owner_quick_test_approval_reference=$10,owner_caller_hash=$11,
  approved_at=clock_timestamp()-interval '1 hour',reviewed_until=clock_timestamp()+interval '1 day',approval_reference='LOCAL SYNTHETIC PROVIDER REVIEW',
- allow_inbound_while_paused=true,inbound_pause_approval_reference='LOCAL SYNTHETIC INBOUND-ONLY APPROVAL',enabled=true ${extra}`,[hash,agent,branch,version]));
+ allow_inbound_while_paused=true,inbound_pause_approval_reference='LOCAL SYNTHETIC INBOUND-ONLY APPROVAL',enabled=true ${extra}`,[hash,agent,branch,version,profile,profile==='normal'?normalRate:rate,profile==='normal'?600:60,profile==='normal'?430:65,profile==='owner_quick_test',profile==='owner_quick_test'?'EXPLICIT LOCAL OWNER-ONLY QUICK TEST':null,profile==='owner_quick_test'?caller:null]));
 }
 const snapshot=()=>admin(async()=>({wallet:await value('select to_jsonb(w) from icash_wallets w where account_id=$1',[account]),
  budget:await value('select to_jsonb(b) from icash_operating_budget b'),receipts:Number(await value('select count(*) from icash_reception_private.receipts')),
@@ -74,9 +77,22 @@ try{
  const amounts=Object.fromEntries(cats.map(x=>[x,x==='elevenlabs'?91200:x==='twilio'?12900:x==='support_and_overhead'?1000:0]));
  for(const [id,operation] of [[rate,'incoming_call'],[otherRate,'other']])await q(`insert into icash_operation_rates(id,operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled,voice_max_duration_seconds)
  values($1::uuid,$2,$1::text,65,$3,'SYNTHETIC LOCAL PLANNING ONLY',now()-interval '1 day',now()+interval '2 days',true,60)`,[id,operation,JSON.stringify(amounts)]);
+ const normalAmounts={...amounts,elevenlabs:912000,twilio:129000};
+ await q(`insert into icash_operation_rates(id,operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled,voice_max_duration_seconds)
+ values($1,'incoming_call','normal-local',430,$2,'SYNTHETIC NORMAL PLANNING ONLY',now()-interval '1 day',now()+interval '2 days',true,600)`,[normalRate,JSON.stringify(normalAmounts)]);
  await db.exec(`grant select,insert,update,delete on all tables in schema public to service_role;
  revoke all on all functions in schema public from public,anon,authenticated;grant execute on all functions in schema public to service_role;`);
  await db.exec(read('config/general-reception.sql'));
+ // Installed-path upgrade fixture: old setup existed before either profile.
+ // Synthetic private-table fixtures are local only and model an uncertain
+ // routing write whose original settings MUST survive every schema upgrade.
+ await db.exec(read('tests/fixtures/reception-setup-preprofiles.sql'));
+ const preservedPhone={phone_number:'+17816093521',sid:'PN'+'9'.repeat(32),account_sid:'AC'+'8'.repeat(32),
+  voice_url:'https://previous.example/inbound',voice_method:'POST',voice_fallback_url:'https://previous.example/fallback',voice_fallback_method:'POST',
+  sms_url:'https://previous.example/sms',status_callback:'https://previous.example/status'};
+ await q(`insert into icash_reception_private.setup_attempts(action,nonce,fingerprint,original_phone)
+ values('route',$1,$2,$3)`,['f'.repeat(32),'e'.repeat(64),JSON.stringify(preservedPhone)]);
+ const preservedAttempt=await value("select to_jsonb(a) from icash_reception_private.setup_attempts a where action='route'");
  const originalCredit=await value("select pg_get_functiondef('public.icash_reserve_credit(uuid,text,bigint)'::regprocedure)");
  const originalClaim=await value("select pg_get_functiondef('public.icash_claim_before_activation(text)'::regprocedure)");
  await db.exec(read('config/general-reception-customer-funding.sql'));
@@ -85,7 +101,18 @@ try{
  eq(changedCredit.replaceAll('if a.bot_paused and not public.icash_general_reception_pause_exempt(p_account,p_operation,p_amount) then','if a.bot_paused then'),originalCredit);
  eq(changedClaim.replace('if (a.bot_paused and not public.icash_general_reception_pause_exempt(o.account_id,p_operation,o.charge_cap_cents)) or not r.enabled','if a.bot_paused or not r.enabled'),originalClaim);
 
- await db.exec(read('config/general-reception-setup.sql'));
+ await db.exec(read('config/general-reception-profile-setup-upgrade.sql'));
+ eq(await value("select to_jsonb(a) from icash_reception_private.setup_attempts a where action='route'"),preservedAttempt);
+ eq((await value('select public.icash_get_reception_setup()')).original_phone,preservedPhone);
+ eq(await value("select has_function_privilege('service_role','public.icash_complete_reception_setup(text,text,jsonb)','EXECUTE')"),true);
+ eq(await value("select has_function_privilege('anon','public.icash_complete_reception_setup(text,text,jsonb)','EXECUTE')"),false);
+ scenarios++;console.log('PASS installed old setup → profile bridge → RPC-only upgrade preserves original snapshot and attempt');
+ // Reset ONLY the synthetic local row so independent scenarios start empty.
+ await q('delete from icash_reception_private.setup_attempts');
+ // Fresh-install and upgrade function definitions must remain identical.
+ const currentCompletion=fn('config/general-reception-setup.sql','icash_complete_reception_setup').replace(/create function/i,'create or replace function');
+ const upgradedCompletion=fn('config/general-reception-profile-setup-upgrade.sql','icash_complete_reception_setup');
+ eq(currentCompletion,upgradedCompletion);
  const setup=()=>value('select public.icash_get_reception_setup()');
  const setupNonce=n=>n.toString(16).padStart(32,'0');
  const originalPhone={sid:'PN'+'1'.repeat(32),account_sid:'AC'+'2'.repeat(32),phone_number:'+17816093521',
@@ -109,12 +136,12 @@ try{
   eq(await setupClaim('bogus'),false);eq(await setupClaim('prepare_branch',1,originalPhone),false);
   eq(await setupClaim('prepare_branch'),true);eq(await setupClaim('prepare_branch'),false);eq(await setupClaim('prepare_branch',2),false);
   eq(await setupClaim('configure_branch',2),false,'uncertain in-progress provider operation blocks another action');
-  const result={branch_id:branch,reviewed_version_id:version,config_hash:hash};
-  for(const bad of [{...result,extra:true},{...result,branch_id:'agtbrch_8901m3sw5tn6fvkae4d334netswh'},{...result,config_hash:'bad'}])eq(await setupComplete('prepare_branch',1,bad),false);
+  const result={branch_id:branch,reviewed_version_id:version,config_hash:hash,call_profile:'normal',rate_id:normalRate,max_duration_seconds:600,customer_charge_cap_cents:430};
+  for(const bad of [{...result,extra:true},{...result,branch_id:'agtbrch_8901m3sw5tn6fvkae4d334netswh'},{...result,config_hash:'bad'},{...result,call_profile:'owner_quick_test'},{...result,rate_id:rate},{...result,max_duration_seconds:60},{...result,customer_charge_cap_cents:65}])eq(await setupComplete('prepare_branch',1,bad),false);
   eq(await setupComplete('prepare_branch',2,result),false);eq(await setupComplete('prepare_branch',1,result),true);eq(await setupComplete('prepare_branch',1,result),false);
   const c=await value('select public.icash_get_general_reception_config()');
   eq(c.enabled,false);eq(c.agent_id,'agent_7801m3qsygdwfv5tggatf7w68y3d');eq(c.branch_id,branch);eq(c.reviewed_version_id,version);eq(c.config_hash,hash);
-  eq(c.funding_mode,'customer_credits');eq(c.rate_id,rate);eq(c.allow_inbound_while_paused,false);eq(c.max_duration_seconds,60);
+  eq(c.funding_mode,'customer_credits');eq(c.rate_id,normalRate);eq(c.allow_inbound_while_paused,false);eq(c.max_duration_seconds,600);eq(c.call_profile,'normal');eq(c.customer_charge_cap_cents,430);
   eq(await value('select bot_paused from icash_accounts'),true);eq(await snapshot(),before);
   eq(await setupClaim('configure_branch',2),true);eq(await setupComplete('configure_branch',2,result),true);
   eq((await setup()).attempts.configure_branch.state,'verified');
@@ -145,10 +172,46 @@ try{
  });
 
  await scenario('disabled default; no operator amount or period; wallet and pause untouched',async()=>{
-  const c=await value('select public.icash_get_general_reception_config()');eq(c.enabled,false);eq(c.funding_mode,'customer_credits');eq(c.rate_id,rate);eq(c.allow_inbound_while_paused,false);eq(c.receipt_mode,'provider_readback');eq(await value('select public.icash_latest_general_reception_receipt()'),null);
+  const c=await value('select public.icash_get_general_reception_config()');eq(c.enabled,false);eq(c.funding_mode,'customer_credits');eq(c.rate_id,normalRate);eq(c.max_duration_seconds,600);eq(c.customer_charge_cap_cents,430);eq(c.call_profile,'normal');eq(c.owner_quick_test_enabled,false);eq(c.owner_caller_hash,null);eq(c.allow_inbound_while_paused,false);eq(c.receipt_mode,'provider_readback');eq(await value('select public.icash_latest_general_reception_receipt()'),null);
   eq(c.approved_budget_usd_micros,null);eq(c.period_starts_at,null);eq(c.period_ends_at,null);eq(c.reviewed_until,null);
   await zeroMutation(async()=>eq(await reserve(),{allowed:false,reason:'disabled'}));
   eq(await value('select bot_paused from icash_accounts'),true);eq((await snapshot()).wallet.balance_cents,85);
+ });
+ await scenario('normal600/430 is default and insufficient current funds never downgrade',async()=>{
+  await prepare('','normal');const before=await snapshot();
+  eq((await reserve()).reason,'customer_funding_denied');eq(await snapshot(),before);
+  const c=await value('select public.icash_get_general_reception_config()');
+  eq(c.call_profile,'normal');eq(c.max_duration_seconds,600);eq(c.customer_charge_cap_cents,430);eq(c.rate_id,normalRate);
+  eq(c.owner_quick_test_enabled,false);eq(before.wallet.balance_cents,85);eq(await value('select daily_limit_cents from icash_accounts'),300);
+ });
+ await scenario('explicit owner quick-test rejects every other caller without reserving',async()=>{
+  await prepare();
+  await zeroMutation(async()=>eq((await reserve(1,{caller:'c'.repeat(64)})).reason,'caller_not_authorized'));
+  for(const changes of ["owner_quick_test_enabled=false","owner_quick_test_approval_reference=null","owner_caller_hash=null", "owner_caller_hash='bad'",'max_duration_seconds=600','customer_charge_cap_cents=430',`rate_id='${normalRate}'`])
+   await admin(()=>denies(()=>q(`update icash_reception_private.config set ${changes}`),/check constraint/));
+  eq((await reserve()).allowed,true);
+ });
+ await scenario('normal600/430 uses real primitives when pre-existing synthetic funds permit',async()=>{
+  // Isolated fixture only, not a production top-up or permission to raise limits.
+  await prepare('','normal');await q('update icash_wallets set balance_cents=1500');
+  await q('update icash_accounts set daily_limit_cents=1500');await q('update icash_spend_activations set customer_cap_cents=1500');
+  const r=await reserve();eq(r.allowed,true);eq(r.receipt.call_profile,'normal');eq(r.receipt.rate_id,normalRate);
+  eq(r.receipt.max_duration_seconds,600);eq(r.receipt.customer_charge_cap_cents,430);
+  eq((await snapshot()).wallet.reserved_cents,430);eq(await value('select bot_paused from icash_accounts'),true);
+  eq(await value('select state from icash_operation_spend'),'dispatched');
+  const completed=await finish();eq(completed.max_duration_seconds,600);eq((await snapshot()).wallet.reserved_cents,430);
+  eq((await reserve(2)).allowed,true);await finish(2);eq((await reserve(3)).reason,'caller_throttled');
+  eq((await reserve(3,{caller:'c'.repeat(64)})).allowed,true);
+ });
+ await scenario('normal exact rate and complete600-second headroom cannot use quick pricing',async()=>{
+  await prepare('','normal');
+  for(const changes of ['max_duration_seconds=60','customer_charge_cap_cents=65',`rate_id='${rate}'`])
+   await admin(()=>denies(()=>q(`update icash_reception_private.config set ${changes}`),/check constraint/));
+  await q('update icash_operation_rates set charge_cents=65 where id=$1',[normalRate]);
+  await zeroMutation(async()=>eq((await reserve()).reason,'rate_unavailable'));
+  await q('update icash_operation_rates set charge_cents=430 where id=$1',[normalRate]);
+  await admin(()=>q("update icash_reception_private.config set reviewed_until=clock_timestamp()+interval '650 seconds'"));
+  await zeroMutation(async()=>eq((await reserve()).reason,'outside_review'));
  });
  await scenario('paused account needs exact explicit inbound opt-in; no debit when denied',async()=>{
   await prepare();await admin(()=>q('update icash_reception_private.config set allow_inbound_while_paused=false,inbound_pause_approval_reference=null'));
@@ -157,7 +220,7 @@ try{
  });
  await scenario('real reserve+claim holds exactly65c before provider; operation/evidence fixed',async()=>{
   await prepare();const result=await reserve();eq(result.allowed,true);eq(result.receipt.operation_key,'reception:'+sid(1));
-  eq(result.receipt.customer_charge_cap_cents,65);eq(result.receipt.max_duration_seconds,60);eq(result.receipt.conversation_id,null);
+  eq(result.receipt.customer_charge_cap_cents,65);eq(result.receipt.call_profile,'owner_quick_test');eq(result.receipt.rate_id,rate);eq(result.receipt.max_duration_seconds,60);eq(result.receipt.conversation_id,null);
   const s=await snapshot();eq(s.wallet.balance_cents,85);eq(s.wallet.reserved_cents,65);eq(s.receipts,1);eq(s.ops,1);eq(s.credits,1);eq(s.ledger,0);
   const operation=await value('select to_jsonb(o) from icash_operation_spend o');eq(operation.state,'dispatched');eq(operation.charge_cap_cents,65);eq(operation.reserved_micros,126120);eq(await value('select public.icash_latest_general_reception_receipt()'),result.receipt);
   eq(operation.standard_cost_multiplier,5);eq(operation.elevenlabs_cost_multiplier,3);
@@ -237,7 +300,7 @@ try{
   const first=await Promise.all([reserve(10),reserve(10),reserve(11)]);eq(first.filter(x=>x.allowed).length,1);eq(first[1].reason,'duplicate_call');eq(first[2].reason,'concurrency_limit');
   eq((await reserve(10,{call:sid(10).slice(0,2)+sid(10).slice(2).toUpperCase()})).reason,'duplicate_call');
   await finish(10);eq((await reserve(11)).allowed,true);await finish(11);eq((await reserve(12)).reason,'caller_throttled');
-  eq((await reserve(12,{caller:'c'.repeat(64)})).allowed,true);
+  eq((await reserve(12,{caller:'c'.repeat(64)})).reason,'caller_not_authorized');
  });
  await scenario('private ledger immutable; only service RPCs and boolean helper permitted',async()=>{
   await prepare();await reserve();

@@ -31,7 +31,7 @@ function result(action:InboundValueDecision['action'],reason:string,priority:Inb
 }
 export function decideReturningSeller(input:{matches:ReturningSellerCandidate[];matchesComplete:boolean;verifiedIngressAccountId:string|null;now:number;maxSeconds:number}):InboundValueDecision{
  const {matches,now,maxSeconds}=input;
- if(!Number.isFinite(now)||!Number.isInteger(maxSeconds)||maxSeconds<60||maxSeconds>300)return result('reject_paid_call','invalid_policy_input');
+ if(!Number.isFinite(now)||!Number.isInteger(maxSeconds)||maxSeconds<60||maxSeconds>600)return result('reject_paid_call','invalid_policy_input');
  // Count ALL open property/account matches BEFORE affordability/eligibility
  // filtering. Never choose the sole good/funded candidate out of ambiguous ones.
  if(!input.matchesComplete||matches.length!==1)return result('identify_without_customer_charge',matches.length>1?'ambiguous_property_or_account':'unknown_or_incomplete_match');
@@ -78,7 +78,7 @@ export function decideReturningSeller(input:{matches:ReturningSellerCandidate[];
 export function decideCallProgress(input:{elapsedSeconds:number;maxSeconds:number;callerAskedToStop:boolean;optedOut:boolean;explicitlyNotReady:boolean;legitimateQuestionPending:boolean;newPropertyOrTermsInformation:boolean;nextStepProgress:boolean;readinessClarificationGiven:boolean;repeatedOffTopicAfterRedirect:boolean;repeatingAnsweredQuestionWithoutNewIssue:boolean}){
  const finish=(reason:string,message:string)=>({action:'end' as const,reason,message,outboundAuthorized:false as const});
  if(input.optedOut||input.callerAskedToStop)return finish('caller_requested_stop',"Understood. I'll end the call now.");
- if(!Number.isFinite(input.elapsedSeconds)||input.elapsedSeconds<0||!Number.isInteger(input.maxSeconds)||input.maxSeconds<60||input.maxSeconds>300)return finish('invalid_time_bound','Thanks for calling. Please call back when you’re ready.');
+ if(!Number.isFinite(input.elapsedSeconds)||input.elapsedSeconds<0||!Number.isInteger(input.maxSeconds)||input.maxSeconds<60||input.maxSeconds>600)return finish('invalid_time_bound','Thanks for calling. Please call back when you’re ready.');
  if(input.elapsedSeconds>=input.maxSeconds-5)return finish('duration_cap','Thanks for calling. You’re welcome to call back when you’re ready to continue.');
  if(input.explicitlyNotReady)return finish('not_ready','No problem. You’re welcome to call back when you’re ready.');
  if(input.legitimateQuestionPending)return {action:'answer_briefly' as const,reason:'reasonable_property_price_or_process_question',outboundAuthorized:false as const};

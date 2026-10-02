@@ -1,7 +1,7 @@
 import {createHmac} from 'node:crypto';
-import {boundedBody,receptionCompletionArgs,receptionTarget,type ReceptionEnv,type ReceptionDeps} from './general-reception.ts';
+import {boundedBody,receptionReceiptProfile,receptionCompletionArgs,receptionTarget,type ReceptionEnv,type ReceptionDeps} from './general-reception.ts';
 const obj=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
-const hold=(reason:string)=>({status:'held',reason,message:'Call verification is still held for review ('+reason.replaceAll('_',' ')+'). The customer reservation remains held.',customerChargeCapCents:65,settled:false,providerMarginVerified:false});
+const hold=(reason:string)=>({status:'held',reason,message:'Call verification is still held for review ('+reason.replaceAll('_',' ')+'). The customer reservation remains held.',settled:false,providerMarginVerified:false});
 /** Called only by the fixed authenticated owner control, never by caller requests.
  * No new webhook secret is needed: both receipts are obtained over authenticated
  * fixed-origin provider APIs using existing server credentials. No provider writes. */
@@ -11,7 +11,8 @@ export async function reconcileReception(env:ReceptionEnv,deps:ReceptionDeps){
   const signal=AbortSignal.timeout(20000),fetcher=deps.fetcher??fetch;
   const r=obj(await deps.rpc('icash_latest_general_reception_receipt',{},signal));
   if(!Object.keys(r).length)return {status:'no_call',settled:false,message:'No admitted reception call has been recorded yet.'};
-  if(r.account_id!==receptionTarget.accountId||r.agent_id!==receptionTarget.agentId||typeof r.call_sid!=='string'||!/^CA[0-9a-fA-F]{32}$/.test(r.call_sid)||typeof r.receipt_nonce!=='string'||!/^[a-f0-9]{64}$/.test(r.receipt_nonce)||r.operation_key!=='reception:'+r.call_sid||r.customer_charge_cap_cents!==65||r.max_duration_seconds!==60)return hold('receipt_binding_invalid');
+  const profile=receptionReceiptProfile(r);
+  if(!profile||r.account_id!==receptionTarget.accountId||r.agent_id!==receptionTarget.agentId||typeof r.call_sid!=='string'||!/^CA[0-9a-fA-F]{32}$/.test(r.call_sid)||typeof r.receipt_nonce!=='string'||!/^[a-f0-9]{64}$/.test(r.receipt_nonce)||r.operation_key!=='reception:'+r.call_sid)return hold('receipt_binding_invalid');
   const read=async(url:string,headers:Record<string,string>)=>{
    const response=await fetcher(url,{headers,redirect:'error',cache:'no-store',signal:AbortSignal.any([signal,AbortSignal.timeout(6000)])});
    if(!response.ok||response.url&&response.url!==url)throw Error('PROVIDER_UNAVAILABLE');
@@ -32,10 +33,10 @@ export async function reconcileReception(env:ReceptionEnv,deps:ReceptionDeps){
   if(call.sid!==r.call_sid||call.account_sid!==env.TWILIO_ACCOUNT_SID||call.to!==receptionTarget.calledNumber||call.direction!=='inbound'||typeof call.from!=='string'||createHmac('sha256',env.TWILIO_AUTH_TOKEN).update('reception-caller-v1\0'+call.from).digest('hex')!==r.caller_hash||!Number.isFinite(created)||!Number.isFinite(reserved)||created>reserved||reserved-created>120000)return hold('carrier_binding_invalid');
   if(!['completed','failed','busy','no-answer','canceled'].includes(String(call.status))||!['done','failed'].includes(String(data.status)))return hold('call_not_terminal');
   const duration=obj(data.metadata).call_duration_secs;
-  if(typeof duration!=='number'||!Number.isFinite(duration)||duration<0||duration>62)return hold('duration_requires_review');
+  if(typeof duration!=='number'||!Number.isFinite(duration)||duration<0||duration>profile.maxDurationSeconds+2)return hold('duration_requires_review');
   const args=receptionCompletionArgs(data);if(!args)return hold('completion_binding_invalid');
   const finished=await deps.rpc('icash_finish_general_reception',args,signal);
   if(!finished)return hold('ledger_binding_conflict');
-  return {status:data.status==='done'?'completed':'failed',durationSeconds:duration,customerChargeCapCents:65,settled:false,providerMarginVerified:false,message:'Call completion verified from both providers. Cost reconciliation is still held; no charge above the reservation is authorized.'};
+  return {status:data.status==='done'?'completed':'failed',durationSeconds:duration,customerChargeCapCents:profile.customerChargeCapCents,settled:false,providerMarginVerified:false,message:'Call completion verified from both providers. Cost reconciliation is still held; no charge above the reservation is authorized.'};
  }catch{return hold('provider_receipt_unavailable');}
 }

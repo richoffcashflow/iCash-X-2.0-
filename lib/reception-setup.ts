@@ -1,5 +1,5 @@
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
-import {boundedBody,inspectReceptionAgent,receptionGreeting,receptionPrompt,receptionTarget,receptionUrl,type ReceptionConfig} from './general-reception.ts';
+import {boundedBody,inspectReceptionAgent,receptionGreeting,receptionPrompt,receptionTarget,receptionUrl,resolveReceptionProfile,type ReceptionConfig} from './general-reception.ts';
 
 // Fixed owner-only deployment preparation. No credentials, calls, generic proxy,
 // branch promotion, account activation or budget approval can be created here.
@@ -16,7 +16,7 @@ type Obj=Record<string,unknown>;
 export type SetupAction='prepare_branch'|'configure_branch'|'route'|'restore';
 export type ReceptionSetupEnv={ELEVENLABS_API_KEY?:string;ELEVENLABS_INBOUND_WEBHOOK_SECRET?:string;RECEPTION_POSTCALL_SECRET?:string;ELEVENLABS_WEBHOOK_SECRET?:string;TWILIO_ACCOUNT_SID?:string;TWILIO_AUTH_TOKEN?:string;RECEPTION_ENABLED?:string};
 export type ReceptionSetupDeps={fetcher?:typeof fetch;rpc:(name:string,body?:Obj)=>Promise<unknown>;now?:()=>number};
-export type ReceptionSetupReview={status:'review'|'blocked'|'verified'|'outcome_unknown';message:string;blockers:string[];checks:Record<string,boolean>;actions:{action:SetupAction;reviewToken:string;expiresAt:string}[];branch?:{id:string;version:string;configHash:string};checkedAt:string};
+export type ReceptionSetupReview={status:'review'|'blocked'|'verified'|'outcome_unknown';message:string;blockers:string[];checks:Record<string,boolean>;actions:{action:SetupAction;reviewToken:string;expiresAt:string}[];branch?:{id:string;version:string;configHash:string};profile?:{name:string;maxDurationSeconds:number;customerChargeCapCents:number};checkedAt:string};
 const obj=(v:unknown):Obj=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Obj:{};
 const id=(v:unknown,prefix:string):v is string=>typeof v==='string'&&new RegExp(`^${prefix}_[A-Za-z0-9]{1,160}$`).test(v);
 const empty=(v:unknown)=>v==null||(Array.isArray(v)?v.length===0:typeof v==='object'&&Object.keys(obj(v)).length===0);
@@ -26,7 +26,7 @@ const digest=(v:unknown)=>createHash('sha256').update(canonical(v)).digest('hex'
 const equal=(a:unknown,b:unknown)=>canonical(a)===canonical(b);
 function stable(v:Obj){const result={...v};for(const k of ['metadata','access_info','default_hold_audio_url','date_updated','calls_7d','commits_ahead','commits_behind'])delete result[k];return result;}
 function fail(code:string):never{throw Error(code);}
-const errors=new Set(['configuration_unavailable','database_unavailable','provider_unavailable','provider_receipt_invalid','provider_access_denied','configuration_changed','invalid_review','review_expired','action_not_ready','attempt_already_claimed','verification_failed']);
+const errors=new Set(['configuration_unavailable','database_unavailable','provider_unavailable','provider_receipt_invalid','provider_access_denied','configuration_changed','invalid_review','review_expired','action_not_ready','attempt_already_claimed','verification_failed','profile_configuration_invalid']);
 const reason=(e:unknown)=>e instanceof Error&&errors.has(e.message)?e.message:'provider_unavailable';
 function result(deps:ReceptionSetupDeps,status:ReceptionSetupReview['status'],message:string,extra:Partial<ReceptionSetupReview>={}):ReceptionSetupReview{return {status,message,blockers:[],checks:{},actions:[],checkedAt:new Date(deps.now?.()??Date.now()).toISOString(),...extra};}
 function signing(env:ReceptionSetupEnv){if(typeof window!=='undefined'||!goodSecret(env.ELEVENLABS_INBOUND_WEBHOOK_SECRET))fail('configuration_unavailable');return env.ELEVENLABS_INBOUND_WEBHOOK_SECRET;}
@@ -56,8 +56,9 @@ async function readPhone(api:ReturnType<typeof providers>,env:ReceptionSetupEnv)
  for(const key of ['voice_url','voice_fallback_url'])if(phone[key]!==null&&typeof phone[key]!=='string')fail('provider_receipt_invalid');
  return phoneStable(phone);
 }
-function localConfig(agent:Obj):ReceptionConfig{return {account_id:receptionTarget.accountId,owner_user_id:receptionTarget.ownerUserId,called_number:receptionTarget.calledNumber,enabled:false,agent_id:receptionTarget.agentId,branch_id:String(agent.branch_id),reviewed_version_id:String(agent.version_id),config_hash:'',max_duration_seconds:60};}
-function safeBranch(agent:Obj,branch:Obj){const c=localConfig(agent),check=inspectReceptionAgent(c,agent,branch);c.config_hash=check.hash;return {c,safe:inspectReceptionAgent(c,agent,branch).safe};}
+function profile(config:Obj){return resolveReceptionProfile(config)??fail('profile_configuration_invalid');}
+function localConfig(agent:Obj,config:Obj):ReceptionConfig{const selected=profile(config);return {...config,account_id:receptionTarget.accountId,owner_user_id:receptionTarget.ownerUserId,called_number:receptionTarget.calledNumber,enabled:false,agent_id:receptionTarget.agentId,branch_id:String(agent.branch_id),reviewed_version_id:String(agent.version_id),config_hash:'',max_duration_seconds:selected.maxDurationSeconds};}
+function safeBranch(agent:Obj,branch:Obj,config:Obj){const c=localConfig(agent,config),check=inspectReceptionAgent(c,agent,branch);c.config_hash=check.hash;return {c,safe:inspectReceptionAgent(c,agent,branch).safe};}
 function sharedSettingsChecks(main:Obj){const p=obj(main.platform_settings);return {sharedAuthenticationEnabled:obj(p.auth).enable_auth===true,sharedRecordingDisabled:obj(p.privacy).record_voice===false,sharedConcurrencyOne:obj(p.call_limits).agent_concurrency_limit===1,sharedBurstingDisabled:obj(p.call_limits).bursting_enabled===false,sharedQueueDisabled:obj(p.queueing_config).enabled===false&&empty(p.queueing)};}
 function sharedSettingsSafe(main:Obj){return Object.values(sharedSettingsChecks(main)).every(Boolean);}
 function sourceSafe(main:Obj){return sharedSettingsSafe(main)&&empty(main.procedures)&&typeof obj(obj(main.conversation_config).tts).voice_id==='string'&&typeof obj(obj(obj(main.conversation_config).agent).prompt).llm==='string';}
@@ -67,7 +68,8 @@ function sourceSafe(main:Obj){return sharedSettingsSafe(main)&&empty(main.proced
 // https://elevenlabs.io/docs/eleven-agents/operate/versioning#per-agent-settings
 // Explicit replacement of executable surfaces, retaining only selected voice/LLM
 // settings. No inherited prompts, tools, KB, dynamic variables or language presets.
-export function receptionBranchBody(main:Obj,hookId:string|null){
+export function receptionBranchBody(main:Obj,hookId:string|null,config:Obj){
+ const selected=profile(config);
  const conversation=obj(main.conversation_config),tts=obj(conversation.tts),prompt=obj(obj(conversation.agent).prompt);
  const sourceBuiltinNames=Object.keys(obj(prompt.built_in_tools));
  if(sourceBuiltinNames.length>40||sourceBuiltinNames.some(name=>! /^[a-z][a-z0-9_]{0,79}$/.test(name)))fail('provider_receipt_invalid');
@@ -75,13 +77,14 @@ export function receptionBranchBody(main:Obj,hookId:string|null){
  // Null each documented field: an empty object can deep-merge and retain tools.
  const built_in_tools:Obj=Object.fromEntries(builtInNames.map(name=>[name,null]));
  built_in_tools.end_call={type:'system',name:'end_call',description:'',params:{system_tool_type:'end_call'}};
- return {conversation_config:{asr:{user_input_audio_format:'ulaw_8000'},tts:{voice_id:tts.voice_id,model_id:tts.model_id??'eleven_turbo_v2',agent_output_audio_format:'ulaw_8000'},agent:{first_message:receptionGreeting,language:'en',prompt:{prompt:receptionPrompt,llm:prompt.llm,max_tokens:120,tools:[],tool_ids:[],built_in_tools,mcp_server_ids:[],native_mcp_server_ids:[],knowledge_base:[],rag:{enabled:false},custom_llm:null}},conversation:{max_duration_seconds:60,max_conversation_duration_message:null},language_presets:{}},platform_settings:{overrides:{enable_conversation_initiation_client_data_from_webhook:false,enable_procedure_ids_from_client:false,enable_starting_workflow_node_id_from_client:false,conversation_config_override:{conversation:{max_duration_seconds:true}}},workspace_overrides:{conversation_initiation_client_data_webhook:null,webhooks:{post_call_webhook_id:hookId,events:hookId?['transcript']:[],transcript_format:'json',send_audio:false}},data_collection:{},evaluation:{criteria:[]}},workflow:{nodes:{},edges:{},subgraphs:{}}};
+ return {conversation_config:{asr:{user_input_audio_format:'ulaw_8000'},tts:{voice_id:tts.voice_id,model_id:tts.model_id??'eleven_turbo_v2',agent_output_audio_format:'ulaw_8000'},agent:{first_message:receptionGreeting,language:'en',prompt:{prompt:receptionPrompt,llm:prompt.llm,max_tokens:120,tools:[],tool_ids:[],built_in_tools,mcp_server_ids:[],native_mcp_server_ids:[],knowledge_base:[],rag:{enabled:false},custom_llm:null}},conversation:{max_duration_seconds:selected.maxDurationSeconds,max_conversation_duration_message:null},language_presets:{}},platform_settings:{overrides:{enable_conversation_initiation_client_data_from_webhook:false,enable_procedure_ids_from_client:false,enable_starting_workflow_node_id_from_client:false,conversation_config_override:{conversation:{max_duration_seconds:true}}},workspace_overrides:{conversation_initiation_client_data_webhook:null,webhooks:{post_call_webhook_id:hookId,events:hookId?['transcript']:[],transcript_format:'json',send_audio:false}},data_collection:{},evaluation:{criteria:[]}},workflow:{nodes:{},edges:{},subgraphs:{}}};
 }
 type Snapshot={main:Obj;owner:Obj;branches:Obj[];branch:Obj|null;branchMeta:Obj|null;state:Obj;config:Obj;phone:Obj|null;hookId:string|null;postcallConfigured:boolean;blockers:string[]};
 async function snapshot(env:ReceptionSetupEnv,deps:ReceptionSetupDeps):Promise<Snapshot>{
  signing(env);const api=providers(env,deps);
  let state:Obj,config:Obj;try{state=obj(await deps.rpc('icash_get_reception_setup'));config=obj(await deps.rpc('icash_get_general_reception_config'));}catch{fail('database_unavailable');}
  if(state.schema_version!==1||config.account_id!==receptionTarget.accountId||config.owner_user_id!==receptionTarget.ownerUserId||config.called_number!==receptionTarget.calledNumber)fail('database_unavailable');
+ profile(config);
  const [main,owner,listed]=await Promise.all([api.eleven(agentPath),api.eleven(agentPath+'?branch_id='+ownerBranch),api.eleven(agentPath+'/branches?include_archived=true&limit=100')]);
  if(main.agent_id!==receptionTarget.agentId||!id(main.main_branch_id,'agtbrch')||main.branch_id!==main.main_branch_id||!id(main.version_id,'agtvrsn')||main.branch_id===ownerBranch||owner.agent_id!==receptionTarget.agentId||owner.branch_id!==ownerBranch||owner.main_branch_id!==main.main_branch_id)fail('provider_receipt_invalid');
  const rows=listed.results;if(!Array.isArray(rows)||!rows.length||rows.length>=100||(obj(listed.meta).total!==undefined&&obj(listed.meta).total!==rows.length))fail('provider_receipt_invalid');
@@ -114,7 +117,7 @@ function allowed(s:Snapshot,env:ReceptionSetupEnv,action:SetupAction){
  if(action==='configure_branch')return !!s.branch&&s.config.branch_id===s.branch.branch_id&&s.config.enabled===false&&sourceSafe(s.main)&&empty(s.branch.procedures)&&(s.config.receipt_mode==='provider_readback'||(!!s.hookId&&s.postcallConfigured));
  const phone=s.phone;if(!phone||phone.voice_application_sid||phone.trunk_sid)return false;
  if(action==='restore')return !!s.state.original_phone&&equal(phoneOther(phone),phoneOther(obj(s.state.original_phone)))&&equal(routing(phone),desiredRouting)&&typeof s.state.route_started_at==='string'&&(Date.now()-Date.parse(s.state.route_started_at))>30_000;
- if(s.state.original_phone||!s.branch||!s.branchMeta||!safeBranch(s.branch,s.branchMeta).safe||!hookReady(s)||s.config.enabled!==true||env.RECEPTION_ENABLED!=='true')return false;
+ if(s.state.original_phone||!s.branch||!s.branchMeta||!safeBranch(s.branch,s.branchMeta,s.config).safe||!hookReady(s)||s.config.enabled!==true||env.RECEPTION_ENABLED!=='true')return false;
  return inspectReceptionAgent(s.config as ReceptionConfig,s.branch,s.branchMeta).safe&&!equal(routing(phone),desiredRouting);
 }
 type Token={v:1;action:SetupAction;fingerprint:string;nonce:string;expires:number};
@@ -129,10 +132,10 @@ function verify(raw:unknown,action:SetupAction,secret:string,now:number):Token{
  if(Object.keys(t!).sort().join(',')!=='action,expires,fingerprint,nonce,v'||t!.v!==1||t!.action!==action||!actions.includes(action)||typeof t!.fingerprint!=='string'||!/^[a-f0-9]{64}$/.test(t!.fingerprint)||typeof t!.nonce!=='string'||!/^[a-f0-9]{32}$/.test(t!.nonce)||!Number.isSafeInteger(t!.expires)||Number(t!.expires)>now+120_000)fail('invalid_review');if(Number(t!.expires)<=now)fail('review_expired');return t! as Token;
 }
 export async function reviewReceptionSetup(env:ReceptionSetupEnv,deps:ReceptionSetupDeps):Promise<ReceptionSetupReview>{
- try{const s=await snapshot(env,deps),valid=!!s.branch&&!!s.branchMeta&&safeBranch(s.branch,s.branchMeta).safe,offered=actions.filter(a=>allowed(s,env,a)).map(a=>issue(s,a,signing(env),deps.now?.()??Date.now()));
+ try{const s=await snapshot(env,deps),valid=!!s.branch&&!!s.branchMeta&&safeBranch(s.branch,s.branchMeta,s.config).safe,offered=actions.filter(a=>allowed(s,env,a)).map(a=>issue(s,a,signing(env),deps.now?.()??Date.now()));
   const blockers=[...s.blockers];if(s.config.enabled!==true||env.RECEPTION_ENABLED!=='true')blockers.push('separate_funding_and_enablement_required');if(!sourceSafe(s.main))blockers.push(sharedSettingsSafe(s.main)?'source_voice_llm_or_procedures_unverified':'shared_agent_safety_settings_require_separate_review');if(s.branch&&!valid)blockers.push('branch_policy_readback_failed');if(Object.values(attempts(s)).some(v=>obj(v).state==='started'))blockers.push('prior_write_requires_read_only_reconciliation');
-  const c=s.branch&&s.branchMeta?safeBranch(s.branch,s.branchMeta).c:null;
-  return result(deps,'review','Review the fixed reception setup. Preparation never enables calls or changes customer funding.',{blockers,checks:{database:true,provider:true,...sharedSettingsChecks(s.main),sharedAgentSettingsSafe:sharedSettingsSafe(s.main),dedicatedBranch:valid,postcallSecretConfigured:s.postcallConfigured,postcallHookReady:hookReady(s),providerReadbackMode:s.config.receipt_mode==='provider_readback',twilioReadback:!!s.phone,twilioUsesReception:!!s.phone&&equal(routing(s.phone),desiredRouting),originalRoutingSaved:!!s.state.original_phone},actions:offered,...(c?{branch:{id:c.branch_id,version:c.reviewed_version_id,configHash:c.config_hash}}:{})});
+  const c=s.branch&&s.branchMeta?safeBranch(s.branch,s.branchMeta,s.config).c:null;
+  return result(deps,'review','Review the fixed reception setup. Preparation never enables calls or changes customer funding.',{blockers,profile:{name:String(s.config.call_profile),maxDurationSeconds:profile(s.config).maxDurationSeconds,customerChargeCapCents:profile(s.config).customerChargeCapCents},checks:{database:true,provider:true,...sharedSettingsChecks(s.main),sharedAgentSettingsSafe:sharedSettingsSafe(s.main),dedicatedBranch:valid,postcallSecretConfigured:s.postcallConfigured,postcallHookReady:hookReady(s),providerReadbackMode:s.config.receipt_mode==='provider_readback',twilioReadback:!!s.phone,twilioUsesReception:!!s.phone&&equal(routing(s.phone),desiredRouting),originalRoutingSaved:!!s.state.original_phone},actions:offered,...(c?{branch:{id:c.branch_id,version:c.reviewed_version_id,configHash:c.config_hash}}:{})});
  }catch(e){
   // Emergency restoration must remain available during an ElevenLabs outage or
   // unrelated Main/branch drift. It only needs the fixed phone and saved state.
@@ -148,14 +151,14 @@ export async function applyReceptionSetup(env:ReceptionSetupEnv,deps:ReceptionSe
   const claimed=await deps.rpc('icash_claim_reception_setup',{p_action:action,p_nonce:token.nonce,p_fingerprint:token.fingerprint,p_original_phone:action==='route'?s.phone:null});if(claimed!==true)fail('attempt_already_claimed');
   const api=providers(env,deps);let out:Obj={};dispatched=true;
   if(action==='prepare_branch'||action==='configure_branch'){
-   const body=receptionBranchBody(s.main,s.config.receipt_mode==='provider_readback'?null:s.postcallConfigured?s.hookId:null);
+   const body=receptionBranchBody(s.main,s.config.receipt_mode==='provider_readback'?null:s.postcallConfigured?s.hookId:null,s.config);
    const receipt=action==='prepare_branch'?await api.eleven(agentPath+'/branches','POST',{parent_version_id:s.main.version_id,name:receptionBranchName,description:'Isolated message-only general reception. Never Main or the owner audio test. Enablement is separately gated.',...body,include_draft:false}):await api.eleven(agentPath+'?branch_id='+s.branch!.branch_id,'PATCH',body);
    const branchId=action==='prepare_branch'?receipt.created_branch_id:s.branch!.branch_id;
    if(!id(branchId,'agtbrch')||branchId===s.main.branch_id||branchId===ownerBranch)fail('verification_failed');
    const after=await snapshot(env,deps);
-   if(!equal(after.main,s.main)||!equal(after.owner,s.owner)||!equal(after.phone,s.phone)||!after.branch||!after.branchMeta||after.branch.branch_id!==branchId||!safeBranch(after.branch,after.branchMeta).safe)fail('verification_failed');
+   if(!equal(after.main,s.main)||!equal(after.owner,s.owner)||!equal(after.phone,s.phone)||!after.branch||!after.branchMeta||after.branch.branch_id!==branchId||!safeBranch(after.branch,after.branchMeta,after.config).safe)fail('verification_failed');
    const beforeOthers=s.branches.filter(b=>b.id!==branchId),afterOthers=after.branches.filter(b=>b.id!==branchId);if(!equal(beforeOthers,afterOthers))fail('verification_failed');
-   const c=safeBranch(after.branch,after.branchMeta).c;out={branch_id:c.branch_id,reviewed_version_id:c.reviewed_version_id,config_hash:c.config_hash};
+   const c=safeBranch(after.branch,after.branchMeta,after.config).c;out={branch_id:c.branch_id,reviewed_version_id:c.reviewed_version_id,config_hash:c.config_hash,call_profile:c.call_profile,rate_id:c.rate_id,max_duration_seconds:c.max_duration_seconds,customer_charge_cap_cents:c.customer_charge_cap_cents};
   }else{
    const original=obj(s.state.original_phone),desired=action==='route'?desiredRouting:routing(original),phone=s.phone!;
    const params=new URLSearchParams({VoiceUrl:String(desired.voice_url??''),VoiceMethod:String(desired.voice_method),VoiceFallbackUrl:String(desired.voice_fallback_url??''),VoiceFallbackMethod:String(desired.voice_fallback_method)});

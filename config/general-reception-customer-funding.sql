@@ -4,7 +4,9 @@ begin;
 -- This narrow bridge changes no account, wallet, activation, rate, or operating
 -- budget values, and enables nothing. Provider configuration/rate approval and
 -- inbound-only pause opt-in remain separate, explicit actions.
--- The fixed rate is the EXISTING incoming-call rate, not a new source of credit.
+-- Both profile rates are EXISTING incoming-call rates, not new credit. Normal
+-- is 600 seconds / 430 cents; quick-test is a separately approved owner-only
+-- 60 seconds / 65 cents profile. Insufficient normal funding NEVER downgrades it.
 do $$
 begin
  if exists(select 1 from icash_reception_private.receipts) then
@@ -16,18 +18,39 @@ begin
  end if;
 end $$;
 update icash_reception_private.config set enabled=false;
+-- Installed base schema allowed only 60..300 seconds. Widen its named checks
+-- locally, then constrain this bridge to the two exact reviewed profiles below.
+alter table icash_reception_private.config
+ drop constraint config_max_duration_seconds_check,
+ add constraint config_max_duration_seconds_check check(max_duration_seconds between 60 and 600),
+ alter column max_duration_seconds set default 600;
+alter table icash_reception_private.receipts
+ drop constraint receipts_max_duration_seconds_check,
+ add constraint receipts_max_duration_seconds_check check(max_duration_seconds between 60 and 600);
+update icash_reception_private.config set max_duration_seconds=600;
 alter table icash_reception_private.config
  add column funding_mode text not null default 'customer_credits' check(funding_mode='customer_credits'),
  add column receipt_mode text not null default 'provider_readback' check(receipt_mode='provider_readback'),
- add column rate_id uuid not null default 'f93ace00-83fc-4d09-a37c-6d9d9f0a38f0'
-  references public.icash_operation_rates(id)
-  check(rate_id='f93ace00-83fc-4d09-a37c-6d9d9f0a38f0'::uuid),
+ add column call_profile text not null default 'normal' check(call_profile in ('normal','owner_quick_test')),
+ add column customer_charge_cap_cents bigint not null default 430,
+ add column rate_id uuid not null default 'e827a7c9-8648-4999-885c-f136fd07100e'
+  references public.icash_operation_rates(id),
+ add column owner_quick_test_enabled boolean not null default false,
+ add column owner_quick_test_approval_reference text
+  check(length(btrim(owner_quick_test_approval_reference)) between 1 and 500),
+ add column owner_caller_hash text check(owner_caller_hash ~ '^[a-f0-9]{64}$'),
  add column reviewed_until timestamptz check(isfinite(reviewed_until)),
  add column allow_inbound_while_paused boolean not null default false,
  add column inbound_pause_approval_reference text
   check(length(btrim(inbound_pause_approval_reference)) between 1 and 500),
  add constraint reception_pause_opt_in check(not allow_inbound_while_paused or inbound_pause_approval_reference is not null),
- add constraint reception_initial_duration check(max_duration_seconds=60),
+ add constraint reception_call_profile check(
+  (call_profile='normal' and rate_id='e827a7c9-8648-4999-885c-f136fd07100e'::uuid
+   and max_duration_seconds=600 and customer_charge_cap_cents=430)
+  or (call_profile='owner_quick_test' and rate_id='f93ace00-83fc-4d09-a37c-6d9d9f0a38f0'::uuid
+   and max_duration_seconds=60 and customer_charge_cap_cents=65
+   and owner_quick_test_enabled and owner_quick_test_approval_reference is not null and owner_caller_hash is not null)
+ ),
  drop constraint reception_enabled_approval,
  add constraint reception_customer_funding_approval check(not enabled or (
   config_hash is not null and agent_id is not null and branch_id is not null
@@ -40,7 +63,15 @@ alter table icash_reception_private.config
 alter table icash_reception_private.receipts
  add column operation_key text not null unique references public.icash_operation_spend(operation_key) deferrable initially deferred,
  add column admission_xid bigint not null default txid_current(),
- add column customer_charge_cap_cents bigint not null default 65 check(customer_charge_cap_cents=65),
+ add column call_profile text not null,
+ add column rate_id uuid not null references public.icash_operation_rates(id),
+ add column customer_charge_cap_cents bigint not null,
+ add constraint reception_receipt_profile check(
+  (call_profile='normal' and rate_id='e827a7c9-8648-4999-885c-f136fd07100e'::uuid
+   and max_duration_seconds=600 and customer_charge_cap_cents=430)
+  or (call_profile='owner_quick_test' and rate_id='f93ace00-83fc-4d09-a37c-6d9d9f0a38f0'::uuid
+   and max_duration_seconds=60 and customer_charge_cap_cents=65)
+ ),
  add constraint reception_exact_operation check(operation_key='reception:'||call_sid);
 
 -- A bool-only, service-only predicate avoids exposing the private schema to
@@ -56,13 +87,19 @@ returns boolean language sql stable security definer set search_path='' as $$
   and r.state='reserved' and r.conversation_id is null and r.config_hash=c.config_hash
   and r.agent_id=c.agent_id and r.branch_id=c.branch_id and r.reviewed_version_id=c.reviewed_version_id
   and c.enabled and c.allow_inbound_while_paused and c.inbound_pause_approval_reference is not null
-  and c.approved_at<=clock_timestamp() and c.reviewed_until>=clock_timestamp()+interval '120 seconds'
-  and rate.operation='incoming_call' and rate.enabled and rate.charge_cents=65 and p_charge=65
-  and rate.voice_max_duration_seconds>=60 and rate.verified_at<=clock_timestamp()
-  and rate.expires_at>=clock_timestamp()+interval '120 seconds'
+  and r.call_profile=c.call_profile and r.rate_id=c.rate_id
+  and r.max_duration_seconds=c.max_duration_seconds and r.customer_charge_cap_cents=c.customer_charge_cap_cents
+  and (c.call_profile='normal' or (c.call_profile='owner_quick_test' and c.owner_quick_test_enabled
+   and c.owner_quick_test_approval_reference is not null and r.caller_hash=c.owner_caller_hash))
+  and c.approved_at<=clock_timestamp()
+  and c.reviewed_until>=clock_timestamp()+make_interval(secs=>c.max_duration_seconds+60)
+  and rate.operation='incoming_call' and rate.enabled and rate.charge_cents=c.customer_charge_cap_cents
+  and p_charge=c.customer_charge_cap_cents and rate.voice_max_duration_seconds=c.max_duration_seconds
+  and rate.verified_at<=clock_timestamp()
+  and rate.expires_at>=clock_timestamp()+make_interval(secs=>c.max_duration_seconds+60)
   and (not exists(select 1 from public.icash_operation_spend o where o.operation_key=p_operation)
    or exists(select 1 from public.icash_operation_spend o where o.operation_key=p_operation
-    and o.account_id=c.account_id and o.rate_id=c.rate_id and o.charge_cap_cents=65)));
+    and o.account_id=c.account_id and o.rate_id=c.rate_id and o.charge_cap_cents=c.customer_charge_cap_cents)));
 
 $$;
 revoke all on function public.icash_general_reception_pause_exempt(uuid,text,bigint) from public,anon,authenticated,service_role;
@@ -111,6 +148,11 @@ begin
  if c.config_hash is distinct from p_config_hash or c.reviewed_version_id is distinct from p_reviewed_version_id then
   return jsonb_build_object('allowed',false,'reason','config_changed');
  end if;
+ -- Owner quick-test is opt-in and caller-bound, never an affordability fallback.
+ if c.call_profile='owner_quick_test' and (not c.owner_quick_test_enabled
+  or c.owner_quick_test_approval_reference is null or c.owner_caller_hash is distinct from p_caller_hash) then
+  return jsonb_build_object('allowed',false,'reason','caller_not_authorized');
+ end if;
  if exists(select 1 from icash_reception_private.receipts where lower(call_sid)=lower(p_call_sid)) then
   return jsonb_build_object('allowed',false,'reason','duplicate_call');
  end if;
@@ -137,10 +179,10 @@ begin
   or t+make_interval(secs=>c.max_duration_seconds+60)>c.reviewed_until then
   return jsonb_build_object('allowed',false,'reason','outside_review');
  end if;
- if rate.id is null or rate.operation<>'incoming_call' or not rate.enabled or rate.charge_cents<>65
+ if rate.id is null or rate.operation<>'incoming_call' or not rate.enabled or rate.charge_cents<>c.customer_charge_cap_cents
   or not isfinite(rate.verified_at) or not isfinite(rate.expires_at)
   or rate.verified_at>t or rate.verified_at>c.approved_at
-  or rate.voice_max_duration_seconds is null or rate.voice_max_duration_seconds<c.max_duration_seconds
+  or rate.voice_max_duration_seconds is null or rate.voice_max_duration_seconds<>c.max_duration_seconds
   or t+make_interval(secs=>c.max_duration_seconds+60)>rate.expires_at then
   return jsonb_build_object('allowed',false,'reason','rate_unavailable');
  end if;
@@ -159,22 +201,22 @@ begin
  -- receipt insertion fails. Known spend denials return no permission or nonce.
  begin
   -- This complete reviewed rate is a PLANNING reservation, not proof of actual
-  -- all-in provider cost. Customer reservation is hard-capped at 65 cents.
+  -- all-in provider cost. Customer reservation is the exact selected profile cap.
   select sum(value::text::numeric) into cost_total from jsonb_each(rate.costs_micros);
   planned_reserve:=ceil(cost_total*(10000+rate.buffer_bps)/10000);
   insert into icash_reception_private.receipts(account_id,call_sid,called_number,caller_hash,receipt_nonce,
    config_hash,agent_id,branch_id,reviewed_version_id,max_duration_seconds,reserved_usd_micros,
-   period_starts_at,period_ends_at,reserved_at,operation_key)
+   period_starts_at,period_ends_at,reserved_at,operation_key,call_profile,rate_id,customer_charge_cap_cents)
   values(c.account_id,p_call_sid,c.called_number,p_caller_hash,p_receipt_nonce,c.config_hash,c.agent_id,c.branch_id,
-   c.reviewed_version_id,c.max_duration_seconds,planned_reserve,c.approved_at,c.reviewed_until,t,op)
+   c.reviewed_version_id,c.max_duration_seconds,planned_reserve,c.approved_at,c.reviewed_until,t,op,c.call_profile,c.rate_id,c.customer_charge_cap_cents)
   returning * into r;
   perform public.icash_reserve_operation(c.account_id,op,c.rate_id,least(c.reviewed_until,rate.expires_at));
   select * into strict o from public.icash_operation_spend where operation_key=op for update;
   if o.account_id<>c.account_id or o.rate_id<>c.rate_id or o.state<>'reserved'
-   or o.reserved_micros<>planned_reserve or o.charge_cap_cents<>65
+   or o.reserved_micros<>planned_reserve or o.charge_cap_cents<>c.customer_charge_cap_cents
    or not exists(select 1 from public.icash_credit_reservations cr
     where cr.id=o.credit_reservation_id and cr.operation_key=op and cr.account_id=c.account_id
-     and cr.status='reserved' and cr.amount_cents=65) then
+     and cr.status='reserved' and cr.amount_cents=c.customer_charge_cap_cents) then
    raise exception 'Customer reservation does not match reviewed reception rate';
   end if;
   if not public.icash_claim_operation(op) then raise exception 'Reception spending not claimable'; end if;
@@ -206,6 +248,7 @@ returns jsonb language sql stable security definer set search_path='' as $$
   'call_sid',r.call_sid,'conversation_id',r.conversation_id,'receipt_state',r.state,
   'agent_id',r.agent_id,'branch_id',r.branch_id,'reviewed_version_id',r.reviewed_version_id,
   'terminal_at',r.terminal_at,'max_duration_seconds',r.max_duration_seconds,
+  'call_profile',r.call_profile,'customer_charge_cap_cents',r.customer_charge_cap_cents,
   'rate_id',o.rate_id,'operation_state',o.state,'reserved_usd_micros',o.reserved_micros,
   'customer_reserved_cents',cr.amount_cents,'credit_state',cr.status,
   'requires_authoritative_cost_reconciliation',o.state='dispatched',
