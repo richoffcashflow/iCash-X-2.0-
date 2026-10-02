@@ -25,3 +25,5 @@ Tests use synthetic data. Photo route tests cover tenant ownership, actual store
 ## Customer-facing labels
 
 Customer labels use “Property photo,” “Property data” and “Contact data.” The provider name stays in normalized records, API provenance, tests and internal implementation, but is not rendered as an application-added customer badge or explanation. Provider images are still displayed whole with object-fit:contain; original image bytes, copyright marks and proprietary notices are not cropped, covered, removed or altered. This does not establish broader white-label licensing rights. The public terms reviewed October 2, 2026 prohibit removing proprietary notices (section 2(e)): https://www.dealmachine.com/terms-of-service . No separate requirement for our own added badge was found in the image API documentation; any applicable contracted display attribution remains a release requirement.
+
+Thumbnails are compact beside the address: 80px square on desktop, 56px square on narrow screens. The full image remains contained, not cropped, and never expands into a full-width hero.

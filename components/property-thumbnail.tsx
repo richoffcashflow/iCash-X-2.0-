@@ -18,6 +18,6 @@ export function PropertyThumbnail({screeningId,address,images}:{screeningId:stri
   return()=>controller.abort();
  },[screeningId,saved?.url]);
  return <span className="property-thumbnail">
-  {photo&&failed!==photo.url?<><Image src={photo.url} alt={`${photo.view==='satellite'?'Satellite view':'Street view'} of ${address}`} width={112} height={112} unoptimized loading="lazy" referrerPolicy="no-referrer" onError={()=>setFailed(photo.url)}/><span className="property-thumbnail-source">{photo.view==='satellite'?'Aerial view':'Property photo'}</span></>:<span className="property-thumbnail-empty"><House size={24} aria-hidden="true"/><span>Photo unavailable</span></span>}
+  {photo&&failed!==photo.url?<><Image src={photo.url} alt={`${photo.view==='satellite'?'Satellite view':'Street view'} of ${address}`} width={80} height={80} unoptimized loading="lazy" referrerPolicy="no-referrer" onError={()=>setFailed(photo.url)}/><span className="property-thumbnail-source">{photo.view==='satellite'?'Aerial view':'Property photo'}</span></>:<span className="property-thumbnail-empty"><House size={24} aria-hidden="true"/><span>Photo unavailable</span></span>}
  </span>;
 }

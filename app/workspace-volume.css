@@ -191,13 +191,13 @@
 
 /* Property imagery stays inside the existing disclosure card. */
 .property-summary-main{flex:1}
-.property-thumbnail{display:flex;flex-direction:column;flex:0 0 112px;width:112px;align-self:center;border:1px solid #e3e3e3;border-radius:9px;overflow:hidden;background:#f4f4f4}
-.property-thumbnail>img{display:block;width:112px;height:112px;object-fit:contain}
+.property-thumbnail{display:flex;flex-direction:column;flex:0 0 80px;width:80px;align-self:center;border:1px solid #e3e3e3;border-radius:9px;overflow:hidden;background:#f4f4f4}
+.property-thumbnail>img{display:block;width:80px;height:80px;object-fit:contain}
 .property-thumbnail-source{padding:5px 3px;font-size:8px;line-height:1.4;text-align:center;color:#666;background:#fff}
-.property-thumbnail-empty{height:112px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#999}
+.property-thumbnail-empty{height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#999}
 .property-thumbnail-empty>span{font-size:10px;color:#777}
 .property-control-help{font-size:11px!important;line-height:1.5!important;color:#666!important;margin:10px 0 0!important}
-@media(max-width:600px){.property-thumbnail{flex-basis:68px;width:68px;align-self:flex-start}.property-thumbnail>img{width:68px;height:68px}.property-thumbnail-empty{height:68px}.property-thumbnail-source{font-size:7px}.property-summary-main{flex:1}.personalized-workspace .live-property>.property-disclosure>.property-summary{gap:10px}.property-open-control{flex-shrink:0}}
+@media(max-width:600px){.property-thumbnail{flex-basis:56px;width:56px;align-self:flex-start}.property-thumbnail>img{width:56px;height:56px}.property-thumbnail-empty{height:56px;gap:3px}.property-thumbnail-empty>span{font-size:8px;text-align:center;line-height:1.25;padding:0 3px}.property-thumbnail-source{font-size:7px}.property-summary-main{flex:1}.personalized-workspace .live-property>.property-disclosure>.property-summary{gap:10px}.property-open-control{flex-shrink:0}}
 
 .property-analysis{margin-bottom:24px}
 .property-analysis-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}

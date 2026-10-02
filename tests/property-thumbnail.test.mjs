@@ -11,10 +11,12 @@ const mod={exports:{}};new Function('require','module','exports',code)(name=>nam
 const all=node=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(all):[node,...all(node.props?.children)];
 const render=props=>{cursor=0;effects=[];return mod.exports.PropertyThumbnail(props);};
 const props={screeningId:'one',address:'Fictional property',images:{street_view:'https://img.dealmachine.com/sv/1,2.jpg'}};
-let nodes=all(render(props)),img=nodes.find(n=>n.type==='Image');assert(img);assert(!nodes.some(n=>typeof n.props?.children==='string'&&/DealMachine/i.test(n.props.children)));assert.equal(img.props.referrerPolicy,'no-referrer');assert.equal(img.props.unoptimized,true);assert.equal(img.props.loading,'lazy');assert.match(img.props.alt,/Street view of Fictional property/);
+let nodes=all(render(props)),img=nodes.find(n=>n.type==='Image');assert(img);assert(!nodes.some(n=>typeof n.props?.children==='string'&&/DealMachine/i.test(n.props.children)));assert.equal(img.props.referrerPolicy,'no-referrer');assert.equal(img.props.unoptimized,true);assert.equal(img.props.loading,'lazy');assert.equal(img.props.width,80);assert.equal(img.props.height,80);assert.match(img.props.alt,/Street view of Fictional property/);
 img.props.onError();nodes=all(render(props));assert(!nodes.some(n=>n.type==='Image'));assert(nodes.some(n=>n.props.className==='property-thumbnail-empty'));
 nodes=all(render({...props,images:{satellite:'https://img.dealmachine.com/sat/3,4.jpg'}}));assert(nodes.some(n=>n.type==='Image'),'New image is not held by previous failure');
 state=[];const originalFetch=globalThis.fetch;let resolve;
 globalThis.fetch=()=>new Promise(done=>{resolve=done;});render({...props,images:undefined});const cleanup=effects[0]();cleanup();
 resolve({ok:true,json:async()=>({photo:{view:'street_view',url:props.images.street_view}})});await new Promise(done=>setImmediate(done));assert.equal(state[0],null,'Aborted old property response never updates the current thumbnail');globalThis.fetch=originalFetch;
 console.log('Property thumbnail: image attributes, missing/broken fallback, changed-image recovery and stale-response abort passed');
+
+const css=readFileSync(new URL('../app/workspace-volume.css',import.meta.url),'utf8');assert.match(css,/flex:0 0 80px;width:80px/);assert.match(css,/flex-basis:56px;width:56px/);assert.match(css,/object-fit:contain/);
