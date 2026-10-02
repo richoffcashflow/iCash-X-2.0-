@@ -4,13 +4,13 @@ import {boundedBody,receptionTarget} from './general-reception.ts';
 // POST is the provider's documented read method, not a provider mutation:
 // https://elevenlabs.io/docs/api-reference/analytics/workspace/requests
 // Its published response has dynamic column names, not a fixed field schema.
-// Only unambiguous timestamp/method/path/status_code labels are interpreted.
+// Only unambiguous timestamp/method/path/response_code labels are interpreted.
 // Never infer a create outcome from position, a search hit or outer HTTP 200.
 const start=Date.parse('2026-10-02T18:08:20Z'),end=Date.parse('2026-10-02T18:09:00Z');
 const path=`/v1/convai/agents/${receptionTarget.agentId}/branches`;
 const endpoint='https://api.us.elevenlabs.io/v1/workspace/analytics/requests';
 type Obj=Record<string,unknown>;
-export type ReceptionSetupAnalytics={status:'matched'|'unavailable'|'ambiguous';httpStatus?:number;method?:'POST';path?:string;schemaColumns?:string[]};
+export type ReceptionSetupAnalytics={status:'matched'|'unavailable'|'ambiguous';httpStatus?:number;method?:'POST';path?:string;schemaColumns?:string[];reason?:string;timestampType?:string;timestampUnit?:string;timestampValueType?:string;responseCodeType?:string};
 type Env={ELEVENLABS_API_KEY?:string};
 type Deps={rpc:(name:string,body?:Obj)=>Promise<unknown>;fetcher?:typeof fetch};
 const obj=(v:unknown):Obj=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Obj:{};
@@ -27,18 +27,27 @@ export async function readReceptionSetupAnalytics(env:Env,deps:Deps):Promise<Rec
   if(!/^application\/json(?:;|$)/i.test(response.headers.get('content-type')??''))return unavailable();
   const data=obj(JSON.parse(await boundedBody(response,128*1024))),columns=data.columns;
   if(!Array.isArray(columns)||!columns.length||columns.length>32||new Set(columns).size!==columns.length||columns.some(c=>typeof c!=='string'||!/^[A-Za-z][A-Za-z0-9_ .-]{0,63}$/.test(c))||!Array.isArray(data.column_types)||data.column_types.length!==columns.length||!Array.isArray(data.column_units)||data.column_units.length!==columns.length||!Array.isArray(data.rows)||data.rows.length>20||data.rows.some(row=>!Array.isArray(row)||row.length!==columns.length))return unavailable();
-  const required=['timestamp','method','path','status_code'],indices=required.map(name=>columns.indexOf(name));
-  if(indices.some(index=>index<0)||!['DateTime','Int'].includes(String(data.column_types[indices[0]]))||data.column_types[indices[1]]!=='String'||data.column_types[indices[2]]!=='String'||data.column_types[indices[3]]!=='Int'||data.column_units[indices[0]]!=='ms')return {status:'unavailable',schemaColumns:columns as string[]};
-  if(data.rows.length===20)return {status:'ambiguous'}; // Potential truncation.
+  const required=['timestamp','method','path','response_code'],indices=required.map(name=>columns.indexOf(name));
+  const timestampType=String(data.column_types[indices[0]]),unit=data.column_units[indices[0]];
+  const responseCodeType=String(data.column_types[indices[3]]);
+  const meta={responseCodeType:/^[A-Za-z0-9_]{1,32}$/.test(responseCodeType)?responseCodeType:'unsupported',timestampType:['DateTime','Int','Float','String'].includes(timestampType)?timestampType:'unsupported',timestampUnit:unit===null?'null':['ms','s'].includes(String(unit))?String(unit):'unsupported'};
+  if(indices.some(index=>index<0)||!['DateTime','Int','Float'].includes(timestampType)||data.column_types[indices[1]]!=='String'||data.column_types[indices[2]]!=='String'||data.column_types[indices[3]]!=='Int')return {status:'unavailable',reason:'unsupported_schema',schemaColumns:columns as string[],...meta};
+  if(data.rows.length===20)return {status:'ambiguous',reason:'possibly_truncated'};
   const matches:number[]=[];
   for(const row of data.rows){
    const [time,method,requestPath,status]=indices.map(index=>row[index]);
-   const timestamp=typeof time==='number'&&Number.isSafeInteger(time)?time:NaN;
-   if(!Number.isFinite(timestamp)||timestamp<at||timestamp<start||timestamp>=end||typeof method!=='string'||typeof requestPath!=='string'||!Number.isSafeInteger(status)||status<100||status>599)return unavailable();
-   if(method==='POST'&&requestPath===path)matches.push(status);
+   if(typeof method!=='string'||typeof requestPath!=='string')return {status:'unavailable',reason:'invalid_method_or_path'};
+   if(method!=='POST'||requestPath!==path)continue;
+   let timestamp=NaN;
+   if(typeof time==='number'&&Number.isFinite(time)&&(unit==='ms'||unit==='s'))timestamp=time*(unit==='s'?1000:1);
+   else if(timestampType==='DateTime'&&typeof time==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(time))timestamp=Date.parse(time);
+   if(!Number.isFinite(timestamp))return {status:'unavailable',reason:'unsupported_timestamp',...meta,timestampValueType:time===null?'null':typeof time};
+   if(timestamp<at||timestamp<start||timestamp>=end)return {status:'unavailable',reason:'outside_attempt_window'};
+   if(!Number.isSafeInteger(status)||status<100||status>599)return {status:'unavailable',reason:'invalid_response_code'};
+   matches.push(status);
   }
-  if(matches.length>1)return {status:'ambiguous'};
+  if(matches.length>1)return {status:'ambiguous',reason:'multiple_matching_requests'};
   if(matches.length===1)return {status:'matched',httpStatus:matches[0],method:'POST',path};
-  return unavailable();
+  return {status:'unavailable',reason:'no_matching_request'};
  }catch{return unavailable();}
 }
