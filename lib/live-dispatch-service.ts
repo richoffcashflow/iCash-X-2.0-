@@ -1,5 +1,5 @@
 import {recordingServer} from './required-call-recording-server.ts';
-import {readRecordingReview,recordingPolicy} from './required-call-recording.ts';
+import {object,readRecordingReview,recordingAgentMatches,recordingPolicy} from './required-call-recording.ts';
 import {createHash} from 'node:crypto';
 import {sameBusinessNumber,consistentTextSenders} from './number-continuity.ts';
 import {boundedVoiceSmsContext} from './voice-sms-context.ts';
@@ -34,6 +34,9 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  if(j.operational_contact_id&&await db<boolean>('rpc/icash_operational_contact_current','POST',{p_account:accountId,p_contact:j.operational_contact_id,p_channel:'voice',p_check_hour:false})!==true)return hold('contact_operating_checks_required');
  const [snapshot]=p?await db<{snapshot:unknown}[]>(`icash_screening_jobs?id=eq.${p.screening_id}&account_id=eq.${accountId}&state=eq.complete&select=snapshot`):[];
  if(!c?.enabled||!(Date.parse(c.reviewed_until)>Date.now())||!p||!snapshot||!process.env.ELEVENLABS_API_KEY)return hold('voice_configuration_required');
+ // Recorded dispatch binds the account config to the complete reviewed projection,
+ // not the legacy main-branch conversation-only hash or its two-tool subset.
+ if(c.agent_id!==recordedReview.agentId||c.agent_config_hash!==recordedReview.configHash||c.max_duration_seconds!==recordedReview.maxTotalSeconds||!Array.isArray(c.required_tool_ids)||c.required_tool_ids.length!==recordedReview.toolIds.length||!recordedReview.toolIds.every(id=>c.required_tool_ids.includes(id)))return hold('recorded_call_review_required');
  if(createHash('sha256').update(p.phone).digest('hex')!==p.contact_key)return hold('contact_binding_invalid');
  const suppressed=await db<{phone:string}[]>(`icash_text_suppressions?phone=eq.${encodeURIComponent(p.phone)}&select=phone&limit=1`);if(suppressed.length)return hold('contact_opted_out');
  const contact=contactEligibility(p);if(!contact.ready){if(contact.reason==='outside_contact_hours'&&!j.callback_id){await db(`icash_voice_jobs?id=eq.${j.id}&state=eq.issued`,'PATCH',{state:'ready',due_at:new Date(Date.now()+30*60000).toISOString()});return {status:contact.reason};}return hold(contact.reason);}
@@ -52,20 +55,18 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  let phone:{phone_number:string};
  try{phone=await elevenRequest<{phone_number:string}>(`/v1/convai/phone-numbers/${encodeURIComponent(c.phone_number_id)}`);}catch{return hold('business_number_verification_required');}
  if(!sameBusinessNumber(businessNumber,phone.phone_number))return hold('business_number_mismatch');
- const agent=await elevenRequest<{conversation_config:{tts?:{voice_id?:string};conversation?:{max_duration_seconds?:number};agent?:{prompt?:{tool_ids?:string[]}}};platform_settings?:unknown}>(`/v1/convai/agents/${c.agent_id}`);
- const platform=agent.platform_settings as {overrides?:{conversation_config_override?:{agent?:{first_message?:boolean;prompt?:{prompt?:boolean}}}}}|undefined;
- const overrides=platform?.overrides?.conversation_config_override?.agent;
- if(p.party==='seller'&&(overrides?.first_message!==true||overrides?.prompt?.prompt!==true))return hold('property_context_override_review_required');
- const voiceOverride=agent.conversation_config.tts?.voice_id!==identity.voice_id;
+ let agent:unknown;
+ try{agent=await elevenRequest<unknown>(`/v1/convai/agents/${encodeURIComponent(recordedReview.agentId)}?branch_id=${encodeURIComponent(recordedReview.branchId)}`);}catch{return hold('production_agent_review_required');}
+ // Share the recording service's exact non-main branch/version, privacy,
+ // override, tool-set and canonical full-projection validation before reserve.
+ if(!recordingAgentMatches(recordedReview,agent))return hold('production_agent_review_required');
+ const voiceOverride=object(object(object(agent).conversation_config).tts).voice_id!==identity.voice_id;
  if(voiceOverride&&!c.approved_voice_ids?.includes(identity.voice_id))return hold('voice_selection_setup_required');
- const configHash=createHash('sha256').update(JSON.stringify(agent.conversation_config)).digest('hex');
- const cap=agent.conversation_config.conversation?.max_duration_seconds;
- if(configHash!==c.agent_config_hash||!Number.isInteger(cap)||(cap??0)>c.max_duration_seconds||(cap??0)<60||c.required_tool_ids.some(id=>!agent.conversation_config.agent?.prompt?.tool_ids?.includes(id)))return hold('production_agent_review_required');
  const [practice]=await db<{agent_id:string}[]>(`icash_voice_test_config?agent_id=eq.${c.agent_id}&select=agent_id`);if(practice)return hold('practice_agent_blocked');
  const rateId=p.party==='buyer'?c.buyer_rate_id:c.seller_rate_id;if(!rateId)return hold('full_call_cost_quote_required');
  const [rate]=await db<{operation:string;enabled:boolean;expires_at:string;voice_max_duration_seconds:number|null;charge_cents?:number;version?:string}[]>(`icash_operation_rates?id=eq.${rateId}&select=operation,enabled,expires_at,voice_max_duration_seconds,charge_cents,version`);
  if(!rate?.enabled||rate.operation!==(p.party==='buyer'?'buyer_call':'seller_call')||!(Date.parse(rate.expires_at)>Date.now())||!rate.voice_max_duration_seconds||rate.voice_max_duration_seconds<c.max_duration_seconds)return hold('full_call_cost_quote_required');
- if(recordedReview.agentId!==c.agent_id||!sameBusinessNumber(businessNumber,recordedReview.fromPhone)||rate.charge_cents!==recordingPolicy.minimumHoldCents||!rate.version?.startsWith(recordingPolicy.version+':'))return hold('recorded_call_review_required');
+ if(!sameBusinessNumber(businessNumber,recordedReview.fromPhone)||rate.charge_cents!==recordingPolicy.minimumHoldCents||!rate.version?.startsWith(recordingPolicy.version+':'))return hold('recorded_call_review_required');
  const [authority]=await db<{max_offer_cents:number;expires_at:string;review_request_id:string|null}[]>(`icash_offer_authorities?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&select=max_offer_cents,expires_at,review_request_id`);
  const ceiling=verifiedOfferCeiling(eligible?.ready?eligible.screening.preliminarySellerCeilingCents:null,authority);
  const smsContext=p.party==='seller'?boundedVoiceSmsContext(await db<unknown>('rpc/icash_voice_sms_context','POST',{p_account:accountId,p_permission:p.id})):null;

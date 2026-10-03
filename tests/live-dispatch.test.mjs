@@ -8,7 +8,7 @@ import {boundedVoiceSmsContext,voiceSmsInstructions} from '../lib/voice-sms-cont
 import {buyerCallInstructions} from '../lib/buyer-call-policy.ts';
 import {contactEligibility,callEligibility,verifiedOfferCeiling} from '../lib/live-dispatch-policy.ts';
 import {evaluateLaunch} from '../lib/launch-readiness-policy.ts';
-import {readRecordingReview,recordingPolicy} from '../lib/required-call-recording.ts';
+import {canonical,object,readRecordingReview,recordingAgentMatches,recordingPolicy,sha} from '../lib/required-call-recording.ts';
 import {sellerFirstMessage,sellerCallPrompt} from '../lib/seller-call-context.ts';
 const now=Date.parse('2026-09-29T16:00:00Z');
 const realNow=Date.now;Date.now=()=>now;
@@ -23,9 +23,11 @@ assert.equal(callEligibility(permission,{...snapshot,fetchedAt:new Date(now-8640
 assert.equal(verifiedOfferCeiling(9000000,{max_offer_cents:8000000,expires_at:new Date(now+1000).toISOString()},now),8000000);
 assert.equal(verifiedOfferCeiling(9000000,undefined,now),null);
 assert.equal(verifiedOfferCeiling(9000000,{max_offer_cents:8000000,expires_at:new Date(now-1).toISOString()},now),null);
-const config={tts:{voice_id:'voice'},conversation:{max_duration_seconds:600},agent:{prompt:{tool_ids:['callback','handoff']}}};
-const c={enabled:true,agent_id:'agent_fixture',phone_number_id:'number',agent_config_hash:createHash('sha256').update(JSON.stringify(config)).digest('hex'),reviewed_until:new Date(now+100000).toISOString(),seller_rate_id:'rate',buyer_rate_id:'buyer-rate',max_duration_seconds:600,required_tool_ids:['callback','handoff']};
-const review={enabled:true,reviewedAt:new Date(now-1000).toISOString(),reviewedUntil:new Date(now+100000).toISOString(),agentId:'agent_fixture',branchId:'agtbrch_fixture',versionId:'agtvrsn_fixture',configHash:'a'.repeat(64),fromPhone:'+14243948384',providerAccountSid:'AC'+'a'.repeat(32),stopToolId:'tool_stop',toolIds:['tool_callback','tool_handoff','tool_stop'],approvedHoldCents:recordingPolicy.minimumHoldCents,retentionDays:30,maxTotalSeconds:600,policyVersion:recordingPolicy.version};
+const config={asr:{user_input_audio_format:'ulaw_8000'},tts:{voice_id:'voice',agent_output_audio_format:'ulaw_8000'},conversation:{max_duration_seconds:600},agent:{prompt:{tool_ids:['tool_callback','tool_handoff','tool_stop']}}};
+const agent={agent_id:'agent_fixture',branch_id:'agtbrch_fixture',main_branch_id:'agtbrch_main',version_id:'agtvrsn_fixture',conversation_config:config,platform_settings:{privacy:{record_voice:false},auth:{enable_auth:true},call_limits:{bursting_enabled:false},queueing_config:{enabled:false},overrides:{conversation_config_override:{conversation:{max_duration_seconds:true},agent:{first_message:true,prompt:{prompt:true}},tts:{voice_id:true}}}},workflow:{nodes:[],edges:[]},procedures:[]};
+const review={enabled:true,reviewedAt:new Date(now-1000).toISOString(),reviewedUntil:new Date(now+100000).toISOString(),agentId:agent.agent_id,branchId:agent.branch_id,versionId:agent.version_id,configHash:sha(JSON.stringify(canonical({conversation_config:agent.conversation_config,platform_settings:agent.platform_settings,workflow:agent.workflow,procedures:agent.procedures}))),fromPhone:'+14243948384',providerAccountSid:'AC'+'a'.repeat(32),stopToolId:'tool_stop',toolIds:['tool_callback','tool_handoff','tool_stop'],approvedHoldCents:recordingPolicy.minimumHoldCents,retentionDays:30,maxTotalSeconds:600,policyVersion:recordingPolicy.version};
+const configTemplate={enabled:true,agent_id:review.agentId,phone_number_id:'number',agent_config_hash:review.configHash,reviewed_until:new Date(now+100000).toISOString(),seller_rate_id:'rate',buyer_rate_id:'buyer-rate',max_duration_seconds:600,required_tool_ids:review.toolIds,approved_voice_ids:[]};
+let c=structuredClone(configTemplate),providerAgent=structuredClone(agent),providerPaths=[],agentReadFailed=false,identityVoice='voice';
 let providerReads=0,flipAt=null,flip=()=>{},legacyRate=false,recordingStatus='recording_consent_pending';
 let outboundBody,contextOverrides=true,operational=false,operationalCurrent=true;
 let buyerApproved=true,callbackId=null,providerNumber='+14243948384',suppressed=false,paced=true;let records=[],postCount=0,allowClaim=true,paused=false,timeout=false,jobState='issued',practice=false,quoteSeconds=600;
@@ -43,7 +45,7 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_voice_configs'))return [c];
  if(path.startsWith('icash_contact_permissions')||path.startsWith('icash_voice_contact_targets'))return [{...permission,id:operational?'operational':permission.id}];
  if(path.startsWith('icash_screening_jobs'))return [{snapshot}];
- if(path.startsWith('icash_customer_identities'))return [{principal:'Fixture Buyer',voice_id:'voice'}];
+ if(path.startsWith('icash_customer_identities'))return [{principal:'Fixture Buyer',voice_id:identityVoice}];
  if(path.startsWith('icash_accounts'))return [{assistant_name:'Alex',bot_paused:paused}];
  if(path.startsWith('icash_voice_test_config'))return practice?[{agent_id:c.agent_id}]:[];
  if(path==='rpc/icash_buyer_voice_context')return buyerApproved?{dealId:'deal',address:'Fixture',askingPriceCents:10000000,repairsCents:100000,packageId:'doc'}:null;
@@ -54,21 +56,58 @@ const db=async(path,method,body)=>{
  if(path==='icash_live_conversations')return [];
  throw Error('Unexpected request '+path);
 };
-const elevenRequest=async(path,body)=>{providerReads++;assert.equal(body,undefined,'No legacy direct dial, even if recording dispatch fails');if(path.includes('/phone-numbers/'))return {phone_number:providerNumber};return {conversation_config:config,platform_settings:{overrides:{conversation_config_override:{agent:{first_message:contextOverrides,prompt:{prompt:contextOverrides}}}}}};};
+const elevenRequest=async(path,body)=>{providerReads++;providerPaths.push(path);assert.equal(body,undefined,'No legacy direct dial, even if recording dispatch fails');if(path.includes('/phone-numbers/'))return {phone_number:providerNumber};assert.equal(path,`/v1/convai/agents/${review.agentId}?branch_id=${review.branchId}`,'Never read main instead of the reviewed recorded branch');if(agentReadFailed)throw Error('Synthetic metadata read failure');const result=structuredClone(providerAgent);if(!contextOverrides)result.platform_settings.overrides.conversation_config_override.agent={first_message:false,prompt:{prompt:false}};return result;};
 const recordingServer=()=>({dispatch:async input=>{outboundBody=input;postCount++;if(timeout)return {status:'recording_dial_unknown_no_retry'};return {status:recordingStatus};}});
-globalThis.__voiceTest={recordingServer,readRecordingReview,recordingPolicy,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation:async()=>records.push({reserve:true}),contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt};
+globalThis.__voiceTest={recordingServer,object,readRecordingReview,recordingAgentMatches,recordingPolicy,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation:async()=>records.push({reserve:true}),contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt};
 let source=ts.transpileModule(readFileSync(new URL('../lib/live-dispatch-service.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-source='const {recordingServer,readRecordingReview,recordingPolicy,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation,contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt}=globalThis.__voiceTest;\n'+source;
+source='const {recordingServer,object,readRecordingReview,recordingAgentMatches,recordingPolicy,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation,contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt}=globalThis.__voiceTest;\n'+source;
 const {dispatchLiveVoice}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 process.env.ELEVENLABS_API_KEY='fixture-no-network';process.env.CONTIGUITY_FROM='+14243948384';
-const reset=()=>{providerReads=0;flipAt=null;flip=()=>{};legacyRate=false;recordingStatus='recording_consent_pending';Object.assign(process.env,{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:review.providerAccountSid,TWILIO_AUTH_TOKEN:'synthetic-provider-token'});operational=false;operationalCurrent=true;contextOverrides=true;outboundBody=undefined;buyerApproved=true;records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;callbackId=null;providerNumber='+14243948384';suppressed=false;paced=true;};
+const reset=()=>{c=structuredClone(configTemplate);providerAgent=structuredClone(agent);providerPaths=[];agentReadFailed=false;identityVoice='voice';providerReads=0;flipAt=null;flip=()=>{};legacyRate=false;recordingStatus='recording_consent_pending';Object.assign(process.env,{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:review.providerAccountSid,TWILIO_AUTH_TOKEN:'synthetic-provider-token'});operational=false;operationalCurrent=true;contextOverrides=true;outboundBody=undefined;buyerApproved=true;records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;callbackId=null;providerNumber='+14243948384';suppressed=false;paced=true;};
 reset();assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);
 assert.match(outboundBody.firstMessage,/Is this the owner of Fixture only/);
 assert.equal(outboundBody.operationKey,'voice:job');
 assert.match(outboundBody.prompt,/PRIVATE SERVER NEGOTIATION AUTHORITY/);
 assert(!Object.hasOwn(outboundBody,'call_recording_enabled'));
 assert(!records.some(r=>r.path==='icash_live_conversations'&&r.method==='POST'),'Only verified recording service may create the live binding');
-reset();contextOverrides=false;assert.equal((await dispatchLiveVoice('account','job')).status,'property_context_override_review_required');assert.equal(postCount,0);assert(!records.some(r=>r.path==='rpc/icash_reserve_paced_voice'));
+assert.deepEqual(providerPaths,[`/v1/convai/phone-numbers/${c.phone_number_id}`,`/v1/convai/agents/${review.agentId}?branch_id=${review.branchId}`]);
+const noAdmission=()=>{assert.equal(postCount,0);assert(!records.some(r=>['rpc/icash_reserve_paced_voice','rpc/icash_claim_reviewed_voice_job'].includes(r.path)));assert.equal(jobState,'held');};
+// Recorded account configs must match the review, including exact tool set and cap.
+// Legacy conversation hashes and two-tool configs stay fail-closed in this lane.
+for(const mutate of [
+ c=>c.agent_id='agent_other',c=>c.agent_config_hash=sha(JSON.stringify(config)),c=>c.agent_config_hash='f'.repeat(64),
+ c=>c.max_duration_seconds=599,c=>c.max_duration_seconds=601,c=>c.max_duration_seconds='600',
+ c=>c.required_tool_ids=review.toolIds.slice(0,2),c=>c.required_tool_ids=[...review.toolIds,'tool_extra'],
+ c=>c.required_tool_ids=['tool_callback','tool_handoff','tool_unreviewed'],c=>c.required_tool_ids=['tool_callback','tool_handoff','tool_handoff'],
+ c=>c.required_tool_ids=null,c=>delete c.required_tool_ids,
+]){reset();mutate(c);assert.equal((await dispatchLiveVoice('account','job')).status,'recorded_call_review_required');assert.equal(providerReads,0);noAdmission();}
+reset();c.required_tool_ids.reverse();assert.equal((await dispatchLiveVoice('account','job')).status,'call_started','Config tool-set order is immaterial');
+// Unlike legacy JSON serialization, canonical review projection ignores key order.
+const reverseKeys=value=>Array.isArray(value)?value.map(reverseKeys):value!==null&&typeof value==='object'?Object.fromEntries(Object.entries(value).reverse().map(([key,item])=>[key,reverseKeys(item)])):value;
+reset();providerAgent=reverseKeys(providerAgent);assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');
+// The actual returned branch/version and full projection are checked for both parties.
+const agentMutations=[
+ a=>a.agent_id='agent_other',a=>a.branch_id=a.main_branch_id,a=>a.main_branch_id=a.branch_id,a=>a.version_id='agtvrsn_other',
+ a=>delete a.main_branch_id,a=>a.main_branch_id=null,a=>a.main_branch_id='',a=>a.main_branch_id='main',
+ a=>a.main_branch_id=123,a=>a.main_branch_id=['agtbrch_main'],a=>a.main_branch_id='agtbrch_main?unexpected=1',
+ a=>a.conversation_config.conversation.max_duration_seconds=599,a=>a.conversation_config.conversation.max_duration_seconds=601,
+ a=>a.conversation_config.agent.prompt.tool_ids.pop(),a=>a.conversation_config.agent.prompt.tool_ids.push('tool_extra'),
+ a=>a.conversation_config.agent.prompt.tool_ids[2]='tool_handoff',a=>a.conversation_config.agent.prompt.tool_ids[2]='tool_unreviewed',
+ a=>a.conversation_config.asr.user_input_audio_format='pcm_16000',a=>a.conversation_config.tts.agent_output_audio_format='pcm_16000',
+ a=>a.conversation_config.agent.prompt.prompt='Unreviewed prompt',a=>a.platform_settings.privacy.record_voice=true,
+ a=>a.platform_settings.auth.enable_auth=false,a=>a.platform_settings.call_limits.bursting_enabled=true,a=>a.platform_settings.queueing_config.enabled=true,
+ a=>a.platform_settings.overrides.conversation_config_override.agent.first_message=false,a=>a.platform_settings.overrides.conversation_config_override.agent.prompt.prompt=false,
+ a=>a.platform_settings.overrides.conversation_config_override.conversation.max_duration_seconds=false,a=>a.platform_settings.overrides.conversation_config_override.tts.voice_id=false,
+ a=>a.workflow.nodes.push({id:'unreviewed'}),a=>a.procedures.push({id:'unreviewed'}),
+];
+for(const party of ['seller','buyer'])for(const mutate of agentMutations){reset();permission={...permission,party};mutate(providerAgent);assert.equal((await dispatchLiveVoice('account','job')).status,'production_agent_review_required');noAdmission();}
+permission={...permission,party:'seller'};
+for(const malformed of [null,{},[],{conversation_config:null}]){reset();providerAgent=malformed;assert.equal((await dispatchLiveVoice('account','job')).status,'production_agent_review_required');noAdmission();}
+reset();agentReadFailed=true;assert.equal((await dispatchLiveVoice('account','job')).status,'production_agent_review_required');noAdmission();
+reset();identityVoice='unapproved-voice';assert.equal((await dispatchLiveVoice('account','job')).status,'voice_selection_setup_required');noAdmission();
+reset();identityVoice='approved-voice';c.approved_voice_ids=[identityVoice];assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(outboundBody.voiceId,identityVoice);
+console.log('PASS recorded dispatch: exact non-main branch/version and canonical full projection, matching account config/hash/600-second cap/three-tool set, malformed metadata and drift held before reserve or dial; approved voice policy retained');
+reset();contextOverrides=false;assert.equal((await dispatchLiveVoice('account','job')).status,'production_agent_review_required');assert.equal(postCount,0);assert(!records.some(r=>r.path==='rpc/icash_reserve_paced_voice'));
 reset();paused=true;await dispatchLiveVoice('account','job');assert.equal(postCount,0);assert(!records.some(r=>r.reserve));
 reset();practice=true;assert.equal((await dispatchLiveVoice('account','job')).status,'practice_agent_blocked');assert.equal(postCount,0);
 reset();quoteSeconds=60;assert.equal((await dispatchLiveVoice('account','job')).status,'full_call_cost_quote_required');assert.equal(postCount,0);

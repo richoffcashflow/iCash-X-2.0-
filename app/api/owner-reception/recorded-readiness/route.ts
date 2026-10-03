@@ -12,6 +12,6 @@ export async function GET(request:Request){try{
  const url=new URL(request.url);
  if(request.method!=='GET'||url.pathname!=='/api/owner-reception/recorded-readiness'||url.search||url.username||url.password||request.headers.get('host')!==url.host)return unavailable(400);
  if(!['same-origin','none',null].includes(request.headers.get('sec-fetch-site'))||request.headers.has('origin')&&request.headers.get('origin')!==url.origin)return unavailable(403);
- const result=await readRecordedReceptionReadiness({ELEVENLABS_API_KEY:process.env.ELEVENLABS_API_KEY},{signal:request.signal});
+ const result=await readRecordedReceptionReadiness({ELEVENLABS_API_KEY:process.env.ELEVENLABS_API_KEY,TWILIO_ACCOUNT_SID:process.env.TWILIO_ACCOUNT_SID,TWILIO_AUTH_TOKEN:process.env.TWILIO_AUTH_TOKEN},{signal:request.signal});
  return Response.json(result,{status:result.status==='unavailable'?503:200,headers:privateHeaders});
 }catch(e){return unavailable(e instanceof Error&&['SIGN_IN_REQUIRED','ACCOUNT_REQUIRED'].includes(e.message)?401:503);}}

@@ -70,7 +70,10 @@ try{
  process.env.ICASH_OWNER_RECORDING_RECEIPTS_READY='false';response=await route.GET(new Request('https://www.geticashx.com/api/owner-recording-test/reply?id='+id));assert.equal(response.status,404);assert.equal(inspectorCalls,1);
 }finally{if(savedFlag===undefined)delete process.env.ICASH_OWNER_RECORDING_RECEIPTS_READY;else process.env.ICASH_OWNER_RECORDING_RECEIPTS_READY=savedFlag;}
 const source=readFileSync(new URL('../app/owner-recording-test/check.tsx',import.meta.url),'utf8');assert(source.includes('<OwnerReplyInspector runId={r.id}'));assert(source.includes('if(active.current||!ended)return'));assert(source.includes('controller.current?.abort()'));assert(!source.includes('TWILIO_AUTH_TOKEN'));
-const require=createRequire(import.meta.url),mod={exports:{}};new Function('require','module','exports',ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText)(require,mod,mod.exports);
+const require=createRequire(import.meta.url),mod={exports:{}};
+// The production-readiness child has its own focused suite; this renderer isolates the reply inspector export.
+const componentRequire=name=>name==='./production-readiness'?{default:()=>null}:require(name);
+new Function('require','module','exports',ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText)(componentRequire,mod,mod.exports);
 const html=renderToStaticMarkup(require('react').createElement(mod.exports.OwnerReplyInspector,{runId:id,ended:true}));assert(html.includes('Inspect captured reply (read-only)'));assert(!html.includes('Captured reply:'));
 const serviceSource=readFileSync(new URL('../lib/owner-call-reply-inspector.ts',import.meta.url),'utf8');assert(!/console\.|\.start\(|\.dial\(|\.register\(|\.end\(|db\([^\n]*['"]POST/.test(serviceSource));
 console.log('Owner reply inspector: fixed owner/run/canonical-call binding, read-only provider transport, denial stop, bounded pages/bodies, redaction/no header/nonce/response leakage, explicit multiple/missing/partial events, private route and visible click-only UI passed.');
