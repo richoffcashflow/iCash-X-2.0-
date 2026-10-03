@@ -12,6 +12,7 @@ export async function POST(req:Request){
  try{
  const inbound=event.type.startsWith('text.incoming');const sender=inbound?event.data.to:event.data.from;
  const known=await db<{phone:string}[]>(`icash_text_senders?phone=eq.${encodeURIComponent(sender)}&select=phone`);if(!known.length)return new Response(null,{status:400});
+ if(inbound&&event.optOut)await db('rpc/icash_stop_customer_update_phone','POST',{p_phone:event.data.from});
  await db('rpc/icash_ingest_text_event','POST',{p_event:event,p_optout:event.optOut});
  if(inbound)await ownerPracticeReply(event.id);
  return NextResponse.json({received:true});

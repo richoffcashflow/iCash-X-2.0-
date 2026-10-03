@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {propertyBotStatus,propertyNextMove,mostPromisingProperty} from '../lib/workspace-guidance.ts';
+import {makeWorkspaceFixture} from './fixtures/workspace-volume.mjs';
+const active={manual:false,paused:false,available:true,stale:false,attention:false,practice:false};
+assert.equal(propertyBotStatus(active).label,'AI active');
+for(const hold of [{manual:true},{paused:true},{available:false},{stale:true},{attention:true},{practice:true},{stage:'closed'},{stage:'canceled'}])assert.notEqual(propertyBotStatus({...active,...hold}).tone,'green');
+assert.equal(propertyBotStatus({...active,paused:true,attention:true}).label,'Needs you');
+const work=makeWorkspaceFixture(),best=mostPromisingProperty(work.properties,work);assert(work.properties.some(p=>p.id===best&&p.result.financialCheck.status==='eligible'));
+assert.equal(mostPromisingProperty([],work),null);
+assert.match(propertyNextMove({...work.properties[0],result:{...work.properties[0].result,financialCheck:{status:'review'}}},{...work,deals:[],callbacks:[],handoffs:[],textAttention:[],signing:[],callRequests:[],propertyAttentionIds:[]}),/Review the property numbers/);
+console.log('Property guidance: truthful active/paused/stale/manual states and saved-evidence priorities passed.');

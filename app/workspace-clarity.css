@@ -1,0 +1,211 @@
+/* One work surface: budget, current state, next move, and the property. */
+.personalized-workspace{background:#f8f9fb;color:#16181d;min-height:100dvh}
+.personalized-workspace .console-header{max-width:1040px;padding:20px 28px;margin:auto;border-bottom:0;background:transparent}
+.personalized-workspace .console-main{max-width:960px;margin:auto;padding:8px 24px 40px}
+.personalized-workspace .workspace-header-links{gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.personalized-workspace .workspace-header-links button,.personalized-workspace .workspace-header-links a{min-height:40px;font-size:13px}
+.personalized-workspace .workspace-eyebrow{display:block;font-size:12px;font-weight:650;letter-spacing:.075em;text-transform:uppercase;color:#667085;line-height:1.4}
+.personalized-workspace .daily-budget-bar{background:#fff;border:1px solid #e6e8ec;border-radius:18px;padding:20px 24px;margin:0 0 26px;box-shadow:0 4px 20px #18223004}
+.personalized-workspace .daily-budget-top{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.personalized-workspace .daily-budget-top strong{display:block;font-size:30px;line-height:1.25;letter-spacing:-.045em;font-weight:700;margin-top:5px;font-variant-numeric:tabular-nums}
+.personalized-workspace .daily-budget-top strong small{font-size:15px;font-weight:450;letter-spacing:0;color:#667085;margin-left:4px}
+.personalized-workspace .budget-increase,.personalized-workspace .coach-action{border:0;border-radius:11px;background:#171a20;color:#fff;padding:12px 17px;min-height:44px;font-size:14px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:8px;line-height:1.4}
+.personalized-workspace .daily-budget-bottom{display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:13px;border-top:1px solid #edf0f3;gap:12px;font-size:14px;color:#475467}
+.personalized-workspace .daily-budget-bottom span{display:flex;align-items:center;gap:7px}
+.personalized-workspace .daily-budget-bottom button,.personalized-workspace .updates-toolbar button{border:0;background:transparent;font-size:13px;color:#344054;text-decoration:underline;text-underline-offset:3px;min-height:32px}
+.personalized-workspace .daily-budget-renewal,.personalized-workspace .daily-budget-reserved{display:block;font-size:12px;color:#667085;margin-top:7px;line-height:1.5}
+.personalized-workspace .workspace-funding-container:empty{display:none}
+.personalized-workspace .inline-funding{margin:0 0 24px;background:white;border:1px solid #dfe3e9;border-radius:18px;padding:22px}
+.personalized-workspace .budget-presets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:20px 0}
+.personalized-workspace .budget-presets button{border:1px solid #d9dee6;border-radius:11px;padding:13px 4px;background:white;color:#344054;min-height:62px}
+.personalized-workspace .budget-presets button strong{display:block;font-size:22px;letter-spacing:-.03em}
+.personalized-workspace .budget-presets button span{font-size:12px}
+.personalized-workspace .budget-presets button[aria-pressed=true]{background:#171a20;border-color:#171a20;color:white}
+.personalized-workspace .budget-change-confirmation{padding:14px;background:#f1f6f3;border-radius:10px;font-size:14px;line-height:1.6;text-align:left;color:#234936}
+.personalized-workspace .operation-panel{background:transparent;border:0;box-shadow:none;padding:0;border-radius:0}
+.personalized-workspace .workspace-status-hero{display:flex;align-items:center;justify-content:space-between;gap:20px}
+.personalized-workspace .workspace-status-hero h2{font-size:27px;line-height:1.2;font-weight:650;letter-spacing:-.04em;margin:7px 0 0;color:#16181d}
+.personalized-workspace .workspace-status-label{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:650;letter-spacing:.05em;white-space:nowrap}
+.personalized-workspace .ai-status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.personalized-workspace .tone-green{color:#187748}
+.personalized-workspace .tone-amber{color:#976213}
+.personalized-workspace .tone-gray{color:#667085}
+.personalized-workspace .workspace-status-detail{max-width:650px;font-size:14px;line-height:1.6;color:#667085;text-align:left;margin:10px 0}
+.personalized-workspace .workspace-run-controls{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 21px}
+.personalized-workspace .workspace-run-controls .workspace-quiet{font-size:13px;min-height:40px;padding:6px 0;background:none;border:0;color:#475467;text-decoration:underline;text-underline-offset:4px}
+.personalized-workspace .deal-coach{padding:20px 22px;border:1px solid #dce2e9;border-left:3px solid #202833;border-radius:14px;background:#fff;margin:20px 0 28px;text-align:left}
+.personalized-workspace .deal-coach h3{font-size:18px;line-height:1.4;font-weight:650;letter-spacing:-.025em;margin:7px 0}
+.personalized-workspace .deal-coach p{font-size:14px;line-height:1.65;color:#566173;max-width:660px;margin:0 0 13px;text-align:left}
+.personalized-workspace .deal-coach .workspace-primary-actions{margin-top:15px}
+.personalized-workspace .next-step-details{margin-top:14px;font-size:12px;color:#667085}
+.personalized-workspace .next-step-details p{font-size:13px;margin:10px 0 0}
+.personalized-workspace .workspace-section-heading h3{font-size:21px;font-weight:650;letter-spacing:-.03em;margin:0}
+.personalized-workspace .live-caption{font-size:14px;color:#667085;margin-top:6px}
+.personalized-workspace .property-library{border:0;padding:0;background:transparent;margin-top:12px}
+.personalized-workspace .property-list-meta{justify-content:flex-end;margin:0 0 9px}
+.personalized-workspace .property-list-meta small{font-size:12px;color:#667085}
+.personalized-workspace .workspace-search{font-size:13px;line-height:1.4;color:#667085;display:block}
+.personalized-workspace .workspace-search input{margin-top:7px;border:1px solid #dfe3e8;background:#fff;border-radius:11px;padding:13px 15px;font-size:16px;min-height:46px}
+.personalized-workspace .workspace-filters{margin:12px 0;gap:6px}
+.personalized-workspace .workspace-filters button{min-height:42px;font-size:13px;border-radius:9px;padding:9px 12px;min-width:0}
+.personalized-workspace .workspace-scope{font-size:12px;color:#667085;margin:9px 0 16px;line-height:1.5}
+.personalized-workspace .property-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:18px}
+.personalized-workspace .live-property{margin:0;background:#fff;border:1px solid #e0e5eb;border-radius:17px;overflow:hidden;box-shadow:0 3px 10px #18223003;min-width:0}
+.personalized-workspace .live-property[hidden]{display:none}
+.personalized-workspace .live-property[data-expanded=true]{grid-column:1/-1;border-color:#aeb8c5}
+.personalized-workspace .live-property[data-promising=true]{border-color:#9bb9a9}
+.personalized-workspace button.property-summary{padding:18px;display:grid;grid-template-columns:64px minmax(0,1fr) 20px;gap:12px;align-items:start;position:relative}
+.personalized-workspace .property-thumbnail{width:64px;height:64px;min-width:64px;border-radius:11px}
+.personalized-workspace .property-summary-main{min-width:0}
+.personalized-workspace .property-address strong{font-size:17px;line-height:1.35;letter-spacing:-.025em}
+.personalized-workspace .property-address>span{font-size:13px;color:#667085;line-height:1.5;margin-top:3px}
+.personalized-workspace .promising-label{display:block;font-size:11px;color:#187748;font-weight:650;margin:0 0 6px;line-height:1.4}
+.personalized-workspace .property-owner-name{display:block;font-size:12px;color:#566173;margin:5px 0;line-height:1.4;overflow-wrap:anywhere}
+.personalized-workspace .property-summary-status{margin-top:7px;gap:5px}
+.personalized-workspace .property-status{font-size:11px;line-height:1.5;padding:3px 7px;background:#f3f5f8;color:#475467;border:0}
+.personalized-workspace .property-recorded-meta{display:none}
+.personalized-workspace .property-bot-status{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:1.5;font-weight:550;margin-top:9px}
+.personalized-workspace .property-open-control{grid-column:3;grid-row:1;align-self:center;min-width:0;margin:0;color:#8b95a4}
+.personalized-workspace .property-open-control>span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.personalized-workspace .property-cash-preview{grid-column:1/-1;border-top:1px solid #edf0f3;padding-top:14px;margin-top:2px;display:block}
+.personalized-workspace .property-cash-preview>span{display:block;font-size:12px;color:#667085}
+.personalized-workspace .property-cash-preview strong{display:block;font-size:32px;font-weight:700;letter-spacing:-.055em;line-height:1.25;margin:4px 0;color:#17613d;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.personalized-workspace .property-cash-preview small{display:block;font-size:11px;color:#778294;line-height:1.4}
+.personalized-workspace .property-quick-actions{padding:0 18px 17px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.personalized-workspace .property-quick-actions button{min-height:43px;border-radius:10px;font-size:14px;background:#f7f8fa;border-color:#e8ebef;color:#344054}
+.personalized-workspace .property-details{padding:22px;border-top:1px solid #edf0f3}
+.personalized-workspace .property-analysis-heading h4{font-size:17px;letter-spacing:-.02em}
+.personalized-workspace .property-analysis-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:15px 0}
+.personalized-workspace .property-analysis-metric{background:#f7f8fa;border:0;border-radius:12px;padding:16px;display:block}
+.personalized-workspace .property-analysis-metric dt{font-size:13px;color:#667085;margin:0 0 6px}
+.personalized-workspace .property-analysis-metric dd{font-size:24px;font-weight:650;letter-spacing:-.035em;line-height:1.3;text-align:left;color:#202833;overflow-wrap:anywhere}
+.personalized-workspace .property-analysis-offer{grid-column:1/-1;background:#edf6f0;padding:22px}
+.personalized-workspace .property-analysis-offer dt{color:#386b4d}
+.personalized-workspace .property-analysis-offer dd{font-size:42px;color:#175e38;font-weight:700;letter-spacing:-.055em}
+.personalized-workspace .property-comps{margin:13px 0}
+.personalized-workspace .estimate-details,.personalized-workspace .property-owner-details{font-size:13px;line-height:1.6;color:#667085}
+.personalized-workspace .property-owner-details{border-top:1px solid #edf0f3;margin-top:20px;padding-top:17px}
+.personalized-workspace .property-owner-details>summary{color:#344054;font-size:14px}
+.personalized-workspace .property-owner-details .property-facts{margin-top:18px}
+.personalized-workspace .property-control{margin-top:20px;background:#f8fafb;border:1px solid #edf0f3;border-radius:12px;padding:14px;gap:16px}
+.personalized-workspace .property-control .property-bot-status{margin:0;font-size:14px}
+.personalized-workspace .property-control small{font-size:12px;line-height:1.5;color:#667085;margin-top:4px}
+.personalized-workspace .takeover-button{min-height:42px;border-color:#d7dfe8;font-size:13px;background:#fff;color:#344054}
+.personalized-workspace .property-control-help{font-size:11px;line-height:1.5;color:#778294;margin-top:8px;display:block}
+.personalized-workspace .seller-summary{margin:20px 0;padding:0 0 18px;border-bottom:1px solid #edf0f3}
+.personalized-workspace .seller-summary p{font-size:15px;line-height:1.65;color:#344054;text-align:left;margin:7px 0 0}
+.personalized-workspace .property-next{background:#f6f8fb;border:0;border-radius:12px;padding:16px;margin-top:18px}
+.personalized-workspace .property-next>p{font-size:14px;line-height:1.65;color:#344054;text-align:left;margin:0}
+.personalized-workspace .property-next>p>span{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#667085;font-weight:650;margin-bottom:4px}
+.personalized-workspace .workspace-progress-details,.personalized-workspace .workspace-free-example{border-top:1px solid #e1e5eb;padding:18px 0;margin:24px 0 0;font-size:14px;color:#566173}
+.personalized-workspace .workspace-progress-details>summary,.personalized-workspace .workspace-free-example>summary{min-height:32px}
+.personalized-workspace .workspace-attention{background:#fffcf5;border:1px solid #efdfba;border-radius:14px;padding:16px;margin:18px 0 24px}
+.personalized-workspace .workspace-attention h4{font-size:16px}
+.personalized-workspace .workspace-updates-button{display:inline-flex;align-items:center;gap:6px;position:relative;border:0;background:none;padding:8px;color:#344054}
+.personalized-workspace .workspace-updates-button b{background:#202833;color:white;border-radius:12px;min-width:19px;height:19px;display:grid;place-items:center;font-size:10px}
+.personalized-workspace .updates-dialog{width:min(480px,calc(100vw - 24px));max-height:85dvh;padding:0;border:1px solid #e4e7ec;border-radius:20px;background:#fff;color:#16181d;margin:auto;box-shadow:0 20px 80px #10182825;overflow:auto}
+.personalized-workspace .updates-dialog::backdrop{background:#10182865;backdrop-filter:blur(3px)}
+.personalized-workspace .updates-heading{padding:22px 22px 14px;display:flex;align-items:center;justify-content:space-between;gap:15px}
+.personalized-workspace .updates-heading h2{font-size:26px;letter-spacing:-.04em;margin:6px 0 0}
+.personalized-workspace .icon-close{border:0;background:#f2f4f7;color:#475467;border-radius:50%;width:40px;height:40px;display:grid;place-items:center;flex:none}
+.personalized-workspace .updates-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 22px 14px;border-bottom:1px solid #edf0f3}
+.personalized-workspace .updates-list{list-style:none;margin:0;padding:0}
+.personalized-workspace .updates-list li{margin:0;border-bottom:1px solid #edf0f3}
+.personalized-workspace .updates-list a{display:flex;gap:12px;align-items:flex-start;padding:18px 22px;text-decoration:none;color:inherit}
+.personalized-workspace .updates-list strong{font-size:14px;line-height:1.45;display:block}
+.personalized-workspace .updates-list p{font-size:13px;line-height:1.5;color:#667085;margin:5px 0;text-align:left}
+.personalized-workspace .updates-list small{font-size:11px;color:#778294}
+.personalized-workspace .update-unread-dot{width:6px;height:6px;border-radius:50%;background:transparent;flex:none;margin-top:7px}
+.personalized-workspace [data-unread=true] .update-unread-dot{background:#187748}
+.personalized-workspace .updates-list li[data-unread=true]{background:#f7faf8}
+.personalized-workspace .updates-empty{padding:32px 24px;text-align:center;color:#667085;font-size:14px;line-height:1.65}
+.personalized-workspace .updates-empty svg{margin:auto}.personalized-workspace .updates-empty h3{font-size:18px;color:#344054;margin:12px 0 4px}
+.personalized-workspace .updates-error{padding:12px 22px;font-size:13px;line-height:1.6;color:#8b3d19}
+.personalized-workspace .bot-update-preferences{margin:22px 0;padding:20px;background:#f8fafb;border:1px solid #e3e8ee;border-radius:14px}
+.personalized-workspace .bot-update-preferences h3{font-size:20px;letter-spacing:-.03em;margin:7px 0}
+.personalized-workspace .bot-update-preferences>p{font-size:14px;color:#566173;line-height:1.6;margin:0 0 16px}
+.personalized-workspace .update-channel{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid #e5e9ef;color:#344054}
+.personalized-workspace .update-channel>span{flex:1;min-width:0}
+.personalized-workspace .update-channel strong{display:block;font-size:14px}
+.personalized-workspace .update-channel small{display:block;font-size:12px;line-height:1.5;overflow-wrap:anywhere;margin-top:4px;color:#667085}
+.personalized-workspace .update-channel input,.personalized-workspace .update-consent input{width:18px;height:18px;flex:none;accent-color:#171a20}
+.personalized-workspace .update-phone-label{display:block;font-size:13px;margin-top:14px;color:#475467}
+.personalized-workspace .update-phone-label input,.personalized-workspace .update-phone-label select{display:block;width:100%;font-size:16px;margin-top:6px;padding:12px;border:1px solid #d6dde6;border-radius:9px;background:#fff}
+.personalized-workspace .update-consent{display:flex;align-items:flex-start;gap:10px;font-size:12px;line-height:1.6;color:#566173;margin:17px 0}
+.personalized-workspace .updates-availability{display:block;font-size:12px;color:#976213;margin:12px 0;line-height:1.5}
+.personalized-workspace .bot-update-preferences>.coach-action{margin-top:14px}
+.personalized-workspace .task-alert-settings{font-size:13px;color:#667085}
+.personalized-workspace button:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:640px){
+ .personalized-workspace .console-header{padding:13px 16px;gap:8px}.personalized-workspace .console-main{padding:6px 14px 28px}
+ .personalized-workspace .workspace-header-links{gap:3px}.personalized-workspace .workspace-header-links .header-access{font-size:12px;padding:5px}.personalized-workspace .workspace-header-links .workspace-help{font-size:12px}
+ .personalized-workspace .workspace-updates-button>span{display:none}.personalized-workspace .workspace-updates-button{padding:8px}
+ .personalized-workspace .daily-budget-bar{padding:17px 18px;margin-bottom:23px;border-radius:16px}.personalized-workspace .daily-budget-top strong{font-size:28px}
+ .personalized-workspace .budget-increase{font-size:13px;padding:11px 13px}.personalized-workspace .budget-increase svg{display:none}
+ .personalized-workspace .workspace-status-hero{gap:12px;align-items:flex-start;flex-wrap:wrap}.personalized-workspace .workspace-status-hero h2{font-size:25px}.personalized-workspace .workspace-status-label{font-size:10px;margin-top:9px}
+ .personalized-workspace .workspace-status-detail{font-size:14px}.personalized-workspace .deal-coach{padding:18px;margin:18px 0 24px}
+ .personalized-workspace .property-list{grid-template-columns:1fr;gap:13px}.personalized-workspace .property-details{padding:17px}
+ .personalized-workspace .property-analysis-offer dd{font-size:36px}.personalized-workspace .property-analysis-metric dd{font-size:23px}.personalized-workspace .property-analysis-offer dd{font-size:36px}
+ .personalized-workspace .property-analysis-metric{padding:14px}.personalized-workspace .property-analysis-metric dt{font-size:12px}.personalized-workspace .property-analysis-offer{padding:18px}
+ .personalized-workspace .property-control{gap:10px;flex-wrap:wrap}.personalized-workspace .takeover-button{flex:none}.personalized-workspace .workspace-filters button{font-size:12px;padding:8px 6px}.personalized-workspace .workspace-filters button span{margin-left:4px}
+ .personalized-workspace .property-contact-dialog .message-bubble p{font-size:15px}.personalized-workspace .property-contact-dialog .message-composer textarea{font-size:16px}
+}
+@media(prefers-reduced-motion:reduce){.personalized-workspace *{scroll-behavior:auto!important;transition:none!important}}
+
+.personalized-workspace .updates-budget{padding:20px 22px;background:#f8fafb}.personalized-workspace .updates-budget strong{font-size:14px}.personalized-workspace .updates-budget p{font-size:13px;color:#667085;margin:6px 0 14px}.personalized-workspace .updates-budget .coach-action{font-size:13px}
+
+/* Reset legacy dark-header rules and keep the first screen focused. */
+.personalized-workspace .console-header{display:flex;align-items:center;justify-content:space-between;width:100%;color:#344054}
+.personalized-workspace .console-header>div{margin:0;padding:0;height:auto;max-width:none;min-width:0}
+.personalized-workspace .console-header img{filter:brightness(0);width:104px;height:58px}
+.personalized-workspace .console-header .brand-version{color:#667085;margin-left:7px;font-size:12px}
+.personalized-workspace .console-header .header-access,.personalized-workspace .console-header .workspace-help{color:#475467;background:transparent;border:0;font-size:13px}
+.personalized-workspace .workspace-updates-button>span{font-size:13px;letter-spacing:0;font-weight:500}
+.personalized-workspace .live-work{border-top:0;padding-top:0;margin-top:12px}
+.personalized-workspace .daily-budget-bar{padding:16px 20px;margin-bottom:20px}
+.personalized-workspace .workspace-status-hero h2{font-size:25px}
+.personalized-workspace .workspace-status-detail{margin:8px 0}
+.personalized-workspace .workspace-run-controls{margin:0 0 12px}
+.personalized-workspace .live-work>.deal-coach{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:20px;padding:16px 18px;margin:14px 0 22px}
+.personalized-workspace .live-work>.deal-coach>span,.personalized-workspace .live-work>.deal-coach h3,.personalized-workspace .live-work>.deal-coach p{grid-column:1}
+.personalized-workspace .live-work>.deal-coach p{margin-bottom:0}
+.personalized-workspace .live-work>.deal-coach .coach-action{grid-column:2;grid-row:1 / span 3;align-self:center}
+.personalized-workspace details.workspace-attention{padding:0 16px;margin:14px 0}
+.personalized-workspace .workspace-attention>.attention-heading{padding:13px 0;margin:0;cursor:pointer;min-height:52px}
+.personalized-workspace .workspace-attention:not([open])>.attention-heading p{display:none}
+.personalized-workspace .workspace-attention>.attention-heading h4{font-size:14px}
+.personalized-workspace .workspace-attention[open]{padding-bottom:16px}
+.personalized-workspace .workspace-search input{margin-top:0}
+@media(max-width:640px){
+ .personalized-workspace .console-header{flex-wrap:wrap;padding:12px 14px;gap:6px}
+ .personalized-workspace .console-header img{width:78px;height:44px}
+ .personalized-workspace .console-header .workspace-header-links{margin-left:auto;gap:1px}
+ .personalized-workspace .console-header .header-access{font-size:12px;padding:5px}
+ .personalized-workspace .console-header .workspace-help{font-size:11px}
+ .personalized-workspace .live-work>.deal-coach{display:block;padding:15px 16px;margin:12px 0 20px}
+ .personalized-workspace .live-work>.deal-coach .coach-action{margin-top:12px}
+ .personalized-workspace .workspace-status-hero h2{font-size:22px}
+ .personalized-workspace .daily-budget-bar{padding:15px 18px}
+ .personalized-workspace .workspace-header-links .workspace-updates-button>span{display:none}
+}
+
+.personalized-workspace .property-library{margin-left:0;margin-right:0;width:100%;min-width:0}
+.personalized-workspace .property-library .workspace-filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.personalized-workspace .property-library .workspace-filters button{min-width:0;padding:9px 6px;justify-content:center}
+.personalized-workspace .property-library>.workspace-section-heading{margin-bottom:8px}
+
+.personalized-workspace .property-status[hidden]{display:none}
+
+.personalized-workspace .live-property>.property-disclosure>button.property-summary{display:grid;grid-template-columns:64px minmax(0,1fr) 20px;align-items:start;justify-content:stretch;gap:12px;padding:18px;min-height:0}
+.personalized-workspace .property-summary-main{display:block}
+.personalized-workspace .updates-dialog{white-space:normal;letter-spacing:normal;font-weight:400}
+.personalized-workspace .updates-list a>span{min-width:0;white-space:normal;letter-spacing:normal;font-weight:400;overflow-wrap:anywhere}
+.personalized-workspace .inline-funding>.funding-review-heading{display:flex;flex-direction:row;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}
+.personalized-workspace .funding-review-heading>button{width:40px;height:40px;min-width:40px;display:grid;place-items:center;padding:0;border:0;background:#f3f5f8;border-radius:50%}
+.personalized-workspace .budget-custom-amount{margin:4px 0 18px;font-size:13px;color:#566173}
+.personalized-workspace .budget-custom-amount>summary{min-height:36px;cursor:pointer}
+.personalized-workspace .boost-caption[hidden]{display:none}
+@media(max-width:640px){.personalized-workspace .live-property>.property-disclosure>button.property-summary{grid-template-columns:56px minmax(0,1fr) 20px;padding:16px;gap:10px}.personalized-workspace .property-thumbnail{width:56px;height:56px;min-width:56px}}
+
+.personalized-workspace .live-property[data-expanded=true] .property-cash-preview{display:none}
+@media(max-width:640px){.personalized-workspace .property-library .workspace-filters button{display:flex;flex-direction:column;align-items:center;gap:3px;white-space:nowrap;overflow-wrap:normal;font-size:11px;padding:9px 4px}.personalized-workspace .property-library .workspace-filters button span{margin:0;font-size:11px}}

@@ -4,6 +4,7 @@
 import http from 'node:http';
 import {makeWorkspaceFixture,fixtureAccount,uuid} from './workspace-volume.mjs';
 const appPort=Number(process.env.APP_PORT||3005),port=Number(process.env.PORT||3006);
+let budgetCode='budget_ten',budgetCents=1000;let preferences={email:'qa@example.com',phone:null,emailEnabled:false,smsEnabled:false,timezone:'America/Chicago',emailAvailable:true,smsAvailable:true,seenAt:null};
 let scenario='volume';let setup={id:uuid(9999),revision:0,stage:0,profile:{displayName:'',theme:'ink',logo:'monogram',voice:'sarah',market:'Nationwide',marketMode:'nationwide',aiLogo:null,contracts:true,buyers:true}};const manualIds=new Set(),handled=new Set();
 function json(res,value,status=200){res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(value));}
 http.createServer(async(req,res)=>{
@@ -12,8 +13,9 @@ http.createServer(async(req,res)=>{
   let raw='';for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||'{}');}catch{}
   if(url.pathname==='/api/setup'){if(body.action==='save')setup={...setup,profile:body.profile,stage:body.stage,revision:setup.revision+1};return json(res,{setup});}
   if(url.pathname==='/api/setup/event')return json(res,{saved:true});
-  if(url.pathname==='/api/funding/status')return json(res,{mode:'test',enabled:false,packs:[{code:'budget_ten',price_cents:1000,credit_cents:1000,enabled:false}]});
-  if(url.pathname==='/api/billing/daily')return json(res,{ready:false,plan:null});
+  if(url.pathname==='/api/funding/status')return json(res,{mode:'test',enabled:true,earlyAccess:false,packs:[['budget_ten',1000],['budget_25',2500],['budget_50',5000],['work',10000]].map(([code,cents])=>({code,price_cents:cents,credit_cents:cents,enabled:true}))});
+  if(url.pathname==='/api/billing/daily') {if(body.action==='change'){budgetCode=body.packCode;budgetCents=body.totalCents;return json(res,{saved:true,message:'Budget updated. Your next renewal uses the new amount. No charge was made now.'});}return json(res,{ready:true,plan:{state:'active',budgetCents,packCode:budgetCode,nextCharge:1791158400}});}
+  if(url.pathname==='/api/notifications/updates'){if(body.action==='seen')preferences.seenAt=body.before;if(body.action==='preferences')preferences={...preferences,...body};return json(res,{saved:true,preferences,items:[{id:'fixture:reply',kind:'seller_reply',screeningId:uuid(2),createdAt:'2026-10-03T12:00:00Z',title:'A seller replied',detail:'Open the conversation to see their latest message.',address:'101 Example Lane, Demo City, TX 75001'},{id:'fixture:research',kind:'research_complete',screeningId:uuid(3),createdAt:'2026-10-03T11:00:00Z',title:'Your bot finished property research',detail:'Review the saved findings and available property numbers.',address:'102 Example Street, Demo City, TX 75001'}]});}
   if(url.pathname==='/api/account')return json(res,scenario==='guest'?{signedIn:false,signInReady:false}:{...fixtureAccount,...(['zero','reserved'].includes(scenario)?{balanceCents:scenario==='zero'?0:20,reservedCents:65}:{}),paused:scenario!=='running',activeWork:scenario==='running',smsWorkReady:scenario==='running'});
   if(url.pathname==='/api/work/outreach-campaign')return req.method==='GET'?json(res,{policy:{version:'fixture-policy-v1',text:'FICTIONAL QA responsibilities. No recipient permission or real campaign is created.',mode:'sms_inbound'},acknowledgment:{version:'fixture-policy-v1',acceptedAt:'2026-10-01T12:00:00.000Z'},configured:true,released:scenario==='running',liveWorkReady:false,smsChannelEnabled:true}):json(res,{error:'QA only: campaign saves disabled.'},409);
   if(url.pathname==='/api/work/property-photo')return json(res,{photo:null});

@@ -1,3 +1,4 @@
+import {recordCustomerUpdateDelivery} from '../lib/customer-updates-service.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHmac} from 'node:crypto';
@@ -14,7 +15,7 @@ let mode='live',writes=[],reads=[],fetches=0,priorTitle=false,priorDeal=false,fe
 const db=async(path,method,body)=>{if(method){assert.equal(method,'POST');assert(['rpc/icash_support_request_email_cancel','rpc/icash_record_title_reply','rpc/icash_record_deal_email_reply','rpc/icash_support_claim_cancel_receipt','rpc/icash_support_finish_cancel_receipt','rpc/icash_record_email_delivery'].includes(path),'No billing/account/AI/sending capability in intake');writes.push({path,body});if(path==='rpc/icash_support_claim_cancel_receipt'){if(receiptClaimed)return null;receiptClaimed=true;return {id:id(60),recipient:'verified-owner@example.com'};}if(path==='rpc/icash_support_finish_cancel_receipt'&&finishError)throw Error('DB receipt failure');return null;}reads.push(path);return path.startsWith('icash_title_replies')?(priorTitle?[{id:id(90)}]:[]):path.startsWith('icash_deal_emails')?(priorDeal?[{id:id(91)}]:[]):assert.fail('Unexpected read');};
 const fundingMode=()=>mode;
 const {intakeVerifiedSupportEmail}=await load('lib/support-email-intake.ts',{db,fundingMode,titleEmailAddress,isCancelEmail,supportId},'__verifiedSupportIntake');
-const common={customerEmailDomains:()=>null,customerReplyReference:()=>null,NextResponse,db,fundingMode,verifyTitleWebhook,titleEmailAddress,titleReference,intakeVerifiedSupportEmail,supportId};
+const common={recordCustomerUpdateDelivery,customerEmailDomains:()=>null,customerReplyReference:()=>null,NextResponse,db,fundingMode,verifyTitleWebhook,titleEmailAddress,titleReference,intakeVerifiedSupportEmail,supportId};
 const title=await load('app/api/webhooks/title-email/route.ts',common,'__receivingTitleRoute');
 const legacy=await load('app/api/webhooks/support-email/route.ts',common,'__receivingLegacySupportRoute');
 const originalFetch=globalThis.fetch;

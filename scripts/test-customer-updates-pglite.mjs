@@ -1,0 +1,101 @@
+// Isolated PostgreSQL/WASM verification. No provider, credentials or remote DB.
+// node scripts/test-attention-notifications-pglite.mjs /absolute/path/to/pglite/dist/index.js
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {isAbsolute} from 'node:path';
+import {pathToFileURL} from 'node:url';
+const path = process.argv[2];
+if (!path || !isAbsolute(path)) throw Error('Supply an existing official PGlite module path');
+const {PGlite} = await import(pathToFileURL(path).href);
+const pg = await PGlite.create();
+const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
+const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const a = uuid(1), b = uuid(2), u = uuid(11), v = uuid(12), p = uuid(21), q = uuid(22), d = uuid(31), e = uuid(32);
+const scalar = async (sql, params = []) => Object.values((await pg.query(sql, params)).rows[0])[0];
+try {
+  await pg.exec(`
+    create role anon; create role authenticated; create role service_role bypassrls;
+    create schema auth; create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
+    create table public.icash_accounts(id uuid primary key,owner_user_id uuid);
+    create table public.icash_screening_jobs(id uuid primary key,account_id uuid,state text);
+    create table public.icash_deal_files(id uuid primary key,account_id uuid,screening_id uuid,stage text,terms jsonb default '{}');
+    create table public.icash_text_attention(id uuid primary key,account_id uuid,screening_id uuid,deal_id uuid,message_id uuid,kind text,state text,updated_at timestamptz default now());
+    create table public.icash_handoffs(id uuid primary key,account_id uuid,screening_id uuid,state text,created_at timestamptz default now());
+    create table public.icash_sms_call_requests(id uuid primary key,account_id uuid,screening_id uuid,deal_id uuid,message_id uuid,state text,requested_at timestamptz default now());
+    create table public.icash_live_callbacks(id uuid primary key,account_id uuid,screening_id uuid,state text,due_at timestamptz default now());
+    create table public.icash_signing_envelopes(id uuid primary key,account_id uuid,deal_id uuid,state text,test_mode boolean,updated_at timestamptz default now());
+    create table public.icash_title_tasks(id uuid primary key,account_id uuid,deal_id uuid,kind text,state text,due_date date,updated_at timestamptz default now());
+    create table public.icash_automation_tickets(id uuid primary key default gen_random_uuid(),account_id uuid,kind text constraint icash_automation_tickets_kind_check check(kind in ('discovery','new_deployed_kind')),token text default gen_random_uuid()::text||gen_random_uuid()::text,state text default 'issued',created_at timestamptz default now(),expires_at timestamptz default now()+interval '2 minutes');
+    create function public.icash_next_automation() returns jsonb language sql as $$ select nullif(current_setting('fixture.prior',true),'')::jsonb $$;
+    insert into auth.users values('${u}','owner@example.com',now()),('${v}','other@example.com',now());
+    insert into public.icash_accounts values('${a}','${u}'),('${b}','${v}');
+    insert into public.icash_screening_jobs values('${p}','${a}','complete'),('${q}','${b}','complete');
+    insert into public.icash_deal_files(id,account_id,screening_id,stage) values('${d}','${a}','${p}','under_contract'),('${e}','${b}','${q}','under_contract');
+    insert into public.icash_text_attention(id,account_id,screening_id,deal_id,message_id,kind,state) values('${uuid(41)}','${a}','${p}','${d}','${uuid(141)}','human','open');
+    insert into public.icash_handoffs(id,account_id,screening_id,state) values('${uuid(42)}','${a}','${p}','open');
+    insert into public.icash_sms_call_requests(id,account_id,screening_id,deal_id,message_id,state) values('${uuid(43)}','${a}','${p}','${d}','${uuid(143)}','needs_review');
+    insert into public.icash_live_callbacks(id,account_id,screening_id,state) values('${uuid(44)}','${a}','${p}','held_for_human');
+    insert into public.icash_signing_envelopes(id,account_id,deal_id,state,test_mode) values('${uuid(45)}','${a}','${d}','customer_signature_needed',false),('${uuid(145)}','${a}','${d}','customer_signature_needed',true);
+    insert into public.icash_title_tasks(id,account_id,deal_id,kind,state,due_date) values('${uuid(46)}','${a}','${d}','deadline','needs_review',current_date),('${uuid(47)}','${a}','${d}','deadline','scheduled',current_date),('${uuid(147)}','${a}','${d}','deadline','scheduled',current_date+30);
+  `);
+
+  await pg.exec(`
+    alter table public.icash_screening_jobs add column result jsonb default '{}', add column completed_at timestamptz;
+    alter table public.icash_deal_files add column updated_at timestamptz default now();
+    create table public.icash_funding_orders(account_id uuid,mode text,state text,credited_at timestamptz,payer_phone text,paid_at timestamptz);
+    create table public.icash_text_threads(id uuid primary key,account_id uuid,deal_id uuid,party text);
+    create table public.icash_text_messages(id uuid primary key,account_id uuid,thread_id uuid,direction text,state text,created_at timestamptz default now());
+  `);
+  await pg.exec(read('config/attention-notifications.sql'));
+  await pg.exec(read('config/customer-updates.sql'));
+  const prefs=()=>scalar('select public.icash_customer_update_preferences_get($1,$2)',[a,u]);
+  const timezone=await scalar("select name from pg_timezone_names where name like 'Etc/GMT%' and extract(hour from now() at time zone name)=12 limit 1");
+  const save=(email=true,sms=false)=>scalar('select public.icash_customer_update_preferences_save($1,$2,$3,$4,$5,$6,$7)',[a,u,email,sms,'+12125550123',timezone,'bot-updates-2026-10-03.1']);
+  const claim=(email=true,sms=true)=>scalar('select public.icash_claim_customer_update($1,$2,$3)',[a,email,sms]);
+  const authorize=id=>scalar('select public.icash_authorize_customer_update($1,$2)',[a,id]);
+  const clear=()=>pg.exec('delete from public.icash_customer_update_deliveries');
+  const age=()=>pg.exec("update public.icash_customer_update_deliveries set created_at=now()-interval '2 hours'");
+  assert.equal((await prefs()).emailEnabled,false);assert.equal(await claim(),null);
+  await assert.rejects(save(),/unavailable/);
+  await pg.exec('update public.icash_customer_update_settings set enabled=true');
+  await assert.rejects(scalar('select public.icash_customer_update_preferences_get($1,$2)',[a,v]),/Account required/);
+  await assert.rejects(scalar('select public.icash_customer_update_preferences_save($1,$2,true,false,null,$3,null)',[a,u,timezone]),/Confirm/);
+  await save();assert.equal((await prefs()).emailEnabled,true);
+  assert.equal(await claim(),null,'No historical attention is sent at enrollment');
+  await pg.exec(`update public.icash_screening_jobs set completed_at=now() where id='${p}';`);
+  let id=await claim();assert(id);let job=await authorize(id);assert.equal(job.kind,'research_complete');assert.equal(job.recipient,'owner@example.com');
+  assert.equal(await authorize(id),null,'Authorization is one use');assert.equal(await claim(),null,'Claim consumes hourly cap');
+  await scalar('select public.icash_finish_customer_update($1,$2,$3)',[a,id,uuid(500)]);
+  await age();assert.equal(await claim(),null,'A saved event is not sent twice');
+  await scalar('select public.icash_customer_update_delivery_event($1,$2,$3,$4)',[id,uuid(500),'other@example.com','email.bounced']);assert.equal((await prefs()).emailEnabled,true);
+  await scalar('select public.icash_customer_update_delivery_event($1,$2,$3,$4)',[id,uuid(500),'owner@example.com','email.bounced']);assert.equal((await prefs()).emailEnabled,false);assert.equal((await prefs()).emailSuppressed,true);
+  await assert.rejects(save(),/delivery paused/);
+  await scalar('select public.icash_customer_update_delivery_event($1,$2,$3,$4)',[id,uuid(500),'owner@example.com','email.delivered']);
+  assert.equal(await scalar('select state from public.icash_customer_update_deliveries where id=$1',[id]),'bounced');
+  await pg.exec(`update public.icash_customer_update_preferences set email_suppressed_at=null;insert into public.icash_text_threads values('${uuid(61)}','${a}','${d}','seller');`);
+  await clear();await save();
+  for(let i=0;i<6;i++)await pg.query('insert into public.icash_text_messages(id,account_id,thread_id,direction,state) values($1,$2,$3,$4,$5)',[uuid(70+i),a,uuid(61),'incoming','received']);
+  id=await claim();job=await authorize(id);assert.equal(job.kind,'seller_reply');await age();
+  id=await claim();assert(id);await authorize(id);await age();id=await claim();assert(id);await authorize(id);await age();
+  assert.equal(await claim(),null,'Three attempts, including uncertain sends, consume daily cap');
+  await clear();await save();await pg.exec("update public.icash_customer_update_preferences set consented_at=now()-interval '1 day'");
+  id=await claim();await save(false,false);assert.equal(await authorize(id),null,'Opt-out cancels pending claim');
+  await clear();await save(false,true);await pg.exec("update public.icash_customer_update_preferences set consented_at=now()-interval '1 day'");
+  id=await claim();assert(id);await scalar('select public.icash_stop_customer_update_phone($1)',['+12125550123']);assert.equal(await authorize(id),null);assert.equal((await prefs()).smsEnabled,false);
+  await clear();await save();await pg.exec("update public.icash_customer_update_preferences set consented_at=now()-interval '1 day'");
+  id=await claim();await pg.query('update public.icash_accounts set owner_user_id=$1 where id=$2',[v,a]);assert.equal(await authorize(id),null,'Ownership transfer invalidates send');assert.equal(await claim(),null);
+  await pg.query('update public.icash_accounts set owner_user_id=$1 where id=$2',[u,a]);
+  const token=await scalar('select unsubscribe_token from public.icash_customer_update_preferences where account_id=$1',[a]);await scalar('select public.icash_stop_customer_updates($1)',[token]);assert.equal((await prefs()).emailEnabled,false);
+  await save();await scalar('select public.icash_customer_updates_seen($1,$2,now())',[a,u]);assert((await prefs()).seenAt);
+  await assert.rejects(scalar("select public.icash_customer_updates_seen($1,$2,now()+interval '1 day')",[a,u]),/Invalid/);
+  assert.equal(await scalar('select count(*)::int from public.icash_customer_update_sources($1) where screening_id=$2',[a,q]),0);
+  await pg.query("update public.icash_screening_jobs set result=$1 where id=$2",[{property:{propertyId:'practice_demo'}},p]);assert.equal(await scalar('select count(*)::int from public.icash_customer_update_sources($1)',[a]),0);await pg.query("update public.icash_screening_jobs set result='{}' where id=$1",[p]);
+  await pg.exec(`set fixture.prior='{"token":"original-work"}'`);assert.deepEqual(await scalar('select public.icash_next_automation()'),{token:'original-work'});
+  await pg.exec("set fixture.prior=''");assert((await scalar('select public.icash_next_automation()')).token);assert.equal(await scalar("select kind from public.icash_automation_tickets order by created_at desc limit 1"),'customer_updates');
+  await pg.exec(`insert into public.icash_automation_tickets(account_id,kind) values('${a}','new_deployed_kind')`);
+  for(const role of ['anon','authenticated']){
+   assert.equal(await scalar('select has_table_privilege($1,$2,$3)',[role,'public.icash_customer_update_preferences','SELECT']),false);
+   assert.equal(await scalar('select has_function_privilege($1,$2,$3)',[role,'public.icash_claim_customer_update(uuid,boolean,boolean)','EXECUTE']),false);
+  }
+  console.log('PASS isolated customer updates: migration, private access, tenant scope, opt-in, history exclusion, single authorization, duplicate/hourly/daily limits, STOP/unsubscribe/ownership races, bounce suppression and scheduler preservation. No external sends.');
+} finally {await pg.close();}

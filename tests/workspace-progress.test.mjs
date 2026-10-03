@@ -27,11 +27,11 @@ for(const chargeCents of [NaN,Infinity,-50,undefined,0])assert.match(nextWorkFun
 assert.equal(nextWorkFunding({...a,workReady:true}).needsFunding,false,'do not predict which paid task runs when multiple channels are ready');
 assert.match(nextWorkFunding({...a,contactWorkReady:false,smsWorkReady:false}).detail,/not confirmed yet.*funding does not clear/,'low-budget and setup holds do not invent a price');
 const source=readFileSync(new URL('../app/page.tsx',import.meta.url),'utf8');
-assert.match(source,/creditAmount\(account!\.balanceCents\)/);
-assert.match(source,/reserved for work in progress, separate from your available credits/);
-assert.match(source,/What happens next/);
+assert.match(source,/DailyBudgetControl balanceCents=\{account.balanceCents\}/);
+assert.match(source,/reservedCents=\{account.reservedCents\}/);
+assert.match(source,/Your next step/);
 assert.match(source,/aria-label="Close funding"/);
 assert.match(source,/addEventListener\('popstate',syncFunding\)/);
 assert.match(source,/addEventListener\('hashchange',syncFunding\)/);
-assert.match(source,/useState\('budget_ten'\)/,'default budget unchanged');
+assert.match(source,/initialCode=\{fundingCode\|\|undefined\}/,'opening Manage preserves the actual plan');
 console.log('PASS honest progress, first milestone, missing/invalid evidence, net credits, current cost holds, shortfall, blocked work, stale estimates and refill navigation');

@@ -19,9 +19,9 @@ function page(account,campaign,error=false){
 const campaign={policy:{version:'v1'},acknowledgment:{version:'v1'},configured:true,released:false,liveWorkReady:false,smsChannelEnabled:true};
 const account={signedIn:true,mode:'live',balanceCents:850,assistantName:'Synthetic bot',paused:true,billingActive:false,identity:{principal:'Synthetic company'},smsWorkReady:false,workReady:false};
 let tree=page(account,campaign),nodes=all(tree);
-assert.match(text(tree),/PAUSED/);assert.match(text(tree),/8.50/);assert.doesNotMatch(text(tree),/Your account records/);
+assert.match(text(tree),/PAUSED/);assert.equal(nodes.find(n=>n.type===component('DailyBudgetControl')).props.balanceCents,850);assert.doesNotMatch(text(tree),/Your account records/);
 assert.equal(nodes.filter(n=>n.type==='button'&&n.props.className==='fund-button').length,1,'one primary action');
-assert(nodes.some(n=>n.type==='button'&&text(n).includes('Fund my AI bot')&&n.props.className.includes('funding-toggle')),'funding remains available as a secondary action');
+assert(nodes.some(n=>n.type===component('DailyBudgetControl')),'daily budget remains available as a secondary action');
 assert.equal(nodes.find(n=>n.props?.['aria-label']==='Workspace settings').props.hidden,true,'settings stay out of the default workspace');
 assert(nodes.some(n=>n.type==='button'&&text(n)==='Settings'),'settings have a clear entry point');
 assert(nodes.some(n=>n.props?.['aria-label']==='Workspace settings'));
