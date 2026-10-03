@@ -1,6 +1,6 @@
 import {recordingServer} from './required-call-recording-server.ts';
 import {readRecordingReview,recordingPolicy} from './required-call-recording.ts';
-import {createHash,randomBytes} from 'node:crypto';
+import {createHash} from 'node:crypto';
 import {sameBusinessNumber,consistentTextSenders} from './number-continuity.ts';
 import {boundedVoiceSmsContext} from './voice-sms-context.ts';
 import {db} from '@/lib/stripe-test';
@@ -16,6 +16,17 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const [j]=await db<Job[]>(`icash_voice_jobs?id=eq.${jobId}&account_id=eq.${accountId}&select=*`);if(!j||j.state!=='issued')return {status:'held'};
  let ownsDispatch=false;
  const hold=async(reason:string)=>{await db('rpc/icash_hold_voice_job','POST',{p_account:accountId,p_job:j.id,p_reason:reason,p_after_claim:ownsDispatch});return {status:reason};};
+ // Every customer call uses consent-first recording. Capture OFF is a hold, never a legacy fallback.
+ const reviewJson=process.env.RECORDED_OUTBOUND_REVIEW_JSON;
+ const recordingReleaseHold=()=>{
+  if(process.env.ICASH_LIVE_WORK_READY!=='true')return 'live_work_not_ready';
+  if(process.env.ICASH_RECORDED_OUTBOUND_READY!=='true')return 'recorded_call_release_required';
+  const review=readRecordingReview(process.env.RECORDED_OUTBOUND_REVIEW_JSON);
+  if(process.env.ICASH_RECORDING_RECEIPTS_READY!=='true'||!review||process.env.RECORDED_OUTBOUND_REVIEW_JSON!==reviewJson||review.providerAccountSid!==process.env.TWILIO_ACCOUNT_SID||!process.env.TWILIO_AUTH_TOKEN)return 'recorded_call_review_required';
+  return null;
+ };
+ const releaseHold=recordingReleaseHold();if(releaseHold)return hold(releaseHold);
+ const recordedReview=readRecordingReview(reviewJson)!;
  const [c]=await db<Config[]>(`icash_voice_configs?account_id=eq.${accountId}&select=*`);
  // Operational targets contain routing/DNC evidence only, never a fabricated consent record.
  if((j.permission_id==null)===(j.operational_contact_id==null))return hold('contact_binding_invalid');
@@ -54,9 +65,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const rateId=p.party==='buyer'?c.buyer_rate_id:c.seller_rate_id;if(!rateId)return hold('full_call_cost_quote_required');
  const [rate]=await db<{operation:string;enabled:boolean;expires_at:string;voice_max_duration_seconds:number|null;charge_cents?:number;version?:string}[]>(`icash_operation_rates?id=eq.${rateId}&select=operation,enabled,expires_at,voice_max_duration_seconds,charge_cents,version`);
  if(!rate?.enabled||rate.operation!==(p.party==='buyer'?'buyer_call':'seller_call')||!(Date.parse(rate.expires_at)>Date.now())||!rate.voice_max_duration_seconds||rate.voice_max_duration_seconds<c.max_duration_seconds)return hold('full_call_cost_quote_required');
- const recorded=process.env.ICASH_RECORDED_OUTBOUND_READY==='true',recordedReview=recorded?readRecordingReview(process.env.RECORDED_OUTBOUND_REVIEW_JSON):null;
- if(recorded&&(process.env.ICASH_RECORDING_RECEIPTS_READY!=='true'||!recordedReview||recordedReview.agentId!==c.agent_id||!sameBusinessNumber(businessNumber,recordedReview.fromPhone)||rate.charge_cents!==recordingPolicy.minimumHoldCents||!rate.version?.startsWith(recordingPolicy.version+':')))return hold('recorded_call_review_required');
- if(!recorded&&rate.version?.startsWith('required-audio-30d-speech-v1:'))return hold('recorded_call_release_required');
+ if(recordedReview.agentId!==c.agent_id||!sameBusinessNumber(businessNumber,recordedReview.fromPhone)||rate.charge_cents!==recordingPolicy.minimumHoldCents||!rate.version?.startsWith(recordingPolicy.version+':'))return hold('recorded_call_review_required');
  const [authority]=await db<{max_offer_cents:number;expires_at:string;review_request_id:string|null}[]>(`icash_offer_authorities?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&select=max_offer_cents,expires_at,review_request_id`);
  const ceiling=verifiedOfferCeiling(eligible?.ready?eligible.screening.preliminarySellerCeilingCents:null,authority);
  const smsContext=p.party==='seller'?boundedVoiceSmsContext(await db<unknown>('rpc/icash_voice_sms_context','POST',{p_account:accountId,p_permission:p.id})):null;
@@ -66,28 +75,19 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  let sellerGreeting:string|undefined,sellerPrompt:string|undefined;
  if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext);sellerPrompt=sellerCallPrompt(sellerContext,ceiling);}catch{return hold('property_context_required');}}
  const operationKey=`voice:${j.id}`;
+ const reserveHold=recordingReleaseHold();if(reserveHold)return hold(reserveHold);
  if(!await db<boolean>('rpc/icash_reserve_paced_voice','POST',{p_account:accountId,p_job:j.id,p_rate:rateId,p_permission_until:p.permission_until,p_financial_checked_at:eligible?.ready?new Date(eligible.screening.financialCheck.checkedAt).toISOString():null,p_financial_eligible:eligible?.ready&&eligible.screening.financialCheck.status==='eligible'}))return {status:'waiting_for_daytime_budget'};
+ const claimHold=recordingReleaseHold();if(claimHold)return hold(claimHold);
  if(!await db<boolean>('rpc/icash_claim_reviewed_voice_job','POST',{p_job:j.id,p_offer_snapshot:ceiling===null?null:authority,p_buyer_snapshot:buyerContext}))return hold('dispatch_permission_changed');
  ownsDispatch=true;
- const token=randomBytes(32).toString('hex');
  const strategy=parseInt(createHash('sha256').update(`${accountId}:${p.contact_key}`).digest('hex').slice(0,8),16)%2===0?'cash_interest':'flexible_timing';
  try{
  await db(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&state=eq.dispatching`,'PATCH',{sms_context:smsContext});
- if(recorded){
-  const result=await recordingServer().dispatch({accountId,operationKey,principal:identity.principal,assistantName:account.assistant_name,voiceId:identity.voice_id,firstMessage:sellerGreeting??`Hi, I'm ${account.assistant_name}, the AI assistant for ${identity.principal}.`,prompt:buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!,strategyKey:strategy});
-  if(result.status==='recording_consent_pending')return {status:'call_started'};
-  if(result.status==='recording_dial_unknown_no_retry')return {status:'provider_outcome_unknown_no_retry'}; // Keep the durable dispatch claim recoverable; never redial.
-  return hold(result.status);
- }
- const response=await elevenRequest<{success:boolean;conversation_id?:string;callSid?:string}>('/v1/convai/twilio/outbound-call',{
- agent_id:c.agent_id,agent_phone_number_id:c.phone_number_id,to_number:p.phone,call_recording_enabled:false,
- conversation_initiation_client_data:{dynamic_variables:{principal:identity.principal,assistant_name:account.assistant_name,property_address:address,approved_offer_ceiling:'NOT AUTHORIZED',secret__icash_call_token:token},conversation_config_override:{...(voiceOverride?{tts:{voice_id:identity.voice_id}}:{}),agent:{...(sellerGreeting?{first_message:sellerGreeting}:{}),prompt:{prompt:buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!}},conversation:{max_duration_seconds:c.max_duration_seconds}}}
- });
- // A timeout or incomplete receipt never triggers a second dial.
- if(!response.success||!/^conv_[A-Za-z0-9]+$/.test(response.conversation_id??'')||!/^CA[a-fA-F0-9]{32}$/.test(response.callSid??''))return hold('provider_receipt_needs_reconciliation');
- await db('icash_live_conversations','POST',{account_id:accountId,screening_id:p.screening_id,party:p.party,agent_id:c.agent_id,conversation_id:response.conversation_id,operation_key:operationKey,contact_key:p.contact_key,strategy_key:strategy,tool_token_hash:createHash('sha256').update(token).digest('hex'),tool_expires_at:new Date(Date.now()+(c.max_duration_seconds+120)*1000).toISOString()});
- await db(`icash_voice_jobs?id=eq.${j.id}&state=eq.dispatching`,'PATCH',{state:'dispatched',outcome:'call_started',conversation_id:response.conversation_id,provider_call_sid:response.callSid,updated_at:new Date().toISOString()});
- if(j.callback_id)await db(`icash_live_callbacks?id=eq.${j.callback_id}&account_id=eq.${accountId}`,'PATCH',{state:'dispatched'});
- return {status:'call_started'};
+ const dispatchHold=recordingReleaseHold();if(dispatchHold)return hold(dispatchHold);
+ const result=await recordingServer().dispatch({accountId,operationKey,principal:identity.principal,assistantName:account.assistant_name,voiceId:identity.voice_id,firstMessage:sellerGreeting??`Hi, I'm ${account.assistant_name}, the AI assistant for ${identity.principal}.`,prompt:buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!,strategyKey:strategy});
+ // A started call is still waiting for consent; only the recording service can confirm capture.
+ if(result.status==='recording_consent_pending')return {status:'call_started'};
+ if(result.status==='recording_dial_unknown_no_retry')return {status:'provider_outcome_unknown_no_retry'}; // Keep the durable claim recoverable; never redial.
+ return hold(result.status);
  }catch{return hold('provider_outcome_unknown_no_retry');}
 }

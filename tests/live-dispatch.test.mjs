@@ -8,6 +8,7 @@ import {boundedVoiceSmsContext,voiceSmsInstructions} from '../lib/voice-sms-cont
 import {buyerCallInstructions} from '../lib/buyer-call-policy.ts';
 import {contactEligibility,callEligibility,verifiedOfferCeiling} from '../lib/live-dispatch-policy.ts';
 import {evaluateLaunch} from '../lib/launch-readiness-policy.ts';
+import {readRecordingReview,recordingPolicy} from '../lib/required-call-recording.ts';
 import {sellerFirstMessage,sellerCallPrompt} from '../lib/seller-call-context.ts';
 const now=Date.parse('2026-09-29T16:00:00Z');
 const realNow=Date.now;Date.now=()=>now;
@@ -24,10 +25,13 @@ assert.equal(verifiedOfferCeiling(9000000,undefined,now),null);
 assert.equal(verifiedOfferCeiling(9000000,{max_offer_cents:8000000,expires_at:new Date(now-1).toISOString()},now),null);
 const config={tts:{voice_id:'voice'},conversation:{max_duration_seconds:600},agent:{prompt:{tool_ids:['callback','handoff']}}};
 const c={enabled:true,agent_id:'agent_fixture',phone_number_id:'number',agent_config_hash:createHash('sha256').update(JSON.stringify(config)).digest('hex'),reviewed_until:new Date(now+100000).toISOString(),seller_rate_id:'rate',buyer_rate_id:'buyer-rate',max_duration_seconds:600,required_tool_ids:['callback','handoff']};
+const review={enabled:true,reviewedAt:new Date(now-1000).toISOString(),reviewedUntil:new Date(now+100000).toISOString(),agentId:'agent_fixture',branchId:'agtbrch_fixture',versionId:'agtvrsn_fixture',configHash:'a'.repeat(64),fromPhone:'+14243948384',providerAccountSid:'AC'+'a'.repeat(32),stopToolId:'tool_stop',toolIds:['tool_callback','tool_handoff','tool_stop'],approvedHoldCents:recordingPolicy.minimumHoldCents,retentionDays:30,maxTotalSeconds:600,policyVersion:recordingPolicy.version};
+let providerReads=0,flipAt=null,flip=()=>{},legacyRate=false,recordingStatus='recording_consent_pending';
 let outboundBody,contextOverrides=true,operational=false,operationalCurrent=true;
 let buyerApproved=true,callbackId=null,providerNumber='+14243948384',suppressed=false,paced=true;let records=[],postCount=0,allowClaim=true,paused=false,timeout=false,jobState='issued',practice=false,quoteSeconds=600;
 const db=async(path,method,body)=>{
  records.push({path,method,body});
+ if(flipAt===path||flipAt==='final-patch'&&method==='PATCH'&&body.sms_context!==undefined)flip();
  if(path==='rpc/icash_hold_voice_job'){if(jobState===(body.p_after_claim?'dispatching':'issued'))jobState='held';return true;}
  if(path.startsWith('icash_text_suppressions'))return suppressed?[{phone:permission.phone}]:[];
  if(path.startsWith('icash_text_threads'))return [{sender:'+14243948384'}];
@@ -43,33 +47,33 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_accounts'))return [{assistant_name:'Alex',bot_paused:paused}];
  if(path.startsWith('icash_voice_test_config'))return practice?[{agent_id:c.agent_id}]:[];
  if(path==='rpc/icash_buyer_voice_context')return buyerApproved?{dealId:'deal',address:'Fixture',askingPriceCents:10000000,repairsCents:100000,packageId:'doc'}:null;
- if(path.startsWith('icash_operation_rates'))return [{operation:permission.party==='buyer'?'buyer_call':'seller_call',enabled:true,expires_at:c.reviewed_until,voice_max_duration_seconds:quoteSeconds}];
+ if(path.startsWith('icash_operation_rates'))return [{operation:permission.party==='buyer'?'buyer_call':'seller_call',enabled:true,expires_at:c.reviewed_until,voice_max_duration_seconds:quoteSeconds,charge_cents:legacyRate?946:recordingPolicy.minimumHoldCents,version:legacyRate?'staged-seller-20260930-us-600s-v1':recordingPolicy.version+':fixture'}];
  if(path.startsWith('icash_offer_authorities'))return [];
  if(path==='rpc/icash_claim_reviewed_voice_job'){if(allowClaim)jobState='dispatching';return allowClaim;}
  if(path.startsWith('icash_live_conversations?')){assert(path.includes('account_id=eq.account&screening_id=eq.screening&contact_key=eq.'));assert(path.includes('party=eq.seller&state=eq.complete&operation_key=like.voice:*'));return [];}
  if(path==='icash_live_conversations')return [];
  throw Error('Unexpected request '+path);
 };
-const elevenRequest=async(path,body)=>{if(path.includes('/phone-numbers/'))return {phone_number:providerNumber};if(!body)return {conversation_config:config,platform_settings:{overrides:{conversation_config_override:{agent:{first_message:contextOverrides,prompt:{prompt:contextOverrides}}}}}};outboundBody=body;postCount++;if(timeout)throw Error('timeout');return {success:true,conversation_id:'conv_fixture',callSid:'CA'+'1'.repeat(32)};};
-globalThis.__voiceTest={sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation:async()=>records.push({reserve:true}),contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt};
+const elevenRequest=async(path,body)=>{providerReads++;assert.equal(body,undefined,'No legacy direct dial, even if recording dispatch fails');if(path.includes('/phone-numbers/'))return {phone_number:providerNumber};return {conversation_config:config,platform_settings:{overrides:{conversation_config_override:{agent:{first_message:contextOverrides,prompt:{prompt:contextOverrides}}}}}};};
+const recordingServer=()=>({dispatch:async input=>{outboundBody=input;postCount++;if(timeout)return {status:'recording_dial_unknown_no_retry'};return {status:recordingStatus};}});
+globalThis.__voiceTest={recordingServer,readRecordingReview,recordingPolicy,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation:async()=>records.push({reserve:true}),contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt};
 let source=ts.transpileModule(readFileSync(new URL('../lib/live-dispatch-service.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-source='const {sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation,contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt}=globalThis.__voiceTest;\n'+source;
+source='const {recordingServer,readRecordingReview,recordingPolicy,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation,contactEligibility,buyerCallInstructions,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt}=globalThis.__voiceTest;\n'+source;
 const {dispatchLiveVoice}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 process.env.ELEVENLABS_API_KEY='fixture-no-network';process.env.CONTIGUITY_FROM='+14243948384';
-const reset=()=>{operational=false;operationalCurrent=true;contextOverrides=true;outboundBody=undefined;buyerApproved=true;records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;callbackId=null;providerNumber='+14243948384';suppressed=false;paced=true;};
-assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);
-assert.match(outboundBody.conversation_initiation_client_data.conversation_config_override.agent.first_message,/Is this the owner of Fixture only/);
-assert.equal(outboundBody.conversation_initiation_client_data.dynamic_variables.approved_offer_ceiling,'NOT AUTHORIZED');
-assert(!JSON.stringify(outboundBody.conversation_initiation_client_data.dynamic_variables).includes('maxOfferCents'));
-assert.match(outboundBody.conversation_initiation_client_data.conversation_config_override.agent.prompt.prompt,/PRIVATE SERVER NEGOTIATION AUTHORITY/);
+const reset=()=>{providerReads=0;flipAt=null;flip=()=>{};legacyRate=false;recordingStatus='recording_consent_pending';Object.assign(process.env,{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:review.providerAccountSid,TWILIO_AUTH_TOKEN:'synthetic-provider-token'});operational=false;operationalCurrent=true;contextOverrides=true;outboundBody=undefined;buyerApproved=true;records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;callbackId=null;providerNumber='+14243948384';suppressed=false;paced=true;};
+reset();assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);
+assert.match(outboundBody.firstMessage,/Is this the owner of Fixture only/);
+assert.equal(outboundBody.operationKey,'voice:job');
+assert.match(outboundBody.prompt,/PRIVATE SERVER NEGOTIATION AUTHORITY/);
+assert(!Object.hasOwn(outboundBody,'call_recording_enabled'));
+assert(!records.some(r=>r.path==='icash_live_conversations'&&r.method==='POST'),'Only verified recording service may create the live binding');
 reset();contextOverrides=false;assert.equal((await dispatchLiveVoice('account','job')).status,'property_context_override_review_required');assert.equal(postCount,0);assert(!records.some(r=>r.path==='rpc/icash_reserve_paced_voice'));
-reset();await dispatchLiveVoice('account','job');
-const saved=records.find(r=>r.path==='icash_live_conversations');assert.match(saved.body.tool_token_hash,/^[a-f0-9]{64}$/);assert(!JSON.stringify(saved).includes('secret__'));
 reset();paused=true;await dispatchLiveVoice('account','job');assert.equal(postCount,0);assert(!records.some(r=>r.reserve));
 reset();practice=true;assert.equal((await dispatchLiveVoice('account','job')).status,'practice_agent_blocked');assert.equal(postCount,0);
 reset();quoteSeconds=60;assert.equal((await dispatchLiveVoice('account','job')).status,'full_call_cost_quote_required');assert.equal(postCount,0);
 reset();allowClaim=false;await dispatchLiveVoice('account','job');assert.equal(postCount,0);
-reset();timeout=true;assert.equal((await dispatchLiveVoice('account','job')).status,'provider_outcome_unknown_no_retry');assert.equal(jobState,'held');await dispatchLiveVoice('account','job');assert.equal(postCount,1,'uncertain dial must never retry');
+reset();timeout=true;assert.equal((await dispatchLiveVoice('account','job')).status,'provider_outcome_unknown_no_retry');assert.equal(jobState,'dispatching');await dispatchLiveVoice('account','job');assert.equal(postCount,1,'uncertain dial must never retry');
 const readiness=evaluateLaunch({cashReserve:true,discovery:true,voice:true,contactPermission:true,productionContracts:true,unresolvedDispatches:false},{data:true,voice:true,email:true,billing:true});assert.equal(readiness.acquisitionReady,true);assert.equal(readiness.ready,true);assert.deepEqual(readiness.blockers,[]);
 assert(evaluateLaunch({cashReserve:true,discovery:true,voice:true,contactPermission:true,productionContracts:true,unresolvedDispatches:false},{data:true,voice:false,email:true,billing:true}).blockers.includes('voiceProvider'));
 reset();permission={...permission,party:'buyer'};assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);
@@ -81,6 +85,28 @@ reset();callbackId='callback';permission={...permission,timezone:'Pacific/Honolu
 reset();permission={...permission,party:'seller',timezone:'America/Chicago'};operational=true;assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);assert(records.some(r=>r.path.startsWith('icash_voice_contact_targets')));assert(!records.some(r=>r.path==='icash_contact_permissions'&&r.method==='POST'));
 reset();operational=true;operationalCurrent=false;assert.equal((await dispatchLiveVoice('account','job')).status,'contact_operating_checks_required');assert.equal(postCount,0);assert(!records.some(r=>r.path==='rpc/icash_reserve_paced_voice'));
 reset();operational=true;allowClaim=false;await dispatchLiveVoice('account','job');assert.equal(postCount,0,'Operational contacts still need the final atomic claim');
+// Legacy enabled configuration/rate cannot start seller, buyer, callback, or operational calls.
+for(const party of ['seller','buyer'])for(const operationalTarget of [false,true])for(const callback of [null,'callback']){
+ reset();permission={...permission,party};operational=operationalTarget;callbackId=callback;legacyRate=true;process.env.ICASH_RECORDED_OUTBOUND_READY='false';
+ assert.equal((await dispatchLiveVoice('account','job')).status,'recorded_call_release_required');assert.equal(providerReads,0);assert.equal(postCount,0);
+ assert(!records.some(r=>['rpc/icash_reserve_paced_voice','rpc/icash_claim_reviewed_voice_job'].includes(r.path)));assert.equal(jobState,'held');
+}
+for(const change of [()=>delete process.env.ICASH_RECORDED_OUTBOUND_READY,()=>process.env.ICASH_RECORDING_RECEIPTS_READY='false',()=>process.env.RECORDED_OUTBOUND_REVIEW_JSON='invalid',()=>process.env.TWILIO_ACCOUNT_SID='AC'+'b'.repeat(32),()=>delete process.env.TWILIO_AUTH_TOKEN]){
+ reset();change();assert.notEqual((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(providerReads,0);assert.equal(postCount,0);assert(!records.some(r=>r.path==='rpc/icash_reserve_paced_voice'));
+}
+reset();legacyRate=true;assert.equal((await dispatchLiveVoice('account','job')).status,'recorded_call_review_required');assert.equal(postCount,0);assert(!records.some(r=>r.path==='rpc/icash_reserve_paced_voice'));
+// Recheck after asynchronous context/reservation/claim work. No cached release can dial.
+permission={...permission,party:'seller'};
+for(const at of ['rpc/icash_voice_sms_context','rpc/icash_reserve_paced_voice','final-patch'])for(const change of [()=>process.env.ICASH_RECORDED_OUTBOUND_READY='false',()=>process.env.ICASH_RECORDING_RECEIPTS_READY='false',()=>process.env.ICASH_LIVE_WORK_READY='false',()=>process.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify({...review,versionId:'agtvrsn_changed'})]){
+ reset();flipAt=at;flip=change;assert.notEqual((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,0);
+ if(at==='rpc/icash_voice_sms_context')assert(!records.some(r=>r.path==='rpc/icash_reserve_paced_voice'));
+ if(at!=='final-patch')assert(!records.some(r=>r.path==='rpc/icash_claim_reviewed_voice_job'));
+ assert.equal(records.at(-1).body.p_after_claim,at==='final-patch','Only the owned dispatch claim may be held');
+}
+for(const status of ['recording_review_required','recording_admission_held','recording_release_required']){
+ reset();recordingStatus=status;assert.equal((await dispatchLiveVoice('account','job')).status,status);assert.equal(postCount,1);assert.equal(providerReads,2);assert.equal(jobState,'held');
+}
+console.log('PASS mandatory customer recording: legacy946 enabled config holds all seller/buyer/callback/operational paths, no provider/reserve/claim when capture OFF, exact reviewed rate, late release changes, no fallback or premature recording claim');
 delete process.env.CONTIGUITY_FROM;delete globalThis.__voiceTest;delete process.env.ELEVENLABS_API_KEY;Date.now=realNow;
 console.log('Voice dispatch: permissions, hours, fresh underwriting, reviewed offer ceilings, full-duration costs, Stop, practice-agent isolation, uncertain-call no-retry and honest launch readiness passed. No provider traffic.');
 

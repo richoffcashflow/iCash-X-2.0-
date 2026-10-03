@@ -34,10 +34,7 @@ const {POST}=await import('data:text/javascript;base64,'+Buffer.from(source).toS
 process.env.ELEVENLABS_INBOUND_WEBHOOK_SECRET=secret;
 const req=(body=call,auth='Bearer '+secret)=>new Request('https://example.invalid/api/internal/voice/inbound',{method:'POST',headers:{authorization:auth,'content-type':'application/json'},body:JSON.stringify(body)});
 assert.equal((await POST(req(call,'Bearer wrong'))).status,401);assert.equal(databaseCalls,0);assert.equal(providerCalls,0);
-registered=false;assert.equal((await POST(req())).status,409);assert.equal(providerCalls,0);
-registered=true;match=false;assert.equal((await POST(req())).status,409);
-match=true;const response=await POST(req());assert.equal(response.status,200);assert.match(response.headers.get('cache-control'),/no-store/);
-const payload=await response.json();assert.equal(payload.dynamic_variables.secret__icash_call_token,a.token);assert.equal(lastBody.p_token_hash,a.hash);assert(!JSON.stringify(lastBody).includes(a.token),'raw tool token never stored');
+for(const enabled of [false,true]){registered=enabled;const response=await POST(req());assert.equal(response.status,503);assert.match(response.headers.get('cache-control'),/no-store/);assert.equal(databaseCalls,0);assert.equal(providerCalls,0);assert(!JSON.stringify(await response.json()).includes(a.token));}
 assert.equal((await POST(req({...call,account_id:'another-tenant'}))).status,409);
 delete globalThis.__inboundFixture;delete process.env.ELEVENLABS_INBOUND_WEBHOOK_SECRET;
-console.log('Actual inbound HTTP handler: unauthorized, unregistered, unmatched and valid cases passed without provider traffic.');
+console.log('Actual inbound HTTP handler: unauthorized and all legacy customer calls held before any database/provider access without provider traffic.');

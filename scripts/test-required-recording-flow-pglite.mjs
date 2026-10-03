@@ -48,6 +48,17 @@ try{
  const service=recordingService(process.env,{db,provider});
  const elevenRequest=async(path,body)=>{assert.equal(body,undefined,'Legacy direct dial must never run for recorded lane');return path.includes('/phone-numbers/')?{phone_number:f.sender}:{conversation_config:main,platform_settings:{overrides:{conversation_config_override:{agent:{first_message:true,prompt:{prompt:true}},tts:{voice_id:true}}}}};};
  const dispatcher=await loadService('lib/live-dispatch-service.ts',{recordingServer:()=>service,readRecordingReview,recordingPolicy,createHash,randomBytes,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,db,elevenRequest,buyerCallInstructions,contactEligibility,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt});
+ // An enabled legacy rate/config with capture OFF must not reserve, claim, or dial.
+ await q('savepoint legacy_recording_hold');
+ const legacyRate=(await one("insert into icash_operation_rates(operation,version,charge_cents,costs_micros,buffer_bps,evidence_ref,verified_at,expires_at,enabled,voice_max_duration_seconds) values('seller_call','staged-seller-20260930-us-600s-v1:synthetic',946,$1,2000,'SIMULATION legacy quote',now()-interval '1 minute',now()+interval '1 day',true,600) returning id",[{...rateCosts,elevenlabs:100000}])).id;
+ await q('update icash_voice_configs set seller_rate_id=$2 where account_id=$1',[account,legacyRate]);
+ process.env.ICASH_RECORDED_OUTBOUND_READY='false';
+ assert.equal((await dispatcher.dispatchLiveVoice(account,job.id)).status,'recorded_call_release_required');assert.deepEqual(events,[]);
+ assert.equal((await one('select reserved_cents from icash_wallets where account_id=$1',[account])).reserved_cents,0);
+ assert.equal((await one('select count(*)::int n from icash_operation_spend where operation_key=$1',['voice:'+job.id])).n,0);
+ assert.equal((await one('select state from icash_voice_jobs where id=$1',[job.id])).state,'held');
+ process.env.ICASH_RECORDED_OUTBOUND_READY='true';await q('rollback to savepoint legacy_recording_hold');await q('release savepoint legacy_recording_hold');
+ console.log('PASS REAL SQL legacy enabled946/config + capture OFF: job held, no spend row, reserve, claim, or provider mutation');
  for(const mismatch of [{agentId:'agent_other'},{fromPhone:'+12125550999'}]){await q('savepoint mismatched_review');process.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify({...review,...mismatch});assert.equal((await dispatcher.dispatchLiveVoice(account,job.id)).status,'recorded_call_review_required');assert.deepEqual(events,[]);assert.equal((await one('select reserved_cents from icash_wallets where account_id=$1',[account])).reserved_cents,0);process.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify(review);await q('rollback to savepoint mismatched_review');await q('release savepoint mismatched_review');}
  assert.equal((await dispatcher.dispatchLiveVoice(account,job.id)).status,'provider_outcome_unknown_no_retry');
  assert.equal((await one('select state from icash_voice_jobs where id=$1',[job.id])).state,'dispatching');

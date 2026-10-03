@@ -1,10 +1,7 @@
 import {beginAudioOnce} from '@/lib/owner-audio-once-service';
 import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {NextResponse} from 'next/server';
-import {db} from '@/lib/stripe-test';
-import {createHash} from 'node:crypto';
-import {elevenRequest} from '@/lib/elevenlabs';
-import {inboundAuthorized,inboundCallSchema,inboundCapability,inboundInitiation} from '@/lib/inbound-voice';
+import {inboundAuthorized,inboundCallSchema} from '@/lib/inbound-voice';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 export const maxDuration=20;
@@ -22,27 +19,9 @@ export async function POST(req:Request){
    const result=await beginAudioOnce(call);
    return NextResponse.json(result??{error:'Call routing unavailable'},{status:result?200:409,headers});
   }
-  if(process.env.ICASH_LIVE_WORK_READY!=='true')return NextResponse.json({error:'Call routing unavailable'},{status:503,headers});
-  const cap=inboundCapability(call,secret!);
-  // Fetch no customer data until the called number and agent are explicitly registered.
-  const routes=await db<{agent_id:string}[]>(`icash_inbound_voice_routes?called_number=eq.${encodeURIComponent(call.called_number)}&agent_id=eq.${call.agent_id}&enabled=eq.true&select=agent_id&limit=1`);
-  if(routes.length!==1)throw new Error('Unregistered route');
-  const agent=await elevenRequest<{conversation_config:unknown}>(`/v1/convai/agents/${call.agent_id}`);
-  const agentHash=createHash('sha256').update(JSON.stringify(agent.conversation_config)).digest('hex');
-  const result=await db<{maxSeconds:number}|null>('rpc/icash_begin_inbound_voice','POST',{
-   p_caller:call.caller_id,p_called:call.called_number,p_agent:call.agent_id,p_call_sid:call.call_sid,
-   p_conversation:call.conversation_id,p_binding_hash:cap.bindingHash,p_token_hash:cap.hash,p_agent_hash:agentHash,
-  });
-  if(!result)return NextResponse.json({error:'Call routing unavailable'},{status:409,headers});
-  // Admission still owns all routing and cost controls. Load only the public
-  // address and supported greeting name from that durable binding before speech; caller ID proves no identity.
-  // Missing context must not cause guesses, a new tenant lookup, or another charge.
-  let context:Parameters<typeof inboundInitiation>[2]=null;
-  try{
-   context=await db<Parameters<typeof inboundInitiation>[2]>('rpc/icash_inbound_property_context','POST',{
-    p_call_sid:call.call_sid,p_conversation:call.conversation_id,p_binding_hash:cap.bindingHash,p_token_hash:cap.hash,
-   });
-  }catch{/* Unknown/missing context falls back to asking the caller for the address. */}
-  return NextResponse.json(inboundInitiation(result.maxSeconds,cap.token,context),{headers});
+  // Legacy customer ingress cannot establish consent-first recording. Do not admit,
+  // reserve, or return an AI initiation here, even if an old route row is enabled.
+  // New customer ingress must use the separately reviewed recorded-reception route.
+  return NextResponse.json({error:'Call routing unavailable'},{status:503,headers});
  }catch{return NextResponse.json({error:'Call routing unavailable'},{status:409,headers});}
 }

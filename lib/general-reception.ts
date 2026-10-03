@@ -161,6 +161,9 @@ export function createReceptionHandlers(env:ReceptionEnv,deps:ReceptionDeps){
     if(!/^\+[1-9]\d{7,14}$/.test(from)&&!['anonymous','restricted','unknown'].includes(from))return reject();
     const c=await deps.rpc('icash_get_general_reception_config',{},deadline) as ReceptionConfig|null;
     const profile=c?resolveReceptionProfile(c):null;
+    // Normal customer intake requires the separate consent-first recorded route.
+    // Preserve only the explicitly bounded, caller-bound historical owner test.
+    if(c?.call_profile!=='owner_quick_test')return reject();
     if(!c||!profile||c.enabled!==true||c.funding_mode!=='customer_credits'||c.receipt_mode!=='provider_readback'||!identifier(c.branch_id,'agtbrch')||c.agent_id!==receptionTarget.agentId)return reject();
     const callerHash=createHmac('sha256',env.TWILIO_AUTH_TOKEN!).update('reception-caller-v1\0'+from).digest('hex');
     // Caller ID only restricts this low-privilege test; it grants no identity or account authority.

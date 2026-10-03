@@ -18,23 +18,14 @@ const route=await loadService('app/api/internal/voice/inbound/route.ts',{NextRes
  elevenRequest:async()=>{events.push({path:'provider-read'});return {conversation_config:{}};},
  beginAudioOnce:async()=>({ownerFixture:true}),ownerInboundTarget,inboundAuthorized,inboundCallSchema,inboundCapability,inboundInitiation});
 const request=(body=call,auth='Bearer '+secret)=>new Request('https://fixture.invalid/api/internal/voice/inbound',{method:'POST',headers:{authorization:auth,'content-type':'application/json'},body:JSON.stringify(body)});
-let response=await route.POST(request());assert.equal(response.status,200);let payload=await response.json();
-assert.deepEqual(events.map(x=>x.path.startsWith('icash_inbound_voice_routes?')?'route':x.path),['route','provider-read','rpc/icash_begin_inbound_voice','rpc/icash_inbound_property_context']);
-const cap=inboundCapability(call,secret);assert.deepEqual(events.at(-1).body,{p_call_sid:call.call_sid,p_conversation:call.conversation_id,p_binding_hash:cap.bindingHash,p_token_hash:cap.hash});
-assert(!JSON.stringify(events).includes(cap.token),'Lookup never stores plaintext capability');
+// The safe formatter remains available for historical context, but this legacy
+// customer route must never load context or admit an unrecorded call.
+const payload=inboundInitiation(600,'synthetic-token',context);
 assert.match(payload.conversation_config_override.agent.first_message,/123 Fixture Lane/);
 assert.match(payload.conversation_config_override.agent.first_message,/Jane/);
 for(const privateValue of ['Secret Owner','Secret SMS','900000'])assert(!JSON.stringify(payload).includes(privateValue));
-assert.equal(response.headers.get('cache-control'),'private, no-store');
-assert.equal(payload.dynamic_variables.approved_offer_ceiling,'NOT AUTHORIZED');
-for(const missing of [null,{status:'ambiguous'},{status:'matched',address:42},{status:'matched',address:'Bad\naddress'},{}]){
- context=missing;events.length=0;response=await route.POST(request());assert.equal(response.status,200);payload=await response.json();
- assert.match(payload.conversation_config_override.agent.first_message,/Which property/);
- assert.equal(events.filter(e=>e.path==='rpc/icash_begin_inbound_voice').length,1,'No repeat admission for unknown context');
-}
-lookupError=true;events.length=0;response=await route.POST(request());assert.equal(response.status,200);payload=await response.json();
-assert.match(payload.conversation_config_override.agent.first_message,/Which property/);assert(!JSON.stringify(payload).includes('PRIVATE DATABASE'));
-assert.equal(events.filter(e=>e.path==='rpc/icash_begin_inbound_voice').length,1);lookupError=false;
+for(const missing of [null,{status:'ambiguous'},{status:'matched',address:42},{status:'matched',address:'Bad\naddress'},{}])assert.match(inboundInitiation(600,'synthetic-token',missing).conversation_config_override.agent.first_message,/Which property/);
+let response=await route.POST(request());assert.equal(response.status,503);assert.deepEqual(events,[]);assert.equal(response.headers.get('cache-control'),'private, no-store');
 for(const rejection of ['unauthorized','held','unregistered','unmatched','extra-account']){
  events.length=0;registered=rejection!=='unregistered';admitted=rejection!=='unmatched';env.ICASH_LIVE_WORK_READY=rejection==='held'?'false':'true';
  response=await route.POST(request(rejection==='extra-account'?{...call,account_id:'caller-choice'}:call,rejection==='unauthorized'?'Bearer invalid':'Bearer '+secret));
@@ -42,4 +33,4 @@ for(const rejection of ['unauthorized','held','unregistered','unmatched','extra-
 }
 events.length=0;response=await route.POST(request({...call,caller_id:ownerInboundTarget.ownerPhone,called_number:ownerInboundTarget.ingressNumber,agent_id:ownerInboundTarget.agentId}));
 assert.deepEqual(await response.json(),{ownerFixture:true});assert.deepEqual(events,[]);
-console.log('Inbound property-context route passed: admission-before-context, exact hashed binding, first-name/address allowlist, unknown/ambiguous/error fallback, owner isolation and unchanged holds.');
+console.log('Legacy inbound customer admission stays closed before context/provider/budget access; safe historical formatter and exact owner isolation preserved.');
