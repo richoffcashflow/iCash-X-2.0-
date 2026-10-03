@@ -22,7 +22,7 @@ export async function createJourneyDb(modulePath,suppliedPg=null){
   'text-messaging','text-stop-voice','inventory-allocation','account-margin',
   'estimated-operation-settlement','communication-fractional-billing','customer-funded-margins','scoped-spend-activation',
   'estimated-settlement-fairness','dealmachine-cost-baseline','bot-setup-funnel','bot-setup-session-isolation','market-shortlist',
-  'funded-account-provisioning','funded-provisioning-trigger','funded-voice-provisioning','market-contract-coverage','research-contract-separation','requested-property-zip-resolution',
+  'funded-account-provisioning','funded-provisioning-trigger','funded-voice-provisioning','market-contract-coverage','standard-contract-routing','research-contract-separation','requested-property-zip-resolution',
   'daytime-pacing','inbound-voice','voice-launch-hardening','voice-sms-context','voice-usage-settlement','voice-pending-estimate-isolation',
   'reviewed-action-authority','buyer-qualification','title-requests','title-directory','title-inbound','closing-coordination','closing-confirmations','title-tasks','title-followup','manual-deal-email','requested-buyer-package-email','buyer-title-ordering',
  ].map(x=>'config/'+x+'.sql'));

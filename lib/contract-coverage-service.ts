@@ -1,9 +1,9 @@
 import {db} from '@/lib/stripe-test';
 import {contractCapability,reviewedContractCoverage,type ContractTemplateCapability} from './contract-coverage.ts';
 export async function readContractCoverage(){
- const templates=await db<ContractTemplateCapability[]>('icash_signing_templates?enabled=eq.true&test_mode=eq.false&provider=eq.docuseal&select=state_code,kind,signer_count,enabled,test_mode,provider,reviewed_until,rate:icash_operation_rates(operation,enabled,expires_at)&limit=801');
+ const templates=await db<ContractTemplateCapability[]>('icash_signing_templates?enabled=eq.true&test_mode=eq.false&provider=eq.docuseal&select=template_scope,state_code,kind,signer_count,enabled,test_mode,provider,reviewed_until,rate:icash_operation_rates(operation,enabled,expires_at)&limit=801');
  // Bound data transfer and fail closed rather than silently missing coverage rows.
- if(templates.length>800)throw Error('Contract coverage requires review');
+ if(templates.length>800)throw Error('Contract template list exceeds the supported limit');
  return reviewedContractCoverage(templates);
 }
 export async function acquisitionContractCoverage(zip:string){

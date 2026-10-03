@@ -7,7 +7,7 @@ import {authorityReviewStatus} from '../lib/authority-review-status.ts';
 const account='00000000-0000-4000-8000-000000000001',screening='00000000-0000-4000-8000-000000000002',deal='00000000-0000-4000-8000-000000000003',envelope='00000000-0000-4000-8000-000000000004';
 let paths=[],owner=true,found=true,suppressed=false;
 const tomorrow=new Date(Date.now()+86400000).toISOString(),yesterday=new Date(Date.now()-86400000).toISOString();
-const mocks={z,authorityReviewStatus,contractCapability,readContractCoverage:async()=>({scope:'reviewed_templates',states:[{state:'TX',signerCounts:[1]}]}),NextResponse:{json:(body,options={})=>({body,status:options.status??200})},workAccount:async()=>{if(!owner)throw Error();return {accountId:account};},db:async(path,method)=>{
+const mocks={z,authorityReviewStatus,contractCapability,readContractCoverage:async()=>({scope:'configured_templates',states:[{state:'TX',signerCounts:[1]}]}),NextResponse:{json:(body,options={})=>({body,status:options.status??200})},workAccount:async()=>{if(!owner)throw Error();return {accountId:account};},db:async(path,method)=>{
  assert(!method||method==='GET','Diagnostics must never write or dispatch');paths.push(path);
  const table=path.split('?')[0];
  if(!['icash_text_suppressions','icash_contact_suppressions'].includes(table))assert(path.includes(table==='icash_accounts'?`id=eq.${account}`:`account_id=eq.${account}`));

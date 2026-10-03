@@ -38,7 +38,7 @@ const signing=await loadService('lib/signing-service.ts',{z,dealTermsSchema,sign
   assert.equal(method,'GET','Missing coverage must not create an envelope, authorization, or reservation');
   if(path.startsWith('icash_deal_files'))return [{terms,stage:kind==='purchase'?'draft':'under_contract'}];
   if(path.startsWith('icash_customer_identities'))return [{principal:'Fixture Principal'}];
-  if(path.startsWith('icash_signing_templates')){assert(path.includes('state_code=eq.'+terms.state)&&path.includes('kind=eq.'+kind)&&path.includes('signer_count=eq.1')&&path.includes('test_mode=eq.false')&&path.includes('enabled=eq.true'));return template?[template]:[];}
+  if(path.startsWith('icash_signing_templates')){assert((path.includes('template_scope=eq.standard')||path.includes('state_code=eq.'+terms.state))&&path.includes('kind=eq.'+kind)&&path.includes('signer_count=eq.1')&&path.includes('test_mode=eq.false')&&path.includes('enabled=eq.true'));return template?[template]:[];}
   writes++;throw Error('Unexpected downstream signing call');
  },dispatchReservedOperation:async()=>{writes++;throw Error('Must not reserve signing funds');}
 });
@@ -46,10 +46,10 @@ const oldFetch=globalThis.fetch;globalThis.fetch=async()=>{writes++;throw Error(
 try{
  for(const state of ['TN','AL'])for(kind of ['purchase','assignment']){
   terms={...terms,state,assignee:'Fixture Assignee',assignmentFeeCents:10000,assignmentDepositCents:0,escrowAgent:'Fixture Escrow'};
-  await assert.rejects(()=>signing.sendForSignatures({accountId:'account',userId:'owner',customerEmail:'principal@example.invalid',dealId:'deal',kind,signers:[{name:'Fixture Signer',email:'signer@example.invalid'}]}),/reviewed signing template/);
+  await assert.rejects(()=>signing.sendForSignatures({accountId:'account',userId:'owner',customerEmail:'principal@example.invalid',dealId:'deal',kind,signers:[{name:'Fixture Signer',email:'signer@example.invalid'}]}),/active contract template/);
  }
  template={reviewed_until:'2020-01-01'};
- await assert.rejects(()=>signing.sendForSignatures({accountId:'account',userId:'owner',customerEmail:'principal@example.invalid',dealId:'deal',kind,signers:[{name:'Fixture Signer',email:'signer@example.invalid'}]}),/reviewed signing template/);
+ await assert.rejects(()=>signing.sendForSignatures({accountId:'account',userId:'owner',customerEmail:'principal@example.invalid',dealId:'deal',kind,signers:[{name:'Fixture Signer',email:'signer@example.invalid'}]}),/active contract template/);
  assert.equal(writes,0);
 }finally{globalThis.fetch=oldFetch;}
-console.log('Research/contract separation: full and independent discovery admit a configured TN market; pause, rights and unknown-market holds remain; TN/AL purchase and assignment send reject before writes without reviewed templates.');
+console.log('Research/contract separation: full and independent discovery admit a configured TN market; pause, rights and unknown-market holds remain; TN/AL purchase and assignment send reject before writes without configured templates.');

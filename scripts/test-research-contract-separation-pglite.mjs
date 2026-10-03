@@ -81,7 +81,7 @@ try{
  await q("insert into icash_customer_identities(account_id,first_name,last_name,voice_id,voice_name) values($1,'Fixture','Principal','fixture','Fixture')",[account]);
  const template=(await one("insert into icash_signing_templates(state_code,kind,signer_count,provider_template_id,placeholder_names,field_map,reviewed_until,review_reference,test_mode,enabled,provider) values('TX','purchase',1,'123','[\"Seller\",\"Customer\"]','{}',now()+interval '1 day','SIMULATION ONLY',false,true,'docuseal') returning id")).id;
  const signing=await loadService('lib/signing-service.ts',{z,db,dealTermsSchema,signingReadiness});
- await assert.rejects(()=>signing.sendForSignatures({accountId:account,userId:user,customerEmail:'separation@example.invalid',dealId:deal,kind:'purchase',signers:[{name:'Fixture Seller',email:'seller@example.invalid'}]}),/reviewed signing template/);
+ await assert.rejects(()=>signing.sendForSignatures({accountId:account,userId:user,customerEmail:'separation@example.invalid',dealId:deal,kind:'purchase',signers:[{name:'Fixture Seller',email:'seller@example.invalid'}]}),/active contract template/);
  await assert.rejects(()=>rpc('icash_begin_signing',{p_user:user,p_account:account,p_deal:deal,p_kind:'purchase',p_template:template,p_hash:signingTermsHash(terms),p_recipients:[{id:'1',email:'seller@example.invalid'},{id:'2',email:'separation@example.invalid'}]}),/query returned no rows/);
  assert.equal((await one('select count(*)::int n from icash_signing_envelopes')).n,0);assert.equal(paid,1);
  assert(!notices.some(n=>n.includes('Funded account provisioning deferred')));

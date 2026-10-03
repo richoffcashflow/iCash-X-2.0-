@@ -22,8 +22,22 @@ export async function sendForSignatures(i:{accountId:string;userId:string;custom
  const testMode=process.env.DOCUSEAL_MODE!=='live';
  if(!testMode&&process.env.ICASH_LIVE_WORK_READY!=='true')throw new Error('Live work is not ready.');
  if(!(testMode?process.env.DOCUSEAL_TEST_API_KEY:process.env.DOCUSEAL_API_KEY))throw new Error('Signing key for this mode is not configured.');
- const [template]=await db<Template[]>(`icash_signing_templates?state_code=eq.${terms.state}&kind=eq.${i.kind}&signer_count=eq.${i.signers.length}&test_mode=eq.${testMode}&provider=eq.docuseal&enabled=eq.true&select=*`);
- if(!template||Date.parse(template.reviewed_until)<=Date.now())throw new Error('A reviewed signing template is needed for this state and signer count.');
+ // Prefer an exact configured form, then the explicitly generic standard form.
+ // state_code on a standard form is historical routing metadata, not a legal certification.
+ const templateQuery=`kind=eq.${i.kind}&signer_count=eq.${i.signers.length}&test_mode=eq.${testMode}&provider=eq.docuseal&enabled=eq.true&reviewed_until=gt.${encodeURIComponent(new Date().toISOString())}&select=*&limit=2`;
+ const exact=await db<Template[]>(`icash_signing_templates?template_scope=eq.state&state_code=eq.${terms.state}&${templateQuery}`);
+ const usable=async(candidates:Template[])=>{
+  if(candidates.length>1)throw new Error('Duplicate contract template configuration.');
+  const candidate=candidates[0];if(!candidate||!(Date.parse(candidate.reviewed_until)>Date.now()))return null;
+  if(!testMode){
+   const rates=candidate.rate_id?await db<{operation:string;enabled:boolean;expires_at:string}[]>(`icash_operation_rates?id=eq.${candidate.rate_id}&select=operation,enabled,expires_at`):[];
+   const rate=rates.length===1?rates[0]:null;
+   if(!rate?.enabled||rate.operation!=='contract_signing'||!(Date.parse(rate.expires_at)>Date.now()))return null;
+  }
+  return candidate;
+ };
+ const template=await usable(exact)??await usable(await db<Template[]>(`icash_signing_templates?template_scope=eq.standard&${templateQuery}`));
+ if(!template||!(Date.parse(template.reviewed_until)>Date.now()))throw new Error('An active contract template supporting every required signer is needed.');
  if(terms.legalDescription.length>template.max_legal_description_chars)throw new Error('Legal description needs an attached exhibit before signing.');
  if(i.autoSignature&&(!template.automated_signing_reviewed||!template.customer_signature_field||!template.customer_consent_field))throw new Error('Auto-signing authorization is not enabled for this template.');
  const values=signingFields(terms,i.kind);
@@ -31,7 +45,6 @@ export async function sendForSignatures(i:{accountId:string;userId:string;custom
  if(Object.keys(values).some(k=>!template.field_map[k])||new Set(Object.values(template.field_map)).size!==Object.keys(values).length)throw new Error('Contract field mapping needs review.');
  const recipients=[...i.signers,{name:identity.principal,email:i.customerEmail}].map((s,n)=>({...s,id:String(n+1),placeholder_name:template.placeholder_names[n],delivery_method:'email'}));
  if(recipients.some(r=>!r.placeholder_name))throw new Error('Signer mapping needs review.');
- if(!testMode){const [rate]=template.rate_id?await db<{operation:string;enabled:boolean}[]>(`icash_operation_rates?id=eq.${template.rate_id}&select=operation,enabled`):[];if(!rate?.enabled||rate.operation!=='contract_signing')throw new Error('Signing cost configuration is not ready.');}
  const envelope=await db<Envelope>('rpc/icash_begin_signing','POST',{p_user:i.userId,p_account:i.accountId,p_deal:i.dealId,p_kind:i.kind,p_template:template.id,p_hash:signingTermsHash(terms),p_recipients:recipients});
  try{
   if(signingTermsHash(envelope.terms)!==envelope.terms_hash)throw new Error('Contract changed. Review required before sending.');
