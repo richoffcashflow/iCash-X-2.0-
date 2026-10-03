@@ -5,6 +5,7 @@ import {usdMicros} from './voice-usage-service.ts';
 import type {RecordingDb} from './required-call-recording-service.ts';
 import {ownerRecordingBase,ownerRecordingReview,ownerProviderRow,asProviderReview,type OwnerRecordingConfig,type OwnerRecordingRun} from './owner-recording-test.ts';
 import type {OwnerRecordingProviders} from './owner-recording-test-provider.ts';
+import {ownerConsentDiagnostic,ownerRecoveryDiagnostic,ownerCarrierDiagnostic} from './owner-recording-diagnostics.ts';
 const terminal=(s:unknown)=>['completed','busy','failed','no-answer','canceled'].includes(String(s));
 const xml=(s='<Response><Hangup/></Response>')=>new Response(s,{headers:{...privateHeaders,'Content-Type':'text/xml'}});
 const tokenFor=(id:string,env:RecordingEnv)=>createHmac('sha256',env.TWILIO_AUTH_TOKEN!).update('icash-owner-recording-v1:'+id).digest('hex');
@@ -42,7 +43,7 @@ export function ownerRecordingService(env:RecordingEnv,{db,provider,now=Date.now
  }
  async function settle(r:OwnerRecordingRun,c:Record<string,unknown>){
   if(r.settlement)return;
-  if(!callMatches(r,c)||!terminal(c.status)||!r.call_ended_at||typeof c.price!=='string'||!/^-(?:\d+)(?:\.\d{1,6})?$|^0(?:\.0+)?$/.test(c.price)||c.price_unit!=='USD'||typeof c.duration!=='string'||!/^\d+$/.test(c.duration)||Number(c.duration)>60)throw Error('OWNER_CARRIER_PRICE_PENDING');
+  if(!callMatches(r,c)||!terminal(c.status)||!r.call_ended_at||typeof c.price!=='string'||!/^-(?:\d+)(?:\.\d{1,6})?$|^0(?:\.0+)?$/.test(c.price)||c.price_unit!=='USD'||typeof c.duration!=='string'||!/^\d+$/.test(c.duration)||Number(c.duration)>60){console.warn('owner_recording_diagnostic',{stage:'carrier_receipt',runId:r.id,...ownerCarrierDiagnostic(c,callMatches(r,c),terminal(c.status))});throw Error('OWNER_CARRIER_PRICE_PENDING');}
   const items:{provider:string;label:string;micros:number;basis:string;receipt:string}[]=[];
   const seconds=Number(c.duration),q=r.configuration.quote;
   items.push({provider:'twilio',label:'Call',micros:usdMicros(c.price.replace('-','')),basis:'observed',receipt:String(c.sid)});
@@ -69,13 +70,13 @@ export function ownerRecordingService(env:RecordingEnv,{db,provider,now=Date.now
    try{const checked=await signed(request,'consent');if(!checked)return xml();r=checked.r;const {c,f}=checked;if(r.state!=='consent_pending'||r.consent_at){await end(r);return xml();}
     if(env.ICASH_OWNER_RECORDING_TEST_READY!=='true'||c.status!=='in-progress'||!(await preflight(r.configuration)).ready){await update(r,'fail',{reason:'current_owner_review_required'});await end(r);return xml();}
     if(recordingGateOptOut(f)){await update(r,'contact_opt_out');await end(r);return xml();}
-    const yes=affirmativeSpeech(f);if(!yes){const confidence=Number(f.get('Confidence'));const invalid=f.has('SpeechResult')&&(!f.has('Confidence')||!Number.isFinite(confidence)||confidence<0.9||confidence>1||f.has('UnstableSpeechResult'));await update(r,invalid?'fail':'decline',{reason:invalid?'consent_asr_evidence_unverified':'consent_not_verified'});await end(r);return xml();}
+    const yes=affirmativeSpeech(f);if(!yes){const confidence=Number(f.get('Confidence'));const invalid=f.has('SpeechResult')&&(!f.has('Confidence')||!Number.isFinite(confidence)||confidence<0.9||confidence>1||f.has('UnstableSpeechResult'));const diagnostic=ownerConsentDiagnostic(f);console.warn('owner_recording_diagnostic',{stage:'consent_rejected',runId:r.id,...diagnostic});await update(r,invalid?'fail':'decline',{reason:invalid?diagnostic.reason:'consent_not_verified'});await end(r);return xml();}
     await update(r,'consent',{nonceHash:r.nonce_hash,source:'twilio_gather_speech',...yes});await update(r,'claim_start');
     const rec=await provider.start(r.call_sid!,ownerRecordingBase+'/status?id='+r.id);if(!recordingMatches(r,rec)||rec.status!=='in-progress')throw Error('OWNER_RECORDING_START_UNKNOWN');
     const started=await trans(r,'started',{recordingSid:rec.sid,startedAt:new Date(String(rec.start_time)).toISOString()});if(started)Object.assign(r,started);else{const fresh=await get(r.id);if(!fresh||fresh.recording_sid!==rec.sid||fresh.end_requested_at||fresh.state!=='recording')throw Error('OWNER_START_SAVE_REQUIRED');r=fresh;}
     const remaining=60-Math.ceil((now()-Date.parse(String(c.start_time)))/1000);if(remaining<1||remaining>60)throw Error('OWNER_CALL_TIME_EXHAUSTED');
     await update(r,'claim_register');return xml(await provider.register(ownerProviderRow(r),remaining,tokenFor(r.id,env)));
-   }catch{if(r)await end(r);return xml();}
+   }catch(error){console.warn('owner_recording_diagnostic',{stage:'consent_error',runId:r?.id??null,reason:ownerRecoveryDiagnostic(error)});if(r)await end(r);return xml();}
   },
   async callback(request:Request,kind:'status'|'terminal'){
    try{const checked=await signed(request,kind);if(!checked)return new Response(null,{status:401});const {r,c,f}=checked;
@@ -84,7 +85,7 @@ export function ownerRecordingService(env:RecordingEnv,{db,provider,now=Date.now
      else if(rec.status==='absent'){const ended=await end(r);await update(r,'absent_audio',{recordingSid:rec.sid});return new Response(null,{status:ended?204:503});}
     }else if(terminal(c.status)){if(!r.end_requested_at)await update(r,'end_request');if(!r.call_ended_at)await update(r,'ended',{callSid:c.sid,accountSid:c.account_sid,status:c.status});await settle(r,c);}
     return new Response(null,{status:204,headers:privateHeaders});
-   }catch{return new Response(null,{status:503,headers:privateHeaders});}
+   }catch(error){console.warn('owner_recording_diagnostic',{stage:kind,reason:ownerRecoveryDiagnostic(error)});return new Response(null,{status:503,headers:privateHeaders});}
   },
   async stop(request:Request){const b=object(JSON.parse((await boundedBytes(request,2048)).toString())),token=request.headers.get('authorization')?.replace(/^Bearer /,'');if(Object.keys(b).length!==1||!uuid(b.recordingId))return null;const r=await get(b.recordingId);if(!r)return null;if(!token||!/^[a-f0-9]{64}$/.test(token)||!timingSafeEqual(Buffer.from(token),Buffer.from(tokenFor(r.id,env)))||sha(token)!==r.stop_token_hash)return Response.json({callEnded:false},{status:401,headers:privateHeaders});const ended=await end(r);if(!ended&&r.recording_sid)await provider.stop(r.call_sid!,r.recording_sid).catch(()=>null);return Response.json({callEnded:ended,instruction:'Stop talking and end this call.'},{status:ended?200:503,headers:privateHeaders});},
   async maintain(){const summary={processed:0,held:0};for(const r of await db<OwnerRecordingRun[]>('rpc/icash_claim_owner_recording_work','POST',{})){try{
@@ -102,7 +103,7 @@ export function ownerRecordingService(env:RecordingEnv,{db,provider,now=Date.now
     if(r.start_claimed_at&&!r.recording_sid){const list=await provider.listRecordings(r.call_sid);if(list.next_page_uri||!Array.isArray(list.recordings)||list.recordings.length!==1)throw Error('OWNER_RECORDING_OUTCOME_REVIEW');const rec=object(list.recordings[0]);if(!recordingMatches(r,rec))throw Error('OWNER_RECORDING_BINDING_REQUIRED');await update(r,'started',{recordingSid:rec.sid,startedAt:new Date(String(rec.start_time)).toISOString()});}
     if(r.recording_sid&&!r.deleted_at){const rec=await provider.getRecording(r.recording_sid);if(!recordingMatches(r,rec))throw Error('OWNER_RECORDING_BINDING_REQUIRED');if(rec.status==='absent'){await end(r);await update(r,'absent_audio',{recordingSid:rec.sid});throw Error('OWNER_REQUIRED_AUDIO_ABSENT');}if(rec.status==='completed'&&r.duration_seconds===null){if(!await end(r))throw Error('OWNER_END_UNCONFIRMED');await update(r,'completed_audio',{recordingSid:rec.sid,durationSeconds:Number(rec.duration),priceMicros:typeof rec.price==='string'&&rec.price_unit==='USD'?usdMicros(rec.price.replace('-','')):null});}}
     await settle(r,c);summary.processed++;
-   }catch{await trans(r,'retry',{reason:'owner_recording_reconciliation_required'}).catch(()=>null);summary.held++;}}return summary;},
+   }catch(error){const reason=ownerRecoveryDiagnostic(error);console.warn('owner_recording_diagnostic',{stage:'maintenance',runId:r.id,reason});await trans(r,'retry',{reason:reason.toLowerCase()}).catch(()=>null);summary.held++;}}return summary;},
   async audio(owner:{accountId:string;userId:string},id:string){const r=await get(id,owner.accountId,owner.userId);if(!r||r.state!=='available'||r.deleted_at||!r.recording_sid||!r.audio_expires_at||Date.parse(r.audio_expires_at)<=now())return new Response(null,{status:404,headers:privateHeaders});const data=await provider.media(r.recording_sid);if(Date.parse(r.audio_expires_at)<=now())return new Response(null,{status:404,headers:privateHeaders});return new Response(data,{headers:{...privateHeaders,'Content-Type':'audio/mpeg'}});}
  };return api;
 }
