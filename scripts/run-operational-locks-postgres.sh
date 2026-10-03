@@ -11,8 +11,10 @@ trap cleanup EXIT
 "$PG_BIN/pg_ctl" -D "$DATA" -l "$DATA/server.log" -o "-c unix_socket_directories= -c listen_addresses=127.0.0.1 -p 55442" start >/dev/null
 if [[ "${1:-locks}" == "voice" ]]; then
   node --experimental-strip-types "$(dirname "$0")/test-operational-voice-eligibility-pglite.mjs" "$(cd "$(dirname "$0")/.." && pwd)/tests/helpers/operational-native-db.mjs"
+elif [[ "${1:-locks}" == "campaign" ]]; then
+  node --experimental-strip-types "$(dirname "$0")/test-self-service-campaigns-pglite.mjs" "$(cd "$(dirname "$0")/.." && pwd)/tests/helpers/operational-native-db.mjs"
 elif [[ "${1:-locks}" == "locks" ]]; then
   node --experimental-strip-types "$(dirname "$0")/test-operational-locks-postgres.mjs"
 else
-  echo "Use locks or voice" >&2; exit 1
+  echo "Use locks, voice, or campaign" >&2; exit 1
 fi

@@ -23,7 +23,7 @@ assert.equal((await read()).reason,'spending_activation_required');
 const presentation={identity:{},paused:true,workReady:false,discoveryWorkReady:false,discoveryBlocker:(await read()).reason,balanceCents:1000};
 assert.match(workspaceStatus(presentation).detail,/do not pay again/);
 assert.equal(workspaceNextAction(presentation,null).kind,'support');
-assert.equal(workspaceNextAction({...presentation,discoveryBlocker:'discovery_not_released'},{configured:false,released:false,liveWorkReady:false,smsChannelEnabled:true,policy:{version:'v'},acknowledgment:null}).label,'Review campaign responsibilities');
+assert.equal(workspaceNextAction({...presentation,discoveryBlocker:'discovery_not_released'},{configured:false,released:false,liveWorkReady:false,smsChannelEnabled:true,policy:{version:'v'},acknowledgment:null}).label,'Choose outreach channels');
 rows.icash_spend_activations=[{enabled:true,customer_cap_cents:300}];
 const ready=await read();assert.equal(ready.ready,true);assert.equal(rows.icash_accounts[0].bot_paused,true);
 assert.equal(workspaceNextAction({...presentation,discoveryWorkReady:true,discoveryQuote:ready.quote},null).label,'Start discovery');

@@ -15,8 +15,8 @@ assert.equal(workspaceNextAction({...a,identity:null},campaign).kind,'identity')
 assert.equal(workspaceNextAction({...a,billingReview:true},campaign).kind,'support');
 assert.equal(workspaceNextAction({...a,activeWork:true,paused:false},campaign).kind,'pause');
 assert.equal(workspaceNextAction({...a,paused:true},null).kind,'campaign');
-assert.equal(workspaceNextAction({...a,paused:true},{...campaign,acknowledgment:{version:'old'}}).label,'Review campaign responsibilities');
-assert.match(workspaceNextAction({...a,paused:true},{...campaign,released:false}).reason,/No customer action/);
+assert.equal(workspaceNextAction({...a,paused:true},{...campaign,acknowledgment:{version:'old'}}).label,'Choose outreach channels');
+assert.match(workspaceNextAction({...a,paused:true},{...campaign,released:false}).reason,/save to complete account setup/);
 assert.equal(workspaceNextAction({...a,paused:true,workReady:false},campaign).kind,'campaign');
 assert.equal(workspaceNextAction({...a,paused:true,balanceCents:0},campaign).kind,'funding');
 assert.equal(workspaceNextAction({...a,paused:false},campaign).kind,'work');
@@ -26,3 +26,8 @@ assert.equal(workspaceActionDisabled('pause',false,true),false,'a refresh error 
 assert.equal(workspaceActionDisabled('resume',false,true),true,'cannot start from stale account state');
 assert.equal(workspaceActionDisabled('pause',true,true),true,'duplicate controls remain guarded');
 console.log('Stop remains available through account refresh failures; stale starts stay blocked.');
+
+const inbound={...campaign,mode:'sms_inbound',smsChannelEnabled:true};
+assert.match(workspaceNextAction({...a,paused:true,smsWorkReady:true},inbound).reason,/inbound-call invitations/);
+assert.match(workspaceNextAction({...a,paused:false,smsWorkReady:true},inbound).reason,/Outbound AI calls stay off/);
+assert.doesNotMatch(workspaceNextAction({...a,paused:false,smsWorkReady:true},inbound).reason,/invitations remain held/);

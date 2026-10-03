@@ -1,4 +1,4 @@
 export const outreachCampaignPolicy={
- version:'sms-inbound-2026-09-30.1',mode:'sms_inbound' as const,
- text:'I am responsible for using lawful, permitted SMS contact sources with prior contact and required permission for the actual sending business, and for complying with applicable consent, do-not-call, calling-time, state and provider rules. The platform must honor STOP and other opt-outs. An interested recipient may be invited to call our AI assistant. This acknowledgment is not recipient consent or legal clearance, and it does not authorize outbound AI calls, offers or contracts. Missing required evidence or provider setup keeps outreach paused.'
+ version:'outreach-channels-2026-10-03.1',mode:'outreach_channels' as const,
+ text:'I choose the channels shown above for my account’s outreach. I am responsible for lawful use of leads and for required contact permissions, opt-outs, documents, and investment decisions. The platform does not independently verify recipient consent or legal suitability. Data and do-not-call results are not recipient consent. This selection does not start my bot, change my spending limit, or authorize offers, contracts, or property marketing. Existing provider, do-not-call, timing, and budget checks still apply.'
 };

@@ -16,7 +16,7 @@ export function workspaceStatus(a:{billingReview?:boolean;paused?:boolean;workRe
 }
 
 /** One navigation/action hint, derived only from verified current status. Never grants authority. */
-export function workspaceNextAction(a:{billingReview?:boolean;paused?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;spendingActivationAvailable?:boolean;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;balanceCents?:number;activeWork?:boolean;identity?:unknown},campaign:{configured:boolean;released:boolean;liveWorkReady:boolean;smsChannelEnabled?:boolean;policy:{version:string};acknowledgment:{version:string}|null}|null){
+export function workspaceNextAction(a:{billingReview?:boolean;paused?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;spendingActivationAvailable?:boolean;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;balanceCents?:number;activeWork?:boolean;identity?:unknown},campaign:{mode?:'outbound_voice_sms'|'sms_inbound'|null;configured:boolean;released:boolean;liveWorkReady:boolean;smsChannelEnabled?:boolean;policy:{version:string};acknowledgment:{version:string}|null}|null){
  if(a.billingReview)return {kind:'support' as const,label:'Get help with payment',reason:'A payment review is holding new work.'};
  if(!a.identity)return {kind:'identity' as const,label:'Add my contract name',reason:'Add your legal name or company before your bot can work.'};
  if(a.activeWork&&!a.paused)return {kind:'pause' as const,label:'Stop bot & daily billing',reason:'Work is in progress. Stop here to pause new work and future renewals.'};
@@ -37,13 +37,14 @@ export function workspaceNextAction(a:{billingReview?:boolean;paused?:boolean;wo
  if(blocker&&a.discoveryBlocker==='available_credits_required')return {kind:'funding' as const,label:'Review funding',reason:blocker.detail};
  if(blocker)return {kind:'support' as const,label:'Get setup help',reason:blocker.detail};
  if(!campaign)return {kind:'campaign' as const,label:'Check outreach status',reason:'Verify campaign status before starting.'};
- if(!campaign.configured||campaign.acknowledgment?.version!==campaign.policy.version)return {kind:'campaign' as const,label:'Review campaign responsibilities',reason:'Review and acknowledge the campaign before outreach can start.'};
- if(!campaign.released)return {kind:'campaign' as const,label:'View campaign status',reason:'Campaign release is pending. No customer action can release it here.'};
- const smsOnly=!a.workReady&&a.smsWorkReady===true&&campaign.smsChannelEnabled===true;
+ if(!campaign.configured||campaign.acknowledgment?.version!==campaign.policy.version)return {kind:'campaign' as const,label:'Choose outreach channels',reason:'Choose outbound AI calls + SMS or SMS with inbound-call invitations, then save your account’s responsibilities.'};
+ if(!campaign.released)return {kind:'campaign' as const,label:'Confirm outreach channels',reason:'Review your selected channels and sending business, then save to complete account setup.'};
+ const smsOnly=(campaign.mode==='sms_inbound'||!a.workReady)&&a.smsWorkReady===true&&campaign.smsChannelEnabled===true;
+ const inboundMode=campaign.mode==='sms_inbound'&&campaign.liveWorkReady&&a.workReady;
  if(!smsOnly&&(!campaign.liveWorkReady||!a.workReady))return {kind:'campaign' as const,label:'View setup status',reason:'Required setup checks are pending. Review the status; funding does not clear them.'};
  if((a.balanceCents??0)<=0)return {kind:'funding' as const,label:'Review funding',reason:'Choose a budget to add available credits. Review billing before paying.'};
- if(a.paused)return {kind:'resume' as const,label:smsOnly?'Start SMS outreach':'Start bot',reason:smsOnly?'Start eligible SMS only. Contact, timing and budget checks still apply; AI calls remain held.':'Setup checks are ready. Start your bot; contact and timing checks still apply.'};
- return {kind:'work' as const,label:'View current work',reason:smsOnly?'SMS is ready for eligible contacts. AI calls and invitations remain held.':'Your bot is ready for eligible tasks. Open your saved work below.'};
+ if(a.paused)return {kind:'resume' as const,label:smsOnly?'Start SMS outreach':'Start bot',reason:smsOnly?inboundMode?'Start eligible SMS and inbound-call invitations. Outbound AI calls stay off; contact, provider, timing and budget checks still apply.':'Start eligible SMS only. Contact, timing and budget checks still apply; AI calls remain held.':'Setup checks are ready. Start your bot; contact and timing checks still apply.'};
+ return {kind:'work' as const,label:'View current work',reason:smsOnly?inboundMode?'SMS and inbound-call invitations can run when their setup and contact checks pass. Outbound AI calls stay off.':'SMS is ready for eligible contacts. AI calls and invitations remain held.':'Your bot is ready for eligible tasks. Open your saved work below.'};
 }
 
 export function workspaceActionDisabled(kind:ReturnType<typeof workspaceNextAction>['kind'],busy:boolean,accountError:boolean){
