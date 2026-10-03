@@ -86,6 +86,7 @@
 .personalized-workspace .property-cash-preview[data-earlier-estimate=true] :is(span,strong,small){color:#475467}
 .personalized-workspace .property-analysis-offer[data-earlier-estimate=true]{background:#f5f6f8}
 .personalized-workspace .property-analysis-offer[data-earlier-estimate=true] :is(dt,dd,small){color:#475467}
+.personalized-workspace .property-analysis-offer[data-earlier-estimate=true] small{display:block;margin-top:6px;font-size:11px;line-height:1.5;font-weight:500;letter-spacing:normal;white-space:normal}
 .personalized-workspace .property-comps{margin:13px 0}
 .personalized-workspace .estimate-details,.personalized-workspace .property-owner-details{font-size:13px;line-height:1.6;color:#667085}
 .personalized-workspace .property-owner-details{border-top:1px solid #edf0f3;margin-top:20px;padding-top:17px}

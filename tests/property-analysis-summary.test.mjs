@@ -99,3 +99,9 @@ assert.equal(offerMetric({...result,calculationVersion:'provider_repair_scalar_v
 const styles=readFileSync(new URL('../app/workspace-clarity.css',import.meta.url),'utf8');
 assert.match(styles,/\.property-analysis-offer\[data-earlier-estimate=true\] :is\(dt,dd,small\)\{color:#475467\}/,'historical limitations use high-contrast text');
 assert.match(styles,/\.property-analysis-offer\[data-earlier-estimate=true\]\{background:#f5f6f8\}/,'historical amount keeps a neutral treatment');
+const historicalSmallRule=styles.match(/\.personalized-workspace \.property-analysis-offer\[data-earlier-estimate=true\] small\{([^}]+)\}/)?.[1];
+assert.ok(historicalSmallRule,'the historical limitation text has its own typography rule');
+for(const declaration of ['display:block','margin-top:6px','font-size:11px','line-height:1.5','font-weight:500','letter-spacing:normal','white-space:normal']){
+ assert.ok(historicalSmallRule.split(';').includes(declaration),`historical small text resets inherited amount typography: ${declaration}`);
+}
+assert.doesNotMatch(historicalSmallRule,/(?:^|;)(?:white-space:nowrap|height:|position:|overflow:hidden)/,'the limitation remains in document flow and can wrap at narrow widths');
