@@ -1,0 +1,19 @@
+'use client';
+import {useEffect,useRef,useState} from 'react';
+import type {IncomingReadiness} from '@/lib/recorded-reception-readiness';
+function valid(value:unknown):value is IncomingReadiness{
+ const r=value as IncomingReadiness;
+ return !!r&&r.mode==='read_only'&&['checked','partial','unavailable'].includes(r.status)&&typeof r.checkedAt==='string'&&Number.isFinite(Date.parse(r.checkedAt))&&typeof r.stopToolMatches==='boolean'&&typeof r.workspacePostcallAbsent==='boolean'&&Array.isArray(r.branches)&&r.branches.length===2&&r.branches.every(b=>!!b&&['owner_quick_test','normal'].includes(b.profile)&&[60,600].includes(b.maxDurationSeconds)&&/^agtbrch_[A-Za-z0-9]{1,160}$/.test(b.branchId)&&/^agtvrsn_[A-Za-z0-9]{1,160}$/.test(b.expectedVersionId)&&(b.observedVersionId===null||/^agtvrsn_[A-Za-z0-9]{1,160}$/.test(b.observedVersionId))&&(b.observedConfigHash===null||/^[a-f0-9]{64}$/.test(b.observedConfigHash))&&(b.draftExists===null||typeof b.draftExists==='boolean')&&(b.livePercentage===null||Number.isFinite(b.livePercentage))&&typeof b.providerChecksPass==='boolean'&&b.checks&&typeof b.checks==='object'&&!Array.isArray(b.checks)&&Object.keys(b.checks).length<=64&&Object.entries(b.checks).every(([key,v])=>/^[a-zA-Z]{1,80}$/.test(key)&&typeof v==='boolean'));
+}
+export default function RecordedIncomingReadiness(){
+ const [result,setResult]=useState<IncomingReadiness|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const pending=useRef<AbortController|null>(null);
+ useEffect(()=>()=>{pending.current?.abort();},[]);
+ async function read(){
+  if(pending.current)return;const controller=new AbortController();pending.current=controller;setBusy(true);setError('');setResult(null);
+  try{const response=await fetch('/api/owner-reception/recorded-readiness',{method:'GET',cache:'no-store',credentials:'same-origin',signal:controller.signal});const value=await response.json();if(!response.ok||!valid(value))throw Error('UNAVAILABLE');if(!controller.signal.aborted)setResult(value);}
+  catch{if(!controller.signal.aborted)setError('Provider checks are unavailable. Sign in as the account owner and retry.');}
+  finally{if(pending.current===controller)pending.current=null;if(!controller.signal.aborted)setBusy(false);}
+ }
+ return <section aria-busy={busy}><p>Read the two prepared incoming branches and their stop tool. This check does not place calls, save approvals, change routing, or enable recording.</p><button type="button" disabled={busy} onClick={()=>void read()}>{busy?'Checking provider…':'Check prepared incoming branches'}</button>{error&&<p role="alert">{error}</p>}{result&&<><p role="status">Checked {result.checkedAt}. {result.status==='partial'?'Some provider evidence is unavailable.':'Provider readback completed.'}</p>{result.branches.map(b=><section key={b.profile} style={{marginTop:24,padding:20,border:'1px solid #ddd',borderRadius:10}}><h2>{b.profile==='owner_quick_test'?'Owner-only 60-second branch':'Normal 10-minute branch'}</h2><p>Provider safety checks: {b.providerChecksPass?'Pass':'Needs review'}. Draft: {b.draftExists===null?'Unknown':b.draftExists?'Present':'Absent'}. Live traffic: {b.livePercentage===null?'Unknown':b.livePercentage+'%'}.</p><p style={{overflowWrap:'anywhere'}}>Branch: {b.branchId}<br/>Expected version: {b.expectedVersionId}<br/>Observed version: {b.observedVersionId??'Unavailable'}<br/>Observed configuration fingerprint: {b.observedConfigHash??'Unavailable'}</p><details><summary>Validation checks</summary><ul>{Object.entries(b.checks).map(([key,value])=><li key={key}>{key.replace(/([a-z])([A-Z])/g,'$1 $2')}: {value?'Yes':'No'}</li>)}</ul></details></section>)}<p>Fingerprints describe the current provider response. Funding, release configuration and call verification are separate.</p></>}</section>;
+}
