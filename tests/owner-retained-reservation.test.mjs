@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {ownerPendingCarrierCandidate,ownerPendingCarrierReceipt,ownerPriorRunClear} from '../lib/owner-retained-reservation.ts';
+const iso='2026-10-03T12:00:00Z';
+const row={state:'failed',last_error:'owner_carrier_price_pending',reserved_micros:1000000,configuration:{quote:{maxAttemptMicros:1000000},review:{providerAccountSid:'AC'+'a'.repeat(32)},from_phone:'+12125550101',phone:'+12145555280'},call_sid:'CA'+'b'.repeat(32),call_started_at:iso,end_requested_at:iso,call_ended_at:iso,contact_opted_out:false};
+const none=['consent_at','consent_evidence','start_claimed_at','registration_claimed_at','recording_sid','conversation_id','provider_started_at','audio_expires_at','duration_seconds','recording_price_micros','deleted_at','settled_at','settled_micros','settlement'];for(const key of none)row[key]=null;
+const receipt={sid:row.call_sid,account_sid:row.configuration.review.providerAccountSid,from:row.configuration.from_phone,to:row.configuration.phone,direction:'outbound-api',status:'completed',price:null,price_unit:'USD',duration:'23',start_time:iso};
+assert(ownerPendingCarrierCandidate(row));assert(ownerPendingCarrierReceipt(row,receipt));assert(!ownerPriorRunClear(row));
+for(const key of none){const bad={...row,[key]:key.endsWith('_at')?iso:'unexpected'};assert(!ownerPendingCarrierCandidate(bad),key);}
+for(const update of [{state:'declined'},{last_error:'owner_recording_reconciliation_required'},{last_error:'owner_call_binding_required'},{reserved_micros:999999},{call_sid:null},{call_ended_at:null},{call_started_at:null},{end_requested_at:null},{contact_opted_out:true}])assert(!ownerPendingCarrierCandidate({...row,...update}));
+for(const update of [{sid:'CA'+'c'.repeat(32)},{account_sid:'AC'+'c'.repeat(32)},{from:'+12125550000'},{to:'+12125550000'},{direction:'inbound'},{status:'failed'},{status:'in-progress'},{price:'0'},{price:'-0.014000'},{price:undefined},{price_unit:'EUR'},{duration:'61'},{duration:23},{duration:'23.1'},{duration:'NaN'},{start_time:'invalid'},{start_time:'2026-10-03T12:01:00Z'}])assert.equal(ownerPendingCarrierReceipt(row,{...receipt,...update}),null,JSON.stringify(update));
+assert(ownerPriorRunClear({...row,settled_at:iso,settled_micros:34000,settlement:{totalMicros:34000}}));assert(!ownerPriorRunClear({...row,settled_at:iso,settled_micros:1000001,settlement:{}}));
+console.log('Retained reservation requires exact ended preconsent/no-start price-pending proof; unrelated errors, unknowns, observed costs and all recording/AI attempts remain held.');

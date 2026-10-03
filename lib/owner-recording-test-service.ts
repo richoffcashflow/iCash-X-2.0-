@@ -7,6 +7,7 @@ import {ownerRecordingBase,ownerRecordingReview,ownerProviderRow,asProviderRevie
 import type {OwnerRecordingProviders} from './owner-recording-test-provider.ts';
 import {ownerConsentDiagnostic,ownerRecoveryDiagnostic,ownerCarrierDiagnostic} from './owner-recording-diagnostics.ts';
 import {ownerAffirmativeSpeech} from './owner-recording-consent.ts';
+import {ownerPendingCarrierCandidate,ownerPendingCarrierReceipt,ownerPriorRunClear} from './owner-retained-reservation.ts';
 const terminal=(s:unknown)=>['completed','busy','failed','no-answer','canceled'].includes(String(s));
 const xml=(s='<Response><Hangup/></Response>')=>new Response(s,{headers:{...privateHeaders,'Content-Type':'text/xml'}});
 const tokenFor=(id:string,env:RecordingEnv)=>createHmac('sha256',env.TWILIO_AUTH_TOKEN!).update('icash-owner-recording-v1:'+id).digest('hex');
@@ -17,6 +18,17 @@ export function ownerRecordingService(env:RecordingEnv,{db,provider,now=Date.now
  const callMatches=(r:OwnerRecordingRun,c:Record<string,unknown>)=>sid(c.sid,'CA')&&(r.call_sid===null||r.call_sid===c.sid)&&c.account_sid===r.configuration.review.providerAccountSid&&c.from===r.configuration.from_phone&&c.to===r.configuration.phone&&c.direction==='outbound-api';
  const recordingMatches=(r:OwnerRecordingRun,p:Record<string,unknown>)=>sid(p.sid,'RE')&&p.call_sid===r.call_sid&&p.account_sid===r.configuration.review.providerAccountSid&&(!r.recording_sid||r.recording_sid===p.sid);
  async function preflight(c:OwnerRecordingConfig){const r=c.review;if(!/^agent_[A-Za-z0-9]+$/.test(String(r.agentId))||!/^agtbrch_[A-Za-z0-9]+$/.test(String(r.branchId))||!/^phnum_[A-Za-z0-9]+$/.test(c.phone_number_id)||r.stopToolId!=null&&!/^tool_[A-Za-z0-9]+$/.test(String(r.stopToolId)))throw Error('OWNER_FIXED_TARGET_REQUIRED');const [agent,branch,phone,tool,pricing,caller]=await Promise.all([provider.agent(asProviderReview(c)),provider.branch(String(r.agentId),String(r.branchId)),provider.phone(c.phone_number_id),/^tool_[A-Za-z0-9]+$/.test(String(r.stopToolId))?provider.tool(String(r.stopToolId)):Promise.resolve({}),provider.voicePrice(c.phone,c.from_phone),provider.callerId(c.from_phone)]);const review=ownerRecordingReview(c,agent,branch,phone,tool,env.CONTIGUITY_FROM,env.TWILIO_ACCOUNT_SID,now());const prices=pricing.outbound_call_prices;const priceIdentity=pricing.destination_number===c.phone&&pricing.origination_number===c.from_phone&&pricing.price_unit==='USD'&&pricing.iso_country==='US'&&Array.isArray(prices)&&prices.length>0&&prices.every(x=>{try{usdMicros(object(x).current_price);return true;}catch{return false;}});const currentRate=priceIdentity?Math.max(...(prices as unknown[]).map(x=>usdMicros(object(x).current_price))):null;const priceGood=currentRate!==null&&currentRate<=Number(c.quote.voiceMaxMicrosPerMinute);return {ready:review.ready&&priceGood&&caller.usable,checks:{...review.checks,currentCarrierPrice:priceGood,directTwilioCallerUsable:caller.usable},observed:{...review.observed,currentCarrierRateMicros:currentRate}};}
+ async function priorReady(owner:{accountId:string;userId:string},runs:OwnerRecordingRun[],persist=false){
+  if(runs.length>3)return false;
+  for(const r of runs){
+   if(r.account_id!==owner.accountId||r.owner_user_id!==owner.userId)return false;
+   if(ownerPriorRunClear(r))continue;
+   if(!ownerPendingCarrierCandidate(r))return false;
+   try{const receipt=ownerPendingCarrierReceipt(r,await provider.getCall(r.call_sid!));if(!receipt)return false;
+    if(persist&&await db<boolean>('rpc/icash_attest_owner_pending_carrier','POST',{p_id:r.id,p_version:r.row_version,p_account:owner.accountId,p_user:owner.userId,p_receipt:receipt})!==true)return false;
+   }catch{return false;}
+  }return true;
+ }
  async function end(r:OwnerRecordingRun){
   if(r.call_ended_at)return true;if(!r.call_sid)return false;
   try{if(!r.end_requested_at){const requested=await trans(r,'end_request');if(requested)Object.assign(r,requested);else{const fresh=await get(r.id);if(fresh)Object.assign(r,fresh);if(!r.end_requested_at)await update(r,'end_request');}}
@@ -53,18 +65,34 @@ export function ownerRecordingService(env:RecordingEnv,{db,provider,now=Date.now
   items.push({provider:'twilio',label:'One speech Gather',micros:c.status==='completed'?20000:0,basis:'estimated',receipt:'One-use ASR allowance; no reprompt'});
   if(r.start_claimed_at){if(!r.recording_sid||r.duration_seconds===null)throw Error('OWNER_RECORDING_PRICE_PENDING');const min=Math.ceil(r.duration_seconds/60);items.push({provider:'twilio',label:'Audio recording',micros:r.recording_price_micros??min*2500,basis:r.recording_price_micros===null?'estimated':'observed',receipt:r.recording_sid});items.push({provider:'twilio',label:'30-day audio storage',micros:Math.ceil(min*500*30/28),basis:'estimated',receipt:'Conservative30/28 allocation'});}
   const totalMicros=items.reduce((n,x)=>n+x.micros,0);await update(r,'settle',{totalMicros,items,carrier:{callSid:c.sid,accountSid:c.account_sid,from:c.from,to:c.to,status:c.status,durationSeconds:seconds,priceMicros:items[0].micros,currency:'USD'},budgetBasis:'Observed USD plus explicitly estimated Twilio add-ons; no customer wallet debit'});
+  if(totalMicros>r.reserved_micros){for(const active of await db<OwnerRecordingRun[]>(`icash_owner_recording_test_runs?account_id=eq.${r.account_id}&owner_user_id=eq.${r.owner_user_id}&call_ended_at=is.null&select=*&limit=3`))if(active.end_requested_at)await end(active);}
+
  }
  const api={
   get,
-  async status(owner:{accountId:string;userId:string}){const [c]=await db<OwnerRecordingConfig[]>(`icash_owner_recording_test_config?id=eq.1&account_id=eq.${owner.accountId}&owner_user_id=eq.${owner.userId}&select=*`);if(!c)return {ready:false,reason:'owner_test_not_configured'};const runs=await db<OwnerRecordingRun[]>(`icash_owner_recording_test_runs?account_id=eq.${owner.accountId}&owner_user_id=eq.${owner.userId}&select=*&order=attempt.asc`);const checks=await preflight(c).catch(()=>({ready:false,checks:{providerPreflight:false},observed:null}));const allowance=runs.length+c.prior_attempts<3&&runs.every(r=>r.call_ended_at&&r.settlement&&!r.contact_opted_out&&r.settled_micros!<=r.reserved_micros)&&runs.reduce((n,r)=>n+(r.settled_micros??r.reserved_micros),c.prior_spend_micros)+Number(c.quote.maxAttemptMicros)<=3000000;return {ready:env.ICASH_OWNER_RECORDING_TEST_READY==='true'&&checks.ready&&allowance,allowanceReady:allowance,checks:checks.checks,observed:checks.observed,phoneEnding:c.phone.slice(-4),maxSeconds:60,totalBudgetCents:300,priorAttempts:c.prior_attempts,priorSpendMicros:c.prior_spend_micros,remainingAttempts:Math.max(0,3-c.prior_attempts-runs.length),remainingBudgetMicros:Math.max(0,3000000-runs.reduce((n,r)=>n+(r.settled_micros??r.reserved_micros),c.prior_spend_micros)),runs:runs.map(r=>({id:r.id,attempt:r.attempt,state:r.state,callSid:r.call_sid,recordingSid:r.recording_sid,conversationId:r.conversation_id,durationSeconds:r.duration_seconds,audioExpiresAt:r.audio_expires_at,deletedAt:r.deleted_at,settlement:r.settlement,callEnded:!!r.call_ended_at,error:r.last_error}))};},
+  async status(owner:{accountId:string;userId:string}){const [c]=await db<OwnerRecordingConfig[]>(`icash_owner_recording_test_config?id=eq.1&account_id=eq.${owner.accountId}&owner_user_id=eq.${owner.userId}&select=*`);if(!c)return {ready:false,reason:'owner_test_not_configured'};const runs=await db<OwnerRecordingRun[]>(`icash_owner_recording_test_runs?account_id=eq.${owner.accountId}&owner_user_id=eq.${owner.userId}&select=*&order=attempt.asc`);const checks=await preflight(c).catch(()=>({ready:false,checks:{providerPreflight:false},observed:null}));const allowance=runs.length+c.prior_attempts<3&&await priorReady(owner,runs)&&runs.reduce((n,r)=>n+(r.settled_micros??r.reserved_micros),c.prior_spend_micros)+Number(c.quote.maxAttemptMicros)<=3000000;return {ready:env.ICASH_OWNER_RECORDING_TEST_READY==='true'&&checks.ready&&allowance,allowanceReady:allowance,checks:checks.checks,observed:checks.observed,phoneEnding:c.phone.slice(-4),maxSeconds:60,totalBudgetCents:300,priorAttempts:c.prior_attempts,priorSpendMicros:c.prior_spend_micros,remainingAttempts:Math.max(0,3-c.prior_attempts-runs.length),remainingBudgetMicros:Math.max(0,3000000-runs.reduce((n,r)=>n+(r.settled_micros??r.reserved_micros),c.prior_spend_micros)),runs:runs.map(r=>({id:r.id,attempt:r.attempt,state:r.state,callSid:r.call_sid,recordingSid:r.recording_sid,conversationId:r.conversation_id,durationSeconds:r.duration_seconds,audioExpiresAt:r.audio_expires_at,deletedAt:r.deleted_at,settlement:r.settlement,reservedMicros:r.reserved_micros,callEnded:!!r.call_ended_at,error:r.last_error}))};},
   async start(owner:{accountId:string;userId:string}){
    if(env.ICASH_OWNER_RECORDING_TEST_READY!=='true')return {status:'disabled'};
    const [c]=await db<OwnerRecordingConfig[]>(`icash_owner_recording_test_config?id=eq.1&account_id=eq.${owner.accountId}&owner_user_id=eq.${owner.userId}&select=*`);if(!c||!(await preflight(c)).ready)return {status:'owner_preflight_held'};
+   const prior=await db<OwnerRecordingRun[]>(`icash_owner_recording_test_runs?account_id=eq.${owner.accountId}&owner_user_id=eq.${owner.userId}&select=*&order=attempt.asc`);
+   if(!await priorReady(owner,prior,true))return {status:'owner_allowance_held'};
    const nonce=randomBytes(32).toString('hex'),runId=randomUUID(),stop=tokenFor(runId,env);
    const r=await db<OwnerRecordingRun|null>('rpc/icash_claim_owner_recording_test','POST',{p_account:owner.accountId,p_user:owner.userId,p_expected:c,p_run:runId,p_nonce_hash:sha(nonce),p_stop_hash:sha(stop)});if(!r)return {status:'owner_allowance_held'};
    // Derive a stable secret from the random nonce-bound run, not owner-supplied call data.
    // Store only its hash; stop secret is assigned through the claim capability below.
-   try{const twiml=consentTwiml(r.id,nonce,recordingDisclosure(String(c.review.principal),String(c.review.assistantName))).replaceAll(recordingBaseUrl,ownerRecordingBase);const result=await provider.dial60(c.from_phone,c.phone,twiml,ownerRecordingBase+'/terminal?id='+r.id);if(!callMatches(r,result))throw Error('OWNER_DIAL_BINDING_UNKNOWN');await update(r,'bind_call',{callSid:result.sid,accountSid:result.account_sid,from:result.from,to:result.to,startedAt:result.start_time??null});return {status:'consent_pending',id:r.id};}
+   try{
+    const before=await get(r.id,owner.accountId,owner.userId);if(!before||before.end_requested_at||before.call_ended_at||before.state!=='consent_pending')return {status:'owner_start_held_after_claim',id:r.id};Object.assign(r,before);
+    const twiml=consentTwiml(r.id,nonce,recordingDisclosure(String(c.review.principal),String(c.review.assistantName))).replaceAll(recordingBaseUrl,ownerRecordingBase);
+    const result=await provider.dial60(c.from_phone,c.phone,twiml,ownerRecordingBase+'/terminal?id='+r.id);if(!callMatches(r,result))throw Error('OWNER_DIAL_BINDING_UNKNOWN');
+    for(let bindAttempt=0;bindAttempt<3;bindAttempt++){
+     const fresh=await get(r.id,owner.accountId,owner.userId);if(!fresh)break;Object.assign(r,fresh);
+     if(r.call_sid)break;
+     const bound=await trans(r,'bind_call',{callSid:result.sid,accountSid:result.account_sid,from:result.from,to:result.to,startedAt:result.start_time??null});if(bound){Object.assign(r,bound);break;}
+    }
+    if(r.call_sid!==result.sid){await provider.end(String(result.sid)).catch(()=>null);throw Error('OWNER_DIAL_BINDING_UNKNOWN');}
+    if(r.end_requested_at||r.call_ended_at){await end(r);return {status:'owner_end_requested_after_claim',id:r.id};}
+    return {status:'consent_pending',id:r.id};
+   }
    catch{await trans(r,'retry',{reason:'dial_outcome_unknown_no_retry'}).catch(()=>null);return {status:'dial_outcome_unknown_no_retry',id:r.id};}
   },
   async consent(request:Request){let r:OwnerRecordingRun|null=null;
