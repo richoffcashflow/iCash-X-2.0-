@@ -1,14 +1,24 @@
 import {affirmativeUtterances} from './required-call-recording.ts';
 
+type OwnerConfidence={status:'missing'|'malformed'|'low'|'valid';value:number|null;reported:string|null};
+/** Decimal provider format only, at most 30 fractional digits. Compare exactly before Number(). */
+export function ownerConfidence(raw:string|null):OwnerConfidence{
+ if(raw===null)return {status:'missing',value:null,reported:null};
+ if(!/^(?:0|1|0?\.[0-9]{1,30}|1\.[0-9]{1,30})$/.test(raw))return {status:'malformed',value:null,reported:null};
+ const [whole='',fraction='']=raw.split('.');
+ if(whole==='1'&&/[1-9]/.test(fraction))return {status:'malformed',value:null,reported:null};
+ if(whole!=='1'&&(fraction===''||fraction[0]<'9'))return {status:'low',value:null,reported:raw};
+ return {status:'valid',value:Number(raw),reported:raw};
+}
+
 /** Diagnostic metadata only. Never retain speech, phone numbers, callback URLs or tokens. */
 export function ownerConsentDiagnostic(form:URLSearchParams){
- const text=form.get('SpeechResult'),raw=form.get('Confidence'),score=raw===null||raw.trim()===''?null:Number(raw);
- const confidenceStatus=raw===null?'missing':score===null||!Number.isFinite(score)||score<0||score>1?'malformed':score<0.9?'low':'valid';
+ const text=form.get('SpeechResult'),score=ownerConfidence(form.get('Confidence')),confidenceStatus=score.status;
  const normalized=text?.trim().toLowerCase().replace(/[.!]+$/,'').trim();
  const speechStatus=text===null?'missing':!text.trim()?'empty':text.length>120?'oversized':(affirmativeUtterances as readonly string[]).includes(normalized??'')?'exact_affirmative':'other';
  const unstable=form.has('UnstableSpeechResult');
  const reason=unstable?'consent_asr_unstable':confidenceStatus==='missing'?'consent_confidence_missing':confidenceStatus==='malformed'?'consent_confidence_malformed':confidenceStatus==='low'?'consent_confidence_low':'consent_not_verified';
- return {reason,speechStatus,confidenceStatus,confidence:confidenceStatus==='low'||confidenceStatus==='valid'?score:null,unstable};
+ return {reason,speechStatus,confidenceStatus,confidence:score.value,confidenceReported:score.reported,unstable};
 }
 
 const recoveryCodes=new Set([
