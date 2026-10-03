@@ -1,3 +1,4 @@
+import {inverseContactStops} from '../tests/helpers/recording-contact-stop-cases.mjs';
 import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {createHmac,randomUUID} from 'node:crypto';import {pathToFileURL} from 'node:url';
 import {createOperationalContactFixture} from '../tests/helpers/operational-contact-fixture.mjs';import {databaseAdapter} from '../tests/helpers/simulated-journey-services.mjs';
 import {naturalYes,naturalNo} from '../tests/helpers/owner-natural-consent-cases.mjs';
@@ -6,7 +7,7 @@ import {ownerRecordingService} from '../lib/owner-recording-test-service.ts';imp
 const f=await createOperationalContactFixture(process.argv[2]),{pg,q,one,account,user,sender}=f;const {db}=databaseAdapter(pg);const now=Date.now(),when=new Date(now).toISOString(),until=new Date(now+3600000).toISOString(),phone='+12145555280',ac='AC'+'a'.repeat(32),ca='CA'+'b'.repeat(32),re='RE'+'c'.repeat(32),conv='conv_ownerfixture';
 try{
  await pg.exec(readFileSync(new URL('../config/self-service-outreach-campaigns.sql',import.meta.url),'utf8'));
- await pg.exec(readFileSync(new URL('../config/owner-voice-acceptance.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/owner-recording-test.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/owner-recording-consent-evidence-v2.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/owner-recording-retained-reservation.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/owner-recording-natural-consent-v3.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/owner-recording-declined-reservation.sql',import.meta.url),'utf8'));
+ await pg.exec(readFileSync(new URL('../config/owner-voice-acceptance.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/owner-recording-test.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/owner-recording-consent-evidence-v2.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/owner-recording-retained-reservation.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/owner-recording-natural-consent-v3.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/owner-recording-declined-reservation.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/recording-consent-evidence-v4.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/owner-recording-advisory-consent-v4.sql',import.meta.url),'utf8'));
  const grammarVectors=[...naturalYes,...naturalNo.filter(x=>x!==null&&!x.includes('\0'))];
  for(const phrase of naturalYes)for(const qualifier of ['no','not','never','but no','if','unless','maybe','I guess','stop calling','do not call','not now','except'])grammarVectors.push(qualifier+' '+phrase,phrase+' '+qualifier);
  for(const phrase of grammarVectors){const sql=(await one('select icash_owner_recording_private.natural_affirmative_v3($1) v',[phrase])).v;assert.equal(sql,ownerNaturalAffirmative(phrase),'JS/SQL parity: '+JSON.stringify(phrase));}
@@ -36,7 +37,7 @@ try{
  assert.equal((await svc.status(owner)).ready,true);assert.equal((await svc.start({...owner,userId:f.otherUser})).status,'owner_preflight_held');
  assert.equal((await svc.start(owner)).status,'consent_pending');run=await one('select * from icash_owner_recording_test_runs');assert.equal(run.attempt,1);assert.deepEqual(events,['dial60']);assert.equal((await svc.start(owner)).status,'owner_allowance_held');assert.deepEqual(events,['dial60']);
  const action=twiml.match(/action="([^"]+)"/)[1].replaceAll('&amp;','&');assert(action.startsWith(ownerRecordingBase));
- assert((await(await svc.consent(signed(action,{AccountSid:ac,CallSid:ca,SpeechResult:'Yes!'}))).text()).includes('<Connect>'));assert.deepEqual(events,['dial60','start','register']);run=await one('select * from icash_owner_recording_test_runs');assert.equal(run.consent_evidence.confidence,null);assert.equal(run.consent_evidence.confidenceBasis,'not_provided');assert.equal(run.consent_evidence.evidenceVersion,'owner-final-natural-affirmative-v3');
+ assert((await(await svc.consent(signed(action,{AccountSid:ac,CallSid:ca,SpeechResult:'Yes!'}))).text()).includes('<Connect>'));assert.deepEqual(events,['dial60','start','register']);run=await one('select * from icash_owner_recording_test_runs');assert.equal(run.consent_evidence.confidence,null);assert.equal(run.consent_evidence.confidenceBasis,'not_provided');assert.equal(run.consent_evidence.evidenceVersion,'owner-final-natural-affirmative-advisory-v4');
  await q('savepoint absent_callback_lost');const beforeAbsent=[...events];recordStatus='absent';failEnd=true;const absentWorker=ownerRecordingService({...env,ICASH_OWNER_RECORDING_TEST_READY:'false'},{db,provider});assert.equal((await absentWorker.maintain()).held,1);let absentRow=await one('select * from icash_owner_recording_test_runs');assert(absentRow.end_requested_at&&!absentRow.call_ended_at);assert.equal(absentRow.state,'absent');
  await pg.exec("create or replace function icash_owner_recording_private.clock_now() returns timestamptz language sql volatile set search_path='' as $$select pg_catalog.clock_timestamp()+interval '130 seconds'$$;");failEnd=false;assert.equal((await absentWorker.maintain()).held,1);absentRow=await one('select * from icash_owner_recording_test_runs');assert(absentRow.call_ended_at);assert.equal(events.filter(x=>x==='register').length,1);await q('rollback to savepoint absent_callback_lost');await q('release savepoint absent_callback_lost');recordStatus='in-progress';callStatus='in-progress';events=beforeAbsent;
  console.log('PASS lost absent-audio callback immediately requests END; failed END durably recovers with captureOFF, no unrecorded AI registration.');
@@ -48,19 +49,19 @@ try{
  await pg.exec("create or replace function icash_owner_recording_private.clock_now() returns timestamptz language sql volatile set search_path='' as $$select pg_catalog.clock_timestamp()+interval '31 days'$$;");const cleanup=ownerRecordingService({...env,ICASH_OWNER_RECORDING_TEST_READY:'false'},{db,provider,now:()=>Date.now()+31*86400000});assert.equal((await cleanup.maintain()).processed,1);assert.equal((await one('select state from icash_owner_recording_test_runs')).state,'deleted');assert.equal((await cleanup.audio(owner,run.id)).status,404);
  await q('rollback');events=[];callStatus='in-progress';recordStatus='in-progress';
  // Low-score technical ASR failure with missing terminal callback still releases only measured/estimated cost.
- await q('begin');assert.equal((await svc.start(owner)).status,'consent_pending');run=await one('select * from icash_owner_recording_test_runs');const negative=twiml.match(/action="([^"]+)"/)[1].replaceAll('&amp;','&');await svc.consent(signed(negative,{AccountSid:ac,CallSid:ca,SpeechResult:'yes',Confidence:'.5'}));assert.deepEqual(events,['dial60','end']);assert.equal((await off.maintain()).processed,1);assert.equal((await one('select settled_micros from icash_owner_recording_test_runs')).settled_micros,34000);await q('rollback');
+ await q('begin');assert.equal((await svc.start(owner)).status,'consent_pending');run=await one('select * from icash_owner_recording_test_runs');const negative=twiml.match(/action="([^"]+)"/)[1].replaceAll('&amp;','&');await svc.consent(signed(negative,{AccountSid:ac,CallSid:ca,SpeechResult:'yes',Confidence:'NaN'}));assert.deepEqual(events,['dial60','end']);assert.equal((await off.maintain()).processed,1);assert.equal((await one('select settled_micros from icash_owner_recording_test_runs')).settled_micros,34000);await q('rollback');
 
  // All owner v2 negatives run through actual SQL and the signed final-action handler.
  for(const [speech,confidence,extra,expected] of [
   ['no',null,{},'declined'],['no yes',null,{},'declined'],['yes but do not record',null,{},'declined'],
-  ['',null,{},'declined'],[null,null,{},'declined'],['yes','.89',{},'failed'],
-  ['yes','',{},'failed'],['yes','NaN',{},'failed'],['yes','1.1',{},'failed'],['yes','0x1',{},'failed'],['yes','0b1',{},'failed'],['yes','0o1',{},'failed'],['yes','0.8999999999999999999999',{},'failed'],['yes','1.000000000000000000001',{},'failed'],
+  ['',null,{},'declined'],[null,null,{},'declined'],['yes','bad',{},'failed'],
+  ['yes','',{},'failed'],['yes','NaN',{},'failed'],['yes','1.1',{},'failed'],['yes','0x1',{},'failed'],['yes','0b1',{},'failed'],['yes','0o1',{},'failed'],['yes','-0.1',{},'failed'],['yes','1.000000000000000000001',{},'failed'],
   ['yes',null,{UnstableSpeechResult:'yes'},'failed'],
  ]){
   await q('begin');events=[];callStatus='in-progress';assert.equal((await svc.start(owner)).status,'consent_pending');
   const url=twiml.match(/action="([^"]+)"/)[1].replaceAll('&amp;','&');
   const form={AccountSid:ac,CallSid:ca,...extra};if(speech!==null)form.SpeechResult=speech;if(confidence!==null)form.Confidence=confidence;
-  await svc.consent(signed(url,form));const rejected=await one('select * from icash_owner_recording_test_runs');assert.equal(rejected.state,expected);assert.equal(rejected.consent_at,null);assert.equal(rejected.start_claimed_at,null);assert.equal(rejected.registration_claimed_at,null);assert.deepEqual(events,['dial60','end']);
+  await svc.consent(signed(url,form));const rejected=await one('select * from icash_owner_recording_test_runs');assert.equal(rejected.state,expected);assert.equal(rejected.consent_at,null);assert.equal(rejected.start_claimed_at,null);assert.equal(rejected.registration_claimed_at,null);assert.equal(rejected.contact_opted_out,false);assert.deepEqual(events,['dial60','end']);
   // A fresh signature on an old/ended attempt never makes its rejected result into consent.
   await svc.consent(signed(url,{AccountSid:ac,CallSid:ca,SpeechResult:'yes'}));assert.equal((await one('select consent_at from icash_owner_recording_test_runs')).consent_at,null);assert(!events.includes('start'));await q('rollback');
  }
@@ -79,17 +80,17 @@ try{
  await q('rollback');
  console.log('PASS owner v2 signed final affirmative with null score; SQL provenance checks; refusal/mixed/silent/low/malformed/partial/foreign/replay failures never start recording or AI.');
  // Real signed-handler natural language and immutable original evidence, not merely helper tests.
- for(const phrase of naturalYes){
+ for(const phrase of [...naturalYes,'Yep.',"Yes, it's okay."]){
   await q('begin');events=[];callStatus='in-progress';assert.equal((await svc.start(owner)).status,'consent_pending');run=await one('select * from icash_owner_recording_test_runs');
-  const url=twiml.match(/action="([^"]+)"/)[1].replaceAll('&amp;','&');
-  assert((await(await svc.consent(signed(url,{AccountSid:ac,CallSid:ca,SpeechResult:phrase,Confidence:'0.97909707'}))).text()).includes('<Connect>'),phrase);
-  const accepted=await one('select * from icash_owner_recording_test_runs');assert.equal(accepted.consent_evidence.utterance,phrase);assert.equal(accepted.consent_evidence.evidenceVersion,'owner-final-natural-affirmative-v3');assert.equal(accepted.consent_evidence.confidenceReported,'0.97909707');assert.deepEqual(events,['dial60','start','register']);await q('rollback');
+  const url=twiml.match(/action="([^"]+)"/)[1].replaceAll('&amp;','&');const reported=phrase==='Yep.'?'0.6769525':'0.97909707';
+  assert((await(await svc.consent(signed(url,{AccountSid:ac,CallSid:ca,SpeechResult:phrase,Confidence:reported}))).text()).includes('<Connect>'),phrase);
+  const accepted=await one('select * from icash_owner_recording_test_runs');assert.equal(accepted.consent_evidence.utterance,phrase);assert.equal(accepted.consent_evidence.evidenceVersion,'owner-final-natural-affirmative-advisory-v4');assert.equal(accepted.consent_evidence.confidenceReported,reported);assert.equal(accepted.consent_evidence.confidencePolicy,'advisory');assert.deepEqual(events,['dial60','start','register']);await q('rollback');
  }
- for(const phrase of ['Yes, but no recording.','Yes, if you delete it.','Sure, maybe.','You can record?','Yes yes, no.']){
+ for(const phrase of [...inverseContactStops,'Yes, but no recording.','Yes, if you delete it.','Sure, maybe.','You can record?','Yes yes, no.']){
   await q('begin');events=[];callStatus='in-progress';assert.equal((await svc.start(owner)).status,'consent_pending');
-  const url=twiml.match(/action="([^"]+)"/)[1].replaceAll('&amp;','&');await svc.consent(signed(url,{AccountSid:ac,CallSid:ca,SpeechResult:phrase,Confidence:'0.99'}));const rejected=await one('select * from icash_owner_recording_test_runs');assert.equal(rejected.consent_at,null);assert.equal(rejected.start_claimed_at,null);assert.equal(rejected.registration_claimed_at,null);assert.deepEqual(events,['dial60','end']);await q('rollback');
+  const url=twiml.match(/action="([^"]+)"/)[1].replaceAll('&amp;','&');await svc.consent(signed(url,{AccountSid:ac,CallSid:ca,SpeechResult:phrase,Confidence:'0.99'}));const rejected=await one('select * from icash_owner_recording_test_runs');assert.equal(rejected.consent_at,null);assert.equal(rejected.start_claimed_at,null);assert.equal(rejected.registration_claimed_at,null);assert.equal(rejected.contact_opted_out,false);assert.deepEqual(events,['dial60','end']);await q('rollback');
  }
- console.log('PASS signed v3 natural affirmatives preserve original provider evidence; negative/mixed/conditional/ambiguous replies never start recording or AI.');
+ console.log('PASS signed v4 advisory natural affirmatives preserve original provider evidence; negative/mixed/conditional/ambiguous replies never start recording or AI.');
  // A new synthetic approval allowance still cannot be rearmed past3 attempts, even cheap refusals.
  await q('begin');events=[];
  for(let i=1;i<=3;i++){activeCall='CA'+String(i).repeat(32);callStatus='in-progress';const result=await svc.start(owner);assert.equal(result.status,'consent_pending');run=await one('select * from icash_owner_recording_test_runs where id=$1',[result.id]);const url=twiml.match(/action="([^"]+)"/)[1].replaceAll('&amp;','&');await svc.consent(signed(url,{AccountSid:ac,CallSid:activeCall,SpeechResult:'No thanks',Confidence:'.99'}));assert.equal((await off.maintain()).processed,1);}

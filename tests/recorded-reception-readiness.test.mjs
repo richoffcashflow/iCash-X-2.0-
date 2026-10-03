@@ -60,3 +60,49 @@ test('standalone owner page is authenticated, linked, cancelable and has no acti
  const page=readFileSync('app/owner-reception/recorded-readiness/page.tsx','utf8'),ui=readFileSync('app/owner-reception/recorded-readiness/readiness.tsx','utf8'),home=readFileSync('app/owner-reception/page.tsx','utf8');
  assert.match(page,/await workAccount/);assert.match(page,/account\.userId===receptionTarget.ownerUserId/);assert.match(home,/\/owner-reception\/recorded-readiness/);assert.match(ui,/pending.current\?\.abort/);assert.match(ui,/if\(pending.current\)return/);assert.match(ui,/setResult\(null\)/);assert.match(ui,/role="alert"/);assert.match(ui,/observedConfigHash/);assert(!/method:'POST'|reviewToken|confirm\(/.test(ui));
 });
+
+test('canonical inline stop is allowed only with the independently checked identical definition; full source remains fingerprinted',async()=>{
+ const f=fixtures(),stop=structuredClone(f.tool.tool_config),end={type:'system',name:'end_call',params:{system_tool_type:'end_call'}};
+ f.agents[0].conversation_config.agent.prompt.tools=[stop,end];
+ const raw=structuredClone(f.agents[0]);
+ const result=(await inspect(f)).result.branches[0];
+ assert.equal(result.providerChecksPass,true);assert.equal(result.checks.safeInlineTools,true);assert.equal(result.checks.noTools,true);
+ assert.equal(result.inlineTools.reviewedStopDefinition,true);assert.equal(result.inlineTools.matchingStopCount,1);assert.equal(result.inlineTools.nativeEndCallCount,1);assert.equal(result.inlineTools.unrecognizedCount,0);
+ assert.deepEqual(f.agents[0],raw,'inspection never mutates canonical data');
+ assert.notEqual(result.observedConfigHash,(await inspect()).result.branches[0].observedConfigHash,'inline tools remain covered by the original fingerprint');
+ const reordered=Object.fromEntries(Object.entries(stop).reverse());f.agents[0].conversation_config.agent.prompt.tools=[reordered,end];
+ assert.equal((await inspect(f)).result.branches[0].observedConfigHash,result.observedConfigHash);assert.equal((await inspect(f)).result.branches[0].providerChecksPass,true);
+ const failed=(await inspect(f,i=>i===4?new Response('unavailable',{status:503}):undefined)).result.branches[0];
+ assert.equal(failed.providerChecksPass,false);assert.equal(failed.checks.safeInlineTools,false);assert.equal(failed.inlineTools.matchingStopCount,0);
+});
+test('inline resemblance, extra fields, duplicate definitions, unsupported wrappers and unknown tools fail closed',async()=>{
+ const mutations=[
+  f=>f.agents[0].conversation_config.agent.prompt.tools[0].description='different description',
+  f=>f.agents[0].conversation_config.agent.prompt.tools[0].api_schema.method='GET',
+  f=>f.agents[0].conversation_config.agent.prompt.tools[0].api_schema.url='https://foreign.invalid/stop',
+  f=>f.agents[0].conversation_config.agent.prompt.tools[0].api_schema.request_headers.Authorization={variable_name:'other'},
+  f=>f.agents[0].conversation_config.agent.prompt.tools[0].api_schema.request_body_schema.properties.recordingId.dynamic_variable='other',
+  f=>f.agents[0].conversation_config.agent.prompt.tools[0].execution_mode='unknown-execution',
+  f=>f.agents[0].conversation_config.agent.prompt.tools.push(structuredClone(f.tool.tool_config)),
+  f=>f.agents[0].conversation_config.agent.prompt.tools.push({type:'webhook',name:'unreviewed'}),
+  f=>f.agents[0].conversation_config.agent.prompt.tools.push({type:'system',name:'transfer_to_number',params:{system_tool_type:'transfer_to_number'}}),
+  f=>f.agents[0].conversation_config.agent.prompt.tools=[{tool_config:structuredClone(f.tool.tool_config),id:f.tool.id}],
+  f=>f.agents[0].conversation_config.agent.prompt.tools='not a list',
+  f=>f.agents[0].conversation_config.agent.prompt.tools={},
+  f=>f.agents[0].conversation_config.agent.prompt.tool_ids=['tool_foreign'],
+  f=>f.tool.id='tool_foreign',
+  f=>{f.tool.tool_config.api_schema.request_headers.Extra='unapproved';f.agents[0].conversation_config.agent.prompt.tools=[structuredClone(f.tool.tool_config)];},
+  f=>{f.tool.tool_config.api_schema.auth_connection={secret_id:'PRIVATE_SECRET'};f.agents[0].conversation_config.agent.prompt.tools=[structuredClone(f.tool.tool_config)];},
+  f=>f.tool.response_mocks=[{response:'fake success'}],
+ ];
+ for(const mutate of mutations){const f=fixtures();f.agents[0].conversation_config.agent.prompt.tools=[structuredClone(f.tool.tool_config)];mutate(f);assert.equal((await inspect(f)).result.branches[0].providerChecksPass,false,mutate.toString());}
+});
+test('inline diagnostics are fixed, bounded, redacted classifications rather than arbitrary provider fields',async()=>{
+ const f=fixtures(),sentinel='DO_NOT_RETURN_PROVIDER_SECRET';
+ f.agents[0].conversation_config.agent.prompt.tools=Array.from({length:10},()=>({type:sentinel,name:sentinel,[sentinel]:sentinel,api_schema:{url:'https://'+sentinel,request_headers:{Authorization:sentinel}}}));
+ const result=(await inspect(f)).result,b=result.branches[0];
+ assert.equal(b.providerChecksPass,false);assert.equal(b.inlineTools.bounded,false);assert.equal(b.inlineTools.count,10);assert.equal(b.inlineTools.entries.length,8);assert.equal(b.inlineTools.unrecognizedCount,8);assert(!JSON.stringify(result).includes(sentinel));
+ for(const entry of b.inlineTools.entries)assert.deepEqual(Object.keys(entry).sort(),['definitionMatches','kind','stopNameMatches','type','wrappedDefinitionPresent']);
+ const service=readFileSync('lib/recorded-reception-service.ts','utf8');assert.match(service,/inspectRecordedReceptionAgent\(c,agent,found\[0\],receptionWorkspacePostcallAbsent\(workspace\),tool\)\.safe/);
+ const ui=readFileSync('app/owner-reception/recorded-readiness/readiness.tsx','utf8');assert.match(ui,/Inline tool evidence/);assert.match(ui,/validInline\(b.inlineTools\)/);
+});

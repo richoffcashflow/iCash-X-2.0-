@@ -1,0 +1,21 @@
+import {inverseContactStops,mixedContactStops} from './helpers/recording-contact-stop-cases.mjs';
+import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+import {finalAffirmativeSpeech,recordingConfidence,naturalAffirmative,recordingContactOptOut} from '../lib/recording-consent-evidence.ts';
+import {ownerAffirmativeSpeech,ownerRecordingGateOptOut} from '../lib/owner-recording-consent.ts';
+import {ownerNaturalAffirmative} from '../lib/owner-natural-consent.ts';
+import {ownerConfidence} from '../lib/owner-recording-diagnostics.ts';
+import {affirmativeSpeech,recordingGateOptOut} from '../lib/required-call-recording.ts';
+import {ownerOptOutCases} from './helpers/owner-natural-consent-cases.mjs';
+assert.equal(ownerNaturalAffirmative,naturalAffirmative);assert.equal(ownerConfidence,recordingConfidence);assert.equal(ownerRecordingGateOptOut,recordingContactOptOut);assert.equal(recordingGateOptOut,recordingContactOptOut);
+for(const [phrase,score] of [['Yep.','0.6769525'],["Yes, it's okay.",'0.97909707'],['Yes?','0'],['Go ahead record',null],['yes','.8999999999999999999999'],['yes','1']]){const f=new URLSearchParams({SpeechResult:phrase});if(score!==null)f.set('Confidence',score);const a=affirmativeSpeech(f),b=ownerAffirmativeSpeech(f);assert(a&&b);assert.equal(a.utterance,phrase);assert.equal(a.confidence,score===null?null:Number(score));assert.equal(a.confidenceReported,score);assert.equal(a.confidencePolicy,'advisory');assert.equal(a.evidenceVersion,'recorded-final-natural-affirmative-advisory-v4');assert.equal(b.evidenceVersion,'owner-final-natural-affirmative-advisory-v4');assert.deepEqual({...a,evidenceVersion:b.evidenceVersion},b);}
+for(const score of ['', ' ', '-.1','1.000000000000000000001','1.1','Infinity','NaN','0x1','0b1','1e0',' .9 ','0.'+'1'.repeat(31)])assert.equal(finalAffirmativeSpeech(new URLSearchParams({SpeechResult:'Yep.',Confidence:score})),null);
+for(const phrase of ['no','not sure','yes but no','yes if you delete it','I said yes yesterday','you can record?','hello',''])for(const score of ['0','0.6769525','1'])assert.equal(finalAffirmativeSpeech(new URLSearchParams({SpeechResult:phrase,Confidence:score})),null);
+for(const phrase of ownerOptOutCases)assert(recordingContactOptOut(new URLSearchParams({SpeechResult:phrase})));for(const phrase of ['no recording','no thanks','yes but do not record'])assert.equal(recordingContactOptOut(new URLSearchParams({SpeechResult:phrase})),null);
+// Reuse the independently reviewed grammar, rather than changing it with the score policy.
+const old=readFileSync(new URL('../config/owner-recording-natural-consent-v3.sql',import.meta.url),'utf8'),shared=readFileSync(new URL('../config/recording-consent-evidence-v4.sql',import.meta.url),'utf8');
+const grammar=s=>s.slice(s.indexOf('declare s text;'),s.indexOf('end $grammar$;')+'end $grammar$;'.length);assert.equal(grammar(old),grammar(shared));
+// Every prior lifecycle/recovery/settlement branch remains byte-identical outside consent/opt-out.
+for(const [base,patch,fn] of [['required-call-recording','required-call-recording-consent-v4','icash_transition_call_recording'],['recorded-reception','recorded-reception-consent-v4','icash_transition_recorded_reception'],['owner-recording-natural-consent-v3','owner-recording-advisory-consent-v4','icash_transition_owner_recording_test']]){const extract=s=>{const a=s.indexOf('function public.'+fn);return s.slice(a,s.indexOf('end $$;',a)+7);};const a=extract(readFileSync(new URL('../config/'+base+'.sql',import.meta.url),'utf8')),b=extract(readFileSync(new URL('../config/'+patch+'.sql',import.meta.url),'utf8'));assert.equal(a.slice(0,a.indexOf(" elsif p_action='consent' then")),b.slice(0,b.indexOf(" elsif p_action='consent' then")));assert.equal(a.slice(a.indexOf(" elsif p_action='claim_start' then")),b.slice(b.indexOf(" elsif p_action='claim_start' then")));}
+console.log('Shared v4: exact final affirmatives, advisory actual 0–1/missing score, strict malformed/ambiguous rejection, owner-compatible wrappers and unchanged grammar/lifecycle.');
+
+for(const phrase of inverseContactStops)assert.equal(recordingContactOptOut(new URLSearchParams({SpeechResult:phrase})),null,phrase);for(const phrase of mixedContactStops)assert(recordingContactOptOut(new URLSearchParams({SpeechResult:phrase})),phrase);

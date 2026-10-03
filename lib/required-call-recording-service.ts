@@ -1,3 +1,4 @@
+import {recordingConfidence} from './recording-consent-evidence.ts';
 import {createHmac,randomBytes} from 'node:crypto';
 import {usdMicros} from './voice-usage-service.ts';
 import {affirmativeSpeech,recordingGateOptOut,audioAvailable,endTwiml,object,privateHeaders,readRecordingReview,recordingAgentMatches,recordingBaseUrl,recordingDisclosure,recordingPolicy,recordingPricing,sha,sid,uuid,verifiedTwilioForm,consentTwiml,type RecordingRow,type RecordingReview} from './required-call-recording.ts';
@@ -76,7 +77,7 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
     // Replayed or concurrent callbacks cannot start/register again. Ending is safest.
     if(row.state!=='consent_pending'||row.consent_at){await endBound(row);return hangup();}
     const optOut=recordingGateOptOut(form);
-    if(optOut){await transition(db,row,'contact_opt_out',{nonceHash:sha(nonce),utterance:optOut});await endBound(row);return xml(endTwiml);}
+    if(optOut){const stopped=await transition(db,row,'contact_opt_out',{nonceHash:sha(nonce),utterance:optOut});if(stopped)row=stopped;await endBound(row);return xml(endTwiml);}
     const age=now()-Date.parse(String(call.start_time));
     const review=await readReview();
     if(!review||row.agent_id!==review.agentId||row.branch_id!==review.branchId||row.version_id!==review.versionId||row.disclosure_version!==recordingPolicy.disclosureVersion||!Number.isFinite(age)||age<0||age>recordingPolicy.consentWindowSeconds*1000||!await checkAgent(review)){
@@ -84,8 +85,8 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
     }
     const yes=affirmativeSpeech(form);
     if(!yes){
-     const confidence=Number(form.get('Confidence'));
-     if(form.has('SpeechResult')&&(!form.has('Confidence')||!Number.isFinite(confidence)||confidence<0.9||confidence>1||form.has('UnstableSpeechResult')))await transition(db,row,'fail',{reason:'consent_asr_evidence_unverified'});
+     const confidence=recordingConfidence(form.get('Confidence'));
+     if(form.has('SpeechResult')&&(confidence.status==='malformed'||form.has('UnstableSpeechResult')))await transition(db,row,'fail',{reason:'consent_asr_evidence_unverified'});
      else await transition(db,row,'decline',{reason:form.has('SpeechResult')?'ambiguous':'timeout'});
      await endBound(row);return xml(endTwiml);
     }

@@ -1,3 +1,4 @@
+import {inverseContactStops,mixedContactStops} from '../tests/helpers/recording-contact-stop-cases.mjs';
 import {settleRecordingGateOnly} from '../lib/required-call-recording-billing.ts';
 import {settleBoundVoiceUsage} from '../lib/voice-usage-service.ts';
 import {costCategories} from '../lib/cost-guard.ts';
@@ -6,6 +7,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {createHmac} from 'node:crypto';
+import {affirmativeSpeech} from '../lib/required-call-recording.ts';
+import {ownerOptOutCases} from '../tests/helpers/owner-natural-consent-cases.mjs';
 import {recordingService} from '../lib/required-call-recording-service.ts';
 import {canonical,sha,recordingPolicy,recordingBaseUrl} from '../lib/required-call-recording.ts';
 // LOCAL ONLY. No credentials, provider calls, real database URL or external writes.
@@ -81,14 +84,14 @@ try{
   create view public.icash_voice_contact_targets as select * from public.icash_contact_permissions;
   create table public.icash_voice_jobs(id uuid primary key,account_id uuid,permission_id uuid,operational_contact_id uuid,state text,outcome text,operation_key text,provider_call_sid text,conversation_id text,updated_at timestamptz);
   create table public.icash_voice_test_sessions(conversation_id text);create table public.icash_voice_test_config(agent_id text);`);
- await pg.exec(table(live,'icash_live_conversations'));
+ await pg.exec(table(live,'icash_live_conversations'));await pg.exec('create table public.icash_live_callbacks(conversation_id uuid,state text);');await pg.exec(read('config/text-stop-voice.sql'));
  await pg.exec(fn(live,'icash_validate_live_binding'));
  await pg.exec('create trigger icash_live_binding before insert on public.icash_live_conversations for each row execute function public.icash_validate_live_binding();');
  await pg.exec(fn('supabase/migrations/20260928015153_icash_atomic_credits_and_engine_evidence.sql','icash_finish_credit'));
  await pg.exec(fn(costs,'icash_settle_operation'));
  await pg.exec(table('config/fulfillment-completion.sql','icash_cost_manifests'));
  await pg.exec(fn('config/fulfillment-completion.sql','icash_settle_complete_costs'));
- await pg.exec(read('config/required-call-recording.sql'));
+ await pg.exec(read('config/required-call-recording.sql'));await pg.exec(read('config/recording-consent-evidence-v4.sql'));await pg.exec(read('config/required-call-recording-consent-v4.sql'));
  await pg.exec(read('tests/required-call-recording-database.sql'));
  await scenario('service-only ACL and actual anon/auth/public denials',async()=>{
   for(const role of ['anon','authenticated','untrusted_test_role']){
@@ -130,10 +133,15 @@ try{
   eq((await trans('start_unknown')).state,'starting');eq(await trans('claim_start'),null);eq((await get()).recording_sid,null);
  });
  for(const phrase of ['yes','yeah','yep','sure','yes please',"yes that's okay",'yes you can record','yes i agree','i agree','i consent','yes you may record'])await scenario(`affirmative allowlist: ${phrase}`,async()=>{await bound();ok(await trans('consent',consentPayload(phrase)));});
+ const v3=(phrase="Yes, it's okay.",score=null)=>{const form=new URLSearchParams({SpeechResult:phrase});if(score!==null)form.set('Confidence',score);return {nonceHash:nonce,source:'twilio_gather_speech',...affirmativeSpeech(form),disclosureVersion:'speech-disclosure-v1'};};
+ for(const phrase of ["Yes, it's okay.",'Yes, yes.','Go ahead, record.','Okay?','I consent to recording this call.'])await scenario('versioned final natural consent '+phrase,async()=>{await bound();const r=await trans('consent',v3(phrase));ok(r);eq(r.consent_evidence.utterance,phrase);eq(r.consent_evidence.confidence,null);eq(r.consent_evidence.confidenceReported,null);eq(r.consent_evidence.confidenceBasis,'not_provided');eq(r.consent_evidence.evidenceVersion,'recorded-final-natural-affirmative-advisory-v4');eq(await trans('consent',v3(phrase)),null);});
+ await scenario('v3 confidence/provenance/identity rejects are independent SQL checks',async()=>{await bound();for(const over of [{nonceHash:'f'.repeat(64)},{source:'model'},{evidenceVersion:'owner-final-natural-affirmative-v3'},{resultKind:'partial'},{confidenceBasis:'provider_reported'},{confidence:1,confidenceReported:'.5',confidenceBasis:'provider_reported'},{confidence:1,confidenceReported:'0x1',confidenceBasis:'provider_reported'},{confidence:1,confidenceReported:'0.8999999999999999999999',confidenceBasis:'provider_reported'},{confidence:1,confidenceReported:'1.000000000000000000001',confidenceBasis:'provider_reported'},{utterance:'yes, but no'},{utterance:'yes if you delete it'},{utterance:'you can record?'},{utterance:null},{confidence:'1'}])eq(await trans('consent',{...v3(),...over}),null,JSON.stringify(over));for(const key of ['confidence','confidenceReported','resultKind','confidenceBasis','confidencePolicy']){const missing=v3();delete missing[key];await denied(()=>trans('consent',missing),/Invalid spoken consent/);}eq((await get()).consent_at,null);});
+ for(const phrase of [...ownerOptOutCases,...mixedContactStops])await scenario('durable explicit opt-out '+phrase.slice(0,35),async()=>{await bound();const r=await trans('contact_opt_out',{nonceHash:nonce,utterance:phrase});eq(r.state,'declined');ok(r.end_requested_at);eq(r.consent_at,null);ok((await q('select revoked_at from icash_contact_permissions where id=$1',[permission])).rows[0].revoked_at);eq((await q('select phone from icash_text_suppressions')).rows.map(x=>x.phone),['+12125550102']);eq(await trans('claim_start'),null);});
+ await scenario('recording refusal is not contact suppression',async()=>{await bound();for(const utterance of [...inverseContactStops,'No recording','No thanks','yes but do not record'])eq(await trans('contact_opt_out',{nonceHash:nonce,utterance}),null);eq((await q('select count(*)::int n from icash_text_suppressions')).rows[0].n,0);});
  await scenario('decline/timeout are terminal for consent and cannot record',async()=>{
   await bound();eq((await trans('decline',{reason:'timeout'})).state,'declined');eq(await trans('consent',consentPayload()),null);eq(await trans('claim_start'),null);eq(await trans('started',provider(await get())),null);
  });
- await scenario('consent-gate contact opt-out suppresses destination without recording consent',async()=>{await bound();const r=await trans('contact_opt_out',{nonceHash:nonce,utterance:'Do not call me again'});eq(r.state,'declined');eq(r.consent_at,null);eq((await q('select phone from icash_text_suppressions')).rows[0].phone,'+12125550102');eq(await trans('claim_start'),null);});
+ await scenario('consent-gate contact opt-out suppresses destination without recording consent',async()=>{await bound();const r=await trans('contact_opt_out',{nonceHash:nonce,utterance:'Do not call me again'});eq(r.state,'declined');eq(r.consent_at,null);ok((await q('select revoked_at from icash_contact_permissions where id=$1',[permission])).rows[0].revoked_at);eq((await q('select phone from icash_text_suppressions')).rows[0].phone,'+12125550102');eq(await trans('claim_start'),null);});
  await scenario('provider starts only after consent; retention anchored to provider, cost unknown stays NULL',async()=>{
   await bound();eq(await trans('started',provider(await get())),null);await trans('consent',consentPayload());await trans('claim_start');
   const evidence=provider(await get());const r=await trans('started',evidence);eq(r.state,'recording');eq(Date.parse(r.audio_expires_at)-Date.parse(r.provider_started_at),30*86400000);
@@ -213,7 +221,7 @@ try{
   const database=async(path,method,b)=>{if(path.startsWith('icash_live_conversations?'))return (await q('select to_jsonb(c) r from public.icash_live_conversations c where id=$1 and account_id=$2',[live.id,account])).rows.map(x=>x.r);if(path.startsWith('icash_operation_spend?'))return (await q('select rate_id,state from public.icash_operation_spend where operation_key=$1 and account_id=$2',[operation,account])).rows;if(path.startsWith('icash_operation_rates?'))return (await q('select operation,version from public.icash_operation_rates where id=$1',[row.rate_id])).rows;if(path.startsWith('rpc/'))ledgerAttempts++;throw Error(path);};
   const base={enabled:true,rateId:row.rate_id,operation:'seller_call',components:{other:{kind:'fixed_estimate',amountMicros:0,evidenceRef:'Synthetic legacy zero audio addon'}}};for(const version of ['legacy-usd-policy-v1','required-audio-30d-speech-v1:reviewer'])eq((await settleBoundVoiceUsage(database,account,live.id,[{...base,version}])).reason,'recording_cost_policy_required');eq(ledgerAttempts,0);eq((await q('select state from public.icash_operation_spend where operation_key=$1',[operation])).rows[0].state,'dispatched');eq((await q('select reserved_cents from public.icash_wallets where account_id=$1',[account])).rows[0].reserved_cents,977);
  });
- await scenario('actual HTTP consent service against exact SQL state transitions',async()=>{
+ for(const [spoken,reported] of [['Yep.','0.6769525'],["Yes, it's okay.",'0.97909707'],['Yes?',null]])await scenario('actual HTTP v4 consent '+spoken,async()=>{
   const time=Date.now(),when=new Date(time).toISOString();let network=[];
   const config={agent_id:'agent_fixture',branch_id:'agtbrch_fixture',version_id:'agtvrsn_fixture',main_branch_id:'agtbrch_main',conversation_config:{asr:{user_input_audio_format:'ulaw_8000'},tts:{agent_output_audio_format:'ulaw_8000'},conversation:{max_duration_seconds:600},agent:{prompt:{tool_ids:['tool_one','tool_two','tool_stop']}}},platform_settings:{privacy:{record_voice:false},auth:{enable_auth:true},call_limits:{bursting_enabled:false},queueing_config:{enabled:false},overrides:{conversation_config_override:{conversation:{max_duration_seconds:true},agent:{first_message:true,prompt:{prompt:true}},tts:{voice_id:true}}}}};
   const review={enabled:true,reviewedAt:new Date(time-1000).toISOString(),reviewedUntil:new Date(time+3600000).toISOString(),agentId:config.agent_id,branchId:config.branch_id,versionId:config.version_id,configHash:sha(JSON.stringify(canonical({conversation_config:config.conversation_config,platform_settings:config.platform_settings,workflow:null,procedures:null}))),fromPhone:context.fromPhone,providerAccountSid:ac,stopToolId:'tool_stop',toolIds:['tool_one','tool_two','tool_stop'],approvedHoldCents:977,retentionDays:30,maxTotalSeconds:600,policyVersion:recordingPolicy.version};
@@ -224,7 +232,7 @@ try{
   const service=recordingService(env,{db:database,provider});
   eq((await service.dispatch({accountId:account,operationKey:operation,principal:'Fixture',assistantName:'Alex',firstMessage:'Fixture opening',prompt:'Fixture prompt',strategyKey:'cash_interest'})).status,'recording_consent_pending');
   const action=network[0].twiml.match(/action="([^"]+)"/)[1].replaceAll('&amp;','&');
-  const body=new URLSearchParams({AccountSid:ac,CallSid:call,SpeechResult:'Yes!',Confidence:'0.99'});
+  const body=new URLSearchParams({AccountSid:ac,CallSid:call,SpeechResult:spoken});if(reported!==null)body.set('Confidence',reported);
   const signature=createHmac('sha1',env.TWILIO_AUTH_TOKEN).update(action+[...body.keys()].sort().map(k=>k+body.get(k)).join('')).digest('base64');
   const request=()=>new Request(action,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded','x-twilio-signature':signature},body:body.toString()});
   const signedRequest=(url,entries,signatureOverride)=>{const body=new URLSearchParams(entries),sig=createHmac('sha1',env.TWILIO_AUTH_TOKEN).update(url+[...body.keys()].sort().map(k=>k+body.get(k)).join('')).digest('base64');return new Request(url,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded','x-twilio-signature':signatureOverride??sig},body:body.toString()});};
@@ -232,7 +240,9 @@ try{
    {name:'bad signature',entries:{AccountSid:ac,CallSid:call,SpeechResult:'yes',Confidence:'.99'},sig:'x'},
    {name:'wrong account',entries:{AccountSid:'AC'+'f'.repeat(32),CallSid:call,SpeechResult:'yes',Confidence:'.99'}},
    {name:'wrong nonce',url:action.replace(/nonce=[a-f0-9]+/,'nonce='+'f'.repeat(64)),entries:{AccountSid:ac,CallSid:call,SpeechResult:'yes',Confidence:'.99'}},
-   {name:'missing confidence',state:'failed',entries:{AccountSid:ac,CallSid:call,SpeechResult:'yes'}},
+   {name:'empty confidence',state:'failed',entries:{AccountSid:ac,CallSid:call,SpeechResult:'yes',Confidence:''}},
+   {name:'malformed confidence',state:'failed',entries:{AccountSid:ac,CallSid:call,SpeechResult:'yes',Confidence:'0x1'}},
+   {name:'out-of-range confidence',state:'failed',entries:{AccountSid:ac,CallSid:call,SpeechResult:'yes',Confidence:'1.000000000000000000001'}},
    {name:'unstable speech',state:'failed',entries:{AccountSid:ac,CallSid:call,SpeechResult:'yes',Confidence:'.99',UnstableSpeechResult:'yes'}},
    {name:'ambiguous phrase',state:'declined',entries:{AccountSid:ac,CallSid:call,SpeechResult:'yes but do not record',Confidence:'.99'}},
    {name:'silence',state:'declined',entries:{AccountSid:ac,CallSid:call}},
@@ -240,7 +250,7 @@ try{
    {name:'contact opt out',state:'declined',optOut:true,entries:{AccountSid:ac,CallSid:call,SpeechResult:'do not call me again',Confidence:'.99'}},
   ]){await q('savepoint reviewer_callback');const n=network.length;const response=await service.consent(signedRequest(bad.url??action,bad.entries,bad.sig));ok(!(await response.text()).includes('<Connect>'),bad.name);const r=await get();eq(r.consent_at,null,bad.name);eq(r.start_claimed_at,null,bad.name);eq(r.recording_sid,null,bad.name);eq(r.state,bad.state??'consent_pending',bad.name);eq(network.slice(n).filter(x=>x.action==='start'||x.action==='register').length,0,bad.name);eq((await q('select count(*)::int n from public.icash_text_suppressions')).rows[0].n,bad.optOut?1:0,bad.name);await q('rollback to savepoint reviewer_callback');await q('release savepoint reviewer_callback');network=network.slice(0,n);console.log('PASS INDEPENDENT SQL HTTP NEGATIVE '+bad.name);}
   await q('savepoint reviewer_start_race');const beforeRace=network.length,normalStart=provider.start;provider.start=async()=>{const receipt=await normalStart();provider.getRecording=async()=>receipt;const r=await get();const callback=await service.status(signedRequest(recordingBaseUrl+'/status?id='+r.id,{AccountSid:ac,CallSid:call,RecordingSid:rec,RecordingStatus:'in-progress'}));eq(callback.status,204);return receipt;};const raced=await service.consent(request());ok((await raced.text()).includes('<Connect>'),'Early signed in-progress callback cannot abort matching start');eq(network.slice(beforeRace).map(x=>x.action),['start','register']);eq((await get()).state,'recording');provider.start=normalStart;await q('rollback to savepoint reviewer_start_race');await q('release savepoint reviewer_start_race');network=network.slice(0,beforeRace);console.log('PASS INDEPENDENT SQL signed status wins started-CAS race; one recording and one registration');
-  const response=await service.consent(request());ok((await response.text()).includes('<Connect>'));eq((await get()).state,'recording');eq(network.map(x=>x.action),['dial','start','register']);
+  const response=await service.consent(request());ok((await response.text()).includes('<Connect>'));eq((await get()).state,'recording');eq((await get()).consent_evidence.confidenceReported,reported);eq((await get()).consent_evidence.confidencePolicy,'advisory');eq(network.map(x=>x.action),['dial','start','register']);
   const withdrawalToken=createHmac('sha256',env.TWILIO_AUTH_TOKEN).update('icash-recording-stop-v1:'+operation).digest('hex');
   const endProvider=provider.end;
   for(const failStop of [false,true]){await q('savepoint reviewer_withdrawal');const current=await get(),before=network.length;provider.stop=async()=>{network.push({action:'stop'});if(failStop)throw Error('Synthetic stop outage');return {sid:rec,account_sid:ac,call_sid:call,status:'stopped'};};const stopped=await service.stop(new Request(recordingBaseUrl+'/stop',{method:'POST',headers:{authorization:'Bearer '+withdrawalToken},body:JSON.stringify({recordingId:current.id})}));eq(stopped.status,200);const outcome=await stopped.json();eq(outcome.callEnded,true);eq((await get()).state,'processing');eq(network.slice(before).map(x=>x.action),['end']);eq(network.filter(x=>x.action==='register').length,1);eq(await trans('claim_start'),null);await q('rollback to savepoint reviewer_withdrawal');await q('release savepoint reviewer_withdrawal');network=network.slice(0,before);console.log('PASS INDEPENDENT SQL WITHDRAWAL '+(failStop?'end success bypasses unnecessary stop':'whole-call end stops audio and conversation'));}

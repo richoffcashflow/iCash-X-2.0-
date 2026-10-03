@@ -1,0 +1,2 @@
+export const inverseContactStops=["Don't stop calling me",'Do not stop texting me','Never stop contacting me','Don’t ever stop calling me',"Don't remove me",'Do not remove my number',"Don't take me off",'Never take my number off',"I don't want you to stop calling me",'I do not want your company to ever remove my number'];
+export const mixedContactStops=["Don't stop calling my office, but do not call me again",'Do not remove me, but stop calling me',"Don't stop calling; do not stop texting; never call me again",'Please stop calling me. Do not remove me'];

@@ -3,11 +3,11 @@ import {naturalYes,naturalNo,ownerOptOutCases} from './helpers/owner-natural-con
 import {ownerNaturalAffirmative} from '../lib/owner-natural-consent.ts';
 import {ownerAffirmativeSpeech,ownerRecordingGateOptOut} from '../lib/owner-recording-consent.ts';
 import {ownerConsentDiagnostic} from '../lib/owner-recording-diagnostics.ts';
-for(const text of naturalYes){assert.equal(ownerNaturalAffirmative(text),true,text);for(const confidence of [null,'0.97909707']){const f=new URLSearchParams({SpeechResult:text});if(confidence!==null)f.set('Confidence',confidence);const e=ownerAffirmativeSpeech(f);assert(e,text);assert.equal(e.utterance,text);assert.equal(e.evidenceVersion,'owner-final-natural-affirmative-v3');}}
+for(const text of naturalYes){assert.equal(ownerNaturalAffirmative(text),true,text);for(const confidence of [null,'0.97909707']){const f=new URLSearchParams({SpeechResult:text});if(confidence!==null)f.set('Confidence',confidence);const e=ownerAffirmativeSpeech(f);assert(e,text);assert.equal(e.utterance,text);assert.equal(e.evidenceVersion,'owner-final-natural-affirmative-advisory-v4');}}
 for(const text of naturalNo){assert.equal(ownerNaturalAffirmative(text),false,String(text));const f=new URLSearchParams({Confidence:'.99'});if(text!==null)f.set('SpeechResult',text);assert.equal(ownerAffirmativeSpeech(f),null,String(text));}
 for(const phrase of naturalYes)for(const qualifier of ['no','not','never','but no','if','unless','maybe','I guess','stop calling','do not call','not now','except']){assert.equal(ownerNaturalAffirmative(qualifier+' '+phrase),false);assert.equal(ownerNaturalAffirmative(phrase+' '+qualifier),false);}
 for(const field of ['UnstableSpeechResult','SpeechResult','Confidence']){const f=new URLSearchParams({SpeechResult:'Yes, that’s fine.',Confidence:'.99'});f.append(field,'yes');assert.equal(ownerAffirmativeSpeech(f),null);}
-assert.equal(ownerAffirmativeSpeech(new URLSearchParams({SpeechResult:'yes yes',Confidence:'.89'})),null);
+assert.equal(ownerAffirmativeSpeech(new URLSearchParams({SpeechResult:'yes yes',Confidence:'.89'})).confidence,.89);
 const diag=ownerConsentDiagnostic(new URLSearchParams({SpeechResult:'Yes, yes, that’s fine!',Confidence:'0.97909707'}));assert.equal(diag.speechStatus,'natural_affirmative');assert.deepEqual(diag.speechShape,{comma:true,curlyApostrophe:true,question:false,repeatedAffirmative:true});assert(!JSON.stringify(diag).includes('fine'));
 console.log('Owner natural consent: whole-response grammar, punctuation/contractions/repetition, exact confidence, qualifiers/negation/ambiguity/duplicate/partial rejection; diagnostic shape only.');
 

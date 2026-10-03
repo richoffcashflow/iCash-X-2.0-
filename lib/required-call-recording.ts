@@ -1,3 +1,4 @@
+import {finalAffirmativeSpeech,recordingConsentEvidenceVersion,recordingContactOptOut} from './recording-consent-evidence.ts';
 import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
 /** Default-off outbound foundation. Spoken-consent977-cent quote approved; activation still requires release review. */
 export const recordingPolicy=Object.freeze({version:'required-audio-30d-speech-v1',disclosureVersion:'required-audio-30d-speech-2026-10-03',retentionDays:30,maxTotalSeconds:600,consentWindowSeconds:45,recordingMicrosPerMinute:2500,storageMicrosPerMinuteMonth:500,speechGatherMicros:20000,recordingAllowanceMicros:31000,minimumHoldCents:977,previousApprovedHoldCents:965});
@@ -36,12 +37,8 @@ export function consentTwiml(id:string,nonce:string,disclosure:string){
 }
 export const endTwiml='<Response><Say voice="man" language="en-US">Okay, I won\'t record a conversation without your permission. Take care.</Say><Hangup/></Response>';
 export const affirmativeUtterances=['yes','yeah','yep','sure','yes please',"yes that's okay",'yes you can record','yes i agree','i agree','i consent','yes you may record'] as const;
-export function recordingGateOptOut(form:URLSearchParams){const text=form.get('SpeechResult');return !form.has('UnstableSpeechResult')&&typeof text==='string'&&text.length<=120&&/\b(stop (?:calling|texting|contacting)|do not (?:call|text|contact)|don't (?:call|text|contact)|remove (?:me|my number))\b/i.test(text)?text:null;}
-export function affirmativeSpeech(form:URLSearchParams){
- const utterance=form.get('SpeechResult'),confidence=Number(form.get('Confidence'));
- const normalized=utterance?.trim().toLowerCase().replace(/[.!]+$/,'').trim();
- return !form.has('UnstableSpeechResult')&&typeof utterance==='string'&&utterance.length<=120&&form.has('Confidence')&&Number.isFinite(confidence)&&confidence>=0.9&&confidence<=1&&(affirmativeUtterances as readonly string[]).includes(normalized??'')?{utterance,confidence}:null;
-}
+export const recordingGateOptOut=recordingContactOptOut;
+export function affirmativeSpeech(form:URLSearchParams){const result=finalAffirmativeSpeech(form);return result?{...result,evidenceVersion:recordingConsentEvidenceVersion}:null;}
 export function verifiedTwilioForm(raw:string,signature:string|null,token:string,url:string){
  if(raw.length>16384||token.length<20||!signature||!/^[A-Za-z0-9+/]{27}=$/.test(signature))return null;
  const f=new URLSearchParams(raw),keys=[...f.keys()];if(keys.length>100||new Set(keys).size!==keys.length)return null;

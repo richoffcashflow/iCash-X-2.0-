@@ -19,22 +19,44 @@ export function validRecordedReceptionConfig(c:RecordedReceptionConfig|null,now=
  if(!c||!uuid(c.id)||c.enabled!==true||c.account_id!==receptionTarget.accountId||c.owner_user_id!==receptionTarget.ownerUserId||c.called_number!==receptionTarget.calledNumber||c.agent_id!==receptionTarget.agentId||c.policy_version!==recordedReceptionPolicy||!sid(c.provider_account_sid,'AC')||!uuid(c.rate_id)||!/^tool_[A-Za-z0-9]+$/.test(c.stop_tool_id)||!/^agtbrch_[A-Za-z0-9]+$/.test(c.branch_id)||!/^agtvrsn_[A-Za-z0-9]+$/.test(c.reviewed_version_id)||!/^[a-f0-9]{64}$/.test(c.config_hash)||!Number.isSafeInteger(c.customer_charge_cap_cents)||c.customer_charge_cap_cents<1||c.funding_mode!=='customer_credits'||c.receipt_mode!=='provider_readback'||!(c.context_policy==='message_only'||propertyReceptionEnabled(c))||!Number.isFinite(Date.parse(c.approved_at))||Date.parse(c.approved_at)>now||!Number.isFinite(Date.parse(c.reviewed_until))||Date.parse(c.reviewed_until)<now+(c.max_duration_seconds+60)*1000)return false;
  return c.call_profile==='normal'&&c.max_duration_seconds===600||c.call_profile==='owner_quick_test'&&c.max_duration_seconds===60&&c.owner_quick_test_enabled===true&&typeof c.owner_quick_test_approval_reference==='string'&&c.owner_quick_test_approval_reference.trim().length>=10&&/^[a-f0-9]{64}$/.test(c.owner_caller_hash??'');
 }
+export type ReceptionInlineToolEvidence={shape:'absent'|'array'|'invalid';count:number|null;reviewedStopDefinition:boolean;matchingStopCount:number;nativeEndCallCount:number;unrecognizedCount:number;bounded:boolean;entries:{kind:'native_end_call'|'reviewed_stop'|'unrecognized';type:'system'|'webhook'|'client'|'other';stopNameMatches:boolean;wrappedDefinitionPresent:boolean;definitionMatches:boolean}[]};
+/** Only a direct canonical tool config, equal in every field to the separately
+ * fetched and checked stop definition, may be removed from the base no-tools
+ * comparison. Never remove by name, ID, URL, or an unchecked tool definition. */
+export function recordedReceptionInlineToolEvidence(input:unknown,stopToolId:string,toolInput?:unknown):ReceptionInlineToolEvidence{
+ const tools=object(object(object(object(input).conversation_config).agent).prompt).tools;
+ const reviewedStopDefinition=recordedReceptionToolMatches(stopToolId,toolInput);
+ const expected=reviewedStopDefinition?JSON.stringify(canonical(object(toolInput).tool_config)):null;
+ const kind=(value:unknown):ReceptionInlineToolEvidence['entries'][number]=>{
+  const t=object(value),definitionMatches=expected!==null&&JSON.stringify(canonical(value))===expected;
+  const nativeEnd=t.type==='system'&&t.name==='end_call'&&object(t.params).system_tool_type==='end_call';
+  return {kind:definitionMatches?'reviewed_stop':nativeEnd?'native_end_call':'unrecognized',type:t.type==='system'||t.type==='webhook'||t.type==='client'?t.type:'other',stopNameMatches:t.name==='icash_stop_reception_recording',wrappedDefinitionPresent:Object.hasOwn(t,'tool_config'),definitionMatches};
+ };
+ const absent=tools===undefined||tools===null,bounded=absent||Array.isArray(tools)&&tools.length<=8;
+ // Fixed enum/boolean fields only: no provider-defined names, IDs, headers,
+ // values, descriptions, payloads, URLs, or secret locators are returned.
+ const entries=Array.isArray(tools)?tools.slice(0,8).map(kind):[];
+ return {shape:absent?'absent':Array.isArray(tools)?'array':'invalid',count:absent?0:Array.isArray(tools)?Math.min(tools.length,1000):null,reviewedStopDefinition,matchingStopCount:entries.filter(t=>t.kind==='reviewed_stop').length,nativeEndCallCount:entries.filter(t=>t.kind==='native_end_call').length,unrecognizedCount:entries.filter(t=>t.kind==='unrecognized').length,bounded,entries};
+}
 /** Reuse every existing receptionist safety check after removing only the one
- * exactly reviewed stop capability. Fingerprint the ORIGINAL provider object. */
-export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:unknown,branch:unknown,workspaceAbsent:boolean){
+ * independently verified stop capability. Fingerprint the ORIGINAL object. */
+export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:unknown,branch:unknown,workspaceAbsent:boolean,toolInput?:unknown){
  const raw=object(input),a=structuredClone(raw),conversation=object(a.conversation_config),agent=object(conversation.agent),prompt=object(agent.prompt);
  const exactStop=Array.isArray(prompt.tool_ids)&&prompt.tool_ids.length===1&&prompt.tool_ids[0]===c.stop_tool_id;
+ const inlineTools=recordedReceptionInlineToolEvidence(raw,c.stop_tool_id,toolInput);
+ const inlineStopMatchesReviewedDefinition=inlineTools.bounded&&inlineTools.shape!=='invalid'&&inlineTools.matchingStopCount<=1&&inlineTools.unrecognizedCount===0;
+ if(inlineStopMatchesReviewedDefinition&&Array.isArray(prompt.tools))prompt.tools=prompt.tools.filter((_,index)=>inlineTools.entries[index].kind!=='reviewed_stop');
  const expectedPrompt=propertyReceptionEnabled(c)?propertyReceptionPrompt:receptionPrompt;
  const exactPrompt=prompt.prompt===expectedPrompt+recordedReceptionStopInstruction;
  prompt.tool_ids=[];prompt.prompt=expectedPrompt;
  const base=inspectReceptionAgent({...c,config_hash:''},a,branch,workspaceAbsent);
  const snapshot={main_branch_id:raw.main_branch_id,agent_id:raw.agent_id,branch_id:raw.branch_id,version_id:raw.version_id,conversation_config:raw.conversation_config,platform_settings:raw.platform_settings,workflow:raw.workflow??null,procedures:raw.procedures??null};
  const hash=sha(JSON.stringify(canonical(snapshot)));
- return {safe:exactStop&&exactPrompt&&Object.values(base.checks).every(Boolean)&&hash===c.config_hash,hash,checks:{...base.checks,exactStop,exactPrompt}};
+ return {safe:exactStop&&exactPrompt&&inlineStopMatchesReviewedDefinition&&Object.values(base.checks).every(Boolean)&&hash===c.config_hash,hash,checks:{...base.checks,exactStop,exactPrompt,inlineStopMatchesReviewedDefinition},inlineTools};
 }
 export function recordedReceptionToolMatches(id:string,input:unknown){
  const t=object(input),c=object(t.tool_config),a=object(c.api_schema),b=object(a.request_body_schema),p=object(b.properties),r=object(p.recordingId),h=object(object(a.request_headers).Authorization);
- return t.id===id&&c.type==='webhook'&&c.name==='icash_stop_reception_recording'&&a.url===recordedReceptionUrl+'/stop'&&a.method==='POST'&&Object.keys(h).length===1&&h.variable_name==='secret__icash_reception_stop_token'&&b.type==='object'&&Array.isArray(b.required)&&b.required.length===1&&b.required[0]==='recordingId'&&Object.keys(p).length===1&&r.type==='string'&&r.dynamic_variable==='icash_reception_recording_id'&&(a.auth_connection===null||a.auth_connection===undefined)&&(!t.response_mocks||Array.isArray(t.response_mocks)&&t.response_mocks.length===0);
+ return t.id===id&&c.type==='webhook'&&c.name==='icash_stop_reception_recording'&&a.url===recordedReceptionUrl+'/stop'&&a.method==='POST'&&Object.keys(object(a.request_headers)).length===1&&Object.keys(h).length===1&&h.variable_name==='secret__icash_reception_stop_token'&&b.type==='object'&&Array.isArray(b.required)&&b.required.length===1&&b.required[0]==='recordingId'&&Object.keys(p).length===1&&r.type==='string'&&r.dynamic_variable==='icash_reception_recording_id'&&(a.auth_connection===null||a.auth_connection===undefined)&&(!t.response_mocks||Array.isArray(t.response_mocks)&&t.response_mocks.length===0);
 }
 export function receptionConsentTwiml(id:string,nonce:string){
  return consentTwiml(id,nonce,recordingDisclosure('iCash X','the receptionist')).replace('https://www.geticashx.com/api/internal/voice/recording/consent',recordedReceptionUrl+'/consent');

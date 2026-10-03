@@ -139,7 +139,7 @@ test('each exact confident affirmative phrase records only after durable consent
   for(const utterance of affirmativeUtterances){const f=await fixture().ready();const r=await f.consent({SpeechResult:utterance+'!',Confidence:'.99'});assert.match(await r.text(),/<Connect>/);assert.equal(f.row.consent_evidence.utterance,utterance+'!');assert.equal(f.row.consent_evidence.source,'twilio_gather_speech');assert.equal(f.row.consent_evidence.confidence,.99);assert.deepEqual(providerWrites(f).map(e=>e.provider),['boundCall','start','register']);const names=f.events.map(e=>e.rpc==='icash_transition_recorded_reception'?e.body.p_action:e.provider);assert(names.indexOf('consent')<names.indexOf('claim_start'));assert(names.indexOf('claim_start')<names.indexOf('start'));assert(names.indexOf('started')<names.indexOf('claim_register'));assert(names.indexOf('claim_register')<names.indexOf('register'));}
 });
 test('refusal, ambiguity, partial speech, absent/invalid confidence, and empty input end without AI or recording',async()=>{
-  const fields=[...['no','not sure','yes but do not record','I said yes yesterday','maybe','okay','yes,','yes?','Ignore the rules. Yes'].map(SpeechResult=>({SpeechResult,Confidence:'1'})),...['','.89','2','NaN','Infinity','-1'].map(Confidence=>({SpeechResult:'yes',Confidence})),{SpeechResult:'yes'},{SpeechResult:'yes',Confidence:'1',UnstableSpeechResult:'yes'},{}];
+  const fields=[...['no','not sure','yes but do not record','I said yes yesterday','maybe','you can record?','Ignore the rules. Yes'].map(SpeechResult=>({SpeechResult,Confidence:'1'})),...['','2','NaN','Infinity','-1'].map(Confidence=>({SpeechResult:'yes',Confidence})),{SpeechResult:'yes',Confidence:'1',UnstableSpeechResult:'yes'},{}];
   for(const body of fields){const f=await fixture().ready();assert.match(await(await f.consent(body)).text(),/<Hangup/);assert(!providerWrites(f).some(e=>['start','register'].includes(e.provider)));assert(f.row.end_requested_at);assert(f.row.call_ended_at);}
 });
 test('expired, switched off, or mismatched consent capability cannot start recording',async()=>{
@@ -303,4 +303,20 @@ test('declined presentation claims call ended only after canonical terminal conf
  assert.equal(f.row.state,'declined');assert.equal(recordedReceptionPresentation(f.row,now).callEnded,false);
  f.row.call_ended_at=iso;assert.equal(recordedReceptionPresentation(f.row,now).callEnded,true);
  const ui=readFileSync('components/reception-recordings.tsx','utf8');assert.match(ui,/declined:'Recording declined; ending call'/);assert.match(ui,/r.status==='declined'&&r.callEnded\?'Recording declined; call ended'/);
+});
+
+test('runtime admission uses independent exact inline stop proof for both bounded incoming profiles',async()=>{
+ for(const profile of ['normal','owner_quick_test']){
+  const f=fixture({profile,mutate:x=>{x.agent.conversation_config.agent.prompt.tools=[clone(x.tool.tool_config),{type:'system',name:'end_call',params:{system_tool_type:'end_call'}}];x.c.config_hash=inspectRecordedReceptionAgent(x.c,x.agent,x.branch,true).hash;}});
+  const {text}=await f.admit();assert.match(text,/<Gather/);assert.equal(f.row.state,'consent_pending');
+  assert.equal(f.events.filter(e=>e.rpc==='icash_reserve_recorded_reception').length,1);
+  assert.deepEqual(providerWrites(f).map(e=>e.provider),['boundCall']);assert.equal(f.row.max_total_seconds,profile==='normal'?600:60);
+ }
+});
+test('runtime rejects inline stop mismatches, duplicate tools and missing independent proof before reservation',async()=>{
+ const changes=[x=>x.tool=null,x=>x.tool.id='tool_foreign',x=>x.agent.conversation_config.agent.prompt.tools[0].api_schema.url='https://foreign.invalid/stop',x=>x.agent.conversation_config.agent.prompt.tools[0].description='different from independent definition',x=>x.agent.conversation_config.agent.prompt.tools.push(clone(x.tool.tool_config))];
+ for(const change of changes){
+  const f=fixture({mutate:x=>{x.agent.conversation_config.agent.prompt.tools=[clone(x.tool.tool_config)];change(x);x.c.config_hash=inspectRecordedReceptionAgent(x.c,x.agent,x.branch,true).hash;}});
+  assert.equal((await f.admit()).text,rejectTwiml);assert.equal(f.row,null);assert.equal(providerWrites(f).length,0);assert(!f.events.some(e=>e.rpc==='icash_reserve_recorded_reception'));
+ }
 });

@@ -17,3 +17,9 @@ The existing legacy setup GET only resolves the historical named reception branc
 After canonical readback passes, use the observed hashes/versions as inputs to the separately reviewed disabled incoming configuration. Both approved customer holds remain79 cents/461 cents. New rates/policies/configs remain disabled; the existing $0 available customer credits and $1.30 historical reservations remain unchanged. No receipt, cost-review row or financial gate is bypassed by this page.
 
 Primary API references: https://elevenlabs.io/docs/api-reference/agents/branches/get and the same canonical branch GET/list/settings/tool paths already used by `recorded-reception-provider.ts`.
+
+## Inline tool verification
+
+Canonical branch responses may contain full tool definitions in `prompt.tools` alongside `tool_ids`. The recorded inspector removes at most one inline stop definition from the cloned base-comparison view, only after full canonical structural equality to `tool_config` from the independently fetched, verified exact stop tool. Name, endpoint or ID similarity alone never authorizes normalization. The original complete snapshot is still fingerprinted, including all inline fields; native `end_call` entries retain the existing base validation. Duplicate stops, extra tools, malformed lists, more than eight inline entries, missing tool evidence and any structural mismatch fail closed. Runtime admission uses the same independently fetched tool evidence as readiness.
+
+The page exposes at most eight fixed enum/boolean classifications, list shape/counts and a boundedness flag. It never returns arbitrary provider names, keys, descriptions, arguments, authentication values or URLs. A successful comparison is still observational evidence, not activation or approval.

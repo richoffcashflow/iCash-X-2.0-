@@ -1,5 +1,5 @@
 import {randomBytes} from 'node:crypto';
-import {affirmativeSpeech,endTwiml,object,privateHeaders,sha,sid,uuid,verifiedTwilioForm} from './required-call-recording.ts';
+import {affirmativeSpeech,recordingGateOptOut,endTwiml,object,privateHeaders,sha,sid,uuid,verifiedTwilioForm} from './required-call-recording.ts';
 import {boundedBytes} from './required-call-recording-provider.ts';
 import {finalRecordingPayload} from './required-call-recording-service.ts';
 import {receptionTarget,rejectTwiml,receptionWorkspacePostcallAbsent} from './general-reception.ts';
@@ -53,7 +53,7 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
   const [agent,branches,workspace,tool]=await Promise.all([provider.agent(c),provider.branches(c),provider.workspace(),provider.tool(c.stop_tool_id)]);
   const rows=branches.results,meta=object(branches.meta);if(!Array.isArray(rows)||rows.length>=100||meta.total!==undefined&&meta.total!==rows.length)return false;
   const found=rows.filter(r=>object(r).id===c.branch_id);
-  return found.length===1&&inspectRecordedReceptionAgent(c,agent,found[0],receptionWorkspacePostcallAbsent(workspace)).safe&&recordedReceptionToolMatches(c.stop_tool_id,tool);
+  return found.length===1&&inspectRecordedReceptionAgent(c,agent,found[0],receptionWorkspacePostcallAbsent(workspace),tool).safe&&recordedReceptionToolMatches(c.stop_tool_id,tool);
  }
  async function signed(request:Request,part:string,nonceRequired=false){
   const u=new URL(request.url),id=u.searchParams.get('id'),nonce=u.searchParams.get('nonce');
@@ -95,6 +95,8 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
     if(!incomingCallMatches(row,call,now(),true)){await endRecordedReception(rpc,provider,row,'call_clock_or_status_conflict');return hangup();}
     if(row.state!=='consent_pending'||row.consent_at){await endRecordedReception(rpc,provider,row,'replayed_consent');return hangup();}
     row=await bindRecordedReceptionCallStart(rpc,row,call);
+    const optOut=recordingGateOptOut(auth.f);
+    if(optOut){const stopped=await transition(row,'contact_opt_out',{nonceHash:row.nonce_hash,utterance:optOut});if(stopped)row=stopped;await endRecordedReception(rpc,provider,row,'contact_opt_out');return xml(endTwiml);}
     const c=await currentConfig(row.to_phone),age=now()-Date.parse(row.call_started_at??'');
     if(!c||c.id!==row.config_id||!Number.isFinite(age)||age<0||age>45000||Date.parse(row.consent_deadline_at)<=now()||!await checkAgent(c)){await transition(row,'decline',{reason:'timeout'});await endRecordedReception(rpc,provider,row,'consent_unavailable');return hangup();}
     const yes=affirmativeSpeech(auth.f);
