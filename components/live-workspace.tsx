@@ -87,7 +87,7 @@ function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefre
     <PropertyThumbnail key={photoRefresh} screeningId={p.id} address={p.result.property.address} images={p.result.property.images}/>
     <span className="property-summary-main">
      <span className="property-address" id={`property-address-${p.id}`}><strong>{address.street}</strong>{address.location&&<span>{address.location}</span>}</span>
-     <span className="property-summary-status"><span className="property-status">{milestone(p,work).replace(/^[^A-Za-z]+/,'')}</span>{manual&&<span className="property-manual-label">Paused for this property</span>}</span>
+     <span className="property-summary-status">{(p.result.property.propertyId.startsWith('practice_')||[true,'true'].includes((deal?.terms as (DealTerms&{practice?:boolean|string})|undefined)?.practice??false))&&<span className="property-manual-label">Practice only · no real property</span>}<span className="property-status">{milestone(p,work).replace(/^[^A-Za-z]+/,'')}</span>{manual&&<span className="property-manual-label">Paused for this property</span>}</span>
      {(researched||calls.length>0)&&<span className="property-recorded-meta">{researched&&<span>Researched {researched}</span>}{calls.length>0&&<span>{calls.length} saved call{calls.length===1?'':'s'}</span>}</span>}
     </span>
     <span className="property-open-control"><span>{active?'Close':'View details'}</span><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>

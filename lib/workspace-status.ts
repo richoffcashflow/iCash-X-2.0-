@@ -1,6 +1,10 @@
-export function workspaceStatus(a:{billingReview?:boolean;paused?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;balanceCents?:number;activeWork?:boolean;identity?:unknown}){
+import {discoveryBlockerMessage} from './discovery-blocker-message.ts';
+export function workspaceStatus(a:{billingReview?:boolean;paused?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;spendingActivationAvailable?:boolean;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;balanceCents?:number;activeWork?:boolean;identity?:unknown}){
  if(a.billingReview)return {label:'PAYMENT REVIEW',title:'Your payment needs a review.',detail:'New work is paused. Your saved work remains available.'};
  if(!a.identity)return {label:'NEEDS YOU',title:'Add your contract name.',detail:'Add your full legal name or company so agreements use the correct buyer.'};
+ const blocker=!a.workReady&&!a.discoveryWorkReady&&!a.contactWorkReady&&!a.smsWorkReady&&!a.activeWork?discoveryBlockerMessage(a.discoveryBlocker):null;
+ if(blocker&&a.discoveryBlocker==='spending_activation_required'&&a.spendingActivationAvailable===true)return {label:'NEEDS YOU',title:'Review your bot’s spending limit.',detail:'Review and authorize the paid-credit limit below. Saving does not start your bot; Start remains a separate action.'};
+ if(blocker)return {label:'SETUP PENDING',title:blocker.title,detail:blocker.detail};
  if(a.paused)return {label:'PAUSED',title:'Your bot is paused.',detail:'Your opportunities and conversations are saved.'};
  if((a.balanceCents??0)<=0)return {label:'NO AVAILABLE CREDITS',title:'Your available credits are used up.',detail:'No new paid work can start without available credits.'};
  if(!a.workReady&&a.contactWorkReady)return {label:'CONTACT LOOKUP READY',title:'Owner contact lookup is ready.',detail:'Lookups are limited to financially screened properties and your account budget. Contact details do not grant outreach permission; AI calls remain held.'};
@@ -12,7 +16,7 @@ export function workspaceStatus(a:{billingReview?:boolean;paused?:boolean;workRe
 }
 
 /** One navigation/action hint, derived only from verified current status. Never grants authority. */
-export function workspaceNextAction(a:{billingReview?:boolean;paused?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;balanceCents?:number;activeWork?:boolean;identity?:unknown},campaign:{configured:boolean;released:boolean;liveWorkReady:boolean;smsChannelEnabled?:boolean;policy:{version:string};acknowledgment:{version:string}|null}|null){
+export function workspaceNextAction(a:{billingReview?:boolean;paused?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;spendingActivationAvailable?:boolean;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;balanceCents?:number;activeWork?:boolean;identity?:unknown},campaign:{configured:boolean;released:boolean;liveWorkReady:boolean;smsChannelEnabled?:boolean;policy:{version:string};acknowledgment:{version:string}|null}|null){
  if(a.billingReview)return {kind:'support' as const,label:'Get help with payment',reason:'A payment review is holding new work.'};
  if(!a.identity)return {kind:'identity' as const,label:'Add my contract name',reason:'Add your legal name or company before your bot can work.'};
  if(a.activeWork&&!a.paused)return {kind:'pause' as const,label:'Stop bot & daily billing',reason:'Work is in progress. Stop here to pause new work and future renewals.'};
@@ -28,6 +32,10 @@ export function workspaceNextAction(a:{billingReview?:boolean;paused?:boolean;wo
   return a.paused?{kind:'resume' as const,label:withSms?'Start discovery & SMS':'Start discovery',reason:quote+(withSms?'Eligible SMS can also start. Wallet and daily limits still apply; owner contact lookups and AI calls remain held.':'Wallet and daily limits still apply. Owner contact lookups, outreach and AI calls remain held.')}
    :{kind:'work' as const,label:'View current work',reason:'Property discovery is ready for the next budget-eligible page. Open saved screening results below.'};
  }
+ const blocker=!campaign?.smsChannelEnabled&&!a.workReady&&!a.discoveryWorkReady&&!a.contactWorkReady&&!a.smsWorkReady&&!a.activeWork?discoveryBlockerMessage(a.discoveryBlocker):null;
+ if(blocker&&a.discoveryBlocker==='spending_activation_required'&&a.spendingActivationAvailable===true)return {kind:'activation' as const,label:'Review spending activation',reason:'Your paid-credit spending review is available below. Review and accept the limit; Start remains a separate action.'};
+ if(blocker&&a.discoveryBlocker==='available_credits_required')return {kind:'funding' as const,label:'Review funding',reason:blocker.detail};
+ if(blocker)return {kind:'support' as const,label:'Get setup help',reason:blocker.detail};
  if(!campaign)return {kind:'campaign' as const,label:'Check outreach status',reason:'Verify campaign status before starting.'};
  if(!campaign.configured||campaign.acknowledgment?.version!==campaign.policy.version)return {kind:'campaign' as const,label:'Review campaign responsibilities',reason:'Review and acknowledge the campaign before outreach can start.'};
  if(!campaign.released)return {kind:'campaign' as const,label:'View campaign status',reason:'Campaign release is pending. No customer action can release it here.'};

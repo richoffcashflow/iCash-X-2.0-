@@ -14,9 +14,10 @@ for(const text of ['FREE EXAMPLE','fictional','Written example only','No call is
 assert.match(component,/localStorage\.setItem/,'sample calculation is retained locally');
 assert.match(component,/Reset example numbers/);
 const setup=readFileSync(new URL('../components/bot-setup.tsx',import.meta.url),'utf8');
-assert.match(setup,/retryBuild.current=false;navigate\('sample'\)/,'first saved setup opens free value before payment');
-assert.match(setup,/Back to free example/);
-assert.match(setup,/get\('payment'\)==='funded'\)setScreen\('funding'\)/,'payment return keeps priority');
+assert.match(setup,/navigate\('funding'\);setBuildPhase\(null\)/,'saved setup opens funding directly');
+assert.doesNotMatch(setup,/FreeSampleWorkspace/,'fictional sample is not part of bot creation');
+assert.match(setup,/Edit bot name/);
+assert.match(setup,/paymentReturn\|\|hash/,'payment return keeps priority');
 const page=readFileSync(new URL('../app/page.tsx',import.meta.url),'utf8');
 assert.match(page,/Try a free deal example/,'sample remains accessible at zero balance');
 console.log('PASS free sample arithmetic, invalid input, honest fictional conversation, no API use, retained calculator and funding/back entry points');
