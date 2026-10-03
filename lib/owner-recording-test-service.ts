@@ -1,12 +1,12 @@
 import {createHmac,randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
-import {recordingGateOptOut,consentTwiml,recordingDisclosure,recordingBaseUrl,verifiedTwilioForm,object,sha,uuid,sid,privateHeaders} from './required-call-recording.ts';
+import {consentTwiml,recordingDisclosure,recordingBaseUrl,verifiedTwilioForm,object,sha,uuid,sid,privateHeaders} from './required-call-recording.ts';
 import {boundedBytes,RecordingProviderError,type RecordingEnv} from './required-call-recording-provider.ts';
 import {usdMicros} from './voice-usage-service.ts';
 import type {RecordingDb} from './required-call-recording-service.ts';
 import {ownerRecordingBase,ownerRecordingReview,ownerProviderRow,asProviderReview,type OwnerRecordingConfig,type OwnerRecordingRun} from './owner-recording-test.ts';
 import type {OwnerRecordingProviders} from './owner-recording-test-provider.ts';
 import {ownerConsentDiagnostic,ownerRecoveryDiagnostic,ownerCarrierDiagnostic} from './owner-recording-diagnostics.ts';
-import {ownerAffirmativeSpeech} from './owner-recording-consent.ts';
+import {ownerAffirmativeSpeech,ownerRecordingGateOptOut} from './owner-recording-consent.ts';
 import {ownerPendingCarrierCandidate,ownerPendingCarrierReceipt,ownerPriorRunClear} from './owner-retained-reservation.ts';
 const terminal=(s:unknown)=>['completed','busy','failed','no-answer','canceled'].includes(String(s));
 const xml=(s='<Response><Hangup/></Response>')=>new Response(s,{headers:{...privateHeaders,'Content-Type':'text/xml'}});
@@ -98,7 +98,7 @@ export function ownerRecordingService(env:RecordingEnv,{db,provider,now=Date.now
   async consent(request:Request){let r:OwnerRecordingRun|null=null;
    try{const checked=await signed(request,'consent');if(!checked)return xml();r=checked.r;const {c,f}=checked;if(r.state!=='consent_pending'||r.consent_at){await end(r);return xml();}
     if(env.ICASH_OWNER_RECORDING_TEST_READY!=='true'||c.status!=='in-progress'||!(await preflight(r.configuration)).ready){await update(r,'fail',{reason:'current_owner_review_required'});await end(r);return xml();}
-    if(recordingGateOptOut(f)){await update(r,'contact_opt_out');await end(r);return xml();}
+    if(ownerRecordingGateOptOut(f)){await update(r,'contact_opt_out');await end(r);return xml();}
     const yes=ownerAffirmativeSpeech(f);if(!yes){const diagnostic=ownerConsentDiagnostic(f);const invalid=diagnostic.unstable||diagnostic.confidenceStatus==='low'||diagnostic.confidenceStatus==='malformed';console.warn('owner_recording_diagnostic',{stage:'consent_rejected',runId:r.id,...diagnostic});await update(r,invalid?'fail':'decline',{reason:invalid?diagnostic.reason:'consent_not_verified'});await end(r);return xml();}
     await update(r,'consent',{nonceHash:r.nonce_hash,source:'twilio_gather_speech',...yes});await update(r,'claim_start');
     const rec=await provider.start(r.call_sid!,ownerRecordingBase+'/status?id='+r.id);if(!recordingMatches(r,rec)||rec.status!=='in-progress')throw Error('OWNER_RECORDING_START_UNKNOWN');

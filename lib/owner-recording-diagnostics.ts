@@ -1,4 +1,5 @@
 import {affirmativeUtterances} from './required-call-recording.ts';
+import {ownerNaturalAffirmative,ownerSpeechShape} from './owner-natural-consent.ts';
 
 type OwnerConfidence={status:'missing'|'malformed'|'low'|'valid';value:number|null;reported:string|null};
 /** Decimal provider format only, at most 30 fractional digits. Compare exactly before Number(). */
@@ -15,10 +16,10 @@ export function ownerConfidence(raw:string|null):OwnerConfidence{
 export function ownerConsentDiagnostic(form:URLSearchParams){
  const text=form.get('SpeechResult'),score=ownerConfidence(form.get('Confidence')),confidenceStatus=score.status;
  const normalized=text?.trim().toLowerCase().replace(/[.!]+$/,'').trim();
- const speechStatus=text===null?'missing':!text.trim()?'empty':text.length>120?'oversized':(affirmativeUtterances as readonly string[]).includes(normalized??'')?'exact_affirmative':'other';
+ const speechStatus=text===null?'missing':!text.trim()?'empty':text.length>120?'oversized':(affirmativeUtterances as readonly string[]).includes(normalized??'')?'exact_affirmative':ownerNaturalAffirmative(text)?'natural_affirmative':'other';
  const unstable=form.has('UnstableSpeechResult');
  const reason=unstable?'consent_asr_unstable':confidenceStatus==='missing'?'consent_confidence_missing':confidenceStatus==='malformed'?'consent_confidence_malformed':confidenceStatus==='low'?'consent_confidence_low':'consent_not_verified';
- return {reason,speechStatus,confidenceStatus,confidence:score.value,confidenceReported:score.reported,unstable};
+ return {reason,speechStatus,confidenceStatus,confidence:score.value,confidenceReported:score.reported,unstable,speechShape:ownerSpeechShape(text)};
 }
 
 const recoveryCodes=new Set([

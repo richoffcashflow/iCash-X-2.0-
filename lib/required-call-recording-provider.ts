@@ -25,6 +25,12 @@ export function createRecordingProviders(env:RecordingEnv,fetcher:typeof fetch=f
  const recordPath=(id:string)=>{if(!sid(id,'RE'))throw Error('RECORDING_ID_REQUIRED');return `/Recordings/${id}`;};
  return {
   getCall:(id:string)=>json(callPath(id)+'.json'),
+  // Read-only call diagnostics. Reconstruct the fixed resource path; never fetch a provider pagination URL.
+  getCallEventsPage:(id:string,page=0,pageToken?:string)=>{
+   if(!Number.isSafeInteger(page)||page<0||page>2||pageToken!==undefined&&!/^[A-Za-z0-9._~-]{1,512}$/.test(pageToken))throw Error('CALL_EVENT_PAGE_INVALID');
+   const query=new URLSearchParams({PageSize:'100',Page:String(page)});if(pageToken!==undefined)query.set('PageToken',pageToken);
+   return json(callPath(id)+'/Events.json?'+query.toString());
+  },
   dial:(from:string,to:string,twiml:string,statusCallback:string)=>json('/Calls.json','POST',new URLSearchParams({From:from,To:to,Twiml:twiml,Record:'false',TimeLimit:'600',Timeout:'20',StatusCallback:statusCallback,StatusCallbackMethod:'POST',StatusCallbackEvent:'completed'})),
   start:(call:string,callback:string)=>json(callPath(call)+'/Recordings.json','POST',new URLSearchParams({RecordingChannels:'dual',RecordingTrack:'both',Trim:'do-not-trim',RecordingStatusCallback:callback,RecordingStatusCallbackMethod:'POST',RecordingStatusCallbackEvent:'in-progress completed absent'})),
   stop:(call:string,recording:string)=>{recordPath(recording);return json(callPath(call)+`/Recordings/${recording}.json`,'POST',new URLSearchParams({Status:'stopped'}));},

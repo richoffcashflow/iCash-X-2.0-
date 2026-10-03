@@ -1,9 +1,9 @@
 import type {OwnerRecordingRun} from './owner-recording-test.ts';
 import {sid} from './required-call-recording.ts';
 
-/** An ended, unstarted technical gate failure can retain its entire $1 while price is pending. */
+/** An ended, unstarted technical failure or consent decline can retain its entire $1 while price is pending. */
 export function ownerPendingCarrierCandidate(r:OwnerRecordingRun){
- return r.state==='failed'&&r.last_error==='owner_carrier_price_pending'&&r.reserved_micros===1000000&&r.configuration.quote.maxAttemptMicros===1000000
+ return (r.state==='failed'||r.state==='declined')&&r.last_error==='owner_carrier_price_pending'&&r.reserved_micros===1000000&&r.configuration.quote.maxAttemptMicros===1000000
   &&sid(r.call_sid,'CA')&&!!r.call_started_at&&!!r.end_requested_at&&!!r.call_ended_at&&r.contact_opted_out===false
   &&[r.consent_at,r.consent_evidence,r.start_claimed_at,r.registration_claimed_at,r.recording_sid,r.conversation_id,
    r.provider_started_at,r.audio_expires_at,r.duration_seconds,r.recording_price_micros,r.deleted_at,r.settled_at,r.settled_micros,r.settlement].every(x=>x===null);
