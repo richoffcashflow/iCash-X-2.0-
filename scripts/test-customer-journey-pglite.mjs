@@ -130,13 +130,13 @@ try{await (async()=>{
  note('External sign-in and payment','NOT RUN','Supabase OTP/session verification and Stripe charge are fixture boundaries; auth.users is synthetic and funding receipt is not a real payment');
  const operating=await loadService('lib/operating-costs.ts',{db,validateCostManifest,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady});
  const coverage=await loadService('lib/contract-coverage-service.ts',{db,contractCapability,reviewedContractCoverage});
- const discovery=await loadService('lib/discovery-service.ts',{db,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady,dispatchReservedOperation:operating.dispatchReservedOperation,discoverPage,acquisitionContractCoverage:coverage.acquisitionContractCoverage});
+ const discovery=await loadService('lib/discovery-service.ts',{db,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady,dispatchReservedOperation:operating.dispatchReservedOperation,discoverPage,propertyResearchMarketKnown:coverage.propertyResearchMarketKnown});
  assert.equal((await coverage.acquisitionContractCoverage('38118')).supported,false);
  assert.equal((await discovery.discoverForAccount(account)).status,'screening_queued');assert.equal(propertyRequests,1);
  assert.equal(await tick(rpc),true);
  const screen=await one('select * from icash_screening_jobs where account_id=$1',[account]);assert.equal(screen.state,'complete');assert.equal(screen.result.financialCheck.status,'eligible');assert.equal(screen.result.outreachAuthorized,false);
  assert.equal((await discovery.discoverForAccount(account)).status,'not_ready');assert.equal(propertyRequests,1);
- pass('Covered market → reserved discovery → worker underwriting','actual discovery service, real spend reserve/claim/save RPCs, real worker tick; unsupported market rejected and repeated completed discovery makes no second provider request');
+ pass('Covered market → reserved discovery → worker underwriting','actual discovery service, real spend reserve/claim/save RPCs, real worker tick; contract coverage remains unsupported for TN and repeated completed discovery makes no second provider request');
  // Continue below only through genuine implemented functions, with explicit synthetic evidence.
  await rpc('icash_queue_voice_jobs',{});
  assert.equal(Number((await one('select count(*) n from icash_voice_jobs')).n),0);

@@ -38,7 +38,7 @@ try{
   return Response.json({data:Array.from({length:5},(_,i)=>({dm_property_id:`prop_${10000+i}`,full_address:`${i+1} Simulation Lane, Memphis TN 38118`,address:`${i+1} Simulation Lane`,city:'Memphis',state:'TN',zip:'38118',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000,estimated_equity_percentage:75})),credits:{used:5,people:0},pagination:{has_next_page:false}});
  };
  assert.equal((await discovery.discoverForAccount(account)).status,'paused');assert.equal(estimates,0);
- process.env.ICASH_LIVE_WORK_READY='true';assert.equal((await discovery.discoverForAccount(account)).status,'contract_coverage_required');process.env.ICASH_LIVE_WORK_READY='false';
+ process.env.ICASH_LIVE_WORK_READY='true';assert.equal((await discovery.discoverForAccount(account)).status,'paused');process.env.ICASH_LIVE_WORK_READY='false';
  await q('begin');try{await q("update icash_discovery_configs set zip='00000' where account_id=$1",[account]);assert.equal((await discovery.discoverForAccount(account)).status,'market_configuration_required');assert.equal(estimates,0);}finally{await q('rollback');}
  Object.assign(process.env,{DOCUSEAL_MODE:'live',DOCUSEAL_API_KEY:'SIMULATION_NO_NETWORK'});
  const signing=await loadService('lib/signing-service.ts',{z,db:async path=>path.startsWith('icash_deal_files')?[{terms:{},stage:'draft'}]:path.startsWith('icash_customer_identities')?[{principal:'SIMULATION'}]:(()=>{throw Error('No template/dispatch after live signing hold');})(),dealTermsSchema:{parse:()=>({state:'TN',legalDescription:'SIMULATION'})},signingReadiness:()=>{}});

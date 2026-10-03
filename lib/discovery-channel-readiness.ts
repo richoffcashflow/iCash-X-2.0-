@@ -1,6 +1,6 @@
 import {db} from '@/lib/stripe-test';
-import {acquisitionContractCoverage,propertyResearchMarketKnown} from '@/lib/contract-coverage-service';
-import {discoveryWorkEnabled,contactWorkEnabled,liveWorkReady} from './live-work-admission.ts';
+import {propertyResearchMarketKnown} from '@/lib/contract-coverage-service';
+import {discoveryWorkEnabled,contactWorkEnabled} from './live-work-admission.ts';
 import {runScreeningJob} from './screening-job.ts';
 import {fullCostReserve,type CostQuote} from './cost-guard.ts';
 type Readiness={reason?:string;ready:boolean;quote:{chargeCents:number;maxProperties?:number;maxContacts?:number;costBasis:'planning_estimate'}|null};
@@ -66,7 +66,7 @@ async function dataAccountReadiness(accountId:string,userId:string,operation:'pr
    if(lifetime+rate.charge_cents>activation.customer_cap_cents)return blocked('account_spending_limit');
   }else if(![budget.funded_micros,budget.spent_micros,budget.protected_micros,budget.reserved_micros].every(integer)
    ||budget.funded_micros-budget.spent_micros-budget.protected_micros-budget.reserved_micros<cost.reserveCents*10000)return held;
-  if(!contacts&&(liveWorkReady()?!(await acquisitionContractCoverage(config.zip)).supported:!await propertyResearchMarketKnown(config.zip)))return blocked('market_review_required');
+  if(!contacts&&!await propertyResearchMarketKnown(config.zip))return blocked('market_review_required');
   return {ready:true,quote:{chargeCents:rate.charge_cents,...(contacts?{maxContacts:quantity}:{maxProperties:quantity}),costBasis:'planning_estimate'}};
  }catch{return held;}
 }

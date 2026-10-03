@@ -1,5 +1,5 @@
 import {discoveryWorkEnabled,liveWorkReady} from './live-work-admission.ts';
-import {acquisitionContractCoverage,propertyResearchMarketKnown} from '@/lib/contract-coverage-service';
+import {propertyResearchMarketKnown} from '@/lib/contract-coverage-service';
 import {db} from '@/lib/stripe-test';
 import {dispatchReservedOperation} from '@/lib/operating-costs';
 import {discoverPage} from './discovery-pipeline.ts';
@@ -11,10 +11,9 @@ export async function discoverForAccount(accountId:string){
  if(!c?.enabled||c.exhausted||!(Date.parse(c.data_rights_until)>Date.now()))return {status:'not_ready'};
  // The independent release is limited to the supported property-only five-record page.
  if(!liveWorkReady()&&(!Number.isSafeInteger(c.per_page)||c.per_page<1||c.per_page>5))return {status:'discovery_page_limit'};
- if(liveWorkReady()){
-  const coverage=await acquisitionContractCoverage(c.zip);
-  if(!coverage.supported)return {status:'contract_coverage_required',message:coverage.reason};
- }else if(!await propertyResearchMarketKnown(c.zip))return {status:'market_configuration_required'};
+ // Property-only discovery is independent of downstream contract-template coverage.
+ // The same configured-market check applies to both release modes.
+ if(!await propertyResearchMarketKnown(c.zip))return {status:'market_configuration_required'};
  const [account]=await db<{bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=bot_paused`);
  const [wallet]=await db<{balance_cents:number;reserved_cents:number}[]>(`icash_wallets?account_id=eq.${accountId}&select=balance_cents,reserved_cents`);
  if(!account||account.bot_paused||!wallet||wallet.balance_cents<=wallet.reserved_cents)return {status:'paused'};

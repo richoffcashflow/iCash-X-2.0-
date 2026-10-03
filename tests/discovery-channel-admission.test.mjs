@@ -16,8 +16,8 @@ const rows={
  icash_funding_orders:[{id:'paid'}],icash_operation_spend:[],icash_credit_ledger:[],
  icash_operation_rates:[{enabled:true,operation:'property_search',version:'planning',charge_cents:84,costs_micros:{...Object.fromEntries(costCategories.map(k=>[k,0])),dealmachine:100000,other:40000},buffer_bps:2000,verified_at:past,expires_at:future}],
 };
-let writes=0,covered=false,knownMarket=true;const db=async(path,method='GET')=>{assert.equal(method,'GET','readiness must be read-only');return structuredClone(rows[path.split('?')[0]]??[]);};
-const readiness=await loadService('lib/discovery-channel-readiness.ts',{db,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady,fullCostReserve,propertyResearchMarketKnown:async()=>knownMarket,acquisitionContractCoverage:async()=>({supported:covered})});
+let writes=0,knownMarket=true;const db=async(path,method='GET')=>{assert.equal(method,'GET','readiness must be read-only');return structuredClone(rows[path.split('?')[0]]??[]);};
+const readiness=await loadService('lib/discovery-channel-readiness.ts',{db,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady,fullCostReserve,propertyResearchMarketKnown:async()=>knownMarket,acquisitionContractCoverage:async()=>{throw Error('Research readiness must not query contract coverage');}});
 const ready=await readiness.discoveryAccountReadiness('account','owner');assert.equal(ready.ready,true);assert.deepEqual(ready.quote,{chargeCents:84,maxProperties:5,costBasis:'planning_estimate'});
 assert.equal((await readiness.discoveryAccountReadiness('account','wrong-owner')).ready,false);
 for(const [table,key,value] of [
@@ -28,8 +28,8 @@ for(const [table,key,value] of [
 rows.icash_credit_ledger=[{delta_cents:-217}];assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,false);rows.icash_credit_ledger=[];
 rows.icash_operation_spend=[{state:'settled',charged_cents:217}];assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,false);rows.icash_operation_spend=[];
 knownMarket=false;assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,false);knownMarket=true;
-// Independent research is ready in a known market with no contract templates; full acquisition is still held.
-process.env.ICASH_LIVE_WORK_READY='true';assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,false);covered=true;assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,true);process.env.ICASH_LIVE_WORK_READY='false';covered=false;
+// Property research is ready without a contract in either release mode.
+process.env.ICASH_LIVE_WORK_READY='true';assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,true);knownMarket=false;assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,false);knownMarket=true;process.env.ICASH_LIVE_WORK_READY='false';
 let marketRows=[{state:'TN'}];const market=await loadService('lib/contract-coverage-service.ts',{db:async path=>{assert(path.includes('zip=eq.38118')&&path.includes('limit=2'));return marketRows;}});
 assert.equal(await market.propertyResearchMarketKnown('38118'),true);assert.equal(await market.propertyResearchMarketKnown('bad'),false);
 for(const rows of [[],[{state:'TN'},{state:'TX'}],[{state:''}],[{state:'Tennessee'}],[{state:null}]]){marketRows=rows;assert.equal(await market.propertyResearchMarketKnown('38118'),false);}
