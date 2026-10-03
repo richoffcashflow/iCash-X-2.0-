@@ -6,7 +6,7 @@ import {elevenRequest} from '@/lib/elevenlabs';
 import {buyerCallInstructions,type BuyerCallContext} from './buyer-call-policy.ts';
 import {contactEligibility,callEligibility,verifiedOfferCeiling,type VoicePermission} from './live-dispatch-policy.ts';
 import {sellerFirstMessage,sellerCallPrompt} from './seller-call-context.ts';
-type Job={id:string;account_id:string;permission_id:string;callback_id:string|null;state:string};
+type Job={id:string;account_id:string;permission_id:string|null;operational_contact_id?:string|null;callback_id:string|null;state:string};
 type Config={approved_voice_ids:string[];enabled:boolean;agent_id:string;phone_number_id:string;agent_config_hash:string;reviewed_until:string;seller_rate_id:string;buyer_rate_id:string|null;max_duration_seconds:number;required_tool_ids:string[]};
 type Permission=VoicePermission&{id:string;account_id:string;screening_id:string;party:'seller'|'buyer';contact_key:string};
 export async function dispatchLiveVoice(accountId:string,jobId:string){
@@ -15,7 +15,10 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  let ownsDispatch=false;
  const hold=async(reason:string)=>{await db('rpc/icash_hold_voice_job','POST',{p_account:accountId,p_job:j.id,p_reason:reason,p_after_claim:ownsDispatch});return {status:reason};};
  const [c]=await db<Config[]>(`icash_voice_configs?account_id=eq.${accountId}&select=*`);
- const [p]=await db<Permission[]>(`icash_contact_permissions?id=eq.${j.permission_id}&account_id=eq.${accountId}&select=*`);
+ // Operational targets contain routing/DNC evidence only, never a fabricated consent record.
+ if((j.permission_id==null)===(j.operational_contact_id==null))return hold('contact_binding_invalid');
+ const [p]=await db<Permission[]>(`${j.operational_contact_id?'icash_voice_contact_targets':'icash_contact_permissions'}?id=eq.${j.operational_contact_id??j.permission_id}&account_id=eq.${accountId}&select=*`);
+ if(j.operational_contact_id&&await db<boolean>('rpc/icash_operational_contact_current','POST',{p_account:accountId,p_contact:j.operational_contact_id,p_channel:'voice',p_check_hour:false})!==true)return hold('contact_operating_checks_required');
  const [snapshot]=p?await db<{snapshot:unknown}[]>(`icash_screening_jobs?id=eq.${p.screening_id}&account_id=eq.${accountId}&state=eq.complete&select=snapshot`):[];
  if(!c?.enabled||!(Date.parse(c.reviewed_until)>Date.now())||!p||!snapshot||!process.env.ELEVENLABS_API_KEY)return hold('voice_configuration_required');
  if(createHash('sha256').update(p.phone).digest('hex')!==p.contact_key)return hold('contact_binding_invalid');

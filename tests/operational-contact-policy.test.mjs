@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {authorityReviewStatus} from '../lib/authority-review-status.ts';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const sql=read('config/operational-contact-eligibility.sql'),sms=read('config/operational-sms-eligibility.sql');
+const data=JSON.parse(read('config/nanpa-geographic-npas-2026-10-02.json'));
+const list=sql.match(/substring\(p_phone from 3 for 3\)=any\(array\[([^\]]+)\]/)[1].split(',').map(x=>x.replaceAll("'",''));
+assert.deepEqual(list,data.npas);assert.equal(list.length,452);assert.equal(new Set(list).size,452);
+for(const npa of ['214','212','424','684','709','879'])assert(list.includes(npa));
+for(const npa of ['200','500','521','600','670','671','800','888','900'])assert(!list.includes(npa));
+assert.equal(data.source,'https://reports.nanpa.com/public/npa_report.csv');assert.match(data.sourceSha256,/^[a-f0-9]{64}$/);
+assert(!/insert into public\.icash_contact_permissions/.test(sql));assert(!/insert into public\.icash_authority_(review_requests|market_reviews)/.test(sql+sms));
+assert(sql.includes("consent_verification='not_performed'"));assert(sms.includes('permission_until is null and permission_evidence is null'));
+assert(sql.includes('h>=least(18,p.local_end_hour)'));assert(sql.includes('end_h:=least(18,p.local_end_hour)'));
+assert(sql.includes('(permission_id is null)<>(operational_contact_id is null)'));
+for(const name of ['icash_reserve_operation','icash_reserve_before_fractional','icash_reserve_before_activation','icash_reserve_before_inventory'])assert(!sql.includes("'"+name+"'"),'No runtime definition introspection for '+name);
+assert(sql.includes('CREATE OR REPLACE FUNCTION public.icash_voice_daytime_allowance'));assert(sql.includes('CREATE OR REPLACE FUNCTION public.icash_reserve_paced_voice'));
+const helper=sql.split('create function public.icash_lock_operational_dnc')[1].split('$$;')[0];
+assert(helper.includes("security definer set search_path=''"));assert(helper.includes('c.account_id=p_account and c.id=p_contact for share of d,src'));assert(!/\b(insert|update|delete|truncate)\b/i.test(helper));
+assert(sql.includes('revoke all on function public.icash_lock_operational_dnc(uuid,uuid) from public,anon,authenticated'));
+assert(!/grant[^;]*update[^;]*icash_dnc/i.test(sql));
+assert(sms.includes('icash_ingest_text_event_before_operational'));assert(!sms.includes("p.proname like 'icash_next%'"),'Only known source-defined scheduler layers may be inspected');
+const items=authorityReviewStatus({identity:true,availableCents:100,paused:false,permissions:[],smsPermissionCurrent:false,offer:null,purchaseSigned:false,marketing:null,now:Date.now()});
+for(const key of ['contact_permission','sms_contact_permission']){const row=items.find(i=>i.key===key);assert.equal(row.status,'blocked');assert.equal(row.action,'none');assert(!row.detail.includes('approved recipient'));}
+console.log('Operational-contact contract: honest provenance, separate source FK, actual DNC/STOP boundaries, service-only read/lock helper, official geographic NPA policy and no per-contact-review CTA.');

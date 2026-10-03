@@ -77,7 +77,7 @@ export function OutreachCampaignAcknowledgment({onStatus}:{onStatus?:(status:Out
           <button type="button" className="rounded-lg border px-3 py-2 disabled:opacity-50" disabled={!canSaveCampaign(state)} onClick={() => void save()}>Save SMS-to-inbound campaign</button>
         </>}
       </>}
-      <p id="outreach-campaign-safety" className="text-muted-foreground">Saving records your acknowledgment only. It does not start outreach, resume your bot, charge your account, or establish a recipient’s consent. Ready setup does not mean your bot is running.</p>
+      <p id="outreach-campaign-safety" className="text-muted-foreground">Saving records your acknowledgment only. It does not start outreach, resume your bot, charge your account, or establish a recipient’s consent. Ready setup does not mean your bot is running. Contact operating checks do not independently verify recipient consent.</p>
     </details>
     {state.error && <p role="alert">{state.error}</p>}
     <button type="button" className="underline" disabled={busy} onClick={() => void load()}>Refresh campaign status</button>

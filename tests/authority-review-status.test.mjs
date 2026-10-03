@@ -3,11 +3,11 @@ import {authorityReviewStatus} from '../lib/authority-review-status.ts';
 const now=Date.parse('2026-09-30T12:00:00Z'),future='2026-10-01T12:00:00Z',past='2026-09-29T12:00:00Z';
 const base={identity:false,availableCents:0,paused:false,permissions:[],offer:null,purchaseSigned:false,marketing:null,now};
 const item=(value,key)=>authorityReviewStatus(value).find(x=>x.key===key);
-assert.equal(item(base,'contact_permission').status,'review_required');assert.match(item(base,'contact_permission').detail,/Purchased contact details alone/);
+assert.equal(item(base,'contact_permission').status,'blocked');assert.match(item(base,'contact_permission').detail,/Purchased contact details alone/);
 assert.equal(item(base,'identity').action,'account_details');assert.equal(item(base,'budget').action,'funding');assert.equal(item(base,'marketing_authority').status,'not_applicable');
 const permission={permission_until:future,dnc_checked_at:past,dnc_clear:true,revoked_at:null,suppressed:false};
 assert.equal(item({...base,permissions:[permission]},'contact_permission').status,'recorded');
-for(const change of [{dnc_clear:false},{dnc_checked_at:future},{dnc_checked_at:'2026-08-01T00:00:00Z'},{permission_until:past},{permission_until:'invalid'},{revoked_at:past},{suppressed:true}])assert.equal(item({...base,permissions:[{...permission,...change}]},'contact_permission').status,'review_required');
+for(const change of [{dnc_clear:false},{dnc_checked_at:future},{dnc_checked_at:'2026-08-01T00:00:00Z'},{permission_until:past},{permission_until:'invalid'},{revoked_at:past},{suppressed:true}])assert.equal(item({...base,permissions:[{...permission,...change}]},'contact_permission').status,'blocked');
 assert.match(item({...base,permissions:[{...permission,suppressed:true}]},'contact_permission').detail,/Do not contact/);
 assert.equal(item({...base,offer:{max_offer_cents:100000,expires_at:future}},'offer_authority').status,'recorded');
 for(const amount of [0,-1,NaN,Infinity,1.5,Number.MAX_SAFE_INTEGER+1])assert.equal(item({...base,offer:{max_offer_cents:amount,expires_at:future}},'offer_authority').status,'review_required');
@@ -20,6 +20,6 @@ assert(!authorityReviewStatus({...base,permissions:[permission],offer:{max_offer
 console.log('Authority diagnostics: missing/expired/revoked/suppressed permissions, fresh DNC, bounded offer, exact signed-marketing gates passed.');
 
 assert.equal(item({...base,smsPermissionCurrent:true},'sms_contact_permission').status,'recorded');
-assert.equal(item({...base,smsPermissionCurrent:true},'contact_permission').status,'review_required','SMS does not assert voice permission');
-assert.equal(item({...base,permissions:[permission]},'sms_contact_permission').status,'review_required','Voice does not assert SMS permission');
-assert.equal(item({...base,smsPermissionCurrent:false},'sms_contact_permission').status,'review_required');
+assert.equal(item({...base,smsPermissionCurrent:true},'contact_permission').status,'blocked','SMS does not assert voice permission');
+assert.equal(item({...base,permissions:[permission]},'sms_contact_permission').status,'blocked','Voice does not assert SMS permission');
+assert.equal(item({...base,smsPermissionCurrent:false},'sms_contact_permission').status,'blocked');
