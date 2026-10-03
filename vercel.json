@@ -8,6 +8,10 @@
     {
       "path": "/api/billing/outbound",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/internal/voice/recording/maintenance",
+      "schedule": "* * * * *"
     }
   ]
 }

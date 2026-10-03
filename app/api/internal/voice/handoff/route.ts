@@ -1,3 +1,4 @@
+import {ensureRecordedConversationBinding} from '@/lib/required-call-recording-binding';
 import {NextResponse} from 'next/server';
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
@@ -10,6 +11,7 @@ export async function POST(req:Request){
  if(!token||!/^[0-9a-f]{64}$/.test(token))return NextResponse.json({error:'Unauthorized'},{status:401,headers});
  try{
   const raw=await req.text();if(raw.length>3000)throw new Error();const i=input.parse(JSON.parse(raw));
+  if(process.env.ICASH_RECORDING_RECEIPTS_READY==='true')await ensureRecordedConversationBinding(token,i.conversationId,db,process.env);
   const result=await db('rpc/icash_live_handoff_tool','POST',{p_hash:createHash('sha256').update(token).digest('hex'),p_conversation:i.conversationId,p_reason:i.reason});
   return NextResponse.json(result,{headers});
  }catch{return NextResponse.json({error:'Handoff not confirmed. Stop negotiating and state that follow-up is needed.'},{status:409,headers});}

@@ -1,3 +1,5 @@
+import {recordingServer} from './required-call-recording-server.ts';
+import {readRecordingReview,recordingPolicy} from './required-call-recording.ts';
 import {createHash,randomBytes} from 'node:crypto';
 import {sameBusinessNumber,consistentTextSenders} from './number-continuity.ts';
 import {boundedVoiceSmsContext} from './voice-sms-context.ts';
@@ -50,8 +52,11 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  if(configHash!==c.agent_config_hash||!Number.isInteger(cap)||(cap??0)>c.max_duration_seconds||(cap??0)<60||c.required_tool_ids.some(id=>!agent.conversation_config.agent?.prompt?.tool_ids?.includes(id)))return hold('production_agent_review_required');
  const [practice]=await db<{agent_id:string}[]>(`icash_voice_test_config?agent_id=eq.${c.agent_id}&select=agent_id`);if(practice)return hold('practice_agent_blocked');
  const rateId=p.party==='buyer'?c.buyer_rate_id:c.seller_rate_id;if(!rateId)return hold('full_call_cost_quote_required');
- const [rate]=await db<{operation:string;enabled:boolean;expires_at:string;voice_max_duration_seconds:number|null}[]>(`icash_operation_rates?id=eq.${rateId}&select=operation,enabled,expires_at,voice_max_duration_seconds`);
+ const [rate]=await db<{operation:string;enabled:boolean;expires_at:string;voice_max_duration_seconds:number|null;charge_cents?:number;version?:string}[]>(`icash_operation_rates?id=eq.${rateId}&select=operation,enabled,expires_at,voice_max_duration_seconds,charge_cents,version`);
  if(!rate?.enabled||rate.operation!==(p.party==='buyer'?'buyer_call':'seller_call')||!(Date.parse(rate.expires_at)>Date.now())||!rate.voice_max_duration_seconds||rate.voice_max_duration_seconds<c.max_duration_seconds)return hold('full_call_cost_quote_required');
+ const recorded=process.env.ICASH_RECORDED_OUTBOUND_READY==='true',recordedReview=recorded?readRecordingReview(process.env.RECORDED_OUTBOUND_REVIEW_JSON):null;
+ if(recorded&&(process.env.ICASH_RECORDING_RECEIPTS_READY!=='true'||!recordedReview||recordedReview.agentId!==c.agent_id||!sameBusinessNumber(businessNumber,recordedReview.fromPhone)||rate.charge_cents!==recordingPolicy.minimumHoldCents||!rate.version?.startsWith(recordingPolicy.version+':')))return hold('recorded_call_review_required');
+ if(!recorded&&rate.version?.startsWith('required-audio-30d-speech-v1:'))return hold('recorded_call_release_required');
  const [authority]=await db<{max_offer_cents:number;expires_at:string;review_request_id:string|null}[]>(`icash_offer_authorities?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&select=max_offer_cents,expires_at,review_request_id`);
  const ceiling=verifiedOfferCeiling(eligible?.ready?eligible.screening.preliminarySellerCeilingCents:null,authority);
  const smsContext=p.party==='seller'?boundedVoiceSmsContext(await db<unknown>('rpc/icash_voice_sms_context','POST',{p_account:accountId,p_permission:p.id})):null;
@@ -68,6 +73,12 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const strategy=parseInt(createHash('sha256').update(`${accountId}:${p.contact_key}`).digest('hex').slice(0,8),16)%2===0?'cash_interest':'flexible_timing';
  try{
  await db(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&state=eq.dispatching`,'PATCH',{sms_context:smsContext});
+ if(recorded){
+  const result=await recordingServer().dispatch({accountId,operationKey,principal:identity.principal,assistantName:account.assistant_name,voiceId:identity.voice_id,firstMessage:sellerGreeting??`Hi, I'm ${account.assistant_name}, the AI assistant for ${identity.principal}.`,prompt:buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!,strategyKey:strategy});
+  if(result.status==='recording_consent_pending')return {status:'call_started'};
+  if(result.status==='recording_dial_unknown_no_retry')return {status:'provider_outcome_unknown_no_retry'}; // Keep the durable dispatch claim recoverable; never redial.
+  return hold(result.status);
+ }
  const response=await elevenRequest<{success:boolean;conversation_id?:string;callSid?:string}>('/v1/convai/twilio/outbound-call',{
  agent_id:c.agent_id,agent_phone_number_id:c.phone_number_id,to_number:p.phone,call_recording_enabled:false,
  conversation_initiation_client_data:{dynamic_variables:{principal:identity.principal,assistant_name:account.assistant_name,property_address:address,approved_offer_ceiling:'NOT AUTHORIZED',secret__icash_call_token:token},conversation_config_override:{...(voiceOverride?{tts:{voice_id:identity.voice_id}}:{}),agent:{...(sellerGreeting?{first_message:sellerGreeting}:{}),prompt:{prompt:buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!}},conversation:{max_duration_seconds:c.max_duration_seconds}}}

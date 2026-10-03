@@ -1,10 +1,12 @@
+import {recordingAddonCosts,completedRecordingReceipt} from './required-call-recording-cost.ts';
+import type {RecordingRow} from './required-call-recording.ts';
 import {CarrierUsageUnavailable,outboundCarrierInput,type OutboundCarrierRule,type CarrierEnv} from './outbound-carrier-usage.ts';
 import {costCategories} from './cost-guard.ts';
 import {voiceCostManifest, type VoiceCostInputs} from './voice-cost-settlement.ts';
 
 // Only server-owned reviewed configuration is accepted. Never use analysis/model fields.
 export type VoiceUsageDb=<T>(path:string,method?:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;
-type Rule=OutboundCarrierRule|{kind:'fixed_estimate';amountMicros:number;evidenceRef:string}|{
+type Rule={kind:'recording_addon_estimate';policyVersion:'required-audio-30d-speech-v1';evidenceRef:string}|OutboundCarrierRule|{kind:'fixed_estimate';amountMicros:number;evidenceRef:string}|{
  kind:'duration_estimate';unitSeconds:number;microsPerUnit:number;rounding:'exact'|'up';minimumUnits:number;
  evidenceRef:string;durationSource:'conversation_proxy';assumption:string;
 };
@@ -42,10 +44,13 @@ export async function settleBoundVoiceUsage(db:VoiceUsageDb,accountId:string,cal
  }
  const [spend]=await db<{rate_id:string;state:string}[]>(`icash_operation_spend?operation_key=eq.${eq(call.operation_key)}&account_id=eq.${eq(accountId)}&select=rate_id,state`);
  if(!spend||!['dispatched','settled'].includes(spend.state))return hold('operation_unbound');
- const [rate]=await db<{operation:string}[]>(`icash_operation_rates?id=eq.${eq(spend.rate_id)}&select=operation`);
+ const [rate]=await db<{operation:string;version?:string}[]>(`icash_operation_rates?id=eq.${eq(spend.rate_id)}&select=operation,version`);
  const matches=policies.filter(p=>p?.enabled===true&&p.rateId===spend.rate_id&&p.operation===rate?.operation);
  if(matches.length!==1)return hold('reviewed_policy_missing');
- const policy=matches[0];const created=Date.parse(call.created_at);const reviewed=Date.parse(policy.reviewedAt);
+ const policy=matches[0];
+ const recordingRate=rate?.version?.startsWith('required-audio-30d-speech-v1:')===true,recordingPolicy=policy.version.startsWith('required-audio-30d-speech-v1:');
+ if(recordingRate!==recordingPolicy||(recordingRate&&policy.components?.other?.kind!=='recording_addon_estimate'))return hold('recording_cost_policy_required');
+ const created=Date.parse(call.created_at);const reviewed=Date.parse(policy.reviewedAt);
  const from=Date.parse(policy.validFrom),until=Date.parse(policy.validUntil);
  if(!ref(policy.evidenceRef)||!ref(policy.version)||![created,reviewed,from,until].every(Number.isFinite)||reviewed>created||from>created||until<=created||from>=until)return hold('reviewed_policy_invalid');
  const observations=await db<{amount:unknown;units:string}[]>(`icash_cost_observations?provider=eq.elevenlabs&event_key=eq.${eq(call.conversation_id)}&source_ref=eq.${eq(call.operation_key)}&select=amount,units`);
@@ -59,7 +64,13 @@ export async function settleBoundVoiceUsage(db:VoiceUsageDb,accountId:string,cal
    if(category==='elevenlabs')continue;
    const rule=policy.components[category];
    if(!rule||!ref(rule.evidenceRef))throw Error('Missing rule');
-   if(rule.kind==='outbound_carrier_estimate'){
+   if(rule.kind==='recording_addon_estimate'){
+    if(category!=='other'||rule.policyVersion!=='required-audio-30d-speech-v1'||!policy.version.startsWith(rule.policyVersion+':'))throw Error('Recording cost policy required');
+    const records=await db<RecordingRow[]>(`icash_call_recordings?account_id=eq.${eq(accountId)}&operation_key=eq.${eq(call.operation_key)}&conversation_id=eq.${eq(call.conversation_id)}&select=*`);
+    if(records.length!==1||records[0].rate_id!==spend.rate_id||!completedRecordingReceipt(records[0]))throw Error('Recording receipt required');
+    const r=records[0],add=recordingAddonCosts(r);
+    inputs[category]={kind:'fixed_estimate',amountMicros:add.total,evidenceRef:`Twilio ${r.recording_sid}; recording ${add.recording} micros ${add.recordingObserved?'observed':'estimated'}; storage ${add.storage} micros ESTIMATED; speech ${add.speech} micros ESTIMATED; ${rule.evidenceRef}`};
+   }else if(rule.kind==='outbound_carrier_estimate'){
     if(category!=='twilio'||!carrier||!['seller_call','buyer_call'].includes(policy.operation))throw Error('Carrier collector unavailable');
     inputs[category]=await outboundCarrierInput(db,accountId,call,rule,carrier.env,carrier.fetcher,carrier.signal);
    }

@@ -25,7 +25,8 @@ export function databaseAdapter(pg){
    if(key==='limit'){assert(/^\d+$/.test(expression));limit=' limit '+expression;continue;}
    if(key==='order'){for(const item of expression.split(',')){const [col,direction='asc']=item.split('.');assert(['asc','desc'].includes(direction));order.push(identifier(col)+' '+direction);}continue;}
    const dot=expression.indexOf('.'),op=expression.slice(0,dot),val=expression.slice(dot+1),col=identifier(key);
-   if(op==='cs'){assert(/^\{[A-Za-z0-9_, -]*\}$/.test(val));args.push(val);where.push(col+' @> $'+args.length+'::text[]');}
+   if(op==='like'){args.push(val.replaceAll('*','%'));where.push(col+' like $'+args.length);}
+   else if(op==='cs'){assert(/^\{[A-Za-z0-9_, -]*\}$/.test(val));args.push(val);where.push(col+' @> $'+args.length+'::text[]');}
    else if(op==='is'){assert.equal(val,'null');where.push(col+' is null');}
    else if(op==='in'){assert(/^\([^()]*\)$/.test(val));const values=val.slice(1,-1).split(',');where.push(col+' in ('+values.map(x=>{args.push(x);return '$'+args.length;}).join(',')+')');}
    else{assert(['eq','gt','gte','lt','lte','neq'].includes(op),`Unsupported fixture filter ${expression}`);args.push(val);where.push(col+({eq:'=',gt:'>',gte:'>=',lt:'<',lte:'<=',neq:'<>'}[op])+'$'+args.length);}

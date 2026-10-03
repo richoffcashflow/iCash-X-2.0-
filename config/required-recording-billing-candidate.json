@@ -1,0 +1,186 @@
+{
+  "status": "DISABLED_TEMPLATE_NOT_RUNTIME_POLICY",
+  "policyVersion": "required-audio-30d-speech-v1",
+  "baseCommit": "3625dd02589c8f3fa894b015dda219a12ed79f9c",
+  "preserveExistingPolicies": true,
+  "immutableVersionsRequired": true,
+  "newOutboundPolicies": [
+    {
+      "enabled": false,
+      "version": "required-audio-30d-speech-v1:REVIEWED_RELEASE_ID",
+      "rateId": null,
+      "operation": "seller_call",
+      "reviewedAt": null,
+      "validFrom": null,
+      "validUntil": null,
+      "evidenceRef": "Populate from verified new977-cent rate and current supplier review; no invented approval or identity",
+      "components": {
+        "llm": {
+          "kind": "fixed_estimate",
+          "amountMicros": 0,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "email": {
+          "kind": "fixed_estimate",
+          "amountMicros": 0,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "other": {
+          "kind": "recording_addon_estimate",
+          "policyVersion": "required-audio-30d-speech-v1",
+          "evidenceRef": "Twilio public US recording .0025/min, storage .0005/min/month (30/28 allocation), one Gather .02; verified2026-10-03"
+        },
+        "github": {
+          "kind": "fixed_estimate",
+          "amountMicros": 1000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "twilio": {
+          "kind": "outbound_carrier_estimate",
+          "requires": "Copy the matching currently reviewed complete carrier rule, fresh supplier-rate evidence and bound agent/provider/from IDs; never a zero or conversation-only estimate"
+        },
+        "vercel": {
+          "kind": "fixed_estimate",
+          "amountMicros": 3000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "railway": {
+          "kind": "fixed_estimate",
+          "amountMicros": 3000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "payments": {
+          "kind": "fixed_estimate",
+          "amountMicros": 10000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "supabase": {
+          "kind": "fixed_estimate",
+          "amountMicros": 3000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "messaging": {
+          "kind": "fixed_estimate",
+          "amountMicros": 0,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "acquisition": {
+          "kind": "fixed_estimate",
+          "amountMicros": 10000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "dealmachine": {
+          "kind": "fixed_estimate",
+          "amountMicros": 0,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "title_and_signing": {
+          "kind": "fixed_estimate",
+          "amountMicros": 0,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "support_and_overhead": {
+          "kind": "fixed_estimate",
+          "amountMicros": 5000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "refund_and_dispute_reserve": {
+          "kind": "fixed_estimate",
+          "amountMicros": 5000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        }
+      }
+    },
+    {
+      "enabled": false,
+      "version": "required-audio-30d-speech-v1:REVIEWED_RELEASE_ID",
+      "rateId": null,
+      "operation": "buyer_call",
+      "reviewedAt": null,
+      "validFrom": null,
+      "validUntil": null,
+      "evidenceRef": "Populate from verified new977-cent rate and current supplier review; no invented approval or identity",
+      "components": {
+        "llm": {
+          "kind": "fixed_estimate",
+          "amountMicros": 0,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "email": {
+          "kind": "fixed_estimate",
+          "amountMicros": 0,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "other": {
+          "kind": "recording_addon_estimate",
+          "policyVersion": "required-audio-30d-speech-v1",
+          "evidenceRef": "Twilio public US recording .0025/min, storage .0005/min/month (30/28 allocation), one Gather .02; verified2026-10-03"
+        },
+        "github": {
+          "kind": "fixed_estimate",
+          "amountMicros": 1000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "twilio": {
+          "kind": "outbound_carrier_estimate",
+          "requires": "Copy the matching currently reviewed complete carrier rule, fresh supplier-rate evidence and bound agent/provider/from IDs; never a zero or conversation-only estimate"
+        },
+        "vercel": {
+          "kind": "fixed_estimate",
+          "amountMicros": 3000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "railway": {
+          "kind": "fixed_estimate",
+          "amountMicros": 3000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "payments": {
+          "kind": "fixed_estimate",
+          "amountMicros": 10000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "supabase": {
+          "kind": "fixed_estimate",
+          "amountMicros": 3000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "messaging": {
+          "kind": "fixed_estimate",
+          "amountMicros": 0,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "acquisition": {
+          "kind": "fixed_estimate",
+          "amountMicros": 10000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "dealmachine": {
+          "kind": "fixed_estimate",
+          "amountMicros": 0,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "title_and_signing": {
+          "kind": "fixed_estimate",
+          "amountMicros": 0,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "support_and_overhead": {
+          "kind": "fixed_estimate",
+          "amountMicros": 5000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        },
+        "refund_and_dispute_reserve": {
+          "kind": "fixed_estimate",
+          "amountMicros": 5000,
+          "evidenceRef": "Reviewed recorded outbound overhead allowance2026-10-03; production volume still to validate"
+        }
+      }
+    }
+  ],
+  "forbidden": [
+    "Do not submit this unresolved template as VOICE_USAGE_POLICIES_JSON",
+    "Do not replace946-cent or incoming policies",
+    "Do not set other=0 or fixed_estimate for these recorded rates"
+  ]
+}

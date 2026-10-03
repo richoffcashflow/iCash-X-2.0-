@@ -1,0 +1,28 @@
+{
+  "status": "local_candidate_not_installed",
+  "policyVersion": "required-audio-30d-speech-v1",
+  "operations": ["seller_call", "buyer_call"],
+  "chargeCents": 977,
+  "bufferBps": 2000,
+  "voiceMaxDurationSeconds": 600,
+  "retentionDaysAudioOnly": 30,
+  "standardCostMultiplier": 5,
+  "elevenlabsCostMultiplier": 3,
+  "costsMicros": {
+    "llm": 0, "email": 0, "other": 51000, "github": 1000,
+    "twilio": 989000, "vercel": 3000, "railway": 3000,
+    "payments": 10000, "supabase": 3000, "messaging": 0,
+    "elevenlabs": 912000, "acquisition": 10000, "dealmachine": 0,
+    "title_and_signing": 0, "support_and_overhead": 5000,
+    "refund_and_dispute_reserve": 5000
+  },
+  "otherEstimateMicros": {"oneSpokenConsentGather": 20000, "recordingAnd30DayStorageCeiling": 31000},
+  "enabled": false,
+  "releaseRequirements": [
+    "Separate new rate IDs; never overwrite current946-cent rates",
+    "Review current supplier tariffs and expiry before installation",
+    "Keep consent inside total600-second carrier cap",
+    "Validate playback and cleanup infrastructure overhead at expected volume",
+    "No inbound use; inbound quote is separate"
+  ]
+}
