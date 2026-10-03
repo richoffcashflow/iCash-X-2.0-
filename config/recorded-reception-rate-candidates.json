@@ -1,0 +1,54 @@
+{
+  "status": "DISABLED_UNAPPROVED_ARITHMETIC_ONLY",
+  "baseCommit": "3ce71a111da43d4e95b70e8cad11f23b684ddb13",
+  "enabled": false,
+  "policyVersion": "recorded-reception-30d-speech-v1",
+  "runtimeRateIds": null,
+  "pricingPolicy": {
+    "version": "recorded-reception-30d-speech-v1",
+    "retentionDays": 30,
+    "recordingMicrosPerMinute": 2500,
+    "storageMicrosPerMinuteMonth": 500,
+    "speechGatherMicros": 20000,
+    "streamMicrosPerMinute": 4400,
+    "estimate": true
+  },
+  "sourceOptionsNotCurrentActivationEvidence": [
+    {
+      "profile": "owner_quick_test",
+      "totalSeconds": 60,
+      "historicalHoldCents": 65,
+      "illustrativeRecordedHoldCents": 79,
+      "calculation": "ceil((91200*3 + (8500+40000+4400+3100+20000)*5)*1.2/10000)",
+      "note": "Current database owner-only60 profile verified. Supplier and infrastructure allocations remain estimates; the proposed79-cent cap is unapproved and not installed. Consent stays inside60 total seconds."
+    },
+    {
+      "profile": "normal",
+      "totalSeconds": 600,
+      "historicalHoldCents": 430,
+      "illustrativeRecordedHoldCents": 461,
+      "calculation": "ceil((912000*3 + (129000+40000+31000+20000)*5)*1.2/10000)",
+      "note": "Existing normal600 rate is disabled. Arithmetic uses its verified stored planning amounts and unchanged5x/3x multipliers; no current supplier/overhead approval or normal-caller activation is implied."
+    }
+  ],
+  "releaseRequirements": [
+    "Database profile and rates read2026-10-03; runtime incoming billing policy still unverified",
+    "Fresh quote and user approval before any cap increase",
+    "Separate immutable incoming rates and configs; preserve historical bindings",
+    "Capture remains false; no call or provider setup authorized by this file",
+    "Do not treat these examples as approved runtime configuration"
+  ],
+  "metadataVerifiedAt": "2026-10-03T07:02:28Z",
+  "currentReceptionDatabaseProfile": {
+    "enabled": true,
+    "callProfile": "owner_quick_test",
+    "contextPolicy": "message_only",
+    "maxDurationSeconds": 60,
+    "holdCents": 65,
+    "rateId": "f93ace00-83fc-4d09-a37c-6d9d9f0a38f0",
+    "reviewedUntil": "2026-10-07T21:42:00Z"
+  },
+  "normal600RateEnabled": false,
+  "legacyBusinessInboundRouteEnabled": false,
+  "runtimeBillingPolicyVerified": false
+}

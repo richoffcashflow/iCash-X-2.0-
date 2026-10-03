@@ -1,0 +1,96 @@
+import {object} from './required-call-recording.ts';
+import {RecordingProviderError} from './required-call-recording-provider.ts';
+import {finalRecordingPayload} from './required-call-recording-service.ts';
+import {incomingCallIdentityMatches,receptionRecordingMatches,receptionConversationMatches,type RecordedReceptionRow,type RecordedReceptionRpc,type RecordedReceptionEnv} from './recorded-reception.ts';
+import {getRecordedReception,transitionRecordedReception,endRecordedReception,boundEndReceipt,bindRecordedReceptionCallStart} from './recorded-reception-service.ts';
+import {settleRecordedReception} from './recorded-reception-settlement.ts';
+import type {RecordedReceptionProviders} from './recorded-reception-provider.ts';
+
+/** Independent cleanup and termination worker. Launch/account/wallet gates never
+ * control recovery or deletion. Provider deletion is verified before finalizing. */
+export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provider:RecordedReceptionProviders,env:RecordedReceptionEnv,now=Date.now()){
+ const result={deleted:0,reconciled:0,settled:0,held:0};
+ async function finish(row:RecordedReceptionRow,kind:string,outcome:string,payload:Record<string,unknown>={}){
+  const current=await getRecordedReception(rpc,row.id,row.account_id);if(!current)throw Error('SESSION_MISSING');
+  const saved=await rpc('icash_finish_recorded_reception_work',{p_id:row.id,p_account:row.account_id,p_operation:row.operation_key,p_kind:kind,p_lease_token:row[kind==='delete'?'deletion_lease_token':'reconcile_lease_token'],p_expected_version:current.row_version,p_outcome:outcome,p_payload:payload});
+  if(!saved)throw Error('WORK_FINISH_NOT_SAVED');return saved;
+ }
+ // Deletion first and independent of carrier/conversation availability/costs.
+ for(const row of await rpc<RecordedReceptionRow[]>('icash_claim_recorded_reception_work',{p_kind:'delete',p_limit:5,p_lease_seconds:120})){
+  try{
+   if(row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!row.recording_sid)throw Error('RECORDING_BINDING_REQUIRED');
+   let before:Record<string,unknown>|null=null;
+   try{before=await provider.getRecording(row.recording_sid,true);}catch(e){if(!(e instanceof RecordingProviderError)||e.status!==404)throw e;}
+   if(before&&!receptionRecordingMatches(row,before))throw Error('RECORDING_BINDING_REQUIRED');
+   if(before&&before.status!=='deleted')await provider.deleteRecording(row.recording_sid);
+   let gone=false;try{const after=await provider.getRecording(row.recording_sid,true);gone=receptionRecordingMatches(row,after)&&after.status==='deleted';}catch(e){if(e instanceof RecordingProviderError&&e.status===404)gone=true;else throw e;}
+   if(!gone)throw Error('DELETION_UNCONFIRMED');await finish(row,'delete','deleted');result.deleted++;
+  }catch{await finish(row,'delete','retry',{reason:'deletion_confirmation_required'}).catch(()=>null);result.held++;}
+ }
+ for(const initial of await rpc<RecordedReceptionRow[]>('icash_claim_recorded_reception_work',{p_kind:'reconcile',p_limit:3,p_lease_seconds:120})){
+  let row=initial;
+  try{
+   if(row.provider_account_sid!==env.TWILIO_ACCOUNT_SID)throw Error('PROVIDER_BINDING_REQUIRED');
+   // A once-claimed start may have created audio even if its response was lost.
+   // Bind its exact Call/account identity and expiry before carrier/end/cost
+   // dependencies, so their outage cannot prevent the deletion queue.
+   let receipt:Record<string,unknown>|null=null,recordingDiscoveryFailed=false;
+   if(!row.recording_sid&&row.start_claimed_at)try{
+    const listed=await provider.listRecordings(row.call_sid);if(listed.next_page_uri!==null||!Array.isArray(listed.recordings)||listed.recordings.length!==1)throw Error('UNIQUE_RECORDING_REQUIRED');
+    receipt=object(listed.recordings[0]);if(!receptionRecordingMatches(row,receipt))throw Error('RECORDING_BINDING_REQUIRED');
+    const next=await transitionRecordedReception(rpc,row,'started',{recordingSid:receipt.sid,providerStartedAt:new Date(String(receipt.start_time)).toISOString()});if(!next)throw Error('RECORDING_BINDING_SAVE_REQUIRED');row=next;
+   }catch{recordingDiscoveryFailed=true;}
+   let call:Record<string,unknown>;
+   try{call=await provider.getCall(row.call_sid);}catch{
+    // An unavailable read cannot cancel already-durable termination authority.
+    // The helper may POST ended to this exact reserved SID, but still refuses
+    // to mark terminal until a full account/number/direction readback succeeds.
+    if(!row.call_ended_at&&(row.end_requested_at||now>=Date.parse(row.call_deadline_at)||!row.consent_at&&now>=Date.parse(row.consent_deadline_at))){const ended=await endRecordedReception(rpc,provider,row,'carrier_read_outage_end');row=ended.row;}
+    throw Error('CALL_READ_REQUIRED');
+   }
+   if(!incomingCallIdentityMatches(row,call))throw Error('CALL_BINDING_REQUIRED');
+   let clockConflict=false;try{row=await bindRecordedReceptionCallStart(rpc,row,call);}catch{clockConflict=true;}
+   const terminal=['completed','failed','busy','no-answer','canceled'].includes(String(call.status));
+   if(terminal){
+    if(!row.end_requested_at){const next=await transitionRecordedReception(rpc,row,'request_end',{reason:'carrier_terminal'});if(next)row=next;}
+    if(!row.call_ended_at){const next=await transitionRecordedReception(rpc,row,'call_ended',boundEndReceipt(row,call));if(!next)throw Error('TERMINAL_SAVE_REQUIRED');row=next;}
+   }else if(clockConflict||row.end_requested_at||now>=Date.parse(row.call_deadline_at)||!row.consent_at&&now>=Date.parse(row.consent_deadline_at)){
+    const ended=await endRecordedReception(rpc,provider,row,'deadline_or_requested_end');row=ended.row;if(!ended.ended)throw Error('TERMINATION_UNCONFIRMED');
+   }
+   if(recordingDiscoveryFailed)throw Error('RECORDING_DISCOVERY_REQUIRED');
+   if(!receipt&&row.recording_sid&&row.state!=='deleted')receipt=await provider.getRecording(row.recording_sid);
+   if(receipt){
+    if(!receptionRecordingMatches(row,receipt))throw Error('RECORDING_BINDING_REQUIRED');
+    if(['completed','absent'].includes(String(receipt.status))&&!row.call_ended_at){const ended=await endRecordedReception(rpc,provider,row,'audio_terminal');row=ended.row;if(!ended.ended)throw Error('TERMINATION_UNCONFIRMED');}
+    if(receipt.status==='completed'&&(!['available','expired','deletion_pending','deleted'].includes(row.state)||row.state==='available'&&row.provider_recording_price_micros===null&&finalRecordingPayload(receipt).providerRecordingPriceMicros!==undefined)){
+     const next=await transitionRecordedReception(rpc,row,'available',finalRecordingPayload(receipt));if(!next)throw Error('RECORDING_RECEIPT_SAVE_REQUIRED');row=next;
+    }else if(receipt.status==='absent'&&row.state!=='absent'){
+     const next=await transitionRecordedReception(rpc,row,'absent');if(!next)throw Error('ABSENT_RECEIPT_SAVE_REQUIRED');row=next;
+    }
+   }
+   let conversation:Record<string,unknown>|null=null;
+   // No agent query for declined/unstarted calls. A lost register response is
+   // discovered by immutable user-id; it is NEVER registered a second time.
+   if(row.register_claimed_at){
+    if(row.conversation_id)conversation=await provider.conversation(row.conversation_id);
+    else{
+     const listed=await provider.conversations(row);if(listed.has_more!==false||!Array.isArray(listed.conversations)||listed.conversations.length!==1)throw Error('UNIQUE_CONVERSATION_REQUIRED');
+     const candidate=object(listed.conversations[0]);if(typeof candidate.conversation_id!=='string')throw Error('CONVERSATION_ID_REQUIRED');conversation=await provider.conversation(candidate.conversation_id);
+    }
+    if(!receptionConversationMatches(row,conversation))throw Error('CONVERSATION_BINDING_REQUIRED');
+    if(!row.conversation_id){const next=await transitionRecordedReception(rpc,row,'bind_conversation',{conversationId:conversation.conversation_id,agentId:conversation.agent_id,branchId:conversation.branch_id,versionId:conversation.version_id});if(!next)throw Error('CONVERSATION_SAVE_REQUIRED');row=next;}
+   }
+   // Disputed clocks hold costs, never exact-call recording discovery, expiry
+   // scheduling, terminal marking or identity recovery needed for deletion.
+   if(clockConflict)throw Error('CALL_START_CONFLICT');
+   if(row.call_ended_at){
+    const freshCall=terminal?call:await provider.getCall(row.call_sid);
+    const settled=await settleRecordedReception(rpc,row,freshCall,conversation,receipt);
+    if(settled.settled===true)result.settled++;
+    if('reviewRequired' in settled&&settled.reviewRequired)result.held++;
+   }
+   await finish(initial,'reconcile','checked');result.reconciled++;
+  }catch{await finish(initial,'reconcile','retry',{reason:'provider_reconciliation_required'}).catch(()=>null);result.held++;}
+ }
+ return result;
+}

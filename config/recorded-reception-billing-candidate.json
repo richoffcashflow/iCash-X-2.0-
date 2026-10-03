@@ -1,0 +1,111 @@
+{
+  "status": "DISABLED_UNRESOLVED_TEMPLATE_NOT_AN_APPROVAL",
+  "enabled": false,
+  "id": null,
+  "version": "recorded-reception-cost-v1:REVIEWED_RELEASE_ID",
+  "account_id": null,
+  "rate_id": null,
+  "rate_snapshot": null,
+  "approved_at": null,
+  "reviewed_until": null,
+  "approval_reference": null,
+  "standard_cost_multiplier": 5,
+  "elevenlabs_cost_multiplier": 3,
+  "components": {
+    "dealmachine": {
+      "source": "fixed_estimate",
+      "amountMicros": 0,
+      "evidenceRef": "UNREVIEWED_TEMPLATE: confirm the existing incoming usage-allocation estimate and applicability before activation"
+    },
+    "messaging": {
+      "source": "fixed_estimate",
+      "amountMicros": 0,
+      "evidenceRef": "UNREVIEWED_TEMPLATE: confirm the existing incoming usage-allocation estimate and applicability before activation"
+    },
+    "email": {
+      "source": "fixed_estimate",
+      "amountMicros": 0,
+      "evidenceRef": "UNREVIEWED_TEMPLATE: confirm the existing incoming usage-allocation estimate and applicability before activation"
+    },
+    "vercel": {
+      "source": "fixed_estimate",
+      "amountMicros": 3000,
+      "evidenceRef": "UNREVIEWED_TEMPLATE: confirm the existing incoming usage-allocation estimate and applicability before activation"
+    },
+    "railway": {
+      "source": "fixed_estimate",
+      "amountMicros": 3000,
+      "evidenceRef": "UNREVIEWED_TEMPLATE: confirm the existing incoming usage-allocation estimate and applicability before activation"
+    },
+    "supabase": {
+      "source": "fixed_estimate",
+      "amountMicros": 3000,
+      "evidenceRef": "UNREVIEWED_TEMPLATE: confirm the existing incoming usage-allocation estimate and applicability before activation"
+    },
+    "github": {
+      "source": "fixed_estimate",
+      "amountMicros": 1000,
+      "evidenceRef": "UNREVIEWED_TEMPLATE: confirm the existing incoming usage-allocation estimate and applicability before activation"
+    },
+    "payments": {
+      "source": "fixed_estimate",
+      "amountMicros": 10000,
+      "evidenceRef": "UNREVIEWED_TEMPLATE: confirm the existing incoming usage-allocation estimate and applicability before activation"
+    },
+    "title_and_signing": {
+      "source": "fixed_estimate",
+      "amountMicros": 0,
+      "evidenceRef": "UNREVIEWED_TEMPLATE: confirm the existing incoming usage-allocation estimate and applicability before activation"
+    },
+    "support_and_overhead": {
+      "source": "fixed_estimate",
+      "amountMicros": 5000,
+      "evidenceRef": "UNREVIEWED_TEMPLATE: confirm the existing incoming usage-allocation estimate and applicability before activation"
+    },
+    "acquisition": {
+      "source": "fixed_estimate",
+      "amountMicros": 10000,
+      "evidenceRef": "UNREVIEWED_TEMPLATE: confirm the existing incoming usage-allocation estimate and applicability before activation"
+    },
+    "refund_and_dispute_reserve": {
+      "source": "fixed_estimate",
+      "amountMicros": 5000,
+      "evidenceRef": "UNREVIEWED_TEMPLATE: confirm the existing incoming usage-allocation estimate and applicability before activation"
+    },
+    "twilio": {
+      "source": "provider_receipt",
+      "evidenceRef": "Canonical authenticated terminal Twilio inbound Call USD connectivity receipt; stream cost allocated separately"
+    },
+    "elevenlabs": {
+      "source": "provider_receipt",
+      "evidenceRef": "Canonical exact-bound completed ElevenLabs conversation inclusive cost_fiat USD; absent entirely for gate-only calls"
+    },
+    "llm": {
+      "source": "inclusive_zero",
+      "evidenceRef": "No double count: completed ElevenLabs USD receipt includes model cost; no model starts in gate-only calls"
+    },
+    "other": {
+      "source": "recorded_reception_addons",
+      "policyVersion": "recorded-reception-30d-speech-v1",
+      "pricingPolicy": {
+        "version": "recorded-reception-30d-speech-v1",
+        "retentionDays": 30,
+        "recordingMicrosPerMinute": 2500,
+        "storageMicrosPerMinuteMonth": 500,
+        "speechGatherMicros": 20000,
+        "streamMicrosPerMinute": 4400,
+        "estimate": true
+      },
+      "evidenceRef": "UNREVIEWED_TEMPLATE: review Twilio speech/recording/30-day storage/stream estimates and runtime rounding before activation"
+    }
+  },
+  "requirements": [
+    "Create a distinct reviewed policy for each recorded incoming rate/profile",
+    "Do not treat this template as a runtime policy or user approval",
+    "Bind exact policy identity/snapshot in the new versioned configuration and each admitted session",
+    "No policy rows installed by source SQL; capture stays OFF",
+    "Routine calls use immutable policy plus authenticated receipts; unknown/mismatched/over-cap cases hold",
+    "Preserve manual-review historical receipts and never fabricate cost_reviews rows"
+  ],
+  "baseCommit": "3ce71a111da43d4e95b70e8cad11f23b684ddb13"
+}
