@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {runOutboundBilling,authorizeOutboundBilling} from '../lib/outbound-billing-service.ts';
+const call='11111111-1111-1111-1111-111111111111',account='22222222-2222-2222-2222-222222222222',lease='33333333-3333-3333-3333-333333333333',operation='voice:44444444-4444-4444-4444-444444444444';
+function fixture(){const calls=[];const s={job:{call_id:call,account_id:account,lease_token:lease,operation_key:operation,attempts:1},prior:null,result:{status:'conversation_saved',billing:{status:'settled'}},saved:true};
+ const db=async(path,method,args,signal)=>{assert(signal);calls.push({path,args});if(path.endsWith('claim_outbound_billing'))return s.job?[s.job]:[];if(path.endsWith('get_outbound_usage_settlement')){if(s.readError)throw Error('DB unavailable');return s.prior;}if(path.endsWith('finish_outbound_billing')){if(s.finishError)throw Error('timeout');return s.saved;}throw Error('Unknown RPC');};
+ const reconcile=async(a,c,signal)=>{calls.push({reconcile:true,a,c});assert.equal(a,account);assert.equal(c,call);assert(signal);if(s.reconcileError)throw Error('ambiguous provider result');return s.result;};
+ return {s,calls,db,reconcile,run:()=>runOutboundBilling(true,db,reconcile)};}
+let f=fixture();assert.equal((await f.run()).status,'completed');assert(f.calls.some(x=>x.reconcile));
+f=fixture();f.s.prior={settled:true,operationKey:operation,chargedCents:20};assert.equal((await f.run()).ledgerConfirmed,true);assert(!f.calls.some(x=>x.reconcile));
+f=fixture();f.s.readError=true;assert.equal((await f.run()).status,'retry');assert(!f.calls.some(x=>x.reconcile));
+f=fixture();f.s.prior={settled:true,operationKey:'foreign',chargedCents:20};assert.equal((await f.run()).status,'retry');assert(!f.calls.some(x=>x.reconcile));
+f=fixture();f.s.result={status:'awaiting_conversation'};assert.equal((await f.run()).status,'retry');assert.equal(f.calls.at(-1).args.p_retry_seconds,60);
+f=fixture();f.s.result={status:'conversation_saved',billing:{status:'held',reason:'provider_receipt_missing'}};assert.equal((await f.run()).status,'retry');
+f=fixture();f.s.result={status:'conversation_saved',billing:{status:'held',reason:'reviewed_policy_missing'}};assert.equal((await f.run()).status,'review');
+f=fixture();f.s.result={status:'conversation_saved',billing:{status:'held',reason:'ledger_review_required'}};assert.equal((await f.run()).status,'review');
+f=fixture();f.s.reconcileError=true;assert.equal((await f.run()).status,'retry');
+f=fixture();f.s.finishError=true;assert.equal((await f.run()).status,'queue_update_unconfirmed');
+f=fixture();f.s.saved=false;assert.equal((await f.run()).status,'queue_update_unconfirmed');
+f=fixture();f.s.job.attempts=12;f.s.reconcileError=true;assert.equal((await f.run()).reviewRequired,true);assert.equal(f.calls.at(-1).args.p_retry_seconds,900);
+f=fixture();assert.equal((await runOutboundBilling(false,f.db,f.reconcile)).status,'disabled');assert.equal(f.calls.length,0);
+f=fixture();f.s.job=null;assert.equal((await f.run()).status,'idle');
+f=fixture();f.s.job.account_id='foreign';await assert.rejects(()=>f.run(),/binding/);assert.equal(f.calls.length,1);
+const secret='a'.repeat(32),request=(auth,url='https://example.test/api/billing/outbound')=>new Request(url,{headers:{authorization:auth}});
+assert(authorizeOutboundBilling(request('Bearer '+secret),secret));assert(!authorizeOutboundBilling(request('Bearer bad'),secret));assert(!authorizeOutboundBilling(request('Bearer '+secret,'https://example.test/api/billing/outbound?account=other'),secret));
+console.log('Outbound billing:15 scenarios; tenant binding, inactive-account completion, unknown commit readback, bounded retry, policy review and auth passed');

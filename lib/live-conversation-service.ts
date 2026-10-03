@@ -7,7 +7,7 @@ export async function reconcileLiveConversation(accountId:string,callId:string,s
  const db:typeof database=(path,method,body)=>{signal?.throwIfAborted();return database(path,method,body,signal);};
  const [call]=await db<{conversation_id:string;agent_id:string;party:'seller'|'buyer';state:string;operation_key:string}[]>(`icash_live_conversations?id=eq.${callId}&account_id=eq.${accountId}&select=conversation_id,agent_id,party,state,operation_key`);
  if(!call)return {status:'not_found'};
- const settle=()=>settleBoundVoiceUsage(db,accountId,callId,readVoiceUsagePolicies(process.env.VOICE_USAGE_POLICIES_JSON));
+ const settle=()=>settleBoundVoiceUsage(db,accountId,callId,readVoiceUsagePolicies(process.env.VOICE_USAGE_POLICIES_JSON),{env:{TWILIO_ACCOUNT_SID:process.env.TWILIO_ACCOUNT_SID,TWILIO_AUTH_TOKEN:process.env.TWILIO_AUTH_TOKEN,ELEVENLABS_API_KEY:process.env.ELEVENLABS_API_KEY},signal});
  if(call.state==='complete'){
   const billing=await settle();
   if(billing.status!=='held'||!['provider_receipt_missing','duration_missing'].includes(billing.reason))return {status:'conversation_saved',billing};

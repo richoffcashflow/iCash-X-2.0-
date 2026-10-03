@@ -1,16 +1,17 @@
+import {CarrierUsageUnavailable,outboundCarrierInput,type OutboundCarrierRule,type CarrierEnv} from './outbound-carrier-usage.ts';
 import {costCategories} from './cost-guard.ts';
 import {voiceCostManifest, type VoiceCostInputs} from './voice-cost-settlement.ts';
 
 // Only server-owned reviewed configuration is accepted. Never use analysis/model fields.
 export type VoiceUsageDb=<T>(path:string,method?:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;
-type Rule={kind:'fixed_estimate';amountMicros:number;evidenceRef:string}|{
+type Rule=OutboundCarrierRule|{kind:'fixed_estimate';amountMicros:number;evidenceRef:string}|{
  kind:'duration_estimate';unitSeconds:number;microsPerUnit:number;rounding:'exact'|'up';minimumUnits:number;
  evidenceRef:string;durationSource:'conversation_proxy';assumption:string;
 };
 export type VoiceUsagePolicy={version:string;rateId:string;operation:'seller_call'|'buyer_call'|'incoming_call';
  enabled:boolean;reviewedAt:string;validFrom:string;validUntil:string;evidenceRef:string;
  components:Record<Exclude<typeof costCategories[number],'elevenlabs'>,Rule>};
-type Call={operation_key:string;conversation_id:string;state:string;completed_at:string|null;created_at:string;result:{durationSeconds?:number|null}|null};
+type Call={agent_id?:string;contact_key?:string;operation_key:string;conversation_id:string;state:string;completed_at:string|null;created_at:string;result:{durationSeconds?:number|null}|null};
 const ref=(s:unknown):s is string=>typeof s==='string'&&s.trim().length>=10;
 const eq=(s:string)=>encodeURIComponent(s);
 /** Match PostgreSQL ceil(USD * 1000000), without binary float multiplication. */
@@ -29,9 +30,9 @@ export function readVoiceUsagePolicies(raw:string|undefined):VoiceUsagePolicy[]{
  try{const p=JSON.parse(raw);return Array.isArray(p)?p:[];}catch{return [];}
 }
 
-export async function settleBoundVoiceUsage(db:VoiceUsageDb,accountId:string,callId:string,policies:VoiceUsagePolicy[]){
+export async function settleBoundVoiceUsage(db:VoiceUsageDb,accountId:string,callId:string,policies:VoiceUsagePolicy[],carrier?:{env:CarrierEnv;fetcher?:typeof fetch;signal?:AbortSignal}){
  const hold=(reason:string)=>({status:'held' as const,reason});
- const [call]=await db<Call[]>(`icash_live_conversations?id=eq.${eq(callId)}&account_id=eq.${eq(accountId)}&select=operation_key,conversation_id,state,completed_at,created_at,result`);
+ const [call]=await db<Call[]>(`icash_live_conversations?id=eq.${eq(callId)}&account_id=eq.${eq(accountId)}&select=agent_id,contact_key,operation_key,conversation_id,state,completed_at,created_at,result`);
  if(!call||call.state!=='complete'||!call.completed_at)return hold('conversation_incomplete');
  let duration=call.result?.durationSeconds;
  if(!Number.isSafeInteger(duration)||duration!<0){
@@ -58,12 +59,16 @@ export async function settleBoundVoiceUsage(db:VoiceUsageDb,accountId:string,cal
    if(category==='elevenlabs')continue;
    const rule=policy.components[category];
    if(!rule||!ref(rule.evidenceRef))throw Error('Missing rule');
-   if(rule.kind==='fixed_estimate')inputs[category]={kind:rule.kind,amountMicros:rule.amountMicros,evidenceRef:rule.evidenceRef};
+   if(rule.kind==='outbound_carrier_estimate'){
+    if(category!=='twilio'||!carrier||!['seller_call','buyer_call'].includes(policy.operation))throw Error('Carrier collector unavailable');
+    inputs[category]=await outboundCarrierInput(db,accountId,call,rule,carrier.env,carrier.fetcher,carrier.signal);
+   }
+   else if(rule.kind==='fixed_estimate')inputs[category]={kind:rule.kind,amountMicros:rule.amountMicros,evidenceRef:rule.evidenceRef};
    else if(rule.kind==='duration_estimate'&&rule.durationSource==='conversation_proxy'&&ref(rule.assumption))inputs[category]={kind:rule.kind,durationSeconds:duration!,unitSeconds:rule.unitSeconds,microsPerUnit:rule.microsPerUnit,rounding:rule.rounding,minimumUnits:rule.minimumUnits,evidenceRef:rule.evidenceRef,durationEvidenceRef:`ESTIMATED conversation-duration proxy:${call.conversation_id}; ${rule.assumption}`};
    else throw Error('Unsupported usage source');
   }
   manifest=voiceCostManifest(inputs);
- }catch{return hold('cost_evidence_incomplete');}
+ }catch(error){return hold(error instanceof CarrierUsageUnavailable?'carrier_usage_unavailable':'cost_evidence_incomplete');}
  // SQL rechecks account/conversation/receipt binding, quote ceiling, and immutable retries.
  // Do not swallow conflicts: automation must surface them for reconciliation.
  const ok=await db<boolean>('rpc/icash_settle_voice_usage','POST',{p_operation:call.operation_key,p_components:manifest.components,p_evidence:`voice usage policy:${policy.version}; ${policy.evidenceRef}`});

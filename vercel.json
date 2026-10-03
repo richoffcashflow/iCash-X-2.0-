@@ -4,6 +4,10 @@
     {
       "path": "/api/billing/reconcile",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/billing/outbound",
+      "schedule": "* * * * *"
     }
   ]
 }
