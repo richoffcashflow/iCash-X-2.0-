@@ -25,7 +25,7 @@ export function redactSupportQuestion(text:string){
 export function supportAnswer(topic:SupportTopic,evidence:SupportEvidence[],ai:boolean){
  const wanted=topic==='billing'?['billing','payments','credits']:topic==='setup'?['readiness','work']:topic==='cancel'?['work','billing']:['work','credits','readiness','screening','voice','billing'];
  const relevant=evidence.filter(e=>wanted.includes(e.key));
- const intro=topic==='cancel'?'To stop future bot work and daily renewals, use “Review cancellation” below and confirm. Chat messages alone do not cancel anything. Deletion and refunds need a separate support review.':topic==='human'?'You can send this conversation and its status checks to the support team using “Ask the team”.':'Here is what I could verify from your account:';
+ const intro=topic==='cancel'?'To stop future bot work and subscription renewals, use “Review cancellation” below and confirm. Chat messages alone do not cancel anything. Deletion and refunds need a separate support review.':topic==='human'?'You can send this conversation and its status checks to the support team using “Ask the team”.':'Here is what I could verify from your account:';
  const details=relevant.map(e=>{const next=supportNextStep(e);return e.detail+(next?' Next: '+next.text:'');}).join('\n\n');
  const ending=relevant.some(e=>e.status!=='ok')?'If this does not explain the issue, choose “Ask the team”. Your conversation and these checks will be included.':'If something still seems wrong, tell me what you expected and what happened.';
  return `${intro}\n\n${details||'Account checks could not be verified. Refresh the status checks or ask the team; no account changes were made.'}\n\n${ending}${ai?'':'\n\nAI is unavailable right now; these are direct account checks.'}`;

@@ -19,8 +19,8 @@ const setup=readFileSync(new URL('../components/bot-setup.tsx',import.meta.url),
 assert.match(setup,/Create my bot/);assert.ok(!setup.includes('id="practice-budget"'),'budget is chosen only after creation');
 assert.ok(!setup.includes('id="bot-market"'));assert.ok(!setup.includes('id="bot-voice"'));assert.ok(!setup.includes("/api/setup/voices"));
 assert.match(setup,/if\(saveInFlight.current\|\|loading\)return false/);assert.ok(setup.indexOf('await saveBotBuild')<setup.indexOf('await waitForBotCreationTransition'));
-assert.match(setup,/editedFields:fields/,'retry applies only explicit user edits');assert.match(setup,/<FundingCheckout onSignedIn=\{onSignedIn\}/);assert.ok(!setup.includes('DemoRunner'));
-assert.match(setup,/get\('payment'\)==='funded'/,'payment return is not intercepted');assert.match(setup,/No charges or outreach/);
+assert.match(setup,/editedFields:fields/,'retry applies only explicit user edits');assert.match(setup,/<MembershipCheckout onSignedIn=\{onSignedIn\}/);assert.ok(!setup.includes('DemoRunner'));
+assert.match(setup,/get\('payment'\)==='funded'/,'payment return is not intercepted');assert.match(setup,/No email, phone, or card needed/);
 const demo=readFileSync(new URL('../components/demo-runner.tsx',import.meta.url),'utf8');assert.ok(!demo.includes('fetch('),'simulation never calls live endpoints');assert.ok(!demo.includes('Real payments are not open yet'));assert.ok(!demo.includes('needsYou'),'simulation does not require a second continue action');assert.match(demo,/return\(\)=>clearTimeout\(timer\)/);assert.match(demo,/No real charges, calls, contracts, or earnings/);assert.match(demo,/!paused&&visible&&!complete/);
-const checkout=readFileSync(new URL('../components/funding-checkout.tsx',import.meta.url),'utf8');assert.match(checkout,/\[accepted,setAccepted\]=useState\(false\)/,'real billing consent stays unchecked');assert.match(checkout,/every 24 hours/);
+const checkout=readFileSync(new URL('../components/membership-checkout.tsx',import.meta.url),'utf8');assert.match(checkout,/\[accepted,setAccepted\]=useState\(false\)/,'real billing consent stays unchecked');assert.match(checkout,/billed monthly until cancelled/);
 console.log('Standalone practice helpers remain isolated; current setup collects only a name, creates, then opens funding with unchecked consent.');

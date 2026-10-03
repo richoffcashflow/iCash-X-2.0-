@@ -11,6 +11,7 @@ export async function settleFunding(s:Stripe.Checkout.Session) {
  const [o]=await db<FundingOrder[]>(`icash_funding_orders?id=eq.${id}&select=*`);
  if(!o || !fundingSessionMatches(s,o))throw new Error("Payment mismatch");
  await db("rpc/icash_settle_taxed_funding","POST",{p_order:o.id,p_mode:o.mode,p_session:s.id,p_payment:s.payment_intent,p_amount:s.amount_total,p_tax:s.total_details?.amount_tax??0,p_email:s.customer_details?.email,p_phone:s.customer_details?.phone??null});
+ if(s.metadata?.icash_prepaid_work==='true')await db('rpc/icash_apply_prepaid_purchase','POST',{p_order:o.id});
 }
 export async function limitRequest(req:Request,scope:string,identifier:string,limit:number,seconds:number) {
  // Vercel overwrites this trusted proxy header; a missing address shares a restrictive bucket.

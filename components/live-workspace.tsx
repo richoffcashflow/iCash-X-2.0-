@@ -1,6 +1,6 @@
 'use client';
 import {Activity,useEffect,useRef,useState} from 'react';
-import {Phone,MessageCircle} from 'lucide-react';
+import {Phone,MessageCircle,X} from 'lucide-react';
 import {analysisMoney,propertyAnalysisView} from '@/lib/property-analysis-view';
 import {mostPromisingProperty,propertyBotStatus,propertyNextMove} from '@/lib/workspace-guidance';
 import {ManualCallOptions} from '@/components/manual-call-options';
@@ -126,10 +126,10 @@ function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefre
    </div></Activity>}
   </div>
   <dialog ref={contactDialog} className="property-contact-dialog" aria-labelledby={`contact-heading-${p.id}`} onClose={()=>setContactView(null)} onCancel={()=>setContactView(null)}>
-   <div className="contact-dialog-heading"><div><h3 id={`contact-heading-${p.id}`}>{address.street}</h3><small>{address.location}</small></div><button className="contact-dialog-close" aria-label="Close conversation" onClick={()=>setContactView(null)}>×</button></div>
-   {contactVisited&&<Activity mode={contactView&&!hidden?'visible':'hidden'}>    <section className="property-conversations" id={`conversation-${p.id}`} aria-label="Property conversations"><div className="workspace-section-heading"><h4>{contactView==='calls'?'Call':'Text'}</h4><div className="conversation-switch"><button aria-pressed={contactView!=='calls'} onClick={()=>setContactView('texts')}>Texts</button><button aria-pressed={contactView==='calls'} onClick={()=>setContactView('calls')}>Calls{calls.length?` (${calls.length})`:''}</button></div></div>
-    <div hidden={contactView==='calls'}>{deal?<DealCommunications dealId={deal.id} active={contactView==='texts'&&!hidden}/>:<div className="conversation-empty"><MessageCircle size={24}/><strong>No texts yet</strong><p>{hasPhone?'No permitted text thread is linked yet.':'No phone number is saved yet.'}</p><button disabled>Text unavailable</button></div>}</div>
-    {contactView==='calls'&&<div className="property-call-list"><ManualCallOptions screeningId={p.id}/>{calls.length?calls.map(c=><CallConversation key={c.id} id={c.id} party={c.party} summary={c.summary} completedAt={c.completed_at}/>):<div className="conversation-empty"><Phone size={24}/><strong>No calls yet</strong><p>Completed calls will appear here.</p></div>}</div>}
+   <div className="contact-dialog-heading"><div><span className="contact-dialog-kicker">CONVERSATIONS</span><h3 id={`contact-heading-${p.id}`}>{address.street}</h3><small>{owner?`${owner} · `:''}{address.location}</small></div><button className="contact-dialog-close" aria-label="Close conversation" onClick={()=>setContactView(null)}><X size={20}/></button></div>
+   {contactVisited&&<Activity mode={contactView&&!hidden?'visible':'hidden'}>    <section className="property-conversations" id={`conversation-${p.id}`} aria-label="Property conversations"><div className="workspace-section-heading"><div className="conversation-switch"><button aria-pressed={contactView!=='calls'} onClick={()=>setContactView('texts')}><MessageCircle size={16}/>Texts</button><button aria-pressed={contactView==='calls'} onClick={()=>setContactView('calls')}><Phone size={16}/>Calls{calls.length?` (${calls.length})`:''}</button></div><small>Saved to this property</small></div>
+    <div className="contact-text-view" hidden={contactView==='calls'}>{deal?<DealCommunications dealId={deal.id} active={contactView==='texts'&&!hidden}/>:<div className="conversation-empty"><MessageCircle size={24}/><strong>No text conversation yet</strong><p>{hasPhone?'Contact setup is still pending. Texting becomes available after a permitted thread is linked.':'A phone number and permitted text conversation are needed before you can send.'}</p></div>}</div>
+    {contactView==='calls'&&<div className="property-call-list"><ManualCallOptions screeningId={p.id}/><h4 className="call-history-title">Call history</h4>{calls.length?calls.map(c=><CallConversation key={c.id} id={c.id} party={c.party} summary={c.summary} completedAt={c.completed_at}/>):<div className="conversation-empty"><Phone size={24}/><strong>No calls yet</strong><p>Saved bot calls, transcripts, and available recordings will appear here.</p></div>}</div>}
     </section>
 </Activity>}
   </dialog>

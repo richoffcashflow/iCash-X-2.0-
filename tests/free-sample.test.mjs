@@ -19,12 +19,12 @@ assert.doesNotMatch(setup,/FreeSampleWorkspace/,'fictional sample is not part of
 assert.match(setup,/Edit bot name/);
 assert.match(setup,/paymentReturn\|\|hash/,'payment return keeps priority');
 const page=readFileSync(new URL('../app/page.tsx',import.meta.url),'utf8');
-assert.match(page,/Try a free deal example/,'sample remains accessible at zero balance');
+assert.doesNotMatch(page,/Try a free deal example|FreeSampleWorkspace/,'sample removed from customer workspace');
 console.log('PASS free sample arithmetic, invalid input, honest fictional conversation, no API use, retained calculator and funding/back entry points');
 
 assert.deepEqual(restoreSampleInputs({value:'310000',repairs:'',fee:'20000'}),{value:'310000',repairs:'',fee:'20000'},'incomplete input remains saved');
 for(const draft of [null,{},[],{value:1,repairs:'0',fee:'0'},{value:'1'.repeat(25),repairs:'0',fee:'0'}])assert.equal(restoreSampleInputs(draft),null);
 assert.match(component,/maximumFractionDigits:2/,'do not round a cent-valued offer cap up to whole dollars');
 const checkout=readFileSync(new URL('../components/funding-checkout.tsx',import.meta.url),'utf8');
-assert.match(checkout,/return\(\)=>\{mounted.current=false;/,'closing funding invalidates pending responses');
-assert.equal((checkout.match(/const d=await r.json\(\);if\(!mounted.current\)return;/g)||[]).length,2,'both daily and one-time late checkout responses are ignored');
+assert.match(checkout,/return\(\)=>\{alive.current=false;/,'closing funding invalidates pending responses');
+assert.match(checkout,/const d=await r.json\(\);if\(!alive.current\)return;/,'late checkout response cannot navigate after closing');

@@ -27,7 +27,7 @@ for(const chargeCents of [NaN,Infinity,-50,undefined,0])assert.match(nextWorkFun
 assert.equal(nextWorkFunding({...a,workReady:true}).needsFunding,false,'do not predict which paid task runs when multiple channels are ready');
 assert.match(nextWorkFunding({...a,contactWorkReady:false,smsWorkReady:false}).detail,/not confirmed yet.*funding does not clear/,'low-budget and setup holds do not invent a price');
 const source=readFileSync(new URL('../app/page.tsx',import.meta.url),'utf8');
-assert.match(source,/DailyBudgetControl balanceCents=\{account.balanceCents\}/);
+assert.match(source,/CreditsWallet balanceCents=\{account.balanceCents\}/);
 assert.match(source,/reservedCents=\{account.reservedCents\}/);
 assert.match(source,/Your next step/);
 assert.match(source,/aria-label="Close funding"/);

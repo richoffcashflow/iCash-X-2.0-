@@ -23,7 +23,7 @@ export async function saveBotBuild(profile:BotProfile,current:BotSetup,options:{
 
 /** A short presentation transition, never simulated provider provisioning. */
 export function waitForBotCreationTransition(started:number,signal:AbortSignal,reducedMotion:boolean):Promise<void>{
- const delay=reducedMotion?0:Math.max(0,5000-(Date.now()-started));
+ const delay=reducedMotion?0:Math.max(0,450-(Date.now()-started));
  if(signal.aborted)return Promise.reject(new DOMException('Creation interrupted.','AbortError'));
  if(!delay)return Promise.resolve();
  return new Promise((resolve,reject)=>{

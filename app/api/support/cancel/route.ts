@@ -5,6 +5,7 @@ import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
 import {allowedOrigin,fundingMode} from '@/lib/funding-policy';
 import {stopDaily,type DailyPlan} from '@/lib/daily-billing';
+import {accountMembership,stopMembership} from '@/lib/membership';
 import {supportId,hashCancelNonce,createCancelToken,parseCancelToken} from '@/lib/support-policy';
 export const runtime='nodejs';
 const headers={'Cache-Control':'private, no-store'};
@@ -16,7 +17,7 @@ export async function POST(req:Request){
   if(i.action==='prepare'){
    const nonce=randomBytes(32).toString('hex');const requestId=await db<string>('rpc/icash_support_prepare_cancel','POST',{p_account:accountId,p_user:userId,p_mode:mode,p_request:i.requestId??null,p_nonce:hashCancelNonce(nonce)});
    const expiresAt=Date.now()+10*60_000;const token=createCancelToken(requestId,nonce);
-   return NextResponse.json({token,expiresAt,summary:`Pause new bot work and stop future ${mode==='live'?'live':'test'} daily renewals in this environment. Work already in progress may still finish and incur previously authorized costs. Existing credit and account records stay in place. This does not delete your account or request a refund.`},{headers});
+   return NextResponse.json({token,expiresAt,summary:`Pause new bot work and stop future ${mode==='live'?'live':'test'} subscription renewals in this environment. Work already in progress may still finish and incur previously authorized costs. Existing credit and account records stay in place. This does not delete your account or request a refund.`},{headers});
   }
   const claims=parseCancelToken(i.token);
   const claimed=await db<boolean>('rpc/icash_support_claim_cancel','POST',{p_account:accountId,p_user:userId,p_mode:mode,p_request:claims.requestId,p_nonce:hashCancelNonce(claims.nonce)});
@@ -24,14 +25,17 @@ export async function POST(req:Request){
   try{
    const plans=await db<DailyPlan[]>(`icash_daily_plans?account_id=eq.${accountId}&mode=eq.${mode}&state=neq.stopped&select=*`);
    for(const plan of plans){if(plan.mode!==mode)throw Error('PLAN_MODE_MISMATCH');await stopDaily(plan);}
+   const membership=await accountMembership(accountId);if(membership)await stopMembership(membership);
+   const savedMembership=membership?await accountMembership(accountId):null;
+   if(savedMembership&&savedMembership.state!=='cancelled'&&!savedMembership.cancel_at_period_end)throw Error('MEMBERSHIP_CANCELLATION_UNCONFIRMED');
    const [account]=await db<{bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=bot_paused`);
    const remaining=await db<{id:string}[]>(`icash_daily_plans?account_id=eq.${accountId}&mode=eq.${mode}&state=neq.stopped&select=id&limit=1`);
    if(!account?.bot_paused||remaining.length)throw Error('CANCELLATION_UNCONFIRMED');
-   const result=`Your bot is paused and future ${mode==='live'?'live':'test'} daily renewals in this environment are stopped. Previously authorized in-progress work may still settle. Your account and credit remain available.`;
+   const result=`Your bot is paused and future ${mode==='live'?'live':'test'} subscription renewals in this environment are stopped. Previously authorized in-progress work may still settle. Your account and credit remain available.`;
    await db(`icash_support_cancel_requests?id=eq.${claims.requestId}&account_id=eq.${accountId}&mode=eq.${mode}`,'PATCH',{state:'cancelled',result,updated_at:new Date().toISOString()});
    return NextResponse.json({confirmed:true,message:result},{headers});
   }catch{
-   const result=`Your pause and ${mode==='live'?'live':'test'} daily-renewal stop request is saved. Provider cancellation in this environment is not yet confirmed; support review is needed. Do not assume future renewals have stopped until confirmed.`;
+   const result=`Your pause and ${mode==='live'?'live':'test'} subscription-renewal stop request is saved. Provider cancellation in this environment is not yet confirmed; support review is needed. Do not assume future renewals have stopped until confirmed.`;
    await db(`icash_support_cancel_requests?id=eq.${claims.requestId}&account_id=eq.${accountId}&mode=eq.${mode}`,'PATCH',{state:'needs_review',result,updated_at:new Date().toISOString()});
    return NextResponse.json({confirmed:false,message:result},{status:202,headers});
   }

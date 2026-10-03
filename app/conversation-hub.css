@@ -1,0 +1,99 @@
+/* A single place to read the conversation and act, without leaving the property. */
+.personalized-workspace .property-contact-dialog{width:min(920px,calc(100vw - 40px));height:min(820px,calc(100dvh - 48px));max-height:none;overflow:hidden;white-space:normal;letter-spacing:normal;border:1px solid #dfe5e1;border-radius:20px}
+.personalized-workspace .property-contact-dialog[open]{display:flex;flex-direction:column}
+.personalized-workspace .contact-dialog-heading{padding:20px 24px;flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid #edf0ed}
+.personalized-workspace .contact-dialog-kicker{font-size:10px;letter-spacing:.12em;color:#7d8a81;display:block;margin-bottom:6px;font-weight:600}
+.personalized-workspace .contact-dialog-heading h3{font-size:20px;font-weight:650;line-height:1.4;letter-spacing:-.03em;margin:0;color:#25322a}
+.personalized-workspace .contact-dialog-heading small{display:block;font-size:12px;line-height:1.5;color:#7a877e;margin-top:3px}
+.personalized-workspace .contact-dialog-close{display:grid;place-items:center;width:42px;height:42px;min-width:42px;padding:0;border:0;background:#f2f5f3;color:#5a6a60;border-radius:50%}
+.personalized-workspace .property-contact-dialog .property-conversations{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;border:0}
+.personalized-workspace .property-contact-dialog .property-conversations>.workspace-section-heading{flex:none;padding:10px 20px;justify-content:space-between;gap:10px}
+.personalized-workspace .property-conversations>.workspace-section-heading>small{font-size:11px;color:#89928c}
+.personalized-workspace .conversation-switch{display:flex;gap:5px;background:#f2f5f3;border-radius:10px;padding:3px}
+.personalized-workspace .conversation-switch button{display:flex;align-items:center;gap:7px;background:none;border:0;min-height:38px;padding:8px 14px;color:#7c8980;border-radius:8px;font-size:13px;font-weight:500}
+.personalized-workspace .conversation-switch button[aria-pressed=true]{background:#fff;color:#29543c;box-shadow:0 1px 4px #223c2d0d}
+.personalized-workspace .contact-text-view,.personalized-workspace .deal-communications,.personalized-workspace .deal-texts{flex:1;min-height:0;display:flex;flex-direction:column}
+.personalized-workspace .deal-texts{padding:0}
+.personalized-workspace .conversation-inbox{display:flex;flex:1;min-height:0;min-width:0}
+.personalized-workspace .conversation-contacts{width:208px;flex:none;border-right:1px solid #edf0ed;background:#fafcfb;padding:16px 10px;overflow:auto;scrollbar-width:thin}
+.personalized-workspace .conversation-contacts-title{font-size:11px;font-weight:600;color:#8b958e;margin:0 8px 12px}
+.personalized-workspace .conversation-contacts>button{display:flex;align-items:center;gap:9px;text-align:left;width:100%;padding:13px 10px;margin:2px 0;background:none;border:1px solid transparent;border-radius:10px;color:#67776c}
+.personalized-workspace .conversation-contacts>button[aria-pressed=true]{background:#edf4ef;border-color:#e0eae3;color:#244c33}
+.personalized-workspace .conversation-contact-avatar{display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:50%;background:#e4ece7;color:#4c745a;font-size:12px;font-weight:600}
+.personalized-workspace .conversation-contacts strong{font-size:13px;display:block;font-weight:600;line-height:1.5}
+.personalized-workspace .conversation-contacts small{font-size:11px;display:block;margin-top:2px;color:#88968d;overflow-wrap:anywhere}
+.personalized-workspace .conversation-contacts em{font-size:10px;color:#997333;font-style:normal;display:block;margin-top:4px}
+.personalized-workspace .conversation-thread-pane{flex:1;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+.personalized-workspace .conversation-thread-heading{flex:none;padding:15px 20px 10px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.personalized-workspace .conversation-thread-heading strong{display:block;font-size:14px;font-weight:600;color:#32493a}
+.personalized-workspace .conversation-thread-heading span{display:block;font-size:12px;margin-top:3px;color:#7f8b83}
+.personalized-workspace .conversation-refresh{display:grid;place-items:center;min-height:38px;width:38px;background:none;border:0;color:#849189}
+.personalized-workspace .conversation-search{flex:none;margin:0;padding:0 20px;color:#89948d;font-size:11px;max-height:115px;overflow:auto}
+.personalized-workspace .conversation-search>summary{min-height:28px;cursor:pointer}
+.personalized-workspace .conversation-search input{font-size:16px}
+.personalized-workspace .history-pages:empty{display:none}
+.personalized-workspace .conversation-thread-pane>.history-pages{flex:none;margin:0;padding:0 20px;gap:12px}
+.personalized-workspace .history-pages button{font-size:11px;min-height:32px;padding:5px 7px;color:#687e6f}
+.personalized-workspace .conversation-body{flex:1;display:flex;flex-direction:column;min-height:0}
+.personalized-workspace .conversation-log-wrap{position:relative;flex:1;min-height:90px;display:flex;overflow:hidden}
+.personalized-workspace .property-contact-dialog .message-history{flex:1;max-height:none;min-height:0;background:#fff;padding:18px 20px;gap:15px;border-radius:0;scrollbar-width:thin;overscroll-behavior:contain}
+.personalized-workspace .property-contact-dialog .message-bubble{max-width:88%;padding:13px 15px;border-radius:13px;background:#f2f5f3;color:#334239;overflow-wrap:anywhere;flex:none}
+.personalized-workspace .property-contact-dialog .message-outgoing{align-self:flex-end;background:#254b35;color:#fff;border-bottom-right-radius:4px}
+.personalized-workspace .property-contact-dialog .message-incoming{align-self:flex-start;border-bottom-left-radius:4px}
+.personalized-workspace .property-contact-dialog .message-speaker{font-size:10px;font-weight:500;opacity:.7;color:inherit}
+.personalized-workspace .property-contact-dialog .message-bubble p{font-size:14px;color:inherit;line-height:1.65;margin:5px 0 8px;text-align:left}
+.personalized-workspace .property-contact-dialog .message-bubble small{font-size:10px;line-height:1.5;opacity:.65;color:inherit}
+.personalized-workspace .conversation-latest{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);display:flex;gap:5px;align-items:center;border-radius:20px;border:1px solid #dee5e0;background:#fff;box-shadow:0 2px 10px #2033280a;font-size:11px;padding:8px 12px;white-space:nowrap}
+.personalized-workspace .property-contact-dialog .message-composer{flex:none;padding:12px 18px 10px;margin:0;border-top:1px solid #edf0ed;background:white}
+.personalized-workspace .text-input-row{display:flex;align-items:flex-end;border:1px solid #d9e2db;border-radius:13px;padding:7px;gap:7px}
+.personalized-workspace .text-input-row:focus-within{border-color:#84a590;box-shadow:0 0 0 2px #eef5f0}
+.personalized-workspace .property-contact-dialog .text-input-row textarea{display:block;flex:1;min-width:0;width:100%;font-size:16px;line-height:1.5;min-height:56px!important;max-height:110px;border:0;border-radius:8px;outline:none;box-shadow:none;resize:none;margin:0;padding:7px 5px;background:none;color:#324339}
+.personalized-workspace .property-contact-dialog .text-input-row .message-send{width:39px;height:39px;min-width:39px;padding:0;display:grid;place-items:center;background:#254b35;color:white;border:0;border-radius:10px;margin:0}
+.personalized-workspace .text-composer-meta{display:flex;justify-content:space-between;gap:12px;color:#849088;padding:7px 2px 0;font-size:10px;line-height:1.6}
+.personalized-workspace .message-composer p{font-size:12px;line-height:1.6;color:#856932;text-align:left;margin:8px 0 0}
+.personalized-workspace .message-composer .message-check-status{font-size:12px;padding:7px 0;min-height:32px;border:0;background:none;color:#637e6c;text-decoration:underline;margin-top:5px}
+.personalized-workspace .message-ai-note{flex:none;max-height:130px;overflow:auto;font-size:11px;padding:4px 20px 10px;color:#89958d;margin:0}
+.personalized-workspace .conversation-email{flex:none;max-height:40dvh;overflow:auto;padding:8px 20px;border-top:1px solid #edf0ed;margin:0;font-size:11px;color:#829087}
+.personalized-workspace .conversation-empty{padding:28px 22px;line-height:1.6;color:#819086;text-align:center;margin:auto}
+.personalized-workspace .conversation-empty svg{margin:0 auto 14px;color:#8ea496}
+.personalized-workspace .conversation-empty strong{display:block;color:#445d4e;font-size:16px;margin-bottom:8px}
+.personalized-workspace .conversation-empty p{font-size:13px;text-align:center;line-height:1.7;max-width:330px;margin:auto;color:#819086}
+.personalized-workspace .conversation-loading,.personalized-workspace .conversation-load-error{font-size:13px;color:#839187;padding:18px;text-align:left;line-height:1.6}
+.personalized-workspace .property-call-list{flex:1;min-height:0;overflow:auto;padding:20px 24px;scrollbar-width:thin}
+.personalized-workspace .property-call-list .manual-call-options{background:#f4f8f5;border:1px solid #e0e9e2;border-radius:14px;padding:18px;margin:0 0 26px}
+.personalized-workspace .manual-call-options h5{font-size:16px;margin:0 0 8px;font-weight:600;color:#324b3b}
+.personalized-workspace .manual-call-options small{font-size:12px;line-height:1.65;color:#829087}
+.personalized-workspace .manual-call-contact{padding:14px 0 0;display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.personalized-workspace .manual-call-contact strong{font-size:13px;font-weight:500;color:#526a5b}
+.personalized-workspace .manual-call-contact a{display:inline-flex;align-items:center;justify-content:center;background:#254b35;color:white;text-decoration:none;font-size:13px;min-height:42px;padding:11px 16px;border-radius:10px;margin-top:5px}
+.personalized-workspace .property-call-list .call-history-title{font-size:13px;color:#76877c;margin-bottom:14px;font-weight:600}
+.personalized-workspace .property-call-list>details{padding:15px 0;border-bottom:1px solid #edf0ed;font-size:13px;line-height:1.6;color:#657a6d}
+.personalized-workspace .property-call-list>details>summary{cursor:pointer;min-height:38px;color:#3c5546;font-weight:600}
+.personalized-workspace .property-call-list>details>summary small{display:block;font-size:11px;font-weight:400;color:#8a988f;margin-top:5px}
+.personalized-workspace .property-call-list .conversation-messages{max-height:40dvh}
+.personalized-workspace .workspace-progress{margin:18px 0 22px;padding:16px 18px;border:1px solid #e2e8e4;border-radius:13px;background:#f9fbfa}
+.personalized-workspace .workspace-progress h3{font-size:15px}
+.personalized-workspace .workspace-progress .progress-milestones{display:flex;gap:8px 20px;flex-wrap:wrap;font-size:13px}
+.personalized-workspace .workspace-progress .progress-note{font-size:11px;margin-top:9px}
+.personalized-workspace .workspace-progress>details{margin-top:6px}
+.personalized-workspace .budget-guardrails{font-size:11px;color:#798980;margin-top:6px;line-height:1.65}
+.personalized-workspace .budget-guardrails>summary{display:flex;align-items:center;gap:5px;min-height:32px;cursor:pointer}
+.personalized-workspace .budget-guardrails p{font-size:12px;line-height:1.65;max-width:640px;text-align:left;margin:8px 0;color:#63756a}
+@media(max-width:640px){
+ .personalized-workspace .property-contact-dialog{width:100vw;height:100dvh;max-width:none;margin:0;inset:0;border:0;border-radius:0}
+ .personalized-workspace .contact-dialog-heading{padding:16px}.personalized-workspace .contact-dialog-heading h3{font-size:18px}
+ .personalized-workspace .property-contact-dialog .property-conversations>.workspace-section-heading{padding:8px 14px}.personalized-workspace .property-conversations>.workspace-section-heading>small{font-size:10px}
+ .personalized-workspace .conversation-inbox{flex-direction:column}
+ .personalized-workspace .conversation-contacts{width:100%;display:flex;align-items:center;gap:5px;padding:8px 12px;border-right:0;border-bottom:1px solid #edf0ed;overflow-x:auto;overflow-y:hidden;flex:none}
+ .personalized-workspace .conversation-contacts-title{display:none}.personalized-workspace .conversation-contacts>button{width:auto;flex:none;padding:7px 10px;margin:0;gap:7px}.personalized-workspace .conversation-contact-avatar{width:27px;height:27px}
+ .personalized-workspace .conversation-contacts strong{font-size:11px}.personalized-workspace .conversation-contacts small{font-size:10px;white-space:nowrap}.personalized-workspace .conversation-contacts .history-pages{flex:none}
+ .personalized-workspace .conversation-thread-heading{padding:12px 16px 4px}.personalized-workspace .conversation-search{padding:0 16px}
+ .personalized-workspace .property-contact-dialog .message-history{padding:14px 16px;gap:12px}
+ .personalized-workspace .property-contact-dialog .message-bubble{max-width:92%}.personalized-workspace .property-contact-dialog .message-bubble p{font-size:14px}
+ .personalized-workspace .property-contact-dialog .message-composer{padding:10px 13px}.personalized-workspace .conversation-email{padding:9px 16px calc(9px + env(safe-area-inset-bottom))}
+ .personalized-workspace .property-call-list{padding:18px 16px}.personalized-workspace .workspace-progress{padding:14px 16px}
+}
+
+.personalized-workspace .property-contact-dialog .deal-communications{margin:0;padding:0;border:0;border-radius:0}
+.personalized-workspace .conversation-thread-pane{gap:0;margin:0}
+.personalized-workspace .text-composer-meta>small:last-child{white-space:nowrap;flex:none}

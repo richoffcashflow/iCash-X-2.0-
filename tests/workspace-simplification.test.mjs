@@ -19,15 +19,15 @@ function page(account,campaign,error=false){
 const campaign={policy:{version:'v1'},acknowledgment:{version:'v1'},configured:true,released:false,liveWorkReady:false,smsChannelEnabled:true};
 const account={signedIn:true,mode:'live',balanceCents:850,assistantName:'Synthetic bot',paused:true,billingActive:false,identity:{principal:'Synthetic company'},smsWorkReady:false,workReady:false};
 let tree=page(account,campaign),nodes=all(tree);
-assert.match(text(tree),/PAUSED/);assert.equal(nodes.find(n=>n.type===component('DailyBudgetControl')).props.balanceCents,850);assert.doesNotMatch(text(tree),/Your account records/);
+assert.match(text(tree),/PAUSED/);assert.equal(nodes.find(n=>n.type===component('CreditsWallet')).props.balanceCents,850);assert.doesNotMatch(text(tree),/Your account records/);
 assert.equal(nodes.filter(n=>n.type==='button'&&n.props.className==='fund-button').length,1,'one primary action');
-assert(nodes.some(n=>n.type===component('DailyBudgetControl')),'daily budget remains available as a secondary action');
+assert(nodes.some(n=>n.type===component('CreditsWallet')),'daily budget remains available as a secondary action');
 assert.equal(nodes.find(n=>n.props?.['aria-label']==='Workspace settings').props.hidden,true,'settings stay out of the default workspace');
 assert(nodes.some(n=>n.type==='button'&&text(n)==='Settings'),'settings have a clear entry point');
 assert(nodes.some(n=>n.props?.['aria-label']==='Workspace settings'));
 assert(nodes.some(n=>n.type==='details'&&n.props.id==='account-details'),'account details remain accessible');
 tree=page({...account,paused:false,billingActive:true,activeWork:true,workReady:true},{...campaign,released:true,liveWorkReady:true},true);
-const stop=all(tree).find(n=>n.type==='button'&&text(n).includes('Stop bot'));assert(stop);assert.equal(stop.props.disabled,false,'transient account error never blocks Stop');
+const stop=all(tree).find(n=>n.type==='button'&&text(n).includes('Pause bot'));assert(stop);assert.equal(stop.props.disabled,false,'transient account error never blocks Stop');
 function beneathDetails(root,target,inside=false){if(root===target)return inside;if(Array.isArray(root))return root.some(n=>beneathDetails(n,target,inside));return !!root&&typeof root==='object'&&beneathDetails(root.props?.children,target,inside||root.type==='details');}
 assert.equal(beneathDetails(tree,stop),false,'Stop is never hidden in an expander');
 tree=page({...account,smsWorkReady:true},{...campaign,released:true},true);assert(all(tree).find(n=>n.type==='button'&&text(n)==='Start SMS outreach').props.disabled,'stale Start remains blocked');

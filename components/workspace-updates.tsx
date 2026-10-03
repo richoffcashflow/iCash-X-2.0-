@@ -22,7 +22,7 @@ export function WorkspaceUpdates({onPreferences,onBudget}:{onPreferences:()=>voi
    {!loaded&&!error&&<p className="updates-empty" role="status">Loading your bot’s updates…</p>}
    {loaded&&!items.length&&<div className="updates-empty"><Bell size={24}/><h3>You’re all caught up.</h3><p>Seller replies, completed research and deal milestones will appear here.</p></div>}
    <ul className="updates-list">{items.map(item=><li key={item.id} data-unread={!seenAt||Date.parse(item.createdAt)>Date.parse(seenAt)}><a href={`/?screeningId=${encodeURIComponent(item.screeningId)}`}><span className="update-unread-dot" aria-hidden="true"/><span><strong>{item.title}</strong><p>{item.address??item.detail}</p><small>{new Date(item.createdAt).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</small></span></a></li>)}</ul>
-   {loaded&&items.length>0&&<div className="updates-budget"><strong>Ready for more eligible work?</strong><p>Choose how much your bot can spend each day.</p><button className="coach-action" onClick={()=>{dialog.current?.close();onBudget();}}>Review daily budget</button></div>}
+   {loaded&&items.length>0&&<div className="updates-budget"><strong>Ready for more eligible work?</strong><p>Add prepaid credits for the next eligible tasks.</p><button className="coach-action" onClick={()=>{dialog.current?.close();onBudget();}}>Add work credits</button></div>}
   </dialog>
  </>;
 }

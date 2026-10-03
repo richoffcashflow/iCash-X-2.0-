@@ -35,8 +35,8 @@ await saveBotBuild({...profile,market:'San Antonio, TX',marketMode:'city',voice:
 assert.equal(JSON.parse(changedChoices[1].body).profile.market,'San Antonio, TX');assert.equal(JSON.parse(changedChoices[1].body).profile.voice,'chris');
 const {mock}=await import('node:test');mock.timers.enable({apis:['setTimeout','Date'],now:1000});
 let transitionDone=false;const transition=waitForBotCreationTransition(1000,new AbortController().signal,false).then(()=>{transitionDone=true;});
-mock.timers.tick(4999);await Promise.resolve();assert.equal(transitionDone,false);mock.timers.tick(1);await transition;assert.equal(transitionDone,true);
+mock.timers.tick(449);await Promise.resolve();assert.equal(transitionDone,false);mock.timers.tick(1);await transition;assert.equal(transitionDone,true);
 const interrupted=new AbortController();const pending=waitForBotCreationTransition(Date.now(),interrupted.signal,false);interrupted.abort();await assert.rejects(pending,/Creation interrupted/);
 await waitForBotCreationTransition(Date.now(),new AbortController().signal,true);
 await waitForBotCreationTransition(Date.now()-6000,new AbortController().signal,false);
-mock.timers.reset();console.log('Creation transition: five-second minimum, reduced motion, slow-save completion, cancellation and edited choices passed.');
+mock.timers.reset();console.log('Creation transition: brief creation transition, reduced motion, slow-save completion, cancellation and edited choices passed.');

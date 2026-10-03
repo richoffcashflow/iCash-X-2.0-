@@ -8,6 +8,9 @@ import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/account-auth";
 import { db } from "@/lib/stripe-test";
 import {accountMode} from "@/lib/account-mode";
+import {accountMembership} from '@/lib/membership';
+import {membershipAccessible} from '@/lib/membership-policy';
+import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 export const dynamic="force-dynamic";
 export async function GET(){
  const headers={"Cache-Control":"private, no-store"};
@@ -20,7 +23,7 @@ export async function GET(){
  await db("rpc/icash_claim_bot_setup","POST",{p_account:id});
  if(mode==="live")await resolveRequestedPropertyMarket(id,user.id);
  const [[a],[identity],[wallet],totals,[botSetup],reviews,readiness,voiceWork,propertyWork,billingPlans,smsReady,discoveryReadiness,contactReadiness]=await Promise.all([
- db<{id:string;assistant_name:string;bot_paused:boolean;daily_limit_cents:number}[]>(`icash_accounts?id=eq.${id}&select=id,assistant_name,bot_paused,daily_limit_cents`),
+ db<{id:string;assistant_name:string;bot_paused:boolean;daily_limit_cents:number;billing_model:string}[]>(`icash_accounts?id=eq.${id}&select=id,assistant_name,bot_paused,daily_limit_cents,billing_model`),
  db<CustomerIdentity[]>(`icash_customer_identities?account_id=eq.${id}&select=first_name,last_name,company_name,principal,voice_id,voice_name`),
  db<{balance_cents:number;reserved_cents:number}[]>(`icash_wallets?account_id=eq.${id}&select=balance_cents,reserved_cents`),
  db<{creditCents:number;phone:string|null}>('rpc/icash_funding_account_totals','POST',{p_account:id,p_mode:mode}),
@@ -36,6 +39,7 @@ export async function GET(){
  ]);
  // Sandbox balances are order totals, never spendable live-wallet grants.
  const balance=mode==="test"?totals.creditCents:wallet.balance_cents-wallet.reserved_cents;
- return NextResponse.json({signedIn:true,botSetup:botSetup??null,identity:identity??null,mode,email:user.email,phone:totals.phone,balanceCents:balance,reservedCents:mode==="test"?0:wallet.reserved_cents,assistantName:a.assistant_name,paused:a.bot_paused,billingActive:billingPlans.length>0,dailyLimitCents:a.daily_limit_cents,billingReview:reviews.length>0,workReady:mode==="live"&&liveWorkReady()&&readiness.ready,smsWorkReady:smsReady,discoveryWorkReady:discoveryReadiness.ready,discoveryBlocker:discoveryReadiness.ready?null:('reason' in discoveryReadiness?discoveryReadiness.reason:'readiness_unavailable'),discoveryQuote:discoveryReadiness.quote,contactWorkReady:contactReadiness.ready,contactQuote:contactReadiness.quote,activeWork:voiceWork.length>0||propertyWork.length>0},{headers});
+ const membership=a.billing_model==='membership_credits'?await accountMembership(id):null;
+ return NextResponse.json({signedIn:true,billingModel:a.billing_model,membershipActive:membershipAccessible(membership),isBillingOwner:user.id===ownerInboundTarget.ownerUserId,botSetup:botSetup??null,identity:identity??null,mode,email:user.email,phone:totals.phone??membership?.payer_phone??null,balanceCents:balance,reservedCents:mode==="test"?0:wallet.reserved_cents,assistantName:a.assistant_name,paused:a.bot_paused,billingActive:billingPlans.length>0,dailyLimitCents:a.daily_limit_cents,billingReview:reviews.length>0,workReady:mode==="live"&&liveWorkReady()&&readiness.ready,smsWorkReady:smsReady,discoveryWorkReady:discoveryReadiness.ready,discoveryBlocker:discoveryReadiness.ready?null:('reason' in discoveryReadiness?discoveryReadiness.reason:'readiness_unavailable'),discoveryQuote:discoveryReadiness.quote,contactWorkReady:contactReadiness.ready,contactQuote:contactReadiness.quote,activeWork:voiceWork.length>0||propertyWork.length>0},{headers});
  }catch{return NextResponse.json({error:"Your account is temporarily unavailable. Please retry."},{status:503,headers});}
 }
