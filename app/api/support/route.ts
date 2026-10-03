@@ -15,9 +15,13 @@ export async function GET(req:Request){
   const threads=await db<{id:string;subject:string;status:string;updated_at:string}[]>(`icash_support_threads?account_id=eq.${accountId}&select=id,subject,status,updated_at&order=updated_at.desc&limit=30`);
   const chosen=threadId??threads[0]?.id;
   if(threadId&&!threads.some(t=>t.id===threadId))return NextResponse.json({error:'Conversation not found.'},{status:404,headers});
-  const messages=chosen?await db(`icash_support_messages?account_id=eq.${accountId}&thread_id=eq.${chosen}&select=id,role,content,evidence,created_at&order=created_at.desc&limit=100`):[];
-  const mode=fundingMode();const cancellations=mode?await db(`icash_support_cancel_requests?account_id=eq.${accountId}&mode=eq.${mode}&select=id,source,state,result,created_at&order=created_at.desc&limit=5`):[];
-  return NextResponse.json({threads,threadId:chosen??null,messages:Array.isArray(messages)?messages.reverse():[],cancellations},{headers});
+  const mode=fundingMode();
+  const [messages,cancellations,evidence]=await Promise.all([
+   chosen?db(`icash_support_messages?account_id=eq.${accountId}&thread_id=eq.${chosen}&select=id,role,content,evidence,created_at&order=created_at.desc&limit=100`):[],
+   mode?db(`icash_support_cancel_requests?account_id=eq.${accountId}&mode=eq.${mode}&select=id,source,state,result,created_at&order=created_at.desc&limit=5`):[],
+   collectSupportDiagnostics(accountId),
+  ]);
+  return NextResponse.json({threads,threadId:chosen??null,messages:Array.isArray(messages)?messages.reverse():[],cancellations,evidence},{headers});
  }catch(e){return NextResponse.json({error:e instanceof Error&&['SIGN_IN_REQUIRED','ACCOUNT_REQUIRED'].includes(e.message)?'Sign in to your account to get help.':'Support history is unavailable. Please retry.'},{status:e instanceof Error&&['SIGN_IN_REQUIRED','ACCOUNT_REQUIRED'].includes(e.message)?401:503,headers});}
 }
 export async function POST(req:Request){

@@ -20,6 +20,7 @@ paths=[];replay=true;r=await route.POST(request('/api/support',{requestId:id(4),
 replay=false;rateLimited=true;r=await route.POST(request('/api/support',{requestId:id(5),message:'help'}));assert.equal(r.status,429);assert.equal(diagnostics,1);rateLimited=false;
 r=await route.POST(request('/api/support',{action:'escalate',threadId:id(99)}));assert.equal(r.status,404);
 r=await route.POST(request('/api/support',{action:'escalate',threadId}));assert.equal(r.body.escalated,true);
+r=await route.GET(new Request('https://example.com/api/support'));assert.equal(r.status,200);assert.deepEqual(r.body.evidence,[]);assert.equal(r.headers['Cache-Control'],'private, no-store');assert.equal(diagnostics,2,'current diagnostics are tenant-bound and returned by authenticated GET');
 let stopFailure=false,stops=0,prepared=null;paths=[];delete process.env.ICASH_SUPPORT_CANCEL_SECRET;
 const cancel=await load('app/api/support/cancel/route.ts',{NextResponse,randomBytes,z,workAccount,db:async(path,method,body)=>{
  paths.push({path,method,body});
