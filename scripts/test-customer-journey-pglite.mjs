@@ -105,7 +105,7 @@ try{await (async()=>{
  await q(`insert into auth.users(id,email,email_confirmed_at) values($1,'customer@example.invalid',now()),($2,'other@example.invalid',now()),($3,'operator@example.invalid',now())`,[user,otherUser,operator]);
  const guest='a'.repeat(64);
  const setup=await rpc('icash_init_bot_setup',{p_guest:guest});
- const saved=await rpc('icash_save_bot_setup',{p_setup:setup.id,p_revision:0,p_profile:{displayName:'Simulation Bot',marketMode:'nationwide'},p_stage:4});
+ const saved=await rpc('icash_save_bot_setup',{p_setup:setup.id,p_revision:0,p_profile:{displayName:'Simulation Bot',marketMode:'city',market:'75217'},p_stage:4});
  assert.equal(saved.stage,4);assert.equal(await rpc('icash_save_bot_setup',{p_setup:setup.id,p_revision:0,p_profile:{displayName:'Stale'},p_stage:1}),null);
  const order=(await one(`insert into icash_funding_orders(mode,guest_hash,pack_code,price_cents,credit_cents) values('live',$1,'work',10000,10000) returning id`,[guest])).id;
  const paid={p_order:order,p_mode:'live',p_session:'cs_live_SIMULATION',p_payment:'pi_SIMULATION',p_amount:10000,p_email:'customer@example.invalid',p_phone:null};

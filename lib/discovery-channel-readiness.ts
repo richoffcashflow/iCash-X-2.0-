@@ -66,7 +66,7 @@ async function dataAccountReadiness(accountId:string,userId:string,operation:'pr
    if(lifetime+rate.charge_cents>activation.customer_cap_cents)return blocked('account_spending_limit');
   }else if(![budget.funded_micros,budget.spent_micros,budget.protected_micros,budget.reserved_micros].every(integer)
    ||budget.funded_micros-budget.spent_micros-budget.protected_micros-budget.reserved_micros<cost.reserveCents*10000)return held;
-  if(!contacts&&!await propertyResearchMarketKnown(config.zip))return blocked('market_review_required');
+  if(!contacts&&!await propertyResearchMarketKnown(config.zip,accountId))return blocked('market_review_required');
   return {ready:true,quote:{chargeCents:rate.charge_cents,...(contacts?{maxContacts:quantity}:{maxProperties:quantity}),costBasis:'planning_estimate'}};
  }catch{return held;}
 }

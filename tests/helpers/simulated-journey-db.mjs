@@ -4,10 +4,13 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {isAbsolute} from 'node:path';
 export const read=p=>readFileSync(new URL('../../'+p,import.meta.url),'utf8');
-export async function createJourneyDb(modulePath){
- assert(modulePath&&isAbsolute(modulePath),'Supply an existing official PGlite module path');
- const {PGlite}=await import(pathToFileURL(modulePath).href);
- const notices=[],pg=await PGlite.create({onNotice:n=>notices.push(n.message)});
+export async function createJourneyDb(modulePath,suppliedPg=null){
+ const notices=[];let pg=suppliedPg;
+ if(!pg){
+  assert(modulePath&&isAbsolute(modulePath),'Supply an existing official PGlite module path');
+  const {PGlite}=await import(pathToFileURL(modulePath).href);
+  pg=await PGlite.create({onNotice:n=>notices.push(n.message)});
+ }
  await pg.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;
  create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
  create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
@@ -19,7 +22,7 @@ export async function createJourneyDb(modulePath){
   'text-messaging','text-stop-voice','inventory-allocation','account-margin',
   'estimated-operation-settlement','communication-fractional-billing','customer-funded-margins','scoped-spend-activation',
   'estimated-settlement-fairness','dealmachine-cost-baseline','bot-setup-funnel','bot-setup-session-isolation','market-shortlist',
-  'funded-account-provisioning','funded-provisioning-trigger','funded-voice-provisioning','market-contract-coverage',
+  'funded-account-provisioning','funded-provisioning-trigger','funded-voice-provisioning','market-contract-coverage','research-contract-separation','requested-property-zip-resolution',
   'daytime-pacing','inbound-voice','voice-launch-hardening','voice-sms-context','voice-usage-settlement','voice-pending-estimate-isolation',
   'reviewed-action-authority','buyer-qualification','title-requests','title-directory','title-inbound','closing-coordination','closing-confirmations','title-tasks','title-followup','manual-deal-email','requested-buyer-package-email','buyer-title-ordering',
  ].map(x=>'config/'+x+'.sql'));

@@ -13,6 +13,7 @@ const discovery=await loadService('lib/discovery-service.ts',{
  db:async path=>{
   calls.push(path);
   if(path.startsWith('icash_discovery_configs'))return [{enabled:true,exhausted:false,zip:'38118',data_rights_until:rights,per_page:5,rate_id:'rate',property_credit_micros:10000,next_page:1,revision:'revision'}];
+  if(path.startsWith('icash_bot_setups'))return [];
   if(path.startsWith('icash_accounts'))return [{bot_paused:paused}];
   if(path.startsWith('icash_wallets'))return [{balance_cents:300,reserved_cents:0}];
   if(path.startsWith('icash_operation_rates'))return [{enabled:true,operation:'property_search',expires_at:'2099-01-01',costs_micros:{dealmachine:100000}}];

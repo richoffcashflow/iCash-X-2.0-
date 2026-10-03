@@ -1,3 +1,4 @@
+import {resolveRequestedPropertyMarket} from '@/lib/requested-property-market';
 import {discoveryAccountReadiness,contactAccountReadiness} from '@/lib/discovery-channel-readiness';
 import {smsAccountReady} from '@/lib/sms-channel-readiness';
 import {liveWorkReady} from '@/lib/live-work-admission';
@@ -17,6 +18,7 @@ export async function GET(){
  if(mode==="live")await db("rpc/icash_apply_funding_pacing","POST",{p_account:id});
  await db("rpc/icash_daily_claim","POST",{p_account:id});
  await db("rpc/icash_claim_bot_setup","POST",{p_account:id});
+ if(mode==="live")await resolveRequestedPropertyMarket(id,user.id);
  const [[a],[identity],[wallet],totals,[botSetup],reviews,readiness,voiceWork,propertyWork,billingPlans,smsReady,discoveryReadiness,contactReadiness]=await Promise.all([
  db<{id:string;assistant_name:string;bot_paused:boolean;daily_limit_cents:number}[]>(`icash_accounts?id=eq.${id}&select=id,assistant_name,bot_paused,daily_limit_cents`),
  db<CustomerIdentity[]>(`icash_customer_identities?account_id=eq.${id}&select=first_name,last_name,company_name,principal,voice_id,voice_name`),

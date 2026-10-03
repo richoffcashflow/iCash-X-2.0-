@@ -24,7 +24,7 @@ try{
  await q('update icash_screening_control set enabled=true');
  const rate=(await one("select id from icash_operation_rates where operation='property_search' and enabled")).id;
  const ownerRate=(await one("select id from icash_operation_rates where operation='owner_enrichment' and enabled")).id;
- const config=await one("insert into icash_discovery_configs(account_id,enabled,auto_enabled,zip,rate_id,property_credit_micros,data_rights_until,seller_cost_reserve_cents,per_page,contacts_enabled,contact_rate_id) values($1,true,true,'38118',$2,10000,now()+interval '1 day',0,5,true,$3) returning *",[account,rate,ownerRate]);
+ const config=await one("insert into icash_discovery_configs(account_id,enabled,auto_enabled,zip,rate_id,property_credit_micros,data_rights_until,seller_cost_reserve_cents,per_page,contacts_enabled,contact_rate_id) values($1,true,true,'38118',$2,10000,now()+interval '1 day',0,5,true,$3) on conflict(account_id) do update set enabled=true,auto_enabled=true,zip='38118',rate_id=excluded.rate_id,property_credit_micros=excluded.property_credit_micros,data_rights_until=excluded.data_rights_until,per_page=5,contacts_enabled=true,contact_rate_id=excluded.contact_rate_id returning *",[account,rate,ownerRate]);
  const costs=await loadService('lib/operating-costs.ts',{db,validateCostManifest,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady});
  const market=await loadService('lib/contract-coverage-service.ts',{db,contractCapability,reviewedContractCoverage});
  assert.equal(await market.propertyResearchMarketKnown('38118'),true);
