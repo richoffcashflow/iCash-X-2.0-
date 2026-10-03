@@ -12,6 +12,10 @@
     {
       "path": "/api/internal/voice/recording/maintenance",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/internal/voice/owner-recording-test/maintenance",
+      "schedule": "* * * * *"
     }
   ]
 }

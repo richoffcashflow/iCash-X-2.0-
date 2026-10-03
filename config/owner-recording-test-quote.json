@@ -1,0 +1,32 @@
+{
+ "status":"DISABLED_OPERATOR_PLANNING_CANDIDATE",
+ "currency":"USD",
+ "maxAttempts":3,
+ "totalCapMicros":3000000,
+ "maxTotalSeconds":60,
+ "quote":{
+  "elevenlabsAllowanceMicrosPerMinute":500000,
+  "voiceMaxMicrosPerMinute":94500,
+  "streamMicrosPerMinute":4400,
+  "speechGatherMicros":20000,
+  "recordingMicrosPerMinute":2500,
+  "storageMicrosPerMinuteMonth":500,
+  "maxAttemptMicros":1000000,
+  "reviewedAt":null,
+  "validUntil":null,
+  "evidenceRef":"Operator planning candidate, not installed:0.50 inclusive EL/minute allowance, burstOFF and60-second fixed prompt; actual pinned branch/model/voice and Twilio destination rate must pass fresh review."
+ },
+ "arithmetic":{
+  "worstPlanningMicrosPerAttempt":621936,
+  "worstPlanningMicrosForThree":1865808,
+  "maximumBudgetReservationForThree":3000000
+ },
+ "assumptions":[
+  "The0.50 EL allocation is a deliberately conservative operator estimate, not a vendor-guaranteed rate or cap.",
+  "Reviewed copied owner branch has fixed60-second duration, no burst/queue, selected model/voice and no extra tools or audio copies.",
+  "Read actual Twilio destination rate before each attempt; it must not exceed the94500-micro planning envelope.",
+  "One ASR Gather, basic Say, both-channel recording only after consent,30-day audio-only storage with30/28 conservative allocation.",
+  "No next attempt until actual inclusive EL USD and canonical Twilio Call price are reconciled; unobserved add-ons are clearly estimated.",
+  "A bill above its1USD reserved attempt allowance or unknown usage blocks all further attempts. No customer-wallet debit."
+ ]
+}
