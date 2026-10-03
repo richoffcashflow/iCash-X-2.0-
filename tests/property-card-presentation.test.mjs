@@ -49,3 +49,33 @@ card=mod.exports.PropertyCard({...props,work:sparse,property:{...property,comple
 assert.equal(nodes.filter(n=>n.props?.className==='property-recorded-meta').length,0,'missing dates and calls do not invent metadata');
 assert.doesNotMatch(source,/photo-placeholder|fake-price|dummy-value/);
 console.log('Property-card presentation: address hierarchy, evidence-only metadata, native keyboard disclosure, nested-toggle isolation, grouped details and retained child state passed.');
+
+const cashPreview=saved=>all(mod.exports.PropertyCard({...props,property:{...property,result:saved}})).find(n=>n.props?.className==='property-cash-preview');
+const historical={...property.result,calculationVersion:undefined,preliminarySellerCeilingCents:410000,property:{...property.result.property,fetchedAt:'2026-10-01T05:13:42.573Z'}};
+const before=JSON.stringify(historical);
+let preview=cashPreview(historical);
+assert.equal(preview.props['data-earlier-estimate'],true);
+assert.match(text(preview),/Earlier saved estimate.*\$4,100.*Needs update · Unapproved.*Recorded Oct 1, 2026/,'the collapsed card prominently shows historical amount and limitations together');
+assert.doesNotMatch(text(preview),/Cash offer estimate|Refresh the saved calculation/,'historical research is not described as a current offer or a working refresh action');
+assert.equal(all(preview).find(n=>n.type==='strong').props.children,'$4,100','the exact saved amount stays in the large existing amount element');
+assert.equal(all(preview).filter(n=>['button','a','input'].includes(n.type)).length,0,'the historical display introduces no action');
+assert.equal(JSON.stringify(historical),before,'card rendering does not mutate saved results');
+preview=cashPreview(property.result);
+assert.equal(preview.props['data-earlier-estimate'],undefined);
+assert.match(text(preview),/Cash offer estimate.*\$145,000.*Based on saved analysis/);assert.doesNotMatch(text(preview),/Earlier saved estimate|Needs update/);
+for(const fetchedAt of [undefined,null,'bad']){
+ preview=cashPreview({...historical,property:{...historical.property,fetchedAt}});
+ assert.match(text(preview),/Earlier saved estimate.*\$4,100.*Needs update · Unapproved.*Recorded date unavailable/);
+ assert.doesNotMatch(text(preview),/Invalid Date|Sep 30|Oct 1/,'card completion time is not substituted for the snapshot date');
+}
+assert.match(text(cashPreview({...historical,property:{...historical.property,fetchedAt:'2026-10-01T23:30:00-07:00'}})),/Recorded Oct 2, 2026/);
+assert.match(text(cashPreview({...historical,preliminarySellerCeilingCents:0})),/Earlier saved estimate.*\$0.*Needs update · Unapproved/);
+for(const amount of [null,undefined,-1,1.5,'410000',NaN,Infinity,Number.MAX_SAFE_INTEGER+1]){
+ const unavailable=text(cashPreview({...historical,preliminarySellerCeilingCents:amount}));
+ assert.match(unavailable,/Not available/);assert.doesNotMatch(unavailable,/Earlier saved estimate|\$/);
+}
+assert.match(text(cashPreview({...historical,calculationVersion:'unrecognized_version'})),/Earlier saved estimate.*Needs update/);
+console.log('Historical collapsed card: saved amount, explicit historical/update/unapproved/date labels, unchanged current-version display, invalid/missing input handling and no added action passed.');
+
+const cashStyles=readFileSync(new URL('../app/workspace-clarity.css',import.meta.url),'utf8');
+assert.match(cashStyles,/\.property-cash-preview\[data-earlier-estimate=true\] :is\(span,strong,small\)\{color:#475467\}/,'historical card labels, amount and date stay high-contrast');

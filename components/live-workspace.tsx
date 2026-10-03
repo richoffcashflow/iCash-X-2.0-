@@ -86,6 +86,7 @@ function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefre
  useEffect(()=>{if(contractReady)setPreparingContract(true);},[contractReady]);
  const address=propertyAddressLines(p.result.property.address),researched=propertyResearchDate(p.completed_at);
  const analysis=propertyAnalysisView(p.result);
+ const estimateDate=analysis.fetchedAt?new Date(analysis.fetchedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}):null;
  const practice=p.result.property.propertyId.startsWith('practice_')||[true,'true'].includes((deal?.terms as (DealTerms&{practice?:boolean|string})|undefined)?.practice??false);
  const bot=propertyBotStatus({manual,paused:botPaused,available:botAvailable,stale,attention:needsAttention(p.id,work),stage:deal?.stage,practice});
  const phase=milestone(p,work).replace(/^[^A-Za-z]+/,'');
@@ -104,7 +105,7 @@ function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefre
      {(researched||calls.length>0)&&<span className="property-recorded-meta">{researched&&<span>Researched {researched}</span>}{calls.length>0&&<span>{calls.length} saved call{calls.length===1?'':'s'}</span>}</span>}
      <span className={`property-bot-status tone-${bot.tone}`}><span className="ai-status-dot" aria-hidden="true"/>{bot.label}</span>
     </span>
-    <span className="property-cash-preview"><span>Cash offer estimate</span><strong>{analysis.offerNeedsUpdate?'Needs update':analysisMoney(analysis.cashOfferCeilingCents)}</strong><small>{analysis.offerNeedsUpdate?'Refresh the saved calculation':'Based on saved analysis'}</small></span>
+    <span className="property-cash-preview" data-earlier-estimate={analysis.offerNeedsUpdate||undefined}><span>{analysis.offerNeedsUpdate?'Earlier saved estimate':'Cash offer estimate'}</span><strong>{analysisMoney(analysis.cashOfferCeilingCents)}</strong>{analysis.offerNeedsUpdate?<><span>Needs update · Unapproved</span><small>{estimateDate?`Recorded ${estimateDate}`:'Recorded date unavailable'}</small></>:<small>Based on saved analysis</small>}</span>
     <span className="property-open-control"><span>{active?'Close':'View details'}</span><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
    </button>
    <div className="property-quick-actions"><button type="button" onClick={()=>openContact('calls')} aria-label={`Call ${address.street}`}><Phone size={16}/>Call</button><button type="button" onClick={()=>openContact('texts')} aria-label={`Text conversation for ${address.street}`}><MessageCircle size={16}/>Text</button></div>

@@ -7,7 +7,7 @@ export function PropertyAnalysisSummary({result}: {result: unknown}) {
  return <section className="property-analysis" aria-label="Property financial analysis">
   <div className="property-analysis-heading"><h4>Deal numbers</h4><small>Estimates only</small></div>
   <dl className="property-analysis-grid">
-   <div className="property-analysis-metric property-analysis-offer"><dt>Cash offer estimate</dt><dd>{view.offerNeedsUpdate?'Needs update':analysisMoney(view.cashOfferCeilingCents)}</dd></div>
+   <div className="property-analysis-metric property-analysis-offer" data-earlier-estimate={view.offerNeedsUpdate||undefined}><dt>{view.offerNeedsUpdate?'Earlier saved estimate · Needs update':'Cash offer estimate'}</dt><dd>{analysisMoney(view.cashOfferCeilingCents)}{view.offerNeedsUpdate&&<small>Unapproved · {date?`Recorded ${date}`:'Recorded date unavailable'}</small>}</dd></div>
    <div className="property-analysis-metric"><dt>Estimated repairs</dt><dd>{repairValue}</dd></div>
    <div className="property-analysis-metric"><dt>ARV · Value after repairs</dt><dd>{analysisMoney(view.arvCents)}</dd></div>
   </dl>
