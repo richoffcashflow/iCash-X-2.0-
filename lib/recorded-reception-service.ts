@@ -2,7 +2,7 @@ import {randomBytes} from 'node:crypto';
 import {affirmativeSpeech,recordingGateOptOut,endTwiml,object,privateHeaders,sha,sid,uuid,verifiedTwilioForm} from './required-call-recording.ts';
 import {boundedBytes} from './required-call-recording-provider.ts';
 import {finalRecordingPayload} from './required-call-recording-service.ts';
-import {receptionTarget,rejectTwiml,receptionWorkspacePostcallAbsent} from './general-reception.ts';
+import {receptionTarget,receptionUrl,rejectTwiml,receptionWorkspacePostcallAbsent} from './general-reception.ts';
 import {propertyReceptionEnabled} from './reception-property-context.ts';
 import {recordedReceptionUrl,recordedReceptionPolicy,receptionConsentTwiml,receptionCallerHash,receptionStopToken,validRecordedReceptionConfig,inspectRecordedReceptionAgent,recordedReceptionToolMatches,incomingCallMatches,incomingCallIdentityMatches,receptionRecordingMatches,receptionAudioAvailable,type RecordedReceptionRpc,type RecordedReceptionRow,type RecordedReceptionConfig,type RecordedReceptionEnv} from './recorded-reception.ts';
 import type {RecordedReceptionProviders} from './recorded-reception-provider.ts';
@@ -69,8 +69,12 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
    let row:RecordedReceptionRow|null=null;
    try{
     if(env.ICASH_RECORDED_RECEPTION_READY!=='true')return xml(rejectTwiml);
-    const u=new URL(request.url);if(request.method!=='POST'||u.pathname!=='/api/reception/recorded/inbound'||u.search||request.headers.get('content-type')?.split(';')[0].trim()!=='application/x-www-form-urlencoded')return xml(rejectTwiml);
-    const f=verifiedTwilioForm((await boundedBytes(request,16384)).toString('utf8'),request.headers.get('x-twilio-signature'),env.TWILIO_AUTH_TOKEN??'',recordedReceptionUrl+'/inbound');
+    // Keep the already-installed carrier URL working during the recorded rollout.
+    // Verify against its exact canonical URL; never rewrite a signed request or
+    // infer its signature target from Host/X-Forwarded headers.
+    const u=new URL(request.url),target=u.pathname==='/api/reception/inbound'?receptionUrl:u.pathname==='/api/reception/recorded/inbound'?recordedReceptionUrl+'/inbound':null;
+    if(request.method!=='POST'||!target||u.search||request.headers.get('content-type')?.split(';')[0].trim()!=='application/x-www-form-urlencoded')return xml(rejectTwiml);
+    const f=verifiedTwilioForm((await boundedBytes(request,16384)).toString('utf8'),request.headers.get('x-twilio-signature'),env.TWILIO_AUTH_TOKEN??'',target);
     if(!f||f.get('AccountSid')!==env.TWILIO_ACCOUNT_SID||f.get('Direction')!=='inbound'||f.get('CallStatus')!=='ringing'||f.get('To')!==receptionTarget.calledNumber||!sid(f.get('CallSid'),'CA'))return xml(rejectTwiml);
     const from=f.get('From')??'';if(!/^\+[1-9]\d{7,14}$/.test(from)&&!['anonymous','restricted','unknown'].includes(from))return xml(rejectTwiml);
     const c=await currentConfig(f.get('To')!);if(!c)return xml(rejectTwiml);

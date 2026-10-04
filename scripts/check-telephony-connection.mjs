@@ -4,12 +4,15 @@ import {pathToFileURL} from 'node:url';
 import {readOwnerForwarding} from '../lib/owner-forwarding-readiness.ts';
 import {readRecordedReceptionReadiness} from '../lib/recorded-reception-readiness.ts';
 import {readRecordedOutboundReadiness} from '../lib/recorded-outbound-readiness.ts';
+import {readVoiceUsagePolicies} from '../lib/voice-usage-service.ts';
+import {observeLegacyReceptionCosts} from '../lib/legacy-reception-cost-observation.ts';
 
 export async function checkTelephonyConnection(env=process.env,fetcher=fetch){
  const reads=await Promise.allSettled([
   readOwnerForwarding(env,fetcher),
   readRecordedReceptionReadiness(env,{fetcher}),
   readRecordedOutboundReadiness(env,{fetcher}),
+  observeLegacyReceptionCosts(env,fetcher),
  ]);
  const value=(i)=>reads[i].status==='fulfilled'?reads[i].value:null;
  const forwarding=value(0),incoming=value(1),outgoing=value(2);
@@ -19,6 +22,16 @@ export async function checkTelephonyConnection(env=process.env,fetcher=fetch){
   forwarding:forwarding?{status:'checked',enabled:forwarding.enabled,providerStatus:forwarding.providerStatus,routeConfigured:forwarding.routeConfigured}:{status:'unavailable',routeConfigured:false},
   incoming:incoming??{status:'unavailable',branches:[],phone:{status:'unavailable',bindingVerified:false,route:'unknown'}},
   outgoing:outgoing??{status:'unavailable',providerChecksPass:false},
+  legacyCosts:value(3)??[],
+  billingPolicies:readVoiceUsagePolicies(env.VOICE_USAGE_POLICIES_JSON).filter(p=>typeof p.version==='string'&&p.version.startsWith('required-audio-30d-speech-v1:')).map(p=>({
+   rateId:p.rateId,version:p.version,enabled:p.enabled===true,operation:p.operation,validUntil:p.validUntil,
+   componentCount:Object.keys(p.components??{}).length,
+   carrierAccountMatches:p.components?.twilio?.twilioAccountSid===env.TWILIO_ACCOUNT_SID,
+   carrierAgentMatches:p.components?.twilio?.agentId===outgoing?.agentId,
+   carrierFromMatches:p.components?.twilio?.from===env.CONTIGUITY_FROM,
+   carrierKind:p.components?.twilio?.kind==='outbound_carrier_estimate',
+   recordingAddons:p.components?.other?.kind==='recording_addon_estimate',
+  })),
   liveCallVerification:'not_tested',
  };
 }

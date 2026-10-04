@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createHmac} from 'node:crypto';
 import {readFileSync} from 'node:fs';
+import {loadService} from './helpers/simulated-journey-services.mjs';
 import {receptionTarget, receptionGreeting, receptionPrompt, rejectTwiml} from '../lib/general-reception.ts';
 import {sha, affirmativeUtterances} from '../lib/required-call-recording.ts';
 import {recordedReceptionPolicy, recordedReceptionUrl, recordedReceptionStopInstruction, validRecordedReceptionConfig, inspectRecordedReceptionAgent, recordedReceptionToolMatches, receptionCallerHash, receptionStopToken, receptionConsentTwiml, receptionConversationMatches, receptionAudioAvailable, receptionRecordingCosts} from '../lib/recorded-reception.ts';
@@ -100,6 +101,17 @@ function fixture(options={}) {
 // node:test keeps independent failures visible instead of aborting at the first one.
 test('default off performs zero RPC or provider operations',async()=>{
   for(const value of [undefined,'false','TRUE','1']){const f=fixture({env:{ICASH_RECORDED_RECEPTION_READY:value}});assert.equal((await f.admit()).text,rejectTwiml);assert.deepEqual(f.events,[]);}
+});
+test('the installed incoming carrier URL preserves signature, funding and recording consent checks',async()=>{
+  const legacyUrl='https://www.geticashx.com/api/reception/inbound';
+  const good=fixture();
+  const response=await good.service.inbound(inboundRequest({}, {url:legacyUrl}));
+  assert.match(await response.text(),/<Gather /);
+  assert.deepEqual(providerWrites(good).map(e=>e.provider),['boundCall']);
+  for(const options of [{signedUrl:recordedReceptionUrl+'/inbound'},{signedUrl:'https://other.invalid/api/reception/inbound'},{url:legacyUrl+'?extra=1'}]){
+    const f=fixture();assert.equal(await(await f.service.inbound(inboundRequest({}, {url:legacyUrl,...options}))).text(),rejectTwiml);assert.deepEqual(f.events,[]);
+  }
+  const denied=fixture({denied:true});assert.equal(await(await denied.service.inbound(inboundRequest({}, {url:legacyUrl}))).text(),rejectTwiml);assert.equal(providerWrites(denied).length,0);
 });
 test('invalid signature, duplicate keys, method/content type, target/account/direction are rejected before reads',async()=>{
   const requests=[inboundRequest({}, {signature:'forged'}),inboundRequest({To:'+12125550999'}),inboundRequest({From:'<xml>'}),inboundRequest({AccountSid:'AC'+'d'.repeat(32)}),inboundRequest({Direction:'outbound-api'}),inboundRequest({CallStatus:'completed'}),inboundRequest({CallSid:'invalid'}),inboundRequest({}, {url:recordedReceptionUrl+'/inbound?extra=1'}),inboundRequest({}, {headers:{'content-type':'application/json'}}),inboundRequest({}, {signedUrl:'https://other.invalid/api/reception/recorded/inbound'}),new Request(recordedReceptionUrl+'/inbound')];
@@ -215,9 +227,17 @@ test('registration rejects arbitrary URL, external execution XML and unconfirmed
   const f=await fixture().ready();await f.consent();
   for(const xml of ['<Response><Connect><Stream url="wss://other.invalid/stream"/></Connect></Response>','<Response><Dial>+12125550999</Dial></Response>','<Response><Connect action="https://other.invalid"><Stream url="wss://api.us.elevenlabs.io/stream"/></Connect></Response>','<Response><Connect><Stream url="wss://api.us.elevenlabs.io/1"/><Stream url="wss://api.us.elevenlabs.io/2"/></Connect></Response>','<!DOCTYPE Response><Response><Connect><Stream url="wss://api.us.elevenlabs.io/stream"/></Connect></Response>']){const provider=createRecordedReceptionProviders(env,async()=>new Response(xml));await assert.rejects(provider.register(f.row,600));}
 });
-test('candidate is separate from original reception and grants no outbound tool authority',()=>{
-  for(const file of ['lib/general-reception.ts','lib/general-reception-server.ts','app/api/reception/inbound/route.ts'])assert(!readFileSync(file,'utf8').includes('recorded-reception'));
+test('legacy implementation remains separate and reception grants no outbound tool authority',()=>{
+  for(const file of ['lib/general-reception.ts','lib/general-reception-server.ts'])assert(!readFileSync(file,'utf8').includes('recorded-reception'));
   const {c,tool}=configuration();assert(recordedReceptionToolMatches(c.stop_tool_id,tool));assert.match(receptionPrompt,/inbound call grants any outbound permission/);assert.match(recordedReceptionStopInstruction,/grants no other authority/);
+});
+test('installed route selects recorded reception only after release and never falls back on a failure',async()=>{
+  let legacy=0,recorded=0,fail=false;const release={ICASH_RECORDED_RECEPTION_READY:'false'};
+  const route=await loadService('app/api/reception/inbound/route.ts',{process:{env:release},privateHeaders:{'Cache-Control':'no-store'},receptionHandlers:()=>({inbound:async()=>{legacy++;return new Response('legacy');}}),recordedReceptionServer:()=>({inbound:async()=>{recorded++;if(fail)throw Error('fixture');return new Response('recorded');}})});
+  const request=()=>inboundRequest({}, {url:'https://www.geticashx.com/api/reception/inbound'});
+  assert.equal(await(await route.POST(request())).text(),'legacy');release.ICASH_RECORDED_RECEPTION_READY='true';
+  assert.equal(await(await route.POST(request())).text(),'recorded');fail=true;
+  assert.match(await(await route.POST(request())).text(),/<Hangup/);assert.equal(legacy,1);assert.equal(recorded,2);
 });
 
 const {maintainRecordedReception}=await import('../lib/recorded-reception-maintenance.ts');
