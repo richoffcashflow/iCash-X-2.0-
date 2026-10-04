@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {WebinarCheckout} from '@/components/webinar-checkout-adapter';
 import {WebinarAudience} from '@/components/webinar-audience';
+import {WebinarPurchaseNotifications} from '@/components/webinar-purchase-notifications';
 import {availableOffers,selectOffer} from '@/packages/webinar-engine/src/index';
 import {webinarSite} from '@/lib/webinar-site';
 import {webinarBrowserReady,webinarBrowserEvent} from '@/lib/webinar-browser-events';
@@ -59,7 +60,7 @@ export function WebinarRoom(){
  const namePrompt=!!w&&!name&&!skipName&&time>=w.nameAt;
  const contactPrompt=!!w&&!contactSaved&&!skipContact&&time>=w.contactAt&&!namePrompt;
  return <div className="wb-room">
-  <header className="wb-header"><a href="/" className="wb-wordmark">{webinarSite.brandName}<small>SESSIONS</small></a><div>{session&&<WebinarAudience sessionId={session.sessionId} enabled={session.webinar.showAudienceCount} preview={session.preview} playing={playing&&!mediaError}/>}<span className="wb-session-label">{session?.preview?'OWNER PREVIEW':'AUTOMATED SESSION'}</span><button className="wb-text" onClick={()=>setLogin(x=>!x)}>Already a member?</button></div></header>
+  <header className="wb-header"><a href="/" className="wb-wordmark">{webinarSite.brandName}<small>SESSIONS</small></a><div>{session&&<WebinarAudience sessionId={session.sessionId} enabled={session.webinar.showAudienceCount} preview={session.preview} playing={playing&&!mediaError} display={session.webinar.audienceDisplay} seconds={time}/>}<span className="wb-session-label">{session?.preview?'OWNER PREVIEW':'AUTOMATED SESSION'}</span><button className="wb-text" onClick={()=>setLogin(x=>!x)}>Already a member?</button></div></header>
   {login&&<div className="wb-login"><button className="wb-icon" aria-label="Close sign in" onClick={()=>setLogin(false)}><X/></button><h2>Welcome back</h2><p>Use your existing account to open your workspace.</p><AccountAccess onSignedIn={()=>location.assign(webinarSite.workspacePath)}/></div>}
   {!session?<main className="wb-empty"><span className="wb-eyebrow">{webinarSite.hostName} · {webinarSite.brandName}</span><h1>{unavailable?'Your next session is coming.':error?'Let’s get you connected.':'Opening your session…'}</h1><p>{unavailable||error||'Finding your place and preparing the video.'}</p>{error&&<button className="wb-primary" onClick={()=>void load()}>Try again</button>}{unavailable&&<a className="wb-primary" href="/">Open iCash X</a>}</main>:<main className={`wb-stage ${funding&&currentOffer?'wb-selling':''}`}>
    <section className="wb-watch">
@@ -90,6 +91,7 @@ export function WebinarRoom(){
     </section>
    </aside>
   </main>}
+  {session&&<WebinarPurchaseNotifications sessionId={session.sessionId} preview={session.preview} enabled={session.webinar.purchaseNotifications.enabled&&!!currentOffer&&!checkoutEngaged&&!mediaError&&!login&&time>=Math.max(webinarPitchAt(session.webinar),session.webinar.purchaseNotifications.startAt??0)} intervalSeconds={session.webinar.purchaseNotifications.intervalSeconds}/>}
   {session&&<div className="wb-bottom"><span>{name?<><b>{name}</b><small>Your session is saved</small></>:<><b>{webinarSite.brandName}</b><small>Watch. Ask. Choose your next step.</small></>}</span>{currentOffer?<button className="wb-primary" onClick={openFunding}>{currentOffer.ctaLabel}</button>:<span className="wb-next-up">{nextOffer?`Next step in ${formatWatchTime(nextOffer.at-time)}`:'Thanks for watching'}</span>}</div>}
  </div>;
 }

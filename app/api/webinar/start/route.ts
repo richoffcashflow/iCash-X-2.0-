@@ -9,6 +9,7 @@ import {db} from '@/lib/stripe-test';
 import {publicWebinar,settingsSchema,webinarSchema,visitorTimezone,webinarOffers,webinarPitchAt,offerDestination,type WebinarSettings,type Webinar} from '@/lib/webinar-policy';
 import {selectOffer} from '@/packages/webinar-engine/src/index';
 import {snapshotChat} from '@/lib/webinar-variants';
+import {approximateRegion} from '@/lib/webinar-activity';
 import {optimizedWebinar,returnVisit,type WebinarPerformance} from '@/lib/webinar-optimizer';
 import {webinarBody,webinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarOwner,webinarVisitor,type WebinarSession} from '@/lib/webinar-server';
 export const dynamic='force-dynamic';
@@ -22,7 +23,8 @@ export async function POST(req:Request){try{
  const visitor=await webinarVisitor(true,i.resume);const timezone=visitorTimezone(process.env.VERCEL?req.headers.get('x-vercel-ip-timezone'):null,i.timezone);
  const attribution=Object.fromEntries(Object.entries(i.attribution??{}).filter(([k])=>['utm_source','utm_medium','utm_campaign','utm_content','utm_term'].includes(k)));
  const jar=await cookies();let fundingGuest=jar.get('icash_funding_guest')?.value;if(!validGuest(fundingGuest)){fundingGuest=randomBytes(32).toString('hex');jar.set('icash_funding_guest',fundingGuest,{httpOnly:true,secure:process.env.NODE_ENV!=='development',sameSite:'lax',path:'/',maxAge:86400*30});}
- await db(`icash_webinar_visitors?id=eq.${visitor.id}`,'PATCH',{timezone,funding_guest_hash:guestHash(fundingGuest),last_seen_at:new Date().toISOString(),...(Object.keys(attribution).length?{attribution}:{})});
+ const activityRegion=process.env.VERCEL?approximateRegion(req.headers.get('x-vercel-ip-country'),req.headers.get('x-vercel-ip-country-region')):null;
+ await db(`icash_webinar_visitors?id=eq.${visitor.id}`,'PATCH',{timezone,activity_region:activityRegion,funding_guest_hash:guestHash(fundingGuest),last_seen_at:new Date().toISOString(),...(Object.keys(attribution).length?{attribution}:{})});
  if(!i.preview&&await webinarCustomerPaid(guestHash(fundingGuest)))return Response.json({redirect:webinarSite.workspacePath},{headers:webinarHeaders});
  const [rows,history,settingsRows,performance,offers]=await Promise.all([db<{config:Webinar}[]>('icash_webinars?select=config&order=updated_at.desc&limit=100'),db<WebinarSession[]>(`icash_webinar_sessions?visitor_id=eq.${visitor.id}&is_preview=eq.${!!i.preview}&select=*&order=created_at.desc&limit=100`),db<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config'),db<WebinarPerformance[]>('rpc/icash_webinar_performance','POST',{}),db<{session_id:string;created_at:string;kind:string;event_key:string}[]>(`icash_webinar_events?visitor_id=eq.${visitor.id}&kind=in.(pitch_shown,checkout_opened)&select=session_id,created_at,kind,event_key&order=created_at.desc&limit=1000`)]);
  const settings=settingsSchema.parse(settingsRows[0].config);
