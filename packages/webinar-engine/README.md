@@ -56,3 +56,7 @@ The current rollout uses **one deployment and database per company**. Each owns 
 - Purchase metrics come from verified live billing evidence. Refunds/disputes and test payments are excluded. Browser and server Purchase events share the same payment-based ID.
 
 The example import presets are iCash X installation content. Each future company supplies its own scripts, recordings, offer terms and knowledge.
+
+## Timed offers and duration inputs
+
+`availableOffers` and `selectOffer` accept any offer shape with `id`, `at` (seconds) and an optional absolute `expiresAt` deadline. Selection respects reveal time, expiry and a visitor's preferred eligible offer. `splitDuration` / `changeDurationUnit` support hours, minutes and seconds without coupling the engine to React. iCash X supplies offer URLs, Stripe checkout, payment verification and actual audience heartbeats through application adapters. Other companies replace those adapters and use their own deployment/database.

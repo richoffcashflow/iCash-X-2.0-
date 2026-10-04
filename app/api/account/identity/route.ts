@@ -1,3 +1,7 @@
+import {cookies} from 'next/headers';
+import {guestHash} from '@/lib/stripe-test';
+import {validGuest} from '@/lib/funding';
+import {checkoutCustomerContext} from '@/lib/checkout-customer-context';
 import {setupVoices} from '@/lib/setup-voices';
 import {NextResponse} from 'next/server';
 import {currentUser} from '@/lib/account-auth';
@@ -6,6 +10,10 @@ import {db} from '@/lib/stripe-test';
 import {elevenRequest} from '@/lib/elevenlabs';
 import {identityNames,chooseAccountVoice} from '@/lib/customer-identity';
 const headers={'Cache-Control':'private, no-store'};
+export async function GET(){
+ try{const user=await currentUser(true);if(!user)return NextResponse.json({firstName:''},{headers});const token=(await cookies()).get('icash_funding_guest')?.value;const context=await checkoutCustomerContext(validGuest(token)?guestHash(token!):null,user.email);return NextResponse.json({firstName:context.name??''},{headers});}
+ catch{return NextResponse.json({firstName:''},{headers});}
+}
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
  try{
