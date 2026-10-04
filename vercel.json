@@ -20,6 +20,14 @@
     {
       "path": "/api/reception/recorded/maintenance",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/webinar/followups",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/webinar/conversions",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

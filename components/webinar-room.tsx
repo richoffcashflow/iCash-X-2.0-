@@ -1,0 +1,88 @@
+'use client';
+import {useCallback,useEffect,useRef,useState} from 'react';
+import {WebinarCheckout} from '@/components/webinar-checkout-adapter';
+import {webinarSite} from '@/lib/webinar-site';
+import {webinarBrowserReady,webinarBrowserEvent} from '@/lib/webinar-browser-events';
+import {Play,Volume2,MessageCircle,Send,X,Pause,Maximize,RotateCcw,ChevronDown,ShieldCheck} from 'lucide-react';
+import {AccountAccess} from '@/components/account-access';
+import {formatWatchTime,offerOpen,webinarConsent,webinarConsentVersion,type Webinar,type WebinarEvent} from '@/lib/webinar-policy';
+type PublicWebinar=Omit<Webinar,'faq'|'chatStyle'>;
+type Message={id:string;role:'user'|'assistant';text:string};
+type Session={webinar:PublicWebinar;sessionId:string;progress:number;name:string;contactSaved:boolean;messages:Message[];preview:boolean;serverNow:number};
+async function post(path:string,body:unknown){const res=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await res.json();if(!res.ok)throw Error(data.error||'Please try again.');return data;}
+export function WebinarRoom(){
+ const [session,setSession]=useState<Session|null>(null),[error,setError]=useState(''),[unavailable,setUnavailable]=useState(''),[login,setLogin]=useState(false);
+ const [time,setTime]=useState(0),[playing,setPlaying]=useState(false),[muted,setMuted]=useState(true),[mediaError,setMediaError]=useState(''),[funding,setFunding]=useState(false),[chatOpen,setChatOpen]=useState(true),[messages,setMessages]=useState<Message[]>([]),[question,setQuestion]=useState(''),[chatBusy,setChatBusy]=useState(false),[chatError,setChatError]=useState('');
+ const [name,setName]=useState(''),[draftName,setDraftName]=useState(''),[email,setEmail]=useState(''),[phone,setPhone]=useState(''),[consent,setConsent]=useState(false),[contactSaved,setContactSaved]=useState(false),[skipName,setSkipName]=useState(false),[skipContact,setSkipContact]=useState(false),[formBusy,setFormBusy]=useState(false),[formError,setFormError]=useState('');
+ const [now,setNow]=useState(Date.now()),[endCountdown,setEndCountdown]=useState<number|null>(null),[saved,setSaved]=useState(true);
+ const starting=useRef(false);
+ const video=useRef<HTMLVideoElement>(null),chatEnd=useRef<HTMLDivElement>(null),lastSync=useRef(0),pitchSeen=useRef(false),startSeen=useRef(false),loaded=useRef(false),alive=useRef(true),offset=useRef(0),position=useRef(0),fundingRef=useRef(false);
+ const load=useCallback(async()=>{if(starting.current)return;starting.current=true;setError('');setUnavailable('');try{
+  const params=new URLSearchParams(location.search),attribution=Object.fromEntries(['utm_source','utm_medium','utm_campaign','utm_content','utm_term','fbclid'].flatMap(k=>params.has(k)?[[k,params.get(k)!]]:[]));
+  const d=await post('/api/webinar/start',{timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Chicago',...(params.get('r')?{resume:params.get('r')}:{}),...(params.get('preview')?{preview:params.get('preview')}:{}),attribution});
+  if(d.redirect){location.replace(d.redirect);return;}if(d.unavailable){setUnavailable(d.message);return;}if(!alive.current)return;
+  if(params.has('r')){params.delete('r');history.replaceState(null,'',location.pathname+(params.size?'?'+params.toString():''));}
+  webinarBrowserReady(d.sessionId,d.preview);offset.current=d.serverNow-Date.now();setSession(d);setName(d.name);setDraftName(d.name);setContactSaved(d.contactSaved);setMessages(d.messages);setTime(d.progress);position.current=d.progress;
+ }catch(e){if(alive.current)setError(e instanceof Error?e.message:'Could not open the session.');}finally{starting.current=false;}},[]);
+ useEffect(()=>{alive.current=true;void load();return()=>{alive.current=false;};},[load]);
+ const track=useCallback((kind:WebinarEvent,beacon=false)=>{
+  if(!session||session.preview)return;const body={sessionId:session.sessionId,seconds:Math.floor(position.current),kind};
+  if(beacon){navigator.sendBeacon('/api/webinar/event',new Blob([JSON.stringify(body)],{type:'application/json'}));return;}
+  void post('/api/webinar/event',body).then(()=>{if(alive.current)setSaved(true);if(['started','contact_saved','checkout_opened'].includes(kind))webinarBrowserEvent(kind as 'started'|'contact_saved'|'checkout_opened',session.sessionId);}).catch(()=>{if(alive.current)setSaved(false);});
+ },[session]);
+ useEffect(()=>{
+  const hidden=()=>{if(document.hidden){video.current?.pause();track('progress',true);}};
+  const leave=()=>track('progress',true);document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',leave);
+  return()=>{document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',leave);};
+ },[track]);
+ useEffect(()=>{const id=setInterval(()=>setNow(Date.now()+offset.current),1000);return()=>clearInterval(id);},[]);
+ useEffect(()=>{if(endCountdown===null)return;if(endCountdown===0){location.assign(webinarSite.checkoutPath);return;}const id=setTimeout(()=>setEndCountdown(n=>n===null?null:n-1),1000);return()=>clearTimeout(id);},[endCountdown]);
+ useEffect(()=>{chatEnd.current?.scrollIntoView({block:'nearest',behavior:'smooth'});},[messages]);
+ function openFunding(){if(!session||!offerOpen(session.webinar,now))return;track('checkout_opened');setFunding(true);fundingRef.current=true;setChatOpen(false);setEndCountdown(null);}
+ function tick(){const v=video.current;if(!v||!session)return;const n=Math.floor(v.currentTime);position.current=n;setTime(n);
+  if(Date.now()-lastSync.current>15000){lastSync.current=Date.now();track('progress');}
+  if(n>=session.webinar.pitchAt&&!pitchSeen.current){pitchSeen.current=true;track('pitch_shown');setFunding(true);fundingRef.current=true;setChatOpen(false);}
+ }
+ async function playWithSound(){const v=video.current;if(!v)return;v.muted=false;setMuted(false);try{await v.play();setMediaError('');}catch{setMediaError('Tap play again to start your video.');}}
+ async function saveContact(onlyName:boolean){if(!session||formBusy)return;setFormBusy(true);setFormError('');try{
+  const d=await post('/api/webinar/contact',{sessionId:session.sessionId,name:draftName.trim(),email,phone,consent,version:webinarConsentVersion,onlyName});setName(d.name);if(!onlyName)setContactSaved(d.contactSaved);track(onlyName?'name_saved':'contact_saved');
+ }catch(e){setFormError(e instanceof Error?e.message:'Could not save.');}finally{setFormBusy(false);}}
+ async function send(e:React.FormEvent){e.preventDefault();if(!question.trim()||chatBusy||!session)return;setChatBusy(true);setChatError('');const text=question.trim();try{const d=await post('/api/webinar/chat',{sessionId:session.sessionId,text});setMessages(m=>[...m,...d.messages]);setQuestion('');}catch(e){setChatError(e instanceof Error?e.message:'Message was not sent.');}finally{setChatBusy(false);}}
+ const w=session?.webinar,cues=w?.chat.filter(c=>c.at<=time).sort((a,b)=>a.at-b.at)??[],open=w?offerOpen(w,now):false;
+ const namePrompt=!!w&&!name&&!skipName&&time>=w.nameAt;
+ const contactPrompt=!!w&&!contactSaved&&!skipContact&&time>=w.contactAt&&!namePrompt;
+ return <div className="wb-room">
+  <header className="wb-header"><a href="/" className="wb-wordmark">{webinarSite.brandName}<small>SESSIONS</small></a><div><span className="wb-session-label">{session?.preview?'OWNER PREVIEW':'AUTOMATED SESSION'}</span><button className="wb-text" onClick={()=>setLogin(x=>!x)}>Already a member?</button></div></header>
+  {login&&<div className="wb-login"><button className="wb-icon" aria-label="Close sign in" onClick={()=>setLogin(false)}><X/></button><h2>Welcome back</h2><p>Use your existing account to open your workspace.</p><AccountAccess onSignedIn={()=>location.assign(webinarSite.workspacePath)}/></div>}
+  {!session?<main className="wb-empty"><span className="wb-eyebrow">{webinarSite.hostName} · {webinarSite.brandName}</span><h1>{unavailable?'Your next session is coming.':error?'Let’s get you connected.':'Opening your session…'}</h1><p>{unavailable||error||'Finding your place and preparing the video.'}</p>{error&&<button className="wb-primary" onClick={()=>void load()}>Try again</button>}{unavailable&&<a className="wb-primary" href="/">Open iCash X</a>}</main>:<main className={`wb-stage ${funding?'wb-selling':''}`}>
+   <section className="wb-watch">
+    <div className="wb-title-row"><div><span className="wb-eyebrow">WITH {webinarSite.hostName}</span><h1>{w!.title}</h1></div><span className="wb-duration">{formatWatchTime(w!.durationSeconds)}</span></div>
+    <div className="wb-player">
+     <video ref={video} src={w!.videoUrl||undefined} poster={w!.posterUrl||undefined} playsInline autoPlay muted preload="metadata" onLoadedMetadata={()=>{
+      const v=video.current;if(!v||loaded.current)return;loaded.current=true;v.currentTime=Math.min(session.progress,Number.isFinite(v.duration)?Math.max(0,v.duration-1):session.progress);void v.play().catch(()=>setPlaying(false));
+     }} onPlay={()=>{setPlaying(true);if(!startSeen.current){startSeen.current=true;track('started');}}} onPause={()=>{setPlaying(false);track('progress');}} onTimeUpdate={tick} onVolumeChange={()=>setMuted(video.current?.muted??true)} onError={()=>setMediaError('This video could not load. Try again or contact support.')} onEnded={()=>{track('completed');if(w!.redirectAtEnd&&!session.preview)setEndCountdown(8);setFunding(open);setChatOpen(!open);}} aria-label={w!.title}/>
+     {(!playing||muted)&&!mediaError&&<button className="wb-play-overlay" onClick={()=>void playWithSound()}><span className="wb-play-circle"><Play fill="currentColor" size={35}/></span><strong>{playing?'Tap for sound':time>0?'Continue watching':'Play the session'}</strong><span>{playing?'Your session has started':time>0?`Pick up at ${formatWatchTime(time)}`:'Press play. We’ll save your place.'}</span></button>}
+     {mediaError&&<div className="wb-play-overlay wb-media-error"><p role="alert">{mediaError}</p><button className="wb-primary" onClick={()=>{setMediaError('');loaded.current=false;video.current?.load();}}>Reload video</button><a href="/support">Get help</a></div>}
+     <div className="wb-player-controls"><button aria-label={playing?'Pause':'Play'} onClick={()=>playing?video.current?.pause():void playWithSound()}>{playing?<Pause size={18}/>:<Play size={18}/>}</button><span>{formatWatchTime(time)} / {formatWatchTime(w!.durationSeconds)}</span><input aria-label="Video position" type="range" min={0} max={w!.durationSeconds} value={time} onChange={e=>{if(video.current)video.current.currentTime=Number(e.target.value);tick();}}/><button aria-label={muted?'Unmute':'Mute'} onClick={()=>{if(video.current)video.current.muted=!video.current.muted;}}><Volume2 size={18}/></button><button aria-label="Full screen" onClick={()=>void video.current?.requestFullscreen().catch(()=>{})}><Maximize size={18}/></button></div>
+    </div>
+    <div className="wb-under-video"><span><RotateCcw size={14}/>{saved?'Your place is saved':'Progress has not synced. Keep this tab open.'}</span><span>Recorded presentation · AI assistance</span></div>
+    {w!.description&&<p className="wb-description">{w!.description}</p>}
+    {(namePrompt||contactPrompt)&&<form className="wb-prompt" onSubmit={e=>{e.preventDefault();void saveContact(namePrompt);}}>
+     <div><span className="wb-eyebrow">{namePrompt?'MAKE YOURSELF AT HOME':'KEEP YOUR PLACE'}</span><h2>{namePrompt?'What should we call you?':'Want the session in your inbox?'}</h2><p>{namePrompt?'Your name stays with you throughout the session.':'Save your details without leaving the video.'}</p></div>
+     <label className="wb-label">First name<input required autoComplete="given-name" maxLength={80} value={draftName} onChange={e=>setDraftName(e.target.value)} placeholder="Your first name"/></label>
+     {contactPrompt&&<><label className="wb-label">Email<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/></label><label className="wb-label">Phone <small>optional</small><input type="tel" autoComplete="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Your phone number"/></label><label className="wb-check"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/><span>{webinarConsent}</span></label><a className="wb-privacy-link" href="/webinar/privacy" target="_blank" rel="noopener noreferrer">Privacy &amp; follow-ups</a></>}
+     <div className="wb-prompt-actions"><button className="wb-primary" disabled={formBusy}>{formBusy?'Saving…':namePrompt?'That’s me':'Save my details'}</button><button type="button" className="wb-text" onClick={()=>{if(namePrompt)setSkipName(true);else setSkipContact(true);}}>Skip for now</button></div>{formError&&<p role="alert">{formError}</p>}
+    </form>}
+    {endCountdown!==null&&<div className="wb-prompt"><strong>Opening your next step in {endCountdown} seconds</strong><button className="wb-text" onClick={()=>setEndCountdown(null)}>Stay here</button></div>}
+   </section>
+   <aside className="wb-side">
+    {funding&&open&&<section className="wb-offer"><div className="wb-panel-heading"><span className="wb-eyebrow">YOUR NEXT STEP</span><button className="wb-icon" aria-label="Minimize offer" onClick={()=>{setFunding(false);fundingRef.current=false;setChatOpen(true);}}><ChevronDown size={20}/></button></div><h2>{w!.offerTitle}</h2>{w!.offerEndsAt&&<p className="wb-deadline">Enrollment closes in <strong>{formatWatchTime(Math.ceil((Date.parse(w!.offerEndsAt)-now)/1000))}</strong></p>}<div className="wb-embedded-checkout"><WebinarCheckout/></div><p className="wb-secure"><ShieldCheck size={14}/>Your video keeps playing while you review.</p></section>}
+    {!open&&<section className="wb-offer"><h2>This session’s offer has ended.</h2><a className="wb-primary" href="/join">See current options</a></section>}
+    <section className={`wb-chat ${chatOpen?'':'wb-chat-collapsed'}`}><button className="wb-chat-heading" onClick={()=>setChatOpen(v=>!v)} aria-expanded={chatOpen}><span><MessageCircle size={18}/><strong>Session chat</strong></span><span>{chatOpen?'Minimize':'Open chat'}</span></button>
+     {chatOpen&&<><div className="wb-chat-log" role="log" aria-label="Session messages"><p className="wb-chat-note">Scheduled host notes, AI notes and replay comments appear with the video. Your questions get a private AI reply.</p>{cues.map(c=><article className="wb-message" key={c.id}><div className="wb-avatar">{c.name.slice(0,1).toUpperCase()}</div><div><b>{c.name}</b><small>{c.kind==='replay'?'REPLAY':c.kind==='ai'?'AI SESSION NOTE':'HOST NOTE'} · {formatWatchTime(c.at)}</small><p>{c.text.replaceAll('{{name}}',name||'there')}</p></div></article>)}{messages.map(m=><article className={`wb-message ${m.role==='user'?'wb-message-own':''}`} key={m.id}><div className="wb-avatar">{m.role==='user'?(name||'Y').slice(0,1):'X'}</div><div><b>{m.role==='user'?name||'You':webinarSite.assistantName}</b><small>{m.role==='user'?'ONLY YOU CAN SEE THIS':'AI REPLY'}</small><p>{m.text}</p></div></article>)}{chatBusy&&<p role="status" className="wb-chat-note">The assistant is replying…</p>}<div ref={chatEnd}/></div><form className="wb-chat-input" onSubmit={send}><label className="wb-sr" htmlFor="wb-question">Ask a question</label><input id="wb-question" value={question} maxLength={1200} onChange={e=>setQuestion(e.target.value)} placeholder="Ask about the session…"/><button disabled={chatBusy||!question.trim()} aria-label="Send question"><Send size={18}/></button></form>{chatError&&<p className="wb-chat-note" role="alert">{chatError}</p>}</>}
+    </section>
+   </aside>
+  </main>}
+  {session&&<div className="wb-bottom"><span>{name?<><b>{name}</b><small>Your session is saved</small></>:<><b>{webinarSite.brandName}</b><small>Watch. Ask. Choose your next step.</small></>}</span>{open&&time>=session.webinar.pitchAt?<button className="wb-primary" onClick={openFunding}>{session.webinar.ctaLabel}</button>:<span className="wb-next-up">{session.webinar.pitchAt>time?`Next step in ${formatWatchTime(session.webinar.pitchAt-time)}`:'Thanks for watching'}</span>}</div>}
+ </div>;
+}
