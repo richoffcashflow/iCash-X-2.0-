@@ -23,7 +23,7 @@ export function returnVisit(history:ReturnSession[],timezone:string,checkoutWind
  }
  return {kind:!latest.completed_at&&sameLocalDay(latest.updated_at,timezone,now)?'resume':'advance',sessionId:latest.id};
 }
-export type WebinarPerformance={webinar_id:string;revision:number;visitors:number;mature_visitors:number;purchases:number;value_cents:number;mature_value_cents:number};
+export type WebinarPerformance={webinar_id:string;revision:number;visitors:number;mature_visitors:number;purchases:number;value_cents:number;mature_value_cents:number;viewers?:number;buyers?:number;close_rate?:number};
 export type Allocation={webinar_id:string;revision:number;share:number;valuePerVisitor:number;phase:'learning'|'optimizing'};
 export function eligibleVariants<T extends WebinarDefinition>(webinars:T[],history:WatchHistory[],timezone:string,now=new Date(),routing={nightStartsAt:18,nightEndsAt:6}){
  const night=isNight(timezone,now,routing),seen=new Set(history.map(h=>h.webinar_id));
@@ -65,4 +65,19 @@ export function freezeTimeline(chat:TimelineMessage[],sessionId:string,enabled:b
   if(!enabled||cue.kind==='replay'||!variations?.length)return cue;
   return {...cue,text:variations[choice(sessionId+':'+cue.id,variations.length)],name:assistantName,kind:'ai'};
  });
+}
+
+export type TimedOffer={id:string;at:number;expiresAt:string|null};
+/** Previously revealed offers stay available until their actual deadline. */
+export function availableOffers<T extends TimedOffer>(offers:T[],seconds:number,now=Date.now()):T[]{
+ return offers.filter(o=>o.at<=seconds&&(!o.expiresAt||Date.parse(o.expiresAt)>now)).sort((a,b)=>a.at-b.at);
+}
+export function selectOffer<T extends TimedOffer>(offers:T[],seconds:number,now=Date.now(),preferredId?:string|null):T|null{
+ const available=availableOffers(offers,seconds,now);
+ return available.find(o=>o.id===preferredId)??available.at(-1)??null;
+}
+export function splitDuration(seconds:number){const n=Math.max(0,Math.floor(Number.isFinite(seconds)?seconds:0));return {hours:Math.floor(n/3600),minutes:Math.floor(n%3600/60),seconds:n%60};}
+export function changeDurationUnit(total:number,unit:'hours'|'minutes'|'seconds',value:number,max=14400){
+ const parts=splitDuration(total);parts[unit]=Math.max(0,Math.min(unit==='hours'?Math.floor(max/3600):59,Math.floor(Number.isFinite(value)?value:0)));
+ return Math.min(max,parts.hours*3600+parts.minutes*60+parts.seconds);
 }

@@ -5,14 +5,14 @@ The owner manages sessions at `/webinaradmin` (`/webinar-studio` remains an alia
 ## Publish a session
 
 1. Create a session; upload an MP4/WebM/MOV or supply a direct HTTPS video URL. MP4 with H.264/AAC offers the broadest browser compatibility. The storage project's own upload cap also applies.
-2. Set the title, description, actual duration, name/contact prompts and pitch timestamp. Preview the saved session.
+2. Follow Video & details → Offers → Chat & AI → Review & publish. Duration and every timed moment use Hours / Minutes / Seconds. The video supplies its duration when metadata is available. Add up to 12 offers, each with its own headline, reveal time, CTA, destination and optional fixed deadline. Select an ending offer or use the latest available one.
 3. Add timed host notes or import CSV/JSON. CSV columns: `time,name,message,kind`; `time` accepts seconds or `mm:ss`, and `kind` is `host` or `replay`. Use only genuine past comments for replay entries. `{{name}}` inserts the viewer's saved first name.
 4. Add approved facts/FAQ for AI answers. Pasted transcripts can generate a draft host-note timeline for review.
-5. Choose all/day/night/returning audience, then save as Published. Before the offer, same-local-day unfinished sessions resume. Once someone reaches the offer or finishes, repeat visits go directly to checkout for three hours by default. After that window, an unpaid return advances to a new webinar, even on the same day. Otherwise, on a later day, an unpaid viewer advances to the next ranked eligible unseen recording, then the third and remaining recordings on subsequent returns. A completed session enters the checkout window before advancing. Superseding an unfinished recording does not create a completion event. Night defaults to 6 PM–6 AM; Smart link settings can change the boundaries. Vercel supplies the IP timezone, with validated browser timezone and America/Chicago fallbacks.
+5. Choose all/day/night/returning audience, then save as Published. Before the offer, same-local-day unfinished sessions resume. Once someone reaches the offer or finishes, repeat visits go directly to checkout for three hours by default. After that window, an unpaid return advances to a new webinar, even on the same day. Otherwise, on a later day, an unpaid viewer advances to the next ranked eligible unseen recording, then the third and remaining recordings on subsequent returns. A completed session enters the checkout window before advancing. Superseding an unfinished recording does not create a completion event. Night defaults to 6 PM–6 AM; Automatic optimizer settings can change the boundaries. Vercel supplies the IP timezone, with validated browser timezone and America/Chicago fallbacks.
 
-Playback autostarts muted with `playsInline`; a large sound/play overlay handles browser restrictions. Hiding the page pauses it. Progress persists every 15 seconds and on pause/page exit. Server-side session snapshots keep ongoing playback stable when the owner edits a webinar. The pitch shows the existing `/join` component and minimizes chat. The player remains mounted. The existing checkout may navigate to Stripe; payment and account authentication keep their established checks.
+Playback autostarts muted with `playsInline`; a large sound/play overlay handles browser restrictions. Hiding the page pauses it. Progress persists every 15 seconds and on pause/page exit. Server-side session snapshots keep ongoing playback stable when the owner edits a webinar. The pitch opens a compact checkout beside the video and minimizes chat. The player stays mounted. Once checkout begins, later offers and the ending countdown cannot interrupt it. Built-in iCash X offers share the current software price and terms; custom product offers use their own HTTPS or internal destinations. Owner previews cannot create payments.
 
-The end-of-video redirect shows an eight-second countdown with a Stay here option. Optional offer deadlines are fixed timestamps; they do not reset. No fictional live audience count, purchase feed or scarcity is generated. AI replies and replay content are labeled.
+The end-of-video redirect shows an eight-second countdown with a Stay here option. Optional offer deadlines are fixed timestamps; they do not reset. The dynamic audience badge counts actual distinct viewers whose visible player is active. Heartbeats update every 30 seconds and expire after 75 seconds; multiple tabs count once. Paused, hidden, preview, completed and superseded sessions are excluded. The owner can hide the badge. No fictional purchase feed or scarcity is generated. AI replies and replay content are labeled.
 
 ## Follow-ups
 
@@ -72,7 +72,7 @@ A verified live funding order or settled membership invoice contributes the actu
 
 ## Meta setup
 
-In Smart link, enter the company's Pixel/dataset ID. Configure `ICASH_META_ACCESS_TOKEN`, an explicit supported `ICASH_META_GRAPH_VERSION` such as the version selected for the Meta application, and `ICASH_APP_ORIGIN` on the server. The studio reports connection readiness without returning any token. Measurement stays disabled until configured and enabled; production is the only environment allowed to transmit.
+In Automatic optimizer, enter the company's Pixel/dataset ID. Configure `ICASH_META_ACCESS_TOKEN`, an explicit supported `ICASH_META_GRAPH_VERSION` such as the version selected for the Meta application, and `ICASH_APP_ORIGIN` on the server. The studio reports connection readiness without returning any token. Measurement stays disabled until configured and enabled; production is the only environment allowed to transmit.
 
 The browser reports ViewContent, Lead and InitiateCheckout; merely opening the offer uses a separate custom event. Purchase is built only from verified billing records. Browser and Conversions API use identical `webinar:purchase:<payment-id>` IDs, with USD value from the same record. The private `/api/webinar/conversions` cron reconciles and leases conversion jobs every five minutes. Retries keep the exact payload and event ID; they expire before the provider's event-age window. Meta receipt health appears in the studio. Refunded/disputed payments are removed from future optimization; historical events already accepted by Meta are not rewritten by this integration.
 
@@ -86,20 +86,32 @@ Primary integration references: [Meta Business SDK Conversions API example](http
 
 The cancelled shared-password idea was not implemented. The admin portal uses the existing verified owner account.
 
-## Current validation record — October 4, 2026
+## Purchase → bot → workspace
 
-- All 195 repository test suites pass after the final integration.
-- All 31 focused webinar/growth/portability cases pass, including the checkout return window.
-- The isolated Postgres test executes all three actual migrations and verifies same-day atomic resume, later-day advancement without fake completion, checkout-window expiry with concurrent returns, saved chat, owner-preview separation, unique payment attribution, tax amounts, test/pending exclusion, refund exclusion, consent withdrawal, queue leases and public-role isolation.
-- The portable engine compiles to ESM/declarations and runs without the application runtime. TypeScript and the full Next.js production build pass; `/webinaradmin` is included in the built route list.
-- All three database migrations are applied. Readback confirms no public access to conversion records, purchase-attribution functions or session creation, zero conversion jobs, and Meta/email delivery disabled.
-- Source is prepared on the existing local feature branch. The earlier approval-review blocks still prevent a GitHub push and Resend webhook creation; neither action was retried. No Meta conversion or reminder email was sent. Hosted browser/video/checkout verification is pending publication, because the local browser cannot start in this execution environment.
+`MembershipCheckout` checks canonical billing status before showing `PostPurchaseSetup`. A confirmed, accessible membership opens the bot-name screen, saves the real setup with revision checks, displays the creation state, then enters the workspace. A returning saved bot is reused. Signed-in buyers proceed after the save. Guests see their payment email prefilled for the existing one-time verification; payment alone never authenticates an email or grants a session. The existing account-claim RPC attaches their saved setup after verification.
 
+Saved webinar name/email/phone prefill Stripe through a server-read signed visitor cookie bound to the same billing guest. An authenticated account does not inherit a different visitor email. The optional workspace identity form carries forward the saved first name for confirmation. A bot name is a preference, not a claim that provider provisioning or paid outreach has occurred.
+
+Embedded Checkout uses Stripe's `ui_mode: embedded_page`, `redirect_on_completion: never`, and the canonical `onComplete` → billing status read. It reuses owned pending sessions, expires incompatible open sessions before replacement, and never replaces a completed purchase. Webhook/Stripe invoice verification remains the source of payment access, attribution and close-rate data. Explicit subscription consent and work-credit separation remain in place.
+
+To enable embedded payments, set `STRIPE_PUBLISHABLE_KEY` to the publishable key from the **same Stripe account and live/test mode** as the existing secret key. Production currently lacks this key; the studio displays the connection gap and visitors use the existing secure hosted checkout with the new bot-creation return flow. A key with the wrong mode fails closed. Client secrets are sent only to the owning browser in private/no-store responses and are not persisted in browser storage.
+
+## Results and automatic allocation
+
+Optimization is automatic for this installation. New versions receive learning traffic before mature verified paid value guides allocation; exploration remains on. Owners set day/night hours and return behavior without manually adjusting traffic weights. This does not change Meta campaign budgets.
+
+Dashboard cards and Results show unique viewers, distinct buyers, viewer-to-buyer close rate, purchase count and paid value for each current saved webinar version over the last 30 days. A buyer with multiple purchases counts once in the close rate. Existing attribution excludes previews, test payments and billing-review/refund/dispute records. External checkout links require their own verified payment adapter before their sales count.
+
+## Validation record — October 4, 2026
+
+- The previous launch was published after explicit user approval and is live at `/webinaradmin` and `/webinar`. The former GitHub publication block is resolved. The separate Resend webhook approval is still outstanding.
+- 198 repository suites plus the added post-purchase component-handler suite pass. The new tests cover typed offer timing, links, key-mode matching, payment consent, owned-session reuse, completed-payment protection, carried details, saved bot preferences and verified account handoff.
+- The isolated Postgres test executes all four webinar migrations, including actual audience deduplication, pause/leave ordering, expiry, preview isolation and distinct-buyer close rates. All four migrations are applied in the configured Supabase project.
+- Portable-engine TypeScript, app TypeScript, the full Next.js production build and whitespace checks pass.
+- No live charge, reminder email, Meta event or owner webinar was created by these tests. Recordings still need to be supplied and published by the owner. End-to-end embedded payment verification remains pending the matching production publishable key.
 
 ## Checkout return window — October 4, 2026
 
-The owner sets **Smart link → After they watch → hours** (0–72, default 3). Once a visitor reaches the pitch timestamp and a pitch impression is recorded, or completes the recording, their next entry within the window returns `/join`. The existing verified-payment/customer check runs first. Viewing milestones and completion timestamps are persisted; page refresh and return visits never restart the clock.
+The owner sets **Automatic optimizer → Day, night & returning visitors → hours** (0–72, default 3). Once a visitor reaches the pitch timestamp and a pitch impression is recorded, or completes the recording, their next entry within the window returns the last eligible offer they opened, or the latest revealed eligible offer. The built-in software offer uses `/join`. Expired offers are skipped. The existing verified-payment/customer check runs first. Viewing milestones and completion timestamps are persisted; page refresh and return visits never restart the clock.
 
 At expiry, an unpaid viewer receives the next eligible unseen recording, even that same day. A viewer leaving before the offer keeps normal same-day resume behavior. The engine always considers the latest non-preview, non-superseded session, so an older expired recording cannot skip a newly started one. The new session RPC can skip the specific expired session while still reusing a newer session created by a concurrent tab. Advancing does not fabricate completion. Setting the window to 0 advances immediately on return.
-
-The portal URL was checked at 3:27 PM America/Chicago and returned HTTP 404. The current production deployment remains commit `a90f989`; the prepared feature branch has not been pushed or deployed because of the earlier automatic approval-review block.

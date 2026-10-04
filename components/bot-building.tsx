@@ -4,7 +4,7 @@ import {ArrowLeft,Check,RotateCcw} from 'lucide-react';
 import {botInitials,type BotProfile} from '@/lib/bot-setup';
 
 export type BotBuildPhase='saving'|'saved'|'error';
-export function BotBuilding({profile,phase,error,onRetry,onBack}:{profile:BotProfile;phase:BotBuildPhase;error:string;onRetry:()=>void;onBack:()=>void}){
+export function BotBuilding({profile,phase,error,onRetry,onBack,paid=false}:{profile:BotProfile;phase:BotBuildPhase;error:string;onRetry:()=>void;onBack:()=>void;paid?:boolean}){
  const heading=useRef<HTMLHeadingElement>(null);
  const failed=phase==='error';
  useEffect(()=>{heading.current?.focus();},[failed]);
@@ -26,6 +26,6 @@ export function BotBuilding({profile,phase,error,onRetry,onBack}:{profile:BotPro
    {phase==='saved'?<Check size={16}/>:<span className="bot-building-dot"/>}
    <span>{phase==='saved'?'Your setup is saved. Opening the next step…':'Saving your bot’s name and preferences…'}</span>
   </div>}
-  <p className="bot-building-note">Just setup for now. No charges or outreach.</p>
+  <p className="bot-building-note">{paid?'Your software is paid. Add work credits in your workspace when you’re ready.':'Just setup for now. No charges or outreach.'}</p>
  </div>;
 }
