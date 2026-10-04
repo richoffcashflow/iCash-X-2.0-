@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {jsx as _jsx,jsxs as _jsxs} from 'react/jsx-runtime';
+import * as icons from 'lucide-react';
+import ts from 'typescript';
+import * as reporting from '../lib/webinar-reporting.ts';
+import {formatWatchTime,newWebinar} from '../lib/webinar-policy.ts';
+const w={...newWebinar('00000000-0000-4000-8000-000000000001'),status:'published',audience:'day',title:'Main webinar',videoUrl:'https://example.test/video.mp4'};
+const metrics={...reporting.emptyFunnel,viewers:10,addToCart:4,checkouts:3,purchases:2,buyers:2,cohortBuyers:1,revenueCents:1000};
+let report={period:'today',timezone:'America/Chicago',startDate:'2026-10-04',endDate:'2026-10-04',generatedAt:'2026-10-04T18:00:00Z',summary:metrics,webinars:[{webinarId:w.id,...metrics}],days:[{date:'2026-10-04',...metrics}]},states=[],index=0;
+const usedIcons=Object.fromEntries(["ArrowUpRight","CheckCircle2","ChevronRight","Clock","Eye","RefreshCw","ShoppingBag","ShoppingCart","CreditCard","Plus","Play","Settings2","Sun","Moon","Sparkles"].map(name=>[name,icons[name]]));
+const deps={...usedIcons,...reporting,formatWatchTime,webinarSite:{brandName:'iCash X'},_jsx,_jsxs,useState:initial=>{const n=index++;return [states[n]??initial,()=>{}];},useEffect:()=>{}};
+globalThis.__webinarDashboard=deps;
+const source=ts.transpileModule(readFileSync(new URL('../components/webinar-daily-dashboard.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText.replace(/^import .* from .*;$/gm,'');
+const {WebinarDailyDashboard}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__webinarDashboard;\n'+source).toString('base64'));
+function render(webinars,loaded=true){index=0;states=['today','America/Chicago',loaded?report:null,!loaded,'',0];return renderToStaticMarkup(WebinarDailyDashboard({webinars,onCreate:()=>{},onEdit:()=>{},onOptimizer:()=>{}}));}
+let html=render([w]);for(const label of ['Today at a glance','Add to cart','Checkouts','Purchases','$10.00','10.0%','Your main webinar covers day and night','all saved versions included','Reporting timezone'])assert.ok(html.includes(label),label);
+assert.match(html,/aria-pressed="true">Today/);
+html=render([w,{...w,id:'night',audience:'night'}]);assert.ok(html.includes('Day and night switching is ready'));
+html=render([],false);assert.ok(html.includes('Start with one webinar.'));assert.ok(html.includes('Create my first webinar'));assert.ok(!html.includes('$0.00'),'Loading is not reported as zero revenue');
+console.log('Daily dashboard: today selection, separate funnel labels, exact revenue, cohort close rate, routing explanation and loading/empty states passed.');
