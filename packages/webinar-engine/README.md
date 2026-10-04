@@ -51,6 +51,7 @@ The current rollout uses **one deployment and database per company**. Each owns 
 - `returnVisit` sends repeat visits to checkout for a configurable period after the first offer impression or completion (default three hours). Refreshes do not extend the period. Once it expires, selection advances to a fresh webinar, including on the same day. The latest session takes precedence over expired older sessions.
 - A later local day advances an unpaid prospect to the next eligible unseen webinar. Superseding an unfinished session does not count as completion.
 - Day/night matching uses a validated hosting-provider timezone, with browser fallback. A session in progress is stable.
+- A published daytime recording also covers night until a usable dedicated night recording is published; the reverse fallback also works. Drafts and recordings without media do not disable this fallback. Returning-only recordings remain restricted to returning visitors.
 - New visitors explore eligible versions. Mature purchase value adjusts traffic while preserving an exploration floor. Returning visitors choose the strongest remaining eligible version.
 - AI alternatives are reviewed before publication and selected once per session. Replay comments remain unchanged. AI notes are labeled.
 - Purchase metrics come from verified live billing evidence. Refunds/disputes and test payments are excluded. Browser and server Purchase events share the same payment-based ID.

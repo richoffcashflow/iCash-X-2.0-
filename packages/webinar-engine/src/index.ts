@@ -27,7 +27,10 @@ export type WebinarPerformance={webinar_id:string;revision:number;visitors:numbe
 export type Allocation={webinar_id:string;revision:number;share:number;valuePerVisitor:number;phase:'learning'|'optimizing'};
 export function eligibleVariants<T extends WebinarDefinition>(webinars:T[],history:WatchHistory[],timezone:string,now=new Date(),routing={nightStartsAt:18,nightEndsAt:6}){
  const night=isNight(timezone,now,routing),seen=new Set(history.map(h=>h.webinar_id));
- const pool=webinars.filter(w=>w.status==='published'&&w.videoUrl&&(w.audience==='all'||w.audience===(night?'night':'day')||(seen.size>0&&w.audience==='returning')));
+ const published=webinars.filter(w=>w.status==='published'&&w.videoUrl),period=night?'night':'day';
+ // Until the other time-of-day recording is published, the available one runs both.
+ const hasMatching=published.some(w=>w.audience===period);
+ const pool=published.filter(w=>w.audience==='all'||w.audience===period||(!hasMatching&&w.audience===(night?'day':'night'))||(seen.size>0&&w.audience==='returning'));
  const unseen=pool.filter(w=>!seen.has(w.id));
  const last=[...history].sort((a,b)=>(b.created_at??b.updated_at).localeCompare(a.created_at??a.updated_at))[0]?.webinar_id;
  const rotated=pool.length>1?pool.filter(w=>w.id!==last):pool,options=unseen.length?unseen:rotated;

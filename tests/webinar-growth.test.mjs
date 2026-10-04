@@ -63,6 +63,18 @@ test('dedicated night videos override generic fallback and never select drafts',
  assert.deepEqual(eligibleVariants([day,night,fallback,{...webinar('night'),status:'draft'}],[],'America/Chicago',now).map(w=>w.id),[night.id]);
  assert.equal(optimizedWebinar([night,fallback],[],'America/Chicago',[],optimizer,.9,now).id,night.id);
 });
+test('a daytime recording covers both periods until a usable night version is published',()=>{
+ const day=webinar('day'),night=webinar('night'),now=new Date('2026-10-05T01:00:00Z');
+ for(const pool of [[day],[day,{...night,status:'draft'}],[day,{...night,videoUrl:''}]])assert.deepEqual(eligibleVariants(pool,[],'America/Chicago',now).map(w=>w.id),[day.id]);
+ assert.equal(optimizedWebinar([day],[],'America/Chicago',[],optimizer,.9,now).id,day.id);
+ assert.deepEqual(eligibleVariants([day,night],[],'America/Chicago',now).map(w=>w.id),[night.id]);
+ assert.deepEqual(eligibleVariants([day,night],[],'America/Chicago',new Date('2026-10-04T17:00:00Z')).map(w=>w.id),[day.id]);
+});
+test('all-time or only-night recordings work around the clock without exposing returning-only content to new visitors',()=>{
+ const night=webinar('night'),returning=webinar('returning'),now=new Date('2026-10-04T17:00:00Z');
+ assert.deepEqual(eligibleVariants([night,returning],[],'America/Chicago',now).map(w=>w.id),[night.id]);
+ assert.equal(eligibleVariants([returning],[],'America/Chicago',now).length,0);
+});
 test('returning viewers get an unseen version and do not immediately repeat after seeing all',()=>{
  const a=webinar(),b=webinar(),history=[{webinar_id:a.id,revision:1,completed_at:'2026-10-03',updated_at:'2026-10-03',progress_seconds:1800}];
  assert.equal(eligibleVariants([a,b],history,'UTC')[0].id,b.id);

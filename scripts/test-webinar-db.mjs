@@ -6,8 +6,9 @@ const {PGlite}=await import(pathToFileURL(process.argv[2]).href),pg=await PGlite
 try{
  await pg.exec(`create role anon;create role authenticated;create role service_role bypassrls;
  create table icash_accounts(id uuid primary key);
- create table icash_funding_orders(id uuid primary key,mode text,state text,guest_hash text,payer_email text,price_cents bigint,tax_cents bigint default 0,credit_cents bigint,daily_plan_id uuid,paid_at timestamptz,stripe_payment_id text,account_id uuid);
- create table icash_memberships(id uuid primary key,mode text,state text,paid_through timestamptz,guest_hash text,payer_email text,account_id uuid);
+ create table icash_funding_orders(id uuid primary key,mode text,state text,guest_hash text,payer_email text,price_cents bigint,tax_cents bigint default 0,credit_cents bigint,daily_plan_id uuid,stripe_session_id text,paid_at timestamptz,stripe_payment_id text,account_id uuid);
+ create table icash_memberships(id uuid primary key,mode text,state text,stripe_session_id text,paid_through timestamptz,guest_hash text,payer_email text,account_id uuid);
+ create table icash_daily_plans(id uuid primary key,mode text,state text,guest_hash text,account_id uuid,stripe_session_id text);
  create table icash_membership_invoices(stripe_invoice_id text primary key,membership_id uuid,stripe_payment_id text,amount_cents bigint,recorded_at timestamptz default now());
  create table icash_billing_reviews(payment_id text);
  create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);`);
@@ -16,6 +17,7 @@ try{
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261004203030_webinar_checkout_return_window.sql',import.meta.url),'utf8'));
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261004212006_webinar_offers_audience_and_close_rates.sql',import.meta.url),'utf8'));
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261004221240_webinar_recent_activity.sql',import.meta.url),'utf8'));
+ await pg.exec(readFileSync(new URL('../supabase/migrations/20261004223624_webinar_daily_funnel.sql',import.meta.url),'utf8'));
  const q=(sql,args=[])=>pg.query(sql,args),visitor=randomUUID(),other=randomUUID(),webinar=randomUUID(),session=randomUUID();
  await q('insert into icash_webinar_visitors(id) values($1),($2)',[visitor,other]);
  const config={id:webinar,revision:1,status:'published',title:'Database verification',durationSeconds:100};
@@ -133,7 +135,37 @@ try{
  await q("insert into icash_billing_reviews(payment_id) values('pi_activity_member')");assert.equal((await feed()).length,2,'Refund or review removes a purchase from subsequent responses');
  for(const role of ['anon','authenticated'])assert.equal((await q('select has_function_privilege($1,\'icash_webinar_recent_activity(uuid,uuid)\',\'execute\') as ok',[role])).rows[0].ok,false);
  assert.equal((await q("select has_function_privilege('service_role','icash_webinar_recent_activity(uuid,uuid)','execute') as ok")).rows[0].ok,true);
+ // Daily reporting uses each event/payment date in the requested timezone and
+ // keeps older revisions, returning purchasers and repeat payments distinct.
+ const report=async(period='today',zone='America/Chicago')=>(await q('select icash_webinar_daily_report($1,$2) as value',[period,zone])).rows[0].value;
+ const bounds=await report(),reportWebinar=randomUUID(),reportVisitor=randomUUID(),reportSession=randomUUID(),reportOtherSession=randomUUID(),earlierVisitor=randomUUID(),earlierSession=randomUUID();
+ const dayStart=Date.parse(bounds.startsAt),clock=Date.parse(bounds.generatedAt),started=new Date(dayStart+(clock-dayStart)/2).toISOString(),yesterdayStart=new Date(dayStart-3600000).toISOString();
+ await q("insert into icash_webinars(id,revision,config) values($1,2,$2)",[reportWebinar,{...config,id:reportWebinar,revision:2}]);
+ await q("insert into icash_webinar_visitors(id,funding_guest_hash) values($1,'report-guest'),($2,'earlier-guest')",[reportVisitor,earlierVisitor]);
+ await q("insert into icash_webinar_sessions(id,visitor_id,webinar_id,revision,config,created_at) values($1,$2,$3,1,$4,$5),($6,$2,$3,2,$4,$5),($7,$8,$3,1,$4,$9)",[reportSession,reportVisitor,reportWebinar,config,started,reportOtherSession,earlierSession,earlierVisitor,yesterdayStart]);
+ await q("insert into icash_webinar_events(visitor_id,session_id,kind,event_key,created_at) values($1,$2,'started','once',$3),($1,$4,'started','once',$3),($5,$6,'started','once',$7)",[reportVisitor,reportSession,started,reportOtherSession,earlierVisitor,earlierSession,yesterdayStart]);
+ const membershipCheckout=randomUUID();
+ await q("insert into icash_memberships(id,mode,state,guest_hash,stripe_session_id) values($1,'live','pending','report-guest','cs_live_report')",[membershipCheckout]);
+ await q("update icash_memberships set stripe_session_id='cs_live_report' where id=$1",[membershipCheckout]);
+ let row=(await report()).webinars.find(w=>w.webinarId===reportWebinar);
+ assert.equal(row.viewers,1,'A visitor using two revisions still counts once');assert.equal(row.addToCart,1);assert.equal(row.checkouts,1,'A saved checkout is measured once');assert.equal(row.purchases,0,'A checkout does not create a purchase');
+ for(const table of ['icash_funding_orders','icash_daily_plans'])await q(`insert into ${table}(id,mode,state,guest_hash,stripe_session_id) values($1,'live','pending','report-guest',$2)`,[randomUUID(),'cs_live_'+table]);
+ assert.equal((await report()).webinars.find(w=>w.webinarId===reportWebinar).checkouts,1,'Additional billing paths do not duplicate the same viewer');
+ const checkoutEvents=Number((await q("select count(*) as n from icash_webinar_events where kind='checkout_started'")).rows[0].n);
+ for(const [mode,guest,sid] of [['test','report-guest','cs_test_report'],['live','unknown-guest','cs_live_unbound'],['live','preview-buyer','cs_live_preview']])await q("insert into icash_memberships(id,mode,state,guest_hash,stripe_session_id) values($1,$2,'pending',$3,$4)",[randomUUID(),mode,guest,sid]);
+ assert.equal(Number((await q("select count(*) as n from icash_webinar_events where kind='checkout_started'")).rows[0].n),checkoutEvents,'Test, unbound and preview checkouts are excluded');
+ await q("insert into icash_funding_orders(id,mode,state,guest_hash,price_cents,tax_cents,credit_cents,paid_at,stripe_payment_id) values($1,'live','paid','report-guest',1000,100,1000,now(),'pi_report_one'),($2,'live','paid','report-guest',1000,0,1000,now(),'pi_report_two'),($3,'live','paid','earlier-guest',1000,0,1000,$4,'pi_report_midnight'),($5,'live','paid','earlier-guest',900,0,900,$6,'pi_report_yesterday')",[randomUUID(),randomUUID(),randomUUID(),bounds.startsAt,randomUUID(),new Date(dayStart-1000).toISOString()]);
+ const todayReport=await report();row=todayReport.webinars.find(w=>w.webinarId===reportWebinar);
+ assert.equal(row.purchases,3);assert.equal(row.buyers,2);assert.equal(row.cohortBuyers,1,'Yesterday’s viewer buying today does not inflate today’s viewer close rate');assert.equal(row.revenueCents,3100,'Revenue includes recorded tax and payments from earlier viewers');
+ const yesterdayReport=await report('yesterday'),yesterdayRow=yesterdayReport.webinars.find(w=>w.webinarId===reportWebinar);
+ assert.equal(yesterdayRow.viewers,1);assert.equal(yesterdayRow.purchases,1);assert.equal(yesterdayRow.revenueCents,900,'Midnight belongs only to the new local day');
+ assert.equal((await report('7d')).days.length,7);assert.equal((await report('30d')).days.length,30);
+ assert.equal(todayReport.days[0].purchases,todayReport.summary.purchases);
+ await q("insert into icash_billing_reviews(payment_id) values('pi_report_two')");assert.equal((await report()).webinars.find(w=>w.webinarId===reportWebinar).purchases,2);
+ await assert.rejects(()=>report('invalid'));await assert.rejects(()=>report('today','made-up'));
+ for(const role of ['anon','authenticated'])assert.equal((await q("select has_function_privilege($1,'icash_webinar_daily_report(text,text)','execute') as ok",[role])).rows[0].ok,false);
+ const dst=(await q("select extract(epoch from ('2026-11-02'::timestamp at time zone 'America/Chicago')-('2026-11-01'::timestamp at time zone 'America/Chicago'))/3600 as fall,extract(epoch from ('2026-03-09'::timestamp at time zone 'America/Chicago')-('2026-03-08'::timestamp at time zone 'America/Chicago'))/3600 as spring")).rows[0];assert.equal(Number(dst.fall),25);assert.equal(Number(dst.spring),23);
  const grants=(await q("select has_table_privilege('anon','icash_webinar_visitors','select') as read,has_function_privilege('authenticated','icash_webinar_contact(uuid,text,text,text,boolean)','execute') as write")).rows[0];assert.equal(grants.read,false);assert.equal(grants.write,false);
  const rls=await q("select relname,relrowsecurity from pg_class where relname like 'icash_webinar%' and relkind='r'");assert.ok(rls.rows.every(r=>r.relrowsecurity));
- console.log('Webinar database checks passed: sessions, ownership, consent, attribution, close rate, actual audience, anonymous recent activity, daily and membership renewal exclusion, approximate region, owner controls, test/refund exclusion, queue leases and RLS.');
+ console.log('Webinar database checks passed: sessions, attribution, audience, activity, verified checkout triggers, daily funnel, local midnight, DST, earlier-day buyers, preserved revisions, renewals, test/refund exclusion and RLS.');
 }finally{await pg.close();}

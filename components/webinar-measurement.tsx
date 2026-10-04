@@ -36,7 +36,7 @@ export function WebinarMeasurement(){
   setChoice(storage.get('wb-meta-choice'));
   try{session.current=sessionStorage.getItem('icash-webinar-session')||'';}catch{/* Optional measurement. */}
   const ready=(event:Event)=>{session.current=(event as CustomEvent<{sessionId:string}>).detail.sessionId;void refresh();};
-  const track=(event:Event)=>{const d=(event as CustomEvent<{sessionId:string;kind:string}>).detail;const names:Record<string,string>={started:'ViewContent',contact_saved:'Lead',checkout_opened:'WebinarOfferOpened',checkout_started:'InitiateCheckout'};if(names[d.kind])emit({eventName:names[d.kind],eventId:`webinar:${d.sessionId}:${d.kind==='started'?'view':d.kind}`,data:{content_ids:['icash-webinar']}});};
+  const track=(event:Event)=>{const d=(event as CustomEvent<{sessionId:string;kind:string}>).detail;const names:Record<string,string>={started:'ViewContent',contact_saved:'Lead',add_to_cart:'AddToCart',checkout_opened:'WebinarOfferOpened',checkout_started:'InitiateCheckout'};if(names[d.kind])emit({eventName:names[d.kind],eventId:`webinar:${d.sessionId}:${d.kind==='started'?'view':d.kind}`,data:{content_ids:['icash-webinar']}});};
   window.addEventListener('icash-webinar-ready',ready);window.addEventListener('icash-webinar-track',track);void refresh();
   const returned=new URLSearchParams(location.search).has('session_id');let tries=0;
   const timer=returned?setInterval(()=>{if(!document.hidden&&++tries<=12)void refresh();},5000):undefined;

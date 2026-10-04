@@ -1,5 +1,5 @@
 import {webinarSite} from './webinar-site.ts';
-import {localHour,isNight} from '../packages/webinar-engine/src/index.ts';
+import {localHour,isNight,eligibleVariants} from '../packages/webinar-engine/src/index.ts';
 import {selectOffer,splitDuration} from '../packages/webinar-engine/src/index.ts';
 export {localHour,isNight,visitorTimezone,sameLocalDay} from '../packages/webinar-engine/src/index.ts';
 import {z} from 'zod';
@@ -47,11 +47,10 @@ export function chooseWebinar(webinars:Webinar[],history:WatchHistory[],timezone
  const recent=[...history].sort((a,b)=>b.updated_at.localeCompare(a.updated_at));
  // Resume takes priority over changing the day/night version mid-session.
  for(const h of recent){const w=eligible.find(w=>w.id===h.webinar_id&&w.revision===h.revision);if(w&&!h.completed_at&&h.progress_seconds>0)return w;}
- const night=isNight(timezone,now,routing),returning=history.some(h=>!!h.completed_at);
+ const night=isNight(timezone,now,routing);
  const seen=new Set(history.filter(h=>h.completed_at).map(h=>h.webinar_id));
  const lastSeen=new Map<string,string>();for(const h of history)if(h.completed_at&&h.updated_at>(lastSeen.get(h.webinar_id)??''))lastSeen.set(h.webinar_id,h.updated_at);
- const pool=eligible.filter(w=>w.audience==='all'||w.audience===(night?'night':'day')||(returning&&w.audience==='returning'));
- const options=pool.length?pool:eligible.filter(w=>w.audience==='all');
+ const options=eligibleVariants(eligible,history,timezone,now,routing);
  return options.sort((a,b)=>Number(seen.has(a.id))-Number(seen.has(b.id))||(seen.has(a.id)&&seen.has(b.id)?(lastSeen.get(a.id)??'').localeCompare(lastSeen.get(b.id)??''):0)||Number(b.audience===(night?'night':'day'))-Number(a.audience===(night?'night':'day'))||b.priority-a.priority||a.id.localeCompare(b.id))[0]??null;
 }
 export function formatWatchTime(seconds:number){const p=splitDuration(seconds);return p.hours?`${p.hours}:${String(p.minutes).padStart(2,'0')}:${String(p.seconds).padStart(2,'0')}`:`${p.minutes}:${String(p.seconds).padStart(2,'0')}`;}
@@ -62,7 +61,7 @@ export function offerDestination(o:WebinarOffer){return o.action==='link'&&valid
 export function webinarEndOffer(w:OfferConfig,now=Date.now()){return selectOffer(webinarOffers(w),w.durationSeconds??14400,now,w.endOfferId);}
 export function publicWebinar(w:Webinar){const {faq,chatStyle,...rest}=w;void faq;void chatStyle;return {...rest,chat:w.chat.map(({variations,...cue})=>{void variations;return cue;})};}
 export function offerOpen(w:Pick<Webinar,'offerEndsAt'>,now=Date.now()){return !w.offerEndsAt||Date.parse(w.offerEndsAt)>now;}
-export const eventNames=['started','progress','name_saved','contact_saved','pitch_shown','checkout_opened','completed','chat_question','returning_customer'] as const;
+export const eventNames=['started','progress','name_saved','contact_saved','pitch_shown','add_to_cart','checkout_opened','completed','chat_question','returning_customer'] as const;
 export type WebinarEvent=typeof eventNames[number];
 export const optimizerSchema=z.object({enabled:z.boolean().default(true),explorationPercent:z.number().int().min(10).max(50).default(20),minVisitors:z.number().int().min(20).max(5000).default(100)}).strict().transform(v=>({...v,enabled:true}));
 export const metaSchema=z.object({enabled:z.boolean().default(false),pixelId:z.string().regex(/^\d{5,30}$/).or(z.literal('')).default('')}).strict();
