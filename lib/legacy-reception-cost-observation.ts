@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import {boundedBody,receptionTarget} from './general-reception.ts';
 import {ownerInboundTarget} from './owner-inbound-acceptance.ts';
 import {receptionUsdNumberMicros} from './general-reception-reconcile.ts';
+import {twilioUsdChargeMicros} from './twilio-usd-cost.ts';
 
 // Fixed historical calls holding the owner's credits at launch. This collector
 // reads receipts only; it cannot create a financial review, settle or release funds.
@@ -28,14 +29,11 @@ export async function observeLegacyReceptionCosts(env:Record<string,string|undef
    const init=obj(conversation.conversation_initiation_client_data),vars=obj(init.dynamic_variables),nonce=vars.icash_reception_receipt_nonce,metadata=obj(conversation.metadata);
    const duration=metadata.call_duration_secs,carrierSeconds=typeof call.duration==='string'&&/^\d{1,4}$/.test(call.duration)?Number(call.duration):null;
    if(call.sid!==target.callSid||call.account_sid!==env.TWILIO_ACCOUNT_SID||call.to!==receptionTarget.calledNumber||call.from!==ownerInboundTarget.ownerPhone||call.direction!=='inbound'||call.status!=='completed'||conversation.conversation_id!==target.conversationId||conversation.agent_id!==receptionTarget.agentId||conversation.status!=='done'||typeof nonce!=='string'||!/^[a-f0-9]{64}$/.test(nonce)||vars.icash_reception_call_sid!==target.callSid||(conversation.user_id??init.user_id)!=='icash-reception:'+nonce||typeof conversation.branch_id!=='string'||!/^agtbrch_[A-Za-z0-9]+$/.test(conversation.branch_id)||typeof conversation.version_id!=='string'||!/^agtvrsn_[A-Za-z0-9]+$/.test(conversation.version_id)||typeof duration!=='number'||!Number.isFinite(duration)||duration<0||duration>62||carrierSeconds===null||carrierSeconds>120)return {...unavailable,status:'binding_needs_review'};
-   const price=call.price;let twilioMicros:number|null=null;
-   if(call.price_unit==='USD'&&typeof price==='string'&&/^-?\d+(?:\.\d{1,6})?$/.test(price)&&(price.startsWith('-')||Number(price)===0)){
-    const [whole,fraction='']=price.replace(/^-/,'').split('.');twilioMicros=Number(whole)*1000000+Number(fraction.padEnd(6,'0'));
-    if(!Number.isSafeInteger(twilioMicros)||twilioMicros<0)twilioMicros=null;
-   }
+   const twilioMicros=twilioUsdChargeMicros(call.price,call.price_unit);
+   const carrierCostShape={priceType:call.price===null?'null':typeof call.price,unit:call.price_unit==='USD'?'USD':call.price_unit==='usd'?'usd':call.price_unit==null?'missing':'other',exactUsdCharge:twilioMicros!==null};
    const elevenLabsMicros=receptionUsdNumberMicros(metadata.cost_fiat);
    return {receiptId:target.receiptId,status:twilioMicros!==null&&elevenLabsMicros!==null?'observed':'cost_unknown',callSid:target.callSid,conversationId:target.conversationId,branchId:conversation.branch_id,versionId:conversation.version_id,nonceHash:hash(nonce),durationSeconds:duration,carrierSeconds,
-    twilioMicros,elevenLabsMicros,twilioReceiptHash:hash(JSON.stringify(call)),elevenLabsReceiptHash:hash(JSON.stringify(conversation)),scope:'provider_costs_only',settled:false};
+    twilioMicros,elevenLabsMicros,carrierCostShape,twilioReceiptHash:hash(JSON.stringify(call)),elevenLabsReceiptHash:hash(JSON.stringify(conversation)),scope:'provider_costs_only',settled:false};
   }catch{return unavailable;}
  }));
 }

@@ -1,4 +1,5 @@
 import {createHash,createHmac} from 'node:crypto';
+import {twilioUsdChargeMicros} from './twilio-usd-cost.ts';
 import {readReviewedReceptionSettlement,settleReviewedReception} from './general-reception-settlement.ts';
 import {boundedBody,receptionReceiptProfile,receptionCompletionArgs,receptionTarget,type ReceptionEnv,type ReceptionDeps} from './general-reception.ts';
 const obj=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
@@ -20,12 +21,11 @@ export function receptionUsdNumberMicros(value:unknown):number|null {
 // Twilio strings remain exact; known ElevenLabs USD numbers are rounded to micros.
 // Unknown units, null prices and provider credit units remain held.
 function knownProviderCosts(call:Record<string,unknown>,conversation:Record<string,unknown>){
- const micros=(v:string)=>{if(!/^(?:0|[1-9]\d{0,9})(?:\.\d{1,6})?$/.test(v))return null;const [a,b='']=v.split('.'),n=Number(a)*1000000+Number(b.padEnd(6,'0'));return Number.isSafeInteger(n)?n:null;};
  const metadata=obj(conversation.metadata),price=call.price,fiat=metadata.cost_fiat;
  const shape=(v:unknown)=>v===undefined?'missing':v===null?'null':Array.isArray(v)?'array':typeof v;
  const decimalShape=(v:unknown)=>{const s=typeof v==='string'?v:typeof v==='number'?String(v):'';return {notation:/^-?\d+(?:\.\d+)?$/.test(s)?'decimal':/^-?\d+(?:\.\d+)?e[+-]?\d+$/i.test(s)?'exponent':'unrecognized',fractionDigits:/^-?\d+\.(\d+)$/.exec(s)?.[1].length??null};};
  const costShape={twilioPriceType:shape(price),twilioPriceUnitType:shape(call.price_unit),twilioUnit:call.price_unit==='USD'?'USD':call.price_unit==='usd'?'usd':call.price_unit==null?'absent':'other',twilioPriceSign:typeof price==='string'&&price.startsWith('-')?'negative':typeof price==='string'&&/^0(?:\.0+)?$/.test(price)?'zero':'other',twilioPriceNotation:decimalShape(price).notation,twilioPriceFractionDigits:decimalShape(price).fractionDigits,elevenMetadataType:shape(conversation.metadata),elevenCostFiatType:shape(fiat),elevenCostFiatNotation:decimalShape(fiat).notation,elevenCostFiatFractionDigits:decimalShape(fiat).fractionDigits,elevenCreditCostType:shape(metadata.cost),elevenRootCostFiatType:shape(conversation.cost_fiat)};
- const twilioUsdMicros=call.status==='completed'&&call.price_unit==='USD'&&typeof price==='string'&&(/^-/.test(price)||/^0(?:\.0+)?$/.test(price))?micros(price.replace(/^-/,'')):null;
+ const twilioUsdMicros=call.status==='completed'?twilioUsdChargeMicros(price,call.price_unit):null;
  const elevenLabsUsdMicros=conversation.status==='done'?receptionUsdNumberMicros(fiat):null;
  const sum=twilioUsdMicros!==null&&elevenLabsUsdMicros!==null?twilioUsdMicros+elevenLabsUsdMicros:null;
  return {currency:'USD',elevenLabsUsdRounding:'decimal_half_up_to_micros',costShape,twilioUsdMicros,elevenLabsUsdMicros,providerSubtotalUsdMicros:sum!==null&&Number.isSafeInteger(sum)?sum:null,
