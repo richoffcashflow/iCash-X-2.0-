@@ -81,3 +81,15 @@ export function changeDurationUnit(total:number,unit:'hours'|'minutes'|'seconds'
  const parts=splitDuration(total);parts[unit]=Math.max(0,Math.min(unit==='hours'?Math.floor(max/3600):59,Math.floor(Number.isFinite(value)?value:0)));
  return Math.min(max,parts.hours*3600+parts.minutes*60+parts.seconds);
 }
+
+export type AudienceDisplay={mode:'actual'|'fixed'|'simulated';fixedCount:number;minimum:number;maximum:number};
+/** A labeled simulation, stable for a session and playback position. Never used for analytics. */
+export function simulatedAudience(config:AudienceDisplay,sessionId:string,seconds:number):number|null{
+ if(config.mode==='actual')return null;
+ const bounded=(n:number)=>Math.max(0,Math.min(100000,Math.floor(Number.isFinite(n)?n:0)));
+ if(config.mode==='fixed')return bounded(config.fixedCount);
+ const low=bounded(config.minimum),high=Math.max(low,bounded(config.maximum));
+ const position=Math.floor(Math.max(0,Number.isFinite(seconds)?seconds:0)/10)*10/120,step=Math.floor(position),fraction=position-step;
+ const from=choice(sessionId+':audience:'+step,high-low+1),to=choice(sessionId+':audience:'+(step+1),high-low+1);
+ return low+Math.round(from+(to-from)*fraction);
+}

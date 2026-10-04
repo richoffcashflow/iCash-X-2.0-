@@ -6,8 +6,8 @@ const {PGlite}=await import(pathToFileURL(process.argv[2]).href),pg=await PGlite
 try{
  await pg.exec(`create role anon;create role authenticated;create role service_role bypassrls;
  create table icash_accounts(id uuid primary key);
- create table icash_funding_orders(id uuid primary key,mode text,state text,guest_hash text,payer_email text,price_cents bigint,tax_cents bigint default 0,paid_at timestamptz,stripe_payment_id text,account_id uuid);
- create table icash_memberships(id uuid primary key,mode text,paid_through timestamptz,guest_hash text,payer_email text,account_id uuid);
+ create table icash_funding_orders(id uuid primary key,mode text,state text,guest_hash text,payer_email text,price_cents bigint,tax_cents bigint default 0,credit_cents bigint,daily_plan_id uuid,paid_at timestamptz,stripe_payment_id text,account_id uuid);
+ create table icash_memberships(id uuid primary key,mode text,state text,paid_through timestamptz,guest_hash text,payer_email text,account_id uuid);
  create table icash_membership_invoices(stripe_invoice_id text primary key,membership_id uuid,stripe_payment_id text,amount_cents bigint,recorded_at timestamptz default now());
  create table icash_billing_reviews(payment_id text);
  create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);`);
@@ -15,6 +15,7 @@ try{
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261004194452_webinar_variants_and_value_optimization.sql',import.meta.url),'utf8'));
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261004203030_webinar_checkout_return_window.sql',import.meta.url),'utf8'));
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261004212006_webinar_offers_audience_and_close_rates.sql',import.meta.url),'utf8'));
+ await pg.exec(readFileSync(new URL('../supabase/migrations/20261004221240_webinar_recent_activity.sql',import.meta.url),'utf8'));
  const q=(sql,args=[])=>pg.query(sql,args),visitor=randomUUID(),other=randomUUID(),webinar=randomUUID(),session=randomUUID();
  await q('insert into icash_webinar_visitors(id) values($1),($2)',[visitor,other]);
  const config={id:webinar,revision:1,status:'published',title:'Database verification',durationSeconds:100};
@@ -100,7 +101,39 @@ try{
  await q('update icash_webinar_sessions set superseded_at=now() where id=$1',[audienceSession]);assert.equal(await count(tab1,6),null,'Replaced sessions do not count');
  assert.equal((await q("select has_function_privilege('authenticated','icash_webinar_audience(uuid,uuid,uuid,bigint,boolean)','execute') as ok")).rows[0].ok,false);
  assert.equal((await q("select (config->'optimizer'->>'enabled')::boolean as enabled from icash_webinar_settings")).rows[0].enabled,true);
+ // Offer activity exposes only real, recent, attributed payments with coarse region.
+ await q("update icash_webinar_visitors set activity_region='Texas' where id=$1",[buyer]);
+ const dailyPlan=randomUUID(),renewalPlan=randomUUID(),newMember=randomUUID(),previewBuyer=randomUUID(),previewWatch=randomUUID();
+ await q("insert into icash_funding_orders(id,mode,state,guest_hash,price_cents,credit_cents,paid_at,stripe_payment_id,daily_plan_id) values($1,'live','paid','bound-guest',1300,1000,now()-interval '2 minutes','pi_activity_topup',null),($2,'live','paid','bound-guest',1100,1000,now()-interval '1 minute','pi_activity_daily',$3),($4,'live','refunded','bound-guest',1100,1000,now()-interval '2 days','pi_activity_old_daily',$5),($6,'live','paid','bound-guest',1100,1000,now()-interval '1 minute','pi_activity_renewal',$5)",[randomUUID(),randomUUID(),dailyPlan,randomUUID(),renewalPlan,randomUUID()]);
+ for(const [payment,mode,state,guest,ago] of [['pi_activity_test','test','paid','bound-guest','1 minute'],['pi_activity_pending','live','pending','bound-guest','1 minute'],['pi_activity_refunded','live','refunded','bound-guest','1 minute'],['pi_activity_old','live','paid','bound-guest','16 minutes'],['pi_activity_future','live','paid','bound-guest','-1 minute'],['pi_activity_email_only','live','paid','different-guest','1 minute']])await q("insert into icash_funding_orders(id,mode,state,guest_hash,payer_email,price_cents,credit_cents,paid_at,stripe_payment_id) values($1,$2,$3,$4,'same@example.test',1000,1000,now()-$5::interval,$6)",[randomUUID(),mode,state,guest,ago,payment]);
+ await q("insert into icash_memberships(id,mode,state,paid_through,guest_hash) values($1,'live','active',now()+interval '1 month','bound-guest')",[newMember]);
+ await q("insert into icash_membership_invoices(stripe_invoice_id,membership_id,stripe_payment_id,amount_cents,recorded_at) values('in_activity',$1,'pi_activity_member',5000,now()-interval '1 minute')",[newMember]);
+ await q("update icash_memberships set state='active',paid_through=now()+interval '1 month' where id=$1",[member]);
+ await q("insert into icash_membership_invoices(stripe_invoice_id,membership_id,stripe_payment_id,amount_cents) values('in_activity_renewal',$1,'pi_activity_member_renewal',5000)",[member]);
+ await q("insert into icash_webinar_visitors(id,funding_guest_hash) values($1,'preview-buyer')",[previewBuyer]);
+ await q('select icash_webinar_begin($1,$2,$3,true)',[previewBuyer,previewWatch,config]);
+ await q("select icash_webinar_record($1,$2,10,'started','once')",[previewBuyer,previewWatch]);
+ await q("insert into icash_funding_orders(id,mode,state,guest_hash,price_cents,credit_cents,paid_at,stripe_payment_id) values($1,'live','paid','preview-buyer',1000,1000,now(),'pi_activity_preview_only')",[randomUUID()]);
+ const feed=async(v=visitor,h=session)=>(await q('select * from icash_webinar_recent_activity($1,$2)',[v,h])).rows;
+ let activity=await feed();assert.equal(activity.length,3,'Only a new funding payment, first daily budget and first software invoice qualify');
+ assert.deepEqual(activity.map(a=>a.kind).sort(),['daily','funding','membership']);
+ assert.ok(activity.every(a=>a.region==='Texas'&&/^[a-f0-9]{32}$/.test(a.id)));
+ assert.equal(Number(activity.find(a=>a.kind==='daily').amountCents),1000,'Daily amount excludes processing fees');
+ assert.equal(Number(activity.find(a=>a.kind==='funding').amountCents),1000,'Funding amount is credits, not total card charge');
+ assert.deepEqual(Object.keys(activity[0]).sort(),['amountCents','id','kind','occurredAt','region']);
+ assert.deepEqual((await feed()).map(a=>a.id),activity.map(a=>a.id),'Stable event IDs support no replay after refresh');
+ assert.equal((await feed(buyer,lastWatch)).length,0,'A viewer never receives their own payments');
+ assert.equal((await feed(visitor,preview)).length,0,'Previews never expose activity');
+ await assert.rejects(()=>feed(other,session));
+ await q("update icash_webinars set config=config||'{\"purchaseNotifications\":{\"enabled\":true,\"includeRegion\":false}}'::jsonb where id=$1",[webinar]);
+ assert.ok((await feed()).every(a=>a.region===null),'The owner can remove locations server-side');
+ await q("update icash_webinars set config=config||'{\"purchaseNotifications\":{\"enabled\":false}}'::jsonb where id=$1",[webinar]);assert.equal((await feed()).length,0,'Owner disable takes effect on existing sessions');
+ await q("update icash_webinars set config=config||'{\"purchaseNotifications\":{\"enabled\":true,\"includeRegion\":true}}'::jsonb where id=$1",[webinar]);
+ await q("update icash_webinar_visitors set activity_region=null where id=$1",[buyer]);assert.ok((await feed()).every(a=>a.region===null),'Missing location is omitted, not invented');
+ await q("insert into icash_billing_reviews(payment_id) values('pi_activity_member')");assert.equal((await feed()).length,2,'Refund or review removes a purchase from subsequent responses');
+ for(const role of ['anon','authenticated'])assert.equal((await q('select has_function_privilege($1,\'icash_webinar_recent_activity(uuid,uuid)\',\'execute\') as ok',[role])).rows[0].ok,false);
+ assert.equal((await q("select has_function_privilege('service_role','icash_webinar_recent_activity(uuid,uuid)','execute') as ok")).rows[0].ok,true);
  const grants=(await q("select has_table_privilege('anon','icash_webinar_visitors','select') as read,has_function_privilege('authenticated','icash_webinar_contact(uuid,text,text,text,boolean)','execute') as write")).rows[0];assert.equal(grants.read,false);assert.equal(grants.write,false);
  const rls=await q("select relname,relrowsecurity from pg_class where relname like 'icash_webinar%' and relkind='r'");assert.ok(rls.rows.every(r=>r.relrowsecurity));
- console.log('Webinar database checks passed: stable sessions, same-day resume, later-day advancement, ownership, playback, consent, payment attribution, distinct-buyer close rate, actual audience presence, tax, refund exclusion, queue leases, suppression, and RLS.');
+ console.log('Webinar database checks passed: sessions, ownership, consent, attribution, close rate, actual audience, anonymous recent activity, daily and membership renewal exclusion, approximate region, owner controls, test/refund exclusion, queue leases and RLS.');
 }finally{await pg.close();}

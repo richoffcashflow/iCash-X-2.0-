@@ -16,6 +16,8 @@ export function validOfferUrl(value:string){
 }
 export const webinarOfferSchema=z.object({id:z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/),title:z.string().trim().min(1).max(150),description:z.string().max(600).default(''),ctaLabel:z.string().trim().min(1).max(60),at:z.number().int().min(0).max(14400),expiresAt:z.string().datetime().nullable(),action:z.enum(['checkout','link']),url:z.string().max(2000).default('')}).strict().superRefine((o,c)=>{if(o.action==='link'&&!validOfferUrl(o.url))c.addIssue({code:z.ZodIssueCode.custom,path:['url'],message:'Use an HTTPS link or a path on this site, such as /join.'});});
 export type WebinarOffer=z.infer<typeof webinarOfferSchema>;
+export const audienceDisplaySchema=z.object({mode:z.enum(['actual','fixed','simulated']).default('actual'),fixedCount:z.number().int().min(0).max(100000).default(125),minimum:z.number().int().min(0).max(100000).default(80),maximum:z.number().int().min(0).max(100000).default(160)}).strict().refine(v=>v.minimum<=v.maximum,'The maximum must be at least the minimum.');
+export const purchaseNotificationsSchema=z.object({enabled:z.boolean().default(true),includeRegion:z.boolean().default(true),startAt:z.number().int().min(0).max(14400).nullable().default(null),intervalSeconds:z.number().int().min(15).max(120).default(30)}).strict();
 export const webinarSchema=z.object({
  id:z.string().uuid(),revision:z.number().int().positive(),title:z.string().trim().min(1).max(150),description:z.string().max(600),
  status:z.enum(['draft','published']),audience:z.enum(['all','day','night','returning']),priority:z.number().int().min(0).max(100),
@@ -25,6 +27,7 @@ export const webinarSchema=z.object({
  checkoutMode:z.enum(['daily','membership']),redirectAtEnd:z.boolean(),chat:z.array(chatCueSchema).max(500),faq:z.string().max(24000),aiEnabled:z.boolean(),
  variationEnabled:z.boolean().default(false),chatStyle:z.string().max(2500).default(defaultChatStyle),
  offers:z.array(webinarOfferSchema).max(12).default([]),endOfferId:z.string().max(80).nullable().default(null),showAudienceCount:z.boolean().default(true),
+ audienceDisplay:audienceDisplaySchema.default({}),purchaseNotifications:purchaseNotificationsSchema.default({}),
 }).strict().superRefine((w,c)=>{
  if(w.status==='published'&&!w.videoUrl)c.addIssue({code:z.ZodIssueCode.custom,path:['videoUrl'],message:'Add a video before publishing.'});
  for(const k of ['nameAt','contactAt','pitchAt'] as const)if(w[k]>w.durationSeconds)c.addIssue({code:z.ZodIssueCode.custom,path:[k],message:'Must be within the video duration.'});
@@ -33,11 +36,12 @@ export const webinarSchema=z.object({
  if(w.offers.some(o=>o.at>w.durationSeconds))c.addIssue({code:z.ZodIssueCode.custom,path:['offers'],message:'Offer times must be within the video.'});
  if(new Set(w.offers.map(o=>o.id)).size!==w.offers.length)c.addIssue({code:z.ZodIssueCode.custom,path:['offers'],message:'Offer IDs must be unique.'});
  if(w.endOfferId&&!w.offers.some(o=>o.id===w.endOfferId))c.addIssue({code:z.ZodIssueCode.custom,path:['endOfferId'],message:'Choose an existing offer for the ending.'});
+ if(w.purchaseNotifications.startAt!==null&&w.purchaseNotifications.startAt>w.durationSeconds)c.addIssue({code:z.ZodIssueCode.custom,path:['purchaseNotifications','startAt'],message:'Must be within the video duration.'});
 });
 export type Webinar=z.infer<typeof webinarSchema>;
 export type ChatCue=z.infer<typeof chatCueSchema>;
 export type WatchHistory={webinar_id:string;revision:number;progress_seconds:number;completed_at:string|null;updated_at:string};
-export function newWebinar(id:string):Webinar{return {id,revision:1,title:`Your ${webinarSite.brandName} session`,description:`A walkthrough with ${webinarSite.hostName}.`,status:'draft',audience:'all',priority:0,videoUrl:'',posterUrl:'',durationSeconds:1800,nameAt:20,contactAt:120,pitchAt:1200,offerTitle:'Put your AI bot to work',ctaLabel:'See my options',offerEndsAt:null,checkoutMode:'membership',redirectAtEnd:true,offers:[],endOfferId:null,showAudienceCount:true,chat:[{id:'welcome',at:5,name:webinarSite.brandName,text:'Welcome! Ask a question here while you watch. The AI assistant can help with this session.',kind:'host'}],faq:'iCash X is an AI real estate workspace. Paid activity uses a budget. Results, deals and earnings are not guaranteed. Current prices and terms are shown in checkout.',aiEnabled:true,variationEnabled:false,chatStyle:defaultChatStyle};}
+export function newWebinar(id:string):Webinar{return {id,revision:1,title:`Your ${webinarSite.brandName} session`,description:`A walkthrough with ${webinarSite.hostName}.`,status:'draft',audience:'all',priority:0,videoUrl:'',posterUrl:'',durationSeconds:1800,nameAt:20,contactAt:120,pitchAt:1200,offerTitle:'Put your AI bot to work',ctaLabel:'See my options',offerEndsAt:null,checkoutMode:'membership',redirectAtEnd:true,offers:[],endOfferId:null,showAudienceCount:true,audienceDisplay:audienceDisplaySchema.parse({}),purchaseNotifications:purchaseNotificationsSchema.parse({}),chat:[{id:'welcome',at:5,name:webinarSite.brandName,text:'Welcome! Ask a question here while you watch. The AI assistant can help with this session.',kind:'host'}],faq:'iCash X is an AI real estate workspace. Paid activity uses a budget. Results, deals and earnings are not guaranteed. Current prices and terms are shown in checkout.',aiEnabled:true,variationEnabled:false,chatStyle:defaultChatStyle};}
 export function chooseWebinar(webinars:Webinar[],history:WatchHistory[],timezone:string,now=new Date(),routing={nightStartsAt:18,nightEndsAt:6}):Webinar|null{
  const eligible=webinars.filter(w=>w.status==='published'&&w.videoUrl);
  const recent=[...history].sort((a,b)=>b.updated_at.localeCompare(a.updated_at));

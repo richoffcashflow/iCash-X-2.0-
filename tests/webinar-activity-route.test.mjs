@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import {z} from 'zod';
+import {activitySchema,recentActivity} from '../lib/webinar-activity.ts';
+const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+let origin=true,signedIn=true,preview=false,superseded=false;const calls=[];
+class WebinarError extends Error{constructor(status,message){super(message);this.status=status;}}
+const mocks={z,activitySchema,recentActivity,WebinarError,webinarHeaders:{'Cache-Control':'private, no-store'},webinarOrigin:()=>{if(!origin)throw new WebinarError(403,'Origin');},webinarBody:req=>req.json(),webinarError:e=>Response.json({error:e.message},{status:e.status||503}),webinarSession:async sessionId=>{if(!signedIn)throw new WebinarError(401,'Visitor');if(sessionId!==id(2))throw new WebinarError(404,'Session');return {v:{id:id(1)},s:{id:sessionId,is_preview:preview,superseded_at:superseded?'2026-10-04T12:00:00Z':null}};},webinarLimit:async()=>{},db:async(path,method,body)=>{calls.push({path,method,body});return [{id:'a'.repeat(32),kind:'funding',amountCents:1000,occurredAt:new Date(Date.now()-10000).toISOString(),region:'Texas',email:'must-not-leave@example.test',stripe_payment_id:'private'}];}};
+globalThis.__webinarActivityRoute=mocks;
+const source=ts.transpileModule(readFileSync(new URL('../app/api/webinar/activity/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
+const route=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(mocks).join(',')+'}=globalThis.__webinarActivityRoute;\n'+source).toString('base64'));
+const post=body=>route.POST(new Request('https://example.test/api/webinar/activity',{method:'POST',body:JSON.stringify(body)}));
+origin=false;assert.equal((await post({sessionId:id(2)})).status,403);origin=true;
+signedIn=false;assert.equal((await post({sessionId:id(2)})).status,401);signedIn=true;
+assert.equal((await post({sessionId:id(3)})).status,404);
+assert.equal((await post({sessionId:id(2),visitorId:id(3)})).status,400);
+assert.equal((await post({sessionId:'invalid'})).status,400);assert.equal(calls.length,0);
+preview=true;assert.deepEqual((await(await post({sessionId:id(2)})).json()).events,[]);preview=false;
+superseded=true;assert.deepEqual((await(await post({sessionId:id(2)})).json()).events,[]);superseded=false;
+assert.equal(calls.length,0);
+const response=await post({sessionId:id(2)}),data=await response.json();
+assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'private, no-store');
+assert.deepEqual(calls[0],{path:'rpc/icash_webinar_recent_activity',method:'POST',body:{p_visitor:id(1),p_session:id(2)}});
+assert.deepEqual(Object.keys(data.events[0]).sort(),['amountCents','id','kind','occurredAt','region']);assert.equal(data.events[0].amountCents,1000);
+console.log('Webinar activity API: origin, visitor ownership, preview isolation, strict payload, safe fields and private cache checks passed.');
