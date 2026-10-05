@@ -10,7 +10,7 @@ type Quote={id:string;plan_id:string;pack_code:string;budget_cents:number;credit
 export function dailyReady(){return (fundingEnabled()||earlyAccessFundingEnabled())&&!!process.env.CRON_SECRET&&process.env.ICASH_DAILY_BILLING_READY==='true';}
 export async function dailyQuote(p:DailyPlan,code:string,consentText:string=dailyConsent){
  const [pack]=await db<{code:string;price_cents:number;credit_cents:number}[]>(`icash_credit_packs?code=eq.${code}${p.mode==='live'?'&enabled=eq.true':''}&select=code,price_cents,credit_cents`);
- if(!pack||pack.price_cents<1000||pack.price_cents>100000)throw new Error('Budget unavailable');
+ if(!pack||pack.price_cents<1000||pack.price_cents>100000||pack.credit_cents!==pack.price_cents)throw new Error('Budget unavailable');
  const [q]=await db<Quote[]>('icash_daily_quotes','POST',{plan_id:p.id,pack_code:code,budget_cents:pack.price_cents,credit_cents:pack.credit_cents,fee_cents:processingFeeCents(pack.price_cents),consent_text:consentText});
  const stripe=fundingStripe();
  const product=await stripe.products.create({name:'iCash X daily bot budget',metadata:{icash_daily_quote:q.id}},{idempotencyKey:`daily-product:${q.id}`});
@@ -65,6 +65,8 @@ export async function settleDailyInvoice(invoiceId:string,expectedPlan?:DailyPla
  const periodStart=budget.period?.start,paidAt=i.status_transitions?.paid_at;
  if(!Number.isSafeInteger(periodStart)||periodStart<=0||!Number.isSafeInteger(paidAt)||!paidAt||paidAt<=0)throw new Error('Invoice chronology missing');
  await db('rpc/icash_settle_daily_invoice_v2','POST',{p_plan:p.id,p_quote:q.id,p_invoice:i.id,p_payment:pi.id,p_amount:i.total,p_tax:tax,p_email:i.customer_email,p_phone:i.customer_phone,p_cycle_start:new Date(periodStart*1000).toISOString(),p_paid_at:new Date(paidAt*1000).toISOString()});
+ // Paid renewals extend the authorized lifetime cap even if the customer is offline.
+ if(p.account_id)await db('rpc/icash_daily_claim','POST',{p_account:p.account_id});
 }
 
 /** Bounded recovery of missed paid webhooks, checkpointing each verified invoice. */

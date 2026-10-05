@@ -46,14 +46,18 @@ export async function GET(req:Request){
   const visible=properties.slice(0,pageSize);
   const ids=visible.map(p=>p.id).join(',');
   const propertyIds=visible.map(p=>p.result.property.propertyId).filter(id=>/^prop_[a-zA-Z0-9]+$/.test(id)).join(',');
-  const [deals,contactRows,controls,conversations,callbacks]=ids?await Promise.all([
+  const [deals,contactRows,controls,conversations,callbacks,sellerRows]=ids?await Promise.all([
    db<{id:string;screening_id:string}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=in.(${ids})&select=id,screening_id,terms,stage,updated_at`),
    db<ContactRow[]>(`icash_owner_contacts?account_id=eq.${accountId}&screening_id=in.(${ids})&select=account_id,screening_id,created_at,lookup_at:result->>fetchedAt,people:result->contacts&limit=${pageSize}`),
    propertyIds?db<unknown[]>(`icash_property_controls?account_id=eq.${accountId}&property_id=in.(${propertyIds})&manual=eq.true&select=property_id`):Promise.resolve([]),
    db<unknown[]>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=in.(${ids})&state=eq.complete&select=id,screening_id,party,completed_at,summary:result->>summary&order=completed_at.desc,id.desc&limit=24`),
-   db<unknown[]>(`icash_live_callbacks?account_id=eq.${accountId}&screening_id=in.(${ids})&select=id,screening_id,due_at,timezone,state&order=due_at,id&limit=24`)
-  ]):[[],[],[],[],[]];
+   db<unknown[]>(`icash_live_callbacks?account_id=eq.${accountId}&screening_id=in.(${ids})&select=id,screening_id,due_at,timezone,state&order=due_at,id&limit=24`),
+   db<{assigned_account:string;screening_id:string;name:string;phone:string;created_at:string}[]>(`icash_seller_intakes?assigned_account=eq.${accountId}&screening_id=in.(${ids})&state=eq.assigned&select=assigned_account,screening_id,name,phone,created_at&limit=${pageSize}`)
+  ]):[[],[],[],[],[],[]];
   const contacts=purchasedContacts(contactRows,accountId,visible);
+  // Self-reported seller identity is displayed separately from provider owner matches.
+  // Neither the form checkbox nor ownership claim grants the customer's calling authority.
+  for(const lead of sellerRows.filter(l=>l.assigned_account===accountId&&visible.some(p=>p.id===l.screening_id)))contacts.push({screening_id:lead.screening_id,created_at:contactTime(lead.created_at),fetchedAt:contactTime(lead.created_at),source:'Keypath Offers · seller-submitted',ownershipVerified:false,outreachAuthorized:false,contacts:[{name:contactText(lead.name,100),phones:[{number:contactText(lead.phone,30),type:'Seller-submitted',doNotCall:null}]}]});
   // Existence joins return each visible property once, regardless of request volume
   // or the separately selected attention page. Empty embeds avoid transferring messages.
   const propertyAttentionRows=ids?await Promise.all([

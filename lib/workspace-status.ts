@@ -44,7 +44,7 @@ export function workspaceNextAction(a:{billingModel?:string;membershipActive?:bo
  const smsOnly=(campaign.mode==='sms_inbound'||!a.workReady)&&a.smsWorkReady===true&&campaign.smsChannelEnabled===true;
  const inboundMode=campaign.mode==='sms_inbound'&&campaign.liveWorkReady&&a.workReady;
  if(!smsOnly&&(!campaign.liveWorkReady||!a.workReady))return {kind:'campaign' as const,label:'View setup status',reason:'Required setup checks are pending. Review the status; funding does not clear them.'};
- if((a.balanceCents??0)<=0)return {kind:'funding' as const,label:'Review funding',reason:'Add prepaid work credits. Review the one-time amount before paying.'};
+ if((a.balanceCents??0)<=0)return {kind:'funding' as const,label:'Review funding',reason:'Review your funding amount and renewal terms before paying.'};
  if(a.paused)return {kind:'resume' as const,label:smsOnly?'Start SMS outreach':'Start bot',reason:smsOnly?inboundMode?'Start eligible SMS and inbound-call invitations. Outbound AI calls stay off; contact, provider, timing and budget checks still apply.':'Start eligible SMS only. Contact, timing and budget checks still apply; AI calls remain held.':'Setup checks are ready. Start your bot; contact and timing checks still apply.'};
  return {kind:'work' as const,label:'View current work',reason:smsOnly?inboundMode?'SMS and inbound-call invitations can run when their setup and contact checks pass. Outbound AI calls stay off.':'SMS is ready for eligible contacts. AI calls and invitations remain held.':'Your bot is ready for eligible tasks. Open your saved work below.'};
 }

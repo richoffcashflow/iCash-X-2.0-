@@ -28,6 +28,10 @@
     {
       "path": "/api/webinar/conversions",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/internal/seller",
+      "schedule": "* * * * *"
     }
   ]
 }

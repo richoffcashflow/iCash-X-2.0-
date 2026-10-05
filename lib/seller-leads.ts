@@ -1,0 +1,10 @@
+import {z} from 'zod';
+export const sellerBrand='HomeOffer Network';
+export const sellerConsentVersion='homeoffer-seller-ai-2026-10-05.1';
+export const sellerConsentText='I agree that iCash X, operating this HomeOffer Network form, may call or text the number I provide about this property using automated technology and an AI-generated voice. Consent is not a condition of selling or buying anything. Message and data rates may apply. I can revoke consent anytime, including by replying STOP to texts.';
+export const sellerSharingText='HomeOffer Network is a seller-intake service operated by iCash X. We may share your request with up to 10 different matched property buyers or wholesalers over time and may receive compensation. Your request is shared and is not exclusive to one buyer. We are not promising to buy your home. Any purchase, assignment, or referral role will be disclosed before you sign. Submitting does not authorize unrelated businesses to make automated calls.';
+const clean=(max:number)=>z.string().trim().min(1).max(max).regex(/^[^\u0000-\u001f<>]+$/u);
+export function sellerPhone(v:string){const s=v.replace(/[\s().-]/g,'');const n=/^[2-9]\d{2}[2-9]\d{6}$/.test(s)?'+1'+s:/^1[2-9]\d{2}[2-9]\d{6}$/.test(s)?'+'+s:s;return /^\+1[2-9]\d{2}[2-9]\d{6}$/.test(n)?n:null;}
+export const sellerSubmission=z.object({name:clean(100),address:clean(300),phone:z.string().max(30).transform(sellerPhone).refine((p):p is string=>p!==null,'Enter a valid US phone number.'),consented:z.boolean(),consentVersion:z.literal(sellerConsentVersion),ownerConfirmed:z.literal(true),requestId:z.string().uuid(),campaign:z.string().max(100).regex(/^[a-zA-Z0-9_-]*$/).default(''),source:z.enum(['meta','google','tiktok','youtube','other','direct']).default('direct'),clickId:z.string().max(300).regex(/^[a-zA-Z0-9_.:-]*$/).default(''),honeypot:z.string().max(200).default('')}).strict();
+export type SellerSubmission=z.infer<typeof sellerSubmission>;
+export function sellerDuplicateKeyInput(address:string,phone:string){return address.normalize('NFKC').toLowerCase().replace(/[^a-z0-9]/g,'')+'|'+phone;}
