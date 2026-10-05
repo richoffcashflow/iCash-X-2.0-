@@ -114,5 +114,20 @@ try{
  const event=(await q('select icash_claim_seller_event() j')).rows[0].j;await q('select icash_finish_seller_event($1,$2,true)',[event.id,event.token]);assert.equal((await q('select delivery_state from icash_seller_events where id=$1',[event.id])).rows[0].delivery_state,'delivered');
  for(const role of ['anon','authenticated'])for(const fn of ['icash_claim_seller_lookup()','icash_assign_seller_lead()','icash_seller_funnel_summary()'])assert.equal((await q('select has_function_privilege($1,$2,\'execute\') allowed',[role,fn])).rows[0].allowed,false);
  assert((await q("select bool_and(relrowsecurity) enabled from pg_class where relname like 'icash_seller_%' and relkind='r'")).rows[0].enabled);
+ await pg.exec(file('supabase/migrations/20261005060500_homeoffer_contact_consent.sql'));
+ assert.equal(Number((await q("select count(*) n from icash_seller_intakes where email_consented or contact_consent_scope is not null")).rows[0].n),0,'legacy consent is never expanded');
+ const {sellerConsentText,sellerSharingText,sellerConsentVersion}=await import('../lib/seller-leads.ts');
+ const contactRequest=uuid();
+ const contact=async(email='seller@example.invalid',accepted=true,request=contactRequest)=>q('select icash_submit_seller_contact_intake($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) id',[request,hash('contact-guest'),'Contact Seller','Synthetic Contact Address','+12145550123',hash(request),accepted,sellerConsentVersion,sellerConsentText,sellerSharingText,{},hash('agent'),email]);
+ const contactId=(await contact()).rows[0].id;assert.equal((await contact()).rows[0].id,contactId,'same evidence retries once');
+ const savedContact=(await q('select email,email_consented,contact_consent_scope,consent_text,sharing_text from icash_seller_intakes where id=$1',[contactId])).rows[0];
+ assert.deepEqual(savedContact,{email:'seller@example.invalid',email_consented:true,contact_consent_scope:'homeoffer_network_and_matched_buyers',consent_text:sellerConsentText,sharing_text:sellerSharingText});
+ await assert.rejects(contact('changed@example.invalid'),/retry mismatch/);await assert.rejects(contact('seller@example.invalid',false),/retry mismatch/);
+ const declined=(await contact('declined@example.invalid',false,uuid())).rows[0].id;
+ assert.deepEqual((await q('select ai_consented,email_consented,contact_consent_scope from icash_seller_intakes where id=$1',[declined])).rows[0],{ai_consented:false,email_consented:false,contact_consent_scope:null});
+ const noEmail=(await contact(null,true,uuid())).rows[0].id;assert.equal((await q('select email_consented from icash_seller_intakes where id=$1',[noEmail])).rows[0].email_consented,false);
+ await assert.rejects(contact('bad-email',true,uuid()),/Invalid email/);
+ for(const role of ['anon','authenticated'])assert.equal((await q("select has_function_privilege($1,'icash_submit_seller_contact_intake(uuid,text,text,text,text,text,boolean,text,text,text,jsonb,text,text)','execute') allowed",[role])).rows[0].allowed,false);
+ console.log('PASS HomeOffer contact evidence: exact copy/version, optional email, explicit channel choice, HomeOffer and up-to-eight matched-buyer scope, legacy preservation, idempotency and private RPC.');
  console.log('PASS isolated SQL: $10 minimum, historical invoice compatibility, immutable price versions, 3× rates, renewal caps, pause preservation, intake consent/idempotency, zero-budget lookup hold, one-use provider claims, exact CPA allocation, funded daily bid limit, next-day queue, exactly-once debit, factual call milestones, event claims, RLS and private RPCs.');
 }catch(e){console.error(e);process.exitCode=1;}finally{await pg.close();}
