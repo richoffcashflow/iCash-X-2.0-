@@ -13,7 +13,7 @@ const person={name:'Synthetic Person',personId:'per_private',emails:['private@ex
  {number:'+12025550102',type:'Landline',doNotCall:false},{number:'+12025550103',doNotCall:null},{number:'+12025550104',doNotCall:'false'},{}]};
 const contactRows=[lookup(1,[person,{},null,'invalid',{name:34,phones:'invalid'}]),lookup(7,[{name:'Page two contact',phones:[]}]),lookup(20,[{name:'Retained contact',phones:[]}]),
  {...lookup(998,[{name:'Other tenant contact',phones:[]}]),account_id:otherAccount}];
-let paths=[],authorized=true;
+let paths=[],authorized=true,sellerFixtures=[];
 const paginate=(rows,q)=>rows.slice(Number(q.get('offset')??0),Number(q.get('offset')??0)+Number(q.get('limit')??rows.length));
 const mocks={z,NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
  paths.push({path,method,body});
@@ -41,7 +41,7 @@ const mocks={z,NextResponse:{json:(body,options={})=>({body,status:options.statu
   // Defense in depth: even an unexpected database row cannot escape projection.
   return [...selected,{...lookup(1,[{name:'Wrong account row',phones:[]}]),account_id:otherAccount},lookup(19,[{name:'Nonvisible contact',phones:[]}])];
  }
- if(table==='icash_seller_intakes'){assert.equal(q.get('assigned_account'),'eq.'+account);return [];}
+ if(table==='icash_seller_matches'){assert.equal(q.get('account_id'),'eq.'+account);assert.equal(q.get('select'),'account_id,screening_id,lead:icash_seller_intakes(name,phone)');return sellerFixtures;}
  if(['icash_property_controls','icash_live_conversations','icash_live_callbacks'].includes(table))return [];
  throw Error('Unexpected read '+table);
 }};
@@ -72,6 +72,8 @@ contactRows[0].people=Array.from({length:30},()=>({name:'x'.repeat(250),phones:A
 assert.equal(r.body.contacts[0].contacts.length,25);assert.equal(r.body.contacts[0].contacts[0].name.length,200);assert.equal(r.body.contacts[0].contacts[0].phones.length,20);assert.equal(r.body.contacts[0].contacts[0].phones[0].number.length,30);assert.equal(r.body.contacts[0].contacts[0].phones[0].type.length,30);assert.equal(r.body.contacts[0].contacts[0].phones[0].doNotCall,null);
 for(const bad of ['?query=*','?query=%25','?query=abc%26account_id=eq.other','?query='+('a'.repeat(101))]){paths=[];r=await get(bad);assert.equal(r.status,400);assert.equal(paths.length,0,'Invalid search fails before any data query');}
 for(const bad of ['?page=-1','?page=1.5','?page=Infinity','?attentionPage=10001','?screeningId=invalid']){paths=[];r=await get(bad);assert.notEqual(r.status,200);assert.equal(paths.length,0);}
+sellerFixtures=[{account_id:account,screening_id:uuid(1),lead:{name:'Assigned seller',phone:'+12025550111'}},{account_id:otherAccount,screening_id:uuid(1),lead:{name:'Wrong seller',phone:'+12025550112'}},{account_id:account,screening_id:uuid(19),lead:{name:'Nonvisible seller',phone:'+12025550113'}}];
+r=await get('');const shared=r.body.contacts.find(c=>c.source==='HomeOffer Network · seller-submitted');assert.equal(shared.contacts[0].name,'Assigned seller');assert.equal(shared.created_at,null);assert.equal(shared.fetchedAt,null);assert(!JSON.stringify(r.body).includes('Wrong seller'));assert(!JSON.stringify(r.body).includes('Nonvisible seller'));
 authorized=false;paths=[];r=await get('');assert.notEqual(r.status,200);assert.equal(paths.length,0,'No data access without account ownership');
 delete globalThis.__activityRoute;
 console.log('Activity route: tenant-bound purchased contacts, explicit field projection, DNC states, missing/malformed results, bounded arrays, pagination, retained views, search and authentication passed. Synthetic fixtures only.');

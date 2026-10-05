@@ -52,12 +52,12 @@ export async function GET(req:Request){
    propertyIds?db<unknown[]>(`icash_property_controls?account_id=eq.${accountId}&property_id=in.(${propertyIds})&manual=eq.true&select=property_id`):Promise.resolve([]),
    db<unknown[]>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=in.(${ids})&state=eq.complete&select=id,screening_id,party,completed_at,summary:result->>summary&order=completed_at.desc,id.desc&limit=24`),
    db<unknown[]>(`icash_live_callbacks?account_id=eq.${accountId}&screening_id=in.(${ids})&select=id,screening_id,due_at,timezone,state&order=due_at,id&limit=24`),
-   db<{assigned_account:string;screening_id:string;name:string;phone:string;created_at:string}[]>(`icash_seller_intakes?assigned_account=eq.${accountId}&screening_id=in.(${ids})&state=eq.assigned&select=assigned_account,screening_id,name,phone,created_at&limit=${pageSize}`)
+   db<{account_id:string;screening_id:string;lead:{name:string;phone:string}|null}[]>(`icash_seller_matches?account_id=eq.${accountId}&screening_id=in.(${ids})&select=account_id,screening_id,lead:icash_seller_intakes(name,phone)&limit=${pageSize}`)
   ]):[[],[],[],[],[],[]];
   const contacts=purchasedContacts(contactRows,accountId,visible);
   // Self-reported seller identity is displayed separately from provider owner matches.
   // Neither the form checkbox nor ownership claim grants the customer's calling authority.
-  for(const lead of sellerRows.filter(l=>l.assigned_account===accountId&&visible.some(p=>p.id===l.screening_id)))contacts.push({screening_id:lead.screening_id,created_at:contactTime(lead.created_at),fetchedAt:contactTime(lead.created_at),source:'Keypath Offers · seller-submitted',ownershipVerified:false,outreachAuthorized:false,contacts:[{name:contactText(lead.name,100),phones:[{number:contactText(lead.phone,30),type:'Seller-submitted',doNotCall:null}]}]});
+  for(const lead of sellerRows.filter(l=>l.account_id===accountId&&l.lead&&visible.some(p=>p.id===l.screening_id)))contacts.push({screening_id:lead.screening_id,created_at:null,fetchedAt:null,source:'HomeOffer Network · seller-submitted',ownershipVerified:false,outreachAuthorized:false,contacts:[{name:contactText(lead.lead?.name,100),phones:[{number:contactText(lead.lead?.phone,30),type:'Seller-submitted',doNotCall:null}]}]});
   // Existence joins return each visible property once, regardless of request volume
   // or the separately selected attention page. Empty embeds avoid transferring messages.
   const propertyAttentionRows=ids?await Promise.all([
