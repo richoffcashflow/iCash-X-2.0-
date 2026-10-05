@@ -10,7 +10,7 @@ export function BudgetSummary(){
  return <section className="budget-summary workspace-progress" aria-labelledby="workspace-progress-title">
  <div className="workspace-section-heading"><h3 id="workspace-progress-title">Your progress</h3><small>All-time recorded work</small></div>
  {progress?<>{progress.items.length>0?<ul className="progress-milestones">{progress.items.map(item=><li key={item}>{item}</li>)}</ul>:<p className="progress-empty">{progress.empty}</p>}<p className="progress-note">{progress.note}</p></>:<p role="status">{error?'Progress is unavailable right now. Your saved work is still below.':'Loading recorded progress…'}</p>}
- {s&&<details open><summary>Spending & work summary</summary><div className="workspace-recorded-totals" aria-label="Recorded work and spending"><span><strong>{creditAmount(s.spentCents)}</strong> spent to date</span><span><strong>{creditAmount(s.balanceCents)}</strong> credits remaining</span></div><p>{s.explanation}</p><a className="summary-download" href="/api/work/summary?format=pdf">Download PDF summary</a><small>All recorded account activity. Pending results may change.</small></details>}
+ {s&&<details open><summary>Spending & work summary</summary><div className="workspace-recorded-totals" aria-label="Recorded work and spending"><span><strong>{creditAmount(s.spentCents)}</strong> spent to date</span></div><p>{s.explanation}</p><a className="summary-download" href="/api/work/summary?format=pdf">Download PDF summary</a><small>All recorded account activity. Pending results may change.</small></details>}
  {error&&s&&<p role="status">{error}</p>}
  </section>;
 }
