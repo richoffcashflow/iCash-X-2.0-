@@ -219,7 +219,7 @@ try{
  create table icash_market_research_jobs(state text,next_attempt_at timestamptz,updated_at timestamptz);
  insert into icash_market_research_scopes values(true);
  insert into icash_market_research_jobs values('pending',now(),now()),('running',now(),now()),('complete',now(),now());`);
- await pg.exec(file('supabase/migrations/20261005172604_inbound_address_research_without_city_targets.sql'));
+ await pg.exec(file('supabase/migrations/20261005173221_inbound_address_research_without_city_targets.sql'));
  assert.equal(Number((await q('select count(*) n from icash_seller_markets where enabled')).rows[0].n),0);
  assert.equal(Number((await q('select count(*) n from icash_market_research_scopes where enabled')).rows[0].n),0);
  assert.equal((await q("select count(*)::int n from icash_market_research_jobs where state='held'")).rows[0].n,1,'only unstarted scans are held');
