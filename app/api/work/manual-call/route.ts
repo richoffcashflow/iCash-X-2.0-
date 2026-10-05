@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {z} from 'zod';
 import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
+import {allowedOrigin} from '@/lib/funding-policy';
 import {contactEligibility,type VoicePermission} from '@/lib/live-dispatch-policy';
 export const dynamic='force-dynamic';
 /** Read-only dialer choices. Never queues calls, grants permission or spends credits. */
@@ -32,4 +33,19 @@ export async function GET(req:Request){
   });
   return NextResponse.json({contacts},{headers});
  }catch{return NextResponse.json({error:'Could not check contact readiness. Try again.'},{status:503,headers});}
+}
+
+/** Starting the customer's call hands this property to them before opening their dialer. */
+export async function POST(req:Request){
+ const headers={'Cache-Control':'private, no-store'};
+ if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
+ try{
+  const {accountId,userId}=await workAccount();const raw=await req.text();if(raw.length>512)throw Error();
+  const {screeningId,phone}=z.object({screeningId:z.string().uuid(),phone:z.string().regex(/^\+1[2-9][0-9]{9}$/)}).strict().parse(JSON.parse(raw));
+  const options=await GET(new Request(new URL(`?screeningId=${screeningId}`,req.url)));
+  const data=await options.json();
+  if(!options.ok||!data.contacts?.some((c:{phone:string;available:boolean})=>c.phone===phone&&c.available))return NextResponse.json({error:'Calling is unavailable for this contact. Refresh its status.'},{status:409,headers});
+  await db('rpc/icash_set_work_control','POST',{p_user:userId,p_account:accountId,p_action:'takeover',p_screening:screeningId});
+  return NextResponse.json({manual:true,dialUrl:`tel:${phone}`},{headers});
+ }catch{return NextResponse.json({error:'Could not take control of this lead. The call has not started. Please retry.'},{status:409,headers});}
 }

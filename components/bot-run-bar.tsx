@@ -1,9 +1,10 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {Play,Square,ArrowUpRight} from 'lucide-react';
+import {Plus} from 'lucide-react';
+import {creditAmount} from '@/lib/workspace-progress';
 import type {BotActivity} from '@/lib/bot-activity';
-type Props={running:boolean;canStop:boolean;busy:boolean;stale:boolean;daily:boolean;budgetCents?:number;principalKey?:string;onRun:()=>void;onStop:()=>void;onBudget:()=>void};
-export function BotRunBar({running,canStop,busy,stale,daily,budgetCents,principalKey,onRun,onStop,onBudget}:Props){
+type Props={running:boolean;stopped:boolean;paymentRequired:boolean;busy:boolean;stale:boolean;balanceCents?:number;principalKey?:string;onAddCredits:()=>void};
+export function BotRunBar({running,stopped,paymentRequired,busy,stale,balanceCents,principalKey,onAddCredits}:Props){
  const [activity,setActivity]=useState<(BotActivity&{principalKey?:string})|null>(null);
  useEffect(()=>{
   if(!running||stale){setActivity(null);return;}
@@ -26,12 +27,12 @@ export function BotRunBar({running,canStop,busy,stale,daily,budgetCents,principa
  },[running,stale,principalKey]);
  const current=activity?.principalKey===principalKey&&activity&&Date.now()-Date.parse(activity.checkedAt)<25000?activity:null;
  const active=running&&!stale&&!busy&&current?.active===true;
- const budget=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(Math.max(1000,budgetCents??1000)/100);
- const title=busy?(canStop?'Stopping…':'Starting…'):stale?'Checking status':running?'Bot running':'Run your bot';
+ const empty=balanceCents!==undefined&&balanceCents<=0;
+ const title=stale?'Checking status':paymentRequired?'Subscription needs attention':empty?'Waiting for credits':stopped?'Bot stopped':running?'Bot running':'Your AI bot';
  return <section className={`bot-run-bar${active?' is-active':''}`} aria-label="Bot controls">
-  <div className="bot-run-status"><span className="bot-work-dots" aria-hidden="true"><i/><i/><i/></span><div aria-live="polite" aria-atomic="true"><h2>{title}</h2><p>{busy?(canStop?'Stopping new work':'Starting your bot'):stale?'Reconnecting to your workspace':running?(current?.label??'Updating status…'):'Set your budget. Start working.'}</p></div></div>
-  <div className="bot-run-actions">{daily&&<button id="workspace-funding-toggle" className="bot-run-budget" type="button" aria-haspopup="dialog" aria-label={`Daily budget ${budget}. Change budget`} onClick={onBudget}>{budget}<span>/day</span><ArrowUpRight size={15} aria-hidden="true"/></button>}
-   {canStop?<button className="bot-main-action" type="button" disabled={busy} aria-label={daily?'Stop bot and daily billing':'Stop bot'} onClick={onStop}><Square size={13} fill="currentColor" aria-hidden="true"/>{busy?'Stopping…':'Stop bot'}</button>:<button className="bot-main-action" type="button" disabled={busy||stale} onClick={onRun}><Play size={14} fill="currentColor" aria-hidden="true"/>Run bot</button>}
+  <div className="bot-run-status"><span className="bot-work-dots" aria-hidden="true"><i/><i/><i/></span><div aria-live="polite" aria-atomic="true"><h2>{title}</h2><p>{stale?'Reconnecting to your workspace':paymentRequired?'Update payment to resume work. Your leads are saved.':empty?'Add credits to continue. Your leads are saved.':running?(current?.label??'Updating status…'):stopped?'Add credits to restart automatically.':'Add credits. Work starts automatically.'}</p></div></div>
+  <div className="bot-run-actions">{balanceCents!==undefined&&<div className="bot-credit-balance"><strong>{stale?'—':creditAmount(balanceCents)}</strong><span>available</span></div>}
+   <button id="workspace-funding-toggle" className="bot-main-action" type="button" aria-haspopup={paymentRequired?undefined:'dialog'} disabled={busy||stale} onClick={onAddCredits}><Plus size={16} aria-hidden="true"/>{paymentRequired?'Update payment':'Add credits'}</button>
   </div>
  </section>;
 }

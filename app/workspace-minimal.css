@@ -67,3 +67,7 @@
 @keyframes bot-working{0%,70%,100%{transform:translateY(0);opacity:.4}35%{transform:translateY(-5px);opacity:1}}
 @media(prefers-reduced-motion:reduce){.bot-run-bar.is-active .bot-work-dots i{animation:none;opacity:1}}
 @media(max-width:600px){.bot-run-bar{padding:22px 20px;gap:20px;flex-wrap:wrap}.bot-run-status{gap:15px}.bot-run-status h2{font-size:22px}.bot-run-actions{width:100%;justify-content:space-between;gap:16px}.bot-run-budget{font-size:17px}.bot-main-action{min-width:112px}.bot-run-actions>.bot-main-action:only-child{margin-left:auto}}
+
+.bot-credit-balance{display:flex;flex-direction:column;gap:3px;text-align:right}.bot-credit-balance strong{font-size:22px;font-weight:600;letter-spacing:-.5px}.bot-credit-balance span{font-size:12px;color:#b9b9bf}
+
+.conversation-control{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px;border-bottom:1px solid #ededee;font-size:12px;color:#666}.conversation-control button{color:#18181b;font-weight:600}.property-quick-actions{grid-template-columns:repeat(3,minmax(0,1fr))}

@@ -25,9 +25,10 @@ export async function GET(req:Request){
 }
 export async function POST(req:Request){
  if(!allowedOrigin(req))return new Response(null,{status:403});
- try{const {accountId}=await workAccount();const raw=await req.text();if(raw.length>10000)throw Error();
+ try{const {accountId,userId}=await workAccount();const raw=await req.text();if(raw.length>10000)throw Error();
  const b=z.object({threadId:z.string().uuid(),requestKey:z.string().uuid(),message:z.string().trim().max(1000),assetIds:z.array(z.string().uuid()).max(3).default([])}).strict().parse(JSON.parse(raw));
- const id=await db<string>('rpc/icash_queue_text','POST',{p_account:accountId,p_thread:b.threadId,p_key:b.requestKey,p_body:b.message,p_assets:b.assetIds});
- return NextResponse.json({id,...await dispatchTextMessage(accountId,id)});
+ const queued=await db<{id:string;manual:boolean}>('rpc/icash_queue_customer_text','POST',{p_actor:userId,p_account:accountId,p_thread:b.threadId,p_key:b.requestKey,p_body:b.message,p_assets:b.assetIds});
+ try{return NextResponse.json({...queued,...await dispatchTextMessage(accountId,queued.id)});}
+ catch{return NextResponse.json({...queued,status:'message_delivery_needs_review'});}
  }catch{return NextResponse.json({error:'Message held. Check permission, message length, budget and sender setup.'},{status:409});}
 }

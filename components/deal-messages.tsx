@@ -7,7 +7,7 @@ type Message={id:string;thread_id:string;direction:string;body:string;state:stri
 type Ai={id:string;thread_id:string;state:string;reply:string|null;analysis:{summary?:string;callbackRequested?:boolean;facts?:{kind:string;quote:string}[]}|null};
 type Data={threads:Thread[];messages:Message[];ai?:Ai[];threadId?:string;nextThread:string|null;next:{before:string;beforeId:string}|null};
 type SendAttempt={key:string;body:string;busy:boolean;held:boolean;status:string};
-export function DealMessages({dealId,active=true}:{dealId:string;active?:boolean}){
+export function DealMessages({dealId,active=true,onTakeover}:{dealId:string;active?:boolean;onTakeover?:()=>void}){
  const [data,setData]=useState<(Data&{scope:string})|null>(null),[error,setError]=useState(''),[threadId,setThreadId]=useState(''),[afterThread,setAfterThread]=useState(''),[page,setPage]=useState<{before:string;beforeId:string}|null>(null),[refresh,setRefresh]=useState(0),[drafts,setDrafts]=useState<Record<string,string>>({}),[search,setSearch]=useState('');
  const attempts=useRef<Record<string,SendAttempt>>({});
  const scope=JSON.stringify([dealId,threadId,afterThread,page]);
@@ -28,11 +28,11 @@ export function DealMessages({dealId,active=true}:{dealId:string;active?:boolean
  {!!data?.threads.length&&<aside className="conversation-contacts" aria-label="Text contacts"><div className="conversation-contacts-title">Contacts</div>{data.threads.map(t=><button type="button" key={t.id} aria-pressed={(threadId||data.threadId)===t.id} onClick={()=>choose(t.id)}><span className="conversation-contact-avatar">{t.party==='buyer'?'B':'S'}</span><span><strong>{t.party==='buyer'?'Buyer':'Seller'}</strong><small>{t.recipient}</small>{drafts[t.id]?.trim()&&<em>Draft saved</em>}</span></button>)}<div className="history-pages">{afterThread&&<button onClick={()=>{setAfterThread('');setThreadId('');setPage(null);setData(null);}}>First contacts</button>}{data.nextThread&&<button onClick={()=>{setAfterThread(data.nextThread!);setThreadId('');setPage(null);setData(null);}}>More contacts</button>}</div></aside>}
  <div className="conversation-thread-pane">
  {!current&&(!data||data.scope!==scope)&&<p className="conversation-loading" role="status">Loading conversation…</p>}
- {current&&<><div className="conversation-thread-heading"><div><strong>{current.party==='buyer'?'Buyer':'Seller'}</strong><span>{current.recipient}</span></div><button type="button" className="conversation-refresh" aria-label="Refresh texts" onClick={()=>setRefresh(v=>v+1)}><RefreshCw size={16}/></button></div><details className="conversation-search"><summary>Search texts</summary><label className="message-search">Find in loaded texts<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search this message page"/></label></details><div className="history-pages">{page&&<button onClick={()=>setPage(null)}>Latest texts</button>}{data?.next&&<button onClick={()=>setPage(data.next)}>Older texts</button>}</div><Conversation key={current.id} attempts={attempts.current} stale={!!error||!active} draft={drafts[current.id]??''} onDraft={value=>setDrafts(d=>({...d,[current.id]:value}))} search={search} thread={current} ai={data?.ai?.[0]} messages={data?.messages.slice().reverse()??[]} onSent={()=>{setPage(null);setRefresh(v=>v+1);}}/></>}
+ {current&&<><div className="conversation-thread-heading"><div><strong>{current.party==='buyer'?'Buyer':'Seller'}</strong><span>{current.recipient}</span></div><button type="button" className="conversation-refresh" aria-label="Refresh texts" onClick={()=>setRefresh(v=>v+1)}><RefreshCw size={16}/></button></div><details className="conversation-search"><summary>Search texts</summary><label className="message-search">Find in loaded texts<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search this message page"/></label></details><div className="history-pages">{page&&<button onClick={()=>setPage(null)}>Latest texts</button>}{data?.next&&<button onClick={()=>setPage(data.next)}>Older texts</button>}</div><Conversation onTakeover={onTakeover} key={current.id} attempts={attempts.current} stale={!!error||!active} draft={drafts[current.id]??''} onDraft={value=>setDrafts(d=>({...d,[current.id]:value}))} search={search} thread={current} ai={data?.ai?.[0]} messages={data?.messages.slice().reverse()??[]} onSent={()=>{setPage(null);setRefresh(v=>v+1);}}/></>}
  </div></div>
  </div>;
 }
-function Conversation({thread,messages,ai,onSent,draft,onDraft,search,attempts,stale}:{thread:Thread;messages:Message[];ai?:Ai;onSent:()=>void;draft:string;onDraft:(value:string)=>void;search:string;attempts:Record<string,SendAttempt>;stale:boolean}){
+function Conversation({onTakeover,thread,messages,ai,onSent,draft,onDraft,search,attempts,stale}:{onTakeover?:()=>void;thread:Thread;messages:Message[];ai?:Ai;onSent:()=>void;draft:string;onDraft:(value:string)=>void;search:string;attempts:Record<string,SendAttempt>;stale:boolean}){
  const log=useRef<HTMLDivElement>(null),nearLatest=useRef(true),[showLatest,setShowLatest]=useState(false);
  useEffect(()=>{if(nearLatest.current&&log.current)log.current.scrollTop=log.current.scrollHeight;},[messages.at(-1)?.id,search]);
  const visible=messages.filter(m=>m.body.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
@@ -47,11 +47,11 @@ function Conversation({thread,messages,ai,onSent,draft,onDraft,search,attempts,s
    <small>{message.direction==='outgoing'?message.state==='accepted'?'Accepted by provider':message.state.replaceAll('_',' '):'Received'} · {safeLocalTime(message.created_at)}</small>
   </article>)}
   </div>{showLatest&&<button type="button" className="conversation-latest" onClick={()=>{nearLatest.current=true;setShowLatest(false);if(log.current)log.current.scrollTop=log.current.scrollHeight;}}><ArrowDown size={14}/>Latest texts</button>}</div>
-  <TextComposer attempts={attempts} stale={stale} thread={thread} message={draft} setMessage={onDraft} onSent={()=>{nearLatest.current=true;onSent();}}/>
+  <TextComposer onTakeover={onTakeover} attempts={attempts} stale={stale} thread={thread} message={draft} setMessage={onDraft} onSent={()=>{nearLatest.current=true;onSent();}}/>
   {ai&&<details className="message-ai-note"><summary>{ai.state==='handoff'?'A person was requested':ai.state==='needs_review'?'Review AI reply':'AI conversation notes'}</summary>{ai.analysis?.summary&&<p>{ai.analysis.summary}</p>}{ai.analysis?.callbackRequested&&<p>Callback requested. Not booked yet.</p>}{ai.reply&&<><p>{ai.reply}</p><button type="button" onClick={()=>{if(!draft.trim()||window.confirm('Replace your unsent draft with this suggested reply?'))onDraft(ai.reply!);}}>Use as my draft</button></>}</details>}
  </div>;
 }
-function TextComposer({thread,message,setMessage,onSent,attempts,stale}:{thread:Thread;message:string;setMessage:(value:string)=>void;onSent:()=>void;attempts:Record<string,SendAttempt>;stale:boolean}){
+function TextComposer({onTakeover,thread,message,setMessage,onSent,attempts,stale}:{onTakeover?:()=>void;thread:Thread;message:string;setMessage:(value:string)=>void;onSent:()=>void;attempts:Record<string,SendAttempt>;stale:boolean}){
  const [,update]=useState(0);
  const attempt=attempts[thread.id],busy=attempt?.busy??false,held=attempt?.held??false,status=attempt?.status??'';
  const replyBlocked=thread.paused&&!thread.manualReply;
@@ -63,13 +63,14 @@ function TextComposer({thread,message,setMessage,onSent,attempts,stale}:{thread:
   try{
    const response=await fetch('/api/work/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:thread.id,requestKey:request.key,message:body})});const result=await response.json();
    if(!response.ok)throw Error();
+   if(result.manual===true)onTakeover?.();
    if(result.status==='message_accepted'){request.status='Accepted by the provider. Delivery is not confirmed yet.';setMessage('');}
    else{request.status='Message held. Contact permission, sender setup or available budget needs review.';request.held=true;}
   }catch{request.status='Send status is uncertain. Check the conversation before sending again.';request.held=true;}finally{request.busy=false;update(n=>n+1);onSent();}
  }
  return <form className="message-composer" data-unsaved-draft={message.trim()?'true':undefined} onSubmit={send}>
   <label className="sr-only" htmlFor={`reply-${thread.id}`}>Your reply</label><div className="text-input-row"><textarea id={`reply-${thread.id}`} placeholder={`Text the ${thread.party==='buyer'?'buyer':'seller'}…`} value={message} onChange={event=>setMessage(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing&&window.matchMedia('(pointer: fine)').matches){event.preventDefault();void send(event);}}} maxLength={160} rows={2} required disabled={busy||held||replyBlocked}/><button className="message-send" aria-label={busy?'Sending text':'Send text'} disabled={busy||held||stale||replyBlocked||!message.trim()||message.length>maxLength}><ArrowUp size={18}/></button></div>
-  <div className="text-composer-meta"><small>Uses credits · Budget &amp; contact limits apply</small><small aria-live="polite">{message.length}/{maxLength}</small></div>
+  <div className="text-composer-meta"><small>Sending puts you in control of this lead</small><small aria-live="polite">{message.length}/{maxLength}</small></div>
   {held&&<button type="button" className="message-check-status" onClick={()=>{onSent();}}>Check latest status</button>}{replyBlocked&&<p>Messaging is paused for this contact.</p>}{status&&<p role="status">{status}</p>}
   {message.length>maxLength&&<p>Shorten this draft to {maxLength} characters before sending.</p>}
  </form>;

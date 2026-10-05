@@ -1,6 +1,6 @@
 'use client';
 import {Activity,useEffect,useRef,useState} from 'react';
-import {Phone,MessageCircle,X} from 'lucide-react';
+import {Phone,MessageCircle,Mail,X} from 'lucide-react';
 import {analysisMoney,propertyAnalysisView} from '@/lib/property-analysis-view';
 import {mostPromisingProperty,propertyBotStatus,propertyNextMove} from '@/lib/workspace-guidance';
 import {ManualCallOptions} from '@/components/manual-call-options';
@@ -13,7 +13,8 @@ import {fillEmptyTerms} from '@/lib/contract-preparation';
 import {dealCardSummary} from '@/lib/deal-card-summary';
 import {workMilestone} from '@/lib/work-milestone';
 import {CallConversation} from '@/components/call-conversation';
-import {DealCommunications} from '@/components/deal-communications';
+import {DealMessages} from '@/components/deal-messages';
+import {DealEmail} from '@/components/deal-email';
 import {FulfillmentDetails} from '@/components/fulfillment-details';
 import {SigningControls,SigningAttention,type SigningEnvelope} from '@/components/signing-controls';
 import {dealTermsSchema,type DealTerms,type DocumentKind} from '@/lib/deal-documents';
@@ -74,14 +75,15 @@ export function LiveWorkspace({principal,botPaused=false,botAvailable=false,acco
 }
 function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefresh,hidden,photoRefresh=0,botPaused=false,botAvailable=false,stale=false,promising=false}:{botPaused?:boolean;botAvailable?:boolean;stale?:boolean;promising?:boolean;photoRefresh?:number;property:Property;work:Work;principal:string;hidden:boolean;active:boolean;visited:boolean;onToggle:(open:boolean)=>void;onRefresh:()=>void}){
  const initialManual=work.controls.some(c=>c.property_id===p.result.property.propertyId);
- const [manual,setManual]=useState(initialManual),[controlBusy,setControlBusy]=useState(false),[controlMessage,setControlMessage]=useState(''),[preparingContract,setPreparingContract]=useState(false),[contactView,setContactView]=useState<'texts'|'calls'|null>(null),[contactVisited,setContactVisited]=useState(false);
+ const [manual,setManual]=useState(initialManual),[controlBusy,setControlBusy]=useState(false),[controlMessage,setControlMessage]=useState(''),[preparingContract,setPreparingContract]=useState(false),[contactView,setContactView]=useState<'texts'|'calls'|'email'|null>(null),[contactVisited,setContactVisited]=useState(false);
  const contactDialog=useRef<HTMLDialogElement>(null);
  useEffect(()=>{const dialog=contactDialog.current;if(!dialog)return;if(contactView&&!hidden){if(!dialog.open)dialog.showModal();}else if(dialog.open)dialog.close();},[contactView,hidden]);
  useEffect(()=>setManual(initialManual),[initialManual]);
  const deal=work.deals.find(d=>d.screening_id===p.id),calls=work.conversations.filter(c=>c.screening_id===p.id);
  const lookups=work.contacts.filter(c=>c.screening_id===p.id);
  const hasPhone=lookups.some(l=>l.contacts?.some(c=>c.phones.some(p=>p.number)));
- function openContact(view:'texts'|'calls'){setContactVisited(true);setContactView(view);}
+ function openContact(view:'texts'|'calls'|'email'){setContactVisited(true);setContactView(view);}
+ function tookOver(){setManual(true);setControlMessage('You’re handling this lead.');onRefresh();}
  const contractReady=showPropertyContract(deal,work.signing);
  useEffect(()=>{if(contractReady)setPreparingContract(true);},[contractReady]);
  const address=propertyAddressLines(p.result.property.address);
@@ -106,7 +108,7 @@ function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefre
     <span className="property-cash-preview" aria-label="Cash offer estimate"><strong>{analysisMoney(analysis.cashOfferCeilingCents)}</strong></span>
     <span className="property-open-control"><span>{active?'Close':'View details'}</span><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
    </button>
-   <div className="property-quick-actions"><button type="button" onClick={()=>openContact('calls')} aria-label={`Call ${address.street}`}><Phone size={16}/>Call</button><button type="button" onClick={()=>openContact('texts')} aria-label={`Text conversation for ${address.street}`}><MessageCircle size={16}/>Text</button></div>
+   <div className="property-quick-actions"><button type="button" onClick={()=>openContact('calls')} aria-label={`Call ${address.street}`}><Phone size={16}/>Call</button><button type="button" onClick={()=>openContact('texts')} aria-label={`Text conversation for ${address.street}`}><MessageCircle size={16}/>Text</button><button type="button" onClick={()=>openContact('email')} aria-label={`Email conversation for ${address.street}`}><Mail size={16}/>Email</button></div>
    {visited&&<Activity mode={active&&!hidden?'visible':'hidden'}><div className="property-details" id={`property-content-${p.id}`}>
     <PropertyAnalysisSummary result={p.result}/>
     <div className="property-control"><span><b className={`property-bot-status tone-${bot.tone}`}><span className="ai-status-dot" aria-hidden="true"/>{bot.label}</b><small>{bot.detail}</small></span><button className="takeover-button" title={manual?'Let the bot manage new work for this property':'Pause new automated work for this property and handle it yourself'} disabled={controlBusy} onClick={()=>void control()}>{controlBusy?'Saving…':manual?'Return to bot':'Take over'}</button></div>
@@ -125,9 +127,10 @@ function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefre
   </div>
   <dialog ref={contactDialog} className="property-contact-dialog" aria-labelledby={`contact-heading-${p.id}`} onClose={()=>setContactView(null)} onCancel={()=>setContactView(null)}>
    <div className="contact-dialog-heading"><div><span className="contact-dialog-kicker">CONVERSATIONS</span><h3 id={`contact-heading-${p.id}`}>{address.street}</h3><small>{owner?`${owner} · `:''}{address.location}</small></div><button className="contact-dialog-close" aria-label="Close conversation" onClick={()=>setContactView(null)}><X size={20}/></button></div>
-   {contactVisited&&<Activity mode={contactView&&!hidden?'visible':'hidden'}>    <section className="property-conversations" id={`conversation-${p.id}`} aria-label="Property conversations"><div className="workspace-section-heading"><div className="conversation-switch"><button aria-pressed={contactView!=='calls'} onClick={()=>setContactView('texts')}><MessageCircle size={16}/>Texts</button><button aria-pressed={contactView==='calls'} onClick={()=>setContactView('calls')}><Phone size={16}/>Calls{calls.length?` (${calls.length})`:''}</button></div><small>Saved to this property</small></div>
-    <div className="contact-text-view" hidden={contactView==='calls'}>{deal?<DealCommunications dealId={deal.id} active={contactView==='texts'&&!hidden}/>:<div className="conversation-empty"><MessageCircle size={24}/><strong>No text conversation yet</strong><p>{hasPhone?'Contact setup is still pending. Texting becomes available after a permitted thread is linked.':'A phone number and permitted text conversation are needed before you can send.'}</p></div>}</div>
-    {contactView==='calls'&&<div className="property-call-list"><ManualCallOptions screeningId={p.id}/><h4 className="call-history-title">Call history</h4>{calls.length?calls.map(c=><CallConversation key={c.id} id={c.id} party={c.party} summary={c.summary} completedAt={c.completed_at}/>):<div className="conversation-empty"><Phone size={24}/><strong>No calls yet</strong><p>Saved bot calls, transcripts, and available recordings will appear here.</p></div>}</div>}
+   {contactVisited&&<Activity mode={contactView&&!hidden?'visible':'hidden'}>    <section className="property-conversations" id={`conversation-${p.id}`} aria-label="Property conversations"><div className="workspace-section-heading"><div className="conversation-switch"><button aria-pressed={contactView==='texts'} onClick={()=>setContactView('texts')}><MessageCircle size={16}/>Texts</button><button aria-pressed={contactView==='calls'} onClick={()=>setContactView('calls')}><Phone size={16}/>Calls{calls.length?` (${calls.length})`:''}</button><button aria-pressed={contactView==='email'} onClick={()=>setContactView('email')}><Mail size={16}/>Email</button></div><small>Saved to this property</small></div><div className="conversation-control"><span>{manual?'You’re handling this lead':'Bot manages this lead'}</span>{manual&&<button className="workspace-quiet" disabled={controlBusy} onClick={()=>void control()}>{controlBusy?'Saving…':'Return to bot'}</button>}</div>{controlMessage&&<p className="sr-only" role="status">{controlMessage}</p>}
+    <div className="contact-text-view" hidden={contactView!=='texts'}>{deal?<DealMessages dealId={deal.id} active={contactView==='texts'&&!hidden} onTakeover={tookOver}/>:<div className="conversation-empty"><MessageCircle size={24}/><strong>No text conversation yet</strong><p>{hasPhone?'Contact setup is still pending. Texting becomes available after a permitted thread is linked.':'A phone number and permitted text conversation are needed before you can send.'}</p></div>}</div>
+    {contactView==='calls'&&<div className="property-call-list"><ManualCallOptions screeningId={p.id} onTakeover={tookOver}/><h4 className="call-history-title">Call history</h4>{calls.length?calls.map(c=><CallConversation key={c.id} id={c.id} party={c.party} summary={c.summary} completedAt={c.completed_at}/>):<div className="conversation-empty"><Phone size={24}/><strong>No calls yet</strong><p>Saved bot calls, transcripts, and available recordings will appear here.</p></div>}</div>}
+    <div hidden={contactView!=='email'}>{deal?<DealEmail dealId={deal.id} active={contactView==='email'&&!hidden}/>:<div className="conversation-empty"><Mail size={24}/><strong>No email contact yet</strong><p>Email becomes available when a contact address is linked to this lead.</p></div>}</div>
     </section>
 </Activity>}
   </dialog>

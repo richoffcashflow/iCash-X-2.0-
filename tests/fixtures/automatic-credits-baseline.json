@@ -1,0 +1,730 @@
+{
+  "tables": [
+    {
+      "name": "icash_accounts",
+      "definition": "create table public.icash_accounts (id uuid default gen_random_uuid(),owner_user_id uuid,assistant_name text,legal_name text,identity_verified_at timestamp with time zone,bot_paused boolean default true,daily_limit_cents bigint default 0,created_at timestamp with time zone default now(),billing_model text default 'legacy'::text,UNIQUE (owner_user_id),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_wallets",
+      "definition": "create table public.icash_wallets (account_id uuid,balance_cents bigint default 0,reserved_cents bigint default 0,currency text default 'USD'::text,PRIMARY KEY (account_id));"
+    },
+    {
+      "name": "icash_deals",
+      "definition": "create table public.icash_deals (id uuid default gen_random_uuid(),account_id uuid,address text,stage text default 'research'::text,source_provider text,source_record_id text,photo_url text,photo_rights_verified_at timestamp with time zone,needs_user boolean default false,deadline_at timestamp with time zone,seller_signed_at timestamp with time zone,closed_confirmed_at timestamp with time zone,proceeds_confirmed_at timestamp with time zone,created_at timestamp with time zone default now(),UNIQUE (account_id, id),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_conversations",
+      "definition": "create table public.icash_conversations (id uuid default gen_random_uuid(),account_id uuid,deal_id uuid,contact_name text,contact_phone text,contact_email text,human_takeover boolean default false,version bigint default 0,created_at timestamp with time zone default now(),UNIQUE (account_id, deal_id, id),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_messages",
+      "definition": "create table public.icash_messages (id uuid default gen_random_uuid(),account_id uuid,deal_id uuid,conversation_id uuid,channel text,direction text,body text,provider text,provider_event_id text,occurred_at timestamp with time zone,created_at timestamp with time zone default now(),PRIMARY KEY (id),UNIQUE (provider, provider_event_id));"
+    },
+    {
+      "name": "icash_callbacks",
+      "definition": "create table public.icash_callbacks (id uuid default gen_random_uuid(),account_id uuid,deal_id uuid,conversation_id uuid,due_at timestamp with time zone,seller_timezone text,time_confirmed boolean default false,status text default 'scheduled'::text,idempotency_key text,created_at timestamp with time zone default now(),UNIQUE (idempotency_key),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_activity",
+      "definition": "create table public.icash_activity (id uuid default gen_random_uuid(),account_id uuid,deal_id uuid,event_type text,summary text,source_event_id text,occurred_at timestamp with time zone,created_at timestamp with time zone default now(),PRIMARY KEY (id),UNIQUE (source_event_id));"
+    },
+    {
+      "name": "icash_credit_ledger",
+      "definition": "create table public.icash_credit_ledger (id uuid default gen_random_uuid(),account_id uuid,event_key text,kind text,delta_cents bigint,evidence_ref text,created_at timestamp with time zone default now(),UNIQUE (event_key),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_credit_reservations",
+      "definition": "create table public.icash_credit_reservations (id uuid default gen_random_uuid(),account_id uuid,operation_key text,amount_cents bigint,settled_cents bigint,status text default 'reserved'::text,created_at timestamp with time zone default now(),UNIQUE (operation_key),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_credit_packs",
+      "definition": "create table public.icash_credit_packs (code text,price_cents bigint,credit_cents bigint,enabled boolean default false,currency text default 'USD'::text,PRIMARY KEY (code));"
+    },
+    {
+      "name": "icash_notification_preferences",
+      "definition": "create table public.icash_notification_preferences (account_id uuid,in_app_enabled boolean default true,email_enabled boolean default false,push_enabled boolean default false,sms_enabled boolean default false,sms_consent_at timestamp with time zone,last_funding_prompt_at timestamp with time zone,PRIMARY KEY (account_id));"
+    },
+    {
+      "name": "icash_test_orders",
+      "definition": "create table public.icash_test_orders (id uuid default gen_random_uuid(),guest_hash text,pack_code text,price_cents bigint,credit_cents bigint,stripe_session_id text,payment_intent_id text,state text default 'pending'::text,created_at timestamp with time zone default now(),paid_at timestamp with time zone,UNIQUE (payment_intent_id),PRIMARY KEY (id),UNIQUE (stripe_session_id));"
+    },
+    {
+      "name": "icash_funding_orders",
+      "definition": "create table public.icash_funding_orders (id uuid default gen_random_uuid(),mode text,guest_hash text,account_id uuid,pack_code text,price_cents bigint,credit_cents bigint,currency text default 'usd'::text,state text default 'pending'::text,stripe_session_id text,stripe_payment_id text,payer_email text,payer_phone text,paid_at timestamp with time zone,credited_at timestamp with time zone,created_at timestamp with time zone default now(),run_days integer,pacing_applied_at timestamp with time zone,flexible_pacing boolean default false,processing_fee_cents bigint default 0,tax_required boolean default false,tax_cents bigint default 0,charged_total_cents bigint,daily_plan_id uuid,stripe_invoice_id text,billing_period_start timestamp with time zone,prepaid_applied_at timestamp with time zone,PRIMARY KEY (id),UNIQUE (stripe_invoice_id),UNIQUE (stripe_payment_id),UNIQUE (stripe_session_id));"
+    },
+    {
+      "name": "icash_billing_reviews",
+      "definition": "create table public.icash_billing_reviews (event_id text,payment_id text,reason text,account_id uuid,resolved_at timestamp with time zone,created_at timestamp with time zone default now(),PRIMARY KEY (event_id));"
+    },
+    {
+      "name": "icash_request_limits",
+      "definition": "create table public.icash_request_limits (bucket text,window_start timestamp with time zone,attempts integer,PRIMARY KEY (bucket));"
+    },
+    {
+      "name": "icash_learning_cohorts",
+      "definition": "create table public.icash_learning_cohorts (account_id uuid,deal_id uuid,mode text,strategy_key text,market text,channel text,assigned_at timestamp with time zone default now(),PRIMARY KEY (account_id, deal_id));"
+    },
+    {
+      "name": "icash_learning_events",
+      "definition": "create table public.icash_learning_events (account_id uuid,deal_id uuid,event_key text,operation_id text,kind text,source text,evidence_ref text,occurred_at timestamp with time zone,received_at timestamp with time zone default now(),provider_cost_micros bigint default 0,UNIQUE (account_id, operation_id, kind),PRIMARY KEY (account_id, event_key));"
+    },
+    {
+      "name": "icash_voice_test_config",
+      "definition": "create table public.icash_voice_test_config (id integer,agent_id text,provisioning_claimed boolean default false,enabled boolean default false,created_at timestamp with time zone default now(),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_voice_test_access",
+      "definition": "create table public.icash_voice_test_access (token_hash text,expires_at timestamp with time zone,max_sessions integer default 3,used_sessions integer default 0,revoked boolean default false,last_import_at timestamp with time zone,PRIMARY KEY (token_hash));"
+    },
+    {
+      "name": "icash_voice_test_sessions",
+      "definition": "create table public.icash_voice_test_sessions (id uuid default gen_random_uuid(),token_hash text,agent_id text,conversation_id text,state text default 'reserved'::text,created_at timestamp with time zone default now(),last_poll_at timestamp with time zone,completed_at timestamp with time zone,result jsonb,callback_status text,callback_due_at timestamp with time zone,source text default 'browser'::text,property_context jsonb,property_lookup_status text,UNIQUE (conversation_id),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_customer_identities",
+      "definition": "create table public.icash_customer_identities (account_id uuid,first_name text,last_name text,company_name text default ''::text,principal text,voice_id text,voice_name text,updated_at timestamp with time zone default now(),PRIMARY KEY (account_id));"
+    },
+    {
+      "name": "icash_operating_budget",
+      "definition": "create table public.icash_operating_budget (id integer,enabled boolean default false,funded_micros bigint default 0,protected_micros bigint default 0,reserved_micros bigint default 0,spent_micros bigint default 0,daily_limit_micros bigint,minimum_margin_bps integer default 8000,hold_reason text,tax_reserve_bps integer default 3500,require_company_reserve boolean default true,standard_cost_multiplier numeric default 5,elevenlabs_cost_multiplier numeric default 3,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_operation_rates",
+      "definition": "create table public.icash_operation_rates (id uuid default gen_random_uuid(),operation text,version text,charge_cents bigint,costs_micros jsonb,buffer_bps integer default 2000,evidence_ref text,verified_at timestamp with time zone,expires_at timestamp with time zone,enabled boolean default false,voice_max_duration_seconds integer,flat_customer_price_cents bigint,PRIMARY KEY (id),UNIQUE (version));"
+    },
+    {
+      "name": "icash_operation_spend",
+      "definition": "create table public.icash_operation_spend (operation_key text,account_id uuid,rate_id uuid,credit_reservation_id uuid,charge_cap_cents bigint,reserved_micros bigint,state text default 'reserved'::text,permission_until timestamp with time zone,financial_checked_at timestamp with time zone,actual_micros bigint,charged_cents bigint,settlement_evidence text,created_at timestamp with time zone default now(),dispatched_at timestamp with time zone,settled_at timestamp with time zone,customer_price_micros bigint,standard_cost_multiplier numeric default 5,elevenlabs_cost_multiplier numeric default 5,required_revenue_micros numeric,cost_basis text default 'unreconciled'::text,estimate_checked_at timestamp with time zone,PRIMARY KEY (operation_key));"
+    },
+    {
+      "name": "icash_cost_observations",
+      "definition": "create table public.icash_cost_observations (provider text,event_key text,source_ref text,amount numeric,units text,reconciled boolean default false,observed_at timestamp with time zone default now(),PRIMARY KEY (provider, event_key));"
+    },
+    {
+      "name": "icash_screening_control",
+      "definition": "create table public.icash_screening_control (id integer,enabled boolean default true,max_concurrency integer default 2,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_screening_jobs",
+      "definition": "create table public.icash_screening_jobs (id uuid default gen_random_uuid(),account_id uuid,event_key text,snapshot jsonb,due_at timestamp with time zone default now(),state text default 'queued'::text,attempts integer default 0,lease_token uuid,lease_until timestamp with time zone,result jsonb,error_code text,created_at timestamp with time zone default now(),completed_at timestamp with time zone,UNIQUE (event_key),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_discovery_configs",
+      "definition": "create table public.icash_discovery_configs (account_id uuid,enabled boolean default false,zip text,rate_id uuid,property_credit_micros bigint,data_rights_until timestamp with time zone,assignment_fee_cents bigint default 1000000,seller_cost_reserve_cents bigint,per_page integer default 5,next_page integer default 1,revision uuid default gen_random_uuid(),exhausted boolean default false,auto_enabled boolean default true,next_run_at timestamp with time zone default now(),interval_seconds integer default 900,contacts_enabled boolean default false,contact_rate_id uuid,contact_credit_cap integer default 5,max_open_prospects integer default 20,PRIMARY KEY (account_id));"
+    },
+    {
+      "name": "icash_discovery_results",
+      "definition": "create table public.icash_discovery_results (operation_key text,account_id uuid,result jsonb,created_at timestamp with time zone default now(),PRIMARY KEY (operation_key));"
+    },
+    {
+      "name": "icash_dealmachine_request_budget",
+      "definition": "create table public.icash_dealmachine_request_budget (id integer,minute_start timestamp with time zone default now(),minute_used integer default 0,day_start timestamp with time zone default now(),day_used integer default 0,minute_limit integer default 50,day_limit integer default 4500,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_automation_tickets",
+      "definition": "create table public.icash_automation_tickets (id uuid default gen_random_uuid(),token text default ((gen_random_uuid())::text || (gen_random_uuid())::text),account_id uuid,kind text,screening_id uuid,state text default 'issued'::text,expires_at timestamp with time zone default (now() + '00:02:00'::interval),created_at timestamp with time zone default now(),completed_at timestamp with time zone,outcome text,live_call_id uuid,signing_id uuid,voice_job_id uuid,fulfillment_job_id uuid,title_task_id uuid,text_ai_job_id uuid,market_research_job_id uuid,issue_attempts integer default 1,opener_message_id uuid,PRIMARY KEY (id),UNIQUE (screening_id),UNIQUE (token));"
+    },
+    {
+      "name": "icash_owner_contacts",
+      "definition": "create table public.icash_owner_contacts (screening_id uuid,account_id uuid,operation_key text,result jsonb,created_at timestamp with time zone default now(),UNIQUE (operation_key),PRIMARY KEY (screening_id));"
+    },
+    {
+      "name": "icash_deal_files",
+      "definition": "create table public.icash_deal_files (id uuid default gen_random_uuid(),account_id uuid,screening_id uuid,terms jsonb,stage text default 'draft'::text,seller_signed_at timestamp with time zone,assignment_signed_at timestamp with time zone,title_verified_at timestamp with time zone,funded_at timestamp with time zone,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),UNIQUE (account_id, screening_id),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_deal_documents",
+      "definition": "create table public.icash_deal_documents (id uuid default gen_random_uuid(),deal_id uuid,kind text,html text,terms jsonb,created_at timestamp with time zone default now(),fulfillment_job_id uuid,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_showing_requests",
+      "definition": "create table public.icash_showing_requests (id uuid default gen_random_uuid(),deal_id uuid,buyer_name text,starts_at timestamp with time zone,ends_at timestamp with time zone,timezone text,state text default 'proposed'::text,seller_confirmed_at timestamp with time zone,buyer_confirmed_at timestamp with time zone,created_at timestamp with time zone default now(),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_funding_consents",
+      "definition": "create table public.icash_funding_consents (order_id uuid,version text,terms_text text,price_cents bigint,credit_cents bigint,guest_hash text,account_id uuid,user_agent_hash text,accepted_at timestamp with time zone default now(),PRIMARY KEY (order_id, version));"
+    },
+    {
+      "name": "icash_property_controls",
+      "definition": "create table public.icash_property_controls (account_id uuid,property_id text,manual boolean default true,updated_at timestamp with time zone default now(),PRIMARY KEY (account_id, property_id));"
+    },
+    {
+      "name": "icash_control_events",
+      "definition": "create table public.icash_control_events (id uuid default gen_random_uuid(),account_id uuid,actor_user_id uuid,action text,property_id text,created_at timestamp with time zone default now(),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_planning_estimates",
+      "definition": "create table public.icash_planning_estimates (id integer,lookup_cents integer,voice_minute_cents integer,lookup_share_percent integer,call_minutes_low integer,call_minutes_high integer,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_paid_lookup_diagnostics",
+      "definition": "create table public.icash_paid_lookup_diagnostics (id text,zip text,max_credits integer,state text default 'authorized'::text,result jsonb,created_at timestamp with time zone default now(),started_at timestamp with time zone,completed_at timestamp with time zone,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_live_conversations",
+      "definition": "create table public.icash_live_conversations (id uuid default gen_random_uuid(),account_id uuid,screening_id uuid,party text,agent_id text,conversation_id text,operation_key text,contact_key text,strategy_key text,tool_token_hash text,tool_expires_at timestamp with time zone,state text default 'waiting'::text,next_poll_at timestamp with time zone default now(),poll_attempts integer default 0,result jsonb,created_at timestamp with time zone default now(),completed_at timestamp with time zone,UNIQUE (conversation_id),UNIQUE (operation_key),PRIMARY KEY (id),UNIQUE (tool_token_hash));"
+    },
+    {
+      "name": "icash_handoffs",
+      "definition": "create table public.icash_handoffs (id uuid default gen_random_uuid(),conversation_id uuid,account_id uuid,screening_id uuid,party text,reason text,summary text,next_action text,state text default 'open'::text,created_at timestamp with time zone default now(),resolved_at timestamp with time zone,UNIQUE (conversation_id),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_live_callbacks",
+      "definition": "create table public.icash_live_callbacks (id uuid default gen_random_uuid(),conversation_id uuid,account_id uuid,screening_id uuid,due_at timestamp with time zone,timezone text,evidence jsonb,state text default 'pending_dispatch_review'::text,created_at timestamp with time zone default now(),UNIQUE (conversation_id),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_contact_suppressions",
+      "definition": "create table public.icash_contact_suppressions (account_id uuid,contact_key text,source_conversation uuid,created_at timestamp with time zone default now(),PRIMARY KEY (account_id, contact_key));"
+    },
+    {
+      "name": "icash_signing_templates",
+      "definition": "create table public.icash_signing_templates (id uuid default gen_random_uuid(),state_code text,kind text,signer_count integer,provider_template_id text,placeholder_names jsonb,field_map jsonb,reviewed_until timestamp with time zone,review_reference text,test_mode boolean default true,enabled boolean default false,rate_id uuid,provider text default 'signwell'::text,customer_signature_field text,automated_signing_reviewed boolean default false,customer_consent_field text,max_legal_description_chars integer default 2000,template_scope text default 'state'::text,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_signing_envelopes",
+      "definition": "create table public.icash_signing_envelopes (id uuid default gen_random_uuid(),account_id uuid,deal_id uuid,kind text,template_id uuid,terms jsonb,terms_hash text,recipients jsonb,test_mode boolean,consent_version text,requested_by uuid,provider_id text,state text default 'creating'::text,provider_status text,provider_evidence jsonb,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),next_poll_at timestamp with time zone default (now() + '00:02:00'::interval),last_poll_at timestamp with time zone,UNIQUE (deal_id, kind, test_mode),PRIMARY KEY (id),UNIQUE (provider_id));"
+    },
+    {
+      "name": "icash_signature_authorizations",
+      "definition": "create table public.icash_signature_authorizations (envelope_id uuid,account_id uuid,actor_user_id uuid,terms_hash text,signature_text text,consent_version text default '2026-09-28-auto-sign-1'::text,authorized_at timestamp with time zone default now(),expires_at timestamp with time zone,state text default 'authorized'::text,claimed_at timestamp with time zone,PRIMARY KEY (envelope_id));"
+    },
+    {
+      "name": "icash_integration_checks",
+      "definition": "create table public.icash_integration_checks (provider text,checked_at timestamp with time zone default now(),result jsonb,PRIMARY KEY (provider));"
+    },
+    {
+      "name": "icash_template_drafts",
+      "definition": "create table public.icash_template_drafts (key text,state text default 'claimed'::text,result jsonb,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),PRIMARY KEY (key));"
+    },
+    {
+      "name": "icash_daily_plans",
+      "definition": "create table public.icash_daily_plans (id uuid default gen_random_uuid(),mode text,guest_hash text,account_id uuid,stripe_subscription_id text,stripe_session_id text,state text default 'pending'::text,reconciled_at timestamp with time zone,checkout_url text,consent_version text,consent_text text,created_at timestamp with time zone default now(),invoice_reconcile_cursor text,activated_at timestamp with time zone,PRIMARY KEY (id),UNIQUE (stripe_session_id),UNIQUE (stripe_subscription_id));"
+    },
+    {
+      "name": "icash_daily_quotes",
+      "definition": "create table public.icash_daily_quotes (id uuid default gen_random_uuid(),plan_id uuid,pack_code text,budget_cents bigint,credit_cents bigint,fee_cents bigint,budget_price text,fee_price text,created_at timestamp with time zone default now(),consent_text text,UNIQUE (budget_price),UNIQUE (fee_price),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_voice_configs",
+      "definition": "create table public.icash_voice_configs (account_id uuid,enabled boolean default false,agent_id text,phone_number_id text,agent_config_hash text,reviewed_until timestamp with time zone,seller_rate_id uuid,buyer_rate_id uuid,max_duration_seconds integer default 600,required_tool_ids text[],approved_voice_ids text[] default '{}'::text[],PRIMARY KEY (account_id));"
+    },
+    {
+      "name": "icash_contact_permissions",
+      "definition": "create table public.icash_contact_permissions (id uuid default gen_random_uuid(),account_id uuid,screening_id uuid,party text,phone text,contact_key text,timezone text,local_start_hour integer default 9,local_end_hour integer default 20,permission_evidence text,permission_until timestamp with time zone,dnc_checked_at timestamp with time zone,dnc_clear boolean default false,revoked_at timestamp with time zone,buyer_id uuid,review_request_id uuid,UNIQUE (account_id, screening_id, party, contact_key),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_voice_jobs",
+      "definition": "create table public.icash_voice_jobs (id uuid default gen_random_uuid(),account_id uuid,permission_id uuid,callback_id uuid,due_at timestamp with time zone default now(),state text default 'ready'::text,outcome text,operation_key text,conversation_id text,provider_call_sid text,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),sms_context jsonb,operational_contact_id uuid,UNIQUE (callback_id),UNIQUE (operation_key),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_offer_authorities",
+      "definition": "create table public.icash_offer_authorities (account_id uuid,screening_id uuid,max_offer_cents bigint,reviewed_evidence text,expires_at timestamp with time zone,review_request_id uuid,PRIMARY KEY (account_id, screening_id));"
+    },
+    {
+      "name": "icash_voice_scheduler",
+      "definition": "create table public.icash_voice_scheduler (id integer,last_dispatch_at timestamp with time zone,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_cost_manifests",
+      "definition": "create table public.icash_cost_manifests (operation_key text,charge_cents bigint,actual_micros bigint,components jsonb,evidence_ref text,created_at timestamp with time zone default now(),PRIMARY KEY (operation_key));"
+    },
+    {
+      "name": "icash_buyer_profiles",
+      "definition": "create table public.icash_buyer_profiles (id uuid default gen_random_uuid(),account_id uuid,entity_key text,display_name text,criteria jsonb,source_ref text,updated_at timestamp with time zone default now(),discovery jsonb,qualification_request_id uuid,qualification_expires_at timestamp with time zone,UNIQUE (account_id, entity_key),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_disposition_authorities",
+      "definition": "create table public.icash_disposition_authorities (deal_id uuid,account_id uuid,purchase_envelope_id uuid,market text,property_type text,asking_price_cents bigint,repairs_cents bigint,retain_credit_cents bigint default 0,marketing_evidence text,expires_at timestamp with time zone,review_request_id uuid,terms_hash text,signed_document_hash text,marketing_scope text,PRIMARY KEY (deal_id));"
+    },
+    {
+      "name": "icash_fulfillment_jobs",
+      "definition": "create table public.icash_fulfillment_jobs (id uuid default gen_random_uuid(),account_id uuid,deal_id uuid,purchase_envelope_id uuid,state text default 'ready'::text,result jsonb,updated_at timestamp with time zone default now(),UNIQUE (deal_id),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_buyer_matches",
+      "definition": "create table public.icash_buyer_matches (deal_id uuid,buyer_id uuid,score integer,ready boolean,rank integer,source_ref text,created_at timestamp with time zone default now(),qualification_request_id uuid,PRIMARY KEY (deal_id, buyer_id));"
+    },
+    {
+      "name": "icash_buyer_search_configs",
+      "definition": "create table public.icash_buyer_search_configs (account_id uuid,enabled boolean default false,rate_id uuid,unit_cost_micros bigint,rights_until timestamp with time zone,revision uuid default gen_random_uuid(),zip text,since date,per_page integer default 10,max_pages integer default 5,PRIMARY KEY (account_id));"
+    },
+    {
+      "name": "icash_buyer_search_receipts",
+      "definition": "create table public.icash_buyer_search_receipts (deal_id uuid,revision uuid,page integer,operation_key text,has_next_page boolean,receipt jsonb,created_at timestamp with time zone default now(),UNIQUE (operation_key),PRIMARY KEY (deal_id, revision, page));"
+    },
+    {
+      "name": "icash_buyer_candidates",
+      "definition": "create table public.icash_buyer_candidates (deal_id uuid,buyer_id uuid,rights_until timestamp with time zone,discovered_at timestamp with time zone default now(),PRIMARY KEY (deal_id, buyer_id));"
+    },
+    {
+      "name": "icash_title_contacts",
+      "definition": "create table public.icash_title_contacts (deal_id uuid,account_id uuid,email text,verified_until timestamp with time zone,evidence_ref text,rate_id uuid,enabled boolean default false,PRIMARY KEY (deal_id));"
+    },
+    {
+      "name": "icash_title_requests",
+      "definition": "create table public.icash_title_requests (id uuid default gen_random_uuid(),deal_id uuid,account_id uuid,purchase_envelope_id uuid,recipient text,property_address text,rate_id uuid,verified_until timestamp with time zone,state text default 'ready'::text,provider_id text,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),UNIQUE (deal_id),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_title_directory",
+      "definition": "create table public.icash_title_directory (id uuid default gen_random_uuid(),domain text,name text,source_url text,public_email text,public_phone text,claimed_states text[] default '{}'::text[],contact_checked_until timestamp with time zone,status text default 'candidate'::text,qualification_evidence text,verified_states text[] default '{}'::text[],verified_until timestamp with time zone,UNIQUE (domain),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_title_qualification_jobs",
+      "definition": "create table public.icash_title_qualification_jobs (id uuid default gen_random_uuid(),account_id uuid,company_id uuid,market text,state_code text,state text default 'ready'::text,provider_id text,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),UNIQUE (account_id, company_id, market),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_title_search_results",
+      "definition": "create table public.icash_title_search_results (operation_key text,account_id uuid,deal_id uuid,place_ids text[],created_at timestamp with time zone default now(),PRIMARY KEY (operation_key));"
+    },
+    {
+      "name": "icash_title_replies",
+      "definition": "create table public.icash_title_replies (id uuid default gen_random_uuid(),provider_email_id uuid,account_id uuid,deal_id uuid,request_id uuid,qualification_id uuid,sender text,subject text,body_text text,sender_verified boolean default false,needs_review boolean default true,received_at timestamp with time zone default now(),PRIMARY KEY (id),UNIQUE (provider_email_id));"
+    },
+    {
+      "name": "icash_title_tasks",
+      "definition": "create table public.icash_title_tasks (id uuid default gen_random_uuid(),account_id uuid,deal_id uuid,request_id uuid,reply_id uuid,source_key text,kind text,label text,due_date date,state text,evidence text,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),email_state text default 'waiting'::text,email_provider_id text,email_retry_at timestamp with time zone default now(),PRIMARY KEY (id),UNIQUE (source_key));"
+    },
+    {
+      "name": "icash_title_followup_settings",
+      "definition": "create table public.icash_title_followup_settings (id integer,enabled boolean default false,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_text_senders",
+      "definition": "create table public.icash_text_senders (phone text,enabled boolean default false,PRIMARY KEY (phone));"
+    },
+    {
+      "name": "icash_text_threads",
+      "definition": "create table public.icash_text_threads (id uuid default gen_random_uuid(),account_id uuid,deal_id uuid,sender text,recipient text,permission_until timestamp with time zone,permission_evidence text,timezone text default 'America/Chicago'::text,dnc_checked_at timestamp with time zone,dnc_clear boolean default false,sms_rate_id uuid,mms_rate_id uuid,paused boolean default true,ai_mode text default 'auto'::text,party text default 'seller'::text,sms_review_request_id uuid,sms_intake_pending boolean default false,operational_contact_id uuid,eligibility_until timestamp with time zone,operational_sms_sender text,operational_sms_rate_hash text,operational_sms_price_micros bigint,PRIMARY KEY (id),UNIQUE (sender, recipient));"
+    },
+    {
+      "name": "icash_text_suppressions",
+      "definition": "create table public.icash_text_suppressions (phone text,reason text,created_at timestamp with time zone default now(),PRIMARY KEY (phone));"
+    },
+    {
+      "name": "icash_text_assets",
+      "definition": "create table public.icash_text_assets (id uuid default gen_random_uuid(),account_id uuid,deal_id uuid,url text,bytes integer,verified_until timestamp with time zone,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_text_messages",
+      "definition": "create table public.icash_text_messages (id uuid default gen_random_uuid(),thread_id uuid,account_id uuid,direction text,body text default ''::text,attachments jsonb default '[]'::jsonb,asset_ids uuid[] default '{}'::uuid[],state text,request_key uuid,event_id text,provider_id text,last_delivery_at timestamp with time zone,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),customer_price_micros bigint,UNIQUE (event_id),PRIMARY KEY (id),UNIQUE (provider_id),UNIQUE (request_key));"
+    },
+    {
+      "name": "icash_text_events",
+      "definition": "create table public.icash_text_events (id text,type text,payload jsonb,received_at timestamp with time zone default now(),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_text_diagnostics",
+      "definition": "create table public.icash_text_diagnostics (id uuid default gen_random_uuid(),token_hash text,sender text,recipient text,body text,authorization_ref text,expires_at timestamp with time zone,state text default 'ready'::text,provider_id text,cost_micros bigint,cost_status text default 'unknown'::text,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),ai_input text,ai_result jsonb,error_code text,PRIMARY KEY (id),UNIQUE (provider_id),UNIQUE (token_hash));"
+    },
+    {
+      "name": "icash_text_ai_settings",
+      "definition": "create table public.icash_text_ai_settings (id integer,enabled boolean default true,model text default 'gpt-4.1-mini'::text,rate_id uuid,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_text_ai_jobs",
+      "definition": "create table public.icash_text_ai_jobs (id uuid default gen_random_uuid(),account_id uuid,thread_id uuid,message_id uuid,state text default 'pending'::text,analysis jsonb,reply text,provider_id text,usage jsonb,outgoing_id uuid,next_attempt_at timestamp with time zone default now(),created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),UNIQUE (message_id),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_sms_price_settings",
+      "definition": "create table public.icash_sms_price_settings (id integer,base_micros_per_segment bigint,benchmark_source text,provider_cost_status text default 'unknown'::text,provider_cost_micros bigint,carrier_fee_status text default 'unknown'::text,verified_at timestamp with time zone default now(),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_communication_prices",
+      "definition": "create table public.icash_communication_prices (operation text,customer_micros bigint,source text,updated_at timestamp with time zone default now(),PRIMARY KEY (operation));"
+    },
+    {
+      "name": "icash_fractional_credit_carry",
+      "definition": "create table public.icash_fractional_credit_carry (account_id uuid,remaining_micros bigint default 0,PRIMARY KEY (account_id));"
+    },
+    {
+      "name": "icash_fractional_usage",
+      "definition": "create table public.icash_fractional_usage (operation_key text,account_id uuid,price_micros bigint,charged_cents bigint,created_at timestamp with time zone default now(),PRIMARY KEY (operation_key));"
+    },
+    {
+      "name": "icash_daytime_pacing_settings",
+      "definition": "create table public.icash_daytime_pacing_settings (id integer,enabled boolean default true,min_samples_per_hour integer default 30,active_deal_reserve_bps integer default 2000,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_owner_reply_sessions",
+      "definition": "create table public.icash_owner_reply_sessions (thread_id uuid,enabled boolean default false,expires_at timestamp with time zone,remaining integer,authorization_ref text,PRIMARY KEY (thread_id));"
+    },
+    {
+      "name": "icash_owner_reply_attempts",
+      "definition": "create table public.icash_owner_reply_attempts (id uuid default gen_random_uuid(),message_id uuid,thread_id uuid,state text default 'analyzing'::text,result jsonb,outgoing_id uuid,cost_micros bigint,created_at timestamp with time zone default now(),UNIQUE (message_id),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_data_cost_settings",
+      "definition": "create table public.icash_data_cost_settings (provider text,credit_micros bigint,cost_basis text,source_ref text,updated_at timestamp with time zone default now(),PRIMARY KEY (provider));"
+    },
+    {
+      "name": "icash_inventory_claims",
+      "definition": "create table public.icash_inventory_claims (resource_key text,account_id uuid,screening_id uuid,cooldown_until timestamp with time zone,updated_at timestamp with time zone default now(),PRIMARY KEY (resource_key));"
+    },
+    {
+      "name": "icash_inventory_markets",
+      "definition": "create table public.icash_inventory_markets (account_id uuid,zip text,priority integer default 100,eligible_until timestamp with time zone,next_scan_at timestamp with time zone default now(),PRIMARY KEY (account_id, zip));"
+    },
+    {
+      "name": "icash_market_shortlist",
+      "definition": "create table public.icash_market_shortlist (zip text,city text,state text,priority integer,metro_investor_share numeric,evidence_year integer,source_url text,status text default 'research_candidate'::text,researched_at timestamp with time zone default now(),PRIMARY KEY (zip),UNIQUE (priority));"
+    },
+    {
+      "name": "icash_market_research_scopes",
+      "definition": "create table public.icash_market_research_scopes (id uuid default gen_random_uuid(),account_id uuid,city text,state text,enabled boolean default false,next_scan_at timestamp with time zone default now(),location_query text,UNIQUE (account_id, city, state),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_market_research_jobs",
+      "definition": "create table public.icash_market_research_jobs (id uuid default gen_random_uuid(),scope_id uuid,account_id uuid,cycle uuid,kind text,city text,state_code text,zip text default ''::text,page integer default 1,state text default 'pending'::text,attempts integer default 0,next_attempt_at timestamp with time zone default now(),created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),PRIMARY KEY (id),UNIQUE (scope_id, cycle, kind, zip, page));"
+    },
+    {
+      "name": "icash_market_research_usage",
+      "definition": "create table public.icash_market_research_usage (day date,requests_reserved integer,PRIMARY KEY (day));"
+    },
+    {
+      "name": "icash_market_research_results",
+      "definition": "create table public.icash_market_research_results (account_id uuid,zip text,city text,state text,total_properties bigint,high_equity_properties bigint,potential_buyers bigint,inventory_score numeric,checked_at timestamp with time zone default now(),status text default 'research_candidate'::text,PRIMARY KEY (account_id, zip));"
+    },
+    {
+      "name": "icash_property_checks",
+      "definition": "create table public.icash_property_checks (id uuid default gen_random_uuid(),account_id uuid,token_hash text,property_id text,expected_address text,authorization_ref text,expires_at timestamp with time zone,state text default 'authorized'::text,result jsonb,created_at timestamp with time zone default now(),started_at timestamp with time zone,completed_at timestamp with time zone,PRIMARY KEY (id),UNIQUE (token_hash));"
+    },
+    {
+      "name": "icash_text_property_checks",
+      "definition": "create table public.icash_text_property_checks (thread_id uuid,account_id uuid,check_id uuid,assignment_fee_cents bigint default 1000000,PRIMARY KEY (thread_id));"
+    },
+    {
+      "name": "icash_seller_opener_variants",
+      "definition": "create table public.icash_seller_opener_variants (key text,body text,enabled boolean default true,PRIMARY KEY (key));"
+    },
+    {
+      "name": "icash_seller_opener_assignments",
+      "definition": "create table public.icash_seller_opener_assignments (thread_id uuid,account_id uuid,variant text,body text,created_at timestamp with time zone default now(),message_id uuid,delivered_at timestamp with time zone,first_reply_at timestamp with time zone,opted_out boolean default false,UNIQUE (message_id),PRIMARY KEY (thread_id));"
+    },
+    {
+      "name": "icash_sms_call_requests",
+      "definition": "create table public.icash_sms_call_requests (id uuid default gen_random_uuid(),account_id uuid,thread_id uuid,deal_id uuid,screening_id uuid,message_id uuid,state text default 'needs_review'::text,requested_at timestamp with time zone,updated_at timestamp with time zone default now(),UNIQUE (message_id),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_bot_setups",
+      "definition": "create table public.icash_bot_setups (id uuid default gen_random_uuid(),guest_hash text,account_id uuid,profile jsonb default '{}'::jsonb,stage integer default 0,revision integer default 0,variant text,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),flow_variant text default 'quick'::text,flow_experiment text,UNIQUE (account_id),UNIQUE (guest_hash),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_setup_events",
+      "definition": "create table public.icash_setup_events (setup_id uuid,event text,created_at timestamp with time zone default now(),PRIMARY KEY (setup_id, event));"
+    },
+    {
+      "name": "icash_setup_allocation",
+      "definition": "create table public.icash_setup_allocation (id integer,winner text,checked_at timestamp with time zone default '-infinity'::timestamp with time zone,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_brand_jobs",
+      "definition": "create table public.icash_brand_jobs (setup_id uuid,brand_name text,state text,attempts integer default 1,designs jsonb,usage jsonb,updated_at timestamp with time zone default now(),render_version integer default 1,error_code text,PRIMARY KEY (setup_id));"
+    },
+    {
+      "name": "icash_brand_daily",
+      "definition": "create table public.icash_brand_daily (day date,attempts integer,PRIMARY KEY (day));"
+    },
+    {
+      "name": "icash_closing_updates",
+      "definition": "create table public.icash_closing_updates (id uuid default gen_random_uuid(),account_id uuid,deal_id uuid,reply_id uuid,kind text,effective_date date,amount_cents bigint,file_reference text default ''::text,confirmed_by uuid,created_at timestamp with time zone default now(),confirmation_source text default 'user_review'::text,UNIQUE (deal_id, reply_id, kind),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_deal_emails",
+      "definition": "create table public.icash_deal_emails (id uuid default gen_random_uuid(),account_id uuid,deal_id uuid,direction text,contact_key text,recipient text,subject text,body_text text,state text,request_key uuid,provider_id uuid,reply_to_id uuid,rate_id uuid,permission_until timestamp with time zone,authored_by uuid,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),delivery_state text,delivery_at timestamp with time zone,UNIQUE (account_id, request_key),PRIMARY KEY (id),UNIQUE (provider_id));"
+    },
+    {
+      "name": "icash_inbound_voice_routes",
+      "definition": "create table public.icash_inbound_voice_routes (called_number text,business_number text,agent_id text,rate_id uuid,max_duration_seconds integer default 600,enabled boolean default false,reviewed_until timestamp with time zone,agent_config_hash text,PRIMARY KEY (called_number));"
+    },
+    {
+      "name": "icash_inbound_voice_receipts",
+      "definition": "create table public.icash_inbound_voice_receipts (call_sid text,conversation_id text,binding_hash text,live_call_id uuid,max_duration_seconds integer,created_at timestamp with time zone default now(),invitation_id uuid,UNIQUE (conversation_id),UNIQUE (live_call_id),PRIMARY KEY (call_sid));"
+    },
+    {
+      "name": "icash_text_attention",
+      "definition": "create table public.icash_text_attention (id uuid default gen_random_uuid(),account_id uuid,thread_id uuid,deal_id uuid,screening_id uuid,message_id uuid,kind text,party text,quote text,timezone text,state text default 'open'::text,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),message_event_at numeric,PRIMARY KEY (id),UNIQUE (thread_id, kind));"
+    },
+    {
+      "name": "icash_payment_test_access",
+      "definition": "create table public.icash_payment_test_access (user_id uuid,expires_at timestamp with time zone,created_at timestamp with time zone default now(),PRIMARY KEY (user_id));"
+    },
+    {
+      "name": "icash_spend_activations",
+      "definition": "create table public.icash_spend_activations (account_id uuid,enabled boolean default false,customer_cap_cents bigint,created_at timestamp with time zone default now(),PRIMARY KEY (account_id));"
+    },
+    {
+      "name": "icash_voice_production_template",
+      "definition": "create table public.icash_voice_production_template (id integer,enabled boolean default false,agent_id text,phone_number_id text,agent_config_hash text,required_tool_ids text[],approved_voice_ids text[] default '{}'::text[],seller_rate_id uuid,buyer_rate_id uuid,max_duration_seconds integer,reviewed_at timestamp with time zone,reviewed_until timestamp with time zone,evidence_ref text,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_trusted_operators",
+      "definition": "create table public.icash_trusted_operators (user_id uuid,scopes text[] default '{}'::text[],provisioned_by text,provisioned_at timestamp with time zone default now(),expires_at timestamp with time zone,revoked_at timestamp with time zone,PRIMARY KEY (user_id));"
+    },
+    {
+      "name": "icash_authority_market_reviews",
+      "definition": "create table public.icash_authority_market_reviews (id uuid default gen_random_uuid(),account_id uuid,screening_id uuid,state_code text,kind text,channel text,source_reference text,reviewed_by text,reviewed_at timestamp with time zone,expires_at timestamp with time zone,revoked_at timestamp with time zone,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_dnc_verification_sources",
+      "definition": "create table public.icash_dnc_verification_sources (id uuid default gen_random_uuid(),name text,source_reference text,enabled boolean default false,expires_at timestamp with time zone,evidence_kind text default 'legacy_record'::text,observation_provider text,observation_scope text,max_observation_age_seconds integer,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_dnc_verification_receipts",
+      "definition": "create table public.icash_dnc_verification_receipts (id uuid default gen_random_uuid(),source_id uuid,phone text,contact_key text,provider_reference text,receipt_hash text,checked_at timestamp with time zone,expires_at timestamp with time zone,clear boolean,revoked_at timestamp with time zone,contact_timezone text,timezone_source_reference text,evidence_kind text default 'legacy_record'::text,observation_provenance jsonb default '{}'::jsonb,observation_recorded_at timestamp with time zone,UNIQUE (source_id, provider_reference),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_authority_review_requests",
+      "definition": "create table public.icash_authority_review_requests (id uuid default gen_random_uuid(),account_id uuid,submitted_by uuid,screening_id uuid,kind text,idempotency_key uuid,payload jsonb,payload_hash text,state text default 'submitted'::text,expires_at timestamp with time zone,created_at timestamp with time zone default now(),reviewed_by uuid,reviewed_at timestamp with time zone,decision_note text,verification jsonb,UNIQUE (account_id, idempotency_key),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_authority_review_audit",
+      "definition": "create table public.icash_authority_review_audit (id uuid default gen_random_uuid(),request_id uuid,actor_user_id uuid,event text,note text,evidence jsonb default '{}'::jsonb,created_at timestamp with time zone default now(),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_support_threads",
+      "definition": "create table public.icash_support_threads (id uuid default gen_random_uuid(),account_id uuid,subject text,status text default 'open'::text,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),UNIQUE (id, account_id),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_support_messages",
+      "definition": "create table public.icash_support_messages (id uuid default gen_random_uuid(),thread_id uuid,account_id uuid,request_id uuid,role text,content text,evidence jsonb default '[]'::jsonb,actor_user_id uuid,created_at timestamp with time zone default now(),UNIQUE (account_id, request_id, role),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_support_cancel_requests",
+      "definition": "create table public.icash_support_cancel_requests (id uuid default gen_random_uuid(),account_id uuid,user_id uuid,mode text,source text,provider_email_id uuid,state text default 'awaiting_confirmation'::text,nonce_hash text,expires_at timestamp with time zone,consumed_at timestamp with time zone,confirmed_at timestamp with time zone,result text,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),receipt_state text default 'pending'::text,receipt_recipient text,receipt_claimed_at timestamp with time zone,receipt_completed_at timestamp with time zone,receipt_provider_id uuid,PRIMARY KEY (id),UNIQUE (provider_email_id));"
+    },
+    {
+      "name": "icash_attention_email_settings",
+      "definition": "create table public.icash_attention_email_settings (id integer,enabled boolean default false,global_daily_limit integer default 100,next_scan_at timestamp with time zone default now(),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_attention_email_preferences",
+      "definition": "create table public.icash_attention_email_preferences (account_id uuid,enabled boolean default false,categories text[] default ARRAY['needs_you'::text, 'signatures'::text, 'callbacks'::text, 'closing'::text],consent_email text,consent_version text,consented_at timestamp with time zone,revision bigint default 0,unsubscribe_token text default ((gen_random_uuid())::text || (gen_random_uuid())::text),suppressed_at timestamp with time zone,suppression_reason text,next_scan_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),PRIMARY KEY (account_id),UNIQUE (unsubscribe_token));"
+    },
+    {
+      "name": "icash_attention_emails",
+      "definition": "create table public.icash_attention_emails (id uuid default gen_random_uuid(),account_id uuid,owner_user_id uuid,recipient text,kind text,category text,source_id uuid,source_version text,screening_id uuid,preference_revision bigint,state text default 'claimed'::text,created_at timestamp with time zone default now(),authorized_at timestamp with time zone,completed_at timestamp with time zone,provider_id uuid,UNIQUE (account_id, kind, source_id, source_version),PRIMARY KEY (id),UNIQUE (provider_id));"
+    },
+    {
+      "name": "icash_buyer_qualification_requests",
+      "definition": "create table public.icash_buyer_qualification_requests (id uuid default gen_random_uuid(),account_id uuid,buyer_id uuid,deal_id uuid,entity_key text,submitted_by uuid,idempotency_key uuid,payload jsonb,payload_hash text,state text default 'submitted'::text,created_at timestamp with time zone default now(),expires_at timestamp with time zone,reviewed_by uuid,reviewed_at timestamp with time zone,decision_note text,verification jsonb,UNIQUE (account_id, idempotency_key),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_buyer_qualification_audit",
+      "definition": "create table public.icash_buyer_qualification_audit (id uuid default gen_random_uuid(),request_id uuid,actor_user_id uuid,event text,note text,evidence jsonb default '{}'::jsonb,created_at timestamp with time zone default now(),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_owner_voice_acceptance_config",
+      "definition": "create table public.icash_owner_voice_acceptance_config (id integer default 1,account_id uuid,owner_user_id uuid,phone text,agent_id text,phone_number_id text,branch_id text,branch_name text,reviewed_config_hash text,reviewed_version_id text,enabled boolean default false,approval_ref text,created_at timestamp with time zone default now(),expires_at timestamp with time zone,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_owner_voice_acceptance_runs",
+      "definition": "create table public.icash_owner_voice_acceptance_runs (id uuid default gen_random_uuid(),config_id integer,account_id uuid,owner_user_id uuid,state text default 'claimed'::text,configuration jsonb,claimed_at timestamp with time zone default now(),conversation_id text,provider_call_sid text,updated_at timestamp with time zone default now(),UNIQUE (config_id),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_campaign_acknowledgments",
+      "definition": "create table public.icash_campaign_acknowledgments (id uuid default gen_random_uuid(),account_id uuid,user_id uuid,policy_version text,policy_text text,accepted_at timestamp with time zone default now(),UNIQUE (account_id, user_id, policy_version),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_outreach_campaigns",
+      "definition": "create table public.icash_outreach_campaigns (account_id uuid,mode text,acknowledgment_id uuid,reviewed_principal text,enabled boolean default false,updated_at timestamp with time zone default now(),channel_selection_id uuid,PRIMARY KEY (account_id));"
+    },
+    {
+      "name": "icash_sms_inbound_invitations",
+      "definition": "create table public.icash_sms_inbound_invitations (id uuid default gen_random_uuid(),account_id uuid,thread_id uuid,deal_id uuid,screening_id uuid,opener_id uuid,reply_id uuid,message_id uuid,called_number text,sender text,recipient text,created_at timestamp with time zone default now(),expires_at timestamp with time zone,UNIQUE (message_id),PRIMARY KEY (id),UNIQUE (reply_id),UNIQUE (thread_id));"
+    },
+    {
+      "name": "icash_email_delivery_events",
+      "definition": "create table public.icash_email_delivery_events (event_id text,provider_id text,kind text,occurred_at timestamp with time zone,PRIMARY KEY (event_id));"
+    },
+    {
+      "name": "icash_email_suppressions",
+      "definition": "create table public.icash_email_suppressions (account_id uuid,email text,reason text,created_at timestamp with time zone default now(),PRIMARY KEY (account_id, email));"
+    },
+    {
+      "name": "icash_owner_inbound_acceptance_config",
+      "definition": "create table public.icash_owner_inbound_acceptance_config (id uuid default gen_random_uuid(),account_id uuid,owner_user_id uuid,owner_phone text,source_phone text,ingress_phone text,twilio_account_sid text,agent_id text,elevenlabs_region text,twilio_region text,all_in_cost_reviewed boolean default false,forwarding_no_incremental_cost boolean default false,provider_extras_disabled boolean default false,phone_number_id text,branch_id text,branch_name text,reviewed_config_hash text,reviewed_version_id text,approval_ref text,enabled boolean default false,max_duration_seconds integer,quote_cap_cents bigint,twilio_micros_per_minute bigint,elevenlabs_micros_per_minute bigint,customer_cost_multiplier numeric,rate_reviewed_at timestamp with time zone,rate_expires_at timestamp with time zone,rate_evidence_hash text,created_at timestamp with time zone default now(),expires_at timestamp with time zone,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_owner_inbound_acceptance_runs",
+      "definition": "create table public.icash_owner_inbound_acceptance_runs (id uuid default gen_random_uuid(),config_id uuid,account_id uuid,owner_user_id uuid,state text default 'armed'::text,configuration jsonb,challenge_salt text,challenge_hash text,operation_key text,credit_reservation_id uuid,quote_cap_cents bigint,reserved_cents bigint,armed_at timestamp with time zone default now(),expires_at timestamp with time zone,attempted_at timestamp with time zone,admitted_at timestamp with time zone,provider_call_sid text,conversation_id text,admission_receipt_hash text,evidence jsonb,charged_cents bigint,actual_cost_cents bigint,settled_at timestamp with time zone,updated_at timestamp with time zone default now(),UNIQUE (admission_receipt_hash),UNIQUE (config_id),UNIQUE (conversation_id),UNIQUE (credit_reservation_id),UNIQUE (operation_key),PRIMARY KEY (id),UNIQUE (provider_call_sid));"
+    },
+    {
+      "name": "icash_owner_inbound_acceptance_audit",
+      "definition": "create table public.icash_owner_inbound_acceptance_audit (id uuid default gen_random_uuid(),run_id uuid,account_id uuid,event text,state text,receipt_hash text,charged_cents bigint,created_at timestamp with time zone default now(),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_owner_audio_once",
+      "definition": "create table public.icash_owner_audio_once (id integer,account_id uuid,owner_user_id uuid,state text,config_hash text,version_id text,branch_name text,challenge_salt text,challenge_hash text,armed_at timestamp with time zone,expires_at timestamp with time zone,claimed_at timestamp with time zone,call_sid text,conversation_id text,result jsonb,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_owner_audio_phone_pin",
+      "definition": "create table public.icash_owner_audio_phone_pin (id integer,review_token text,created_at timestamp with time zone default now(),restore_started_at timestamp with time zone,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_sms_seller_openings",
+      "definition": "create table public.icash_sms_seller_openings (thread_id uuid,account_id uuid,owner_question_id uuid,owner_reply_id uuid,interest_message_id uuid,UNIQUE (interest_message_id),UNIQUE (owner_question_id),UNIQUE (owner_reply_id),PRIMARY KEY (thread_id));"
+    },
+    {
+      "name": "icash_outbound_price_snapshots",
+      "definition": "create table public.icash_outbound_price_snapshots (operation_key text,account_id uuid,snapshot jsonb,created_at timestamp with time zone default now(),PRIMARY KEY (operation_key));"
+    },
+    {
+      "name": "icash_spend_activation_receipts",
+      "definition": "create table public.icash_spend_activation_receipts (account_id uuid,actor_user_id uuid,review_key text,customer_cap_cents bigint,daily_limit_cents bigint,consent_version text,accepted_at timestamp with time zone default now(),PRIMARY KEY (account_id));"
+    },
+    {
+      "name": "icash_property_zip_geographies",
+      "definition": "create table public.icash_property_zip_geographies (zip text,state_code text,name text,property_count bigint,source_ref text,checked_at timestamp with time zone,expires_at timestamp with time zone,lookup_token uuid,lookup_account uuid,lookup_until timestamp with time zone,retry_after timestamp with time zone,PRIMARY KEY (zip));"
+    },
+    {
+      "name": "icash_operational_contacts",
+      "definition": "create table public.icash_operational_contacts (id uuid default gen_random_uuid(),account_id uuid,screening_id uuid,channel text,phone text,contact_key text,timezone text,timezone_basis text,local_start_hour integer default 9,local_end_hour integer default 20,owner_user_id uuid,sending_principal text,source_hash text,dnc_receipt_id uuid,eligibility_until timestamp with time zone,created_at timestamp with time zone default now(),revoked_at timestamp with time zone,provenance text default 'owned_contact_data_and_dnc'::text,consent_verification text default 'not_performed'::text,UNIQUE (account_id, screening_id, channel, phone, source_hash, dnc_receipt_id),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_dealmachine_dnc_ingestions",
+      "definition": "create table public.icash_dealmachine_dnc_ingestions (screening_id uuid,account_id uuid,owner_user_id uuid,operation_key text,source_id uuid,source_hash text,provider_operation_hash text,provider_cost_hash text,request_started_at timestamp with time zone,source_recorded_at timestamp with time zone,ingested_at timestamp with time zone,original_expires_at timestamp with time zone,observations integer,held_phones integer,outcome text,UNIQUE (operation_key),PRIMARY KEY (screening_id));"
+    },
+    {
+      "name": "icash_dealmachine_dnc_rejections",
+      "definition": "create table public.icash_dealmachine_dnc_rejections (screening_id uuid,account_id uuid,operation_key text,source_hash text,source_recorded_at timestamp with time zone,rejected_at timestamp with time zone,reason text,PRIMARY KEY (screening_id));"
+    },
+    {
+      "name": "icash_call_recordings",
+      "definition": "create table public.icash_call_recordings (id uuid default gen_random_uuid(),account_id uuid,operation_key text,voice_job_id uuid,permission_id uuid,operational_contact_id uuid,screening_id uuid,party text,call_context jsonb,provider_account_sid text,call_sid text,recording_sid text,conversation_id text,to_phone text,from_phone text,contact_key text,agent_id text,branch_id text,version_id text,rate_id uuid,charge_cap_cents bigint,max_total_seconds integer,state text default 'consent_pending'::text,nonce_hash text,stop_token_hash text,disclosure_version text,pricing_policy jsonb,row_version bigint default 1,consent_at timestamp with time zone,consent_evidence jsonb,dial_claimed_at timestamp with time zone,start_claimed_at timestamp with time zone,provider_started_at timestamp with time zone,ended_at timestamp with time zone,duration_seconds integer,audio_expires_at timestamp with time zone,deleted_at timestamp with time zone,end_requested_at timestamp with time zone,call_ended_at timestamp with time zone,provider_recording_price_micros bigint,price_is_estimate boolean default true,created_at timestamp with time zone default icash_recording_private.clock_now(),consent_deadline_at timestamp with time zone,updated_at timestamp with time zone default icash_recording_private.clock_now(),next_reconcile_at timestamp with time zone,reconcile_attempts integer default 0,reconcile_lease_token uuid,reconcile_lease_expires_at timestamp with time zone,next_delete_at timestamp with time zone,deletion_attempts integer default 0,deletion_lease_token uuid,deletion_lease_expires_at timestamp with time zone,last_error text,last_action text default 'create'::text,UNIQUE (operation_key),PRIMARY KEY (id),UNIQUE (provider_account_sid, call_sid),UNIQUE (provider_account_sid, recording_sid),UNIQUE (voice_job_id));"
+    },
+    {
+      "name": "icash_campaign_channel_selections",
+      "definition": "create table public.icash_campaign_channel_selections (id uuid default gen_random_uuid(),account_id uuid,user_id uuid,acknowledgment_id uuid,mode text,sending_principal text,source text default 'customer_ui'::text,selected_at timestamp with time zone default clock_timestamp(),UNIQUE (account_id, user_id, acknowledgment_id, mode, sending_principal),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_owner_recording_test_config",
+      "definition": "create table public.icash_owner_recording_test_config (id integer,account_id uuid,owner_user_id uuid,phone text,from_phone text,phone_number_id text,review jsonb,quote jsonb,enabled boolean default false,approval_ref text,approved_at timestamp with time zone,prior_attempts integer,prior_spend_micros bigint,max_attempts integer default 3,total_cap_micros bigint default 3000000,max_seconds integer default 60,created_at timestamp with time zone default icash_owner_recording_private.clock_now(),expires_at timestamp with time zone,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_owner_recording_test_runs",
+      "definition": "create table public.icash_owner_recording_test_runs (id uuid default gen_random_uuid(),config_id integer,account_id uuid,owner_user_id uuid,configuration jsonb,attempt integer,nonce_hash text,stop_token_hash text,reserved_micros bigint,state text default 'consent_pending'::text,row_version bigint default 1,created_at timestamp with time zone default icash_owner_recording_private.clock_now(),updated_at timestamp with time zone default icash_owner_recording_private.clock_now(),call_sid text,call_started_at timestamp with time zone,recording_sid text,conversation_id text,consent_at timestamp with time zone,consent_evidence jsonb,start_claimed_at timestamp with time zone,registration_claimed_at timestamp with time zone,end_requested_at timestamp with time zone,call_ended_at timestamp with time zone,provider_started_at timestamp with time zone,audio_expires_at timestamp with time zone,duration_seconds integer,recording_price_micros bigint,settled_micros bigint,settlement jsonb,settled_at timestamp with time zone,deleted_at timestamp with time zone,contact_opted_out boolean default false,next_work_at timestamp with time zone default icash_owner_recording_private.clock_now(),lease_token uuid,lease_until timestamp with time zone,last_error text,UNIQUE (call_sid),UNIQUE (config_id, attempt),UNIQUE (conversation_id),PRIMARY KEY (id),UNIQUE (recording_sid));"
+    },
+    {
+      "name": "icash_customer_update_settings",
+      "definition": "create table public.icash_customer_update_settings (id integer,enabled boolean default false,global_daily_limit integer default 100,next_scan_at timestamp with time zone default now(),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_customer_update_preferences",
+      "definition": "create table public.icash_customer_update_preferences (account_id uuid,owner_user_id uuid,email_enabled boolean default false,sms_enabled boolean default false,email_suppressed_at timestamp with time zone,consent_email text,phone text,timezone text default 'America/Chicago'::text,consent_version text,consented_at timestamp with time zone,revision integer default 0,seen_at timestamp with time zone,unsubscribe_token text default ((gen_random_uuid())::text || (gen_random_uuid())::text),next_scan_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),PRIMARY KEY (account_id),UNIQUE (unsubscribe_token));"
+    },
+    {
+      "name": "icash_customer_update_deliveries",
+      "definition": "create table public.icash_customer_update_deliveries (id uuid default gen_random_uuid(),account_id uuid,channel text,source_key text,kind text,screening_id uuid,recipient text,preference_revision integer,state text default 'claimed'::text,created_at timestamp with time zone default now(),authorized_at timestamp with time zone,provider_id text,UNIQUE (account_id, channel, source_key),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_membership_offer",
+      "definition": "create table public.icash_membership_offer (id integer,price_cents bigint,revision integer default 1,enabled boolean default true,updated_by uuid,updated_at timestamp with time zone default now(),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_memberships",
+      "definition": "create table public.icash_memberships (id uuid default gen_random_uuid(),mode text,guest_hash text,account_id uuid,price_cents bigint,offer_revision integer,state text default 'pending'::text,stripe_session_id text,stripe_subscription_id text,stripe_customer_id text,checkout_url text,payer_email text,payer_phone text,paid_through timestamp with time zone,cancel_at_period_end boolean default false,consent_version text,consent_text text,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),PRIMARY KEY (id),UNIQUE (stripe_session_id),UNIQUE (stripe_subscription_id));"
+    },
+    {
+      "name": "icash_membership_invoices",
+      "definition": "create table public.icash_membership_invoices (stripe_invoice_id text,membership_id uuid,stripe_payment_id text,amount_cents bigint,period_end timestamp with time zone,recorded_at timestamp with time zone default now(),PRIMARY KEY (stripe_invoice_id),UNIQUE (stripe_payment_id));"
+    },
+    {
+      "name": "icash_webinars",
+      "definition": "create table public.icash_webinars (id uuid default gen_random_uuid(),revision integer default 1,config jsonb,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_webinar_visitors",
+      "definition": "create table public.icash_webinar_visitors (id uuid default gen_random_uuid(),name text,email text,phone text,timezone text default 'America/Chicago'::text,attribution jsonb default '{}'::jsonb,email_consent_at timestamp with time zone,consent_version text,opted_out_at timestamp with time zone,account_id uuid,funded_at timestamp with time zone,funding_guest_hash text,created_at timestamp with time zone default now(),last_seen_at timestamp with time zone default now(),marketing_consent_at timestamp with time zone,measurement jsonb default '{}'::jsonb,activity_region text,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_webinar_sessions",
+      "definition": "create table public.icash_webinar_sessions (id uuid default gen_random_uuid(),visitor_id uuid,webinar_id uuid,revision integer,config jsonb,progress_seconds integer default 0,max_seconds integer default 0,completed_at timestamp with time zone,is_preview boolean default false,created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),superseded_at timestamp with time zone,PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_webinar_events",
+      "definition": "create table public.icash_webinar_events (id uuid default gen_random_uuid(),visitor_id uuid,session_id uuid,kind text,event_key text,created_at timestamp with time zone default now(),PRIMARY KEY (id),UNIQUE (session_id, kind, event_key));"
+    },
+    {
+      "name": "icash_webinar_messages",
+      "definition": "create table public.icash_webinar_messages (id uuid default gen_random_uuid(),session_id uuid,role text,text text,created_at timestamp with time zone default now(),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_webinar_settings",
+      "definition": "create table public.icash_webinar_settings (id integer,config jsonb,updated_at timestamp with time zone default now(),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_webinar_suppressions",
+      "definition": "create table public.icash_webinar_suppressions (email text,reason text,created_at timestamp with time zone default now(),PRIMARY KEY (email));"
+    },
+    {
+      "name": "icash_webinar_followups",
+      "definition": "create table public.icash_webinar_followups (id uuid default gen_random_uuid(),visitor_id uuid,email text,step integer,state text default 'pending'::text,due_at timestamp with time zone,claimed_at timestamp with time zone,first_attempt_at timestamp with time zone,attempts integer default 0,provider_id text,payload jsonb,sent_at timestamp with time zone,UNIQUE (email, step),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_webinar_email_receipts",
+      "definition": "create table public.icash_webinar_email_receipts (provider_id uuid,kind text,created_at timestamp with time zone default now(),PRIMARY KEY (provider_id, kind));"
+    },
+    {
+      "name": "icash_webinar_meta_events",
+      "definition": "create table public.icash_webinar_meta_events (event_id text,payment_id text,visitor_id uuid,session_id uuid,value_cents bigint,occurred_at timestamp with time zone,state text default 'pending'::text,attempts integer default 0,claimed_at timestamp with time zone,due_at timestamp with time zone default now(),sent_at timestamp with time zone,payload jsonb,last_status integer,UNIQUE (payment_id),PRIMARY KEY (event_id));"
+    },
+    {
+      "name": "icash_webinar_presence",
+      "definition": "create table public.icash_webinar_presence (session_id uuid,tab_id uuid,visitor_id uuid,webinar_id uuid,sequence bigint,watching boolean,seen_at timestamp with time zone default now(),PRIMARY KEY (session_id, tab_id));"
+    },
+    {
+      "name": "icash_seller_controls",
+      "definition": "create table public.icash_seller_controls (id integer,enabled boolean default false,lookup_allowance_micros bigint default 0,lookup_reserved_micros bigint default 0,lookup_used_micros bigint default 0,data_rights_until timestamp with time zone,review_ref text,assignment_fee_cents bigint default 1000000,seller_cost_reserve_cents bigint default 100000,updated_by uuid,updated_at timestamp with time zone default now(),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_seller_markets",
+      "definition": "create table public.icash_seller_markets (city text,state text,major_city boolean default false,enabled boolean default false,review_ref text,reviewed_until timestamp with time zone,updated_by uuid,PRIMARY KEY (city, state));"
+    },
+    {
+      "name": "icash_seller_intakes",
+      "definition": "create table public.icash_seller_intakes (id uuid default gen_random_uuid(),request_id uuid,guest_hash text,duplicate_key text,name text,address text,phone text,ai_consented boolean,consent_version text,consent_text text,sharing_text text,owner_claimed boolean default true,agent_hash text,attribution jsonb,state text default 'received'::text,canonical_id uuid,claim_token uuid,claimed_at timestamp with time zone,lookup_costs jsonb,lookup_cap_micros bigint,lookup_cost_basis text,data_rights_until timestamp with time zone,result jsonb,property jsonb,numbers_passed boolean default false,market_qualified boolean default false,checked_at timestamp with time zone,ad_cost_micros bigint,ad_cost_receipt text,assigned_account uuid,screening_id uuid,operation_key text,assigned_at timestamp with time zone,next_assignment_at timestamp with time zone default now(),hold_reason text,created_at timestamp with time zone default now(),email text,email_consented boolean default false,contact_consent_scope text,customer_costs jsonb,customer_cost_basis text,UNIQUE (operation_key),PRIMARY KEY (id),UNIQUE (request_id));"
+    },
+    {
+      "name": "icash_seller_matches",
+      "definition": "create table public.icash_seller_matches (lead_id uuid,account_id uuid,screening_id uuid,operation_key text,charge_cents bigint,assigned_at timestamp with time zone default now(),UNIQUE (operation_key),PRIMARY KEY (lead_id, account_id),UNIQUE (screening_id));"
+    },
+    {
+      "name": "icash_seller_ad_costs",
+      "definition": "create table public.icash_seller_ad_costs (receipt_id text,source text,campaign text,period_start timestamp with time zone,period_end timestamp with time zone,spend_micros bigint,qualified_count integer,evidence_ref text,recorded_by uuid,created_at timestamp with time zone default now(),PRIMARY KEY (receipt_id));"
+    },
+    {
+      "name": "icash_seller_events",
+      "definition": "create table public.icash_seller_events (id uuid default gen_random_uuid(),lead_id uuid,event_name text,occurred_at timestamp with time zone default now(),evidence_ref text,delivery_state text default 'pending'::text,delivery_token uuid,attempted_at timestamp with time zone,delivered_at timestamp with time zone,attempts integer default 0,UNIQUE (lead_id, event_name),PRIMARY KEY (id));"
+    },
+    {
+      "name": "icash_seller_responses",
+      "definition": "create table public.icash_seller_responses (lead_id uuid,account_id uuid,screening_id uuid,state text default 'pending'::text,detail text default 'Preparing seller response'::text,outcome jsonb default '{}'::jsonb,next_attempt_at timestamp with time zone default now(),created_at timestamp with time zone default now(),updated_at timestamp with time zone default now(),PRIMARY KEY (lead_id, account_id),UNIQUE (screening_id));"
+    }
+  ],
+  "functions": [
+    {
+      "proname": "icash_apply_prepaid_purchase",
+      "definition": "CREATE OR REPLACE FUNCTION public.icash_apply_prepaid_purchase(p_order uuid)\n RETURNS boolean\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare o public.icash_funding_orders;funded bigint;a public.icash_accounts;\nbegin\n select * into o from public.icash_funding_orders where id=p_order for update;\n if not found or o.mode<>'live' or o.state<>'paid' or o.account_id is null or o.credited_at is null then return false;end if;\n if o.prepaid_applied_at is not null then return true;end if;\n if not exists(select 1 from public.icash_funding_consents c where c.order_id=o.id and c.version='work-credits-2026-10-03.1' and c.account_id=o.account_id and c.price_cents=o.price_cents and c.credit_cents=o.credit_cents) then return false;end if;\n select * into a from public.icash_accounts where id=o.account_id for update;\n if exists(select 1 from public.icash_daily_plans where account_id=a.id and mode='live' and state<>'stopped') then return false;end if;\n if exists(select 1 from public.icash_billing_reviews where account_id=a.id and resolved_at is null) or not public.icash_membership_work_allowed(a.id) then return false;end if;\n perform 1 from public.icash_wallets where account_id=a.id for update;\n select coalesce(sum(credit_cents),0) into funded from public.icash_funding_orders where account_id=a.id and mode='live' and state='paid' and credited_at is not null;\n if funded<=0 or funded>100000000 then return false;end if;\n insert into public.icash_spend_activations(account_id,enabled,customer_cap_cents) values(a.id,true,funded)\n on conflict(account_id) do update set enabled=true,customer_cap_cents=excluded.customer_cap_cents;\n update public.icash_accounts set billing_model=case when billing_model='legacy' then 'prepaid' else billing_model end,daily_limit_cents=funded,bot_paused=false where id=a.id;\n update public.icash_funding_orders set prepaid_applied_at=now(),pacing_applied_at=now() where id=o.id;\n -- Provider/channel, identity, contact, cost, offer and contract authority checks still run at dispatch.\n return true;\nend $function$\n"
+    },
+    {
+      "proname": "icash_membership_work_allowed",
+      "definition": "CREATE OR REPLACE FUNCTION public.icash_membership_work_allowed(p_account uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n select exists(select 1 from public.icash_accounts a where a.id=p_account and (a.billing_model<>'membership_credits' or exists(select 1 from public.icash_memberships m where m.account_id=a.id and m.mode='live' and m.state='active' and m.paid_through>now())))\n$function$\n"
+    },
+    {
+      "proname": "icash_queue_text",
+      "definition": "CREATE OR REPLACE FUNCTION public.icash_queue_text(p_account uuid, p_thread uuid, p_key uuid, p_body text, p_assets uuid[])\n RETURNS uuid\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare t public.icash_text_threads;m public.icash_text_messages;urls jsonb;total bigint;\nbegin\n select * into t from public.icash_text_threads where id=p_thread and account_id=p_account;\n if not found or not exists(select 1 from public.icash_deal_files where id=t.deal_id and account_id=p_account) then raise exception 'Thread not available';end if;\n if length(trim(p_body))=0 and cardinality(p_assets)=0 then raise exception 'Message required';end if;\n if length(p_body)>1000 or cardinality(p_assets)>3 then raise exception 'Message too large';end if;\n -- One SMS segment per reviewed rate; MMS has its own independent rate.\n if cardinality(p_assets)=0 and (length(p_body)>160 or (p_body ~ '[^A-Za-z0-9 .,!?]' and length(p_body)>35)) then raise exception 'Shorten the message';end if;\n select coalesce(jsonb_agg(url order by id),'[]'),coalesce(sum(bytes),0) into urls,total from public.icash_text_assets where id=any(p_assets) and account_id=p_account and deal_id=t.deal_id and verified_until>now();\n if jsonb_array_length(urls)<>cardinality(p_assets) or total>5000000 then raise exception 'Verified attachments required';end if;\n insert into public.icash_text_messages(thread_id,account_id,direction,body,asset_ids,attachments,state,request_key) values(t.id,p_account,'outgoing',p_body,p_assets,urls,'ready',p_key) on conflict(request_key) do nothing;\n select * into m from public.icash_text_messages where request_key=p_key;\n -- Insert uses the caller's idempotency key below; no cross-account lookup may return an ID.\n if m.id is null then raise exception 'Message key missing';end if;\n if m.account_id<>p_account or m.thread_id<>p_thread or m.body<>p_body or m.asset_ids<>p_assets then raise exception 'Message key conflict';end if;\n return m.id;\nend $function$\n"
+    },
+    {
+      "proname": "icash_set_work_control_before_sms_intake",
+      "definition": "CREATE OR REPLACE FUNCTION public.icash_set_work_control_before_sms_intake(p_user uuid, p_account uuid, p_action text, p_screening uuid DEFAULT NULL::uuid)\n RETURNS void\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare prop text;\nbegin\n perform 1 from public.icash_accounts where id=p_account and owner_user_id=p_user for update;\n if not found then raise exception 'Account ownership required';end if;\n if p_action in ('pause','resume') then\n update public.icash_accounts set bot_paused=(p_action='pause') where id=p_account;\n elsif p_action in ('takeover','return_to_bot') then\n select snapshot->>'propertyId' into prop from public.icash_screening_jobs where id=p_screening and account_id=p_account;\n if prop is null then raise exception 'Property missing';end if;\n insert into public.icash_property_controls(account_id,property_id,manual) values(p_account,prop,p_action='takeover')\n on conflict(account_id,property_id) do update set manual=excluded.manual,updated_at=now();\n if p_action='return_to_bot' then\n update public.icash_handoffs set state='resolved',resolved_at=now() where account_id=p_account and screening_id=p_screening and state<>'resolved';\n -- Returning control never automatically retries a past callback.\n end if;\n else raise exception 'Invalid control';end if;\n insert into public.icash_control_events(account_id,actor_user_id,action,property_id) values(p_account,p_user,p_action,prop);\nend $function$\n"
+    },
+    {
+      "proname": "icash_claim_text_before_owner_question",
+      "definition": "CREATE OR REPLACE FUNCTION public.icash_claim_text_before_owner_question(p_account uuid, p_message uuid, p_sender text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare invitation public.icash_sms_inbound_invitations;t public.icash_text_threads;m public.icash_text_messages;d public.icash_deal_files;s public.icash_screening_jobs;\nbegin\n perform 1 from public.icash_operating_budget where id=1 for update;\n select th.* into t from public.icash_text_threads th join public.icash_text_messages msg on msg.thread_id=th.id and msg.account_id=th.account_id where msg.id=p_message and msg.account_id=p_account;\n if not found then return null;end if;\n perform pg_advisory_xact_lock(hashtextextended(t.recipient,74));\n perform 1 from public.icash_accounts where id=p_account and not bot_paused for update;if not found then return null;end if;\n perform 1 from public.icash_outreach_campaigns where account_id=p_account for share;\n select * into t from public.icash_text_threads where id=t.id and account_id=p_account for update;\n select * into m from public.icash_text_messages where id=p_message and account_id=p_account and thread_id=t.id for update;\n if not found or m.state<>'ready' or m.direction<>'outgoing' then return null;end if;\n select * into d from public.icash_deal_files where id=t.deal_id and account_id=p_account and stage not in ('closed','cancelled') and coalesce(terms->>'practice','false')<>'true' for share;\n if not found then return null;end if;\n select * into s from public.icash_screening_jobs where id=d.screening_id and account_id=p_account and state='complete' for share;\n if not found or s.result->'financialCheck'->>'status' is distinct from 'eligible' or s.completed_at is null or s.completed_at>now() or s.completed_at<now()-interval '24 hours' then return null;end if;\n\n if exists(select 1 from public.icash_property_controls where account_id=p_account and property_id=s.snapshot->>'propertyId' and manual)\n and not (\n  public.icash_manual_handoff_reply(p_account,t.id)\n  and not exists(select 1 from public.icash_text_ai_jobs where outgoing_id=p_message and account_id=p_account)\n  and not exists(select 1 from public.icash_seller_opener_assignments where message_id=p_message and account_id=p_account)\n  and not exists(select 1 from public.icash_sms_inbound_invitations where message_id=p_message and account_id=p_account)\n ) then return null;end if;\n if exists(select 1 from public.icash_text_ai_jobs where outgoing_id=p_message and account_id=p_account) then return null;end if;\n if t.dnc_checked_at>now() then return null;end if;\n if not public.icash_sms_thread_review_current(p_account,t.id,true) then return null;end if;\n if not public.icash_outreach_sms_current(p_account) then return null;end if;\n select * into invitation from public.icash_sms_inbound_invitations where message_id=p_message and account_id=p_account;\n if found then\n  if not public.icash_sms_inbound_campaign_current(p_account) then return null;end if;\n  select * into t from public.icash_text_threads where id=invitation.thread_id and account_id=p_account;\n  if t.id is null or t.sender<>invitation.sender or t.recipient<>invitation.recipient or t.deal_id<>invitation.deal_id or invitation.expires_at<=now() then return null;end if;\n  if not exists(select 1 from public.icash_inbound_voice_routes where called_number=invitation.called_number and business_number=p_sender and enabled and reviewed_until>now() and agent_config_hash is not null) then return null;end if;\n  if exists(select 1 from public.icash_text_messages where thread_id=t.id and direction='incoming' and id<>invitation.reply_id and created_at>=(select created_at from public.icash_text_messages where id=invitation.reply_id)) then return null;end if;\n end if;\n return public.icash_claim_text_before_campaign(p_account,p_message,p_sender);\nend $function$\n"
+    },
+    {
+      "proname": "icash_deal_email_contacts",
+      "definition": "CREATE OR REPLACE FUNCTION public.icash_deal_email_contacts(p_account uuid, p_deal uuid)\n RETURNS TABLE(contact_key text, email text, display_name text, party text, verified_until timestamp with time zone)\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n select 'title',lower(c.email),coalesce(nullif(d.terms->>'escrowAgent',''),'Closing office'),'title',c.verified_until\n from public.icash_title_contacts c join public.icash_deal_files d on d.id=c.deal_id and d.account_id=c.account_id\n where c.account_id=p_account and c.deal_id=p_deal and c.enabled and c.verified_until>now()\n union all\n select 'signer:'||e.id||':'||r.n,lower(r.value->>'email'),r.value->>'name',case e.kind when 'purchase' then 'seller' else 'buyer' end,e.updated_at+interval '90 days'\n from public.icash_signing_envelopes e join public.icash_deal_files d on d.id=e.deal_id and d.account_id=e.account_id\n cross join lateral jsonb_array_elements(e.recipients) with ordinality r(value,n)\n where e.account_id=p_account and e.deal_id=p_deal and e.state='completed' and not e.test_mode\n and e.updated_at>now()-interval '90 days' and e.kind in ('purchase','assignment')\n and r.n<jsonb_array_length(e.recipients) and length(r.value->>'email') between 3 and 320\n union all\n select 'buyer-request:'||m.id,lower((regexp_match(m.body,'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}'))[1]),'Cash buyer','buyer',m.created_at+interval '30 days'\n from public.icash_text_messages m join public.icash_text_threads t on t.id=m.thread_id and t.account_id=m.account_id\n where t.account_id=p_account and t.deal_id=p_deal and t.party='buyer' and not t.paused\n and m.direction='incoming' and m.created_at>now()-interval '30 days'\n and m.body ~* '\\m(email|send|forward)\\M' and m.body ~* '\\m(details|info|information|package)\\M'\n and m.body !~* '\\m(stop|unsubscribe|not|never|cancel)\\M|don.t'\n and (select count(*) from regexp_matches(m.body,'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}','g'))=1\n and not exists(select 1 from public.icash_text_suppressions s where s.phone=t.recipient);\n$function$\n"
+    }
+  ]
+}
