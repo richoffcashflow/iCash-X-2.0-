@@ -27,3 +27,6 @@ const response=processSellerResponses(db,async()=>{await waitingText;return {sta
 await Promise.resolve();await Promise.resolve();
 assert.equal(voiceStarted,true,'voice starts while SMS remains in flight');
 releaseText();await response;
+
+const addressOnly=await sellerJourneyReadiness(async()=>[{processing_enabled:true,allowance_available:true,markets:0,active_accounts:0,senders:1,voice_accounts:1,pending_responses:0,held_responses:0,started_responses:0}],{});
+assert.equal(addressOnly.checks.find(c=>c.key==='lookup').status,'configured','Research works without configured target cities');

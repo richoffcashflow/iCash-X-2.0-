@@ -2,6 +2,14 @@
 
 **Release verdict: not ready for unattended live operation.** The audit found a real gap between inbound lead assignment and first contact. This release adds the missing tracked handoff and immediate dispatch attempt for already-admitted channels. It does not make missing permissions, funding, provider acceptance or completed signatures appear valid.
 
+## Correction: submitted-address research, 5 October
+
+The owner clarified that the former Dallas, San Antonio, Memphis and Birmingham discovery targets are obsolete. Inbound research applies to each submitted address, regardless of the former city list. The city gate is removed from qualification, assignment, readiness and the owner setup page. Financial qualification, recorded data-use permission, duplicate prevention, lookup allowance and downstream contact/signing checks remain separate.
+
+The four existing market scan scopes are disabled and 210 unstarted scan jobs are held; completed history is preserved. Production cold-discovery/contact-enrichment flags are false while acquisition mode remains inbound. Runtime admission also blocks market research in inbound mode. Submitted-address lookup and post-contract buyer search retain their own paths.
+
+The owner’s confirmed data-use permission and $10 platform research allowance remain in place. Research does not require a funded recipient; delivery and initial contact do. No real seller submission, customer charge or phone call was fabricated for verification.
+
 ## Follow-up: immediate contact after research
 
 **Activation update, 5 October at 11:47 CDT:** The owner explicitly approved enabling production outbound calling before the recorded-call acceptance test passes. The production `ICASH_RECORDED_OUTBOUND_READY` setting was changed to `true` and read back successfully. This authorization supersedes the activation rejection described below; it is not evidence of a completed test. Existing funding, contact, provider-review, recording, STOP and per-account checks continue to apply. Research allowance, market/data setup and funded-account prerequisites remain outstanding.
