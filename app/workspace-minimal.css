@@ -49,3 +49,21 @@
 .post-payment-name [role=alert]{font-size:13px;margin:12px 0 0}
 .minimal-workspace .tone-green,.minimal-workspace .property-status{color:#444;background:#f4f4f5}
 .minimal-workspace .tone-green .ai-status-dot{background:#18181b}
+
+/* The bot is the workspace's primary control. Dots animate only for live work. */
+.bot-run-bar{display:flex;align-items:center;justify-content:space-between;gap:28px;width:100%;box-sizing:border-box;background:#18181b;color:#fff;border-radius:18px;padding:27px 28px;margin:0 0 24px;min-height:116px}
+.bot-run-status{display:flex;align-items:center;gap:20px;min-width:0}
+.bot-run-status h2{color:inherit;font-size:24px;font-weight:600;letter-spacing:-.7px;line-height:1.2;margin:0 0 7px}
+.bot-run-status p{color:#b9b9bf;font-size:13px;line-height:1.5;margin:0}
+.bot-work-dots{display:flex;gap:5px;align-items:center;flex-shrink:0;min-width:34px;height:28px}
+.bot-work-dots i{display:block;width:7px;height:7px;border-radius:50%;background:#b9b9bf}
+.bot-run-bar.is-active .bot-work-dots i{background:white;animation:bot-working 1.4s ease-in-out infinite}
+.bot-run-bar.is-active .bot-work-dots i:nth-child(2){animation-delay:.16s}.bot-run-bar.is-active .bot-work-dots i:nth-child(3){animation-delay:.32s}
+.bot-run-actions{display:flex;align-items:center;gap:24px;flex-shrink:0}
+.bot-run-budget{display:flex;align-items:center;gap:3px;background:transparent;color:#fff;border:0;cursor:pointer;padding:10px 0;min-height:44px;font:inherit;font-size:18px;font-weight:500}
+.bot-run-budget span{font-size:12px;color:#b9b9bf;font-weight:400}.bot-run-budget svg{margin-left:6px;color:#b9b9bf}
+.bot-main-action{display:flex;align-items:center;justify-content:center;gap:9px;background:#fff;border:1px solid #fff;border-radius:10px;color:#18181b;font:inherit;font-size:13px;font-weight:600;padding:12px 18px;min-height:44px;cursor:pointer;white-space:nowrap}
+.bot-main-action:disabled{cursor:wait;opacity:.6}.bot-run-bar button:focus-visible{outline:2px solid #fff;outline-offset:5px}
+@keyframes bot-working{0%,70%,100%{transform:translateY(0);opacity:.4}35%{transform:translateY(-5px);opacity:1}}
+@media(prefers-reduced-motion:reduce){.bot-run-bar.is-active .bot-work-dots i{animation:none;opacity:1}}
+@media(max-width:600px){.bot-run-bar{padding:22px 20px;gap:20px;flex-wrap:wrap}.bot-run-status{gap:15px}.bot-run-status h2{font-size:22px}.bot-run-actions{width:100%;justify-content:space-between;gap:16px}.bot-run-budget{font-size:17px}.bot-main-action{min-width:112px}.bot-run-actions>.bot-main-action:only-child{margin-left:auto}}

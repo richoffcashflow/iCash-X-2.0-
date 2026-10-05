@@ -7,8 +7,10 @@ export function contactWorkEnabled(env:NodeJS.ProcessEnv=process.env){return env
 /** SMS is independently releasable; this never admits voice, contracts or lead purchases. */
 export function smsWorkEnabled(env:NodeJS.ProcessEnv=process.env){return liveWorkReady(env)||env.ICASH_SMS_WORK_READY==='true';}
 export function automationWorkReady(kind:string,env:NodeJS.ProcessEnv=process.env){
- // Inbound acquisition never searches for properties or enriches prospect lists,
- // even when the general live-work release is enabled. Submitted-address lookup
+ // Inbound-only acquisition never searches for properties or enriches prospect lists.
+ // Hybrid acquisition additionally checks its account supply policy at the
+ // scheduler and atomic paid-discovery claim; release flags alone cannot buy a page.
+ // Submitted-address lookup
  // and post-contract buyer search use their separate services and remain intact.
  if(kind==='discovery')return discoveryWorkEnabled(env);
  if(kind==='market_research')return liveWorkReady(env)&&discoveryWorkEnabled(env);
