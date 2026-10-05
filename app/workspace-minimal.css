@@ -1,0 +1,32 @@
+/* A single budget entry point keeps the workspace focused on properties. */
+.workspace-top-controls{display:flex;align-items:center;gap:16px;margin-bottom:20px}
+.workspace-top-controls>.daily-budget-bar{flex:1;min-width:0;margin:0;padding:0;border:0;background:transparent;box-shadow:none}
+.workspace-budget-button{display:grid;grid-template-columns:1fr auto;gap:5px 16px;width:100%;text-align:left;background:transparent;border:0;padding:8px 0;color:inherit;cursor:pointer;font:inherit}
+.workspace-budget-button>span:first-child{font-size:12px;color:#666}
+.workspace-budget-button>strong{grid-column:1;font-size:32px;letter-spacing:-1px;line-height:1.2}
+.workspace-budget-button .budget-edit-label{grid-column:2;grid-row:1/3;align-self:center;font-size:13px;color:var(--bot-color,#18181b);text-decoration:underline;text-underline-offset:4px}
+.workspace-available{display:block;font-size:12px;color:#737373;margin-top:3px}
+.workspace-top-controls .stop-bot{min-height:44px;padding:10px 20px;border:1px solid #d4d4d4;border-radius:12px;background:white;color:#333;font-size:14px;flex-shrink:0}
+.workspace-state-row{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:20px}
+.workspace-state{min-width:0;font-size:13px;color:#666;flex:1}
+.workspace-state summary{cursor:pointer;min-height:44px;align-content:center;color:#444}
+.workspace-state p{font-size:12px;line-height:1.6;max-width:520px}
+.workspace-state-row .fund-button{width:auto;min-height:44px;flex-shrink:0;border-radius:10px;padding:11px 16px;font-size:13px;background:var(--bot-color,#18181b);color:#fff;text-align:center}
+.workspace-progress-details{margin:0 20px 10px;border-bottom:1px solid #eee;padding-bottom:12px;font-size:12px;color:#666}
+.workspace-progress-details>summary{cursor:pointer;min-height:32px;align-content:center}
+.funding-dialog{box-sizing:border-box;width:min(440px,calc(100% - 32px));max-height:calc(100dvh - 40px);padding:24px;margin:auto;border:1px solid #e5e5e5;border-radius:20px;background:#fff;color:#18181b;box-shadow:0 24px 90px #0003;overflow:auto;overscroll-behavior:contain}
+.funding-dialog::backdrop{background:#1118;backdrop-filter:blur(3px)}
+.funding-dialog-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.funding-dialog-heading h2{font-size:18px;font-weight:650;letter-spacing:-.4px;margin:0}
+.funding-dialog-heading>button{display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:#f5f5f5;color:#444;cursor:pointer}
+.daily-funding{gap:16px;--tier-color:var(--bot-color,#18181b)}
+.daily-funding .daily-slider{accent-color:var(--bot-color,#18181b);margin:4px 0 0;min-height:44px}
+.daily-funding .daily-slider-labels{display:flex;justify-content:space-between;width:100%;gap:24px;margin-top:-14px;font-size:12px}
+.daily-funding .daily-checkout-button{background:var(--bot-color,#18181b);border-color:var(--bot-color,#18181b);color:#fff;min-height:50px}
+.daily-funding .daily-availability{border:0;padding:0;color:#666;font-size:12px}
+.daily-funding .daily-renewal{font-size:12px;line-height:1.6}
+.daily-funding .boost-terms{margin:0;padding:0;border:0}
+.daily-funding .boost-terms>summary{cursor:pointer;min-height:32px;align-content:center}
+.daily-funding .daily-next-renewal{margin:0;font-size:11px}
+.personalized-workspace .property-cash-preview strong{color:var(--bot-color,#18181b)}
+@media(max-width:600px){.workspace-top-controls{gap:14px}.workspace-budget-button>strong{font-size:28px}.workspace-state-row{padding:14px;gap:12px}.workspace-state-row .fund-button{max-width:60%;white-space:normal}.workspace-progress-details{margin-inline:14px}.funding-dialog{padding:20px}.daily-price strong{font-size:64px}}

@@ -19,7 +19,7 @@ function page(account,campaign,error=false){
 const campaign={policy:{version:'v1'},acknowledgment:{version:'v1'},configured:true,released:false,liveWorkReady:false,smsChannelEnabled:true};
 const account={signedIn:true,mode:'live',balanceCents:850,assistantName:'Synthetic bot',paused:true,billingActive:false,identity:{principal:'Synthetic company'},smsWorkReady:false,workReady:false};
 let tree=page(account,campaign),nodes=all(tree);
-assert.match(text(tree),/PAUSED/);assert.equal(nodes.find(n=>n.type===component('DailyBudgetBar')).props.balanceCents,850);assert.doesNotMatch(text(tree),/Your account records/);
+assert.match(text(tree),/Paused/);assert.equal(nodes.find(n=>n.type===component('DailyBudgetBar')).props.balanceCents,850);assert.doesNotMatch(text(tree),/Your account records/);
 assert.equal(nodes.filter(n=>n.type==='button'&&n.props.className==='fund-button').length,1,'one primary action');
 assert(nodes.some(n=>n.type===component('DailyBudgetBar')),'daily budget remains available as a secondary action');
 assert.equal(nodes.find(n=>n.props?.['aria-label']==='Workspace settings').props.hidden,true,'settings stay out of the default workspace');
@@ -27,7 +27,7 @@ assert(nodes.some(n=>n.type==='button'&&text(n)==='Settings'),'settings have a c
 assert(nodes.some(n=>n.props?.['aria-label']==='Workspace settings'));
 assert(nodes.some(n=>n.type==='details'&&n.props.id==='account-details'),'account details remain accessible');
 tree=page({...account,paused:false,billingActive:true,activeWork:true,workReady:true},{...campaign,released:true,liveWorkReady:true},true);
-const stop=all(tree).find(n=>n.type==='button'&&text(n).includes('Pause bot'));assert(stop);assert.equal(stop.props.disabled,false,'transient account error never blocks Stop');
+const stop=all(tree).find(n=>n.type==='button'&&text(n)==='Stop');assert(stop);assert.equal(stop.props.disabled,false,'transient account error never blocks Stop');
 function beneathDetails(root,target,inside=false){if(root===target)return inside;if(Array.isArray(root))return root.some(n=>beneathDetails(n,target,inside));return !!root&&typeof root==='object'&&beneathDetails(root.props?.children,target,inside||root.type==='details');}
 assert.equal(beneathDetails(tree,stop),false,'Stop is never hidden in an expander');
 tree=page({...account,smsWorkReady:true},{...campaign,released:true},true);assert(all(tree).find(n=>n.type==='button'&&text(n)==='Start SMS outreach').props.disabled,'stale Start remains blocked');
@@ -38,7 +38,7 @@ tree=budget(summary);assert.match(text(tree),/17.50/);assert.match(text(tree),/s
 assert.equal(all(tree).find(n=>n.type==='details').props.open,undefined,'advanced totals start collapsed');
 assert.equal(beneathDetails(tree,all(tree).find(n=>n.props?.['aria-label']==='Recorded work and spending')),true,'settled spend remains accessible under the summary');
 tree=budget({...summary,spentCents:undefined});assert.match(text(tree),/Unavailable/);assert.doesNotMatch(text(tree),/\$0.00.*spent/,'missing spend is not fabricated zero');
-tree=page({...account,balanceCents:0,smsWorkReady:true},{...campaign,released:true});assert.match(text(tree),/Your available credits are used up|Your bot is paused/);assert.match(text(tree),/Review funding/,'zero-balance funding stays visible');
+tree=page({...account,balanceCents:0,smsWorkReady:true},{...campaign,released:true});assert.match(text(tree),/Your available credits are used up|Paused/);assert.match(text(tree),/Review funding/,'zero-balance funding stays visible');
 const source=readFileSync(new URL('../components/live-workspace.tsx',import.meta.url),'utf8');
 assert(source.indexOf('<PropertyNextStep property={p}')>source.indexOf('<div className="property-details"'),'detailed next steps moved inside property disclosure');
 assert(source.indexOf('className="property-control"')>source.indexOf('<div className="property-details"'),'property controls remain inside opened details');
