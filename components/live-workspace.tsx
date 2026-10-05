@@ -17,7 +17,7 @@ import {DealCommunications} from '@/components/deal-communications';
 import {FulfillmentDetails} from '@/components/fulfillment-details';
 import {SigningControls,SigningAttention,type SigningEnvelope} from '@/components/signing-controls';
 import {dealTermsSchema,type DealTerms,type DocumentKind} from '@/lib/deal-documents';
-import {filterProperties,needsAttention,propertyAddressLines,propertyGroup,propertyResearchDate,safeLocalTime,type WorkspaceFilter,type WorkspaceProperty} from './workspace-view';
+import {filterProperties,needsAttention,propertyAddressLines,propertyGroup,safeLocalTime,type WorkspaceFilter,type WorkspaceProperty} from './workspace-view';
 type Property=WorkspaceProperty;
 type Deal={id:string;screening_id:string;terms:DealTerms;stage:string};
 type Handoff={address?:string|null;id:string;screening_id:string;party:string;reason:string;summary:string;next_action:string;state:string};
@@ -84,8 +84,7 @@ function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefre
  function openContact(view:'texts'|'calls'){setContactVisited(true);setContactView(view);}
  const contractReady=showPropertyContract(deal,work.signing);
  useEffect(()=>{if(contractReady)setPreparingContract(true);},[contractReady]);
- const inboundLead=lookups.some(l=>l.source?.startsWith('HomeOffer')||l.source?.startsWith('Keypath'));
- const address=propertyAddressLines(p.result.property.address),researched=inboundLead?null:propertyResearchDate(p.completed_at);
+ const address=propertyAddressLines(p.result.property.address);
  const analysis=propertyAnalysisView(p.result);
  const practice=p.result.property.propertyId.startsWith('practice_')||[true,'true'].includes((deal?.terms as (DealTerms&{practice?:boolean|string})|undefined)?.practice??false);
  const bot=propertyBotStatus({manual,paused:botPaused,available:botAvailable,stale,attention:needsAttention(p.id,work),stage:deal?.stage,practice});
@@ -100,9 +99,9 @@ function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefre
     <span className="property-summary-main">
      {promising&&!practice&&<span className="promising-label">Most promising on this page</span>}
      <span className="property-address" id={`property-address-${p.id}`}><strong>{address.street}</strong>{address.location&&<span>{address.location}</span>}</span>
-     {owner&&<span className="property-owner-name">{inboundLead?'Seller request':'Owner match'} · {owner}</span>}
+     {owner&&<span className="property-owner-name">{owner}</span>}
      <span className="property-summary-status">{(p.result.property.propertyId.startsWith('practice_')||[true,'true'].includes((deal?.terms as (DealTerms&{practice?:boolean|string})|undefined)?.practice??false))&&<span className="property-manual-label">Practice only · no real property</span>}<span className="property-status" hidden={phase===bot.label}>{phase}</span>{manual&&<span className="property-manual-label">Paused for this property</span>}</span>
-     {(researched||calls.length>0)&&<span className="property-recorded-meta">{researched&&<span>Researched {researched}</span>}{calls.length>0&&<span>{calls.length} saved call{calls.length===1?'':'s'}</span>}</span>}
+     {calls.length>0&&<span className="property-recorded-meta">{calls.length} saved call{calls.length===1?'':'s'}</span>}
      <span className={`property-bot-status tone-${bot.tone}`}><span className="ai-status-dot" aria-hidden="true"/>{bot.label}</span>
     </span>
     <span className="property-cash-preview" aria-label="Cash offer estimate"><strong>{analysisMoney(analysis.cashOfferCeilingCents)}</strong></span>

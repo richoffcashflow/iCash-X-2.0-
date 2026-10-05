@@ -15,7 +15,7 @@ import type {CustomerIdentity as Identity} from '@/lib/customer-identity';
 import type {OutreachCampaignStatus} from '@/components/outreach-campaign-state';
 import {OutreachCampaignAcknowledgment} from '@/components/outreach-campaign-acknowledgment';
 import {BudgetSummary} from '@/components/budget-summary';
-import {CreditsWallet,DailyBudgetBar} from '@/components/daily-budget-control';
+import {CreditsWallet} from '@/components/daily-budget-control';
 import {MembershipSettings} from '@/components/membership-settings';
 import {SupportLauncher} from '@/components/support-launcher';
 import {WorkspaceUpdates,BotUpdatePreferences} from '@/components/workspace-updates';
@@ -23,6 +23,7 @@ import {nextWorkFunding} from '@/lib/workspace-progress';
 import {SpendActivationReview} from '@/components/spend-activation-review';
 import {LiveWorkspace} from '@/components/live-workspace';
 import {PostPaymentBotName} from '@/components/post-payment-bot-name';
+import {BotRunBar} from '@/components/bot-run-bar';
 import {BotBrand} from '@/components/bot-brand';
 import {setupThemes,type BotProfile} from '@/lib/bot-setup';
 type Account={billingModel?:string;membershipActive?:boolean;isBillingOwner?:boolean;identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;phone?:string;balanceCents?:number;reservedCents?:number;dailyLimitCents?:number;assistantName?:string;paused?:boolean;billingActive?:boolean;billingReview?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;activeWork?:boolean};
@@ -64,11 +65,8 @@ export default function Home(){
    {signInOpen&&guest&&<section className="inline-sign-in setup-sign-in" id="inline-sign-in" aria-labelledby="sign-in-title"><div className="sign-in-heading"><h2 id="sign-in-title">Welcome back</h2><button aria-label="Close sign-in" onClick={()=>{setSignInOpen(false);document.getElementById('balance-sign-in')?.focus();}}><X size={19}/></button></div><AccountAccess ready={account?.signInReady===true} onSignedIn={()=>void refreshAccount()}/></section>}
    {!account?<section className="account-loading" role="status"><h1 className="sr-only">iCash X workspace</h1><p>{accountError?'Your account could not load. Retry above to continue.':'Opening your workspace…'}</p></section>:<>
     <h1 className="sr-only">{profile?.displayName||'iCash X'} AI real estate workspace</h1>
-    <div className="workspace-top-controls">
-     {dailyBilling?<DailyBudgetBar budgetCents={account.dailyLimitCents} balanceCents={account.balanceCents} reservedCents={account.reservedCents} active={account.billingActive} showBalance={false} running={botRunning&&account.billingActive===true} stale={accountError} onChange={openFunding}/>:<CreditsWallet balanceCents={account.balanceCents} reservedCents={account.reservedCents} stale={accountError} onChange={openFunding}/>}
-     {dailyBilling&&!botRunning&&<button className="workspace-run-button" disabled={controlBusy||accountError} onClick={()=>openFunding('',true)}>Run bot</button>}
-     {!guest&&(nextAction.kind==='pause'||account.paused===false||account.billingActive)&&<button className="workspace-quiet stop-bot" disabled={controlBusy} aria-label="Stop bot and daily billing" onClick={()=>void toggleBot('pause')}>{controlBusy?'Stopping…':'Stop bot'}</button>}
-    </div>
+    <BotRunBar running={botRunning} canStop={!guest&&(nextAction.kind==='pause'||account.paused===false||account.billingActive===true)} busy={controlBusy} stale={accountError} daily={dailyBilling} budgetCents={account.dailyLimitCents} principalKey={account.email} onRun={()=>dailyBilling?openFunding('',true):doNextAction()} onStop={()=>void toggleBot('pause')} onBudget={()=>openFunding()}/>
+    {!dailyBilling&&<CreditsWallet balanceCents={account.balanceCents} reservedCents={account.reservedCents} stale={accountError} onChange={openFunding}/>}
     {fundingOpen&&<FundingDialog title={dailyBilling?'Daily budget':'Add credits'} onClose={closeFunding}>{dailyBilling?<DailyFundingCheckout key={fundingCode} initialCode={fundingCode||undefined} startBot={runRequested} onBeforeStart={()=>{if(account.signedIn&&account.botSetup?.profile.displayName)saveRunRequest(window.sessionStorage,account.email);}} onFunded={completeFunding} onSignedIn={()=>{closeFunding();void refreshAccount();}}/>:<FundingCheckout key={fundingCode} initialCode={fundingCode||undefined} onSignedIn={()=>{closeFunding();void refreshAccount();}}/>}</FundingDialog>}
     {!guest&&<div hidden={!settingsOpen} className="workspace-settings" aria-label="Workspace settings"><div className="workspace-section-heading"><h2>Settings</h2>{account.isBillingOwner&&<><a href="/owner-pricing">Pricing settings</a><a href="/seller-operations">Seller ads</a></>}<button className="workspace-quiet" onClick={()=>setSettingsOpen(false)}>Done</button></div><OutreachCampaignAcknowledgment onStatus={setCampaign}/><OwnerRecordingTestLink/><details className="setup-details"><summary>How a deal works</summary><DealExplainer/></details><details id="notification-settings"><summary>Email &amp; text updates</summary><BotUpdatePreferences phone={account.phone}/></details>{account.billingModel==='membership_credits'&&<details id="membership-settings"><summary>Software subscription</summary><MembershipSettings/></details>}<details id="account-details"><summary>Account details</summary><p>{account!.email}</p>{account!.phone&&<p>{account!.phone}</p>}<CustomerIdentity identity={account!.identity??null} onSaved={()=>void refreshAccount()}/><p>{dailyBilling?'Pause stops new work and cancels future daily renewals. Unused credits remain.':'Work credits are prepaid. Pause your bot to stop new work.'}</p></details></div>}
     <section className="operation-panel" aria-label="Your AI real estate bot">
