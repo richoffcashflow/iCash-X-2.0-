@@ -7,7 +7,7 @@ import {db} from '@/lib/stripe-test';
 import {elevenRequest} from '@/lib/elevenlabs';
 import {buyerCallInstructions,type BuyerCallContext} from './buyer-call-policy.ts';
 import {contactEligibility,callEligibility,verifiedOfferCeiling,type VoicePermission} from './live-dispatch-policy.ts';
-import {sellerFirstMessage,sellerCallPrompt} from './seller-call-context.ts';
+import {sellerFirstMessage,sellerCallPrompt,type SellerRequestContext} from './seller-call-context.ts';
 type Job={id:string;account_id:string;permission_id:string|null;operational_contact_id?:string|null;callback_id:string|null;state:string};
 type Config={approved_voice_ids:string[];enabled:boolean;agent_id:string;phone_number_id:string;agent_config_hash:string;reviewed_until:string;seller_rate_id:string;buyer_rate_id:string|null;max_duration_seconds:number;required_tool_ids:string[]};
 type Permission=VoicePermission&{id:string;account_id:string;screening_id:string;party:'seller'|'buyer';contact_key:string};
@@ -72,7 +72,8 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const smsContext=p.party==='seller'?boundedVoiceSmsContext(await db<unknown>('rpc/icash_voice_sms_context','POST',{p_account:accountId,p_permission:p.id})):null;
  const priorCalls=p.party==='seller'?await db<unknown>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&contact_key=eq.${p.contact_key}&party=eq.seller&state=eq.complete&operation_key=like.voice:*&completed_at=gte.${encodeURIComponent(new Date(Date.now()-30*86400000).toISOString())}&order=completed_at.desc&limit=3&select=completed_at,result`):[];
  const buyerKind=identity.company_name?.trim()?'company' as const:'individual' as const;
- const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext};
+ const request=p.party==='seller'&&object(snapshot.snapshot).sellerRequest?await db<SellerRequestContext|null>('rpc/icash_seller_call_request','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone}):null;
+ const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext,request:request??undefined};
  // Validate the complete opening/context before reserving credits or dialing.
  let sellerGreeting:string|undefined,sellerPrompt:string|undefined;
  if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext);sellerPrompt=sellerCallPrompt(sellerContext,ceiling);}catch{return hold('property_context_required');}}

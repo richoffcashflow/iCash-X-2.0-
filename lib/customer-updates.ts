@@ -1,5 +1,12 @@
 export const botUpdateConsentVersion='bot-updates-2026-10-03.1';
 export const updateCopy={
+ lead_assigned:{title:'A seller request is ready',detail:'Open the property to see the request and response status.'},
+ response_held:{title:'A seller response needs attention',detail:'The first response is waiting for setup or review. Open the property to continue.'},
+ buyer_reply:{title:'A buyer replied',detail:'Open the conversation to review the buyer’s message.'},
+ call_complete:{title:'A call result is ready',detail:'Review the saved call outcome and next step.'},
+ showing_update:{title:'A showing request changed',detail:'Check the showing status. A proposed time is not confirmed access.'},
+ title_reply:{title:'Your title company replied',detail:'Review the title reply and any documents or deadlines requested.'},
+ buyer_package:{title:'A buyer package was sent',detail:'The email provider accepted the package. This does not confirm delivery or buyer acceptance.'},
  seller_reply:{title:'A seller replied',detail:'Open the conversation to see their latest message.'},
  contract_signed:{title:'A signed agreement is ready',detail:'Review the completed signing record in your property.'},
  deal_title_open:{title:'Your deal reached title',detail:'Check the title file and remaining closing steps.'},

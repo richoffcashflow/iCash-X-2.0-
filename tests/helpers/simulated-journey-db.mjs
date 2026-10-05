@@ -15,7 +15,10 @@ export async function createJourneyDb(modulePath,suppliedPg=null){
  create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
  create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
  create schema extensions;create function extensions.digest(text,text) returns bytea language sql immutable as $$select sha256(convert_to($1,'UTF8'))$$;`);
- const files=readdirSync(new URL('../../supabase/migrations/',import.meta.url)).filter(x=>x.endsWith('.sql')).sort().map(x=>'supabase/migrations/'+x);
+ // This fixture reconstructs the original provider journey. Later migrations
+ // depend on intervening config releases and must not run before those releases.
+ // Current inbound distribution/response migrations have their own SQL fixtures.
+ const files=readdirSync(new URL('../../supabase/migrations/',import.meta.url)).filter(x=>x.endsWith('.sql')&&x<'20261003000000').sort().map(x=>'supabase/migrations/'+x);
  // Explicit dependency/override order. Configs are the production SQL, not reconstructed functions.
  files.push(...[
   'assignment-title-ordering','live-dispatch','setup-voice-dispatch','fulfillment-completion','buyer-discovery','buyer-search-config-integrity','buyer-voice',
