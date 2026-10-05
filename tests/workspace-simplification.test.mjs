@@ -4,6 +4,7 @@ import {createRequire} from 'node:module';
 import ts from 'typescript';
 import * as status from '../lib/workspace-status.ts';
 import * as progress from '../lib/workspace-progress.ts';
+import * as activity from '../lib/activity-report.ts';
 const require=createRequire(import.meta.url);
 const code=file=>ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
 const all=root=>!root||typeof root!=='object'?[]:Array.isArray(root)?root.flatMap(all):[root,...all(root.props?.children)];
@@ -32,12 +33,14 @@ function beneathDetails(root,target,inside=false){if(root===target)return inside
 assert.equal(beneathDetails(tree,stop),false,'credit action is never hidden in an expander');
 tree=page({...account,smsWorkReady:true},{...campaign,released:true},true);assert(all(tree).find(n=>n.type===component('BotRunBar')).props.stale,'stale account state is identified');
 
-function budget(summary){let index=0;const mod={exports:{}};new Function('require','module','exports',code('components/budget-summary.tsx'))(name=>name==='react'?{useEffect(){},useState:()=>[index++===0?summary:'',()=>{}]}:name==='@/lib/workspace-progress'?progress:require(name),mod,mod.exports);return mod.exports.BudgetSummary({onFund(){throw Error('Unexpected funding action');}});}
-const summary={spentCents:1750,analyzed:5,reservedCents:0,fundedCents:10000,balanceCents:8250,packs:[],screeningCandidates:3,activeContracts:0,explanation:'Synthetic account totals'};
-tree=budget(summary);assert.match(text(tree),/17.50/);assert.match(text(tree),/spent to date/);assert.match(text(tree),/5\s+property analyses completed/);
-assert.equal(all(tree).find(n=>n.type==='details').props.open,true,'activity and spending are open');
-assert.equal(beneathDetails(tree,all(tree).find(n=>n.props?.['aria-label']==='Recorded work and spending')),true,'settled spend remains accessible under the summary');
-tree=budget({...summary,spentCents:undefined});assert.match(text(tree),/Unavailable/);assert.doesNotMatch(text(tree),/\$0.00.*spent/,'missing spend is not fabricated zero');
+function budget(report,days=1,error=''){let index=0;const slots=[days,report,error,0],mod={exports:{}};new Function('require','module','exports',code('components/budget-summary.tsx'))(name=>name==='react'?{useEffect(){},useState:()=>[slots[index++],()=>{}]}:name==='@/lib/workspace-progress'?progress:name==='@/lib/activity-report'?activity:require(name),mod,mod.exports);return mod.exports.BudgetSummary();}
+const summary={days:1,leads:5,calls:8,texts:12,contracts:2,spentCents:1750};
+tree=budget(summary);assert.match(text(tree),/Activity/);assert.doesNotMatch(text(tree),/Spent|17.50|spending/);assert.match(text(tree),/Leads\s+5/);assert.match(text(tree),/Calls\s+8/);assert.match(text(tree),/Texts\s+12/);assert.match(text(tree),/Contracts\s+2/);
+assert.equal(all(tree).filter(n=>n.type==='details').length,0,'report is always visible without nested sections');
+assert.deepEqual(all(tree).filter(n=>n.type==='button').map(text),['Today','7 days','30 days']);
+assert.doesNotMatch(text(tree),/Your progress|preliminary|All-time|Download PDF/);
+tree=budget(summary,7);assert.doesNotMatch(text(tree),/17.50|Leads\s+5/,'previous-period values never appear under a new selected period');assert.match(text(tree),/Loading/);
+tree=budget(null,1,'Could not refresh activity.');assert.doesNotMatch(text(tree),/\$0.00|Leads\s+0/,'failed or missing activity is not presented as zero');assert.match(text(tree),/Retry/);
 tree=page({...account,balanceCents:0,smsWorkReady:true},{...campaign,released:true});assert.equal(all(tree).find(n=>n.type===component('BotRunBar')).props.running,false,'zero-balance budget entry stays visible without implying the bot is running');
 const source=readFileSync(new URL('../components/live-workspace.tsx',import.meta.url),'utf8');
 assert(source.indexOf('<PropertyNextStep property={p}')>source.indexOf('<div className="property-details"'),'detailed next steps moved inside property disclosure');

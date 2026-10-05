@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import {validActivityReport} from '../lib/activity-report.ts';
+let authorized=true,queries=[],bad=false;
+const mocks={NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:'session-account'};},validActivityReport,db:async(path,method,body)=>{queries.push({path,method,body});return bad?null:{days:body.p_days,timezone:body.p_timezone,startAt:'2026-10-05T05:00:00Z',endAt:'2026-10-05T12:00:00Z',leads:3,calls:5,texts:9,contracts:1};}};
+globalThis.__activityReport=mocks;
+const code=ts.transpileModule(readFileSync(new URL('../app/api/work/report/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
+const {GET}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(mocks).join(',')+'}=globalThis.__activityReport;\n'+code).toString('base64'));
+const get=query=>GET(new Request('https://example.test/api/work/report?'+query));
+let r=await get('days=7&timezone=America%2FChicago&accountId=someone-else');assert.equal(r.status,200);assert.equal(r.body.days,7);assert.equal(r.headers['Cache-Control'],'private, no-store');assert.deepEqual(queries[0],{path:'rpc/icash_activity_report',method:'POST',body:{p_account:'session-account',p_days:7,p_timezone:'America/Chicago'}});
+queries=[];for(const query of ['days=0','days=2','days=30x','timezone=Invalid%2FZone'])assert.equal((await get(query)).status,400);assert.equal(queries.length,0);
+authorized=false;assert.equal((await get('days=1')).status,503);assert.equal(queries.length,0);authorized=true;
+bad=true;assert.equal((await get('days=1')).status,503,'missing records never become a zero report');
+for(const patch of [{leads:-1},{calls:NaN},{contracts:'2'},{texts:undefined},{days:30},{startAt:'invalid'}])assert.equal(validActivityReport({days:1,timezone:'UTC',startAt:'2026-10-05T05:00:00Z',endAt:'2026-10-05T12:00:00Z',leads:0,calls:0,texts:0,contracts:0,...patch},1),false);
+delete globalThis.__activityReport;
+console.log('PASS activity API: authenticated account binding, period/timezone validation, no caching, and honest missing-data failures.');

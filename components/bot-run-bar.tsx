@@ -31,7 +31,7 @@ export function BotRunBar({running,stopped,paymentRequired,busy,stale,balanceCen
  const title=stale?'Checking status':paymentRequired?'Subscription needs attention':empty?'Waiting for credits':stopped?'Bot stopped':running?'Bot running':'Your AI bot';
  return <section className={`bot-run-bar${active?' is-active':''}`} aria-label="Bot controls">
   <div className="bot-run-status"><span className="bot-work-dots" aria-hidden="true"><i/><i/><i/></span><div aria-live="polite" aria-atomic="true"><h2>{title}</h2><p>{stale?'Reconnecting to your workspace':paymentRequired?'Update payment to resume work. Your leads are saved.':empty?'Add credits to continue. Your leads are saved.':running?(current?.label??'Updating status…'):stopped?'Add credits to restart automatically.':'Add credits. Work starts automatically.'}</p></div></div>
-  <div className="bot-run-actions">{balanceCents!==undefined&&<div className="bot-credit-balance"><strong>{stale?'—':creditAmount(balanceCents)}</strong><span>available</span></div>}
+  <div className="bot-run-actions">{balanceCents!==undefined&&<div className="bot-credit-balance"><strong>{stale?'—':creditAmount(balanceCents)}</strong><span>credits left</span></div>}
    <button id="workspace-funding-toggle" className="bot-main-action" type="button" aria-haspopup={paymentRequired?undefined:'dialog'} disabled={busy||stale} onClick={onAddCredits}><Plus size={16} aria-hidden="true"/>{paymentRequired?'Update payment':'Add credits'}</button>
   </div>
  </section>;

@@ -70,7 +70,7 @@ export default function Home(){
      {account.mode==='test'&&<p className="workspace-test-label">Test workspace</p>}
      {controlError&&<p role="alert">{controlError}</p>}
      {account.mode==='live'&&account.billingModel==='legacy'&&<SpendActivationReview key={activationKey} onAvailabilityChange={updateActivationAvailability} onSaved={()=>void refreshAccount()}/>}
-     <details className="workspace-progress-details" open><summary>Activity & spending</summary><BudgetSummary/></details>
+     <BudgetSummary/>
      <LiveWorkspace principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/>
      </>}
     </section>
