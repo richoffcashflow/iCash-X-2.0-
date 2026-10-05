@@ -29,8 +29,8 @@ assert.match(nextWorkFunding({...a,contactWorkReady:false,smsWorkReady:false}).d
 const source=readFileSync(new URL('../app/page.tsx',import.meta.url),'utf8');
 assert.match(source,/CreditsWallet balanceCents=\{account.balanceCents\}/);
 assert.match(source,/reservedCents=\{account.reservedCents\}/);
-assert.match(source,/Your next step/);
-assert.match(source,/aria-label="Close funding"/);
+assert.match(source,/nextAction.label/);
+assert.match(source,/<FundingDialog/);
 assert.match(source,/addEventListener\('popstate',syncFunding\)/);
 assert.match(source,/addEventListener\('hashchange',syncFunding\)/);
 assert.match(source,/initialCode=\{fundingCode\|\|undefined\}/,'opening Manage preserves the actual plan');
