@@ -115,6 +115,7 @@ try{
  for(const role of ['anon','authenticated'])for(const fn of ['icash_claim_seller_lookup()','icash_assign_seller_lead()','icash_seller_funnel_summary()'])assert.equal((await q('select has_function_privilege($1,$2,\'execute\') allowed',[role,fn])).rows[0].allowed,false);
  assert((await q("select bool_and(relrowsecurity) enabled from pg_class where relname like 'icash_seller_%' and relkind='r'")).rows[0].enabled);
  await pg.exec(file('supabase/migrations/20261005060500_homeoffer_contact_consent.sql'));
+ await pg.exec(file('supabase/migrations/20261005061100_homeoffer_public_consent_copy.sql'));
  assert.equal(Number((await q("select count(*) n from icash_seller_intakes where email_consented or contact_consent_scope is not null")).rows[0].n),0,'legacy consent is never expanded');
  const {sellerConsentText,sellerSharingText,sellerConsentVersion}=await import('../lib/seller-leads.ts');
  const contactRequest=uuid();
