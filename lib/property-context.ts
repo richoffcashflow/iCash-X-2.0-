@@ -2,9 +2,10 @@ import {dealMachinePhoto} from './property-photo.ts';
 import {screenEquity} from './equity-screen.ts';
 import {normalizeDealMachineRepairs} from './dealmachine-repairs.ts';
 import {calculateHouseOffer} from './offer-policy.ts';
+import {cashOfferCalculation} from './cash-offer-math.ts';
 export const propertyIdPattern=/^prop_\d{1,20}$/;
 function number(value:unknown){return typeof value==='number'&&Number.isFinite(value)&&value>=0?value:null;}
-function cents(value:unknown){const n=number(value);return n!==null&&Number.isSafeInteger(Math.round(n*100))?Math.round(n*100):null;}
+function cents(value:unknown){const n=number(value);if(n===null)return null;const rounded=Math.round(n*100);return Number.isSafeInteger(rounded)&&Math.abs(n*100-rounded)<0.000001?rounded:null;}
 function text(value:unknown,max:number){return typeof value==='string'&&value.trim()&&value.length<=max?value.trim():null;}
 export function propertyContext(raw:unknown,id:string,fetchedAt:string){
  const response=raw as {data?:Record<string,unknown>;credits?:Record<string,unknown>};
@@ -16,14 +17,15 @@ export function propertyContext(raw:unknown,id:string,fetchedAt:string){
  const arvCents=cents(d.estimated_value);
  // Never substitute a range bound or midpoint for the provider's single estimate.
  const repairCents=repairs.baselineCents;
- const screening=arvCents!==null&&repairCents!==null?Number(BigInt(arvCents)*BigInt(7000)/BigInt(10000)-BigInt(repairCents)):null;
+ const offerCalculation=cashOfferCalculation(arvCents,repairCents);
+ const screening=offerCalculation?.buyerCeilingCents??null;
  const arvEstimate={cents:arvCents,sourceField:'estimated_value' as const,reviewed:false as const,usage:'screening_assumption' as const};
  return {propertyId:id,source:'dealmachine' as const,fetchedAt,address,legalDescription:text(d.legal_description,12000),legalDescriptionSource:'dealmachine.legal_description' as const,legalDescriptionVerified:false as const,
   images:(()=>{const photo=dealMachinePhoto(d.images);return photo?{[photo.view]:photo.url}:null;})(),
   bedrooms:number(d.num_bedrooms),bathrooms:number(d.num_bathrooms),livingAreaSqft:number(d.living_area_sqft),yearBuilt:number(d.year_built),
   estimatedMarketValueCents:arvCents,arvEstimate,estimatedEquityCents:screenEquity(d,screening).equityCents,
   financialScreening:screenEquity(d,screening),
-  screeningBuyerCeilingCents:screening!==null&&screening>0?screening:null,
+  screeningBuyerCeilingCents:screening!==null&&screening>0?screening:null,offerCalculation,
   repairs:{...repairs,condition:text(repairs.condition,100)},
   // Owner-selected ARV proxy for preliminary screening; preserve actual provider field provenance.
   offer:calculateHouseOffer({propertyType:'house',arv:arvCents===null?null:{lowCents:arvCents,highCents:arvCents,reviewed:false,source:'dealmachine.estimated_value'},repairs:null}),

@@ -6,7 +6,7 @@ const raw={data:{dm_property_id:id,full_address:'Example property (fixture)',est
 const p=propertyContext(raw,id,at);
 assert.equal(p.arvEstimate.cents,20000000);
 assert.equal(p.arvEstimate.reviewed,false);
-assert.equal(p.screeningBuyerCeilingCents,10000000);
+assert.equal(p.screeningBuyerCeilingCents,11200000);
 assert.equal(p.offer.maxSellerOfferCents,null);
 assert.equal(p.offerAuthorized,false);
 assert.equal(p.vendorCostUsd,null);
@@ -15,9 +15,9 @@ assert.match(propertyVoiceContext(p),/not a verified appraisal or approved offer
 assert.equal(propertyContext({data:{...raw.data,estimated_value:null}},id,at).screeningBuyerCeilingCents,null);
 assert.equal(propertyContext({data:{...raw.data,estimated_value:'200000'}},id,at).arvEstimate.cents,null);
 assert.equal(propertyContext({data:{...raw.data,estimated_repair_cost:null}},id,at).screeningBuyerCeilingCents,null);
-assert.equal(propertyContext({data:{...raw.data,estimated_repair_cost_low:30000,estimated_repair_cost_high:50000}},id,at).screeningBuyerCeilingCents,10000000);
-assert.equal(propertyContext({data:{...raw.data,estimated_repair_cost_low:60000,estimated_repair_cost_high:50000}},id,at).screeningBuyerCeilingCents,10000000);
-assert.equal(propertyContext({data:{...raw.data,estimated_repair_cost:150000}},id,at).screeningBuyerCeilingCents,null);
+assert.equal(propertyContext({data:{...raw.data,estimated_repair_cost_low:30000,estimated_repair_cost_high:50000}},id,at).screeningBuyerCeilingCents,11200000);
+assert.equal(propertyContext({data:{...raw.data,estimated_repair_cost_low:60000,estimated_repair_cost_high:50000}},id,at).screeningBuyerCeilingCents,11200000);
+assert.equal(propertyContext({data:{...raw.data,estimated_repair_cost:150000}},id,at).screeningBuyerCeilingCents,3500000);
 assert.throws(()=>propertyContext(raw,'prop_999',at));
 assert.throws(()=>propertyContext(null,id,at));
 let calls=0;
@@ -45,3 +45,6 @@ assert.equal(ranged.repairs.sourceField,'estimated_repair_cost');
 const voiceData=JSON.parse(propertyVoiceContext(ranged).split('DATA: ')[1]);
 assert.equal(voiceData.repairs.baselineCents,4000000);
 assert.equal('rangeCents' in voiceData.repairs,false);
+
+assert.equal(propertyContext({data:{...raw.data,estimated_value:200000.001}},id,at).arvEstimate.cents,null);
+assert.equal(propertyContext({data:{...raw.data,estimated_repair_cost:200000}},id,at).screeningBuyerCeilingCents,null);

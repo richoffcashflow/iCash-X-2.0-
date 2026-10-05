@@ -47,8 +47,8 @@ const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.
 const mod={exports:{}};
 new Function('require','module','exports',compiled)(name=>name==='@/lib/property-analysis-view'?analysis:require(name),mod,mod.exports);
 const text=node=>typeof node==='string'?node:typeof node==='number'?String(node):Array.isArray(node)?node.map(text).join(' '):node&&typeof node==='object'?text(node.props?.children):'';
-let rendered=text(mod.exports.PropertyAnalysisSummary({result:{...result,calculationVersion:'provider_repair_scalar_v1'}}));
-assert.match(rendered,/Cash offer estimate.*\$90,000/);
+let rendered=text(mod.exports.PropertyAnalysisSummary({result:{...result,calculationVersion:'net_after_repairs_70_v2'}}));
+assert.match(rendered,/Cash offer price.*\$90,000/);
 assert.match(rendered,/Estimated repairs.*\$40,000/);
 assert.match(rendered,/Value after repairs.*\$200,000/);
 assert.match(rendered,/not an approved offer or an inspection/);
@@ -68,34 +68,34 @@ assert.doesNotMatch(source,/repairs\.rangeCents/,'the visible estimate never dis
 const all=node=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(all):[node,...all(node.props?.children)];
 const offerMetric=saved=>all(mod.exports.PropertyAnalysisSummary({result:saved})).find(n=>n.props?.className==='property-analysis-metric property-analysis-offer');
 const original=JSON.stringify(result);
-for(const calculationVersion of [undefined,null,'legacy_range_v0','unknown_future_version']){
+for(const calculationVersion of [undefined,null,'legacy_range_v0','provider_repair_scalar_v1','unknown_future_version']){
  const saved={...result,calculationVersion};
  const metric=offerMetric(saved);
  assert.equal(metric.props['data-earlier-estimate'],true);
- assert.match(text(metric),/Earlier saved estimate · Needs update.*\$90,000.*Unapproved ·\s+Recorded Oct 1, 2026/,'legacy amount and its limitations are visible outside collapsed details');
- assert.doesNotMatch(text(metric),/Cash offer estimate/,'a legacy amount is never labeled as a current cash offer');
+ assert.match(text(metric),/Cash offer price · Needs update.*\$90,000.*Unapproved ·\s+Recorded Oct 1, 2026/,'legacy amount and its limitations are visible outside collapsed details');
+ assert.match(text(metric),/Needs update/,'a legacy amount is never shown without the update warning');
  assert.equal(analysis.propertyAnalysisView(saved).offerNeedsUpdate,true,'presentation keeps the calculation-version guard');
 }
 assert.equal(JSON.stringify(result),original,'display must not overwrite saved research');
 assert.match(text(mod.exports.PropertyAnalysisSummary({result})),/earlier saved offer estimate.*No new offer has been calculated or approved/);
-assert.equal(analysis.propertyAnalysisView({...result,calculationVersion:'provider_repair_scalar_v1'}).offerNeedsUpdate,false);
-const current=text(offerMetric({...result,calculationVersion:'provider_repair_scalar_v1'}));
-assert.match(current,/Cash offer estimate.*\$90,000/);assert.doesNotMatch(current,/Earlier saved estimate|Needs update/,'current-version presentation stays distinct without claiming fresh research');
+assert.equal(analysis.propertyAnalysisView({...result,calculationVersion:'net_after_repairs_70_v2'}).offerNeedsUpdate,false);
+const current=text(offerMetric({...result,calculationVersion:'net_after_repairs_70_v2'}));
+assert.match(current,/Cash offer price.*\$90,000/);assert.doesNotMatch(current,/Needs update/,'current-version presentation stays distinct without claiming fresh research');
 for(const fetchedAt of [undefined,null,'bad']){
  const metric=text(offerMetric({...result,property:{...property,fetchedAt}}));
- assert.match(metric,/Earlier saved estimate.*\$90,000.*Unapproved ·\s+Recorded date unavailable/);
+ assert.match(metric,/Cash offer price.*\$90,000.*Unapproved ·\s+Recorded date unavailable/);
  assert.doesNotMatch(metric,/Invalid Date|Recorded Oct/,'a missing date is not replaced by today or another saved timestamp');
 }
 assert.match(text(offerMetric({...result,property:{...property,fetchedAt:'2026-10-01T23:30:00-07:00'}})),/Recorded Oct 2, 2026/,'recorded dates use UTC consistently');
-assert.match(text(offerMetric({...result,preliminarySellerCeilingCents:0})),/Earlier saved estimate.*\$0.*Unapproved/,'a recorded zero remains different from an unavailable amount');
+assert.match(text(offerMetric({...result,preliminarySellerCeilingCents:0})),/Cash offer price.*\$0.*Unapproved/,'a recorded zero remains different from an unavailable amount');
 for(const amount of [null,undefined,-1,1.5,'410000',NaN,Infinity,Number.MAX_SAFE_INTEGER+1]){
  const metric=text(offerMetric({...result,preliminarySellerCeilingCents:amount}));
- assert.match(metric,/Not available/);assert.doesNotMatch(metric,/Earlier saved estimate|\$/,'invalid or missing saved amounts are never reconstructed from ARV or repairs');
+ assert.match(metric,/Not available/);assert.doesNotMatch(metric,/Needs update|\$/,'invalid or missing saved amounts are never reconstructed from ARV or repairs');
 }
 assert.doesNotMatch(source,/runScreeningJob|calculateHouseOffer|onClick|onSubmit/,'the financial summary adds no calculation or action');
 console.log('Historical-offer presentation: visible saved amount, update/unapproved/date labels, exact version guard, UTC dates, malformed/missing values and no calculation or mutation passed.');
 
-assert.equal(offerMetric({...result,calculationVersion:'provider_repair_scalar_v1'}).props['data-earlier-estimate'],undefined,'historical styling never changes current-version estimates');
+assert.equal(offerMetric({...result,calculationVersion:'net_after_repairs_70_v2'}).props['data-earlier-estimate'],undefined,'historical styling never changes current-version estimates');
 const styles=readFileSync(new URL('../app/workspace-clarity.css',import.meta.url),'utf8');
 assert.match(styles,/\.property-analysis-offer\[data-earlier-estimate=true\] :is\(dt,dd,small\)\{color:#475467\}/,'historical limitations use high-contrast text');
 assert.match(styles,/\.property-analysis-offer\[data-earlier-estimate=true\]\{background:#f5f6f8\}/,'historical amount keeps a neutral treatment');
@@ -105,3 +105,10 @@ for(const declaration of ['display:block','margin-top:6px','font-size:11px','lin
  assert.ok(historicalSmallRule.split(';').includes(declaration),`historical small text resets inherited amount typography: ${declaration}`);
 }
 assert.doesNotMatch(historicalSmallRule,/(?:^|;)(?:white-space:nowrap|height:|position:|overflow:hidden)/,'the limitation remains in document flow and can wrap at narrow widths');
+
+const currentResult={property,calculationVersion:'net_after_repairs_70_v2',preliminarySellerCeilingCents:10200000};
+assert.equal(analysis.propertyAnalysisView(currentResult).calculation.feeCents,1000000);
+const breakdown=text(mod.exports.PropertyAnalysisSummary({result:currentResult}));
+assert.match(breakdown,/Offer calculation/);
+assert.ok(breakdown.replace(/\s/g,'').includes('($200,000−$40,000)×70%−$10,000=$102,000'));
+assert.equal(analysis.propertyAnalysisView({...currentResult,preliminarySellerCeilingCents:1}).calculation,null,'do not display a breakdown inconsistent with the saved offer');

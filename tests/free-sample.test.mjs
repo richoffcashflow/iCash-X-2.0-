@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {sampleInputs,sampleOffer,restoreSampleInputs} from '../lib/free-sample.ts';
-assert.deepEqual(sampleOffer(sampleInputs),{buyerBudgetCents:12900000,sellerCapCents:11400000,hasRoom:true});
-assert.equal(sampleOffer({...sampleInputs,repairs:'35000'}).sellerCapCents,10400000);
-assert.equal(sampleOffer({...sampleInputs,fee:'30000'}).sellerCapCents,9900000);
-assert.equal(sampleOffer({value:'100.01',repairs:'0.01',fee:'0'}).sellerCapCents,6999);
+assert.deepEqual(sampleOffer(sampleInputs),{buyerBudgetCents:13650000,sellerCapCents:12150000,hasRoom:true});
+assert.equal(sampleOffer({...sampleInputs,repairs:'35000'}).sellerCapCents,11450000);
+assert.equal(sampleOffer({...sampleInputs,fee:'30000'}).sellerCapCents,10650000);
+assert.equal(sampleOffer({value:'100.01',repairs:'0.01',fee:'0'}).sellerCapCents,7000);
 for(const bad of ['', ' ', '-1', 'NaN', 'Infinity', '1e9', '1.123', '100000001'])for(const key of ['value','repairs','fee'])assert.equal(sampleOffer({...sampleInputs,[key]:bad}),null);
 assert.equal(sampleOffer({...sampleInputs,value:'0'}),null);
 assert.equal(sampleOffer({...sampleInputs,repairs:'200000'}).hasRoom,false);

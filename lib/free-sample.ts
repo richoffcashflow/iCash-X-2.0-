@@ -1,11 +1,12 @@
+import {cashOfferCalculation} from './cash-offer-math.ts';
 /** Local arithmetic only. This does not price a real property or authorize an offer. */
 export const sampleInputs={value:'220000',repairs:'25000',fee:'15000'};
 export function sampleOffer(inputs:{value:string;repairs:string;fee:string}){
  const cents=(value:string)=>/^\d+(?:\.\d{1,2})?$/.test(value.trim())&&Number(value)<=100_000_000?Math.round(Number(value)*100):null;
  const value=cents(inputs.value),repairs=cents(inputs.repairs),fee=cents(inputs.fee);
  if(value===null||repairs===null||fee===null||value<=0)return null;
- const buyerBudget=Math.floor(value*70/100)-repairs;
- return {buyerBudgetCents:buyerBudget,sellerCapCents:buyerBudget-fee,hasRoom:buyerBudget-fee>0};
+ const calculation=cashOfferCalculation(value,repairs,{assignmentFeeCents:fee})!;
+ return {buyerBudgetCents:calculation.buyerCeilingCents,sellerCapCents:calculation.sellerCeilingCents??0,hasRoom:calculation.sellerCeilingCents!==null};
 }
 
 /** Keep incomplete local drafts; validation belongs to the calculation, not restoration. */

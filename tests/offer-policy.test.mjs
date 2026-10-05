@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {calculateHouseOffer} from '../lib/offer-policy.ts';
 const evidence=(lowCents,highCents=lowCents)=>({lowCents,highCents,reviewed:true,source:'reviewed estimate'});
 const input={propertyType:'house',arv:evidence(30000000),repairs:evidence(4000000,5000000),assignmentFeeCents:1500000};
-assert.equal(calculateHouseOffer(input).maxSellerOfferCents,14500000);
+assert.equal(calculateHouseOffer(input).maxSellerOfferCents,16000000);
 assert.equal(calculateHouseOffer({...input,repairs:null}).status,'needs_review');
 assert.equal(calculateHouseOffer({...input,repairs:{...input.repairs,reviewed:false}}).status,'needs_review');
 assert.equal(calculateHouseOffer({...input,propertyType:'land'}).status,'needs_review');
@@ -10,6 +10,6 @@ assert.equal(calculateHouseOffer({...input,repairs:evidence(30000000)}).status,'
 assert.throws(()=>calculateHouseOffer({...input,ruleBasisPoints:7500}));
 assert.throws(()=>calculateHouseOffer({...input,assignmentFeeCents:NaN}));
 assert.equal(calculateHouseOffer({...input,arv:evidence(101),repairs:evidence(0),assignmentFeeCents:0}).maxSellerOfferCents,70);
-assert.equal(calculateHouseOffer({...input,assignmentFeeCents:undefined}).maxSellerOfferCents,15000000);
-assert.equal(calculateHouseOffer({...input,assignmentFeeCents:undefined}).assignmentFeeCents,1000000);
+assert.equal(calculateHouseOffer({...input,assignmentFeeCents:undefined}).maxSellerOfferCents,15500000);
+assert.equal(calculateHouseOffer({...input,assignmentFeeCents:undefined}).assignmentFeeCents,2000000);
 console.log('House offer policy checks passed');

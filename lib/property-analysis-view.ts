@@ -1,3 +1,4 @@
+import {cashOfferPolicy} from './cash-offer-math.ts';
 type RecordValue = Record<string, unknown>;
 const record = (value: unknown): RecordValue => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as RecordValue : {};
 const money = (value: unknown): number | null => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
@@ -16,9 +17,13 @@ export function propertyAnalysisView(result: unknown) {
  // An explicitly missing ARV estimate must not be replaced by a stale fallback.
  const arvCents = Object.hasOwn(arv, 'cents') ? money(arv.cents) : money(property.estimatedMarketValueCents);
  const source = property.source === 'dealmachine' ? 'DealMachine' : text(property.source) ?? 'Saved property research';
+ const calculation=record(property.offerCalculation),feeCents=money(calculation.assignmentFeeCents),sellerCents=money(saved.preliminarySellerCeilingCents);
+ const current=saved.calculationVersion===cashOfferPolicy.version;
+ const validCalculation=current&&calculation.version===cashOfferPolicy.version&&arvCents!==null&&baselineCents!==null&&feeCents!==null&&calculation.arvCents===arvCents&&calculation.repairCents===baselineCents&&calculation.sellerCeilingCents===sellerCents&&calculation.ruleBasisPoints===cashOfferPolicy.ruleBasisPoints;
  return {
-  cashOfferCeilingCents: money(saved.preliminarySellerCeilingCents),
-  offerNeedsUpdate: money(saved.preliminarySellerCeilingCents) !== null && saved.calculationVersion !== 'provider_repair_scalar_v1',
+  cashOfferCeilingCents: sellerCents,
+  offerNeedsUpdate: sellerCents !== null && !current,
+  calculation:validCalculation?{feeCents,rulePercent:cashOfferPolicy.ruleBasisPoints/100}:null,
   arvCents,
   repairs: {baselineCents, rangeCents, status: repairStatus, condition: text(repairs.condition, 100), source: repairs.provider === 'dealmachine' ? 'DealMachine' : source},
   source,
