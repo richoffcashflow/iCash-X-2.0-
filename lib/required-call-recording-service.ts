@@ -44,12 +44,12 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
  return {
   /** Internal adapter only. SQL requires already-reserved/dispatched operation and reviewed contact gates.
    * Wired only after normal dispatcher reserve/claim; recorded rate/config rollout is required first. */
-  async dispatch(input:{accountId:string;operationKey:string;principal:string;assistantName:string;voiceId?:string;firstMessage:string;prompt:string;strategyKey:'cash_interest'|'flexible_timing'}){
+  async dispatch(input:{buyerKind?:'company'|'individual';accountId:string;operationKey:string;principal:string;assistantName:string;voiceId?:string;firstMessage:string;prompt:string;strategyKey:'cash_interest'|'flexible_timing'}){
    if(!dispatchAllowed())return {status:'recording_release_required'};
    const review=await readReview();if(!review||!await checkAgent(review))return {status:'recording_review_required'};
    if(!dispatchAllowed())return {status:'recording_release_required'};
    if(!uuid(input.accountId)||!/^voice:[0-9a-f-]{36}$/i.test(input.operationKey)||input.prompt.length>24000||input.firstMessage.length>2000)throw Error('RECORDING_CONTEXT_REQUIRED');
-   const disclosure=recordingDisclosure(input.principal,input.assistantName),nonce=randomBytes(32).toString('hex'),stop=recordingStopToken(input.operationKey,env);
+   const disclosure=recordingDisclosure(input.principal,input.assistantName,input.buyerKind),nonce=randomBytes(32).toString('hex'),stop=recordingStopToken(input.operationKey,env);
    let row=await db<RecordingRow|null>('rpc/icash_create_call_recording','POST',{p_account:input.accountId,p_operation:input.operationKey,p_provider_account_sid:review.providerAccountSid,p_call_sid:null,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(stop),p_disclosure_version:recordingPolicy.disclosureVersion,p_pricing_policy:recordingPricing,p_context:{fromPhone:review.fromPhone,branchId:review.branchId,versionId:review.versionId,maxTotalSeconds:600,callContext:{principal:input.principal,assistantName:input.assistantName,firstMessage:input.firstMessage,prompt:input.prompt,strategyKey:input.strategyKey,...(input.voiceId?{voiceId:input.voiceId}:{})}}});
    if(!row)return {status:'recording_admission_held'};
    if(!dispatchAllowed())return {status:'recording_release_required'};

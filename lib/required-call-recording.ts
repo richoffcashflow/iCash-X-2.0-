@@ -1,3 +1,4 @@
+import {homeOfferBuyerRole,type NetworkBuyerKind} from './homeoffer-buyer-identity.ts';
 import {finalAffirmativeSpeech,recordingConsentEvidenceVersion,recordingContactOptOut} from './recording-consent-evidence.ts';
 import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
 /** Default-off outbound foundation. Spoken-consent977-cent quote approved; activation still requires release review. */
@@ -21,10 +22,10 @@ export function recordingAgentMatches(review:RecordingReview,raw:unknown){
  const snapshot={conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null};
  return a.agent_id===review.agentId&&a.branch_id===review.branchId&&typeof a.main_branch_id==='string'&&/^agtbrch_[A-Za-z0-9]+$/.test(a.main_branch_id)&&a.main_branch_id!==review.branchId&&a.version_id===review.versionId&&object(platform.privacy).record_voice===false&&object(platform.auth).enable_auth===true&&object(config.asr).user_input_audio_format==='ulaw_8000'&&object(config.tts).agent_output_audio_format==='ulaw_8000'&&object(config.conversation).max_duration_seconds===600&&object(platform.call_limits).bursting_enabled===false&&object(platform.queueing_config).enabled===false&&object(overrides.conversation).max_duration_seconds===true&&object(overrides.agent).first_message===true&&object(object(overrides.agent).prompt).prompt===true&&object(overrides.tts).voice_id===true&&Array.isArray(prompt.tool_ids)&&prompt.tool_ids.length===review.toolIds.length&&review.toolIds.every(id=>(prompt.tool_ids as unknown[]).includes(id))&&sha(JSON.stringify(canonical(snapshot)))===review.configHash;
 }
-export function recordingDisclosure(principal:string,assistantName:string){
+export function recordingDisclosure(principal:string,assistantName:string,buyerKind?:NetworkBuyerKind){
  const valid=(s:string)=>typeof s==='string'&&s.trim().length>0&&s.length<=160&&!/[<>\x00-\x1f]/.test(s);
  if(!valid(principal)||!valid(assistantName))throw Error('RECORDING_IDENTITY_REQUIRED');
- return `Hi, I'm ${assistantName}, the AI assistant for ${principal}. We save a written transcript. The call audio would be private to this business, kept for 30 days for call review. Quick thing before we get into it, is it okay if I record this call?`;
+ return `Hi, I'm ${assistantName}, the AI assistant for ${principal}${buyerKind?', '+homeOfferBuyerRole(buyerKind):''}. We save a written transcript. The call audio would be private to this business, kept for 30 days for call review. Quick thing before we get into it, is it okay if I record this call?`;
 }
 const escapeXml=(s:string)=>s.replace(/[<>&'\"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;',"'":'&apos;','"':'&quot;'}[c]!));
 export function consentTwiml(id:string,nonce:string,disclosure:string){

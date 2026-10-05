@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {saveRunRequest,consumeRunRequest,hasRunRequest,clearRunRequest} from '../lib/workspace-run-request.ts';
+const values=new Map(),storage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
+const email='buyer@example.invalid',now=10000000;
+assert(!consumeRunRequest(storage,email,now));
+saveRunRequest(storage,email,now);assert(hasRunRequest(storage,email,now));assert(!hasRunRequest(storage,'other@example.invalid',now));
+assert(consumeRunRequest(storage,email,now+1));assert(!consumeRunRequest(storage,email,now+2));
+saveRunRequest(storage,email,now);assert(!consumeRunRequest(storage,email,now+3600000));
+saveRunRequest(storage,email,now+1);assert(!consumeRunRequest(storage,email,now));
+saveRunRequest(storage,email,now);clearRunRequest(storage);assert(!hasRunRequest(storage,email,now));
+assert.throws(()=>saveRunRequest(storage,undefined,now));
+console.log('Run authorization: explicit account binding, one-use completion, expiry, future timestamp, cancellation and missing identity passed.');
