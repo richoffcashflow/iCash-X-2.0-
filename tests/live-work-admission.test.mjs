@@ -9,7 +9,7 @@ process.env.ICASH_LIVE_WORK_READY='false';delete process.env.ICASH_DISCOVERY_WOR
 assert.equal(liveWorkReady(),false);assert.equal(liveWorkReady({}),false);assert.equal(liveWorkReady({ICASH_LIVE_WORK_READY:'true'}),true);
 // Actual service functions return before a provider request, claim, or new reserve.
 for(const [file,fn] of Object.entries({'discovery-service':'discoverForAccount','live-dispatch-service':'dispatchLiveVoice','owner-enrichment-service':'enrichForAccount','market-expansion-service':'expandMarket','text-ai-service':'processTextAi','text-message-service':'dispatchTextMessage','fulfillment-service':'prepareFulfillment','title-followup-service':'dispatchTitleFollowup','deal-email-service':'dispatchDealEmail','title-service':'dispatchTitleRequest','title-directory-service':'qualifyTitleCompanies','buyer-discovery-service':'discoverBuyersForDeal','buyer-package-email':'sendRequestedBuyerPackages'})){
- const service=await load('lib/'+file+'.ts',{z,liveWorkReady,discoveryWorkEnabled,contactWorkEnabled,smsWorkEnabled,db:async()=>{throw Error('No DB or provider work may start');}});
+ const service=await load('lib/'+file+'.ts',{z,liveWorkReady,discoveryWorkEnabled,contactWorkEnabled,smsWorkEnabled,automationWorkReady,db:async()=>{throw Error('No DB or provider work may start');}});
  assert.equal((await service[fn]('account','job')).status,'live_work_not_ready',file);
 }
 const costs=await load('lib/operating-costs.ts',{liveWorkReady,discoveryWorkEnabled,contactWorkEnabled,db:async()=>{throw Error('Unexpected reserve');}});await assert.rejects(()=>costs.reserveOperation({}),/Live work is not ready/);

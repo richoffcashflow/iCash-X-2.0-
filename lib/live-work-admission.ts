@@ -11,6 +11,7 @@ export function automationWorkReady(kind:string,env:NodeJS.ProcessEnv=process.en
  // even when the general live-work release is enabled. Submitted-address lookup
  // and post-contract buyer search use their separate services and remain intact.
  if(kind==='discovery')return discoveryWorkEnabled(env);
+ if(kind==='market_research')return liveWorkReady(env)&&discoveryWorkEnabled(env);
  if(kind==='contacts')return contactWorkEnabled(env);
  return liveWorkReady(env)||(kind==='seller_opener'&&smsWorkEnabled(env));
 }
