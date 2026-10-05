@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {sellerDemandPlan} from '../lib/seller-demand.ts';
+const base={activeAccounts:80,budgetAvailableAccounts:60,accountsWithoutLead24h:12,deliveries24h:90,deliveries7d:400,qualified7d:60,requests7d:100,scheduledLeads24h:4,matureLeads:0,observedRecipientsPerLead:null};
+const p=sellerDemandPlan(base);assert.equal(p.minimumQualifiedDaily,10);assert.equal(p.minimumQualifiedWeekly,70);assert.equal(p.shortfall24h,12,'aggregate delivery surplus cannot hide unserved accounts');assert.equal(p.plannedQualifiedDaily,null);
+const actual=sellerDemandPlan({...base,matureLeads:20,observedRecipientsPerLead:4});assert.equal(actual.plannedQualifiedDaily,20);assert.equal(actual.plannedQualifiedWeekly,140);
+assert.equal(sellerDemandPlan({...base,matureLeads:20,observedRecipientsPerLead:0}).plannedQualifiedDaily,null);
+assert.equal(sellerDemandPlan({...base,activeAccounts:0}).minimumQualifiedDaily,0);
+assert.equal(sellerDemandPlan({...base,activeAccounts:1}).minimumQualifiedDaily,1);
+assert.equal(sellerDemandPlan({...base,activeAccounts:1}).minimumQualifiedWeekly,7,'a single account cannot receive the same lead eight times');
+console.log('PASS lead demand: daily/weekly minimum, actual mature-cohort yield, no invented forecast, per-account shortfall.');
