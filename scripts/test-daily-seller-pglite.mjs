@@ -131,6 +131,65 @@ try{
  const noEmail=(await contact(null,true,uuid())).rows[0].id;assert.equal((await q('select email_consented from icash_seller_intakes where id=$1',[noEmail])).rows[0].email_consented,false);
  await assert.rejects(contact('bad-email',true,uuid()),/Invalid email/);
  for(const role of ['anon','authenticated'])assert.equal((await q("select has_function_privilege($1,'icash_submit_seller_contact_intake(uuid,text,text,text,text,text,boolean,text,text,text,jsonb,text,text)','execute') allowed",[role])).rows[0].allowed,false);
+ // Current distribution migration: preserve the historical tests above and verify
+ // the new rules against actual SQL, without moving a real clock or provider.
+ await pg.exec(`create table icash_text_suppressions(phone text primary key);create table icash_contact_suppressions(account_id uuid,contact_key text);alter table icash_live_conversations add column contact_key text;`);
+ await pg.exec(file('supabase/migrations/20261005113211_inbound_priority_lead_distribution.sql'));
+ await pg.exec(file('supabase/migrations/20261005114251_seller_supply_owner_report.sql'));
+ for(const [n,hours] of [[0,0],[1,1],[2,24],[3,48],[4,72],[5,96],[6,120],[7,168]]){
+  const d=(await q("select extract(epoch from (icash_seller_assignment_due($1,now(),now())-now()))/3600 h",[n])).rows[0];assert.equal(Number(d.h),hours);
+ }
+ assert.equal((await q("select icash_seller_assignment_due(8,now(),now())='infinity'::timestamptz capped")).rows[0].capped,true);
+ await q('update icash_accounts set bot_paused=true');
+ await q("update icash_seller_intakes set next_assignment_at='infinity'");
+ const recipients=[];
+ for(let n=0;n<9;n++){
+  const id=uuid();recipients.push(id);await q("insert into icash_accounts(id,billing_model,bot_paused,daily_limit_cents) values($1,'daily',false,$2)",[id,n===0?10000:1000]);
+  await q('insert into icash_wallets(account_id,balance_cents) values($1,100000)',[id]);await q('insert into icash_spend_activations(account_id,enabled,customer_cap_cents) values($1,true,100000)',[id]);
+  await q("insert into icash_bot_setups values($1,'{\"marketMode\":\"nationwide\"}')",[id]);
+  await q("insert into icash_daily_plans(account_id,guest_hash,mode,state,consent_version,consent_text) values($1,$2,'live','active','daily-2026-10-04.1','Fixture consent')",[id,hash(id)]);
+ }
+ const fresh=await submit('New weighted lead');
+ const specific=(await q('select icash_claim_seller_lookup_for($1) j',[fresh])).rows[0].j;
+ assert.equal(specific.id,fresh,'submission callback claims its own lead, not old backlog');
+ assert.equal((await q('select icash_claim_seller_lookup_for($1) j',[fresh])).rows[0].j,null,'duplicate callbacks cannot repeat lookup');
+ await q("update icash_seller_intakes set state='qualified',lookup_cost_basis='Synthetic cost allocation',lookup_costs=$2,property=$3,result=$4,checked_at=now(),data_rights_until=now()+interval '10 days',numbers_passed=true,market_qualified=true,ad_cost_micros=1000000,ad_cost_receipt='fixture',next_assignment_at=now() where id=$1",[fresh,costs,{id:'prop_weighted',city:'Dallas',state:'TX',zip:'75217',fetchedAt:new Date().toISOString(),raw:{}},{financialCheck:{status:'eligible'}}]);
+ assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j.status,'assigned');
+ assert.equal((await q('select assigned_account from icash_seller_intakes where id=$1',[fresh])).rows[0].assigned_account,recipients[0],'larger funded budget wins first access when equally served');
+ await q('update icash_seller_intakes set next_assignment_at=now() where id=$1',[fresh]);
+ assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j,null,'a receipt/queue reset cannot bypass the first-hour delay');
+ await q("update icash_seller_matches set assigned_at=now()-interval '2 hours' where lead_id=$1",[fresh]);
+ assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j.status,'assigned');
+ for(let n=3;n<=8;n++){
+  assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j,null,'later recipient waits');
+  await q("update icash_seller_matches set assigned_at=now()-interval '8 days' where lead_id=$1",[fresh]);
+  await q("update icash_seller_intakes set next_assignment_at=now(),checked_at=now()-interval '6 days' where id=$1",[fresh]);
+  assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j.status,'assigned','shared original research does not rerun lookup per recipient');
+ }
+ assert.deepEqual((await q('select count(*)::int n,count(distinct account_id)::int users,min(charge_cents)::int low,max(charge_cents)::int high from icash_seller_matches where lead_id=$1',[fresh])).rows[0],{n:8,users:8,low:330,high:330});
+ assert.equal((await q("select count(*)::int n from icash_screening_jobs s join icash_seller_matches m on m.screening_id=s.id where m.lead_id=$1 and s.completed_at<now()-interval '5 days'",[fresh])).rows[0].n,6,'later assignment never fabricates a new research timestamp');
+ await q('update icash_seller_intakes set next_assignment_at=now() where id=$1',[fresh]);assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j,null);
+ // New fresh lead should reach the account that has received none in 24h.
+ const nextLead=await submit('Second weighted lead');
+ await q("update icash_seller_intakes set state='qualified',lookup_cost_basis='Synthetic cost allocation',lookup_costs=$2,property=$3,result=$4,checked_at=now(),data_rights_until=now()+interval '10 days',numbers_passed=true,market_qualified=true,ad_cost_micros=1000000,ad_cost_receipt='fixture',next_assignment_at=now() where id=$1",[nextLead,costs,{id:'prop_next',city:'Dallas',state:'TX',zip:'75217',fetchedAt:new Date().toISOString(),raw:{}},{financialCheck:{status:'eligible'}}]);
+ // Give high-budget account recent deliveries, leaving one small account unserved.
+ await q('update icash_seller_matches set assigned_at=now() where lead_id=$1',[fresh]);
+ const waiting=(await q('select id from icash_accounts where id=any($1::uuid[]) and not exists(select 1 from icash_seller_matches m where m.account_id=icash_accounts.id)',[recipients])).rows[0].id;
+ assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j.status,'assigned');
+ assert.equal((await q('select assigned_account from icash_seller_intakes where id=$1',[nextLead])).rows[0].assigned_account,waiting,'smaller account without a daily lead precedes an already-served larger account');
+ const summary=(await q('select icash_seller_demand_summary() j')).rows[0].j;
+ assert.equal(summary.activeAccounts,9);assert.equal(summary.accountsWithoutLead24h,0);assert(summary.deliveries24h>=9);
+ // A seller stop or a completed purchase prevents another paid distribution.
+ await q("update icash_seller_matches set assigned_at=now()-interval '2 hours' where lead_id=$1",[nextLead]);await q('update icash_seller_intakes set next_assignment_at=now() where id=$1',[nextLead]);
+ await q("insert into icash_text_suppressions values('+12145550123')");
+ assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j,null,'global STOP excludes lead');
+ await q('delete from icash_text_suppressions');
+ const sm=(await q('select * from icash_seller_matches where lead_id=$1',[nextLead])).rows[0];const signedDeal=uuid();
+ await q("insert into icash_deal_files values($1,$2,$3,now(),'{}')",[signedDeal,sm.account_id,sm.screening_id]);
+ await q("insert into icash_signing_envelopes values($1,$2,$3,'purchase',false,'completed','fixture-signed','{}')",[uuid(),sm.account_id,signedDeal]);
+ assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j,null,'signed purchase excludes lead');
+ for(const role of ['anon','authenticated'])for(const fn of ['icash_claim_seller_lookup_for(uuid)','icash_seller_demand_summary()'])assert.equal((await q('select has_function_privilege($1,$2,\'execute\') allowed',[role,fn])).rows[0].allowed,false);
+ console.log('PASS weighted inbound distribution: 8 unique charges, hour/day pacing, priority for larger budgets, daily coverage for small accounts, research reuse, suppressed/contracted exclusions, targeted lookup claims and owner-only demand.');
  console.log('PASS HomeOffer contact evidence: exact copy/version, optional email, explicit channel choice, HomeOffer and up-to-eight matched-buyer scope, legacy preservation, idempotency and private RPC.');
  console.log('PASS isolated SQL: $10 minimum, historical invoice compatibility, immutable price versions, 3× rates, renewal caps, pause preservation, intake consent/idempotency, zero-budget lookup hold, one-use provider claims, exact CPA allocation, funded daily bid limit, next-day queue, exactly-once debit, factual call milestones, event claims, RLS and private RPCs.');
 }catch(e){console.error(e);process.exitCode=1;}finally{await pg.close();}
