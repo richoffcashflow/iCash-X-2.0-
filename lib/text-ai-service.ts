@@ -17,9 +17,9 @@ export async function processTextAi(accountId:string,jobId:string){
   const [thread]=job?await db<{deal_id:string;party:string}[]>(`icash_text_threads?id=eq.${job.thread_id}&account_id=eq.${accountId}&select=deal_id,party`):[];
   if(!thread||!['seller','buyer'].includes(thread.party))throw Error('TEXT_PARTY_REVIEW_REQUIRED');
   const party=thread.party as 'seller'|'buyer';
-  const [identity]=await db<{principal:string}[]>(`icash_customer_identities?account_id=eq.${accountId}&select=principal`);
+  const [identity]=await db<{principal:string;company_name?:string}[]>(`icash_customer_identities?account_id=eq.${accountId}&select=principal,company_name`);
   const property=party==='seller'?await db<TextProperty|null>('rpc/icash_text_property_context','POST',{p_account:accountId,p_thread:job.thread_id}):null;
-  const {analysis,usage,providerId}=await analyzeText({...input,party,context:{principal:identity?.principal??null,qualification:input.context,property,preliminarySellerCeilingCents:property?.ceilingCents??null,offerAuthorized:false}},process.env.OPENAI_API_KEY);
+  const {analysis,usage,providerId}=await analyzeText({...input,party,context:{principal:identity?.principal??null,buyerKind:identity?.company_name?.trim()?'company':'individual',qualification:input.context,property,preliminarySellerCeilingCents:property?.ceilingCents??null,offerAuthorized:false}},process.env.OPENAI_API_KEY);
   if(!propertyQuestionAllowed(analysis.action,property,input.messages))analysis.action='review';
   await db('rpc/icash_save_text_ai','POST',{p_account:accountId,p_job:jobId,p_analysis:analysis,p_reply:analysis.reply,p_provider:providerId,p_usage:usage});
   if(party==='buyer'&&!analysis.humanRequested&&!analysis.callbackRequested&&!analysis.optedOut&&!analysis.declined)try{await sendRequestedBuyerPackages(accountId,thread.deal_id);}catch{/* Buyer email status remains in the mailbox; never blindly retry a send. */}

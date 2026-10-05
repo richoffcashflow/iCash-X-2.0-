@@ -56,6 +56,7 @@ try{
  create function icash_claim_operation(o text) returns boolean language plpgsql set search_path='public' as $$begin update icash_operation_spend set state='dispatched' where operation_key=o and state='reserved';return found;end$$;
  create function icash_settle_complete_costs(o text,c bigint,m jsonb,e text) returns void language plpgsql set search_path='public' as $$declare a uuid;begin select account_id into a from icash_operation_spend where operation_key=o;perform icash_finish_credit(a,o,c,e);update icash_operation_spend set state='settled',charged_cents=c where operation_key=o;end$$;`);
  await pg.exec(file('supabase/migrations/20261004170451_seller_intake_and_budgeted_lead_assignment.sql'));
+ await pg.exec(file('supabase/migrations/20261005054100_homeoffer_eight_buyer_schedule.sql'));
  await q("insert into icash_bot_setups values($1,'{\"marketMode\":\"nationwide\"}')",[a]);
  const submit=async(label,request=uuid(),consent=false)=>{const values=[request,hash('guest'),label,'Synthetic address '+label,'+12145550123',hash(label),consent,'homeoffer-seller-ai-2026-10-05.1','Exact AI consent '.repeat(12),'Exact data sharing disclosure '.repeat(8),{source:'meta',campaign:'fixture'},hash('agent')];return (await q('select icash_submit_seller_intake($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) id',values)).rows[0].id;};
  const req=uuid(),l1=await submit('One',req);assert.equal(await submit('One',req),l1);await assert.rejects(submit('One',req,true),/retry mismatch/);await submit('One');assert.equal(Number((await q("select count(*) n from icash_seller_intakes where state='duplicate'")).rows[0].n),1);
@@ -82,13 +83,28 @@ try{
  await q('insert into icash_spend_activations(account_id,enabled,customer_cap_cents) values($1,true,2000)',[second]);
  await q("insert into icash_bot_setups values($1,'{\"marketMode\":\"nationwide\"}')",[second]);
  await q("insert into icash_daily_plans(account_id,guest_hash,mode,state,consent_version,consent_text) values($1,$2,'live','active','daily-2026-10-04.1','Fixture consent')",[second,hash('second')]);
- assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j,null,'matching is paced, not simultaneous');
+ await q("update icash_seller_intakes set next_assignment_at='infinity' where id<>$1",[l1]);
  await q('update icash_seller_intakes set next_assignment_at=now() where id=$1',[l1]);
  assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j.status,'assigned');
  assert.equal(Number((await q('select count(distinct account_id) n from icash_seller_matches where lead_id=$1',[l1])).rows[0].n),2,'distinct buyers');
  assert.equal(Number((await q('select count(*) n from icash_seller_matches where lead_id=$1 and account_id=$2',[l1,a])).rows[0].n),1,'original buyer is not charged twice');
  assert.equal(Number((await q('select balance_cents from icash_wallets where account_id=$1',[second])).rows[0].balance_cents),1670);
- assert((await q('select next_assignment_at>now() paced from icash_seller_intakes where id=$1',[l1])).rows[0].paced);
+ assert((await q('select next_assignment_at<=now() due from icash_seller_intakes where id=$1',[l1])).rows[0].due,'first three matches have no artificial delay');
+ await q("update icash_seller_intakes set next_assignment_at='infinity' where id<>$1",[l1]);
+ for(let count=3;count<=8;count++){
+  const buyer=uuid();await q("insert into icash_accounts(id,billing_model,bot_paused,daily_limit_cents) values($1,'daily',false,10000)",[buyer]);
+  await q('insert into icash_wallets(account_id,balance_cents) values($1,10000)',[buyer]);await q('insert into icash_spend_activations(account_id,enabled,customer_cap_cents) values($1,true,10000)',[buyer]);
+  await q("insert into icash_bot_setups values($1,'{\"marketMode\":\"nationwide\"}')",[buyer]);
+  await q("insert into icash_daily_plans(account_id,guest_hash,mode,state,consent_version,consent_text) values($1,$2,'live','active','daily-2026-10-04.1','Fixture consent')",[buyer,hash(buyer)]);
+  if(count>3){assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j,null,'later wave waits');await q('update icash_seller_intakes set next_assignment_at=now() where id=$1',[l1]);}
+  assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j.status,'assigned');
+  assert.equal(Number((await q('select count(distinct account_id) n from icash_seller_matches where lead_id=$1',[l1])).rows[0].n),count);
+  assert.equal(Number((await q('select balance_cents from icash_wallets where account_id=$1',[buyer])).rows[0].balance_cents),9670,'each buyer pays the same 3x cost price once');
+  assert((await q('select next_assignment_at>=now()+interval \'23 hours\' paced from icash_seller_intakes where id=$1',[l1])).rows[0].paced);
+ }
+ await q('update icash_seller_intakes set next_assignment_at=now() where id=$1',[l1]);assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j,null,'eight-buyer cap blocks further assignments');
+ assert.equal(Number((await q("select count(*) n from icash_screening_jobs where snapshot->'sellerRequest'->>'maximumBuyers'='8'")).rows[0].n),9,'each new match discloses the cap');
+
  const screen=(await q('select screening_id from icash_seller_intakes where id=$1',[l1])).rows[0].screening_id;
  await q("insert into icash_live_conversations values($1,$2,$3,'seller','complete',now(),'{\"durationSeconds\":0,\"transcript\":[]}')",[uuid(),a,screen]);await q('select icash_collect_seller_milestones()');assert.equal(Number((await q("select count(*) n from icash_seller_events where event_name='Contact'")).rows[0].n),0);
  await q("update icash_live_conversations set result='{\"durationSeconds\":12,\"transcript\":[{\"role\":\"user\",\"message\":\"Hello, this is the seller\"}]}'");await q('select icash_collect_seller_milestones()');await q('select icash_collect_seller_milestones()');assert.equal(Number((await q("select count(*) n from icash_seller_events where event_name='Contact'")).rows[0].n),1);

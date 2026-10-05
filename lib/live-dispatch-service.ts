@@ -45,7 +45,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const buyerContext=p.party==='buyer'?await db<BuyerCallContext|null>('rpc/icash_buyer_voice_context','POST',{p_permission:p.id}):null;
  if(p.party==='buyer'&&!buyerContext)return hold('buyer_marketing_release_required');
  const address=buyerContext?.address||(eligible?.ready?eligible.screening.property.address:'');
- const [identity]=await db<{principal:string;voice_id:string}[]>(`icash_customer_identities?account_id=eq.${accountId}&select=principal,voice_id`);
+ const [identity]=await db<{principal:string;voice_id:string;company_name?:string}[]>(`icash_customer_identities?account_id=eq.${accountId}&select=principal,voice_id,company_name`);
  const [account]=await db<{assistant_name:string;bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=assistant_name,bot_paused`);
  if(!identity?.principal||!account||account.bot_paused)return hold('identity_or_start_required');
  // Verify the actual provider caller ID before reserving credits or placing a call.
@@ -71,7 +71,8 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const ceiling=verifiedOfferCeiling(eligible?.ready?eligible.screening.preliminarySellerCeilingCents:null,authority);
  const smsContext=p.party==='seller'?boundedVoiceSmsContext(await db<unknown>('rpc/icash_voice_sms_context','POST',{p_account:accountId,p_permission:p.id})):null;
  const priorCalls=p.party==='seller'?await db<unknown>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&contact_key=eq.${p.contact_key}&party=eq.seller&state=eq.complete&operation_key=like.voice:*&completed_at=gte.${encodeURIComponent(new Date(Date.now()-30*86400000).toISOString())}&order=completed_at.desc&limit=3&select=completed_at,result`):[];
- const sellerContext={priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext};
+ const buyerKind=identity.company_name?.trim()?'company' as const:'individual' as const;
+ const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext};
  // Validate the complete opening/context before reserving credits or dialing.
  let sellerGreeting:string|undefined,sellerPrompt:string|undefined;
  if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext);sellerPrompt=sellerCallPrompt(sellerContext,ceiling);}catch{return hold('property_context_required');}}
@@ -85,7 +86,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  try{
  await db(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&state=eq.dispatching`,'PATCH',{sms_context:smsContext});
  const dispatchHold=recordingReleaseHold();if(dispatchHold)return hold(dispatchHold);
- const result=await recordingServer().dispatch({accountId,operationKey,principal:identity.principal,assistantName:account.assistant_name,voiceId:identity.voice_id,firstMessage:sellerGreeting??`Hi, I'm ${account.assistant_name}, the AI assistant for ${identity.principal}.`,prompt:buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!,strategyKey:strategy});
+ const result=await recordingServer().dispatch({accountId,operationKey,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:identity.voice_id,firstMessage:sellerGreeting??`Hi, I'm ${account.assistant_name}, the AI assistant for ${identity.principal}.`,prompt:buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!,strategyKey:strategy});
  // A started call is still waiting for consent; only the recording service can confirm capture.
  if(result.status==='recording_consent_pending')return {status:'call_started'};
  if(result.status==='recording_dial_unknown_no_retry')return {status:'provider_outcome_unknown_no_retry'}; // Keep the durable claim recoverable; never redial.

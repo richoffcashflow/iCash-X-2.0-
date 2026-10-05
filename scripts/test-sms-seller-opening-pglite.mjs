@@ -80,7 +80,7 @@ try{
  const created=await one('select * from icash_text_threads where account_id=$1',[account]);const thread=created.id;
 
  const apply=async name=>pg.exec(readFileSync(new URL('../config/'+name+'.sql',import.meta.url),'utf8'));
- for(const name of ['sms-manual-reply-continuity','sms-opener-unstarted-recovery','sms-seller-opening'])await apply(name);
+ for(const name of ['sms-manual-reply-continuity','sms-opener-unstarted-recovery','sms-seller-opening','homeoffer-buyer-introductions'])await apply(name);
  const isolated=async action=>{await q('begin');try{return await action();}finally{await q('rollback');}};
  await rpc('icash_set_work_control',{p_user:user,p_account:account,p_action:'resume',p_screening:null});
  const openerArgs={p_account:account,p_thread:thread};
@@ -97,7 +97,7 @@ try{
  const start=async()=>{const id=await rpc('icash_queue_seller_opener',openerArgs);assert(id);assert(await claim(id));await accept(id);return id;};
  await isolated(async()=>{
   const id=await start(),text=await body(id);
-  assert.match(text,/^Hi, I am the AI assistant for SIMULATION buying business\. Is this the owner of 123 Main Street\?/);
+  assert.match(text,/^Hi, AI for SIMULATION buying business, an independent HomeOffer Network cash buyer\. Is this the owner of 123 Main Street\?/);
   assert(!text.includes('all cash'));assert(!text.includes('Jordan'));assert.match(text,/Reply STOP to opt out\.$/);
   assert.equal(await rpc('icash_queue_seller_opener',openerArgs),null,'No duplicate or reset opening');
   assert.equal(await rpc('icash_queue_seller_opener',{...openerArgs,p_account:other}),null);
