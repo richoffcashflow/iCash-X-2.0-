@@ -6,6 +6,9 @@ import {allowedOrigin} from '@/lib/funding-policy';
 import {limitRequest,validGuest} from '@/lib/funding';
 import {sellerSubmission,sellerConsentText,sellerSharingText,sellerDuplicateKeyInput} from '@/lib/seller-leads';
 import {processSellerIntake} from '@/lib/seller-pipeline';
+import {processSellerResponses} from '@/lib/seller-response-service';
+import {dispatchTextMessage} from '@/lib/text-message-service';
+import {dispatchLiveVoice} from '@/lib/live-dispatch-service';
 export const dynamic='force-dynamic';
 export const maxDuration=60;
 const headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer'};
@@ -24,6 +27,7 @@ export async function POST(req:Request){
    try{
     await processSellerIntake(db,process.env.DEALMACHINE_API_KEY,fetch,leadId);
     await db('rpc/icash_assign_seller_lead','POST',{});
+    await processSellerResponses(db,dispatchTextMessage,dispatchLiveVoice,leadId);
    }catch{console.error('Seller intake background processing deferred to queue');}
   });
   // A persisted request is not a qualified lead or a promise that a call was made.

@@ -36,6 +36,7 @@ const text=await load('lib/text-message-service.ts',{liveWorkReady,discoveryWork
  if(path.startsWith('icash_sms_inbound_invitations?')){assert(path.includes('account_id=eq.account')&&path.includes('message_id=eq.message'));return invitation?[{id:'invite',reply_id:'received-reply'}]:[];}
  if(path==='rpc/icash_review_sms_campaign_reply'){assert.deepEqual(body,{p_account:'account',p_message:'received-reply'});return 'attention';}
  if(path.startsWith('icash_text_threads?'))return [{sender:process.env.CONTIGUITY_FROM,recipient:'+12125550124'}];
+ if(path.startsWith('icash_text_senders?'))return [{phone:process.env.CONTIGUITY_FROM}];
  if(path.startsWith('icash_voice_configs?'))return [{enabled:false}];
  if(path==='rpc/icash_claim_text'){claims++;assert.deepEqual(body,{p_account:'account',p_message:'message',p_sender:process.env.CONTIGUITY_FROM});return claim?{id:'claimed'}:null;}
  if(path==='rpc/icash_accept_text'){accepted++;assert.equal(body.p_provider,'receipt');return;}throw Error(path);

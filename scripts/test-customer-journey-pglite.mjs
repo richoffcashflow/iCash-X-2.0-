@@ -32,6 +32,10 @@ import {titleEmailAddress} from '../lib/title-inbound-policy.ts';
 import {emailFromName} from '../lib/deal-email-policy.ts';
 import {titleConfirmationInstructions} from '../lib/title-confirmation-instructions.ts';
 
+// The recorded-calling release has its own current, stricter integration suite.
+// This explicit mode starts downstream from synthetic seller statements and makes
+// no claim to have verified a call, recording or voice settlement.
+const downstreamOnly=process.argv.includes('--downstream-only');
 const titleFirstStage=process.argv.find(x=>x.startsWith('--title-first='))?.split('=')[1]??null;
 assert(titleFirstStage===null||['title_open','closing'].includes(titleFirstStage),'Invalid title-first stage');
 const {pg,files,notices}=await createJourneyDb(process.argv[2]);
@@ -162,9 +166,16 @@ try{await (async()=>{
  const permission=await one('select * from icash_contact_permissions where review_request_id=$1',[contactReview.id]);
  const offerReview=await rpc('icash_submit_authority_review',{p_account:account,p_user:user,p_key:randomUUID(),p_payload:{...reviewBase,kind:'offer_ceiling',channel:'offer',maxCents:9000000}});
  await decide(offerReview.id,{marketReviewId:await market('offer_ceiling','offer'),reviewReference:'SIMULATION reviewed offer limit',reviewedAt:past(0.001),validUntil:future(1),underwritingReference:'SIMULATION seller ceiling evidence',underwritingMaxCents:9000000});
+ let savedCall,work;
+ if(downstreamOnly){
+  await rpc('icash_queue_voice_jobs',{});
+  await q("update icash_voice_jobs set state='held',outcome='SIMULATION downstream boundary: no call attempted'");
+  savedCall={result:{transcript:[{role:'user',message:'I accept $90,000.'}]}};
+  note('Recorded calling','NOT RUN','Downstream-only mode uses an explicit synthetic seller statement. Run current recording suites separately; this is not end-to-end live proof.');
+ }else{
  const voice=await loadService('lib/live-dispatch-service.ts',{createHash,randomBytes,db,elevenRequest,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,buyerCallInstructions,contactEligibility,callEligibility,verifiedOfferCeiling,productionDealInstructions,acquisitionOpeners});
  const ticket=await rpc('icash_next_automation',{});assert(ticket?.token,'Voice job was not issued');
- const work=await rpc('icash_consume_automation',{p_token:ticket.token});assert.equal(work.kind,'voice_dispatch');assert.equal(await rpc('icash_consume_automation',{p_token:ticket.token}),null);
+ work=await rpc('icash_consume_automation',{p_token:ticket.token});assert.equal(work.kind,'voice_dispatch');assert.equal(await rpc('icash_consume_automation',{p_token:ticket.token}),null);
  assert.equal((await voice.dispatchLiveVoice(otherAccount,work.voiceJobId)).status,'held');assert.equal(voiceWrites,0);
  // Alternate timeout branch: discard the entire fixture transaction afterward.
  await q('begin');
@@ -186,7 +197,7 @@ try{await (async()=>{
  assert.equal((await recon.reconcileLiveConversation(account,live.id)).status,'awaiting_conversation');
  callComplete=true;
  const held=await recon.reconcileLiveConversation(account,live.id);assert.equal(held.billing.reason,'reviewed_policy_missing');
- const savedCall=await one('select * from icash_live_conversations where id=$1',[live.id]);assert.equal(savedCall.state,'complete');assert.equal(savedCall.result.underContract,false);
+ savedCall=await one('select * from icash_live_conversations where id=$1',[live.id]);assert.equal(savedCall.state,'complete');assert.equal(savedCall.result.underContract,false);
  const policy={enabled:true,version:'SIMULATION usage policy v1',rateId:rates.seller_call,operation:'seller_call',reviewedAt:past(1),validFrom:past(1),validUntil:future(1),evidenceRef:'SIMULATION complete cost basis',components:Object.fromEntries(costCategories.filter(c=>c!=='elevenlabs').map(c=>[c,c==='twilio'?{kind:'duration_estimate',unitSeconds:60,microsPerUnit:14000,rounding:'up',minimumUnits:0,durationSource:'conversation_proxy',assumption:'SIMULATION duration approximation',evidenceRef:'SIMULATION carrier price'}:{kind:'fixed_estimate',amountMicros:c==='support_and_overhead'?1000:0,evidenceRef:'SIMULATION explicit component'}]))};
  process.env.VOICE_USAGE_POLICIES_JSON=JSON.stringify([policy]);
  const settled=await recon.reconcileLiveConversation(account,live.id);assert.equal(settled.billing.status,'settled');
@@ -196,6 +207,8 @@ try{await (async()=>{
  assert.equal((await recon.reconcileLiveConversation(otherAccount,live.id)).status,'not_found');
  pass('Reviewed contact/offer → one voice dispatch → transcript → usage ledger','real intake/reviewer/DNC checks, scheduler one-use ticket, voice service and SQL dispatch, provider-result reconciliation, held missing usage policy then resumed one debit; cross-account access and duplicate call blocked');
  note('Calling and permissions','SIMULATED EVIDENCE ONLY','Operator membership, legal/consent/DNC evidence and provider voice/audio results are local fixtures. No live phone call or valid real-world contact authority established');
+
+ }
 
  const prep=contractPreparation(savedCall.result.transcript.map((t,i)=>({id:'transcript-'+i,party:'seller',partyKey:permission.contact_key,body:t.message})),'draft',{...draft,priceCents:null});
  assert.equal(prep.patch.priceCents,9000000);assert.equal(prep.requiresReview,true);
@@ -326,7 +339,7 @@ try{await (async()=>{
  await fulfillment.prepareFulfillment(account,qualifiedWork.fulfillmentJobId);
  const matched=await one('select * from icash_buyer_matches where deal_id=$1 and buyer_id=$2',[dealId,buyer.id]);assert.equal(matched.ready,true);assert.equal(matched.score,70);
  assert.equal((await one('select result from icash_fulfillment_jobs where id=$1',[prepared.id])).result.buyerStatus,'matches_ready_outreach_not_sent');
- assert.equal(voiceWrites,1,'Qualification never dials a buyer');
+ assert.equal(voiceWrites,downstreamOnly?0:1,'Qualification never dials a buyer');
  // Expiry is enforced at query/context time, independent of scheduler cleanup.
  await q('begin');try{await q("update icash_buyer_profiles set qualification_expires_at=now()-interval '1 second' where id=$1",[buyer.id]);assert.deepEqual(await rpc('icash_reviewed_buyers',{p_account:account,p_deal:dealId}),[]);}finally{await q('rollback');}
  // A failure at the final audit insert rolls back profile replacement and prior revocation.
@@ -404,7 +417,7 @@ try{await (async()=>{
    assert.equal(await rpc('icash_claim_reviewed_voice_job',{p_job:w.voiceJobId,p_offer_snapshot:null,p_buyer_snapshot:currentBuyerContext}),true);
    assert.equal(await rpc('icash_claim_reviewed_voice_job',{p_job:w.voiceJobId,p_offer_snapshot:null,p_buyer_snapshot:currentBuyerContext}),false);
    assert.equal((await one('select stage from icash_deal_files where id=$1',[dealId])).stage,titleFirstStage);
-   assert.equal(voiceWrites,1,'SQL claim simulation does not dial buyer');
+   assert.equal(voiceWrites,downstreamOnly?0:1,'SQL claim simulation does not dial buyer');
   }finally{await q('rollback');}
   pass('Title-first discovery → reviewed marketing/qualification → final buyer claim',`clean ${titleFirstStage} order reaches real atomic buyer dispatch claim once; all stale source, quote, revision, withdrawal, suppression and cross-account checks above also pass`);
   console.log(`\nSIMULATION SUMMARY (${titleFirstStage} before sourcing): ${report.filter(x=>x.status==='SIMULATED PASS').length} stages passed; ${files.length} actual schema/config files; ${calls.filter(x=>x.rpc).length} real RPC calls; ${external.length} intercepted provider fixture requests. Buyer provider dial and later close are not run in this variant.`);
@@ -509,7 +522,7 @@ try{await (async()=>{
 
  const available=Number((await one('select balance_cents-reserved_cents as available from icash_wallets where account_id=$1',[account])).available);
  await assert.rejects(rpc('icash_reserve_credit',{p_account:account,p_operation:'SIMULATION:insufficient',p_amount:available+1}),/Insufficient credits/);
- await assert.rejects(rpc('icash_reserve_credit',{p_account:otherAccount,p_operation:'voice:'+work.voiceJobId,p_amount:1000}),/Idempotency conflict/);
+ if(!downstreamOnly)await assert.rejects(rpc('icash_reserve_credit',{p_account:otherAccount,p_operation:'voice:'+work.voiceJobId,p_amount:1000}),/Idempotency conflict/);
  const expiryRate=(await one(`insert into icash_operation_rates(operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled) values('property_search','SIMULATION expiring rate',1000,$1,'SIMULATION transient current rate',now()-interval '1 minute',now()+interval '1 second',true) returning id`,[{...costs,dealmachine:10000}])).id;
  const expiryKey='SIMULATION:expiry-before-dispatch';
  await operating.reserveOperation({accountId:account,operationKey:expiryKey,rateId:expiryRate,permissionUntil:future(1)});
