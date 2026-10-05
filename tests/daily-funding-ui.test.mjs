@@ -28,7 +28,7 @@ try{
  for(const [active,code,amount] of [[false,'budget_ten',1000],[true,'budget_25',2500]]){
   let tree=render({active,code}),nodes=all(tree),button=nodes.find(n=>n.props?.className==='setup-primary daily-checkout-button');
   assert.equal(nodes.some(n=>n.props?.type==='checkbox'),false);
-  assert.match(text(tree),/every 24 hours until you stop/);assert.match(text(tree),/Daily billing continues while unavailable/);
+  assert.match(text(tree),/every 24 hours until you stop/);assert.match(text(tree),/Daily billing continues while work is waiting/);
   assert.equal(button.props.disabled,false);assert.match(text(button),new RegExp(`${active?'Save':'Start'} \\$${amount/100}/day`));
   assert.equal(posts.length,active?1:0,'rendering never submits billing consent');
   button.props.onClick();button.props.onClick();assert.equal(posts.length,active?2:1,'double clicks submit once');
