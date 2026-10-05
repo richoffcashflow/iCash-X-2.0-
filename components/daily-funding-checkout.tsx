@@ -7,7 +7,7 @@ import {dailyConsent,dailyConsentVersion} from '@/lib/daily-consent';
 import {earlyAccessTermsVersion,earlyAccessDailyDisclosure} from '@/lib/funding-consent';
 type Pack={code:string;price_cents:number;credit_cents:number;enabled:boolean};
 type Funding={mode:'test'|'live'|null;earlyAccess?:boolean;packs?:Pack[];paidCents?:number;needsClaim?:boolean;email?:string};
-type Daily={ready:boolean;plan:{state:string;budgetCents:number|null;nextCharge:number|null}|null};
+type Daily={ready:boolean;billingModel?:string;plan:{state:string;budgetCents:number|null;nextCharge:number|null}|null};
 const dollars=(cents:number)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(cents/100);
 export function DailyFundingCheckout({onSignedIn,initialCode,startBot=false,onBeforeStart,onFunded}:{onSignedIn:()=>void;initialCode?:string;startBot?:boolean;onBeforeStart?:()=>void;onFunded?:()=>Promise<void>}){
  const id=useId(),mounted=useRef(true),lock=useRef(false),notified=useRef(false),polling=useRef(false),edited=useRef(!!initialCode);
@@ -41,10 +41,11 @@ export function DailyFundingCheckout({onSignedIn,initialCode,startBot=false,onBe
   <div className="daily-slider-labels"><span>$10</span><span>{dollars(packs.at(-1)?.price_cents??100000)}</span></div>
   <p className="daily-renewal" id={id+'-terms'}>{changing?'From your next renewal. ':''}<strong>{dollars(amount)} every 24 hours until you stop.</strong></p>
   {early&&<p className="daily-availability" id={id+'-availability'}>Early access. Daily billing continues while work is waiting.</p>}
-  <button type="button" className="setup-primary daily-checkout-button" disabled={busy||!daily.ready||!selected} aria-describedby={`${id}-terms${early?` ${id}-availability`:''}`} onClick={()=>void checkout()}>{busy?'One moment…':startBot?`Start bot · ${dollars(amount)}/day`:changing?`Save ${dollars(amount)}/day`:`Start ${dollars(amount)}/day`}<ArrowRight size={18}/></button>
+  <button type="button" className="setup-primary daily-checkout-button" disabled={busy||!daily.ready||!selected} aria-describedby={`${id}-terms${early?` ${id}-availability`:''}`} onClick={()=>void checkout()}>{busy?'One moment…':changing?`Save ${dollars(amount)}/day`:`Run bot · ${dollars(amount)}/day`}<ArrowRight size={18}/></button>
+  {daily.billingModel==='membership_credits'&&<small className="daily-membership-note">Your $50/month software subscription is separate.</small>}
   <details className="boost-terms"><summary>Billing details</summary><p>{dailyConsent}</p><p>Eligible work must fit your available credits and daily limit. Work that doesn’t fit waits for a later funded day; tomorrow’s money is never spent early. Increasing your budget doesn’t guarantee a lead or deal.</p>{early&&<p>{earlyAccessDailyDisclosure}</p>}<a href="/costs-and-disclosures#daily-billing" target="_blank" rel="noopener noreferrer">All costs and terms ↗</a></details>
   {daily.plan?.nextCharge&&<p className="daily-next-renewal">Next renewal: {new Date(daily.plan.nextCharge*1000).toLocaleString()}.</p>}
-  {daily.plan&&<button className="boost-refresh" disabled={busy} onClick={()=>void stop()}>Stop daily billing</button>}
-  {!daily.ready&&<p role="status">Daily funding is currently unavailable.</p>}{notice&&<p role="status">{notice}</p>}{error&&<p role="alert">{error} <button onClick={()=>void refresh()}>Refresh</button></p>}
+  {daily.plan&&daily.plan.state!=='stopped'&&<button className="boost-refresh" disabled={busy} onClick={()=>void stop()}>Stop daily billing</button>}
+  {!daily.ready&&<p role="status">Could not start daily funding. <button type="button" onClick={()=>void refresh()}>Try again</button> <a href="/support">Get help</a></p>}{notice&&<p role="status">{notice}</p>}{error&&<p role="alert">{error} <button onClick={()=>void refresh()}>Refresh</button></p>}
  </div>;
 }

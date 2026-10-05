@@ -29,7 +29,7 @@ try{
   let tree=render({active,code}),nodes=all(tree),button=nodes.find(n=>n.props?.className==='setup-primary daily-checkout-button');
   assert.equal(nodes.some(n=>n.props?.type==='checkbox'),false);
   assert.match(text(tree),/every 24 hours until you stop/);assert.match(text(tree),/Daily billing continues while work is waiting/);
-  assert.equal(button.props.disabled,false);assert.match(text(button),new RegExp(`${active?'Save':'Start'} \\$${amount/100}/day`));
+  assert.equal(button.props.disabled,false);assert.match(text(button),new RegExp(`${active?'Save':'Run bot ·'} \\$${amount/100}/day`));
   assert.equal(posts.length,active?1:0,'rendering never submits billing consent');
   button.props.onClick();button.props.onClick();assert.equal(posts.length,active?2:1,'double clicks submit once');
   assert.deepEqual(posts.at(-1),{action:active?'change':'start',packCode:code,totalCents:amount,accepted:true,version:consent.dailyConsentVersion,earlyAccessAccepted:true,earlyAccessVersion:early.earlyAccessTermsVersion});

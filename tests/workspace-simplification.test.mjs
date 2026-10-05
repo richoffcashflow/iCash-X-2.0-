@@ -22,20 +22,20 @@ const account={signedIn:true,mode:'live',balanceCents:850,assistantName:'Synthet
 let tree=page(account,campaign),nodes=all(tree);
 assert.equal(nodes.find(n=>n.type===component('BotRunBar')).props.running,false);assert.equal(nodes.find(n=>n.type===component('BotRunBar')).props.balanceCents,850);assert.doesNotMatch(text(tree),/Your account records/);
 assert.equal(nodes.filter(n=>n.type==='button'&&n.props.className==='fund-button').length,1,'one primary action');
-assert(nodes.some(n=>n.type===component('BotRunBar')&&typeof n.props.onAddCredits==='function'),'one-time credits remain available');
+assert(nodes.some(n=>n.type===component('BotRunBar')&&typeof n.props.onBudget==='function'),'one-time credits remain available');
 assert.equal(nodes.find(n=>n.props?.['aria-label']==='Workspace settings').props.hidden,true,'settings stay out of the default workspace');
 assert(nodes.some(n=>n.type==='button'&&text(n)==='Settings'),'settings have a clear entry point');
 assert(nodes.some(n=>n.props?.['aria-label']==='Workspace settings'));
 assert(nodes.some(n=>n.type==='details'&&n.props.id==='account-details'),'account details remain accessible');
 tree=page({...account,paused:false,billingActive:true,activeWork:true,workReady:true},{...campaign,released:true,liveWorkReady:true},true);
-const stop=all(tree).find(n=>n.type===component('BotRunBar'));assert.equal(typeof stop.props.onAddCredits,'function');assert.equal(stop.props.busy,false);
+const stop=all(tree).find(n=>n.type===component('BotRunBar'));assert.equal(typeof stop.props.onBudget,'function');assert.equal(stop.props.busy,false);
 function beneathDetails(root,target,inside=false){if(root===target)return inside;if(Array.isArray(root))return root.some(n=>beneathDetails(n,target,inside));return !!root&&typeof root==='object'&&beneathDetails(root.props?.children,target,inside||root.type==='details');}
 assert.equal(beneathDetails(tree,stop),false,'credit action is never hidden in an expander');
 tree=page({...account,smsWorkReady:true},{...campaign,released:true},true);assert(all(tree).find(n=>n.type===component('BotRunBar')).props.stale,'stale account state is identified');
 
 function budget(report,days=1,error=''){let index=0;const slots=[days,report,error,0],mod={exports:{}};new Function('require','module','exports',code('components/budget-summary.tsx'))(name=>name==='react'?{useEffect(){},useState:()=>[slots[index++],()=>{}]}:name==='@/lib/workspace-progress'?progress:name==='@/lib/activity-report'?activity:require(name),mod,mod.exports);return mod.exports.BudgetSummary();}
 const summary={days:1,leads:5,calls:8,texts:12,contracts:2,spentCents:1750};
-tree=budget(summary);assert.match(text(tree),/Activity/);assert.doesNotMatch(text(tree),/Spent|17.50|spending/);assert.match(text(tree),/Leads\s+5/);assert.match(text(tree),/Calls\s+8/);assert.match(text(tree),/Texts\s+12/);assert.match(text(tree),/Contracts\s+2/);
+tree=budget(summary);assert.match(text(tree),/Bot activity/);assert.doesNotMatch(text(tree),/Spent|17.50|spending/);assert.match(text(tree),/Leads\s+5/);assert.match(text(tree),/Calls\s+8/);assert.match(text(tree),/Texts\s+12/);assert.match(text(tree),/Contracts\s+2/);
 assert.equal(all(tree).filter(n=>n.type==='details').length,0,'report is always visible without nested sections');
 assert.deepEqual(all(tree).filter(n=>n.type==='button').map(text),['Today','7 days','30 days']);
 assert.doesNotMatch(text(tree),/Your progress|preliminary|All-time|Download PDF/);
@@ -55,8 +55,10 @@ tree=page({...account,balanceCents:0,billingModel:'membership_credits',membershi
 assert(all(tree).find(n=>n.type===component('BotRunBar')).props.paymentRequired,'missed membership payment has a recovery action');
 
 const barModule={exports:{}};new Function('require','module','exports',code('components/bot-run-bar.tsx'))(name=>name==='react'?{useState:()=>[null,()=>{}],useEffect(){}}:name==='@/lib/workspace-progress'?progress:require(name),barModule,barModule.exports);
-const renderBar=patch=>barModule.exports.BotRunBar({running:false,stopped:false,paymentRequired:false,busy:false,stale:false,balanceCents:0,onAddCredits(){},...patch});
-assert.match(text(renderBar({})),/Add credits to continue\. Your leads are saved/);
-assert.match(text(renderBar({paymentRequired:true,balanceCents:1000})),/Update payment to resume work\. Your leads are saved/);
+const renderBar=patch=>barModule.exports.BotRunBar({running:false,stopped:false,paymentRequired:false,busy:false,stale:false,balanceCents:0,onBudget(){},onPause(){},...patch});
+assert.match(text(renderBar({})),/Choose a daily budget/);
+assert.match(text(renderBar({paymentRequired:true,balanceCents:1000})),/Update your subscription/);
 assert.match(text(renderBar({running:true,balanceCents:1000})),/Bot running/);
-assert.doesNotMatch(text(renderBar({running:true,balanceCents:1000})),/Pause|Stop bot|daily budget/);
+assert.match(text(renderBar({running:true,canPause:true,balanceCents:1000})),/Pause bot/);
+assert.match(text(renderBar({stopped:true,balanceCents:1000})),/Run bot/);
+assert.match(text(renderBar({budgetCents:2500})),/\$25/);

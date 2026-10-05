@@ -17,7 +17,7 @@ export function BudgetSummary(){
  const current=report?.days===days?report:null;
  const metrics=[['leads','Leads','New properties added to your workspace'],['calls','Calls','Bot calls started, including unanswered calls'],['texts','Texts','Texts sent or delivered'],['contracts','Contracts','Seller contracts signed']] as const;
  return <section className="workspace-activity" aria-labelledby="workspace-activity-title">
-  <div className="workspace-activity-heading"><h3 id="workspace-activity-title">Activity</h3><div className="activity-periods" role="group" aria-label="Activity period">{activityPeriods.map(period=><button key={period.days} type="button" aria-pressed={days===period.days} onClick={()=>setDays(period.days)}>{period.label}</button>)}</div></div>
+  <div className="workspace-activity-heading"><h3 id="workspace-activity-title">Bot activity</h3><div className="activity-periods" role="group" aria-label="Activity period">{activityPeriods.map(period=><button key={period.days} type="button" aria-pressed={days===period.days} onClick={()=>setDays(period.days)}>{period.label}</button>)}</div></div>
   <dl className="activity-metrics" aria-busy={!current&&!error}>{metrics.map(([key,label,meaning])=><div key={key}><dt title={meaning}>{label}</dt><dd>{current?current[key].toLocaleString():'—'}</dd></div>)}</dl>
   <div className="activity-report-status">{!current&&!error&&<span role="status">Loading…</span>}{error&&<span role="status">{error}{current?' Showing last update.':''} <button type="button" onClick={()=>setRetry(v=>v+1)}>Retry</button></span>}</div>
  </section>;

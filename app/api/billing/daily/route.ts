@@ -30,7 +30,7 @@ export async function POST(req:Request){
  try{const raw=await req.text();if(raw.length>1024)throw new Error();const i=JSON.parse(raw);const {p,token,user,account}=await owner(true);await limitRequest(req,'daily-billing',token!,8,600);
  if(i.action==='stop'){if(p)await stopDaily(p);return NextResponse.json({stopped:true});}
  if(!dailyReady()||!await customerFundingReady())return NextResponse.json({error:'Daily funding is currently unavailable. Please retry.'},{status:503});
- if(account?.billing_model==='membership_credits')return NextResponse.json({error:'Manage your existing software subscription before switching billing models. It has not been changed.'},{status:409});
+ if(account?.billing_model==='membership_credits'&&!await db<boolean>('rpc/icash_membership_work_allowed','POST',{p_account:account.id}))return NextResponse.json({error:'Update your software subscription payment before starting the daily budget.'},{status:409});
  const earlyAccess=earlyAccessFundingEnabled();
  if(earlyAccess&&!acceptedEarlyAccessTerms(i))return NextResponse.json({error:'Acknowledge the current live-work limitations and ongoing daily renewal before payment.'},{status:400});
  const consentVersion=earlyAccess?`${dailyConsentVersion}:early:${earlyAccessTermsVersion}`:dailyConsentVersion;

@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {MessageCircle,ArrowDown,ArrowUp,RefreshCw} from 'lucide-react';
+import {smsLength} from '@/lib/sms-length';
 import {messageSpeaker,safeLocalTime} from './workspace-view';
 type Thread={id:string;recipient:string;paused:boolean;manualReply?:boolean;party?:string};
 type Message={id:string;thread_id:string;direction:string;body:string;state:string;created_at:string;attachments?:{url:string;filename?:string}[]};
@@ -23,9 +24,9 @@ export function DealMessages({dealId,active=true,onTakeover}:{dealId:string;acti
  function choose(id:string){setThreadId(id);setPage(null);setSearch('');setError('');}
  return <div className="deal-texts" data-unsaved-draft={Object.values(drafts).some(d=>d.trim())?'true':undefined}>
  {error&&<p className="conversation-load-error" role="status">{error} <button className="workspace-quiet" onClick={()=>setRefresh(v=>v+1)}>Retry</button></p>}
- {data?.scope===scope&&!data.threads.length&&<div className="conversation-empty"><MessageCircle size={26}/><strong>No text conversation yet</strong><p>A permitted contact needs to be linked before you can send. Your bot’s saved texts will appear here.</p></div>}
- <div className="conversation-inbox">
- {!!data?.threads.length&&<aside className="conversation-contacts" aria-label="Text contacts"><div className="conversation-contacts-title">Contacts</div>{data.threads.map(t=><button type="button" key={t.id} aria-pressed={(threadId||data.threadId)===t.id} onClick={()=>choose(t.id)}><span className="conversation-contact-avatar">{t.party==='buyer'?'B':'S'}</span><span><strong>{t.party==='buyer'?'Buyer':'Seller'}</strong><small>{t.recipient}</small>{drafts[t.id]?.trim()&&<em>Draft saved</em>}</span></button>)}<div className="history-pages">{afterThread&&<button onClick={()=>{setAfterThread('');setThreadId('');setPage(null);setData(null);}}>First contacts</button>}{data.nextThread&&<button onClick={()=>{setAfterThread(data.nextThread!);setThreadId('');setPage(null);setData(null);}}>More contacts</button>}</div></aside>}
+ {data?.scope===scope&&!data.threads.length&&<div className="conversation-empty"><MessageCircle size={26}/><strong>No text conversation yet</strong><p>A permitted contact needs to be linked before you can send. Your bot’s saved texts will appear here.</p><button type="button" onClick={()=>setRefresh(v=>v+1)}>Check contact</button><a href="/support">Get help</a></div>}
+ <div className={`conversation-inbox${data?.threads.length===1&&!data.nextThread&&!afterThread?' single-contact':''}`}>
+ {!!data?.threads.length&&(data.threads.length>1||data.nextThread||afterThread)&&<aside className="conversation-contacts" aria-label="Text contacts"><div className="conversation-contacts-title">Contacts</div>{data.threads.map(t=><button type="button" key={t.id} aria-pressed={(threadId||data.threadId)===t.id} onClick={()=>choose(t.id)}><span className="conversation-contact-avatar">{t.party==='buyer'?'B':'S'}</span><span><strong>{t.party==='buyer'?'Buyer':'Seller'}</strong><small>{t.recipient}</small>{drafts[t.id]?.trim()&&<em>Draft saved</em>}</span></button>)}<div className="history-pages">{afterThread&&<button onClick={()=>{setAfterThread('');setThreadId('');setPage(null);setData(null);}}>First contacts</button>}{data.nextThread&&<button onClick={()=>{setAfterThread(data.nextThread!);setThreadId('');setPage(null);setData(null);}}>More contacts</button>}</div></aside>}
  <div className="conversation-thread-pane">
  {!current&&(!data||data.scope!==scope)&&<p className="conversation-loading" role="status">Loading conversation…</p>}
  {current&&<><div className="conversation-thread-heading"><div><strong>{current.party==='buyer'?'Buyer':'Seller'}</strong><span>{current.recipient}</span></div><button type="button" className="conversation-refresh" aria-label="Refresh texts" onClick={()=>setRefresh(v=>v+1)}><RefreshCw size={16}/></button></div><details className="conversation-search"><summary>Search texts</summary><label className="message-search">Find in loaded texts<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search this message page"/></label></details><div className="history-pages">{page&&<button onClick={()=>setPage(null)}>Latest texts</button>}{data?.next&&<button onClick={()=>setPage(data.next)}>Older texts</button>}</div><Conversation onTakeover={onTakeover} key={current.id} attempts={attempts.current} stale={!!error||!active} draft={drafts[current.id]??''} onDraft={value=>setDrafts(d=>({...d,[current.id]:value}))} search={search} thread={current} ai={data?.ai?.[0]} messages={data?.messages.slice().reverse()??[]} onSent={()=>{setPage(null);setRefresh(v=>v+1);}}/></>}
@@ -55,9 +56,9 @@ function TextComposer({onTakeover,thread,message,setMessage,onSent,attempts,stal
  const [,update]=useState(0);
  const attempt=attempts[thread.id],busy=attempt?.busy??false,held=attempt?.held??false,status=attempt?.status??'';
  const replyBlocked=thread.paused&&!thread.manualReply;
- const maxLength=/[^A-Za-z0-9 .,!?]/.test(message)?35:160;
+ const length=smsLength(message),maxLength=length.limit;
  async function send(event:Pick<React.FormEvent,'preventDefault'>){
-  event.preventDefault();const body=message.trim();if(attempts[thread.id]?.busy||attempts[thread.id]?.held||stale||replyBlocked||!body||message.length>maxLength)return;
+  event.preventDefault();const body=message.trim();if(attempts[thread.id]?.busy||attempts[thread.id]?.held||stale||replyBlocked||!body||!length.fits)return;
   // One attempt per contact survives tab changes. The synchronous lock prevents double submits.
   const request:SendAttempt={key:crypto.randomUUID(),body,busy:true,held:false,status:''};attempts[thread.id]=request;update(n=>n+1);
   try{
@@ -69,9 +70,9 @@ function TextComposer({onTakeover,thread,message,setMessage,onSent,attempts,stal
   }catch{request.status='Send status is uncertain. Check the conversation before sending again.';request.held=true;}finally{request.busy=false;update(n=>n+1);onSent();}
  }
  return <form className="message-composer" data-unsaved-draft={message.trim()?'true':undefined} onSubmit={send}>
-  <label className="sr-only" htmlFor={`reply-${thread.id}`}>Your reply</label><div className="text-input-row"><textarea id={`reply-${thread.id}`} placeholder={`Text the ${thread.party==='buyer'?'buyer':'seller'}…`} value={message} onChange={event=>setMessage(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing&&window.matchMedia('(pointer: fine)').matches){event.preventDefault();void send(event);}}} maxLength={160} rows={2} required disabled={busy||held||replyBlocked}/><button className="message-send" aria-label={busy?'Sending text':'Send text'} disabled={busy||held||stale||replyBlocked||!message.trim()||message.length>maxLength}><ArrowUp size={18}/></button></div>
-  <div className="text-composer-meta"><small>Sending puts you in control of this lead</small><small aria-live="polite">{message.length}/{maxLength}</small></div>
-  {held&&<button type="button" className="message-check-status" onClick={()=>{onSent();}}>Check latest status</button>}{replyBlocked&&<p>Messaging is paused for this contact.</p>}{status&&<p role="status">{status}</p>}
-  {message.length>maxLength&&<p>Shorten this draft to {maxLength} characters before sending.</p>}
+  <label className="sr-only" htmlFor={`reply-${thread.id}`}>Your reply</label><div className="text-input-row"><textarea id={`reply-${thread.id}`} placeholder={`Text the ${thread.party==='buyer'?'buyer':'seller'}…`} value={message} onChange={event=>setMessage(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing&&window.matchMedia('(pointer: fine)').matches){event.preventDefault();void send(event);}}} maxLength={160} rows={2} required disabled={busy||held||replyBlocked}/><button className="message-send" aria-label={busy?'Sending text':'Send text'} disabled={busy||held||stale||replyBlocked||!message.trim()||!length.fits}><ArrowUp size={18}/></button></div>
+  <div className="text-composer-meta"><small>Sending pauses the bot on this lead</small><small aria-live="polite">{length.units}/{maxLength}</small></div>
+  {held&&<button type="button" className="message-check-status" onClick={()=>{onSent();}}>Check latest status</button>}{replyBlocked&&<p>Texting is unavailable for this contact. <button type="button" onClick={onSent}>Check again</button> <a href="/support">Get help</a></p>}{status&&<p role="status">{status}</p>}
+  {!length.fits&&<p>Shorten this draft to {maxLength} characters before sending.</p>}
  </form>;
 }

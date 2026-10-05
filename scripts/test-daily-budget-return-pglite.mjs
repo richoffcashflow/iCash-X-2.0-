@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {pathToFileURL} from 'node:url';
+import {randomUUID as uuid} from 'node:crypto';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const {PGlite}=await import(pathToFileURL(process.argv[2]).href),pg=await PGlite.create();
+const q=(sql,args=[])=>pg.query(sql,args);
+try{
+ await pg.exec('create role anon;create role authenticated;create role service_role;');
+ const fixture=JSON.parse(read('tests/fixtures/automatic-credits-baseline.json'));
+ const names=['icash_accounts','icash_daily_plans','icash_funding_orders','icash_memberships','icash_spend_activations','icash_billing_reviews'];
+ for(const t of fixture.tables.filter(t=>names.includes(t.name)))await pg.exec(t.definition);
+ await pg.exec(`create function public.icash_membership_work_allowed(p_account uuid) returns boolean language sql stable set search_path='' as $$ select exists(select 1 from public.icash_accounts a where a.id=p_account and (a.billing_model<>'membership_credits' or exists(select 1 from public.icash_memberships m where m.account_id=a.id and m.mode='live' and m.state='active' and m.paid_through>now()))) $$;`);
+ await pg.exec(read('supabase/migrations/20261005215122_daily_budget_workspace_return.sql'));
+ const account=uuid(),plan=uuid(),order=uuid();
+ await q("insert into icash_accounts(id,billing_model,bot_paused,daily_limit_cents) values($1,'membership_credits',true,5000)",[account]);
+ await q("insert into icash_daily_plans(id,account_id,mode,state,consent_version) values($1,$2,'live','active','daily-2026-10-04.1')",[plan,account]);
+ await q("insert into icash_funding_orders(id,account_id,daily_plan_id,mode,state,credited_at,credit_cents,billing_period_start,paid_at) values($1,$2,$3,'live','paid',now(),1000,now(),now())",[order,account,plan]);
+ const claim=()=>q('select icash_daily_claim($1)',[account]);
+ const state=async()=>(await q('select billing_model,bot_paused,daily_limit_cents from icash_accounts where id=$1',[account])).rows[0];
+ await claim();assert.equal((await state()).bot_paused,true,'unpaid membership cannot activate');
+ await q("insert into icash_memberships(account_id,mode,state,paid_through) values($1,'live','active',now()+interval '1 month')",[account]);
+ await claim();assert.deepEqual(await state(),{billing_model:'membership_credits',bot_paused:false,daily_limit_cents:1000},'daily plan preserves membership and uses paid budget');
+ assert.equal((await q('select customer_cap_cents from icash_spend_activations where account_id=$1',[account])).rows[0].customer_cap_cents,1000);
+ await q('update icash_accounts set bot_paused=true where id=$1',[account]);await claim();assert.equal((await state()).bot_paused,true,'polling does not undo pause');
+ await q("insert into icash_funding_orders(id,account_id,daily_plan_id,mode,state,credited_at,credit_cents,billing_period_start,paid_at) values($1,$2,$3,'live','paid',now(),2500,now()+interval '1 second',now())",[uuid(),account,plan]);
+ await claim();assert.equal((await state()).daily_limit_cents,2500);assert.equal((await state()).bot_paused,true);
+ assert.equal((await q('select customer_cap_cents from icash_spend_activations where account_id=$1',[account])).rows[0].customer_cap_cents,3500);
+ await q("update icash_daily_plans set state='stopped' where id=$1",[plan]);await q('update icash_accounts set daily_limit_cents=1200 where id=$1',[account]);await claim();assert.equal((await state()).daily_limit_cents,1200,'stopped plans do not reactivate');
+ assert.equal((await q("select has_function_privilege('authenticated','icash_daily_claim(uuid)','execute') permitted")).rows[0].permitted,false);
+ console.log('PASS daily funding: membership preserved, unpaid membership held, verified paid limits, renewal caps, pause/replay respected, stopped plans stay stopped, private RPC.');
+}catch(e){console.error(e.message,e.where??'');process.exitCode=1;}finally{await pg.close();}

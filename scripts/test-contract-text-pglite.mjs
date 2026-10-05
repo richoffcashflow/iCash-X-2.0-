@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {pathToFileURL} from 'node:url';
+import {randomUUID as uuid,createHash} from 'node:crypto';
+import {smsLength} from '../lib/sms-length.ts';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const {PGlite}=await import(pathToFileURL(process.argv[2]).href),pg=await PGlite.create();
+const q=(s,a=[])=>pg.query(s,a);
+try{
+ await pg.exec('create role anon;create role authenticated;create role service_role;create schema extensions;');
+ const fixture=JSON.parse(read('tests/fixtures/automatic-credits-baseline.json'));
+ const names=['icash_accounts','icash_signing_envelopes','icash_text_threads','icash_text_messages','icash_live_conversations','icash_deal_files','icash_screening_jobs','icash_property_controls','icash_text_suppressions','icash_text_assets'];
+ for(const t of fixture.tables.filter(t=>names.includes(t.name)))await pg.exec(t.definition);
+ await pg.exec(`create function public.icash_sms_thread_review_current(uuid,uuid,boolean) returns boolean language sql as $$select not paused from public.icash_text_threads where account_id=$1 and id=$2$$;create function public.icash_membership_work_allowed(uuid) returns boolean language sql as $$select true$$;create function extensions.digest(text,text) returns bytea language sql as $$select sha256(convert_to($1,'UTF8'))$$;`);
+ await pg.exec(read('tests/fixtures/contract-text-queue-baseline.sql'));
+ await pg.exec(read('supabase/migrations/20261005215816_contract_text_delivery.sql'));
+ for(const value of ['hello',"Review your contract: https://docuseal.com/s/abc_DEF-123",'a'.repeat(160),'a'.repeat(161),'^'.repeat(80),'^'.repeat(81),'汉'.repeat(70),'汉'.repeat(71),'😀'.repeat(35),'😀'.repeat(36)])assert.equal((await q('select icash_sms_single_segment($1) ok',[value])).rows[0].ok,smsLength(value).fits);
+ const account=uuid(),other=uuid(),deal=uuid(),screen=uuid(),envelope=uuid(),thread=uuid(),phone='+12025550100',body='Review your contract: https://docuseal.com/s/fixture_only';
+ await q('insert into icash_accounts(id,bot_paused) values($1,false),($2,false)',[account,other]);
+ await q("insert into icash_screening_jobs(id,account_id,snapshot) values($1,$2,'{\"propertyId\":\"fixture\"}')",[screen,account]);
+ await q("insert into icash_deal_files(id,account_id,screening_id,stage,terms) values($1,$2,$3,'draft','{}')",[deal,account,screen]);
+ await q("insert into icash_signing_envelopes(id,account_id,deal_id,kind,terms,recipients,test_mode,provider_id,state) values($1,$2,$3,'purchase','{}',$4,false,'123','awaiting_counterparty')",[envelope,account,deal,JSON.stringify([{id:'1',phone},{id:'2',email:'owner@example.invalid'}])]);
+ await q("insert into icash_text_threads(id,account_id,deal_id,sender,recipient,paused,party) values($1,$2,$3,'+12025550101',$4,false,'seller')",[thread,account,deal,phone]);
+ const queue=(a=account,p=phone,b=body)=>q("select icash_queue_contract_text($1,$2,'1',$3,$4) id",[a,envelope,p,b]);
+ const first=(await queue()).rows[0].id;assert.equal((await queue()).rows[0].id,first,'repeat cannot create another text');
+ assert.equal((await q('select count(*)::int n from icash_text_messages')).rows[0].n,1);
+ await assert.rejects(()=>queue(other));await assert.rejects(()=>queue(account,'+12025550199'));
+ await q('insert into icash_text_suppressions(phone) values($1)',[phone]);await assert.rejects(()=>queue());await q('delete from icash_text_suppressions');
+ await q("insert into icash_live_conversations(account_id,screening_id,party,conversation_id,tool_token_hash,tool_expires_at,state,contact_key) values($1,$2,'seller','conv_fixture','hash',now()+interval '10 minutes','waiting',$3)",[account,screen,createHash('sha256').update(phone).digest('hex')]);
+ const context=async(hash='hash')=>(await q("select icash_live_contract_context($1,'conv_fixture') result",[hash])).rows[0].result;
+ assert.deepEqual(await context(),{accountId:account,envelopeId:envelope,phone});assert.equal(await context('wrong'),null);
+ await q('update icash_accounts set bot_paused=true where id=$1',[account]);assert.equal(await context(),null);await q('update icash_accounts set bot_paused=false where id=$1',[account]);
+ await q("insert into icash_property_controls(account_id,property_id,manual) values($1,'fixture',true)",[account]);assert.equal(await context(),null);await q('delete from icash_property_controls');
+ await q('update icash_signing_envelopes set test_mode=true where id=$1',[envelope]);assert.equal(await context(),null);await assert.rejects(()=>queue());
+ assert.equal((await q("select has_function_privilege('authenticated','icash_queue_contract_text(uuid,uuid,text,text,text)','execute') ok")).rows[0].ok,false);
+ console.log('PASS SMS alphabet boundaries, contract text idempotency, account/signer isolation, opt-out, bound call, manual takeover, test isolation, private RPC.');
+}catch(e){console.error(e.message,e.where??'');process.exitCode=1;}finally{await pg.close();}
