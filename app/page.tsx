@@ -3,7 +3,7 @@ import OwnerRecordingTestLink from '@/components/owner-recording-test-link';
 import {useCallback,useEffect,useState,useRef,type CSSProperties} from 'react';
 import Image from 'next/image';
 import {saveRunRequest,consumeRunRequest,hasRunRequest,clearRunRequest} from '@/lib/workspace-run-request';
-import {workspaceStatus,workspaceNextAction,workspaceActionDisabled} from '@/lib/workspace-status';
+import {workspaceNextAction,workspaceActionDisabled} from '@/lib/workspace-status';
 import {DealExplainer} from '@/components/deal-explainer';
 import {X} from 'lucide-react';
 import {FundingCheckout} from '@/components/funding-checkout';
@@ -47,7 +47,6 @@ export default function Home(){
  async function signOut(){if(document.querySelector('[data-unsaved-draft="true"]')&&!window.confirm('Sign out and discard unsaved work in this view?'))return;const r=await fetch('/api/auth/logout',{method:'POST'});if(r.ok){setAccount({signedIn:false});setCampaign(null);setDraftBrand(null);setFundingOpen(false);}else setAccountError(true);}
  function closeFunding(){clearRunRequest(window.sessionStorage);setFundingOpen(false);setRunRequested(false);if(window.location.hash==='#funding')window.history.replaceState(window.history.state,'',window.location.pathname+window.location.search);document.getElementById('workspace-funding-toggle')?.focus();}
  function openFunding(code='',run=false){setRunRequested(run);if(account?.billingModel==='membership_credits'&&!account.membershipActive){showDetails('membership-settings');return;}setFundingCode(code);setFundingOpen(true);if(window.location.hash!=='#funding')window.history.pushState(window.history.state,'','#funding');}
- const status=workspaceStatus({...account,spendingActivationAvailable});
  const funding=nextWorkFunding(account??{},accountError);
  const suggestedAction=workspaceNextAction({...account,spendingActivationAvailable},campaign);
  const nextAction=funding.needsFunding&&suggestedAction.kind==='resume'?{kind:'funding' as const,label:'Review funding',reason:'There are not enough available credits for the next eligible task. Your saved progress stays here.'}:suggestedAction;
@@ -72,9 +71,9 @@ export default function Home(){
     <section className="operation-panel" aria-label="Your AI real estate bot">
      {guest?<div className="workspace-first-visit"><h2>Your properties</h2><p>Run your bot to get started.</p></div>:<>
      {needsBotName&&<PostPaymentBotName onBrand={updateBrand} onCreated={async()=>{await refreshAccount();await toggleBot('resume');}}/>}
-     <div className="workspace-state-row"><details className="workspace-state"><summary>{accountError?'Checking status':status.label==='PAUSED'?'Paused':status.label==='WORKING'?'Working':status.title}</summary><p>{status.detail}</p>{!['pause','work'].includes(nextAction.kind)&&<p>{nextAction.reason}</p>}{funding.detail&&<p>{funding.detail}</p>}</details>
-      {!['pause','work',...(dailyBilling?['resume','funding']:[])].includes(nextAction.kind)&&(nextAction.kind==='support'?<a className="fund-button" href="/support">{nextAction.label}</a>:<button className="fund-button" disabled={workspaceActionDisabled(nextAction.kind,controlBusy,accountError)} onClick={doNextAction}>{controlBusy?'Saving…':nextAction.label}</button>)}
-     </div>
+     {!['pause','work',...(dailyBilling?['resume','funding']:[])].includes(nextAction.kind)&&<div className="workspace-state-row">
+      {nextAction.kind==='support'?<a className="fund-button" href="/support">{nextAction.label}</a>:<button className="fund-button" disabled={workspaceActionDisabled(nextAction.kind,controlBusy,accountError)} onClick={doNextAction}>{controlBusy?'Saving…':nextAction.label}</button>}
+     </div>}
      {account.mode==='test'&&<p className="workspace-test-label">Test workspace</p>}
      {controlError&&<p role="alert">{controlError}</p>}
      {account.mode==='live'&&account.billingModel==='legacy'&&<SpendActivationReview key={activationKey} onAvailabilityChange={updateActivationAvailability} onSaved={()=>void refreshAccount()}/>}
