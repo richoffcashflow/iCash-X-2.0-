@@ -19,9 +19,39 @@ test('simulated counts are bounded and stable across resume, while actual counts
  assert.equal(simulatedAudience(config,id,145),simulatedAudience(config,id,149));
  assert.equal(simulatedAudience(config,id,300),numbers[30]);
  assert.notDeepEqual(numbers,Array.from({length:301},(_,n)=>simulatedAudience(config,'another session',n*10)));
- assert.equal(simulatedAudience({...config,mode:'fixed'},id,300),125);
  assert.equal(simulatedAudience({...config,mode:'actual'},id,300),null);
  assert.equal(simulatedAudience({...config,minimum:40,maximum:40},id,300),40);
+});
+test('a saved fixed number becomes a dynamic target that builds, fluctuates and tapers with video length',()=>{
+ const config={mode:'fixed',fixedCount:800,minimum:80,maximum:160};
+ for(const duration of [60,600,1800,14400])for(const session of [id,'another session','returning viewer']){
+  const count=seconds=>simulatedAudience(config,session,seconds,duration);
+  const middle=Array.from({length:41},(_,n)=>count(duration*(.3+n*.01)));
+  assert.ok(count(0)<600,'The audience starts below the target');
+  assert.ok(middle.every(n=>n>=720&&n<=880),'The audience builds toward the target');
+  assert.ok(middle.some((n,i)=>i>0&&n>middle[i-1]),'Arrivals continue in the middle');
+  assert.ok(middle.some((n,i)=>i>0&&n<middle[i-1]),'Departures continue in the middle');
+  assert.ok(count(duration)<Math.min(...middle),'The audience tapers near the end');
+  assert.equal(count(duration+3600),count(duration),'The completed audience stops drifting');
+  assert.equal(count(-10),count(0));
+ }
+ const curve=session=>Array.from({length:181},(_,n)=>simulatedAudience(config,session,n*10,1800));
+ const numbers=curve(id);
+ assert.deepEqual(curve(id),numbers,'Returning to the same playback positions preserves the curve');
+ assert.notDeepEqual(curve('another session'),numbers,'New sessions have their own variation');
+ assert.equal(simulatedAudience(config,id,145,1800),simulatedAudience(config,id,149,1800));
+ assert.ok(numbers.every((n,i)=>i===0||Math.abs(n-numbers[i-1])<=40),'A normal webinar changes gradually');
+});
+test('target audience handles zero, limits, short recordings and invalid timing safely',()=>{
+ const config={mode:'fixed',fixedCount:800,minimum:0,maximum:100000};
+ for(const target of [0,1,800,100000,100001,-10,NaN,Infinity])for(const duration of [10,59,1801,14400,0,NaN,Infinity]){
+  for(const seconds of [-10,0,5,59,900,1801,14400,NaN,Infinity]){
+   const count=simulatedAudience({...config,fixedCount:target},id,seconds,duration);
+   assert.ok(Number.isInteger(count)&&count>=0&&count<=100000);
+   if(target===0)assert.equal(count,0);
+  }
+ }
+ assert.equal(simulatedAudience(config,id,300),simulatedAudience(config,id,300,1800),'Portable callers retain the default duration');
 });
 test('locations use coarse validated regions with no invented fallback',()=>{
  assert.equal(approximateRegion('US','TX'),'Texas');assert.equal(approximateRegion('US','ZZ'),'the United States');

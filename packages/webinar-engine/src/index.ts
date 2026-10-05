@@ -87,10 +87,26 @@ export function changeDurationUnit(total:number,unit:'hours'|'minutes'|'seconds'
 
 export type AudienceDisplay={mode:'actual'|'fixed'|'simulated';fixedCount:number;minimum:number;maximum:number};
 /** A labeled simulation, stable for a session and playback position. Never used for analytics. */
-export function simulatedAudience(config:AudienceDisplay,sessionId:string,seconds:number):number|null{
+export function simulatedAudience(config:AudienceDisplay,sessionId:string,seconds:number,durationSeconds=1800):number|null{
  if(config.mode==='actual')return null;
  const bounded=(n:number)=>Math.max(0,Math.min(100000,Math.floor(Number.isFinite(n)?n:0)));
- if(config.mode==='fixed')return bounded(config.fixedCount);
+ // Keep the saved `fixed` mode and field compatible: the number is now a target.
+ if(config.mode==='fixed'){
+  const target=bounded(config.fixedCount);
+  const duration=Number.isFinite(durationSeconds)&&durationSeconds>0?Math.max(10,durationSeconds):1800;
+  const time=Math.max(0,Number.isFinite(seconds)?seconds:0),cadence=Math.max(1,Math.min(10,duration/60));
+  const elapsed=time>=duration?duration:Math.floor(time/cadence)*cadence,progress=elapsed/duration;
+  const seeded=(key:string)=>choice(sessionId+':target-audience:'+key,10001)/10000;
+  const smooth=(value:number)=>{const n=Math.max(0,Math.min(1,value));return n*n*(3-2*n);};
+  const start=.5+seeded('start')*.12,rampUntil=.18+seeded('ramp')*.08;
+  const taperAt=.72+seeded('taper')*.08,finish=.72+seeded('finish')*.1;
+  const trend=start+(1-start)*smooth(progress/rampUntil)-(1-finish)*smooth((progress-taperAt)/(1-taperAt));
+  // Gentle arrivals and departures continue around the target between the ramp and taper.
+  const position=elapsed/Math.min(90,duration/16),step=Math.floor(position);
+  const from=seeded('wave:'+step)*2-1,to=seeded('wave:'+(step+1))*2-1;
+  const variation=(from+(to-from)*smooth(position-step))*.04;
+  return bounded(Math.round(target*trend*(1+variation)));
+ }
  const low=bounded(config.minimum),high=Math.max(low,bounded(config.maximum));
  const position=Math.floor(Math.max(0,Number.isFinite(seconds)?seconds:0)/10)*10/120,step=Math.floor(position),fraction=position-step;
  const from=choice(sessionId+':audience:'+step,high-low+1),to=choice(sessionId+':audience:'+(step+1),high-low+1);
