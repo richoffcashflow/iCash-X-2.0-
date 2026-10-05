@@ -19,7 +19,7 @@ const mocks={z,NextResponse:{json:(body,options={})=>({body,status:options.statu
  paths.push({path,method,body});
  if(path==='rpc/icash_prioritized_work'){assert.equal(body.p_account,account);return properties.slice(body.p_page*6,body.p_page*6+7);}
  const [table,params]=path.split('?');const q=new URLSearchParams(params);
- assert.equal(q.get('account_id'),`eq.${account}`,'Every read is tenant scoped');
+ assert.equal(q.get(table==='icash_seller_intakes'?'assigned_account':'account_id'),`eq.${account}`,'Every read is tenant scoped');
  if(table==='icash_screening_jobs'){
   if(q.get('select')?.includes('!inner()'))return [{id:uuid(1)}];
   if(q.get('select')==='id,result:result->property')return properties.filter(p=>q.get('id').includes(p.id)).map(p=>({id:p.id,result:p.result.property}));
@@ -41,6 +41,7 @@ const mocks={z,NextResponse:{json:(body,options={})=>({body,status:options.statu
   // Defense in depth: even an unexpected database row cannot escape projection.
   return [...selected,{...lookup(1,[{name:'Wrong account row',phones:[]}]),account_id:otherAccount},lookup(19,[{name:'Nonvisible contact',phones:[]}])];
  }
+ if(table==='icash_seller_intakes'){assert.equal(q.get('assigned_account'),'eq.'+account);return [];}
  if(['icash_property_controls','icash_live_conversations','icash_live_callbacks'].includes(table))return [];
  throw Error('Unexpected read '+table);
 }};
