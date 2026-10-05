@@ -97,7 +97,6 @@ function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefre
    <button type="button" className="property-summary" aria-expanded={active} aria-controls={`property-content-${p.id}`} onClick={()=>onToggle(!active)}>
     <PropertyThumbnail key={photoRefresh} screeningId={p.id} address={p.result.property.address} images={p.result.property.images}/>
     <span className="property-summary-main">
-     {promising&&!practice&&<span className="promising-label">Most promising on this page</span>}
      <span className="property-address" id={`property-address-${p.id}`}><strong>{address.street}</strong>{address.location&&<span>{address.location}</span>}</span>
      {owner&&<span className="property-owner-name">{owner}</span>}
      <span className="property-summary-status">{(p.result.property.propertyId.startsWith('practice_')||[true,'true'].includes((deal?.terms as (DealTerms&{practice?:boolean|string})|undefined)?.practice??false))&&<span className="property-manual-label">Practice only · no real property</span>}<span className="property-status" hidden={phase===bot.label}>{phase}</span>{manual&&<span className="property-manual-label">Paused for this property</span>}</span>
