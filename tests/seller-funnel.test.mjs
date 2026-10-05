@@ -25,6 +25,10 @@ assert.equal((await processSellerIntake(db,undefined)).status,'provider_not_conf
 const transport=async(url,opts)=>{requests++;assert.equal(url,'https://api.v2.dealmachine.com/v1/enrichment/address');const body=JSON.parse(opts.body);assert.equal(body.data.length,1);assert.equal(body.contact_audience,'none');assert(!('estimate_cost' in body));return Response.json(raw);};
 assert.equal((await processSellerIntake(db,'dm_sk_live_fixture',transport)).status,'property_checked');await processSellerIntake(db,'dm_sk_live_fixture',transport);assert.equal(requests,1);assert.equal(saved,1);
 claimed=false;assert.equal((await processSellerIntake(db,'dm_sk_live_fixture',async()=>{requests++;throw Error('ambiguous provider timeout');})).status,'lookup_requires_review');await processSellerIntake(db,'dm_sk_live_fixture',transport);assert.equal(requests,2,'an ambiguous paid lookup is not retried');
+claimed=false;let targetClaim=false;
+const targeted=async(path,method,body)=>{if(path==='rpc/icash_claim_seller_lookup_for'){assert.deepEqual(body,{p_id:input.requestId});targetClaim=true;return db('rpc/icash_claim_seller_lookup',method,{});}return db(path,method,body);};
+assert.equal((await processSellerIntake(targeted,'dm_sk_live_fixture',transport,input.requestId)).status,'property_checked');assert(targetClaim);
+await processSellerIntake(targeted,'dm_sk_live_fixture',transport,input.requestId);assert.equal(requests,3,'targeted retries reuse the durable claim');
 const event={id:'event-fixture',leadId:'lead-fixture',token:'claim',name:'Lead',occurredAt:new Date(now).toISOString(),phone:'+12145550123'};
 const payload=sellerMetaEvent(event,now);assert.equal(payload.event_id,'keypath:event-fixture');assert(!JSON.stringify(payload).includes(event.phone));assert.equal(payload.user_data.ph[0].length,64);assert(!('custom_data' in payload));assert.throws(()=>sellerMetaEvent({...event,occurredAt:new Date(now-8*86400000).toISOString()},now));
 let writes=[];const eventDb=async(path,method,body)=>{writes.push({path,body});return path==='rpc/icash_claim_seller_event'?event:true;};
