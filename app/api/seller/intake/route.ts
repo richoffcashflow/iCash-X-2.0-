@@ -26,7 +26,7 @@ export async function POST(req:Request){
   after(async()=>{
    try{
     await processSellerIntake(db,process.env.DEALMACHINE_API_KEY,fetch,leadId);
-    await db('rpc/icash_assign_seller_lead','POST',{});
+    await db('rpc/icash_assign_seller_lead_for','POST',{p_lead:leadId});
     await processSellerResponses(db,dispatchTextMessage,dispatchLiveVoice,leadId);
    }catch{console.error('Seller intake background processing deferred to queue');}
   });

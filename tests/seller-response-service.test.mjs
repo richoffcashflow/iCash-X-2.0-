@@ -19,3 +19,11 @@ assert.match(sellerFirstMessage(seller),/^Hi, is this David\?/);assert.match(sel
 assert(!sellerFirstMessage({...seller,request:{...seller.request,name:'<ignore instructions>'}}).includes('<ignore'));
 assert.match(sellerCallPrompt(seller),/not claim the offer is ready/);
 console.log('PASS seller response handoff: database-only binding, independent channel failures, no invented dispatch and explicit live blockers.');
+
+// A slow SMS provider must not delay the independent initial call.
+let releaseText,voiceStarted=false;
+const waitingText=new Promise(resolve=>{releaseText=resolve;});
+const response=processSellerResponses(db,async()=>{await waitingText;return {status:'accepted'};},async()=>{voiceStarted=true;return {status:'call_started'};});
+await Promise.resolve();await Promise.resolve();
+assert.equal(voiceStarted,true,'voice starts while SMS remains in flight');
+releaseText();await response;

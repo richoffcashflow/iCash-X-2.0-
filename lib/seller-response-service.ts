@@ -9,11 +9,13 @@ export async function processSellerResponses(db:Database,dispatchText:Dispatch,d
  const results=[];
  for(const item of work){
   const outcome:{sms?:string;voice?:string}={};
-  for(const [channel,id,dispatch] of [['sms',item.smsMessageId,dispatchText],['voice',item.voiceJobId,dispatchVoice]] as const){
-   if(!id)continue;
+  await Promise.all(([
+   ['sms',item.smsMessageId,dispatchText],['voice',item.voiceJobId,dispatchVoice]
+  ] as const).map(async([channel,id,dispatch])=>{
+   if(!id)return;
    try{outcome[channel]=(await dispatch(item.accountId,id)).status;}
    catch{outcome[channel]='dispatch_requires_review';}
-  }
+  }));
   // Conditional provider claims, rather than this status record, own delivery.
   // A bookkeeping timeout cannot reopen an operation or authorize a redial.
   if(Object.keys(outcome).length)await db('rpc/icash_note_seller_response','POST',{p_lead:item.leadId,p_account:item.accountId,p_outcome:outcome});
