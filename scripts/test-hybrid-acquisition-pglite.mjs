@@ -13,7 +13,7 @@ try{
  await pg.exec(Object.values(fixture.tables).join('\n').replaceAll('id uuid primary key','id uuid primary key default gen_random_uuid()'));
  await pg.exec(Object.values(fixture.functions).join(';\n')+';');
  await pg.exec(file('tests/fixtures/hybrid-free-scheduler.sql'));
- await pg.exec(file('supabase/migrations/20261005181022_hybrid_inbound_priority_acquisition.sql'));
+ await pg.exec(file('supabase/migrations/20261005183118_hybrid_inbound_priority_acquisition.sql'));
  for(const [address,state] of [['10 Main St, Dallas, TX 75201, USA','TX'],['10 Main St, Austin, Texas, United States','TX'],['10 Main St, Portland, OR','OR'],['10 Maine Street, Boston, MA 02108','MA'],['10 Main St',null]])assert.equal(await scalar('select icash_address_state($1) value',[address]),state);
  assert.equal(await scalar("select icash_research_state_allowed('TX') value"),true);
  for(const state of ['OR','IL','SC','CT','XX',null])assert.equal(await scalar('select icash_research_state_allowed($1) value',[state]),false);
