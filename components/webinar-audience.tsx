@@ -3,7 +3,7 @@ import {useEffect,useRef,useState} from 'react';
 import {Users} from 'lucide-react';
 import {simulatedAudience,type AudienceDisplay} from '@/packages/webinar-engine/src/index';
 
-export function WebinarAudience({sessionId,enabled,preview,playing,display,seconds}:{sessionId:string;enabled:boolean;preview:boolean;playing:boolean;display:AudienceDisplay;seconds:number}){
+export function WebinarAudience({sessionId,enabled,preview,playing,display,seconds,durationSeconds}:{sessionId:string;enabled:boolean;preview:boolean;playing:boolean;display:AudienceDisplay;seconds:number;durationSeconds:number}){
  const [count,setCount]=useState<number|null>(null),tab=useRef(''),sequence=useRef(0);
  useEffect(()=>{
   if(!enabled||preview||display.mode!=='actual')return;
@@ -20,7 +20,7 @@ export function WebinarAudience({sessionId,enabled,preview,playing,display,secon
   document.addEventListener('visibilitychange',visibility);window.addEventListener('pagehide',leave);
   return()=>{disposed=true;clearInterval(interval);document.removeEventListener('visibilitychange',visibility);window.removeEventListener('pagehide',leave);update(true);};
  },[sessionId,enabled,preview,playing,display.mode]);
- const simulated=simulatedAudience(display,sessionId,seconds);
+ const simulated=simulatedAudience(display,sessionId,seconds,durationSeconds);
  if(enabled&&simulated!==null)return <span className="wb-audience" title="A simulated audience display configured by the host. This is not a count of connected viewers."><Users size={14}/><b>{simulated.toLocaleString()}</b> simulated viewers</span>;
  if(!enabled||preview||count===null||count===0)return null;
  return <span className="wb-audience" title="Active viewers of this recording. Updated every 30 seconds; inactive connections expire within 75 seconds."><Users size={14}/><b>{count.toLocaleString()}</b> watching now</span>;
