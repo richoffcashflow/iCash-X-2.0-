@@ -10,7 +10,7 @@ const headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referre
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Open the property form directly and try again.'},{status:403,headers});
  try{
-  const body=await req.text();if(body.length>3000)throw Error();const p=sellerSubmission.safeParse(JSON.parse(body));if(!p.success)return NextResponse.json({error:'Check your name, full property address, US phone number, and email if provided.'},{status:400,headers});const i=p.data;
+  const body=await req.text();if(body.length>3000)throw Error();const p=sellerSubmission.safeParse(JSON.parse(body));if(!p.success)return NextResponse.json({error:'Check your contact details and accept the contact agreement.'},{status:400,headers});const i=p.data;
   if(i.honeypot)return NextResponse.json({received:true,message:'Your request has been received.'},{headers});
   const jar=await cookies();let token=jar.get('keypath_seller')?.value;if(!validGuest(token)){token=randomBytes(32).toString('hex');jar.set('keypath_seller',token,{httpOnly:true,secure:true,sameSite:'lax',path:'/',maxAge:86400*30});}
   await limitRequest(req,'seller-intake',token,5,3600);

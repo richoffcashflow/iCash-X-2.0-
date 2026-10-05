@@ -5,9 +5,9 @@ import {processSellerIntake} from '../lib/seller-pipeline.ts';
 import {sellerMetaEvent,deliverSellerEvent} from '../lib/seller-conversions.ts';
 import {dailyBudgetTier,validDailyBudget} from '../lib/daily-budget.ts';
 const now=Date.now(),future=new Date(now+86400000).toISOString();
-const input={name:'Sample Seller',address:'Synthetic address, Dallas, TX 75217',phone:'214-555-0123',consented:false,ownerConfirmed:true,consentVersion:sellerConsentVersion,requestId:'12345678-1234-4234-8234-123456789abc'};
-assert.equal(sellerSubmission.parse(input).phone,'+12145550123');assert.equal(sellerSubmission.parse(input).consented,false,'AI consent is optional and explicit');
-for(const bad of [{...input,phone:'invalid'},{...input,ownerConfirmed:false},{...input,consentVersion:'old'},{...input,qualified:true},{...input,email:'invalid'},{...input,email:'x@example.com\nBcc: other@example.com'}])assert.equal(sellerSubmission.safeParse(bad).success,false);
+const input={name:'Sample Seller',address:'Synthetic address, Dallas, TX 75217',phone:'214-555-0123',consented:true,consentVersion:sellerConsentVersion,requestId:'12345678-1234-4234-8234-123456789abc'};
+assert.equal(sellerSubmission.parse(input).phone,'+12145550123');assert.equal(sellerSubmission.parse(input).consented,true,'Only explicit affirmative consent is accepted');
+for(const bad of [{...input,phone:'invalid'},{...input,consented:false},{...input,consented:undefined},{...input,ownerConfirmed:true},{...input,consentVersion:'old'},{...input,qualified:true},{...input,email:'invalid'},{...input,email:'x@example.com\nBcc: other@example.com'}])assert.equal(sellerSubmission.safeParse(bad).success,false);
 assert.equal(sellerSubmission.parse({...input,email:' Seller@Example.com '}).email,'seller@example.com');assert.equal(sellerSubmission.parse(input).email,null);assert.equal(sellerSubmission.parse({...input,email:''}).email,null);
 assert.equal(sellerDuplicateKeyInput(' 123 Main St. ','+12145550123'),sellerDuplicateKeyInput('123 MAIN ST','+12145550123'));
 const raw={data:[{matched:true,dm_property_id:'prop_123',full_address:'Synthetic only',city:'Dallas',state:'TX',zip:'75217',property_type:1,estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}],credits:{used:1,people:0},totals:{submitted:1}};
@@ -31,4 +31,4 @@ let writes=[];const eventDb=async(path,method,body)=>{writes.push({path,body});r
 assert.equal((await deliverSellerEvent(eventDb,{})).status,'measurement_setup_required');assert.equal(writes.length,0);
 const env={META_SELLER_EVENTS_ENABLED:'true',META_SELLER_DATASET_ID:'123456789',META_SELLER_ACCESS_TOKEN:'fixture',META_GRAPH_VERSION:'v25.0'};
 assert.equal((await deliverSellerEvent(eventDb,env,async()=>Response.json({events_received:1}))).status,'delivered');assert.equal(writes.at(-1).body.p_delivered,true);
-console.log('PASS seller funnel: optional consent, input validation, real financial screening, reviewed markets, exact 3× pricing, one-use paid lookup, ambiguous-outcome hold, private measurement payload and credential gate.');
+console.log('PASS seller funnel: explicit affirmative consent, input validation, real financial screening, reviewed markets, exact 3× pricing, one-use paid lookup, ambiguous-outcome hold, private measurement payload and credential gate.');
