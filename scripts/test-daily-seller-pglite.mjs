@@ -190,6 +190,30 @@ try{
  await q("insert into icash_signing_envelopes values($1,$2,$3,'purchase',false,'completed','fixture-signed','{}')",[uuid(),sm.account_id,signedDeal]);
  assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j,null,'signed purchase excludes lead');
  for(const role of ['anon','authenticated'])for(const fn of ['icash_claim_seller_lookup_for(uuid)','icash_seller_demand_summary()'])assert.equal((await q('select has_function_privilege($1,$2,\'execute\') allowed',[role,fn])).rows[0].allowed,false);
+ // User's corrected billing flow: research -> immediate targeted assignment,
+ // with advertising measured separately and the first price held for all users.
+ await pg.exec(file('supabase/migrations/20261005131826_instant_research_assignment.sql'));
+ const historic=(await q('select customer_costs,customer_cost_basis from icash_seller_intakes where id=$1',[fresh])).rows[0];
+ assert.equal(Number(historic.customer_costs.acquisition),1000000,'historical paid basis is preserved');
+ await q("update icash_seller_intakes set next_assignment_at='infinity'");
+ const backlog=await submit('Earlier backlog'),instant=await submit('Instant research');
+ for(const [id,label] of [[backlog,'backlog'],[instant,'instant']])await q("update icash_seller_intakes set state='qualified',lookup_costs=$2,lookup_cost_basis='Synthetic research only',property=$3,result=$4,checked_at=now(),data_rights_until=now()+interval '7 days',numbers_passed=true,market_qualified=true,next_assignment_at=now(),created_at=now()-interval '2 days',attribution=$5 where id=$1",[id,costs,{id:'prop_'+label,city:'Dallas',state:'TX',zip:'75217',fetchedAt:new Date().toISOString(),raw:{}},{financialCheck:{status:'eligible'}},{source:'meta',campaign:label}]);
+ const immediate=(await q('select icash_assign_seller_lead_for($1) j',[instant])).rows[0].j;
+ assert.equal(immediate.status,'assigned');assert.equal(immediate.leadId,instant);assert.equal(immediate.chargeCents,30,'3× research, no advertising receipt required');
+ assert.equal((await q('select count(*)::int n from icash_seller_matches where lead_id=$1',[backlog])).rows[0].n,0,'targeted callback does not assign an unrelated older lead');
+ assert.equal((await q('select icash_assign_seller_lead_for($1) j',[instant])).rows[0].j,null,'retry does not debit the first user twice');
+ const beforeReport=(await q('select sum(balance_cents)::text n from icash_wallets')).rows[0].n;
+ const report=(await q("select icash_allocate_seller_ad_cost('instant-receipt','meta','instant',now()::date-interval '3 days',now()-interval '1 day',9000000,'Synthetic actual ad report',$1) j",[a])).rows[0].j;
+ assert.equal(report.allocated,1,'late advertising report includes assigned leads');
+ assert.equal((await q('select sum(balance_cents)::text n from icash_wallets')).rows[0].n,beforeReport,'ad reporting cannot retroactively bill a customer');
+ await q("update icash_seller_matches set assigned_at=now()-interval '25 hours' where lead_id=$1",[instant]);
+ await q("update icash_seller_intakes set lookup_costs=jsonb_set(lookup_costs,'{dealmachine}','999999') where id=$1",[instant]);
+ assert.equal((await q('select icash_assign_seller_lead_for($1) j',[instant])).rows[0].j.chargeCents,30,'later delivery keeps frozen price despite changed raw inputs and ad receipt');
+ assert.equal((await q('select count(*)::int n from icash_seller_matches where lead_id=$1',[instant])).rows[0].n,2);
+ assert.equal((await q('select icash_assign_seller_lead() j')).rows[0].j.leadId,backlog,'cron wrapper still serves backlog without receipts');
+ assert.equal((await q('select icash_seller_funnel_summary() j')).rows[0].j.waitingForCosts,0);
+ for(const role of ['anon','authenticated'])assert.equal((await q("select has_function_privilege($1,'icash_assign_seller_lead_for(uuid)','execute') allowed",[role])).rows[0].allowed,false);
+ console.log('PASS immediate research assignment: exact lead, no ad wait, 3× research, historical and later price preservation, no retroactive charges, idempotency, paced recipients and private RPC.');
  console.log('PASS weighted inbound distribution: 3 unique charges, 24/72-hour pacing, priority for larger budgets, daily coverage for small accounts, research reuse, suppressed/contracted exclusions, targeted lookup claims and owner-only demand.');
  console.log('PASS HomeOffer contact evidence: exact copy/version, optional email, explicit channel choice, historical sharing evidence, legacy preservation, idempotency and private RPC.');
  console.log('PASS isolated SQL: $10 minimum, historical invoice compatibility, immutable price versions, 3× rates, renewal caps, pause preservation, intake consent/idempotency, zero-budget lookup hold, one-use provider claims, exact CPA allocation, funded daily bid limit, next-day queue, exactly-once debit, factual call milestones, event claims, RLS and private RPCs.');

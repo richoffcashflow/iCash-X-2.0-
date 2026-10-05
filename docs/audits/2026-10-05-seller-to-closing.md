@@ -2,6 +2,14 @@
 
 **Release verdict: not ready for unattended live operation.** The audit found a real gap between inbound lead assignment and first contact. This release adds the missing tracked handoff and immediate dispatch attempt for already-admitted channels. It does not make missing permissions, funding, provider acceptance or completed signatures appear valid.
 
+## Follow-up: immediate contact after research
+
+The owner clarified the intended sequence: submitted address → DealMachine research → funded user assignment → immediate SMS and call. The follow-up release removes the advertising-receipt dependency, targets assignment to the just-submitted lead, and starts the independent SMS/call attempts concurrently. New lead prices use 3× the recorded research and operating cost basis. The first assignment freezes that basis for later recipients; advertising reporting cannot debit customers retroactively. Historical paid prices are preserved.
+
+The seller-processing switch and the existing owner's account voice configuration were enabled at the owner's request. Automatic approval review rejected changing the production `ICASH_RECORDED_OUTBOUND_READY` flag because no completed recorded-call acceptance exists; the production flag remains false. The existing inbound reception service remains enabled, but the recorded incoming replacement is not activated. A fresh readback still shows a missing Twilio price for the previous reception call, so its reserved credits cannot be reconciled yet. No funds, acceptance evidence, market reviews, or contact permissions were invented.
+
+Validation: all 210 automated suites, TypeScript, production build, and the expanded isolated SQL test passed. New tests cover assignment without advertising receipts, exact-lead targeting, historical price preservation, fixed later-recipient charges, no retroactive advertising debit, duplicate prevention, tenant privileges, and a call starting while SMS is still awaiting its provider.
+
 ## Changes in this release
 
 - Every paid seller assignment creates one durable response record. The response worker prepares an empty-price draft without overwriting existing terms, then attempts the existing text and call paths when their separate requirements are met. Submission processing and the one-minute seller cron both run this handoff. A provider timeout does not authorize another send or redial.
@@ -36,8 +44,8 @@ The current owner call allowance still shows one unused attempt and $1 uncommitt
 
 | Step | What is implemented | What remains before claiming complete automation |
 |---|---|---|
-| Seller submits | Validated, versioned agreement, deduplication, persisted request, targeted address lookup claim and immediate background processing | First response is still downstream of qualification and paid assignment. Actual campaign-cost allocation can delay assignment. A separately funded HomeOffer intake response lane is needed to respond before assignment; customer wallets must not be charged for unassigned work. |
-| Research and distribution | DealMachine address-only lookup; real financial inputs; maximum three recipient accounts; initial, 24-hour and 72-hour distribution; exact duplicate charging protection | Platform allowance, reviewed markets, active accounts and actual ad-cost receipts are missing. Shared research lasts eight days, but automated financial call admission requires 24-hour freshness: later recipients need a separately funded refresh path. |
+| Seller submits | Validated, versioned agreement, deduplication, persisted request, targeted address lookup and assignment, immediate background processing | First response follows completed research and funded assignment, as clarified by the owner. Advertising reports no longer delay assignment. Actual account-specific channel configuration is still required. |
+| Research and distribution | DealMachine address-only lookup; real financial inputs; maximum three recipient accounts; initial, 24-hour and 72-hour distribution; exact duplicate charging protection; 3× research pricing independent of advertising reports | Platform allowance, reviewed markets and active accounts are missing. Shared research lasts eight days, but automated financial call admission requires 24-hour freshness: later recipients need a separately funded refresh path. |
 | First SMS/call | This release supplies the durable handoff into existing permitted channels and records failures | The checkbox does not create the actual account-specific channel records. No live acceptance test has passed. Unconditional immediate calling outside contact hours is not released. |
 | No answer | Ambiguous sends are held; confirmed callback requests have durable scheduling | A complete automatic no-answer cadence is missing. Do not classify a declined recording prompt, uncertain dial, voicemail or opt-out as a successful conversation. |
 | Appointments/showings | Callback tools and showing proposals exist; confirmed access requires both parties | SMS callback requests still require review; showing proposals are not an autonomous calendar booking system. |
@@ -79,8 +87,8 @@ The current owner call allowance still shows one unused attempt and $1 uncommitt
 
 ## Release acceptance still required
 
-1. Actual lookup allowance, licensed data-use evidence, reviewed launch markets and real campaign-cost records.
-2. A funded active account and valid channel configuration; or a separately funded first-party intake responder if response must precede paid assignment.
+1. Actual lookup allowance, licensed data-use evidence and reviewed launch markets. Campaign-cost reports are optional internal reporting and do not hold customer delivery.
+2. A funded active account and valid channel configuration for contact immediately after completed research and assignment.
 3. Reconcile existing call costs, refresh the bounded call-test review through its normal workflow, and complete one controlled recorded call with audio, transcript, STOP, callback and human handoff evidence.
 4. Complete controlled SMS delivery/reply/STOP and a real DocuSeal **test-mode** signing flow; then test an actual requested package and title reply using controlled recipients.
 5. Implement and test the remaining no-answer, multi-identity allocation, later-recipient refresh and lifecycle-learning work above before advertising a fully autonomous wholesaling business.
