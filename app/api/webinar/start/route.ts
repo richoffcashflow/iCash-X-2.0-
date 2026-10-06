@@ -12,6 +12,8 @@ import {selectRecording} from '@/lib/webinar-recordings';
 import {snapshotChat} from '@/lib/webinar-variants';
 import {approximateRegion} from '@/lib/webinar-activity';
 import {returnVisit} from '@/lib/webinar-optimizer';
+import {adIdentity,intelligencePlan,intelligenceChoice,intelligenceBucket,intelligencePolicyVersion} from '@/packages/webinar-engine/src/intelligence';
+import {intelligenceContext,intelligenceCandidates,intelligencePoolKey,readIntelligenceData,type IntelligenceAssignment} from '@/lib/webinar-intelligence';
 import {webinarBody,webinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarOwner,webinarVisitor,type WebinarSession} from '@/lib/webinar-server';
 export const dynamic='force-dynamic';
 export async function POST(req:Request){try{
@@ -22,7 +24,7 @@ export async function POST(req:Request){try{
  return Response.json({redirect:account.destination,needsBudget:account.needsBudget},{headers:webinarHeaders});}}
  if(i.preview)await webinarOwner();
  const visitor=await webinarVisitor(true,i.resume);const timezone=visitorTimezone(process.env.VERCEL?req.headers.get('x-vercel-ip-timezone'):null,i.timezone);
- const attribution=Object.fromEntries(Object.entries(i.attribution??{}).filter(([k])=>['utm_source','utm_medium','utm_campaign','utm_content','utm_term'].includes(k)));
+ const attribution=Object.fromEntries(Object.entries(i.attribution??{}).filter(([k])=>['utm_source','utm_medium','utm_campaign','utm_content','utm_term','ad_id','adset_id','campaign_id'].includes(k)));
  const jar=await cookies();let fundingGuest=jar.get('icash_funding_guest')?.value;if(!validGuest(fundingGuest)){fundingGuest=randomBytes(32).toString('hex');jar.set('icash_funding_guest',fundingGuest,{httpOnly:true,secure:process.env.NODE_ENV!=='development',sameSite:'lax',path:'/',maxAge:86400*30});}
  const activityRegion=process.env.VERCEL?approximateRegion(req.headers.get('x-vercel-ip-country'),req.headers.get('x-vercel-ip-country-region')):null;
  await db(`icash_webinar_visitors?id=eq.${visitor.id}`,'PATCH',{timezone,activity_region:activityRegion,funding_guest_hash:guestHash(fundingGuest),last_seen_at:new Date().toISOString(),...(Object.keys(attribution).length?{attribution}:{})});
@@ -43,10 +45,29 @@ export async function POST(req:Request){try{
  }
  const resumeId=journey.kind==='resume'?journey.sessionId:null;
  const unfinished=history.find(h=>h.id===resumeId);
- const webinar=i.preview?rows.find(r=>r.config.id===i.preview)?.config:unfinished?.config??(i.code?rows[0]?.config:chooseWebinar(rows.map(r=>r.config),history,timezone,new Date(),settings.routing));
+ let webinar=i.preview?rows.find(r=>r.config.id===i.preview)?.config:unfinished?.config??(i.code?rows[0]?.config:chooseWebinar(rows.map(r=>r.config),history,timezone,new Date(),settings.routing));
+ let assignment:IntelligenceAssignment|null=null;
+ if(!i.preview&&!i.code&&!unfinished&&settings.optimizer.enabled){
+  const now=new Date(),context=intelligenceContext(history,timezone,now,settings.routing);
+  const adKey=adIdentity(Object.keys(attribution).length?attribution:visitor.attribution);
+  const {recordings,arms}=intelligenceCandidates(rows.map(r=>r.config),history,timezone,now,settings.routing);
+  if(arms.length){
+   let failed=false;
+   const data=arms.length>1?await readIntelligenceData(context,adKey).catch(()=>{failed=true;return {rows:[]};}):{rows:[]};
+   const plan=intelligencePlan(arms,data.rows,adKey,settings.optimizer);
+   const choice=intelligenceChoice(arms,plan,intelligenceBucket(visitor.id),Math.random(),settings.optimizer);
+   if(choice){
+    const selected=failed?(arms.find(a=>a.key===plan.baselineKey)??arms[0]):choice.arm;
+    webinar=recordings.find(w=>w.id===selected.webinarId)!;
+    assignment={ad_key:adKey,context_key:context,pool_key:intelligencePoolKey(arms),baseline_key:plan.baselineKey!,mode:failed?'fallback':choice.mode,probability:failed?1:choice.probability,policy_version:intelligencePolicyVersion};
+   }
+  }
+ }
  if(!webinar)return Response.json({unavailable:true,message:'The next session is being prepared. You can open iCash X below.'},{headers:webinarHeaders});
  const sessionId=randomUUID();
- const session=await db<WebinarSession>('rpc/icash_webinar_begin','POST',{p_visitor:visitor.id,p_id:sessionId,p_config:snapshotChat(unfinished&&!i.preview?webinarSchema.parse(webinar):selectRecording(webinarSchema.parse(webinar),timezone,new Date(),settings.routing,i.preview?i.variant??'day':undefined),sessionId),p_preview:!!i.preview,p_advance_from:!i.preview&&journey.kind==='advance'?journey.sessionId:null});
+ const snapshot=snapshotChat((unfinished&&!i.preview)||assignment?webinarSchema.parse(webinar):selectRecording(webinarSchema.parse(webinar),timezone,new Date(),settings.routing,i.preview?i.variant??'day':undefined),sessionId);
+ const begin={p_visitor:visitor.id,p_id:sessionId,p_config:snapshot,p_advance_from:!i.preview&&journey.kind==='advance'?journey.sessionId:null};
+ const session=assignment?await db<WebinarSession>('rpc/icash_webinar_begin_intelligent','POST',{...begin,p_assignment:assignment}):await db<WebinarSession>('rpc/icash_webinar_begin','POST',{...begin,p_preview:!!i.preview});
  const messages=await db<{id:string;role:'user'|'assistant';text:string}[]>(`icash_webinar_messages?session_id=eq.${session.id}&select=id,role,text&order=created_at.asc&limit=60`).catch(()=>[]);
  return Response.json({webinar:publicWebinar(webinarSchema.parse(session.config)),sessionId:session.id,progress:session.completed_at?0:session.progress_seconds,name:visitor.name??'',email:visitor.email??'',phone:visitor.phone??'',contactSaved:!!visitor.email&&!!visitor.phone,messages,preview:!!i.preview,serverNow:Date.now()},{headers:webinarHeaders});
  }catch(e){if(e instanceof z.ZodError)return Response.json({error:'The webinar link could not be read.'},{status:400,headers:webinarHeaders});return webinarError(e);}}

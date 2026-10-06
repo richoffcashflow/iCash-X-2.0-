@@ -12,7 +12,7 @@ import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 export const dynamic='force-dynamic';
 export const maxDuration=60;
 type Snapshot={accountId:string;account:{billingModel:string;membership:{state:string;paid_through:string|null}|null;balanceCents:number;billingReview:boolean;[key:string]:unknown}};
-export async function GET(req?:Request){
+export async function GET(req:Request){
  const headers={'Cache-Control':'private, no-store'},started=Date.now();let stage='authentication';
  try{
   const mode=accountMode(),user=await currentUser(true);

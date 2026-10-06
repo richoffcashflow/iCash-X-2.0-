@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {verifyWebinarIntelligence} from './test-webinar-intelligence-db.mjs';
 import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {randomUUID} from 'node:crypto';
@@ -201,6 +202,8 @@ try{
  assert.equal(versions.find(r=>r.version==='night').viewers,1);
  assert.equal(versions.find(r=>r.version==='night').averageWatchPercent,40);
  assert.equal((await report()).recordings.filter(r=>r.webinarId===webinar&&r.version==='night').length,0,'No Night row until a night version or real night session exists');
+ await pg.exec(readFileSync(new URL('../supabase/migrations/20261006195506_webinar_intelligence.sql',import.meta.url),'utf8'));
+ await verifyWebinarIntelligence(q,config,webinar,secondWebinar);
  const grants=(await q("select has_table_privilege('anon','icash_webinar_visitors','select') as read,has_function_privilege('authenticated','icash_webinar_contact(uuid,text,text,text,boolean)','execute') as write")).rows[0];assert.equal(grants.read,false);assert.equal(grants.write,false);
  const rls=await q("select relname,relrowsecurity from pg_class where relname like 'icash_webinar%' and relkind='r'");assert.ok(rls.rows.every(r=>r.relrowsecurity));
  console.log('Webinar database checks passed: sessions, attribution, audience, activity, verified checkout triggers, daily funnel, local midnight, DST, earlier-day buyers, preserved revisions, renewals, test/refund exclusion and RLS.');

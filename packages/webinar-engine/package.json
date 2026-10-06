@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": {".": {"types": "./dist/index.d.ts", "import": "./dist/index.js"}},
+  "exports": {".": {"types": "./dist/index.d.ts", "import": "./dist/index.js"}, "./intelligence": {"types": "./dist/intelligence.d.ts", "import": "./dist/intelligence.js"}},
   "files": ["dist", "README.md"],
   "scripts": {"build": "tsc -p tsconfig.json"},
   "devDependencies": {"typescript": "5.9.3"}

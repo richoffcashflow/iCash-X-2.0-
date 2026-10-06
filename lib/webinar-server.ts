@@ -13,7 +13,7 @@ export function webinarOrigin(req:Request){if(process.env.NODE_ENV==='developmen
 export async function webinarBody(req:Request,limit=50000){if(Number(req.headers.get('content-length')||0)>limit)throw new WebinarError(413,'This upload is too large.');const body=await req.text();if(body.length>limit)throw new WebinarError(413,'This request is too large.');return JSON.parse(body);}
 export function webinarKey(){const key=process.env.ICASH_WEBINAR_SECRET||process.env.SUPABASE_SECRET_KEY;if(!key)throw new WebinarError(503,'Webinar storage is unavailable.');return key;}
 export function webinarToken(id:string,purpose:'visitor'|'resume'|'unsubscribe',seconds:number){return signWebinarToken(id,purpose,seconds,webinarKey());}
-export type Visitor={id:string;name:string|null;email:string|null;phone:string|null;timezone:string;email_consent_at:string|null;opted_out_at:string|null;funded_at:string|null;account_id:string|null;funding_guest_hash:string|null};
+export type Visitor={attribution?:Record<string,string>;id:string;name:string|null;email:string|null;phone:string|null;timezone:string;email_consent_at:string|null;opted_out_at:string|null;funded_at:string|null;account_id:string|null;funding_guest_hash:string|null};
 export type WebinarSession={id:string;visitor_id:string;webinar_id:string;revision:number;progress_seconds:number;max_seconds:number;completed_at:string|null;superseded_at:string|null;created_at:string;updated_at:string;config:Webinar;is_preview:boolean};
 export async function webinarVisitor(create=false,resume?:string){
  const jar=await cookies();let id=readWebinarToken(jar.get('icash_webinar')?.value,'visitor',webinarKey());
