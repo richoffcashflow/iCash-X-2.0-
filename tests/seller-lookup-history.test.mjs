@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import {sellerLookupHistory} from '../lib/seller-lookup-history.ts';
+import {processSellerIntake} from '../lib/seller-pipeline.ts';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+let urls=[];
+const lead={address:'5822 Lyndhurst Dr, Houston, TX 77033, USA',claimed_at:'2026-10-06T21:43:49Z',created_at:'2026-10-06T21:23:19Z'};
+const history=await sellerLookupHistory(lead,'dm_sk_live_fixture',async(url,opts)=>{
+ urls.push(url);assert(url.startsWith('https://api.v2.dealmachine.com/v1/activity/'));
+ if(url.endsWith('/search')){const b=JSON.parse(opts.body);assert.equal(b.query,'5822 Lyndhurst Dr');assert.equal(b.per_page,3);assert.deepEqual(b.filters,{type:['enrich_address']});return Response.json({data:[{activity_id:'act_fixture',type:'enrich_address'}]});}
+ assert.equal(opts.method,'GET');return Response.json({data:{activity_id:'act_fixture',type:'enrich_address',request:{items:[{street:'5822 Lyndhurst Dr'}]},result_summary:{items_matched:1,credits_used:1},entity_ids:{properties:['prop_131609319'],people:[]}}});
+});
+assert.equal(urls.length,2);assert.equal(history.records[0].result.credits_used,1);
+await assert.rejects(sellerLookupHistory(lead,undefined),/NOT_CONFIGURED/);
+await assert.rejects(sellerLookupHistory(lead,'dm_sk_live_fixture',async()=>Response.json({}, {status:401})),/HISTORY_HTTP_401/);
+let written;
+const db=async(path,method,body)=>{if(path==='rpc/icash_take_dealmachine_request')return true;if(path==='rpc/icash_claim_seller_lookup')return {id:'lead',token:'token',address:lead.address,assignmentFeeCents:1000000,sellerCostReserveCents:100000};if(method==='PATCH'){written={path,body};return [];}throw Error('Unexpected mutation '+path);};
+const raw={data:[{matched:true,dm_property_id:'prop_1',full_address:lead.address,property_type:999}],totals:{submitted:1},credits:{used:1,people:0}};
+assert.equal((await processSellerIntake(db,'dm_sk_live_fixture',async()=>Response.json(raw))).status,'lookup_requires_review');
+assert.equal(written.body.state,'review');assert.equal(written.body.result.lookupFailure.stage,'qualification');
+assert.equal(written.body.result.lookupFailure.code,'PROPERTY_MATCH_REQUIRES_REVIEW');
+assert.deepEqual(written.body.result.providerResponse,raw,'Keep the receipt instead of rerunning a paid lookup');
+assert(written.path.endsWith('&state=eq.checking'));
+let user=null,reads=0;
+globalThis.__sellerHistoryMocks={currentUser:async()=>user,ownerInboundTarget:{ownerUserId:'owner'},db:async()=>{reads++;return [{id:'12345678-1234-4234-8234-123456789abc',...lead,state:'review'}];},sellerLookupHistory:async()=>history};
+let source=ts.transpileModule(readFileSync(new URL('../app/api/seller/lookup-status/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
+source='const {currentUser,ownerInboundTarget,db,sellerLookupHistory}=globalThis.__sellerHistoryMocks;\n'+source;
+const route=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const request=id=>new Request('https://www.geticashx.com/api/seller/lookup-status?lead='+id);
+assert.equal((await route.GET(request('12345678-1234-4234-8234-123456789abc'))).status,403);
+user={id:'another-customer'};assert.equal((await route.GET(request('12345678-1234-4234-8234-123456789abc'))).status,403);assert.equal(reads,0);
+user={id:'owner'};assert.equal((await route.GET(request('invalid'))).status,400);assert.equal(reads,0);
+const response=await route.GET(request('12345678-1234-4234-8234-123456789abc'));assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'private, no-store');assert.equal(reads,1);
+console.log('PASS bounded credit-free history lookup, no enrichment replay, and durable qualification-failure evidence.');
