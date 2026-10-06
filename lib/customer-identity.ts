@@ -9,7 +9,8 @@ export function identityNames(input:unknown){
   if((required&&!value)||value.length>max||/[\u0000-\u001f<>\{\}]/u.test(value))throw Error('Enter a valid name.');
   return value;
  }
- const first_name=name('first_name',true,80),last_name=name('last_name',true,80),company_name=name('company_name',false,160);
+ const company_name=name('company_name',false,160);
+ const first_name=name('first_name',!company_name,80),last_name=name('last_name',!company_name,80);
  return {first_name,last_name,company_name,principal:company_name||`${first_name} ${last_name}`};
 }
 type ProviderVoice={voice_id:string;name:string;category:string};

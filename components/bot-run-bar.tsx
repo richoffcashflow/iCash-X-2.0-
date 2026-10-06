@@ -28,8 +28,8 @@ export function BotRunBar({running,stopped,paymentRequired,busy,stale,balanceCen
  const current=activity?.principalKey===principalKey&&activity&&Date.now()-Date.parse(activity.checkedAt)<25000?activity:null;
  const active=running&&!stale&&!busy&&current?.active===true;
  const funded=(balanceCents??0)>0;
- const title=stale?'Checking status':paymentRequired?'Restore access':active?'Bot working':!funded?'Ready when you are':stopped?'Bot paused':running?'Bot running':'Bot ready';
- const detail=stale?'Reconnecting…':paymentRequired?'Update your subscription to continue.':active?current!.label:!funded?'Add money to start your bot.':running?(current?.label??'Checking for the next task…'):stopped?'Your properties and conversations are saved.':'Waiting for eligible work.';
+ const title=stale?'Checking status':paymentRequired?'Restore access':active?'Bot working':!funded?(balanceCents===undefined?'Ready when you are':'Out of credits'):stopped?'Bot paused':running?'Bot running':'Bot ready';
+ const detail=stale?'Reconnecting…':paymentRequired?'Update your subscription to continue.':active?current!.label:!funded?(balanceCents===undefined?'Add money to start your bot.':'Add money to continue. Your properties and conversations are saved.'):running?(current?.label??'Checking for the next task…'):stopped?'Your properties and conversations are saved.':'Waiting for eligible work.';
  return <section className={`bot-run-bar bot-run-centered${active?' is-active':''}`} aria-label="Bot controls">
   <div className="bot-run-status"><span className="bot-work-dots" aria-hidden="true"><i/><i/><i/></span><div aria-live="polite" aria-atomic="true"><div className="bot-run-eyebrow">Your AI workspace</div><h2>{title}</h2><p>{detail}</p></div></div>
   <div className="bot-run-actions">

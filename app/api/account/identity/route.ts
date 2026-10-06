@@ -20,7 +20,7 @@ export async function POST(req:Request){
   const user=await currentUser(true);
   if(!user)return NextResponse.json({error:'Sign in to save your name.'},{status:401,headers});
   const raw=await req.text();if(raw.length>2048)return NextResponse.json({error:'Name is too long.'},{status:400,headers});
-  let names;try{names=identityNames(JSON.parse(raw));}catch{return NextResponse.json({error:'Enter your first and last name. Company is optional.'},{status:400,headers});}
+  let names;try{names=identityNames(JSON.parse(raw));}catch{return NextResponse.json({error:'Enter your company name or your first and last name.'},{status:400,headers});}
   const [account]=await db<{id:string}[]>(`icash_accounts?owner_user_id=eq.${user.id}&select=id&limit=1`);
   if(!account)return NextResponse.json({error:'Finish setting up your funded account first.'},{status:409,headers});
   const [existing]=await db<{voice_id:string;voice_name:string}[]>(`icash_customer_identities?account_id=eq.${account.id}&select=voice_id,voice_name`);

@@ -11,23 +11,22 @@ export const dynamic='force-dynamic';
 const headers={'Cache-Control':'private, no-store'};
 export async function GET(req:Request){
  try{
-  const {accountId}=await workAccount();const raw=new URL(req.url).searchParams.get('threadId');const threadId=raw?supportId.parse(raw):null;
+  const {accountId}=await workAccount({allowInactiveMembership:true});const raw=new URL(req.url).searchParams.get('threadId');const threadId=raw?supportId.parse(raw):null;
   const threads=await db<{id:string;subject:string;status:string;updated_at:string}[]>(`icash_support_threads?account_id=eq.${accountId}&select=id,subject,status,updated_at&order=updated_at.desc&limit=30`);
   const chosen=threadId??threads[0]?.id;
   if(threadId&&!threads.some(t=>t.id===threadId))return NextResponse.json({error:'Conversation not found.'},{status:404,headers});
   const mode=fundingMode();
-  const [messages,cancellations,evidence]=await Promise.all([
-   chosen?db(`icash_support_messages?account_id=eq.${accountId}&thread_id=eq.${chosen}&select=id,role,content,evidence,created_at&order=created_at.desc&limit=100`):[],
+  const [messages,cancellations]=await Promise.all([
+   chosen?db(`icash_support_messages?account_id=eq.${accountId}&thread_id=eq.${chosen}&select=id,role,content,created_at&order=created_at.desc&limit=100`):[],
    mode?db(`icash_support_cancel_requests?account_id=eq.${accountId}&mode=eq.${mode}&select=id,source,state,result,created_at&order=created_at.desc&limit=5`):[],
-   collectSupportDiagnostics(accountId),
   ]);
-  return NextResponse.json({threads,threadId:chosen??null,messages:Array.isArray(messages)?messages.reverse():[],cancellations,evidence},{headers});
+  return NextResponse.json({threads,threadId:chosen??null,messages:Array.isArray(messages)?messages.reverse():[],cancellations},{headers});
  }catch(e){return NextResponse.json({error:e instanceof Error&&['SIGN_IN_REQUIRED','ACCOUNT_REQUIRED'].includes(e.message)?'Sign in to your account to get help.':'Support history is unavailable. Please retry.'},{status:e instanceof Error&&['SIGN_IN_REQUIRED','ACCOUNT_REQUIRED'].includes(e.message)?401:503,headers});}
 }
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
  try{
-  const {accountId,userId}=await workAccount();const raw=await req.text();if(raw.length>5000)return NextResponse.json({error:'Message too long.'},{status:413,headers});
+  const {accountId,userId}=await workAccount({allowInactiveMembership:true});const raw=await req.text();if(raw.length>5000)return NextResponse.json({error:'Message too long.'},{status:413,headers});
   const value=JSON.parse(raw);
   if(value.action==='escalate'){
    const i=z.object({action:z.literal('escalate'),threadId:supportId}).strict().parse(value);

@@ -16,7 +16,7 @@ assert.equal(isCancelEmail(' cancel my account! '),true);assert.equal(isCancelEm
 const redacted=redactSupportQuestion('sk_test_12345678901234567890123 test@example.com https://private.example/t=abc 4111 1111 1111 1111');
 assert(!redacted.includes('1234567890'));assert(!redacted.includes('test@example.com'));assert(!redacted.includes('private.example'));assert(!redacted.includes('4111'));
 const evidence=[{key:'work',source:'icash_accounts',status:'attention',detail:'Your bot is paused.',observedAt:new Date().toISOString()}];
-assert.match(supportAnswer('cancel',evidence,false),/Chat messages alone do not cancel/);assert.match(supportAnswer('work',evidence,false),/AI is unavailable/);
+assert.match(supportAnswer('cancel',evidence,false),/Chat messages alone do not cancel/);assert.match(supportAnswer('work',evidence,false),/Your bot is paused/);assert.doesNotMatch(supportAnswer('work',evidence,false),/AI is unavailable/);assert.equal(supportTopic('Hello!'),'general');
 async function load(file,mocks,key){globalThis[key]=mocks;let source=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;source=source.replace(/^import .*;\s*$/gm,'');return import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(mocks).join(',')+'}=globalThis.'+key+';\n'+source).toString('base64'));}
 const {classifySupportQuestion}=await load('lib/support-ai.ts',{z,redactSupportQuestion,supportTopic,supportTopics},'__supportAI');
 let calls=0;delete process.env.ICASH_SUPPORT_AI_ENABLED;

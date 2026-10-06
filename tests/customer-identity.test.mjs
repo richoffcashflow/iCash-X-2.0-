@@ -4,6 +4,9 @@ assert.equal(identityNames({first_name:' Jordan ',last_name:'Smith',company_name
 assert.equal(identityNames({first_name:'Jordan',last_name:'Smith',company_name:'Oak Homes'}).principal,'Oak Homes');
 assert.throws(()=>identityNames({first_name:'',last_name:'Smith'}));
 assert.throws(()=>identityNames({first_name:'{{instructions}}',last_name:'Smith'}));
+assert.equal(identityNames({company_name:'Oak Homes'}).principal,'Oak Homes');
+assert.throws(()=>identityNames({company_name:'  '}));
+assert.throws(()=>identityNames({first_name:'Jordan'}));
 const pool=[{voice_id:'a',name:'Chris - Conversational',category:'premade'},{voice_id:'b',name:'Sarah',category:'premade'},{voice_id:'c',name:'Chris',category:'cloned'}];
 assert.equal(chooseAccountVoice('account-a',pool).voice_id,chooseAccountVoice('account-a',[...pool].reverse()).voice_id);
 assert.equal(new Set(Array.from({length:20},(_,i)=>chooseAccountVoice(`account-${i}`,pool).voice_id)).size,2);

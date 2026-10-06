@@ -21,7 +21,7 @@ const campaign={policy:{version:'v1'},acknowledgment:{version:'v1'},configured:t
 const account={signedIn:true,mode:'live',balanceCents:850,assistantName:'Synthetic bot',paused:true,billingActive:false,identity:{principal:'Synthetic company'},smsWorkReady:false,workReady:false};
 let tree=page(account,campaign),nodes=all(tree);
 assert.equal(nodes.find(n=>n.type===component('BotRunBar')).props.running,false);assert.equal(nodes.find(n=>n.type===component('BotRunBar')).props.balanceCents,850);assert.doesNotMatch(text(tree),/Your account records/);
-assert.equal(nodes.filter(n=>n.type==='button'&&n.props.className==='fund-button').length,1,'one primary action');
+assert.equal(nodes.filter(n=>n.type==='button'&&n.props.className==='fund-button').length,0,'setup-status actions stay out of the workspace');
 assert(nodes.some(n=>n.type===component('BotRunBar')&&typeof n.props.onBudget==='function'),'one-time credits remain available');
 assert.equal(nodes.find(n=>n.props?.['aria-label']==='Workspace settings').props.hidden,true,'settings stay out of the default workspace');
 assert(nodes.some(n=>n.type==='button'&&text(n)==='Settings'),'settings have a clear entry point');
@@ -52,13 +52,16 @@ tree=page({signedIn:false},null);assert.match(text(tree),/Your properties/);asse
 tree=page({...account,balanceCents:0,billingModel:'membership_credits',membershipActive:true},campaign);assert(all(tree).some(n=>n.type===component('PostPaymentBotName')),'naming follows paid membership');
 tree=page({...account,balanceCents:0,billingModel:'membership_credits',membershipActive:false},campaign);assert(!all(tree).some(n=>n.type===component('PostPaymentBotName')),'unfunded accounts are not asked to name a bot');
 
-assert(all(tree).find(n=>n.type===component('BotRunBar')).props.paymentRequired,'missed membership payment has a recovery action');
+assert(all(tree).some(n=>n.type===component('MembershipSettings')&&n.props.locked),'missed membership payment shows subscription recovery');
 
 const barModule={exports:{}};new Function('require','module','exports',code('components/bot-run-bar.tsx'))(name=>name==='react'?{useState:()=>[null,()=>{}],useEffect(){}}:name==='@/lib/workspace-progress'?progress:require(name),barModule,barModule.exports);
 const renderBar=patch=>barModule.exports.BotRunBar({running:false,stopped:false,paymentRequired:false,busy:false,stale:false,balanceCents:0,onBudget(){},onPause(){},...patch});
-assert.match(text(renderBar({})),/Choose a daily budget/);
+assert.match(text(renderBar({})),/Out of credits/);
 assert.match(text(renderBar({paymentRequired:true,balanceCents:1000})),/Update your subscription/);
 assert.match(text(renderBar({running:true,balanceCents:1000})),/Bot running/);
 assert.match(text(renderBar({running:true,canPause:true,balanceCents:1000})),/Pause bot/);
 assert.match(text(renderBar({stopped:true,balanceCents:1000})),/Run bot/);
-assert.match(text(renderBar({budgetCents:2500})),/\$25/);
+assert.match(text(renderBar({balanceCents:2500})),/\$25/);
+assert.match(text(renderBar({})),/Add money to continue/);
+assert.match(text(renderBar({balanceCents:undefined})),/Ready when you are/);
+tree=page({...account,identity:null,membershipActive:true,billingModel:'membership_credits'},campaign);assert(all(tree).some(n=>n.type===component('CustomerIdentity')&&n.props.onboarding),'identity is collected in setup');assert(!all(tree).some(n=>n.type===component('PostPaymentBotName')),'identity comes before bot naming');

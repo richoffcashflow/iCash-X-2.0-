@@ -13,7 +13,7 @@ const input=z.discriminatedUnion('action',[z.object({action:z.literal('prepare')
 export async function POST(req:Request){
  if(!allowedOrigin(req)||req.headers.get('origin')!==new URL(req.url).origin)return NextResponse.json({error:'Invalid origin'},{status:403,headers});
  try{
-  const {accountId,userId}=await workAccount();const raw=await req.text();if(raw.length>3000)throw Error('INVALID_REQUEST');const i=input.parse(JSON.parse(raw));const mode=fundingMode();if(!mode)return NextResponse.json({error:'Billing mode could not be verified. No cancellation was attempted.'},{status:503,headers});
+  const {accountId,userId}=await workAccount({allowInactiveMembership:true});const raw=await req.text();if(raw.length>3000)throw Error('INVALID_REQUEST');const i=input.parse(JSON.parse(raw));const mode=fundingMode();if(!mode)return NextResponse.json({error:'Billing mode could not be verified. No cancellation was attempted.'},{status:503,headers});
   if(i.action==='prepare'){
    const nonce=randomBytes(32).toString('hex');const requestId=await db<string>('rpc/icash_support_prepare_cancel','POST',{p_account:accountId,p_user:userId,p_mode:mode,p_request:i.requestId??null,p_nonce:hashCancelNonce(nonce)});
    const expiresAt=Date.now()+10*60_000;const token=createCancelToken(requestId,nonce);

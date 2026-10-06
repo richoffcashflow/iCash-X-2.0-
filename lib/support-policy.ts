@@ -9,6 +9,7 @@ export const supportMessageInput = z.object({requestId:supportId,threadId:suppor
 export const supportStatusInput = z.object({requestId:supportId,threadId:supportId,status:z.enum(['open','escalated','waiting_on_customer','resolved']),reply:z.string().trim().min(1).max(3000).optional()}).strict();
 /** Only these literal topics influence diagnostics. Model output is never an executable instruction. */
 export function supportTopic(text:string):SupportTopic {
+ if(/^(hi|hello|hey|thanks|thank you)[.!?\s]*$/i.test(text.trim()))return 'general';
  if(/\b(human|person|owner|agent|escalate)\b/i.test(text))return 'human';
  if(/\b(cancel|delete|refund)\b/i.test(text)||/^(?:please\s+)?stop[.!?\s]*$/i.test(text.trim())||/\b(?:want to|please|help me|can you)\s+stop\b|\bstop (?:my |the |future )?(?:bot|work|renewals|billing|plan|subscription)\b/i.test(text))return 'cancel';
  if(/\b(bill|billing|charge|charged|payment|credit|balance|renewal)\b/i.test(text))return 'billing';
@@ -23,12 +24,14 @@ export function redactSupportQuestion(text:string){
  .replace(/\b\d[\d\s().+\-]{5,}\d\b/g,'[number removed]');
 }
 export function supportAnswer(topic:SupportTopic,evidence:SupportEvidence[],ai:boolean){
- const wanted=topic==='billing'?['billing','payments','credits']:topic==='setup'?['readiness','work']:topic==='cancel'?['work','billing']:['work','credits','readiness','screening','voice','billing'];
+ if(topic==='general')return 'Hi! How can we help with your bot, billing, or a property?';
+ if(topic==='cancel')return 'Open Chat options (•••), then Manage cancellation to review and confirm. Chat messages alone do not cancel anything. Ask the team for refunds or account deletion.';
+ if(topic==='human')return 'Choose “Ask the team” below to send them this conversation. Their reply will appear here.';
+ const wanted=topic==='billing'?['billing','payments','credits']:topic==='setup'?['readiness','work']:['work','credits','readiness','screening','voice'];
  const relevant=evidence.filter(e=>wanted.includes(e.key));
- const intro=topic==='cancel'?'To stop future bot work and subscription renewals, use “Review cancellation” below and confirm. Chat messages alone do not cancel anything. Deletion and refunds need a separate support review.':topic==='human'?'You can send this conversation and its status checks to the support team using “Ask the team”.':'Here is what I could verify from your account:';
- const details=relevant.map(e=>{const next=supportNextStep(e);return e.detail+(next?' Next: '+next.text:'');}).join('\n\n');
- const ending=relevant.some(e=>e.status!=='ok')?'If this does not explain the issue, choose “Ask the team”. Your conversation and these checks will be included.':'If something still seems wrong, tell me what you expected and what happened.';
- return `${intro}\n\n${details||'Account checks could not be verified. Refresh the status checks or ask the team; no account changes were made.'}\n\n${ending}${ai?'':'\n\nAI is unavailable right now; these are direct account checks.'}`;
+ const attention=relevant.filter(e=>e.status!=='ok');
+ const details=(attention.length?attention:relevant).slice(0,2).map(e=>{const next=supportNextStep(e);return e.detail+(next?' '+next.text:'');}).join('\n\n');
+ return details||'I couldn’t verify your account details just now. Try again, or choose “Ask the team” below.';
 }
 export function hashCancelNonce(nonce:string){return createHash('sha256').update(nonce).digest('hex');}
 const cancelNonce=z.string().regex(/^[a-f0-9]{64}$/);
