@@ -14,7 +14,13 @@ const raw={data:[{matched:true,dm_property_id:'prop_123',full_address:'Synthetic
 const options={assignmentFeeCents:1000000,sellerCostReserveCents:100000};
 let r=qualifySellerProperty(raw,options,now);assert.equal(r.status,'qualified');assert.equal(r.result.outreachAuthorized,false);assert.equal(r.result.offerAuthorized,false);
 assert.equal(qualifySellerProperty({...raw,data:[{...raw.data[0],property_type:[1]}]},options,now).status,'qualified','The documented MULTI_SELECT array must qualify the same as its legacy scalar');
-for(const type of [[],[1,2],['1'],[2],null])assert.throws(()=>qualifySellerProperty({...raw,data:[{...raw.data[0],property_type:type}]},options,now),/PROPERTY_MATCH_REQUIRES_REVIEW/,'Mixed, missing or unrecognized types remain reviewable');
+for(const type of ['Single Family',['Single Family'],' single family ']){
+ const labeled=qualifySellerProperty({...raw,data:[{...raw.data[0],property_type:type}]},options,now);
+ assert.equal(labeled.status,'qualified','Address-enrichment display labels must pass the same screening as option IDs');
+ assert.deepEqual(labeled.property.raw.data.property_type,type,'Keep the actual provider receipt');
+ assert.equal(labeled.result.outreachAuthorized,false);
+}
+for(const type of [[],[1,2],['1'],[2],null,'Multi Family','Single Family, Condo',['Single Family','Condo'],[1,'Single Family'],{},true])assert.throws(()=>qualifySellerProperty({...raw,data:[{...raw.data[0],property_type:type}]},options,now),/PROPERTY_MATCH_REQUIRES_REVIEW/,'Mixed, missing or unrecognized types remain reviewable');
 for(const [city,state] of [['Houston','TX'],['Phoenix','AZ'],['Columbus','OH']])assert.equal(qualifySellerProperty({...raw,data:[{...raw.data[0],city,state}]},options,now).status,'qualified','Submitted addresses do not need a city allowlist');
 assert.equal(qualifySellerProperty({...raw,data:[{...raw.data[0],estimated_repair_cost:null}]},options,now).numbersPassed,false);
 assert.throws(()=>qualifySellerProperty({...raw,credits:{used:2,people:0}},options,now));

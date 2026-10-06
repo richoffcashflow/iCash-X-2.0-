@@ -3,9 +3,11 @@ export function qualifySellerProperty(raw:unknown,options:{assignmentFeeCents:nu
  const r=raw as {data?:Record<string,unknown>[];credits?:{used?:unknown;people?:unknown};totals?:{submitted?:number}};
  if(!Array.isArray(r?.data)||r.data.length!==1||r.totals?.submitted!==1||!Number.isSafeInteger(r.credits?.used)||Number(r.credits?.used)<0||Number(r.credits?.used)>1||r.credits?.people!==0)throw Error('PROVIDER_RESULT_REQUIRES_REVIEW');
  const row=r.data[0];if(row.matched===false)return {status:'unmatched' as const,numbersPassed:false,marketQualified:false,property:null,result:null,creditsUsed:Number(r.credits!.used)};
- // DealMachine MULTI_SELECT fields use arrays of option IDs. Keep support for
- // older scalar receipts, but do not classify mixed/unknown property types as a house.
- const houseType=row.property_type===1||(Array.isArray(row.property_type)&&row.property_type.length===1&&row.property_type[0]===1);
+ // Address enrichment also returns the display label, while other responses
+ // use option IDs. Accept only one recognized single-family value; preserve
+ // the original receipt and keep mixed/unknown property types in review.
+ const types=Array.isArray(row.property_type)?row.property_type:[row.property_type];
+ const houseType=types.length===1&&(types[0]===1||(typeof types[0]==='string'&&types[0].trim().toLowerCase()==='single family'));
  if(row.matched!==true||row.match_warning||typeof row.dm_property_id!=='string'||typeof row.full_address!=='string'||!houseType)throw Error('PROPERTY_MATCH_REQUIRES_REVIEW');
  const fetchedAt=new Date(now).toISOString();const result=runScreeningJob({propertyId:row.dm_property_id,fetchedAt,propertyType:'house',raw:{data:row,credits:r.credits},...options},now);
  const numbersPassed=result.financialCheck.status==='eligible'&&typeof result.preliminarySellerCeilingCents==='number'&&result.preliminarySellerCeilingCents>0;
