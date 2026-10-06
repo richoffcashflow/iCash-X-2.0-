@@ -41,10 +41,10 @@ export default function Home(){
  const spendingActivationAvailable=account?.signedIn===true&&account.mode==='live'&&activationAvailability?.key===activationKey&&activationAvailability.available===true;
  const updateBrand=useCallback((profile:BotProfile)=>setDraftBrand(profile),[]);
  async function refreshAccount(){
-  if(refreshInFlight.current)return;refreshInFlight.current=true;const generation=++accountGeneration.current;readinessRequest.current?.abort();const coreController=new AbortController();accountRequest.current=coreController;
+  if(refreshInFlight.current)return false;refreshInFlight.current=true;const generation=++accountGeneration.current;readinessRequest.current?.abort();const coreController=new AbortController();accountRequest.current=coreController;
   try{
    const r=await fetch('/api/account?view=core',{cache:'no-store',signal:AbortSignal.any([coreController.signal,AbortSignal.timeout(25000)])});if(!r.ok)throw Error();const next:Account=await r.json();
-   if(generation!==accountGeneration.current)return;
+   if(generation!==accountGeneration.current)return false;
    setAccount(next);setAccountError(false);setSignInOpen(false);
    if(next.signedIn&&next.readinessPending){
     const controller=new AbortController();readinessRequest.current=controller;
@@ -53,9 +53,25 @@ export default function Home(){
      if(generation===accountGeneration.current&&!controller.signal.aborted&&details.signedIn&&details.email===next.email)setAccount(details);
     }).catch(()=>{/* Optional checks never erase a successfully loaded account. Work APIs still authorize every action. */});
    }
-  }catch{if(generation===accountGeneration.current)setAccountError(true);}finally{if(generation===accountGeneration.current)refreshInFlight.current=false;}
+   return true;
+  }catch{if(generation===accountGeneration.current)setAccountError(true);return false;}finally{if(generation===accountGeneration.current)refreshInFlight.current=false;}
  }
  useEffect(()=>()=>{accountGeneration.current++;accountRequest.current?.abort();readinessRequest.current?.abort();refreshInFlight.current=false;},[]);
+ useEffect(()=>{
+  if(!accountError)return;
+  let stopped=false,recovering=false,attempt=0,timer:ReturnType<typeof setTimeout>|undefined;
+  const delays=[5000,15000,30000];
+  const schedule=()=>{if(!stopped&&attempt<delays.length)timer=setTimeout(recover,delays[attempt]);};
+  const recover=async()=>{
+   if(stopped||recovering||document.hidden||!navigator.onLine)return;
+   clearTimeout(timer);attempt++;recovering=true;
+   const recovered=await refreshAccount();
+   recovering=false;
+   if(!recovered)schedule();
+  };
+  schedule();window.addEventListener('online',recover);document.addEventListener('visibilitychange',recover);
+  return()=>{stopped=true;clearTimeout(timer);window.removeEventListener('online',recover);document.removeEventListener('visibilitychange',recover);};
+ },[accountError]);
  useEffect(()=>{void refreshAccount();const syncFunding=()=>setFundingOpen(window.location.hash==='#funding');syncFunding();if(new URLSearchParams(window.location.search).get('payment')==='funded')setFundingOpen(true);window.addEventListener('hashchange',syncFunding);window.addEventListener('popstate',syncFunding);return()=>{window.removeEventListener('hashchange',syncFunding);window.removeEventListener('popstate',syncFunding);};},[]);
  useEffect(()=>{if(account?.signedIn&&new URLSearchParams(window.location.search).get('settings')==='billing'){if(account.billingModel==='membership_credits')showDetails('membership-settings');else setFundingOpen(true);}if(account?.signedIn&&new URLSearchParams(window.location.search).get('notifications')==='1'){setSettingsOpen(true);const node=document.getElementById('notification-settings') as HTMLDetailsElement|null;if(node){node.open=true;document.getElementById('notification-settings')?.scrollIntoView({block:'start'});}}},[account?.signedIn]);
  useEffect(()=>{if(!account?.signedIn)return;const update=()=>{if(!document.hidden)void refreshAccount();};const timer=setInterval(update,30000);document.addEventListener('visibilitychange',update);return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',update);};},[account?.signedIn]);
