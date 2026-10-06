@@ -13,6 +13,8 @@ assert.equal(sellerDuplicateKeyInput(' 123 Main St. ','+12145550123'),sellerDupl
 const raw={data:[{matched:true,dm_property_id:'prop_123',full_address:'Synthetic only',city:'Dallas',state:'TX',zip:'75217',property_type:1,estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}],credits:{used:1,people:0},totals:{submitted:1}};
 const options={assignmentFeeCents:1000000,sellerCostReserveCents:100000};
 let r=qualifySellerProperty(raw,options,now);assert.equal(r.status,'qualified');assert.equal(r.result.outreachAuthorized,false);assert.equal(r.result.offerAuthorized,false);
+assert.equal(qualifySellerProperty({...raw,data:[{...raw.data[0],property_type:[1]}]},options,now).status,'qualified','The documented MULTI_SELECT array must qualify the same as its legacy scalar');
+for(const type of [[],[1,2],['1'],[2],null])assert.throws(()=>qualifySellerProperty({...raw,data:[{...raw.data[0],property_type:type}]},options,now),/PROPERTY_MATCH_REQUIRES_REVIEW/,'Mixed, missing or unrecognized types remain reviewable');
 for(const [city,state] of [['Houston','TX'],['Phoenix','AZ'],['Columbus','OH']])assert.equal(qualifySellerProperty({...raw,data:[{...raw.data[0],city,state}]},options,now).status,'qualified','Submitted addresses do not need a city allowlist');
 assert.equal(qualifySellerProperty({...raw,data:[{...raw.data[0],estimated_repair_cost:null}]},options,now).numbersPassed,false);
 assert.throws(()=>qualifySellerProperty({...raw,credits:{used:2,people:0}},options,now));
