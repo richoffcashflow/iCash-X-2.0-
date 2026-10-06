@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {createRequire} from 'node:module';import ts from 'typescript';
+const require=createRequire(import.meta.url);const code=ts.transpileModule(readFileSync(new URL('../components/credit-action-gate.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;const mod={exports:{}};new Function('require','module','exports',code)(require,mod,mod.exports);
+class Target{constructor(interactive=true){this.interactive=interactive;}closest(){return this.interactive?this:null;}}globalThis.Element=Target;
+let prompts=0,actions=0;const gate=blocked=>mod.exports.CreditActionGate({blocked,onRequireCredits(){prompts++;},children:null});
+function event(extra={}){return {target:new Target(),button:0,key:'Enter',preventDefault(){this.prevented=true;},stopPropagation(){this.stopped=true;},...extra};}
+for(const blocked of [true,false])for(const name of ['onPointerDownCapture','onClickCapture','onSubmitCapture','onKeyDownCapture','onBeforeInputCapture','onPasteCapture']){const e=event();const before=prompts;gate(blocked).props[name](e);if(!e.stopped)actions++;assert.equal(!!e.prevented,blocked);assert.equal(prompts-before,blocked?1:0);}
+for(const key of ['Tab','Escape','ArrowLeft']){const e=event({key});gate(true).props.onKeyDownCapture(e);assert.equal(e.stopped,undefined,'Navigation must remain available');}
+for(const key of ['a','Backspace','ArrowUp']){const e=event({key});gate(true).props.onKeyDownCapture(e);assert.equal(e.stopped,true);}
+const scroll=event({target:new Target(false)});gate(true).props.onPointerDownCapture(scroll);assert.equal(scroll.stopped,undefined,'Passive touch scroll is not a purchase prompt');assert.equal(actions,6);
+console.log('PASS credit gate: blocks action/default before execution, disabled-control pointer capture, keyboard/paste/submit coverage, funded passthrough, and navigation/scroll preserved.');

@@ -7,7 +7,7 @@ import {db,guestHash} from '@/lib/stripe-test';
 import {allowedOrigin,fundingMode} from '@/lib/funding-policy';
 import {fundingStripe,limitRequest,validGuest} from '@/lib/funding';
 import {customerFundingReady} from '@/lib/launch-readiness';
-import {membershipOffer,accountMembership,publicMembership,reconcileMembershipCheckout,stopMembership,type Membership} from '@/lib/membership';
+import {membershipOffer,accountMembership,publicMembership,reconcileMembershipCheckout,stopMembership,membershipRetentionOffer,retainMembership,retentionVersion,type Membership} from '@/lib/membership';
 import {membershipTerms,membershipTermsVersion} from '@/lib/membership-policy';
 import {checkoutCustomerContext} from '@/lib/checkout-customer-context';
 import {checkoutPublishableKey,membershipCheckoutPresentation,checkoutMatchesPresentation} from '@/lib/embedded-checkout-policy';
@@ -20,18 +20,26 @@ export async function GET(req:Request){try{
  const scope=account?`account_id=eq.${account.id}`:hash?`guest_hash=eq.${hash}&account_id=is.null`:null;
  if(scope&&mode){const rows=await db<Membership[]>(`icash_memberships?${scope}&mode=eq.${mode}${sessionId?'&stripe_session_id=eq.'+sessionId:''}&order=created_at.desc&select=*&limit=1`);m=rows[0]??null;if(sessionId&&!m)return NextResponse.json({error:'Sign in with your payment email to open this purchase.'},{status:404,headers});if(m?.stripe_session_id&&(sessionId||m.state==='pending'||!m.paid_through))m=await reconcileMembershipCheckout(m);}
  const customer=await checkoutCustomerContext(hash,user?.email);
- return NextResponse.json({offer,mode,embeddedReady:!!checkoutPublishableKey(mode),customerName:customer.name??'',ready:offer.enabled&&await customerFundingReady(),membership:publicMembership(m),needsClaim:!!m?.paid_through&&!m.account_id,email:m?.paid_through&&!user?m.payer_email:user?.email??customer.email??null},{headers});
+ return NextResponse.json({offer,mode,embeddedReady:!!checkoutPublishableKey(mode),customerName:customer.name??'',ready:offer.enabled&&await customerFundingReady(),membership:publicMembership(m),retentionOffer:await membershipRetentionOffer(m),needsClaim:!!m?.paid_through&&!m.account_id,email:m?.paid_through&&!user?m.payer_email:user?.email??customer.email??null},{headers});
  }catch{return NextResponse.json({error:'Could not check software access. Please retry.'},{status:503,headers});}}
-const input=z.discriminatedUnion('action',[z.object({action:z.literal('checkout'),accepted:z.literal(true),version:z.literal(membershipTermsVersion),revision:z.number().int().positive(),totalCents:z.number().int().positive(),embedded:z.boolean().optional()}).strict(),z.object({action:z.literal('cancel')}).strict(),z.object({action:z.literal('manage')}).strict()]);
+const input=z.discriminatedUnion('action',[z.object({action:z.literal('checkout'),accepted:z.literal(true),version:z.literal(membershipTermsVersion),revision:z.number().int().positive(),totalCents:z.number().int().positive(),embedded:z.boolean().optional()}).strict(),z.object({action:z.literal('cancel')}).strict(),z.object({action:z.literal('manage')}).strict(),z.object({action:z.literal('retain'),accepted:z.literal(true),version:z.literal(retentionVersion),priceCents:z.number().int().positive(),months:z.literal(6)}).strict()]);
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
  try{
  const raw=await req.text();if(raw.length>1024)throw Error();const i=input.parse(JSON.parse(raw)),mode=fundingMode();if(!mode)throw Error();const {token,hash,account,user}=await owner(true);await limitRequest(req,'membership',token!,8,600);const stripe=fundingStripe(),origin=req.headers.get('origin')!;
  if(i.action!=='checkout'){
   if(!account||!user)return NextResponse.json({error:'Sign in to manage your software subscription.'},{status:401,headers});const m=await accountMembership(account.id);if(!m)throw Error();
-  if(i.action==='cancel'){await stopMembership(m);return NextResponse.json({saved:true,message:'Future software renewals are cancelled. Access continues through the paid period. Your work-credit balance is unchanged.'},{headers});}
+  if(i.action==='retain'){
+   if(i.priceCents!==m.price_cents-Math.round(m.price_cents*.5))return NextResponse.json({error:'The offer changed. Reopen it to review the current price.'},{status:409,headers});
+   try{await retainMembership(m);}catch{return NextResponse.json({error:'Could not confirm the offer. You can retry or cancel your subscription.'},{status:409,headers});}
+   return NextResponse.json({saved:true,message:'50% off is applied for 6 months, starting with your next renewal. Your subscription stays active.'},{headers});
+  }
+  if(i.action==='cancel'){
+   try{await stopMembership(m);}catch(e){if(e instanceof Error&&e.message==='MEMBERSHIP_CANCELLATION_PENDING')return NextResponse.json({saved:false,stopped:true,message:'Your workspace is locked and new bot work has stopped. Subscription cancellation is retrying automatically. Your unused credits are saved.'},{status:202,headers});throw e;}
+   return NextResponse.json({saved:true,stopped:true,message:'Subscription cancelled. New bot work has stopped. Your unused credits are saved until you renew.'},{headers});
+  }
   if(!m.stripe_customer_id)throw Error();
-  const config=await stripe.billingPortal.configurations.create({business_profile:{headline:'Manage your iCash X software subscription'},features:{payment_method_update:{enabled:true},invoice_history:{enabled:true},subscription_cancel:{enabled:true,mode:'at_period_end',proration_behavior:'none'}}},{idempotencyKey:'icash-membership-portal-v1'});
+  const config=await stripe.billingPortal.configurations.create({business_profile:{headline:'Manage your iCash X software subscription'},features:{payment_method_update:{enabled:true},invoice_history:{enabled:true},subscription_cancel:{enabled:true,mode:'immediately',proration_behavior:'none'}}},{idempotencyKey:'icash-membership-portal-v2-immediate'});
   const portal=await stripe.billingPortal.sessions.create({customer:m.stripe_customer_id,configuration:config.id,return_url:origin+'/?settings=billing'});return NextResponse.json({url:portal.url},{headers});
  }
  const offer=await membershipOffer();if(!offer.enabled||!await customerFundingReady())return NextResponse.json({error:'Software checkout is currently unavailable.'},{status:503,headers});
@@ -43,8 +51,8 @@ export async function POST(req:Request){
  if(prior){
   if(prior.account_id!==(account?.id??null))return NextResponse.json({error:'This browser has another account’s checkout. Sign in to that account to continue.'},{status:409,headers});
   if(prior.state!=='pending')return NextResponse.json({error:'Your software subscription already exists. Open your workspace or manage your payment.'},{status:409,headers});
-  if(prior.stripe_session_id){const s=await stripe.checkout.sessions.retrieve(prior.stripe_session_id);if(s.metadata?.icash_membership!==prior.id||s.livemode!==(mode==='live'))throw Error();if(s.status==='complete'){await reconcileMembershipCheckout(prior);return NextResponse.json({error:'Your payment is being confirmed. Refresh; do not pay again.'},{status:409,headers});}if(s.status==='open'&&prior.price_cents===offer.priceCents&&prior.offer_revision===offer.revision&&checkoutMatchesPresentation(s,embedded))return NextResponse.json(checkoutResult(s),{headers});if(s.status==='open')await stripe.checkout.sessions.expire(s.id);await db(`icash_memberships?id=eq.${prior.id}`,'PATCH',{state:'cancelled'});}
-  else if(prior.price_cents!==offer.priceCents||prior.offer_revision!==offer.revision)await db(`icash_memberships?id=eq.${prior.id}`,'PATCH',{state:'cancelled'});
+  if(prior.stripe_session_id){const s=await stripe.checkout.sessions.retrieve(prior.stripe_session_id);if(s.metadata?.icash_membership!==prior.id||s.livemode!==(mode==='live'))throw Error();if(s.status==='complete'){await reconcileMembershipCheckout(prior);return NextResponse.json({error:'Your payment is being confirmed. Refresh; do not pay again.'},{status:409,headers});}if(s.status==='open'&&prior.price_cents===offer.priceCents&&prior.offer_revision===offer.revision&&prior.consent_version===membershipTermsVersion&&checkoutMatchesPresentation(s,embedded))return NextResponse.json(checkoutResult(s),{headers});if(s.status==='open')await stripe.checkout.sessions.expire(s.id);await db(`icash_memberships?id=eq.${prior.id}`,'PATCH',{state:'cancelled'});}
+  else if(prior.price_cents!==offer.priceCents||prior.offer_revision!==offer.revision||prior.consent_version!==membershipTermsVersion)await db(`icash_memberships?id=eq.${prior.id}`,'PATCH',{state:'cancelled'});
  }
  const m=await db<Membership>('rpc/icash_begin_membership','POST',{p_guest:hash,p_account:account?.id??null,p_mode:mode,p_price:offer.priceCents,p_revision:offer.revision,p_terms:membershipTerms(offer.priceCents)});
  const contact=await checkoutCustomerContext(hash,user?.email);

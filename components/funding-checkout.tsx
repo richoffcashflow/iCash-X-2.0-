@@ -7,7 +7,7 @@ import {earlyAccessTermsVersion,earlyAccessDisclosure} from '@/lib/funding-conse
 import {workCreditTerms,workCreditTermsVersion,priceLabel} from '@/lib/membership-policy';
 type Pack={code:string;price_cents:number;credit_cents:number;enabled:boolean};
 type Funding={earlyAccess?:boolean;mode:'test'|'live'|null;enabled:boolean;packs?:Pack[];custom?:{enabled:boolean;minCents:number;maxCents:number};paidCents?:number;needsClaim?:boolean;email?:string};
-export function FundingCheckout({onSignedIn,initialCode}:{onSignedIn:()=>void;initialCode?:string}){
+export function FundingCheckout({onSignedIn,initialCode,outOfCredits=false}:{onSignedIn:()=>void;initialCode?:string;outOfCredits?:boolean}){
  const [status,setStatus]=useState<Funding|null>(null),[code,setCode]=useState(initialCode??'budget_ten'),[customAmount,setCustomAmount]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[paymentReturn,setPaymentReturn]=useState(false);
  const inFlight=useRef(false),polling=useRef(false),notified=useRef(false),alive=useRef(true);
  async function refresh(){if(polling.current)return;polling.current=true;try{const sessionId=new URLSearchParams(window.location.search).get('session_id');const r=await fetch('/api/funding/status'+(sessionId?'?session_id='+encodeURIComponent(sessionId):''),{cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.error);if(alive.current){setStatus(d);setError('');}}catch(e){if(alive.current)setError(e instanceof Error?e.message:'Could not check credits. Please retry.');}finally{polling.current=false;}}
@@ -21,7 +21,7 @@ export function FundingCheckout({onSignedIn,initialCode}:{onSignedIn:()=>void;in
  if(paymentReturn&&status&&!status.paidCents&&!status.needsClaim)return <div role="status"><h3>Confirming your credits</h3><p>Your balance updates after payment is confirmed. Please don’t pay again.</p><button className="workspace-quiet" onClick={()=>void refresh()}>Check payment</button>{error&&<p role="alert">{error}</p>}</div>;
  if(status?.needsClaim)return <div><h3>Your payment is confirmed</h3><p>Verify your payment email to open your workspace.</p><AccountAccess initialEmail={status.email??''} onSignedIn={onSignedIn}/></div>;
  return <section className="credit-checkout" aria-label="Add money">
-  <p className="credit-checkout-intro">Choose an amount to start your bot.</p>
+  <p className="credit-checkout-intro">{outOfCredits?'Add money to keep working.':'Choose an amount to start your bot.'}</p>
   {!status&&<p role="status">Checking available credit amounts…</p>}
   {status?.mode==='test'&&<p className="membership-note">Test checkout · No live work.</p>}
   <div className="credit-pack-options" role="group" aria-label="Amount to add">{[1000,2500,5000].map(cents=>{const pack=packs.find(p=>p.price_cents===cents);return <button type="button" key={cents} aria-pressed={!isCustom&&selected?.price_cents===cents} disabled={busy||!pack} onClick={()=>pack&&setCode(pack.code)}><strong>{priceLabel(cents)}</strong></button>;})}<button type="button" aria-pressed={isCustom} disabled={busy||!status?.custom?.enabled} onClick={()=>setCode(customFundingCode)}><strong>Custom</strong></button></div>

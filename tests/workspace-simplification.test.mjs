@@ -23,10 +23,10 @@ let tree=page(account,campaign),nodes=all(tree);
 assert.equal(nodes.find(n=>n.type===component('BotRunBar')).props.running,false);assert.equal(nodes.find(n=>n.type===component('BotRunBar')).props.balanceCents,850);assert.doesNotMatch(text(tree),/Your account records/);
 assert.equal(nodes.filter(n=>n.type==='button'&&n.props.className==='fund-button').length,0,'setup-status actions stay out of the workspace');
 assert(nodes.some(n=>n.type===component('BotRunBar')&&typeof n.props.onBudget==='function'),'one-time credits remain available');
-assert.equal(nodes.find(n=>n.props?.['aria-label']==='Workspace settings').props.hidden,true,'settings stay out of the default workspace');
+assert(!nodes.some(n=>n.props?.['aria-label']==='Workspace settings'),'settings stay unmounted until requested');
 assert(nodes.some(n=>n.type==='button'&&text(n)==='Settings'),'settings have a clear entry point');
-assert(nodes.some(n=>n.props?.['aria-label']==='Workspace settings'));
-assert(nodes.some(n=>n.type==='details'&&n.props.id==='account-details'),'account details remain accessible');
+
+
 tree=page({...account,paused:false,billingActive:true,activeWork:true,workReady:true},{...campaign,released:true,liveWorkReady:true},true);
 const stop=all(tree).find(n=>n.type===component('BotRunBar'));assert.equal(typeof stop.props.onBudget,'function');assert.equal(stop.props.busy,false);
 function beneathDetails(root,target,inside=false){if(root===target)return inside;if(Array.isArray(root))return root.some(n=>beneathDetails(n,target,inside));return !!root&&typeof root==='object'&&beneathDetails(root.props?.children,target,inside||root.type==='details');}

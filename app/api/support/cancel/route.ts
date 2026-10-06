@@ -31,7 +31,7 @@ export async function POST(req:Request){
    const [account]=await db<{bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=bot_paused`);
    const remaining=await db<{id:string}[]>(`icash_daily_plans?account_id=eq.${accountId}&mode=eq.${mode}&state=neq.stopped&select=id&limit=1`);
    if(!account?.bot_paused||remaining.length)throw Error('CANCELLATION_UNCONFIRMED');
-   const result=`Your bot is paused and future ${mode==='live'?'live':'test'} subscription renewals in this environment are stopped. Previously authorized in-progress work may still settle. Your account and credit remain available.`;
+   const result=`Your bot is paused and future ${mode==='live'?'live':'test'} subscription renewals in this environment are stopped. Previously authorized in-progress work may still settle. Your account and unused credits are saved. An active software subscription is required to resume work.`;
    await db(`icash_support_cancel_requests?id=eq.${claims.requestId}&account_id=eq.${accountId}&mode=eq.${mode}`,'PATCH',{state:'cancelled',result,updated_at:new Date().toISOString()});
    return NextResponse.json({confirmed:true,message:result},{headers});
   }catch{
