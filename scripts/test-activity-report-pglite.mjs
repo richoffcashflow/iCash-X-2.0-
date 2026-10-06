@@ -9,9 +9,11 @@ const q=(sql,args=[])=>pg.query(sql,args);
 try{
  await pg.exec('create role anon;create role authenticated;create role service_role;');
  const tables=['icash_accounts','icash_screening_jobs','icash_voice_jobs','icash_live_conversations','icash_operation_spend','icash_call_recordings','icash_deal_files','icash_text_messages','icash_text_threads'];
+ if(process.argv[3])tables.push('icash_automation_tickets');
  const fixture=JSON.parse(read('tests/fixtures/automatic-credits-baseline.json'));
  for(const t of fixture.tables.filter(t=>tables.includes(t.name)))await pg.exec(t.definition.replace(/default icash_[a-z_]+\.clock_now\(\)/g,'default now()'));
  await pg.exec(read('supabase/migrations/20261005211700_workspace_activity_report.sql'));
+ if(process.argv[3])await pg.exec(read(process.argv[3]));
  const a=uuid(),b=uuid();await q('insert into icash_accounts(id) values($1),($2)',[a,b]);
  const report=async(days=1,zone='America/Chicago',account=a)=>(await q('select icash_activity_report($1,$2,$3) r',[account,days,zone])).rows[0].r;
  const blank=await report();assert.deepEqual([blank.leads,blank.calls,blank.texts,blank.contracts],[0,0,0,0]);
