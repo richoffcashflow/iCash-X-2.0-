@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const {PGlite}=await import(process.env.PGLITE_MODULE||'@electric-sql/pglite');
+const pg=new PGlite();
+await pg.exec(`create role anon;create role authenticated;create role service_role;create table public.icash_accounts(id uuid primary key,owner_user_id uuid);insert into public.icash_accounts values ('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002');`);
+await pg.exec(readFileSync(process.argv[2],'utf8'));
+const sql=`select public.icash_begin_workspace_question('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000003','What happened today?') result`;
+let first=(await pg.query(sql)).rows[0].result;assert.equal(first.fresh,true);
+let second=(await pg.query(sql)).rows[0].result;assert.equal(second.fresh,false);assert.equal(second.id,first.id);
+await assert.rejects(pg.query(sql.replace('What happened today?','Different request')));
+await assert.rejects(pg.query(sql.replace('00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000099')));
+const acl=(await pg.query(`select has_table_privilege('anon','public.icash_workspace_questions','select') a,has_table_privilege('authenticated','public.icash_workspace_questions','select') b,has_function_privilege('anon','public.icash_begin_workspace_question(uuid,uuid,uuid,text)','execute') c,(select relrowsecurity from pg_class where oid='public.icash_workspace_questions'::regclass) rls`)).rows[0];
+assert.deepEqual(acl,{a:false,b:false,c:false,rls:true});
+assert.equal((await pg.query('select count(*)::int as n from public.icash_workspace_questions')).rows[0].n,1);
+await pg.close();console.log('PASS assistant migration: idempotent request claim, mismatched payload/owner rejection, RLS and private grants.');

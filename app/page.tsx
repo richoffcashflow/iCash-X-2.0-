@@ -21,12 +21,15 @@ import {nextWorkFunding} from '@/lib/workspace-progress';
 import {SpendActivationReview} from '@/components/spend-activation-review';
 import {LiveWorkspace} from '@/components/live-workspace';
 import {PostPaymentBotName} from '@/components/post-payment-bot-name';
+import {WorkspaceAssistant,type AssistantRequest} from '@/components/workspace-assistant';
+import type {AssistantAction} from '@/lib/workspace-assistant-policy';
 import {BotRunBar} from '@/components/bot-run-bar';
 import {BotBrand} from '@/components/bot-brand';
 import {setupThemes,type BotProfile} from '@/lib/bot-setup';
 type Account={billingModel?:string;membershipActive?:boolean;isBillingOwner?:boolean;identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;phone?:string;balanceCents?:number;reservedCents?:number;dailyLimitCents?:number;assistantName?:string;paused?:boolean;billingActive?:boolean;billingReview?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;activeWork?:boolean};
 export default function Home(){
  const [account,setAccount]=useState<Account|null>(null),[accountError,setAccountError]=useState(false),[signInOpen,setSignInOpen]=useState(false),[fundingOpen,setFundingOpen]=useState(false),[fundingCode,setFundingCode]=useState(''),[controlBusy,setControlBusy]=useState(false),[controlError,setControlError]=useState(''),[draftBrand,setDraftBrand]=useState<BotProfile|null>(null);
+ const [assistantRequest,setAssistantRequest]=useState<AssistantRequest|null>(null),[propertyRequest,setPropertyRequest]=useState<{id:string;nonce:number}|null>(null);
  const [settingsOpen,setSettingsOpen]=useState(false);
  const [campaign,setCampaign]=useState<OutreachCampaignStatus|null>(null);
  const refreshInFlight=useRef(false);
@@ -48,11 +51,18 @@ export default function Home(){
  const nextAction=funding.needsFunding&&suggestedAction.kind==='resume'?{kind:'funding' as const,label:'Review funding',reason:'There are not enough available credits for the next eligible task. Your saved progress stays here.'}:suggestedAction;
  function showDetails(id:string){setSettingsOpen(true);requestAnimationFrame(()=>{const details=document.getElementById(id) as HTMLDetailsElement|null;if(!details)return;details.open=true;details.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});details.querySelector<HTMLElement>('summary')?.focus();});}
  function doNextAction(){if(nextAction.kind==='membership')openFunding();else if(nextAction.kind==='identity')showDetails('account-details');else if(nextAction.kind==='campaign')showDetails('outreach-campaign-details');else if(nextAction.kind==='activation'){const review=document.getElementById('spending-activation-review');review?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'});review?.focus();}else if(nextAction.kind==='funding')openFunding();else if(nextAction.kind==='resume')void toggleBot('resume');else if(nextAction.kind==='pause')void toggleBot('pause');else if(nextAction.kind==='work')document.getElementById('workspace-properties')?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});}
+ async function assistantAction(action:AssistantAction){
+  if(action.kind==='funding'){openFunding();return;}
+  if(action.kind==='pause'||action.kind==='resume'){if(!await toggleBot(action.kind))throw Error('Could not confirm the bot update. Please check its status above.');return;}
+  if(action.kind==='property'&&action.screeningId){setPropertyRequest({id:action.screeningId,nonce:Date.now()});return;}
+  if(action.kind==='attention'){const section=document.getElementById('workspace-attention');if(section){section.scrollIntoView({behavior:'smooth',block:'center'});section.focus();}else throw Error('The request list is refreshing. Check Needs you in a moment.');return;}
+  if(action.kind==='support')window.location.assign('/support');
+ }
  const botRunning=(account?.billingModel!=='membership_credits'||account?.membershipActive===true)&&account?.paused===false&&(account.billingActive===true||account.billingModel==='prepaid'||account.billingModel==='membership_credits')&&!account?.billingReview&&!!account?.identity&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady||account.activeWork);
  const workspaceLocked=account?.signedIn===true&&account.billingModel==='membership_credits'&&account.membershipActive!==true;
  const guest=!account?.signedIn;const profile=account?.signedIn?account.botSetup?.profile:draftBrand;const theme=setupThemes.ink;
  const needsBotName=account?.signedIn===true&&((account.balanceCents??0)>0||account.billingModel==='prepaid'||account.membershipActive===true)&&!account.botSetup?.profile.displayName?.trim();
- return <div className="console-shell personalized-workspace minimal-workspace" style={{'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties}>
+ return <div className="console-shell personalized-workspace minimal-workspace assistant-workspace" style={{'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties}>
   <header className="console-header"><div>{profile?.displayName?<BotBrand profile={profile} compact/>:<><Image src="/icash-x-logo.png" alt="iCash X" width={111} height={62} priority/><b className="brand-version">2.0</b></>}</div><div className="workspace-header-links">{account?.signedIn?<SupportLauncher key={account.email??'account'}/>:<a className="workspace-help" href="/support">Help</a>}{account?.signedIn?<>{!workspaceLocked&&<><WorkspaceUpdates onPreferences={()=>showDetails('notification-settings')} onBudget={()=>openFunding()}/><button className="header-access" aria-expanded={settingsOpen} onClick={()=>setSettingsOpen(v=>!v)}>Settings</button></>}<button className="header-access" onClick={()=>void signOut()}>Sign out</button></>:<button id="balance-sign-in" className="header-access" aria-expanded={signInOpen} aria-controls="inline-sign-in" onClick={()=>setSignInOpen(v=>!v)}>Sign in</button>}</div></header>
   <main className="console-main">
    {accountError&&<p role="alert">Could not load your account. <button onClick={()=>void refreshAccount()}>Retry</button></p>}
@@ -73,9 +83,10 @@ export default function Home(){
      {controlError&&<p role="alert">{controlError}</p>}
      {account.mode==='live'&&account.billingModel==='legacy'&&<SpendActivationReview key={activationKey} onAvailabilityChange={updateActivationAvailability} onSaved={()=>void refreshAccount()}/>}
      <BudgetSummary/>
-     <LiveWorkspace principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/>
+     <LiveWorkspace propertyRequest={propertyRequest} onAsk={(screeningId,address)=>setAssistantRequest({screeningId,address,nonce:Date.now()})} principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/>
      </>}
     </section>
+    {!guest&&<WorkspaceAssistant key={account.email} request={assistantRequest} stale={accountError} onAction={assistantAction}/>}
     </>}
    </>}
   </main>
