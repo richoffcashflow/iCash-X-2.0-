@@ -75,3 +75,11 @@ const aborted=await settlePendingVoiceUsage(batchDb,'account',[policy()],async(_
 },controller.signal);
 assert.equal(finished,true);assert.deepEqual(aborted,{settled:0,held:0,reviewRequired:1});
 console.log('PASS: bound server collector, immutable pricing, scoped fair one-row claims, 77-row held backlog, conflicts, missing calls, cancellation');
+
+const staged={rateId:'12345678-1234-4234-8234-123456789abc',version:'required-audio-30d-speech-v1:fixture',enabled:false,components:{other:{kind:'recording_addon_estimate'}}};
+const activation=JSON.stringify([{rateId:staged.rateId,version:staged.version}]);
+assert.equal(readVoiceUsagePolicies(JSON.stringify([staged]),activation)[0].enabled,true);
+assert.equal(readVoiceUsagePolicies(JSON.stringify([staged]))[0].enabled,false);
+assert.equal(readVoiceUsagePolicies(JSON.stringify([{...staged,version:staged.version+'different'}]),activation)[0].enabled,false);
+assert.equal(readVoiceUsagePolicies(JSON.stringify([staged]),'bad json')[0].enabled,false);
+assert.equal(readVoiceUsagePolicies(JSON.stringify([{...staged,components:{}}]),activation)[0].enabled,false);

@@ -23,7 +23,7 @@ export async function checkTelephonyConnection(env=process.env,fetcher=fetch){
   incoming:incoming??{status:'unavailable',branches:[],phone:{status:'unavailable',bindingVerified:false,route:'unknown'}},
   outgoing:outgoing??{status:'unavailable',providerChecksPass:false},
   legacyCosts:value(3)??[],
-  billingPolicies:readVoiceUsagePolicies(env.VOICE_USAGE_POLICIES_JSON).filter(p=>typeof p.version==='string'&&p.version.startsWith('required-audio-30d-speech-v1:')).map(p=>({
+  billingPolicies:readVoiceUsagePolicies(env.VOICE_USAGE_POLICIES_JSON,env.VOICE_USAGE_POLICY_ACTIVATIONS_JSON).filter(p=>typeof p.version==='string'&&p.version.startsWith('required-audio-30d-speech-v1:')).map(p=>({
    rateId:p.rateId,version:p.version,enabled:p.enabled===true,operation:p.operation,validUntil:p.validUntil,
    componentCount:Object.keys(p.components??{}).length,
    carrierAccountMatches:p.components?.twilio?.twilioAccountSid===env.TWILIO_ACCOUNT_SID,

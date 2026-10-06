@@ -2,7 +2,7 @@ type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 type ResponseWork={leadId:string;accountId:string;screeningId:string;smsMessageId:string|null;voiceJobId:string|null;status:string};
 type Dispatch=(accountId:string,id:string)=>Promise<{status:string}>;
 /** Immediate after-response attempt, with the existing cron as a durable fallback.
- * Only the database may bind a seller to a customer. No permission is inferred,
+ * Only the database may bind saved seller consent to a matched customer;
  * no provider outcome is retried, and SMS failure does not swallow voice work. */
 export async function processSellerResponses(db:Database,dispatchText:Dispatch,dispatchVoice:Dispatch,leadId?:string){
  const work=await db<ResponseWork[]>('rpc/icash_prepare_seller_responses','POST',{p_lead:leadId??null});

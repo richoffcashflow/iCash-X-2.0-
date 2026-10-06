@@ -31,7 +31,7 @@ export async function POST(request:Request){
   await db('rpc/icash_finish_automation','POST',{p_id:ticket.id,p_success:success,p_outcome:result.status});
   try{await db('rpc/icash_settle_pending_estimates','POST',{p_account:ticket.accountId,p_limit:25});}catch{/* Scheduled reconciliation retries without changing a completed job. */}
   let billing;
-  try{billing=await settlePendingVoiceUsage(db,ticket.accountId,readVoiceUsagePolicies(process.env.VOICE_USAGE_POLICIES_JSON),reconcileLiveConversation,billingDeadline);}
+  try{billing=await settlePendingVoiceUsage(db,ticket.accountId,readVoiceUsagePolicies(process.env.VOICE_USAGE_POLICIES_JSON,process.env.VOICE_USAGE_POLICY_ACTIVATIONS_JSON),reconcileLiveConversation,billingDeadline);}
   catch{billing={status:'review_required'};} // Billing failure never rewrites a successful primary action.
   // Optional alerts get only the remaining deadline and cannot change primary work.
   if(ticket.kind!=='customer_updates'&&!billingDeadline.aborted){

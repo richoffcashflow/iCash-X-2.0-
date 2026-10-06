@@ -44,3 +44,6 @@ assert.equal((await deliverSellerEvent(eventDb,{})).status,'measurement_setup_re
 const env={META_SELLER_EVENTS_ENABLED:'true',META_SELLER_DATASET_ID:'123456789',META_SELLER_ACCESS_TOKEN:'fixture',META_GRAPH_VERSION:'v25.0'};
 assert.equal((await deliverSellerEvent(eventDb,env,async()=>Response.json({events_received:1}))).status,'delivered');assert.equal(writes.at(-1).body.p_delivered,true);
 console.log('PASS seller funnel: explicit affirmative consent, input validation, real financial screening, address-driven research, exact 3× pricing, one-use paid lookup, ambiguous-outcome hold, private measurement payload and credential gate.');
+
+assert.equal(sellerSubmission.parse({...input,contactTimezone:'America/Chicago'}).contactTimezone,'America/Chicago');
+assert.equal(sellerSubmission.safeParse({...input,contactTimezone:'invalid/zone'}).success,false);

@@ -27,6 +27,7 @@ const config={asr:{user_input_audio_format:'ulaw_8000'},tts:{voice_id:'voice',ag
 const agent={agent_id:'agent_fixture',branch_id:'agtbrch_fixture',main_branch_id:'agtbrch_main',version_id:'agtvrsn_fixture',conversation_config:config,platform_settings:{privacy:{record_voice:false},auth:{enable_auth:true},call_limits:{bursting_enabled:false},queueing_config:{enabled:false},overrides:{conversation_config_override:{conversation:{max_duration_seconds:true},agent:{first_message:true,prompt:{prompt:true}},tts:{voice_id:true}}}},workflow:{nodes:[],edges:[]},procedures:[]};
 const review={enabled:true,reviewedAt:new Date(now-1000).toISOString(),reviewedUntil:new Date(now+100000).toISOString(),agentId:agent.agent_id,branchId:agent.branch_id,versionId:agent.version_id,configHash:sha(JSON.stringify(canonical({conversation_config:agent.conversation_config,platform_settings:agent.platform_settings,workflow:agent.workflow,procedures:agent.procedures}))),fromPhone:'+14243948384',providerAccountSid:'AC'+'a'.repeat(32),stopToolId:'tool_stop',toolIds:['tool_callback','tool_handoff','tool_stop'],approvedHoldCents:recordingPolicy.minimumHoldCents,retentionDays:30,maxTotalSeconds:600,policyVersion:recordingPolicy.version};
 const configTemplate={enabled:true,agent_id:review.agentId,phone_number_id:'number',agent_config_hash:review.configHash,reviewed_until:new Date(now+100000).toISOString(),seller_rate_id:'rate',buyer_rate_id:'buyer-rate',max_duration_seconds:600,required_tool_ids:review.toolIds,approved_voice_ids:[]};
+let sellerConsentCurrent=true;
 let c=structuredClone(configTemplate),providerAgent=structuredClone(agent),providerPaths=[],agentReadFailed=false,identityVoice='voice';
 let providerReads=0,flipAt=null,flip=()=>{},legacyRate=false,recordingStatus='recording_consent_pending';
 let outboundBody,contextOverrides=true,operational=false,operationalCurrent=true;
@@ -38,6 +39,7 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_text_suppressions'))return suppressed?[{phone:permission.phone}]:[];
  if(path.startsWith('icash_text_threads'))return [{sender:'+14243948384'}];
  if(path==='rpc/icash_voice_sms_context')return null;
+ if(path==='rpc/icash_seller_voice_permission_current')return sellerConsentCurrent;
  if(path==='rpc/icash_operational_contact_current'){assert.equal(body.p_account,'account');assert.equal(body.p_contact,'operational');assert.equal(body.p_channel,'voice');return operationalCurrent;}
  if(path==='rpc/icash_reserve_paced_voice')return paced;
  if(method==='PATCH'){if(body.state==='held'&&path.includes(`state=eq.${jobState}`))jobState='held';return [];}
@@ -146,6 +148,11 @@ for(const status of ['recording_review_required','recording_admission_held','rec
  reset();recordingStatus=status;assert.equal((await dispatchLiveVoice('account','job')).status,status);assert.equal(postCount,1);assert.equal(providerReads,2);assert.equal(jobState,'held');
 }
 console.log('PASS mandatory customer recording: legacy946 enabled config holds all seller/buyer/callback/operational paths, no provider/reserve/claim when capture OFF, exact reviewed rate, late release changes, no fallback or premature recording claim');
+reset();permission={...permission,seller_intake_id:'saved-intake',dnc_clear:false,dnc_checked_at:null};
+assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);
+reset();sellerConsentCurrent=false;permission={...permission,sellerConsentVerified:true};
+assert.equal((await dispatchLiveVoice('account','job')).status,'contact_operating_checks_required');noAdmission();
+assert(records.some(r=>r.path==='rpc/icash_seller_voice_permission_current'),'Never trust a stored/client verification flag');
 delete process.env.CONTIGUITY_FROM;delete globalThis.__voiceTest;delete process.env.ELEVENLABS_API_KEY;Date.now=realNow;
 console.log('Voice dispatch: permissions, hours, fresh underwriting, reviewed offer ceilings, full-duration costs, Stop, practice-agent isolation, uncertain-call no-retry and honest launch readiness passed. No provider traffic.');
 

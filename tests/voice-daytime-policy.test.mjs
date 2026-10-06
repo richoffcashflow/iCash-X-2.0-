@@ -13,3 +13,9 @@ for(const day of ['2026-01-15','2026-03-08','2026-07-15','2026-11-01'])for(const
  const parts=new Intl.DateTimeFormat('en-US',{timeZone:zone,hour:'2-digit',hourCycle:'h23'}).formatToParts(new Date(`${day}T${time}Z`));const hour=Number(parts.find(p=>p.type==='hour').value);assert(hour>=9&&hour<18,`${day} ${zone} ${time}`);
 }
 console.log('Voice daytime: legacy/new 09:00 inclusive–18:00 exclusive, stricter windows, DST boundaries and conservative supported-region UTC19–20 policy. No claim of verified recipient location or learned best times.');
+
+for(const [when,ready] of [['2026-10-06T23:59:00Z',true],['2026-10-07T01:00:00Z',false]]){
+ const now=Date.parse(when);const inbound={phone:'+12145550123',timezone:'America/Chicago',local_start_hour:9,local_end_hour:20,permission_until:new Date(now+86400000).toISOString(),dnc_checked_at:null,dnc_clear:false,revoked_at:null,sellerConsentVerified:true};
+ assert.equal(contactEligibility(inbound,now).ready,ready,'Verified request uses configured 9–20 window');
+ assert.equal(contactEligibility({...inbound,sellerConsentVerified:false},now).ready,false);
+}

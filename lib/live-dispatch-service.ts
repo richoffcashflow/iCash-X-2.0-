@@ -10,7 +10,7 @@ import {contactEligibility,callEligibility,verifiedOfferCeiling,type VoicePermis
 import {sellerFirstMessage,sellerCallPrompt,type SellerRequestContext} from './seller-call-context.ts';
 type Job={id:string;account_id:string;permission_id:string|null;operational_contact_id?:string|null;callback_id:string|null;state:string};
 type Config={approved_voice_ids:string[];enabled:boolean;agent_id:string;phone_number_id:string;agent_config_hash:string;reviewed_until:string;seller_rate_id:string;buyer_rate_id:string|null;max_duration_seconds:number;required_tool_ids:string[]};
-type Permission=VoicePermission&{id:string;account_id:string;screening_id:string;party:'seller'|'buyer';contact_key:string};
+type Permission=VoicePermission&{id:string;account_id:string;screening_id:string;party:'seller'|'buyer';contact_key:string;seller_intake_id?:string|null};
 export async function dispatchLiveVoice(accountId:string,jobId:string){
  if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
  const [j]=await db<Job[]>(`icash_voice_jobs?id=eq.${jobId}&account_id=eq.${accountId}&select=*`);if(!j||j.state!=='issued')return {status:'held'};
@@ -39,6 +39,8 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  if(c.agent_id!==recordedReview.agentId||c.agent_config_hash!==recordedReview.configHash||c.max_duration_seconds!==recordedReview.maxTotalSeconds||!Array.isArray(c.required_tool_ids)||c.required_tool_ids.length!==recordedReview.toolIds.length||!recordedReview.toolIds.every(id=>c.required_tool_ids.includes(id)))return hold('recorded_call_review_required');
  if(createHash('sha256').update(p.phone).digest('hex')!==p.contact_key)return hold('contact_binding_invalid');
  const suppressed=await db<{phone:string}[]>(`icash_text_suppressions?phone=eq.${encodeURIComponent(p.phone)}&select=phone&limit=1`);if(suppressed.length)return hold('contact_opted_out');
+ // This flag is derived exclusively from a fresh server-side database check.
+ p.sellerConsentVerified=p.seller_intake_id?await db<boolean>('rpc/icash_seller_voice_permission_current','POST',{p_account:accountId,p_permission:p.id})===true:false;
  const contact=contactEligibility(p);if(!contact.ready){if(contact.reason==='outside_contact_hours'&&!j.callback_id){await db(`icash_voice_jobs?id=eq.${j.id}&state=eq.issued`,'PATCH',{state:'ready',due_at:new Date(Date.now()+30*60000).toISOString()});return {status:contact.reason};}return hold(contact.reason);}
  const eligible=p.party==='seller'?callEligibility(p,snapshot.snapshot):null;
  if(eligible&&!eligible.ready)return hold(eligible.reason);

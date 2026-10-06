@@ -27,9 +27,13 @@ export function usdMicros(value:unknown){
  const amount=Number(shift>=0?n*d:(n+d-BigInt(1))/d);
  if(!Number.isSafeInteger(amount)||amount<0)throw Error('USD receipt out of range');return amount;
 }
-export function readVoiceUsagePolicies(raw:string|undefined):VoiceUsagePolicy[]{
+/** A separate server-only activation list enables exact staged rate/version pairs.
+ * Existing historical policies and all cost evidence remain unchanged. */
+export function readVoiceUsagePolicies(raw:string|undefined,activationsRaw?:string):VoiceUsagePolicy[]{
  if(!raw)return [];
- try{const p=JSON.parse(raw);return Array.isArray(p)?p:[];}catch{return [];}
+ let activations:{rateId:string;version:string}[]=[];
+ try{const a=JSON.parse(activationsRaw??'[]');if(Array.isArray(a)&&a.every(v=>v&&typeof v.rateId==='string'&&/^[0-9a-f-]{36}$/i.test(v.rateId)&&typeof v.version==='string'&&v.version.startsWith('required-audio-30d-speech-v1:')))activations=a;}catch{/* Invalid activation never enables a policy. */}
+ try{const p=JSON.parse(raw);return Array.isArray(p)?p.map((v:VoiceUsagePolicy)=>v&&v.components?.other?.kind==='recording_addon_estimate'&&activations.some(a=>a.rateId===v.rateId&&a.version===v.version)?{...v,enabled:true}:v):[];}catch{return [];}
 }
 
 export async function settleBoundVoiceUsage(db:VoiceUsageDb,accountId:string,callId:string,policies:VoiceUsagePolicy[],carrier?:{env:CarrierEnv;fetcher?:typeof fetch;signal?:AbortSignal}){

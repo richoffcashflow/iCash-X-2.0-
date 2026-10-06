@@ -40,7 +40,7 @@ export function SellerIntake(){
    const q=new URLSearchParams(window.location.search),source=sellerOptinSource(q.get('utm_source'));
    const campaign=sellerOptinCampaign(q.get('campaign')||q.get('utm_campaign')),clickId=(q.get('fbclid')||q.get('gclid')||q.get('ttclid')||'').replace(/[^a-zA-Z0-9_.:-]/g,'').slice(0,300);
    await Promise.race([eventQueue.current,new Promise(resolve=>setTimeout(resolve,800))]);
-   const r=await fetch('/api/seller/intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,address,phone,consented,consentVersion:sellerConsentVersion,requestId:request.current,campaign,source,clickId,honeypot:trap})});
+   const r=await fetch('/api/seller/intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,address,phone,consented,consentVersion:sellerConsentVersion,contactTimezone:Intl.DateTimeFormat().resolvedOptions().timeZone,requestId:request.current,campaign,source,clickId,honeypot:trap})});
    const d=await r.json();if(!r.ok)throw Error(d.error||'Please retry.');setDone(true);requestAnimationFrame(()=>success.current?.focus());
   }catch(e){setError(e instanceof Error?e.message:'Please retry.');}finally{lock.current=false;setBusy(false);}
  }
