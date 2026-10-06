@@ -20,7 +20,9 @@ export async function POST(req:Request){
   const jar=await cookies();let token=jar.get('keypath_seller')?.value;if(!validGuest(token)){token=randomBytes(32).toString('hex');jar.set('keypath_seller',token,{httpOnly:true,secure:true,sameSite:'lax',path:'/',maxAge:86400*30});}
   await limitRequest(req,'seller-intake',token,5,3600);
   const hash=(v:string)=>createHash('sha256').update(v).digest('hex');
-  const leadId=await db<string>('rpc/icash_submit_seller_contact_intake','POST',{p_request:i.requestId,p_guest:guestHash(token),p_name:i.name,p_address:i.address,p_phone:i.phone,p_email:i.email,p_duplicate:hash(sellerDuplicateKeyInput(i.address,i.phone)),p_consented:i.consented,p_consent_version:i.consentVersion,p_consent_text:sellerConsentText,p_sharing_text:sellerSharingText,p_attribution:{source:i.source,campaign:i.campaign,clickId:i.clickId,measurementOptOut:req.headers.get('sec-gpc')==='1'},p_agent_hash:guestHash(req.headers.get('user-agent')||'unknown')});
+  const optin=jar.get('homeoffer_optin')?.value;
+  const optinGuest=validGuest(optin)&&req.headers.get('sec-gpc')!=='1'?guestHash(optin):null;
+  const leadId=await db<string>('rpc/icash_submit_seller_contact_intake','POST',{p_request:i.requestId,p_guest:guestHash(token),p_name:i.name,p_address:i.address,p_phone:i.phone,p_email:i.email,p_duplicate:hash(sellerDuplicateKeyInput(i.address,i.phone)),p_consented:i.consented,p_consent_version:i.consentVersion,p_consent_text:sellerConsentText,p_sharing_text:sellerSharingText,p_attribution:{source:i.source,campaign:i.campaign,clickId:i.clickId,measurementOptOut:req.headers.get('sec-gpc')==='1',...(optinGuest?{optinGuest}:{})},p_agent_hash:guestHash(req.headers.get('user-agent')||'unknown')});
   // Persist first; one-use claims prevent duplicate paid lookups on retries.
   // Cron remains the durable fallback if this bounded callback cannot complete.
   after(async()=>{

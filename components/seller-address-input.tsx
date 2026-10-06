@@ -8,7 +8,7 @@ import {createAddressSearch, type AddressPrediction, type PlacesLibrary} from '@
 const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 type MapsWindow = Window & {google?: {maps: {importLibrary(name: string): Promise<PlacesLibrary>}}};
 
-export function SellerAddressInput({value, onChange}: {value: string; onChange: (value: string) => void}) {
+export function SellerAddressInput({value, onChange, standalone = false}: {value: string; onChange: (value: string) => void; standalone?: boolean}) {
   const [activated, setActivated] = useState(false);
   const [focused, setFocused] = useState(false);
   const [ready, setReady] = useState(false);
@@ -96,12 +96,12 @@ export function SellerAddressInput({value, onChange}: {value: string; onChange: 
     {apiKey && activated && <Script id="homeoffer-google-maps" src={`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places&v=weekly`} onReady={() => {void initialize();}} onError={() => setUnavailable(true)}/>}
     <div className="seller-address-lookup">
       <div className="seller-address-bar"><MapPin size={22}/>
-        <input ref={input} id="seller-address" name="street-address" autoComplete={apiKey ? 'off' : 'street-address'} enterKeyHint="next" required minLength={8} maxLength={300} value={value}
+        <input ref={input} id="seller-address" name="street-address" autoComplete={apiKey ? 'off' : 'street-address'} enterKeyHint="next" required minLength={8} maxLength={300} value={value} aria-busy={selecting}
           role="combobox" aria-autocomplete="list" aria-expanded={expanded} aria-controls={expanded ? 'seller-address-options' : undefined} aria-activedescendant={expanded && active >= 0 ? `seller-address-option-${active}` : undefined} aria-describedby="seller-address-hint"
           onFocus={() => {setActivated(true); setFocused(true);}} onBlur={() => {generation.current++; setFocused(false); setSuggestions([]); setActive(-1);}}
           onChange={event => {generation.current++; selected.current = ''; setSuggestions([]); setActive(-1); onChange(event.target.value);}}
           onKeyDown={keyDown} placeholder="Enter your home address"/>
-        <button type="submit" aria-label="Continue with this address" disabled={selecting}><ArrowRight size={24}/></button>
+        {!standalone && <button type="submit" aria-label="Continue with this address" disabled={selecting}><ArrowRight size={24}/></button>}
       </div>
       {expanded && <div className="seller-address-dropdown">
         <ul id="seller-address-options" role="listbox" aria-label="Matching addresses">

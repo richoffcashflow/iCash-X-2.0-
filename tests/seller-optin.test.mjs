@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {sellerOptinPlan,chooseSellerOptin,sellerOptinSource,sellerOptinCampaign,sellerOptinVariants} from '../lib/seller-optin.ts';
+const rows=(counts)=>sellerOptinVariants.map((v,i)=>({variant:v.id,source:'meta',device:'mobile',views:500,starts:100,contacts:50,submissions:40,qualified:counts[i],matureViews:500,matureQualified:counts[i]}));
+assert.equal(sellerOptinPlan([]).mode,'learning');
+assert.equal(sellerOptinPlan(rows([40,39,35])).mode,'learning','Similar results must not invent a winner');
+assert.equal(sellerOptinPlan(rows([200,10,12]).map(r=>({...r,matureViews:99,matureQualified:1}))).mode,'learning');
+assert.equal(sellerOptinPlan(rows([200,10,12]).map(r=>({...r,matureQualified:0}))).mode,'learning','Recent unqualified submissions do not drive routing');
+assert.equal(sellerOptinPlan(rows([600,10,12])).mode,'learning','Invalid evidence fails closed');
+const plan=sellerOptinPlan(rows([200,10,12]));
+assert.equal(plan.winner,'fast_cash');assert.deepEqual(plan.weights,{fast_cash:.8,as_is:.1,ready:.1});
+assert.equal(chooseSellerOptin(plan,.799),'fast_cash');assert.equal(chooseSellerOptin(plan,.81),'as_is');assert.equal(chooseSellerOptin(plan,.91),'ready');
+assert.equal(sellerOptinPlan(rows([10,200,12])).winner,'as_is');
+assert.equal(sellerOptinSource('Instagram'),'meta');assert.equal(sellerOptinSource('facebook'),'meta');assert.equal(sellerOptinSource(null),'direct');assert.equal(sellerOptinCampaign('<tag>/test_123'),'tagtest_123');
+console.log('PASS opt-in routing: minimum evidence, qualified-only success, conservative separation, stable weights, exploration and normalized attribution.');
