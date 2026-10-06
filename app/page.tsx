@@ -2,6 +2,7 @@
 import OwnerRecordingTestLink from '@/components/owner-recording-test-link';
 import {useCallback,useEffect,useState,useRef,type CSSProperties} from 'react';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import {workspaceNextAction,workspaceActionDisabled} from '@/lib/workspace-status';
 import {DealExplainer} from '@/components/deal-explainer';
 import {X} from 'lucide-react';
@@ -21,29 +22,45 @@ import {nextWorkFunding} from '@/lib/workspace-progress';
 import {SpendActivationReview} from '@/components/spend-activation-review';
 import {LiveWorkspace} from '@/components/live-workspace';
 import {PostPaymentBotName} from '@/components/post-payment-bot-name';
-import {WorkspaceAssistant,type AssistantRequest} from '@/components/workspace-assistant';
+import type {AssistantRequest} from '@/components/workspace-assistant';
+const WorkspaceAssistant=dynamic(()=>import('@/components/workspace-assistant').then(m=>m.WorkspaceAssistant),{ssr:false});
 import type {AssistantAction} from '@/lib/workspace-assistant-policy';
 import {BotRunBar} from '@/components/bot-run-bar';
 import {BotBrand} from '@/components/bot-brand';
 import {setupThemes,type BotProfile} from '@/lib/bot-setup';
-type Account={billingModel?:string;membershipActive?:boolean;isBillingOwner?:boolean;identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;phone?:string;balanceCents?:number;reservedCents?:number;dailyLimitCents?:number;assistantName?:string;paused?:boolean;billingActive?:boolean;billingReview?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;activeWork?:boolean};
+type Account={readinessPending?:boolean;billingModel?:string;membershipActive?:boolean;isBillingOwner?:boolean;identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;phone?:string;balanceCents?:number;reservedCents?:number;dailyLimitCents?:number;assistantName?:string;paused?:boolean;billingActive?:boolean;billingReview?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;activeWork?:boolean};
 export default function Home(){
  const [account,setAccount]=useState<Account|null>(null),[accountError,setAccountError]=useState(false),[signInOpen,setSignInOpen]=useState(false),[fundingOpen,setFundingOpen]=useState(false),[fundingCode,setFundingCode]=useState(''),[controlBusy,setControlBusy]=useState(false),[controlError,setControlError]=useState(''),[draftBrand,setDraftBrand]=useState<BotProfile|null>(null);
  const [assistantRequest,setAssistantRequest]=useState<AssistantRequest|null>(null),[propertyRequest,setPropertyRequest]=useState<{id:string;nonce:number}|null>(null);
  const [settingsOpen,setSettingsOpen]=useState(false);
  const [campaign,setCampaign]=useState<OutreachCampaignStatus|null>(null);
- const refreshInFlight=useRef(false);
+ const refreshInFlight=useRef(false),accountGeneration=useRef(0),accountRequest=useRef<AbortController|null>(null),readinessRequest=useRef<AbortController|null>(null);
  const [activationAvailability,setActivationAvailability]=useState<{key:string;available:boolean}|null>(null);
  const activationKey=`${account?.email}:${account?.balanceCents}:${account?.dailyLimitCents}:${account?.paused}`;
  const updateActivationAvailability=useCallback((available:boolean)=>setActivationAvailability(current=>current?.key===activationKey&&current.available===available?current:{key:activationKey,available}),[activationKey]);
  const spendingActivationAvailable=account?.signedIn===true&&account.mode==='live'&&activationAvailability?.key===activationKey&&activationAvailability.available===true;
  const updateBrand=useCallback((profile:BotProfile)=>setDraftBrand(profile),[]);
- async function refreshAccount(){if(refreshInFlight.current)return;refreshInFlight.current=true;try{const r=await fetch('/api/account',{cache:'no-store'});if(!r.ok)throw Error();setAccount(await r.json());setAccountError(false);setSignInOpen(false);}catch{setAccountError(true);}finally{refreshInFlight.current=false;}}
+ async function refreshAccount(){
+  if(refreshInFlight.current)return;refreshInFlight.current=true;const generation=++accountGeneration.current;readinessRequest.current?.abort();const coreController=new AbortController();accountRequest.current=coreController;
+  try{
+   const r=await fetch('/api/account?view=core',{cache:'no-store',signal:AbortSignal.any([coreController.signal,AbortSignal.timeout(25000)])});if(!r.ok)throw Error();const next:Account=await r.json();
+   if(generation!==accountGeneration.current)return;
+   setAccount(next);setAccountError(false);setSignInOpen(false);
+   if(next.signedIn&&next.readinessPending){
+    const controller=new AbortController();readinessRequest.current=controller;
+    void fetch('/api/account',{cache:'no-store',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(25000)])}).then(async response=>{
+     if(!response.ok)throw Error();const details:Account=await response.json();
+     if(generation===accountGeneration.current&&!controller.signal.aborted&&details.signedIn&&details.email===next.email)setAccount(details);
+    }).catch(()=>{/* Optional checks never erase a successfully loaded account. Work APIs still authorize every action. */});
+   }
+  }catch{if(generation===accountGeneration.current)setAccountError(true);}finally{if(generation===accountGeneration.current)refreshInFlight.current=false;}
+ }
+ useEffect(()=>()=>{accountGeneration.current++;accountRequest.current?.abort();readinessRequest.current?.abort();refreshInFlight.current=false;},[]);
  useEffect(()=>{void refreshAccount();const syncFunding=()=>setFundingOpen(window.location.hash==='#funding');syncFunding();if(new URLSearchParams(window.location.search).get('payment')==='funded')setFundingOpen(true);window.addEventListener('hashchange',syncFunding);window.addEventListener('popstate',syncFunding);return()=>{window.removeEventListener('hashchange',syncFunding);window.removeEventListener('popstate',syncFunding);};},[]);
  useEffect(()=>{if(account?.signedIn&&new URLSearchParams(window.location.search).get('settings')==='billing'){if(account.billingModel==='membership_credits')showDetails('membership-settings');else setFundingOpen(true);}if(account?.signedIn&&new URLSearchParams(window.location.search).get('notifications')==='1'){setSettingsOpen(true);const node=document.getElementById('notification-settings') as HTMLDetailsElement|null;if(node){node.open=true;document.getElementById('notification-settings')?.scrollIntoView({block:'start'});}}},[account?.signedIn]);
  useEffect(()=>{if(!account?.signedIn)return;const update=()=>{if(!document.hidden)void refreshAccount();};const timer=setInterval(update,30000);document.addEventListener('visibilitychange',update);return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',update);};},[account?.signedIn]);
  async function toggleBot(action:'pause'|'resume'){setControlBusy(true);setControlError('');try{const r=await fetch('/api/work/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})});const result=await r.json();if(!r.ok)throw Error(result.error||'Could not update your bot. Please retry.');await refreshAccount();return true;}catch(e){setControlError(e instanceof Error?e.message:'Could not update your bot. Please retry.');await refreshAccount();return false;}finally{setControlBusy(false);}}
- async function signOut(){if(document.querySelector('[data-unsaved-draft="true"]')&&!window.confirm('Sign out and discard unsaved work in this view?'))return;const r=await fetch('/api/auth/logout',{method:'POST'});if(r.ok){setAccount({signedIn:false});setCampaign(null);setDraftBrand(null);setFundingOpen(false);}else setAccountError(true);}
+ async function signOut(){if(document.querySelector('[data-unsaved-draft="true"]')&&!window.confirm('Sign out and discard unsaved work in this view?'))return;accountGeneration.current++;accountRequest.current?.abort();readinessRequest.current?.abort();refreshInFlight.current=false;const r=await fetch('/api/auth/logout',{method:'POST'});if(r.ok){setAccount({signedIn:false});setCampaign(null);setDraftBrand(null);setFundingOpen(false);}else setAccountError(true);}
  function closeFunding(){setFundingOpen(false);if(window.location.hash==='#funding')window.history.replaceState(window.history.state,'',window.location.pathname+window.location.search);document.getElementById('workspace-funding-toggle')?.focus();}
  function openFunding(code=''){if(account?.billingModel==='membership_credits'&&!account.membershipActive){showDetails('membership-settings');return;}setFundingCode(code);setFundingOpen(true);if(window.location.hash!=='#funding')window.history.pushState(window.history.state,'','#funding');}
  const funding=nextWorkFunding(account??{},accountError);
@@ -76,7 +93,7 @@ export default function Home(){
     <section className="operation-panel" aria-label="Your AI real estate bot">
      {guest?<div className="workspace-first-visit"><h2>Your properties</h2><p>Join for $50/month, then add money to start your bot.</p></div>:<>
      {needsBotName&&<PostPaymentBotName onBrand={updateBrand} onCreated={async()=>{await refreshAccount();}}/>}
-     {!['pause','work','resume','funding','membership'].includes(nextAction.kind)&&<div className="workspace-state-row">
+     {!account.readinessPending&&!['pause','work','resume','funding','membership'].includes(nextAction.kind)&&<div className="workspace-state-row">
       {nextAction.kind==='support'?<a className="fund-button" href="/support">{nextAction.label}</a>:<button className="fund-button" disabled={workspaceActionDisabled(nextAction.kind,controlBusy,accountError)} onClick={doNextAction}>{controlBusy?'Saving…':nextAction.label}</button>}
      </div>}
      {account.mode==='test'&&<p className="workspace-test-label">Test workspace</p>}

@@ -1,26 +1,23 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
-let screeningState='running',paths=[],fullReady=true,smsReady=false,discoveryReady=false,contactReady=false;
-const mocks={accountMembership:async()=>null,membershipAccessible:()=>false,ownerInboundTarget:{ownerUserId:"owner-admin"},resolveRequestedPropertyMarket:async()=>({status:'not_requested'}),contactAccountReadiness:async(account,user)=>{assert.equal(account,'account');assert.equal(user,'user');return {ready:contactReady,quote:contactReady?{chargeCents:174,maxContacts:25,costBasis:'planning_estimate'}:null};},discoveryAccountReadiness:async(account,user)=>{assert.equal(account,'account');assert.equal(user,'user');return {ready:discoveryReady,quote:discoveryReady?{chargeCents:84,maxProperties:5,costBasis:'planning_estimate'}:null};},liveWorkReady:()=>fullReady,smsAccountReady:async(account,user)=>{assert.equal(account,'account');assert.equal(user,'user');return smsReady;},launchReadiness:async()=>({ready:true}),accountMode:()=> 'live',currentUser:async()=>({id:'user',email:'fixture@example.invalid'}),NextResponse:{json:(body,options={})=>({body,status:options.status??200})},db:async(path,method,body)=>{
- paths.push(path);
- if(path==='rpc/icash_claim_funding')return 'account';
- if(path.startsWith('rpc/icash_funding_account_totals'))return {creditCents:1000,phone:null};
- if(path.startsWith('rpc/'))return null;
- if(path.startsWith('icash_accounts?'))return [{id:'account',assistant_name:'Scout',bot_paused:false,daily_limit_cents:1000}];
- if(path.startsWith('icash_customer_identities'))return [{principal:'Fixture'}];
- if(path.startsWith('icash_wallets'))return [{balance_cents:1000,reserved_cents:200}];
- if(path.startsWith('icash_screening_jobs'))return path.includes(screeningState)?[{id:'job'}]:[];
- if(['icash_bot_setups','icash_billing_reviews','icash_live_conversations','icash_daily_plans'].some(t=>path.startsWith(t)))return [];
- throw Error('Unexpected '+path);
+let paths=[],checks=0,signedIn=true,fullReady=true,smsReady=false,discoveryReady=false,contactReady=false,failSnapshot=false;
+const snapshot={accountId:'account',account:{billingModel:'membership_credits',membership:{state:'active',paid_through:'2099-01-01'},balanceCents:800,reservedCents:200,paused:false,activeWork:true,billingReview:false,identity:{principal:'Fixture'}}};
+const mocks={membershipAccessible:m=>m?.state==='active'&&Date.parse(m.paid_through)>Date.now(),ownerInboundTarget:{ownerUserId:'owner-admin'},resolveRequestedPropertyMarket:async()=>{checks++;return {status:'not_requested'};},contactAccountReadiness:async()=>{checks++;return {ready:contactReady,quote:contactReady?{chargeCents:174,maxContacts:25}:null};},discoveryAccountReadiness:async()=>{checks++;return {ready:discoveryReady,quote:discoveryReady?{chargeCents:84,maxProperties:5}:null};},liveWorkReady:()=>fullReady,smsAccountReady:async()=>{checks++;return smsReady;},launchReadiness:async()=>{checks++;return {ready:true};},accountMode:()=> 'live',currentUser:async()=>signedIn?{id:'user',email:'fixture@example.invalid'}:null,NextResponse:{json:(body,options={})=>({body,status:options.status??200})},db:async(path,method,body)=>{
+ paths.push(path);assert.equal(path,'rpc/icash_load_workspace_account');assert.equal(method,'POST');assert.deepEqual(body,{p_user:'user',p_mode:'live'});if(failSnapshot)throw Error('private database details');return structuredClone(snapshot);
 }};
 globalThis.__accountActivity=mocks;
 let source=ts.transpileModule(readFileSync(new URL('../app/api/account/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');source='const {'+Object.keys(mocks).join(',')+'}=globalThis.__accountActivity;\n'+source;
 const {GET}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
-for(const state of ['queued','running']){screeningState=state;const r=await GET();assert.equal(r.status,200);assert.equal(r.body.activeWork,true,state);assert.equal(r.body.balanceCents,800);}
-screeningState='complete';const r=await GET();assert.equal(r.body.activeWork,false);assert(paths.some(p=>p.includes('state=in.(queued,running)')));
-fullReady=false;smsReady=true;const sms=await GET();assert.equal(sms.body.workReady,false);assert.equal(sms.body.smsWorkReady,true);smsReady=false;assert.equal((await GET()).body.smsWorkReady,false);
-discoveryReady=true;const discovery=await GET();assert.equal(discovery.body.workReady,false);assert.equal(discovery.body.smsWorkReady,false);assert.equal(discovery.body.discoveryWorkReady,true);assert.deepEqual(discovery.body.discoveryQuote,{chargeCents:84,maxProperties:5,costBasis:'planning_estimate'});
-contactReady=true;const contacts=await GET();assert.equal(contacts.body.contactWorkReady,true);assert.equal(contacts.body.contactQuote.chargeCents,174);
+const core=()=>GET(new Request('https://www.geticashx.com/api/account?view=core'));
+let r=await core();assert.equal(r.status,200);assert.equal(paths.length,1);assert.equal(checks,0);assert.equal(r.body.balanceCents,800);assert.equal(r.body.activeWork,true);assert.equal(r.body.membershipActive,true);assert.equal(r.body.readinessPending,true);assert.equal(r.body.workReady,false);assert(!('accountId' in r.body));assert(!('membership' in r.body));
+r=await GET();assert.equal(r.body.workReady,true);assert.equal(checks,5);
+fullReady=false;smsReady=true;assert.equal((await GET()).body.smsWorkReady,true);
+discoveryReady=true;contactReady=true;r=await GET();assert.equal(r.body.discoveryQuote.chargeCents,84);assert.equal(r.body.contactQuote.chargeCents,174);
+for(const change of [{balanceCents:0},{billingReview:true},{membership:{state:'past_due',paid_through:'2099-01-01'}},{membership:{state:'active',paid_through:'2000-01-01'}}]){
+ const previous=structuredClone(snapshot.account);Object.assign(snapshot.account,change);checks=0;r=await GET();assert.equal(r.status,200);assert.equal(checks,0);assert.equal(r.body.workReady,false);assert.equal(r.body.readinessPending,false);if(change.membership)assert.equal(r.body.membershipActive,false);snapshot.account=previous;
+}
+signedIn=false;paths=[];r=await core();assert.equal(r.body.signedIn,false);assert.equal(paths.length,0);signedIn=true;
+const oldLog=console.error;let diagnostic;console.error=(...args)=>{diagnostic=args};failSnapshot=true;r=await core();console.error=oldLog;assert.equal(r.status,503);assert(!JSON.stringify(r.body).includes('private database'));assert.equal(diagnostic[1].stage,'account_snapshot');assert(!JSON.stringify(diagnostic).includes('private database'));
 delete globalThis.__accountActivity;
-console.log('Account activity uses real queued/running screening states, completed work idle and net available balance.');
+console.log('PASS account load: one snapshot request, deferred readiness, no empty-credit scans, membership lock, safe errors and exact saved balances.');
