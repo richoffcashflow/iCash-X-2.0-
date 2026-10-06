@@ -12,6 +12,7 @@ import {acceptedFundingTerms,fundingTermsVersion,fundingTermsText,acceptedEarlyA
 import {maximumFundingDays} from '@/lib/funding-duration';
 import {processingFeeCents} from '@/lib/funding-fees';
 import {workCreditTerms,workCreditTermsVersion} from '@/lib/membership-policy';
+import {customFundingCode,validFundingAmount} from '@/lib/funding-amount';
 export const runtime="nodejs";
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:"Open iCash X directly and try again."},{status:403});
@@ -20,7 +21,7 @@ export async function POST(req:Request){
  let consent;try{const raw=await req.text();if(raw.length>512)throw new Error();consent=JSON.parse(raw);}catch{return NextResponse.json({error:"Accept the purchase terms to continue."},{status:400});}
  const prepaid=consent?.accepted===true&&consent?.version===workCreditTermsVersion;
  if(!prepaid&&!acceptedFundingTerms(consent))return NextResponse.json({error:"Accept the current purchase terms to continue."},{status:400});
- const choice=consent as {packCode?:unknown;days?:unknown;totalCents?:unknown};
+ const choice=consent as {packCode?:unknown;days?:unknown;totalCents?:unknown;customAmountCents?:unknown};
  const privateCheck=privateAllowed&&choice.packCode==='private_check_three';
  if(!privateCheck&&!(await customerFundingReady()))return NextResponse.json({error:"Funding is not open yet."},{status:503});
  const earlyAccess=!privateCheck&&earlyAccessFundingEnabled();
@@ -29,6 +30,8 @@ export async function POST(req:Request){
  const consentVersion=prepaid?workCreditTermsVersion:earlyAccess?`${fundingTermsVersion}:early:${earlyAccessTermsVersion}`:fundingTermsVersion;
  const consentText=prepaid?workCreditTerms+(earlyAccess?' '+earlyAccessDisclosure:''):earlyAccess?`${fundingTermsText} Early-access acknowledgment: ${earlyAccessDisclosure}`:fundingTermsText;
  const packCode=typeof choice.packCode==="string"&&/^[a-z0-9_]{1,30}$/.test(choice.packCode)?choice.packCode:"start";
+ const custom=packCode===customFundingCode;
+ if(custom?(!prepaid||!validFundingAmount(choice.customAmountCents)||choice.days!==1):choice.customAmountCents!==undefined)return NextResponse.json({error:'Choose an amount from $10 to $1,000, with up to two decimal places.'},{status:400});
  if(privateCheck&&(choice.packCode!=='private_check_three'||choice.days!==1||choice.totalCents!==300))return NextResponse.json({error:'Private payment checks are limited to $3, once per checkout, with no renewal.'},{status:400});
  const runDays=typeof choice.days==="number"?choice.days:1;
  if(!Number.isInteger(runDays)||runDays<1||runDays>7)return NextResponse.json({error:"Choose 1–7 days."},{status:400});
@@ -47,6 +50,9 @@ export async function POST(req:Request){
  const stripe=fundingStripe();
  const [pack]=await db<{code:string;price_cents:number;credit_cents:number}[]>(`icash_credit_packs?code=eq.${packCode}${mode==="live"&&!privateCheck?"&enabled=eq.true":""}&select=code,price_cents,credit_cents`);
  if(!pack||!Number.isSafeInteger(pack.price_cents)||!Number.isSafeInteger(pack.credit_cents)||pack.credit_cents<=0||(privateCheck?(pack.price_cents!==300||pack.credit_cents!==300):(pack.price_cents<1000||pack.price_cents>100000||pack.credit_cents>100000)))throw new Error("No enabled pack");
+ // The enabled custom pack identifies the product. The order snapshots the exact
+ // validated amount; payment and wallet settlement are bound to that snapshot.
+ if(custom&&validFundingAmount(choice.customAmountCents)){pack.price_cents=choice.customAmountCents;pack.credit_cents=choice.customAmountCents;}
  const budgetPrice=pack.price_cents*runDays,fee=processingFeeCents(budgetPrice),totalPrice=budgetPrice+fee,totalCredits=pack.credit_cents*runDays;
  if(!Number.isSafeInteger(totalPrice)||!Number.isSafeInteger(totalCredits)||choice.totalCents!==totalPrice)return NextResponse.json({error:"Budget changed. Refresh and confirm your total."},{status:400});
  if(!privateCheck&&runDays>maximumFundingDays(pack.price_cents))return NextResponse.json({error:"Choose fewer days for this budget."},{status:400});

@@ -7,11 +7,14 @@ import { cookies } from "next/headers";
 import { db,guestHash } from "@/lib/stripe-test";
 import { earlyAccessFundingEnabled,fundingMode,type FundingOrder } from "@/lib/funding-policy";
 import { fundingStripe,settleFunding,validGuest } from "@/lib/funding";
+import {customFundingCode,minimumFundingCents,maximumFundingCents} from '@/lib/funding-amount';
 export const dynamic="force-dynamic";
 export async function GET(req:Request){
  const headers={"Cache-Control":"private, no-store"};const mode=fundingMode();
  try{
- const packs=await db<{code:string;price_cents:number;credit_cents:number;enabled:boolean}[]>("icash_credit_packs?price_cents=gte.1000&select=code,price_cents,credit_cents,enabled&order=price_cents&limit=250");
+ const catalog=await db<{code:string;price_cents:number;credit_cents:number;enabled:boolean}[]>("icash_credit_packs?price_cents=gte.1000&select=code,price_cents,credit_cents,enabled&order=price_cents&limit=250");
+ const packs=catalog.filter(p=>p.code!==customFundingCode);
+ const custom={enabled:catalog.some(p=>p.code===customFundingCode&&p.enabled),minCents:minimumFundingCents,maxCents:maximumFundingCents};
  const pack=packs.find(p=>p.code==="budget_ten");
  const [planning]=await db("icash_planning_estimates?id=eq.1&select=lookup_cents,voice_minute_cents,lookup_share_percent,call_minutes_low,call_minutes_high") as import("@/lib/funding-forecast").PlanningPrices[];
  const token=(await cookies()).get("icash_funding_guest")?.value;
@@ -41,6 +44,6 @@ export async function GET(req:Request){
  }
  }
  const summary=fundingReturnSummary(orders,!!user);
- return NextResponse.json({privatePaymentCheck:await privatePaymentCheckAllowed(),mode,enabled:await customerFundingReady(),earlyAccess:earlyAccessFundingEnabled(),packs,planning,forecast:{cycleChargeCents:null,qualified:null},priceCents:pack?.price_cents??null,creditCents:pack?.credit_cents??null,...summary},{headers});
+ return NextResponse.json({privatePaymentCheck:await privatePaymentCheckAllowed(),mode,enabled:await customerFundingReady(),earlyAccess:earlyAccessFundingEnabled(),packs,custom,planning,forecast:{cycleChargeCents:null,qualified:null},priceCents:pack?.price_cents??null,creditCents:pack?.credit_cents??null,...summary},{headers});
  }catch{return NextResponse.json({enabled:false,error:"Could not check funding. Please retry."},{status:503,headers});}
 }

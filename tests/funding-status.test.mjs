@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
+import * as fundingAmounts from '../lib/funding-amount.ts';
 import {fundingReturnSummary} from '../lib/funding-return.ts';
 // Exercise the route without network calls or charges.
 let signedIn=true,guest=true,settled=false,paths=[],retrieved=0,planMatch=false,orderMatch=true;
 const receipt={id:'order',state:'pending',credit_cents:300,stripe_session_id:'cs_live_current',credited_at:null,payer_email:'test@example.invalid'};
-const mocks={
+const mocks={...fundingAmounts,
  currentUser:async()=>signedIn?{id:'owner'}:null,
  privatePaymentCheckAllowed:async()=>false,customerFundingReady:async()=>false,earlyAccessFundingEnabled:()=>false,
  NextResponse:{json:(body,options={})=>({body,status:options.status??200})},

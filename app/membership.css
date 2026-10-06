@@ -32,3 +32,24 @@
 
 .membership-renewal,.membership-note{font-size:12px;color:#5b7062}
 .membership-credits-note p{color:#5b7062}.membership-consent{min-height:44px;font-size:13px}
+
+/* Manual funding follows the workspace's neutral theme. */
+.personalized-workspace .credit-checkout-intro{color:#71717a!important;font-size:14px;line-height:1.5}
+.credit-pack-options button{min-height:64px;color:#27272a;border-color:#dedee3;cursor:pointer}
+.credit-pack-options button[aria-pressed=true]{background:#18181b;border-color:#18181b;color:#fff}
+.credit-pack-options button:disabled{opacity:.45;cursor:default}
+.credit-pack-options strong{font-size:21px;letter-spacing:-.03em}
+.credit-pack-options button:last-child strong{font-size:16px;letter-spacing:0}
+.credit-pack-options button:focus-visible,.credit-custom-amount input:focus-visible{outline:2px solid #52525b;outline-offset:3px}
+.credit-custom-amount{display:grid;gap:8px;font-size:13px;color:#52525b}
+.credit-custom-amount input{width:100%;box-sizing:border-box;font:inherit;font-size:24px;color:#18181b;border:1px solid #dedee3;border-radius:10px;padding:12px;background:#fff}
+.credit-custom-amount small{font-size:12px;color:#71717a}
+.credit-purchase-summary{color:#52525b;border-color:#e4e4e7}.credit-purchase-summary strong{color:#18181b}.credit-purchase-summary small{color:#71717a}
+.credit-purchase-terms,.credit-purchase-safe{color:#71717a!important}
+.personalized-workspace .credit-checkout>.fund-button{background:#18181b;color:#fff}
+.personalized-workspace .credit-checkout>.fund-button:disabled{opacity:.45;cursor:default}
+.subscription-lock{max-width:460px;margin:70px auto;text-align:center;padding:36px 24px;border:1px solid #e4e4e7;border-radius:20px;background:#fff}
+.subscription-lock h1{font-size:30px;letter-spacing:-.04em;margin:0 0 12px}.subscription-lock>p{color:#71717a;font-size:14px}
+.subscription-lock .membership-settings{margin:28px 0 16px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.subscription-lock .membership-settings>.fund-button{background:#18181b;color:#fff;padding:14px 28px;border:0;border-radius:10px;min-height:48px}
+.subscription-lock .workspace-quiet{font-size:13px}
