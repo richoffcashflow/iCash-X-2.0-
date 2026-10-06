@@ -13,7 +13,7 @@ import {fillEmptyTerms} from '@/lib/contract-preparation';
 import {dealCardSummary} from '@/lib/deal-card-summary';
 import {workMilestone} from '@/lib/work-milestone';
 import {CallConversation} from '@/components/call-conversation';
-import {DealMessages} from '@/components/deal-messages';
+import {PropertyMessages} from '@/components/property-messages';
 import {FulfillmentDetails} from '@/components/fulfillment-details';
 import {SigningControls,SigningAttention,type SigningEnvelope} from '@/components/signing-controls';
 import {dealTermsSchema,type DealTerms,type DocumentKind} from '@/lib/deal-documents';
@@ -80,13 +80,13 @@ function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefre
  useEffect(()=>setManual(initialManual),[initialManual]);
  const deal=work.deals.find(d=>d.screening_id===p.id),calls=work.conversations.filter(c=>c.screening_id===p.id);
  const lookups=work.contacts.filter(c=>c.screening_id===p.id);
- const hasPhone=lookups.some(l=>l.contacts?.some(c=>c.phones.some(p=>p.number)));
  function openContact(view:'texts'|'calls'){setContactVisited(true);setContactView(view);}
  function tookOver(){setManual(true);setControlMessage('You’re handling this lead.');onRefresh();}
  const contractReady=showPropertyContract(deal,work.signing);
  useEffect(()=>{if(contractReady)setPreparingContract(true);},[contractReady]);
  const address=propertyAddressLines(p.result.property.address);
  const analysis=propertyAnalysisView(p.result);
+ const dealSummary=dealCardSummary(deal,work.signing);
  const practice=p.result.property.propertyId.startsWith('practice_')||[true,'true'].includes((deal?.terms as (DealTerms&{practice?:boolean|string})|undefined)?.practice??false);
  const bot=propertyBotStatus({manual,paused:botPaused,available:botAvailable,stale,attention:needsAttention(p.id,work),stage:deal?.stage,practice});
  const phase=milestone(p,work).replace(/^[^A-Za-z]+/,'');
@@ -104,12 +104,12 @@ function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefre
      {calls.length>0&&<span className="property-recorded-meta">{calls.length} saved call{calls.length===1?'':'s'}</span>}
      <span className={`property-bot-status tone-${bot.tone}`}><span className="ai-status-dot" aria-hidden="true"/>{bot.label}</span>
     </span>
-    <span className="property-cash-preview" aria-label="Cash offer price"><small>Cash offer price</small><strong>{analysisMoney(analysis.cashOfferCeilingCents)}</strong></span>
+    <span className="property-cash-preview" aria-label={dealSummary?.priceCents!=null?'Purchase price':'Cash offer price'}><small>{dealSummary?.priceCents!=null?'Purchase price':'Cash offer price'}</small><strong>{analysisMoney(dealSummary?.priceCents??analysis.cashOfferCeilingCents)}</strong></span>
     <span className="property-open-control"><span>{active?'Close':'View details'}</span><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
    </button>
    <div className="property-quick-actions"><button type="button" onClick={()=>openContact('calls')} aria-label={`Call ${address.street}`}><Phone size={16}/>Call</button><button type="button" onClick={()=>openContact('texts')} aria-label={`Text conversation for ${address.street}`}><MessageCircle size={16}/>Text</button></div>
    {visited&&<Activity mode={active&&!hidden?'visible':'hidden'}><div className="property-details" id={`property-content-${p.id}`}>
-    <PropertyAnalysisSummary result={p.result}/>
+    {dealSummary?.contractSigned?<details className="contract-deal-estimates"><summary>Original deal estimates</summary><PropertyAnalysisSummary result={p.result}/></details>:<PropertyAnalysisSummary result={p.result}/>}
     <div className="property-control"><span><b className={`property-bot-status tone-${bot.tone}`}><span className="ai-status-dot" aria-hidden="true"/>{bot.label}</b><small>{bot.detail}</small></span><button className="takeover-button" title={manual?'Let the bot manage new work for this property':'Pause new automated work for this property and handle it yourself'} disabled={controlBusy} onClick={()=>void control()}>{controlBusy?'Saving…':manual?'Return to bot':'Take over'}</button></div>
     <small className="property-control-help">Take over pauses new work. Already-started work may finish.</small>
     {controlMessage&&<p className="control-result" role="status">{controlMessage}</p>}
@@ -127,7 +127,7 @@ function PropertyCard({property:p,work,principal,active,visited,onToggle,onRefre
   <dialog ref={contactDialog} className="property-contact-dialog" aria-labelledby={`contact-heading-${p.id}`} onClose={()=>setContactView(null)} onCancel={()=>setContactView(null)}>
    <div className="contact-dialog-heading"><div><span className="contact-dialog-kicker">CONVERSATIONS</span><h3 id={`contact-heading-${p.id}`}>{address.street}</h3><small>{owner?`${owner} · `:''}{address.location}</small></div><button className="contact-dialog-close" aria-label="Close conversation" onClick={()=>setContactView(null)}><X size={20}/></button></div>
    {contactVisited&&<Activity mode={contactView&&!hidden?'visible':'hidden'}>    <section className="property-conversations" id={`conversation-${p.id}`} aria-label="Property conversations"><div className="workspace-section-heading"><div className="conversation-switch"><button aria-pressed={contactView==='texts'} onClick={()=>setContactView('texts')}><MessageCircle size={16}/>Texts</button><button aria-pressed={contactView==='calls'} onClick={()=>setContactView('calls')}><Phone size={16}/>Calls{calls.length?` (${calls.length})`:''}</button></div><small>Saved to this property</small></div><div className="conversation-control"><span>{manual?'You’re handling this lead':'Bot manages this lead'}</span>{manual&&<button className="workspace-quiet" disabled={controlBusy} onClick={()=>void control()}>{controlBusy?'Saving…':'Return to bot'}</button>}</div>{controlMessage&&<p className="control-result" role="status">{controlMessage}</p>}
-    <div className="contact-text-view" hidden={contactView!=='texts'}>{deal?<DealMessages dealId={deal.id} active={contactView==='texts'&&!hidden} onTakeover={tookOver}/>:<div className="conversation-empty"><MessageCircle size={24}/><strong>No text conversation yet</strong><p>{hasPhone?'Contact setup is still pending. Texting becomes available after a permitted thread is linked.':'A phone number and permitted text conversation are needed before you can send.'}</p><button type="button" onClick={onRefresh}>Check contact</button><button type="button" onClick={()=>setContactView('calls')}>Try calling</button><a href="/support">Get help</a></div>}</div>
+    <div className="contact-text-view" hidden={contactView!=='texts'}><PropertyMessages screeningId={p.id} active={contactView==='texts'&&!hidden} onTakeover={tookOver}/></div>
     {contactView==='calls'&&<div className="property-call-list"><ManualCallOptions screeningId={p.id} onTakeover={tookOver}/><h4 className="call-history-title">Call history</h4>{calls.length?calls.map(c=><CallConversation key={c.id} id={c.id} party={c.party} summary={c.summary} completedAt={c.completed_at}/>):<div className="conversation-empty"><Phone size={24}/><strong>No calls yet</strong><p>Saved bot calls, transcripts, and available recordings will appear here.</p></div>}</div>}
     </section>
 </Activity>}
@@ -145,7 +145,7 @@ function PropertyFacts({property:p,lookups}:{property:Property;lookups:Purchased
 }
 function PropertyNextStep({property,work}:{property:Property;work:Work}){
  const deal=work.deals.find(d=>d.screening_id===property.id),summary=dealCardSummary(deal,work.signing);
- return <div className="property-next"><p><span>Next step</span>{propertyNextMove(property,work)}</p>{summary&&<><ol className="property-milestones" aria-label="Verified deal progress">{summary.steps.filter(step=>step.done).map(step=><li key={step.label} className={step.done?'complete':''}><span aria-hidden="true">{step.done?'✓':'○'}</span>{step.label}<span className="sr-only">{step.done?' complete':' not confirmed'}</span></li>)}</ol>{summary.priceCents!==null&&<div className="property-price"><span>Signed purchase price</span><strong>{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(summary.priceCents/100)}</strong></div>}</>}</div>;
+ return <div className="property-next"><p><span>{summary?.contractSigned?summary.status:'Next step'}</span>{summary?.contractSigned?summary.nextAction:propertyNextMove(property,work)}</p>{summary?.contractSigned&&<><ol className="property-milestones" aria-label="Deal progress">{summary.steps.map(step=><li key={step.label} className={step.done?'complete':step.current?'current':''} aria-current={step.current?'step':undefined}><span aria-hidden="true">{step.done?'✓':'○'}</span>{step.label}<span className="sr-only">{step.done?' complete':step.current?' current':' upcoming'}</span></li>)}</ol>{deal?.terms.closingDate&&<small>Target closing · {deal.terms.closingDate}</small>}</>}</div>;
 }
 function WorkspaceAttention({work,page,onPage,onOpen,onRefresh}:{work:Work;page:number;onPage:(page:number)=>void;onOpen:(id:string)=>void;onRefresh:()=>void}){
  const [handled,setHandled]=useState<string[]>([]),[expanded,setExpanded]=useState(false);

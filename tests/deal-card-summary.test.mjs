@@ -12,3 +12,9 @@ assert.equal(dealCardSummary({...deal,stage:'closing'},[signature]).steps[3].don
 assert.equal(dealCardSummary({...deal,stage:'canceled'},[signature]).steps[3].done,false);
 assert.equal(dealCardSummary({...deal,stage:'closed'},[signature]).steps[3].done,true);
 console.log('Deal cards exclude test/other-deal signatures and do not imply closing or unsigned prices.');
+assert.equal(signed.status,'Under contract');assert.equal(signed.steps[1].current,true);assert.match(signed.nextAction,/buyer package/);
+const assigned=dealCardSummary(deal,[signature,{...signature,kind:'assignment'}]);assert.equal(assigned.status,'Buyer secured');assert.equal(assigned.steps[2].current,true);
+assert.equal(dealCardSummary({...deal,stage:'closing'},[signature]).status,'Closing');
+assert.equal(dealCardSummary({...deal,stage:'closed'},[signature]).steps.some(s=>s.current),false);
+assert.equal(dealCardSummary({...deal,stage:'cancelled'},[signature]).status,'Deal stopped');
+assert.equal(dealCardSummary(deal,[{...signature,test_mode:true}]).contractSigned,false);

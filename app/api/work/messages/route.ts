@@ -19,16 +19,17 @@ export async function GET(req:Request){
  db<unknown[]>(`icash_text_ai_jobs?account_id=eq.${accountId}&thread_id=eq.${threadId}&state=in.(drafted,handoff,needs_review)&select=id,thread_id,state,reply,analysis,created_at&order=created_at.desc&limit=1`)
  ]):[[],[]];
  const messages=rows.slice(0,20),last=messages.at(-1);
- const manualReply=threadId&&threads.find(t=>t.id===threadId)?.paused?await db<boolean>('rpc/icash_manual_handoff_reply','POST',{p_account:accountId,p_thread:threadId}):false;
- return NextResponse.json({threads:threads.map(t=>({...t,manualReply:t.id===threadId&&manualReply})),threadId,messages,ai,nextThread:threadRows.length>20?threads.at(-1)!.id:null,next:rows.length>20&&last?{before:last.created_at,beforeId:last.id}:null},{headers});
+ const sendReason=threadId?await db<string|null>('rpc/icash_manual_text_reason','POST',{p_account:accountId,p_thread:threadId}):null;
+ return NextResponse.json({threads:threads.map(t=>({...t,manualReply:true,sendReason:t.id===threadId?sendReason:null})),threadId,messages,ai,nextThread:threadRows.length>20?threads.at(-1)!.id:null,next:rows.length>20&&last?{before:last.created_at,beforeId:last.id}:null},{headers});
  }catch{return NextResponse.json({error:'Messages unavailable'},{status:400,headers});}
 }
 export async function POST(req:Request){
  if(!allowedOrigin(req))return new Response(null,{status:403});
  try{const {accountId,userId}=await workAccount();const raw=await req.text();if(raw.length>10000)throw Error();
  const b=z.object({threadId:z.string().uuid(),requestKey:z.string().uuid(),message:z.string().trim().max(1000),assetIds:z.array(z.string().uuid()).max(3).default([])}).strict().parse(JSON.parse(raw));
- const queued=await db<{id:string;manual:boolean}>('rpc/icash_queue_customer_text','POST',{p_actor:userId,p_account:accountId,p_thread:b.threadId,p_key:b.requestKey,p_body:b.message,p_assets:b.assetIds});
- try{return NextResponse.json({...queued,...await dispatchTextMessage(accountId,queued.id)});}
+ const queued=await db<{id:string;manual:boolean;error?:string}>('rpc/icash_queue_customer_text','POST',{p_actor:userId,p_account:accountId,p_thread:b.threadId,p_key:b.requestKey,p_body:b.message,p_assets:b.assetIds});
+ if(queued.error)return NextResponse.json({error:queued.error,notSent:true},{status:409});
+ try{return NextResponse.json({...queued,...await dispatchTextMessage(accountId,queued.id,true)});}
  catch{return NextResponse.json({...queued,status:'message_delivery_needs_review'});}
- }catch{return NextResponse.json({error:'Message held. Check permission, message length, budget and sender setup.'},{status:409});}
+ }catch{return NextResponse.json({error:'Could not queue this text. Refresh the conversation and try again.'},{status:409});}
 }

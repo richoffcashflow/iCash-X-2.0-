@@ -6,13 +6,14 @@ import * as view from '../components/workspace-view.ts';
 import * as contracts from '../lib/property-contract-visibility.ts';
 import * as guidance from '../lib/workspace-guidance.ts';
 import * as analysis from '../lib/property-analysis-view.ts';
+import * as cardSummary from '../lib/deal-card-summary.ts';
 import * as milestone from '../lib/work-milestone.ts';
 import {makeWorkspaceFixture} from './fixtures/workspace-volume.mjs';
 const require=createRequire(import.meta.url);
 const source=readFileSync(new URL('../components/live-workspace.tsx',import.meta.url),'utf8');
 const compiled=ts.transpileModule(source+'\nexport {PropertyCard};',{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
 const mod={exports:{}};
-new Function('require','module','exports',compiled)(name=>name==='react'?{useState:v=>[v,()=>{}],useEffect(){},useRef:v=>({current:v}),Activity:'Activity'}:name==='react/jsx-runtime'?require(name):name==='./workspace-view'?view:name==='@/lib/work-milestone'?milestone:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/property-analysis-view'?analysis:name==='@/lib/property-contract-visibility'?contracts:{},mod,mod.exports);
+new Function('require','module','exports',compiled)(name=>name==='react'?{useState:v=>[v,()=>{}],useEffect(){},useRef:v=>({current:v}),Activity:'Activity'}:name==='react/jsx-runtime'?require(name):name==='./workspace-view'?view:name==='@/lib/deal-card-summary'?cardSummary:name==='@/lib/work-milestone'?milestone:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/property-analysis-view'?analysis:name==='@/lib/property-contract-visibility'?contracts:{},mod,mod.exports);
 const all=node=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(all):[node,...all(node.props?.children)];
 const text=node=>typeof node==='string'?node:typeof node==='number'?String(node):Array.isArray(node)?node.map(text).join(' '):node&&typeof node==='object'?text(node.props?.children):'';
 const work=makeWorkspaceFixture(),property=work.properties[0];
@@ -54,14 +55,19 @@ const cashPreview=saved=>all(mod.exports.PropertyCard({...props,property:{...pro
 const historical={...property.result,calculationVersion:undefined,preliminarySellerCeilingCents:410000,property:{...property.result.property,fetchedAt:'2026-10-01T05:13:42.573Z'}};
 const before=JSON.stringify(historical);
 let preview=cashPreview(historical);
-assert.equal(preview.props['aria-label'],'Cash offer estimate');
-assert.equal(text(preview),'$4,100','collapsed offer shows only the exact saved amount');
+assert.equal(preview.props['aria-label'],'Cash offer price');
+assert.equal(text(preview),'Cash offer price $4,100','collapsed offer labels the exact saved amount');
 assert.equal(JSON.stringify(historical),before,'rendering never modifies saved results');
-assert.equal(text(cashPreview(property.result)),'$145,000');
-assert.equal(text(cashPreview({...historical,preliminarySellerCeilingCents:0})),'$0');
+assert.equal(text(cashPreview(property.result)),'Cash offer price $145,000');
+assert.equal(text(cashPreview({...historical,preliminarySellerCeilingCents:0})),'Cash offer price $0');
 for(const amount of [null,undefined,-1,1.5,'410000',NaN,Infinity,Number.MAX_SAFE_INTEGER+1]){
- assert.equal(text(cashPreview({...historical,preliminarySellerCeilingCents:amount})),'Not available','invalid amounts stay unavailable');
+ assert.equal(text(cashPreview({...historical,preliminarySellerCeilingCents:amount})),'Cash offer price Not available','invalid amounts stay unavailable');
 }
 const opened=all(mod.exports.PropertyCard({...props,property:{...property,result:historical},active:true,visited:true}));
 assert(opened.some(n=>n.props?.result===historical),'full source and stale-estimate context remain in the opened analysis');
 console.log('Compact cash offer: exact saved number, accessible label, invalid-value handling and full analysis retained in details.');
+
+const signedWork={...work,signing:[{deal_id:work.deals[0].id,kind:'purchase',state:'completed',test_mode:false}]};
+const signedCard=all(mod.exports.PropertyCard({...props,work:signedWork,active:true,visited:true}));
+assert.match(text(signedCard.find(n=>n.props?.className==='property-cash-preview')),/Purchase price/);
+assert(signedCard.some(n=>n.props?.className==='contract-deal-estimates'),'signed contract puts original estimates behind disclosure');

@@ -120,3 +120,12 @@
 .minimal-workspace .manual-call-contact>button{min-height:48px;border:0;background:#18181b;color:white;border-radius:10px;font-size:15px}
 .minimal-workspace .conversation-empty button,.minimal-workspace .conversation-empty a,.minimal-workspace .contact-recovery{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 16px;border:1px solid #dedee3;border-radius:9px;background:white;color:#18181b;font-size:13px;text-decoration:none;cursor:pointer}
 @media(max-width:600px){.bot-run-centered{padding:26px 18px 20px;min-height:230px;gap:17px}.bot-run-centered .bot-run-actions{width:auto}.bot-run-centered .bot-run-status h2{font-size:24px}.minimal-workspace .property-contact-dialog{width:100%;max-width:100%;height:100dvh;max-height:100dvh;margin:0;border-radius:0}.minimal-workspace .conversation-inbox{grid-template-columns:1fr}.minimal-workspace .conversation-contacts{max-height:120px;overflow:auto}.minimal-workspace .message-composer{position:sticky;bottom:0;background:#fff;padding-bottom:env(safe-area-inset-bottom,12px)}}
+
+/* Deal progress stays compact as contracts move toward closing. */
+.minimal-workspace .property-milestones{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:0;list-style:none}
+.minimal-workspace .property-milestones li{display:flex;flex-direction:column;gap:5px;align-items:center;text-align:center;color:var(--muted-foreground,#687387);font-size:12px;padding:10px 4px;border-top:2px solid #e5e7eb}
+.minimal-workspace .property-milestones li.complete{border-color:#475569;color:#334155}
+.minimal-workspace .property-milestones li.current{border-color:#1e293b;color:#111827;font-weight:700}
+.contract-deal-estimates>summary,.text-contact-picker>summary{cursor:pointer;padding:12px 0;font-weight:600}
+.manual-call-contact>span{font-size:14px;overflow-wrap:anywhere}
+.text-contact-picker{margin-top:14px}

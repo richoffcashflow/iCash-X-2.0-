@@ -3,7 +3,7 @@ import {sameBusinessNumber} from './number-continuity.ts';
 import {elevenRequest} from '@/lib/elevenlabs';
 import {db} from '@/lib/stripe-test';
 import {sendContiguityText,textPayload} from '@/lib/contiguity';
-export async function dispatchTextMessage(accountId:string,messageId:string){
+export async function dispatchTextMessage(accountId:string,messageId:string,manual=false){
  if(!smsWorkEnabled())return {status:'live_work_not_ready'};
  const key=process.env.CONTIGUITY_API_KEY;
  if(!key||!process.env.CONTIGUITY_WEBHOOK_SECRET)return {status:'messaging_configuration_required'};
@@ -27,7 +27,7 @@ export async function dispatchTextMessage(accountId:string,messageId:string){
   catch{return {status:'business_number_verification_required'};}
  }
  textPayload({from,to:thread.recipient,message:m.body,attachments:m.attachments});
- const job=await db<unknown>('rpc/icash_claim_text','POST',{p_account:accountId,p_message:messageId,p_sender:from});if(!job)return {status:'message_held'};
+ const job=await db<unknown>(manual?'rpc/icash_claim_customer_text':'rpc/icash_claim_text','POST',{p_account:accountId,p_message:messageId,p_sender:from});if(!job)return {status:'message_held'};
  try{
  const result=await sendContiguityText(job,key);
  await db('rpc/icash_accept_text','POST',{p_account:accountId,p_message:messageId,p_provider:result.messageId});
