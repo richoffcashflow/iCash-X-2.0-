@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {pathToFileURL} from 'node:url';
+const {PGlite}=await import(pathToFileURL(process.argv[2]).href);const pg=await PGlite.create();const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const aid='00000000-0000-4000-8000-000000000001',uid='00000000-0000-4000-8000-000000000002',other='00000000-0000-4000-8000-000000000003';
+try{
+ await pg.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;
+ create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
+ create table public.icash_accounts(id uuid primary key,owner_user_id uuid unique);
+ create table public.icash_funding_orders(account_id uuid,mode text,state text,credited_at timestamptz,paid_at timestamptz,payer_phone text);
+ create table public.icash_customer_update_preferences(account_id uuid primary key,owner_user_id uuid,phone text,sms_enabled boolean,email_enabled boolean,consent_email text,timezone text,seen_at timestamptz,email_suppressed_at timestamptz,revision int,updated_at timestamptz);
+ create table public.icash_customer_update_deliveries(account_id uuid,channel text,state text,authorized_at timestamptz,recipient text);
+ create function public.icash_load_workspace_account(p_user uuid,p_mode text) returns jsonb language plpgsql as $$declare a public.icash_accounts;totals jsonb:='{"phone":"+12125550101"}';membership jsonb:='{}';begin select * into strict a from public.icash_accounts where owner_user_id=p_user;return jsonb_build_object('phone',coalesce(totals->>'phone',membership->>'payer_phone'));end$$;
+ `);
+ await pg.exec(read('supabase/migrations/20260928153922_customer_bot_identity.sql'));
+ const company=read('supabase/migrations/20261006185551_inbound_workspace_identity_and_archival.sql');await pg.exec(company.slice(0,company.indexOf('-- Archived research'))+'commit;');
+ const prefs=read('config/customer-updates.sql');await pg.exec(prefs.slice(prefs.indexOf('create function public.icash_customer_update_preferences_get'),prefs.indexOf('create function public.icash_customer_update_preferences_save')));
+ await pg.exec(read('config/editable-account-details.sql'));
+ await pg.query('insert into icash_accounts values($1,$2,null),($3,$3,null)',[aid,uid,other]);await pg.query("insert into auth.users values($1,'owner@example.com',now())",[uid]);
+ const save=async(first,last,company,phone,user=uid)=>(await pg.query('select icash_save_account_details($1,$2,$3,$4,$5,$6,$7) as saved',[user,first,last,company,'stableVoice','Chris',phone])).rows[0].saved;
+ let result=await save('','','Oak Homes','+12125550123');assert.equal(result.identity.principal,'Oak Homes');assert.equal(result.phone,'+12125550123');
+ await pg.query("insert into icash_customer_update_preferences values($1,$2,'+12125550123',true,false,null,'America/Chicago',null,null,1,now())",[aid,uid]);
+ await pg.query("insert into icash_customer_update_deliveries values($1,'sms','claimed',null,'+12125550123'),($1,'sms','claimed',now(),'+12125550123'),($2,'sms','claimed',null,'+12125550123')",[aid,other]);
+ result=await save('Taylor','Reed','','+12125550123');assert.equal(result.identity.principal,'Taylor Reed');assert.equal(result.smsUpdatesPaused,false);assert.equal((await pg.query('select sms_enabled from icash_customer_update_preferences')).rows[0].sms_enabled,true,'unchanged number retains prior opt-in');
+ result=await save('Taylor','Reed','','+12125550124');assert.equal(result.smsUpdatesPaused,true);assert.equal((await pg.query('select sms_enabled from icash_customer_update_preferences')).rows[0].sms_enabled,false);assert.equal((await pg.query('select phone from icash_customer_update_preferences')).rows[0].phone,'+12125550124');
+ const delivery=(await pg.query('select * from icash_customer_update_deliveries')).rows;assert.equal(delivery.filter(d=>d.state==='canceled').length,1);assert.equal(delivery.find(d=>d.account_id===other).state,'claimed');assert.equal(delivery.find(d=>d.authorized_at).state,'claimed');
+ let phone=(await pg.query("select icash_load_workspace_account($1,'live')->>'phone' as phone",[uid])).rows[0].phone;assert.equal(phone,'+12125550124');
+ await assert.rejects(save('','','','+12125550199'));assert.equal((await pg.query('select contact_phone from icash_accounts where id=$1',[aid])).rows[0].contact_phone,'+12125550124','invalid identity rolls back the entire edit');
+ await assert.rejects(save('Taylor','Reed','','bad'));await assert.rejects(save('Taylor','Reed','','+12125550199','00000000-0000-4000-8000-000000000099'));
+ await save('Taylor','Reed','','');phone=(await pg.query("select icash_load_workspace_account($1,'live')->>'phone' as phone",[uid])).rows[0].phone;assert.equal(phone,'','cleared account phone does not revert to checkout');assert.equal((await pg.query('select icash_customer_update_preferences_get($1,$2) as pref',[aid,uid])).rows[0].pref.phone,null);
+ assert.equal((await pg.query('select contact_phone from icash_accounts where id=$1',[other])).rows[0].contact_phone,null);
+ for(const role of ['anon','authenticated'])assert.equal((await pg.query("select has_function_privilege($1,'icash_save_account_details(uuid,text,text,text,text,text,text)','execute') as allowed",[role])).rows[0].allowed,false);
+ assert.equal((await pg.query("select has_function_privilege('service_role','icash_save_account_details(uuid,text,text,text,text,text,text)','execute') as allowed")).rows[0].allowed,true);
+ console.log('PASS account SQL: company/individual identity, atomic save and rollback, owner isolation, phone clearing, no new SMS opt-in, cancellation of unstarted old-number updates, service-only permissions.');
+}finally{await pg.close();}

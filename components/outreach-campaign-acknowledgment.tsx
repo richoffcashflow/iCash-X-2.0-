@@ -3,7 +3,7 @@ import {useEffect, useReducer, useRef} from 'react';
 import {canSaveCampaign, hasCurrentCampaignAcknowledgment, initialOutreachCampaignState, outreachCampaignReducer, parseCampaignStatus,type OutreachCampaignStatus} from './outreach-campaign-state';
 
 const endpoint = '/api/work/outreach-campaign';
-export function OutreachCampaignAcknowledgment({onStatus}:{onStatus?:(status:OutreachCampaignStatus|null)=>void} = {}) {
+export function OutreachCampaignAcknowledgment({onStatus,statusOnly=false}:{onStatus?:(status:OutreachCampaignStatus|null)=>void;statusOnly?:boolean} = {}) {
   const [state, dispatch] = useReducer(outreachCampaignReducer, initialOutreachCampaignState);
   const request = useRef<AbortController | null>(null);
   const saving = useRef(false);
@@ -54,6 +54,7 @@ export function OutreachCampaignAcknowledgment({onStatus}:{onStatus?:(status:Out
   const recorded = current && status?.configured && status.released;
   const busy = state.phase === 'loading' || state.phase === 'saving';
   const choiceChanged = state.selectedMode !== status?.mode;
+  if(statusOnly)return null;
   return <details id="outreach-campaign-details" className="workspace-campaign-settings">
     <summary><span>Outreach channels</span><small>{state.error?'Status unavailable':busy?'Checking…':recorded?'Configured':'Choose channels'}</small></summary>
     <section className="campaign-settings-content space-y-3 text-sm" aria-labelledby="outreach-campaign-heading" aria-busy={busy}>

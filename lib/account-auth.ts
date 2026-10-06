@@ -2,11 +2,11 @@ import { cookies } from "next/headers";
 import { db } from "@/lib/stripe-test";
 import {accountMode} from "@/lib/account-mode";
 class AuthRequestError extends Error { constructor(public status:number){super("Account authentication unavailable");} }
-type AuthUser={id:string;email?:string;email_confirmed_at?:string};
+type AuthUser={id:string;email?:string;email_confirmed_at?:string;new_email?:string};
 type AuthSession={access_token:string;refresh_token:string;expires_in:number;user:AuthUser};
-export async function authRequest<T>(path:string,body?:unknown,access?:string):Promise<T> {
+export async function authRequest<T>(path:string,body?:unknown,access?:string,method?:'PUT'):Promise<T> {
  if(!process.env.SUPABASE_URL||!process.env.SUPABASE_SECRET_KEY)throw new Error("Account access unavailable");
- const r=await fetch(`${process.env.SUPABASE_URL}/auth/v1/${path}`,{method:body===undefined?"GET":"POST",headers:{apikey:process.env.SUPABASE_SECRET_KEY,...(access?{Authorization:`Bearer ${access}`}:{}) ,"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body),cache:"no-store",signal:AbortSignal.timeout(15000)});
+ const r=await fetch(`${process.env.SUPABASE_URL}/auth/v1/${path}`,{method:method??(body===undefined?"GET":"POST"),headers:{apikey:process.env.SUPABASE_SECRET_KEY,...(access?{Authorization:`Bearer ${access}`}:{}) ,"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body),cache:"no-store",signal:AbortSignal.timeout(15000)});
  if(!r.ok)throw new AuthRequestError(r.status);
  if(r.status===204)return undefined as T;
  return r.json();
