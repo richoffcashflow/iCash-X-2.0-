@@ -27,7 +27,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  const [editingName,setEditingName]=useState(false),[promptHistory,setPromptHistory]=useState({...emptyPromptHistory});
  const chatEnd=useRef<HTMLDivElement>(null),lastSync=useRef(0),pitchSeen=useRef(false),startSeen=useRef(false),alive=useRef(true),offset=useRef(0),position=useRef(0),shownOffers=useRef(new Set<string>());
  const load=useCallback(async()=>{if(starting.current)return;starting.current=true;setError('');setUnavailable('');try{
-  const params=new URLSearchParams(location.search),attribution=Object.fromEntries(['utm_source','utm_medium','utm_campaign','utm_content','utm_term','fbclid'].flatMap(k=>params.has(k)?[[k,params.get(k)!]]:[]));
+  const params=new URLSearchParams(location.search),attribution=Object.fromEntries(['utm_source','utm_medium','utm_campaign','utm_content','utm_term','ad_id','adset_id','campaign_id','fbclid'].flatMap(k=>params.has(k)?[[k,params.get(k)!]]:[]));
   const d=await post<Session&{redirect?:string;unavailable?:boolean;message?:string}>('/api/webinar/start',{...(webinarCode?{code:webinarCode}:{}),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Chicago',...(params.get('r')?{resume:params.get('r')}:{}),...(params.get('preview')?{preview:params.get('preview'),variant:params.get('variant')==='night'?'night':'day'}:{}),attribution});
   if(d.redirect){location.replace(d.redirect);return;}if(d.unavailable){setUnavailable(d.message||'The next session is being prepared.');return;}if(!alive.current)return;
   if(params.has('r')){params.delete('r');history.replaceState(null,'',location.pathname+(params.size?'?'+params.toString():''));}
