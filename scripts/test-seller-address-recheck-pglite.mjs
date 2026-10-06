@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {pathToFileURL} from 'node:url';
+import {randomUUID} from 'node:crypto';
+const {PGlite}=await import(pathToFileURL(process.argv[2]).href),pg=await PGlite.create();
+try {
+ await pg.exec(`create role anon;create role authenticated;create role service_role;
+ create table icash_seller_controls(id integer primary key,lookup_used_micros bigint);insert into icash_seller_controls values(1,30000);
+ create table icash_seller_intakes(id uuid primary key,address text,state text,checked_at timestamptz,lookup_costs jsonb,lookup_cost_basis text,property jsonb,result jsonb,assigned_account uuid,screening_id uuid,claim_token uuid,claimed_at timestamptz,hold_reason text);
+ create table icash_seller_matches(lead_id uuid);
+ `);
+ await pg.exec(readFileSync(new URL('../config/seller-address-recheck.sql',import.meta.url),'utf8'));
+ const q=(sql,args=[])=>pg.query(sql,args);
+ const create=async(state='unmatched',cost=0)=>{const id=randomUUID();await q("insert into icash_seller_intakes(id,address,state,checked_at,lookup_costs,property,result,claim_token) values($1,'123 Test St, Austin, TX 78701, USA',$2,now(),jsonb_build_object('dealmachine',$3::integer),'null','null',gen_random_uuid())",[id,state,cost]);return id;};
+ const recheck=async id=>(await q('select icash_requeue_unmatched_seller_address($1,$2) ok',[id,'Fixture operator reviewed a known no-match formatting failure'])).rows[0].ok;
+ const id=await create();assert.equal(await recheck(id),true);
+ let row=(await q('select * from icash_seller_intakes where id=$1',[id])).rows[0];
+ assert.equal(row.state,'received');assert.equal(row.checked_at,null);assert.equal(row.claim_token,null);
+ assert.equal(row.lookup_history.length,1);assert.equal(row.lookup_history[0].state,'unmatched');assert.equal(row.lookup_history[0].lookupCosts.dealmachine,0);
+ assert.equal(Number((await q('select lookup_used_micros from icash_seller_controls')).rows[0].lookup_used_micros),30000,'Prior cost remains recorded; no allowance refund');
+ assert.equal(await recheck(id),false);
+ await q("update icash_seller_intakes set state='unmatched',checked_at=now() where id=$1",[id]);
+ assert.equal(await recheck(id),false,'Even a second explicit no-match cannot loop');
+ for(const state of ['received','checking','review','qualified','assigned','numbers_review'])assert.equal(await recheck(await create(state)),false,'Cannot replay '+state);
+ assert.equal(await recheck(await create('unmatched',10000)),false,'Charged requests cannot be replayed');
+ const assigned=await create();await q('update icash_seller_intakes set assigned_account=gen_random_uuid() where id=$1',[assigned]);assert.equal(await recheck(assigned),false);
+ const matched=await create();await q('insert into icash_seller_matches values($1)',[matched]);assert.equal(await recheck(matched),false);
+ const found=await create();await q('update icash_seller_intakes set property=$2 where id=$1',[found,{id:'prop_fixture'}]);assert.equal(await recheck(found),false);
+ await assert.rejects(q('select icash_requeue_unmatched_seller_address($1,$2)',[await create(),'']),/review reference/);
+ for(const role of ['anon','authenticated'])assert.equal((await q("select has_function_privilege($1,'icash_requeue_unmatched_seller_address(uuid,text)','execute') ok",[role])).rows[0].ok,false);
+ console.log('PASS one-time reviewed no-charge recheck, evidence preservation, no allowance refund, no unknown-outcome replay, no assigned-lead replay and private role access.');
+} finally {await pg.close();}
