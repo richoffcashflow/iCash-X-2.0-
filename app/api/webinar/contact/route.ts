@@ -7,5 +7,5 @@ export async function POST(req:Request){try{
  const {v,s}=await webinarSession(i.sessionId);await webinarLimit(req,v.id,'contact',8,600);
  if(i.onlyName)await db(`icash_webinar_visitors?id=eq.${v.id}`,'PATCH',{name:i.name});
  else await db('rpc/icash_webinar_contact','POST',{p_visitor:v.id,p_name:i.name,p_email:i.email,p_phone:i.phone,p_consent:i.consent&&!s.is_preview});
- return Response.json({saved:true,name:i.name,contactSaved:!!i.email||!!i.phone},{headers:webinarHeaders});
+ return Response.json({saved:true,name:i.name,contactSaved:!!i.email&&!!i.phone},{headers:webinarHeaders});
  }catch(e){return webinarError(e);}}

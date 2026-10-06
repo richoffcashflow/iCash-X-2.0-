@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import ts from 'typescript';
+import {webinarRequest} from '../lib/webinar-client.ts';
 import {saveBotBuild,waitForBotCreationTransition} from '../lib/bot-build.ts';import {defaultBotProfile,setupProfileSchema} from '../lib/bot-setup.ts';
 // Exercise the real component handlers and server save protocol without providers.
 async function harness(file,extra){const cells=[],effects=[],pending=[];let index=0;
@@ -11,7 +12,7 @@ const AccountAccess=()=>null,BotBuilding=()=>null,PostPurchaseSetup=()=>null,Str
 globalThis.window={location:{search:''}};globalThis.matchMedia=()=>({matches:true});
 for(const accessible of [false,true]){
  globalThis.fetch=async()=>Response.json({offer:{revision:1,priceCents:5000},membership:{accessible},ready:false,needsClaim:true,email:'paid@example.invalid',customerName:'Casey'});
- const h=await harness('components/membership-checkout.tsx',{PostPurchaseSetup,StripeEmbeddedCheckout,webinarBrowserEvent:()=>{},priceLabel:()=>'$50',membershipTermsVersion:'fixture'}),props={onSignedIn:()=>{}};h.render('MembershipCheckout',props);await flush();const tree=h.render('MembershipCheckout',props);assert.equal(!!find(tree,PostPurchaseSetup),accessible,'Only confirmed accessible membership unlocks post-purchase setup');h.close();
+ const h=await harness('components/membership-checkout.tsx',{PostPurchaseSetup,StripeEmbeddedCheckout,webinarRequest,webinarBrowserEvent:()=>{},priceLabel:()=>'$50',membershipTermsVersion:'fixture'}),props={onSignedIn:()=>{}};h.render('MembershipCheckout',props);await flush();const tree=h.render('MembershipCheckout',props);assert.equal(!!find(tree,PostPurchaseSetup),accessible,'Only confirmed accessible membership unlocks post-purchase setup');h.close();
 }
 let saved={id:'saved-setup',revision:1,stage:0,profile:{...defaultBotProfile,voice:'chris',market:'Austin, TX',marketMode:'city'}},requests=[],opens=0,hold;
 globalThis.fetch=async(_url,options)=>{const body=JSON.parse(options.body);requests.push(body);if(body.action==='save'){await new Promise(resolve=>hold=resolve);saved={...saved,profile:body.profile,revision:saved.revision+1,stage:4};}return Response.json({setup:saved});};

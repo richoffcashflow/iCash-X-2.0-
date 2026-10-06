@@ -18,6 +18,8 @@ try{
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261004212006_webinar_offers_audience_and_close_rates.sql',import.meta.url),'utf8'));
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261004221240_webinar_recent_activity.sql',import.meta.url),'utf8'));
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261004223624_webinar_daily_funnel.sql',import.meta.url),'utf8'));
+ await pg.exec("create table public.icash_timezone_names(name text primary key);insert into public.icash_timezone_names select name from pg_timezone_names;alter table public.icash_timezone_names enable row level security;revoke all on public.icash_timezone_names from public,anon,authenticated;grant select on public.icash_timezone_names to service_role;");
+ await pg.exec(readFileSync(new URL('../supabase/migrations/20261006183014_webinar_public_links_and_session_scope.sql',import.meta.url),'utf8'));
  const q=(sql,args=[])=>pg.query(sql,args),visitor=randomUUID(),other=randomUUID(),webinar=randomUUID(),session=randomUUID();
  await q('insert into icash_webinar_visitors(id) values($1),($2)',[visitor,other]);
  const config={id:webinar,revision:1,status:'published',title:'Database verification',durationSeconds:100};
@@ -102,7 +104,7 @@ try{
  await q("update icash_webinars set config=jsonb_set(config,'{showAudienceCount}','true') where id=$1",[webinar]);
  await q('update icash_webinar_sessions set superseded_at=now() where id=$1',[audienceSession]);assert.equal(await count(tab1,6),null,'Replaced sessions do not count');
  assert.equal((await q("select has_function_privilege('authenticated','icash_webinar_audience(uuid,uuid,uuid,bigint,boolean)','execute') as ok")).rows[0].ok,false);
- assert.equal((await q("select (config->'optimizer'->>'enabled')::boolean as enabled from icash_webinar_settings")).rows[0].enabled,true);
+ assert.equal((await q("select (config->'optimizer'->>'enabled')::boolean as enabled from icash_webinar_settings")).rows[0].enabled,false);
  // Offer activity exposes only real, recent, attributed payments with coarse region.
  await q("update icash_webinar_visitors set activity_region='Texas' where id=$1",[buyer]);
  const dailyPlan=randomUUID(),renewalPlan=randomUUID(),newMember=randomUUID(),previewBuyer=randomUUID(),previewWatch=randomUUID();
@@ -165,6 +167,40 @@ try{
  await assert.rejects(()=>report('invalid'));await assert.rejects(()=>report('today','made-up'));
  for(const role of ['anon','authenticated'])assert.equal((await q("select has_function_privilege($1,'icash_webinar_daily_report(text,text)','execute') as ok",[role])).rows[0].ok,false);
  const dst=(await q("select extract(epoch from ('2026-11-02'::timestamp at time zone 'America/Chicago')-('2026-11-01'::timestamp at time zone 'America/Chicago'))/3600 as fall,extract(epoch from ('2026-03-09'::timestamp at time zone 'America/Chicago')-('2026-03-08'::timestamp at time zone 'America/Chicago'))/3600 as spring")).rows[0];assert.equal(Number(dst.fall),25);assert.equal(Number(dst.spring),23);
+
+ // Each new webinar owns a permanent numeric code. Sessions from other links
+ // remain resumable; day/night swaps cannot replace a viewer's active snapshot.
+ const codes=(await q('select public_code from icash_webinars')).rows.map(r=>String(r.public_code));
+ assert.equal(new Set(codes).size,codes.length);assert.ok(codes.every(code=>/^\d{6,12}$/.test(code)));
+ const savedCode=(await q('select public_code from icash_webinars where id=$1',[webinar])).rows[0].public_code;
+ await q("update icash_webinars set config=config||'{\"title\":\"Renamed webinar\"}' where id=$1",[webinar]);
+ assert.equal((await q('select public_code from icash_webinars where id=$1',[webinar])).rows[0].public_code,savedCode);
+ const linkVisitor=randomUUID(),linkA=randomUUID(),linkB=randomUUID();
+ await q('insert into icash_webinar_visitors(id) values($1)',[linkVisitor]);
+ await q('select icash_webinar_begin($1,$2,$3,false)',[linkVisitor,linkA,{...config,recordingVersion:'day'}]);
+ await q('select icash_webinar_begin($1,$2,$3,false)',[linkVisitor,linkB,{...config,id:secondWebinar,recordingVersion:'night'}]);
+ assert.equal((await q('select (icash_webinar_begin($1,$2,$3,false)).id as id',[linkVisitor,randomUUID(),{...config,recordingVersion:'night'}])).rows[0].id,linkA);
+ assert.equal((await q('select count(*)::int as n from icash_webinar_sessions where visitor_id=$1 and superseded_at is null',[linkVisitor])).rows[0].n,2);
+ // Watch time ignores paused wall time and caps seek jumps by elapsed time.
+ await q("select icash_webinar_record($1,$2,0,'started','once')",[linkVisitor,linkA]);
+ await q("update icash_webinar_sessions set watch_updated_at=now()-interval '20 seconds' where id=$1",[linkA]);
+ await q("select icash_webinar_record($1,$2,20,'progress','once')",[linkVisitor,linkA]);
+ await q("update icash_webinar_sessions set watch_updated_at=now()-interval '1 hour' where id=$1",[linkA]);
+ await q("select icash_webinar_record($1,$2,20,'progress','once')",[linkVisitor,linkA]);
+ assert.equal(Number((await q('select watched_seconds from icash_webinar_sessions where id=$1',[linkA])).rows[0].watched_seconds),20);
+ await q("update icash_webinar_sessions set watch_updated_at=now()-interval '2 seconds' where id=$1",[linkA]);
+ await q("select icash_webinar_record($1,$2,90,'progress','once')",[linkVisitor,linkA]);
+ const watched=Number((await q('select watched_seconds from icash_webinar_sessions where id=$1',[linkA])).rows[0].watched_seconds);assert.ok(watched>=22&&watched<23);
+ // Separate versions use the session snapshot and actual attributed payment.
+ await q("update icash_webinar_sessions set config=config||'{\"recordingVersion\":\"night\"}',watched_seconds=40 where id=$1",[reportOtherSession]);
+ await q('update icash_webinar_sessions set watched_seconds=20 where id=$1',[reportSession]);
+ let versions=(await report()).recordings.filter(r=>r.webinarId===reportWebinar);
+ assert.equal(versions.find(r=>r.version==='day').averageWatchSeconds,20);
+ assert.equal(versions.find(r=>r.version==='night').averageWatchSeconds,40);
+ assert.equal((await report()).webinars.find(r=>r.webinarId===reportWebinar).averageWatchSeconds,30);
+ assert.equal(versions.find(r=>r.version==='night').viewers,1);
+ assert.equal(versions.find(r=>r.version==='night').averageWatchPercent,40);
+ assert.equal((await report()).recordings.filter(r=>r.webinarId===webinar&&r.version==='night').length,0,'No Night row until a night version or real night session exists');
  const grants=(await q("select has_table_privilege('anon','icash_webinar_visitors','select') as read,has_function_privilege('authenticated','icash_webinar_contact(uuid,text,text,text,boolean)','execute') as write")).rows[0];assert.equal(grants.read,false);assert.equal(grants.write,false);
  const rls=await q("select relname,relrowsecurity from pg_class where relname like 'icash_webinar%' and relkind='r'");assert.ok(rls.rows.every(r=>r.relrowsecurity));
  console.log('Webinar database checks passed: sessions, attribution, audience, activity, verified checkout triggers, daily funnel, local midnight, DST, earlier-day buyers, preserved revisions, renewals, test/refund exclusion and RLS.');
