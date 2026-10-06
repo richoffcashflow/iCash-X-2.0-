@@ -10,7 +10,7 @@ const SupportChat=dynamic(()=>import('@/components/support-chat').then(module=>m
  loading:()=> <p className="support-panel-loading" role="status">Opening support…</p>,
 });
 
-export function SupportLauncher(){
+export function SupportLauncher({onMembershipChanged}:{onMembershipChanged?:(stopped?:boolean)=>void|Promise<unknown>}){
  const [opened,setOpened]=useState(false),[visible,setVisible]=useState(false);
  const dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null);
  useEffect(()=>{
@@ -21,7 +21,7 @@ export function SupportLauncher(){
  return <>
   <button ref={trigger} type="button" className="workspace-support-launcher" aria-haspopup="dialog" aria-expanded={visible} onClick={()=>{setOpened(true);setVisible(true);}}><LifeBuoy size={17} aria-hidden="true"/>Help</button>
   {opened&&createPortal(<dialog ref={dialog} className="support-panel" aria-label="iCash X support" onCancel={event=>{event.preventDefault();close();}} onClose={close}>
-   <SupportChat active={visible} onClose={close}/>
+   <SupportChat active={visible} onClose={close} onMembershipChanged={onMembershipChanged}/>
   </dialog>,document.body)}
  </>;
 }

@@ -43,7 +43,8 @@ export async function GET(req:Request){
  }
  }
  }
+ const [autoRecharge]=account&&mode?await db<{enabled:boolean;amount_cents:number|null;issue:string|null}[]>(`icash_auto_recharges?account_id=eq.${account.id}&mode=eq.${mode}&select=enabled,amount_cents,issue`):[];
  const summary=fundingReturnSummary(orders,!!user);
- return NextResponse.json({privatePaymentCheck:await privatePaymentCheckAllowed(),mode,enabled:await customerFundingReady(),earlyAccess:earlyAccessFundingEnabled(),packs,custom,planning,forecast:{cycleChargeCents:null,qualified:null},priceCents:pack?.price_cents??null,creditCents:pack?.credit_cents??null,...summary},{headers});
+ return NextResponse.json({privatePaymentCheck:await privatePaymentCheckAllowed(),mode,enabled:await customerFundingReady(),earlyAccess:earlyAccessFundingEnabled(),autoRecharge:autoRecharge??{enabled:false},packs,custom,planning,forecast:{cycleChargeCents:null,qualified:null},priceCents:pack?.price_cents??null,creditCents:pack?.credit_cents??null,...summary},{headers});
  }catch{return NextResponse.json({enabled:false,error:"Could not check funding. Please retry."},{status:503,headers});}
 }

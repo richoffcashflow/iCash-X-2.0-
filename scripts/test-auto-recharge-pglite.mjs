@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {pathToFileURL} from 'node:url';
+const {PGlite}=await import(pathToFileURL(process.argv[2]).href),pg=await PGlite.create();
+const a='00000000-0000-4000-8000-000000000001',o='00000000-0000-4000-8000-000000000002';
+try{
+ await pg.exec(`create role anon;create role authenticated;create role service_role bypassrls;
+ create table icash_accounts(id uuid primary key,bot_paused boolean default false,active boolean default true);
+ create table icash_wallets(account_id uuid,balance_cents bigint,reserved_cents bigint);
+ create table icash_credit_ledger(account_id uuid,delta_cents bigint,key text unique);
+ create table icash_billing_reviews(account_id uuid,resolved_at timestamptz);
+ create table icash_daily_plans(account_id uuid,mode text,state text);
+ create table icash_spend_activations(account_id uuid,enabled boolean,customer_cap_cents bigint);
+ create table icash_funding_orders(id uuid primary key,account_id uuid references icash_accounts,mode text,state text default 'pending',price_cents bigint,credit_cents bigint,guest_hash text,pack_code text,run_days int,flexible_pacing boolean,credited_at timestamptz,stripe_payment_id text unique,paid_at timestamptz,charged_total_cents bigint,payer_email text);
+ create table icash_funding_consents(order_id uuid,version text,price_cents bigint,account_id uuid);
+ create function icash_membership_work_allowed(p_account uuid) returns boolean language sql set search_path=public as $$select active from icash_accounts where id=p_account$$;
+ create function icash_post_credit(a uuid,k text,kind text,c bigint,p text) returns void language plpgsql set search_path=public as $$begin insert into icash_credit_ledger values(a,c,k) on conflict do nothing;if found then update icash_wallets set balance_cents=balance_cents+c where account_id=a;end if;end$$;
+ create function icash_apply_prepaid_purchase(uuid) returns boolean language sql set search_path=public as $$select exists(select 1 from icash_funding_consents c where c.version in ('work-credits-2026-10-03.1','work-credits-2026-10-05.1'))$$;
+ create function icash_load_workspace_account(p_user uuid,p_mode text) returns jsonb language plpgsql set search_path=public as $$declare a icash_accounts;wallet icash_wallets;totals jsonb:='{}';begin select * into a from icash_accounts where id=p_user;select * into wallet from icash_wallets where account_id=p_user;return jsonb_build_object('reservedCents',case when p_mode='test' then 0 else wallet.reserved_cents end);end$$;
+ `);
+ await pg.exec(readFileSync(new URL('../config/auto-recharge.sql',import.meta.url),'utf8'));
+ await pg.query('insert into icash_accounts(id) values($1)',[a]);await pg.query('insert into icash_wallets values($1,100,0)',[a]);
+ await pg.query("insert into icash_funding_orders(id,account_id,mode,price_cents,credit_cents,pack_code,auto_recharge) values($1,$2,'live',2500,2500,'budget_25',true)",[o,a]);
+ const claim=async()=>(await pg.query("select icash_claim_auto_recharge($1,'live') as t",[a])).rows[0].t;
+ assert.equal(await claim(),null,'No opt-in means no attempt');
+ await pg.query('select icash_prepare_auto_recharge($1)',[o]);await assert.rejects(pg.query("select icash_activate_auto_recharge($1,'cus_fixture','pm_fixture')",[o]));
+ await pg.query("update icash_funding_orders set state='paid',credited_at=now() where id=$1",[o]);
+ await pg.query("insert into icash_funding_consents values($1,'work-credits-2026-10-06.1:recharge-2026-10-06.1',2500,$2)",[o,a]);
+ await pg.query("select icash_activate_auto_recharge($1,'cus_fixture','pm_fixture')",[o]);
+ await pg.query('update icash_accounts set bot_paused=true');assert.equal(await claim(),null,'Pause blocks billing');await pg.query('update icash_accounts set bot_paused=false,active=false');assert.equal(await claim(),null,'Inactive membership blocks billing');await pg.query('update icash_accounts set active=true');
+ await pg.query('update icash_wallets set balance_cents=500');assert.equal(await claim(),null,'Only below $5');await pg.query('update icash_wallets set balance_cents=100');
+ let t=await claim();assert(t);assert.equal(t.amount_cents,2500);assert.equal(await claim(),null,'Lease prevents duplicate worker');
+ await pg.query('update icash_auto_recharge_attempts set lease_until=now()');assert.equal((await claim()).id,t.id,'Retries preserve attempt identity');
+ await pg.query('update icash_auto_recharges set enabled=false,pending_order=null');assert.equal((await pg.query('select icash_auto_recharge_allowed($1) as allowed',[t.id])).rows[0].allowed,false);
+ await pg.query("select icash_activate_auto_recharge($1,'cus_fixture','pm_fixture')",[o]);assert.equal((await pg.query('select enabled from icash_auto_recharges')).rows[0].enabled,false,'Delayed setup cannot undo off switch');
+ const settle=amount=>pg.query("select icash_settle_auto_recharge($1,'pi_fixture',$2,'cus_fixture','pm_fixture','live')",[t.id,amount]);await assert.rejects(settle(1000));
+ await settle(2500);await settle(2500);assert.equal((await pg.query('select balance_cents from icash_wallets')).rows[0].balance_cents,2600,'Exactly-once credit even when disabled during payment');
+ await pg.query('update icash_auto_recharges set enabled=true');await pg.query('update icash_wallets set balance_cents=100');assert.equal(await claim(),null,'24-hour limit survives toggle');
+ await pg.query("update icash_auto_recharges set last_attempt_at=now()-interval '25 hours'");assert.equal((await pg.query("select * from icash_due_auto_recharges('live')")).rows.length,1);
+ assert.equal((await pg.query("select icash_load_workspace_account($1,'live')->>'hasCreditHistory' as history",[a])).rows[0].history,'true');
+ assert.equal((await pg.query("select icash_load_workspace_account($1,'test')->>'hasCreditHistory' as history",[a])).rows[0].history,'false','Live history does not leak into test mode');
+ for(const role of ['anon','authenticated']){assert.equal((await pg.query("select has_table_privilege($1,'icash_auto_recharges','select') as ok",[role])).rows[0].ok,false);assert.equal((await pg.query("select has_function_privilege($1,'icash_claim_auto_recharge(uuid,text)','execute') as ok",[role])).rows[0].ok,false);}
+ console.log('PASS recharge SQL: paid opt-in, low-balance threshold, pause/subscription gates, cooldown, worker lease, retry identity, delayed setup, exact-once settlement, mode isolation and private grants.');
+}finally{await pg.close();}

@@ -1,3 +1,4 @@
+import {settleAutoRecharge} from '@/lib/auto-recharge';
 import { NextResponse } from "next/server";
 import { db,settleTestSession } from "@/lib/stripe-test";
 import { fundingMode } from "@/lib/funding-policy";
@@ -21,6 +22,7 @@ export async function POST(req:Request) {
    else if(s.metadata?.icash_funding_order)await settleFunding(await stripe.checkout.sessions.retrieve(s.id));
    else if(mode==="test"&&s.metadata?.icash_test_order)await settleTestSession(await stripe.checkout.sessions.retrieve(s.id));
   }
+ }else if(event.type==="payment_intent.succeeded"&&event.data.object.metadata?.icash_auto_recharge_attempt){await settleAutoRecharge(event.data.object);
  }else if(event.type==="invoice.paid"){if(!await settleMembershipInvoice(event.data.object.id))await settleDailyInvoice(event.data.object.id);
  }else if(event.type==="invoice.payment_failed"||event.type==="invoice.payment_action_required"){const sid=event.data.object.parent?.subscription_details?.subscription;const id=typeof sid==='string'?sid:sid?.id;if(id){const sub=await stripe.subscriptions.retrieve(id);if(!await syncMembershipSubscription(sub))await syncDailySubscription(sub);}
  }else if(event.type==="customer.subscription.updated"||event.type==="customer.subscription.deleted"){const sub=await stripe.subscriptions.retrieve(event.data.object.id);if(!await syncMembershipSubscription(sub))await syncDailySubscription(sub);

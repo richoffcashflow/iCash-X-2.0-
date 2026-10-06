@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 export type FundingMode = "test" | "live";
-export type FundingOrder = { id:string; mode:FundingMode; guest_hash:string; account_id:string|null; pack_code:string; price_cents:number; processing_fee_cents?:number; tax_required?:boolean; credit_cents:number; stripe_session_id:string|null; state:string; payer_email?:string; credited_at?:string|null };
+export type FundingOrder = { id:string; auto_recharge?:boolean; mode:FundingMode; guest_hash:string; account_id:string|null; pack_code:string; price_cents:number; processing_fee_cents?:number; tax_required?:boolean; credit_cents:number; stripe_session_id:string|null; state:string; payer_email?:string; credited_at?:string|null };
 export function fundingMode(env:NodeJS.ProcessEnv=process.env):FundingMode|null {
  if(env.VERCEL_ENV==="preview" && env.STRIPE_SECRET_KEY?.startsWith("sk_test_")) return "test";
  if(env.VERCEL_ENV==="production" && env.STRIPE_SECRET_KEY?.startsWith("sk_live_")) return "live";

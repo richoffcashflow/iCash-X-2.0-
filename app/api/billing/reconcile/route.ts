@@ -1,3 +1,4 @@
+import {reconcileAutoRecharge} from '@/lib/auto-recharge';
 import {NextResponse} from 'next/server';
 import {timingSafeEqual} from 'node:crypto';
 import {db} from '@/lib/stripe-test';
@@ -33,4 +34,5 @@ export async function GET(req:Request){const expected=`Bearer ${process.env.CRON
  if(p.stripe_subscription_id){const result=await reconcileDailyInvoices(p,deadline);if(result.historyPending)historyPending++;}
  }catch{failed++;}finally{await db(`icash_daily_plans?id=eq.${p.id}`,'PATCH',{reconciled_at:new Date().toISOString()});}}
 
- return NextResponse.json({checked,failed,historyPending,deferred:plans.length-checked,cancellationChecked,cancellationFailed,cancellationDeferred:cancellations.length-cancellationChecked},{status:failed||cancellationFailed?503:200});}
+ const autoRecharge=await reconcileAutoRecharge(deadline);
+ return NextResponse.json({autoRecharge,checked,failed,historyPending,deferred:plans.length-checked,cancellationChecked,cancellationFailed,cancellationDeferred:cancellations.length-cancellationChecked},{status:failed||cancellationFailed||autoRecharge.failed?503:200});}

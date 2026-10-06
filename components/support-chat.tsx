@@ -1,6 +1,8 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {ArrowDown,ArrowLeft,ArrowUp,LifeBuoy,MoreHorizontal,X} from 'lucide-react';
+import {MembershipSettings} from '@/components/membership-settings';
+import '@/app/membership.css';
 import {AccountAccess} from '@/components/account-access';
 import '@/app/support/support.css';
 import '@/app/support/self-service.css';
@@ -8,7 +10,7 @@ import '@/app/support/chat.css';
 type Message={id:string;role:string;content:string;created_at:string};
 type Thread={id:string;subject:string;status:string};
 type Cancellation={id:string;source:string;state:string;result:string|null};
-export function SupportChat({onClose,active=true}:{onClose?:()=>void;active?:boolean}){
+export function SupportChat({onClose,active=true,onMembershipChanged}:{onClose?:()=>void;active?:boolean;onMembershipChanged?:(stopped?:boolean)=>void|Promise<unknown>}){
  const [threads,setThreads]=useState<Thread[]>([]),[messages,setMessages]=useState<Message[]>([]),[thread,setThread]=useState<string|null>(null);
  const [draft,setDraft]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[needsSignIn,setNeedsSignIn]=useState(false);
  const [cancellations,setCancellations]=useState<Cancellation[]>([]),[confirmation,setConfirmation]=useState<{token:string;summary:string}|null>(null),[ack,setAck]=useState(false),[notice,setNotice]=useState('');
@@ -16,8 +18,8 @@ export function SupportChat({onClose,active=true}:{onClose?:()=>void;active?:boo
  const confirmationHeading=useRef<HTMLHeadingElement>(null);
  const historyLog=useRef<HTMLDivElement>(null),composer=useRef<HTMLTextAreaElement>(null),readSequence=useRef(0);
  const nearLatest=useRef(true),reading=useRef(false),currentThread=useRef(thread);currentThread.current=thread;
- const [showLatest,setShowLatest]=useState(false);
- const clearAccount=useCallback(()=>{setNeedsSignIn(true);setThreads([]);setMessages([]);setThread(null);setCancellations([]);setConfirmation(null);setAck(false);setDraft('');setNotice('');setError('');request.current=null;},[]);
+ const [showLatest,setShowLatest]=useState(false),[membershipOpen,setMembershipOpen]=useState(false);
+ const clearAccount=useCallback(()=>{setNeedsSignIn(true);setMembershipOpen(false);setThreads([]);setMessages([]);setThread(null);setCancellations([]);setConfirmation(null);setAck(false);setDraft('');setNotice('');setError('');request.current=null;},[]);
  const load=useCallback(async(id?:string,background=false)=>{
   if(background&&reading.current)return;reading.current=true;
   const sequence=++readSequence.current;if(!background)setLoading(true);
@@ -91,7 +93,7 @@ export function SupportChat({onClose,active=true}:{onClose?:()=>void;active?:boo
  if(needsSignIn)return <section className="support-shell support-chat support-sign-in"><header className="support-heading"><div><p className="support-eyebrow">iCash X</p><h1>Let’s get you some help</h1></div>{exit}</header><div className="support-sign-in-body"><div className="support-welcome-icon"><LifeBuoy size={25}/></div><p>Sign in so we can check only your account. Use your account or payment email.</p><AccountAccess onSignedIn={()=>void load()}/><small>Already paid? Your payment is saved. You don’t need to pay again.</small></div></section>;
  return <section className="support-shell support-chat" aria-label="Support conversation">
   <header className="support-heading"><div className="support-title"><span className="support-avatar" aria-hidden="true"><LifeBuoy size={22}/></span><div><h1>iCash X support</h1><p className="support-status">{statusLabel}</p></div></div>{exit}</header>
-  <details className="support-options"><summary aria-label="Chat options"><MoreHorizontal size={20}/></summary><div><button type="button" disabled={busy||loading} onClick={()=>void load(thread??undefined)}>Refresh conversation</button><button type="button" disabled={busy||loading} onClick={()=>void cancel('prepare')}>Manage cancellation</button>{threads.length>1&&<label>Past conversations<select value={thread??''} disabled={busy||loading} onChange={e=>chooseConversation(e.target.value)}>{threads.map(t=><option value={t.id} key={t.id}>{t.subject.slice(0,50)}</option>)}</select></label>}{cancellations.length>0&&<details className="support-cancellation-history"><summary>Cancellation requests</summary>{cancellations.map(c=><div className="support-notice" key={c.id}><p>{c.state==='awaiting_confirmation'?`${c.source==='email'?'Email cancellation request received. ':''}Awaiting your confirmation. This request has not changed your bot or renewals.`:c.state==='cancelled'?`Cancellation confirmed when this request was completed. ${c.result??'Refresh account checks for the current state.'}`:c.result??'Your confirmed cancellation is still being checked.'}</p>{!['processing','cancelled'].includes(c.state)&&<button disabled={busy||loading} onClick={()=>void cancel('prepare',c.id)}>Review this request</button>}</div>)}</details>}</div></details>
+  <details className="support-options"><summary aria-label="Chat options"><MoreHorizontal size={20}/></summary><div><button type="button" disabled={busy||loading} onClick={()=>void load(thread??undefined)}>Refresh conversation</button>{threads.length>1&&<label>Past conversations<select value={thread??''} disabled={busy||loading} onChange={e=>chooseConversation(e.target.value)}>{threads.map(t=><option value={t.id} key={t.id}>{t.subject.slice(0,50)}</option>)}</select></label>}{cancellations.length>0&&<details className="support-cancellation-history"><summary>Cancellation requests</summary>{cancellations.map(c=><div className="support-notice" key={c.id}><p>{c.state==='awaiting_confirmation'?`${c.source==='email'?'Email cancellation request received. ':''}Awaiting your confirmation. This request has not changed your bot or renewals.`:c.state==='cancelled'?`Cancellation confirmed when this request was completed. ${c.result??'Refresh account checks for the current state.'}`:c.result??'Your confirmed cancellation is still being checked.'}</p>{!['processing','cancelled'].includes(c.state)&&<button disabled={busy||loading} onClick={()=>void cancel('prepare',c.id)}>Review this request</button>}</div>)}</details>}</div></details>
   <div className="support-chat-alerts">
    {error&&<p className="support-error" role="alert">{error} <button type="button" disabled={busy||loading} onClick={()=>void load(thread??undefined)}>Refresh status</button></p>}{notice&&<p className="support-notice" role="status">{notice}</p>}
 
@@ -106,7 +108,8 @@ export function SupportChat({onClose,active=true}:{onClose?:()=>void;active?:boo
   </section>
   <div className="support-compose-dock">
    <form onSubmit={send} className="support-composer" data-unsaved-draft={draft.trim()?'true':undefined}><label htmlFor="support-message" className="sr-only">Your message</label><div className="support-input-row"><textarea ref={composer} id="support-message" value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing&&window.matchMedia('(pointer: fine)').matches){e.preventDefault();void send(e);}}} maxLength={2000} rows={1} placeholder="Message support…" disabled={busy}/><button type="submit" className="support-primary support-send" aria-label={busy?'Sending message':'Send message'} disabled={busy||loading||!draft.trim()}><ArrowUp size={20}/></button></div></form>
-   <div className="support-actions"><button type="button" disabled={busy||loading} onClick={()=>void escalate()}>{draft.trim()?'Send to team':'Ask the team'}</button></div>
+   <div className="support-actions"><button type="button" disabled={busy||loading} onClick={()=>void escalate()}>{draft.trim()?'Send to team':'Ask the team'}</button><button type="button" onClick={()=>setMembershipOpen(v=>!v)} aria-expanded={membershipOpen}>Cancel subscription</button></div>
+   {membershipOpen&&<MembershipSettings cancellationOnly onClosed={()=>setMembershipOpen(false)} onChanged={async stopped=>{await onMembershipChanged?.(stopped);await load(thread??undefined);if(stopped!==undefined){setMembershipOpen(false);setNotice(stopped?'Subscription cancelled. Your unused credits are saved.':'Subscription updated.');}}}/>}
   </div>
  </section>;
 }

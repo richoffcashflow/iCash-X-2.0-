@@ -56,12 +56,14 @@ assert(all(tree).some(n=>n.type===component('MembershipSettings')&&n.props.locke
 
 const barModule={exports:{}};new Function('require','module','exports',code('components/bot-run-bar.tsx'))(name=>name==='react'?{useState:()=>[null,()=>{}],useEffect(){}}:name==='@/lib/workspace-progress'?progress:require(name),barModule,barModule.exports);
 const renderBar=patch=>barModule.exports.BotRunBar({running:false,stopped:false,paymentRequired:false,busy:false,stale:false,balanceCents:0,onBudget(){},onPause(){},...patch});
-assert.match(text(renderBar({})),/Out of credits/);
+assert.match(text(renderBar({hasCreditHistory:true})),/Out of credits/);
 assert.match(text(renderBar({paymentRequired:true,balanceCents:1000})),/Update your subscription/);
 assert.match(text(renderBar({running:true,balanceCents:1000})),/Bot running/);
 assert.match(text(renderBar({running:true,canPause:true,balanceCents:1000})),/Pause bot/);
 assert.match(text(renderBar({stopped:true,balanceCents:1000})),/Run bot/);
 assert.match(text(renderBar({balanceCents:2500})),/\$25/);
-assert.match(text(renderBar({})),/Add money to continue/);
+assert.match(text(renderBar({hasCreditHistory:true})),/Add money to continue/);
 assert.match(text(renderBar({balanceCents:undefined})),/Ready when you are/);
 tree=page({...account,identity:null,membershipActive:true,billingModel:'membership_credits'},campaign);assert(all(tree).some(n=>n.type===component('CustomerIdentity')&&n.props.onboarding),'identity is collected in setup');assert(!all(tree).some(n=>n.type===component('PostPaymentBotName')),'identity comes before bot naming');
+
+assert.match(text(renderBar({})),/Add money to start your bot/);assert.doesNotMatch(text(renderBar({})),/Out of credits|credits left/);
