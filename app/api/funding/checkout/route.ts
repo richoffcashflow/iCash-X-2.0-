@@ -29,7 +29,7 @@ export async function POST(req:Request){
  if(earlyAccess&&!acceptedEarlyAccessTerms(consent))return NextResponse.json({error:"Acknowledge the current early-access limitations before payment."},{status:400});
  if(earlyAccess&&choice.days!==1)return NextResponse.json({error:"Early-access funding is one credit purchase with no daily renewal."},{status:400});
  const autoRecharge=consent.autoRecharge===true;
- if(consent.autoRecharge!==undefined&&typeof consent.autoRecharge!=='boolean'||autoRecharge&&(!prepaid||consent.autoRechargeVersion!==autoRechargeVersion||earlyAccess||privateCheck))return NextResponse.json({error:'Refresh the auto recharge option and try again.'},{status:400});
+ if(consent.autoRecharge!==undefined&&typeof consent.autoRecharge!=='boolean'||autoRecharge&&(!prepaid||consent.autoRechargeVersion!==autoRechargeVersion||privateCheck))return NextResponse.json({error:'Refresh the auto recharge option and try again.'},{status:400});
  const consentVersion=prepaid?workCreditTermsVersion+(autoRecharge?':'+autoRechargeVersion:''):earlyAccess?`${fundingTermsVersion}:early:${earlyAccessTermsVersion}`:fundingTermsVersion;
  let consentText=prepaid?workCreditTerms+(earlyAccess?' '+earlyAccessDisclosure:''):earlyAccess?`${fundingTermsText} Early-access acknowledgment: ${earlyAccessDisclosure}`:fundingTermsText;
  const packCode=typeof choice.packCode==="string"&&/^[a-z0-9_]{1,30}$/.test(choice.packCode)?choice.packCode:"start";
