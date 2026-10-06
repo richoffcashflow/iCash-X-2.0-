@@ -18,8 +18,8 @@ export const webinarOfferSchema=z.object({id:z.string().regex(/^[a-zA-Z0-9_-]{1,
 export type WebinarOffer=z.infer<typeof webinarOfferSchema>;
 export const audienceDisplaySchema=z.object({mode:z.enum(['actual','fixed','simulated']).default('actual'),fixedCount:z.number().int().min(0).max(100000).default(125),minimum:z.number().int().min(0).max(100000).default(80),maximum:z.number().int().min(0).max(100000).default(160)}).strict().refine(v=>v.minimum<=v.maximum,'The maximum must be at least the minimum.');
 export const purchaseNotificationsSchema=z.object({enabled:z.boolean().default(true),includeRegion:z.boolean().default(true),startAt:z.number().int().min(0).max(14400).nullable().default(null),intervalSeconds:z.number().int().min(15).max(120).default(30)}).strict();
-export const webinarSchema=z.object({
- id:z.string().uuid(),revision:z.number().int().positive(),title:z.string().trim().min(1).max(150),description:z.string().max(600),
+const webinarBaseSchema=z.object({
+ publicCode:z.string().regex(/^\d{6,12}$/).nullable().default(null),id:z.string().uuid(),revision:z.number().int().positive(),title:z.string().trim().min(1).max(150),description:z.string().max(600),
  status:z.enum(['draft','published']),audience:z.enum(['all','day','night','returning']),priority:z.number().int().min(0).max(100),
  videoUrl:httpsUrl,posterUrl:httpsUrl,durationSeconds:z.number().int().min(10).max(14400),
  nameAt:z.number().int().min(0).max(14400),contactAt:z.number().int().min(0).max(14400),pitchAt:z.number().int().min(0).max(14400),
@@ -28,7 +28,8 @@ export const webinarSchema=z.object({
  variationEnabled:z.boolean().default(false),chatStyle:z.string().max(2500).default(defaultChatStyle),
  offers:z.array(webinarOfferSchema).max(12).default([]),endOfferId:z.string().max(80).nullable().default(null),showAudienceCount:z.boolean().default(true),
  audienceDisplay:audienceDisplaySchema.default({}),purchaseNotifications:purchaseNotificationsSchema.default({}),
-}).strict().superRefine((w,c)=>{
+}).strict();
+function validateRecording(w:z.infer<typeof webinarBaseSchema>,c:z.RefinementCtx){
  if(w.status==='published'&&!w.videoUrl)c.addIssue({code:z.ZodIssueCode.custom,path:['videoUrl'],message:'Add a video before publishing.'});
  for(const k of ['nameAt','contactAt','pitchAt'] as const)if(w[k]>w.durationSeconds)c.addIssue({code:z.ZodIssueCode.custom,path:[k],message:'Must be within the video duration.'});
  if(new Set(w.chat.map(c=>c.id)).size!==w.chat.length)c.addIssue({code:z.ZodIssueCode.custom,path:['chat'],message:'Chat IDs must be unique.'});
@@ -37,11 +38,18 @@ export const webinarSchema=z.object({
  if(new Set(w.offers.map(o=>o.id)).size!==w.offers.length)c.addIssue({code:z.ZodIssueCode.custom,path:['offers'],message:'Offer IDs must be unique.'});
  if(w.endOfferId&&!w.offers.some(o=>o.id===w.endOfferId))c.addIssue({code:z.ZodIssueCode.custom,path:['endOfferId'],message:'Choose an existing offer for the ending.'});
  if(w.purchaseNotifications.startAt!==null&&w.purchaseNotifications.startAt>w.durationSeconds)c.addIssue({code:z.ZodIssueCode.custom,path:['purchaseNotifications','startAt'],message:'Must be within the video duration.'});
+}
+export const webinarRecordingSchema=webinarBaseSchema.pick({videoUrl:true,posterUrl:true,durationSeconds:true,nameAt:true,contactAt:true,pitchAt:true,offerTitle:true,ctaLabel:true,offerEndsAt:true,checkoutMode:true,redirectAtEnd:true,chat:true,faq:true,aiEnabled:true,variationEnabled:true,chatStyle:true,offers:true,endOfferId:true}).strip();
+export type WebinarRecording=z.infer<typeof webinarRecordingSchema>;
+export const webinarSchema=webinarBaseSchema.extend({nightVersion:webinarRecordingSchema.nullable().default(null),nightEnabled:z.boolean().default(false),recordingVersion:z.enum(['day','night']).default('day')}).superRefine((w,c)=>{
+ validateRecording(w,c);
+ if(w.nightEnabled&&!w.nightVersion)c.addIssue({code:z.ZodIssueCode.custom,path:['nightVersion'],message:'Add a night recording first.'});
+ if(w.nightVersion)validateRecording({...w,...w.nightVersion,status:w.nightEnabled?w.status:'draft'}, {...c,path:[...c.path,'nightVersion'],addIssue:issue=>c.addIssue({...issue,path:['nightVersion',...(issue.path??[])]})});
 });
 export type Webinar=z.infer<typeof webinarSchema>;
 export type ChatCue=z.infer<typeof chatCueSchema>;
 export type WatchHistory={webinar_id:string;revision:number;progress_seconds:number;completed_at:string|null;updated_at:string};
-export function newWebinar(id:string):Webinar{return {id,revision:1,title:`Your ${webinarSite.brandName} session`,description:`A walkthrough with ${webinarSite.hostName}.`,status:'draft',audience:'all',priority:0,videoUrl:'',posterUrl:'',durationSeconds:1800,nameAt:20,contactAt:120,pitchAt:1200,offerTitle:'Put your AI bot to work',ctaLabel:'See my options',offerEndsAt:null,checkoutMode:'membership',redirectAtEnd:true,offers:[],endOfferId:null,showAudienceCount:true,audienceDisplay:audienceDisplaySchema.parse({}),purchaseNotifications:purchaseNotificationsSchema.parse({}),chat:[{id:'welcome',at:5,name:webinarSite.brandName,text:'Welcome! Ask a question here while you watch. The AI assistant can help with this session.',kind:'host'}],faq:'iCash X is an AI real estate workspace. Paid activity uses a budget. Results, deals and earnings are not guaranteed. Current prices and terms are shown in checkout.',aiEnabled:true,variationEnabled:false,chatStyle:defaultChatStyle};}
+export function newWebinar(id:string):Webinar{return {publicCode:null,nightVersion:null,nightEnabled:false,recordingVersion:'day',id,revision:1,title:`Your ${webinarSite.brandName} session`,description:`A walkthrough with ${webinarSite.hostName}.`,status:'draft',audience:'all',priority:0,videoUrl:'',posterUrl:'',durationSeconds:1800,nameAt:30,contactAt:30,pitchAt:1200,offerTitle:'Put your AI bot to work',ctaLabel:'See my options',offerEndsAt:null,checkoutMode:'membership',redirectAtEnd:true,offers:[],endOfferId:null,showAudienceCount:true,audienceDisplay:audienceDisplaySchema.parse({}),purchaseNotifications:purchaseNotificationsSchema.parse({}),chat:[{id:'welcome',at:5,name:webinarSite.brandName,text:'Welcome! Ask a question here while you watch. The AI assistant can help with this session.',kind:'host'}],faq:'iCash X is an AI real estate workspace. Paid activity uses a budget. Results, deals and earnings are not guaranteed. Current prices and terms are shown in checkout.',aiEnabled:true,variationEnabled:false,chatStyle:defaultChatStyle};}
 export function chooseWebinar(webinars:Webinar[],history:WatchHistory[],timezone:string,now=new Date(),routing={nightStartsAt:18,nightEndsAt:6}):Webinar|null{
  const eligible=webinars.filter(w=>w.status==='published'&&w.videoUrl);
  const recent=[...history].sort((a,b)=>b.updated_at.localeCompare(a.updated_at));
@@ -59,12 +67,12 @@ export function webinarOffers(w:OfferConfig):WebinarOffer[]{return w.offers?.len
 export function webinarPitchAt(w:OfferConfig){return Math.min(...webinarOffers(w).map(o=>o.at));}
 export function offerDestination(o:WebinarOffer){return o.action==='link'&&validOfferUrl(o.url)?o.url:webinarSite.checkoutPath;}
 export function webinarEndOffer(w:OfferConfig,now=Date.now()){return selectOffer(webinarOffers(w),w.durationSeconds??14400,now,w.endOfferId);}
-export function publicWebinar(w:Webinar){const {faq,chatStyle,...rest}=w;void faq;void chatStyle;return {...rest,chat:w.chat.map(({variations,...cue})=>{void variations;return cue;})};}
+export function publicWebinar(w:Webinar){const {faq,chatStyle,nightVersion,nightEnabled,...rest}=w;void faq;void chatStyle;void nightVersion;void nightEnabled;return {...rest,chat:w.chat.map(({variations,...cue})=>{void variations;return cue;})};}
 export function offerOpen(w:Pick<Webinar,'offerEndsAt'>,now=Date.now()){return !w.offerEndsAt||Date.parse(w.offerEndsAt)>now;}
 export const eventNames=['started','progress','name_saved','contact_saved','pitch_shown','add_to_cart','checkout_opened','completed','chat_question','returning_customer'] as const;
 export type WebinarEvent=typeof eventNames[number];
-export const optimizerSchema=z.object({enabled:z.boolean().default(true),explorationPercent:z.number().int().min(10).max(50).default(20),minVisitors:z.number().int().min(20).max(5000).default(100)}).strict().transform(v=>({...v,enabled:true}));
+export const optimizerSchema=z.object({enabled:z.boolean().default(false),explorationPercent:z.number().int().min(10).max(50).default(20),minVisitors:z.number().int().min(20).max(5000).default(100)}).strict().transform(v=>({...v,enabled:false}));
 export const metaSchema=z.object({enabled:z.boolean().default(false),pixelId:z.string().regex(/^\d{5,30}$/).or(z.literal('')).default('')}).strict();
 export const routingSchema=z.object({nightStartsAt:z.number().int().min(0).max(23),nightEndsAt:z.number().int().min(0).max(23),checkoutWindowHours:z.number().min(0).max(72).default(3)}).strict().refine(r=>r.nightStartsAt!==r.nightEndsAt,'Day and night need different start times.');
-export const settingsSchema=z.object({enabled:z.boolean(),fromEmail:z.string().email().or(z.literal('')),postalAddress:z.string().max(500),subjects:z.array(z.string().min(1).max(150)).length(3),messages:z.array(z.string().min(1).max(2000)).length(3),optimizer:optimizerSchema.default({enabled:true,explorationPercent:20,minVisitors:100}),meta:metaSchema.default({enabled:false,pixelId:''}),routing:routingSchema.default({nightStartsAt:18,nightEndsAt:6})}).strict();
+export const settingsSchema=z.object({enabled:z.boolean(),fromEmail:z.string().email().or(z.literal('')),postalAddress:z.string().max(500),subjects:z.array(z.string().min(1).max(150)).length(3),messages:z.array(z.string().min(1).max(2000)).length(3),optimizer:optimizerSchema.default({enabled:false,explorationPercent:20,minVisitors:100}),meta:metaSchema.default({enabled:false,pixelId:''}),routing:routingSchema.default({nightStartsAt:18,nightEndsAt:6})}).strict();
 export type WebinarSettings=z.infer<typeof settingsSchema>;

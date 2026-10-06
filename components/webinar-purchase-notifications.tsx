@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
+import {webinarRequest} from '@/lib/webinar-client';
 import {Check,X} from 'lucide-react';
 import {activityAge,activityMessage,recentActivity,type WebinarActivity} from '@/lib/webinar-activity';
 import {webinarSite} from '@/lib/webinar-site';
@@ -19,9 +20,7 @@ export function WebinarPurchaseNotifications({sessionId,enabled,preview,interval
    if(busy||document.hidden)return;
    busy=true;
    try{
-    const response=await fetch('/api/webinar/activity',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId}),signal:controller.signal});
-    if(!response.ok)return;
-    const data=await response.json() as {events:WebinarActivity[];serverNow:number};
+    const data=await webinarRequest<{events:WebinarActivity[];serverNow:number}>('/api/webinar/activity',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId}),signal:controller.signal},10000);
     if(disposed)return;
     const events=recentActivity(data.events,data.serverNow);setNow(data.serverNow);
     if(currentId&&!events.some(event=>event.id===currentId)){setActive(null);currentId='';}
