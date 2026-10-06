@@ -58,7 +58,7 @@ export function SellerIntake(){
      <div className="seller-card">
       {step==='address'?<form className="seller-address-form" onSubmit={e=>{e.preventDefault();if(address.trim().length<8)return;begin();track('contact');setError('');setStep('contact');requestAnimationFrame(()=>nameInput.current?.focus({preventScroll:true}));}}>
        <label className="seller-sr-only" htmlFor="seller-address">Your property address</label>
-       <SellerAddressInput value={address} onChange={value=>{begin();setAddress(value);request.current='';}} standalone/>
+       <SellerAddressInput value={address} onChange={value=>{begin();setAddress(value);request.current='';}}/>
        <button className="seller-submit" type="submit">{copy.cta}</button>
        <p className="seller-form-note"><ShieldCheck size={14} aria-hidden="true"/>Free request. No obligation to sell.</p>
       </form>:<>

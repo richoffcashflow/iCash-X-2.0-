@@ -2,13 +2,13 @@
 
 import Script from 'next/script';
 import {useEffect, useRef, useState, type KeyboardEvent} from 'react';
-import {ArrowRight, MapPin} from 'lucide-react';
+import {MapPin} from 'lucide-react';
 import {createAddressSearch, type AddressPrediction, type PlacesLibrary} from '@/lib/address-autocomplete';
 
 const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 type MapsWindow = Window & {google?: {maps: {importLibrary(name: string): Promise<PlacesLibrary>}}};
 
-export function SellerAddressInput({value, onChange, standalone = false}: {value: string; onChange: (value: string) => void; standalone?: boolean}) {
+export function SellerAddressInput({value, onChange}: {value: string; onChange: (value: string) => void}) {
   const [activated, setActivated] = useState(false);
   const [focused, setFocused] = useState(false);
   const [ready, setReady] = useState(false);
@@ -21,9 +21,25 @@ export function SellerAddressInput({value, onChange, standalone = false}: {value
   const selected = useRef('');
   const mounted = useRef(true);
   const input = useRef<HTMLInputElement>(null);
+  const lookup = useRef<HTMLDivElement>(null);
   const expanded = focused && suggestions.length > 0;
 
   useEffect(() => {mounted.current = true; return () => {mounted.current = false; generation.current++;};}, []);
+
+  useEffect(() => {
+    if (!focused) return;
+    // A touch can blur the input before its click reaches a suggestion.
+    // Dismiss on an actual outside press instead; leave scrolling untouched.
+    function outsidePress(event: PointerEvent) {
+      if (!(event.target instanceof Node) || lookup.current?.contains(event.target)) return;
+      generation.current++;
+      setFocused(false);
+      setSuggestions([]);
+      setActive(-1);
+    }
+    document.addEventListener('pointerdown', outsidePress, true);
+    return () => document.removeEventListener('pointerdown', outsidePress, true);
+  }, [focused]);
 
   async function initialize() {
     try {
@@ -94,19 +110,24 @@ export function SellerAddressInput({value, onChange, standalone = false}: {value
 
   return <>
     {apiKey && activated && <Script id="homeoffer-google-maps" src={`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places&v=weekly`} onReady={() => {void initialize();}} onError={() => setUnavailable(true)}/>}
-    <div className="seller-address-lookup">
-      <div className="seller-address-bar"><MapPin size={22}/>
-        <input ref={input} id="seller-address" name="street-address" autoComplete={apiKey ? 'off' : 'street-address'} enterKeyHint="next" required minLength={8} maxLength={300} value={value} aria-busy={selecting}
+    <div ref={lookup} className="seller-address-lookup" onBlur={event => {
+      // Keep the list mounted while focus moves to a suggestion, including
+      // mobile browsers that report a null relatedTarget during a tap.
+      if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) {
+        generation.current++; setFocused(false); setSuggestions([]); setActive(-1);
+      }
+    }}>
+      <label className="seller-address-bar" htmlFor="seller-address"><MapPin size={22} aria-hidden="true"/>
+        <input ref={input} id="seller-address" name="street-address" type="text" inputMode="text" autoCorrect="off" spellCheck={false} autoComplete={apiKey ? 'off' : 'street-address'} enterKeyHint="next" required minLength={8} maxLength={300} value={value} aria-busy={selecting}
           role="combobox" aria-autocomplete="list" aria-expanded={expanded} aria-controls={expanded ? 'seller-address-options' : undefined} aria-activedescendant={expanded && active >= 0 ? `seller-address-option-${active}` : undefined} aria-describedby="seller-address-hint"
-          onFocus={() => {setActivated(true); setFocused(true);}} onBlur={() => {generation.current++; setFocused(false); setSuggestions([]); setActive(-1);}}
+          onFocus={() => {setActivated(true); setFocused(true);}}
           onChange={event => {generation.current++; selected.current = ''; setSuggestions([]); setActive(-1); onChange(event.target.value);}}
           onKeyDown={keyDown} placeholder="Enter your home address"/>
-        {!standalone && <button type="submit" aria-label="Continue with this address" disabled={selecting}><ArrowRight size={24}/></button>}
-      </div>
+      </label>
       {expanded && <div className="seller-address-dropdown">
         <ul id="seller-address-options" role="listbox" aria-label="Matching addresses">
-          {suggestions.map((prediction, index) => <li id={`seller-address-option-${index}`} key={prediction.placeId} role="option" aria-selected={index === active}
-            onPointerDown={event => event.preventDefault()} onClick={() => void choose(prediction)}><MapPin size={16}/><span>{prediction.text.toString()}</span></li>)}
+          {suggestions.map((prediction, index) => <li key={prediction.placeId} role="presentation"><button type="button" id={`seller-address-option-${index}`} role="option" aria-selected={index === active} tabIndex={-1}
+            onClick={() => void choose(prediction)}><MapPin size={16} aria-hidden="true"/><span>{prediction.text.toString()}</span></button></li>)}
         </ul>
         <div className="seller-google-attribution"><img src="/google-maps-attribution.svg" alt="Google Maps" height={16}/></div>
       </div>}
