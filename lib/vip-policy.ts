@@ -9,4 +9,4 @@ export function vipPrice(standardCents:number,_kind:'lead'|'usage'){
  if(!Number.isSafeInteger(standardCents)||standardCents<0)throw Error('Invalid price');
  return Math.ceil(standardCents*80/100);
 }
-export const vipBenefits=['20% off AI work','20% off leads','Priority for eligible new leads','Custom bot name'];
+export const vipBenefits=['20% off AI work','20% off leads','Priority for eligible new leads','Custom bot name','Your own AI voice'];
