@@ -38,7 +38,7 @@
 .personalized-workspace .conversation-log-wrap{position:relative;flex:1;min-height:90px;display:flex;overflow:hidden}
 .personalized-workspace .property-contact-dialog .message-history{flex:1;max-height:none;min-height:0;background:#fff;padding:18px 20px;gap:15px;border-radius:0;scrollbar-width:thin;overscroll-behavior:contain}
 .personalized-workspace .property-contact-dialog .message-bubble{max-width:88%;padding:13px 15px;border-radius:13px;background:#f2f5f3;color:#334239;overflow-wrap:anywhere;flex:none}
-.personalized-workspace .property-contact-dialog .message-outgoing{align-self:flex-end;background:#254b35;color:#fff;border-bottom-right-radius:4px}
+.personalized-workspace .property-contact-dialog .message-outgoing{align-self:flex-end;background:#0070f3;color:#fff;border-bottom-right-radius:4px}
 .personalized-workspace .property-contact-dialog .message-incoming{align-self:flex-start;border-bottom-left-radius:4px}
 .personalized-workspace .property-contact-dialog .message-speaker{font-size:10px;font-weight:500;opacity:.7;color:inherit}
 .personalized-workspace .property-contact-dialog .message-bubble p{font-size:14px;color:inherit;line-height:1.65;margin:5px 0 8px;text-align:left}
@@ -48,7 +48,7 @@
 .personalized-workspace .text-input-row{display:flex;align-items:flex-end;border:1px solid #d9e2db;border-radius:13px;padding:7px;gap:7px}
 .personalized-workspace .text-input-row:focus-within{border-color:#84a590;box-shadow:0 0 0 2px #eef5f0}
 .personalized-workspace .property-contact-dialog .text-input-row textarea{display:block;flex:1;min-width:0;width:100%;font-size:16px;line-height:1.5;min-height:56px!important;max-height:110px;border:0;border-radius:8px;outline:none;box-shadow:none;resize:none;margin:0;padding:7px 5px;background:none;color:#324339}
-.personalized-workspace .property-contact-dialog .text-input-row .message-send{width:39px;height:39px;min-width:39px;padding:0;display:grid;place-items:center;background:#254b35;color:white;border:0;border-radius:10px;margin:0}
+.personalized-workspace .property-contact-dialog .text-input-row .message-send{width:39px;height:39px;min-width:39px;padding:0;display:grid;place-items:center;background:#0070f3;color:white;border:0;border-radius:10px;margin:0}
 .personalized-workspace .text-composer-meta{display:flex;justify-content:space-between;gap:12px;color:#849088;padding:7px 2px 0;font-size:10px;line-height:1.6}
 .personalized-workspace .message-composer p{font-size:12px;line-height:1.6;color:#856932;text-align:left;margin:8px 0 0}
 .personalized-workspace .message-composer .message-check-status{font-size:12px;padding:7px 0;min-height:32px;border:0;background:none;color:#637e6c;text-decoration:underline;margin-top:5px}
