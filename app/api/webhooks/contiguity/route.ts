@@ -2,6 +2,9 @@ import {NextResponse} from 'next/server';
 import {verifyContiguityWebhook,parseTextWebhook} from '@/lib/contiguity';
 import {db} from '@/lib/stripe-test';
 import {ownerPracticeReply} from '@/lib/owner-practice-replies';
+import {replyToSellerText} from '@/lib/seller-text-replies';
+import {dispatchTextMessage} from '@/lib/text-message-service';
+import {processTextAi} from '@/lib/text-ai-service';
 export const runtime='nodejs';
 export const maxDuration=60;
 export async function POST(req:Request){
@@ -16,7 +19,12 @@ export async function POST(req:Request){
  if(['text.delivery.confirmed','text.delivery.failed','text.cancelled'].includes(event.type))await db('rpc/icash_webinar_followup_delivery','POST',{p_channel:'sms',p_provider:event.data.message_id,p_kind:event.type==='text.delivery.confirmed'?'delivered':'failed'});
  if(inbound&&event.optOut)await db('rpc/icash_stop_customer_update_phone','POST',{p_phone:event.data.from});
  await db('rpc/icash_ingest_text_event','POST',{p_event:event,p_optout:event.optOut});
- if(inbound)await ownerPracticeReply(event.id);
+ if(inbound&&!event.optOut){
+  // Queuing is idempotent and provider claims are atomic. A failed immediate
+  // attempt remains durable for the automation worker; never replay a send.
+  try{await replyToSellerText(db,dispatchTextMessage,event.id,processTextAi);}catch{/* Durable queue is retried only before provider claim. */}
+  await ownerPracticeReply(event.id);
+ }
  return NextResponse.json({received:true});
  }catch{return new Response(null,{status:503});}
 }
