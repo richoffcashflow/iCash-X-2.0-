@@ -5,7 +5,7 @@ import {priceLabel} from '@/lib/membership-policy';
 import {FundingDialog} from '@/components/funding-dialog';
 type MembershipView={vip?:boolean;vipUntil?:string|null;pendingDowngrade?:boolean;state:string;priceCents:number;paidThrough:string|null;cancelAtPeriodEnd:boolean;accessible:boolean;retentionEndsAt?:string|null};
 type Offer={eligible:boolean;retryable:boolean;priceCents:number;months:number;version:string};
-export function MembershipSettings({locked=false,cancellationOnly=false,onClosed,onChanged}:{locked?:boolean;cancellationOnly?:boolean;onClosed?:()=>void;onChanged?:(stopped?:boolean)=>void|Promise<unknown>}={}){
+export function MembershipSettings({locked=false,cancellationOnly=false,initialUpgradeReview=false,onClosed,onChanged}:{locked?:boolean;cancellationOnly?:boolean;initialUpgradeReview?:boolean;onClosed?:()=>void;onChanged?:(stopped?:boolean)=>void|Promise<unknown>}={}){
  const [data,setData]=useState<MembershipView|null>(null),[offer,setOffer]=useState<Offer|null>(null),[loaded,setLoaded]=useState(false),[review,setReview]=useState(cancellationOnly),[busy,setBusy]=useState(false),[message,setMessage]=useState('');const operation=useRef(false);
  async function load(){try{if(new URLSearchParams(window.location.search).has('vip_session'))await fetch('/api/billing/vip',{cache:'no-store',signal:AbortSignal.timeout(30000)});const r=await fetch('/api/billing/membership',{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error();const d=await r.json();setData(d.membership);setOffer(d.retentionOffer??null);setLoaded(true);}catch{setMessage('Could not load your subscription. Please try again.');}}
  useEffect(()=>{void load();},[]);
@@ -26,7 +26,7 @@ export function MembershipSettings({locked=false,cancellationOnly=false,onClosed
   {cancelling&&<p role="status">Your bot is stopped. Cancellation is finishing automatically. Your unused credits are saved.</p>}
   {!data.accessible&&['pending','cancelled'].includes(data.state)&&<a className="fund-button" href="/join">Renew subscription</a>}
   {data.state!=='pending'&&<button className={locked&&!['cancelled','cancel_requested'].includes(data.state)?'fund-button':'membership-payment-link'} disabled={busy} onClick={()=>void act('manage')}>{locked&&!['cancelled','cancel_requested'].includes(data.state)?'Renew subscription':'Payment & invoices'}</button>}
-  {data.accessible&&<VipPlan vip={data.vip===true} pendingDowngrade={data.pendingDowngrade===true} vipUntil={data.vipUntil??null} paidThrough={data.paidThrough} discountActive={!!data.retentionEndsAt&&Date.parse(data.retentionEndsAt)>Date.now()} onChanged={async()=>{await load();await onChanged?.();}}/>}
+  {data.accessible&&<VipPlan initialUpgradeReview={initialUpgradeReview} vip={data.vip===true} pendingDowngrade={data.pendingDowngrade===true} vipUntil={data.vipUntil??null} paidThrough={data.paidThrough} discountActive={!!data.retentionEndsAt&&Date.parse(data.retentionEndsAt)>Date.now()} onChanged={async()=>{await load();await onChanged?.();}}/>}
   </>}{cancellationOnly&&!canCancel&&<p>{cancelling?'Cancellation is finishing. Your unused credits are saved.':'Your subscription is cancelled. Your unused credits are saved.'}</p>}
  </>:<>{loaded?<p>No monthly subscription is linked.</p>:<p>Loading subscription…</p>}</>}
  {message&&!review&&<p role="status">{message}</p>}

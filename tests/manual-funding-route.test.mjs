@@ -1,3 +1,4 @@
+import * as embeddedPolicy from '../lib/embedded-checkout-policy.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
@@ -6,8 +7,8 @@ import * as amounts from '../lib/funding-amount.ts';
 import * as policy from '../lib/membership-policy.ts';
 import * as consent from '../lib/funding-consent.ts';
 let user={id:'owner',email:'fixture@example.invalid'},active=true,orders=[],calls=[],sessions=new Map();
-const stripe={checkout:{sessions:{create:async(body,options)=>{calls.push({create:body,options});const s={id:'cs_live_'+(sessions.size+1),status:'open',payment_status:'unpaid',livemode:true,url:'https://checkout.stripe.com/fixture',metadata:body.metadata};sessions.set(s.id,s);return s;},retrieve:async id=>sessions.get(id),expire:async id=>{sessions.get(id).status='expired';}}}};
-const deps={...recharge,...amounts,...policy,...consent,NextResponse:{json:(body,o={})=>({body,status:o.status??200})},allowedOrigin:()=>true,privatePaymentCheckAllowed:async()=>false,customerFundingReady:async()=>true,earlyAccessFundingEnabled:()=>false,fundingMode:()=> 'live',cookies:async()=>({get:()=>({value:'a'.repeat(64)})}),validGuest:()=>true,guestHash:()=> 'hash',limitRequest:async()=>{},currentUser:async()=>user,accountMembership:async()=>({mode:'live',account_id:'account',stripe_customer_id:'cus_owned'}),fundingStripe:()=>stripe,processingFeeCents:()=>0,maximumFundingDays:()=>7,settleFunding:async()=>{throw Error('Unexpected payment');},db:async(path,method,body)=>{
+const stripe={checkout:{sessions:{create:async(body,options)=>{calls.push({create:body,options});const s={id:'cs_live_'+(sessions.size+1),status:'open',payment_status:'unpaid',livemode:true,url:body.ui_mode==='embedded_page'?null:'https://checkout.stripe.com/fixture',ui_mode:body.ui_mode??'hosted_page',client_secret:body.ui_mode==='embedded_page'?'cs_live_secret_fixture':null,metadata:body.metadata};sessions.set(s.id,s);return s;},retrieve:async id=>sessions.get(id),expire:async id=>{sessions.get(id).status='expired';}}}};
+const deps={...embeddedPolicy,...recharge,...amounts,...policy,...consent,NextResponse:{json:(body,o={})=>({body,status:o.status??200})},allowedOrigin:()=>true,privatePaymentCheckAllowed:async()=>false,customerFundingReady:async()=>true,earlyAccessFundingEnabled:()=>false,fundingMode:()=> 'live',cookies:async()=>({get:()=>({value:'a'.repeat(64)})}),validGuest:()=>true,guestHash:()=> 'hash',limitRequest:async()=>{},currentUser:async()=>user,accountMembership:async()=>({mode:'live',account_id:'account',stripe_customer_id:'cus_owned'}),fundingStripe:()=>stripe,processingFeeCents:()=>0,maximumFundingDays:()=>7,settleFunding:async()=>{throw Error('Unexpected payment');},db:async(path,method,body)=>{
  calls.push({path,method,body});
  if(path.startsWith('icash_accounts'))return [{id:'account'}];
  if(path.startsWith('icash_daily_plans'))return [];
@@ -48,3 +49,19 @@ assert.equal((await POST(request(automatic))).status,200);
 const autoCreate=calls.filter(c=>c.create).at(-1).create;assert.equal(autoCreate.payment_intent_data.setup_future_usage,'off_session');assert.equal(autoCreate.metadata.icash_auto_recharge,'true');assert.match(autoCreate.custom_text.submit.message,/\$10.*below \$5.*24 hours/);
 assert.equal((await POST(request(purchase))).status,200);assert.equal(calls.filter(c=>c.create).at(-1).create.payment_intent_data,undefined,'Changing to manual replaces auto checkout');
 console.log('PASS auto recharge checkout: explicit versioned opt-in, exact amount/threshold, saved-card setup only on opt-in, manual replacement expires auto checkout.');
+
+// The same one-time order supports inline Stripe and survives repeated opens.
+process.env.STRIPE_PUBLISHABLE_KEY='pk_live_fixture';
+const inline={...purchase,embedded:true};
+let inlineResponse=await POST(request(inline));assert.equal(inlineResponse.status,200);assert.equal(inlineResponse.body.publishableKey,'pk_live_fixture');assert(inlineResponse.body.clientSecret);assert.equal(inlineResponse.body.url,undefined);
+const inlineCreate=calls.filter(c=>c.create).at(-1).create;
+assert.equal(inlineCreate.ui_mode,'embedded_page');assert.equal(inlineCreate.redirect_on_completion,'never');assert.equal(inlineCreate.success_url,undefined);assert.equal(inlineCreate.cancel_url,undefined);assert.equal(inlineCreate.customer,'cus_owned');
+const count=calls.filter(c=>c.create).length;
+assert.equal((await POST(request(inline))).body.sessionId,inlineResponse.body.sessionId);assert.equal(calls.filter(c=>c.create).length,count,'Reopening inline checkout reuses the owned session');
+const last=sessions.get(inlineResponse.body.sessionId);last.status='complete';last.payment_status='unpaid';
+assert.equal((await POST(request(inline))).status,409);assert.equal(calls.filter(c=>c.create).length,count,'An uncertain completed payment never creates another purchase');
+last.status='expired';
+process.env.STRIPE_PUBLISHABLE_KEY='pk_test_fixture';
+const fallback=await POST(request(inline));assert.equal(fallback.status,200);assert.match(fallback.body.url,/checkout.stripe.com/);assert.equal(fallback.body.clientSecret,undefined,'Wrong-mode keys use hosted payment');
+delete process.env.STRIPE_PUBLISHABLE_KEY;
+console.log('PASS inline funding: exact amount, matching Stripe key, saved customer, no redirect, same-session retry, uncertain-payment hold, and hosted fallback.');

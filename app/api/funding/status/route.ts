@@ -1,3 +1,4 @@
+import {checkoutPublishableKey} from '@/lib/embedded-checkout-policy';
 import {currentUser} from '@/lib/account-auth';
 import {fundingReturnSummary} from '@/lib/funding-return';
 import {privatePaymentCheckAllowed} from '@/lib/private-payment-check';
@@ -49,6 +50,6 @@ export async function GET(req:Request){
  const low=!!wallet&&wallet.balance_cents-wallet.reserved_cents<500;
  const recommendedCents=low&&recent.length>=5?25000:low&&recent.length>=3?10000:low&&recent.length>=1?5000:1000;
  const summary=fundingReturnSummary(orders,!!user);
- return NextResponse.json({privatePaymentCheck:await privatePaymentCheckAllowed(),recommendedCents,mode,enabled:await customerFundingReady(),earlyAccess:earlyAccessFundingEnabled(),autoRecharge:autoRecharge??{enabled:false},packs,custom,planning,forecast:{cycleChargeCents:null,qualified:null},priceCents:pack?.price_cents??null,creditCents:pack?.credit_cents??null,...summary},{headers});
+ return NextResponse.json({embeddedReady:!!checkoutPublishableKey(mode),privatePaymentCheck:await privatePaymentCheckAllowed(),recommendedCents,mode,enabled:await customerFundingReady(),earlyAccess:earlyAccessFundingEnabled(),autoRecharge:autoRecharge??{enabled:false},packs,custom,planning,forecast:{cycleChargeCents:null,qualified:null},priceCents:pack?.price_cents??null,creditCents:pack?.credit_cents??null,...summary},{headers});
  }catch{return NextResponse.json({enabled:false,error:"Could not check funding. Please retry."},{status:503,headers});}
 }
