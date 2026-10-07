@@ -88,7 +88,12 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext,true);sellerPrompt=limited?limitedSellerPrompt(address,identity.principal,account.assistant_name):sellerCallPrompt(sellerContext,ceiling,closing,!!recordedReview.contractToolId,cashOfferPrice);}catch{return hold('property_context_required');}}
  const operationKey=`voice:${j.id}`;
  const reserveHold=recordingReleaseHold();if(reserveHold)return hold(reserveHold);
- if(!await db<boolean>('rpc/icash_reserve_paced_voice','POST',{p_account:accountId,p_job:j.id,p_rate:rateId,p_permission_until:p.permission_until,p_financial_checked_at:eligible?.ready?new Date(eligible.screening.financialCheck.checkedAt).toISOString():null,p_financial_eligible:eligible?.ready&&eligible.screening.financialCheck.status==='eligible'}))return {status:'waiting_for_daytime_budget'};
+ const reservationInput={p_account:accountId,p_job:j.id,p_rate:rateId,p_permission_until:p.permission_until,p_financial_checked_at:eligible?.ready?new Date(eligible.screening.financialCheck.checkedAt).toISOString():null,p_financial_eligible:eligible?.ready&&eligible.screening.financialCheck.status==='eligible'};
+ // Activate only after the matching database migration is installed. Never retry an ambiguous reservation through another path.
+ const fundedCall=process.env.ICASH_FLEXIBLE_VOICE_READY==='true'
+  ?await db<{maxSeconds:number}|null>('rpc/icash_reserve_flexible_voice','POST',reservationInput)
+  :await db<boolean>('rpc/icash_reserve_paced_voice','POST',reservationInput)?{maxSeconds:600}:null;
+ if(!fundedCall)return {status:'waiting_for_daytime_budget'};
  const claimHold=recordingReleaseHold();if(claimHold)return hold(claimHold);
  const claimed=p.party==='seller'
   ?limited?await db<boolean>('rpc/icash_claim_limited_seller_voice','POST',{p_job:j.id,p_snapshot:snapshot.snapshot}):await db<boolean>('rpc/icash_claim_automatic_offer_voice_job','POST',{p_job:j.id,p_snapshot:snapshot.snapshot,p_offer_price_cents:cashOfferPrice})
@@ -99,7 +104,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  try{
  await db(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&state=eq.dispatching`,'PATCH',{sms_context:smsContext});
  const dispatchHold=recordingReleaseHold();if(dispatchHold)return hold(dispatchHold);
- const result=await recordingServer().dispatch({accountId,operationKey,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:identity.voice_id,firstMessage:sellerGreeting??`Hi, I'm ${account.assistant_name}, the AI assistant for ${identity.principal}. I'm calling about an investment property at ${address}. Are you buying in that area?`,prompt:buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!,strategyKey:strategy});
+ const result=await recordingServer().dispatch({accountId,operationKey,maxTotalSeconds:fundedCall.maxSeconds,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:identity.voice_id,firstMessage:sellerGreeting??`Hi, I'm ${account.assistant_name}, the AI assistant for ${identity.principal}. I'm calling about an investment property at ${address}. Are you buying in that area?`,prompt:buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!,strategyKey:strategy});
  // A started call is still waiting for consent; only the recording service can confirm capture.
  if(result.status==='recording_consent_pending')return {status:'call_started'};
  if(result.status==='recording_dial_unknown_no_retry')return {status:'provider_outcome_unknown_no_retry'}; // Keep the durable claim recoverable; never redial.

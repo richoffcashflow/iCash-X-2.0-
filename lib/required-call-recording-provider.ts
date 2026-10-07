@@ -31,7 +31,7 @@ export function createRecordingProviders(env:RecordingEnv,fetcher:typeof fetch=f
    const query=new URLSearchParams({PageSize:'100',Page:String(page)});if(pageToken!==undefined)query.set('PageToken',pageToken);
    return json(callPath(id)+'/Events.json?'+query.toString());
   },
-  dial:(from:string,to:string,twiml:string,statusCallback:string)=>json('/Calls.json','POST',new URLSearchParams({From:from,To:to,Twiml:twiml,Record:'false',TimeLimit:'600',Timeout:'20',StatusCallback:statusCallback,StatusCallbackMethod:'POST',StatusCallbackEvent:'completed'})),
+  dial:(from:string,to:string,twiml:string,statusCallback:string,maxSeconds=600)=>{if(!Number.isInteger(maxSeconds)||maxSeconds<120||maxSeconds>600||maxSeconds%60!==0)throw Error('CALL_CAP_REQUIRED');return json('/Calls.json','POST',new URLSearchParams({From:from,To:to,Twiml:twiml,Record:'false',TimeLimit:String(maxSeconds),Timeout:'20',StatusCallback:statusCallback,StatusCallbackMethod:'POST',StatusCallbackEvent:'completed'}));},
   start:(call:string,callback:string)=>json(callPath(call)+'/Recordings.json','POST',new URLSearchParams({RecordingChannels:'dual',RecordingTrack:'both',Trim:'do-not-trim',RecordingStatusCallback:callback,RecordingStatusCallbackMethod:'POST',RecordingStatusCallbackEvent:'in-progress completed absent'})),
   stop:(call:string,recording:string)=>{recordPath(recording);return json(callPath(call)+`/Recordings/${recording}.json`,'POST',new URLSearchParams({Status:'stopped'}));},
   end:(call:string)=>json(callPath(call)+'.json','POST',new URLSearchParams({Status:'completed'}),true),

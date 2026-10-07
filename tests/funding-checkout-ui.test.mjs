@@ -23,10 +23,12 @@ function render(){cursor=0;dirty=false;tree=mod.exports.FundingCheckout({onSigne
 async function flush(){for(let i=0;i<15;i++){if(dirty)render();const tasks=pending;pending=[];tasks.forEach(fn=>fn());await new Promise(resolve=>setTimeout(resolve,2));if(!dirty&&!pending.length)return tree;}throw Error('Render did not settle');}
 function checkout(){return find(tree,n=>n.type==='button'&&n.props.className==='fund-button full');}
 render();tree=await flush();assert.equal(checkout().props.disabled,false);assert.match(text(tree),/One-time purchase/);assert.match(text(tree),/One-time payment/);assert.match(text(tree),/Your bot starts eligible work after payment/);assert.equal(calls.filter(c=>c.options?.method==='POST').length,0,'Reading never purchases');
-find(tree,n=>n.type==='button'&&text(n)==='$25').props.onClick();tree=await flush();assert.match(text(checkout()),/25/);
+find(tree,n=>n.type==='button'&&text(n).trim()==='$25').props.onClick();tree=await flush();assert.match(text(checkout()),/25/);
 const submit=checkout();submit.props.onClick();submit.props.onClick();tree=await flush();const posts=calls.filter(c=>c.url==='/api/funding/checkout'&&c.options.method==='POST');assert.equal(posts.length,1);const payload=JSON.parse(posts[0].options.body);assert.equal(payload.totalCents,2500);assert.equal(payload.days,1);assert.equal(payload.version,membership.workCreditTermsVersion);assert.equal(payload.accepted,true);assert.equal(payload.earlyAccessAccepted,true);assert.equal(calls.filter(c=>c.redirect).length,1);assert.equal(calls.some(c=>c.url==='/api/billing/daily'),false);
+// Higher presets use the existing exact custom-amount checkout, never a silent charge.
+for(const dollars of [50,100,250]){const count=calls.filter(c=>c.options?.method==='POST').length;find(tree,n=>n.type==='button'&&text(n).trim()==='$'+dollars).props.onClick();tree=await flush();assert.match(text(checkout()),new RegExp(String(dollars)));assert.equal(calls.filter(c=>c.options?.method==='POST').length,count);}
 // Custom amounts remain manual, use exact cents, and cannot be submitted below the minimum.
-find(tree,n=>n.type==='button'&&text(n)==='Custom').props.onClick();tree=await flush();assert.equal(checkout().props.disabled,true);
+find(tree,n=>n.type==='button'&&text(n).trim()==='Custom').props.onClick();tree=await flush();assert.equal(checkout().props.disabled,true);
 const input=()=>find(tree,n=>n.type==='input'&&n.props.id==='custom-credit-amount');
 for(const value of ['9.99','1000.01','12.345','-10','1e2']){input().props.onChange({target:{value}});tree=await flush();assert.equal(checkout().props.disabled,true);}
 input().props.onChange({target:{value:'37.42'}});tree=await flush();assert.equal(checkout().props.disabled,false);assert.match(text(checkout()),/37.42/);

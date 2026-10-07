@@ -1,12 +1,13 @@
 'use client';
 import type {KeyboardEvent,ReactNode,SyntheticEvent} from 'react';
 
-type Props={blocked:boolean;onRequireCredits:()=>void;children:ReactNode};
+type Props={blocked:boolean;actionsOnly?:boolean;onRequireCredits:()=>void;children:ReactNode};
 
 /** A UI prompt only. Work endpoints still authorize and reserve every paid action. */
-export function CreditActionGate({blocked,onRequireCredits,children}:Props){
+export function CreditActionGate({blocked,actionsOnly=false,onRequireCredits,children}:Props){
  function prompt(event:SyntheticEvent){
   if(!blocked)return;
+  if(actionsOnly&&(!(event.target instanceof Element)||!event.target.closest('[data-credit-action],.message-composer,.manual-call-options input')))return;
   event.preventDefault();event.stopPropagation();onRequireCredits();
  }
  function keyDown(event:KeyboardEvent<HTMLDivElement>){

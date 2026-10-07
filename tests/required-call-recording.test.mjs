@@ -111,3 +111,5 @@ assert.equal(gateWrites.length,1);assert.equal(gateWrites[0].path,'rpc/icash_not
 gateWrites=[];await settleRecordingGateOnly(terminalDb,{getCall:async()=>({...terminalCall,to:'+12125550999'})},row,now);assert.equal(gateWrites.length,0);
 await settleRecordingGateOnly(terminalDb,{getCall:async()=>({...terminalCall,status:'in-progress'})},row,now);assert.equal(gateWrites.length,0);
 console.log('PASS ended gate-only calls save bound terminal status while unknown prices remain held; mismatched and active calls cannot complete.');
+
+await wire.dial(row.from_phone,row.to_phone,'<Response/>','https://www.geticashx.com/fixture',120);assert.equal(new URLSearchParams(network.at(-1).init.body).get('TimeLimit'),'120','carrier enforces funded call duration');const priorNetwork=network.length;assert.throws(()=>wire.dial(row.from_phone,row.to_phone,'<Response/>','https://www.geticashx.com/fixture',119));assert.equal(network.length,priorNetwork,'invalid bound never dials');

@@ -8,3 +8,5 @@ for(const key of ['Tab','Escape','ArrowLeft']){const e=event({key});gate(true).p
 for(const key of ['a','Backspace','ArrowUp']){const e=event({key});gate(true).props.onKeyDownCapture(e);assert.equal(e.stopped,true);}
 const scroll=event({target:new Target(false)});gate(true).props.onPointerDownCapture(scroll);assert.equal(scroll.stopped,undefined,'Passive touch scroll is not a purchase prompt');assert.equal(actions,6);
 console.log('PASS credit gate: blocks action/default before execution, disabled-control pointer capture, keyboard/paste/submit coverage, funded passthrough, and navigation/scroll preserved.');
+
+const readOnly=mod.exports.CreditActionGate({blocked:true,actionsOnly:true,onRequireCredits(){prompts++;},children:null});const history=event({target:new Target(false)});readOnly.props.onClickCapture(history);assert.equal(history.stopped,undefined,'saved call summaries remain readable');const paidAction=event();readOnly.props.onClickCapture(paidAction);assert.equal(paidAction.stopped,true,'Call, Text and AI actions prompt before work');

@@ -47,20 +47,21 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
  return {
   /** Internal adapter only. SQL requires already-reserved/dispatched operation and reviewed contact gates.
    * Wired only after normal dispatcher reserve/claim; recorded rate/config rollout is required first. */
-  async dispatch(input:{buyerKind?:'company'|'individual';accountId:string;operationKey:string;principal:string;assistantName:string;voiceId?:string;firstMessage:string;prompt:string;strategyKey:'cash_interest'|'flexible_timing'}){
+  async dispatch(input:{maxTotalSeconds?:number;buyerKind?:'company'|'individual';accountId:string;operationKey:string;principal:string;assistantName:string;voiceId?:string;firstMessage:string;prompt:string;strategyKey:'cash_interest'|'flexible_timing'}){
    if(!dispatchAllowed())return {status:'recording_release_required'};
    const review=await readReview();if(!review||!await checkAgent(review))return {status:'recording_review_required'};
    if(!dispatchAllowed())return {status:'recording_release_required'};
    if(!uuid(input.accountId)||!/^voice:[0-9a-f-]{36}$/i.test(input.operationKey)||input.prompt.length>24000||input.firstMessage.length>2000)throw Error('RECORDING_CONTEXT_REQUIRED');
+   const maxSeconds=input.maxTotalSeconds??600;if(!Number.isInteger(maxSeconds)||maxSeconds<120||maxSeconds>600||maxSeconds%60!==0)throw Error('CALL_CAP_REQUIRED');
    const disclosure=recordingDisclosure(input.principal,input.assistantName,input.buyerKind),nonce=randomBytes(32).toString('hex'),stop=recordingStopToken(input.operationKey,env);
-   let row=await db<RecordingRow|null>('rpc/icash_create_call_recording','POST',{p_account:input.accountId,p_operation:input.operationKey,p_provider_account_sid:review.providerAccountSid,p_call_sid:null,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(stop),p_disclosure_version:recordingPolicy.disclosureVersion,p_pricing_policy:recordingPricing,p_context:{fromPhone:review.fromPhone,branchId:review.branchId,versionId:review.versionId,maxTotalSeconds:600,callContext:{principal:input.principal,assistantName:input.assistantName,firstMessage:input.firstMessage,prompt:input.prompt,strategyKey:input.strategyKey,...(input.voiceId?{voiceId:input.voiceId}:{})}}});
+   let row=await db<RecordingRow|null>('rpc/icash_create_call_recording','POST',{p_account:input.accountId,p_operation:input.operationKey,p_provider_account_sid:review.providerAccountSid,p_call_sid:null,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(stop),p_disclosure_version:recordingPolicy.disclosureVersion,p_pricing_policy:recordingPricing,p_context:{fromPhone:review.fromPhone,branchId:review.branchId,versionId:review.versionId,maxTotalSeconds:maxSeconds,callContext:{principal:input.principal,assistantName:input.assistantName,firstMessage:input.firstMessage,prompt:input.prompt,strategyKey:input.strategyKey,...(input.voiceId?{voiceId:input.voiceId}:{})}}});
    if(!row)return {status:'recording_admission_held'};
    if(!dispatchAllowed())return {status:'recording_release_required'};
    row=await transition(db,row,'claim_dial');if(!row)return {status:'recording_dial_already_claimed'};
    // A changed release after any asynchronous preflight/admission cannot start a call.
    if(!dispatchAllowed())return {status:'recording_release_required'};
    try{
-    const call=await provider.dial(row.from_phone,row.to_phone,input.buyerKind?sellerNoticeTwiml(row.id,nonce):consentTwiml(row.id,nonce,disclosure),recordingBaseUrl+'/terminal?id='+row.id);
+    const call=await provider.dial(row.from_phone,row.to_phone,input.buyerKind?sellerNoticeTwiml(row.id,nonce):consentTwiml(row.id,nonce,disclosure),recordingBaseUrl+'/terminal?id='+row.id,row.max_total_seconds);
     const bound=await bindCall(row,call);if(!bound)throw Error('CALL_BINDING_UNCERTAIN');
     return {status:'recording_consent_pending',recordingId:row.id};
    }catch{await transition(db,row,'dial_unknown').catch(()=>null);return {status:'recording_dial_unknown_no_retry'};}
@@ -107,8 +108,8 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
       if(!current||current.account_id!==row.account_id||current.operation_key!==row.operation_key||current.state!=='recording'||current.end_requested_at||!current.consent_at||!current.start_claimed_at||current.recording_sid!==p.sid||Date.parse(current.provider_started_at??'')!==Date.parse(String(p.start_time)))throw Error('START_NOT_SAVED');
       row=current;
      }
-     const seconds=Math.floor((now()-Date.parse(String(call.start_time)))/1000),remaining=600-seconds;
-     if(remaining<60||remaining>600)throw Error('CALL_CAP_REQUIRED');
+     const seconds=Math.floor((now()-Date.parse(String(call.start_time)))/1000),remaining=row.max_total_seconds-seconds;
+     if(remaining<1||remaining>row.max_total_seconds)throw Error('CALL_CAP_REQUIRED');
      // Record confirmed before connecting AI; no unrecorded continuation.
      return xml(await provider.register(row,remaining,recordingStopToken(row.operation_key,env)));
     }catch{

@@ -5,7 +5,7 @@ import {CallRecording} from './call-recording';
 
 type TranscriptPage = {id: string; before: number | null; transcript: {role: string; message: string}[]; next: number | null};
 
-export function CallConversation({id, party, summary, completedAt}: {id: string; party: string; summary?: string; completedAt?: string}) {
+export function CallConversation({id, party, summary, completedAt, durationSeconds, nextAction, interested, optedOut, humanRequested}: {id: string; party: string; summary?: string; completedAt?: string;durationSeconds?:number;nextAction?:string;interested?:boolean;optedOut?:boolean;humanRequested?:boolean}) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<TranscriptPage | null>(null);
   const [error, setError] = useState<{id: string; before: number | null; message: string} | null>(null);
@@ -36,14 +36,12 @@ export function CallConversation({id, party, summary, completedAt}: {id: string;
     return () => {controller.abort(); running.current = false;};
   }, [id, open, before, attempt]);
 
-  return <details onToggle={event => {
+  return <article className="call-summary-card"><header><strong>{party === 'seller' ? 'Seller' : party === 'buyer' ? 'Buyer' : 'Contact'} call</strong><span>{optedOut?'Do not contact':humanRequested?'Needs you':interested?'Interested':'Completed'}</span></header><small>{completedAt ? safeLocalTime(completedAt) : 'Time not recorded'}{typeof durationSeconds==='number'&&Number.isFinite(durationSeconds)&&durationSeconds>=0?` · ${Math.floor(durationSeconds/60)}m ${Math.floor(durationSeconds%60)}s`:''}</small><h5>Call summary</h5><p className="call-summary-copy">{summary?.trim() || 'No summary is available for this call yet.'}</p>{nextAction&&<div className="call-next-step"><strong>Next step</strong><p>{nextAction}</p></div>}<details onToggle={event => {
     if (event.target !== event.currentTarget) return;
     setOpen(event.currentTarget.open);
     if (!event.currentTarget.open) {setData(null); setError(null);}
   }}>
-    <summary>{party === 'seller' ? 'Seller' : party === 'buyer' ? 'Buyer' : 'Contact'} call <small>{completedAt ? safeLocalTime(completedAt) : 'Time not recorded'} · Completed</small></summary>
-    <p>{summary || 'Completed call record.'}</p>
-    <small>This is a saved transcript. Taking over pauses new work; it does not join or transfer a phone call.</small>
+    <summary>Transcript &amp; recording</summary>
     {open && <>
       {!current && (currentError ? <>
         <p role="alert">{currentError}</p>
@@ -63,5 +61,5 @@ export function CallConversation({id, party, summary, completedAt}: {id: string;
       </div>
       <CallRecording key={id} conversationId={id}/>
     </>}
-  </details>;
+  </details></article>;
 }
