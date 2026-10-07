@@ -6,7 +6,7 @@ import {analyzeText,safeTextReplies} from '../lib/text-ai-policy.ts';
 import {propertyQuestionAllowed} from '../lib/text-property-policy.ts';
 
 // Run the actual service with local database/provider fakes. No emails, SMS or paid AI calls.
-let party='seller',incoming='The house needs a roof.',action='ask_price',records=[],packages=0,dispatches=0,modelCalls=0;
+let party='seller',incoming='The house needs a roof.',action='ask_price',records=[],packages=0,dispatches=0,modelCalls=0,buyerReplyAllowed=false;
 const db=async(path,method,body)=>{
  records.push({path,method,body});
  if(path==='rpc/icash_claim_text_ai')return {model:'fixture',context:{stage:'draft'},messages:[{direction:'incoming',body:incoming}]};
@@ -16,6 +16,7 @@ const db=async(path,method,body)=>{
  if(path==='rpc/icash_text_property_context')return null;
  if(path==='rpc/icash_save_text_ai'||method==='PATCH')return null;
  if(path==='rpc/icash_queue_ai_reply')return 'outgoing';
+ if(path==='rpc/icash_queue_buyer_factual_reply'){assert.deepEqual(Object.keys(body).sort(),['p_account','p_job']);return buyerReplyAllowed?'server-factual-message':null;}
  throw Error('Unexpected database call '+path);
 };
 const analyze=async(input)=>analyzeText(input,'fixture',async(_url,options)=>{
@@ -54,11 +55,18 @@ try{
  assert(!records.some(r=>r.path==='rpc/icash_text_property_context'));
  assert(!records.some(r=>r.path==='rpc/icash_queue_ai_reply'));
 
+ reset();buyerReplyAllowed=true;incoming='What is the buyer price?';
+ assert.equal((await processTextAi('account','job')).status,'message_accepted');
+ assert.equal(dispatches,1);assert.equal(saved().action,'review');
+ assert(!records.some(r=>r.path==='rpc/icash_queue_ai_reply'));
+ assert.equal(records.find(r=>r.path==='rpc/icash_queue_buyer_factual_reply').body.p_reply,undefined,'Model prose never enters buyer queue');
+
  for(const message of ['No thanks.','Stop contacting me.','Please call me tomorrow.','Can I talk with your manager?']){
   reset();incoming=message;
   await processTextAi('account','job');
   assert.equal(dispatches,0,message);assert.equal(packages,0,message);
   assert(!records.some(r=>r.path==='rpc/icash_queue_ai_reply'),message);
+  assert(!records.some(r=>r.path==='rpc/icash_queue_buyer_factual_reply'),message);
  }
 
  reset();party='seller';incoming='Yes, I would consider selling.';action='ask_condition';

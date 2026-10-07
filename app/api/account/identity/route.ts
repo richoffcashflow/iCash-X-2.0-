@@ -8,7 +8,7 @@ import {currentUser} from '@/lib/account-auth';
 import {allowedOrigin} from '@/lib/funding-policy';
 import {db} from '@/lib/stripe-test';
 import {elevenRequest} from '@/lib/elevenlabs';
-import {identityNames,chooseAccountVoice} from '@/lib/customer-identity';
+import {identityNames,chooseAccountVoice,readReviewedAccountVoices} from '@/lib/customer-identity';
 import {normalizeUpdatePhone} from '@/lib/customer-updates';
 const headers={'Cache-Control':'private, no-store'};
 export async function GET(){
@@ -26,9 +26,16 @@ export async function POST(req:Request){
   if(!account)return NextResponse.json({error:'Finish setting up your funded account first.'},{status:409,headers});
   const [existing]=await db<{voice_id:string;voice_name:string}[]>(`icash_customer_identities?account_id=eq.${account.id}&select=voice_id,voice_name`);
   let voice=existing;
-  const [setup]=await db<{profile:{voice?:string}}[]>(`icash_bot_setups?account_id=eq.${account.id}&select=profile`);
-  if(setup?.profile.voice){const selected=(await setupVoices()).find(v=>v.key===setup.profile.voice);if(selected)voice={voice_id:selected.voiceId,voice_name:selected.name};}
-  if(!voice){const catalog=await elevenRequest<{voices:{voice_id:string;name:string;category:string}[]}>('/v1/voices');const selected=chooseAccountVoice(account.id,catalog.voices);voice={voice_id:selected.voice_id,voice_name:selected.name};}
+  // Ordinary account edits never replace a saved voice, including historical choices.
+  if(!voice){
+   const approved=await readReviewedAccountVoices(db);
+   if(!approved.length)throw Error('Reviewed voice setup unavailable');
+   const [setup]=await db<{profile:{voice?:string}}[]>(`icash_bot_setups?account_id=eq.${account.id}&select=profile`);
+   if(setup?.profile.voice){const selected=(await setupVoices()).find(v=>v.key===setup.profile.voice&&approved.includes(v.voiceId));if(selected)voice={voice_id:selected.voiceId,voice_name:selected.name};}
+   if(!voice){const catalog=await elevenRequest<{voices:{voice_id:string;name:string;category:string}[]}>('/v1/voices');const selected=chooseAccountVoice(account.id,catalog.voices,approved);voice={voice_id:selected.voice_id,voice_name:selected.name};}
+   // Recheck after slow catalog reads; expired/changed approval cannot create an identity.
+   const current=await readReviewedAccountVoices(db);if(!current.includes(voice.voice_id))throw Error('Voice review changed');
+  }
   const params={p_user:user.id,p_first:names.first_name,p_last:names.last_name,p_company:names.company_name,p_voice:voice.voice_id,p_voice_name:voice.voice_name};
   if(phone!==undefined){const saved=await db<{identity:unknown;phone:string;smsUpdatesPaused:boolean}>('rpc/icash_save_account_details','POST',{...params,p_phone:phone});return NextResponse.json(saved,{headers});}
   const identity=await db('rpc/icash_save_customer_identity','POST',params);

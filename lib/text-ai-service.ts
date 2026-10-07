@@ -25,6 +25,13 @@ export async function processTextAi(accountId:string,jobId:string){
   await db('rpc/icash_save_text_ai','POST',{p_account:accountId,p_job:jobId,p_analysis:analysis,p_reply:analysis.reply,p_provider:providerId,p_usage:usage});
   if(party==='buyer'&&!analysis.humanRequested&&!analysis.callbackRequested&&!analysis.optedOut&&!analysis.declined)try{await sendRequestedBuyerPackages(accountId,thread.deal_id);}catch{/* Buyer email status remains in the mailbox; never blindly retry a send. */}
   if(analysis.humanRequested||analysis.callbackRequested)return {status:'text_ai_handoff'};
+  if(party==='buyer'&&!analysis.optedOut&&!analysis.declined){
+   // SQL derives exact prose from the latest whole incoming question and current
+   // approved package; neither the model reply nor a caller-provided price is sent.
+   const id=await db<string|null>('rpc/icash_queue_buyer_factual_reply','POST',{p_account:accountId,p_job:jobId});
+   if(id)return dispatchTextMessage(accountId,id);
+   return {status:'text_ai_drafted'};
+  }
   const safe=safeTextReplies[analysis.action];
   if(safe){
    const id=await db<string|null>('rpc/icash_queue_ai_reply','POST',{p_account:accountId,p_job:jobId,p_reply:safe});

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {identityNames,chooseAccountVoice} from '../lib/customer-identity.ts';
+import {identityNames,chooseAccountVoice,readReviewedAccountVoices} from '../lib/customer-identity.ts';
 assert.equal(identityNames({first_name:' Jordan ',last_name:'Smith',company_name:''}).principal,'Jordan Smith');
 assert.equal(identityNames({first_name:'Jordan',last_name:'Smith',company_name:'Oak Homes'}).principal,'Oak Homes');
 assert.throws(()=>identityNames({first_name:'',last_name:'Smith'}));
@@ -8,7 +8,15 @@ assert.equal(identityNames({company_name:'Oak Homes'}).principal,'Oak Homes');
 assert.throws(()=>identityNames({company_name:'  '}));
 assert.throws(()=>identityNames({first_name:'Jordan'}));
 const pool=[{voice_id:'a',name:'Chris - Conversational',category:'premade'},{voice_id:'b',name:'Sarah',category:'premade'},{voice_id:'c',name:'Chris',category:'cloned'}];
-assert.equal(chooseAccountVoice('account-a',pool).voice_id,chooseAccountVoice('account-a',[...pool].reverse()).voice_id);
-assert.equal(new Set(Array.from({length:20},(_,i)=>chooseAccountVoice(`account-${i}`,pool).voice_id)).size,2);
-assert.throws(()=>chooseAccountVoice('account-a',[pool[2]]));
+assert.equal(chooseAccountVoice('account-a',pool,['a','b']).voice_id,chooseAccountVoice('account-a',[...pool].reverse(),['a','b']).voice_id);
+assert.equal(new Set(Array.from({length:20},(_,i)=>chooseAccountVoice(`account-${i}`,pool,['a','b']).voice_id)).size,2);
+assert.throws(()=>chooseAccountVoice('account-a',[pool[2]],['c']));
 console.log('Customer identity fallback and stable approved voice assignment passed.');
+
+assert.equal(chooseAccountVoice('account-a',pool,['b']).voice_id,'b');
+assert.throws(()=>chooseAccountVoice('account-a',pool,[]));
+assert.throws(()=>chooseAccountVoice('account-a',pool,['not-reviewed-catalog']));
+const now=Date.now(),review={enabled:true,reviewed_at:new Date(now-1000).toISOString(),reviewed_until:new Date(now+1000).toISOString(),approved_voice_ids:['b']};
+assert.deepEqual(await readReviewedAccountVoices(async()=>[review],now),['b']);
+for(const patch of [{enabled:false},{reviewed_until:new Date(now).toISOString()},{reviewed_at:new Date(now+1).toISOString()},{approved_voice_ids:[]},{approved_voice_ids:['bad id']}])assert.deepEqual(await readReviewedAccountVoices(async()=>[{...review,...patch}],now),[]);
+console.log('New voice assignment uses only current reviewed IDs; disabled, expired, future or malformed reviews fail closed.');

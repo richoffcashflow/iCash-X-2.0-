@@ -18,6 +18,8 @@ const mocks={...fundingAmounts,
  db:async(path)=>{paths.push(path);
   if(path.startsWith('icash_auto_recharges'))return [];
   if(path.startsWith('icash_credit_packs'))return [];
+  if(path.startsWith('icash_wallets')){assert(path.includes('account_id=eq.account'));return [{balance_cents:0,reserved_cents:0}];}
+  if(path.startsWith('icash_funding_orders')&&path.includes('select=credit_cents')){assert(path.includes('account_id=eq.account')&&path.includes('mode=eq.live'));return [];}
   if(path.startsWith('icash_planning_estimates'))return [{}];
   if(path.startsWith('icash_accounts'))return [{id:'account'}];
   if(path.startsWith('icash_daily_plans'))return planMatch?[{id:'daily-plan'}]:[];
@@ -33,8 +35,8 @@ const {GET}=await import('data:text/javascript;base64,'+Buffer.from(source).toSt
 const request=id=>new Request('https://www.geticashx.com/api/funding/status?session_id='+encodeURIComponent(id));
 let response=await GET(request('cs_live_current'));
 assert.equal(response.body.paidCents,300);assert.equal(response.body.needsClaim,false);
-assert.equal(paths.filter(p=>p.startsWith('icash_funding_orders')).length,2,'read settlement state again');
-assert(paths.filter(p=>p.startsWith('icash_funding_orders')).every(p=>p.includes('account_id=eq.account')&&p.includes('stripe_session_id=eq.cs_live_current')));
+assert.equal(paths.filter(p=>p.startsWith('icash_funding_orders')&&!p.includes('select=credit_cents')).length,2,'read settlement state again');
+assert(paths.filter(p=>p.startsWith('icash_funding_orders')&&!p.includes('select=credit_cents')).every(p=>p.includes('account_id=eq.account')&&p.includes('stripe_session_id=eq.cs_live_current')));
 paths=[];orderMatch=false;retrieved=0;
 response=await GET(request('cs_live_someoneelse'));
 assert.equal(response.body.paidCents,0);assert.equal(retrieved,0,'never retrieve unowned sessions');

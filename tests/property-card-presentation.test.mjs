@@ -28,7 +28,8 @@ assert.match(text(summary),/100 Example Street/);assert.match(text(summary),/Dem
 assert.match(text(summary),/View details/);assert.match(text(summary),/1\s+saved call/);
 assert.equal(nodes.filter(n=>n.props?.className==='property-details').length,0,'unvisited properties do not mount expensive detail work');
 assert.equal(all(summary.props.children).filter(n=>n.type==='button').length,0,'the disclosure has no nested interactive buttons');
-assert.equal(nodes.filter(n=>n.type==='button'&&n.props.className!=='contact-dialog-close').length,3,'separate property, Calls and Text controls are visible while collapsed');
+assert.equal(nodes.filter(n=>n.type==='button'&&n.props.className!=='contact-dialog-close').length,4,'property, Call, Text and saved-call history controls are visible while collapsed');
+assert(nodes.some(n=>n.type==='button'&&text(n)==='View call summaries'),'saved history remains directly accessible separately from paid contact actions');
 assert.equal(nodes.find(n=>n.type==='svg').props['aria-hidden'],'true');
 summary.props.onClick();assert.deepEqual(toggle,[true]);
 for(const button of all(nodes.find(n=>n.props?.className==='property-quick-actions')).filter(n=>n.type==='button'))button.props.onClick();

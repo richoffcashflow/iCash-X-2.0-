@@ -79,3 +79,8 @@ assert.equal(analyzed.analysis.optedOut,true,'the full source, not the first 100
 assert.equal(analyzed.analysis.action,'review');
 assert.match(analyzed.analysis.summary,/full conversation/);
 console.log('Conversation trust: shared prompts, honest practice identity, buyer routing, refusals, complete-source summaries and adversarial provider output passed. No live model or provider calls.');
+
+for(const prompt of prompts){assert(prompt.includes('one or two short sentences'));assert(prompt.includes('usually under 40 words'));assert(prompt.includes('at most one question'));assert(prompt.includes('Never pretend to be human'));assert(prompt.includes('After an explicit stop-contact request'));}
+assert(productionDealInstructions.includes('Do not call a price unrealistic without evidence'));
+assert(productionDealInstructions.includes('If the seller clearly declines, end the pitch'));
+console.log('Brief natural dialogue, bounded objection handling, ordinary-decline exit and explicit opt-out distinction passed.');

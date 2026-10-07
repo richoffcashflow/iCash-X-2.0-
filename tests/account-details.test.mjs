@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import ts from 'typescript';
-import {identityNames,chooseAccountVoice} from '../lib/customer-identity.ts';
+import {identityNames,chooseAccountVoice,readReviewedAccountVoices} from '../lib/customer-identity.ts';
 import {normalizeUpdatePhone} from '../lib/customer-updates.ts';
 import {normalizeEmail} from '../lib/funding-policy.ts';
 const require=createRequire(import.meta.url);
@@ -18,7 +18,7 @@ const mocks={
  '@/lib/funding':{validGuest:()=>false,limitRequest:async(...args)=>{calls.push({rate:args.slice(1)});if(limited)throw Error('rate');}},
  '@/lib/stripe-test':{guestHash:x=>x,db:async(path,method,body)=>{calls.push({path,method,body});if(path.startsWith('icash_accounts?')){assert(path.includes('owner_user_id=eq.'+uid));return [{id:aid}];}if(path.startsWith('icash_customer_identities?'))return [{voice_id:'persisted',voice_name:'Chris'}];if(path.startsWith('icash_bot_setups?'))return [];if(path.startsWith('rpc/'))return {identity:{principal:body.p_company||body.p_first+' '+body.p_last},phone:body.p_phone,smsUpdatesPaused:false};throw Error('Unexpected DB');}},
  '@/lib/checkout-customer-context':{checkoutCustomerContext:async()=>({})},'@/lib/setup-voices':{setupVoices:async()=>[]},'@/lib/elevenlabs':{elevenRequest:async()=>{throw Error('Do not assign a new voice');}},
- '@/lib/customer-identity':{identityNames,chooseAccountVoice},'@/lib/customer-updates':{normalizeUpdatePhone}
+ '@/lib/customer-identity':{identityNames,chooseAccountVoice,readReviewedAccountVoices},'@/lib/customer-updates':{normalizeUpdatePhone}
 };
 const route=load('app/api/account/identity/route.ts',mocks),emailRoute=load('app/api/account/email/route.ts',mocks);
 const post=(route,body)=>route.POST(new Request('https://example.com/api/account',{method:'POST',body:JSON.stringify(body)}));

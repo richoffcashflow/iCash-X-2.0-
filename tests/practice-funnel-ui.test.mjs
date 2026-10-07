@@ -25,7 +25,7 @@ function harness(search='',hash=''){
  const props={onBrand(){},onSignedIn(){}};
  return{calls,get history(){return history;},navigate(hash){window.location.hash=hash;listeners.hashchange?.();},back(){historyIndex--;window.location.hash=history[historyIndex];listeners.popstate?.();},forward(){historyIndex++;window.location.hash=history[historyIndex];listeners.popstate?.();},respond(fn){respond=fn;},render(){cursor=0;dirty=false;tree=mod.exports.BotSetupFlow(props);return tree;},effects(){const tasks=pending;pending=[];tasks.forEach(fn=>fn());},async flush(){for(let n=0;n<12;n++){if(dirty)this.render();this.effects();await new Promise(resolve=>setTimeout(resolve,2));if(!dirty&&!pending.length)return tree;}throw Error('Render did not settle');},unmount(){slots.forEach(slot=>slot?.cleanup?.());}};
 }
-const initial={id:'fixture-setup',stage:0,revision:1,profile:{...setupPolicy.defaultBotProfile,displayName:'Saved name',market:'Austin, TX',marketMode:'city'}};
+const initial={id:'fixture-setup',stage:0,revision:1,profile:{...setupPolicy.defaultBotProfile,voice:'sarah',displayName:'Saved name',market:'Austin, TX',marketMode:'city'}};
 const h=harness();let resolveInit;
 h.respond((url,options)=>new Promise(resolve=>{resolveInit=resolve;}));
 let tree=h.render();h.effects();find(tree,n=>n.type==='input'&&n.props.id==='bot-name').props.onChange({target:{value:'Scout'}});await h.flush();
