@@ -20,7 +20,7 @@ export async function processWebinarFollowups({database=db,transport=fetch,env=p
  if(!ready.email&&!ready.sms)return {emailReady:ready.email,textReady:ready.sms,setupRequired:settings.enabled||settings.smsEnabled,sent:0};
  const origin=new URL(env.ICASH_APP_ORIGIN!).origin;
  const jobs=await database<FollowupJob[]>('rpc/icash_webinar_claim_followups','POST',{p_email_ready:ready.email,p_sms_ready:ready.sms});
- let sent=0,canceled=0,failed=0;
+ let sent=0,canceled=0,failed=0,emailTurn=Promise.resolve();
  async function deliver(job:FollowupJob){let dispatched=false,providerAccepted=false;
   try{
    const [v]=await database<Visitor[]>(`icash_webinar_visitors?id=eq.${job.visitor_id}&select=*&limit=1`);
@@ -42,6 +42,8 @@ export async function processWebinarFollowups({database=db,transport=fetch,env=p
    }
    // Durable one-use authorization rechecks purchase, consent, pause, contact,
    // activity and cross-channel frequency immediately before the provider call.
+   // Pace email requests; transient provider limits still retry safely.
+   if(job.channel==='email'){const turn=emailTurn.then(()=>new Promise<void>(resolve=>setTimeout(resolve,600)));emailTurn=turn;await turn;}
    const approved=await database<FollowupJob|null>('rpc/icash_webinar_authorize_followup','POST',{p_id:job.id,p_payload:payload});
    if(!approved?.id){canceled++;return;}dispatched=true;
    const email=job.channel==='email';
