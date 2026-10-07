@@ -54,5 +54,20 @@ export async function verifyWebinarIntelligence(q,config,webinar,secondWebinar){
   for(const signature of ['icash_webinar_begin_intelligent(uuid,uuid,jsonb,jsonb,uuid)','icash_webinar_intelligence_report(text,text)','icash_webinar_intelligence_settings(boolean)'])assert.equal((await q('select has_function_privilege($1,$2,\'execute\') as ok',[role,signature])).rows[0].ok,false);
  }
  assert.equal((await q("select has_function_privilege('service_role','icash_webinar_intelligence_report(text,text)','execute') as ok")).rows[0].ok,true);
+ const stop={ad_key:'*',arm_key:webinar+':1:day',winner_key:secondWebinar+':1:day'};
+ await q('select icash_webinar_stop_recordings($1,$2)',['new:day',[stop]]);
+ await q('select icash_webinar_stop_recordings($1,$2)',['new:day',[stop]]);
+ assert.equal(Number((await q('select count(*) as n from icash_webinar_intelligence_stops')).rows[0].n),1,'Duplicate stops are idempotent');
+ await q("update icash_webinar_intelligence_stops set created_at=now()-interval '60 days'");
+ assert.equal((await q("select arm_key from icash_webinar_intelligence_stops where context_key='new:day'")).rows[0].arm_key,stop.arm_key,'Stops outlive reporting windows');
+ assert.equal((await q("select * from icash_webinar_intelligence_stops where context_key='new:night'")).rows.length,0,'Day stops do not disable Night fallback');
+ await q('select icash_webinar_stop_recordings($1,$2)',['new:night',[{...stop,ad_key:'ad:12345'}]]);
+ await assert.rejects(()=>q('select icash_webinar_stop_recordings($1,$2)',['bad',[stop]]));
+ await assert.rejects(()=>q('select icash_webinar_stop_recordings($1,$2)',['new:day',[{...stop,winner_key:stop.arm_key}]]));
+ for(const role of ['anon','authenticated']){
+  assert.equal((await q("select has_table_privilege($1,'icash_webinar_intelligence_stops','select') as ok",[role])).rows[0].ok,false);
+  assert.equal((await q("select has_function_privilege($1,'icash_webinar_stop_recordings(text,jsonb)','execute') as ok",[role])).rows[0].ok,false);
+ }
+ assert.equal((await q("select has_function_privilege('service_role','icash_webinar_stop_recordings(text,jsonb)','execute') as ok")).rows[0].ok,true);
  console.log('Intelligence database checks passed: atomic resume/advance, immutable ad assignment, 24-hour cohorts, randomized-only learning, control comparison, Day/Night/revisions, repeats, refunds, test exclusion and private permissions.');
 }

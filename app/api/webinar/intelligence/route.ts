@@ -21,11 +21,11 @@ export async function GET(req:Request){try{
  now.setUTCHours(context.endsWith(':night')?settings.routing.nightStartsAt:settings.routing.nightEndsAt,0,0,0);
  const history=context.startsWith('returning:')?[{webinar_id:'prior-session',revision:1,progress_seconds:0,completed_at:null,updated_at:now.toISOString()}]:[];
  const {arms,recordings}=intelligenceCandidates(webinars.map(w=>webinarSchema.parse(w.config)),history,'UTC',now,settings.routing,new Date());
- const plan=intelligencePlan(arms,data.rows,ad,settings.optimizer);
- const comparison=data.comparisons.find(c=>c.pool_key===intelligencePoolKey(arms))??null;
+ const plan=intelligencePlan(arms,data.rows,ad,settings.optimizer,data.stops);
+ const comparison=data.comparisons.find(c=>c.pool_key===intelligencePoolKey(arms.filter(a=>!plan.stoppedKeys.includes(a.key))))??null;
  return Response.json({context,ad,generatedAt:data.generatedAt,enabled:settings.optimizer.enabled,plan,
   arms:arms.map(a=>({...a,title:recordings.find(w=>w.id===a.webinarId)!.title})),
-  rows:data.rows.filter(r=>r.ad_key===ad),ads:data.ads,comparison,
+  rows:data.rows.filter(r=>r.ad_key===ad),ads:data.ads,comparison,metricsAvailable:data.metricsAvailable,
  },{headers:webinarHeaders});
  }catch(e){return webinarError(e);}}
 export async function POST(req:Request){try{

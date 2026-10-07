@@ -65,3 +65,41 @@ test('candidates respect Night fallback, opt-out, deadlines, drafts and later un
 test('settings enable automatic routing without activating Meta',()=>{
  const saved=settingsSchema.parse({enabled:false,fromEmail:'',postalAddress:'',subjects:['a','b','c'],messages:['a','b','c'],optimizer:settings});assert.equal(saved.optimizer.enabled,true);assert.equal(saved.meta.enabled,false);assert.equal(saved.meta.pixelId,'');
 });
+test('proven losers get exactly zero traffic in every assignment mode, including the old baseline',()=>{
+ const rows=[metric(a,'*',20),metric(b,'*',200)];
+ const plan=engine.intelligencePlan([a,b,c],rows,'*',settings);
+ assert.deepEqual(plan.stoppedKeys,[a.key]);assert.equal(plan.baselineKey,b.key);
+ assert.equal(plan.shares.find(s=>s.key===a.key).share,0);
+ assert.equal(plan.shares.reduce((n,s)=>n+s.share,0),1);
+ for(const bucket of [0,.03,.5,.99])for(let i=0;i<1000;i++)assert.notEqual(engine.intelligenceChoice([a,b,c],plan,bucket,i/1000,settings).arm.key,a.key);
+ const only=engine.intelligencePlan([a,b],rows,'*',settings);
+ assert.equal(only.shares.find(s=>s.key===b.key).share,1);
+ assert.equal(engine.intelligenceChoice([a,b],only,0,0,settings).arm.key,b.key);
+});
+test('a clearly weak third webinar stops while two close contenders keep testing',()=>{
+ const plan=engine.intelligencePlan([a,b,c],[metric(a,'*',200),metric(b,'*',199),metric(c,'*',1)],'*',settings);
+ assert.deepEqual(plan.stoppedKeys,[c.key]);assert.equal(plan.winnerKey,null);
+ assert.equal(plan.newStops[0].winner_key,null);
+ assert.equal(engine.intelligencePlan([a,b,c],[],'*',settings,plan.newStops).winnerKey,null,'Stopping third place never crowns a tied leader');
+ assert.ok(plan.shares.find(s=>s.key===a.key).share>0);assert.ok(plan.shares.find(s=>s.key===b.key).share>0);
+});
+test('saved stops survive expired analytics and new challengers get a bounded test',()=>{
+ const stops=[{ad_key:'*',arm_key:b.key,winner_key:a.key}];
+ const plan=engine.intelligencePlan([a,b,c],[],'ad:12345',settings,stops);
+ assert.deepEqual(plan.stoppedKeys,[b.key]);assert.equal(plan.winnerKey,a.key);
+ assert.equal(plan.shares.find(s=>s.key===b.key).share,0);assert.ok(plan.shares.find(s=>s.key===c.key).share<=.2);
+ const revised=arm('b',2),fresh=engine.intelligencePlan([a,revised],[],'*',settings,stops);
+ assert.ok(fresh.shares.find(s=>s.key===revised.key).share>0);
+ const allStopped=engine.intelligencePlan([b],[],'*',settings,stops);
+ assert.equal(allStopped.shares[0].share,0);assert.equal(engine.intelligenceChoice([b],allStopped,0,0,settings),null);
+});
+test('ad-specific evidence can beat the shared winner without reviving that ad’s own stopped variant',()=>{
+ const shared=[{ad_key:'*',arm_key:b.key,winner_key:a.key}];
+ const rows=[metric(a,'ad:12345',20),metric(b,'ad:12345',200)];
+ const plan=engine.intelligencePlan([a,b],rows,'ad:12345',settings,shared);
+ assert.equal(plan.winnerKey,b.key);assert.deepEqual(plan.stoppedKeys,[a.key]);assert.equal(plan.newStops[0].ad_key,'ad:12345');
+ const saved=engine.intelligencePlan([a,b],[],'ad:12345',settings,[{ad_key:'ad:12345',arm_key:a.key,winner_key:b.key}]);
+ assert.deepEqual(saved.stoppedKeys,[a.key]);assert.equal(saved.shares.find(s=>s.key===a.key).share,0);
+ const aged=engine.intelligencePlan([a,b],[],'ad:12345',settings,[...shared,...plan.newStops]);
+ assert.equal(aged.source,'ad');assert.equal(aged.winnerKey,b.key);assert.deepEqual(aged.stoppedKeys,[a.key]);
+});

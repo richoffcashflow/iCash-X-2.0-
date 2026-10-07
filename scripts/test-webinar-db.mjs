@@ -204,6 +204,7 @@ try{
  assert.equal(versions.find(r=>r.version==='night').averageWatchPercent,40);
  assert.equal((await report()).recordings.filter(r=>r.webinarId===webinar&&r.version==='night').length,0,'No Night row until a night version or real night session exists');
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261006195506_webinar_intelligence.sql',import.meta.url),'utf8'));
+ await pg.exec(readFileSync(new URL('../supabase/migrations/20261007022412_webinar_intelligence_stops.sql',import.meta.url),'utf8'));
  await verifyWebinarIntelligence(q,config,webinar,secondWebinar);
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261007013308_webinar_timers.sql',import.meta.url),'utf8'));
  await verifyWebinarTimers(q,config);
