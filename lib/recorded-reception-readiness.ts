@@ -1,3 +1,4 @@
+import {buyerReceptionPolicy,buyerReceptionPolicyHash} from './buyer-reception-context.ts';
 import {boundedBytes} from './required-call-recording-provider.ts';
 import {object} from './required-call-recording.ts';
 import {receptionTarget,receptionUrl,receptionWorkspacePostcallAbsent,type ReceptionConfig} from './general-reception.ts';
@@ -10,7 +11,7 @@ export const incomingReadinessTargets=Object.freeze({
  stopToolId:'tool_8601m416c9jzfkp8qydb54q5vhkh',
  profiles:Object.freeze([
   Object.freeze({profile:'owner_quick_test',seconds:60,branchId:'agtbrch_1801m4161ppwfb0t33mcqmfztx8w',expectedVersionId:'agtvrsn_6401m416mha4fg8bbmzkdaw34avs'}),
-  Object.freeze({profile:'normal',seconds:600,branchId:'agtbrch_9101m416pfheeb284rmpy0c91xak',expectedVersionId:'agtvrsn_5701m4a44yjyfcwag147msj8z2f0'}),
+  Object.freeze({profile:'normal',seconds:600,branchId:'agtbrch_4501m4btbxsgfwhs016zmz12jbk2',expectedVersionId:'agtvrsn_9701m4btfeg7e3h8t726jyprtvh0'}),
  ]),
 });
 export type IncomingBranchReadiness={profile:string;maxDurationSeconds:number;branchId:string;expectedVersionId:string;observedVersionId:string|null;observedConfigHash:string|null;draftExists:boolean|null;livePercentage:number|null;providerChecksPass:boolean;inlineTools:ReceptionInlineToolEvidence|null;checks:Record<string,boolean>};
@@ -73,7 +74,7 @@ export async function readRecordedReceptionReadiness(env:IncomingReadinessEnv,de
    // This temporary comparison descriptor contains no approved hash or DB row.
    // Compute from the actual canonical response, then rerun the SAME deployed
    // inspector against that observed hash. Only explicit safe checks are output.
-   const c:Partial<RecordedReceptionConfig>&ReceptionConfig={enabled:false,account_id:receptionTarget.accountId,owner_user_id:receptionTarget.ownerUserId,called_number:receptionTarget.calledNumber,agent_id:incomingReadinessTargets.agentId,branch_id:target.branchId,reviewed_version_id:target.expectedVersionId,max_duration_seconds:target.seconds,context_policy:'message_only',stop_tool_id:incomingReadinessTargets.stopToolId,config_hash:''};
+   const c:Partial<RecordedReceptionConfig>&ReceptionConfig={enabled:false,account_id:receptionTarget.accountId,owner_user_id:receptionTarget.ownerUserId,called_number:receptionTarget.calledNumber,agent_id:incomingReadinessTargets.agentId,branch_id:target.branchId,reviewed_version_id:target.expectedVersionId,max_duration_seconds:target.seconds,context_policy:target.profile==='normal'?buyerReceptionPolicy:'message_only',...(target.profile==='normal'?{context_policy_hash:buyerReceptionPolicyHash,context_approval_reference:'Read-only inspection of user-requested buyer and seller reception'}:{}),stop_tool_id:incomingReadinessTargets.stopToolId,config_hash:''};
    const observation=inspectRecordedReceptionAgent(c as RecordedReceptionConfig,a,b,workspacePostcallAbsent,value(4));
    const verified=inspectRecordedReceptionAgent({...c,config_hash:observation.hash} as RecordedReceptionConfig,a,b,workspacePostcallAbsent,value(4));
    observedConfigHash=observation.hash;inlineTools=verified.inlineTools;checks={...verified.checks,...sharedChecks,canonicalSnapshotInspected:verified.safe};
