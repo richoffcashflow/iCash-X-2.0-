@@ -13,7 +13,7 @@ export function qualifySellerProperty(raw:unknown,options:{assignmentFeeCents:nu
  const numbersPassed=result.financialCheck.status==='eligible'&&typeof result.preliminarySellerCeilingCents==='number'&&result.preliminarySellerCeilingCents>0;
  // Every submitted address is researched. Financial qualification is separate
  // from contract jurisdiction and contact authorization, which remain downstream.
- return {status:numbersPassed?'qualified' as const:'numbers_review' as const,numbersPassed,marketQualified:numbersPassed,property:{id:row.dm_property_id,city:row.city,state:row.state,zip:row.zip,address:row.full_address,fetchedAt,raw:{data:row,credits:r.credits}},result,creditsUsed:Number(r.credits!.used)};
+ return {status:numbersPassed?'qualified' as const:'numbers_review' as const,numbersPassed,marketQualified:numbersPassed,property:{sellerCostReserveCents:options.sellerCostReserveCents,id:row.dm_property_id,city:row.city,state:row.state,zip:row.zip,address:row.full_address,fetchedAt,raw:{data:row,credits:r.credits}},result,creditsUsed:Number(r.credits!.used)};
 }
 /** A maximum bid is an eligibility ceiling, not the price charged to a customer. */
 export function sellerLeadCharge(adCostMicros:number,otherCostMicros:number,multiplier=3){

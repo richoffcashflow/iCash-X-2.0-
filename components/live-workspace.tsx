@@ -82,7 +82,7 @@ function PropertyCard({onAsk,property:p,work,principal,active,visited,onToggle,o
  const deal=work.deals.find(d=>d.screening_id===p.id),calls=work.conversations.filter(c=>c.screening_id===p.id);
  const lookups=work.contacts.filter(c=>c.screening_id===p.id);
  function openContact(view:'texts'|'calls'){setContactVisited(true);setContactView(view);}
- function tookOver(){setManual(true);setControlMessage('You’re handling this lead.');onRefresh();}
+ function tookOver(){setManual(true);setControlMessage('');onRefresh();}
  const contractReady=showPropertyContract(deal,work.signing);
  useEffect(()=>{if(contractReady)setPreparingContract(true);},[contractReady]);
  const address=propertyAddressLines(p.result.property.address);

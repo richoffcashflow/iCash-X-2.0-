@@ -29,6 +29,16 @@ try{
  for(const block of migration.match(/do \$patch\$[\s\S]*?end \$patch\$;/g)){
   await pg.exec(block);
  }
+ const routing=read('supabase/migrations/20261006235709_seller_snapshot_and_retired_practice_threads.sql');
+ await pg.exec(routing.slice(0,routing.indexOf('do $patch$'))+'commit;');
+ for(const block of routing.match(/do \$patch\$[\s\S]*?end \$patch\$;/g)){
+  if(/icash_assign_seller_lead_for|icash_prepare_manual_text/.test(block))continue;
+  await pg.exec(block);
+ }
+ const oldScreen=(await one("insert into icash_screening_jobs(account_id,event_key,snapshot,state,result,completed_at) values($1,'SIMULATION old practice','{\"propertyId\":\"practice_old\"}','complete','{}',now()) returning id",[account])).id;
+ const oldDeal=(await one("insert into icash_deal_files(account_id,screening_id,stage,terms) values($1,$2,'draft','{\"practice\":true,\"address\":\"SIMULATION old practice\"}') returning id",[account,oldScreen])).id;
+ const oldThread=(await one("insert into icash_text_threads(account_id,deal_id,sender,recipient,permission_until,permission_evidence,timezone,dnc_checked_at,dnc_clear,sms_rate_id,paused) values($1,$2,$3,$4,now()-interval '1 day','SIMULATION old practice consent',$5,now()-interval '2 days',true,$6,true) returning id",[account,oldDeal,f.sender,phone,timezone,f.sms])).id;
+ await q("insert into icash_text_messages(thread_id,account_id,direction,body,state,provider_id,created_at) values($1,$2,'outgoing','SIMULATION old practice text','delivered','SIMULATION old receipt',now()-interval '2 days')",[oldThread,account]);
  const lead=randomUUID();
  await q('insert into icash_seller_intakes(id,phone,property,ai_consented,consent_version,consent_text,contact_consent_scope,attribution,data_rights_until) values($1,$2,$3,true,$4,$5,$6,$7,now()+interval \'2 days\')',[lead,phone,{address:'123 Main Street',state:'TX'},sellerConsentVersion,sellerConsentText,'homeoffer_network_and_matched_buyers',{contactTimezone:timezone,contactTimezoneSource:'seller_browser'}]);
  await q('insert into icash_seller_matches(lead_id,account_id,screening_id) values($1,$2,$3)',[lead,account,screening]);
@@ -36,8 +46,10 @@ try{
  const evidence=(acc=account)=>rpc('icash_seller_contact_evidence',{p_account:acc,p_screening:screening,p_lead:lead,p_phone:phone});
  assert.equal(await evidence(other),null,'match is tenant bound');
  await project();await project();
+ assert((await one('select retired_at,deal_id from icash_text_threads where id=$1',[oldThread])).retired_at,'expired practice retired');
+ assert.equal((await one('select deal_id from icash_text_threads where id=$1',[oldThread])).deal_id,oldDeal,'practice history stays bound to its original property');
  const p=await one('select * from icash_contact_permissions where account_id=$1',[account]);
- const t=await one('select * from icash_text_threads where account_id=$1',[account]);
+ const t=await one('select * from icash_text_threads where account_id=$1 and retired_at is null',[account]);
  assert.equal(p.dnc_checked_at,null);assert.equal(p.dnc_clear,false);assert.equal(p.review_request_id,null);
  assert.equal(t.dnc_checked_at,null);assert.equal(t.dnc_clear,false);assert.equal(t.sms_review_request_id,null);
  assert.equal(p.seller_intake_id,lead);assert.equal(t.seller_intake_id,lead);
@@ -75,9 +87,9 @@ try{
  assert(dial?.dial_claimed_at,'real final dial claim accepts consent without invented DNC');
  assert.equal(await rpc('icash_transition_call_recording',{p_id:recording.id,p_account:account,p_operation:'voice:'+job,p_expected_state:'consent_pending',p_action:'claim_dial',p_payload:{}}),null,'single use dial');
 
- assert.equal((await one('select count(*)::int n from icash_text_messages where direction=\'outgoing\'')).n,1);
+ assert.equal((await one('select count(*)::int n from icash_text_messages where direction=\'outgoing\' and provider_id is distinct from \'SIMULATION old receipt\'')).n,1);
  await q('update icash_seller_responses set next_attempt_at=now()');await rpc('icash_prepare_seller_responses',{p_lead:lead});
- assert.equal((await one('select count(*)::int n from icash_text_messages where direction=\'outgoing\'')).n,1,'retry does not duplicate');
+ assert.equal((await one('select count(*)::int n from icash_text_messages where direction=\'outgoing\' and provider_id is distinct from \'SIMULATION old receipt\'')).n,1,'retry does not duplicate');
  assert.equal((await one("select count(*)::int n from information_schema.routine_privileges where specific_schema='public' and routine_name in ('icash_seller_contact_evidence','icash_prepare_seller_contacts','icash_seller_sms_permission_current','icash_seller_voice_permission_current') and grantee in ('PUBLIC','anon','authenticated')")).n,0,'server-only entry points');
  console.log('PASS: saved consent automatically projects SMS/voice; real first SMS queue; no fabricated DNC; account, consent, principal, expiry, price and suppression checks; revocation/pause preserved; duplicate-safe retries; private functions. SIMULATED ONLY.');
 }catch(e){console.error(e.message,e.where??'');process.exitCode=1;}finally{await pg.close();}

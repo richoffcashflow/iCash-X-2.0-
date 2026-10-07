@@ -3,6 +3,7 @@ import {sellerSubmission,sellerConsentVersion,sellerDuplicateKeyInput} from '../
 import {qualifySellerProperty,sellerLeadCharge} from '../lib/seller-qualification.ts';
 import {processSellerIntake} from '../lib/seller-pipeline.ts';
 import {sellerMetaEvent,deliverSellerEvent} from '../lib/seller-conversions.ts';
+import {runScreeningJob} from '../lib/screening-job.ts';
 import {dailyBudgetTier,validDailyBudget} from '../lib/daily-budget.ts';
 const now=Date.now();
 const input={name:'Sample Seller',address:'Synthetic address, Dallas, TX 75217',phone:'214-555-0123',consented:true,consentVersion:sellerConsentVersion,requestId:'12345678-1234-4234-8234-123456789abc'};
@@ -47,3 +48,6 @@ console.log('PASS seller funnel: explicit affirmative consent, input validation,
 
 assert.equal(sellerSubmission.parse({...input,contactTimezone:'America/Chicago'}).contactTimezone,'America/Chicago');
 assert.equal(sellerSubmission.safeParse({...input,contactTimezone:'invalid/zone'}).success,false);
+
+assert.equal(r.property.sellerCostReserveCents,options.sellerCostReserveCents);
+assert.equal(runScreeningJob({propertyId:r.property.id,propertyType:'house',fetchedAt:r.property.fetchedAt,raw:r.property.raw,sellerCostReserveCents:r.property.sellerCostReserveCents},now).financialCheck.status,'eligible','Qualification reserve must survive the delivered snapshot');
