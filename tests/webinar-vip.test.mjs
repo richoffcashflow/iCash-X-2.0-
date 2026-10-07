@@ -1,12 +1,30 @@
 import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import ts from 'typescript';
+import {randomUUID} from 'node:crypto';
+import * as engine from '../packages/webinar-engine/src/index.ts';
+import * as webinarPolicy from '../lib/webinar-policy.ts';
+import {selectRecording,createNightRecording} from '../lib/webinar-recordings.ts';
 import {membershipAccessible} from '../lib/membership-policy.ts';import {webinarLink} from '../lib/webinar-links.ts';
-let calls=[],source={webinar_id:'main',is_preview:false,config:{}},rows=[],settings={},token='guest';
+let calls=[],source={webinar_id:'main',is_preview:false,config:{}},rows=[],settings={},token='guest',pool=[],stats=[],failStats=false;
 class WebinarError extends Error{constructor(status,message){super(message);this.status=status;}}
-const deps={membershipAccessible,webinarLink,WebinarError,cookies:async()=>({get:()=>token?{value:token}:undefined}),validGuest:token=>token==='guest',guestHash:()=> 'owned-hash',webinarSession:async id=>{assert.equal(id,'owned-session');return {s:source};},db:async(path)=>{calls.push(path);if(path.startsWith('icash_webinar_settings'))return [{config:settings}];return rows;}};
+const deps={...engine,...webinarPolicy,selectRecording,availableWebinarRows:rows=>rows.map(webinarPolicy.webinarFromRow),webinarConversionRecordings:async()=>{if(failStats)throw Error('report unavailable');return stats;},membershipAccessible,webinarLink,WebinarError,cookies:async()=>({get:()=>token?{value:token}:undefined}),validGuest:token=>token==='guest',guestHash:()=> 'owned-hash',webinarSession:async id=>{assert.equal(id,'owned-session');return {s:source};},db:async(path)=>{calls.push(path);if(path.startsWith('icash_webinar_settings'))return [{config:settings}];if(path.includes('limit=1000'))return pool.map(w=>({config:w,public_code:Number(w.publicCode),parent_webinar_id:w.parentWebinarId}));return rows;}};
 globalThis.__vip=deps;const src=ts.transpileModule(readFileSync(new URL('../lib/webinar-vip.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');const api=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__vip;\n'+src).toString('base64'));
 rows=[{id:'vip'}];assert.equal(await api.checkoutVipSession('owned-session'),'vip');assert.match(calls.at(-1),/parent_webinar_id=eq.main/);
 source.is_preview=true;await assert.rejects(()=>api.checkoutVipSession('owned-session'));source.is_preview=false;source.config.parentWebinarId='main';await assert.rejects(()=>api.checkoutVipSession('owned-session'));source.config={};
 calls=[];settings={homepageVipId:'chosen'};await api.checkoutVipSession();assert.match(calls.at(-1),/id=eq.chosen/);settings={};await api.checkoutVipSession();assert.match(calls.at(-1),/status=eq.published.*order=public_code.asc/);
+const day=new Date('2026-10-07T18:00:00Z'),night=new Date('2026-10-08T03:00:00Z');
+settings={homepageVipId:'day-vip',homepageVipNightId:'night-vip'};
+await api.checkoutVipSession(undefined,{timezone:'America/Chicago'},day);assert.match(calls.at(-1),/id=eq.day-vip/);
+await api.checkoutVipSession(undefined,{timezone:'America/Chicago'},night);assert.match(calls.at(-1),/id=eq.night-vip/);
+await api.checkoutVipSession(undefined,{timezone:'America/Chicago',ipTimezone:'Asia/Tokyo'},day);assert.match(calls.at(-1),/id=eq.night-vip/,'Hosting timezone takes priority');
+settings.homepageVipNightId=null;await api.checkoutVipSession(undefined,{timezone:'America/Chicago'},night);assert.match(calls.at(-1),/id=eq.day-vip/,'The Day VIP can cover both times');
+const mainA={...webinarPolicy.newWebinar(randomUUID()),publicCode:'123450',status:'published',videoUrl:'https://example.test/a.mp4'},mainB={...mainA,id:randomUUID(),publicCode:'123451',nightEnabled:true};mainB.nightVersion={...createNightRecording(mainB),videoUrl:'https://example.test/b-night.mp4'};
+const vipA={...webinarPolicy.newVipWebinar(randomUUID(),mainA),publicCode:'123452',status:'published',videoUrl:'https://example.test/va.mp4'},vipB={...webinarPolicy.newVipWebinar(randomUUID(),mainB),publicCode:'123453',status:'published',videoUrl:'https://example.test/vb.mp4'};
+pool=[mainA,mainB,vipA,vipB];stats=[{webinarId:mainA.id,version:'day',viewers:100,cohortBuyers:20},{webinarId:mainB.id,version:'day',viewers:100,cohortBuyers:5},{webinarId:mainB.id,version:'night',viewers:100,cohortBuyers:40}];settings.homepageVipMode='best-converting';
+assert.equal(await api.checkoutVipSession(undefined,{timezone:'America/Chicago'},day),vipA.id);assert.equal(await api.checkoutVipSession(undefined,{timezone:'America/Chicago'},night),vipB.id);
+rows=[{id:'owned-vip'}];assert.equal(await api.checkoutVipSession('owned-session',{timezone:'America/Chicago'},night),'owned-vip','Automatic homepage routing cannot replace the purchased webinar’s own pair');
+vipB.status='draft';assert.equal(await api.checkoutVipSession(undefined,{timezone:'America/Chicago'},night),vipA.id,'Draft VIPs do not qualify for automatic routing');vipB.status='published';
+stats=stats.map(s=>({...s,viewers:10,cohortBuyers:1}));rows=[{id:'configured-fallback'}];assert.equal(await api.checkoutVipSession(undefined,{timezone:'America/Chicago'},day),'configured-fallback');assert.match(calls.at(-1),/id=eq.day-vip/);
+failStats=true;assert.equal(await api.checkoutVipSession(undefined,{timezone:'America/Chicago'},night),'configured-fallback','Reporting outage cannot block checkout');failStats=false;
 const paid={mode:'live',state:'active',paid_through:new Date(Date.now()+86400000).toISOString(),post_purchase_webinar_id:'vip'};rows=[{public_code:123457,config:{status:'published',videoUrl:'https://example.test/vip.mp4'}}];assert.equal(await api.paidVipDestination(paid),'/live/123457');
 for(const patch of [{mode:'test'},{state:'pending'},{state:'needs_review'},{state:'cancelled'},{paid_through:null},{paid_through:'2020-01-01'},{post_purchase_webinar_id:null}]){calls=[];assert.equal(await api.paidVipDestination({...paid,...patch}),null);assert.equal(calls.length,0,'Unpaid/invalid purchases cannot resolve private videos');}
 rows[0].config.status='draft';assert.equal(await api.paidVipDestination(paid),null,'Draft VIP safely falls back to setup');

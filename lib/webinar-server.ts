@@ -14,7 +14,7 @@ export async function webinarBody(req:Request,limit=50000){if(Number(req.headers
 export function webinarKey(){const key=process.env.ICASH_WEBINAR_SECRET||process.env.SUPABASE_SECRET_KEY;if(!key)throw new WebinarError(503,'Webinar storage is unavailable.');return key;}
 export function webinarToken(id:string,purpose:'visitor'|'resume'|'unsubscribe',seconds:number){return signWebinarToken(id,purpose,seconds,webinarKey());}
 export type Visitor={attribution?:Record<string,string>;id:string;name:string|null;email:string|null;phone:string|null;timezone:string;email_consent_at:string|null;sms_consent_at?:string|null;sms_opted_out_at?:string|null;sms_replied_at?:string|null;opted_out_at:string|null;funded_at:string|null;account_id:string|null;funding_guest_hash:string|null};
-export type WebinarSession={id:string;visitor_id:string;webinar_id:string;revision:number;progress_seconds:number;max_seconds:number;completed_at:string|null;superseded_at:string|null;created_at:string;updated_at:string;config:Webinar;is_preview:boolean};
+export type WebinarSession={id:string;visitor_id:string;webinar_id:string;revision:number;progress_seconds:number;max_seconds:number;watched_seconds?:number;completed_at:string|null;superseded_at:string|null;created_at:string;updated_at:string;config:Webinar;is_preview:boolean};
 export async function webinarVisitor(create=false,resume?:string){
  const jar=await cookies();let id=readWebinarToken(jar.get('icash_webinar')?.value,'visitor',webinarKey());
  const resumed=readWebinarToken(resume,'resume',webinarKey());if(resumed)id=resumed;

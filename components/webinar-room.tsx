@@ -17,7 +17,7 @@ import {AccountAccess} from '@/components/account-access';
 import {publicWebinar,webinarSchema,formatWatchTime,webinarOffers,webinarPitchAt,webinarEndOffer,offerDestination,webinarConsent,webinarConsentVersion,webinarSmsConsent,webinarSmsConsentVersion,type Webinar,type WebinarEvent} from '@/lib/webinar-policy';
 type PublicWebinar=ReturnType<typeof publicWebinar>;
 type Message={id:string;role:'user'|'assistant';text:string};
-type Session={webinar:PublicWebinar;sessionId:string;progress:number;name:string;email?:string;phone?:string;contactSaved:boolean;messages:Message[];preview:boolean;serverNow:number};
+type Session={webinar:PublicWebinar;canonicalPath?:string;sessionId:string;progress:number;name:string;email?:string;phone?:string;contactSaved:boolean;messages:Message[];preview:boolean;serverNow:number};
 export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  const [session,setSession]=useState<Session|null>(null),[error,setError]=useState(''),[unavailable,setUnavailable]=useState(''),[login,setLogin]=useState(false);
  const [time,setTime]=useState(0),[playing,setPlaying]=useState(false),[funding,setFunding]=useState(false),[chatOpen,setChatOpen]=useState(true),[messages,setMessages]=useState<Message[]>([]),[question,setQuestion]=useState(''),[chatBusy,setChatBusy]=useState(false),[chatError,setChatError]=useState('');
@@ -33,9 +33,10 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
   const params=new URLSearchParams(location.search),attribution=Object.fromEntries(['utm_source','utm_medium','utm_campaign','utm_content','utm_term','ad_id','adset_id','campaign_id','fbclid'].flatMap(k=>params.has(k)?[[k,params.get(k)!]]:[]));
   const d=await post<Session&{redirect?:string;unavailable?:boolean;message?:string}>('/api/webinar/start',{...(webinarCode?{code:webinarCode}:{}),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Chicago',...(params.get('r')?{resume:params.get('r')}:{}),...(params.get('preview')?{preview:params.get('preview'),variant:params.get('variant')==='night'?'night':'day'}:{}),attribution});
   if(d.redirect){location.replace(d.redirect);return;}if(d.unavailable){setUnavailable(d.message||'The next session is being prepared.');return;}if(!alive.current)return;
-  if(params.has('r')){params.delete('r');history.replaceState(null,'',location.pathname+(params.size?'?'+params.toString():''));}
   if(typeof d.sessionId!=='string'||!Number.isFinite(d.progress)||!Number.isFinite(d.serverNow))throw Error('The session could not load. Please try again.');
   d.webinar=publicWebinar(webinarSchema.parse({...d.webinar,faq:'',chatStyle:''}));
+  const canonical=d.canonicalPath&&/^\/live\/\d{6,12}$/.test(d.canonicalPath)?d.canonicalPath:location.pathname;
+  if(params.has('r')||canonical!==location.pathname){params.delete('r');history.replaceState(null,'',canonical+(params.size?'?'+params.toString():'')+location.hash);}
   d.messages=Array.isArray(d.messages)?d.messages.filter(m=>m&&typeof m.id==='string'&&typeof m.text==='string'&&['user','assistant'].includes(m.role)):[];
   d.name=typeof d.name==='string'?d.name:'';
   d.progress=d.preview?d.progress:restoredPosition(d.sessionId,d.progress,d.webinar.durationSeconds);
