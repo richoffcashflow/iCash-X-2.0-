@@ -53,6 +53,10 @@ try{
  await q("select icash_reserve_before_fractional($1,'vip-work',$2,now()+interval '1 hour')",[a,rate]);
  const quoted=await one("select * from icash_operation_spend where operation_key='vip-work'");assert.equal(Number(quoted.standard_cost_multiplier),2.4);assert.equal(Number(quoted.required_revenue_micros),24000);
  await q("select icash_finish_credit($1,'vip-work',0,'fixture release')",[a]);
+ const leadRate=uuid();await q("insert into icash_operation_rates(id,operation,version,charge_cents,costs_micros,buffer_bps,verified_at,expires_at,enabled) values($1,'seller_lead','fixture-vip-lead',3,$2,0,now()-interval '1 minute',now()+interval '1 day',true)",[leadRate,parts]);
+ await q("select icash_reserve_before_fractional($1,'vip-lead',$2,now()+interval '1 hour')",[a,leadRate]);
+ const leadQuote=await one("select standard_cost_multiplier,required_revenue_micros from icash_operation_spend where operation_key='vip-lead'");assert.equal(Number(leadQuote.standard_cost_multiplier),2.4);assert.equal(Number(leadQuote.required_revenue_micros),24000,'Lead pricing uses the same 20% discount as AI work');
+ await q("select icash_finish_credit($1,'vip-lead',0,'fixture release')",[a]);
  const down=(await one("select to_jsonb(icash_begin_plan_change($1,$2,'downgrade',$3)) v",[m,a,end])).v;
  await q("update icash_plan_changes set price_id='price_standard' where id=$1",[down.id]);
  await q("select icash_apply_plan_change($1,'sub_fixture','price_standard')",[down.id]);

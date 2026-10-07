@@ -112,7 +112,7 @@ begin
   if n<0 or n<>trunc(n) or n>9007199254740991 then raise exception 'Invalid cost'; end if;
   total:=total+n;
  end loop;
- if public.icash_vip_active(p_account) then b.standard_cost_multiplier:=case when r.operation='seller_lead' then 2.7 else 2.4 end;b.elevenlabs_cost_multiplier:=b.standard_cost_multiplier;end if;
+ if public.icash_vip_active(p_account) then b.standard_cost_multiplier:=2.4;b.elevenlabs_cost_multiplier:=b.standard_cost_multiplier;end if;
  -- Match JS: round reserve up to a cent after adding buffer.
  held:=ceil(total*(10000+r.buffer_bps)/10000);
  required:=ceil((total*b.standard_cost_multiplier-(r.costs_micros->>'elevenlabs')::numeric*(b.standard_cost_multiplier-b.elevenlabs_cost_multiplier))*(10000+r.buffer_bps)/10000);
@@ -210,7 +210,7 @@ begin
  where not exists(select 1 from public.icash_outbound_property_owners o where o.property_id=l.property->>'id' and o.account_id<>ac.id) and public.icash_credit_acquisition_allowed(ac.id) and not ac.bot_paused and not exists(select 1 from public.icash_seller_matches m where m.lead_id=l.id and m.account_id=ac.id)
  and (bs.profile->>'marketMode'='nationwide' or lower(trim(bs.profile->>'market')) in (city_name,city_name||', '||lower(state_code),l.property->>'zip'))
  and not exists(select 1 from public.icash_billing_reviews where account_id=ac.id and resolved_at is null)
- ) candidate where capacity>=case when public.icash_vip_active(candidate.id) then ceil(charge*0.9) else charge end
+ ) candidate where capacity>=case when public.icash_vip_active(candidate.id) then ceil(charge*0.8) else charge end
  -- Larger available budgets receive more opportunities; a square-root weight
  -- keeps smaller funded accounts competitive. First access rotates separately.
  order by
@@ -222,7 +222,7 @@ begin
  (select count(*) from public.icash_seller_matches m where m.account_id=candidate.id and m.assigned_at>now()-interval '7 days'),
  capacity desc,candidate.id limit 50 loop
   charge:=ceil(total::numeric*3/10000);
-  if public.icash_vip_active(a.id) then charge:=ceil(charge*0.9);end if;
+  if public.icash_vip_active(a.id) then charge:=ceil(charge*0.8);end if;
   if a.capacity<charge then continue;end if;
   op:='seller-lead:'||l.id||':'||a.id;
   begin

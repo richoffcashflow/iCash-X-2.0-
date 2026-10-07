@@ -15,5 +15,5 @@ await api.reconcileVipCheckout(session.id);assert.equal(calls.filter(c=>c.kind==
 c=null;await api.changeVipPlan(m,'downgrade','https://www.geticashx.com');assert.equal(m.price_cents,5000);assert.equal(policy.vipActive(m),true);assert.equal(calls.filter(c=>c.kind==='checkout').length,1,'No payment for downgrade');
 c=null;await api.changeVipPlan(m,'keep_vip','https://www.geticashx.com');assert.equal(m.price_cents,10000);assert.equal(calls.filter(c=>c.kind==='checkout').length,1,'Restore VIP renewal without another upgrade charge');
 for(const mutate of [()=>session.customer='cus_other',()=>session.amount_total=4999,()=>session.livemode=false,()=>pi.amount_received=1,()=>pi.customer='cus_other',()=>pi.status='processing']){reset();await api.changeVipPlan(m,'upgrade','https://www.geticashx.com');session.status='complete';session.payment_status='paid';mutate();await assert.rejects(api.reconcileVipCheckout(session.id));assert.equal(m.vip_until,null);assert(!calls.some(c=>c.kind==='update'));}
-assert.equal(policy.vipPrice(1000,'lead'),900);assert.equal(policy.vipPrice(1000,'usage'),800);
+assert.equal(policy.vipPrice(1000,'lead'),800);assert.equal(policy.vipPrice(1000,'usage'),800);
 console.log('PASS VIP checkout: exactly $50 once, verified payment before access, $100 renewal on same date, $50 downgrade, restore without recharge, tampered receipts rejected');

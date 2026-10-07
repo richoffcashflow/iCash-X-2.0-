@@ -6,7 +6,7 @@ Owner approved 2026-10-07. Final pricing supersedes the earlier 2x proposal:
 - Standard-to-VIP costs exactly $50 once for the current paid period; same renewal date.
 - VIP renewals use the existing subscription item, not a second subscription. Existing retention discounts keep their original remaining term.
 - Downgrading changes the next renewal to $50 without proration or a charge today. Paid VIP access stays until the recorded VIP paid-through date. Restoring VIP renewal during that period is free.
-- VIP AI work uses 20% fewer credits (2.4x versus Standard 3x); purchased seller leads get a separate 10% discount, rounded up to whole cents. Discounts never stack on the same action.
+- VIP receives 20% off all credit-funded backend activity: AI work and purchased leads. AI usage is 2.4x versus Standard 3x; lead prices are 80% of the Standard lead price, rounded up to whole cents. Apply the discount once per action. Credit purchases remain dollar-for-dollar; the subscription price is unchanged.
 - Eligible, funded VIP accounts rank ahead of Standard in new seller lead allocation. Existing market, consent, budget, and assignment exclusions still apply.
 - VIP can rename its bot. Existing names remain; new Standard bots use iCash X. Voice cloning and inactive-account lead takeover are not included in this release and are not advertised as available.
 
