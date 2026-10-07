@@ -1,3 +1,4 @@
+import {reconcileVipCheckout} from '@/lib/vip-membership';
 import {settleAutoRecharge} from '@/lib/auto-recharge';
 import { NextResponse } from "next/server";
 import { db,settleTestSession } from "@/lib/stripe-test";
@@ -17,7 +18,8 @@ export async function POST(req:Request) {
  if(event.type==="checkout.session.completed"||event.type==="checkout.session.async_payment_succeeded"){
   const s=event.data.object;
   if(s.payment_status==="paid"){
-   if(s.metadata?.icash_membership)await reconcileMembershipSession(s.id);
+   if(s.metadata?.icash_vip_change)await reconcileVipCheckout(s.id);
+   else if(s.metadata?.icash_membership)await reconcileMembershipSession(s.id);
    else if(s.metadata?.icash_daily_plan){const subId=typeof s.subscription==='string'?s.subscription:s.subscription?.id;if(!subId)throw new Error();const sub=await stripe.subscriptions.retrieve(subId);await syncDailySubscription(sub);const invoiceId=typeof sub.latest_invoice==='string'?sub.latest_invoice:sub.latest_invoice?.id;if(invoiceId)await settleDailyInvoice(invoiceId);}
    else if(s.metadata?.icash_funding_order)await settleFunding(await stripe.checkout.sessions.retrieve(s.id));
    else if(mode==="test"&&s.metadata?.icash_test_order)await settleTestSession(await stripe.checkout.sessions.retrieve(s.id));

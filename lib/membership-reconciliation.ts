@@ -1,10 +1,11 @@
+import {reconcileVipChanges} from '@/lib/vip-membership';
 import {db} from '@/lib/stripe-test';
 import {fundingStripe} from '@/lib/funding';
 import {fundingMode} from '@/lib/funding-policy';
 import {reconcileMembershipCheckout,settleMembershipInvoice,syncMembershipSubscription,type Membership} from '@/lib/membership';
 
-/** Recover access after a missed webhook. Provider reads only: this never creates
- * a payment, renews a subscription, clears review holds, or grants work credits.
+/** Recover access after a missed webhook, and finish explicitly requested plan changes.
+ * This never creates a new payment, clears review holds, or grants work credits.
  * Existing canonical invoice verification and idempotent settlement remain the
  * only authority for paid-through dates. Older invoice history is not backfilled.
  */
@@ -18,6 +19,7 @@ export async function reconcileMemberships(deadline:number){
   checked++;
   try{
    let m=original;
+   await reconcileVipChanges(m.id);
    if(!m.stripe_subscription_id){m=await reconcileMembershipCheckout(m);}
    if(m.stripe_subscription_id){
     const stripe=fundingStripe();

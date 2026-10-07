@@ -23,6 +23,12 @@ let fetched=0;const fake=async(_url,options)=>{fetched++;const body=JSON.parse(o
 let routed=await ai.routeWorkspaceQuestion('Explain the offer',{...context,selectedId:null},[],fake);assert.equal(routed.propertyId,null);assert.equal(routed.model,'fixture-model');assert.equal(routed.usage.prompt_tokens,100);
 routed=await ai.routeWorkspaceQuestion('Pause my bot',context,[],fake);assert.equal(routed.intent,'pause');
 routed=await ai.routeWorkspaceQuestion('Explain this offer',context,[],async()=>{throw Error('fixture timeout');});assert.equal(routed.intent,'offer');assert.equal(routed.propertyId,id(5));
+// Paid model work reserves before provider dispatch and bills from its receipt once.
+process.env.ICASH_SUPPORT_AI_MODEL='gpt-4.1-mini';let reserved=0,settlements=[];
+await ai.routeWorkspaceQuestion('Explain this offer',context,[],fake,{before:async()=>{reserved++;return true;},after:async r=>settlements.push(r)});
+assert.equal(reserved,1);assert.equal(settlements.length,1);assert.equal(settlements[0].usage.prompt_tokens,100);
+const beforeCalls=fetched;await assert.rejects(ai.routeWorkspaceQuestion('Explain this offer',context,[],fake,{before:async()=>{throw Error('CREDITS_REQUIRED');},after:async()=>{throw Error('Must not settle');}}));assert.equal(fetched,beforeCalls,'No paid request without credits');
+settlements=[];await ai.routeWorkspaceQuestion('Explain this offer',context,[],async()=>{throw Error('provider timeout');},{before:async()=>true,after:async r=>settlements.push(r)});assert.deepEqual(settlements,[{providerId:null,usage:null}]);
 delete process.env.OPENAI_API_KEY;delete process.env.ICASH_SUPPORT_AI_MODEL;
 let authorized=true,origin=true,subscription=true,fresh=true,priorState='complete',paths=[],contextReads=0,classifications=0,rateLimited=false;
 const responseAnswer=policy.answerWorkspaceQuestion('offer',context,null);

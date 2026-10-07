@@ -5,7 +5,7 @@ let rows,calls,failRead=false,failSettlement=false,mode='live',sub;
 const reset=()=>{rows=[{id:'member_one',mode:'live',state:'active',stripe_subscription_id:'sub_one'}];calls=[];failRead=false;failSettlement=false;mode='live';sub={id:'sub_one',metadata:{icash_membership:'member_one'}};};
 const db=async(path,method,body)=>{calls.push({path,method,body});if(method==='PATCH'){assert.deepEqual(Object.keys(body),['updated_at']);return [];}assert.match(path,/mode=eq.live/);assert.match(path,/state=in\.\(pending,active,payment_failed,needs_review\)/);assert.match(path,/order=updated_at.asc,id.asc&limit=10/);return rows;};
 const stripe={subscriptions:{retrieve:async id=>{calls.push({retrieve:id});if(failRead)throw Error('Unavailable');return sub;}},invoices:{list:async input=>{calls.push({list:input});assert.deepEqual(input,{subscription:'sub_one',status:'paid',limit:1});return {data:[{id:'in_paid'}]};}}};
-const modules={
+const modules={'@/lib/vip-membership':{reconcileVipChanges:async()=>{}},
  '@/lib/stripe-test':{db},'@/lib/funding':{fundingStripe:()=>stripe},'@/lib/funding-policy':{fundingMode:()=>mode},
  '@/lib/membership':{
   syncMembershipSubscription:async value=>{calls.push({sync:value.id});return true;},

@@ -3,13 +3,13 @@ import {useEffect,useRef,useState} from 'react';
 import {defaultBotProfile,setupProfileSchema,type BotProfile,type BotSetup} from '@/lib/bot-setup';
 import {saveBotBuild} from '@/lib/bot-build';
 
-export function PostPaymentBotName({onBrand,onCreated}:{onBrand:(profile:BotProfile)=>void;onCreated:()=>Promise<void>}){
+export function PostPaymentBotName({onBrand,onCreated,vip=false}:{vip?:boolean;onBrand:(profile:BotProfile)=>void;onCreated:()=>Promise<void>}){
  const [name,setName]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const locked=useRef(false),controller=useRef<AbortController|null>(null),mounted=useRef(true);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;controller.current?.abort();};},[]);
  async function create(){
   if(locked.current)return;
-  const profile=setupProfileSchema.safeParse({...defaultBotProfile,displayName:name.trim()});
+  const profile=setupProfileSchema.safeParse({...defaultBotProfile,displayName:vip?name.trim():'iCash X'});
   if(!profile.success){setError('Enter a name for your bot.');return;}
   locked.current=true;setBusy(true);setError('');const request=new AbortController();controller.current=request;
   const timer=setTimeout(()=>request.abort(),20000);
@@ -23,5 +23,5 @@ export function PostPaymentBotName({onBrand,onCreated}:{onBrand:(profile:BotProf
   }catch(e){if(mounted.current)setError(e instanceof Error?e.message:'Could not save. Please retry.');}
   finally{clearTimeout(timer);locked.current=false;if(mounted.current)setBusy(false);}
  }
- return <section className="post-payment-name" aria-labelledby="bot-name-title"><h2 id="bot-name-title">{busy?'Creating your bot…':'Name your bot'}</h2><form onSubmit={e=>{e.preventDefault();void create();}}><label className="sr-only" htmlFor="paid-bot-name">Bot name</label><input id="paid-bot-name" autoComplete="off" maxLength={64} placeholder="Bot name" value={name} disabled={busy} onChange={e=>{setName(e.target.value);setError('');}} required/><button disabled={busy||!name.trim()}>{busy?'Creating…':'Save bot name'}</button></form>{error&&<p role="alert">{error}</p>}</section>;
+ return <section className="post-payment-name" aria-labelledby="bot-name-title"><h2 id="bot-name-title">{busy?'Creating your bot…':vip?'Name your bot':'Create your bot'}</h2><form onSubmit={e=>{e.preventDefault();void create();}}><label className="sr-only" htmlFor="paid-bot-name">Bot name</label>{vip&&<input id="paid-bot-name" autoComplete="off" maxLength={64} placeholder="Bot name" value={name} disabled={busy} onChange={e=>{setName(e.target.value);setError('');}} required/>}<button disabled={busy||(vip&&!name.trim())}>{busy?'Creating…':vip?'Save bot name':'Create bot'}</button></form>{error&&<p role="alert">{error}</p>}</section>;
 }
