@@ -72,5 +72,8 @@ export function parseTextWebhook(input:unknown){
  if(!['text.incoming.sms','text.incoming.mms','text.delivery.confirmed','text.delivery.failed','text.cancelled','numbers.substitution'].includes(event.type))throw Error('Unsupported text event');
  if(event.type.startsWith('text.incoming')&&event.data.body===undefined&&!event.data.attachments?.length)throw Error('Empty incoming message');
  if(!event.type.startsWith('text.incoming')&&!event.data.message_id)throw Error('Missing message ID');
- return {...event,optOut:event.type.startsWith('text.incoming')&&isMessageOptOut(event.data.body??'')};
+ // Carrier events may use Unix milliseconds; the database accepts seconds.
+ const timestamp=event.timestamp>=1e12?event.timestamp/1000:event.timestamp;
+ if(timestamp<0||timestamp>253402300799)throw Error('Invalid text event timestamp');
+ return {...event,timestamp,optOut:event.type.startsWith('text.incoming')&&isMessageOptOut(event.data.body??'')};
 }

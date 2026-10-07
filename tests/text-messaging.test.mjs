@@ -10,6 +10,9 @@ const r=await sendContiguityText(p,'fixture',async(url,opts)=>{assert.equal(url,
 for(const text of ['STOP','Stop!','unsubscribe','Please stop texting me','remove me from your list'])assert(isMessageOptOut(text));
 assert(!isMessageOptOut('What time can you stop by?'));
 const e={id:'evt_fixture',type:'text.incoming.sms',timestamp:1700000000,data:{from:p.to,to:p.from,body:'STOP'}};assert(parseTextWebhook(e).optOut);
+assert.equal(parseTextWebhook({...e,timestamp:1791336379207}).timestamp,1791336379.207);
+assert.equal(parseTextWebhook(e).timestamp,1700000000);
+assert.throws(()=>parseTextWebhook({...e,timestamp:-1}));
 assert.throws(()=>parseTextWebhook({...e,type:'text.delivery.confirmed'}));
 assert.equal(parseTextWebhook({...e,type:'numbers.substitution',data:{original_number:p.from,used_number:p.to,message_id:'text_fixture'}}).data.from,p.from);
 console.log('SMS/MMS payload, attachment bounds, no retry, STOP, receipt and substitution parsing checks passed. No real messages.');
