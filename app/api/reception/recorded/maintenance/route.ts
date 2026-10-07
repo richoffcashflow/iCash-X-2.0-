@@ -1,3 +1,4 @@
+import {maintainCustomerPhoneCalls} from '@/lib/customer-phone';
 import {timingSafeEqual} from 'node:crypto';
 import {db} from '@/lib/stripe-test';
 import {createRecordedReceptionProviders} from '@/lib/recorded-reception-provider';
@@ -13,7 +14,7 @@ export async function POST(request:Request){
  // Schema readiness only. Keep true once installed; never couple to capture or pauses.
  if(process.env.ICASH_RECORDED_RECEPTION_SCHEMA_READY!=='true')return Response.json({status:'schema_not_released'},{headers:privateHeaders});
  const deadline=AbortSignal.any([request.signal,AbortSignal.timeout(50000)]);
- try{return Response.json(await maintainRecordedReception((name,body)=>db('rpc/'+name,'POST',body??{},deadline),createRecordedReceptionProviders(process.env,fetch,deadline),process.env),{headers:privateHeaders});}
+ try{const [result]=await Promise.all([maintainRecordedReception((name,body)=>db('rpc/'+name,'POST',body??{},deadline),createRecordedReceptionProviders(process.env,fetch,deadline),process.env),maintainCustomerPhoneCalls().catch(()=>undefined)]);return Response.json(result,{headers:privateHeaders});}
  catch{return Response.json({status:'recorded_reception_maintenance_needs_review'},{status:503,headers:privateHeaders});}
 }
 export const GET=POST;
