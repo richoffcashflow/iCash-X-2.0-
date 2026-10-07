@@ -3,6 +3,7 @@ import {db} from '@/lib/stripe-test';
 import {fundingStripe} from '@/lib/funding';
 import {fundingMode} from '@/lib/funding-policy';
 import {vipActive,vipUpgradeCents} from '@/lib/vip-policy';
+import {checkoutPublishableKey,checkoutMatchesPresentation} from '@/lib/embedded-checkout-policy';
 import type {Membership} from '@/lib/membership';
 export type PlanChange={id:string;membership_id:string;account_id:string;action:'upgrade'|'downgrade'|'keep_vip';state:string;period_end:string;from_price:number;to_price:number;session_id:string|null;payment_id:string|null;price_id:string|null};
 const ref=(v:string|{id:string}|null|undefined)=>typeof v==='string'?v:v?.id;
@@ -53,7 +54,7 @@ export async function reconcileVipChanges(membershipId:string){
  const rows=await db<PlanChange[]>(`icash_plan_changes?membership_id=eq.${membershipId}&state=in.(pending,paid)&select=*&limit=1`);
  for(const c of rows){if(c.action==='upgrade'){if(c.session_id)await reconcileVipCheckout(c.session_id);else if(c.state==='pending'&&Date.parse(c.period_end)<=Date.now())await db(`icash_plan_changes?id=eq.${c.id}&state=eq.pending`,'PATCH',{state:'expired'});}else await applyChange(c);}
 }
-export async function changeVipPlan(m:Membership,action:PlanChange['action'],origin:string){
+export async function changeVipPlan(m:Membership,action:PlanChange['action'],origin:string,options:{webinar?:boolean;embedded?:boolean}={}){
  if(!m.account_id||!m.stripe_subscription_id||!m.stripe_customer_id)throw Error('Active subscription required');
  await reconcileVipChanges(m.id);m=await membership(m.id);
  if(action==='upgrade'&&vipActive(m))throw Error('VIP is already active. Refresh your plan.');
@@ -62,7 +63,10 @@ export async function changeVipPlan(m:Membership,action:PlanChange['action'],ori
  if(action==='upgrade'&&item.current_period_end*1000-Date.now()<3600_000)throw Error('Your renewal is within an hour. Upgrade after renewal to avoid a duplicate charge.');
  const c=await db<PlanChange>('rpc/icash_begin_plan_change','POST',{p_membership:m.id,p_account:m.account_id,p_action:action,p_period_end:new Date(item.current_period_end*1000).toISOString()});
  if(action!=='upgrade'){await applyChange(c);return {saved:true,message:action==='downgrade'?'Downgrade saved. VIP continues through your paid period.':'VIP renewal restored. No charge today.'};}
- if(c.session_id){const old=await stripe.checkout.sessions.retrieve(c.session_id);if(old.status==='open'&&old.url)return {url:old.url};if(old.status==='complete')throw Error('Your upgrade payment is being confirmed. Do not pay again.');}
- const checkout=await stripe.checkout.sessions.create({mode:'payment',customer:m.stripe_customer_id!,payment_method_types:['card'],automatic_tax:{enabled:false},line_items:[{price_data:{currency:'usd',unit_amount:vipUpgradeCents,product_data:{name:'iCash X VIP upgrade',description:'$50 upgrade for your current billing period. VIP renews at $100/month before any existing subscription discount. Work credits separate.'}},quantity:1}],metadata:{icash_vip_change:c.id},success_url:origin+'/?settings=billing&vip_session={CHECKOUT_SESSION_ID}',cancel_url:origin+'/?settings=billing',expires_at:Math.min(Math.floor(Date.now()/1000)+3600,item.current_period_end-60)},{idempotencyKey:`vip-checkout:${c.id}:${c.session_id??'first'}`});
- await db(`icash_plan_changes?id=eq.${c.id}&state=eq.pending`,'PATCH',{session_id:checkout.id});return {url:checkout.url};
+ const publishableKey=checkoutPublishableKey(m.mode),embedded=options.embedded===true&&!!publishableKey;
+ const response=(session:Stripe.Checkout.Session)=>session.ui_mode==='embedded_page'?{clientSecret:session.client_secret,publishableKey,sessionId:session.id}:{url:session.url};
+ if(c.session_id){const old=await stripe.checkout.sessions.retrieve(c.session_id);if(old.metadata?.icash_vip_change!==c.id||old.livemode!==(m.mode==='live')||ref(old.customer)!==m.stripe_customer_id)throw Error('Upgrade checkout binding changed');if(old.status==='open'){if(checkoutMatchesPresentation(old,embedded))return response(old);await stripe.checkout.sessions.expire(old.id);}if(old.status==='complete')throw Error('Your upgrade payment is being confirmed. Do not pay again.');}
+ const checkout=await stripe.checkout.sessions.create({mode:'payment',customer:m.stripe_customer_id!,payment_method_types:['card'],automatic_tax:{enabled:false},line_items:[{price_data:{currency:'usd',unit_amount:vipUpgradeCents,product_data:{name:'iCash X VIP upgrade',description:'$50 upgrade for your current billing period. VIP renews at $100/month before any existing subscription discount. Work credits separate.'}},quantity:1}],metadata:{icash_vip_change:c.id},...(embedded?{ui_mode:'embedded_page' as const,redirect_on_completion:'never' as const}:{success_url:origin+(options.webinar?'/webinar/upgrade?upgrade=paid&vip_session={CHECKOUT_SESSION_ID}':'/?settings=billing&vip_session={CHECKOUT_SESSION_ID}'),cancel_url:origin+(options.webinar?'/webinar/upgrade':'/?settings=billing')}),expires_at:Math.min(Math.floor(Date.now()/1000)+3600,item.current_period_end-60)},{idempotencyKey:`vip-checkout:${c.id}:${c.session_id??'first'}`});
+ if(checkout.metadata?.icash_vip_change!==c.id||checkout.livemode!==(m.mode==='live')||ref(checkout.customer)!==m.stripe_customer_id||!checkoutMatchesPresentation(checkout,embedded))throw Error('Upgrade checkout could not be verified');
+ await db(`icash_plan_changes?id=eq.${c.id}&state=eq.pending`,'PATCH',{session_id:checkout.id});return response(checkout);
 }

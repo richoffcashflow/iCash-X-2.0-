@@ -41,7 +41,7 @@ export function WebinarExpressCheckout({checkingAccount=false,accountError=false
      <MembershipCheckout embedded webinarSessionId={webinarSessionId} presentation="plan" onEngaged={()=>setCheckoutEngaged(true)} onSignedIn={openWorkspace}/>
      <a className="wb-text" href={webinarSite.supportPath}>Have a question? We’re here.</a>
     </div>
-    <div className="wb-plan-onboarding" aria-label="Getting started"><span><b>01</b>Get access</span><ArrowRight size={14} aria-hidden="true"/><span><b>02</b>Watch your VIP session</span><ArrowRight size={14} aria-hidden="true"/><span><b>03</b>Set up your bot</span></div>
+    <div className="wb-plan-onboarding" aria-label="Getting started"><span><b>01</b>Get access</span><ArrowRight size={14} aria-hidden="true"/><span><b>02</b>Choose your next step</span><ArrowRight size={14} aria-hidden="true"/><span><b>03</b>Set up your bot</span></div>
    </div>}
   </main>
   {!checkingAccount&&<footer className="wb-plan-footer"><span>iCash X · AI for wholesale real estate.</span><a href="/costs-and-disclosures">Costs &amp; terms</a></footer>}

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import ts from 'typescript';
 import * as policy from '../lib/webinar-policy.ts';import * as prompts from '../lib/webinar-prompts.ts';import * as playback from '../lib/webinar-playback.ts';
+import * as purchaseFlow from '../lib/webinar-purchase-flow.ts';
 import {availableOffers,selectOffer} from '../packages/webinar-engine/src/index.ts';
 async function harness(file,extra){const cells=[],effects=[],pending=[];let index=0;
  const same=(a,b)=>a&&b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
@@ -20,7 +21,7 @@ const icons=Object.fromEntries(['MessageCircle','Send','X','ChevronDown','Shield
 const w={...policy.newWebinar('00000000-0000-4000-8000-000000000123'),videoUrl:'https://example.test/day.mp4',status:'published',publicCode:'129340'};
 const sessionId='00000000-0000-4000-8000-000000000456';let requestLog=[],remembered='',completionGate=null;const redirects=[];location.assign=path=>redirects.push(path);
 async function post(url,body){requestLog.push({url,body});if(url.endsWith('/start'))return {canonicalPath:'/live/129340',sessionId,webinar:policy.publicWebinar(w),progress:0,name:remembered,contactSaved:false,messages:[],preview:false,serverNow:Date.now()};if(url.endsWith('/event')&&body.kind==='completed'){if(completionGate)await completionGate;return {saved:true,redirect:'/webinar/checkout'};}if(url.endsWith('/contact')){remembered=body.name;return {name:remembered,contactSaved:!!body.email&&!!body.phone};}if(url.endsWith('/chat'))return {messages:[{id:'m1',role:'user',text:body.text}]};return {saved:true};}
-const h=await harness('components/webinar-room.tsx',{useWebinarTimers:()=>({deadlines:{},now:Date.now()}),...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}});
+const h=await harness('components/webinar-room.tsx',{useWebinarTimers:()=>({deadlines:{},now:Date.now()}),...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}});
 const render=()=>h.render('WebinarRoom',{webinarCode:'129339'});let tree=render();await flush();tree=render();
 assert.equal(requestLog[0].body.code,'129339');assert.equal(requestLog[0].body.attribution.fbclid,'retained');assert.equal(replaced[0],'/live/129340?ad_id=55555&fbclid=retained#room');assert.equal(all(tree).some(n=>n.props?.className==='wb-offer'),false,'No offer before its cue');assert.equal(all(tree).some(n=>n.type==='header'),false);
 let player=find(tree,'WebinarPlayer');player.props.onProgress(30);tree=render();
@@ -34,6 +35,8 @@ assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).length,1);assert.e
 // the completion request is never interrupted by its late response.
 find(tree,'WebinarPlayer').props.onProgress(w.durationSeconds);tree=render();find(tree,'WebinarPlayer').props.onEnded();await flush();assert.deepEqual(redirects,['/webinar/checkout']);
 let finish;completionGate=new Promise(resolve=>{finish=resolve;});tree=render();find(tree,'WebinarPlayer').props.onEnded();find(tree,'WebinarCheckout').props.onEngaged();finish();await flush();assert.deepEqual(redirects,['/webinar/checkout'],'Late completion cannot replace an engaged checkout');
+// A Standard buyer gets the final upsell, even with an already-engaged base checkout.
+tree=render();find(tree,'WebinarCheckout').props.onPurchased('standard');assert.equal(redirects.at(-1),'/webinar/upgrade');
 h.close();
 // Real player handlers: failed autoplay is recoverable, and reloading restores
 // the newest position rather than the position at initial entry.
