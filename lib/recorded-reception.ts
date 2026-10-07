@@ -58,18 +58,11 @@ export function recordedReceptionToolMatches(id:string,input:unknown){
  const t=object(input),c=object(t.tool_config),a=object(c.api_schema),b=object(a.request_body_schema),p=object(b.properties),r=object(p.recordingId),h=object(object(a.request_headers).Authorization);
  return t.id===id&&c.type==='webhook'&&c.name==='icash_stop_reception_recording'&&a.url===recordedReceptionUrl+'/stop'&&a.method==='POST'&&Object.keys(object(a.request_headers)).length===1&&Object.keys(h).length===1&&h.variable_name==='secret__icash_reception_stop_token'&&b.type==='object'&&Array.isArray(b.required)&&b.required.length===1&&b.required[0]==='recordingId'&&Object.keys(p).length===1&&r.type==='string'&&r.dynamic_variable==='icash_reception_recording_id'&&(a.auth_connection===null||a.auth_connection===undefined)&&(!t.response_mocks||Array.isArray(t.response_mocks)&&t.response_mocks.length===0);
 }
-// Versioned static audio generated once with Eleven v4, in the agent's voice.
-// No per-call generation latency or extra generation request.
-const receptionPromptBase='https://www.geticashx.com/audio/reception-v4-20261007';
-const receptionPromptAudio=(name:'notice'|'question'|'goodbye')=>`<Play>${receptionPromptBase}/${name}.mp3</Play>`;
-export const receptionEndTwiml=`<Response>${receptionPromptAudio('goodbye')}<Hangup/></Response>`;
 export function receptionConsentTwiml(id:string,nonce:string,includeNotice=true){
- // Reuse the same signed action, speech settings, and fail-closed hangup.
- const original=consentTwiml(id,nonce,recordingDisclosure('iCash X','the receptionist'),includeNotice).replace('https://www.geticashx.com/api/internal/voice/recording/consent',recordedReceptionUrl+'/consent');
- let notice=includeNotice;
- return original.replace(/<Say\b[^>]*>[\s\S]*?<\/Say>/g,()=>{if(notice){notice=false;return receptionPromptAudio('notice');}return receptionPromptAudio('question');});
+ return consentTwiml(id,nonce,recordingDisclosure('iCash X','the receptionist'),includeNotice).replace('https://www.geticashx.com/api/internal/voice/recording/consent',recordedReceptionUrl+'/consent');
 }
-/** Play answers the incoming call. No recording or AI before signed setup. */
+/** Say answers the incoming call. A leading Pause would leave it ringing.
+ * No Gather, recording, or AI is allowed until the signed setup callback bounds it. */
 export function receptionAnswerTwiml(id:string,nonce:string){
  const consent=receptionConsentTwiml(id,nonce);
  const notice=consent.slice(0,consent.indexOf('<Gather'));

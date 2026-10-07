@@ -108,7 +108,7 @@ test('the installed incoming carrier URL preserves signature, funding and record
   const legacyUrl='https://www.geticashx.com/api/reception/inbound';
   const good=fixture();
   const answer=await good.answer(inboundRequest({}, {url:legacyUrl}));
-  assert.match(answer.text,/<Play>/);assert.match(answer.text,/<Redirect /);assert.equal(providerWrites(good).length,0);
+  assert.match(answer.text,/<Say /);assert.match(answer.text,/<Redirect /);assert.equal(providerWrites(good).length,0);
   good.setCall({status:'in-progress'});assert.match(await(await good.setup()).text(),/<Gather /);
   assert.deepEqual(providerWrites(good).map(e=>e.provider),['boundCall']);
   for(const options of [{signedUrl:recordedReceptionUrl+'/inbound'},{signedUrl:'https://other.invalid/api/reception/inbound'},{url:legacyUrl+'?extra=1'}]){
@@ -141,7 +141,7 @@ test('unaffordable reservation does not fall back to an owner test or shorter ca
   const f=fixture({denied:true});assert.equal((await f.admit()).text,rejectTwiml);const attempts=f.events.filter(e=>e.rpc==='icash_reserve_recorded_reception');assert.equal(attempts.length,1);assert.equal(attempts[0].body.p_config_id,configId);assert.equal(providerWrites(f).length,0);
 });
 test('spoken disclosure precedes listening; no recording or AI starts before speech consent',async()=>{
-  const f=fixture();const {text}=await f.admit();assert(text.indexOf('</Play>')<text.indexOf('<Gather'));assert.match(text,/reception-v4-20261007\/notice.mp3/);assert.match(text,/reception-v4-20261007\/question.mp3/);assert(!text.includes('<Say'));assert.match(text,/input="speech"/);assert(!/<Record|<Connect|dtmf/.test(text));assert(text.includes(recordedReceptionUrl+'/consent'));assert.equal(f.row.state,'consent_pending');assert.deepEqual(providerWrites(f).map(e=>e.provider),['boundCall']);
+  const f=fixture();const {text}=await f.admit();assert(text.indexOf('</Say>')<text.indexOf('<Gather'));assert.match(text,/AI assistant/);assert.match(text,/save a transcript/);assert.match(text,/keep audio private/);assert.match(text,/30 days/);assert.match(text,/input="speech"/);assert(!/<Record|<Connect|dtmf/.test(text));assert(text.includes(recordedReceptionUrl+'/consent'));assert.equal(f.row.state,'consent_pending');assert.deepEqual(providerWrites(f).map(e=>e.provider),['boundCall']);
   assert.equal(receptionConsentTwiml(id,'e'.repeat(64)).match(/<Gather/g).length,1);
 });
 test('replayed admission cannot repeat claimed provider bound/setup write',async()=>{
@@ -347,7 +347,7 @@ test('runtime rejects inline stop mismatches, duplicate tools and missing indepe
 
 test('ringing admission answers with disclosure, then signed setup bounds before gathering',async()=>{
  const f=fixture();const first=await f.answer();
- assert.match(first.text,/^<Response><Play>/);assert.match(first.text,/<Redirect method="POST">/);
+ assert.match(first.text,/^<Response><Say /);assert.match(first.text,/<Redirect method="POST">/);
  assert(!/<Gather|<Record|<Connect|<Pause/.test(first.text));assert.equal(f.row.state,'reserved');assert.equal(providerWrites(f).length,0);
  f.setCall({status:'in-progress'});
  const second=await(await f.setup()).text();assert.match(second,/^<Response><Gather /);assert.equal(f.row.state,'consent_pending');assert(f.row.call_started_at);
@@ -376,8 +376,3 @@ test('carrier error diagnostics expose only numeric status and code',async()=>{
  const malformed=createRecordedReceptionProviders(env,async()=>new Response(JSON.stringify({code:'private carrier details'}),{status:400}));
  await assert.rejects(malformed.boundCall(f.row),{message:'CALL_BOUND_HTTP_400_CODE_0'});
 });
-
- test('incoming prompts use matching versioned audio without altering signed consent',()=>{
- const xml=receptionConsentTwiml(id,'e'.repeat(64));assert.equal((xml.match(/<Play>/g)||[]).length,2);assert(!xml.includes('<Say'));assert.match(xml,/input="speech"/);assert.match(xml,/actionOnEmptyResult="true"/);assert.match(xml,/<Hangup\/>/);
- const question=receptionConsentTwiml(id,'e'.repeat(64),false);assert.equal((question.match(/<Play>/g)||[]).length,1);assert(!question.includes('notice.mp3'));assert.match(question,/question.mp3/);
- });

@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/prepare-reception-prompts.mjs && next build",
+    "build": "next build",
     "start": "next start",
     "test": "node scripts/test-all.mjs",
     "dealmachine:preflight": "node --experimental-strip-types scripts/dealmachine-preflight.mjs",

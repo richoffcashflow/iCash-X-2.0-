@@ -1,10 +1,10 @@
 import {randomBytes} from 'node:crypto';
-import {affirmativeSpeech,recordingGateOptOut,object,privateHeaders,sha,sid,uuid,verifiedTwilioForm} from './required-call-recording.ts';
+import {affirmativeSpeech,recordingGateOptOut,endTwiml,object,privateHeaders,sha,sid,uuid,verifiedTwilioForm} from './required-call-recording.ts';
 import {boundedBytes} from './required-call-recording-provider.ts';
 import {finalRecordingPayload} from './required-call-recording-service.ts';
 import {receptionTarget,receptionUrl,rejectTwiml,receptionWorkspacePostcallAbsent} from './general-reception.ts';
 import {propertyReceptionEnabled} from './reception-property-context.ts';
-import {recordedReceptionUrl,recordedReceptionPolicy,receptionEndTwiml,receptionConsentTwiml,receptionAnswerTwiml,receptionCallerHash,receptionStopToken,validRecordedReceptionConfig,inspectRecordedReceptionAgent,recordedReceptionToolMatches,incomingCallMatches,incomingCallIdentityMatches,receptionRecordingMatches,receptionAudioAvailable,type RecordedReceptionRpc,type RecordedReceptionRow,type RecordedReceptionConfig,type RecordedReceptionEnv} from './recorded-reception.ts';
+import {recordedReceptionUrl,recordedReceptionPolicy,receptionConsentTwiml,receptionAnswerTwiml,receptionCallerHash,receptionStopToken,validRecordedReceptionConfig,inspectRecordedReceptionAgent,recordedReceptionToolMatches,incomingCallMatches,incomingCallIdentityMatches,receptionRecordingMatches,receptionAudioAvailable,type RecordedReceptionRpc,type RecordedReceptionRow,type RecordedReceptionConfig,type RecordedReceptionEnv} from './recorded-reception.ts';
 import type {RecordedReceptionProviders} from './recorded-reception-provider.ts';
 const xml=(body:string)=>new Response(body,{headers:{...privateHeaders,'Content-Type':'application/xml; charset=utf-8'}});
 const hangup=()=>xml('<Response><Hangup/></Response>');
@@ -118,11 +118,11 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
     if(row.state!=='consent_pending'||row.consent_at){await endRecordedReception(rpc,provider,row,'replayed_consent');return hangup();}
     row=await bindRecordedReceptionCallStart(rpc,row,call);
     const optOut=recordingGateOptOut(auth.f);
-    if(optOut){const stopped=await transition(row,'contact_opt_out',{nonceHash:row.nonce_hash,utterance:optOut});if(stopped)row=stopped;await endRecordedReception(rpc,provider,row,'contact_opt_out');return xml(receptionEndTwiml);}
+    if(optOut){const stopped=await transition(row,'contact_opt_out',{nonceHash:row.nonce_hash,utterance:optOut});if(stopped)row=stopped;await endRecordedReception(rpc,provider,row,'contact_opt_out');return xml(endTwiml);}
     const c=await currentConfig(row.to_phone),age=now()-Date.parse(row.call_started_at??'');
     if(!c||c.id!==row.config_id||!Number.isFinite(age)||age<0||age>45000||Date.parse(row.consent_deadline_at)<=now()||!await checkAgent(c)){await transition(row,'decline',{reason:'timeout'});await endRecordedReception(rpc,provider,row,'consent_unavailable');return hangup();}
     const yes=affirmativeSpeech(auth.f);
-    if(!yes){await transition(row,'decline',{reason:auth.f.has('SpeechResult')?'ambiguous':'timeout'});await endRecordedReception(rpc,provider,row,'consent_declined');return xml(receptionEndTwiml);}
+    if(!yes){await transition(row,'decline',{reason:auth.f.has('SpeechResult')?'ambiguous':'timeout'});await endRecordedReception(rpc,provider,row,'consent_declined');return xml(endTwiml);}
     let next=await transition(row,'consent',{nonceHash:row.nonce_hash,source:'twilio_gather_speech',...yes,disclosureVersion:'required-audio-30d-speech-2026-10-03'});if(!next)throw Error('CONSENT_NOT_SAVED');row=next;
     next=await transition(row,'claim_start');if(!next)throw Error('START_ALREADY_CLAIMED');row=next;
     const recording=await provider.start(row.call_sid,recordedReceptionUrl+'/status?id='+row.id);
