@@ -20,4 +20,4 @@ export function sellerLeadCharge(adCostMicros:number,otherCostMicros:number,mult
  if(![adCostMicros,otherCostMicros,multiplier].every(Number.isSafeInteger)||adCostMicros<0||otherCostMicros<0||multiplier!==3)throw Error('LEAD_COST_REQUIRED');
  const amount=(BigInt(adCostMicros)+BigInt(otherCostMicros))*BigInt(multiplier);const cents=(amount+BigInt(9999))/BigInt(10000);if(cents>BigInt(Number.MAX_SAFE_INTEGER))throw Error('LEAD_COST_TOO_LARGE');return Number(cents);
 }
-export function sellerLeadEvent(stage:'numbers_passed'|'market_qualified'|'call_connected'|'application_submitted'){return ({numbers_passed:'CompleteRegistration',market_qualified:'Lead',call_connected:'Contact',application_submitted:'SubmitApplication'} as const)[stage];}
+export function sellerLeadEvent(stage:'registration'|'numbers_passed'|'market_qualified'|'call_connected'|'application_submitted'){return ({registration:'CompleteRegistration',numbers_passed:'Lead',market_qualified:'Lead',call_connected:'Contact',application_submitted:'SubmitApplication'} as const)[stage];}

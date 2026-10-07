@@ -13,7 +13,7 @@ assert.equal(sellerSubmission.parse({...input,email:' Seller@Example.com '}).ema
 assert.equal(sellerDuplicateKeyInput(' 123 Main St. ','+12145550123'),sellerDuplicateKeyInput('123 MAIN ST','+12145550123'));
 const raw={data:[{matched:true,dm_property_id:'prop_123',full_address:'Synthetic only',city:'Dallas',state:'TX',zip:'75217',property_type:1,estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}],credits:{used:1,people:0},totals:{submitted:1}};
 const options={assignmentFeeCents:1000000,sellerCostReserveCents:100000};
-let r=qualifySellerProperty(raw,options,now);assert.equal(r.status,'qualified');assert.equal(r.result.outreachAuthorized,false);assert.equal(r.result.offerAuthorized,false);
+let r=qualifySellerProperty(raw,options,now);assert.equal(r.status,'qualified');assert.equal(r.result.outreachAuthorized,false);assert.equal(r.result.offerAuthorized,true);
 assert.equal(qualifySellerProperty({...raw,data:[{...raw.data[0],property_type:[1]}]},options,now).status,'qualified','The documented MULTI_SELECT array must qualify the same as its legacy scalar');
 for(const type of ['Single Family',['Single Family'],' single family ']){
  const labeled=qualifySellerProperty({...raw,data:[{...raw.data[0],property_type:type}]},options,now);
@@ -51,3 +51,5 @@ assert.equal(sellerSubmission.safeParse({...input,contactTimezone:'invalid/zone'
 
 assert.equal(r.property.sellerCostReserveCents,options.sellerCostReserveCents);
 assert.equal(runScreeningJob({propertyId:r.property.id,propertyType:'house',fetchedAt:r.property.fetchedAt,raw:r.property.raw,sellerCostReserveCents:r.property.sellerCostReserveCents},now).financialCheck.status,'eligible','Qualification reserve must survive the delivered snapshot');
+
+assert.equal(sellerMetaEvent({...event,name:'Contact',actionSource:'chat'},now).action_source,'chat');

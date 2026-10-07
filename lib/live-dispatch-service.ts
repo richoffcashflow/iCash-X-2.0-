@@ -1,3 +1,5 @@
+import {limitedSellerPrompt} from './seller-limited-contact.ts';
+import {runScreeningJob} from './screening-job.ts';
 import {loadSellerClosingContext} from './seller-closing-context.ts';
 import {recordingServer} from './required-call-recording-server.ts';
 import {object,readRecordingReview,recordingAgentMatches,recordingPolicy} from './required-call-recording.ts';
@@ -44,10 +46,12 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  p.sellerConsentVerified=p.seller_intake_id?await db<boolean>('rpc/icash_seller_voice_permission_current','POST',{p_account:accountId,p_permission:p.id})===true:false;
  const contact=contactEligibility(p);if(!contact.ready){if(contact.reason==='outside_contact_hours'&&!j.callback_id){await db(`icash_voice_jobs?id=eq.${j.id}&state=eq.issued`,'PATCH',{state:'ready',due_at:new Date(Date.now()+30*60000).toISOString()});return {status:contact.reason};}return hold(contact.reason);}
  const eligible=p.party==='seller'?callEligibility(p,snapshot.snapshot):null;
- if(eligible&&!eligible.ready)return hold(eligible.reason);
+ const limited=p.party==='seller'&&eligible&&!eligible.ready&&eligible.reason==='financial_hold'&&p.sellerConsentVerified&&await db<boolean>('rpc/icash_seller_limited_contact','POST',{p_account:accountId,p_screening:p.screening_id})===true;
+ if(eligible&&!eligible.ready&&!limited)return hold(eligible.reason);
+ const limitedScreen=limited?runScreeningJob(snapshot.snapshot):null;
  const buyerContext=p.party==='buyer'?await db<BuyerCallContext|null>('rpc/icash_buyer_voice_context','POST',{p_permission:p.id}):null;
  if(p.party==='buyer'&&!buyerContext)return hold('buyer_marketing_release_required');
- const address=buyerContext?.address||(eligible?.ready?eligible.screening.property.address:'');
+ const address=limitedScreen?.property.address||buyerContext?.address||(eligible?.ready?eligible.screening.property.address:'');
  const [identity]=await db<{principal:string;voice_id:string;company_name?:string}[]>(`icash_customer_identities?account_id=eq.${accountId}&select=principal,voice_id,company_name`);
  const [account]=await db<{assistant_name:string;bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=assistant_name,bot_paused`);
  if(!identity?.principal||!account||account.bot_paused)return hold('identity_or_start_required');
@@ -77,17 +81,17 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const priorCalls=p.party==='seller'?await db<unknown>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&contact_key=eq.${p.contact_key}&party=eq.seller&state=eq.complete&operation_key=like.voice:*&completed_at=gte.${encodeURIComponent(new Date(Date.now()-30*86400000).toISOString())}&order=completed_at.desc&limit=3&select=completed_at,result`):[];
  const buyerKind=identity.company_name?.trim()?'company' as const:'individual' as const;
  const request=p.party==='seller'&&object(snapshot.snapshot).sellerRequest?await db<SellerRequestContext|null>('rpc/icash_seller_call_request','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone}):null;
- const closing=p.party==='seller'&&recordedReview.contractToolId?await loadSellerClosingContext(db,accountId,p.screening_id,p.phone,ceiling):null;
+ const closing=!limited&&p.party==='seller'&&recordedReview.contractToolId?await loadSellerClosingContext(db,accountId,p.screening_id,p.phone,ceiling):null;
  const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext,request:request??undefined};
  // Validate the complete opening/context before reserving credits or dialing.
  let sellerGreeting:string|undefined,sellerPrompt:string|undefined;
- if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext,true);sellerPrompt=sellerCallPrompt(sellerContext,ceiling,closing,!!recordedReview.contractToolId,cashOfferPrice);}catch{return hold('property_context_required');}}
+ if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext,true);sellerPrompt=limited?limitedSellerPrompt(address,identity.principal,account.assistant_name):sellerCallPrompt(sellerContext,ceiling,closing,!!recordedReview.contractToolId,cashOfferPrice);}catch{return hold('property_context_required');}}
  const operationKey=`voice:${j.id}`;
  const reserveHold=recordingReleaseHold();if(reserveHold)return hold(reserveHold);
  if(!await db<boolean>('rpc/icash_reserve_paced_voice','POST',{p_account:accountId,p_job:j.id,p_rate:rateId,p_permission_until:p.permission_until,p_financial_checked_at:eligible?.ready?new Date(eligible.screening.financialCheck.checkedAt).toISOString():null,p_financial_eligible:eligible?.ready&&eligible.screening.financialCheck.status==='eligible'}))return {status:'waiting_for_daytime_budget'};
  const claimHold=recordingReleaseHold();if(claimHold)return hold(claimHold);
  const claimed=p.party==='seller'
-  ?await db<boolean>('rpc/icash_claim_automatic_offer_voice_job','POST',{p_job:j.id,p_snapshot:snapshot.snapshot,p_offer_price_cents:cashOfferPrice})
+  ?limited?await db<boolean>('rpc/icash_claim_limited_seller_voice','POST',{p_job:j.id,p_snapshot:snapshot.snapshot}):await db<boolean>('rpc/icash_claim_automatic_offer_voice_job','POST',{p_job:j.id,p_snapshot:snapshot.snapshot,p_offer_price_cents:cashOfferPrice})
   :await db<boolean>('rpc/icash_claim_reviewed_voice_job','POST',{p_job:j.id,p_offer_snapshot:null,p_buyer_snapshot:buyerContext});
  if(!claimed)return hold('dispatch_permission_changed');
  ownsDispatch=true;

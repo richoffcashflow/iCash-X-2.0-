@@ -1,5 +1,5 @@
 import {safeTextReplies} from './text-ai-policy.ts';
-export type TextProperty={address:string;fetchedAt:string;ceilingCents:number|null;titleReview:boolean};
+export type TextProperty={address:string;fetchedAt:string;ceilingCents:number|null;titleReview:boolean;contactOnly?:boolean};
 /** These questions do not quote an offer, accept terms, or authorize a contract. */
 export function propertyQuestionAllowed(action:string,property:TextProperty|null,messages:{direction:string;body:string}[],now=Date.now()){
  if(!['ask_flexibility','ask_payoff'].includes(action))return true;

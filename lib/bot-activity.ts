@@ -1,6 +1,6 @@
 /** Public task labels only. Never expose prompts, hidden reasoning, or contact data. */
 export const botTaskLabels:Record<string,string>={
- discovery:'Finding properties',market_research:'Checking property availability',contacts:'Looking up owners',
+ discovery:'Searching for new leads',market_research:'Checking property availability',contacts:'Looking up owners',
  seller_opener:'Contacting an owner',text_ai:'Preparing a reply',voice_dispatch:'Starting a call',
  voice_result:'Updating a conversation',signing_result:'Checking a signature',fulfillment:'Preparing deal documents',
  title_followup:'Following up with title',customer_updates:'Sending an update',customer_attention:'Sending an update',

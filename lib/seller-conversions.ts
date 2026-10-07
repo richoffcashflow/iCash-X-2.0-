@@ -1,11 +1,11 @@
 import {createHash} from 'node:crypto';
 import type {SellerDb} from './seller-pipeline.ts';
-type Event={id:string;leadId:string;token:string;name:string;occurredAt:string;phone:string};
+type Event={id:string;leadId:string;token:string;name:string;occurredAt:string;phone:string;actionSource?:'chat'|'phone_call'|'system_generated'};
 export function sellerMetaEvent(e:Event,now=Date.now()){
  const time=Date.parse(e.occurredAt);
  if(!['CompleteRegistration','Lead','Contact','SubmitApplication'].includes(e.name)||!/^\+1[2-9]\d{2}[2-9]\d{6}$/.test(e.phone)||!Number.isFinite(time)||time>now||time<now-7*86400000)throw Error('Event outside delivery window');
  const hash=(v:string)=>createHash('sha256').update(v).digest('hex');
- return {event_name:e.name,event_time:Math.floor(time/1000),event_id:`keypath:${e.id}`,action_source:e.name==='Contact'?'phone_call':'system_generated',user_data:{ph:[hash(e.phone.slice(1))],external_id:[hash(e.leadId)]}};
+ return {event_name:e.name,event_time:Math.floor(time/1000),event_id:`keypath:${e.id}`,action_source:e.name==='Contact'?(e.actionSource==='chat'?'chat':'phone_call'):'system_generated',user_data:{ph:[hash(e.phone.slice(1))],external_id:[hash(e.leadId)]}};
 }
 /** Stable IDs survive retries. No raw address, financial estimate or transcript is exported. */
 export async function deliverSellerEvent(db:SellerDb,env:NodeJS.ProcessEnv,transport:typeof fetch=fetch){
