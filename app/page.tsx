@@ -14,6 +14,7 @@ import type {OutreachCampaignStatus} from '@/components/outreach-campaign-state'
 import {OutreachCampaignAcknowledgment} from '@/components/outreach-campaign-acknowledgment';
 import {BudgetSummary} from '@/components/budget-summary';
 import {MembershipCheckout} from '@/components/membership-checkout';
+import {WebinarExpressCheckout} from '@/components/webinar-express-checkout';
 import {MembershipSettings} from '@/components/membership-settings';
 import {SupportLauncher} from '@/components/support-launcher';
 import {WorkspaceUpdates,BotUpdatePreferences} from '@/components/workspace-updates';
@@ -100,6 +101,7 @@ export default function Home(){
  const guest=!account?.signedIn;const profile=account?.signedIn?account.botSetup?.profile:draftBrand;const theme=setupThemes.ink;
  const needsIdentity=account?.signedIn===true&&!workspaceLocked&&!account.identity;
  const needsBotName=account?.signedIn===true&&((account.balanceCents??0)>0||account.billingModel==='prepaid'||account.membershipActive===true)&&!account.botSetup?.profile.displayName?.trim();
+ if(guest)return <WebinarExpressCheckout checkingAccount={!account} accountError={accountError} signInReady={account?.signInReady??true} onRetry={()=>void refreshAccount()} onSignedIn={()=>void refreshAccount()}/>;
  return <div className="console-shell personalized-workspace minimal-workspace assistant-workspace" style={{'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties}>
   <header className="console-header"><div>{profile?.displayName?<BotBrand profile={profile} compact/>:<><Image src="/icash-x-logo.png" alt="iCash X" width={111} height={62} priority/><b className="brand-version">2.0</b></>}</div><div className="workspace-header-links">{account?.signedIn?<SupportLauncher key={account.email??'account'} onMembershipChanged={membershipChanged}/>:<a className="workspace-help" href="/support">Help</a>}{account?.signedIn?<>{!workspaceLocked&&<><WorkspaceUpdates onPreferences={()=>showDetails('notification-settings')} onBudget={()=>openFunding()}/><button className="header-access" aria-expanded={settingsOpen} onClick={()=>setSettingsOpen(v=>!v)}>Settings</button></>}<button className="header-access" onClick={()=>void signOut()}>Sign out</button></>:<button id="balance-sign-in" className="header-access" aria-expanded={signInOpen} aria-controls="inline-sign-in" onClick={()=>setSignInOpen(v=>!v)}>Sign in</button>}</div></header>
   <main className="console-main">
