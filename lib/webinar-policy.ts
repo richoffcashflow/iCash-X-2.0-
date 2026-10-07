@@ -23,7 +23,7 @@ export const audienceDisplaySchema=z.object({mode:z.enum(['actual','fixed','simu
 export const purchaseNotificationsSchema=z.object({enabled:z.boolean().default(true),includeRegion:z.boolean().default(true),startAt:z.number().int().min(0).max(14400).nullable().default(null),intervalSeconds:z.number().int().min(15).max(120).default(30)}).strict();
 const webinarBaseSchema=z.object({
  publicCode:z.string().regex(/^\d{6,12}$/).nullable().default(null),parentWebinarId:z.string().uuid().nullable().default(null),id:z.string().uuid(),revision:z.number().int().positive(),title:z.string().trim().min(1).max(150),description:z.string().max(600),
- intelligenceEnabled:z.boolean().default(false),status:z.enum(['draft','published']),audience:z.enum(['all','day','night','returning']),priority:z.number().int().min(0).max(100),
+ adEntryWebinarId:z.string().uuid().optional(),intelligenceEnabled:z.boolean().default(false),status:z.enum(['draft','published']),audience:z.enum(['all','day','night','returning']),priority:z.number().int().min(0).max(100),
  videoUrl:httpsUrl,posterUrl:httpsUrl,durationSeconds:z.number().int().min(10).max(14400),
  nameAt:z.number().int().min(0).max(14400),contactAt:z.number().int().min(0).max(14400),pitchAt:z.number().int().min(0).max(14400),
  offerTitle:z.string().trim().min(1).max(150),ctaLabel:z.string().trim().min(1).max(60),offerEndsAt:z.string().datetime().nullable(),
@@ -60,7 +60,7 @@ export function chooseWebinar(webinars:Webinar[],_history:WatchHistory[]=[],_tim
  return [...webinars].filter(w=>!w.parentWebinarId&&w.status==='published'&&w.videoUrl).sort((a,b)=>Number(a.publicCode??Number.MAX_SAFE_INTEGER)-Number(b.publicCode??Number.MAX_SAFE_INTEGER)||a.id.localeCompare(b.id))[0]??null;
 }
 export type WebinarRow={config:Webinar;public_code:number;parent_webinar_id?:string|null};
-export function webinarFromRow(row:WebinarRow):Webinar{return webinarSchema.parse({...row.config,publicCode:String(row.public_code),parentWebinarId:row.parent_webinar_id??null,intelligenceEnabled:false});}
+export function webinarFromRow(row:WebinarRow):Webinar{return webinarSchema.parse({...row.config,adEntryWebinarId:undefined,publicCode:String(row.public_code),parentWebinarId:row.parent_webinar_id??null,intelligenceEnabled:false});}
 export function newVipWebinar(id:string,parent:Webinar):Webinar{return {...newWebinar(id),offers:[{id:'workspace',title:'Make it yours',description:'Create your bot and open your workspace.',ctaLabel:'Set up my bot',at:1500,expiresAt:null,action:'link',url:'/join?setup=1'}],title:`${parent.title.slice(0,136)} · VIP`,description:'Your follow-up session.',parentWebinarId:parent.id};}
 
 export function formatWatchTime(seconds:number){const p=splitDuration(seconds);return p.hours?`${p.hours}:${String(p.minutes).padStart(2,'0')}:${String(p.seconds).padStart(2,'0')}`:`${p.minutes}:${String(p.seconds).padStart(2,'0')}`;}
@@ -69,12 +69,12 @@ export function webinarOffers(w:OfferConfig):WebinarOffer[]{return w.offers?.len
 export function webinarPitchAt(w:OfferConfig){return Math.min(...webinarOffers(w).map(o=>o.at));}
 export function offerDestination(o:WebinarOffer){return o.action==='link'&&validOfferUrl(o.url)?o.url:webinarSite.checkoutPath;}
 export function webinarEndOffer(w:OfferConfig,now=Date.now()){return selectOffer(webinarOffers(w),w.durationSeconds??14400,now,w.endOfferId);}
-export function publicWebinar(w:Webinar){const {faq,chatStyle,nightVersion,nightEnabled,...rest}=w;void faq;void chatStyle;void nightVersion;void nightEnabled;return {...rest,chat:w.chat.map(({variations,...cue})=>{void variations;return cue;})};}
+export function publicWebinar(w:Webinar){const {faq,chatStyle,nightVersion,nightEnabled,adEntryWebinarId,...rest}=w;void faq;void chatStyle;void nightVersion;void nightEnabled;void adEntryWebinarId;return {...rest,chat:w.chat.map(({variations,...cue})=>{void variations;return cue;})};}
 export function offerOpen(w:Pick<Webinar,'offerEndsAt'>,now=Date.now()){return !w.offerEndsAt||Date.parse(w.offerEndsAt)>now;}
 export const eventNames=['started','progress','name_saved','contact_saved','pitch_shown','add_to_cart','checkout_opened','completed','chat_question','returning_customer'] as const;
 export type WebinarEvent=typeof eventNames[number];
 export const optimizerSchema=z.object({enabled:z.boolean().default(false),explorationPercent:z.number().int().min(10).max(50).default(20),minVisitors:z.number().int().min(20).max(5000).default(100)}).strict();
 export const metaSchema=z.object({enabled:z.boolean().default(false),pixelId:z.string().regex(/^\d{5,30}$/).or(z.literal('')).default('')}).strict();
 export const routingSchema=z.object({nightStartsAt:z.number().int().min(0).max(23),nightEndsAt:z.number().int().min(0).max(23),checkoutWindowHours:z.number().min(0).max(72).default(8)}).strict().refine(r=>r.nightStartsAt!==r.nightEndsAt,'Day and night need different start times.');
-export const settingsSchema=z.object({homepageVipId:z.string().uuid().nullable().default(null),enabled:z.boolean(),smsEnabled:z.boolean().default(false),smartFollowups:z.boolean().default(true),fromEmail:z.string().email().or(z.literal('')),postalAddress:z.string().max(500),subjects:z.array(z.string().min(1).max(150)).length(3),messages:z.array(z.string().min(1).max(2000)).length(3),optimizer:optimizerSchema.default({enabled:false,explorationPercent:20,minVisitors:100}),meta:metaSchema.default({enabled:false,pixelId:''}),routing:routingSchema.default({nightStartsAt:18,nightEndsAt:6})}).strict();
+export const settingsSchema=z.object({homepageVipId:z.string().uuid().nullable().default(null),homepageVipNightId:z.string().uuid().nullable().default(null),homepageVipMode:z.enum(['selected','best-converting']).default('selected'),enabled:z.boolean(),smsEnabled:z.boolean().default(false),smartFollowups:z.boolean().default(true),fromEmail:z.string().email().or(z.literal('')),postalAddress:z.string().max(500),subjects:z.array(z.string().min(1).max(150)).length(3),messages:z.array(z.string().min(1).max(2000)).length(3),optimizer:optimizerSchema.default({enabled:false,explorationPercent:20,minVisitors:100}),meta:metaSchema.default({enabled:false,pixelId:''}),routing:routingSchema.default({nightStartsAt:18,nightEndsAt:6})}).strict();
 export type WebinarSettings=z.infer<typeof settingsSchema>;

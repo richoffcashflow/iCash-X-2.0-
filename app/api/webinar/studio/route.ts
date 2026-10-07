@@ -17,7 +17,7 @@ export async function POST(req:Request){try{
  webinarOrigin(req);await webinarOwner();const body=await webinarBody(req,800000);
  if(body.action==='settings'){
  const config=settingsSchema.parse(body.settings);config.optimizer.enabled=false;
- if(config.homepageVipId){const [vip]=await db<WebinarRow[]>(`icash_webinars?id=eq.${config.homepageVipId}&parent_webinar_id=not.is.null&select=config,public_code,parent_webinar_id&limit=1`);if(!vip)throw new WebinarError(400,'Choose a saved VIP session for homepage buyers.');}
+ await Promise.all([...new Set([config.homepageVipId,config.homepageVipNightId].filter(Boolean))].map(async id=>{const [vip]=await db<WebinarRow[]>(`icash_webinars?id=eq.${id}&parent_webinar_id=not.is.null&select=config,public_code,parent_webinar_id&limit=1`);if(!vip)throw new WebinarError(400,'Choose a saved VIP session for homepage buyers.');}));
  if(config.meta.enabled&&(!config.meta.pixelId||!metaReady()))throw new WebinarError(400,'Add your Meta Pixel ID and server connection before enabling measurement.');
  await db('icash_webinar_settings?id=eq.1','PATCH',{config,updated_at:new Date().toISOString()});return Response.json({saved:true,followupReadiness:webinarFollowupReadiness(config)},{headers:webinarHeaders});}
  if(body.action==='create_vip'){
@@ -28,7 +28,7 @@ export async function POST(req:Request){try{
   return Response.json({webinars:pair.map(webinarFromRow)},{headers:webinarHeaders});
  }
  const input=z.object({action:z.literal('save'),webinar:webinarSchema,isNew:z.boolean()}).strict().parse(body);
- const {publicCode:ignoredCode,parentWebinarId:ignoredParent,...details}=input.webinar;void ignoredCode;void ignoredParent;
+ const {publicCode:ignoredCode,parentWebinarId:ignoredParent,adEntryWebinarId:ignoredEntry,...details}=input.webinar;void ignoredCode;void ignoredParent;void ignoredEntry;
  const config={...details,intelligenceEnabled:false,pitchAt:webinarPitchAt(input.webinar),revision:input.isNew?1:input.webinar.revision+1,nightVersion:input.webinar.nightVersion?{...input.webinar.nightVersion,pitchAt:webinarPitchAt(input.webinar.nightVersion)}:null};
  if(config.status==='published'&&webinarOffers(config).every(o=>o.expiresAt&&Date.parse(o.expiresAt)<=Date.now()))throw new WebinarError(400,'Every offer has expired. Update a deadline or add an evergreen offer before publishing.');
  if(config.status==='published'&&config.nightEnabled&&config.nightVersion&&webinarOffers(config.nightVersion).every(o=>o.expiresAt&&Date.parse(o.expiresAt)<=Date.now()))throw new WebinarError(400,'The night recording needs an available offer.');

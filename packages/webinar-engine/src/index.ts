@@ -25,6 +25,25 @@ export function returnVisit(history:ReturnSession[],timezone:string,checkoutWind
  }
  return {kind:!latest.completed_at&&sameLocalDay(latest.updated_at,timezone,now)?'resume':'advance',sessionId:latest.id};
 }
+/** Only this arrival's explicit paid-ad tags qualify; saved attribution is not an arrival. */
+export function paidAdArrival(attribution:Record<string,string>={}){
+ return /^\d{5,30}$/.test(attribution.ad_id??'')||!!attribution.utm_source?.trim()&&/^(paid[_ -]?social|paid|cpc|ppc|cpv|display)$/i.test(attribution.utm_medium??'');
+}
+export type ConfirmedWatch={is_preview:boolean;completed_at:string|null;watched_seconds?:number;config:{durationSeconds:number}};
+/** Opening a page or seeking to the ending does not confirm that it was watched. */
+export function confirmedWatch(session:ConfirmedWatch,now=new Date()){
+ const completed=session.completed_at?Date.parse(session.completed_at):NaN;
+ return !session.is_preview&&Number.isFinite(completed)&&completed<=now.getTime()&&Number.isFinite(session.config.durationSeconds)&&session.config.durationSeconds>0&&Number.isFinite(session.watched_seconds)&&(session.watched_seconds??0)>=session.config.durationSeconds*.9;
+}
+export type ConversionRecording={webinarId:string;version:'day'|'night';viewers:number;cohortBuyers:number};
+export type ConversionCandidate={id:string;publicCode?:string|null;recordingVersion:'day'|'night'};
+export function stableWebinarOrder(a:ConversionCandidate,b:ConversionCandidate){return Number(a.publicCode??Number.MAX_SAFE_INTEGER)-Number(b.publicCode??Number.MAX_SAFE_INTEGER)||a.id.localeCompare(b.id);}
+/** Observed paid close rate, never randomized traffic or a Meta spending decision. */
+export function bestConvertingWebinar<T extends ConversionCandidate>(pool:T[],stats:ConversionRecording[]):T|null{
+ const ranked=pool.flatMap(webinar=>{const row=stats.find(s=>s.webinarId===webinar.id&&s.version===webinar.recordingVersion);return row&&Number.isFinite(row.viewers)&&Number.isFinite(row.cohortBuyers)&&row.viewers>=20&&row.cohortBuyers>=1&&row.cohortBuyers<=row.viewers?[{webinar,rate:row.cohortBuyers/row.viewers,viewers:row.viewers}]:[];});
+ ranked.sort((a,b)=>b.rate-a.rate||b.viewers-a.viewers||stableWebinarOrder(a.webinar,b.webinar));
+ return ranked[0]?.webinar??null;
+}
 export type WebinarPerformance={webinar_id:string;revision:number;visitors:number;mature_visitors:number;purchases:number;value_cents:number;mature_value_cents:number;viewers?:number;buyers?:number;close_rate?:number};
 export type Allocation={webinar_id:string;revision:number;share:number;valuePerVisitor:number;phase:'learning'|'optimizing'};
 export function eligibleVariants<T extends WebinarDefinition>(webinars:T[],history:WatchHistory[],timezone:string,now=new Date(),routing={nightStartsAt:18,nightEndsAt:6}){
