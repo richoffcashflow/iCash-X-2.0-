@@ -14,12 +14,12 @@ globalThis.document={hidden:false,addEventListener:(n,f)=>listeners.set(n,f),rem
 globalThis.location={search:'',pathname:'/live/129339',assign:()=>{},replace:()=>{}};
 globalThis.localStorage=globalThis.sessionStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)};
 Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true});
-const components=Object.fromEntries(['WebinarPlayer','WebinarPanelBoundary','WebinarAudience','WebinarPurchaseNotifications','WebinarCheckout','AccountAccess'].map(n=>[n,n]));
+const components=Object.fromEntries(['WebinarPlayer','WebinarPanelBoundary','WebinarAudience','WebinarPurchaseNotifications','WebinarCheckout','AccountAccess','WebinarTimers'].map(n=>[n,n]));
 const icons=Object.fromEntries(['MessageCircle','Send','X','ChevronDown','ShieldCheck','Maximize','Pause','Play','Volume2','VolumeX'].map(n=>[n,n]));
 const w={...policy.newWebinar('00000000-0000-4000-8000-000000000123'),videoUrl:'https://example.test/day.mp4',status:'published',publicCode:'129339'};
 const sessionId='00000000-0000-4000-8000-000000000456';let requestLog=[],remembered='';
 async function post(url,body){requestLog.push({url,body});if(url.endsWith('/start'))return {sessionId,webinar:policy.publicWebinar(w),progress:0,name:remembered,contactSaved:false,messages:[],preview:false,serverNow:Date.now()};if(url.endsWith('/contact')){remembered=body.name;return {name:remembered,contactSaved:!!body.email&&!!body.phone};}if(url.endsWith('/chat'))return {messages:[{id:'m1',role:'user',text:body.text}]};return {saved:true};}
-const h=await harness('components/webinar-room.tsx',{...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}});
+const h=await harness('components/webinar-room.tsx',{useWebinarTimers:()=>({deadlines:{},now:Date.now()}),...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}});
 const render=()=>h.render('WebinarRoom',{webinarCode:'129339'});let tree=render();await flush();tree=render();
 assert.equal(requestLog[0].body.code,'129339');assert.equal(all(tree).some(n=>n.props?.className==='wb-offer'),false,'No offer before its cue');assert.equal(all(tree).some(n=>n.type==='header'),false);
 let player=find(tree,'WebinarPlayer');player.props.onProgress(30);tree=render();

@@ -77,3 +77,7 @@ Cold pools split randomized traffic equally. Once at least two recordings have 1
 Sparse ads use shared evidence from the same audience context. Ad IDs come from numeric `ad_id` or `utm_content`; unresolved macros and labels stay untagged. Meta URL parameters are available in the Intelligence tab. The optimizer never manages ad spend, changes Meta event definitions, or synthesizes purchases. Revenue includes collected payments and is not net profit.
 
 The control comparison is limited to the same pool of eligible recordings, revisions and priorities. It reports observed revenue per visitor; returns with different eligibility are not mixed. Aggregate reads are cached for 60 seconds and bounded to 1.8 seconds on a cache miss. If reporting fails, entry chooses the baseline without training on that fallback. Session persistence remains required before entry can succeed.
+
+### Display timers
+
+Import `timerDisplay` and the `WebinarTimer` / `TimerDeadlines` types from `@cashflowkey/webinar-engine/timers`. The pure renderer supports video cue timing, persisted relative deadlines, fixed timestamps, and hide/message expiry. Supply a trusted current time and server-persisted deadlines. The iCash X adapter stores the first deadline per visitor/webinar/recording/timer, independently of analytics and payments; another website can supply its own persistence.

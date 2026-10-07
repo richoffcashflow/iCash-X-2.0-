@@ -5,7 +5,7 @@ The owner manages sessions at `/webinaradmin` (`/webinar-studio` remains an alia
 ## Publish a session
 
 1. Create a session; upload an MP4/WebM/MOV or supply a direct HTTPS video URL. MP4 with H.264/AAC offers the broadest browser compatibility. The storage project's own upload cap also applies.
-2. Follow Video & details → Offers → Chat & AI → Review & publish. Duration and every timed moment use Hours / Minutes / Seconds. The video supplies its duration when metadata is available. Add up to 12 offers, each with its own headline, reveal time, CTA, destination and optional fixed deadline. Select an ending offer or use the latest available one.
+2. Follow Video & details → Offers → Timers → Chat & AI → Review & publish. Duration and every timed moment use Hours / Minutes / Seconds. The video supplies its duration when metadata is available. Add up to 12 offers, each with its own headline, reveal time, CTA, destination and optional fixed deadline. Select an ending offer or use the latest available one.
 3. Add timed host notes or import CSV/JSON. CSV columns: `time,name,message,kind`; `time` accepts seconds or `mm:ss`, and `kind` is `host` or `replay`. Use only genuine past comments for replay entries. `{{name}}` inserts the viewer's saved first name.
 4. Add approved facts/FAQ for AI answers. Pasted transcripts can generate a draft host-note timeline for review.
 5. Save and publish the Day recording. It runs at all hours until you choose **Add night version**, upload that recording, and save with automatic switching enabled. Day and Night keep independent video, chat, offers and timing under one permanent link. Night defaults to 6 PM–6 AM in the visitor’s local timezone; change those hours in Settings. Existing sessions keep their recording and saved place.
@@ -142,3 +142,16 @@ At expiry, an unpaid viewer receives the next eligible unseen recording, even th
 ## October 6 update verification
 
 Focused checks cover separate recording edits and selection, numeric links, prompt sequencing, bounded network requests, media reload recovery, checkout ownership, API validation and private analytics. The isolated Postgres run checks numeric code allocation, cross-link resume, playback accumulation excluding pauses, Day/Night report aggregation, verified purchase attribution and existing RLS/grants. Tests use synthetic data; no payment or email is sent. No production webinar recording existed when this update was verified. A full real-device playback/upload and live checkout test still needs the owner’s recording and account.
+
+
+## Timers
+
+Each Day/Night recording has a **Timers** step with **Add timer**. Add up to eight countdowns, each with a video reveal time, label, duration or fixed closing date, placement above the offer or below the video, and an at-zero action (hide or show a message). Times use Hours / Minutes / Seconds.
+
+Duration timers start the first time the viewer reaches their cue. The server stores the deadline by visitor, webinar, recording version and timer ID. Refreshes, multiple tabs, pauses, later sessions and edited revisions cannot extend it. To create a genuinely new countdown, add a new timer. Fixed deadlines use an absolute timestamp. Timers use server time; a missing timer response hides an unconfirmed countdown and retries without interrupting playback or checkout. Owner previews demonstrate countdowns against the video timeline without creating saved deadlines.
+
+Timers control display, not payment terms. An actual offer closing date is configured in Offers. No timer creates purchases, scarcity counts or Meta events. Existing sessions keep their saved webinar configuration; newly saved timer settings apply to new sessions.
+
+## Simple Intelligence view
+
+Intelligence starts with an automatic routing switch, the smart link, status/current winner and a compact results table (visitors, buyers, close rate, average watch). The active audience remains visible. Audience/ad filters, planned traffic, revenue per visitor, baseline comparisons and Meta URL parameters live under Advanced. Routing and purchase measurement are unchanged.
