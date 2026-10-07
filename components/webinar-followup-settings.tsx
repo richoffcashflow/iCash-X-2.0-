@@ -4,7 +4,7 @@ import type {WebinarSettings} from '@/lib/webinar-policy';
 export type FollowupReadiness={emailConnection:boolean;smsConnection:boolean;email:boolean;sms:boolean};
 export type FollowupStats={emailSent:number;textsSent:number;pending:number;needsReview:number};
 export function WebinarFollowupSettings({settings,readiness,stats,busy,onChange,onSave}:{settings:WebinarSettings;readiness:FollowupReadiness|null;stats:FollowupStats|null;busy:boolean;onChange:(value:WebinarSettings)=>void;onSave:()=>void}){
- const emailStatus=!settings.enabled?'Paused':!settings.fromEmail||!settings.postalAddress.trim()?'Add sender and mailing address':!readiness?.emailConnection?'Connection needed':readiness.email?'Ready':'Ready in production';
+ const emailStatus=!settings.enabled?'Paused':!settings.fromEmail?'Add verified sender':!settings.postalAddress.trim()?'Add mailing address':!readiness?.emailConnection?'Connection needed':readiness.email?'Ready':'Ready in production';
  const smsStatus=!settings.smsEnabled?'Paused':!readiness?.smsConnection?'Connection needed':readiness.sms?'Ready':'Ready in production';
  return <div className="ws-followups">
   <section className="ws-card"><div className="ws-card-heading"><div><h2>Bring the right people back</h2><p>Personal reminders that follow each viewer’s progress.</p></div></div>
