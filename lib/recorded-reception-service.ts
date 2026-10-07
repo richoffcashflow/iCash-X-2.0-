@@ -4,7 +4,7 @@ import {boundedBytes} from './required-call-recording-provider.ts';
 import {finalRecordingPayload} from './required-call-recording-service.ts';
 import {receptionTarget,receptionUrl,rejectTwiml,receptionWorkspacePostcallAbsent} from './general-reception.ts';
 import {propertyReceptionEnabled} from './reception-property-context.ts';
-import {recordedReceptionUrl,recordedReceptionPolicy,receptionConsentTwiml,receptionCallerHash,receptionStopToken,validRecordedReceptionConfig,inspectRecordedReceptionAgent,recordedReceptionToolMatches,incomingCallMatches,incomingCallIdentityMatches,receptionRecordingMatches,receptionAudioAvailable,type RecordedReceptionRpc,type RecordedReceptionRow,type RecordedReceptionConfig,type RecordedReceptionEnv} from './recorded-reception.ts';
+import {recordedReceptionUrl,recordedReceptionPolicy,receptionConsentTwiml,receptionAnswerTwiml,receptionCallerHash,receptionStopToken,validRecordedReceptionConfig,inspectRecordedReceptionAgent,recordedReceptionToolMatches,incomingCallMatches,incomingCallIdentityMatches,receptionRecordingMatches,receptionAudioAvailable,type RecordedReceptionRpc,type RecordedReceptionRow,type RecordedReceptionConfig,type RecordedReceptionEnv} from './recorded-reception.ts';
 import type {RecordedReceptionProviders} from './recorded-reception-provider.ts';
 const xml=(body:string)=>new Response(body,{headers:{...privateHeaders,'Content-Type':'application/xml; charset=utf-8'}});
 const hangup=()=>xml('<Response><Hangup/></Response>');
@@ -85,11 +85,29 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
     const admission=await rpc<{allowed:boolean;session:RecordedReceptionRow}>('icash_reserve_recorded_reception',{p_config_id:c.id,p_call_sid:call.sid,p_provider_account_sid:c.provider_account_sid,p_from_phone:from,p_to_phone:c.called_number,p_direction:'inbound',p_caller_hash:callerHash,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(token),p_config_hash:c.config_hash,p_version_id:c.reviewed_version_id});
     if(admission?.allowed!==true||!admission.session)return xml(rejectTwiml);row=admission.session;
     if(row.operation_key!==op||row.account_id!==c.account_id||row.config_id!==c.id||row.call_sid!==call.sid||row.provider_account_sid!==c.provider_account_sid||row.from_phone!==from||row.to_phone!==c.called_number||row.max_total_seconds!==c.max_duration_seconds||row.charge_cap_cents!==c.customer_charge_cap_cents||row.rate_id!==c.rate_id||row.nonce_hash!==sha(nonce)||row.stop_token_hash!==sha(token))throw Error('RESERVATION_BINDING_REQUIRED');
-    const claimed=await transition(row,'claim_setup');if(!claimed)throw Error('SETUP_ALREADY_CLAIMED');row=claimed;
-    const bounded=await provider.boundCall(row);if(!incomingCallMatches(row,bounded,now())||!['ringing','in-progress'].includes(String(bounded.status)))throw Error('PROVIDER_BOUND_UNCONFIRMED');
-    const saved=await transition(row,'bounded',{callSid:row.call_sid,providerAccountSid:row.provider_account_sid,fromPhone:row.from_phone,toPhone:row.to_phone,direction:'inbound',timeLimitSeconds:row.max_total_seconds});if(!saved)throw Error('PROVIDER_BOUND_NOT_SAVED');row=await bindRecordedReceptionCallStart(rpc,saved,bounded);
-    return xml(receptionConsentTwiml(row.id,nonce));
-   }catch{if(row){await transition(row,'setup_unknown').catch(()=>null);await endRecordedReception(rpc,provider,row,'setup_failed');}return hangup();}
+    return xml(receptionAnswerTwiml(row.id,nonce));
+   }catch{if(row)await endRecordedReception(rpc,provider,row,'admission_failed');return hangup();}
+  },
+  async setup(request:Request){
+   let row:RecordedReceptionRow|null=null,stage='authenticate';
+   try{
+    const auth=await signed(request,'setup',true);if(!auth)return hangup();row=auth.row;
+    if(row.state!=='reserved'||row.setup_claimed_at||row.end_requested_at||row.call_ended_at||Date.parse(row.call_deadline_at)<=now())return hangup();
+    stage='read_answered_call';
+    const call=await provider.getCall(row.call_sid);
+    if(auth.f.get('CallStatus')!=='in-progress'||!incomingCallMatches(row,call,now(),true,true))throw Error('ANSWERED_CALL_REQUIRED');
+    stage='claim_setup';
+    const claimed=await transition(row,'claim_setup');if(!claimed)return hangup();row=claimed;
+    stage='bound_call';
+    const bounded=await provider.boundCall(row);if(!incomingCallMatches(row,bounded,now(),true))throw Error('PROVIDER_BOUND_UNCONFIRMED');
+    stage='save_bound';
+    const saved=await transition(row,'bounded',{callSid:row.call_sid,providerAccountSid:row.provider_account_sid,fromPhone:row.from_phone,toPhone:row.to_phone,direction:'inbound',timeLimitSeconds:row.max_total_seconds});if(!saved)throw Error('PROVIDER_BOUND_NOT_SAVED');
+    row=saved;stage='bind_answer_time';row=await bindRecordedReceptionCallStart(rpc,row,bounded);
+    return xml(receptionConsentTwiml(row.id,auth.nonce!,false));
+   }catch(error){
+    console.error('recorded_reception_setup_failed',{sessionId:row?.id,stage,code:error instanceof Error&&/^[A-Z0-9_:]{1,100}$/.test(error.message)?error.message:'SETUP_FAILED'});
+    if(row){if(row.setup_claimed_at&&!row.setup_confirmed_at)await transition(row,'setup_unknown').catch(()=>null);await endRecordedReception(rpc,provider,row,'setup_failed');}return hangup();
+   }
   },
   async consent(request:Request){
    let row:RecordedReceptionRow|null=null;

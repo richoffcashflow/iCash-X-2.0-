@@ -28,13 +28,13 @@ export function recordingDisclosure(principal:string,assistantName:string,buyerK
  return `Hi, I'm ${assistantName}, the AI assistant for ${principal}. We save a transcript and keep audio private for 30 days. Is it okay to record?`;
 }
 const escapeXml=(s:string)=>s.replace(/[<>&'\"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;',"'":'&apos;','"':'&quot;'}[c]!));
-export function consentTwiml(id:string,nonce:string,disclosure:string){
+export function consentTwiml(id:string,nonce:string,disclosure:string,includeNotice=true){
  if(!uuid(id)||!/^[a-f0-9]{64}$/.test(nonce))throw Error('RECORDING_BINDING_REQUIRED');
  const action=`${recordingBaseUrl}/consent?id=${id}&nonce=${nonce}`;
  const question='Is it okay to record?';
  if(!disclosure.endsWith(question))throw Error('DISCLOSURE_REQUIRED');
  const notice=disclosure.slice(0,-question.length).trim();
- return `<Response><Say voice="woman" language="en-US">${escapeXml(notice)}</Say><Gather input="speech" action="${escapeXml(action)}" method="POST" actionOnEmptyResult="true" timeout="5" speechModel="default" language="en-US" speechTimeout="2"><Say voice="woman" language="en-US">${escapeXml(question)}</Say></Gather><Hangup/></Response>`;
+ return `<Response>${includeNotice?`<Say voice="woman" language="en-US">${escapeXml(notice)}</Say>`:''}<Gather input="speech" action="${escapeXml(action)}" method="POST" actionOnEmptyResult="true" timeout="5" speechModel="default" language="en-US" speechTimeout="2"><Say voice="woman" language="en-US">${escapeXml(question)}</Say></Gather><Hangup/></Response>`;
 }
 export const endTwiml='<Response><Say voice="woman" language="en-US">Okay, I won\'t record a conversation without your permission. Take care.</Say><Hangup/></Response>';
 export const affirmativeUtterances=['yes','yeah','yep','sure','yes please',"yes that's okay",'yes you can record','yes i agree','i agree','i consent','yes you may record'] as const;

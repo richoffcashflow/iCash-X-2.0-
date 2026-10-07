@@ -80,7 +80,7 @@ function fixture(options={}) {
     branches:async()=>{events.push({provider:'branches'});return options.branches??{results:[clone(cfg.branch)],meta:{total:1}};},
     workspace:async()=>{events.push({provider:'workspace'});return options.workspace??{webhooks:{post_call_webhook_id:null}};},
     tool:async()=>{events.push({provider:'tool'});return clone(cfg.tool);},
-    boundCall:async r=>{events.push({provider:'boundCall',seconds:r.max_total_seconds});assert(row.setup_claimed_at);if(options.boundThrows)throw Error('synthetic-write-unknown');return clone({...canonicalCall,...options.boundReceipt});},
+    boundCall:async r=>{events.push({provider:'boundCall',seconds:r.max_total_seconds});assert(row.setup_claimed_at);assert.equal(canonicalCall.status,'in-progress','carrier cannot update a ringing call');if(options.boundThrows)throw Error('synthetic-write-unknown');return clone({...canonicalCall,...options.boundReceipt});},
     start:async(sid,callback)=>{events.push({provider:'start',callback});assert.equal(sid,callSid);assert(row.bounded_at);assert(row.consent_at);assert(row.start_claimed_at);assert.equal(row.register_claimed_at,null);if(options.startThrows)throw Error('synthetic-write-unknown');if(options.startCallback){const response=await service.status(signed('status?id='+id,{RecordingSid:recordingSid,RecordingStatus:'in-progress'}));assert.equal(response.status,204);}return {sid:recordingSid,call_sid:callSid,account_sid:accountSid,status:'in-progress',start_time:iso,...options.startReceipt};},
     register:async(r,seconds,context)=>{events.push({provider:'register',seconds,context});assert(r.consent_at);assert(r.start_claimed_at);assert(r.recording_sid);assert(r.register_claimed_at);assert.equal(r.state,'recording');if(options.registerThrows)throw Error('synthetic-write-unknown');return streamXml;},
     end:async sid=>{events.push({provider:'end'});assert.equal(sid,callSid);if(options.endThrows)throw Error('synthetic-write-unknown');canonicalCall.status='completed';return {sid:callSid,account_sid:accountSid,status:'completed',...options.endReceipt};},
@@ -90,7 +90,9 @@ function fixture(options={}) {
   };
   service=recordedReceptionService({...env,...options.env},{rpc,provider:p,now:()=>clock});
   const f={...cfg, events, rpc, provider:p, service, get row(){return row;}, get nonce(){return nonce;}, setNow:ms=>{clock=ms;}, setCall:values=>Object.assign(canonicalCall,values),
-    async admit(){const response=await service.inbound(inboundRequest());const text=await response.text();const match=/nonce=([a-f0-9]{64})/.exec(text);nonce=match?.[1]??null;return {response,text};},
+    async answer(request=inboundRequest()){const response=await service.inbound(request);const text=await response.text();const match=/nonce=([a-f0-9]{64})/.exec(text);if(match)nonce=match[1];return {response,text};},
+    setup(fields={CallStatus:'in-progress'},options={}){return service.setup(signed('setup?id='+id+'&nonce='+nonce,fields,options));},
+    async admit(){const answer=await this.answer();if(!answer.text.includes('<Redirect'))return answer;canonicalCall.status='in-progress';const response=await this.setup();return {response,text:answer.text+await response.text()};},
     consent(fields={SpeechResult:'yes',Confidence:'.99'},options={}){return service.consent(signed('consent?id='+id+'&nonce='+nonce,fields,options));},
     async ready(){const result=await this.admit();assert.match(result.text,/<Gather /);canonicalCall.status='in-progress';return this;},
     stopRequest(token=receptionStopToken({operation_key:operation},env),body={recordingId:id}){return new Request(recordedReceptionUrl+'/stop',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify(body)});},
@@ -105,8 +107,9 @@ test('default off performs zero RPC or provider operations',async()=>{
 test('the installed incoming carrier URL preserves signature, funding and recording consent checks',async()=>{
   const legacyUrl='https://www.geticashx.com/api/reception/inbound';
   const good=fixture();
-  const response=await good.service.inbound(inboundRequest({}, {url:legacyUrl}));
-  assert.match(await response.text(),/<Gather /);
+  const answer=await good.answer(inboundRequest({}, {url:legacyUrl}));
+  assert.match(answer.text,/<Say /);assert.match(answer.text,/<Redirect /);assert.equal(providerWrites(good).length,0);
+  good.setCall({status:'in-progress'});assert.match(await(await good.setup()).text(),/<Gather /);
   assert.deepEqual(providerWrites(good).map(e=>e.provider),['boundCall']);
   for(const options of [{signedUrl:recordedReceptionUrl+'/inbound'},{signedUrl:'https://other.invalid/api/reception/inbound'},{url:legacyUrl+'?extra=1'}]){
     const f=fixture();assert.equal(await(await f.service.inbound(inboundRequest({}, {url:legacyUrl,...options}))).text(),rejectTwiml);assert.deepEqual(f.events,[]);
@@ -138,7 +141,7 @@ test('unaffordable reservation does not fall back to an owner test or shorter ca
   const f=fixture({denied:true});assert.equal((await f.admit()).text,rejectTwiml);const attempts=f.events.filter(e=>e.rpc==='icash_reserve_recorded_reception');assert.equal(attempts.length,1);assert.equal(attempts[0].body.p_config_id,configId);assert.equal(providerWrites(f).length,0);
 });
 test('spoken disclosure precedes listening; no recording or AI starts before speech consent',async()=>{
-  const f=fixture();const {text}=await f.admit();assert(text.indexOf('</Say>')<text.indexOf('<Gather'));assert.match(text,/AI assistant/);assert.match(text,/written transcript/);assert.match(text,/private to this business/);assert.match(text,/30 days/);assert.match(text,/input="speech"/);assert(!/<Record|<Connect|dtmf/.test(text));assert(text.includes(recordedReceptionUrl+'/consent'));assert.equal(f.row.state,'consent_pending');assert.deepEqual(providerWrites(f).map(e=>e.provider),['boundCall']);
+  const f=fixture();const {text}=await f.admit();assert(text.indexOf('</Say>')<text.indexOf('<Gather'));assert.match(text,/AI assistant/);assert.match(text,/save a transcript/);assert.match(text,/keep audio private/);assert.match(text,/30 days/);assert.match(text,/input="speech"/);assert(!/<Record|<Connect|dtmf/.test(text));assert(text.includes(recordedReceptionUrl+'/consent'));assert.equal(f.row.state,'consent_pending');assert.deepEqual(providerWrites(f).map(e=>e.provider),['boundCall']);
   assert.equal(receptionConsentTwiml(id,'e'.repeat(64)).match(/<Gather/g).length,1);
 });
 test('replayed admission cannot repeat claimed provider bound/setup write',async()=>{
@@ -339,4 +342,37 @@ test('runtime rejects inline stop mismatches, duplicate tools and missing indepe
   const f=fixture({mutate:x=>{x.agent.conversation_config.agent.prompt.tools=[clone(x.tool.tool_config)];change(x);x.c.config_hash=inspectRecordedReceptionAgent(x.c,x.agent,x.branch,true).hash;}});
   assert.equal((await f.admit()).text,rejectTwiml);assert.equal(f.row,null);assert.equal(providerWrites(f).length,0);assert(!f.events.some(e=>e.rpc==='icash_reserve_recorded_reception'));
  }
+});
+
+
+test('ringing admission answers with disclosure, then signed setup bounds before gathering',async()=>{
+ const f=fixture();const first=await f.answer();
+ assert.match(first.text,/^<Response><Say /);assert.match(first.text,/<Redirect method="POST">/);
+ assert(!/<Gather|<Record|<Connect|<Pause/.test(first.text));assert.equal(f.row.state,'reserved');assert.equal(providerWrites(f).length,0);
+ f.setCall({status:'in-progress'});
+ const second=await(await f.setup()).text();assert.match(second,/^<Response><Gather /);assert.equal(f.row.state,'consent_pending');assert(f.row.call_started_at);
+ assert.deepEqual(providerWrites(f).map(e=>e.provider),['boundCall']);
+ const names=f.events.map(e=>e.rpc==='icash_transition_recorded_reception'?e.body.p_action:e.provider);
+ assert(names.indexOf('claim_setup')<names.indexOf('boundCall'));assert(names.indexOf('boundCall')<names.indexOf('bounded'));assert(names.indexOf('bounded')<names.indexOf('bind_call_start'));
+ const replay=await(await f.setup()).text();assert.match(replay,/<Hangup/);assert.equal(providerWrites(f).filter(e=>e.provider==='boundCall').length,1);
+});
+test('setup rejects forged, cross-call and nonce callbacks without a carrier mutation',async()=>{
+ for(const variant of ['signature','nonce','call','extra','path']){
+  const f=fixture();await f.answer();f.setCall({status:'in-progress'});f.events.length=0;
+  const path='setup?id='+id+'&nonce='+(variant==='nonce'?'a'.repeat(64):f.nonce)+(variant==='extra'?'&extra=1':'');
+  const req=signed(path,{CallStatus:'in-progress',...(variant==='call'?{CallSid:'CA'+'f'.repeat(32)}:{})},variant==='signature'?{signature:'forged'}:variant==='path'?{url:recordedReceptionUrl+'/terminal?id='+id+'&nonce='+f.nonce}:{});
+  assert.match(await(await f.service.setup(req)).text(),/<Hangup/);assert.equal(providerWrites(f).length,0);assert.equal(f.row.setup_claimed_at,null);
+ }
+});
+test('setup will not update an unanswered, ended, foreign or expired call',async()=>{
+ for(const change of [f=>{},f=>f.setCall({status:'completed'}),f=>f.setCall({status:'in-progress',from:'+12125550000'}),f=>{f.setCall({status:'in-progress'});f.setNow(now+60001); }]){
+  const f=fixture();await f.answer();change(f);assert.match(await(await f.setup()).text(),/<Hangup/);assert(!providerWrites(f).some(e=>['boundCall','start','register'].includes(e.provider)));
+ }
+});
+test('carrier error diagnostics expose only numeric status and code',async()=>{
+ const f=await fixture().ready();
+ const provider=createRecordedReceptionProviders(env,async()=>new Response(JSON.stringify({code:21220,message:'private carrier details',uri:'secret'}),{status:400}));
+ await assert.rejects(provider.boundCall(f.row),{message:'CALL_BOUND_HTTP_400_CODE_21220'});
+ const malformed=createRecordedReceptionProviders(env,async()=>new Response(JSON.stringify({code:'private carrier details'}),{status:400}));
+ await assert.rejects(malformed.boundCall(f.row),{message:'CALL_BOUND_HTTP_400_CODE_0'});
 });

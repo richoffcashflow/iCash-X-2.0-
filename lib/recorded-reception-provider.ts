@@ -18,7 +18,13 @@ export function createRecordedReceptionProviders(env:RecordingEnv,fetcher:typeof
    if(!sid(r.call_sid,'CA')||r.provider_account_sid!==env.TWILIO_ACCOUNT_SID||![60,600].includes(r.max_total_seconds))throw Error('CALL_BINDING_REQUIRED');
    const url=`https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Calls/${r.call_sid}.json`;
    const response=await fetcher(url,{method:'POST',headers:{Authorization:'Basic '+Buffer.from(env.TWILIO_ACCOUNT_SID+':'+env.TWILIO_AUTH_TOKEN).toString('base64'),'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({TimeLimit:String(r.max_total_seconds),StatusCallback:recordedReceptionUrl+'/terminal?id='+r.id,StatusCallbackMethod:'POST'}),redirect:'error',cache:'no-store',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000)});
-   if(!response.ok||response.redirected||response.url&&response.url!==url)throw Error('CALL_BOUND_UNCONFIRMED');return object(JSON.parse((await boundedBytes(response,32768)).toString('utf8')));
+   if(response.redirected||response.url&&response.url!==url)throw Error('CALL_BOUND_UNCONFIRMED');
+   if(!response.ok){
+    // Only numeric carrier diagnostics. Never log credentials, phones, or raw bodies.
+    let code=0;try{const body=object(JSON.parse((await boundedBytes(response,32768)).toString('utf8')));if(Number.isSafeInteger(body.code))code=Number(body.code);}catch{}
+    throw Error('CALL_BOUND_HTTP_'+response.status+'_CODE_'+code);
+   }
+   return object(JSON.parse((await boundedBytes(response,32768)).toString('utf8')));
   },
   agent:async(c:RecordedReceptionConfig)=>object(JSON.parse(await eleven(agentPath(c.agent_id)+'?branch_id='+encodeURIComponent(c.branch_id)))),
   branches:async(c:RecordedReceptionConfig)=>object(JSON.parse(await eleven(agentPath(c.agent_id)+'/branches?include_archived=true&limit=100'))),
