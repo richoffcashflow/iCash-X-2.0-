@@ -11,13 +11,13 @@ assert.equal(workspaceConversionOffer({...base,paused:true}).action,'resume');
 for(const balanceCents of [0,1,499])assert.equal(workspaceConversionOffer({...base,balanceCents}).action,'funding');
 assert.equal(workspaceConversionOffer({...base,balanceCents:500}).action,'vip');
 const offer=workspaceConversionOffer({...base,balanceCents:0,queuedResearch:1});
-assert.match(offer.title,/research is queued/);assert.equal(offer.amountCents,2500);assert.doesNotMatch(offer.detail,/finish|complete|guarantee/);
+assert.match(offer.title,/research is queued/);assert.equal(offer.amountCents,1000);assert.doesNotMatch(offer.detail,/finish|complete|guarantee/);
 assert.doesNotMatch(workspaceConversionOffer({...base,balanceCents:0}).detail,/queue|saved/);
 for(const bad of [{billingReview:true},{identityReady:false},{membershipActive:false},{balanceCents:NaN},{balanceCents:-1},{queuedResearch:Infinity}])assert.equal(workspaceConversionOffer({...base,...bad}),null);
 assert.equal(workspaceConversionOffer({...base,balanceCents:0,canFund:false}),null);
 assert.equal(workspaceConversionOffer({...base,balanceCents:0,autoRechargeEnabled:true}),null);
 let signedIn=true,mode='live',failure=false,paths=[],snapshot={accountId:'owned',account:{balanceCents:0,paused:false,billingReview:false,identity:{principal:'Fixture'},billingModel:'membership_credits'}},vip=false;
-const deps={NextResponse:{json:(body,options={})=>({body,status:options.status??200})},currentUser:async()=>signedIn?{id:'user'}:null,accountMode:()=>mode,db:async(path,method,body)=>{
+const deps={creditRefillContext:async(id,mode,balance)=>{assert.equal(id,'owned');return {amountCents:5000,lowBalanceCents:1000};},NextResponse:{json:(body,options={})=>({body,status:options.status??200})},currentUser:async()=>signedIn?{id:'user'}:null,accountMode:()=>mode,db:async(path,method,body)=>{
  paths.push({path,method,body});if(failure)throw Error();
  if(path==='rpc/icash_load_workspace_account'){assert.equal(body.p_user,'user');return snapshot;}
  assert(path.includes('account_id=eq.owned'),'Every record query is bound to authenticated account');
@@ -29,7 +29,7 @@ const deps={NextResponse:{json:(body,options={})=>({body,status:options.status??
 globalThis.__conversion=deps;
 const src=ts.transpileModule(readFileSync(new URL('../app/api/work/next-action/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .*;\s*$/gm,'');
 const {GET}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__conversion;\n'+src).toString('base64'));
-assert.equal((await GET()).body.offer.action,'funding');
+const fundedOffer=(await GET()).body.offer;assert.equal(fundedOffer.action,'funding');assert.equal(fundedOffer.amountCents,5000);assert.match(fundedOffer.button,/\$50/);assert.match(fundedOffer.detail,/\$50/);
 snapshot.account.balanceCents=2500;assert.equal((await GET()).body.offer.action,'vip');vip=true;assert.equal((await GET()).body.offer,null);
 failure=true;assert.equal((await GET()).status,503);assert.equal((await GET()).body.offer,null);failure=false;
 for(const state of ['guest','test']){paths=[];signedIn=state!=='guest';mode=state==='test'?'test':'live';assert.equal((await GET()).body.offer,null);assert.equal(paths.length,0);}

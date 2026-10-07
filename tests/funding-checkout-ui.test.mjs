@@ -1,3 +1,4 @@
+import * as refill from '../lib/credit-refill-recommendation.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
@@ -18,7 +19,7 @@ let daily={ready:true,plan:null};
 globalThis.window={location:{search:'',assign(url){calls.push({redirect:url});}}};globalThis.document={hidden:false};
 globalThis.fetch=async(url,options={})=>{calls.push({url,options});if(options.method==='POST')return Response.json(url==='/api/setup/event'?{ok:true}:{url:'https://checkout.stripe.com/fixture'});return Response.json(url==='/api/billing/daily'?daily:funding);};
 const hooks={useState(initial){const i=cursor++;if(!(i in slots))slots[i]=typeof initial==='function'?initial():initial;return[slots[i],next=>{const value=typeof next==='function'?next(slots[i]):next;if(!Object.is(value,slots[i])){slots[i]=value;dirty=true;}}];},useRef(initial){const i=cursor++;if(!(i in slots))slots[i]={current:initial};return slots[i];},useEffect(fn,deps){const i=cursor++,previous=slots[i];if(!previous||deps.some((value,index)=>!Object.is(value,previous.deps[index]))){slots[i]={deps,cleanup:previous?.cleanup};pending.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}}};
-const mod={exports:{}};new Function('require','module','exports',code)(name=>name==='react'?hooks:name==='@/lib/funding-amount'?fundingAmounts:name==='@/lib/funding-consent'?fundingConsent:name==='@/lib/membership-policy'?membership:name==='@/lib/auto-recharge-policy'?recharge:name==='@/lib/funding-fees'?{processingFeeCents}:name==='./stripe-embedded-checkout'?{StripeEmbeddedCheckout:'StripeEmbeddedCheckout'}:name==='./account-access'?{AccountAccess:'AccountAccess'}:require(name),mod,mod.exports);
+const mod={exports:{}};new Function('require','module','exports',code)(name=>name==='react'?hooks:name==='@/lib/credit-refill-recommendation'?refill:name==='@/lib/funding-amount'?fundingAmounts:name==='@/lib/funding-consent'?fundingConsent:name==='@/lib/membership-policy'?membership:name==='@/lib/auto-recharge-policy'?recharge:name==='@/lib/funding-fees'?{processingFeeCents}:name==='./stripe-embedded-checkout'?{StripeEmbeddedCheckout:'StripeEmbeddedCheckout'}:name==='./account-access'?{AccountAccess:'AccountAccess'}:require(name),mod,mod.exports);
 function render(){cursor=0;dirty=false;tree=mod.exports.FundingCheckout({onSignedIn(){}});return tree;}
 async function flush(){for(let i=0;i<15;i++){if(dirty)render();const tasks=pending;pending=[];tasks.forEach(fn=>fn());await new Promise(resolve=>setTimeout(resolve,2));if(!dirty&&!pending.length)return tree;}throw Error('Render did not settle');}
 function checkout(){return find(tree,n=>n.type==='button'&&n.props.className==='fund-button full');}
@@ -48,8 +49,8 @@ window.location={search:'',href:'https://www.geticashx.com/#funding',assign(){th
 window.history={replaceState(_a,_b,path){window.location.href='https://www.geticashx.com'+path;window.location.search=new URL(window.location.href).search;}};
 funding={...funding,embeddedReady:true,paidCents:10000};
 globalThis.fetch=async(url,options={})=>{calls.push({url,options});if(options.method==='POST')return Response.json({clientSecret:'cs_live_inline_secret_fixture',publishableKey:'pk_live_fixture',sessionId:'cs_live_inline'});return Response.json({...funding,paidCents:url.includes('session_id=cs_live_inline')?(paid?2500:0):10000});};
-render=()=>{cursor=0;dirty=false;tree=mod.exports.FundingCheckout({initialAmountCents:2500,onSignedIn(){completed++;}});return tree;};
-tree=await flush();assert.match(text(checkout()),/25/);checkout().props.onClick();tree=await flush();
+render=()=>{cursor=0;dirty=false;tree=mod.exports.FundingCheckout({initialAmountCents:7500,reason:'Add $75 in credits for eligible research.',onSignedIn(){completed++;}});return tree;};
+tree=await flush();assert.match(text(checkout()),/75/);assert.match(text(tree),/Add \$75 in credits/);find(tree,n=>n.type==='button'&&text(n).trim()==='$50').props.onClick();tree=await flush();assert.match(text(tree),/Add \$50 in credits/);assert.doesNotMatch(text(tree),/Add \$75 in credits/);checkout().props.onClick();tree=await flush();
 const inline=find(tree,n=>n.type==='StripeEmbeddedCheckout');assert.equal(completed,0);
 inline.props.onComplete();tree=await flush();assert.match(text(tree),/Confirming your credits/);assert.equal(completed,0,'Historical funding cannot confirm the new session');
 paid=true;find(tree,n=>n.type==='button'&&text(n)==='Check payment').props.onClick();tree=await flush();assert.equal(completed,1);assert.equal(window.location.search,'');

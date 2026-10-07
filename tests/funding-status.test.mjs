@@ -7,7 +7,7 @@ import {fundingReturnSummary} from '../lib/funding-return.ts';
 // Exercise the route without network calls or charges.
 let signedIn=true,guest=true,settled=false,paths=[],retrieved=0,planMatch=false,orderMatch=true;
 const receipt={id:'order',state:'pending',credit_cents:300,stripe_session_id:'cs_live_current',credited_at:null,payer_email:'test@example.invalid'};
-const mocks={...embeddedPolicy,...fundingAmounts,
+const mocks={creditRefillContext:async(id,mode,balance)=>{assert.equal(id,'account');return {amountCents:7500};},...embeddedPolicy,...fundingAmounts,
  currentUser:async()=>signedIn?{id:'owner'}:null,
  privatePaymentCheckAllowed:async()=>false,customerFundingReady:async()=>false,earlyAccessFundingEnabled:()=>false,
  NextResponse:{json:(body,options={})=>({body,status:options.status??200})},
@@ -35,7 +35,7 @@ source='const {'+Object.keys(mocks).join(',')+'}=globalThis.__fundingStatus;\n'+
 const {GET}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const request=id=>new Request('https://www.geticashx.com/api/funding/status?session_id='+encodeURIComponent(id));
 let response=await GET(request('cs_live_current'));
-assert.equal(response.body.paidCents,300);assert.equal(response.body.needsClaim,false);
+assert.equal(response.body.recommendedCents,7500);assert.equal(response.body.paidCents,300);assert.equal(response.body.needsClaim,false);
 assert.equal(paths.filter(p=>p.startsWith('icash_funding_orders')&&!p.includes('select=credit_cents')).length,2,'read settlement state again');
 assert(paths.filter(p=>p.startsWith('icash_funding_orders')&&!p.includes('select=credit_cents')).every(p=>p.includes('account_id=eq.account')&&p.includes('stripe_session_id=eq.cs_live_current')));
 paths=[];orderMatch=false;retrieved=0;
