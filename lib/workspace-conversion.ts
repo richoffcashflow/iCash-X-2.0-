@@ -1,6 +1,7 @@
 /** Recommendations describe verified work; they never authorize spending. */
 export type WorkspaceConversionInput = {
   balanceCents: number;
+  refill?: {amountCents:number;lowBalanceCents:number};
   paused: boolean;
   billingReview: boolean;
   identityReady: boolean;
@@ -26,9 +27,11 @@ export function workspaceConversionOffer(input: WorkspaceConversionInput): Works
   if (![input.balanceCents, input.queuedResearch, input.completedResearch].every(n => Number.isSafeInteger(n) && n >= 0)) return null;
   if (input.billingReview || !input.membershipActive || !input.identityReady) return null;
   const empty = input.balanceCents === 0;
-  const low = input.balanceCents < 500;
+  const low = input.balanceCents < (input.refill?.lowBalanceCents ?? 500);
   if ((empty || low) && input.canFund && !input.autoRechargeEnabled) {
-    const amountCents = 2500;
+    const amountCents = input.refill?.amountCents ?? 1000;
+    if(!Number.isSafeInteger(amountCents)||amountCents<1000||amountCents>100000)return null;
+    const amount = new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:amountCents%100?2:0}).format(amountCents/100);
     const research = input.queuedResearch > 0;
     const continuing = research || input.completedResearch > 0;
     return {
@@ -36,12 +39,12 @@ export function workspaceConversionOffer(input: WorkspaceConversionInput): Works
       action: 'funding', amountCents,
       title: research ? 'Your property research is queued.' : empty ? continuing ? 'Let’s keep your bot working.' : 'Put your bot to work.' : 'Keep your bot funded.',
       detail: research
-        ? 'I have property research in the queue. Add $25 in credits for property data, owner lookups, and eligible AI work.'
+        ? `I have property research in the queue. Add ${amount} in credits for property data, owner lookups, and eligible AI work.`
         : continuing
-          ? 'Your research is saved. Add $25 in credits for the next property searches, owner lookups, and eligible follow-ups.'
-          : 'Add $25 in credits for property searches, owner lookups, and eligible AI work.',
+          ? `Your research is saved. Add ${amount} in credits for the next property searches, owner lookups, and eligible follow-ups.`
+          : `Add ${amount} in credits for property searches, owner lookups, and eligible AI work.`,
       compact: research ? 'Research queued' : empty ? 'Your bot needs credits' : 'Credits running low',
-      button: continuing ? 'Add $25 & continue' : 'Add $25 & start',
+      button: continuing ? `Add ${amount} & continue` : `Add ${amount} & start`,
     };
   }
   if (empty) return null;

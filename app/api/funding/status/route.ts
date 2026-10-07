@@ -1,3 +1,4 @@
+import {creditRefillContext} from '@/lib/credit-refill-context';
 import {checkoutPublishableKey} from '@/lib/embedded-checkout-policy';
 import {currentUser} from '@/lib/account-auth';
 import {fundingReturnSummary} from '@/lib/funding-return';
@@ -46,9 +47,8 @@ export async function GET(req:Request){
  }
  const [autoRecharge]=account&&mode?await db<{enabled:boolean;amount_cents:number|null;issue:string|null}[]>(`icash_auto_recharges?account_id=eq.${account.id}&mode=eq.${mode}&select=enabled,amount_cents,issue`):[];
  const [wallet]=account?await db<{balance_cents:number;reserved_cents:number}[]>(`icash_wallets?account_id=eq.${account.id}&select=balance_cents,reserved_cents`):[];
- const recent=account&&mode?await db<{credit_cents:number}[]>(`icash_funding_orders?account_id=eq.${account.id}&mode=eq.${mode}&state=eq.paid&credited_at=gte.${encodeURIComponent(new Date(Date.now()-30*86400000).toISOString())}&select=credit_cents&order=credited_at.desc&limit=20`):[];
- const low=!!wallet&&wallet.balance_cents-wallet.reserved_cents<500;
- const recommendedCents=low&&recent.length>=5?25000:low&&recent.length>=3?10000:low&&recent.length>=1?5000:1000;
+ const recommendation=account&&mode?await creditRefillContext(account.id,mode,Math.max(0,(wallet?.balance_cents??0)-(wallet?.reserved_cents??0))):{amountCents:1000};
+ const recommendedCents=recommendation.amountCents;
  const summary=fundingReturnSummary(orders,!!user);
  return NextResponse.json({embeddedReady:!!checkoutPublishableKey(mode),privatePaymentCheck:await privatePaymentCheckAllowed(),recommendedCents,mode,enabled:await customerFundingReady(),earlyAccess:earlyAccessFundingEnabled(),autoRecharge:autoRecharge??{enabled:false},packs,custom,planning,forecast:{cycleChargeCents:null,qualified:null},priceCents:pack?.price_cents??null,creditCents:pack?.credit_cents??null,...summary},{headers});
  }catch{return NextResponse.json({enabled:false,error:"Could not check funding. Please retry."},{status:503,headers});}
