@@ -8,17 +8,17 @@ async function harness(file,extra){const cells=[],effects=[],pending=[];let inde
  const key='component'+Math.random().toString(36).slice(2);globalThis[key]=deps;const code=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText.replace(/^import .*;\s*$/gm,'');const module=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.'+key+';\n'+code).toString('base64'));return {render(name,props){index=0;const node=module[name](props);while(pending.length)pending.shift()();return node;},close(){effects.forEach(e=>e?.cleanup?.());}};}
 const all=(node)=>!node||typeof node!=='object'?[]:[node,...[node.props?.children].flat(Infinity).flatMap(all)];
 const find=(tree,type)=>all(tree).find(n=>n.type===type);const flush=async()=>{for(let n=0;n<12;n++)await Promise.resolve();};
-const AccountAccess=()=>null,BotBuilding=()=>null,PostPurchaseSetup=()=>null,StripeEmbeddedCheckout=()=>null;
+const AccountAccess=()=>null,BotBuilding=()=>null,PostPurchaseSetup=()=>null,WebinarVipUpsell=()=>null,StripeEmbeddedCheckout=()=>null;
 globalThis.window={location:{search:''}};globalThis.matchMedia=()=>({matches:true});
 for(const accessible of [false,true]){
  globalThis.fetch=async()=>Response.json({offer:{revision:1,priceCents:5000},membership:{accessible},ready:false,needsClaim:true,email:'paid@example.invalid',customerName:'Casey'});
- const h=await harness('components/membership-checkout.tsx',{PostPurchaseSetup,StripeEmbeddedCheckout,webinarRequest,webinarBrowserEvent:()=>{},priceLabel:()=>'$50',membershipTermsVersion:'fixture'}),props={onSignedIn:()=>{}};h.render('MembershipCheckout',props);await flush();const tree=h.render('MembershipCheckout',props);assert.equal(!!find(tree,PostPurchaseSetup),accessible,'Only confirmed accessible membership unlocks post-purchase setup');h.close();
+ const h=await harness('components/membership-checkout.tsx',{PostPurchaseSetup,WebinarVipUpsell,StripeEmbeddedCheckout,webinarRequest,webinarBrowserEvent:()=>{},priceLabel:()=>'$50',membershipTermsVersion:'fixture'}),props={onSignedIn:()=>{}};h.render('MembershipCheckout',props);await flush();const tree=h.render('MembershipCheckout',props);assert.equal(!!find(tree,WebinarVipUpsell),accessible,'Only confirmed accessible membership unlocks the upgrade offer');h.close();
 }
-// Both hosted and embedded completions wait for verified access before VIP navigation.
+// Verified base purchases show the upsell; they do not jump straight to the VIP video.
 for(const accessible of [false,true]){
  let redirects=[];globalThis.window.location={search:'?membership=paid&session_id=cs_live_owned',replace:url=>redirects.push(url)};
  globalThis.fetch=async()=>Response.json({offer:{revision:1,priceCents:5000},membership:{accessible},postPurchaseUrl:accessible?'/live/123457':null,ready:false});
- const h=await harness('components/membership-checkout.tsx',{PostPurchaseSetup,StripeEmbeddedCheckout,webinarRequest,webinarBrowserEvent:()=>{},priceLabel:()=>'$50',membershipTermsVersion:'fixture'}),props={onSignedIn:()=>{}};h.render('MembershipCheckout',props);await flush();h.render('MembershipCheckout',props);assert.deepEqual(redirects,accessible?['/live/123457']:[]);h.close();
+ const h=await harness('components/membership-checkout.tsx',{PostPurchaseSetup,WebinarVipUpsell,StripeEmbeddedCheckout,webinarRequest,webinarBrowserEvent:()=>{},priceLabel:()=>'$50',membershipTermsVersion:'fixture'}),props={onSignedIn:()=>{}};h.render('MembershipCheckout',props);await flush();h.render('MembershipCheckout',props);assert.deepEqual(redirects,[]);h.close();
 }
 globalThis.window.location={search:'?setup=1'};
 let saved={id:'saved-setup',revision:1,stage:0,profile:{...defaultBotProfile,voice:'chris',market:'Austin, TX',marketMode:'city'}},requests=[],opens=0,hold;
