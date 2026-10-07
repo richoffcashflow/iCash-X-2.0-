@@ -50,7 +50,8 @@ globalThis.__intelligenceAdapter=deps;
 const source=ts.transpileModule(readFileSync(new URL('../lib/webinar-intelligence.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
 const adapter=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__intelligenceAdapter;\n'+source).toString('base64'));
 const routing={nightStartsAt:18,nightEndsAt:6},day=new Date('2026-10-06T12:00:00Z'),night=new Date('2026-10-06T23:00:00Z');
-const webinar=()=>({...newWebinar(randomUUID()),status:'published',videoUrl:'https://example.test/day.mp4'});
+// Archived experiment math uses explicitly enabled historical fixtures.
+const webinar=()=>({...newWebinar(randomUUID()),intelligenceEnabled:true,status:'published',videoUrl:'https://example.test/day.mp4'});
 test('candidates respect Night fallback, opt-out, deadlines, drafts and later unseen recordings',()=>{
  const one=webinar(),two=webinar(),expired={...webinar(),offerEndsAt:'2020-01-01T00:00:00Z'};
  const configs=[one,two,expired,{...webinar(),intelligenceEnabled:false},{...webinar(),status:'draft'}];
@@ -62,7 +63,7 @@ test('candidates respect Night fallback, opt-out, deadlines, drafts and later un
  assert.equal(adapter.intelligenceContext(history,'UTC',night,routing),'returning:night');
  assert.equal(adapter.intelligencePoolKey([a,b]),adapter.intelligencePoolKey([b,a]));assert.notEqual(adapter.intelligencePoolKey([a,b]),adapter.intelligencePoolKey([a,c]));
 });
-test('settings enable automatic routing without activating Meta',()=>{
+test('historical settings remain readable without activating Meta',()=>{
  const saved=settingsSchema.parse({enabled:false,fromEmail:'',postalAddress:'',subjects:['a','b','c'],messages:['a','b','c'],optimizer:settings});assert.equal(saved.optimizer.enabled,true);assert.equal(saved.meta.enabled,false);assert.equal(saved.meta.pixelId,'');
 });
 test('proven losers get exactly zero traffic in every assignment mode, including the old baseline',()=>{

@@ -10,5 +10,5 @@ export async function POST(req:Request){try{
  if(i.kind==='add_to_cart'&&!availableOffers(webinarOffers(s.config),i.seconds).length)throw new WebinarError(400,'An offer must be available before selecting it.');
  await db('rpc/icash_webinar_record','POST',{p_visitor:v.id,p_session:i.sessionId,p_seconds:i.seconds,p_kind:i.kind,p_key:i.key});
  const offer=i.kind==='completed'&&!s.is_preview&&s.config.redirectAtEnd&&i.seconds>=s.config.durationSeconds-5?webinarEndOffer(s.config,Date.now()):null;
- return Response.json({saved:true,...(offer?{redirect:offerDestination(offer)}:{})},{headers:webinarHeaders});
+ return Response.json({saved:true,...(offer?{redirect:offer.action==='checkout'?`${offerDestination(offer)}?webinar_session=${s.id}`:offerDestination(offer)}:{})},{headers:webinarHeaders});
  }catch(e){return webinarError(e);}}

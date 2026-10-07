@@ -16,7 +16,7 @@ const deps={...usedIcons,...reporting,formatWatchTime,webinarLink,webinarSite:{b
 globalThis.__webinarDashboard=deps;
 const source=ts.transpileModule(readFileSync(new URL('../components/webinar-daily-dashboard.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText.replace(/^import .* from .*;$/gm,'');
 const {WebinarDailyDashboard}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__webinarDashboard;\n'+source).toString('base64'));
-function render(webinars,loaded=true){index=0;states=['today','America/Chicago',loaded?report:null,!loaded,'',0];return renderToStaticMarkup(WebinarDailyDashboard({webinars,onCreate:()=>{},onEdit:()=>{},onOptimizer:()=>{}}));}
+function render(webinars,loaded=true){index=0;states=['today','America/Chicago',loaded?report:null,!loaded,'',0];return renderToStaticMarkup(WebinarDailyDashboard({webinars,onCreate:()=>{},onEdit:()=>{},onSettings:()=>{}}));}
 let html=render([w]);for(const label of ['Today at a glance','Add to cart','Checkouts','Purchases','$10.00','10.0%','Your main webinar covers day and night','all saved versions included','Reporting timezone','Avg. watch time','12:34','41.9%','Conversion'])assert.ok(html.includes(label),label);
 assert.ok(!html.includes('>Night</span>'));
 assert.match(html,/aria-pressed="true">Today/);

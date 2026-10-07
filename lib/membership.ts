@@ -3,7 +3,7 @@ import {db} from '@/lib/stripe-test';
 import {fundingStripe} from '@/lib/funding';
 import {fundingMode} from '@/lib/funding-policy';
 import {membershipAccessible,validOffer,type MembershipOffer} from './membership-policy';
-export type Membership={id:string;mode:'live'|'test';account_id:string|null;guest_hash:string;price_cents:number;offer_revision:number;state:string;stripe_session_id:string|null;stripe_subscription_id:string|null;stripe_customer_id:string|null;paid_through:string|null;cancel_at_period_end:boolean;payer_email:string|null;payer_phone?:string|null;checkout_url:string|null;consent_version?:string;retention_requested_at?:string|null;retention_started_at?:string|null;retention_ends_at?:string|null;retention_discount_id?:string|null};
+export type Membership={post_purchase_webinar_id?:string|null;id:string;mode:'live'|'test';account_id:string|null;guest_hash:string;price_cents:number;offer_revision:number;state:string;stripe_session_id:string|null;stripe_subscription_id:string|null;stripe_customer_id:string|null;paid_through:string|null;cancel_at_period_end:boolean;payer_email:string|null;payer_phone?:string|null;checkout_url:string|null;consent_version?:string;retention_requested_at?:string|null;retention_started_at?:string|null;retention_ends_at?:string|null;retention_discount_id?:string|null};
 export const retentionVersion='retention-50-six-months-v1';
 const retentionCoupon='icash-retention-50-six-months-v1';
 const identifier=(value:unknown,prefix:string)=>typeof value==='string'&&new RegExp(`^${prefix}_[A-Za-z0-9]+$`).test(value);

@@ -29,7 +29,9 @@ export async function processWebinarFollowups({database=db,transport=fetch,env=p
    if(next.getTime()>now.getTime()){await database(`icash_webinar_outbox?id=eq.${job.id}&state=eq.claimed`,'PATCH',{state:'pending',due_at:next.toISOString(),attempts:Math.max(0,job.attempts-1)});return;}
    let payload=job.payload;
    if(!payload){
-    const [sessions,events]=await Promise.all([database<WebinarSession[]>(`icash_webinar_sessions?visitor_id=eq.${v.id}&is_preview=eq.false&select=*&order=created_at.desc&limit=30`),database<{session_id:string;created_at:string}[]>(`icash_webinar_events?visitor_id=eq.${v.id}&kind=eq.pitch_shown&event_key=eq.once&select=session_id,created_at&order=created_at.desc&limit=30`)]);
+    const [source]=await database<WebinarSession[]>(`icash_webinar_sessions?id=eq.${job.session_id}&visitor_id=eq.${v.id}&is_preview=eq.false&select=*&limit=1`);
+    if(!source){await database(`icash_webinar_outbox?id=eq.${job.id}`,'PATCH',{state:'canceled'});canceled++;return;}
+    const [sessions,events]=await Promise.all([database<WebinarSession[]>(`icash_webinar_sessions?visitor_id=eq.${v.id}&webinar_id=eq.${source.webinar_id}&is_preview=eq.false&select=*&order=created_at.desc&limit=30`),database<{session_id:string;created_at:string}[]>(`icash_webinar_events?visitor_id=eq.${v.id}&kind=eq.pitch_shown&event_key=eq.once&select=session_id,created_at&order=created_at.desc&limit=30`)]);
     const latest=sessions[0];if(!latest){await database(`icash_webinar_outbox?id=eq.${job.id}`,'PATCH',{state:'canceled'});canceled++;return;}
     const history=sessions.map(s=>({...s,config:{...s.config,pitchAt:webinarPitchAt(s.config)},offer_seen_at:events.find(e=>e.session_id===s.id)?.created_at??null}));
     const phase=followupPhase(history,v.timezone,settings.routing.checkoutWindowHours,now),emailStep=job.step===0?0:job.step===2?1:2;
