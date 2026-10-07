@@ -13,6 +13,7 @@ import type {CustomerIdentity as Identity} from '@/lib/customer-identity';
 import type {OutreachCampaignStatus} from '@/components/outreach-campaign-state';
 import {OutreachCampaignAcknowledgment} from '@/components/outreach-campaign-acknowledgment';
 import {BudgetSummary} from '@/components/budget-summary';
+import {SpendingAllowance} from '@/components/spending-allowance';
 import {MembershipCheckout} from '@/components/membership-checkout';
 import {WebinarExpressCheckout} from '@/components/webinar-express-checkout';
 import {MembershipSettings} from '@/components/membership-settings';
@@ -28,7 +29,7 @@ import type {AssistantAction} from '@/lib/workspace-assistant-policy';
 import {BotRunBar} from '@/components/bot-run-bar';
 import {BotBrand} from '@/components/bot-brand';
 import {setupThemes,type BotProfile} from '@/lib/bot-setup';
-type Account={readinessPending?:boolean;billingModel?:string;membershipActive?:boolean;isBillingOwner?:boolean;identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;pendingEmail?:string|null;phone?:string;hasCreditHistory?:boolean;balanceCents?:number;reservedCents?:number;dailyLimitCents?:number;assistantName?:string;paused?:boolean;billingActive?:boolean;billingReview?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;activeWork?:boolean};
+type Account={vip?:boolean;readinessPending?:boolean;billingModel?:string;membershipActive?:boolean;isBillingOwner?:boolean;identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;pendingEmail?:string|null;phone?:string;hasCreditHistory?:boolean;balanceCents?:number;reservedCents?:number;dailyLimitCents?:number;assistantName?:string;paused?:boolean;billingActive?:boolean;billingReview?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;activeWork?:boolean};
 export default function Home(){
  const [account,setAccount]=useState<Account|null>(null),[accountError,setAccountError]=useState(false),[signInOpen,setSignInOpen]=useState(false),[fundingOpen,setFundingOpen]=useState(false),[fundingCode,setFundingCode]=useState(''),[controlBusy,setControlBusy]=useState(false),[controlError,setControlError]=useState(''),[draftBrand,setDraftBrand]=useState<BotProfile|null>(null);
  const [assistantRequest,setAssistantRequest]=useState<AssistantRequest|null>(null),[propertyRequest,setPropertyRequest]=useState<{id:string;nonce:number}|null>(null);
@@ -118,7 +119,7 @@ export default function Home(){
     <section className="operation-panel" aria-label="Your AI real estate bot">
      {guest?<div className="workspace-first-visit"><h2>Your properties</h2><p>Join for $50/month, then add money to start your bot.</p></div>:<>
      {needsIdentity&&<section className="identity-onboarding"><CustomerIdentity identity={null} onboarding onSaved={()=>void refreshAccount()}/></section>}
-     {!needsIdentity&&needsBotName&&<PostPaymentBotName onBrand={updateBrand} onCreated={async()=>{await refreshAccount();}}/>}
+     {!needsIdentity&&needsBotName&&<PostPaymentBotName vip={account.vip===true} onBrand={updateBrand} onCreated={async()=>{await refreshAccount();}}/>}
      {!account.readinessPending&&(nextAction.kind==='activation'||nextAction.kind==='support'&&account.billingReview)&&<div className="workspace-state-row">
       {nextAction.kind==='support'?<a className="fund-button" href="/support">{nextAction.label}</a>:<button className="fund-button" disabled={workspaceActionDisabled(nextAction.kind,controlBusy,accountError)} onClick={doNextAction}>{controlBusy?'Saving…':nextAction.label}</button>}
      </div>}
@@ -126,6 +127,7 @@ export default function Home(){
      {controlError&&<p role="alert">{controlError}</p>}
      {account.mode==='live'&&account.billingModel==='legacy'&&<SpendActivationReview key={activationKey} onAvailabilityChange={updateActivationAvailability} onSaved={()=>void refreshAccount()}/>}
      <CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}>
+     <SpendingAllowance/>
      <BudgetSummary/>
      <LiveWorkspace propertyRequest={propertyRequest} onAsk={(screeningId,address)=>setAssistantRequest({screeningId,address,nonce:Date.now()})} principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/>
      </CreditActionGate>

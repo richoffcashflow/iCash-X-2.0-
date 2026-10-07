@@ -19,6 +19,7 @@ export async function POST(req:Request){
   }
   const input=z.object({action:z.literal('save'),profile:setupProfileSchema,stage:z.number().int().min(0).max(4),revision:z.number().int().min(0)}).strict().parse(data);
   const current=await readBotSetup(owner);if(!current)return NextResponse.json({error:'Refresh to restore your setup.'},{status:409,headers});
+  if(input.profile.displayName!==current.profile.displayName&&input.profile.displayName!=='iCash X'&&(!owner.accountId||!await db<boolean>('rpc/icash_vip_active','POST',{p_account:owner.accountId})))return NextResponse.json({error:'Custom bot names are included with VIP.'},{status:403,headers});
   const setup=await db('rpc/icash_save_bot_setup','POST',{p_setup:current.id,p_revision:input.revision,p_profile:input.profile,p_stage:input.stage});
   if(!setup)return NextResponse.json({error:'Your setup changed in another tab. Reload to continue.'},{status:409,headers});
   return NextResponse.json({setup},{headers});
