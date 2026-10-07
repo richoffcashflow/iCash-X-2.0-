@@ -381,3 +381,15 @@ test('carrier error diagnostics expose only numeric status and code',async()=>{
  const xml=receptionConsentTwiml(id,'e'.repeat(64));assert.equal((xml.match(/<Play>/g)||[]).length,2);assert(!xml.includes('<Say'));assert.match(xml,/input="speech"/);assert.match(xml,/actionOnEmptyResult="true"/);assert.match(xml,/<Hangup\/>/);
  const question=receptionConsentTwiml(id,'e'.repeat(64),false);assert.equal((question.match(/<Play>/g)||[]).length,1);assert(!question.includes('notice.mp3'));assert.match(question,/question.mp3/);
  });
+
+test('missing carrier price uses only an explicit tariff approval, remains estimated, and retains exact identity',async()=>{
+ const s=settlementInput(await fixture().ready());s.row.cost_policy_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';s.call.price=null;s.call.duration='61';
+ const calls=[];const rpc=async(name,body)=>{calls.push({name,body});return name==='icash_get_reception_carrier_estimate'?{tariffVersion:'us-local-inbound-20261007',microsPerMinute:8500}:{settled:true,chargedCents:100,costBasis:'estimated'};};
+ assert.equal((await settleRecordedReception(rpc,s.row,s.call,s.conversation,s.recording)).settled,true);
+ assert.deepEqual(calls.map(c=>c.name),['icash_get_reception_carrier_estimate','icash_settle_recorded_reception']);
+ const p=calls[1].body.p_attestation.providers.twilio;assert.equal(p.amountMicros,17000);assert.equal(p.basis,'estimated');assert.equal(p.pricePending,true);
+ let charges=0;assert.equal((await settleRecordedReception(async name=>{if(name==='icash_settle_recorded_reception')charges++;return null;},s.row,s.call,s.conversation,s.recording)).settled,false);assert.equal(charges,0);
+ for(const mutation of [x=>x.call.price='bad',x=>x.call.price='0.01',x=>x.call.price_unit='EUR',x=>x.call.sid='CA'+'f'.repeat(32),x=>x.call.duration='601',x=>x.call.status='in-progress',x=>x.conversation.metadata.cost_fiat=null]){
+  const bad=structuredClone(s);mutation(bad);let reads=0;assert.equal((await settleRecordedReception(async()=>{reads++;},bad.row,bad.call,bad.conversation,bad.recording)).settled,false);assert.equal(reads,0);
+ }
+});

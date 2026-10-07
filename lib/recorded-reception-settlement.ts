@@ -1,16 +1,18 @@
 import {object,sha} from './required-call-recording.ts';
-import {usdMicros} from './voice-usage-service.ts';
+import {twilioUsdChargeMicros} from './twilio-usd-cost.ts';
 import {receptionUsdNumberMicros} from './general-reception-reconcile.ts';
 import {incomingCallMatches,receptionConversationMatches,receptionRecordingMatches,receptionRecordingCosts,recordedReceptionPolicy,type RecordedReceptionRow,type RecordedReceptionRpc} from './recorded-reception.ts';
 
 /** Provider readback attests identity and USD; it never manufactures a cost
  * approval. SQL requires a separate exact, immutable all-16-category review. */
-export function receptionSettlementAttestation(row:RecordedReceptionRow,call:Record<string,unknown>,conversation:Record<string,unknown>|null,recording:Record<string,unknown>|null){
- if(!row.call_ended_at||!incomingCallMatches(row,call)||!['completed','failed','busy','no-answer','canceled'].includes(String(call.status))||call.price_unit!=='USD'||typeof call.price!=='string'||!/^-(?:0|[1-9]\d*)(?:\.\d{1,6})?$|^0(?:\.0{1,6})?$/.test(call.price)||typeof call.duration!=='string'||!/^\d+$/.test(call.duration))return null;
+export function receptionSettlementAttestation(row:RecordedReceptionRow,call:Record<string,unknown>,conversation:Record<string,unknown>|null,recording:Record<string,unknown>|null,carrierEstimate=false){
+ const carrierMicros=twilioUsdChargeMicros(call.price,call.price_unit);
+ const estimated=carrierEstimate&&call.price===null&&call.status==='completed'&&call.price_unit==='USD';
+ if(!row.call_ended_at||!incomingCallMatches(row,call)||!['completed','failed','busy','no-answer','canceled'].includes(String(call.status))||carrierMicros===null&&!estimated||typeof call.duration!=='string'||!/^\d+$/.test(call.duration))return null;
  if(row.setup_confirmed_at&&!row.call_started_at&&(call.status==='completed'||call.start_time!==null&&call.start_time!==undefined))return null;
  const duration=Number(call.duration);if(!Number.isSafeInteger(duration)||duration<0||duration>row.max_total_seconds)return null;
  const gate=!row.start_claimed_at&&!row.register_claimed_at&&!row.recording_sid&&!row.conversation_id;
- const providers:Record<string,unknown>={twilio:{amountMicros:usdMicros(call.price.replace(/^-/,'')),currency:'USD',receiptHash:sha(JSON.stringify(call))}};
+ const providers:Record<string,unknown>={twilio:{amountMicros:estimated?Math.max(1,Math.ceil(duration/60))*8500:carrierMicros,currency:'USD',receiptHash:sha(JSON.stringify(call)),...(estimated?{basis:'estimated',tariffVersion:'us-local-inbound-20261007',pricePending:true}:{})}};
  let recordingMicros=0,storageMicros=0,streamMicros=0,recordingEstimated=false;
  if(!gate){
   if(!row.conversation_id||!row.recording_sid||!row.consent_at||!row.start_claimed_at||!row.register_claimed_at||!['available','expired','deletion_pending','deleted'].includes(row.state)||row.duration_seconds===null||!row.ended_at||!row.provider_started_at||!conversation||conversation.status!=='done'||!receptionConversationMatches(row,conversation))return null;
@@ -26,7 +28,12 @@ export function receptionSettlementAttestation(row:RecordedReceptionRow,call:Rec
   recording:{policyVersion:recordedReceptionPolicy,speechGatherMicros:row.setup_confirmed_at?20000:0,recordingMicros,storageMicros,streamMicros,recordingEstimated}};
 }
 export async function settleRecordedReception(rpc:RecordedReceptionRpc,row:RecordedReceptionRow,call:Record<string,unknown>,conversation:Record<string,unknown>|null,recording:Record<string,unknown>|null){
- const attestation=receptionSettlementAttestation(row,call,conversation,recording);if(!attestation)return {settled:false,reason:'complete_bound_provider_costs_required'};
+ let attestation=receptionSettlementAttestation(row,call,conversation,recording);
+ if(!attestation&&row.cost_policy_id&&call.price===null){
+  const candidate=receptionSettlementAttestation(row,call,conversation,recording,true);
+  if(candidate){const approval=object(await rpc('icash_get_reception_carrier_estimate',{p_id:row.id,p_account:row.account_id,p_operation:row.operation_key}));if(approval.tariffVersion==='us-local-inbound-20261007'&&approval.microsPerMinute===8500)attestation=candidate;}
+ }
+ if(!attestation)return {settled:false,reason:'complete_bound_provider_costs_required'};
  const result=object(await rpc('icash_settle_recorded_reception',{p_id:row.id,p_account:row.account_id,p_operation:row.operation_key,p_attestation:attestation}));
  if(result.settled===true&&typeof result.chargedCents==='number'&&Number.isSafeInteger(result.chargedCents)&&result.chargedCents>=0&&result.chargedCents<=row.charge_cap_cents&&['verified','estimated'].includes(String(result.costBasis)))return {settled:true,chargedCents:result.chargedCents,costBasis:result.costBasis,...(result.reviewRequired===true?{reviewRequired:true}:{})};
  return {settled:false,reason:result.settled===false?'cost_review_required':'settlement_status_unconfirmed'};
