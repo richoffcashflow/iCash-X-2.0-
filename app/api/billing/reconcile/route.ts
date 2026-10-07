@@ -1,4 +1,5 @@
 import {reconcileAutoRecharge} from '@/lib/auto-recharge';
+import {reconcileMemberships} from '@/lib/membership-reconciliation';
 import {NextResponse} from 'next/server';
 import {timingSafeEqual} from 'node:crypto';
 import {db} from '@/lib/stripe-test';
@@ -13,6 +14,8 @@ export async function GET(req:Request){const expected=`Bearer ${process.env.CRON
  const cancellations=await db<Membership[]>(`icash_memberships?mode=eq.${mode}&state=eq.cancel_requested&order=updated_at.asc&limit=10`);
  let cancellationChecked=0,cancellationFailed=0;
  for(const membership of cancellations){if(Date.now()>=deadline)break;cancellationChecked++;try{await stopMembership(membership);}catch{cancellationFailed++;}}
+ // Recover missed membership webhooks without consuming the whole legacy/recharge budget.
+ const memberships=await reconcileMemberships(Math.min(deadline,Date.now()+15_000));
  // Reserve capacity for active billing while also recovering paid history after Stop.
  const [active,stopped,recent]=await Promise.all([
   db<DailyPlan[]>(`icash_daily_plans?mode=eq.${mode}&state=neq.stopped&order=reconciled_at.asc.nullsfirst&limit=80`),
@@ -35,4 +38,4 @@ export async function GET(req:Request){const expected=`Bearer ${process.env.CRON
  }catch{failed++;}finally{await db(`icash_daily_plans?id=eq.${p.id}`,'PATCH',{reconciled_at:new Date().toISOString()});}}
 
  const autoRecharge=await reconcileAutoRecharge(deadline);
- return NextResponse.json({autoRecharge,checked,failed,historyPending,deferred:plans.length-checked,cancellationChecked,cancellationFailed,cancellationDeferred:cancellations.length-cancellationChecked},{status:failed||cancellationFailed||autoRecharge.failed?503:200});}
+ return NextResponse.json({memberships,autoRecharge,checked,failed,historyPending,deferred:plans.length-checked,cancellationChecked,cancellationFailed,cancellationDeferred:cancellations.length-cancellationChecked},{status:failed||memberships.failed||cancellationFailed||autoRecharge.failed?503:200});}

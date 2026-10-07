@@ -23,8 +23,9 @@ rpcResult=false;assert.equal((await settleBoundVoiceUsage(db,'account','call',[p
 assert.deepEqual(readVoiceUsagePolicies('not json'),[]);assert.deepEqual(readVoiceUsagePolicies('{}'),[]);assert.deepEqual(readVoiceUsagePolicies(undefined),[]);
 assert.equal(usdMicros('0.0000001'),1);assert.equal(usdMicros(0.000001),1);assert.equal(usdMicros('1.000001'),1000001);assert.equal(usdMicros(0.07),70000);assert.throws(()=>usdMicros(-1));assert.throws(()=>usdMicros(Infinity));
 reset();await settlePendingVoiceUsage(()=>{throw Error('must not query disabled config')},'account',[]);
-const live=readFileSync(new URL('../lib/live-conversation-service.ts',import.meta.url),'utf8');assert(live.includes("['provider_receipt_missing','duration_missing'].includes(billing.reason)"));assert(live.includes("if(call.state!=='complete')await db('rpc/icash_save_live_result'"));assert(live.indexOf('icash_record_cost_observation')<live.indexOf('icash_save_live_result'));assert(live.lastIndexOf('billing:await settle()')>live.indexOf('icash_save_live_result'));
+const live=readFileSync(new URL('../lib/live-conversation-service.ts',import.meta.url),'utf8');assert(live.includes("['provider_receipt_missing','duration_missing'].includes(billing.reason)"));assert(live.includes("if(call.state!=='complete'){await db('rpc/icash_save_live_result'"));assert(live.indexOf('icash_record_cost_observation')<live.indexOf('icash_save_live_result'));assert(live.lastIndexOf('billing:await settle()')>live.indexOf('icash_save_live_result'));
 // More than two old pages of held operations: persisted rotation reaches a late ready row.
+const realNow=Date.now;let clock=realNow();Date.now=()=>clock;
 const pending=Array.from({length:77},(_,i)=>({operation_key:'op'+String(i).padStart(3,'0'),estimate_checked_at:null}));
 let pages=0,visited=[],claims=0,loseClaim=false,lastSignal;
 const batchDb=async(path,method,body,signal)=>{
@@ -41,7 +42,9 @@ const batchDb=async(path,method,body,signal)=>{
    row.estimate_checked_at=body.estimate_checked_at;claims++;return [{operation_key:row.operation_key}];
   }
   pages++;assert.equal(q.get('limit'),'1');assert.equal(q.get('order'),'estimate_checked_at.asc.nullsfirst,operation_key.asc');
-  return pending.filter(row=>!row.settled).sort((a,b)=>(a.estimate_checked_at??'').localeCompare(b.estimate_checked_at??'')||a.operation_key.localeCompare(b.operation_key)).slice(0,1).map(row=>({...row}));
+  const due=q.get('or').match(/^\(estimate_checked_at\.is\.null,estimate_checked_at\.lte\.(.*)\)$/);assert(due);
+  assert.equal(Date.parse(due[1]),clock-300000);
+  return pending.filter(row=>!row.settled&&(!row.estimate_checked_at||Date.parse(row.estimate_checked_at)<=Date.parse(due[1]))).sort((a,b)=>(a.estimate_checked_at??'').localeCompare(b.estimate_checked_at??'')||a.operation_key.localeCompare(b.operation_key)).slice(0,1).map(row=>({...row}));
  }
  assert.equal(q.get('limit'),'1');assert.equal(q.get('state'),'eq.complete');
  const op=q.get('operation_key').slice(3);return op==='op002'?[]:[{id:op}];
@@ -60,6 +63,12 @@ for(let i=0;i<77;i++){
 }
 assert.equal(pages,77);assert.equal(claims,77);assert.equal(visited.length,76);assert.equal(new Set(visited).size,76);
 assert.deepEqual(totals,{settled:1,held:74,reviewRequired:1});
+// A hot background loop cannot repeatedly fetch the same held provider receipt.
+let hotAttempts=0;
+assert.deepEqual(await settlePendingVoiceUsage(batchDb,'account',[policy()],async()=>{hotAttempts++;return {};}),{settled:0,held:0,reviewRequired:0});
+assert.equal(hotAttempts,0);clock+=299999;
+await settlePendingVoiceUsage(batchDb,'account',[policy()],async()=>{hotAttempts++;return {};});assert.equal(hotAttempts,0);
+clock+=1;
 // A lost compare-and-set must not reconcile; a retry revisits the oldest held row.
 loseClaim=true;let attempts=0;
 await settlePendingVoiceUsage(batchDb,'account',[policy()],async()=>{attempts++;return {};});assert.equal(attempts,0);
@@ -74,6 +83,7 @@ const aborted=await settlePendingVoiceUsage(batchDb,'account',[policy()],async(_
  controller.abort();assert.equal(signal.aborted,true);finished=true;signal.throwIfAborted();
 },controller.signal);
 assert.equal(finished,true);assert.deepEqual(aborted,{settled:0,held:0,reviewRequired:1});
+Date.now=realNow;
 console.log('PASS: bound server collector, immutable pricing, scoped fair one-row claims, 77-row held backlog, conflicts, missing calls, cancellation');
 
 const staged={rateId:'12345678-1234-4234-8234-123456789abc',version:'required-audio-30d-speech-v1:fixture',enabled:false,components:{other:{kind:'recording_addon_estimate'}}};

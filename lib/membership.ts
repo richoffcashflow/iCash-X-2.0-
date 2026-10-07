@@ -56,7 +56,9 @@ async function matchingMembership(sub:Stripe.Subscription){
 export async function syncMembershipSubscription(sub:Stripe.Subscription){
  const m=await matchingMembership(sub);if(!m)return false;
  const state=m.state==='cancelled'||sub.status==='canceled'?'cancelled':m.state==='cancel_requested'?'cancel_requested':m.state==='needs_review'?'needs_review':sub.status==='active'?'active':['past_due','unpaid','incomplete_expired','paused'].includes(sub.status)?'payment_failed':'pending';
- await db(`icash_memberships?id=eq.${m.id}${state==='needs_review'?'':'&state=neq.needs_review'}`,'PATCH',{stripe_subscription_id:sub.id,stripe_customer_id:ref(sub.customer),state,cancel_at_period_end:sub.cancel_at_period_end,updated_at:new Date().toISOString()});
+ // Compare-and-set prevents a stale provider read from overwriting a newer
+ // cancellation or review decision, independently of the database trigger.
+ await db(`icash_memberships?id=eq.${m.id}&state=eq.${m.state}${state==='needs_review'?'':'&state=neq.needs_review'}`,'PATCH',{stripe_subscription_id:sub.id,stripe_customer_id:ref(sub.customer),state,cancel_at_period_end:sub.cancel_at_period_end,updated_at:new Date().toISOString()});
  return true;
 }
 export async function settleMembershipInvoice(invoiceId:string){

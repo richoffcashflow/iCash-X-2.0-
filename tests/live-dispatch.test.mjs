@@ -53,6 +53,7 @@ const db=async(path,method,body)=>{
  if(path==='rpc/icash_buyer_voice_context')return buyerApproved?{dealId:'deal',address:'Fixture',askingPriceCents:10000000,repairsCents:100000,packageId:'doc'}:null;
  if(path.startsWith('icash_operation_rates'))return [{operation:permission.party==='buyer'?'buyer_call':'seller_call',enabled:true,expires_at:c.reviewed_until,voice_max_duration_seconds:quoteSeconds,charge_cents:legacyRate?946:recordingPolicy.minimumHoldCents,version:legacyRate?'staged-seller-20260930-us-600s-v1':recordingPolicy.version+':fixture'}];
  if(path.startsWith('icash_offer_authorities'))return [];
+ if(path==='rpc/icash_claim_automatic_offer_voice_job'){assert.equal(permission.party,'seller');assert.equal(body.p_job,'job');assert.deepEqual(body.p_snapshot,snapshot);assert.equal(body.p_offer_price_cents,10200000);if(allowClaim)jobState='dispatching';return allowClaim;}
  if(path==='rpc/icash_claim_reviewed_voice_job'){if(allowClaim)jobState='dispatching';return allowClaim;}
  if(path.startsWith('icash_live_conversations?')){assert(path.includes('account_id=eq.account&screening_id=eq.screening&contact_key=eq.'));assert(path.includes('party=eq.seller&state=eq.complete&operation_key=like.voice:*'));return [];}
  if(path==='icash_live_conversations')return [];
@@ -73,7 +74,7 @@ assert.match(outboundBody.prompt,/PRIVATE SERVER NEGOTIATION AUTHORITY/);
 assert(!Object.hasOwn(outboundBody,'call_recording_enabled'));
 assert(!records.some(r=>r.path==='icash_live_conversations'&&r.method==='POST'),'Only verified recording service may create the live binding');
 assert.deepEqual(providerPaths,[`/v1/convai/phone-numbers/${c.phone_number_id}`,`/v1/convai/agents/${review.agentId}?branch_id=${review.branchId}`]);
-const noAdmission=()=>{assert.equal(postCount,0);assert(!records.some(r=>['rpc/icash_reserve_paced_voice','rpc/icash_claim_reviewed_voice_job'].includes(r.path)));assert.equal(jobState,'held');};
+const noAdmission=()=>{assert.equal(postCount,0);assert(!records.some(r=>['rpc/icash_reserve_paced_voice','rpc/icash_claim_reviewed_voice_job','rpc/icash_claim_automatic_offer_voice_job'].includes(r.path)));assert.equal(jobState,'held');};
 // Recorded account configs must match the review, including exact tool set and cap.
 // Legacy conversation hashes and two-tool configs stay fail-closed in this lane.
 for(const mutate of [
@@ -130,7 +131,7 @@ reset();operational=true;allowClaim=false;await dispatchLiveVoice('account','job
 for(const party of ['seller','buyer'])for(const operationalTarget of [false,true])for(const callback of [null,'callback']){
  reset();permission={...permission,party};operational=operationalTarget;callbackId=callback;legacyRate=true;process.env.ICASH_RECORDED_OUTBOUND_READY='false';
  assert.equal((await dispatchLiveVoice('account','job')).status,'recorded_call_release_required');assert.equal(providerReads,0);assert.equal(postCount,0);
- assert(!records.some(r=>['rpc/icash_reserve_paced_voice','rpc/icash_claim_reviewed_voice_job'].includes(r.path)));assert.equal(jobState,'held');
+ assert(!records.some(r=>['rpc/icash_reserve_paced_voice','rpc/icash_claim_reviewed_voice_job','rpc/icash_claim_automatic_offer_voice_job'].includes(r.path)));assert.equal(jobState,'held');
 }
 for(const change of [()=>delete process.env.ICASH_RECORDED_OUTBOUND_READY,()=>process.env.ICASH_RECORDING_RECEIPTS_READY='false',()=>process.env.RECORDED_OUTBOUND_REVIEW_JSON='invalid',()=>process.env.TWILIO_ACCOUNT_SID='AC'+'b'.repeat(32),()=>delete process.env.TWILIO_AUTH_TOKEN]){
  reset();change();assert.notEqual((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(providerReads,0);assert.equal(postCount,0);assert(!records.some(r=>r.path==='rpc/icash_reserve_paced_voice'));
@@ -141,7 +142,7 @@ permission={...permission,party:'seller'};
 for(const at of ['rpc/icash_voice_sms_context','rpc/icash_reserve_paced_voice','final-patch'])for(const change of [()=>process.env.ICASH_RECORDED_OUTBOUND_READY='false',()=>process.env.ICASH_RECORDING_RECEIPTS_READY='false',()=>process.env.ICASH_LIVE_WORK_READY='false',()=>process.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify({...review,versionId:'agtvrsn_changed'})]){
  reset();flipAt=at;flip=change;assert.notEqual((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,0);
  if(at==='rpc/icash_voice_sms_context')assert(!records.some(r=>r.path==='rpc/icash_reserve_paced_voice'));
- if(at!=='final-patch')assert(!records.some(r=>r.path==='rpc/icash_claim_reviewed_voice_job'));
+ if(at!=='final-patch')assert(!records.some(r=>['rpc/icash_claim_reviewed_voice_job','rpc/icash_claim_automatic_offer_voice_job'].includes(r.path)));
  assert.equal(records.at(-1).body.p_after_claim,at==='final-patch','Only the owned dispatch claim may be held');
 }
 for(const status of ['recording_review_required','recording_admission_held','recording_release_required']){

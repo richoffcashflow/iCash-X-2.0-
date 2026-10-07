@@ -1,3 +1,4 @@
+import {canSaveSharedIntegrationCheck} from './integration-check-write-policy.mjs';
 // Deployment preflight: bounded provider GETs only. Never dials, sends, purchases,
 // changes routing, enables a release, or exposes credentials/provider payloads.
 import {pathToFileURL} from 'node:url';
@@ -37,7 +38,7 @@ export async function checkTelephonyConnection(env=process.env,fetcher=fetch){
 }
 
 export async function saveTelephonyCheck(result,env=process.env,fetcher=fetch){
- if(!env.SUPABASE_URL||!env.SUPABASE_SECRET_KEY)return false;
+ if(!canSaveSharedIntegrationCheck(env)||!env.SUPABASE_URL||!env.SUPABASE_SECRET_KEY)return false;
  const response=await fetcher(`${env.SUPABASE_URL}/rest/v1/icash_integration_checks?on_conflict=provider`,{
   method:'POST',headers:{apikey:env.SUPABASE_SECRET_KEY,Authorization:`Bearer ${env.SUPABASE_SECRET_KEY}`,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},
   body:JSON.stringify({provider:'telephony_launch',checked_at:result.checkedAt,result}),redirect:'error',signal:AbortSignal.timeout(10000),

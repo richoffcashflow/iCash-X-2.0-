@@ -24,4 +24,13 @@ assert.equal((await route.POST(request({conversationId:'conv_fixture',agreedPric
 assert.equal((await route.POST(request({conversationId:'conv_fixture',agreedPriceCents:4000000}))).status,200);assert.equal(sends,1);
 console.log('PASS closing context: approved exact-price agreement, seller-bound recipient, no ceiling-as-offer, stale terms and mismatched delivery rejected. Synthetic provider only.');
 
-const automatic=sellerCallPrompt({address:'Fixture address',principal:'Fixture buyer',assistantName:'Robin',history:null},3893700,null,true,3893700);assert(automatic.includes('SERVER CASH OFFER PRICE'));assert(automatic.includes('\"priceCents\":3893700'));assert(automatic.includes('no separate manual price approval'));assert.throws(()=>sellerCallPrompt({address:'Fixture',principal:'Buyer',assistantName:'Robin',history:null},3893700,null,true,3893800));
+const automatic=sellerCallPrompt({address:'Fixture address',principal:'Fixture buyer',assistantName:'Robin',history:null},3893700,null,true,3893700);assert(automatic.includes('CALCULATED PRIVATE MAXIMUM'));assert(automatic.includes('\"maxOfferCents\":3893700'));assert(automatic.includes('not the starting bid'));assert(automatic.includes('never raise an already agreed lower price'));assert(!automatic.includes('Quote that exact dollar amount')); assert.throws(()=>sellerCallPrompt({address:'Fixture',principal:'Buyer',assistantName:'Robin',history:null},3893700,null,true,3893800));
+const {readFileSync}=await import('node:fs');
+for(const file of ['app/api/work/deals/route.ts','app/api/work/preparation/route.ts']){
+ const source=readFileSync(new URL('../'+file,import.meta.url),'utf8');
+ assert(!source.includes('runScreeningJob'),'calculated ceiling must never auto-fill a purchase price: '+file);
+}
+const agreedBelow=sellerCallPrompt({address:'Fixture address',principal:'Fixture buyer',assistantName:'Robin',history:null},4500000,context,true,4500000);
+assert(agreedBelow.includes('"priceCents":4000000'),'exact pending agreed price remains distinct from ceiling');
+assert(agreedBelow.includes('Do not invent a fixed percentage discount'));
+console.log('Negotiation: calculated ceiling stays private, lower agreed price preserved, no invented discount and no ceiling-to-draft prefill.');

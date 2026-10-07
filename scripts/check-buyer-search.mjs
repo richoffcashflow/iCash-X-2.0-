@@ -1,3 +1,4 @@
+import {canSaveSharedIntegrationCheck} from './integration-check-write-policy.mjs';
 // Free estimate only. This script cannot retrieve property/contact records.
 const key=process.env.DEALMACHINE_API_KEY;
 const result={configured:!!key,status:'missing_key',supported:false,estimatedCredits:null};
@@ -7,7 +8,7 @@ if(key)try{
  result.status=`provider_http_${r.status}`;
  if(r.ok){const d=await r.json();const c=d.estimated_credits;if(Number.isSafeInteger(c?.this_page)&&c.this_page>=0&&c.breakdown?.properties===0){result.supported=true;result.status='estimate_verified';result.estimatedCredits=c.this_page;}else result.status='estimate_needs_review';}
 }catch{result.status='connection_failed';}
-if(process.env.SUPABASE_URL&&process.env.SUPABASE_SECRET_KEY)try{
+if(canSaveSharedIntegrationCheck()&&process.env.SUPABASE_URL&&process.env.SUPABASE_SECRET_KEY)try{
  await fetch(`${process.env.SUPABASE_URL}/rest/v1/icash_integration_checks?on_conflict=provider`,{method:'POST',headers:{apikey:process.env.SUPABASE_SECRET_KEY,Authorization:`Bearer ${process.env.SUPABASE_SECRET_KEY}`,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},body:JSON.stringify({provider:'dealmachine_buyer_search',checked_at:new Date().toISOString(),result}),signal:AbortSignal.timeout(10000)});
 }catch{/* No paid fallback. */}
 console.log(`Buyer search preflight: ${result.status}. No records requested.`);

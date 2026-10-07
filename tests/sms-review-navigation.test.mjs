@@ -10,5 +10,10 @@ const route=readFileSync(new URL('../app/api/work/review-status/route.ts',import
 assert(route.includes('icash_sms_thread_review_current'));
 assert(route.includes('contractCapability'));
 assert(route.includes('icash_contact_suppressions'));
-assert(route.includes('icash_offer_authorities'));
+assert(route.includes('runScreeningJob(screening.snapshot)'),'Offer status must be recalculated from the server-owned snapshot');
+assert(route.includes('calculated.cashOfferPriceCents!==null'));
+assert(route.includes('priceCents:calculated.cashOfferPriceCents'));
+assert(route.includes('offer:null,automaticOffer'));
+assert(route.includes('account_id=eq.${accountId}&id=eq.${screeningId}&state=eq.complete'));
+assert(!route.includes('icash_offer_authorities'),'Retired manual authorities must not replace the fresh calculated offer');
 console.log('Workspace removes generic review/proposal clutter without disabling SMS, contract, suppression or offer checks');

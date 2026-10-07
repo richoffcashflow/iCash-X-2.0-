@@ -91,6 +91,8 @@ export async function settleBoundVoiceUsage(db:VoiceUsageDb,accountId:string,cal
 }
 
 /** One fair, persisted attempt per invocation; held rows rotate instead of blocking later calls.
+ * Each operation cools down for five minutes after a claim, including missing
+ * receipts, provider outages and crashes. Direct receipt checks remain immediate.
  * Generic estimate reconciliation must exclude voice rows from its fairness timestamp.
  * This is a claim, not settlement: every financial decision remains in the bound collector/SQL.
  */
@@ -102,7 +104,8 @@ export async function settlePendingVoiceUsage(database:VoiceUsageDb,accountId:st
  if(!rateIds.length)return summary;
  const deadline=signal?AbortSignal.any([signal,AbortSignal.timeout(20000)]):AbortSignal.timeout(20000);
  const db:VoiceUsageDb=(path,method,body)=>{deadline.throwIfAborted();return database(path,method,body,deadline);};
- const scope=`account_id=eq.${eq(accountId)}&state=eq.dispatched&rate_id=in.(${rateIds.map(id=>eq('"'+id+'"')).join(',')})`;
+ const dueBefore=new Date(Date.now()-5*60000).toISOString();
+ const scope=`account_id=eq.${eq(accountId)}&state=eq.dispatched&rate_id=in.(${rateIds.map(id=>eq('"'+id+'"')).join(',')})&or=(estimate_checked_at.is.null,estimate_checked_at.lte.${eq(dueBefore)})`;
  const [spend]=await db<{operation_key:string;estimate_checked_at:string|null}[]>(`icash_operation_spend?${scope}&select=operation_key,estimate_checked_at&order=estimate_checked_at.asc.nullsfirst,operation_key.asc&limit=1`);
  if(!spend)return summary;
  // Compare-and-set lets only one contender advance a given observed timestamp.
