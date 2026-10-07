@@ -4,5 +4,5 @@ export const webinarSite={
  companyKey:process.env.NEXT_PUBLIC_WEBINAR_COMPANY||'icash-x',
  brandName,hostName:process.env.NEXT_PUBLIC_WEBINAR_HOST||'CashFlowKey',
  assistantName:process.env.NEXT_PUBLIC_WEBINAR_ASSISTANT||`${brandName} assistant`,
- viewerPath:'/webinar',adminPath:'/webinaradmin',workspacePath:'/',checkoutPath:'/join',supportPath:'/support',
+ viewerPath:'/webinar',adminPath:'/webinaradmin',workspacePath:'/',checkoutPath:'/webinar/checkout',supportPath:'/support',
 };

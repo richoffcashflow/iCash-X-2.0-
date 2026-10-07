@@ -17,8 +17,8 @@ Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:t
 const components=Object.fromEntries(['WebinarPlayer','WebinarPanelBoundary','WebinarAudience','WebinarPurchaseNotifications','WebinarCheckout','AccountAccess','WebinarTimers'].map(n=>[n,n]));
 const icons=Object.fromEntries(['MessageCircle','Send','X','ChevronDown','ShieldCheck','Maximize','Pause','Play','Volume2','VolumeX'].map(n=>[n,n]));
 const w={...policy.newWebinar('00000000-0000-4000-8000-000000000123'),videoUrl:'https://example.test/day.mp4',status:'published',publicCode:'129339'};
-const sessionId='00000000-0000-4000-8000-000000000456';let requestLog=[],remembered='';
-async function post(url,body){requestLog.push({url,body});if(url.endsWith('/start'))return {sessionId,webinar:policy.publicWebinar(w),progress:0,name:remembered,contactSaved:false,messages:[],preview:false,serverNow:Date.now()};if(url.endsWith('/contact')){remembered=body.name;return {name:remembered,contactSaved:!!body.email&&!!body.phone};}if(url.endsWith('/chat'))return {messages:[{id:'m1',role:'user',text:body.text}]};return {saved:true};}
+const sessionId='00000000-0000-4000-8000-000000000456';let requestLog=[],remembered='',completionGate=null;const redirects=[];location.assign=path=>redirects.push(path);
+async function post(url,body){requestLog.push({url,body});if(url.endsWith('/start'))return {sessionId,webinar:policy.publicWebinar(w),progress:0,name:remembered,contactSaved:false,messages:[],preview:false,serverNow:Date.now()};if(url.endsWith('/event')&&body.kind==='completed'){if(completionGate)await completionGate;return {saved:true,redirect:'/webinar/checkout'};}if(url.endsWith('/contact')){remembered=body.name;return {name:remembered,contactSaved:!!body.email&&!!body.phone};}if(url.endsWith('/chat'))return {messages:[{id:'m1',role:'user',text:body.text}]};return {saved:true};}
 const h=await harness('components/webinar-room.tsx',{useWebinarTimers:()=>({deadlines:{},now:Date.now()}),...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}});
 const render=()=>h.render('WebinarRoom',{webinarCode:'129339'});let tree=render();await flush();tree=render();
 assert.equal(requestLog[0].body.code,'129339');assert.equal(all(tree).some(n=>n.props?.className==='wb-offer'),false,'No offer before its cue');assert.equal(all(tree).some(n=>n.type==='header'),false);
@@ -27,8 +27,12 @@ let prompt=all(tree).find(n=>n.type==='form'&&n.props.className==='wb-prompt');a
 let fields=all(prompt).filter(n=>n.type==='input');assert.equal(fields.length,1);assert.equal(fields[0].props.autoComplete,'given-name');fields[0].props.onChange({target:{value:'Casey'}});
 tree=render();prompt=all(tree).find(n=>n.type==='form'&&n.props.className==='wb-prompt');prompt.props.onSubmit({preventDefault(){}});await flush();tree=render();
 assert.equal(all(tree).some(n=>n.props?.className==='wb-prompt'),false,'Contact does not stack immediately on the name prompt');
-player=find(tree,'WebinarPlayer');player.props.onProgress(60);tree=render();prompt=all(tree).find(n=>n.type==='form'&&n.props.className==='wb-prompt');fields=all(prompt).filter(n=>n.type==='input');assert.deepEqual(fields.map(n=>n.props.type),['email','tel','checkbox']);assert.ok(!fields.some(n=>n.props.autoComplete==='given-name'));
+player=find(tree,'WebinarPlayer');player.props.onProgress(60);tree=render();prompt=all(tree).find(n=>n.type==='form'&&n.props.className==='wb-prompt');fields=all(prompt).filter(n=>n.type==='input');assert.deepEqual(fields.map(n=>n.props.type),['email','tel','checkbox','checkbox']);assert.ok(!fields.some(n=>n.props.autoComplete==='given-name'));
 assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).length,1);assert.equal(requestLog.find(r=>r.url.endsWith('/contact')).body.onlyName,true);
+// A successful completion opens express checkout, but a checkout started during
+// the completion request is never interrupted by its late response.
+find(tree,'WebinarPlayer').props.onProgress(w.durationSeconds);tree=render();find(tree,'WebinarPlayer').props.onEnded();await flush();assert.deepEqual(redirects,['/webinar/checkout']);
+let finish;completionGate=new Promise(resolve=>{finish=resolve;});tree=render();find(tree,'WebinarPlayer').props.onEnded();find(tree,'WebinarCheckout').props.onEngaged();finish();await flush();assert.deepEqual(redirects,['/webinar/checkout'],'Late completion cannot replace an engaged checkout');
 h.close();
 // Real player handlers: failed autoplay is recoverable, and reloading restores
 // the newest position rather than the position at initial entry.

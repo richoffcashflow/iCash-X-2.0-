@@ -14,7 +14,7 @@ import {approximateRegion} from '@/lib/webinar-activity';
 import {returnVisit} from '@/lib/webinar-optimizer';
 import {adIdentity,intelligencePlan,intelligenceChoice,intelligenceBucket,intelligencePolicyVersion} from '@/packages/webinar-engine/src/intelligence';
 import {intelligenceContext,intelligenceCandidates,intelligencePoolKey,readIntelligenceData,saveIntelligenceStops,type IntelligenceAssignment} from '@/lib/webinar-intelligence';
-import {webinarBody,webinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarOwner,webinarVisitor,type WebinarSession} from '@/lib/webinar-server';
+import {webinarBody,webinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarOwner,webinarVisitor,webinarPaid,type WebinarSession} from '@/lib/webinar-server';
 export const dynamic='force-dynamic';
 export async function POST(req:Request){try{
  webinarOrigin(req);const i=z.object({timezone:z.string().max(80),code:z.string().regex(/^\d{6,12}$/).optional(),variant:z.enum(['day','night']).optional(),resume:z.string().max(600).optional(),preview:z.string().uuid().optional(),attribution:z.record(z.string().max(250)).optional()}).strict().parse(await webinarBody(req,3000));
@@ -28,7 +28,7 @@ export async function POST(req:Request){try{
  const jar=await cookies();let fundingGuest=jar.get('icash_funding_guest')?.value;if(!validGuest(fundingGuest)){fundingGuest=randomBytes(32).toString('hex');jar.set('icash_funding_guest',fundingGuest,{httpOnly:true,secure:process.env.NODE_ENV!=='development',sameSite:'lax',path:'/',maxAge:86400*30});}
  const activityRegion=process.env.VERCEL?approximateRegion(req.headers.get('x-vercel-ip-country'),req.headers.get('x-vercel-ip-country-region')):null;
  await db(`icash_webinar_visitors?id=eq.${visitor.id}`,'PATCH',{timezone,activity_region:activityRegion,funding_guest_hash:guestHash(fundingGuest),last_seen_at:new Date().toISOString(),...(Object.keys(attribution).length?{attribution}:{})});
- if(!i.preview&&await webinarCustomerPaid(guestHash(fundingGuest)))return Response.json({redirect:webinarSite.workspacePath},{headers:webinarHeaders});
+ if(!i.preview&&(await webinarCustomerPaid(guestHash(fundingGuest))||await webinarPaid(visitor)))return Response.json({redirect:webinarSite.workspacePath},{headers:webinarHeaders});
  const rows=await db<{config:Webinar;public_code:number}[]>(`icash_webinars?${i.preview?'id=eq.'+i.preview+'&':i.code?'public_code=eq.'+i.code+'&':''}select=config,public_code&order=updated_at.desc&limit=100`);
  for(const row of rows)row.config={...row.config,publicCode:String(row.public_code)};
  if(i.code&&!i.preview&&!rows.some(row=>row.config.status==='published'))return Response.json({unavailable:true,message:'This webinar is not available yet.'},{headers:webinarHeaders});

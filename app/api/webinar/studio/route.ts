@@ -4,18 +4,20 @@ import {webinarSchema,settingsSchema,webinarOffers,webinarPitchAt,type Webinar,t
 import {webinarBody,webinarError,webinarHeaders,webinarOrigin,webinarOwner,WebinarError} from '@/lib/webinar-server';
 import {checkoutPublishableKey} from '@/lib/embedded-checkout-policy';
 import {fundingMode} from '@/lib/funding-policy';
+import {webinarFollowupReadiness} from '@/lib/webinar-email';
 import {metaReady} from '@/lib/webinar-meta';
 export const dynamic='force-dynamic';
 export async function GET(){try{
- await webinarOwner();const [webinars,settings,metaHealth]=await Promise.all([db<{config:Webinar;public_code:number}[]>('icash_webinars?select=config,public_code&order=updated_at.desc&limit=100'),db<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config'),db('rpc/icash_webinar_meta_health','POST',{})]);
- return Response.json({webinars:webinars.map(r=>webinarSchema.parse({...r.config,publicCode:String(r.public_code)})),settings:settingsSchema.parse(settings[0].config),metaHealth,metaReady:metaReady(),embeddedCheckoutReady:!!checkoutPublishableKey(fundingMode()),aiReady:!!process.env.OPENAI_API_KEY&&!!(process.env.ICASH_WEBINAR_AI_MODEL||process.env.ICASH_SUPPORT_AI_MODEL),emailReady:!!process.env.RESEND_API_KEY&&!!process.env.ICASH_APP_ORIGIN&&!!process.env.ICASH_WEBINAR_EMAIL_WEBHOOK_SECRET},{headers:webinarHeaders});
+ await webinarOwner();const [webinars,settings,metaHealth,followupStats]=await Promise.all([db<{config:Webinar;public_code:number}[]>('icash_webinars?select=config,public_code&order=updated_at.desc&limit=100'),db<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config'),db('rpc/icash_webinar_meta_health','POST',{}),db('rpc/icash_webinar_followup_stats','POST',{}).catch(()=>null)]);
+ const config=settingsSchema.parse(settings[0].config),followupReadiness=webinarFollowupReadiness(config);
+ return Response.json({webinars:webinars.map(r=>webinarSchema.parse({...r.config,publicCode:String(r.public_code)})),settings:config,followupReadiness,followupStats,metaHealth,metaReady:metaReady(),embeddedCheckoutReady:!!checkoutPublishableKey(fundingMode()),aiReady:!!process.env.OPENAI_API_KEY&&!!(process.env.ICASH_WEBINAR_AI_MODEL||process.env.ICASH_SUPPORT_AI_MODEL),emailReady:followupReadiness.email},{headers:webinarHeaders});
  }catch(e){return webinarError(e);}}
 export async function POST(req:Request){try{
  webinarOrigin(req);await webinarOwner();const body=await webinarBody(req,800000);
  if(body.action==='settings'){
- const config=settingsSchema.parse(body.settings);if(config.enabled&&(!config.fromEmail||!config.postalAddress.trim()||!process.env.RESEND_API_KEY||!process.env.ICASH_WEBINAR_EMAIL_WEBHOOK_SECRET))throw new WebinarError(400,'Add your verified sender, mailing address and delivery connection before enabling reminders.');
+ const config=settingsSchema.parse(body.settings);
  if(config.meta.enabled&&(!config.meta.pixelId||!metaReady()))throw new WebinarError(400,'Add your Meta Pixel ID and server connection before enabling measurement.');
- await db('icash_webinar_settings?id=eq.1','PATCH',{config,updated_at:new Date().toISOString()});return Response.json({saved:true},{headers:webinarHeaders});}
+ await db('icash_webinar_settings?id=eq.1','PATCH',{config,updated_at:new Date().toISOString()});return Response.json({saved:true,followupReadiness:webinarFollowupReadiness(config)},{headers:webinarHeaders});}
  const input=z.object({action:z.literal('save'),webinar:webinarSchema,isNew:z.boolean()}).strict().parse(body);
  const {publicCode:ignoredCode,...details}=input.webinar;void ignoredCode;
  const config={...details,pitchAt:webinarPitchAt(input.webinar),revision:input.isNew?1:input.webinar.revision+1,nightVersion:input.webinar.nightVersion?{...input.webinar.nightVersion,pitchAt:webinarPitchAt(input.webinar.nightVersion)}:null};

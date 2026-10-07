@@ -42,15 +42,19 @@ Only a session-scoped opaque ID, activity type, amount, timestamp and optional c
 
 ## Follow-ups
 
-Email opt-in is separate and unchecked by default. Phone capture does not authorize SMS or calling. Three emails are queued at 1, 24 and 72 hours, sent only between 9 AM and 8 PM local time. A signed resume link restores webinar state and grants no software-account access. Unsubscribe applies across matching email addresses; confirmed payment stops prospect follow-ups. Workers lease jobs and retry the same persisted Resend payload with the same idempotency key within a bounded period.
+Email and SMS opt-ins are separate, optional and unchecked. Saving a phone number alone does not authorize texts. Follow-ups use the viewer’s first name, actual saved progress and current journey; the owner can replace the automatic email copy with three editable templates. No model call is required for delivery.
 
-Follow-ups start disabled. Before enabling:
+The bounded sequence queues email at 20 minutes, text at 90 minutes, email at 24 hours, text at 48 hours and email at 72 hours after opt-in. It waits for 15 minutes of inactivity, sends between 9 AM and 8 PM in the viewer’s timezone, allows at most two cross-channel messages per rolling 24 hours with an hour between messages, and ends after seven days. The recipient/step uniqueness constraint prevents refreshes or repeated contact submission from restarting it. Verified live purchases stop both channels. Email unsubscribe/bounce/complaint and text STOP suppress the corresponding channel; any text reply stops the text sequence.
 
-- Set a verified sender, business postal address, and the three email subjects/messages in the studio.
-- Configure Resend events `email.bounced`, `email.complained`, `email.suppressed` to `https://www.geticashx.com/api/webinar/email-events`; save its signing secret as `ICASH_WEBINAR_EMAIL_WEBHOOK_SECRET` in production. This connection was blocked by automatic approval review in the build session and needs user approval before it is created.
-- Existing `RESEND_API_KEY`, `ICASH_APP_ORIGIN` and `CRON_SECRET` are reused. No email is sent by local tests or preview deployments.
+Every message uses an unpredictable `/w/<id>` link that restores webinar state for seven days, without authenticating a software account. On click the existing router rechecks payment, current session, eight-hour checkout window and eligible Day/Night recordings. Completion starts a full checkout window even if the first offer appeared earlier. Refresh does not extend it. A finished video saves completion before opening `/webinar/checkout`; a checkout already in progress stays open. The express page uses existing Stripe checkout, saved contact prefill and payment → name bot → workspace setup. There is no automatic charge.
 
-The Vercel cron calls `/api/webinar/followups` every five minutes. Missing setup fails closed. Webhook receipts are persisted so early or repeated delivery events cannot silently lose suppression. Unsubscribe GET shows a confirmation page; POST supports one-click unsubscribe.
+The Follow-ups screen shows separate channel switches, readiness and delivery totals. Email remains paused until a verified sender and business mailing address are saved. The verified `geticashx.com` sender domain is available; the mailing address was still blank at this release. Text delivery uses an enabled `icash_text_senders` sender and explicit new opt-ins. Existing visitors are not automatically opted into texts.
+
+- Email uses `RESEND_API_KEY`, `ICASH_APP_ORIGIN` and the existing signed `/api/webhooks/title-email` delivery connection (`RESEND_RECEIVING_WEBHOOK_SECRET`). No additional webhook or secret rotation is required.
+- Text uses `CONTIGUITY_API_KEY`, `CONTIGUITY_FROM` and the signed `/api/webhooks/contiguity` connection (`CONTIGUITY_WEBHOOK_SECRET`). Replies and delivery events are shared with the existing text service.
+- The `CRON_SECRET`-protected worker runs every five minutes, claims up to 25 jobs and uses at most five concurrent sends. It stops launching jobs after 90 seconds; unfinished leases recover on a later run.
+- Authorization rechecks consent, purchase, active watching, channel pause and frequency immediately before sending. Resend retries use an immutable payload and idempotency key, ending before 20 hours. Ambiguous text delivery is marked for review and never resent automatically. Receipts and the final provider reference are joined transactionally even if the webhook arrives first.
+- Local tests and preview deployments never dispatch follow-ups. Unsubscribe GET confirms the request; POST supports one-click unsubscribe.
 
 AI uses the existing `OPENAI_API_KEY` and `ICASH_SUPPORT_AI_MODEL`, or optional `ICASH_WEBINAR_AI_MODEL`. Replies have per-visitor and shared daily caps, no account mutation tools, and a non-AI fallback. Optional `ICASH_WEBINAR_SECRET` can provide a dedicated signing key; otherwise the server-only Supabase key is used with separate token purposes.
 
@@ -157,3 +161,7 @@ Timers control display, not payment terms. An actual offer closing date is confi
 Intelligence starts with an automatic routing switch, the smart link, separate Day/Night leaders and a compact results table (visitors, buyers, close rate, average watch). Use the Day/Night buttons to inspect each period. Until a Night recording is ready, the nighttime card identifies its Day fallback. Audience/ad filters, planned traffic, revenue per visitor, baseline comparisons and Meta URL parameters live under Advanced.
 
 Proven underperforming revisions show **Stopped · 0%** and receive no new smart-link traffic, including tests and baseline assignments. Decisions use mature randomized purchase value, with at least 100 observed visits per compared arm and at least 10 buyers for the leader. Untested revisions keep a bounded opportunity. Stops are saved per audience/ad/revision and remain after reports age out. Publishing a new revision makes it eligible to test again. Saved viewing sessions and pinned links stay stable; if all otherwise-eligible candidates are stopped, the smart link opens checkout. This changes on-site allocation only; Meta budgets and purchase measurement are unchanged.
+
+## Follow-up verification — October 7, 2026
+
+The adaptive email/text release adds executable worker, routing and component checks plus Postgres checks for independent consent, duplicate enrollment, active viewers, payment races, cross-channel frequency, immutable retry payloads, early/out-of-order delivery receipts, STOP, ambiguous SMS and private permissions. The previous build-handoff notes above are historical. Current production sending uses the existing signed delivery connections.
