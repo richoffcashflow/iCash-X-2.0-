@@ -1,3 +1,4 @@
+import {loadSellerClosingContext} from './seller-closing-context.ts';
 import {recordingServer} from './required-call-recording-server.ts';
 import {object,readRecordingReview,recordingAgentMatches,recordingPolicy} from './required-call-recording.ts';
 import {createHash} from 'node:crypto';
@@ -75,10 +76,11 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const priorCalls=p.party==='seller'?await db<unknown>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&contact_key=eq.${p.contact_key}&party=eq.seller&state=eq.complete&operation_key=like.voice:*&completed_at=gte.${encodeURIComponent(new Date(Date.now()-30*86400000).toISOString())}&order=completed_at.desc&limit=3&select=completed_at,result`):[];
  const buyerKind=identity.company_name?.trim()?'company' as const:'individual' as const;
  const request=p.party==='seller'&&object(snapshot.snapshot).sellerRequest?await db<SellerRequestContext|null>('rpc/icash_seller_call_request','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone}):null;
+ const closing=p.party==='seller'&&recordedReview.contractToolId?await loadSellerClosingContext(db,accountId,p.screening_id,p.phone,ceiling):null;
  const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext,request:request??undefined};
  // Validate the complete opening/context before reserving credits or dialing.
  let sellerGreeting:string|undefined,sellerPrompt:string|undefined;
- if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext,true);sellerPrompt=sellerCallPrompt(sellerContext,ceiling);}catch{return hold('property_context_required');}}
+ if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext,true);sellerPrompt=sellerCallPrompt(sellerContext,ceiling,closing,!!recordedReview.contractToolId);}catch{return hold('property_context_required');}}
  const operationKey=`voice:${j.id}`;
  const reserveHold=recordingReleaseHold();if(reserveHold)return hold(reserveHold);
  if(!await db<boolean>('rpc/icash_reserve_paced_voice','POST',{p_account:accountId,p_job:j.id,p_rate:rateId,p_permission_until:p.permission_until,p_financial_checked_at:eligible?.ready?new Date(eligible.screening.financialCheck.checkedAt).toISOString():null,p_financial_eligible:eligible?.ready&&eligible.screening.financialCheck.status==='eligible'}))return {status:'waiting_for_daytime_budget'};

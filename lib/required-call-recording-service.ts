@@ -1,4 +1,6 @@
+import {sellerContractToolMatches} from './seller-contract-tool.ts';
 import {recordingConfidence} from './recording-consent-evidence.ts';
+import {sellerContinuedSpeech,sellerNoticeTwiml,sellerNoticeEndTwiml} from './seller-call-notice.ts';
 import {createHmac,randomBytes} from 'node:crypto';
 import {usdMicros} from './voice-usage-service.ts';
 import {affirmativeSpeech,recordingGateOptOut,audioAvailable,endTwiml,object,privateHeaders,readRecordingReview,recordingAgentMatches,recordingBaseUrl,recordingDisclosure,recordingPolicy,recordingPricing,sha,sid,uuid,verifiedTwilioForm,consentTwiml,type RecordingRow,type RecordingReview} from './required-call-recording.ts';
@@ -34,6 +36,7 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
  async function readReview(){if(env.ICASH_RECORDED_OUTBOUND_READY!=='true')return null;const r=readRecordingReview(env.RECORDED_OUTBOUND_REVIEW_JSON,now());if(!r||r.providerAccountSid!==env.TWILIO_ACCOUNT_SID)return null;return r;}
  async function checkAgent(review:RecordingReview){
   if(!recordingAgentMatches(review,await provider.agent(review)))return false;
+  if(review.contractToolId&&!sellerContractToolMatches(await provider.tool(review.contractToolId),review.contractToolId))return false;
   const tool=await provider.tool(review.stopToolId),config=object(tool.tool_config),api=object(config.api_schema),body=object(api.request_body_schema),props=object(body.properties),id=object(props.recordingId),auth=object(object(api.request_headers).Authorization);
   return tool.id===review.stopToolId&&config.type==='webhook'&&config.name==='icash_stop_recording'&&api.url===recordingBaseUrl+'/stop'&&api.method==='POST'&&Object.keys(auth).length===1&&auth.variable_name==='secret__icash_recording_stop_token'&&body.type==='object'&&Array.isArray(body.required)&&body.required.length===1&&body.required[0]==='recordingId'&&Object.keys(props).length===1&&id.type==='string'&&id.dynamic_variable==='icash_recording_id'&&(api.auth_connection===null||api.auth_connection===undefined)&&(!tool.response_mocks||Array.isArray(tool.response_mocks)&&tool.response_mocks.length===0);
  }
@@ -57,40 +60,42 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
    // A changed release after any asynchronous preflight/admission cannot start a call.
    if(!dispatchAllowed())return {status:'recording_release_required'};
    try{
-    const call=await provider.dial(row.from_phone,row.to_phone,consentTwiml(row.id,nonce,disclosure),recordingBaseUrl+'/terminal?id='+row.id);
+    const call=await provider.dial(row.from_phone,row.to_phone,input.buyerKind?sellerNoticeTwiml(row.id,nonce):consentTwiml(row.id,nonce,disclosure),recordingBaseUrl+'/terminal?id='+row.id);
     const bound=await bindCall(row,call);if(!bound)throw Error('CALL_BINDING_UNCERTAIN');
     return {status:'recording_consent_pending',recordingId:row.id};
    }catch{await transition(db,row,'dial_unknown').catch(()=>null);return {status:'recording_dial_unknown_no_retry'};}
   },
-  async consent(request:Request){
+  async consent(request:Request,noticeMode=false){
    let row:RecordingRow|null=null;
+   const finishTwiml=noticeMode?sellerNoticeEndTwiml:endTwiml;
    try{
     const u=new URL(request.url),id=u.searchParams.get('id'),nonce=u.searchParams.get('nonce');
-    if(request.method!=='POST'||u.pathname!=='/api/internal/voice/recording/consent'||u.searchParams.size!==2||!uuid(id)||!nonce||!/^[a-f0-9]{64}$/.test(nonce)||request.headers.get('content-type')?.split(';')[0]!=='application/x-www-form-urlencoded')return hangup();
-    const canonical=recordingBaseUrl+'/consent?id='+id+'&nonce='+nonce;
+    const path=noticeMode?'notice':'consent';
+    if(request.method!=='POST'||u.pathname!=='/api/internal/voice/recording/'+path||u.searchParams.size!==2||!uuid(id)||!nonce||!/^[a-f0-9]{64}$/.test(nonce)||request.headers.get('content-type')?.split(';')[0]!=='application/x-www-form-urlencoded')return hangup();
+    const canonical=recordingBaseUrl+'/'+path+'?id='+id+'&nonce='+nonce;
     const form=verifiedTwilioForm((await boundedBytes(request,16384)).toString('utf8'),request.headers.get('x-twilio-signature'),env.TWILIO_AUTH_TOKEN??'',canonical);
     if(!form||form.get('AccountSid')!==env.TWILIO_ACCOUNT_SID||!sid(form.get('CallSid'),'CA'))return hangup();
-    row=await getRow(db,id);if(!row||row.nonce_hash!==sha(nonce)||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID)return hangup();
+    row=await getRow(db,id);if(!row||row.nonce_hash!==sha(nonce)||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||noticeMode&&row.party!=='seller')return hangup();
     const call=await provider.getCall(form.get('CallSid')!);
     if(!canonicalCall(row,call,now(),true))return hangup();
     row=await bindCall(row,call);if(!row)return hangup();
     // Replayed or concurrent callbacks cannot start/register again. Ending is safest.
     if(row.state!=='consent_pending'||row.consent_at){await endBound(row);return hangup();}
     const optOut=recordingGateOptOut(form);
-    if(optOut){const stopped=await transition(db,row,'contact_opt_out',{nonceHash:sha(nonce),utterance:optOut});if(stopped)row=stopped;await endBound(row);return xml(endTwiml);}
+    if(optOut){const stopped=await transition(db,row,'contact_opt_out',{nonceHash:sha(nonce),utterance:optOut});if(stopped)row=stopped;await endBound(row);return xml(finishTwiml);}
     const age=now()-Date.parse(String(call.start_time));
     const review=await readReview();
     if(!review||row.agent_id!==review.agentId||row.branch_id!==review.branchId||row.version_id!==review.versionId||row.disclosure_version!==recordingPolicy.disclosureVersion||!Number.isFinite(age)||age<0||age>recordingPolicy.consentWindowSeconds*1000||!await checkAgent(review)){
      await transition(db,row,'decline',{reason:'timeout'});await endBound(row);return hangup();
     }
-    const yes=affirmativeSpeech(form);
+    const yes=noticeMode?sellerContinuedSpeech(form):affirmativeSpeech(form);
     if(!yes){
      const confidence=recordingConfidence(form.get('Confidence'));
      if(form.has('SpeechResult')&&(confidence.status==='malformed'||form.has('UnstableSpeechResult')))await transition(db,row,'fail',{reason:'consent_asr_evidence_unverified'});
      else await transition(db,row,'decline',{reason:form.has('SpeechResult')?'ambiguous':'timeout'});
-     await endBound(row);return xml(endTwiml);
+     await endBound(row);return xml(finishTwiml);
     }
-    const consented=await transition(db,row,'consent',{nonceHash:sha(nonce),source:'twilio_gather_speech',...yes,disclosureVersion:recordingPolicy.disclosureVersion});if(!consented){await endBound(row);return hangup();}row=consented;
+    const consented=await transition(db,row,noticeMode?'notice_continue':'consent',{nonceHash:sha(nonce),source:'twilio_gather_speech',...yes,disclosureVersion:recordingPolicy.disclosureVersion});if(!consented){await endBound(row);return hangup();}row=consented;
     const claimed=await transition(db,row,'claim_start');if(!claimed){await endBound(row);return hangup();}row=claimed;
     try{
      const p=await provider.start(row.call_sid!,recordingBaseUrl+'/status?id='+row.id);

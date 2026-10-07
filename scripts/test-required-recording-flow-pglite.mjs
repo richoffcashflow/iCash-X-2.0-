@@ -1,3 +1,4 @@
+import {sellerContinuedSpeech} from '../lib/seller-call-notice.ts';
 // FULL LOCAL SIMULATION: real contact admission/claim/recording/ledger SQL; synthetic providers only.
 import assert from 'node:assert/strict';
 import {createHash,createHmac,randomBytes} from 'node:crypto';
@@ -10,7 +11,7 @@ import {boundedVoiceSmsContext} from '../lib/voice-sms-context.ts';
 import {buyerCallInstructions} from '../lib/buyer-call-policy.ts';
 import {contactEligibility,callEligibility,verifiedOfferCeiling} from '../lib/live-dispatch-policy.ts';
 import {sellerFirstMessage,sellerCallPrompt} from '../lib/seller-call-context.ts';
-import {recordingPolicy,canonical,sha,readRecordingReview,recordingBaseUrl} from '../lib/required-call-recording.ts';
+import {recordingPolicy,canonical,sha,readRecordingReview,recordingAgentMatches,object,recordingBaseUrl} from '../lib/required-call-recording.ts';
 import {recordingService,recordingStopToken} from '../lib/required-call-recording-service.ts';
 import {ensureRecordedConversationBinding} from '../lib/required-call-recording-binding.ts';
 import {maintainRecordings} from '../lib/required-call-recording-maintenance.ts';
@@ -26,6 +27,14 @@ try{
  await pg.exec(readFileSync(new URL('../config/outbound-billing-queue.sql',import.meta.url),'utf8'));
  await pg.exec(readFileSync(new URL('../config/dealmachine-dnc-observations.sql',import.meta.url),'utf8'));
  await pg.exec(readFileSync(new URL('../config/required-call-recording.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/recording-consent-evidence-v4.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/required-call-recording-consent-v4.sql',import.meta.url),'utf8'));
+ await pg.exec("create or replace function public.icash_seller_voice_permission_current(uuid,uuid) returns boolean language sql as $$select false$$");
+ await pg.exec(readFileSync(new URL('../config/seller-call-brief-notice.sql',import.meta.url),'utf8'));
+ await pg.exec(readFileSync('supabase/migrations/20261007020025_terminal_call_status_and_credit_readiness.sql','utf8').split('-- Match the actual')[0]+'commit;');await pg.exec(readFileSync('supabase/migrations/20261007020639_terminal_receipt_read_only_recording_access.sql','utf8'));
+ for(const [utterance,allowed] of [['Yes, I wanted a cash offer',true],['Who is this?',true],['No, thanks.',false],['Stop recording',false],['I do not consent',false],['Call later',false],['',false],['Don’t ever call me again',false]]){
+  assert.equal(!!sellerContinuedSpeech(new URLSearchParams({SpeechResult:utterance})),allowed);
+  assert.equal((await one('select icash_recording_private.valid_seller_notice_continuation($1) ok',[utterance])).ok,allowed);
+ }
+ for(const form of [new URLSearchParams({SpeechResult:'Yes',UnstableSpeechResult:'Yes'}),new URLSearchParams('SpeechResult=Yes&SpeechResult=No'),new URLSearchParams({SpeechResult:'Yes',Confidence:'NaN'})])assert.equal(sellerContinuedSpeech(form),null);
  await q('delete from icash_outreach_campaigns where account_id=$1',[account]);
  const snapshot={propertyId:'prop_1001',propertyType:'house',fetchedAt:when,sellerCostReserveCents:100000,raw:{data:{dm_property_id:'prop_1001',full_address:'Synthetic property only',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}}};
  await q('update icash_screening_jobs set snapshot=$2 where id=$1',[screening,snapshot]);
@@ -46,8 +55,8 @@ try{
  let recordStart;
  const provider={agent:async()=>branch,tool:async()=>tool,dial:async(from,to,twiml)=>{events.push('dial');assert.equal(from,f.sender);assert.equal(to,phone);capturedTwiml=twiml;if(loseDialResponse)throw Error('SIMULATION accepted call with lost response');return call();},getCall:async()=>call(),start:async()=>{events.push('start');recordStart=new Date().toISOString();return {sid:re,account_sid:ac,call_sid:ca,status:'in-progress',start_time:recordStart};},register:async(row,remaining)=>{events.push('register');assert(row.consent_at&&row.recording_sid);assert(remaining<=600);assert(row.call_context.prompt.includes('PRIVATE SERVER NEGOTIATION AUTHORITY'));return '<Response><Connect><Stream url="wss://api.elevenlabs.io/fixture"/></Connect></Response>';},end:async()=>{events.push('end');callStatus='completed';return call();},getRecording:async()=>({sid:re,account_sid:ac,call_sid:ca,status:recordingStatus,start_time:recordStart,duration:'30',price:'-0.002500',price_unit:'USD'}),conversation:async()=>conversation(),deleteRecording:async()=>{events.push('delete');recordingStatus='deleted';},media:async()=>Buffer.from('SYNTHETIC AUDIO FIXTURE')};
  const service=recordingService(process.env,{db,provider});
- const elevenRequest=async(path,body)=>{assert.equal(body,undefined,'Legacy direct dial must never run for recorded lane');return path.includes('/phone-numbers/')?{phone_number:f.sender}:{conversation_config:main,platform_settings:{overrides:{conversation_config_override:{agent:{first_message:true,prompt:{prompt:true}},tts:{voice_id:true}}}}};};
- const dispatcher=await loadService('lib/live-dispatch-service.ts',{recordingServer:()=>service,readRecordingReview,recordingPolicy,createHash,randomBytes,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,db,elevenRequest,buyerCallInstructions,contactEligibility,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt});
+ const elevenRequest=async(path,body)=>{assert.equal(body,undefined,'Legacy direct dial must never run for recorded lane');return path.includes('/phone-numbers/')?{phone_number:f.sender}:branch;};
+ const dispatcher=await loadService('lib/live-dispatch-service.ts',{recordingServer:()=>service,readRecordingReview,recordingAgentMatches,object,recordingPolicy,createHash,randomBytes,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,db,elevenRequest,buyerCallInstructions,contactEligibility,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt});
  // An enabled legacy rate/config with capture OFF must not reserve, claim, or dial.
  await q('savepoint legacy_recording_hold');
  const legacyRate=(await one("insert into icash_operation_rates(operation,version,charge_cents,costs_micros,buffer_bps,evidence_ref,verified_at,expires_at,enabled,voice_max_duration_seconds) values('seller_call','staged-seller-20260930-us-600s-v1:synthetic',946,$1,2000,'SIMULATION legacy quote',now()-interval '1 minute',now()+interval '1 day',true,600) returning id",[{...rateCosts,elevenlabs:100000}])).id;
@@ -59,6 +68,7 @@ try{
  assert.equal((await one('select state from icash_voice_jobs where id=$1',[job.id])).state,'held');
  process.env.ICASH_RECORDED_OUTBOUND_READY='true';await q('rollback to savepoint legacy_recording_hold');await q('release savepoint legacy_recording_hold');
  console.log('PASS REAL SQL legacy enabled946/config + capture OFF: job held, no spend row, reserve, claim, or provider mutation');
+ await q('update icash_voice_configs set agent_config_hash=$2,required_tool_ids=array(select jsonb_array_elements_text($3::jsonb)) where account_id=$1',[account,review.configHash,review.toolIds]);
  for(const mismatch of [{agentId:'agent_other'},{fromPhone:'+12125550999'}]){await q('savepoint mismatched_review');process.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify({...review,...mismatch});assert.equal((await dispatcher.dispatchLiveVoice(account,job.id)).status,'recorded_call_review_required');assert.deepEqual(events,[]);assert.equal((await one('select reserved_cents from icash_wallets where account_id=$1',[account])).reserved_cents,0);process.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify(review);await q('rollback to savepoint mismatched_review');await q('release savepoint mismatched_review');}
  assert.equal((await dispatcher.dispatchLiveVoice(account,job.id)).status,'provider_outcome_unknown_no_retry');
  assert.equal((await one('select state from icash_voice_jobs where id=$1',[job.id])).state,'dispatching');
@@ -67,8 +77,8 @@ try{
  assert.equal((await one('select state from icash_operation_spend where operation_key=$1',[session.operation_key])).state,'dispatched');assert.equal((await one('select reserved_cents from icash_wallets where account_id=$1',[account])).reserved_cents,977);
  const consentUrl=capturedTwiml.match(/action="([^"]+)"/)[1].replaceAll('&amp;','&');
  const signed=(url,entries)=>{const body=new URLSearchParams(entries),signature=createHmac('sha1',process.env.TWILIO_AUTH_TOKEN).update(url+[...body.keys()].sort().map(k=>k+body.get(k)).join('')).digest('base64');return new Request(url,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded','x-twilio-signature':signature},body});};
- assert((await(await service.consent(signed(consentUrl,{AccountSid:ac,CallSid:ca,SpeechResult:"Yes, it's okay."}))).text()).includes('<Connect>'));assert.deepEqual(events,['dial','start','register']);
- session=await one('select * from icash_call_recordings where id=$1',[session.id]);const capability=recordingStopToken(session.operation_key,process.env);
+ assert((await(await service.consent(signed(consentUrl,{AccountSid:ac,CallSid:ca,SpeechResult:"Yes, I wanted a cash offer"}),true)).text()).includes('<Connect>'));assert.deepEqual(events,['dial','start','register']);
+ session=await one('select * from icash_call_recordings where id=$1',[session.id]);assert.equal(session.consent_evidence.method,'continued_speech_after_notice');assert.equal(session.consent_evidence.utterance,'Yes, I wanted a cash offer');assert.equal(session.consent_evidence.confidenceReported,null);const capability=recordingStopToken(session.operation_key,process.env);
  // Real SQL withdrawal: failed call-end is visible and remains recoverable with capture OFF.
  await q('savepoint withdrawal_case');const beforeWithdrawal=[...events],normalEnd=provider.end;
  provider.end=async()=>{events.push('end-failed');throw Error('SIMULATION termination outage');};
@@ -106,23 +116,24 @@ try{
  const cleanup=await maintainRecordings(db,provider,{...process.env,ICASH_RECORDED_OUTBOUND_READY:'false'});assert.equal(cleanup.deleted,1);assert(events.includes('delete'));
  assert.equal((await one('select state from icash_call_recordings where id=$1',[session.id])).state,'deleted');assert.equal((await service.audio(account,session.id,null)).status,404);
  assert.equal((await settleBoundVoiceUsage(db,account,live.id,[policy],{env:process.env,fetcher})).status,'settled');assert.equal((await one('select count(*)::int n from icash_credit_ledger where event_key=$1',['usage:'+session.operation_key])).n,1,'Deleted audio receipt still supports idempotent delayed settlement');
- console.log('PASS FULL LOCAL CHAIN: operational contact/no fabricated consent → actual977 reserve/claim → accepted dial/lost response/no-redial → valid signed spoken YES → recording → ELregister → lazy bind → actual callback/handoff RPCs → real billing queue/ledger → private playback/expiry → independent verified provider deletion with capture flag OFF. Synthetic providers and isolated clock advance only.');
+ console.log('PASS FULL LOCAL CHAIN: operational contact/no fabricated consent → actual977 reserve/claim → accepted dial/lost response/no-redial → signed notice continuation → recording → ELregister → lazy bind → actual callback/handoff RPCs → real billing queue/ledger → private playback/expiry → independent verified provider deletion with capture flag OFF. Synthetic providers and isolated clock advance only.');
  await q('rollback');Date.now=realDateNow;
  // A second actual reserve/claim reaches only the consent gate, then settles carrier/ASR costs.
  await q('begin');const secondTransactionTime=Math.floor(Number((await one('select extract(epoch from now())*1000 as ms')).ms));Date.now=()=>secondTransactionTime;await prepare();await rpc('icash_queue_voice_jobs',{});job=await one('select * from icash_voice_jobs where account_id=$1',[account]);await q("update icash_voice_jobs set state='issued' where id=$1",[job.id]);
  events=[];callStatus='in-progress';recordingStatus='in-progress';loseDialResponse=false;
+ await q('update icash_voice_configs set agent_config_hash=$2,required_tool_ids=array(select jsonb_array_elements_text($3::jsonb)) where account_id=$1',[account,review.configHash,review.toolIds]);
  assert.equal((await dispatcher.dispatchLiveVoice(account,job.id)).status,'call_started');
  session=await one('select * from icash_call_recordings where operation_key=$1',['voice:'+job.id]);
  const declineUrl=capturedTwiml.match(/action="([^"]+)"/)[1].replaceAll('&amp;','&');
  await q('savepoint durable_contact_stop');const originalEnd=provider.end;provider.end=async()=>{events.push('end-failed');throw Error('Synthetic carrier END outage');};
- await service.consent(signed(declineUrl,{AccountSid:ac,CallSid:ca,SpeechResult:'Don’t ever call me again'}));let stoppedContact=await one('select * from icash_call_recordings where id=$1',[session.id]);assert.equal(stoppedContact.state,'declined');assert(stoppedContact.end_requested_at&&!stoppedContact.call_ended_at);assert.equal(stoppedContact.consent_at,null);assert.equal((await one('select phone from icash_text_suppressions where phone=$1',[phone])).phone,phone);assert((await one('select revoked_at from icash_operational_contacts where id=$1',[job.operational_contact_id])).revoked_at);assert(!events.includes('start'));
+ await service.consent(signed(declineUrl,{AccountSid:ac,CallSid:ca,SpeechResult:'Don’t ever call me again'}),true);let stoppedContact=await one('select * from icash_call_recordings where id=$1',[session.id]);assert.equal(stoppedContact.state,'declined');assert(stoppedContact.end_requested_at&&!stoppedContact.call_ended_at);assert.equal(stoppedContact.consent_at,null);assert.equal((await one('select phone from icash_text_suppressions where phone=$1',[phone])).phone,phone);assert((await one('select revoked_at from icash_operational_contacts where id=$1',[job.operational_contact_id])).revoked_at);assert(!events.includes('start'));
  provider.end=originalEnd;await maintainRecordings(db,provider,{...process.env,ICASH_RECORDED_OUTBOUND_READY:'false'});stoppedContact=await one('select * from icash_call_recordings where id=$1',[session.id]);assert(stoppedContact.call_ended_at);assert.equal(stoppedContact.start_claimed_at,null);await q('rollback to savepoint durable_contact_stop');await q('release savepoint durable_contact_stop');events=['dial'];callStatus='in-progress';
  console.log('PASS signed explicit contact stop revokes the actual operational recipient and durable END retries with capture OFF; recording refusal remains separate.');
- await q('savepoint failed_asr_lost_terminal');await service.consent(signed(declineUrl,{AccountSid:ac,CallSid:ca,SpeechResult:'Yes!',Confidence:'NaN'}));const technicalFailure=await one('select * from icash_call_recordings where id=$1',[session.id]);assert.equal(technicalFailure.state,'failed');assert.equal(technicalFailure.consent_at,null);assert.equal(technicalFailure.start_claimed_at,null);assert.equal(technicalFailure.recording_sid,null);
+ await q('savepoint failed_asr_lost_terminal');await service.consent(signed(declineUrl,{AccountSid:ac,CallSid:ca,SpeechResult:'Yes!',Confidence:'NaN'}),true);const technicalFailure=await one('select * from icash_call_recordings where id=$1',[session.id]);assert.equal(technicalFailure.state,'failed');assert.equal(technicalFailure.consent_at,null);assert.equal(technicalFailure.start_claimed_at,null);assert.equal(technicalFailure.recording_sid,null);
  // No terminal callback is delivered. Maintenance must settle without discovering nonexistent AI.
  provider.conversations=async()=>{throw Error('Unstarted technical failure must not query ElevenLabs');};assert.equal((await maintainRecordings(db,provider,{...process.env,ICASH_RECORDED_OUTBOUND_READY:'false'})).reconciled,1);assert.equal((await one('select reserved_cents from icash_wallets where account_id=$1',[account])).reserved_cents,0);assert.equal((await one('select charged_cents from icash_operation_spend where operation_key=$1',[session.operation_key])).charged_cents,37);assert.equal((await one('select count(*)::int n from icash_live_conversations')).n,0);await q('rollback to savepoint failed_asr_lost_terminal');await q('release savepoint failed_asr_lost_terminal');events=['dial'];callStatus='in-progress';delete provider.conversations;
  console.log('PASS technical ASR failure plus lost terminal callback settles carrier/ASR once via off-flag worker, without querying nonexistent AI.');
- await service.consent(signed(declineUrl,{AccountSid:ac,CallSid:ca,SpeechResult:'No, thanks.',Confidence:'0.99'}));
+ await service.consent(signed(declineUrl,{AccountSid:ac,CallSid:ca,SpeechResult:'No, thanks.',Confidence:'0.99'}),true);
  session=await one('select * from icash_call_recordings where id=$1',[session.id]);assert.equal(session.state,'declined');assert.equal(session.consent_at,null);assert.equal(session.recording_sid,null);assert.deepEqual(events,['dial','end']);
  const gate=await settleRecordingGateOnly(db,provider,session,Date.now()+2*3600000);assert.equal(gate.settled,true);assert.equal(gate.chargedCents,37);
  assert.equal((await one('select reserved_cents from icash_wallets where account_id=$1',[account])).reserved_cents,0);

@@ -1,0 +1,22 @@
+{
+  "model": "eleven_v4",
+  "voiceId": "cjVigY5qzO86Huf0OWal",
+  "source": "ElevenLabs signed-in Text to Speech, Eleven v4 selected",
+  "files": {
+    "notice": {
+      "text": "Hi, I'm an AI property assistant calling about a cash offer. This call will be recorded.",
+      "bytes": 110978,
+      "sha256": "3d2b5461ce35aa27349579af63c26a547ded79cf5cf70a3f32abb2d51f37caba"
+    },
+    "question": {
+      "text": "Is now a good time to talk?",
+      "bytes": 48284,
+      "sha256": "176c77f67d6710207284e3a2389de8f3dcee325346d94a32c0a454e400251228"
+    },
+    "goodbye": {
+      "text": "No problem. Take care.",
+      "bytes": 44523,
+      "sha256": "3528c49529e7f75ba8138a65bf7c3f78644fdd58d78816c2d4e6beaee8b2a2bd"
+    }
+  }
+}
