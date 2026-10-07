@@ -7,6 +7,7 @@ import {importWebinarChat} from '@/lib/webinar-import';
 import {uploadWebinarFile} from '@/lib/webinar-upload';
 import {webinarSite} from '@/lib/webinar-site';
 import {WebinarTimeInput} from '@/components/webinar-time-input';
+import {WebinarTimersEditor} from '@/components/webinar-timers-editor';
 import {WebinarOffersEditor} from '@/components/webinar-offers-editor';
 import {WebinarAudienceEditor} from '@/components/webinar-audience-editor';
 import {WebinarDashboard,WebinarResults,WebinarReview} from '@/components/webinar-dashboard';
@@ -16,7 +17,7 @@ import {chatPresets,presetChat} from '@/lib/webinar-variants';
 import {webinarLink} from '@/lib/webinar-links';
 import {createNightRecording,editingRecording,patchRecording,type RecordingVersion} from '@/lib/webinar-recordings';
 import {webinarRequest} from '@/lib/webinar-client';
-type Tab='intelligence'|'dashboard'|'session'|'offers'|'chat'|'review'|'followups'|'analytics'|'growth';
+type Tab='intelligence'|'dashboard'|'session'|'offers'|'timers'|'chat'|'review'|'followups'|'analytics'|'growth';
 async function request(path:string,body?:unknown){return webinarRequest<any>(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});}
 export function WebinarStudio(){
  const [webinars,setWebinars]=useState<Webinar[]>([]),[storedDraft,setDraft]=useState<Webinar|null>(null),[isNew,setIsNew]=useState(false),[dirty,setDirty]=useState(false),[settingsDirty,setSettingsDirty]=useState(false),[settings,setSettings]=useState<WebinarSettings|null>(null),[tab,setTab]=useState<Tab>('dashboard'),[loading,setLoading]=useState(true),[denied,setDenied]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[upload,setUpload]=useState<number|null>(null),[transcript,setTranscript]=useState(''),[aiReady,setAiReady]=useState(false),[embeddedCheckoutReady,setEmbeddedCheckoutReady]=useState(false),[emailReady,setEmailReady]=useState(false),[metaReady,setMetaReady]=useState(false),[metaHealth,setMetaHealth]=useState({sent:0,pending:0,failed:0}),[version,setVersion]=useState<RecordingVersion>('day');
@@ -27,7 +28,7 @@ export function WebinarStudio(){
  useEffect(()=>{if(!dirty&&!settingsDirty)return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty,settingsDirty]);
  function update(patch:Partial<Webinar>){setDraft(d=>d?patchRecording(d,version,patch):d);setDirty(true);setNotice('');}
  function changeSettings(value:WebinarSettings){setSettings(value);setSettingsDirty(true);setNotice('');}
- function setDuration(value:number){if(!draft)return;update({durationSeconds:value,nameAt:Math.min(draft.nameAt,value),contactAt:Math.min(draft.contactAt,value),pitchAt:Math.min(draft.pitchAt,value),offers:draft.offers.map(o=>({...o,at:Math.min(o.at,value)})),purchaseNotifications:{...draft.purchaseNotifications,startAt:draft.purchaseNotifications.startAt===null?null:Math.min(draft.purchaseNotifications.startAt,value)}});}
+ function setDuration(value:number){if(!draft)return;update({durationSeconds:value,nameAt:Math.min(draft.nameAt,value),contactAt:Math.min(draft.contactAt,value),pitchAt:Math.min(draft.pitchAt,value),timers:(draft.timers??[]).map(t=>({...t,at:Math.min(t.at,value)})),offers:draft.offers.map(o=>({...o,at:Math.min(o.at,value)})),purchaseNotifications:{...draft.purchaseNotifications,startAt:draft.purchaseNotifications.startAt===null?null:Math.min(draft.purchaseNotifications.startAt,value)}});}
  function duplicate(){if(!storedDraft||busy)return;void createDraft({...storedDraft,id:crypto.randomUUID(),publicCode:null,revision:1,title:storedDraft.title+' — copy',status:'draft'});}
  function select(w:Webinar){if(busy)return;if(dirty&&!window.confirm('Discard your unsaved changes?'))return;abortUpload.current?.abort();setUpload(null);setVersion('day');setDraft(w);setIsNew(false);setDirty(false);setTab('session');setError('');setNotice('');}
  function create(){if(busy)return;if(dirty&&!window.confirm('Discard your unsaved changes?'))return;void createDraft(newWebinar(crypto.randomUUID()));}
@@ -41,10 +42,10 @@ export function WebinarStudio(){
  async function generateVariations(){if(!draft||busy)return;setBusy(true);setError('');try{const d=await request('/api/webinar/studio/variations',{chat:draft.chat,style:draft.chatStyle,faq:draft.faq});update({chat:d.chat,variationEnabled:true});setNotice('Alternate messages are ready below. Review or edit them, then save. Each new session gets a frozen mix.');}catch(e){setError(e instanceof Error?e.message:'Could not generate variations.');}finally{setBusy(false);}}
  function applyPreset(key:keyof typeof chatPresets){const chat=presetChat(key);if(!draft)return;if(chat.some(c=>c.at>draft.durationSeconds)){setError('Set the actual video duration before adding this timeline.');return;}update({chat});setNotice('Timing preset added as AI session notes. Match the moments to your video before saving.');}
  async function toggleIntelligence(enabled:boolean){setBusy(true);try{await request('/api/webinar/intelligence',{enabled});setSettings(s=>s?{...s,optimizer:{...s.optimizer,enabled}}:s);}finally{setBusy(false);}}
- const editing=['session','offers','chat','review'].includes(tab);
- const steps=[{id:'session',label:'Video & details',icon:Video},{id:'offers',label:'Offers',icon:Sparkles},{id:'chat',label:'Chat & AI',icon:MessageSquare},{id:'review',label:'Review & publish',icon:Check}] as const;
+ const editing=['session','offers','timers','chat','review'].includes(tab);
+ const steps=[{id:'session',label:'Video & details',icon:Video},{id:'offers',label:'Offers',icon:Sparkles},{id:'timers',label:'Timers',icon:Clock},{id:'chat',label:'Chat & AI',icon:MessageSquare},{id:'review',label:'Review & publish',icon:Check}] as const;
  const stepIndex=steps.findIndex(t=>t.id===tab);
- const titles={intelligence:'Webinar Intelligence',dashboard:'My webinars',session:draft?.title||'Create a webinar',offers:draft?.title||'Offers',chat:draft?.title||'Chat & AI',review:draft?.title||'Review & publish',growth:'Settings',analytics:'Daily results',followups:'Email follow-ups'};
+ const titles={intelligence:'Webinar Intelligence',dashboard:'My webinars',session:draft?.title||'Create a webinar',offers:draft?.title||'Offers',timers:draft?.title||'Timers',chat:draft?.title||'Chat & AI',review:draft?.title||'Review & publish',growth:'Settings',analytics:'Daily results',followups:'Email follow-ups'};
 
  return <div className="ws-shell">
   <header className="ws-header"><a href="/" className="wb-wordmark">{webinarSite.brandName}<small>WEBINAR STUDIO</small></a><a className="ws-workspace-link" href="/">Back to workspace</a></header>
@@ -64,6 +65,7 @@ export function WebinarStudio(){
      {tab==='intelligence'&&settings&&<WebinarIntelligence enabled={settings.optimizer.enabled} busy={busy} onToggle={toggleIntelligence}/>}
      {tab==='dashboard'&&<WebinarDashboard webinars={webinars} onCreate={create} onEdit={select} onOptimizer={()=>setTab('intelligence')}/>}
      {tab==='offers'&&draft&&<>{!embeddedCheckoutReady&&<p className="ws-alert">Connect the matching Stripe publishable key to enable card payments inside the room. Until then, visitors continue to your secure Stripe checkout and return to name their bot.</p>}<WebinarOffersEditor webinar={draft} onChange={update}/></>}
+     {tab==='timers'&&draft&&<WebinarTimersEditor webinar={draft} onChange={update}/>}
      {tab==='review'&&draft&&<WebinarReview webinar={storedDraft!} busy={busy||upload!==null} isNew={isNew} onPublish={()=>void save('published')}/>}
      {tab==='session'&&(draft?<div className="ws-editor-grid"><div className="ws-editor-main">
       <section className="ws-card ws-video-card"><div className="ws-card-heading"><div><h2>Your video</h2><p>The presentation visitors will watch.</p></div><span className="ws-status">{draft.status}</span></div>
