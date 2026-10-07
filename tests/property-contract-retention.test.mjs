@@ -1,3 +1,4 @@
+import * as dealSummary from '../lib/deal-card-summary.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
@@ -35,7 +36,7 @@ const hooks={
  }
 };
 const mod={exports:{}};
-new Function('require','module','exports',compiled)(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='./workspace-view'?view:name==='@/lib/work-milestone'?milestone:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/property-analysis-view'?analysis:name==='@/lib/property-contract-visibility'?contracts:name==='@/lib/deal-documents'?documents:{},mod,mod.exports);
+new Function('require','module','exports',compiled)(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='./workspace-view'?view:name==='@/lib/work-milestone'?milestone:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/property-analysis-view'?analysis:name==='@/lib/deal-card-summary'?dealSummary:name==='@/lib/property-contract-visibility'?contracts:name==='@/lib/deal-documents'?documents:{},mod,mod.exports);
 const fixture=makeWorkspaceFixture(),property=fixture.properties[0];
 const draft=fixture.deals[0],ready={...draft,terms:{...draft.terms,priceSource:'seller_reported'}};
 const workFor=(deal,controls=[])=>({...fixture,deals:[deal],signing:[],controls});

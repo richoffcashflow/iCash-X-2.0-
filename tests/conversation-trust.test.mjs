@@ -18,7 +18,7 @@ for(const prompt of prompts){
 assert.match(practice.conversation_config.agent.first_message,/AI.*practice.*no real offers or calls/i);
 assert(!practice.conversation_config.agent.prompt.prompt.includes('isolate the remaining objection'));
 assert.match(buyerCallInstructions(buyerContext,'Fixture principal','Alex'),/transferring the right to buy/);
-assert.match(buyerCallInstructions(buyerContext,'Fixture principal','Alex'),/before any separately applicable costs/);
+assert.match(buyerCallInstructions(buyerContext,'Fixture principal','Alex'),/closing costs allocated to Buyer by the agreement, in addition to that buyer price/);
 assert.match(textConversationInstructions('buyer'),/Never ask seller qualification questions/);
 
 const raw={action:'ask_price',reply:'We have a funded buyer and a guaranteed closing.',summary:'Seller accepted $150,000, title is clear and callback booked.',facts:[{kind:'price',quote:'$150,000'}]};

@@ -13,7 +13,7 @@ assert.equal(sellerSubmission.parse({...input,email:' Seller@Example.com '}).ema
 assert.equal(sellerDuplicateKeyInput(' 123 Main St. ','+12145550123'),sellerDuplicateKeyInput('123 MAIN ST','+12145550123'));
 const raw={data:[{matched:true,dm_property_id:'prop_123',full_address:'Synthetic only',city:'Dallas',state:'TX',zip:'75217',property_type:1,estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}],credits:{used:1,people:0},totals:{submitted:1}};
 const options={assignmentFeeCents:1000000,sellerCostReserveCents:100000};
-let r=qualifySellerProperty(raw,options,now);assert.equal(r.status,'qualified');assert.equal(r.result.outreachAuthorized,false);assert.equal(r.result.offerAuthorized,false);
+let r=qualifySellerProperty(raw,options,now);assert.equal(r.status,'qualified');assert.equal(r.result.outreachAuthorized,false);assert.equal(r.result.offerAuthorized,true,'Eligible fresh screening authorizes only the calculated offer ceiling');assert.equal(r.result.cashOfferPriceCents,10200000);assert.equal(r.result.cashOfferPriceCents,r.result.preliminarySellerCeilingCents);assert.equal(r.result.property.offerAuthorized,false,'Raw provider context alone never authorizes an offer');
 assert.equal(qualifySellerProperty({...raw,data:[{...raw.data[0],property_type:[1]}]},options,now).status,'qualified','The documented MULTI_SELECT array must qualify the same as its legacy scalar');
 for(const type of ['Single Family',['Single Family'],' single family ']){
  const labeled=qualifySellerProperty({...raw,data:[{...raw.data[0],property_type:type}]},options,now);
@@ -23,7 +23,7 @@ for(const type of ['Single Family',['Single Family'],' single family ']){
 }
 for(const type of [[],[1,2],['1'],[2],null,'Multi Family','Single Family, Condo',['Single Family','Condo'],[1,'Single Family'],{},true])assert.throws(()=>qualifySellerProperty({...raw,data:[{...raw.data[0],property_type:type}]},options,now),/PROPERTY_MATCH_REQUIRES_REVIEW/,'Mixed, missing or unrecognized types remain reviewable');
 for(const [city,state] of [['Houston','TX'],['Phoenix','AZ'],['Columbus','OH']])assert.equal(qualifySellerProperty({...raw,data:[{...raw.data[0],city,state}]},options,now).status,'qualified','Submitted addresses do not need a city allowlist');
-assert.equal(qualifySellerProperty({...raw,data:[{...raw.data[0],estimated_repair_cost:null}]},options,now).numbersPassed,false);
+const missingRepairs=qualifySellerProperty({...raw,data:[{...raw.data[0],estimated_repair_cost:null}]},options,now);assert.equal(missingRepairs.numbersPassed,false);assert.equal(missingRepairs.result.offerAuthorized,false);assert.equal(missingRepairs.result.cashOfferPriceCents,null);assert.equal(missingRepairs.result.outreachAuthorized,false);
 assert.throws(()=>qualifySellerProperty({...raw,credits:{used:2,people:0}},options,now));
 assert.throws(()=>qualifySellerProperty({...raw,data:[{...raw.data[0],match_warning:'Ambiguous'}]},options,now));
 assert.equal(sellerLeadCharge(1000000,100000),330);assert.equal(sellerLeadCharge(1,0),1);assert.throws(()=>sellerLeadCharge(-1,0));

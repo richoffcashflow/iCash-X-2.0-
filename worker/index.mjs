@@ -1,21 +1,22 @@
 import http from 'node:http';
 import {createRpc,tick,automationTick} from './runner.mjs';
+import {createScheduler} from './scheduler.mjs';
 const configured=Boolean(process.env.SUPABASE_URL&&process.env.SUPABASE_SECRET_KEY);
 const active=configured&&process.env.SCREENING_WORKER_ENABLED==='true';
-let stopping=false,timer,failures=0,automationFailures=0,lastAutomationAt=0;
+let stopping=false,timer;
 const rpc=active?createRpc(process.env.SUPABASE_URL,process.env.SUPABASE_SECRET_KEY):null;
+const scheduler=createScheduler({screening:()=>tick(rpc),automation:()=>automationTick(rpc),
+ onFailure:lane=>console.error(lane==='screening'?'Screening database unavailable; backing off':'Automation held; backing off; reconciliation may be required')});
 async function loop(){
  if(stopping||!rpc)return;
- let worked=false;
- try{worked=await tick(rpc);failures=0;
-  if(Date.now()-lastAutomationAt>=15000){lastAutomationAt=Date.now();try{await automationTick(rpc);automationFailures=0;}catch{automationFailures++;console.error('Automation held; reconciliation may be required');}}
- }catch{failures=Math.min(failures+1,6);console.error('Screening database unavailable; backing off');}
- if(!stopping)timer=setTimeout(loop,failures?Math.min(60000,1000*2**failures):worked?250:15000);
+ const delay=await scheduler.run();
+ if(!stopping)timer=setTimeout(loop,delay);
 }
 const server=http.createServer((req,res)=>{
  if(req.url!=='/health'){res.writeHead(404);res.end();return;}
- res.writeHead(failures>=3?503:200,{'content-type':'application/json'});
- res.end(JSON.stringify({status:active?(failures?'degraded':'screening'):'standby',outreachEnabled:false,automation:automationFailures?'held':'available'}));
+ const health=scheduler.health(active);
+ res.writeHead(health.code,{'content-type':'application/json'});
+ res.end(JSON.stringify(health.body));
 });
 server.listen(Number(process.env.PORT||3001),'0.0.0.0',()=>{if(active)void loop();});
 for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{stopping=true;clearTimeout(timer);server.close();});

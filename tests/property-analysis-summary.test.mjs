@@ -48,10 +48,11 @@ const mod={exports:{}};
 new Function('require','module','exports',compiled)(name=>name==='@/lib/property-analysis-view'?analysis:require(name),mod,mod.exports);
 const text=node=>typeof node==='string'?node:typeof node==='number'?String(node):Array.isArray(node)?node.map(text).join(' '):node&&typeof node==='object'?text(node.props?.children):'';
 let rendered=text(mod.exports.PropertyAnalysisSummary({result:{...result,calculationVersion:'net_after_repairs_70_v2'}}));
-assert.match(rendered,/Cash offer price.*\$90,000/);
+assert.match(rendered,/Maximum cash offer.*\$90,000/);
 assert.match(rendered,/Estimated repairs.*\$40,000/);
 assert.match(rendered,/Value after repairs.*\$200,000/);
-assert.match(rendered,/not an approved offer or an inspection/);
+assert.match(rendered,/maximum purchase price, not the starting offer/);
+assert.match(rendered,/estimates are not an inspection/);
 assert.match(rendered,/has not been verified/);
 assert.doesNotMatch(rendered,/DealMachine/i);assert.match(rendered,/Oct 1, 2026/);
 assert.match(rendered,/No verified nearby sales are saved/);
@@ -72,7 +73,7 @@ for(const calculationVersion of [undefined,null,'legacy_range_v0','provider_repa
  const saved={...result,calculationVersion};
  const metric=offerMetric(saved);
  assert.equal(metric.props['data-earlier-estimate'],true);
- assert.match(text(metric),/Cash offer price · Needs update.*\$90,000.*Unapproved ·\s+Recorded Oct 1, 2026/,'legacy amount and its limitations are visible outside collapsed details');
+ assert.match(text(metric),/Maximum cash offer · Needs update.*\$90,000.*Unapproved ·\s+Recorded Oct 1, 2026/,'legacy amount and its limitations are visible outside collapsed details');
  assert.match(text(metric),/Needs update/,'a legacy amount is never shown without the update warning');
  assert.equal(analysis.propertyAnalysisView(saved).offerNeedsUpdate,true,'presentation keeps the calculation-version guard');
 }
@@ -80,14 +81,14 @@ assert.equal(JSON.stringify(result),original,'display must not overwrite saved r
 assert.match(text(mod.exports.PropertyAnalysisSummary({result})),/earlier saved offer estimate.*No new offer has been calculated or approved/);
 assert.equal(analysis.propertyAnalysisView({...result,calculationVersion:'net_after_repairs_70_v2'}).offerNeedsUpdate,false);
 const current=text(offerMetric({...result,calculationVersion:'net_after_repairs_70_v2'}));
-assert.match(current,/Cash offer price.*\$90,000/);assert.doesNotMatch(current,/Needs update/,'current-version presentation stays distinct without claiming fresh research');
+assert.match(current,/Maximum cash offer.*\$90,000/);assert.doesNotMatch(current,/Needs update/,'current-version presentation stays distinct without claiming fresh research');
 for(const fetchedAt of [undefined,null,'bad']){
  const metric=text(offerMetric({...result,property:{...property,fetchedAt}}));
- assert.match(metric,/Cash offer price.*\$90,000.*Unapproved ·\s+Recorded date unavailable/);
+ assert.match(metric,/Maximum cash offer.*\$90,000.*Unapproved ·\s+Recorded date unavailable/);
  assert.doesNotMatch(metric,/Invalid Date|Recorded Oct/,'a missing date is not replaced by today or another saved timestamp');
 }
 assert.match(text(offerMetric({...result,property:{...property,fetchedAt:'2026-10-01T23:30:00-07:00'}})),/Recorded Oct 2, 2026/,'recorded dates use UTC consistently');
-assert.match(text(offerMetric({...result,preliminarySellerCeilingCents:0})),/Cash offer price.*\$0.*Unapproved/,'a recorded zero remains different from an unavailable amount');
+assert.match(text(offerMetric({...result,preliminarySellerCeilingCents:0})),/Maximum cash offer.*\$0.*Unapproved/,'a recorded zero remains different from an unavailable amount');
 for(const amount of [null,undefined,-1,1.5,'410000',NaN,Infinity,Number.MAX_SAFE_INTEGER+1]){
  const metric=text(offerMetric({...result,preliminarySellerCeilingCents:amount}));
  assert.match(metric,/Not available/);assert.doesNotMatch(metric,/Needs update|\$/,'invalid or missing saved amounts are never reconstructed from ARV or repairs');

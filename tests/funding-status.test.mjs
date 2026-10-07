@@ -16,6 +16,7 @@ const mocks={...fundingAmounts,
  fundingStripe:()=>({checkout:{sessions:{retrieve:async()=>{retrieved++;return {payment_status:'paid'};}}}}),
  settleFunding:async()=>{settled=true;},fundingReturnSummary,
  db:async(path)=>{paths.push(path);
+  if(path.startsWith('icash_auto_recharges'))return [];
   if(path.startsWith('icash_credit_packs'))return [];
   if(path.startsWith('icash_planning_estimates'))return [{}];
   if(path.startsWith('icash_accounts'))return [{id:'account'}];

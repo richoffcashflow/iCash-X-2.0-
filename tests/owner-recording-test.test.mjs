@@ -12,7 +12,9 @@ const childSource=readFileSync(new URL('../app/owner-recording-test/production-r
 new Function('require','module','exports',ts.transpileModule(childSource,{compilerOptions}).outputText)(require,child,child.exports);
 const componentRequire=name=>name==='./production-readiness'?child.exports:require(name);
 const code=ts.transpileModule(source,{compilerOptions}).outputText;new Function('require','module','exports',code)(componentRequire,mod,mod.exports);const html=renderToStaticMarkup(require('react').createElement(mod.exports.default));assert(html.includes('Private recorded phone check'));assert(html.includes('No customer-wallet charge'));assert(html.includes('disabled'));assert(html.includes('Inspect production branch (read-only)')); 
-const main=readFileSync(new URL('../app/page.tsx',import.meta.url),'utf8');assert(main.includes('<OwnerRecordingTestLink/>'));assert.equal((main.match(/OwnerRecordingTestLink/g)||[]).length,2);
+// Account-settings simplification removed the dashboard shortcut; the private route remains.
+const page=readFileSync(new URL('../app/owner-recording-test/page.tsx',import.meta.url),'utf8');assert(page.includes('<OwnerRecordingCheck/>'));assert(page.includes('index:false,follow:false'));assert(page.includes("referrer:'no-referrer'"));
+const ownerRoute=readFileSync(new URL('../app/api/owner-recording-test/route.ts',import.meta.url),'utf8');assert(ownerRoute.includes('status(await workAccount())'));assert(ownerRoute.includes('start(await workAccount())'));assert(ownerRoute.includes('b.confirmation!==ownerRecordingConfirmation'));
 console.log('Owner recording: fixed60sec wire cap/no recording-at-dial, separate owner UI, no secrets/global capture toggle, private lazy audio and repeat-click/lifecycle guards passed.');
 const callerEnv={...env,CONTIGUITY_FROM:'+14243948384'};let reads=[];let incoming=[],outgoing=[];
 const callerProvider=createOwnerRecordingProviders(callerEnv,async(url,init)=>{reads.push({url,method:init.method??'GET'});return Response.json(url.includes('IncomingPhoneNumbers')?{incoming_phone_numbers:incoming}:{outgoing_caller_ids:outgoing});});

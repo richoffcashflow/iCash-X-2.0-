@@ -1,4 +1,3 @@
-import {runScreeningJob} from '@/lib/screening-job';
 import {createHash} from 'node:crypto';
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
@@ -21,7 +20,6 @@ export async function GET(req:Request){
    for(const t of texts){const thread=threads.find(th=>th.id===t.thread_id);const party=thread?.party;if(thread&&(party==='seller'||party==='buyer'))messages.push({id:t.id,party,body:t.body,partyKey:createHash('sha256').update(thread.recipient).digest('hex')});}
   }
   const current=dealTermsSchema.parse(deal?.terms??{}),prepared=contractPreparation(messages,deal?.stage??'draft',current);
-  if((!deal||deal.stage==='draft')&&current.priceCents===null&&current.priceSource==='proposed'&&prepared.patch.priceCents===undefined&&!prepared.conflicts.includes('priceCents'))try{const price=runScreeningJob(property.snapshot).cashOfferPriceCents;if(price!==null)prepared.patch.priceCents=price;}catch{/* No price from stale or incomplete research. */}
   if((!deal||deal.stage==='draft')&&current.assignmentFeeCents===null&&prepared.patch.assignmentFeeCents===undefined)prepared.patch.assignmentFeeCents=1000000;
   return NextResponse.json(prepared,{headers});
  }catch{return NextResponse.json({error:'Could not load saved conversation terms.'},{status:400,headers});}

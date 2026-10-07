@@ -1,3 +1,4 @@
+import {prepareCompletedSellerDraft} from './automatic-contract-preparation.ts';
 import {db as database} from '@/lib/stripe-test';
 import {elevenRequest} from '@/lib/elevenlabs';
 import {readVoiceUsagePolicies,settleBoundVoiceUsage} from './voice-usage-service.ts';
@@ -7,8 +8,10 @@ export async function reconcileLiveConversation(accountId:string,callId:string,s
  const db:typeof database=(path,method,body)=>{signal?.throwIfAborted();return database(path,method,body,signal);};
  const [call]=await db<{conversation_id:string;agent_id:string;party:'seller'|'buyer';state:string;operation_key:string}[]>(`icash_live_conversations?id=eq.${callId}&account_id=eq.${accountId}&select=conversation_id,agent_id,party,state,operation_key`);
  if(!call)return {status:'not_found'};
+ const prepare=async()=>{try{return await prepareCompletedSellerDraft(db,accountId,callId);}catch{return {status:'draft_review_needed'};}};
  const settle=()=>settleBoundVoiceUsage(db,accountId,callId,readVoiceUsagePolicies(process.env.VOICE_USAGE_POLICIES_JSON,process.env.VOICE_USAGE_POLICY_ACTIVATIONS_JSON),{env:{TWILIO_ACCOUNT_SID:process.env.TWILIO_ACCOUNT_SID,TWILIO_AUTH_TOKEN:process.env.TWILIO_AUTH_TOKEN,ELEVENLABS_API_KEY:process.env.ELEVENLABS_API_KEY},signal});
  if(call.state==='complete'){
+  await prepare();
   const billing=await settle();
   if(billing.status!=='held'||!['provider_receipt_missing','duration_missing'].includes(billing.reason))return {status:'conversation_saved',billing};
  }
@@ -21,6 +24,6 @@ export async function reconcileLiveConversation(accountId:string,callId:string,s
   await db('rpc/icash_record_cost_observation','POST',{p_provider:'elevenlabs',p_event:call.conversation_id,p_source:call.operation_key,p_amount:result.providerCostUsd,p_units:'USD'});
  }
  // Late usage evidence does not rewrite completed transcripts or callback decisions.
- if(call.state!=='complete')await db('rpc/icash_save_live_result','POST',{p_call:callId,p_result:result});
+ if(call.state!=='complete'){await db('rpc/icash_save_live_result','POST',{p_call:callId,p_result:result});await prepare();}
  return {status:'conversation_saved',billing:await settle()};
 }
