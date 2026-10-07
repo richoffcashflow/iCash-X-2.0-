@@ -22,6 +22,7 @@ export async function GET(req:Request){
   }
   const current=dealTermsSchema.parse(deal?.terms??{}),prepared=contractPreparation(messages,deal?.stage??'draft',current);
   if((!deal||deal.stage==='draft')&&current.priceCents===null&&current.priceSource==='proposed'&&prepared.patch.priceCents===undefined&&!prepared.conflicts.includes('priceCents'))try{const price=runScreeningJob(property.snapshot).cashOfferPriceCents;if(price!==null)prepared.patch.priceCents=price;}catch{/* No price from stale or incomplete research. */}
+  if((!deal||deal.stage==='draft')&&current.assignmentFeeCents===null&&prepared.patch.assignmentFeeCents===undefined)prepared.patch.assignmentFeeCents=1000000;
   return NextResponse.json(prepared,{headers});
  }catch{return NextResponse.json({error:'Could not load saved conversation terms.'},{status:400,headers});}
 }

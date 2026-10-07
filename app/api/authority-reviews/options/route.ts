@@ -12,7 +12,8 @@ export async function GET(req:Request){
  if(screeningId){
  const [deal]=await db<{id:string;terms:{priceCents:number|null;assignmentFeeCents:number|null;state:string}}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${screeningId}&select=id,terms`);
  const envelopes=deal?await db<{id:string;terms_hash:string}[]>(`icash_signing_envelopes?account_id=eq.${accountId}&deal_id=eq.${deal.id}&kind=eq.purchase&state=eq.completed&test_mode=eq.false&select=id,terms_hash`):[];
- return NextResponse.json({marketing:deal&&envelopes[0]?{dealId:deal.id,purchaseEnvelopeId:envelopes[0].id,termsHash:envelopes[0].terms_hash,stateCode:deal.terms.state,maxCents:Number.isSafeInteger(deal.terms.priceCents)&&Number.isSafeInteger(deal.terms.assignmentFeeCents)?deal.terms.priceCents!+deal.terms.assignmentFeeCents!:null}:null},{headers});
+ const buyers=deal?await db<{buyerId:string;name:string}[]>('rpc/icash_buyer_qualification_options','POST',{p_account:accountId,p_deal:deal.id}):[];
+ return NextResponse.json({buyers:buyers.map(b=>({id:b.buyerId,name:b.name})),marketing:deal&&envelopes[0]?{dealId:deal.id,purchaseEnvelopeId:envelopes[0].id,termsHash:envelopes[0].terms_hash,stateCode:deal.terms.state,maxCents:Number.isSafeInteger(deal.terms.priceCents)&&Number.isSafeInteger(deal.terms.assignmentFeeCents)?deal.terms.priceCents!+deal.terms.assignmentFeeCents!:null}:null},{headers});
  }
  const page=z.coerce.number().int().min(0).max(10000).parse(params.get('page')??0);
  const query=z.string().trim().max(100).regex(/^[a-zA-Z0-9 .,#'/-]*$/).parse(params.get('query')??'');

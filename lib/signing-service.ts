@@ -1,3 +1,5 @@
+import {dispatchAttentionNotification} from './attention-notifications-service';
+import {dispatchCustomerUpdate} from './customer-updates-service';
 import {normalizeDocuseal as normalize,type Submission} from './docuseal-policy.ts';
 import {z} from 'zod';
 import {db} from '@/lib/stripe-test';
@@ -100,6 +102,8 @@ export async function refreshSigning(accountId:string,id:string){
  // Do not retain provider signing URLs, passcodes or edit capabilities in customer-visible evidence.
  const evidence={id:d.id,status:d.status,test_mode:d.test_mode,metadata:d.metadata,apply_signing_order:d.apply_signing_order,recipients:d.recipients.map(r=>({id:r.id,email:r.email,phone:r.phone,status:r.status,signing_order:r.signing_order}))};
  await db('rpc/icash_save_signing_status','POST',{p_id:e.id,p_state:state,p_evidence:evidence});
+ if(!e.test_mode&&state==='customer_signature_needed')try{await dispatchAttentionNotification(accountId,{db});}catch{/* Durable notification sources remain available to the worker. */}
+ if(!e.test_mode&&['customer_signature_needed','completed'].includes(state))try{await dispatchCustomerUpdate(accountId,{db});}catch{/* Delivery retries remain idempotent in the notification worker. */}
  return {status:state};
 }
 export async function completedSigningPdf(accountId:string,id:string,audit=false){

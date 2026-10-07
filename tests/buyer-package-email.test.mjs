@@ -10,6 +10,7 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_accounts'))return [{owner_user_id:'owner',bot_paused:paused}];
  if(path.startsWith('icash_deal_files'))return [{terms,stage,screening_id:'screen'}];
  if(path.startsWith('icash_disposition_authorities'))return [{purchase_envelope_id:'purchase',asking_price_cents:12000000,expires_at:'2099-01-01'}];
+ if(path==='rpc/icash_ensure_buyer_package')return {url:'https://www.geticashx.com/d/'+'a'.repeat(32)};
  if(path==='rpc/icash_deal_email_contacts')return [{contact_key:'buyer-request:request',party:'buyer',email:'fixture@example.invalid'},{contact_key:'signer:other',party:'buyer',email:'other@example.invalid'}];
  if(path.startsWith('icash_operation_rates'))return [{id:'rate'}];
  if(path.startsWith('icash_signing_envelopes'))return signed?[{id:'purchase'}]:[];

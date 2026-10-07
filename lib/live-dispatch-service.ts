@@ -95,7 +95,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  try{
  await db(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&state=eq.dispatching`,'PATCH',{sms_context:smsContext});
  const dispatchHold=recordingReleaseHold();if(dispatchHold)return hold(dispatchHold);
- const result=await recordingServer().dispatch({accountId,operationKey,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:identity.voice_id,firstMessage:sellerGreeting??`Hi, I'm ${account.assistant_name}, the AI assistant for ${identity.principal}.`,prompt:buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!,strategyKey:strategy});
+ const result=await recordingServer().dispatch({accountId,operationKey,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:identity.voice_id,firstMessage:sellerGreeting??`Hi, I'm ${account.assistant_name}, the AI assistant for ${identity.principal}. I'm calling about an investment property at ${address}. Are you buying in that area?`,prompt:buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!,strategyKey:strategy});
  // A started call is still waiting for consent; only the recording service can confirm capture.
  if(result.status==='recording_consent_pending')return {status:'call_started'};
  if(result.status==='recording_dial_unknown_no_retry')return {status:'provider_outcome_unknown_no_retry'}; // Keep the durable claim recoverable; never redial.

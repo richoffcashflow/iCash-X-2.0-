@@ -19,6 +19,6 @@ assert(!/insert into public\.icash_(trusted_operators|dnc_verification_sources|d
 assert(sql.includes('grant select on public.icash_trusted_operators'));
 console.log('Authority input: strict tenant/scoped forms, customer grant/spoof rejection, dates, channels, money, honest statuses and zero seeded access passed.');
 
-const sms={...payload,channel:'sms'};assert(authoritySubmitSchema.parse({idempotencyKey:uuid(2),payload:sms}));validateAuthorityTimes(sms,now);assert.throws(()=>validateAuthorityTimes({...sms,party:'buyer',buyerId:uuid(5)},now));
+const sms={...payload,channel:'sms'};assert(authoritySubmitSchema.parse({idempotencyKey:uuid(2),payload:sms}));validateAuthorityTimes(sms,now);validateAuthorityTimes({...sms,party:'buyer',buyerId:uuid(5)},now);assert.throws(()=>validateAuthorityTimes({...sms,party:'buyer',buyerId:null},now));
 assert.throws(()=>authoritySubmitSchema.parse({idempotencyKey:uuid(2),payload:{...sms,sendingPrincipal:'Spoofed business'}}));
 const smsUi=readFileSync(new URL('../components/dashboard/authority-review-panel.tsx',import.meta.url),'utf8');assert(smsUi.includes('SMS invitation to an incoming call'));assert(smsUi.includes('channel:contactChannel'));assert(smsUi.includes('Approval creates a paused SMS thread only'));

@@ -18,11 +18,15 @@ export async function GET(req:Request){
  db<ClosingUpdate[]>(`icash_closing_updates?account_id=eq.${accountId}&deal_id=eq.${deal.id}&select=id,kind,effective_date,amount_cents,file_reference,reply_id,created_at&order=created_at.desc&limit=100`)
  ]);
  const job=jobs[0],title=titles[0],titleContact=titleContacts[0],ids=matches.map(m=>m.buyer_id).join(','),candidateIds=candidates.map(c=>c.buyer_id).join(',');
- const [documents,buyers,candidateNames]=await Promise.all([
+ const [documents,buyers,candidateNames,packageData,packageLinks]=await Promise.all([
  job?db<unknown[]>(`icash_deal_documents?deal_id=eq.${deal.id}&fulfillment_job_id=eq.${job.id}&select=id,kind&limit=2`):Promise.resolve([]),
  ids?db<{id:string;display_name:string}[]>(`icash_buyer_profiles?account_id=eq.${accountId}&id=in.(${ids})&select=id,display_name`):Promise.resolve([]),
- candidateIds?db<{id:string;display_name:string}[]>(`icash_buyer_profiles?account_id=eq.${accountId}&id=in.(${candidateIds})&select=id,display_name`):Promise.resolve([])
+ candidateIds?db<{id:string;display_name:string}[]>(`icash_buyer_profiles?account_id=eq.${accountId}&id=in.(${candidateIds})&select=id,display_name`):Promise.resolve([]),
+ db<{askingPriceCents:number;purchasePriceCents:number;assignmentFeeCents:number}|null>('rpc/icash_buyer_package_data','POST',{p_account:accountId,p_deal:deal.id}),
+ db<{token:string;asking_price_cents:number}[]>(`icash_buyer_package_links?account_id=eq.${accountId}&deal_id=eq.${deal.id}&revoked_at=is.null&select=token,asking_price_cents&limit=1`)
  ]);
- return NextResponse.json({closingUpdates,titleTasks,titleReplies,title:title?.state??null,titleReady:!!titleContact&&!!process.env.RESEND_API_KEY&&!!process.env.RESEND_RECEIVING_WEBHOOK_SECRET&&!!process.env.ICASH_TITLE_FROM_EMAIL&&!!process.env.ICASH_TITLE_REPLY_EMAIL,candidates:candidateNames.map(c=>({id:c.id,name:c.display_name})),job,documents,buyers:matches.map(m=>({...m,name:buyers.find(b=>b.id===m.buyer_id)?.display_name??'Buyer'}))},{headers:{'Cache-Control':'private, no-store'}});
+ const link=packageLinks[0];
+ const buyerPackage=packageData&&link?.asking_price_cents===packageData.askingPriceCents?{...packageData,url:`https://www.geticashx.com/d/${link.token}`}:null;
+ return NextResponse.json({buyerPackage,closingUpdates,titleTasks,titleReplies,title:title?.state??null,titleReady:!!titleContact&&!!process.env.RESEND_API_KEY&&!!process.env.RESEND_RECEIVING_WEBHOOK_SECRET&&!!process.env.ICASH_TITLE_FROM_EMAIL&&!!process.env.ICASH_TITLE_REPLY_EMAIL,candidates:candidateNames.map(c=>({id:c.id,name:c.display_name})),job,documents,buyers:matches.map(m=>({...m,name:buyers.find(b=>b.id===m.buyer_id)?.display_name??'Buyer'}))},{headers:{'Cache-Control':'private, no-store'}});
  }catch{return NextResponse.json({error:'Could not load deal progress.'},{status:503});}
 }

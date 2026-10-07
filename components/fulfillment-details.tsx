@@ -3,7 +3,7 @@ import {useEffect,useState} from 'react';
 import {ClosingProgress} from './closing-progress';
 import type {ClosingUpdate} from '@/lib/closing-progress';
 import {TitleTasks,type TitleTask} from './title-tasks';
-type Progress={closingUpdates?:ClosingUpdate[];titleTasks?:TitleTask[];titleReplies?:{id:string;sender:string;subject:string;body_text:string;received_at:string;needs_review:boolean}[];title?:string|null;titleReady?:boolean;candidates?:{id:string;name:string}[];job?:{state:string;updated_at:string;result?:{buyerStatus:string;buyerCount:number}};documents:{id:string;kind:string}[];buyers:{buyer_id:string;name:string;rank:number;ready:boolean}[]};
+type Progress={buyerPackage?:{url:string;askingPriceCents:number;purchasePriceCents:number;assignmentFeeCents:number}|null;closingUpdates?:ClosingUpdate[];titleTasks?:TitleTask[];titleReplies?:{id:string;sender:string;subject:string;body_text:string;received_at:string;needs_review:boolean}[];title?:string|null;titleReady?:boolean;candidates?:{id:string;name:string}[];job?:{state:string;updated_at:string;result?:{buyerStatus:string;buyerCount:number;buyerDiscovery?:{status:string;canContinue:boolean};buyerTexts?:{status:string;accepted:number;held?:number};buyerEmail?:{status:string;accepted:number}}};documents:{id:string;kind:string}[];buyers:{buyer_id:string;name:string;rank:number;ready:boolean}[]};
 export function FulfillmentDetails({dealId}:{dealId:string}){
  const [refresh,setRefresh]=useState(0);
  const [open,setOpen]=useState(false),[data,setData]=useState<Progress|null>(null),[error,setError]=useState(''),[sending,setSending]=useState(false),[titleMessage,setTitleMessage]=useState('');
@@ -14,6 +14,9 @@ export function FulfillmentDetails({dealId}:{dealId:string}){
 
  return <details onToggle={e=>{if(e.target===e.currentTarget)setOpen(e.currentTarget.open);}}><summary>🤝 Buyers & closing</summary>{error&&<p role="alert">{error}</p>}{open&&!data&&!error&&<p role="status">Loading…</p>}{open&&data&&<>
  <p>{data.job?.state==='complete'?'Your deal documents are prepared.':'Preparation starts after verified purchase signatures and resumes when your bot is running.'}</p>
+ {data.buyerPackage&&<section className="buyer-package-summary"><h4>Buyer price: {(data.buyerPackage.askingPriceCents/100).toLocaleString('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0})}</h4><p>Signed purchase price + assignment fee. Buyer pays closing costs in addition.</p><a href={data.buyerPackage.url} target="_blank" rel="noreferrer">Open shareable buyer package</a></section>}
+ {data.job?.result?.buyerDiscovery?.canContinue&&<p role="status">Buyer research is continuing through the next group of local buyers.</p>}
+ {!!data.job?.result?.buyerTexts?.held&&<p>Some buyer texts are waiting for current contact eligibility or the calling window.</p>}
  {data.documents.map(doc=><button key={doc.id} onClick={()=>download(doc)}>{doc.kind==='buyer_package'?'View buyer package':'View title request'}</button>)}
  <p>{data.job?.result?.buyerStatus==='marketing_review_required'?'Marketing permission and buyer pricing need review.':data.job?.result?.buyerStatus==='buyer_sourcing_required'?'No stored buyers currently match. Buyer sourcing is still needed.':data.buyers.length?`${data.buyers.length} buyer matches found. Open activity to see outreach progress.`:''}</p>
  {data.buyers.length>0&&data.job&&<small>Matches checked {new Date(data.job.updated_at).toLocaleString()}</small>}{data.buyers.length>0&&<ol>{data.buyers.slice(0,5).map(b=><li key={b.buyer_id}>{b.name} — {b.ready?'Funds and authority verified at last check':'Funds or authority need review'}</li>)}</ol>}

@@ -1,3 +1,4 @@
+import {receptionContextPrompt,receptionContextVariables} from './reception-property-context.ts';
 import {propertyReceptionEnabled,propertyReceptionGreeting,propertyReceptionPrompt,propertyReceptionVariables} from './reception-property-context.ts';
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
 import {ownerWorkflowIsInert} from './owner-voice-acceptance.ts';
@@ -86,7 +87,7 @@ export function receptionWorkspacePostcallAbsent(input:unknown){
 export function inspectReceptionAgent(c:ReceptionConfig,input:unknown,branchInput:unknown,workspacePostcallAbsent=false){
  const a=obj(input),b=obj(branchInput),conversation=obj(a.conversation_config),agent=obj(conversation.agent),prompt=obj(agent.prompt),platform=obj(a.platform_settings),privacy=obj(platform.privacy),overrides=obj(obj(platform.overrides).conversation_config_override);
  const propertyAware=propertyReceptionEnabled(c);
- const expectedGreeting=propertyAware?propertyReceptionGreeting:receptionGreeting,expectedPrompt=propertyAware?propertyReceptionPrompt:receptionPrompt;
+ const expectedGreeting=propertyAware?propertyReceptionGreeting:receptionGreeting,expectedPrompt=propertyAware?receptionContextPrompt(c):receptionPrompt;
  const tools=prompt.tools,builtins=prompt.built_in_tools;
  const safeEnd=(v:unknown)=>obj(v).type==='system'&&obj(v).name==='end_call'&&obj(obj(v).params).system_tool_type==='end_call';
  const safeBuiltins=empty(builtins)||(builtins!==null&&typeof builtins==='object'&&!Array.isArray(builtins)&&Object.entries(obj(builtins)).every(([name,value])=>value===null||value===undefined||(name==='end_call'&&safeEnd(value))));
@@ -134,7 +135,7 @@ async function eleven(env:ReceptionEnv,fetcher:typeof fetch,path:string,body?:un
  const raw=await boundedBody(response,256*1024);
  return path==='/v1/convai/twilio/register-call'?raw:JSON.parse(raw);
 }
-export function receptionRegisterBody(c:ReceptionConfig,from:string,callSid:string,nonce:string,propertyContext:unknown=null){return {agent_id:c.agent_id,from_number:from,to_number:c.called_number,direction:'inbound',conversation_initiation_client_data:{branch_id:c.branch_id,user_id:'icash-reception:'+nonce,conversation_config_override:{conversation:{max_duration_seconds:c.max_duration_seconds}},dynamic_variables:{...(propertyReceptionEnabled(c)?propertyReceptionVariables(propertyContext):{}),icash_reception_lane:'general-v1',icash_reception_call_sid:callSid,icash_reception_receipt_nonce:nonce}}};}
+export function receptionRegisterBody(c:ReceptionConfig,from:string,callSid:string,nonce:string,propertyContext:unknown=null){return {agent_id:c.agent_id,from_number:from,to_number:c.called_number,direction:'inbound',conversation_initiation_client_data:{branch_id:c.branch_id,user_id:'icash-reception:'+nonce,conversation_config_override:{conversation:{max_duration_seconds:c.max_duration_seconds}},dynamic_variables:{...(propertyReceptionEnabled(c)?receptionContextVariables(c,propertyContext):{}),icash_reception_lane:'general-v1',icash_reception_call_sid:callSid,icash_reception_receipt_nonce:nonce}}};}
 
 /** Parse only an already-authenticated provider receipt (HMAC or authenticated GET).
  * This pure parser never establishes authenticity on its own. */

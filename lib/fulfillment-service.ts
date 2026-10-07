@@ -1,3 +1,4 @@
+import {sendBuyerPackageTexts} from './buyer-outreach-service';
 import {sendRequestedBuyerPackages} from './buyer-package-email';
 import {coordinateTitleOpening} from './title-service.ts';
 import {discoverTitlePlaces} from './title-search-service.ts';
@@ -17,7 +18,10 @@ export async function prepareFulfillment(accountId:string,jobId:string){
  const [deal]=await db<{terms:unknown;stage:string}[]>(`icash_deal_files?id=eq.${job.deal_id}&account_id=eq.${accountId}&select=terms,stage`);
  const [signed]=await db<{id:string}[]>(`icash_signing_envelopes?id=eq.${job.purchase_envelope_id}&account_id=eq.${accountId}&deal_id=eq.${job.deal_id}&kind=eq.purchase&state=eq.completed&test_mode=eq.false&select=id`);
  if(!deal||!signed||!['under_contract','buyer_selected','title_open','closing'].includes(deal.stage))return {status:'signed_purchase_required'};
- const terms=dealTermsSchema.parse(deal.terms);
+ await db('rpc/icash_prepare_buyer_disposition','POST',{p_account:accountId,p_deal:job.deal_id});
+ const [current]=await db<{terms:unknown}[]>(`icash_deal_files?id=eq.${job.deal_id}&account_id=eq.${accountId}&select=terms`);
+ const terms=dealTermsSchema.parse(current?.terms??deal.terms);
+ await db('rpc/icash_ensure_buyer_package','POST',{p_account:accountId,p_deal:job.deal_id});
  const documents=(['buyer_package','title_packet'] as const).map(kind=>({kind,html:renderDealDocument(kind,terms)}));
  const [authority]=await db<Authority[]>(`icash_disposition_authorities?deal_id=eq.${job.deal_id}&account_id=eq.${accountId}&select=*`);
  let matches:{id:string;score:number;ready:boolean;rank:number;sourceRef:string;qualificationRequestId:string}[]=[];
@@ -39,7 +43,8 @@ export async function prepareFulfillment(accountId:string,jobId:string){
  // Document preparation is durable before attempting delivery; ambiguous sends stay held.
  let titleOpening:{status:string};try{titleOpening=await coordinateTitleOpening(accountId,job.deal_id);}catch{titleOpening={status:'title_request_held'};}
  await db(`icash_fulfillment_jobs?id=eq.${job.id}&account_id=eq.${accountId}&state=eq.complete`,'PATCH',{result:{...result,titleStatus:titleOpening.status}});
+ let buyerTexts:{status:string;accepted:number};try{buyerTexts=await sendBuyerPackageTexts(accountId,job.deal_id);}catch{buyerTexts={status:'buyer_text_needs_review',accepted:0};}
  let buyerEmail:{status:string;accepted:number};try{buyerEmail=await sendRequestedBuyerPackages(accountId,job.deal_id);}catch{buyerEmail={status:'buyer_email_needs_review',accepted:0};}
- await db(`icash_fulfillment_jobs?id=eq.${job.id}&account_id=eq.${accountId}&state=eq.complete`,'PATCH',{result:{...result,titleStatus:titleOpening.status,buyerEmail}});
+ await db(`icash_fulfillment_jobs?id=eq.${job.id}&account_id=eq.${accountId}&state=eq.complete`,'PATCH',{result:{...result,titleStatus:titleOpening.status,buyerTexts,buyerEmail}});
  return {status:'fulfillment_prepared'};
 }

@@ -1,3 +1,4 @@
+import {receptionContextPrompt,receptionContextVariables} from './reception-property-context.ts';
 import {boundedBytes,createRecordingProviders,type RecordingEnv} from './required-call-recording-provider.ts';
 import {object,sid} from './required-call-recording.ts';
 import {recordedReceptionUrl,receptionStopToken,type RecordedReceptionRow,type RecordedReceptionConfig} from './recorded-reception.ts';
@@ -34,7 +35,7 @@ export function createRecordedReceptionProviders(env:RecordingEnv,fetcher:typeof
   conversation:async(id:string)=>{if(!/^conv_[A-Za-z0-9]+$/.test(id))throw Error('CONVERSATION_REQUIRED');return object(JSON.parse(await eleven('/v1/convai/conversations/'+id)));},
   register:async(r:RecordedReceptionRow,remaining:number,propertyContext:unknown=null)=>{
    if(!Number.isInteger(remaining)||remaining<1||remaining>r.max_total_seconds||!r.recording_sid||!r.consent_at)throw Error('CONSENT_AND_BOUND_REQUIRED');
-   const raw=await eleven('/v1/convai/twilio/register-call',{agent_id:r.agent_id,from_number:r.from_phone,to_number:r.to_phone,direction:'inbound',conversation_initiation_client_data:{branch_id:r.branch_id,user_id:'icash-recorded-reception:'+r.id,conversation_config_override:{conversation:{max_duration_seconds:remaining}},dynamic_variables:{...(propertyReceptionEnabled(r.configuration)?propertyReceptionVariables(propertyContext):{}),icash_reception_recording_id:r.id,secret__icash_reception_stop_token:receptionStopToken(r,env)}}});
+   const raw=await eleven('/v1/convai/twilio/register-call',{agent_id:r.agent_id,from_number:r.from_phone,to_number:r.to_phone,direction:'inbound',conversation_initiation_client_data:{branch_id:r.branch_id,user_id:'icash-recorded-reception:'+r.id,conversation_config_override:{conversation:{max_duration_seconds:remaining}},dynamic_variables:{...(propertyReceptionEnabled(r.configuration)?receptionContextVariables(r.configuration,propertyContext):{}),icash_reception_recording_id:r.id,secret__icash_reception_stop_token:receptionStopToken(r,env)}}});
    const text=raw.trim().startsWith('"')?JSON.parse(raw):raw;
    if(typeof text!=='string'||text.length>64000||/<!/.test(text)||!/^\s*(?:<\?xml[^>]*>\s*)?<Response(?:\s|>)/.test(text)||!text.includes('<Connect')||!text.includes('<Stream'))throw Error('REGISTRATION_NOT_CONFIRMED');
    const tags=[...text.matchAll(/<\/?([A-Za-z][A-Za-z0-9]*)\b/g)].map(m=>m[1]);

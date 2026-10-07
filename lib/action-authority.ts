@@ -15,7 +15,6 @@ export function validateAuthorityTimes(payload:AuthorityPayload,now=Date.now()){
  if(Date.parse(payload.evidenceObservedAt)>now||Date.parse(payload.evidenceObservedAt)<now-365*86400000)throw new Error('Use dated, current evidence.');
  if(Date.parse(payload.expiresAt)<=now||Date.parse(payload.expiresAt)>now+90*86400000)throw new Error('Choose an expiry within 90 days.');
  if(payload.kind==='contact_permission'){
-  if(payload.channel==='sms'&&(payload.party!=='seller'||payload.buyerId))throw new Error('Seller SMS scope required.');
   if(payload.localStartHour>=payload.localEndHour)throw new Error('Choose a valid contact window.');
   try{new Intl.DateTimeFormat('en-US',{timeZone:payload.timezone}).format(now);}catch{throw new Error('Choose a valid time zone.');}
   if((payload.party==='buyer')!==!!payload.buyerId)throw new Error('Select the matching buyer record.');
