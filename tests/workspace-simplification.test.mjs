@@ -48,7 +48,9 @@ assert(source.indexOf('className="property-control"')>source.indexOf('<div class
 assert(source.includes('Paused for this property'));assert(source.includes('Owner & contact'));
 console.log('PASS simplified workspace: visible credit action, open spending, account recovery, stale status, saved properties and post-payment naming');
 
-tree=page({signedIn:false},null);assert.match(text(tree),/Your properties/);assert(all(tree).some(n=>n.type===component('BotRunBar')));assert.doesNotMatch(text(tree),/Create your AI bot|Name your bot/);assert(!all(tree).some(n=>n.type===component('LiveWorkspace')),'guests never fetch private property data');assert(!all(tree).some(n=>n.type==='button'&&text(n)==='Stop bot'));
+tree=page({signedIn:false,signInReady:true},null);assert.equal(tree.type,component('WebinarExpressCheckout'),'visitors open the shared express checkout');assert.equal(tree.props.checkingAccount,false);assert.equal(tree.props.signInReady,true);assert.equal(typeof tree.props.onSignedIn,'function');assert(!all(tree).some(n=>n.type===component('BotRunBar')));assert(!all(tree).some(n=>n.type===component('LiveWorkspace')),'guests never fetch private property data');
+tree=page(null,null);assert.equal(tree.type,component('WebinarExpressCheckout'));assert.equal(tree.props.checkingAccount,true,'account is checked before offering checkout');
+tree=page(null,null,true);assert.equal(tree.props.checkingAccount,true);assert.equal(tree.props.accountError,true);assert.equal(typeof tree.props.onRetry,'function','account failures remain recoverable');
 tree=page({...account,balanceCents:0,billingModel:'membership_credits',membershipActive:true},campaign);assert(all(tree).some(n=>n.type===component('PostPaymentBotName')),'naming follows paid membership');
 tree=page({...account,balanceCents:0,billingModel:'membership_credits',membershipActive:false},campaign);assert(!all(tree).some(n=>n.type===component('PostPaymentBotName')),'unfunded accounts are not asked to name a bot');
 
