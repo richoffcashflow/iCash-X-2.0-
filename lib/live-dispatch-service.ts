@@ -1,4 +1,5 @@
 import {limitedSellerPrompt} from './seller-limited-contact.ts';
+import {selectedCustomCallVoice} from './custom-voice.ts';
 import {runScreeningJob} from './screening-job.ts';
 import {loadSellerClosingContext} from './seller-closing-context.ts';
 import {recordingServer} from './required-call-recording-server.ts';
@@ -67,8 +68,10 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  // Share the recording service's exact non-main branch/version, privacy,
  // override, tool-set and canonical full-projection validation before reserve.
  if(!recordingAgentMatches(recordedReview,agent))return hold('production_agent_review_required');
- const voiceOverride=object(object(object(agent).conversation_config).tts).voice_id!==identity.voice_id;
- if(voiceOverride&&!c.approved_voice_ids?.includes(identity.voice_id))return hold('voice_selection_setup_required');
+ const customVoice=await selectedCustomCallVoice(accountId);
+ const callVoiceId=customVoice??identity.voice_id;
+ const voiceOverride=object(object(object(agent).conversation_config).tts).voice_id!==callVoiceId;
+ if(voiceOverride&&!customVoice&&!c.approved_voice_ids?.includes(callVoiceId))return hold('voice_selection_setup_required');
  const [practice]=await db<{agent_id:string}[]>(`icash_voice_test_config?agent_id=eq.${c.agent_id}&select=agent_id`);if(practice)return hold('practice_agent_blocked');
  const rateId=p.party==='buyer'?c.buyer_rate_id:c.seller_rate_id;if(!rateId)return hold('full_call_cost_quote_required');
  const [rate]=await db<{operation:string;enabled:boolean;expires_at:string;voice_max_duration_seconds:number|null;charge_cents?:number;version?:string}[]>(`icash_operation_rates?id=eq.${rateId}&select=operation,enabled,expires_at,voice_max_duration_seconds,charge_cents,version`);
@@ -104,7 +107,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  try{
  await db(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&state=eq.dispatching`,'PATCH',{sms_context:smsContext});
  const dispatchHold=recordingReleaseHold();if(dispatchHold)return hold(dispatchHold);
- const result=await recordingServer().dispatch({accountId,operationKey,maxTotalSeconds:fundedCall.maxSeconds,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:identity.voice_id,firstMessage:sellerGreeting??`Hi, I'm ${account.assistant_name}, the AI assistant for ${identity.principal}. I'm calling about an investment property at ${address}. Are you buying in that area?`,prompt:buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!,strategyKey:strategy});
+ const result=await recordingServer().dispatch({accountId,operationKey,maxTotalSeconds:fundedCall.maxSeconds,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:callVoiceId,firstMessage:sellerGreeting??`Hi, I'm ${account.assistant_name}, the AI assistant for ${identity.principal}. I'm calling about an investment property at ${address}. Are you buying in that area?`,prompt:buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!,strategyKey:strategy});
  // A started call is still waiting for consent; only the recording service can confirm capture.
  if(result.status==='recording_consent_pending')return {status:'call_started'};
  if(result.status==='recording_dial_unknown_no_retry')return {status:'provider_outcome_unknown_no_retry'}; // Keep the durable claim recoverable; never redial.
