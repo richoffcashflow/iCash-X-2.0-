@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {createHash,createHmac} from 'node:crypto';
 import {boundedBody,receptionTarget} from './general-reception.ts';
 import {ownerInboundTarget} from './owner-inbound-acceptance.ts';
 import {receptionUsdNumberMicros} from './general-reception-reconcile.ts';
@@ -32,7 +32,7 @@ export async function observeLegacyReceptionCosts(env:Record<string,string|undef
    const twilioMicros=twilioUsdChargeMicros(call.price,call.price_unit);
    const carrierCostShape={priceType:call.price===null?'null':typeof call.price,unit:call.price_unit==='USD'?'USD':call.price_unit==='usd'?'usd':call.price_unit==null?'missing':'other',exactUsdCharge:twilioMicros!==null};
    const elevenLabsMicros=receptionUsdNumberMicros(metadata.cost_fiat);
-   return {receiptId:target.receiptId,status:twilioMicros!==null&&elevenLabsMicros!==null?'observed':'cost_unknown',callSid:target.callSid,conversationId:target.conversationId,branchId:conversation.branch_id,versionId:conversation.version_id,nonceHash:hash(nonce),durationSeconds:duration,carrierSeconds,
+   return {receiptId:target.receiptId,status:twilioMicros!==null&&elevenLabsMicros!==null?'observed':'cost_unknown',terminal:true,providerAccountSid:call.account_sid,calledNumber:call.to,callerHash:createHmac('sha256',env.TWILIO_AUTH_TOKEN).update('reception-caller-v1\0'+call.from).digest('hex'),callSid:target.callSid,conversationId:target.conversationId,branchId:conversation.branch_id,versionId:conversation.version_id,nonceHash:hash(nonce),durationSeconds:duration,carrierSeconds,
     twilioMicros,elevenLabsMicros,carrierCostShape,twilioReceiptHash:hash(JSON.stringify(call)),elevenLabsReceiptHash:hash(JSON.stringify(conversation)),scope:'provider_costs_only',settled:false};
   }catch{return unavailable;}
  }));
