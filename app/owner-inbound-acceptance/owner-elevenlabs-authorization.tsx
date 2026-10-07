@@ -76,7 +76,7 @@ export default function OwnerElevenLabsAuthorization(){
   {typeof review?.providerRequestStatus==='number'&&<p>Provider update response: HTTP {review.providerRequestStatus}</p>}
   {review?.status==='ready'&&!attempted&&<>
    <p>Only the missing Authorization reference will be added. Applying publishes a new Main agent version immediately. Keep other ElevenLabs editors idle until verification finishes; the provider does not offer an atomic version lock.</p>
-   <p>Review expires {new Date(review.expiresAt!).toLocaleString()}.</p>
+   <p>Review expires {new Date(review.expiresAt!).toLocaleString('en-US',{hour12:true})}.</p>
    <label><input type="checkbox" checked={consent} disabled={busy} onChange={event=>setConsent(event.target.checked)}/> I approve reusing this saved reference on Main and publishing this authentication change.</label>
    <div><button type="button" disabled={busy||!consent} onClick={()=>void run(true)}>Apply saved reference once</button></div>
   </>}

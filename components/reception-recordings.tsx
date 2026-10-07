@@ -15,11 +15,11 @@ export function ReceptionRecordings(){
   <button type="button" disabled={state.phase==='loading'} onClick={()=>{if(!busy.current){busy.current=true;setRevision(n=>n+1);}}}>Refresh recordings</button>
   {state.phase==='loading'&&<p role="status">Loading recordings…</p>}{state.phase==='error'&&<p role="alert">Could not load reception recordings. Sign in with the owning account and retry.</p>}
   {state.phase==='ready'&&!state.rows.length&&<p>No recorded incoming calls are available. Historical unrecorded calls do not acquire audio retroactively.</p>}
-  {state.rows.map(r=><article key={r.id} style={{marginTop:24,padding:20,border:'1px solid #ddd',borderRadius:12}}><h2>{new Date(r.createdAt).toLocaleString()}</h2><p>{r.status==='declined'&&r.callEnded?'Recording declined; call ended':states[r.status]}</p>
+  {state.rows.map(r=><article key={r.id} style={{marginTop:24,padding:20,border:'1px solid #ddd',borderRadius:12}}><h2>{new Date(r.createdAt).toLocaleString('en-US',{hour12:true})}</h2><p>{r.status==='declined'&&r.callEnded?'Recording declined; call ended':states[r.status]}</p>
    <p>Reserved maximum: {dollars(r.holdCents)}. This reservation is not a charge. Settled charge: {r.chargedCents===null?'Pending':dollars(r.chargedCents)}.</p>
    <p>{r.billingMode==='automatic'?'Billing uses the policy approved for this call. Missing or conflicting cost evidence may require review.':'This session requires its original per-call cost review.'}</p>
    {r.reviewRequired&&<p role="alert">A later provider receipt conflicts with the settled costs. The original charge is preserved; this needs review before any adjustment.</p>}
-   <p>Recorded duration: {r.durationSeconds===null?'Not reported':r.durationSeconds+' seconds'}. Audio expiry: {r.audioExpiresAt?new Date(r.audioExpiresAt).toLocaleString():'Not reported'}.</p>
+   <p>Recorded duration: {r.durationSeconds===null?'Not reported':r.durationSeconds+' seconds'}. Audio expiry: {r.audioExpiresAt?new Date(r.audioExpiresAt).toLocaleString('en-US',{hour12:true}):'Not reported'}.</p>
    {r.audioAvailable&&r.audioExpiresAt&&Date.parse(r.audioExpiresAt)>Date.now()&&<audio key={r.id} controls preload="none" aria-label="Incoming call recording" src={'/api/work/reception-recording/audio?id='+encodeURIComponent(r.id)}/>}
    <p>Recording: {r.recordingCostMicros===null?'Pending':dollars(r.recordingCostMicros,1000000)+' ('+r.recordingCostBasis+')'}. Storage estimate: {r.storageEstimateMicros===null?'Pending':dollars(r.storageEstimateMicros,1000000)}. Spoken-consent estimate: {r.speechGatherEstimateMicros===null?'Pending':dollars(r.speechGatherEstimateMicros,1000000)}.</p><p>Audio does not verify provider costs. Full settlement requires separate reviewed cost evidence.</p>
   </article>)}

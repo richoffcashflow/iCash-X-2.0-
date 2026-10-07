@@ -72,7 +72,7 @@ export function OutreachCampaignAcknowledgment({onStatus,statusOnly=false}:{onSt
     {status && <>
       <p id="outreach-campaign-policy">{status.policy.text}</p>
       <p className="text-muted-foreground">Version {status.policy.version}</p>
-      {state.phase === 'ready' && current && status.acknowledgment && <p>Responsibilities acknowledged on {new Date(status.acknowledgment.acceptedAt).toLocaleString()}.</p>}
+      {state.phase === 'ready' && current && status.acknowledgment && <p>Responsibilities acknowledged on {new Date(status.acknowledgment.acceptedAt).toLocaleString('en-US',{hour12:true})}.</p>}
       {(!recorded || choiceChanged) && <>
         <label className="flex items-start gap-2" htmlFor="outreach-campaign-accept">
           <input id="outreach-campaign-accept" type="checkbox" className="mt-1" checked={state.checked} disabled={state.phase !== 'ready' || !state.selectedMode || !status.principal} aria-describedby="outreach-campaign-policy outreach-campaign-safety" onChange={event => dispatch({type: 'checked', checked: event.target.checked})}/>

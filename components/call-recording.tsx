@@ -66,7 +66,7 @@ function readReceipt(value: unknown): ReceiptResult {
 
 function dateLabel(value: string | null) {
   if (!value || !Number.isFinite(Date.parse(value))) return 'Not reported';
-  return new Date(value).toLocaleString();
+  return new Date(value).toLocaleString('en-US',{hour12:true});
 }
 
 function dollars(amount: number, divisor: number) {
