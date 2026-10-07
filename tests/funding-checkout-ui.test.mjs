@@ -18,7 +18,7 @@ let daily={ready:true,plan:null};
 globalThis.window={location:{search:'',assign(url){calls.push({redirect:url});}}};globalThis.document={hidden:false};
 globalThis.fetch=async(url,options={})=>{calls.push({url,options});if(options.method==='POST')return Response.json(url==='/api/setup/event'?{ok:true}:{url:'https://checkout.stripe.com/fixture'});return Response.json(url==='/api/billing/daily'?daily:funding);};
 const hooks={useState(initial){const i=cursor++;if(!(i in slots))slots[i]=typeof initial==='function'?initial():initial;return[slots[i],next=>{const value=typeof next==='function'?next(slots[i]):next;if(!Object.is(value,slots[i])){slots[i]=value;dirty=true;}}];},useRef(initial){const i=cursor++;if(!(i in slots))slots[i]={current:initial};return slots[i];},useEffect(fn,deps){const i=cursor++,previous=slots[i];if(!previous||deps.some((value,index)=>!Object.is(value,previous.deps[index]))){slots[i]={deps,cleanup:previous?.cleanup};pending.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}}};
-const mod={exports:{}};new Function('require','module','exports',code)(name=>name==='react'?hooks:name==='@/lib/funding-amount'?fundingAmounts:name==='@/lib/funding-consent'?fundingConsent:name==='@/lib/membership-policy'?membership:name==='@/lib/auto-recharge-policy'?recharge:name==='@/lib/funding-fees'?{processingFeeCents}:name==='./account-access'?{AccountAccess:'AccountAccess'}:require(name),mod,mod.exports);
+const mod={exports:{}};new Function('require','module','exports',code)(name=>name==='react'?hooks:name==='@/lib/funding-amount'?fundingAmounts:name==='@/lib/funding-consent'?fundingConsent:name==='@/lib/membership-policy'?membership:name==='@/lib/auto-recharge-policy'?recharge:name==='@/lib/funding-fees'?{processingFeeCents}:name==='./stripe-embedded-checkout'?{StripeEmbeddedCheckout:'StripeEmbeddedCheckout'}:name==='./account-access'?{AccountAccess:'AccountAccess'}:require(name),mod,mod.exports);
 function render(){cursor=0;dirty=false;tree=mod.exports.FundingCheckout({onSignedIn(){}});return tree;}
 async function flush(){for(let i=0;i<15;i++){if(dirty)render();const tasks=pending;pending=[];tasks.forEach(fn=>fn());await new Promise(resolve=>setTimeout(resolve,2));if(!dirty&&!pending.length)return tree;}throw Error('Render did not settle');}
 function checkout(){return find(tree,n=>n.type==='button'&&n.props.className==='fund-button full');}
@@ -41,4 +41,16 @@ const beforeOptIn=calls.filter(c=>c.options?.method==='POST').length;box.props.o
 checkout().props.onClick();tree=await flush();const autoPayload=JSON.parse(calls.filter(c=>c.url==='/api/funding/checkout').at(-1).options.body);assert.equal(autoPayload.autoRecharge,true);assert.equal(autoPayload.autoRechargeVersion,recharge.autoRechargeVersion);
 // An uncertain network result surfaces an error and never retries a payment by itself.
 globalThis.fetch=async(url,options={})=>{calls.push({url,options});throw Error('Synthetic connection loss');};checkout().props.onClick();tree=await flush();assert.match(text(tree),/Synthetic connection loss/);assert.equal(calls.filter(c=>c.url==='/api/funding/checkout'&&c.options.method==='POST').length,4);
+// Inline completion waits for the newly selected session, never historical receipts.
+slots.forEach(slot=>slot?.cleanup?.());slots=[];pending=[];dirty=true;
+let paid=false,completed=0;
+window.location={search:'',href:'https://www.geticashx.com/#funding',assign(){throw Error('Inline payment must stay here');}};
+window.history={replaceState(_a,_b,path){window.location.href='https://www.geticashx.com'+path;window.location.search=new URL(window.location.href).search;}};
+funding={...funding,embeddedReady:true,paidCents:10000};
+globalThis.fetch=async(url,options={})=>{calls.push({url,options});if(options.method==='POST')return Response.json({clientSecret:'cs_live_inline_secret_fixture',publishableKey:'pk_live_fixture',sessionId:'cs_live_inline'});return Response.json({...funding,paidCents:url.includes('session_id=cs_live_inline')?(paid?2500:0):10000});};
+render=()=>{cursor=0;dirty=false;tree=mod.exports.FundingCheckout({initialAmountCents:2500,onSignedIn(){completed++;}});return tree;};
+tree=await flush();assert.match(text(checkout()),/25/);checkout().props.onClick();tree=await flush();
+const inline=find(tree,n=>n.type==='StripeEmbeddedCheckout');assert.equal(completed,0);
+inline.props.onComplete();tree=await flush();assert.match(text(tree),/Confirming your credits/);assert.equal(completed,0,'Historical funding cannot confirm the new session');
+paid=true;find(tree,n=>n.type==='button'&&text(n)==='Check payment').props.onClick();tree=await flush();assert.equal(completed,1);assert.equal(window.location.search,'');
 slots.forEach(slot=>slot?.cleanup?.());console.log('PASS prepaid checkout handlers: no automatic payment, exact chosen amount/terms, one-time request, duplicate lock, permitted Stripe URL, and uncertain result surfaced.');
