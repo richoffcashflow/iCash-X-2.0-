@@ -21,3 +21,9 @@ The six-cent AI reservation is a cap, not the charge. The request uses the defau
 Only currently admitted bindings using the exact prior bundled rate adopt the split rate. Delivered message prices, existing reservations, consent timestamps, paused/manual state and expiry holds remain intact. Model-setting changes cannot use this reviewed model's rate. Migrations fail atomically if the expected existing setup changed.
 
 Apply the routing migration, deploy the request-bound application, then apply token billing. This ordering prevents an older application from making requests outside the new reviewed byte bound. The price/rate change is not a credit top-up or spending-cap increase.
+
+## Production release
+
+PR42 merged as `350d3827e877b773151e529c14fa7cd71a30586b`; Vercel deployment `dpl_3gXnNAPKm1GTxon3yxGe9xg2BcQB` reached READY and the production domain returned HTTP 200 with that deployment ID. Applied migrations: `20261007230724_seller_text_routing_recovery` and `20261007230930_sms_ai_token_billing`. Read-only checks confirm the AI rate is enabled, the eligible thread retains SMS readiness, and new tables/RPCs have no public access. No runtime errors were reported for the webhook/worker window.
+
+Automatic approval review blocked invoking the recovery RPC for the earlier live incoming event because explicit approval for that recipient/test is required. The invocation did not execute; no recovery message exists. Do not retry that event through a different tool or trigger without approval. Live AI response, SMS delivery and a call are not claimed by this verification.
