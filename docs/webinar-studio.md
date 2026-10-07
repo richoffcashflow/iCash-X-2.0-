@@ -1,6 +1,6 @@
 # iCash X webinar studio
 
-The owner manages sessions at `/webinaradmin` (`/webinar-studio` remains an alias). Each new webinar immediately receives a permanent numeric `/live/<code>` URL. `/webinar` remains the general entry point. The existing verified owner account protects all editor, script-drafting, upload and analytics APIs. Knowing an email address never authenticates a visitor.
+The owner manages sessions at `/webinaradmin` (`/webinar-studio` remains an alias). Each new main webinar and its paired VIP draft immediately receive separate permanent numeric `/live/<code>` URLs. `/webinar` remains the general entry point. The existing verified owner account protects all editor, script-drafting, upload and analytics APIs. Knowing an email address never authenticates a visitor.
 
 ## Publish a session
 
@@ -10,7 +10,7 @@ The owner manages sessions at `/webinaradmin` (`/webinar-studio` remains an alia
 4. Add approved facts/FAQ for AI answers. Pasted transcripts can generate a draft host-note timeline for review.
 5. Save and publish the Day recording. It runs at all hours until you choose **Add night version**, upload that recording, and save with automatic switching enabled. Day and Night keep independent video, chat, offers and timing under one permanent link. Night defaults to 6 PM–6 AM in the visitor’s local timezone; change those hours in Settings. Existing sessions keep their recording and saved place.
 
-The numeric link always opens its own webinar, without traffic optimization. After a viewer reaches the offer, the fixed checkout return window still applies. The generic `/webinar` entry retains its ordered return journey across published webinars. Authenticated product customers and verified paid guests use the existing account/checkout handoff.
+The numeric link always opens its own webinar, without traffic optimization. After a viewer reaches the offer, the fixed checkout return window still applies. The generic `/webinar` entry uses the earliest published main webinar by permanent code. It never rotates based on viewing history, ads or performance. Unpaid returns stay with their original main webinar; follow-up links retain that webinar’s code. Authenticated product customers and verified paid guests use the existing account/checkout handoff.
 
 ## Daily overview and results
 
@@ -46,7 +46,7 @@ Email and SMS opt-ins are separate, optional and unchecked. Saving a phone numbe
 
 The bounded sequence queues email at 20 minutes, text at 90 minutes, email at 24 hours, text at 48 hours and email at 72 hours after opt-in. It waits for 15 minutes of inactivity, sends between 9 AM and 8 PM in the viewer’s timezone, allows at most two cross-channel messages per rolling 24 hours with an hour between messages, and ends after seven days. The recipient/step uniqueness constraint prevents refreshes or repeated contact submission from restarting it. Verified live purchases stop both channels. Email unsubscribe/bounce/complaint and text STOP suppress the corresponding channel; any text reply stops the text sequence.
 
-Every message uses an unpredictable `/w/<id>` link that restores webinar state for seven days, without authenticating a software account. On click the existing router rechecks payment, current session, eight-hour checkout window and eligible Day/Night recordings. Completion starts a full checkout window even if the first offer appeared earlier. Refresh does not extend it. A finished video saves completion before opening `/webinar/checkout`; a checkout already in progress stays open. The express page uses existing Stripe checkout, saved contact prefill and payment → name bot → workspace setup. There is no automatic charge.
+Every message uses an unpredictable `/w/<id>` link that restores webinar state for seven days, without authenticating a software account. On click the existing router rechecks payment, current session, eight-hour checkout window and the same webinar’s Day/Night recordings. Completion starts a full checkout window even if the first offer appeared earlier. Refresh does not extend it. A finished video saves completion before opening `/webinar/checkout`; a checkout already in progress stays open. The express page uses existing Stripe checkout, saved contact prefill and payment → name bot → workspace setup. There is no automatic charge.
 
 The Follow-ups screen shows separate channel switches, readiness and delivery totals. Email remains paused until a verified sender and business mailing address are saved. The verified `geticashx.com` sender domain is available; the mailing address was still blank at this release. Text delivery uses an enabled `icash_text_senders` sender and explicit new opt-ins. Existing visitors are not automatically opted into texts.
 
@@ -115,9 +115,9 @@ Primary integration references: [Meta Business SDK Conversions API example](http
 
 The cancelled shared-password idea was not implemented. The admin portal uses the existing verified owner account.
 
-## Purchase → bot → workspace
+## Purchase → VIP → bot → workspace
 
-`MembershipCheckout` checks canonical billing status before showing `PostPurchaseSetup`. A confirmed, accessible membership opens the bot-name screen, saves the real setup with revision checks, displays the creation state, then enters the workspace. A returning saved bot is reused. Signed-in buyers proceed after the save. Guests see their payment email prefilled for the existing one-time verification; payment alone never authenticates an email or grants a session. The existing account-claim RPC attaches their saved setup after verification.
+`MembershipCheckout` checks canonical billing status before showing `PostPurchaseSetup`. After a successful hosted or embedded payment, a confirmed live accessible membership opens its saved VIP destination when published. The VIP Day/Night recording follows local time and its existing saved session. At the VIP ending offer, `/join?setup=1` opens the bot-name screen, saves the real setup with revision checks, displays the creation state, then enters the workspace. A returning saved bot is reused. Signed-in buyers proceed after the save. Guests see their payment email prefilled for the existing one-time verification; payment alone never authenticates an email or grants a session. The existing account-claim RPC attaches their saved setup after verification.
 
 Saved webinar name/email/phone prefill Stripe through a server-read signed visitor cookie bound to the same billing guest. An authenticated account does not inherit a different visitor email. The optional workspace identity form carries forward the saved first name for confirmation. A bot name is a preference, not a claim that provider provisioning or paid outreach has occurred.
 
@@ -156,11 +156,17 @@ Duration timers start the first time the viewer reaches their cue. The server st
 
 Timers control display, not payment terms. An actual offer closing date is configured in Offers. No timer creates purchases, scarcity counts or Meta events. Existing sessions keep their saved webinar configuration; newly saved timer settings apply to new sessions.
 
-## Simple Intelligence view
+## Retired Intelligence view
 
-Intelligence starts with an automatic routing switch, the smart link, separate Day/Night leaders and a compact results table (visitors, buyers, close rate, average watch). Use the Day/Night buttons to inspect each period. Until a Night recording is ready, the nighttime card identifies its Day fallback. Audience/ad filters, planned traffic, revenue per visitor, baseline comparisons and Meta URL parameters live under Advanced.
+Automatic winner selection and test allocation have been removed from the admin and entry route. The legacy endpoint reports disabled and rejects mutations. A database trigger prevents old clients from enabling it again. Historical experiment records remain available internally; current entry never reads them. Meta event names, deduplication and purchase verification are unchanged.
 
-Proven underperforming revisions show **Stopped · 0%** and receive no new smart-link traffic, including tests and baseline assignments. Decisions use mature randomized purchase value, with at least 100 observed visits per compared arm and at least 10 buyers for the leader. Untested revisions keep a bounded opportunity. Stops are saved per audience/ad/revision and remain after reports age out. Publishing a new revision makes it eligible to test again. Saved viewing sessions and pinned links stay stable; if all otherwise-eligible candidates are stopped, the smart link opens checkout. This changes on-site allocation only; Meta budgets and purchase measurement are unchanged.
+## Paid VIP sessions — October 7, 2026
+
+Create or duplicate a main webinar to receive a separate VIP draft and permanent link in one transaction. Existing webinars have **Add VIP session**. A unique parent relationship prevents duplicate VIP links; retries reuse both codes. Edit each session’s Day/Night video, chat, timers and offers independently. VIP defaults to an ending link into bot setup. Publish its video before expecting the purchase redirect.
+
+In Settings, **Homepage VIP session** selects the destination for direct homepage purchases; the default is the first published VIP by code. Webinar checkout uses an owned, non-preview source session and saves that main webinar’s VIP ID on the new membership before opening Stripe. Both embedded and hosted completion read the server’s verified membership status. The saved destination is retained across payment retries. A pending, test, reviewed, expired or unpaid membership never triggers the redirect. A draft or unavailable VIP falls back to existing bot setup so payment cannot strand the customer.
+
+VIP entry requires an active paid live membership on the authenticated account or the same unclaimed billing guest cookie. A name/email, a success query string, or the VIP link alone does not grant access. Owner previews retain their existing protected bypass. Once inside, the normal local-time Day/Night selector and frozen resume snapshot apply; VIP viewers never bounce back into the main checkout return window. Unpaid viewers remain in the main webinar → checkout journey. Follow-ups stop after purchase as before.
 
 ## Follow-up verification — October 7, 2026
 

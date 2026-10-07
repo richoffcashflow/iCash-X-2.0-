@@ -1,5 +1,5 @@
 'use client';
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
 import Image from 'next/image';
 import {ArrowRight,Sparkles} from 'lucide-react';
 import {AccountAccess} from '@/components/account-access';
@@ -13,6 +13,8 @@ import '@/app/plan-homepage.css';
 type Props={checkingAccount?:boolean;accountError?:boolean;signInReady?:boolean;onRetry?:()=>void;onSignedIn?:()=>void};
 
 export function WebinarExpressCheckout({checkingAccount=false,accountError=false,signInReady=true,onRetry,onSignedIn}:Props={}){
+ const [webinarSessionId,setWebinarSessionId]=useState<string>();
+ useEffect(()=>{const id=new URLSearchParams(window.location.search).get('webinar_session');if(id&&/^[0-9a-f-]{36}$/i.test(id))setWebinarSessionId(id);},[]);
  const [signInOpen,setSignInOpen]=useState(false);
  const [checkoutEngaged,setCheckoutEngaged]=useState(false);
  function openWorkspace(){setSignInOpen(false);if(onSignedIn)onSignedIn();else window.location.assign(webinarSite.workspacePath);}
@@ -36,10 +38,10 @@ export function WebinarExpressCheckout({checkingAccount=false,accountError=false
      <PlanWorkspacePreview/>
     </div>
     <div className="wb-express-card wb-plan-card" id="your-plan" tabIndex={-1}>
-     <MembershipCheckout embedded presentation="plan" onEngaged={()=>setCheckoutEngaged(true)} onSignedIn={openWorkspace}/>
+     <MembershipCheckout embedded webinarSessionId={webinarSessionId} presentation="plan" onEngaged={()=>setCheckoutEngaged(true)} onSignedIn={openWorkspace}/>
      <a className="wb-text" href={webinarSite.supportPath}>Have a question? We’re here.</a>
     </div>
-    <div className="wb-plan-onboarding" aria-label="Getting started"><span><b>01</b>Get access</span><ArrowRight size={14} aria-hidden="true"/><span><b>02</b>Name your bot</span><ArrowRight size={14} aria-hidden="true"/><span><b>03</b>Make it yours</span></div>
+    <div className="wb-plan-onboarding" aria-label="Getting started"><span><b>01</b>Get access</span><ArrowRight size={14} aria-hidden="true"/><span><b>02</b>Watch your VIP session</span><ArrowRight size={14} aria-hidden="true"/><span><b>03</b>Set up your bot</span></div>
    </div>}
   </main>
   {!checkingAccount&&<footer className="wb-plan-footer"><span>iCash X · AI for wholesale real estate.</span><a href="/costs-and-disclosures">Costs &amp; terms</a></footer>}

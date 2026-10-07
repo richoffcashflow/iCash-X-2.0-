@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {verifyWebinarVip} from './test-webinar-vip-db.mjs';
 import {verifyWebinarFollowups} from './test-webinar-followups-db.mjs';
 import {verifyWebinarTimers} from './test-webinar-timers-db.mjs';
 import {verifyWebinarIntelligence} from './test-webinar-intelligence-db.mjs';
@@ -212,6 +213,8 @@ try{
  await verifyWebinarTimers(q,config);
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261007185116_webinar_smart_followups.sql',import.meta.url),'utf8'));
  await verifyWebinarFollowups(q,config);
+ await pg.exec(readFileSync(new URL('../supabase/migrations/20261007203314_webinar_fixed_links_vip.sql',import.meta.url),'utf8'));
+ await verifyWebinarVip(q);
  const grants=(await q("select has_table_privilege('anon','icash_webinar_visitors','select') as read,has_function_privilege('authenticated','icash_webinar_contact(uuid,text,text,text,boolean)','execute') as write")).rows[0];assert.equal(grants.read,false);assert.equal(grants.write,false);
  const rls=await q("select relname,relrowsecurity from pg_class where relname like 'icash_webinar%' and relkind='r'");assert.ok(rls.rows.every(r=>r.relrowsecurity));
  console.log('Webinar database checks passed: sessions, attribution, audience, activity, verified checkout triggers, daily funnel, local midnight, DST, earlier-day buyers, preserved revisions, renewals, test/refund exclusion and RLS.');

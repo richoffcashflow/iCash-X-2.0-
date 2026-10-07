@@ -11,6 +11,7 @@ import {membershipOffer,accountMembership,publicMembership,reconcileMembershipCh
 import {membershipTerms,membershipTermsVersion} from '@/lib/membership-policy';
 import {checkoutCustomerContext} from '@/lib/checkout-customer-context';
 import {checkoutPublishableKey,membershipCheckoutPresentation,checkoutMatchesPresentation} from '@/lib/embedded-checkout-policy';
+import {checkoutVipSession,paidVipDestination} from '@/lib/webinar-vip';
 const headers={'Cache-Control':'private, no-store'};
 export const dynamic='force-dynamic';
 async function owner(create=false){const jar=await cookies();let token=jar.get('icash_funding_guest')?.value;if(create&&!validGuest(token)){token=randomBytes(32).toString('hex');jar.set('icash_funding_guest',token,{httpOnly:true,secure:true,sameSite:'lax',path:'/',maxAge:86400*30});}const user=await currentUser(true);const [account]=user?await db<{id:string}[]>(`icash_accounts?owner_user_id=eq.${user.id}&select=id&limit=1`):[];return {token,user,account,hash:validGuest(token)?guestHash(token):null};}
@@ -20,9 +21,10 @@ export async function GET(req:Request){try{
  const scope=account?`account_id=eq.${account.id}`:hash?`guest_hash=eq.${hash}&account_id=is.null`:null;
  if(scope&&mode){const rows=await db<Membership[]>(`icash_memberships?${scope}&mode=eq.${mode}${sessionId?'&stripe_session_id=eq.'+sessionId:''}&order=created_at.desc&select=*&limit=1`);m=rows[0]??null;if(sessionId&&!m)return NextResponse.json({error:'Sign in with your payment email to open this purchase.'},{status:404,headers});if(m?.stripe_session_id&&(sessionId||m.state==='pending'||!m.paid_through))m=await reconcileMembershipCheckout(m);}
  const customer=await checkoutCustomerContext(hash,user?.email);
- return NextResponse.json({offer,mode,embeddedReady:!!checkoutPublishableKey(mode),customerName:customer.name??'',ready:offer.enabled&&await customerFundingReady(),membership:publicMembership(m),retentionOffer:await membershipRetentionOffer(m),needsClaim:!!m?.paid_through&&!m.account_id,email:m?.paid_through&&!user?m.payer_email:user?.email??customer.email??null},{headers});
+ const postPurchaseUrl=await paidVipDestination(m).catch(()=>null);
+ return NextResponse.json({postPurchaseUrl,offer,mode,embeddedReady:!!checkoutPublishableKey(mode),customerName:customer.name??'',ready:offer.enabled&&await customerFundingReady(),membership:publicMembership(m),retentionOffer:await membershipRetentionOffer(m),needsClaim:!!m?.paid_through&&!m.account_id,email:m?.paid_through&&!user?m.payer_email:user?.email??customer.email??null},{headers});
  }catch{return NextResponse.json({error:'Could not check software access. Please retry.'},{status:503,headers});}}
-const input=z.discriminatedUnion('action',[z.object({action:z.literal('checkout'),accepted:z.literal(true),version:z.literal(membershipTermsVersion),revision:z.number().int().positive(),totalCents:z.number().int().positive(),embedded:z.boolean().optional()}).strict(),z.object({action:z.literal('cancel')}).strict(),z.object({action:z.literal('manage')}).strict(),z.object({action:z.literal('retain'),accepted:z.literal(true),version:z.literal(retentionVersion),priceCents:z.number().int().positive(),months:z.literal(6)}).strict()]);
+const input=z.discriminatedUnion('action',[z.object({action:z.literal('checkout'),accepted:z.literal(true),version:z.literal(membershipTermsVersion),revision:z.number().int().positive(),totalCents:z.number().int().positive(),embedded:z.boolean().optional(),webinarSessionId:z.string().uuid().optional()}).strict(),z.object({action:z.literal('cancel')}).strict(),z.object({action:z.literal('manage')}).strict(),z.object({action:z.literal('retain'),accepted:z.literal(true),version:z.literal(retentionVersion),priceCents:z.number().int().positive(),months:z.literal(6)}).strict()]);
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
  try{
@@ -55,6 +57,7 @@ export async function POST(req:Request){
   else if(prior.price_cents!==offer.priceCents||prior.offer_revision!==offer.revision||prior.consent_version!==membershipTermsVersion)await db(`icash_memberships?id=eq.${prior.id}`,'PATCH',{state:'cancelled'});
  }
  const m=await db<Membership>('rpc/icash_begin_membership','POST',{p_guest:hash,p_account:account?.id??null,p_mode:mode,p_price:offer.priceCents,p_revision:offer.revision,p_terms:membershipTerms(offer.priceCents)});
+ if(!m.post_purchase_webinar_id){const vipId=await checkoutVipSession(i.webinarSessionId);if(vipId)await db(`icash_memberships?id=eq.${m.id}&post_purchase_webinar_id=is.null`,'PATCH',{post_purchase_webinar_id:vipId});}
  const contact=await checkoutCustomerContext(hash,user?.email);
  const customer=contact.name||contact.phone?await stripe.customers.create({...contact,metadata:{icash_membership:m.id}},{idempotencyKey:`membership-customer:${m.id}`}):null;
  const s=await stripe.checkout.sessions.create({mode:'subscription',...(customer?{customer:customer.id}:{customer_email:contact.email}),payment_method_types:['card'],phone_number_collection:{enabled:true},automatic_tax:{enabled:false},line_items:[{price_data:{currency:'usd',unit_amount:m.price_cents,recurring:{interval:'month'},product_data:{name:'iCash X software access',description:'Software membership. Work credits are purchased separately; none are included.'}},quantity:1}],subscription_data:{metadata:{icash_membership:m.id}},metadata:{icash_membership:m.id,icash_terms_version:membershipTermsVersion},custom_text:{submit:{message:membershipTerms(m.price_cents)}},...membershipCheckoutPresentation(embedded,origin)},{idempotencyKey:`membership-checkout:${m.id}`});

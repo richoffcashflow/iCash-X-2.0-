@@ -1,5 +1,5 @@
 import {webinarSite} from './webinar-site.ts';
-import {localHour,isNight,eligibleVariants} from '../packages/webinar-engine/src/index.ts';
+import {localHour,isNight} from '../packages/webinar-engine/src/index.ts';
 import {selectOffer,splitDuration} from '../packages/webinar-engine/src/index.ts';
 export {localHour,isNight,visitorTimezone,sameLocalDay} from '../packages/webinar-engine/src/index.ts';
 import {z} from 'zod';
@@ -22,8 +22,8 @@ export type WebinarOffer=z.infer<typeof webinarOfferSchema>;
 export const audienceDisplaySchema=z.object({mode:z.enum(['actual','fixed','simulated']).default('actual'),fixedCount:z.number().int().min(0).max(100000).default(125),minimum:z.number().int().min(0).max(100000).default(80),maximum:z.number().int().min(0).max(100000).default(160)}).strict().refine(v=>v.minimum<=v.maximum,'The maximum must be at least the minimum.');
 export const purchaseNotificationsSchema=z.object({enabled:z.boolean().default(true),includeRegion:z.boolean().default(true),startAt:z.number().int().min(0).max(14400).nullable().default(null),intervalSeconds:z.number().int().min(15).max(120).default(30)}).strict();
 const webinarBaseSchema=z.object({
- publicCode:z.string().regex(/^\d{6,12}$/).nullable().default(null),id:z.string().uuid(),revision:z.number().int().positive(),title:z.string().trim().min(1).max(150),description:z.string().max(600),
- intelligenceEnabled:z.boolean().default(true),status:z.enum(['draft','published']),audience:z.enum(['all','day','night','returning']),priority:z.number().int().min(0).max(100),
+ publicCode:z.string().regex(/^\d{6,12}$/).nullable().default(null),parentWebinarId:z.string().uuid().nullable().default(null),id:z.string().uuid(),revision:z.number().int().positive(),title:z.string().trim().min(1).max(150),description:z.string().max(600),
+ intelligenceEnabled:z.boolean().default(false),status:z.enum(['draft','published']),audience:z.enum(['all','day','night','returning']),priority:z.number().int().min(0).max(100),
  videoUrl:httpsUrl,posterUrl:httpsUrl,durationSeconds:z.number().int().min(10).max(14400),
  nameAt:z.number().int().min(0).max(14400),contactAt:z.number().int().min(0).max(14400),pitchAt:z.number().int().min(0).max(14400),
  offerTitle:z.string().trim().min(1).max(150),ctaLabel:z.string().trim().min(1).max(60),offerEndsAt:z.string().datetime().nullable(),
@@ -54,18 +54,15 @@ export const webinarSchema=webinarBaseSchema.extend({nightVersion:webinarRecordi
 export type Webinar=z.infer<typeof webinarSchema>;
 export type ChatCue=z.infer<typeof chatCueSchema>;
 export type WatchHistory={webinar_id:string;revision:number;progress_seconds:number;completed_at:string|null;updated_at:string};
-export function newWebinar(id:string):Webinar{return {intelligenceEnabled:true,publicCode:null,nightVersion:null,nightEnabled:false,recordingVersion:'day',id,revision:1,title:`Your ${webinarSite.brandName} session`,description:`A walkthrough with ${webinarSite.hostName}.`,status:'draft',audience:'all',priority:0,videoUrl:'',posterUrl:'',durationSeconds:1800,nameAt:30,contactAt:30,pitchAt:1200,offerTitle:'Put your AI bot to work',ctaLabel:'See my options',offerEndsAt:null,checkoutMode:'membership',redirectAtEnd:true,timers:[],offers:[],endOfferId:null,showAudienceCount:true,audienceDisplay:audienceDisplaySchema.parse({}),purchaseNotifications:purchaseNotificationsSchema.parse({}),chat:[{id:'welcome',at:5,name:webinarSite.brandName,text:'Welcome! Ask a question here while you watch. The AI assistant can help with this session.',kind:'host'}],faq:'iCash X is an AI real estate workspace. Paid activity uses a budget. Results, deals and earnings are not guaranteed. Current prices and terms are shown in checkout.',aiEnabled:true,variationEnabled:false,chatStyle:defaultChatStyle};}
-export function chooseWebinar(webinars:Webinar[],history:WatchHistory[],timezone:string,now=new Date(),routing={nightStartsAt:18,nightEndsAt:6}):Webinar|null{
- const eligible=webinars.filter(w=>w.status==='published'&&w.videoUrl);
- const recent=[...history].sort((a,b)=>b.updated_at.localeCompare(a.updated_at));
- // Resume takes priority over changing the day/night version mid-session.
- for(const h of recent){const w=eligible.find(w=>w.id===h.webinar_id&&w.revision===h.revision);if(w&&!h.completed_at&&h.progress_seconds>0)return w;}
- const night=isNight(timezone,now,routing);
- const seen=new Set(history.filter(h=>h.completed_at).map(h=>h.webinar_id));
- const lastSeen=new Map<string,string>();for(const h of history)if(h.completed_at&&h.updated_at>(lastSeen.get(h.webinar_id)??''))lastSeen.set(h.webinar_id,h.updated_at);
- const options=eligibleVariants(eligible,history,timezone,now,routing);
- return options.sort((a,b)=>Number(seen.has(a.id))-Number(seen.has(b.id))||(seen.has(a.id)&&seen.has(b.id)?(lastSeen.get(a.id)??'').localeCompare(lastSeen.get(b.id)??''):0)||Number(b.audience===(night?'night':'day'))-Number(a.audience===(night?'night':'day'))||b.priority-a.priority||a.id.localeCompare(b.id))[0]??null;
+export function newWebinar(id:string):Webinar{return {intelligenceEnabled:false,parentWebinarId:null,publicCode:null,nightVersion:null,nightEnabled:false,recordingVersion:'day',id,revision:1,title:`Your ${webinarSite.brandName} session`,description:`A walkthrough with ${webinarSite.hostName}.`,status:'draft',audience:'all',priority:0,videoUrl:'',posterUrl:'',durationSeconds:1800,nameAt:30,contactAt:30,pitchAt:1200,offerTitle:'Put your AI bot to work',ctaLabel:'See my options',offerEndsAt:null,checkoutMode:'membership',redirectAtEnd:true,timers:[],offers:[],endOfferId:null,showAudienceCount:true,audienceDisplay:audienceDisplaySchema.parse({}),purchaseNotifications:purchaseNotificationsSchema.parse({}),chat:[{id:'welcome',at:5,name:webinarSite.brandName,text:'Welcome! Ask a question here while you watch. The AI assistant can help with this session.',kind:'host'}],faq:'iCash X is an AI real estate workspace. Paid activity uses a budget. Results, deals and earnings are not guaranteed. Current prices and terms are shown in checkout.',aiEnabled:true,variationEnabled:false,chatStyle:defaultChatStyle};}
+/** Stable default for the legacy /webinar URL. History and ad performance never choose a webinar. */
+export function chooseWebinar(webinars:Webinar[],_history:WatchHistory[]=[],_timezone='UTC',_now=new Date(),_routing={nightStartsAt:18,nightEndsAt:6}):Webinar|null{
+ return [...webinars].filter(w=>!w.parentWebinarId&&w.status==='published'&&w.videoUrl).sort((a,b)=>Number(a.publicCode??Number.MAX_SAFE_INTEGER)-Number(b.publicCode??Number.MAX_SAFE_INTEGER)||a.id.localeCompare(b.id))[0]??null;
 }
+export type WebinarRow={config:Webinar;public_code:number;parent_webinar_id?:string|null};
+export function webinarFromRow(row:WebinarRow):Webinar{return webinarSchema.parse({...row.config,publicCode:String(row.public_code),parentWebinarId:row.parent_webinar_id??null,intelligenceEnabled:false});}
+export function newVipWebinar(id:string,parent:Webinar):Webinar{return {...newWebinar(id),offers:[{id:'workspace',title:'Make it yours',description:'Create your bot and open your workspace.',ctaLabel:'Set up my bot',at:1500,expiresAt:null,action:'link',url:'/join?setup=1'}],title:`${parent.title.slice(0,136)} · VIP`,description:'Your follow-up session.',parentWebinarId:parent.id};}
+
 export function formatWatchTime(seconds:number){const p=splitDuration(seconds);return p.hours?`${p.hours}:${String(p.minutes).padStart(2,'0')}:${String(p.seconds).padStart(2,'0')}`:`${p.minutes}:${String(p.seconds).padStart(2,'0')}`;}
 type OfferConfig=Pick<Webinar,'pitchAt'|'offerTitle'|'ctaLabel'|'offerEndsAt'>&Partial<Pick<Webinar,'offers'|'endOfferId'|'durationSeconds'>>;
 export function webinarOffers(w:OfferConfig):WebinarOffer[]{return w.offers?.length?w.offers:[{id:'primary',title:w.offerTitle,description:'',ctaLabel:w.ctaLabel,at:w.pitchAt,expiresAt:w.offerEndsAt,action:'checkout',url:''}];}
@@ -79,5 +76,5 @@ export type WebinarEvent=typeof eventNames[number];
 export const optimizerSchema=z.object({enabled:z.boolean().default(false),explorationPercent:z.number().int().min(10).max(50).default(20),minVisitors:z.number().int().min(20).max(5000).default(100)}).strict();
 export const metaSchema=z.object({enabled:z.boolean().default(false),pixelId:z.string().regex(/^\d{5,30}$/).or(z.literal('')).default('')}).strict();
 export const routingSchema=z.object({nightStartsAt:z.number().int().min(0).max(23),nightEndsAt:z.number().int().min(0).max(23),checkoutWindowHours:z.number().min(0).max(72).default(8)}).strict().refine(r=>r.nightStartsAt!==r.nightEndsAt,'Day and night need different start times.');
-export const settingsSchema=z.object({enabled:z.boolean(),smsEnabled:z.boolean().default(false),smartFollowups:z.boolean().default(true),fromEmail:z.string().email().or(z.literal('')),postalAddress:z.string().max(500),subjects:z.array(z.string().min(1).max(150)).length(3),messages:z.array(z.string().min(1).max(2000)).length(3),optimizer:optimizerSchema.default({enabled:false,explorationPercent:20,minVisitors:100}),meta:metaSchema.default({enabled:false,pixelId:''}),routing:routingSchema.default({nightStartsAt:18,nightEndsAt:6})}).strict();
+export const settingsSchema=z.object({homepageVipId:z.string().uuid().nullable().default(null),enabled:z.boolean(),smsEnabled:z.boolean().default(false),smartFollowups:z.boolean().default(true),fromEmail:z.string().email().or(z.literal('')),postalAddress:z.string().max(500),subjects:z.array(z.string().min(1).max(150)).length(3),messages:z.array(z.string().min(1).max(2000)).length(3),optimizer:optimizerSchema.default({enabled:false,explorationPercent:20,minVisitors:100}),meta:metaSchema.default({enabled:false,pixelId:''}),routing:routingSchema.default({nightStartsAt:18,nightEndsAt:6})}).strict();
 export type WebinarSettings=z.infer<typeof settingsSchema>;

@@ -5,22 +5,12 @@ import {newWebinar,chooseWebinar,webinarSchema,offerOpen,localHour} from '../lib
 import {signWebinarToken,readWebinarToken} from '../lib/webinar-token.ts';
 import {importWebinarChat} from '../lib/webinar-import.ts';
 const video=(audience='all')=>({...newWebinar(randomUUID()),status:'published',videoUrl:'https://example.com/webinar.mp4',audience});
-test('day and night selection uses visitor timezone and rotates unseen sessions',()=>{
- const day=video('day'),night=video('night'),second=video('night');
- assert.equal(chooseWebinar([day,night],[],'America/Chicago',new Date('2026-10-04T18:00:00Z')).id,day.id);
- assert.equal(chooseWebinar([day,night],[],'America/Chicago',new Date('2026-10-05T01:00:00Z')).id,night.id);
- const seen=[{webinar_id:night.id,revision:1,progress_seconds:1800,completed_at:'2026-10-04',updated_at:'2026-10-04'}];
- assert.equal(chooseWebinar([night,second],seen,'America/Chicago',new Date('2026-10-05T01:00:00Z')).id,second.id);
-});
-test('unfinished video resumes before time-of-day selection',()=>{
- const day=video('day'),night=video('night');assert.equal(chooseWebinar([day,night],[{webinar_id:day.id,revision:1,progress_seconds:250,completed_at:null,updated_at:'2026-10-04'}],'America/Chicago',new Date('2026-10-05T01:00:00Z')).id,day.id);
-});
-test('after every version is seen, the oldest completed version rotates back in',()=>{
- const first=video(),second=video();const history=[{webinar_id:first.id,revision:1,progress_seconds:1800,completed_at:'2026-10-03',updated_at:'2026-10-03'},{webinar_id:second.id,revision:1,progress_seconds:1800,completed_at:'2026-10-04',updated_at:'2026-10-04'}];
- assert.equal(chooseWebinar([first,second],history,'America/Chicago').id,first.id);
-});
-test('drafts and wrong audience are not publicly selected',()=>{
- assert.equal(chooseWebinar([{...video(),status:'draft'},video('returning')],[],'America/Chicago'),null);
+test('the legacy entry is stable, excludes VIP and ignores history, audience and priority',()=>{
+ const first={...video('day'),publicCode:'100001',priority:0},second={...video('night'),publicCode:'100002',priority:100};
+ const vip={...video(),publicCode:'100000',parentWebinarId:first.id};
+ const history=[{webinar_id:first.id,revision:1,progress_seconds:1800,completed_at:'2026-10-03',updated_at:'2026-10-03'}];
+ for(const at of ['2026-10-04T18:00:00Z','2026-10-05T01:00:00Z'])assert.equal(chooseWebinar([vip,second,first],history,'America/Chicago',new Date(at)).id,first.id);
+ assert.equal(chooseWebinar([{...first,status:'draft'},vip]),null);
 });
 test('visitor tokens cannot substitute for login or unsubscribe and expire',()=>{
  const id=randomUUID(),now=1700000000000,key='test-only-secret',token=signWebinarToken(id,'visitor',60,key,now);

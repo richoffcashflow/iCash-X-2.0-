@@ -14,6 +14,13 @@ for(const accessible of [false,true]){
  globalThis.fetch=async()=>Response.json({offer:{revision:1,priceCents:5000},membership:{accessible},ready:false,needsClaim:true,email:'paid@example.invalid',customerName:'Casey'});
  const h=await harness('components/membership-checkout.tsx',{PostPurchaseSetup,StripeEmbeddedCheckout,webinarRequest,webinarBrowserEvent:()=>{},priceLabel:()=>'$50',membershipTermsVersion:'fixture'}),props={onSignedIn:()=>{}};h.render('MembershipCheckout',props);await flush();const tree=h.render('MembershipCheckout',props);assert.equal(!!find(tree,PostPurchaseSetup),accessible,'Only confirmed accessible membership unlocks post-purchase setup');h.close();
 }
+// Both hosted and embedded completions wait for verified access before VIP navigation.
+for(const accessible of [false,true]){
+ let redirects=[];globalThis.window.location={search:'?membership=paid&session_id=cs_live_owned',replace:url=>redirects.push(url)};
+ globalThis.fetch=async()=>Response.json({offer:{revision:1,priceCents:5000},membership:{accessible},postPurchaseUrl:accessible?'/live/123457':null,ready:false});
+ const h=await harness('components/membership-checkout.tsx',{PostPurchaseSetup,StripeEmbeddedCheckout,webinarRequest,webinarBrowserEvent:()=>{},priceLabel:()=>'$50',membershipTermsVersion:'fixture'}),props={onSignedIn:()=>{}};h.render('MembershipCheckout',props);await flush();h.render('MembershipCheckout',props);assert.deepEqual(redirects,accessible?['/live/123457']:[]);h.close();
+}
+globalThis.window.location={search:'?setup=1'};
 let saved={id:'saved-setup',revision:1,stage:0,profile:{...defaultBotProfile,voice:'chris',market:'Austin, TX',marketMode:'city'}},requests=[],opens=0,hold;
 globalThis.fetch=async(_url,options)=>{const body=JSON.parse(options.body);requests.push(body);if(body.action==='save'){await new Promise(resolve=>hold=resolve);saved={...saved,profile:body.profile,revision:saved.revision+1,stage:4};}return Response.json({setup:saved});};
 const h=await harness('components/post-purchase-setup.tsx',{AccountAccess,BotBuilding,saveBotBuild,waitForBotCreationTransition,defaultBotProfile,setupProfileSchema}),props={email:'paid@example.invalid',customerName:'Casey',needsClaim:true,onWorkspace:()=>opens++};
