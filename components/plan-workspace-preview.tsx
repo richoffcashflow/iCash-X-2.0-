@@ -3,9 +3,9 @@ import {useState} from 'react';
 import {ArrowUpRight,Bot,Building2,Check,FileSignature,MessageSquare} from 'lucide-react';
 
 const features=[
- {label:'Research',Icon:Building2,title:'See the opportunity.',description:'Property details, comparable sales and cash offer estimates. Get the context for your next move.',details:['Property research','Cash offer analysis']},
- {label:'Conversations',Icon:MessageSquare,title:'Keep the conversation moving.',description:'Seller calls, texts and follow-ups in one place. Pick up the conversation with the context right there.',details:['Calls & texts','Conversation history']},
- {label:'Deal tools',Icon:FileSignature,title:'Turn a next step into a plan.',description:'Keep contract tools, buyer matching and AI guidance together as you work through a deal.',details:['Contract tools','Buyer matching']},
+ {label:'Research',Icon:Building2,title:'Research, handled by AI.',description:'Your AI researches properties, compares recent sales and prepares cash offer estimates for your wholesale pipeline.',details:['Property research','Cash offer analysis']},
+ {label:'Conversations',Icon:MessageSquare,title:'Keep follow-up on autopilot.',description:'Automate seller calls, texts and follow-ups. Keep each reply and conversation together in your workspace.',details:['Automated outreach','Seller follow-up']},
+ {label:'Deal tools',Icon:FileSignature,title:'Connect your wholesale workflow.',description:'Bring offer preparation, contract workflows and buyer matching into one AI-powered workspace.',details:['Contract preparation','Buyer matching']},
 ];
 
 export function PlanWorkspacePreview(){

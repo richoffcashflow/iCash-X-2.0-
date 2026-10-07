@@ -28,9 +28,9 @@ export function WebinarExpressCheckout({checkingAccount=false,accountError=false
    </section>:<div className="wb-plan-layout" data-engaged={checkoutEngaged}>
     <div className="wb-plan-story">
      <section className="wb-plan-intro">
-      <span className="wb-plan-kicker"><Sparkles size={12} aria-hidden="true"/>YOUR REAL ESTATE ADVANTAGE</span>
-      <h1>Big ambitions.<br/><span>Meet your<br className="wb-plan-title-break"/> AI bot.</span></h1>
-      <p>Research properties. Talk to sellers. Move deals forward. Your next chapter starts with a smarter workspace.</p>
+      <span className="wb-plan-kicker"><Sparkles size={12} aria-hidden="true"/>AI FOR WHOLESALE REAL ESTATE</span>
+      <h1>Wholesale<br/>real estate.<br/><span>Automated.</span></h1>
+      <p>Automate your wholesale workflow with AI—from property research and seller outreach to follow-ups, offer preparation, contracts and buyer matching.</p>
       <a className="wb-plan-jump" href="#your-plan">Make your next move<ArrowRight size={16} aria-hidden="true"/></a>
      </section>
      <PlanWorkspacePreview/>
@@ -42,7 +42,7 @@ export function WebinarExpressCheckout({checkingAccount=false,accountError=false
     <div className="wb-plan-onboarding" aria-label="Getting started"><span><b>01</b>Get access</span><ArrowRight size={14} aria-hidden="true"/><span><b>02</b>Name your bot</span><ArrowRight size={14} aria-hidden="true"/><span><b>03</b>Make it yours</span></div>
    </div>}
   </main>
-  {!checkingAccount&&<footer className="wb-plan-footer"><span>iCash X · Built for your next move.</span><a href="/costs-and-disclosures">Costs &amp; terms</a></footer>}
+  {!checkingAccount&&<footer className="wb-plan-footer"><span>iCash X · AI for wholesale real estate.</span><a href="/costs-and-disclosures">Costs &amp; terms</a></footer>}
   {signInOpen&&<FundingDialog title="Welcome back" onClose={()=>setSignInOpen(false)}><AccountAccess ready={signInReady} onSignedIn={openWorkspace}/></FundingDialog>}
  </div>;
 }
