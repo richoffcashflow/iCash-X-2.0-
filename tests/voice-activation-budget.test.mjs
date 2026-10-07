@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {VoiceActivationBudgetError,voiceReservationFailure} from '../lib/voice-budget-failure.ts';
+const body={code:'P0001',message:'Activation spending cap reached'};
+for(const path of ['rpc/icash_reserve_paced_voice','rpc/icash_reserve_flexible_voice'])assert(await voiceReservationFailure(path,400,Response.json(body)) instanceof VoiceActivationBudgetError);
+for(const [path,status,b] of [['rpc/other',400,body],['rpc/icash_reserve_paced_voice',500,body],['rpc/icash_reserve_paced_voice',400,{...body,code:'XX000'}],['rpc/icash_reserve_paced_voice',400,{...body,message:'Provider outcome unknown'}]])assert(!(await voiceReservationFailure(path,status,Response.json(b)) instanceof VoiceActivationBudgetError));
+assert(!(await voiceReservationFailure('rpc/icash_reserve_paced_voice',400,new Response('invalid')) instanceof VoiceActivationBudgetError));
+const source=readFileSync(new URL('../lib/live-dispatch-service.ts',import.meta.url),'utf8');
+assert(source.indexOf('instanceof VoiceActivationBudgetError')>source.indexOf('rpc/icash_reserve_paced_voice'));
+assert(source.indexOf('rpc/icash_hold_voice_activation_budget')<source.indexOf("const claimed="));
+assert(source.includes("if(!held)throw error"));
+assert(source.indexOf("return {status:'activation_budget_held'}")<source.indexOf('recordingServer().dispatch'));
+console.log('PASS: exact atomic reservation error only; other errors remain uncertain; budget hold precedes provider claim and dial.');

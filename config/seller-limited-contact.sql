@@ -62,9 +62,7 @@ begin
  -- eligibility remains bounded by wallet AND rolling daily usage.
  for a in select candidate.* from (select ac.id,least(w.balance_cents-w.reserved_cents,ac.daily_limit_cents-w.reserved_cents-coalesce((select sum(-delta_cents) from public.icash_credit_ledger where account_id=ac.id and kind='usage' and created_at>now()-interval '24 hours'),0)) capacity
  from public.icash_accounts ac join public.icash_wallets w on w.account_id=ac.id
- join public.icash_bot_setups bs on bs.account_id=ac.id
  where not exists(select 1 from public.icash_outbound_property_owners o where o.property_id=l.property->>'id' and o.account_id<>ac.id) and public.icash_credit_acquisition_allowed(ac.id) and not ac.bot_paused and not exists(select 1 from public.icash_seller_matches m where m.lead_id=l.id and m.account_id=ac.id)
- and (bs.profile->>'marketMode'='nationwide' or lower(trim(bs.profile->>'market')) in (city_name,city_name||', '||lower(state_code),l.property->>'zip'))
  and not exists(select 1 from public.icash_billing_reviews where account_id=ac.id and resolved_at is null)
  ) candidate where capacity>=charge
  -- Larger available budgets receive more opportunities; a square-root weight

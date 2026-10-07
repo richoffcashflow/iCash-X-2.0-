@@ -1,3 +1,4 @@
+import {voiceReservationFailure} from './voice-budget-failure.ts';
 import Stripe from "stripe";
 import { createHash } from "node:crypto";
 export type TestOrder = { id:string; guest_hash:string; pack_code:string; price_cents:number; credit_cents:number; stripe_session_id:string|null; state:string };
@@ -13,7 +14,7 @@ export function guestHash(token:string) { return createHash("sha256").update(tok
 export async function db<T>(path:string,method="GET",body?:unknown,signal?:AbortSignal):Promise<T> {
  if(!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) throw new Error("Database not configured");
  const response=await fetch(`${process.env.SUPABASE_URL}/rest/v1/${path}`,{method,headers:{apikey:process.env.SUPABASE_SECRET_KEY,Authorization:`Bearer ${process.env.SUPABASE_SECRET_KEY}`,"Content-Type":"application/json",Prefer:"return=representation"},body:body===undefined?undefined:JSON.stringify(body),cache:"no-store",signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000)});
- if(!response.ok) throw new Error("Database request failed");
+ if(!response.ok) throw await voiceReservationFailure(path,response.status,response);
  const payload=await response.text();
  return (payload?JSON.parse(payload):null) as T;
 }

@@ -13,6 +13,7 @@ import {fillEmptyTerms} from '@/lib/contract-preparation';
 import {dealCardSummary} from '@/lib/deal-card-summary';
 import {workMilestone} from '@/lib/work-milestone';
 import {CallConversation} from '@/components/call-conversation';
+import {SmsRouteReviewCard,type SmsRouteReview} from '@/components/sms-route-review';
 import {PropertyMessages} from '@/components/property-messages';
 import {FulfillmentDetails} from '@/components/fulfillment-details';
 import {SigningControls,SigningAttention,type SigningEnvelope} from '@/components/signing-controls';
@@ -24,7 +25,7 @@ type Handoff={address?:string|null;id:string;screening_id:string;party:string;re
 type Conversation={id:string;screening_id:string;party:string;summary?:string;completed_at?:string;durationSeconds?:number;nextAction?:string;interested?:boolean;optedOut?:boolean;humanRequested?:boolean};
 type TextAttention={address?:string|null;id:string;message_id:string;screening_id:string;deal_id:string;kind:string;party:string;quote:string;timezone:string};
 type PurchasedLookup={screening_id:string;created_at?:string|null;fetchedAt?:string|null;source?:string;ownershipVerified?:false;outreachAuthorized?:false;contacts?:{name:string|null;phones:{number:string|null;type:string|null;doNotCall:boolean|null}[]}[]};
-type Work={propertyAttentionIds?:string[];textAttention?:TextAttention[];callRequests?:{address?:string|null;id:string;screening_id:string;requested_at:string;state:string}[];signatureActions:{id:string;kind:string;test_mode:boolean;screening_id?:string|null;address?:string|null}[];signing:SigningEnvelope[];signingConfigured:boolean;handoffs:Handoff[];conversations:Conversation[];callbacks:{id:string;screening_id:string;due_at:string;timezone:string;state:string}[];properties:Property[];deals:Deal[];contacts:PurchasedLookup[];hasMore:boolean;controls:{property_id:string}[];attentionHasMore?:boolean;searchSupported?:boolean;retainedIds?:string[]};
+type Work={smsRouteReviews?:SmsRouteReview[];propertyAttentionIds?:string[];textAttention?:TextAttention[];callRequests?:{address?:string|null;id:string;screening_id:string;requested_at:string;state:string}[];signatureActions:{id:string;kind:string;test_mode:boolean;screening_id?:string|null;address?:string|null}[];signing:SigningEnvelope[];signingConfigured:boolean;handoffs:Handoff[];conversations:Conversation[];callbacks:{id:string;screening_id:string;due_at:string;timezone:string;state:string}[];properties:Property[];deals:Deal[];contacts:PurchasedLookup[];hasMore:boolean;controls:{property_id:string}[];attentionHasMore?:boolean;searchSupported?:boolean;retainedIds?:string[]};
 function milestone(property:Property,work:Work){
  const deal=work.deals.find(d=>d.screening_id===property.id);
  const signatures=work.signing.filter(e=>e.deal_id===deal?.id&&!e.test_mode);
@@ -155,6 +156,7 @@ function WorkspaceAttention({work,page,onPage,onOpen,onRefresh}:{work:Work;page:
  const [handled,setHandled]=useState<string[]>([]),[expanded,setExpanded]=useState(false);
  function done(id:string){setHandled(v=>[...v,id]);onPage(0);onRefresh();}
  const requests=[
+  ...(work.smsRouteReviews??[]).map(a=>({id:'routing:'+a.message_id+':'+a.revision,propertyId:'',address:a.recipient,priority:0,title:'Identify the property before replying',node:<SmsRouteReviewCard item={a} onOpen={onOpen} onHandled={()=>done('routing:'+a.message_id+':'+a.revision)}/>})),
   ...(work.textAttention??[]).map(a=>({id:'text:'+a.id+':'+a.message_id,propertyId:a.screening_id,address:a.address,priority:a.kind==='withdrawal'?0:a.kind==='human'?2:3,title:a.kind==='withdrawal'?'Review a change of plans':a.kind==='callback'?'Confirm a callback':'Review a message',node:<TextAttentionCard item={a} onHandled={()=>done('text:'+a.id+':'+a.message_id)}/>})),
   ...work.signatureActions.map(e=>({id:'sign:'+e.id,propertyId:e.screening_id??'',address:e.address,priority:1,title:'Review & sign an agreement',node:<SigningAttention envelope={e}/>})),
   ...work.handoffs.filter(h=>h.state==='open').map(h=>({id:'human:'+h.id,propertyId:h.screening_id,address:h.address,priority:2,title:'A person was requested',node:<HandoffCard handoff={h} onHandled={()=>done('human:'+h.id)}/>})),
@@ -165,7 +167,7 @@ function WorkspaceAttention({work,page,onPage,onOpen,onRefresh}:{work:Work;page:
  {requests.length>0&&<div className="attention-list">{requests.slice(0,expanded?requests.length:3).map((r,index)=><details className="attention-item" key={r.id}><summary><strong>{r.title}</strong><span className="attention-address">{r.address??work.properties.find(p=>p.id===r.propertyId)?.result.property.address??(r.propertyId?'Property conversation':'Contract request')}</span></summary>{r.node}{r.propertyId&&<button className="attention-open" onClick={()=>onOpen(r.propertyId)}>Open property & conversations</button>}</details>)}</div>}
  {requests.length>3&&<button className="attention-more" aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)}>{expanded?'Show fewer requests':`Show ${requests.length-3} more on this page`}</button>}
  {(page>0||work.attentionHasMore)&&<nav className="live-pages" aria-label="Request pages"><button disabled={page===0} onClick={()=>{setExpanded(false);onPage(page-1);}}>Previous requests</button><span>Page {page+1}</span><button disabled={!work.attentionHasMore} onClick={()=>{setExpanded(false);onPage(page+1);}}>More requests</button></nav>}
- {requests.length>0&&<small>Marking a request seen does not restart the bot.</small>}</section>;
+ {requests.length>0&&<small>Property handoffs stay paused. SMS routing reviews release only the number’s routing hold.</small>}</section>;
 }
 function TextAttentionCard({item,onHandled}:{item:TextAttention;onHandled:()=>void}){
  const [busy,setBusy]=useState(false),[error,setError]=useState('');

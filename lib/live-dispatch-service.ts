@@ -1,3 +1,4 @@
+import {VoiceActivationBudgetError} from './voice-budget-failure.ts';
 import {limitedSellerPrompt} from './seller-limited-contact.ts';
 import {selectedCustomCallVoice} from './custom-voice.ts';
 import {runScreeningJob} from './screening-job.ts';
@@ -93,9 +94,19 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const reserveHold=recordingReleaseHold();if(reserveHold)return hold(reserveHold);
  const reservationInput={p_account:accountId,p_job:j.id,p_rate:rateId,p_permission_until:p.permission_until,p_financial_checked_at:eligible?.ready?new Date(eligible.screening.financialCheck.checkedAt).toISOString():null,p_financial_eligible:eligible?.ready&&eligible.screening.financialCheck.status==='eligible'};
  // Activate only after the matching database migration is installed. Never retry an ambiguous reservation through another path.
- const fundedCall=process.env.ICASH_FLEXIBLE_VOICE_READY==='true'
+ let fundedCall:{maxSeconds:number}|null;
+ try{
+ fundedCall=process.env.ICASH_FLEXIBLE_VOICE_READY==='true'
   ?await db<{maxSeconds:number}|null>('rpc/icash_reserve_flexible_voice','POST',reservationInput)
   :await db<boolean>('rpc/icash_reserve_paced_voice','POST',reservationInput)?{maxSeconds:600}:null;
+ }catch(error){
+  if(!(error instanceof VoiceActivationBudgetError))throw error;
+  // No automatic retry: this is a configured spending boundary, not provider uncertainty.
+  // The database refuses this transition if ANY reservation or provider attempt exists.
+  const held=await db<boolean>('rpc/icash_hold_voice_activation_budget','POST',{p_account:accountId,p_job:j.id});
+  if(!held)throw error;
+  return {status:'activation_budget_held'};
+ }
  if(!fundedCall)return {status:'waiting_for_daytime_budget'};
  const claimHold=recordingReleaseHold();if(claimHold)return hold(claimHold);
  const claimed=p.party==='seller'

@@ -17,6 +17,7 @@ let paths=[],authorized=true,sellerFixtures=[];
 const paginate=(rows,q)=>rows.slice(Number(q.get('offset')??0),Number(q.get('offset')??0)+Number(q.get('limit')??rows.length));
 const mocks={z,NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
  paths.push({path,method,body});
+ if(path==='rpc/icash_sms_route_review_items'){assert.equal(body.p_account,account);assert.equal(body.p_limit,7);return queue.slice(body.p_offset,body.p_offset+body.p_limit).map((q,i)=>({message_id:q.id,recipient:'+12145550123',body:'Which property?',revision:7,needs_review:true,candidates:[]}));}
  if(path==='rpc/icash_prioritized_work'){assert.equal(body.p_account,account);return properties.slice(body.p_page*6,body.p_page*6+7);}
  const [table,params]=path.split('?');const q=new URLSearchParams(params);
  assert.equal(q.get(table==='icash_seller_intakes'?'assigned_account':'account_id'),`eq.${account}`,'Every read is tenant scoped');
@@ -52,6 +53,7 @@ source='const {'+Object.keys(mocks).join(',')+'}=globalThis.__activityRoute;\n'+
 const {GET}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const get=query=>GET(new Request('https://www.geticashx.com/api/work/activity'+query));
 let r=await get('');assert.equal(r.status,200);assert.equal(r.body.properties.length,6);assert.equal(r.body.hasMore,true);assert.equal(r.body.textAttention.length,6);assert.deepEqual(r.body.propertyAttentionIds,[uuid(1)]);assert.equal(r.body.attentionHasMore,true);assert.equal(r.body.textAttention[0].address,'10 Main Street');assert.equal(r.body.signatureActions[0].screening_id,uuid(10));assert.equal(r.body.signatureActions[0].address,'10 Main Street');
+assert.equal(r.body.smsRouteReviews.length,6);assert.equal(r.body.smsRouteReviews[0].needs_review,true);
 assert.equal(r.headers['Cache-Control'],'private, no-store');
 assert.deepEqual(r.body.contacts,[{screening_id:uuid(1),created_at:'2026-10-01T01:02:03.000Z',fetchedAt:'2026-10-01T01:01:02.000Z',source:'DealMachine',ownershipVerified:false,outreachAuthorized:false,
  contacts:[{name:'Synthetic Person',phones:[{number:'+12025550101',type:'Mobile',doNotCall:true},{number:'+12025550102',type:'Landline',doNotCall:false},{number:'+12025550103',type:null,doNotCall:null},{number:'+12025550104',type:null,doNotCall:null},{number:null,type:null,doNotCall:null}]},{name:null,phones:[]},{name:null,phones:[]}]}]);
