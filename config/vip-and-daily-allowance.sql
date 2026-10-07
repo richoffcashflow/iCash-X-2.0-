@@ -203,12 +203,10 @@ begin
  evidence:=coalesce(l.customer_cost_basis,'ESTIMATE: recorded property research and operating allocations; advertising tracked separately; '||l.lookup_cost_basis);
  select count(*) into match_count from public.icash_seller_matches where lead_id=l.id;
  -- Weighted distribution at the same recorded cost-based price;
- -- eligibility remains bounded by wallet AND rolling daily usage.
+ -- Preserve deployed any-market allocation; wallet and daily allowance still apply.
  for a in select candidate.* from (select ac.id,(public.icash_daily_allowance(ac.id)->>'remainingCents')::bigint capacity
  from public.icash_accounts ac join public.icash_wallets w on w.account_id=ac.id
- join public.icash_bot_setups bs on bs.account_id=ac.id
  where not exists(select 1 from public.icash_outbound_property_owners o where o.property_id=l.property->>'id' and o.account_id<>ac.id) and public.icash_credit_acquisition_allowed(ac.id) and not ac.bot_paused and not exists(select 1 from public.icash_seller_matches m where m.lead_id=l.id and m.account_id=ac.id)
- and (bs.profile->>'marketMode'='nationwide' or lower(trim(bs.profile->>'market')) in (city_name,city_name||', '||lower(state_code),l.property->>'zip'))
  and not exists(select 1 from public.icash_billing_reviews where account_id=ac.id and resolved_at is null)
  ) candidate where capacity>=case when public.icash_vip_active(candidate.id) then ceil(charge*0.8) else charge end
  -- Larger available budgets receive more opportunities; a square-root weight
