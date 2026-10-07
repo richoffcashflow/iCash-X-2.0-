@@ -45,3 +45,11 @@ assert.equal(returningSellerName({threadId:'t',messages:[msg('Hi','outgoing'),ms
 assert(!safeInboundPropertyContext({status:'matched',address:'45 Oak Road',returningName:'Owner'}).returningName);
 
 assert(sellerFirstMessage({...context,principal:'Jamie Smith',buyerKind:'individual'}).includes('the AI assistant for Jamie Smith.'));
+
+for(const question of ['AI for Fixture Homes. Do you own 45 Oak Road? Reply STOP to opt out.','AI for Fixture Homes. Is 45 Oak Road your property? Reply STOP to opt out.']){
+ const variant={threadId:'bound-thread',messages:[msg(question,'outgoing'),msg('Yes.')]};
+ assert(ownershipAlreadyConfirmed(variant,'45 Oak Road'));
+ assert(!ownershipAlreadyConfirmed(variant,'46 Oak Road'));
+ assert(sellerFirstMessage({...context,history:variant}).includes('good time to talk about 45 Oak Road'));
+ assert(!ownershipAlreadyConfirmed({...variant,messages:[...variant.messages,msg('Wrong property.')]},'45 Oak Road'));
+}

@@ -6,15 +6,16 @@ import {analyzeText,safeTextReplies} from '../lib/text-ai-policy.ts';
 import {propertyQuestionAllowed} from '../lib/text-property-policy.ts';
 
 // Run the actual service with local database/provider fakes. No emails, SMS or paid AI calls.
-let party='seller',incoming='The house needs a roof.',action='ask_price',records=[],packages=0,dispatches=0,modelCalls=0,buyerReplyAllowed=false;
+let party='seller',incoming='The house needs a roof.',action='ask_price',records=[],packages=0,dispatches=0,modelCalls=0,buyerReplyAllowed=false,sellerConversation=false,sellerReplyAllowed=true;
 const db=async(path,method,body)=>{
  records.push({path,method,body});
- if(path==='rpc/icash_claim_text_ai')return {model:'fixture',context:{stage:'draft'},messages:[{direction:'incoming',body:incoming}]};
+ if(path==='rpc/icash_claim_text_ai')return {model:'fixture',context:{stage:'draft',sellerConversation},messages:[{direction:'incoming',body:incoming}]};
  if(path.startsWith('icash_text_ai_jobs')&&method!=='PATCH')return [{thread_id:'thread'}];
  if(path.startsWith('icash_text_threads'))return party?[{deal_id:'deal',party}]:[];
  if(path.startsWith('icash_customer_identities'))return [{principal:'Fixture company'}];
  if(path==='rpc/icash_text_property_context')return null;
  if(path==='rpc/icash_save_text_ai'||method==='PATCH')return null;
+ if(path==='rpc/icash_queue_seller_conversation_reply'){assert.deepEqual(Object.keys(body).sort(),['p_account','p_job']);return sellerReplyAllowed?'seller-conversation-message':null;}
  if(path==='rpc/icash_queue_ai_reply')return 'outgoing';
  if(path==='rpc/icash_queue_buyer_factual_reply'){assert.deepEqual(Object.keys(body).sort(),['p_account','p_job']);return buyerReplyAllowed?'server-factual-message':null;}
  throw Error('Unexpected database call '+path);
@@ -72,6 +73,24 @@ try{
  reset();party='seller';incoming='Yes, I would consider selling.';action='ask_condition';
  assert.equal((await processTextAi('account','job')).status,'message_accepted');
  assert.equal(dispatches,1);
+
+ sellerConversation=true;
+ for(const [message,nextAction] of [['Who is this?','reply_identity'],['Can you call me?','ask_callback_details'],['How does this work?','explain_process'],['Can I send pictures?','ask_photos']]){
+  reset();incoming=message;action=nextAction;
+  assert.equal((await processTextAi('account','job')).status,'message_accepted');
+  assert.equal(dispatches,1);
+  assert(records.some(r=>r.path==='rpc/icash_queue_seller_conversation_reply'));
+  assert(!records.some(r=>r.path==='rpc/icash_queue_ai_reply'),'New lane cannot fall back to old sender');
+ }
+ for(const message of ['Stop texting me.','I want a real person.']){
+  reset();incoming=message;action='reply_identity';
+  await processTextAi('account','job');assert.equal(dispatches,0);
+  assert(!records.some(r=>r.path==='rpc/icash_queue_seller_conversation_reply'));
+ }
+ reset();incoming='How does this work?';action='explain_process';sellerReplyAllowed=false;
+ assert.equal((await processTextAi('account','job')).status,'text_ai_drafted');
+ assert.equal(dispatches,0);assert(!records.some(r=>r.path==='rpc/icash_queue_ai_reply'),'A blocked new lane never bypasses the DB through a legacy queue');
+ sellerConversation=false;
 
  for(const missingOrOther of ['', 'title']){
   reset();party=missingOrOther;
