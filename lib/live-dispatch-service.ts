@@ -7,7 +7,7 @@ import {boundedVoiceSmsContext} from './voice-sms-context.ts';
 import {db} from '@/lib/stripe-test';
 import {elevenRequest} from '@/lib/elevenlabs';
 import {buyerCallInstructions,type BuyerCallContext} from './buyer-call-policy.ts';
-import {contactEligibility,callEligibility,verifiedOfferCeiling,type VoicePermission} from './live-dispatch-policy.ts';
+import {contactEligibility,callEligibility,type VoicePermission} from './live-dispatch-policy.ts';
 import {sellerFirstMessage,sellerCallPrompt,type SellerRequestContext} from './seller-call-context.ts';
 type Job={id:string;account_id:string;permission_id:string|null;operational_contact_id?:string|null;callback_id:string|null;state:string};
 type Config={approved_voice_ids:string[];enabled:boolean;agent_id:string;phone_number_id:string;agent_config_hash:string;reviewed_until:string;seller_rate_id:string;buyer_rate_id:string|null;max_duration_seconds:number;required_tool_ids:string[]};
@@ -70,8 +70,9 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const [rate]=await db<{operation:string;enabled:boolean;expires_at:string;voice_max_duration_seconds:number|null;charge_cents?:number;version?:string}[]>(`icash_operation_rates?id=eq.${rateId}&select=operation,enabled,expires_at,voice_max_duration_seconds,charge_cents,version`);
  if(!rate?.enabled||rate.operation!==(p.party==='buyer'?'buyer_call':'seller_call')||!(Date.parse(rate.expires_at)>Date.now())||!rate.voice_max_duration_seconds||rate.voice_max_duration_seconds<c.max_duration_seconds)return hold('full_call_cost_quote_required');
  if(!sameBusinessNumber(businessNumber,recordedReview.fromPhone)||rate.charge_cents!==recordingPolicy.minimumHoldCents||!rate.version?.startsWith(recordingPolicy.version+':'))return hold('recorded_call_review_required');
- const [authority]=await db<{max_offer_cents:number;expires_at:string;review_request_id:string|null}[]>(`icash_offer_authorities?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&select=max_offer_cents,expires_at,review_request_id`);
- const ceiling=verifiedOfferCeiling(eligible?.ready?eligible.screening.preliminarySellerCeilingCents:null,authority);
+ // The displayed formula result is the actual seller offer, under standing operator policy.
+ const cashOfferPrice=eligible?.ready?eligible.screening.cashOfferPriceCents:null;
+ const ceiling=cashOfferPrice;
  const smsContext=p.party==='seller'?boundedVoiceSmsContext(await db<unknown>('rpc/icash_voice_sms_context','POST',{p_account:accountId,p_permission:p.id})):null;
  const priorCalls=p.party==='seller'?await db<unknown>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&contact_key=eq.${p.contact_key}&party=eq.seller&state=eq.complete&operation_key=like.voice:*&completed_at=gte.${encodeURIComponent(new Date(Date.now()-30*86400000).toISOString())}&order=completed_at.desc&limit=3&select=completed_at,result`):[];
  const buyerKind=identity.company_name?.trim()?'company' as const:'individual' as const;
@@ -80,12 +81,15 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext,request:request??undefined};
  // Validate the complete opening/context before reserving credits or dialing.
  let sellerGreeting:string|undefined,sellerPrompt:string|undefined;
- if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext,true);sellerPrompt=sellerCallPrompt(sellerContext,ceiling,closing,!!recordedReview.contractToolId);}catch{return hold('property_context_required');}}
+ if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext,true);sellerPrompt=sellerCallPrompt(sellerContext,ceiling,closing,!!recordedReview.contractToolId,cashOfferPrice);}catch{return hold('property_context_required');}}
  const operationKey=`voice:${j.id}`;
  const reserveHold=recordingReleaseHold();if(reserveHold)return hold(reserveHold);
  if(!await db<boolean>('rpc/icash_reserve_paced_voice','POST',{p_account:accountId,p_job:j.id,p_rate:rateId,p_permission_until:p.permission_until,p_financial_checked_at:eligible?.ready?new Date(eligible.screening.financialCheck.checkedAt).toISOString():null,p_financial_eligible:eligible?.ready&&eligible.screening.financialCheck.status==='eligible'}))return {status:'waiting_for_daytime_budget'};
  const claimHold=recordingReleaseHold();if(claimHold)return hold(claimHold);
- if(!await db<boolean>('rpc/icash_claim_reviewed_voice_job','POST',{p_job:j.id,p_offer_snapshot:ceiling===null?null:authority,p_buyer_snapshot:buyerContext}))return hold('dispatch_permission_changed');
+ const claimed=p.party==='seller'
+  ?await db<boolean>('rpc/icash_claim_automatic_offer_voice_job','POST',{p_job:j.id,p_snapshot:snapshot.snapshot,p_offer_price_cents:cashOfferPrice})
+  :await db<boolean>('rpc/icash_claim_reviewed_voice_job','POST',{p_job:j.id,p_offer_snapshot:null,p_buyer_snapshot:buyerContext});
+ if(!claimed)return hold('dispatch_permission_changed');
  ownsDispatch=true;
  const strategy=parseInt(createHash('sha256').update(`${accountId}:${p.contact_key}`).digest('hex').slice(0,8),16)%2===0?'cash_interest':'flexible_timing';
  try{

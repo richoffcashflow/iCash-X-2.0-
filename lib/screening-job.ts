@@ -1,7 +1,7 @@
 import {propertyContext} from './property-context.ts';
 import {sellerCallFinancialGate} from './equity-screen.ts';
 import {cashOfferPolicy} from './cash-offer-math.ts';
-/** Pure processing of a server-owned licensed snapshot; never fetches data or authorizes outreach. */
+/** Recalculate the operator-selected cash offer from a fresh server-owned snapshot. Never authorizes outreach, signing or title clearance. */
 export function runScreeningJob(snapshot: unknown, now=Date.now()) {
  const s=snapshot as {propertyId?:string;fetchedAt?:string;propertyType?:string;raw?:unknown;assignmentFeeCents?:number;sellerCostReserveCents?:number};
  if(!s||typeof s.propertyId!=='string'||typeof s.fetchedAt!=='string'||!Number.isFinite(now))throw new Error('INVALID_SNAPSHOT');
@@ -18,7 +18,7 @@ export function runScreeningJob(snapshot: unknown, now=Date.now()) {
   :sellerCallFinancialGate(property.financialScreening,{sellerOfferCents,sellerCostReserveCents:reserve??null,checkedAt:now});
  return {property,financialCheck,preliminarySellerCeilingCents:sellerOfferCents,calculationVersion:cashOfferPolicy.version,calculatedAt:new Date(now).toISOString(),
   nextAction:financialCheck.status==='eligible'?'permission_and_cost_check':'review',
-  offerAuthorized:false,outreachAuthorized:false};
+  cashOfferPriceCents:financialCheck.status==='eligible'?sellerOfferCents:null,offerAuthorized:financialCheck.status==='eligible'&&sellerOfferCents!==null,outreachAuthorized:false};
 }
 
 /** Recalculate arithmetic from an old snapshot without making its research fresh. */
@@ -28,5 +28,5 @@ export function recalculateSavedScreening(snapshot:unknown,previous:unknown,now=
  if(!old?.property||old.property.propertyId!==s?.propertyId||!Number.isFinite(fetched)||fetched>now)throw Error('INVALID_SNAPSHOT');
  const fresh=runScreeningJob(snapshot,fetched);
  return {...fresh,calculatedAt:new Date(now).toISOString(),calculationHistory:[...(Array.isArray(old.calculationHistory)?old.calculationHistory.slice(-9):[]),{version:old.calculationVersion??'legacy_range_v0',sellerCeilingCents:old.preliminarySellerCeilingCents??null,replacedAt:new Date(now).toISOString()}],
-  financialCheck:{status:'hold' as const,checkedAt:fetched,reason:'Saved numbers recalculated. Current property research is required before automated contact.'},nextAction:'review',offerAuthorized:false as const,outreachAuthorized:false as const};
+  financialCheck:{status:'hold' as const,checkedAt:fetched,reason:'Saved numbers recalculated. Current property research is required before automated contact.'},nextAction:'review',cashOfferPriceCents:null,offerAuthorized:false as const,outreachAuthorized:false as const};
 }

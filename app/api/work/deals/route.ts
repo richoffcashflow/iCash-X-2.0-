@@ -1,3 +1,4 @@
+import {runScreeningJob} from '@/lib/screening-job';
 import {NextResponse} from 'next/server';
 import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
@@ -15,8 +16,9 @@ export async function POST(req:Request){
   const [identity]=await db<{principal:string}[]>(`icash_customer_identities?account_id=eq.${accountId}&select=principal`);
   if(!identity?.principal)return NextResponse.json({error:'Save your company or personal name in Account details first.'},{status:409});
   terms.buyer=identity.principal;
-  const [screening]=await db<{result:{property:{legalDescription?:string|null}}}[]>(`icash_screening_jobs?id=eq.${screeningId}&account_id=eq.${accountId}&select=result`);
+  const [screening]=await db<{snapshot:unknown;result:{property:{legalDescription?:string|null}}}[]>(`icash_screening_jobs?id=eq.${screeningId}&account_id=eq.${accountId}&select=result,snapshot`);
   if(!screening)throw new Error();
+  if(terms.priceCents===null&&terms.priceSource==='proposed')try{terms.priceCents=runScreeningJob(screening.snapshot).cashOfferPriceCents;}catch{/* Do not invent a price from stale or missing inputs. */}
   if(!terms.legalDescription&&screening.result.property.legalDescription)terms.legalDescription=screening.result.property.legalDescription;
   const id=await db<string>('rpc/icash_prepare_deal','POST',{p_account:accountId,p_screening:screeningId,p_terms:terms});
   return NextResponse.json({id,terms,stage:'draft'});

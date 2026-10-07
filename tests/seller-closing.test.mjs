@@ -23,3 +23,5 @@ assert.equal((await route.POST(request({conversationId:'conv_fixture',agreedPric
 assert.equal((await route.POST(request({conversationId:'conv_fixture',agreedPriceCents:4000000,phone:'+12025550199'}))).status,409);assert.equal(sends,0);
 assert.equal((await route.POST(request({conversationId:'conv_fixture',agreedPriceCents:4000000}))).status,200);assert.equal(sends,1);
 console.log('PASS closing context: approved exact-price agreement, seller-bound recipient, no ceiling-as-offer, stale terms and mismatched delivery rejected. Synthetic provider only.');
+
+const automatic=sellerCallPrompt({address:'Fixture address',principal:'Fixture buyer',assistantName:'Robin',history:null},3893700,null,true,3893700);assert(automatic.includes('SERVER CASH OFFER PRICE'));assert(automatic.includes('\"priceCents\":3893700'));assert(automatic.includes('no separate manual price approval'));assert.throws(()=>sellerCallPrompt({address:'Fixture',principal:'Buyer',assistantName:'Robin',history:null},3893700,null,true,3893800));

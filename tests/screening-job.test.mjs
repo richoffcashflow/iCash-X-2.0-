@@ -29,3 +29,5 @@ for(const repairs of [null,undefined,'40000',-1]){
  assert.equal(job.offerAuthorized,false);
 }
 assert.equal(runScreeningJob({...scalarSnapshot,raw:{data:{...scalarSnapshot.raw.data,estimated_repair_cost:0}}},now).preliminarySellerCeilingCents,13000000);
+
+assert.equal(runScreeningJob(snapshot,now).cashOfferPriceCents,10200000);assert.equal(runScreeningJob(snapshot,now).offerAuthorized,true);assert.equal(runScreeningJob({...snapshot,propertyType:'land'},now).cashOfferPriceCents,null);

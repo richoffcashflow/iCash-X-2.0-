@@ -23,3 +23,8 @@ assert.equal(item({...base,smsPermissionCurrent:true},'sms_contact_permission').
 assert.equal(item({...base,smsPermissionCurrent:true},'contact_permission').status,'blocked','SMS does not assert voice permission');
 assert.equal(item({...base,permissions:[permission]},'sms_contact_permission').status,'blocked','Voice does not assert SMS permission');
 assert.equal(item({...base,smsPermissionCurrent:false},'sms_contact_permission').status,'blocked');
+
+assert.equal(item({...base,automaticOffer:{priceCents:3893700,fetchedAt:new Date(now).toISOString()}},'offer_authority').status,'recorded');
+assert.match(item({...base,automaticOffer:{priceCents:3893700,fetchedAt:new Date(now).toISOString()}},'offer_authority').detail,/without a separate price approval/);
+assert.equal(item({...base,automaticOffer:null,offer:{max_offer_cents:100000,expires_at:future}},'offer_authority').status,'review_required');
+assert.equal(item({...base,automaticOffer:{priceCents:3893700,fetchedAt:new Date(now-86400001).toISOString()}},'offer_authority').status,'review_required');

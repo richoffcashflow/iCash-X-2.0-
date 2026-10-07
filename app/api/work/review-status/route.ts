@@ -1,3 +1,4 @@
+import {runScreeningJob} from '@/lib/screening-job';
 import {readContractCoverage} from '@/lib/contract-coverage-service';
 import {contractCapability} from '@/lib/contract-coverage';
 import {NextResponse} from 'next/server';
@@ -10,14 +11,13 @@ export async function GET(req:Request){
  const headers={'Cache-Control':'private, no-store'};
  try{
  const {accountId}=await workAccount(),screeningId=z.string().uuid().parse(new URL(req.url).searchParams.get('screeningId'));
- const [screening]=await db<{id:string}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=eq.${screeningId}&state=eq.complete&select=id`);
+ const [screening]=await db<{id:string;snapshot:unknown}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=eq.${screeningId}&state=eq.complete&select=id,snapshot`);
  if(!screening)return NextResponse.json({error:'Property not found.'},{status:404,headers});
- const [identities,accounts,wallets,permissions,offers,deals]=await Promise.all([
+ const [identities,accounts,wallets,permissions,deals]=await Promise.all([
  db<{principal:string}[]>(`icash_customer_identities?account_id=eq.${accountId}&select=principal`),
  db<{bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=bot_paused`),
  db<{balance_cents:number;reserved_cents:number}[]>(`icash_wallets?account_id=eq.${accountId}&select=balance_cents,reserved_cents`),
  db<{id:string;eligibility_source?:string;phone:string;contact_key:string;permission_until:string;dnc_checked_at:string;dnc_clear:boolean;revoked_at:string|null}[]>(`icash_voice_contact_targets?account_id=eq.${accountId}&screening_id=eq.${screeningId}&party=eq.seller&select=id,eligibility_source,phone,contact_key,permission_until,dnc_checked_at,dnc_clear,revoked_at&order=permission_until.desc&limit=100`),
- db<{max_offer_cents:number;expires_at:string}[]>(`icash_offer_authorities?account_id=eq.${accountId}&screening_id=eq.${screeningId}&select=max_offer_cents,expires_at`),
  db<{id:string;terms:{priceCents?:number;assignmentFeeCents?:number;state?:string}}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${screeningId}&select=id,terms`)
  ]);
  // Server-side operational status is a read/check only; it does not grant consent or queue work.
@@ -41,8 +41,10 @@ export async function GET(req:Request){
   const results=await Promise.all(smsThreads.slice(offset,offset+10).map(t=>db<boolean>('rpc/icash_sms_thread_review_current','POST',{p_account:accountId,p_thread:t.id,p_check_hour:false})));
   smsPermissionCurrent=results.some(value=>value===true);
  }
+ let automaticOffer:{priceCents:number;fetchedAt:string}|null=null;
+ try{const calculated=runScreeningJob(screening.snapshot);if(calculated.cashOfferPriceCents!==null)automaticOffer={priceCents:calculated.cashOfferPriceCents,fetchedAt:calculated.property.fetchedAt};}catch{/* Missing or stale research is shown explicitly. */}
  const authority=marketing[0],wallet=wallets[0];
- const items=authorityReviewStatus({identity:!!identities[0]?.principal,availableCents:wallet?wallet.balance_cents-wallet.reserved_cents:0,paused:accounts[0]?.bot_paused!==false,smsPermissionCurrent,permissions:permissions.map(p=>({...p,suppressed:(p.eligibility_source==='operational_checks_only'&&!operationalCurrent.get(p.id))||textSuppression.some(s=>s.phone===p.phone)||voiceSuppression.some(s=>s.contact_key===p.contact_key)})),offer:offers[0]??null,purchaseSigned:purchases.length>0,marketing:authority?{expires_at:authority.expires_at,purchaseMatches:purchases.some(p=>p.id===authority.purchase_envelope_id),priceMatches:Number.isSafeInteger(deal.terms.priceCents)&&Number.isSafeInteger(deal.terms.assignmentFeeCents)&&authority.asking_price_cents===deal.terms.priceCents!+deal.terms.assignmentFeeCents!}:null,now:Date.now()});
+ const items=authorityReviewStatus({identity:!!identities[0]?.principal,availableCents:wallet?wallet.balance_cents-wallet.reserved_cents:0,paused:accounts[0]?.bot_paused!==false,smsPermissionCurrent,permissions:permissions.map(p=>({...p,suppressed:(p.eligibility_source==='operational_checks_only'&&!operationalCurrent.get(p.id))||textSuppression.some(s=>s.phone===p.phone)||voiceSuppression.some(s=>s.contact_key===p.contact_key)})),offer:null,automaticOffer,purchaseSigned:purchases.length>0,marketing:authority?{expires_at:authority.expires_at,purchaseMatches:purchases.some(p=>p.id===authority.purchase_envelope_id),priceMatches:Number.isSafeInteger(deal.terms.priceCents)&&Number.isSafeInteger(deal.terms.assignmentFeeCents)&&authority.asking_price_cents===deal.terms.priceCents!+deal.terms.assignmentFeeCents!}:null,now:Date.now()});
  const contractCoverage=await readContractCoverage();
  const capability=contractCapability(contractCoverage,deal?.terms.state??null,1);
  items.push({key:'contract_templates',title:'Contract templates',status:capability.supported?'recorded':'review_required',detail:capability.reason+' This check covers one required counterparty signer; additional owners need a template with enough signer fields.',action:capability.supported?'none':'operator_review'});
