@@ -10,7 +10,7 @@ export const incomingReadinessTargets=Object.freeze({
  stopToolId:'tool_8601m416c9jzfkp8qydb54q5vhkh',
  profiles:Object.freeze([
   Object.freeze({profile:'owner_quick_test',seconds:60,branchId:'agtbrch_1801m4161ppwfb0t33mcqmfztx8w',expectedVersionId:'agtvrsn_6401m416mha4fg8bbmzkdaw34avs'}),
-  Object.freeze({profile:'normal',seconds:600,branchId:'agtbrch_9101m416pfheeb284rmpy0c91xak',expectedVersionId:'agtvrsn_4701m416rcp0fzprqzkvkvg1v2ww'}),
+  Object.freeze({profile:'normal',seconds:600,branchId:'agtbrch_9101m416pfheeb284rmpy0c91xak',expectedVersionId:'agtvrsn_5701m4a44yjyfcwag147msj8z2f0'}),
  ]),
 });
 export type IncomingBranchReadiness={profile:string;maxDurationSeconds:number;branchId:string;expectedVersionId:string;observedVersionId:string|null;observedConfigHash:string|null;draftExists:boolean|null;livePercentage:number|null;providerChecksPass:boolean;inlineTools:ReceptionInlineToolEvidence|null;checks:Record<string,boolean>};
