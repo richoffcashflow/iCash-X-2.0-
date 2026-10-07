@@ -13,7 +13,7 @@ import {snapshotChat} from '@/lib/webinar-variants';
 import {approximateRegion} from '@/lib/webinar-activity';
 import {returnVisit} from '@/lib/webinar-optimizer';
 import {adIdentity,intelligencePlan,intelligenceChoice,intelligenceBucket,intelligencePolicyVersion} from '@/packages/webinar-engine/src/intelligence';
-import {intelligenceContext,intelligenceCandidates,intelligencePoolKey,readIntelligenceData,type IntelligenceAssignment} from '@/lib/webinar-intelligence';
+import {intelligenceContext,intelligenceCandidates,intelligencePoolKey,readIntelligenceData,saveIntelligenceStops,type IntelligenceAssignment} from '@/lib/webinar-intelligence';
 import {webinarBody,webinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarOwner,webinarVisitor,type WebinarSession} from '@/lib/webinar-server';
 export const dynamic='force-dynamic';
 export async function POST(req:Request){try{
@@ -52,14 +52,17 @@ export async function POST(req:Request){try{
   const adKey=adIdentity(Object.keys(attribution).length?attribution:visitor.attribution);
   const {recordings,arms}=intelligenceCandidates(rows.map(r=>r.config),history,timezone,now,settings.routing);
   if(arms.length){
-   let failed=false;
-   const data=arms.length>1?await readIntelligenceData(context,adKey).catch(()=>{failed=true;return {rows:[]};}):{rows:[]};
-   const plan=intelligencePlan(arms,data.rows,adKey,settings.optimizer);
+   const data=await readIntelligenceData(context,adKey),failed=!data.metricsAvailable;
+   const plan=intelligencePlan(arms,data.rows,adKey,settings.optimizer,data.stops);
+   const active=arms.filter(a=>!plan.stoppedKeys.includes(a.key));
+   // Persist before starting another session; a failed write can be retried safely.
+   await saveIntelligenceStops(context,plan.newStops);
    const choice=intelligenceChoice(arms,plan,intelligenceBucket(visitor.id),Math.random(),settings.optimizer);
+   if(!choice)return Response.json({redirect:webinarSite.checkoutPath},{headers:webinarHeaders});
    if(choice){
-    const selected=failed?(arms.find(a=>a.key===plan.baselineKey)??arms[0]):choice.arm;
+    const selected=failed?(active.find(a=>a.key===plan.winnerKey)??active.find(a=>a.key===plan.baselineKey)??active[0]):choice.arm;
     webinar=recordings.find(w=>w.id===selected.webinarId)!;
-    assignment={ad_key:adKey,context_key:context,pool_key:intelligencePoolKey(arms),baseline_key:plan.baselineKey!,mode:failed?'fallback':choice.mode,probability:failed?1:choice.probability,policy_version:intelligencePolicyVersion};
+    assignment={ad_key:adKey,context_key:context,pool_key:intelligencePoolKey(active),baseline_key:plan.baselineKey!,mode:failed?'fallback':choice.mode,probability:failed?1:choice.probability,policy_version:intelligencePolicyVersion};
    }
   }
  }

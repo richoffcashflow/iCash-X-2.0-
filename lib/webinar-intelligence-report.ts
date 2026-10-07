@@ -1,6 +1,6 @@
 import type {IntelligenceMetric,IntelligencePlan} from '../packages/webinar-engine/src/intelligence.ts';
 export type WebinarIntelligenceReport={
- context:string;ad:string;generatedAt:string;enabled:boolean;plan:IntelligencePlan;
+ context:string;ad:string;generatedAt:string;enabled:boolean;metricsAvailable:boolean;plan:IntelligencePlan;
  arms:{key:string;webinarId:string;revision:number;version:'day'|'night';title:string}[];
  rows:IntelligenceMetric[];ads:{ad_key:string;visitors:number}[];
  comparison:null|{holdout_visitors:number;holdout_buyers:number;holdout_value_cents:number;adaptive_visitors:number;adaptive_buyers:number;adaptive_value_cents:number};
