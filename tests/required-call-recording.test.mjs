@@ -102,3 +102,12 @@ console.log('PASS withdrawal partial success returns503 and leaves durable end-c
 reset();const racingProvider={...provider,start:async()=>{calls.push({provider:'start'});row.state='recording';row.recording_sid=re;row.provider_started_at=iso;row.audio_expires_at=new Date(now+30*86400000).toISOString();return {sid:re,account_sid:ac,call_sid:ca,status:'in-progress',start_time:iso};}};
 const raced=await recordingService(env,{db,provider:racingProvider,now:()=>now}).consent(request());assert((await raced.text()).includes('<Connect>'));assert.equal(calls.filter(x=>x.provider==='register').length,1);
 console.log('PASS identical authenticated start-callback race is adopted without duplicate recording/registration');
+// Terminal lifecycle evidence does not depend on a price or settle/reopen spending.
+reset();row.state='failed';let gateWrites=[];
+const terminalCall={sid:ca,account_sid:ac,from:row.from_phone,to:row.to_phone,direction:'outbound-api',date_created:iso,status:'completed',duration:'12',price:null,price_unit:'USD'};
+const terminalDb=async(path,method,body)=>{gateWrites.push({path,body});return true;};
+assert.equal((await settleRecordingGateOnly(terminalDb,{getCall:async()=>terminalCall},row,now)).reason,'terminal_carrier_receipt_required');
+assert.equal(gateWrites.length,1);assert.equal(gateWrites[0].path,'rpc/icash_note_recorded_gate_terminal');assert(!('price' in gateWrites[0].body.p_receipt));
+gateWrites=[];await settleRecordingGateOnly(terminalDb,{getCall:async()=>({...terminalCall,to:'+12125550999'})},row,now);assert.equal(gateWrites.length,0);
+await settleRecordingGateOnly(terminalDb,{getCall:async()=>({...terminalCall,status:'in-progress'})},row,now);assert.equal(gateWrites.length,0);
+console.log('PASS ended gate-only calls save bound terminal status while unknown prices remain held; mismatched and active calls cannot complete.');
