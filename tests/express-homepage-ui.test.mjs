@@ -9,11 +9,11 @@ const source=ts.transpileModule(readFileSync(new URL('../components/webinar-expr
 const all=node=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(all):[node,...all(node.props?.children)];
 const text=node=>typeof node==='string'?node:Array.isArray(node)?node.map(text).join(' '):node&&typeof node==='object'?text(node.props?.children):'';
 function harness(props={}){
- let open=false;
+ const state=[];let cursor=0;
  const module={exports:{}};
- const mocks={react:{useState:()=>[open,next=>{open=next;}]},'next/image':{__esModule:true,default:'Image'},'@/components/account-access':{AccountAccess:'AccountAccess'},'@/components/funding-dialog':{FundingDialog:'FundingDialog'},'@/components/membership-checkout':{MembershipCheckout:'MembershipCheckout'},'@/lib/webinar-site':{webinarSite:{workspacePath:'/',supportPath:'/support'}}};
+ const mocks={react:{useState:initial=>{const index=cursor++;if(!(index in state))state[index]=initial;return [state[index],next=>{state[index]=next;}];}},'next/image':{__esModule:true,default:'Image'},'@/components/account-access':{AccountAccess:'AccountAccess'},'@/components/funding-dialog':{FundingDialog:'FundingDialog'},'@/components/membership-checkout':{MembershipCheckout:'MembershipCheckout'},'@/components/plan-workspace-preview':{PlanWorkspacePreview:'PlanWorkspacePreview'},'@/lib/webinar-site':{webinarSite:{workspacePath:'/',supportPath:'/support'}}};
  new Function('require','module','exports',source)(name=>name.endsWith('.css')?{}:mocks[name]??require(name),module,module.exports);
- return ()=>module.exports.WebinarExpressCheckout(props);
+ return ()=>{cursor=0;return module.exports.WebinarExpressCheckout(props);};
 }
 const find=(tree,type)=>all(tree).find(node=>node.type===type);
 
@@ -23,6 +23,7 @@ test('checkout header exposes the existing brand and sign-in dialog without repl
  assert.equal(find(tree,'Image').props.alt,'iCash X');
  assert.equal(all(tree).find(node=>node.props?.['aria-label']==='iCash X home').props.href,'/');
  assert.equal(find(tree,'MembershipCheckout').props.embedded,true);
+ assert.equal(find(tree,'MembershipCheckout').props.presentation,'plan');
  assert.equal(find(tree,'AccountAccess'),undefined);
  const signIn=all(tree).find(node=>node.type==='button'&&text(node)==='Sign in');
  assert.equal(signIn.props['aria-haspopup'],'dialog');signIn.props.onClick();tree=render();
@@ -59,4 +60,14 @@ test('homepage account loading and retry never mount the purchase form premature
 
 test('email sign-in availability follows the account service',()=>{
  const render=harness({signInReady:false});find(render(),'button').props.onClick();assert.equal(find(render(),'AccountAccess').props.ready,false);
+});
+
+test('engaged checkout keeps the same component position while simplifying its surrounding layout',()=>{
+ const render=harness();let tree=render();
+ const lineage=(node,type,path=[])=>!node||typeof node!=='object'?null:Array.isArray(node)?node.map((child,index)=>lineage(child,type,[...path,index])).find(Boolean):node.type===type?path:lineage(node.props?.children,type,[...path,node.type]);
+ const before=lineage(tree,'MembershipCheckout');
+ find(tree,'MembershipCheckout').props.onEngaged();tree=render();
+ assert.deepEqual(lineage(tree,'MembershipCheckout'),before,'payment form must not remount when checkout begins');
+ assert.equal(all(tree).find(node=>node.props?.className==='wb-plan-layout').props['data-engaged'],true);
+ assert.equal(find(tree,'FundingDialog'),undefined,'engagement does not open sign-in');
 });
