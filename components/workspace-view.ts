@@ -30,7 +30,7 @@ export function messageSpeaker(direction:string,party?:string) {
 }
 export function safeLocalTime(value:string,timezone?:string) {
  const date=new Date(value);if(!Number.isFinite(date.getTime()))return 'Time unavailable';
- try{return date.toLocaleString(undefined,timezone?{timeZone:timezone}:undefined);}catch{return date.toLocaleString();}
+ try{return date.toLocaleString('en-US',{hour12:true,...(timezone?{timeZone:timezone}:{})});}catch{return date.toLocaleString('en-US',{hour12:true});}
 }
 
 /** Split only recorded address text; never infer missing city/state or rewrite proper names. */

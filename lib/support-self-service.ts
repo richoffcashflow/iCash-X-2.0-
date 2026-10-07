@@ -26,4 +26,4 @@ export function supportNextStep(e:SupportEvidence):SupportNextStep|null{
   default:return null;
  }
 }
-export function supportCheckTime(value:string){const date=new Date(value);return Number.isFinite(date.getTime())?date.toLocaleString():'Time unavailable';}
+export function supportCheckTime(value:string){const date=new Date(value);return Number.isFinite(date.getTime())?date.toLocaleString('en-US',{hour12:true}):'Time unavailable';}

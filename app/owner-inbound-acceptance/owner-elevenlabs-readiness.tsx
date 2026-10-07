@@ -83,7 +83,7 @@ export default function OwnerElevenLabsReadinessPanel(){
   <p role="status">{busy?'Reading settings…':data?`Settings ${statusLabel(data.status)}. This read does not verify audio.`:'Settings have not been checked.'}</p>
   {message&&<p role="alert">{message}</p>}
   {data&&<>
-   <p>Provider region: US · Checked {new Date(data.checkedAt).toLocaleString()}</p>
+   <p>Provider region: US · Checked {new Date(data.checkedAt).toLocaleString('en-US',{hour12:true})}</p>
    <h3>Default incoming webhook authentication</h3>
    <dl>
     <dt>Default agent settings</dt><dd>{statusLabel(data.incomingDefault.status)}</dd>

@@ -1,0 +1,7 @@
+.date-time-input{display:grid;gap:6px;min-width:0;font-size:inherit}
+.date-time-input-label{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px}
+.date-time-input-label small{font-weight:400;color:#666}
+.date-time-input-fields{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}
+.date-time-input-fields>input[type=date]{flex:1 1 160px;min-width:0;width:100%;min-height:44px}
+.date-time-input-clock{display:flex;align-items:center;gap:6px;flex:1 1 210px;min-width:0}
+.date-time-input-clock select{flex:1 1 0;min-width:0;width:100%;min-height:44px}

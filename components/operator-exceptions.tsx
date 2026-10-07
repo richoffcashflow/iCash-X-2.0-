@@ -28,7 +28,7 @@ export function OperatorExceptions(){
    {error&&<p className="support-error" role="alert">{error} No current health result is available.</p>}
    {result&&!result.enabled&&<p className="support-notice">Operations checks have not been enabled for this deployment.</p>}
    {snapshot&&<>
-    <p className="support-intro">Checked {new Date(snapshot.observedAt).toLocaleString()}. Each category shows up to 20 recorded items, oldest first. These are bounded checks, not an all-clear for the platform. No work is retried, funds released or messages sent here.</p>
+    <p className="support-intro">Checked {new Date(snapshot.observedAt).toLocaleString('en-US',{hour12:true})}. Each category shows up to 20 recorded items, oldest first. These are bounded checks, not an all-clear for the platform. No work is retried, funds released or messages sent here.</p>
     {snapshot.partial&&<p className="support-error" role="alert">Some checks were unavailable. Missing results do not mean those operations are healthy.</p>}
     <div className="operator-exception-sections">{snapshot.sections.map(section=><section key={section.source} aria-labelledby={'exception-'+section.source}>
      <h3 id={'exception-'+section.source}>{section.label} <small>{section.items.length} shown</small></h3>
@@ -36,7 +36,7 @@ export function OperatorExceptions(){
      {section.status==='checked'&&!section.items.length&&<p className="support-intro">No matching records in this checked page.</p>}
      <ul className="operator-exception-list">{section.items.map(item=><li key={item.key} data-priority={item.priority}>
       <strong>{item.title}</strong><p>{item.detail}</p><p className="operator-next-step">{item.nextStep}</p>
-      <details><summary>Recorded evidence</summary><dl><dt>Account</dt><dd>{item.accountId}</dd><dt>Source record</dt><dd>{item.recordId}</dd><dt>Recorded state</dt><dd>{item.state}</dd><dt>Recorded time</dt><dd>{new Date(item.recordedAt).toLocaleString()}</dd>{item.dueDate&&<><dt>Confirmed date</dt><dd>{item.dueDate} · America/Chicago</dd></>}</dl></details>
+      <details><summary>Recorded evidence</summary><dl><dt>Account</dt><dd>{item.accountId}</dd><dt>Source record</dt><dd>{item.recordId}</dd><dt>Recorded state</dt><dd>{item.state}</dd><dt>Recorded time</dt><dd>{new Date(item.recordedAt).toLocaleString('en-US',{hour12:true})}</dd>{item.dueDate&&<><dt>Confirmed date</dt><dd>{item.dueDate} · America/Chicago</dd></>}</dl></details>
      </li>)}</ul>
      {section.hasMore&&section.page<exceptionMaxPage&&<button disabled={busy} onClick={()=>changePage(section.page+1,section.source)}>Next {section.label.toLowerCase()} records</button>}
      {section.hasMore&&section.page>=exceptionMaxPage&&<p className="support-notice">The bounded page limit has been reached. Additional matching records may remain; use a separately authorized backend investigation for a complete export.</p>}

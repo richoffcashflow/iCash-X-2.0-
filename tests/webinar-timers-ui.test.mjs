@@ -12,7 +12,7 @@ async function component(file, deps) {
   const source = ts.transpileModule(readFileSync(new URL('../components/' + file, import.meta.url), 'utf8'), {compilerOptions: {module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX}}).outputText.replace(/^import .* from .*;$/gm, '');
   return import('data:text/javascript;base64,' + Buffer.from('const {' + Object.keys(globalThis[key]).join(',') + '}=globalThis.' + key + ';\n' + source).toString('base64'));
 }
-const {WebinarTimersEditor} = await component('webinar-timers-editor.tsx', {Clock: 'clock', Plus: 'plus', Trash2: 'trash', WebinarTimeInput: 'time-input', formatWatchTime, webinarPitchAt, newWebinarTimer});
+const {WebinarTimersEditor} = await component('webinar-timers-editor.tsx', {Clock: 'clock', Plus: 'plus', Trash2: 'trash', WebinarTimeInput: 'time-input', DateTimeInput: 'date-time-input', formatWatchTime, webinarPitchAt, newWebinarTimer});
 let webinar = newWebinar('00000000-0000-4000-8000-000000000123');
 const render = () => WebinarTimersEditor({webinar, onChange: patch => webinar = {...webinar, ...patch}});
 let tree = render();
@@ -26,7 +26,7 @@ assert.equal(webinar.timers[0].label, 'Next step in');
 tree = render();
 all(tree).find(node => node.type === 'select' && node.props.value === 'duration').props.onChange({target: {value: 'deadline'}});
 tree = render();
-const date = all(tree).find(node => node.type === 'input' && node.props.type === 'datetime-local');
+const date = all(tree).find(node => node.type === 'date-time-input');
 date.props.onChange({target: {value: '2026-11-01T10:30'}});
 assert.equal(Date.parse(webinar.timers[0].endsAt), new Date('2026-11-01T10:30').getTime());
 date.props.onChange({target: {value: ''}}); assert.equal(webinar.timers[0].endsAt, null);

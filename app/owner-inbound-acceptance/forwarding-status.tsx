@@ -34,9 +34,9 @@ export default function ForwardingStatus(){
    <dt>API change status</dt><dd>{result.providerStatus==='active'?'Active (API state)':'Queued; change is pending'}</dd>
    <dt>Destination</dt><dd>{result.destination??'None'}</dd>
    <dt>Expected Twilio destination</dt><dd>{result.expectedDestination}</dd>
-   {result.estimatedCompletion!==null&&<><dt>Estimated completion</dt><dd>{new Date(result.estimatedCompletion).toLocaleString()}</dd></>}
+   {result.estimatedCompletion!==null&&<><dt>Estimated completion</dt><dd>{new Date(result.estimatedCompletion).toLocaleString('en-US',{hour12:true})}</dd></>}
    <dt>API-reported route</dt><dd>{result.routeConfigured?'API reports active forwarding to the expected destination':'API does not confirm active forwarding to the expected destination'}</dd>
-   <dt>Checked</dt><dd>{new Date(result.checkedAt).toLocaleString()}</dd>
+   <dt>Checked</dt><dd>{new Date(result.checkedAt).toLocaleString('en-US',{hour12:true})}</dd>
   </dl>}
   <p>This forwarding check does not verify an end-to-end call or forwarding charges. See the private audio test result below for call verification.</p>
  </section>;

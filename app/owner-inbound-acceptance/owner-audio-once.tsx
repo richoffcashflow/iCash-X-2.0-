@@ -30,7 +30,7 @@ export default function OwnerAudioOnce(){
   {status?.incomingDiagnostics&&<details><summary>Read-only incoming Main diagnostics</summary><ul>{Object.entries(status.incomingDiagnostics).map(([key,value])=><li key={key}>{key}: {value??'unknown'}</li>)}</ul></details>}
   {status?.canArm&&!attempted&&<><label><input type="checkbox" checked={consent} disabled={busy} onChange={e=>setConsent(e.target.checked)}/> I approve this one owner-initiated test with the duration and provider-fee disclosures above</label><p><button disabled={busy||!consent} onClick={()=>void run('arm')}>Arm one test for five minutes</button></p></>}
   {code&&<p>Private test code: <strong>{code}</strong></p>}
-  {status?.expiresAt&&<p>Call window ends {new Date(status.expiresAt).toLocaleString()}</p>}
+  {status?.expiresAt&&<p>Call window ends {new Date(status.expiresAt).toLocaleString('en-US',{hour12:true})}</p>}
   {status?.canCancel&&<button disabled={busy} onClick={()=>void run('cancel')}>Cancel unused test</button>}
   {status?.canReconcile&&<button disabled={busy} onClick={()=>void run('reconcile')}>Check completed audio result</button>}
   {status?.result&&<p>Audio result: {status.result.status}. Dashboard code: {status.result.challenge}. Forwarding evidence: {status.result.forwarding}. {typeof status.result.durationSeconds==='number'?`Conversation: ${status.result.durationSeconds} seconds.`:''}</p>}
