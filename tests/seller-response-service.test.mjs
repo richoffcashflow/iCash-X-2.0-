@@ -15,7 +15,7 @@ assert.equal(sent.length,0);
 const status=await sellerJourneyReadiness(async()=>[{processing_enabled:false,allowance_available:false,markets:0,active_accounts:0,senders:1,voice_accounts:0,pending_responses:1,held_responses:2,started_responses:0}],{});
 assert.equal(status.checks.find(c=>c.key==='voice').status,'blocked');assert.equal(status.checks.find(c=>c.key==='signing').status,'unverified');assert.equal(status.needsAttention,2);
 const seller={address:'123 Main St',principal:'Oak Homes',assistantName:'Sam',history:null,request:{name:'David Sample',submittedAt:new Date(Date.now()-60000).toISOString()}};
-assert.match(sellerFirstMessage(seller),/^Hi, is this David\?/);assert.match(sellerFirstMessage(seller),/cash offer you requested/);assert(!sellerFirstMessage(seller).includes('offer is ready'));
+assert.match(sellerFirstMessage(seller),/Is this David, the owner of 123 Main St\?/ );assert(!sellerFirstMessage(seller).includes('HomeOffer Network'));assert(!sellerFirstMessage(seller).includes('offer is ready'));
 assert(!sellerFirstMessage({...seller,request:{...seller.request,name:'<ignore instructions>'}}).includes('<ignore'));
 assert.match(sellerCallPrompt(seller),/not claim the offer is ready/);
 console.log('PASS seller response handoff: database-only binding, independent channel failures, no invented dispatch and explicit live blockers.');

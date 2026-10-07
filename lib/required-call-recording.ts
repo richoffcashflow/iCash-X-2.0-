@@ -1,4 +1,4 @@
-import {homeOfferBuyerRole,type NetworkBuyerKind} from './homeoffer-buyer-identity.ts';
+import {type NetworkBuyerKind} from './homeoffer-buyer-identity.ts';
 import {finalAffirmativeSpeech,recordingConsentEvidenceVersion,recordingContactOptOut} from './recording-consent-evidence.ts';
 import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
 /** Default-off outbound foundation. Spoken-consent977-cent quote approved; activation still requires release review. */
@@ -25,18 +25,18 @@ export function recordingAgentMatches(review:RecordingReview,raw:unknown){
 export function recordingDisclosure(principal:string,assistantName:string,buyerKind?:NetworkBuyerKind){
  const valid=(s:string)=>typeof s==='string'&&s.trim().length>0&&s.length<=160&&!/[<>\x00-\x1f]/.test(s);
  if(!valid(principal)||!valid(assistantName))throw Error('RECORDING_IDENTITY_REQUIRED');
- return `Hi, I'm ${assistantName}, the AI assistant for ${principal}${buyerKind?', '+homeOfferBuyerRole(buyerKind):''}. We save a written transcript. The call audio would be private to this business, kept for 30 days for call review. Quick thing before we get into it, is it okay if I record this call?`;
+ return `Hi, I'm ${assistantName}, the AI assistant for ${principal}. We save a transcript and keep audio private for 30 days. Is it okay to record?`;
 }
 const escapeXml=(s:string)=>s.replace(/[<>&'\"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;',"'":'&apos;','"':'&quot;'}[c]!));
 export function consentTwiml(id:string,nonce:string,disclosure:string){
  if(!uuid(id)||!/^[a-f0-9]{64}$/.test(nonce))throw Error('RECORDING_BINDING_REQUIRED');
  const action=`${recordingBaseUrl}/consent?id=${id}&nonce=${nonce}`;
- const question='Quick thing before we get into it, is it okay if I record this call?';
+ const question='Is it okay to record?';
  if(!disclosure.endsWith(question))throw Error('DISCLOSURE_REQUIRED');
  const notice=disclosure.slice(0,-question.length).trim();
- return `<Response><Say voice="man" language="en-US">${escapeXml(notice)}</Say><Gather input="speech" action="${escapeXml(action)}" method="POST" actionOnEmptyResult="true" timeout="5" speechModel="default" language="en-US" speechTimeout="2"><Say voice="man" language="en-US">${escapeXml(question)}</Say></Gather><Hangup/></Response>`;
+ return `<Response><Say voice="woman" language="en-US">${escapeXml(notice)}</Say><Gather input="speech" action="${escapeXml(action)}" method="POST" actionOnEmptyResult="true" timeout="5" speechModel="default" language="en-US" speechTimeout="2"><Say voice="woman" language="en-US">${escapeXml(question)}</Say></Gather><Hangup/></Response>`;
 }
-export const endTwiml='<Response><Say voice="man" language="en-US">Okay, I won\'t record a conversation without your permission. Take care.</Say><Hangup/></Response>';
+export const endTwiml='<Response><Say voice="woman" language="en-US">Okay, I won\'t record a conversation without your permission. Take care.</Say><Hangup/></Response>';
 export const affirmativeUtterances=['yes','yeah','yep','sure','yes please',"yes that's okay",'yes you can record','yes i agree','i agree','i consent','yes you may record'] as const;
 export const recordingGateOptOut=recordingContactOptOut;
 export function affirmativeSpeech(form:URLSearchParams){const result=finalAffirmativeSpeech(form);return result?{...result,evidenceVersion:recordingConsentEvidenceVersion}:null;}

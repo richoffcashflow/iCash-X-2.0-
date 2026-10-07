@@ -78,7 +78,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext,request:request??undefined};
  // Validate the complete opening/context before reserving credits or dialing.
  let sellerGreeting:string|undefined,sellerPrompt:string|undefined;
- if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext);sellerPrompt=sellerCallPrompt(sellerContext,ceiling);}catch{return hold('property_context_required');}}
+ if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext,true);sellerPrompt=sellerCallPrompt(sellerContext,ceiling);}catch{return hold('property_context_required');}}
  const operationKey=`voice:${j.id}`;
  const reserveHold=recordingReleaseHold();if(reserveHold)return hold(reserveHold);
  if(!await db<boolean>('rpc/icash_reserve_paced_voice','POST',{p_account:accountId,p_job:j.id,p_rate:rateId,p_permission_until:p.permission_until,p_financial_checked_at:eligible?.ready?new Date(eligible.screening.financialCheck.checkedAt).toISOString():null,p_financial_eligible:eligible?.ready&&eligible.screening.financialCheck.status==='eligible'}))return {status:'waiting_for_daytime_budget'};

@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useState,useRef} from 'react';
 import {Phone,Copy,ExternalLink} from 'lucide-react';
-type Data={contacts:{phone:string;name?:string;available:boolean;reason:string}[];reason?:string};
+type Data={attempts?:{id:string;createdAt:string;status:string;costPending:boolean}[];contacts:{phone:string;name?:string;available:boolean;reason:string}[];reason?:string};
 export function displayContactPhone(phone:string){return phone.replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3');}
 export function ManualCallOptions({screeningId,onTakeover}:{screeningId:string;onTakeover?:()=>void}){
  const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[refresh,setRefresh]=useState(0),[checked,setChecked]=useState(0),[busy,setBusy]=useState(false);
@@ -33,6 +33,7 @@ export function ManualCallOptions({screeningId,onTakeover}:{screeningId:string;o
    <div className="seller-contact-identity"><span className="seller-contact-avatar">{(c.name||'S').slice(0,1).toUpperCase()}</span><div><strong>{c.name||'Saved contact'}</strong><span>{displayContactPhone(c.phone)}</span></div></div>
    <div className="seller-contact-actions"><button type="button" className="contact-primary" disabled={busy} onClick={()=>void call(c.phone)}><ExternalLink size={16}/>{busy?'Opening…':'Open phone app'}</button><button type="button" className="contact-secondary" onClick={()=>void copy(c.phone)}><Copy size={16}/>Copy number</button></div>
   </div>)}
-  {!!data?.contacts.some(c=>!c.available)&&<details className="contact-unavailable"><summary>Unavailable numbers</summary>{data.contacts.filter(c=>!c.available).map(c=><div className="seller-contact-card" key={c.phone}><strong>{c.name||'Saved contact'}</strong><span>{displayContactPhone(c.phone)}</span><p>{c.reason}</p></div>)}</details>}
+  {data?.attempts?.map(a=><div className="contact-feedback" key={a.id}><strong>{a.status}</strong><p>{new Date(a.createdAt).toLocaleString()}{a.costPending?' · Final call cost pending':''}</p></div>)}
+  {!!data?.contacts.some(c=>!c.available)&&<details className="contact-unavailable" open={!data.contacts.some(c=>c.available)}><summary>Unavailable numbers</summary>{data.contacts.filter(c=>!c.available).map(c=><div className="seller-contact-card" key={c.phone}><strong>{c.name||'Saved contact'}</strong><span>{displayContactPhone(c.phone)}</span><p>{c.reason}</p></div>)}</details>}
  </section>;
 }

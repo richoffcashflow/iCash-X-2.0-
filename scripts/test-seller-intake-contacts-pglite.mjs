@@ -35,6 +35,11 @@ try{
   if(/icash_assign_seller_lead_for|icash_prepare_manual_text/.test(block))continue;
   await pg.exec(block);
  }
+ const natural=read('supabase/migrations/20261007001350_natural_seller_conversations.sql');
+ // Fixture uses the pre-network opener; apply the same production prerequisite first.
+ await pg.exec(read('config/homeoffer-buyer-introductions.sql'));
+ await pg.exec(natural.match(/do \$patch\$[\s\S]*?end \$patch\$;/)[0]);
+ await pg.exec(read('supabase/migrations/20261007001915_short_seller_interest_question.sql'));
  const oldScreen=(await one("insert into icash_screening_jobs(account_id,event_key,snapshot,state,result,completed_at) values($1,'SIMULATION old practice','{\"propertyId\":\"practice_old\"}','complete','{}',now()) returning id",[account])).id;
  const oldDeal=(await one("insert into icash_deal_files(account_id,screening_id,stage,terms) values($1,$2,'draft','{\"practice\":true,\"address\":\"SIMULATION old practice\"}') returning id",[account,oldScreen])).id;
  const oldThread=(await one("insert into icash_text_threads(account_id,deal_id,sender,recipient,permission_until,permission_evidence,timezone,dnc_checked_at,dnc_clear,sms_rate_id,paused) values($1,$2,$3,$4,now()-interval '1 day','SIMULATION old practice consent',$5,now()-interval '2 days',true,$6,true) returning id",[account,oldDeal,f.sender,phone,timezone,f.sms])).id;
@@ -88,6 +93,7 @@ try{
  assert.equal(await rpc('icash_transition_call_recording',{p_id:recording.id,p_account:account,p_operation:'voice:'+job,p_expected_state:'consent_pending',p_action:'claim_dial',p_payload:{}}),null,'single use dial');
 
  assert.equal((await one('select count(*)::int n from icash_text_messages where direction=\'outgoing\' and provider_id is distinct from \'SIMULATION old receipt\'')).n,1);
+ assert.equal((await one("select body from icash_text_messages where thread_id=$1 and direction='outgoing'",[t.id])).body,'Hi, is this SIMULATION, the owner of 123 Main Street?');
  await q('update icash_seller_responses set next_attempt_at=now()');await rpc('icash_prepare_seller_responses',{p_lead:lead});
  assert.equal((await one('select count(*)::int n from icash_text_messages where direction=\'outgoing\' and provider_id is distinct from \'SIMULATION old receipt\'')).n,1,'retry does not duplicate');
  assert.equal((await one("select count(*)::int n from information_schema.routine_privileges where specific_schema='public' and routine_name in ('icash_seller_contact_evidence','icash_prepare_seller_contacts','icash_seller_sms_permission_current','icash_seller_voice_permission_current') and grantee in ('PUBLIC','anon','authenticated')")).n,0,'server-only entry points');
