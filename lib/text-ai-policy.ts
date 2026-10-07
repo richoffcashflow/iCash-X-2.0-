@@ -53,13 +53,17 @@ export async function analyzeText(input:{model:string;context:unknown;party?:Tex
  const sourceMessages=input.messages.slice(-24);
  // Existing SQL readers also cap at 1000 characters, so a value at the boundary may already be partial.
  const messages=sourceMessages.map(m=>({direction:m.direction,body:m.body.slice(0,1000),truncated:m.body.length>=1000,hasAttachments:(Number.isSafeInteger(m.attachmentCount)&&(m.attachmentCount??0)>0)||(Array.isArray(m.attachments)&&m.attachments.length>0)}));
- const response=await fetcher('https://api.openai.com/v1/chat/completions',{
+ const request:RequestInit & {body:string}={
   method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},redirect:'error',signal:AbortSignal.timeout(25000),
-  body:JSON.stringify({model:input.model,store:false,max_completion_tokens:800,messages:[
+  body:JSON.stringify({model:input.model,service_tier:'default',store:false,max_completion_tokens:800,messages:[
    {role:'system',content:textConversationInstructions(party,conversationEnabled)},
    {role:'user',content:JSON.stringify({party,context:input.context,messages})}
   ],response_format:{type:'json_schema',json_schema:{name:'seller_sms_analysis',strict:true,schema:{type:'object',additionalProperties:false,properties:{action:{type:'string',enum:conversationEnabled?textActions.filter(action=>action!=='ask_flexibility'&&action!=='ask_payoff'):textActions},reply:{type:'string'},summary:{type:'string'},facts:{type:'array',items:{type:'object',additionalProperties:false,properties:{kind:{type:'string',enum:['condition','price','timing','owners','occupancy','callback','photos']},quote:{type:'string'}},required:['kind','quote']}}},required:['action','reply','summary','facts']}}}})
- });
+ };
+ // UTF-8 bytes conservatively bound input tokens, including schema and context.
+ // The reviewed rate allows 46,000 input tokens and 800 output tokens.
+ if(Buffer.byteLength(request.body,'utf8')>44000)throw Error('TEXT_AI_CONTEXT_TOO_LARGE');
+ const response=await fetcher('https://api.openai.com/v1/chat/completions',request);
  if(!response.ok)throw Error(`TEXT_AI_PROVIDER_HTTP_${response.status}`);
  const result=await response.json();if(result.choices?.[0]?.finish_reason!=='stop')throw Error('TEXT_AI_INCOMPLETE');
  const analysis=validateTextAnalysis(JSON.parse(result.choices[0].message.content),sourceMessages.filter(m=>m.direction==='incoming').map(m=>m.body),party,conversationEnabled);
