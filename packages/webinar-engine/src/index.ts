@@ -12,12 +12,14 @@ export function isNight(timezone:string,now=new Date(),routing={nightStartsAt:18
 export type ReturnSession=WatchHistory&{id:string;created_at:string;superseded_at:string|null;is_preview:boolean;max_seconds:number;offer_seen_at:string|null;config:{pitchAt:number}};
 export type ReturnVisit={kind:'new'}|{kind:'resume'|'advance';sessionId:string}|{kind:'checkout';sessionId:string;until:string};
 /** A fixed offer window never extends when someone refreshes or opens another tab. */
-export function returnVisit(history:ReturnSession[],timezone:string,checkoutWindowHours=3,now=new Date()):ReturnVisit{
+export function returnVisit(history:ReturnSession[],timezone:string,checkoutWindowHours=8,now=new Date()):ReturnVisit{
  const latest=[...history].filter(s=>!s.is_preview&&!s.superseded_at).sort((a,b)=>b.created_at.localeCompare(a.created_at)||b.updated_at.localeCompare(a.updated_at))[0];
  if(!latest)return {kind:'new'};
- const timestamps=[latest.completed_at,...(latest.max_seconds>=latest.config.pitchAt?[latest.offer_seen_at]:[])].filter((v):v is string=>!!v).map(Date.parse).filter(t=>Number.isFinite(t)&&t<=now.getTime());
+ // Completion starts its own full window, even when the offer appeared earlier.
+ const completion=latest.completed_at?Date.parse(latest.completed_at):NaN;
+ const timestamps=Number.isFinite(completion)&&completion<=now.getTime()?[completion]:(latest.max_seconds>=latest.config.pitchAt&&latest.offer_seen_at?[Date.parse(latest.offer_seen_at)]:[]).filter(t=>Number.isFinite(t)&&t<=now.getTime());
  if(timestamps.length){
-  const started=Math.min(...timestamps),hours=Number.isFinite(checkoutWindowHours)?Math.min(72,Math.max(0,checkoutWindowHours)):3,until=started+hours*3600000;
+  const started=Math.min(...timestamps),hours=Number.isFinite(checkoutWindowHours)?Math.min(72,Math.max(0,checkoutWindowHours)):8,until=started+hours*3600000;
   if(now.getTime()<until)return {kind:'checkout',sessionId:latest.id,until:new Date(until).toISOString()};
   return {kind:'advance',sessionId:latest.id};
  }

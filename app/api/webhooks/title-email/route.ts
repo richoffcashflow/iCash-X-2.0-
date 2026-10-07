@@ -11,7 +11,7 @@ export async function POST(req:Request){
  let event;
  try{const body=await req.text();if(Buffer.byteLength(body)>262144)return new Response(null,{status:413});event=verifyTitleWebhook(body,req.headers,secret);}catch{return new Response(null,{status:400});}
  if(['email.delivered','email.bounced','email.complained','email.delivery_delayed','email.failed','email.suppressed'].includes(event.type)){
- try{await recordCustomerUpdateDelivery(event,db);if(event.type!=='email.suppressed')await db('rpc/icash_record_email_delivery','POST',{p_event:req.headers.get('svix-id'),p_provider:event.data?.email_id,p_kind:event.type,p_at:event.created_at});return NextResponse.json({received:true});}catch{return NextResponse.json({error:'Retry required'},{status:503});}
+ try{if(event.type!=='email.delivery_delayed')await db('rpc/icash_webinar_followup_delivery','POST',{p_channel:'email',p_provider:event.data?.email_id,p_kind:event.type.replace('email.','')});await recordCustomerUpdateDelivery(event,db);if(event.type!=='email.suppressed')await db('rpc/icash_record_email_delivery','POST',{p_event:req.headers.get('svix-id'),p_provider:event.data?.email_id,p_kind:event.type,p_at:event.created_at});return NextResponse.json({received:true});}catch{return NextResponse.json({error:'Retry required'},{status:503});}
  }
  if(event.type!=='email.received')return NextResponse.json({received:true});
  const id=event.data?.email_id;if(typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))return new Response(null,{status:400});

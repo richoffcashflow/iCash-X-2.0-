@@ -6,6 +6,8 @@ import {z} from 'zod';
 import {webinarTimerSchema} from './webinar-timers.ts';
 
 export const webinarConsentVersion='webinar-email-2026-10-04';
+export const webinarSmsConsent=`Text me session reminders and ${webinarSite.brandName} offers (up to 2 texts). Message and data rates may apply. Reply STOP to opt out. Optional; not required to buy.`;
+export const webinarSmsConsentVersion='webinar-sms-2026-10-07';
 export const webinarConsent=`Email me this session, follow-up lessons and ${webinarSite.brandName} offers. I can unsubscribe at any time.`;
 const httpsUrl=z.string().max(2000).refine(v=>{try{const u=new URL(v);return u.protocol==='https:'&&!u.username&&!u.password;}catch{return v==='';}},'Use a direct HTTPS video URL.');
 export const defaultChatStyle='Short, conversational CashFlowKey energy. Welcome the viewer, use brief ready/check-in prompts at the right video moments, invite questions during the demo, and point to the current offer at the pitch. Keep it clear and natural, with occasional emphasis. Speak as the session assistant; never invent attendees, payments, results, or limited spots.';
@@ -76,6 +78,6 @@ export const eventNames=['started','progress','name_saved','contact_saved','pitc
 export type WebinarEvent=typeof eventNames[number];
 export const optimizerSchema=z.object({enabled:z.boolean().default(false),explorationPercent:z.number().int().min(10).max(50).default(20),minVisitors:z.number().int().min(20).max(5000).default(100)}).strict();
 export const metaSchema=z.object({enabled:z.boolean().default(false),pixelId:z.string().regex(/^\d{5,30}$/).or(z.literal('')).default('')}).strict();
-export const routingSchema=z.object({nightStartsAt:z.number().int().min(0).max(23),nightEndsAt:z.number().int().min(0).max(23),checkoutWindowHours:z.number().min(0).max(72).default(3)}).strict().refine(r=>r.nightStartsAt!==r.nightEndsAt,'Day and night need different start times.');
-export const settingsSchema=z.object({enabled:z.boolean(),fromEmail:z.string().email().or(z.literal('')),postalAddress:z.string().max(500),subjects:z.array(z.string().min(1).max(150)).length(3),messages:z.array(z.string().min(1).max(2000)).length(3),optimizer:optimizerSchema.default({enabled:false,explorationPercent:20,minVisitors:100}),meta:metaSchema.default({enabled:false,pixelId:''}),routing:routingSchema.default({nightStartsAt:18,nightEndsAt:6})}).strict();
+export const routingSchema=z.object({nightStartsAt:z.number().int().min(0).max(23),nightEndsAt:z.number().int().min(0).max(23),checkoutWindowHours:z.number().min(0).max(72).default(8)}).strict().refine(r=>r.nightStartsAt!==r.nightEndsAt,'Day and night need different start times.');
+export const settingsSchema=z.object({enabled:z.boolean(),smsEnabled:z.boolean().default(false),smartFollowups:z.boolean().default(true),fromEmail:z.string().email().or(z.literal('')),postalAddress:z.string().max(500),subjects:z.array(z.string().min(1).max(150)).length(3),messages:z.array(z.string().min(1).max(2000)).length(3),optimizer:optimizerSchema.default({enabled:false,explorationPercent:20,minVisitors:100}),meta:metaSchema.default({enabled:false,pixelId:''}),routing:routingSchema.default({nightStartsAt:18,nightEndsAt:6})}).strict();
 export type WebinarSettings=z.infer<typeof settingsSchema>;

@@ -1,7 +1,7 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Maximize,Pause,Play,Volume2,VolumeX} from 'lucide-react';
-import {clearPosition,savePosition,seekToPosition} from '@/lib/webinar-playback';
+import {savePosition,seekToPosition} from '@/lib/webinar-playback';
 
 type Props={sessionId:string;videoUrl:string;posterUrl:string;title:string;progress:number;preview:boolean;onProgress:(seconds:number)=>void;onStarted:()=>void;onCheckpoint:()=>void;onPlayingChange:(playing:boolean)=>void;onEnded:()=>void};
 export function WebinarPlayer(props:Props){
@@ -53,7 +53,7 @@ export function WebinarPlayer(props:Props){
    onTimeUpdate={tick} onVolumeChange={()=>setMuted(video.current?.muted??true)}
    onWaiting={()=>setBuffering(true)} onStalled={()=>setBuffering(true)}
    onError={()=>{playback(false);setBuffering(false);setError('Your video connection was interrupted.');checkpoint();}}
-   onEnded={()=>{setBuffering(false);setSlow(false);if(!props.preview)clearPosition(props.sessionId);callbacks.current.onEnded();}}/>
+   onEnded={()=>{setBuffering(false);setSlow(false);tick();playback(false);callbacks.current.onEnded();}}/>
   <div className="wb-stream-status"><span className="wb-live">● LIVE</span>{props.preview&&<span>Owner preview</span>}</div>
   {(!playing||muted)&&!error&&!slow&&<button type="button" className="wb-unmute" onClick={()=>void attemptPlay(true)}><VolumeX aria-hidden="true"/><strong>{playing?'Tap to unmute':position.current>0?'Continue watching':'Tap to play'}</strong></button>}
   {(error||slow)&&<div className="wb-player-recovery" role="status"><p>{offline?'You’re offline. Reconnect to continue.':error||'The video is taking longer to load.'}</p><button type="button" onClick={reload}>Resume video</button><a href="/support">Get help</a></div>}

@@ -12,6 +12,8 @@ export async function POST(req:Request){
  try{
  const inbound=event.type.startsWith('text.incoming');const sender=inbound?event.data.to:event.data.from;
  const known=await db<{phone:string}[]>(`icash_text_senders?phone=eq.${encodeURIComponent(sender)}&select=phone`);if(!known.length)return new Response(null,{status:400});
+ if(inbound)await db('rpc/icash_webinar_text_reply','POST',{p_phone:event.data.from,p_stop:event.optOut});
+ if(['text.delivery.confirmed','text.delivery.failed','text.cancelled'].includes(event.type))await db('rpc/icash_webinar_followup_delivery','POST',{p_channel:'sms',p_provider:event.data.message_id,p_kind:event.type==='text.delivery.confirmed'?'delivered':'failed'});
  if(inbound&&event.optOut)await db('rpc/icash_stop_customer_update_phone','POST',{p_phone:event.data.from});
  await db('rpc/icash_ingest_text_event','POST',{p_event:event,p_optout:event.optOut});
  if(inbound)await ownerPracticeReply(event.id);

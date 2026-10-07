@@ -117,7 +117,7 @@ test('an expired older session never skips the new video or uses preview activit
  const preview=returnSession({is_preview:true,created_at:'2026-10-04T21:00:00Z',offer_seen_at:'2026-10-04T21:00:00Z'});
  assert.deepEqual(returnVisit([old,fresh,preview],'America/Chicago',3,new Date('2026-10-04T22:00:00Z')),{kind:'resume',sessionId:fresh.id});
 });
-test('legacy routing gains a three-hour window, without changing existing night hours',()=>{
+test('legacy routing gains an eight-hour window, without changing existing night hours',()=>{
  const s=settingsSchema.parse({enabled:false,fromEmail:'',postalAddress:'',subjects:['a','b','c'],messages:['a','b','c'],routing:{nightStartsAt:20,nightEndsAt:5}});
- assert.equal(s.routing.checkoutWindowHours,3);assert.equal(s.routing.nightStartsAt,20);
+ assert.equal(s.routing.checkoutWindowHours,8);assert.equal(s.routing.nightStartsAt,20);
 });

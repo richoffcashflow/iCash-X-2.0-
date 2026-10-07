@@ -48,7 +48,7 @@ The current rollout uses **one deployment and database per company**. Each owns 
 
 - Paid or authenticated existing customers go through the product's own account/workspace flow. Webinar identity never authorizes account login.
 - Before the offer, same-day unfinished viewing resumes the saved snapshot, even if an editor publishes a new revision.
-- `returnVisit` sends repeat visits to checkout for a configurable period after the first offer impression or completion (default three hours). Refreshes do not extend the period. Once it expires, selection advances to a fresh webinar, including on the same day. The latest session takes precedence over expired older sessions.
+- `returnVisit` sends repeat visits to checkout for a configurable period after the first offer impression or completion (default eight hours; completion starts its own full window). Refreshes do not extend the period. Once it expires, selection advances to a fresh webinar, including on the same day. The latest session takes precedence over expired older sessions.
 - A later local day advances an unpaid prospect to the next eligible unseen webinar. Superseding an unfinished session does not count as completion.
 - Day/night matching uses a validated hosting-provider timezone, with browser fallback. A session in progress is stable.
 - A published daytime recording also covers night until a usable dedicated night recording is published; the reverse fallback also works. Drafts and recordings without media do not disable this fallback. Returning-only recordings remain restricted to returning visitors.
