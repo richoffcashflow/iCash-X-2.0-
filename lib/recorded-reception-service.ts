@@ -1,4 +1,5 @@
 import {recordingAuthorized,directCallTwiml} from './direct-call-entry.ts';
+import {sellerAgreementReceptionEnabled} from './seller-agreement-reception.ts';
 import {randomBytes} from 'node:crypto';
 import {affirmativeSpeech,recordingGateOptOut,object,privateHeaders,sha,sid,uuid,verifiedTwilioForm} from './required-call-recording.ts';
 import {boundedBytes} from './required-call-recording-provider.ts';
@@ -51,10 +52,10 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
  const transition=(r:RecordedReceptionRow,a:string,p:Record<string,unknown>={})=>transitionRecordedReception(rpc,r,a,p);
  async function currentConfig(called:string){if(env.ICASH_RECORDED_RECEPTION_READY!=='true')return null;const c=await rpc<RecordedReceptionConfig|null>('icash_get_recorded_reception_config',{p_called_number:called});return validRecordedReceptionConfig(c,now())&&c.provider_account_sid===env.TWILIO_ACCOUNT_SID?c:null;}
  async function checkAgent(c:RecordedReceptionConfig){
-  const [agent,branches,workspace,tool]=await Promise.all([provider.agent(c),provider.branches(c),provider.workspace(),provider.tool(c.stop_tool_id)]);
+  const [agent,branches,workspace,tool,agreementTool]=await Promise.all([provider.agent(c),provider.branches(c),provider.workspace(),provider.tool(c.stop_tool_id),sellerAgreementReceptionEnabled(c)?provider.tool(String(c.agreement_tool_id)):Promise.resolve(undefined)]);
   const rows=branches.results,meta=object(branches.meta);if(!Array.isArray(rows)||rows.length>=100||meta.total!==undefined&&meta.total!==rows.length)return false;
   const found=rows.filter(r=>object(r).id===c.branch_id);
-  return found.length===1&&inspectRecordedReceptionAgent(c,agent,found[0],receptionWorkspacePostcallAbsent(workspace),tool).safe&&recordedReceptionToolMatches(c.stop_tool_id,tool);
+  return found.length===1&&inspectRecordedReceptionAgent(c,agent,found[0],receptionWorkspacePostcallAbsent(workspace),tool,agreementTool).safe&&recordedReceptionToolMatches(c.stop_tool_id,tool);
  }
  async function signed(request:Request,part:string,nonceRequired=false){
   const u=new URL(request.url),id=u.searchParams.get('id'),nonce=u.searchParams.get('nonce');

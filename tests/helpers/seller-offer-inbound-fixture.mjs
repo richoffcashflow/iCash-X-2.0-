@@ -23,4 +23,5 @@ export async function testSellerOfferInbound(f){
  });
  for(const role of ['anon','authenticated'])for(const fn of ['icash_claim_seller_offer_branch(uuid)','icash_stage_seller_offer_reception(uuid,text,text,text)','icash_recorded_reception_property_context(uuid,text)'])assert.equal(await val('select has_function_privilege($1,$2,\'execute\')',[role,'public.'+fn]),false);
  await (await import('./reception-contact-continuity-fixture.mjs')).testReceptionContactContinuity(f);
+ await (await import('./seller-agreement-fixture.mjs')).testSellerAgreement(f);
 }
