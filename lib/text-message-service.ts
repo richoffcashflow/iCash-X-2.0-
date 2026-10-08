@@ -15,14 +15,15 @@ export async function dispatchTextMessage(accountId:string,messageId:string,manu
   const invitations=await db<{id:string;reply_id:string}[]>(`icash_sms_inbound_invitations?account_id=eq.${accountId}&message_id=eq.${messageId}&select=id,reply_id&limit=1`);
   if(invitations.length){await db('rpc/icash_review_sms_campaign_reply','POST',{p_account:accountId,p_message:invitations[0].reply_id});return {status:'inbound_invitation_not_ready'};}
  }
- const [thread]=await db<{recipient:string;sender:string}[]>(`icash_text_threads?id=eq.${m.thread_id}&account_id=eq.${accountId}&select=recipient,sender`);if(!thread)return {status:'message_held'};
+ const [thread]=await db<{recipient:string;sender:string;sender_pool_assigned?:boolean}[]>(`icash_text_threads?id=eq.${m.thread_id}&account_id=eq.${accountId}&select=recipient,sender,sender_pool_assigned`);if(!thread)return {status:'message_held'};
  // Keep the actual thread's sender, including when more leased numbers are
  // provisioned. Never rotate a live conversation or silently use a fallback.
  const from=thread.sender;
  const [sender]=await db<{phone:string}[]>(`icash_text_senders?phone=eq.${encodeURIComponent(from)}&enabled=eq.true&select=phone`);
  if(!sender||!sameBusinessNumber(from,sender.phone))return {status:'business_number_mismatch'};
  const [voice]=await db<{phone_number_id:string;enabled:boolean}[]>(`icash_voice_configs?account_id=eq.${accountId}&select=phone_number_id,enabled`);
- if(voice?.enabled){
+ // Explicit pool assignments have their own SMS identity; the voice caller ID stays unchanged.
+ if(voice?.enabled&&!thread.sender_pool_assigned){
   try{const phone=await elevenRequest<{phone_number:string}>(`/v1/convai/phone-numbers/${encodeURIComponent(voice.phone_number_id)}`);if(!sameBusinessNumber(from,phone.phone_number))return {status:'business_number_mismatch'};}
   catch{return {status:'business_number_verification_required'};}
  }

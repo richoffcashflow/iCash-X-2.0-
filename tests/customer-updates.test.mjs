@@ -9,7 +9,7 @@ for(const origin of ['http://example.com','https://name:secret@example.com','htt
 assert.equal(normalizeUpdatePhone('(212) 555-0123'),'+12125550123');
 function fixtures(mode='success',channel='email'){
  const calls=[],sends=[];let consumed=false;
- const job={id:uuid(1),channel,kind:'seller_reply',screeningId:uuid(2),recipient:channel==='email'?'owner@example.com':'+12125550123',unsubscribeToken:uuid(3)+uuid(4)};
+ const job={id:uuid(1),sender:'+12125550999',channel,kind:'seller_reply',screeningId:uuid(2),recipient:channel==='email'?'owner@example.com':'+12125550123',unsubscribeToken:uuid(3)+uuid(4)};
  const db=async(path,method,body,signal)=>{calls.push({path,body});assert.equal(body.p_account,uuid(9));assert(signal instanceof AbortSignal);
   if(path.endsWith('claim_customer_update')){if(consumed||mode==='empty')return null;consumed=true;return job.id;}
   if(path.endsWith('authorize_customer_update'))return mode==='optout'?null:mode==='forged'?{...job,screeningId:'id&account=other'}:job;

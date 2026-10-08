@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import {verifyWebinarLifecycle} from './test-webinar-lifecycle-db.mjs';
+import {verifyWebinarCampaign} from './test-webinar-campaign-db.mjs';
 import {verifyWebinarVip} from './test-webinar-vip-db.mjs';
 import {verifyWebinarFollowups} from './test-webinar-followups-db.mjs';
 import {verifyWebinarTimers} from './test-webinar-timers-db.mjs';
@@ -9,7 +11,7 @@ import {randomUUID} from 'node:crypto';
 const {PGlite}=await import(pathToFileURL(process.argv[2]).href),pg=await PGlite.create();
 try{
  await pg.exec(`create role anon;create role authenticated;create role service_role bypassrls;
- create table icash_text_suppressions(phone text primary key);
+ create table icash_text_suppressions(phone text primary key);create table icash_text_senders(phone text primary key,enabled boolean default true);
  create table icash_accounts(id uuid primary key);
  create table icash_funding_orders(id uuid primary key,mode text,state text,guest_hash text,payer_email text,price_cents bigint,tax_cents bigint default 0,credit_cents bigint,daily_plan_id uuid,stripe_session_id text,paid_at timestamptz,stripe_payment_id text,account_id uuid);
  create table icash_memberships(id uuid primary key,mode text,state text,stripe_session_id text,paid_through timestamptz,guest_hash text,payer_email text,account_id uuid);
@@ -215,6 +217,9 @@ try{
  await verifyWebinarFollowups(q,config);
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261007203314_webinar_fixed_links_vip.sql',import.meta.url),'utf8'));
  await verifyWebinarVip(q);
+ await pg.exec(readFileSync(new URL('../supabase/migrations/20261008173921_webinar_conversion_campaign.sql',import.meta.url),'utf8'));
+ await verifyWebinarCampaign(q,config);
+ await verifyWebinarLifecycle(pg,q);
  const grants=(await q("select has_table_privilege('anon','icash_webinar_visitors','select') as read,has_function_privilege('authenticated','icash_webinar_contact(uuid,text,text,text,boolean)','execute') as write")).rows[0];assert.equal(grants.read,false);assert.equal(grants.write,false);
  const rls=await q("select relname,relrowsecurity from pg_class where relname like 'icash_webinar%' and relkind='r'");assert.ok(rls.rows.every(r=>r.relrowsecurity));
  console.log('Webinar database checks passed: sessions, attribution, audience, activity, verified checkout triggers, daily funnel, local midnight, DST, earlier-day buyers, preserved revisions, renewals, test/refund exclusion and RLS.');

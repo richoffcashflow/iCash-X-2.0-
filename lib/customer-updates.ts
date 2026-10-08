@@ -1,5 +1,6 @@
-export const botUpdateConsentVersion='bot-updates-2026-10-03.1';
+export const botUpdateConsentVersion='bot-updates-2026-10-08.1';
 export const updateCopy={
+ credits_low:{title:'Your bot needs more credits',detail:'Your available credits are running low. Open your workspace to review your balance and add credits for the next eligible work.'},
  lead_assigned:{title:'A seller request is ready',detail:'Open the property to see the request and response status.'},
  response_held:{title:'A seller response needs attention',detail:'The first response is waiting for setup or review. Open the property to continue.'},
  buyer_reply:{title:'A buyer replied',detail:'Open the conversation to review the buyer’s message.'},
@@ -16,9 +17,9 @@ export const updateCopy={
  needs_you:{title:'Your bot needs your input',detail:'A saved request is waiting in your workspace.'},
 } as const;
 export type UpdateKind=keyof typeof updateCopy;
-export type UpdateSource={source_key:string;kind:UpdateKind;screening_id:string;event_at:string;priority:number};
+export type UpdateSource={source_key:string;kind:UpdateKind;screening_id:string|null;event_at:string;priority:number};
 export type BotUpdatePreferences={email?:string|null;phone?:string|null;emailEnabled:boolean;smsEnabled:boolean;timezone:string;seenAt?:string|null;emailAvailable:boolean;smsAvailable:boolean;emailSuppressed?:boolean};
-export type InboxItem={id:string;kind:UpdateKind;screeningId:string;createdAt:string;title:string;detail:string;address:string|null};
+export type InboxItem={id:string;kind:UpdateKind;screeningId:string|null;createdAt:string;title:string;detail:string;address:string|null};
 export function normalizeUpdatePhone(value:string){const clean=value.replace(/[\s().-]/g,'');return /^\d{10}$/.test(clean)?`+1${clean}`:/^1\d{10}$/.test(clean)?`+${clean}`:clean;}
 export function customerUpdateConfiguration(env:Record<string,string|undefined>){
  let origin:string|null=null;
@@ -26,6 +27,6 @@ export function customerUpdateConfiguration(env:Record<string,string|undefined>)
  const sender=env.ICASH_ATTENTION_FROM_EMAIL??env.ICASH_TITLE_FROM_EMAIL??'';
  const address=sender.match(/<([^<>]+)>$/)?.[1]??sender;
  const email=!!(origin&&env.RESEND_API_KEY&&env.RESEND_RECEIVING_WEBHOOK_SECRET&&/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(address));
- const sms=!!(origin&&env.CONTIGUITY_API_KEY&&env.CONTIGUITY_WEBHOOK_SECRET&&/^\+1[2-9]\d{9}$/.test(env.CONTIGUITY_FROM??''));
+ const sms=!!(origin&&env.CONTIGUITY_API_KEY&&env.CONTIGUITY_WEBHOOK_SECRET);
  return {origin,from:address,email,sms};
 }

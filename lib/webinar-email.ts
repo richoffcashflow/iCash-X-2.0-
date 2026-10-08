@@ -3,20 +3,23 @@ import {localHour,settingsSchema,webinarPitchAt,type WebinarSettings} from '@/li
 import {webinarPaid,webinarToken,type Visitor,type WebinarSession} from '@/lib/webinar-server';
 import {followupCopy,followupPhase} from '@/lib/webinar-followup-policy';
 import {webinarSite} from '@/lib/webinar-site';
+import {campaignCopy,type CampaignDestination} from '@/lib/webinar-campaign';
+import {resolveCampaignTarget} from '@/lib/webinar-campaign-server';
 type Database=typeof db;
-export type FollowupJob={id:string;visitor_id:string;session_id:string;channel:'email'|'sms';recipient:string;step:number;attempts:number;payload:Record<string,unknown>|null;first_attempt_at:string|null};
+export type FollowupJob={campaign_id?:string|null;destination?:CampaignDestination;id:string;visitor_id:string;session_id:string;channel:'email'|'sms';recipient:string;step:number;attempts:number;payload:Record<string,unknown>|null;first_attempt_at:string|null};
 export function webinarMailTime(timezone:string,now=new Date()){let next=new Date(now);for(let n=0;n<26;n++){const hour=localHour(timezone,next);if(hour>=9&&hour<20)return next;next=new Date(next.getTime()+3600000);}return next;}
 export function webinarFollowupReadiness(settings:WebinarSettings,env:Record<string,string|undefined>=process.env){
  const production=env.VERCEL_ENV==='production',origin=env.ICASH_APP_ORIGIN;
  let validOrigin=false;try{const url=new URL(origin||'');validOrigin=url.protocol==='https:'&&!url.username&&!url.password;}catch{}
  const emailConnection=!!env.RESEND_API_KEY&&!!(env.RESEND_RECEIVING_WEBHOOK_SECRET||env.ICASH_WEBINAR_EMAIL_WEBHOOK_SECRET)&&validOrigin;
- const smsConnection=!!env.CONTIGUITY_API_KEY&&!!env.CONTIGUITY_WEBHOOK_SECRET&&/^\+[1-9]\d{7,14}$/.test(env.CONTIGUITY_FROM||'')&&validOrigin;
- return {emailConnection,smsConnection,email:production&&settings.enabled&&emailConnection&&!!settings.fromEmail&&!!settings.postalAddress.trim(),sms:production&&settings.smsEnabled&&smsConnection};
+ const smsConnection=!!env.CONTIGUITY_API_KEY&&!!env.CONTIGUITY_WEBHOOK_SECRET&&validOrigin;
+ return {emailConnection,smsConnection,senderCount:0,email:production&&settings.enabled&&emailConnection&&!!settings.fromEmail&&!!settings.postalAddress.trim(),sms:production&&settings.smsEnabled&&smsConnection};
 }
 export async function processWebinarFollowups({database=db,transport=fetch,env=process.env,clock=()=>new Date()}:{database?:Database;transport?:typeof fetch;env?:Record<string,string|undefined>;clock?:()=>Date}={}){
  const [row]=await database<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config'),settings=settingsSchema.parse(row.config);
  const ready=webinarFollowupReadiness(settings,env);
- if(ready.sms){const senders=await database<unknown[]>(`icash_text_senders?phone=eq.${encodeURIComponent(env.CONTIGUITY_FROM!)}&enabled=eq.true&select=phone&limit=1`);ready.sms=senders.length>0;}
+ if(ready.sms){const senders=await database<unknown[]>('icash_webinar_text_senders?enabled=eq.true&select=phone');ready.senderCount=senders.length;ready.sms=senders.length>0;}
+ if(env.VERCEL_ENV==='production')await database('rpc/icash_webinar_activate_customers','POST',{});
  if(!ready.email&&!ready.sms)return {emailReady:ready.email,textReady:ready.sms,setupRequired:settings.enabled||settings.smsEnabled,sent:0};
  const origin=new URL(env.ICASH_APP_ORIGIN!).origin;
  const jobs=await database<FollowupJob[]>('rpc/icash_webinar_claim_followups','POST',{p_email_ready:ready.email,p_sms_ready:ready.sms});
@@ -35,9 +38,14 @@ export async function processWebinarFollowups({database=db,transport=fetch,env=p
     const latest=sessions[0];if(!latest){await database(`icash_webinar_outbox?id=eq.${job.id}`,'PATCH',{state:'canceled'});canceled++;return;}
     const history=sessions.map(s=>({...s,config:{...s.config,pitchAt:webinarPitchAt(s.config)},offer_seen_at:events.find(e=>e.session_id===s.id)?.created_at??null}));
     const phase=followupPhase(history,v.timezone,settings.routing.checkoutWindowHours,now),emailStep=job.step===0?0:job.step===2?1:2;
-    const copy=followupCopy({name:v.name??'',title:latest.config.title,seconds:latest.progress_seconds,phase,step:job.step,brand:webinarSite.brandName,host:webinarSite.hostName,smart:settings.smartFollowups,subject:settings.subjects[emailStep],message:settings.messages[emailStep]});
+    const target=job.campaign_id?await resolveCampaignTarget(v.id,source.webinar_id,job.destination??'smart',v.timezone,settings,database,now):null;
+    const copy=target?campaignCopy({name:v.name??'',brand:webinarSite.brandName,host:webinarSite.hostName,phase:target.phase,title:target.title,step:job.step}):followupCopy({name:v.name??'',title:latest.config.title,seconds:latest.progress_seconds,phase,step:job.step,brand:webinarSite.brandName,host:webinarSite.hostName,smart:settings.smartFollowups,subject:settings.subjects[emailStep],message:settings.messages[emailStep]});
     const link=`${origin}/w/${job.id}`;
-    if(job.channel==='sms')payload={from:env.CONTIGUITY_FROM,to:job.recipient,message:`${copy.sms} ${link} Reply STOP to opt out.`,attachments:[],fast_track:false};
+    if(job.channel==='sms'){
+     const from=job.campaign_id?await database<string|null>('rpc/icash_webinar_campaign_sender','POST',{p_recipient:job.recipient}):env.CONTIGUITY_FROM;
+     if(!from){await database(`icash_webinar_outbox?id=eq.${job.id}&state=eq.claimed`,'PATCH',{state:'pending',due_at:new Date(now.getTime()+3600000).toISOString(),attempts:Math.max(0,job.attempts-1)});return;}
+     payload={from,to:job.recipient,message:`${copy.sms} ${link} Reply STOP to opt out.`,attachments:[],fast_track:false};
+    }
     else {const unsubscribe=`${origin}/api/webinar/unsubscribe?t=${webinarToken(v.id,'unsubscribe',86400*365)}`;
      payload={from:`${webinarSite.hostName} at ${webinarSite.brandName} <${settings.fromEmail}>`,to:[job.recipient],subject:copy.subject,text:`${copy.body}\n${link}\n\n${copy.signature}\n\n${webinarSite.brandName} session reminders and offers\n${settings.postalAddress}\nUnsubscribe: ${unsubscribe}`,headers:{'List-Unsubscribe':`<${unsubscribe}>`,'List-Unsubscribe-Post':'List-Unsubscribe=One-Click'},tags:[{name:'webinar_job',value:job.id}]};
     }

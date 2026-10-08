@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+export async function verifyWebinarCampaign(q,config){
+ const scalar=async(sql,args=[])=>Object.values((await q(sql,args)).rows[0])[0];
+ const clear=()=>q("update icash_webinar_outbox set state='canceled' where state in ('pending','claimed','sending')");
+ await clear();
+ const make=async(phone='+12125550901',email=`${randomUUID()}@example.invalid`)=>{
+  const id=randomUUID(),session=randomUUID();await q("insert into icash_webinar_visitors(id,timezone) values($1,(select name from pg_timezone_names where extract(hour from now() at time zone name)=12 limit 1))",[id]);
+  await q('select icash_webinar_begin($1,$2,$3,false)',[id,session,config]);
+  await q('select icash_webinar_contact_campaign($1,$2,$3,$4,$5,true,true)',[id,session,'Casey',email,phone]);return {id,session,phone,email};
+ };
+ const a=await make();const jobs=(await q('select * from icash_webinar_outbox where visitor_id=$1 and campaign_id is not null order by step',[a.id])).rows;
+ assert.equal(jobs.length,41);assert.equal(jobs.filter(j=>j.channel==='email').length,31);assert.equal(jobs.filter(j=>j.channel==='sms').length,10);
+ assert.equal(await scalar("select count(*)::int from icash_webinar_outbox where visitor_id=$1 and campaign_id is null and state='pending'",[a.id]),0);
+ await q('select icash_webinar_contact_campaign($1,$2,$3,$4,$5,true,true)',[a.id,a.session,'Casey',a.email,a.phone]);
+ assert.equal(await scalar('select count(*)::int from icash_webinar_campaigns where visitor_id=$1',[a.id]),2,'Repeat opt-in does not restart');
+ const second=await make(a.phone,a.email);assert.equal(await scalar('select count(*)::int from icash_webinar_campaigns where visitor_id=$1',[second.id]),0,'One campaign per contact across devices');
+ await q("insert into icash_webinar_text_senders(phone) values('+12125550001'),('+12125550002')");
+ const sender=await scalar('select icash_webinar_campaign_sender($1)',[a.phone]);assert.equal(await scalar('select icash_webinar_campaign_sender($1)',[a.phone]),sender);
+ assert.notEqual(await scalar("select icash_webinar_campaign_sender('+12125550902')"),sender,'New leads distribute across enabled numbers');
+ await q('update icash_webinar_text_senders set enabled=false where phone=$1',[sender]);assert.equal(await scalar('select icash_webinar_campaign_sender($1)',[a.phone]),null,'Paused conversation never rotates');await q('update icash_webinar_text_senders set enabled=true where phone=$1',[sender]);
+ await q("update icash_webinar_visitors set last_seen_at=now()-interval '20 minutes' where id=$1",[a.id]);
+ const first=jobs.find(j=>j.channel==='email'),sms=jobs.find(j=>j.channel==='sms'),later=jobs.filter(j=>j.channel==='email')[1];
+ await q("update icash_webinar_outbox set due_at=now()-interval '1 minute' where id=any($1)",[[first.id,sms.id,later.id]]);
+ await q('select * from icash_webinar_claim_followups(true,true)');
+ const authorize=(id,payload)=>scalar('select to_jsonb(icash_webinar_authorize_followup($1,$2))',[id,payload]);
+ assert.ok(await authorize(first.id,{subject:'Ready'}));await q("select icash_webinar_finish_followup($1,'email-campaign-first')",[first.id]);
+ assert.equal(await authorize(sms.id,{from:sender}),null,'Messages are spaced apart');
+ await q("update icash_webinar_outbox set sent_at=now()-interval '4 hours' where id=$1",[first.id]);
+ assert.ok(await authorize(later.id,{subject:'Next'}));await q("select icash_webinar_finish_followup($1,'email-campaign-second')",[later.id]);
+ await q("update icash_webinar_outbox set sent_at=now()-interval '4 hours' where id=$1",[later.id]);await q("update icash_webinar_outbox set state='claimed' where id=$1",[sms.id]);
+ assert.ok(await authorize(sms.id,{from:sender}));await q("select icash_webinar_finish_followup($1,'sms-campaign-first')",[sms.id]);
+ const extra=jobs.filter(j=>j.channel==='sms')[1];await q("update icash_webinar_outbox set state='claimed' where id=$1",[extra.id]);await q("update icash_webinar_outbox set sent_at=now()-interval '4 hours' where id=$1",[sms.id]);
+ assert.equal(await authorize(extra.id,{from:sender}),null,'A second text cannot send within 24 hours');
+ await clear();await q("update icash_webinar_campaigns set started_at=now()-interval '68 days' where visitor_id=$1",[a.id]);
+ await q('select * from icash_webinar_claim_followups(true,true)');assert.equal(await scalar('select count(*)::int from icash_webinar_outbox where visitor_id=$1 and step>=1000',[a.id]),1);await q('select * from icash_webinar_claim_followups(true,true)');assert.equal(await scalar('select count(*)::int from icash_webinar_outbox where visitor_id=$1 and step>=1000',[a.id]),1,'One ongoing message per week');
+ await q("insert into icash_memberships(id,mode,payer_email,paid_through) values($1,'live',$2,now()+interval '30 days')",[randomUUID(),a.email]);await q('select * from icash_webinar_claim_followups(true,true)');assert.equal(await scalar("select count(*)::int from icash_webinar_outbox where visitor_id=$1 and state in ('pending','claimed')",[a.id]),0,'Purchase cancels all acquisition messages');
+ const stopped=await make('+12125550903');await q('select icash_webinar_text_reply($1,true)',[stopped.phone]);assert.equal(await scalar("select count(*)::int from icash_webinar_outbox where visitor_id=$1 and channel='sms' and state='pending'",[stopped.id]),0);
+ const emailId=await scalar("select id from icash_webinar_outbox where visitor_id=$1 and channel='email' and campaign_id is not null limit 1",[stopped.id]);await q("update icash_webinar_outbox set expires_at=now()-interval '1 minute' where id=$1",[emailId]);await q('select * from icash_webinar_claim_followups(true,true)');assert.equal(await scalar('select state from icash_webinar_outbox where id=$1',[emailId]),'canceled','A blocked sender never flushes old campaign messages');
+ for(const role of ['anon','authenticated'])assert.equal(await scalar("select has_function_privilege($1,'icash_webinar_contact_campaign(uuid,uuid,text,text,text,boolean,boolean)','execute')",[role]),false);
+ console.log('Campaign database checks passed: cadence, consent, contact dedupe, sticky number pool, frequency, weekly continuation, purchase stop, STOP, expiry and private grants.');
+}

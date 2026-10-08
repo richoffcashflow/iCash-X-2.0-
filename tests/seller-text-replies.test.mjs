@@ -14,9 +14,9 @@ assert.equal((await replyToSellerText(db,text,'signed-provider-event',ai)).statu
 // Execute the actual route with provider/database stand-ins. Authentication must
 // precede ingestion; STOP must never reach either reply engine.
 let verified=true,event={id:'event-1',type:'text.incoming.sms',optOut:false,data:{to:'+12145550001',from:'+12145550002'}};
-let effects=[];
+let effects=[],role='property';
 const deps={NextResponse:{json:(body,o={})=>new Response(JSON.stringify(body),{status:o.status??200})},verifyContiguityWebhook:()=>verified,parseTextWebhook:()=>event,
- db:async(path)=>{effects.push(path);return path.startsWith('icash_text_senders')?[{phone:event.data.to}]:null;},ownerPracticeReply:async()=>effects.push('practice'),replyToSellerText:async()=>effects.push('seller'),dispatchTextMessage:()=>{},processTextAi:()=>{}};
+ db:async(path)=>{effects.push(path);if(path==='rpc/icash_route_lifecycle_text')return role;return path.startsWith('icash_text_senders')?[{phone:event.data.to}]:path.startsWith('icash_webinar_text_senders')?[]:null;},ownerPracticeReply:async()=>effects.push('practice'),replyToSellerText:async()=>effects.push('seller'),dispatchTextMessage:()=>{},processTextAi:()=>{}};
 globalThis.__sellerTextWebhook=deps;
 const source=ts.transpileModule(readFileSync(new URL('../app/api/webhooks/contiguity/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
 const {POST}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__sellerTextWebhook;\n'+source).toString('base64'));delete globalThis.__sellerTextWebhook;
@@ -25,5 +25,6 @@ const req=()=>new Request('https://example.invalid/api/webhooks/contiguity',{met
 verified=false;assert.equal((await POST(req())).status,401);assert.deepEqual(effects,[]);
 verified=true;assert.equal((await POST(req())).status,200);assert.ok(effects.indexOf('rpc/icash_ingest_text_event')<effects.indexOf('seller'));assert.ok(effects.includes('practice'));
 effects=[];event={...event,optOut:true};assert.equal((await POST(req())).status,200);assert.ok(effects.includes('rpc/icash_ingest_text_event'));assert.ok(!effects.includes('seller'));assert.ok(!effects.includes('practice'));
-effects=[];event={...event,type:'text.delivery.confirmed',optOut:false};assert.equal((await POST(req())).status,200);assert.ok(!effects.includes('seller'));
+for(const r of ['customer','prospect','ambiguous','unknown']){role=r;effects=[];event={...event,optOut:false};assert.equal((await POST(req())).status,200);assert(!effects.includes('rpc/icash_ingest_text_event'));assert(!effects.includes('seller'));assert(!effects.includes('practice'));}
+role='property';effects=[];event={...event,type:'text.delivery.confirmed',optOut:false};assert.equal((await POST(req())).status,200);assert.ok(!effects.includes('seller'));
 console.log('Seller reply service and actual webhook: signature-first, event-bound routing, immediate dispatch, bounded AI dispatch, STOP and delivery-event exclusions passed.');

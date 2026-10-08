@@ -1,0 +1,106 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {randomUUID} from 'node:crypto';
+export async function verifyWebinarLifecycle(pg,q){
+ const read=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
+ const scalar=async(sql,args=[])=>Object.values((await q(sql,args)).rows[0])[0];
+ await pg.exec(`
+ create schema auth;create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
+ alter table icash_accounts add column owner_user_id uuid,add column contact_phone text;
+ alter table icash_memberships add column payer_phone text;
+ alter table icash_funding_orders add column credited_at timestamptz,add column auto_recharge boolean,add column payer_phone text;
+ alter table icash_text_suppressions add column reason text;
+ create table icash_wallets(account_id uuid primary key,balance_cents bigint,reserved_cents bigint default 0);
+ create table icash_auto_recharges(account_id uuid,mode text,enabled boolean,pending_order uuid);
+ create table icash_screening_jobs(id uuid primary key,account_id uuid,state text,result jsonb default '{}',completed_at timestamptz);
+ create table icash_deal_files(id uuid primary key,account_id uuid,screening_id uuid,stage text,terms jsonb default '{}',updated_at timestamptz default now());
+ create table icash_text_threads(id uuid primary key,account_id uuid,deal_id uuid,party text,sender text,recipient text,retired_at timestamptz);
+ create table icash_text_messages(id uuid primary key,account_id uuid,thread_id uuid,direction text,state text,created_at timestamptz default now(),updated_at timestamptz default now());
+ create table icash_text_attention(id uuid primary key,account_id uuid,screening_id uuid,deal_id uuid,message_id uuid,kind text,state text,updated_at timestamptz default now());
+ create table icash_handoffs(id uuid primary key,account_id uuid,screening_id uuid,state text,created_at timestamptz default now());
+ create table icash_sms_call_requests(id uuid primary key,account_id uuid,screening_id uuid,deal_id uuid,message_id uuid,state text,requested_at timestamptz default now());
+ create table icash_live_callbacks(id uuid primary key,account_id uuid,screening_id uuid,state text,due_at timestamptz default now());
+ create table icash_signing_envelopes(id uuid primary key,account_id uuid,deal_id uuid,state text,test_mode boolean,updated_at timestamptz default now());
+ create table icash_title_tasks(id uuid primary key,account_id uuid,deal_id uuid,kind text,state text,due_date date,updated_at timestamptz default now());
+ create table icash_automation_tickets(id uuid primary key default gen_random_uuid(),account_id uuid,kind text constraint icash_automation_tickets_kind_check check(kind in ('discovery')),token text default gen_random_uuid()::text||gen_random_uuid()::text,state text default 'issued',created_at timestamptz default now(),expires_at timestamptz default now()+interval '2 minutes');
+ create function icash_next_automation() returns jsonb language sql as $$select null::jsonb$$;
+ -- Existing dispatch function shape; the production patch fails if its prerequisite changes.
+ create function icash_sms_message_route_current(p_account uuid,p_message uuid) returns boolean language plpgsql set search_path='' as $$
+ declare m public.icash_text_messages;t public.icash_text_threads;begin
+ select * into m from public.icash_text_messages where id=p_message and account_id=p_account;
+ select * into t from public.icash_text_threads where id=m.thread_id and account_id=p_account;
+ if t.id is null or t.retired_at is not null then return false;end if;
+ return true;end $$;
+ `);
+ await pg.exec(read('config/attention-notifications.sql'));await pg.exec(read('config/customer-updates.sql'));
+ await pg.exec(read('supabase/migrations/20261008174620_customer_lifecycle_and_text_roles.sql'));
+ await q('update icash_customer_update_settings set enabled=true');
+ const tz=await scalar("select name from pg_timezone_names where name like 'Etc/GMT%' and extract(hour from now() at time zone name)=12 limit 1");
+ const account=randomUUID(),user=randomUUID(),visitor=randomUUID(),phone='+12125550800',primary='+12125550990',other='+12125550991';
+ await q('insert into auth.users values($1,$2,now())',[user,'lifecycle@example.test']);
+ await q('insert into icash_accounts(id,owner_user_id,contact_phone) values($1,$2,$3)',[account,user,phone]);
+ await q("insert into icash_memberships(id,account_id,mode,state,paid_through,payer_phone) values($1,$2,'live','active',now()+interval '1 month',$3)",[randomUUID(),account,phone]);
+ await q("insert into icash_webinar_visitors(id,email,phone,email_consent_at,sms_consent_at,consent_version,sms_consent_version,timezone) values($1,'lifecycle@example.test',$2,now(),now(),'webinar-email-v1','webinar-sms-v1',$3)",[visitor,phone,tz]);
+ assert.equal(await scalar('select icash_webinar_activate_customers()'),0,'Old consent is not expanded');
+ await q("update icash_webinar_visitors set consent_version='webinar-email-campaign-2026-10-08',sms_consent_version='webinar-sms-campaign-2026-10-08' where id=$1",[visitor]);
+ await q('update auth.users set email_confirmed_at=null where id=$1',[user]);assert.equal(await scalar('select icash_webinar_activate_customers()'),0,'Unverified email cannot enroll an account');
+ await q('update auth.users set email_confirmed_at=now() where id=$1',[user]);
+ assert.equal(await scalar('select icash_webinar_activate_customers()'),1);assert.equal(await scalar('select icash_webinar_activate_customers()'),0,'Activation is idempotent');
+ let pref=(await q('select * from icash_customer_update_preferences where account_id=$1',[account])).rows[0];assert(pref.email_enabled&&pref.sms_enabled);assert.equal(pref.source_webinar_visitor,visitor);
+ await scalar('select icash_stop_customer_updates($1)',[pref.unsubscribe_token]);assert.equal(await scalar('select icash_webinar_activate_customers()'),0,'An opt-out is never overwritten');
+ const save=()=>scalar("select icash_customer_update_preferences_save($1,$2,true,true,$3,$4,'bot-updates-2026-10-08.1')",[account,user,phone,tz]);await save();
+ await q('insert into icash_webinar_text_senders(phone) values($1),($2) on conflict do nothing',[primary,other]);await scalar('select icash_webinar_prefer_sender($1)',[primary]);
+ assert.equal(await scalar('select icash_webinar_campaign_sender($1)',[phone]),primary,'Preferred customer number beats load balancing');
+ assert.equal(await scalar('select enabled from icash_text_senders where phone=$1',[primary]),true,'Preferred number remains available for property threads');
+ await scalar('select icash_webinar_prefer_sender($1)',[other]);assert.equal(await scalar('select icash_webinar_campaign_sender($1)',[phone]),primary,'Existing customer keeps their number');
+ await scalar('select icash_webinar_prefer_sender($1)',[primary]);
+ await q('insert into icash_wallets values($1,400,0)',[account]);
+ assert.equal(await scalar('select icash_customer_credit_low($1)',[account]),true);
+ await q("insert into icash_auto_recharges values($1,'live',true,null)",[account]);assert.equal(await scalar('select icash_customer_credit_low($1)',[account]),false,'Active refill is not nagged');await q('delete from icash_auto_recharges where account_id=$1',[account]);
+ const claim=(email=true,sms=true)=>scalar('select icash_claim_customer_update($1,$2,$3)',[account,email,sms]);
+ const authorize=id=>scalar('select icash_authorize_customer_update($1,$2)',[account,id]);
+ let id=await claim();assert(id);await q('update icash_wallets set balance_cents=1000 where account_id=$1',[account]);assert.equal(await authorize(id),null,'Refill after claim cancels stale reminder');
+ await q('delete from icash_customer_update_deliveries');await q('update icash_wallets set balance_cents=400 where account_id=$1',[account]);
+ id=await claim();let job=await authorize(id);assert.equal(job.kind,'credits_low');assert.equal(job.screeningId,null);assert.equal(job.channel,'email');assert.equal(await authorize(id),null,'One-use authorization');
+ id=await claim(false,true);job=await authorize(id);assert.equal(job.sender,primary);assert.equal(job.channel,'sms');assert.equal(await claim(false,true),null,'SMS cap is enforced');
+ assert.equal(await scalar("select icash_lifecycle_frequency_ok('sms',$1)",[phone]),false,'Customer and acquisition share a contact cap');
+ await q("update icash_customer_update_deliveries set authorized_at=now()-interval '25 hours',created_at=now()-interval '25 hours'");
+ const thread=randomUUID(),msg=randomUUID(),seller='+12125550801';
+ await q("insert into icash_text_threads(id,account_id,party,sender,recipient) values($1,$2,'seller',$3,$4)",[thread,account,primary,seller]);
+ await q("insert into icash_text_messages(id,account_id,thread_id,direction,state) values($1,$2,$3,'outgoing','ready')",[msg,account,thread]);
+ assert.equal(await scalar('select icash_sms_message_route_current($1,$2)',[account,msg]),true,'Other contacts can use preferred number for real estate');
+ const route=async(from,to,optout=false,key=randomUUID())=>scalar('select icash_route_lifecycle_text($1,$2)',[{id:key,type:'text.incoming.sms',data:{from,to,body:optout?'STOP':'Tell me more'}},optout]);
+ assert.equal(await route(seller,primary),'property');assert.equal(await route(phone,primary),'customer');
+ const prospect='+12125550802';await scalar('select icash_webinar_campaign_sender($1)',[prospect]);assert.equal(await route(prospect,primary),'prospect');assert.equal(await route('+12125550803',primary),'unknown');
+ await q('update icash_text_threads set recipient=$1 where id=$2',[phone,thread]);
+ assert.equal(await route(phone,primary),'ambiguous');assert.equal(await scalar('select icash_webinar_campaign_sender($1)',[phone]),null,'Role collision holds customer send');
+ assert.equal(await scalar('select icash_sms_message_route_current($1,$2)',[account,msg]),false,'Role collision holds property send');assert.equal(await scalar('select state from icash_text_messages where id=$1',[msg]),'needs_review');
+ await route(phone,primary,true);assert.equal(await scalar('select sms_enabled from icash_customer_update_preferences where account_id=$1',[account]),false);assert.equal(await scalar('select count(*)::int from icash_text_suppressions where phone=$1',[phone]),1);
+ const event=randomUUID();await route(prospect,primary,false,event);await route(prospect,primary,false,event);assert.equal(await scalar('select count(*)::int from icash_lifecycle_text_inbox where event_id=$1',[event]),1,'Repeated provider receipt is deduplicated');
+ for(const role of ['anon','authenticated']){assert.equal(await scalar("select has_table_privilege($1,'icash_lifecycle_text_inbox','select')",[role]),false);assert.equal(await scalar("select has_function_privilege($1,'icash_webinar_activate_customers()','execute')",[role]),false);}
+ // Compile the real previous functions and apply the exact production patch.
+ await pg.exec(`
+ create table icash_seller_intakes(id uuid,phone text);
+ create table icash_operation_rates(id uuid);
+ create table icash_operational_contacts(id uuid);
+ create table icash_authority_review_requests(id uuid);
+ create table icash_authority_market_reviews(id uuid);
+ create table icash_dnc_verification_receipts(id uuid);
+ create table icash_dnc_verification_sources(id uuid);
+ `);
+ await pg.exec(read('tests/fixtures/property-sender-functions.sql'));
+ await pg.exec(read('supabase/migrations/20261008181523_property_sender_history_routing.sql'));
+ const propertyPhone='+12125550810',deal1=randomUUID(),deal2=randomUUID(),deal3=randomUUID();
+ const choose=deal=>scalar('select icash_property_text_sender($1,$2,$3)',[account,deal,propertyPhone]);
+ assert.equal(await choose(deal1),other,'Customer-preferred number is secondary for properties');
+ await q('insert into icash_text_threads(id,account_id,deal_id,sender,recipient) values($1,$2,$3,$4,$5)',[randomUUID(),account,deal1,other,propertyPhone]);
+ assert.equal(await choose(deal1),other,'Same-property follow-up keeps its sender');
+ assert.equal(await choose(deal2),primary,'Next property uses the other previously unused number');
+ await q('insert into icash_text_threads(id,account_id,deal_id,sender,recipient) values($1,$2,$3,$4,$5)',[randomUUID(),account,deal2,primary,propertyPhone]);
+ assert.equal(await choose(deal3),null,'No unused number holds instead of rotating through old numbers');
+ await q('update icash_text_threads set retired_at=now() where recipient=$1 and deal_id=$2',[propertyPhone,deal1]);assert.equal(await choose(deal3),null,'Past contact is remembered after a thread retires');
+ await q("insert into icash_text_suppressions(phone,reason) values($1,'STOP')",[propertyPhone]);assert.equal(await choose(deal2),null,'Opt-out blocks all numbers, including a previous conversation');
+ assert.equal(await scalar("select has_function_privilege('anon','icash_property_text_sender(uuid,uuid,text)','execute')"),false);
+ console.log('PASS property number pool: real function patches, new-contact preference, different sender for a second property, stable follow-ups, exhaustion, retired history and global STOP.');
+ console.log('PASS lifecycle database: verified purchase handover, legacy consent, opt-out, preferred/stable sender, actual low credits, refill race, shared limits, property/customer ambiguity, STOP, dedupe and private grants.');
+}
