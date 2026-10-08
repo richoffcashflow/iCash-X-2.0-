@@ -15,7 +15,15 @@ export async function prepareSellerAgreement(env=process.env,fetcher=fetch){
  if(!env.SUPABASE_URL||!env.SUPABASE_SECRET_KEY||!env.ELEVENLABS_API_KEY)throw Error('DEPLOYMENT_CONFIGURATION_REQUIRED');
  async function request(url,headers,method='GET',body){
   const r=await fetcher(url,{method,headers:{...headers,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(20000)});
-  if(!r.ok||r.redirected||r.url&&r.url!==url)throw Error('PROVIDER_UNCONFIRMED_'+r.status);
+  if(!r.ok||r.redirected||r.url&&r.url!==url){
+   if(!r.ok&&url.startsWith('https://api.us.elevenlabs.io/')&&method==='POST'){
+    const error=await r.json().catch(()=>null),detail=object(object(error).detail);
+    let message=typeof detail.message==='string'?detail.message:typeof object(error).detail==='string'?object(error).detail:'';
+    for(const secret of [env.ELEVENLABS_API_KEY,env.SUPABASE_SECRET_KEY])if(secret)message=message.replaceAll(secret,'[redacted]');
+    console.log('Seller agreement provider rejection:',JSON.stringify({operation:url.endsWith('/branches')?'create_branch':'create_tool',status:r.status,code:typeof detail.status==='string'&&/^[A-Za-z0-9_-]{1,80}$/.test(detail.status)?detail.status:null,message:message.replace(/[\x00-\x1f]/g,' ').slice(0,600)}));
+   }
+   throw Error('PROVIDER_UNCONFIRMED_'+r.status);
+  }
   return JSON.parse((await boundedBytes(r,1024*1024)).toString('utf8'));
  }
  const rpc=(fn,body)=>request(env.SUPABASE_URL+'/rest/v1/rpc/'+fn,{apikey:env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+env.SUPABASE_SECRET_KEY},'POST',body);
@@ -67,14 +75,14 @@ export async function prepareSellerAgreement(env=process.env,fetcher=fetch){
   const selected=rows(branches).filter(b=>b.id===id);if(selected.length!==1||selected[0].current_live_percentage!==0||selected[0].is_archived||selected[0].draft_exists)throw Error('ISOLATED_BRANCH_READBACK_REQUIRED');
   return {agent,branch:selected[0]};
  }
- const inputConfig=structuredClone(incoming.conversation_config);inputConfig.agent.first_message='{{icash_property_greeting}}';inputConfig.agent.prompt.prompt=sellerAgreementReceptionPrompt+directRecordedInstructions;inputConfig.agent.prompt.tool_ids=[c.stop_tool_id,tool.id];
- // Tool IDs are canonical references. Omit expanded webhook definitions inherited by GET.
- inputConfig.agent.prompt.tools=(inputConfig.agent.prompt.tools??[]).filter(t=>t.type==='system');
+ // Branch creation accepts overrides. Inherit audio/runtime settings from the
+ // exact parent version instead of posting output-only GET configuration fields.
+ const inputConfig={agent:{first_message:'{{icash_property_greeting}}',prompt:{prompt:sellerAgreementReceptionPrompt+directRecordedInstructions,tool_ids:[c.stop_tool_id,tool.id]}}};
  const inPrepared=await branch(incomingPath,incoming,inRows,inputConfig);
  const candidate={...c,context_policy:sellerAgreementReceptionPolicy,context_policy_hash:sellerAgreementReceptionPolicyHash,agreement_tool_id:tool.id,branch_id:inPrepared.branch.id,reviewed_version_id:inPrepared.agent.version_id,config_hash:''};
  const inspected=inspectRecordedReceptionAgent(candidate,inPrepared.agent,inPrepared.branch,receptionWorkspacePostcallAbsent(workspace),stop,tool);
  if(!inspectRecordedReceptionAgent({...candidate,config_hash:inspected.hash},inPrepared.agent,inPrepared.branch,receptionWorkspacePostcallAbsent(workspace),stop,tool).safe)throw Error('INBOUND_AGREEMENT_READBACK_REQUIRED');
- const outputConfig=structuredClone(outgoing.conversation_config);outputConfig.agent.prompt.tool_ids=oldReview.toolIds.map(id=>id===oldReview.contractToolId?tool.id:id);outputConfig.agent.prompt.tools=(outputConfig.agent.prompt.tools??[]).filter(t=>t.type==='system');
+ const outputConfig={agent:{prompt:{tool_ids:oldReview.toolIds.map(id=>id===oldReview.contractToolId?tool.id:id)}}};
  const outPrepared=await branch(outgoingPath,outgoing,outRows,outputConfig);
  const a=outPrepared.agent,newReview={...oldReview,branchId:outPrepared.branch.id,versionId:a.version_id,contractToolId:tool.id,toolIds:outputConfig.agent.prompt.tool_ids,reviewedAt:new Date().toISOString(),configHash:sha(JSON.stringify(canonical({conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null})))};
  if(!recordingAgentMatches(newReview,a)||!readRecordingReview(JSON.stringify(newReview)))throw Error('OUTBOUND_AGREEMENT_READBACK_REQUIRED');
