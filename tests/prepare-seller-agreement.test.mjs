@@ -2,20 +2,20 @@ import {legacyAutomaticOfferGuardrail,automaticOfferGuardrails} from '../lib/aut
 import assert from 'node:assert/strict';
 import {prepareSellerAgreement} from '../scripts/prepare-seller-agreement.mjs';
 import {sellerOfferReceptionPolicyHash,sellerOfferReceptionPrompt} from '../lib/seller-offer-reception.ts';
-import {sellerAgreementReceptionPolicy,sellerAgreementReceptionPolicyHash,sellerAgreementReceptionPrompt,noEmdReceptionPolicy,noEmdReceptionPolicyHash,noEmdReceptionPrompt,automaticOfferReceptionPolicy,automaticOfferReceptionPolicyHash,automaticOfferReceptionPrompt,payoffAutomaticOfferReceptionPolicy,payoffAutomaticOfferReceptionPolicyHash,payoffAutomaticOfferReceptionPrompt} from '../lib/seller-agreement-reception.ts';
-import {sellerAgreementToolConfig,noEmdAgreementToolConfig,automaticOfferToolConfig} from '../lib/seller-agreement-tool.ts';
+import {sellerAgreementReceptionPolicy,sellerAgreementReceptionPolicyHash,sellerAgreementReceptionPrompt,noEmdReceptionPolicy,noEmdReceptionPolicyHash,noEmdReceptionPrompt,automaticOfferReceptionPolicy,automaticOfferReceptionPolicyHash,automaticOfferReceptionPrompt,progressAutomaticOfferReceptionPolicy,progressAutomaticOfferReceptionPolicyHash,progressAutomaticOfferReceptionPrompt} from '../lib/seller-agreement-reception.ts';
+import {sellerAgreementToolConfig,noEmdAgreementToolConfig,automaticOfferToolConfig,legacyAutomaticOfferToolConfig} from '../lib/seller-agreement-tool.ts';
 import {inspectRecordedReceptionAgent,recordedReceptionUrl} from '../lib/recorded-reception.ts';
 import {receptionTarget} from '../lib/general-reception.ts';
 import {directRecordedInstructions} from '../lib/direct-call-entry.ts';
 import {canonical,sha,recordingPolicy,recordingAgentMatches} from '../lib/required-call-recording.ts';
 
 async function testStaging(noEmd,automatic=false){
-const oldAgreementTool={id:'tool_previous',tool_config:automatic?automaticOfferToolConfig:sellerAgreementToolConfig};
+const oldAgreementTool={id:'tool_previous',tool_config:automatic?legacyAutomaticOfferToolConfig:sellerAgreementToolConfig};
 const c={id:'11111111-1111-4111-8111-111111111111',account_id:receptionTarget.accountId,owner_user_id:receptionTarget.ownerUserId,called_number:receptionTarget.calledNumber,agent_id:receptionTarget.agentId,call_profile:'normal',entry_policy:'direct_recorded_v1',branch_id:'agtbrch_oldin',reviewed_version_id:'agtvrsn_oldin',context_policy:'seller_offer_v2',context_policy_hash:sellerOfferReceptionPolicyHash,context_approval_reference:'Synthetic reviewed property script',stop_tool_id:'tool_stop',max_duration_seconds:600,config_hash:''};
 const stop={id:c.stop_tool_id,tool_config:{type:'webhook',name:'icash_stop_reception_recording',api_schema:{url:recordedReceptionUrl+'/stop',method:'POST',request_headers:{Authorization:{variable_name:'secret__icash_reception_stop_token'}},request_body_schema:{type:'object',required:['recordingId'],properties:{recordingId:{type:'string',dynamic_variable:'icash_reception_recording_id'}}}}}};
 const incoming={agent_id:c.agent_id,branch_id:c.branch_id,version_id:c.reviewed_version_id,main_branch_id:'agtbrch_mainin',conversation_config:{asr:{user_input_audio_format:'ulaw_8000'},tts:{agent_output_audio_format:'ulaw_8000'},conversation:{max_duration_seconds:600},agent:{first_message:'{{icash_property_greeting}}',prompt:{prompt:sellerOfferReceptionPrompt+directRecordedInstructions,max_tokens:120,tool_ids:[stop.id],tools:[],knowledge_base:[]}}},platform_settings:{privacy:{record_voice:false},auth:{enable_auth:true},call_limits:{agent_concurrency_limit:1,bursting_enabled:false},queueing_config:{enabled:false},overrides:{enable_conversation_initiation_client_data_from_webhook:false,conversation_config_override:{conversation:{max_duration_seconds:true}}},workspace_overrides:{webhooks:{post_call_webhook_id:null,events:[],send_audio:false}}}};
 const branch=a=>({id:a.branch_id,agent_id:a.agent_id,current_live_percentage:0,is_archived:false,draft_exists:false});
-if(noEmd||automatic){Object.assign(c,{context_policy:automatic?payoffAutomaticOfferReceptionPolicy:sellerAgreementReceptionPolicy,context_policy_hash:automatic?payoffAutomaticOfferReceptionPolicyHash:sellerAgreementReceptionPolicyHash,agreement_tool_id:oldAgreementTool.id});Object.assign(incoming.conversation_config.agent.prompt,{prompt:(automatic?payoffAutomaticOfferReceptionPrompt:sellerAgreementReceptionPrompt)+directRecordedInstructions,tool_ids:[stop.id,oldAgreementTool.id],tools:[oldAgreementTool.tool_config]});}
+if(noEmd||automatic){Object.assign(c,{context_policy:automatic?progressAutomaticOfferReceptionPolicy:sellerAgreementReceptionPolicy,context_policy_hash:automatic?progressAutomaticOfferReceptionPolicyHash:sellerAgreementReceptionPolicyHash,agreement_tool_id:oldAgreementTool.id});Object.assign(incoming.conversation_config.agent.prompt,{prompt:(automatic?progressAutomaticOfferReceptionPrompt:sellerAgreementReceptionPrompt)+directRecordedInstructions,tool_ids:[stop.id,oldAgreementTool.id],tools:[oldAgreementTool.tool_config]});}
 if(automatic){incoming.platform_settings.guardrails=automaticOfferGuardrails();}
 c.config_hash=inspectRecordedReceptionAgent(c,incoming,branch(incoming),true,stop,noEmd||automatic?oldAgreementTool:undefined).hash;
 const outgoing=structuredClone(incoming);Object.assign(outgoing,{agent_id:'agent_outbound',branch_id:'agtbrch_oldout',version_id:'agtvrsn_oldout',main_branch_id:'agtbrch_mainout'});
@@ -31,7 +31,7 @@ for(const scenario of (automatic?['ok','changed_tool','source_changed']:['ok','c
   if(init.method==='POST')writes.push({path:u.pathname,body});
   if(u.pathname.endsWith('icash_get_recorded_reception_config'))value=c;
   else if(u.pathname.endsWith('icash_claim_seller_agreement_rollout'))value=scenario!=='claim_denied';
-  else if(u.pathname.endsWith(automatic?'icash_stage_offer_continuity_rollout':'icash_stage_seller_agreement_rollout')){
+  else if(u.pathname.endsWith(automatic?'icash_stage_live_agreement_rollout':'icash_stage_seller_agreement_rollout')){
    assert.equal(body.p_tool,'tool_agreement');assert.equal(body.p_branch,'agtbrch_newin');assert.equal(body.p_outbound_review.branchId,'agtbrch_newout');
    assert.equal(body.p_outbound_review.contractToolId,body.p_tool);assert(!body.p_outbound_review.toolIds.includes('tool_oldcontract'));
    assert(recordingAgentMatches(body.p_outbound_review,created.get(outgoing.agent_id)));

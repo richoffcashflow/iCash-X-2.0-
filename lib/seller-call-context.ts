@@ -69,7 +69,7 @@ export function sellerConversationProgress(address:string,sms:unknown,calls:unkn
 }
 /** Keep whole seller answers with their question, without transport IDs or
  * repeated agent filler. Original transcripts remain in the database. */
-export function compactSellerProgress(progress:{history:VoiceSmsContext|null;priorCalls:SellerPriorCall[]}){
+export function compactSellerProgress(progress:{history:VoiceSmsContext|null;priorCalls:SellerPriorCall[]},budget=5800){
  const exchanges=(messages:VoiceSmsContext['messages'])=>messages.flatMap((turn,index)=>{
   if(turn.direction!=='incoming'||!/[a-z0-9]/i.test(turn.body))return [];
   const question=messages.slice(0,index).findLast(m=>m.direction==='outgoing')?.body??'';
@@ -84,8 +84,9 @@ export function compactSellerProgress(progress:{history:VoiceSmsContext|null;pri
   for(const item of ordered){const size=JSON.stringify(item.pair).length+1;if(used+size<=budget){keep.add(item.index);used+=size;}}
   pairs.forEach((pair,index)=>{if(keep.has(index))selected.push(pair);});return selected;
  };
- const recentSms=bounded(exchanges(progress.history?.messages??[]),1500);
- const priorExchanges=bounded(progress.priorCalls.slice().reverse().flatMap(call=>exchanges(call.messages)),4300);
+ const smsBudget=Math.min(1500,Math.floor(budget/4));
+ const recentSms=bounded(exchanges(progress.history?.messages??[]),smsBudget);
+ const priorExchanges=bounded(progress.priorCalls.slice().reverse().flatMap(call=>exchanges(call.messages)),budget-smsBudget);
  return {recentSms,priorExchanges};
 }
 export type SellerRequestContext={name:string;submittedAt:string};

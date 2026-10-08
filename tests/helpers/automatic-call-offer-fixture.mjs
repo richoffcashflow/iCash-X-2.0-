@@ -17,6 +17,8 @@ export async function testAutomaticCallOffer(f){
  await db.exec(read('supabase/migrations/20261008202910_live_offer_context_continuity.sql'));
  await db.exec(read('supabase/migrations/20261008203215_voice_offer_progress_policy.sql'));
  await db.exec(read('supabase/migrations/20261008204029_voice_offer_progress_evidence.sql'));
+ await db.exec(read('supabase/migrations/20261008213733_live_agreement_history.sql'));
+ await scenario('v9 remains bound to the reviewed seller call',async()=>{const {scope}=await call('seller',true,'v9');assert.equal((await scope()).dealId,'11111111-1111-4111-8111-111111111111');});
  await scenario('outbound offer API reaches real SQL when no text thread exists; paused and foreign calls stay blocked',async()=>{
   const {r,terms}=await call('seller',true,'v8'),id='22222222-2222-4222-8222-222222222222',token='c'.repeat(64),hash=sha(token),contact=sha(r.from_phone);
   await q('insert into public.icash_screening_jobs(id,account_id,snapshot,state) select $1,account_id,snapshot,state from public.icash_screening_jobs limit 1',[id]);

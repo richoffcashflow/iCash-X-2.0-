@@ -58,7 +58,7 @@ export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:un
  const expectedIds=closing?[c.stop_tool_id,agreementId]:[c.stop_tool_id];
  const exactStop=new Set(expectedIds).size===expectedIds.length&&Array.isArray(prompt.tool_ids)&&prompt.tool_ids.length===expectedIds.length&&expectedIds.every(id=>(prompt.tool_ids as unknown[]).includes(id));
  let exactAgreement=!closing;
- if(closing&&sellerAgreementToolMatches(agreementToolInput,agreementId)){
+ if(closing&&sellerAgreementToolMatches(agreementToolInput,agreementId,c.context_policy)){
   const definition=JSON.stringify(canonical(object(agreementToolInput).tool_config));
   const matches=Array.isArray(prompt.tools)?prompt.tools.filter(t=>JSON.stringify(canonical(t))===definition):[];
   exactAgreement=matches.length<=1;

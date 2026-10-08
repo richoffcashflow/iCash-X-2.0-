@@ -24,7 +24,7 @@ export const noEmdAgreementToolName='icash_seller_agreement_no_emd';
 export const noEmdAgreementToolConfig=structuredClone(sellerAgreementToolConfig);
 noEmdAgreementToolConfig.name=noEmdAgreementToolName;
 noEmdAgreementToolConfig.api_schema.request_body_schema.properties.confirmation.properties.termsConfirmed.description='Seller confirmed the actual prepared terms and inspection days. The seller purchase agreement has no earnest-money deposit requirement; do not request or hold for an EMD amount.';
-export const automaticOfferToolConfig={...structuredClone(noEmdAgreementToolConfig),name:automaticOfferToolName,
+export const legacyAutomaticOfferToolConfig={...structuredClone(noEmdAgreementToolConfig),name:automaticOfferToolName,
  description:'Get the exact server-calculated seller offer or authorized buyer price before saying any price. Save acceptance, recalculate from a seller-stated total repair estimate, or record changed facts. Then prepare/text the no-EMD seller agreement and verify signatures after closing confirmations.',
  api_schema:{...structuredClone(noEmdAgreementToolConfig.api_schema),url:'https://www.geticashx.com/api/internal/voice/cash-offer',request_body_schema:{...structuredClone(noEmdAgreementToolConfig.api_schema.request_body_schema),properties:{
   ...structuredClone(noEmdAgreementToolConfig.api_schema.request_body_schema.properties),
@@ -34,10 +34,15 @@ export const automaticOfferToolConfig={...structuredClone(noEmdAgreementToolConf
   sellerStatement:field('string','update_repairs/report_change only: the seller\'s full statement verbatim.'),
   repairEstimateCents:field('number','update_repairs only: optional seller-stated estimated TOTAL repair budget in cents. Omit unless supplied; never infer it from condition or sale price.'),
  }}}};
+export const automaticOfferToolConfig={...structuredClone(legacyAutomaticOfferToolConfig),
+ api_schema:{...structuredClone(legacyAutomaticOfferToolConfig.api_schema),request_body_schema:{...structuredClone(legacyAutomaticOfferToolConfig.api_schema.request_body_schema),
+ required:[...legacyAutomaticOfferToolConfig.api_schema.request_body_schema.required,'conversationHistory'],
+ properties:{...structuredClone(legacyAutomaticOfferToolConfig.api_schema.request_body_schema.properties),conversationHistory:{type:'string',dynamic_variable:'system__conversation_history'}}}}
+};
 /** Reject endpoint, header, schema or dynamic-variable changes independently of agent fingerprints. */
-export function sellerAgreementToolMatches(raw:unknown,id?:string){
+export function sellerAgreementToolMatches(raw:unknown,id?:string,policy?:unknown){
  const r=object(raw),c=object(r.tool_config),a=object(c.api_schema);
- const expected=c.name===automaticOfferToolName?automaticOfferToolConfig:c.name===noEmdAgreementToolName?noEmdAgreementToolConfig:sellerAgreementToolConfig;
+ const expected=c.name===automaticOfferToolName?(policy&&policy!=='automatic_offer_v9'?legacyAutomaticOfferToolConfig:automaticOfferToolConfig):c.name===noEmdAgreementToolName?noEmdAgreementToolConfig:sellerAgreementToolConfig;
  const empty=(v:unknown)=>v==null||Array.isArray(v)&&v.length===0||typeof v==='object'&&Object.keys(v).length===0;
  // ElevenLabs serializes inactive value sources as empty strings/false/null.
  // Remove only those neutral defaults; any active source or omitted field fails.
