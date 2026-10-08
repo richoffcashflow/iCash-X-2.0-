@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useState,useRef} from 'react';
 import {Phone,Copy} from 'lucide-react';
-type Data={businessNumber?:string|null;personalCalls?:{id:string;state:string;callback_phone:string;ended_at:string|null}[];attempts?:{id:string;createdAt:string;status:string;costPending:boolean}[];contacts:{phone:string;name?:string;available:boolean;reason:string}[];reason?:string};
+type Data={businessNumber?:string|null;personalCalls?:{id:string;state:string;callback_phone:string;ended_at:string|null;audioAvailable?:boolean}[];attempts?:{id:string;createdAt:string;status:string;costPending:boolean}[];contacts:{phone:string;name?:string;available:boolean;reason:string}[];reason?:string};
 export function displayContactPhone(phone:string){return phone.replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3');}
 export function ManualCallOptions({screeningId,onTakeover}:{screeningId:string;onTakeover?:()=>void}){
  const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[refresh,setRefresh]=useState(0),[checked,setChecked]=useState(0),[busy,setBusy]=useState(false);
@@ -39,6 +39,7 @@ export function ManualCallOptions({screeningId,onTakeover}:{screeningId:string;o
    <div className="seller-contact-identity"><span className="seller-contact-avatar">{(c.name||'S').slice(0,1).toUpperCase()}</span><div><strong>{c.name||'Saved contact'}</strong><span>{displayContactPhone(c.phone)}</span></div></div>
    <div className="seller-contact-actions"><button type="button" className="contact-primary" data-credit-action disabled={busy||!!callId||!callbackPhone.trim()} onClick={()=>void call(c.phone)}><Phone size={16}/>{busy?'Connecting…':'Call seller'}</button><button type="button" className="contact-secondary" onClick={()=>void copy(c.phone)}><Copy size={16}/>Copy number</button></div>
   </div>)}
+  {data?.personalCalls?.filter(c=>c.audioAvailable).map(c=><div className="contact-feedback" key={c.id}><strong>Listen to your call</strong><audio controls preload="none" aria-label="Play seller call" style={{width:'100%'}} src={'/api/work/business-call?id='+c.id+'&audio=1'}/></div>)}
   {data?.attempts?.map(a=><div className="contact-feedback" key={a.id}><strong>{a.status}</strong><p>{new Date(a.createdAt).toLocaleString('en-US',{hour12:true})}{a.costPending?' · Final call cost pending':''}</p></div>)}
   {!!data?.contacts.some(c=>!c.available)&&<details className="contact-unavailable" open={!data.contacts.some(c=>c.available)}><summary>Unavailable numbers</summary>{data.contacts.filter(c=>!c.available).map(c=><div className="seller-contact-card" key={c.phone}><strong>{c.name||'Saved contact'}</strong><span>{displayContactPhone(c.phone)}</span><p>{c.reason}</p></div>)}</details>}
  </section>;

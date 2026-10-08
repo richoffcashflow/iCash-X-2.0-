@@ -1,3 +1,4 @@
+import {customerPhoneAudioAvailable,type CustomerPhoneCall} from '@/lib/customer-phone';
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {workAccount} from '@/lib/work-account';
@@ -12,9 +13,9 @@ export async function GET(req:Request){
   const contacts=await db<{phone:string;name:string;phone_type:string;blocked:boolean}[]>('rpc/icash_manual_contacts','POST',{p_account:accountId,p_screening:screeningId});
   const choices=await Promise.all(contacts.map(async c=>{const reason=await db<string|null>('rpc/icash_manual_contact_reason','POST',{p_account:accountId,p_screening:screeningId,p_phone:c.phone,p_channel:'voice'});return {...c,available:reason===null,reason:reason??'Call using your business number.'};}));
   const attempts=await db<{id:string;state:string;created_at:string;consent_at:string|null;last_error:string|null}[]>(`icash_call_recordings?account_id=eq.${accountId}&screening_id=eq.${screeningId}&call_sid=not.is.null&conversation_id=is.null&select=id,state,created_at,consent_at,last_error&order=created_at.desc&limit=3`);
-  const [personalCalls,deals]=await Promise.all([db<{id:string;state:string;callback_phone:string;ended_at:string|null}[]>(`icash_customer_phone_calls?account_id=eq.${accountId}&screening_id=eq.${screeningId}&select=id,state,callback_phone,ended_at&order=created_at.desc&limit=1`),db<{id:string}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${screeningId}&select=id&limit=1`)]);
+  const [personalCalls,deals]=await Promise.all([db<CustomerPhoneCall[]>(`icash_customer_phone_calls?account_id=eq.${accountId}&screening_id=eq.${screeningId}&select=id,state,callback_phone,ended_at,recording_required,recording_state,recording_sid,recording_expires_at,recording_deleted_at&order=created_at.desc&limit=1`),db<{id:string}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${screeningId}&select=id&limit=1`)]);
   const [thread]=deals[0]?await db<{sender:string}[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${deals[0].id}&retired_at=is.null&select=sender&limit=1`):[];
-  return NextResponse.json({personalCalls,businessNumber:thread?.sender??null,attempts:attempts.map(a=>({id:a.id,createdAt:a.created_at,status:['failed','declined','absent'].includes(a.state)?'Call ended before the AI conversation':'Call connecting',costPending:a.last_error==='terminal_carrier_reconciliation_required'})),contacts:choices,reason:choices.length?undefined:'No phone number has been saved for this property yet.'},{headers});
+  return NextResponse.json({personalCalls:personalCalls.map(c=>({id:c.id,state:c.state,callback_phone:c.callback_phone,ended_at:c.ended_at,audioAvailable:customerPhoneAudioAvailable(c)})),businessNumber:thread?.sender??null,attempts:attempts.map(a=>({id:a.id,createdAt:a.created_at,status:['failed','declined','absent'].includes(a.state)?'Call ended before the AI conversation':'Call connecting',costPending:a.last_error==='terminal_carrier_reconciliation_required'})),contacts:choices,reason:choices.length?undefined:'No phone number has been saved for this property yet.'},{headers});
  }catch{return NextResponse.json({error:'Could not load contacts. Try again.'},{status:503,headers});}
 }
 export async function POST(req:Request){
