@@ -2,6 +2,9 @@
 .workspace.workspace :global(.bot-run-centered){display:grid;grid-template-columns:minmax(0,1fr) auto;min-height:0;gap:12px 24px;padding:24px;text-align:left;border-radius:18px}
 .workspace.workspace :global(.bot-run-status){flex-direction:row;align-items:center;gap:14px}
 .workspace.workspace :global(.bot-run-status h2){font-size:24px;margin:0 0 5px;letter-spacing:-.6px}
+.workspace.workspace :global(.bot-run-title){display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;margin-bottom:5px}
+.workspace.workspace :global(.bot-run-title h2){margin:0}
+.workspace.workspace :global(.workspace-vip-badge){display:inline-flex;align-items:center;gap:8px;flex:none;min-height:46px;padding:8px 14px;border:1px solid #f3d37d;border-radius:12px;background:linear-gradient(135deg,#fff0b8,#eec261);color:#422900;box-shadow:inset 0 1px 0 #fff8;font-size:22px;font-weight:800;line-height:1;letter-spacing:1.5px}
 .workspace.workspace :global(.bot-run-status p){max-width:420px;font-size:14px;line-height:1.5;margin:0}
 .workspace.workspace :global(.bot-work-dots){flex:none;width:26px}
 .workspace.workspace :global(.bot-run-actions){flex-direction:row;align-items:center;gap:8px;width:auto}
@@ -29,8 +32,9 @@
 .workspace.workspace :global(.property-control){padding:16px 0;border-top:0}
 .workspace.workspace :global(.takeover-button){min-height:44px;border-radius:10px}
 .workspace.workspace :global(.conversation-switch){width:100%;background:#f2f2f2}
-.workspace.workspace :global(.conversation-switch button){flex:1;justify-content:center;min-height:44px;color:#616161;font-size:14px}
-.workspace.workspace :global(.conversation-switch button[aria-pressed=true]){color:#171717}
+.workspace.workspace :global(.conversation-switch button){flex:1;justify-content:center;min-height:44px;background:transparent;color:#616161;font-size:14px}
+.workspace.workspace :global(.conversation-switch button[aria-pressed=true]){background:#fff;color:#171717;box-shadow:0 1px 4px #00000014;font-weight:600}
+.workspace.workspace :global(.conversation-switch button svg){color:inherit;stroke:currentColor}
 .workspace.workspace :global(.property-conversations>.workspace-section-heading){display:block}
 .workspace.workspace :global(.contact-primary){min-height:48px;border-radius:12px;background:#171717;border-color:#171717}
 .workspace.workspace :global(.property-call-list .manual-call-options){background:#f7f7f7;border-color:#e8e8e8}
