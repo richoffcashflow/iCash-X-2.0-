@@ -56,3 +56,13 @@ const variables=sellerAgreementReceptionVariables({status:'matched',address:term
 assert.equal(JSON.parse(variables.icash_property_context).purchaseTerms.earnestCents,undefined);assert(!JSON.stringify(variables).includes('NEVER SEND'));
 assert(sellerAgreementReceptionPrompt.includes('icash_seller_agreement'));assert(!sellerAgreementReceptionPrompt.includes('You cannot send a contract'));
 console.log('PASS seller agreement: confirmed price/date, all owners, optional visit, immutable prepared terms, exact recipient, one provider creation, status evidence and private data filtering. No external messages.');
+
+const v6=await import('../lib/seller-agreement-reception.ts');
+assert.equal(v6.legacyAutomaticOfferReceptionPolicyHash,'1fca2735e85b914b8c934985834def9bd6e698eba33bae7d8d9262067bdea734');
+assert.notEqual(v6.automaticOfferReceptionPolicyHash,v6.legacyAutomaticOfferReceptionPolicyHash);
+const {legacyAutomaticOfferGuardrail,automaticOfferGuardrails,automaticOfferGuardrailMatches}=await import('../lib/automatic-offer-policy.ts');
+const prior=automaticOfferGuardrails();prior.custom.config.configs=[legacyAutomaticOfferGuardrail];
+assert(automaticOfferGuardrailMatches(prior,'automatic_offer_v5'));
+assert(!automaticOfferGuardrailMatches(prior,'automatic_offer_v6'));
+assert(automaticOfferGuardrailMatches(automaticOfferGuardrails(),'automatic_offer_v6'));
+assert(!automaticOfferGuardrailMatches(automaticOfferGuardrails(),'automatic_offer_v5'));

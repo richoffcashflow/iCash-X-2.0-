@@ -6,6 +6,8 @@ export async function testAutomaticCallOffer(f){
  await db.exec(read('supabase/migrations/20261008073432_automatic_offer_voice_guardrail.sql'));
  await db.exec(read('supabase/migrations/20261008074050_automatic_offer_conversation_policy.sql'));
  await db.exec(read('supabase/migrations/20261008153612_conditional_voice_offer_contract_hold.sql'));
+ await db.exec(read('supabase/migrations/20261008174508_voice_offer_streaming_policy.sql'));
+ await scenario('v6 binds seller context and exact price authority',async()=>{const {scope,r}=await call('seller',true,'v6');assert.equal((await scope()).dealId,'11111111-1111-4111-8111-111111111111');assert.equal((await rpc('icash_call_offer_context',{p_hash:r.stop_token_hash,p_conversation:'conv_agreement'})).party,'seller');});
  await scenario('automatic v5 binds the current seller and stores the exact quote and acceptance across calls',async()=>{
   const {r,terms}=await call('seller',true,true),now=Date.now();
   const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:0,raw:{data:{dm_property_id:'prop_123',full_address:terms.address,estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:20000,estimated_equity_percentage:90}}};

@@ -16,6 +16,22 @@ export type AutomaticOfferState={repairEstimateCents?:number;conditionPending?:b
 export type CallOfferContext={party:'seller'|'buyer'|'unknown';accountId?:string;dealId?:string;address?:string;snapshot?:unknown;terms?:unknown;pendingAgreement?:{priceCents:number;closingDate:string}|null;buyer?:{askingPriceCents:number;purchasePriceCents?:number;assignmentFeeCents?:number;address:string};offerState?:AutomaticOfferState|null;offerVersion?:number};
 export const blockedOffer=(reason:string,instruction:string)=>({quoteAllowed:false as const,priceCents:null,reason,instruction});
 
+/** Server-owned spoken amount gives both the voice model and validator the same spelling. */
+export function offerPricePresentation(priceCents:number){
+ if(!Number.isSafeInteger(priceCents)||priceCents<1||priceCents>100000000000)throw Error('Invalid authorized price');
+ const small=['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+ const tens=['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+ const words=(n:number):string=>{
+  if(n<20)return small[n];
+  if(n<100)return tens[Math.floor(n/10)]+(n%10?'-'+small[n%10]:'');
+  if(n<1000)return small[Math.floor(n/100)]+' hundred'+(n%100?' '+words(n%100):'');
+  const scale=n>=1e9?1e9:n>=1e6?1e6:1000,name=scale===1e9?'billion':scale===1e6?'million':'thousand';
+  return words(Math.floor(n/scale))+' '+name+(n%scale?' '+words(n%scale):'');
+ };
+ const dollars=Math.floor(priceCents/100),cents=priceCents%100;
+ return {displayPrice:(priceCents/100).toLocaleString('en-US',{style:'currency',currency:'USD',maximumFractionDigits:cents?2:0}),spokenPrice:words(dollars)+(dollars===1?' dollar':' dollars')+(cents?' and '+words(cents)+(cents===1?' cent':' cents'):'')};
+}
+
 // This classification permits discussing a conditional price only. It never
 // verifies a payoff, replaces research, or clears an earlier ownership change.
 function payoffOnly(statement:string){
@@ -23,8 +39,8 @@ function payoffOnly(statement:string){
   && !/\b(owner|owners|ownership|deed|inherited|divorce|title|property|properties|address|repair|repairs|roof|condition|foundation|fire|damage|offer|price)\b/i.test(statement);
 }
 function conditionalInstruction(price:number,payoffRecorded:boolean,accepted=false){
- const amount=(price/100).toLocaleString('en-US',{style:'currency',currency:'USD',maximumFractionDigits:price%100?2:0});
- const spokenOffer=`Factoring in repairs and holding costs, we can offer ${amount} cash, as is, subject to confirming the mortgage payoff and any liens.`;
+ const amount=offerPricePresentation(price).displayPrice;
+ const spokenOffer=`We can offer ${amount} cash, as is. That accounts for repairs and holding costs and is subject to confirming the mortgage payoff and any liens.`;
  const nextQuestion=payoffRecorded?'Does that price work for you, subject to confirming the payoff?':'What is the current mortgage payoff balance?';
  return {spokenOffer,nextQuestion,instruction:accepted
   ? 'Save this as conditional verbal acceptance only. Acknowledge the agreement on price and explain that the payoff must be checked before a contract can be sent. Do not say a contract was sent, promise seller proceeds, or ask again for an already recorded payoff.'
@@ -38,7 +54,7 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
   const b=context.buyer;
   if(!b||!Number.isSafeInteger(b.askingPriceCents)||b.askingPriceCents<=0)return blockedOffer('buyer_release_required','I need to confirm the current buyer package before quoting a price.');
   const breakdown=Number.isSafeInteger(b.purchasePriceCents)&&Number(b.purchasePriceCents)>0&&Number.isSafeInteger(b.assignmentFeeCents)&&Number(b.assignmentFeeCents)>=0&&Number(b.purchasePriceCents)+Number(b.assignmentFeeCents)===b.askingPriceCents?{purchasePriceCents:b.purchasePriceCents,assignmentFeeCents:b.assignmentFeeCents}:{};
-  return {quoteAllowed:true as const,party:'buyer',priceCents:b.askingPriceCents,...breakdown,address:b.address,status:'approved_buyer_price',instruction:'Quote this exact total buyer price in dollars. The assignment fee is already included. Explain a numerical breakdown only if returned here. Use only the actual agreement for closing-cost terms.'};
+  return {quoteAllowed:true as const,party:'buyer',priceCents:b.askingPriceCents,...offerPricePresentation(b.askingPriceCents),...breakdown,address:b.address,status:'approved_buyer_price',instruction:'Quote this exact total buyer price in dollars. The assignment fee is already included. Explain a numerical breakdown only if returned here. Use only the actual agreement for closing-cost terms.'};
  }
  if(context.party!=='seller'||!context.address)return blockedOffer('property_context_required','Which property are you calling about, and are you buying or selling?');
  if(state.agreementRevisionRequired)return blockedOffer('issued_agreement_changed','The changed property facts require revising the existing agreement before new terms can be confirmed.');
@@ -46,7 +62,7 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
  if(state.conditionPending)return blockedOffer('repair_estimate_required','About how much do you estimate the total repairs will cost?');
  const pending=context.pendingAgreement;
  if(pending&&Number.isSafeInteger(pending.priceCents)&&pending.priceCents>0&&state.repairEstimateCents===undefined){
-  return {quoteAllowed:true as const,contractAllowed:true,party:'seller',priceCents:pending.priceCents,address:context.address,status:'pending_agreement',instruction:'Continue from this exact prepared agreement price and its saved terms. A verbal yes is not a signature.'};
+  return {quoteAllowed:true as const,contractAllowed:true,party:'seller',priceCents:pending.priceCents,...offerPricePresentation(pending.priceCents),address:context.address,status:'pending_agreement',instruction:'Continue from this exact prepared agreement price and its saved terms. A verbal yes is not a signature.'};
  }
  try{
   const base=runScreeningJob(context.snapshot,now);
@@ -61,7 +77,7 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
   const price=agreed??calculation.sellerCeilingCents;
   const conditional=financial.status!=='eligible'||!!state.payoffPending;
   const accepted=!!agreed&&!state.acceptanceConditional;
-  const common={quoteAllowed:true as const,party:'seller',priceCents:price,address:context.address,repairEstimateCents:repairs,repairSource:state.repairEstimateCents===undefined?'property_research':'seller_reported_total_budget',asIs:true,payment:'cash'};
+  const common={quoteAllowed:true as const,party:'seller',priceCents:price,...offerPricePresentation(price),address:context.address,repairEstimateCents:repairs,repairSource:state.repairEstimateCents===undefined?'property_research':'seller_reported_total_budget',asIs:true,payment:'cash'};
   if(conditional)return {...common,conditional:true,contractAllowed:false,payoffVerified:false,status:agreed?'conditional_accepted':'conditional_proposal',conditions:['Mortgage payoff and any liens must be confirmed before a contract is sent.'],...conditionalInstruction(price,!!state.payoffStatement,!!agreed)};
   return {...common,conditional:false,contractAllowed:true,status:accepted?'verbally_accepted':'calculated_proposal',instruction:accepted?'Keep this exact verbally accepted price and continue the remaining closing confirmations.':'Present this exact nonbinding as-is cash purchase price after qualification. Do not promise net proceeds or invent adjustments. Obtain acceptance again if a previous offer was conditional.'};
  }catch{return blockedOffer('current_research_required','The property research needs updating before I can confirm a cash offer.');}

@@ -3,7 +3,7 @@
 import {pathToFileURL} from 'node:url';
 import {sellerAgreementToolConfig,sellerAgreementToolMatches,sellerAgreementToolName,noEmdAgreementToolConfig,noEmdAgreementToolName,automaticOfferToolConfig} from '../lib/seller-agreement-tool.ts';
 import {sellerAgreementReceptionPolicy,sellerAgreementReceptionPolicyHash,sellerAgreementReceptionPrompt,noEmdReceptionPolicy,noEmdReceptionPolicyHash,noEmdReceptionPrompt,automaticOfferReceptionPolicy,automaticOfferReceptionPolicyHash,automaticOfferReceptionPrompt} from '../lib/seller-agreement-reception.ts';
-import {automaticOfferToolName,automaticOfferInstructions,automaticOfferGuardrails,automaticOfferGuardrailMatches} from '../lib/automatic-offer-policy.ts';
+import {automaticOfferPolicy,automaticOfferToolName,automaticOfferInstructions,automaticOfferGuardrails,automaticOfferGuardrailMatches} from '../lib/automatic-offer-policy.ts';
 import {inspectRecordedReceptionAgent} from '../lib/recorded-reception.ts';
 import {canonical,object,readRecordingReview,recordingAgentMatches,sha} from '../lib/required-call-recording.ts';
 import {directRecordedInstructions} from '../lib/direct-call-entry.ts';
@@ -34,9 +34,9 @@ export async function prepareSellerAgreement(env=process.env,fetcher=fetch,noEmd
  const rpc=(fn,body)=>request(env.SUPABASE_URL+'/rest/v1/rpc/'+fn,{apikey:env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+env.SUPABASE_SECRET_KEY},'POST',body);
  const api=(path,method,body)=>request('https://api.us.elevenlabs.io'+path,{'xi-api-key':env.ELEVENLABS_API_KEY},method,body);
  const c=await rpc('icash_get_recorded_reception_config',{p_called_number:receptionTarget.calledNumber});
- if(c?.context_policy===automaticOfferReceptionPolicy&&c?.context_policy_hash===automaticOfferReceptionPolicyHash||!automatic&&(c?.context_policy===noEmdReceptionPolicy&&c?.context_policy_hash===noEmdReceptionPolicyHash||!noEmd&&c?.context_policy===sellerAgreementReceptionPolicy&&c?.context_policy_hash===sellerAgreementReceptionPolicyHash))return {status:'already_active'};
+ if(!automatic&&automaticOfferPolicy(c?.context_policy)||c?.context_policy===automaticOfferReceptionPolicy&&c?.context_policy_hash===automaticOfferReceptionPolicyHash||!automatic&&(c?.context_policy===noEmdReceptionPolicy&&c?.context_policy_hash===noEmdReceptionPolicyHash||!noEmd&&c?.context_policy===sellerAgreementReceptionPolicy&&c?.context_policy_hash===sellerAgreementReceptionPolicyHash))return {status:'already_active'};
  const oldReview=readRecordingReview(env.RECORDED_OUTBOUND_REVIEW_JSON);
- if(!c||c.context_policy!==(automatic?noEmdReceptionPolicy:noEmd?sellerAgreementReceptionPolicy:'seller_offer_v2')||c.entry_policy!=='direct_recorded_v1'||!oldReview)throw Error('REVIEWED_SOURCE_REQUIRED');
+ if(!c||(automatic?c.context_policy!=='automatic_offer_v5':c.context_policy!==(noEmd?sellerAgreementReceptionPolicy:'seller_offer_v2'))||c.entry_policy!=='direct_recorded_v1'||!oldReview)throw Error('REVIEWED_SOURCE_REQUIRED');
  const incomingPath='/v1/convai/agents/'+c.agent_id,outgoingPath='/v1/convai/agents/'+oldReview.agentId;
  const [incoming,outgoing,workspace,stop,listedIncoming,listedOutgoing,toolList,oldAgreementTool]=await Promise.all([
   api(incomingPath+'?branch_id='+c.branch_id),api(outgoingPath+'?branch_id='+oldReview.branchId),api('/v1/convai/settings'),api('/v1/convai/tools/'+c.stop_tool_id),api(incomingPath+'/branches?include_archived=true&limit=100'),api(outgoingPath+'/branches?include_archived=true&limit=100'),api('/v1/convai/tools?search='+toolName+'&page_size=100'),noEmd||automatic?api('/v1/convai/tools/'+c.agreement_tool_id):Promise.resolve(undefined),
@@ -92,8 +92,8 @@ export async function prepareSellerAgreement(env=process.env,fetcher=fetch,noEmd
  const a=outPrepared.agent,newReview={...oldReview,...(automatic?{offerPolicy:automaticOfferReceptionPolicy}:{}),branchId:outPrepared.branch.id,versionId:a.version_id,contractToolId:tool.id,toolIds:outputConfig.agent.prompt.tool_ids,reviewedAt:new Date().toISOString(),configHash:sha(JSON.stringify(canonical({conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null})))};
  if(!recordingAgentMatches(newReview,a)||!readRecordingReview(JSON.stringify(newReview)))throw Error('OUTBOUND_AGREEMENT_READBACK_REQUIRED');
  if(automatic&&(!automaticOfferGuardrailMatches(object(inPrepared.agent.platform_settings).guardrails)||!automaticOfferGuardrailMatches(object(outPrepared.agent.platform_settings).guardrails)))throw Error('PRICE_ENFORCEMENT_READBACK_REQUIRED');
- if(automatic)await verifyProvider(api,[inPrepared.agent,outPrepared.agent],tool.id);
- const staged=await rpc(automatic?'icash_stage_automatic_offer_rollout':'icash_stage_seller_agreement_rollout',{p_source:c.id,p_tool:tool.id,p_branch:inPrepared.branch.id,p_version:inPrepared.agent.version_id,p_hash:inspected.hash,p_outbound_review:newReview});
+ if(automatic)await verifyProvider(api,[inPrepared.agent,outPrepared.agent],tool.id,{prefix:'voice-offer-v6-'+policyHash.slice(0,12)+'-'});
+ const staged=await rpc(automatic?'icash_stage_voice_offer_rollout':'icash_stage_seller_agreement_rollout',{p_source:c.id,p_tool:tool.id,p_branch:inPrepared.branch.id,p_version:inPrepared.agent.version_id,p_hash:inspected.hash,p_outbound_review:newReview});
  if(!staged?.inboundConfigId||!staged.outboundReview)throw Error('STAGING_UNCONFIRMED');
  return {status:'staged',configId:staged.inboundConfigId,toolId:tool.id,inboundBranch:inPrepared.branch.id,outboundBranch:outPrepared.branch.id};
 }
