@@ -11,7 +11,8 @@
     "start": "next start",
     "test": "node scripts/test-all.mjs",
     "dealmachine:preflight": "node --experimental-strip-types scripts/dealmachine-preflight.mjs",
-    "test:voice": "node --experimental-strip-types tests/voice-result.test.mjs && node --experimental-strip-types tests/property-context.test.mjs && node --experimental-strip-types tests/equity-screen.test.mjs && node --experimental-strip-types tests/cost-guard.test.mjs && node --experimental-strip-types tests/database-response.test.mjs && node --experimental-strip-types tests/owner-profit.test.mjs"
+    "test:voice": "node --experimental-strip-types tests/voice-result.test.mjs && node --experimental-strip-types tests/property-context.test.mjs && node --experimental-strip-types tests/equity-screen.test.mjs && node --experimental-strip-types tests/cost-guard.test.mjs && node --experimental-strip-types tests/database-response.test.mjs && node --experimental-strip-types tests/owner-profit.test.mjs",
+    "build:verified": "node scripts/check-buyer-search.mjs && node scripts/check-signing-connection.mjs && node scripts/check-text-connection.mjs && node scripts/check-text-ai-config.mjs && node --experimental-strip-types scripts/check-telephony-connection.mjs && node --experimental-strip-types scripts/prepare-direct-reception.mjs && pnpm build"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
