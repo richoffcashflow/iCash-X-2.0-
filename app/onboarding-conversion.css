@@ -1,55 +1,55 @@
-.setup-shell:has(.conversion-onboarding){background:#f8faf8!important}
+.setup-shell:has(.conversion-onboarding){background:#f9f9f9!important}
 .setup-shell:has(.conversion-onboarding) .console-main{max-width:1160px;padding:48px 32px 20px;display:block}
-.setup-shell .console-header{background:#f8faf8;border-bottom:1px solid #e6ebe7;min-height:82px;padding:10px max(28px,calc((100vw - 1096px)/2));display:flex;justify-content:space-between;align-items:center;color:#25362b;width:100%}
+.setup-shell .console-header{background:#f9f9f9;border-bottom:1px solid #eaeaea;min-height:82px;padding:10px max(28px,calc((100vw - 1096px)/2));display:flex;justify-content:space-between;align-items:center;color:#323232;width:100%}
 .setup-shell .console-header>div{margin:0;padding:0;max-width:none;min-width:0;height:auto}
 .setup-shell .console-header img{filter:brightness(0);width:108px;height:59px}
-.setup-shell:has(.conversion-onboarding) .brand-version{font-size:12px;color:#63756a;margin-left:8px}
+.setup-shell:has(.conversion-onboarding) .brand-version{font-size:12px;color:#717171;margin-left:8px}
 .setup-shell .console-header .workspace-header-links{display:flex;align-items:center;gap:20px;white-space:normal}
-.setup-shell .console-header .workspace-help,.setup-shell .console-header .header-access{background:none;color:#3e5145;border:0;font-size:14px;text-decoration:none;min-height:44px;padding:10px 2px}
-.setup-shell .console-header .setup-brand strong{color:#25362b}
-.setup-shell .console-header .setup-brand>div>span{color:#63756a}
+.setup-shell .console-header .workspace-help,.setup-shell .console-header .header-access{background:none;color:#4d4d4d;border:0;font-size:14px;text-decoration:none;min-height:44px;padding:10px 2px}
+.setup-shell .console-header .setup-brand strong{color:#323232}
+.setup-shell .console-header .setup-brand>div>span{color:#717171}
 .setup-shell .bot-setup.conversion-onboarding{max-width:none;padding:0;border:0;background:none;box-shadow:none;border-radius:0}
 .setup-shell .conversion-onboarding.setup-entry{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(340px,1fr);gap:38px 58px;align-items:center}
 .conversion-onboarding .onboarding-story{text-align:left;padding:10px 0;min-width:0}
-.conversion-onboarding .onboarding-kicker{font-size:11px;letter-spacing:.1em;color:#246c46;font-weight:650;display:flex;align-items:center;gap:8px;margin-bottom:23px}
-.conversion-onboarding .onboarding-story h1{font-size:clamp(40px,4.5vw,60px);font-weight:650;letter-spacing:-.055em;line-height:1.06;text-align:left;margin:0 0 24px;color:#1b2b21;outline-offset:6px;overflow-wrap:normal}
-.conversion-onboarding .onboarding-story h1>span{color:#297347}
-.conversion-onboarding .onboarding-lede{font-size:17px;line-height:1.75;max-width:530px;color:#5a6a60;margin:0 0 30px;text-align:left}
+.conversion-onboarding .onboarding-kicker{font-size:11px;letter-spacing:.1em;color:#5f5f5f;font-weight:650;display:flex;align-items:center;gap:8px;margin-bottom:23px}
+.conversion-onboarding .onboarding-story h1{font-size:clamp(40px,4.5vw,60px);font-weight:650;letter-spacing:-.055em;line-height:1.06;text-align:left;margin:0 0 24px;color:#272727;outline-offset:6px;overflow-wrap:normal}
+.conversion-onboarding .onboarding-story h1>span{color:#666666}
+.conversion-onboarding .onboarding-lede{font-size:17px;line-height:1.75;max-width:530px;color:#666666;margin:0 0 30px;text-align:left}
 .conversion-onboarding .onboarding-features{display:grid;grid-template-columns:1fr 1fr;gap:22px 20px}
 .conversion-onboarding .onboarding-features>div{display:flex;align-items:flex-start;gap:11px;min-width:0}
-.conversion-onboarding .onboarding-features svg{flex:none;color:#388657;margin-top:2px}
-.conversion-onboarding .onboarding-features strong{font-size:14px;line-height:1.5;color:#253b2e;font-weight:600;display:block}
-.conversion-onboarding .onboarding-features small{display:block;font-size:12px;color:#738078;line-height:1.6;margin-top:3px}
-.conversion-onboarding .onboarding-availability{font-size:11px;line-height:1.6;color:#7a857e;text-align:left;margin:25px 0 0;max-width:460px}
-.conversion-onboarding.setup-entry .setup-layout{width:100%;min-width:0;background:#fff;border:1px solid #e2e8e3;border-radius:24px;padding:30px;box-shadow:0 18px 60px #2941320b;display:block}
-.conversion-onboarding .onboarding-card-icon{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;background:#eef6f0;color:#2e7546;margin-bottom:22px}
-.conversion-onboarding.setup-entry .setup-eyebrow{text-align:left;color:#7a887e;font-size:10px;margin:0 0 10px}
-.conversion-onboarding .setup-form h2{font-size:26px;line-height:1.2;letter-spacing:-.04em;font-weight:650;color:#213127;margin:0 0 12px}
-.conversion-onboarding.setup-entry .setup-intro{font-size:14px;line-height:1.7;text-align:left;color:#6a776e;margin:0}
+.conversion-onboarding .onboarding-features svg{flex:none;color:#777777;margin-top:2px}
+.conversion-onboarding .onboarding-features strong{font-size:14px;line-height:1.5;color:#363636;font-weight:600;display:block}
+.conversion-onboarding .onboarding-features small{display:block;font-size:12px;color:#7d7d7d;line-height:1.6;margin-top:3px}
+.conversion-onboarding .onboarding-availability{font-size:11px;line-height:1.6;color:#828282;text-align:left;margin:25px 0 0;max-width:460px}
+.conversion-onboarding.setup-entry .setup-layout{width:100%;min-width:0;background:#fff;border:1px solid #e6e6e6;border-radius:24px;padding:30px;box-shadow:0 18px 60px #3c3c3c0b;display:block}
+.conversion-onboarding .onboarding-card-icon{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;background:#f4f4f4;color:#686868;margin-bottom:22px}
+.conversion-onboarding.setup-entry .setup-eyebrow{text-align:left;color:#848484;font-size:10px;margin:0 0 10px}
+.conversion-onboarding .setup-form h2{font-size:26px;line-height:1.2;letter-spacing:-.04em;font-weight:650;color:#2d2d2d;margin:0 0 12px}
+.conversion-onboarding.setup-entry .setup-intro{font-size:14px;line-height:1.7;text-align:left;color:#747474;margin:0}
 .setup-shell .conversion-onboarding .setup-entry-form{margin-top:23px}
-.conversion-onboarding .setup-entry-form .setup-primary{background:#236d42;color:#fff;font-size:15px;min-height:55px;margin:0;border-radius:12px}
+.conversion-onboarding .setup-entry-form .setup-primary{background:#606060;color:#fff;font-size:15px;min-height:55px;margin:0;border-radius:12px}
 .conversion-onboarding .setup-primary:disabled{opacity:.6}
-.conversion-onboarding .onboarding-no-card{font-size:11px;color:#77847b;text-align:center;line-height:1.6;margin:11px 0 0}
-.conversion-onboarding .onboarding-name{font-size:12px;color:#68776d;border-top:1px solid #eef1ee;margin-top:20px}
+.conversion-onboarding .onboarding-no-card{font-size:11px;color:#818181;text-align:center;line-height:1.6;margin:11px 0 0}
+.conversion-onboarding .onboarding-name{font-size:12px;color:#737373;border-top:1px solid #f0f0f0;margin-top:20px}
 .conversion-onboarding .onboarding-name summary{display:flex;justify-content:space-between;align-items:center;min-height:44px;cursor:pointer;list-style:none}
 .conversion-onboarding .onboarding-name summary::-webkit-details-marker{display:none}
-.conversion-onboarding .onboarding-name summary>span{font-size:10px;background:#f2f5f2;border-radius:5px;padding:4px 6px;color:#819084}
+.conversion-onboarding .onboarding-name summary>span{font-size:10px;background:#f4f4f4;border-radius:5px;padding:4px 6px;color:#8c8c8c}
 .conversion-onboarding .onboarding-name .setup-label{font-size:12px;margin:4px 0 7px}
 .conversion-onboarding .onboarding-name input{font-size:16px;margin-bottom:13px}
-.conversion-onboarding .onboarding-budget-note{display:flex;gap:11px;align-items:flex-start;padding-top:19px;border-top:1px solid #eef1ee;color:#53675a}
+.conversion-onboarding .onboarding-budget-note{display:flex;gap:11px;align-items:flex-start;padding-top:19px;border-top:1px solid #f0f0f0;color:#626262}
 .conversion-onboarding .onboarding-budget-note svg{flex:none;margin-top:2px}
-.conversion-onboarding .onboarding-budget-note strong{font-size:13px;font-weight:600;color:#3b5243}
-.conversion-onboarding .onboarding-budget-note p{font-size:12px;line-height:1.6;text-align:left;margin:5px 0 0;color:#7a877e}
-.conversion-onboarding .onboarding-control{display:flex;align-items:center;gap:6px;color:#839086;font-size:11px;margin:18px 0 0}
-.conversion-onboarding .onboarding-path{list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px;grid-column:1/-1;border-top:1px solid #e1e7e2;margin:0;padding:28px 0 16px}
+.conversion-onboarding .onboarding-budget-note strong{font-size:13px;font-weight:600;color:#4d4d4d}
+.conversion-onboarding .onboarding-budget-note p{font-size:12px;line-height:1.6;text-align:left;margin:5px 0 0;color:#848484}
+.conversion-onboarding .onboarding-control{display:flex;align-items:center;gap:6px;color:#8d8d8d;font-size:11px;margin:18px 0 0}
+.conversion-onboarding .onboarding-path{list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px;grid-column:1/-1;border-top:1px solid #e5e5e5;margin:0;padding:28px 0 16px}
 .conversion-onboarding .onboarding-path li{display:flex;align-items:flex-start;gap:12px}
-.conversion-onboarding .onboarding-path b{font-size:12px;font-weight:500;color:#809185;border:1px solid #dce5de;border-radius:10px;display:grid;place-items:center;width:34px;height:34px;flex:none}
-.conversion-onboarding .onboarding-path strong{display:block;font-size:13px;font-weight:600;line-height:1.5;color:#425a4b}
-.conversion-onboarding .onboarding-path small{display:block;font-size:11px;color:#829087;line-height:1.6;margin-top:3px}
-.setup-shell .conversion-onboarding.setup-complete{max-width:530px;margin:auto;background:white;border:1px solid #e1e8e3;border-radius:22px;padding:30px}
-.conversion-onboarding.setup-complete .setup-ready-title{font-size:35px;line-height:1.1;letter-spacing:-.045em;color:#23372a}
-.conversion-onboarding.setup-complete .setup-intro{font-size:14px;color:#6d7c71;line-height:1.7}
-.setup-shell:has(.conversion-onboarding) .product-disclosure{max-width:1050px;padding:16px 24px 22px;font-size:11px;color:#859088;text-align:center;margin:auto}
+.conversion-onboarding .onboarding-path b{font-size:12px;font-weight:500;color:#8d8d8d;border:1px solid #e3e3e3;border-radius:10px;display:grid;place-items:center;width:34px;height:34px;flex:none}
+.conversion-onboarding .onboarding-path strong{display:block;font-size:13px;font-weight:600;line-height:1.5;color:#555555}
+.conversion-onboarding .onboarding-path small{display:block;font-size:11px;color:#8d8d8d;line-height:1.6;margin-top:3px}
+.setup-shell .conversion-onboarding.setup-complete{max-width:530px;margin:auto;background:white;border:1px solid #e6e6e6;border-radius:22px;padding:30px}
+.conversion-onboarding.setup-complete .setup-ready-title{font-size:35px;line-height:1.1;letter-spacing:-.045em;color:#333333}
+.conversion-onboarding.setup-complete .setup-intro{font-size:14px;color:#787878;line-height:1.7}
+.setup-shell:has(.conversion-onboarding) .product-disclosure{max-width:1050px;padding:16px 24px 22px;font-size:11px;color:#8d8d8d;text-align:center;margin:auto}
 @media(max-width:800px){
  .setup-shell:has(.conversion-onboarding) .console-main{padding:30px 22px 12px;max-width:580px}
  .setup-shell .console-header{padding:10px 22px;min-height:70px}
