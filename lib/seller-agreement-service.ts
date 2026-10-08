@@ -63,8 +63,9 @@ export async function sellerAgreementAction(token:string,input:unknown,d:Depende
    if(await d.db('rpc/icash_finish_seller_agreement','POST',{p_id:claim.id,p_account:scope.accountId,p_envelope:envelopeId})!==true)throw Error('agreement_in_progress');
   }catch(error){await d.db('rpc/icash_fail_seller_agreement','POST',{p_id:claim.id,p_account:scope.accountId}).catch(()=>undefined);throw error;}
  }
- // Recheck the live contact before the actual SMS dispatch; the queue is idempotent.
- if(!await d.db('rpc/icash_seller_agreement_call_context','POST',{p_hash:hash,p_conversation:i.conversationId}))return {status:'needs_followup',sent:false,instruction:'The agreement was prepared, but this call is no longer active. Do not claim a text was sent.'};
+ // The saved confirmation authorizes this exact agreement. A call ending during
+ // provider preparation must not drop its requested text. The SMS service
+ // independently rechecks current contact permission, stops and exact signer.
  return {...await d.text(scope.accountId,envelopeId,scope.phone),agreementPrepared:true};
 }
 export function sellerAgreementFailure(error:unknown){

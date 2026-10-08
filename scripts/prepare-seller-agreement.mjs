@@ -94,7 +94,7 @@ export async function prepareSellerAgreement(env=process.env,fetcher=fetch,noEmd
  const a=outPrepared.agent,newReview={...oldReview,...(automatic?{offerPolicy:automaticOfferReceptionPolicy}:{}),branchId:outPrepared.branch.id,versionId:a.version_id,contractToolId:tool.id,toolIds:outputConfig.agent.prompt.tool_ids,reviewedAt:new Date().toISOString(),configHash:sha(JSON.stringify(canonical({conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null})))};
  if(!recordingAgentMatches(newReview,a)||!readRecordingReview(JSON.stringify(newReview)))throw Error('OUTBOUND_AGREEMENT_READBACK_REQUIRED');
  if(automatic&&(!automaticOfferGuardrailMatches(object(inPrepared.agent.platform_settings).guardrails)||!automaticOfferGuardrailMatches(object(outPrepared.agent.platform_settings).guardrails)))throw Error('PRICE_ENFORCEMENT_READBACK_REQUIRED');
- if(automatic)await verifyProvider(api,[inPrepared.agent,outPrepared.agent],tool.id,{prefix:'voice-offer-v9-'+policyHash.slice(0,12)+'-',closingCases:true});
+ if(automatic)await verifyProvider(api,[inPrepared.agent,outPrepared.agent],tool.id,{prefix:'voice-offer-v9-mocks2-'+policyHash.slice(0,12)+'-',closingCases:true});
  const staged=await rpc(automatic?'icash_stage_live_agreement_rollout':'icash_stage_seller_agreement_rollout',{p_source:c.id,p_tool:tool.id,p_branch:inPrepared.branch.id,p_version:inPrepared.agent.version_id,p_hash:inspected.hash,p_outbound_review:newReview});
  if(!staged?.inboundConfigId||!staged.outboundReview)throw Error('STAGING_UNCONFIRMED');
  return {status:'staged',configId:staged.inboundConfigId,toolId:tool.id,inboundBranch:inPrepared.branch.id,outboundBranch:outPrepared.branch.id};

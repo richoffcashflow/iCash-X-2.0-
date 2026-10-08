@@ -110,6 +110,13 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
    // scheduling, terminal marking or identity recovery needed for deletion.
    stage='clock_binding';if(clockConflict)throw Error('CALL_START_CONFLICT');
    if(row.call_ended_at){
+    // Context is saved only from this exact completed provider conversation.
+    // Tool payloads and model summaries never become future call instructions.
+    if(conversation?.status==='done'&&Array.isArray(conversation.transcript)){
+     const turns=conversation.transcript.map(object).filter(t=>['agent','user'].includes(String(t.role))&&typeof t.message==='string'&&t.message.length<=12000).map(t=>({role:t.role,message:t.message}));
+     const transcript=turns.length>80?[...turns.slice(0,40),...turns.slice(-40)]:turns;
+     if(transcript.length)await rpc('icash_save_seller_inbound_history',{p_session:row.id,p_conversation:row.conversation_id,p_transcript:transcript});
+    }
     stage='settlement';
     const freshCall=terminal?call:await provider.getCall(row.call_sid);
     const settled=await settleRecordedReception(rpc,row,freshCall,conversation,receipt);
