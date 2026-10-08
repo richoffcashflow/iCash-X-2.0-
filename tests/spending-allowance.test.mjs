@@ -57,13 +57,14 @@ const hooks={
 const mod={exports:{}};
 new Function('require','module','exports','setInterval','clearInterval','document',code)(name=>{
  if(name==='react')return hooks;
+ if(name==='./spending-allowance.module.css')return {default:new Proxy({},{get:(_,key)=>String(key)})};
  if(name==='@/components/funding-dialog')return {FundingDialog:'FundingDialog'};
  if(name==='@/lib/membership-policy')return {priceLabel:cents=>'$'+(cents/100).toFixed(2)};
  if(name==='@/lib/spending-allowance')return {fetchSpendingAllowance:()=>read(),saveSpendingAllowance:async body=>{saves++;assert.deepEqual(body,request);if(saveFails)throw Error('Your session expired. Sign in again.');return after;}};
  return require(name);
 },mod,mod.exports,fn=>{tick=fn;return 1;},()=>{},{hidden:false});
 async function flush(){for(let i=0;i<15;i++){if(dirty){cursor=0;dirty=false;tree=mod.exports.SpendingAllowance();}const effects=pending;pending=[];effects.forEach(fn=>fn());await new Promise(resolve=>setTimeout(resolve,1));if(!dirty&&!pending.length)return;}throw Error('Render did not settle');}
-const button=label=>{const found=all(tree).find(n=>n.type==='button'&&text(n)===label);assert(found,'Missing '+label);return found;};
+const button=label=>{const found=all(tree).find(n=>n.type==='button'&&text(n).trim()===label);assert(found,'Missing '+label);return found;};
 const submit=()=>all(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
 await flush();assert.match(text(tree),/\$1\.01 remaining/);
 button('Allow more spending today').props.onClick();await flush();
