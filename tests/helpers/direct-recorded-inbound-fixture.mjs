@@ -9,6 +9,7 @@ export async function testDirectRecordedInbound(f){
  create table public.icash_sms_conversation_focus(sender text,recipient text,account_id uuid,thread_id uuid,route_revision bigint,expires_at timestamptz);
  create table public.icash_sms_routes(sender text,recipient text,account_id uuid,revision bigint,needs_review boolean);`);
  await db.exec(read('config/direct-recorded-inbound.sql'));
+ await db.exec(read('config/recorded-reception-final-clock.sql'));
  await db.exec(read('config/direct-reception-staging.sql'));
  async function reserve(context={}){
   const c=await val(`insert into icash_recorded_reception_private.configs select (jsonb_populate_record(null::icash_recorded_reception_private.configs,to_jsonb(c)||jsonb_build_object('id',gen_random_uuid(),'version',2,'enabled',false,'entry_policy','direct_recorded_v1')||$2::jsonb)).* from icash_recorded_reception_private.configs c where id=$1 returning id`,[config,context]);
@@ -41,6 +42,25 @@ export async function testDirectRecordedInbound(f){
   const paid=await rpc('icash_settle_recorded_reception',{p_id:r.id,p_account:account,p_operation:r.operation_key,p_attestation:a});assert(paid.settled,JSON.stringify(paid));assert(paid.chargedCents<196);
   assert.equal((await rpc('icash_settle_recorded_reception',{p_id:r.id,p_account:account,p_operation:r.operation_key,p_attestation:a})).chargedCents,paid.chargedCents);
   assert.equal(await val('select count(*) from public.icash_credit_ledger'),1);assert.equal(await val('select reserved_cents from public.icash_wallets'),0);
+ });
+ await scenario('final recording clock preserves initial evidence and rejects changes beyond one second',async()=>{
+  const a=await reserve();assert(a.allowed);let r=a.session;
+  await trans('claim_setup');await trans('bounded',boundPayload(r));await trans('bind_call_start',startPayload(r));
+  r=await trans('authorize_recording',{nonceHash:r.nonce_hash,policy:'direct_recorded_v1'});await trans('claim_start');
+  const start=new Date(Math.floor(Date.parse(r.recording_authorized_at)/1000)*1000).toISOString(),rec='RE'+'c'.repeat(32);
+  r=await trans('started',{recordingSid:rec,providerStartedAt:start});assert(r);const initial=structuredClone(r);
+  const payload=delta=>({recordingSid:rec,providerStartedAt:new Date(Date.parse(start)+delta).toISOString(),endedAt:new Date(Date.parse(start)+delta+32000).toISOString(),durationSeconds:32,providerRecordingPriceMicros:2500});
+  assert.equal(await trans('available',payload(-1000)),null);
+  assert.equal(await trans('available',payload(2000)),null);
+  assert.equal(await trans('available',{...payload(1000),recordingSid:'RE'+'d'.repeat(32)}),null);
+  r=await trans('available',payload(1000));assert(r);assert.equal(r.state,'available');
+  assert.equal(Date.parse(r.final_provider_started_at),Date.parse(start)+1000);
+  assert.equal(r.provider_started_at,initial.provider_started_at);assert.equal(r.audio_expires_at,initial.audio_expires_at);
+  assert.equal(r.next_delete_at,initial.next_delete_at);assert.equal(r.recording_authorized_at,initial.recording_authorized_at);
+  assert.equal(r.consent_at,null);assert.equal(r.duration_seconds,32);
+  assert.equal(await trans('available',payload(0)),null);
+  assert.equal(await trans('available',payload(1000),initial),null);
+  assert(await trans('available',payload(1000)));
  });
  await scenario('inbound remembers only the matching unexpired SMS property focus',async()=>{
   const a=await reserve({context_policy:'buyer_seller_v1',context_policy_hash:'06b4040c9d2b788ac204479d1179173f9acbd59172a7e930bac0b189438fde57',context_approval_reference:'Synthetic same-account continuity'});assert(a.allowed);

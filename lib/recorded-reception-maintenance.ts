@@ -93,7 +93,15 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
      const listed=await provider.conversations(row);if(listed.has_more!==false||!Array.isArray(listed.conversations)||listed.conversations.length!==1)throw Error('UNIQUE_CONVERSATION_REQUIRED');
      const candidate=object(listed.conversations[0]);if(typeof candidate.conversation_id!=='string')throw Error('CONVERSATION_ID_REQUIRED');conversation=await provider.conversation(candidate.conversation_id);
     }
-    if(!receptionConversationMatches(row,conversation))throw Error('CONVERSATION_BINDING_REQUIRED');
+    if(!receptionConversationMatches(row,conversation)){
+     const init=object(conversation.conversation_initiation_client_data),vars=object(init.dynamic_variables),phone=object(object(conversation.metadata).phone_call),user='icash-recorded-reception:'+row.id;
+     console.warn('recorded_reception_conversation_conflict',{sessionId:row.id,
+      agent:conversation.agent_id===row.agent_id,branch:conversation.branch_id===row.branch_id,version:conversation.version_id===row.version_id,
+      user:conversation.user_id===user,initUser:init.user_id===user,initBranch:init.branch_id===row.branch_id,recording:vars.icash_reception_recording_id===row.id,
+      call:phone.call_sid===row.call_sid,direction:phone.direction==='inbound',from:phone.external_number===row.from_phone,to:phone.agent_number===row.to_phone,
+     });
+     throw Error('CONVERSATION_BINDING_REQUIRED');
+    }
     if(!row.conversation_id){const next=await transitionRecordedReception(rpc,row,'bind_conversation',{conversationId:conversation.conversation_id,agentId:conversation.agent_id,branchId:conversation.branch_id,versionId:conversation.version_id});if(!next)throw Error('CONVERSATION_SAVE_REQUIRED');row=next;}
    }
    // Disputed clocks hold costs, never exact-call recording discovery, expiry
@@ -104,6 +112,9 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
     const freshCall=terminal?call:await provider.getCall(row.call_sid);
     const settled=await settleRecordedReception(rpc,row,freshCall,conversation,receipt);
     if(settled.settled===true)result.settled++;
+    else console.warn('recorded_reception_settlement_pending',{sessionId:row.id,reason:settled.reason,
+     carrierPricePending:freshCall.price===null,aiComplete:conversation?.status==='done',aiPricePresent:typeof object(conversation?.metadata).cost_fiat==='number',
+    });
     if('reviewRequired' in settled&&settled.reviewRequired)result.held++;
    }
    await finish(initial,'reconcile','checked');result.reconciled++;
