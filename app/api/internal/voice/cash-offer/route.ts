@@ -11,6 +11,7 @@ import {sellerAgreementInput} from '@/lib/seller-agreement-flow';
 import {sendForSignatures,refreshSigning} from '@/lib/signing-service';
 import {textPendingContract} from '@/lib/contract-text-service';
 import {object} from '@/lib/required-call-recording';
+import {liveToolHistory} from '@/lib/live-tool-history';
 export const runtime='nodejs';
 export const maxDuration=60;
 export async function POST(request:Request){
@@ -18,12 +19,14 @@ export async function POST(request:Request){
  if(!token||!/^[a-f0-9]{64}$/.test(token))return NextResponse.json({quoteAllowed:false,sent:false},{status:401,headers});
  let action='unknown';
  try{
-  const raw=await request.text();if(raw.length>6000)throw Error('invalid_input');
-  const input=object(JSON.parse(raw));
+  const raw=await request.text();if(raw.length>262144)throw Error('invalid_input');
+  const {conversationHistory,...input}=object(JSON.parse(raw));
+  if(JSON.stringify(input).length>6000)throw Error('invalid_input');
+  const currentHistory=liveToolHistory(conversationHistory);
   if(['get_offer','accept_offer','update_repairs','report_change','confirm_and_send','status'].includes(String(input.action)))action=String(input.action);
   if(process.env.ICASH_LIVE_WORK_READY!=='true'||process.env.ICASH_RECORDING_RECEIPTS_READY!=='true')return NextResponse.json(blockedOffer('unavailable','The live property workflow is not currently available.'),{status:409,headers});
   let evidence:Promise<unknown>|undefined;
-  const transcript=(i:Record<string,unknown>)=>evidence??=createRecordedReceptionProviders(process.env).conversation(String(i.conversationId));
+  const transcript=(i:Record<string,unknown>)=>currentHistory?Promise.resolve(currentHistory):evidence??=createRecordedReceptionProviders(process.env).conversation(String(i.conversationId));
   const d={db,bind:bindSellerAgreementCall,resolveStatement:async(i:Record<string,unknown>)=>callSellerStatement(await transcript(i),i),verifyInput:async(i:Record<string,unknown>)=>callOfferEvidence(await transcript(i),i),verifyPayoffChange:async(i:Record<string,unknown>)=>callPayoffEvidence(await transcript(i),i),verifyListingStatus:async(i:Record<string,unknown>)=>sellerListingEvidence(await transcript(i),i),verifyPayoffFacts:async(i:Record<string,unknown>)=>sellerPayoffEvidence(await transcript(i),i)};
   if(input.action!=='confirm_and_send'&&input.action!=='status')return NextResponse.json(await automaticCallOffer(token,input,d),{headers});
   const agreement=sellerAgreementInput.parse(input);

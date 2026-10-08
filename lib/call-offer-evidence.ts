@@ -19,13 +19,37 @@ export function spokenMoneyAmounts(text:string){
  * seller statement so a model cannot remove a negation or invent repair dollars. */
 export function callOfferEvidence(value:unknown,input:Record<string,unknown>){
  const rows=object(value).transcript;if(!Array.isArray(rows))return false;
- const turns=rows.map(object).filter(t=>['user','agent'].includes(String(t.role))&&typeof t.message==='string');
+ let applicable=rows;
+ if(input.action==='accept_offer'&&typeof input.quoteRevision==='string'){
+  let lastQuote=-1;
+  for(let n=0;n<rows.length;n++)for(const result of Array.isArray(object(rows[n]).tool_results)?object(rows[n]).tool_results as unknown[]:[]){
+   const r=object(result);if(r.tool_name!=='icash_offer_and_contract'||r.is_error===true||typeof r.result_value!=='string')continue;
+   let quote:Record<string,unknown>;try{quote=object(JSON.parse(r.result_value));}catch{continue;}
+   if(quote.quoteAllowed===true&&typeof quote.quoteRevision==='string'){
+    if(quote.quoteRevision!==input.quoteRevision||quote.priceCents!==input.priceCents)lastQuote=-2;else lastQuote=n;
+   }
+  }
+  if(lastQuote===-2)return false;if(lastQuote>=0)applicable=rows.slice(lastQuote+1);
+ }
+ const turns=applicable.map(object).filter(t=>['user','agent'].includes(String(t.role))&&typeof t.message==='string');
  const index=turns.findLastIndex(t=>t.role==='user');if(index<0)return false;
  const latest=String(turns[index].message).trim();
  if(input.action==='accept_offer'){
-  if(!/^(?:yes|yeah|yep|correct|i agree|i accept|that works|sounds good|i['’]?m ready|i am ready|let['’]?s do it)\b/i.test(latest)||/\b(?:not|but|unless|if|different|instead)\b/i.test(latest))return false;
-  const agent=turns.slice(0,index).findLast(t=>t.role==='agent');
-  return !!agent&&spokenMoneyAmounts(String(agent.message)).includes(Number(input.priceCents));
+  const yes=(text:string)=>/^(?:yes|yeah|yep|correct|i agree|i accept|that works|sounds good|i['’]?m ready|i am ready|let['’]?s do it)\b/i.test(text)&&!/\b(?:not|but|unless|if|different|instead)\b/i.test(text);
+  const priceQuestion=(text:string)=>/\b(?:offer|cash|purchase|price|proceed)\b/i.test(text)&&spokenMoneyAmounts(text).includes(Number(input.priceCents));
+  // A later name/date answer must not erase an earlier explicit price answer.
+  // A counteroffer, condition or withdrawal after it does invalidate it.
+  let accepted=false;
+  for(let n=0;n<turns.length;n++){
+   const turn=turns[n],text=String(turn.message).trim();if(turn.role!=='user')continue;
+   let agent=turns.slice(0,n).findLast(t=>t.role==='agent');
+   if(agent&&/are you still there|can you hear me/i.test(String(agent.message))&&/\b(?:let['’]?s do it|i accept|i agree|that works)\b/i.test(text)){
+    const last=turns.lastIndexOf(agent);agent=turns.slice(0,last).findLast(t=>t.role==='agent');
+   }
+   if(agent&&priceQuestion(String(agent.message)))accepted=yes(text)&&!spokenMoneyAmounts(text).some(amount=>amount!==Number(input.priceCents));
+   else if(/\b(?:only if|changed my mind|do not accept|don't accept|not selling|don['’]?t want to sell|no longer interested|cancel|hold off)\b/i.test(text)||/\b(?:offer|price|instead|but|unless)\b/i.test(text)||spokenMoneyAmounts(text).some(amount=>amount!==Number(input.priceCents))&&/\b(?:could you|can you|need|want|at least|only accept)\b/i.test(text))accepted=false;
+  }
+  return accepted;
  }
  if(latest!==String(input.sellerStatement??'').trim())return false;
  if(input.repairEstimateCents===undefined)return true;
