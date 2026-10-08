@@ -22,7 +22,7 @@ export async function prepareSellerOfferReception(env=process.env,fetcher=fetch)
  const rpc=(name,body)=>request(env.SUPABASE_URL+'/rest/v1/rpc/'+name,{apikey:env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+env.SUPABASE_SECRET_KEY},'POST',body);
  const api=(path,method,body)=>request('https://api.us.elevenlabs.io'+path,{'xi-api-key':env.ELEVENLABS_API_KEY},method,body);
  const c=await rpc('icash_get_recorded_reception_config',{p_called_number:receptionTarget.calledNumber});
- if(['seller_agreement_v3','seller_agreement_v4','automatic_offer_v5','automatic_offer_v6','automatic_offer_v7'].includes(c?.context_policy)||c?.context_policy===sellerOfferReceptionPolicy&&c?.context_policy_hash===sellerOfferReceptionPolicyHash)return {status:'already_active'};
+ if(['seller_agreement_v3','seller_agreement_v4','automatic_offer_v5','automatic_offer_v6','automatic_offer_v7','automatic_offer_v8'].includes(c?.context_policy)||c?.context_policy===sellerOfferReceptionPolicy&&c?.context_policy_hash===sellerOfferReceptionPolicyHash)return {status:'already_active'};
  if(!c||c.agent_id!==receptionTarget.agentId||c.call_profile!=='normal'||c.context_policy!=='buyer_seller_v1'||c.entry_policy!=='direct_recorded_v1')throw Error('REVIEWED_SOURCE_REQUIRED');
  const path='/v1/convai/agents/'+c.agent_id;
  const [source,listed,workspace,tool,main]=await Promise.all([api(path+'?branch_id='+c.branch_id),api(path+'/branches?include_archived=true&limit=100'),api('/v1/convai/settings'),api('/v1/convai/tools/'+c.stop_tool_id),api(path)]);

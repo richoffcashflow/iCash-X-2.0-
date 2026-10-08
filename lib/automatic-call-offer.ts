@@ -13,7 +13,7 @@ export const automaticOfferInput=z.discriminatedUnion('action',[
  z.object({action:z.literal('update_repairs'),conversationId,sellerStatement:z.string().trim().min(3).max(1000),repairEstimateCents:cents.optional()}).strict(),
  z.object({action:z.literal('report_change'),conversationId,sellerStatement:z.string().trim().min(1).max(1000)}).strict(),
 ]);
-export type AutomaticOfferState={payoffReport?:SellerPayoffReport;repairEstimateCents?:number;conditionPending?:boolean;factsPending?:boolean;payoffPending?:boolean;payoffStatement?:string;contractBlocked?:boolean;acceptanceConditional?:boolean;agreementRevisionRequired?:boolean;sellerStatement?:string;acceptedPriceCents?:number|null;quotedPriceCents?:number|null;quoteRevision?:string;snapshotHash?:string};
+export type AutomaticOfferState={listedWithAgent?:boolean;listingStatement?:string;payoffReport?:SellerPayoffReport;repairEstimateCents?:number;conditionPending?:boolean;factsPending?:boolean;payoffPending?:boolean;payoffStatement?:string;contractBlocked?:boolean;acceptanceConditional?:boolean;agreementRevisionRequired?:boolean;sellerStatement?:string;acceptedPriceCents?:number|null;quotedPriceCents?:number|null;quoteRevision?:string;snapshotHash?:string};
 export type CallOfferContext={party:'seller'|'buyer'|'unknown';accountId?:string;dealId?:string;address?:string;snapshot?:unknown;terms?:unknown;pendingAgreement?:{priceCents:number;closingDate:string}|null;buyer?:{askingPriceCents:number;purchasePriceCents?:number;assignmentFeeCents?:number;address:string};offerState?:AutomaticOfferState|null;offerVersion?:number};
 export const blockedOffer=(reason:string,instruction:string)=>({quoteAllowed:false as const,priceCents:null,reason,instruction});
 
@@ -58,6 +58,7 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
   return {quoteAllowed:true as const,party:'buyer',priceCents:b.askingPriceCents,...offerPricePresentation(b.askingPriceCents),...breakdown,address:b.address,status:'approved_buyer_price',instruction:'Quote this exact total buyer price in dollars. The assignment fee is already included. Explain a numerical breakdown only if returned here. Use only the actual agreement for closing-cost terms.'};
  }
  if(context.party!=='seller'||!context.address)return blockedOffer('property_context_required','Which property are you calling about, and are you buying or selling?');
+ if(state.listedWithAgent===true)return blockedOffer('listed_with_agent','We do not purchase properties currently listed with an agent. Thank them and politely end the offer conversation. Do not quote, accept an offer or send an agreement. Do not suggest cancelling their listing.');
  if(state.agreementRevisionRequired)return blockedOffer('issued_agreement_changed','The changed property facts require revising the existing agreement before new terms can be confirmed.');
  if(state.factsPending&&!state.payoffPending)return blockedOffer('property_facts_changed','The updated property or ownership information needs to be confirmed before I can quote a price.');
  if(state.conditionPending)return blockedOffer('repair_estimate_required','About how much do you estimate the total repairs will cost?');
@@ -91,11 +92,11 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
 }
 
 type Db=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
-type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;verifyInput:(input:Record<string,unknown>)=>Promise<boolean>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
+type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;verifyInput:(input:Record<string,unknown>)=>Promise<boolean>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyListingStatus?:(input:Record<string,unknown>)=>Promise<boolean|null>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
 export async function automaticCallOffer(token:string,input:unknown,d:Dependencies){
  const i=automaticOfferInput.parse(input),hash=sha(token);await d.bind(token,i.conversationId);
  const context=await d.db<CallOfferContext|null>('rpc/icash_call_offer_context','POST',{p_hash:hash,p_conversation:i.conversationId});
- if(!context)return blockedOffer('current_call_required','I need to confirm the current property context before quoting a price.');
+ if(!context)return blockedOffer('current_call_required','I cannot retrieve the offer for this call right now. Retry get_offer once. If it still fails, explain the technical problem once and arrange follow-up; do not repeat answered questions or say you are still confirming details.');
  if(context.party==='buyer')return i.action==='get_offer'?calculateAutomaticCallOffer(context,{},(d.now??Date.now)()):blockedOffer('buyer_terms_locked','The buyer price comes from the current under-contract package; changed terms need review.');
  if(context.party!=='seller')return calculateAutomaticCallOffer(context,{},(d.now??Date.now)());
  const state:AutomaticOfferState={...context.offerState},snapshotHash=sha(JSON.stringify(canonical(context.snapshot))),now=(d.now??Date.now)();
@@ -104,6 +105,9 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
   if(context.pendingAgreement)state.agreementRevisionRequired=true;
   const verified=await d.verifyInput(i);state.sellerStatement=verified?i.sellerStatement:'Statement confirmation required';state.acceptedPriceCents=null;
   if(i.action==='report_change'){
+   const listing=await d.verifyListingStatus?.(i);
+   if(typeof listing==='boolean'){state.listedWithAgent=listing;state.listingStatement=i.sellerStatement;}
+   else {
    const update=await d.verifyPayoffFacts?.(i);
    if(update)state.sellerStatement=i.sellerStatement;
    const unrelatedHold=!!state.factsPending&&!state.payoffPending;
@@ -116,6 +120,7 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
    state.payoffPending=verified&&(!state.factsPending||!!state.payoffPending)&&(payoffOnly(i.sellerStatement)||!!await d.verifyPayoffChange?.(i));
    if(state.payoffPending)state.payoffStatement=i.sellerStatement;
    state.factsPending=true;
+   }
    }
   }
   else {state.conditionPending=!verified||i.repairEstimateCents===undefined;if(verified&&i.repairEstimateCents!==undefined)state.repairEstimateCents=i.repairEstimateCents;}
