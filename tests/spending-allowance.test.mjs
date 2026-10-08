@@ -47,6 +47,7 @@ accountError='';database=before;assert.equal((await route.POST(post())).status,5
 const require=createRequire(import.meta.url),code=ts.transpileModule(readFileSync('components/spending-allowance.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
 const all=root=>!root||typeof root!=='object'?[]:Array.isArray(root)?root.flatMap(all):[root,...all(root.props?.children)];
 const text=root=>typeof root==='string'?root:Array.isArray(root)?root.map(text).join(' '):root&&typeof root==='object'?text(root.props?.children):'';
+const atLimit={...before,spentCents:200,remainingCents:0,availableCents:200},afterIncrease={...atLimit,limitCents:400,remainingCents:200,extraCents:200};
 let slots=[],cursor=0,dirty=true,pending=[],tree,tick,read=async()=>before,saveFails=true,saves=0;
 const hooks={
  useState(initial){const i=cursor++;if(!(i in slots))slots[i]=initial;return[slots[i],next=>{const value=typeof next==='function'?next(slots[i]):next;if(!Object.is(value,slots[i])){slots[i]=value;dirty=true;}}];},
@@ -60,19 +61,21 @@ new Function('require','module','exports','setInterval','clearInterval','documen
  if(name==='./spending-allowance.module.css')return {default:new Proxy({},{get:(_,key)=>String(key)})};
  if(name==='@/components/funding-dialog')return {FundingDialog:'FundingDialog'};
  if(name==='@/lib/membership-policy')return {priceLabel:cents=>'$'+(cents/100).toFixed(2)};
- if(name==='@/lib/spending-allowance')return {fetchSpendingAllowance:()=>read(),saveSpendingAllowance:async body=>{saves++;assert.deepEqual(body,request);if(saveFails)throw Error('Your session expired. Sign in again.');return after;}};
+ if(name==='@/lib/spending-allowance')return {fetchSpendingAllowance:()=>read(),saveSpendingAllowance:async body=>{saves++;assert.deepEqual(body,request);if(saveFails)throw Error('Your session expired. Sign in again.');return afterIncrease;}};
  return require(name);
 },mod,mod.exports,fn=>{tick=fn;return 1;},()=>{},{hidden:false});
 async function flush(){for(let i=0;i<15;i++){if(dirty){cursor=0;dirty=false;tree=mod.exports.SpendingAllowance();}const effects=pending;pending=[];effects.forEach(fn=>fn());await new Promise(resolve=>setTimeout(resolve,1));if(!dirty&&!pending.length)return;}throw Error('Render did not settle');}
 const button=label=>{const found=all(tree).find(n=>n.type==='button'&&text(n).trim()===label);assert(found,'Missing '+label);return found;};
 const submit=()=>all(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
-await flush();assert.match(text(tree),/\$1\.01 remaining/);
-button('Allow more spending today').props.onClick();await flush();
+await flush();assert.equal(tree,null,'No allowance card while usage remains');
+read=async()=>({...atLimit,availableCents:0});tick();await flush();assert.equal(tree,null,'Empty credits use the credit refill flow, not a daily increase');
+read=async()=>atLimit;tick();await flush();assert.doesNotMatch(text(tree),/Today’s allowance|daily pace/);
+button('Add more usage').props.onClick();await flush();
 submit();submit();await flush();assert.equal(saves,1);assert.match(text(tree),/session expired/);
 tick();await flush();assert.match(text(tree),/session expired/,'A successful poll must not erase a failed save');
 assert(all(tree).some(n=>n.type==='FundingDialog'),'Failure leaves confirmation dialog open');
 let resolveOld;read=()=>new Promise(resolve=>{resolveOld=resolve;});tick();
-saveFails=false;submit();await flush();assert.match(text(tree),/Allowance saved/);assert.match(text(tree),/\$3\.01/);
-resolveOld(before);await flush();assert.match(text(tree),/\$3\.01 remaining/,'Older GET must not replace confirmed increase');
+saveFails=false;submit();await flush();assert.equal(tree,null,'Successful increase removes the prompt');
+resolveOld(atLimit);await flush();assert.equal(tree,null,'Older GET must not restore an exhausted-usage prompt after a confirmed increase');
 assert(!all(tree).some(n=>n.type==='FundingDialog'));assert.equal(saves,2);
-console.log('PASS allowance: persistent failure message, exact saved response, lost-response recovery, stale refresh race, duplicate submit, authenticated account scope.');
+console.log('PASS usage prompt: hidden until exhausted, no duplicate refill UI, persistent failure message, exact saved response, lost-response recovery, stale refresh race, duplicate submit, authenticated account scope.');
