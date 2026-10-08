@@ -1,0 +1,108 @@
+@font-face{font-family:'iCash Montserrat';font-style:normal;font-weight:400;font-display:swap;src:url('/fonts/montserrat-regular.ttf') format('truetype')}
+@font-face{font-family:'iCash Montserrat';font-style:normal;font-weight:700;font-display:swap;src:url('/fonts/montserrat-bold.ttf') format('truetype')}
+@font-face{font-family:'iCash Montserrat';font-style:normal;font-weight:900;font-display:swap;src:url('/fonts/montserrat-black.ttf') format('truetype')}
+.wb-plan-home,.icash-brand-workspace{font-family:'iCash Montserrat',Arial,Helvetica,sans-serif}
+.icash-brand-workspace.icash-brand-workspace{min-height:100dvh;background:#fff!important;color:#151515;padding-bottom:28px;color-scheme:light}
+.icash-brand-workspace.icash-brand-workspace .console-header{width:calc(100% - 60px);max-width:1120px;min-height:86px;padding:10px 0;margin:auto;background:transparent;color:#111;border-bottom:1px solid #e7e7e7}
+.icash-brand-workspace.icash-brand-workspace .console-header img{filter:brightness(0);width:119px;height:66px}
+.icash-brand-workspace.icash-brand-workspace .brand-version{font-size:9px;color:#777;letter-spacing:.08em}
+.icash-brand-workspace.icash-brand-workspace .console-header :is(.header-access,.workspace-help,.workspace-updates-button){color:#555;font-size:10px;font-weight:700;letter-spacing:.02em}
+.icash-brand-workspace.icash-brand-workspace .console-header .header-access:hover{color:#111;background:#f1f1f1}
+.icash-brand-workspace.icash-brand-workspace .console-header .setup-brand strong{color:#111}
+.icash-brand-workspace.icash-brand-workspace .console-header .setup-brand>div>span{color:#666}
+.icash-brand-workspace.icash-brand-workspace .console-header .setup-mark{border:1px solid #111;background:#111!important;color:#fff}
+.icash-brand-workspace.icash-brand-workspace .console-main{max-width:1120px;padding:34px 0 0}
+.workspace-brand-intro{position:relative;padding:0 0 28px;margin:0;overflow:hidden}
+.workspace-brand-intro>span{display:flex;align-items:center;gap:10px;font-size:9px;font-weight:700;letter-spacing:.17em;color:#666}
+.workspace-brand-intro>span:before{content:'';width:25px;height:1px;background:#777}
+.workspace-brand-intro h1{font-size:clamp(28px,4vw,45px);line-height:1.1;letter-spacing:-.055em;font-weight:900;color:#111;margin:13px 0 10px}
+.workspace-brand-intro p{color:#666;font-size:12px;line-height:1.6;margin:0}
+.icash-brand-workspace.icash-brand-workspace .bot-run-centered{border:1px solid #d8d8d8;border-radius:10px;background:linear-gradient(125deg,#f3f3f3,#fff 80%);box-shadow:0 12px 35px #00000005;padding:25px 28px;gap:12px 24px;margin-bottom:30px}
+.icash-brand-workspace.icash-brand-workspace .bot-run-status h2{font-size:24px;font-weight:700;letter-spacing:-.045em;color:#111}
+.icash-brand-workspace.icash-brand-workspace .bot-run-status p{font-size:12px;color:#666}
+.icash-brand-workspace.icash-brand-workspace .bot-credit-caption{font-size:12px;color:#333}
+.icash-brand-workspace.icash-brand-workspace .bot-main-action{border-radius:4px;font-size:11px;font-weight:700;letter-spacing:.01em;min-height:47px;background:#111;color:#fff}
+.icash-brand-workspace.icash-brand-workspace .bot-run-budget{font-size:11px;color:#555}
+.icash-brand-workspace.icash-brand-workspace .workspace-vip-badge{border-radius:4px;min-height:36px;font-size:18px;padding:7px 10px;background:#fff;color:#111;border:1px solid #dedede}
+.icash-brand-workspace.icash-brand-workspace .operation-panel{background:transparent;border:0;color:#222;box-shadow:none}
+.icash-brand-workspace.icash-brand-workspace .workspace-section-heading h3{font-size:23px;font-weight:900;letter-spacing:-.04em;color:#111}
+.icash-brand-workspace.icash-brand-workspace .open-workspace-assistant{background:#111;color:#fff;border:1px solid #111;border-radius:4px;font-size:11px;min-height:44px}
+.icash-brand-workspace.icash-brand-workspace .workspace-search input{background:#fafafa;color:#111;border:1px solid #dcdcdc;border-radius:5px;min-height:51px;font-size:14px;padding:14px 18px}
+.icash-brand-workspace.icash-brand-workspace .workspace-search input::placeholder{color:#777}
+.icash-brand-workspace.icash-brand-workspace .live-property{background:#fff;color:#222;border:1px solid #dcdcdc;border-radius:9px;box-shadow:0 7px 20px #00000004;transition:border-color .18s}
+.icash-brand-workspace.icash-brand-workspace .live-property:hover{border-color:#999}
+.icash-brand-workspace.icash-brand-workspace .property-summary{background:transparent;color:#151515;padding:23px;gap:15px}
+.icash-brand-workspace.icash-brand-workspace .property-address strong{color:#111;font-size:16px;font-weight:700;letter-spacing:-.025em}
+.icash-brand-workspace.icash-brand-workspace :is(.property-address>span,.property-address small,.property-owner,.property-summary-status){color:#6b6b6b}
+.icash-brand-workspace.icash-brand-workspace :is(.property-status,.tone-green){color:#444;background:#f2f2f2;border-color:#ddd}
+.icash-brand-workspace.icash-brand-workspace .ai-status-dot{background:#555}
+.icash-brand-workspace.icash-brand-workspace .property-cash-preview{border-color:#e7e7e7}
+.icash-brand-workspace.icash-brand-workspace .property-cash-preview span{color:#666}
+.icash-brand-workspace.icash-brand-workspace .property-cash-preview strong{color:#111;font-size:26px;font-weight:700;letter-spacing:-.045em}
+.icash-brand-workspace.icash-brand-workspace .property-open-control{color:#555;background:#f5f5f5;border-color:#ddd}
+.icash-brand-workspace.icash-brand-workspace .property-quick-actions{padding:0 22px 21px;gap:8px}
+.icash-brand-workspace.icash-brand-workspace .property-quick-actions button{background:#fff;color:#333;border:1px solid #d3d3d3;border-radius:4px;font-size:11px;font-weight:700;min-height:44px}
+.icash-brand-workspace.icash-brand-workspace .property-quick-actions button:hover{background:#f2f2f2}
+.icash-brand-workspace.icash-brand-workspace .property-quick-actions button:first-child{background:#111;color:#fff;border-color:#111}
+.icash-brand-workspace.icash-brand-workspace .property-latest-update{color:#777}
+.icash-brand-workspace.icash-brand-workspace .property-latest-update span{color:#444}
+.icash-brand-workspace.icash-brand-workspace .workspace-review-section{padding:20px 22px 0;border:1px solid #ddd;border-radius:9px;background:#fafafa;margin-bottom:29px}
+.icash-brand-workspace.icash-brand-workspace .workspace-review-heading h3{color:#111;font-size:16px;font-weight:700}
+.icash-brand-workspace.icash-brand-workspace .workspace-review-heading p{color:#666;font-size:11px}
+.icash-brand-workspace.icash-brand-workspace .workspace-attention{background:transparent;border-color:#e2e2e2;margin-bottom:0}
+.icash-brand-workspace.icash-brand-workspace .attention-heading{padding:13px 0 18px}
+.icash-brand-workspace.icash-brand-workspace .attention-heading-copy strong{color:#222;font-size:12px}
+.icash-brand-workspace.icash-brand-workspace .attention-heading-copy small{color:#666;font-size:11px}
+.icash-brand-workspace.icash-brand-workspace .attention-review-label{background:#fff;color:#444;border-color:#d6d6d6;border-radius:3px;font-size:10px}
+.icash-brand-workspace.icash-brand-workspace .attention-count{background:#111;color:#fff;border-radius:3px}
+.icash-brand-workspace.icash-brand-workspace .attention-chevron{color:#666}
+.icash-brand-workspace.icash-brand-workspace .workspace-attention[open]>.attention-heading{border-color:#ddd}
+.icash-brand-workspace.icash-brand-workspace :is(.property-details,.attention-single,.attention-list){background:#f8f8f8;color:#181818}
+.icash-brand-workspace.icash-brand-workspace .property-details{border-color:#ddd}
+.icash-brand-workspace.icash-brand-workspace .property-details .workspace-section-heading h3{color:#181818}
+.icash-brand-workspace.icash-brand-workspace .property-details .open-workspace-assistant{background:#181818;color:#fff}
+.icash-brand-workspace.icash-brand-workspace :is(.workspace-filters,.workspace-scope,.workspace-quiet,.workspace-empty){color:#666}
+.icash-brand-workspace.icash-brand-workspace .workspace-filters button{color:#666;border-color:#ddd;background:#fff}
+.icash-brand-workspace.icash-brand-workspace .workspace-filters button[aria-pressed=true]{background:#111;color:#fff;border-color:#111}
+.icash-brand-workspace.icash-brand-workspace .workspace-filters button span{background:#f0f0f0;color:#444}
+.icash-brand-workspace.icash-brand-workspace .workspace-filters button[aria-pressed=true] span{background:#3b3b3b;color:#fff}
+.icash-brand-workspace.icash-brand-workspace .workspace-notice{background:#f5f5f5;border-color:#ddd;color:#333}
+.icash-brand-workspace.icash-brand-workspace .workspace-notice p{color:#333}
+.icash-brand-workspace.icash-brand-workspace .workspace-empty strong{color:#222}
+.icash-brand-workspace.icash-brand-workspace .workspace-empty p{color:#666}
+.icash-brand-workspace.icash-brand-workspace .live-pages button{background:#fff;border-color:#ddd;color:#444}
+.icash-brand-workspace.icash-brand-workspace .product-disclosure{color:#666;border-color:#e5e5e5;font-size:10px;max-width:1120px;display:flex;align-items:center;justify-content:space-between;padding:20px 0;margin-top:34px;gap:20px}
+.icash-brand-workspace.icash-brand-workspace .product-disclosure a{color:#555}
+.icash-brand-workspace.icash-brand-workspace .operation-panel>details{border-color:#ddd;color:#666}
+.icash-brand-workspace.icash-brand-workspace .workspace-activity{color:#222;border-color:#ddd}
+.icash-brand-workspace.icash-brand-workspace .workspace-activity button{color:#555;border-color:#ddd;background:#fff}
+.icash-brand-workspace.icash-brand-workspace .workspace-activity button[aria-pressed=true]{background:#111;color:#fff}
+.icash-brand-workspace.icash-brand-workspace :is(.identity-onboarding,.post-payment-name,.subscription-lock){color:#181818;background:#f8f8f8;border-radius:8px;padding:24px}
+.icash-brand-workspace.icash-brand-workspace .funding-dialog{border:1px solid #ddd;border-radius:8px;box-shadow:0 24px 100px #0003;color:#181818;background:#fff}
+.icash-brand-workspace.icash-brand-workspace .funding-dialog-heading h2{font-weight:900;letter-spacing:-.05em}
+.icash-brand-workspace.icash-brand-workspace :is(button,summary,input,a):focus-visible{outline:2px solid #111;outline-offset:4px}
+@media(max-width:1180px){.icash-brand-workspace.icash-brand-workspace .console-header{margin-inline:30px}.icash-brand-workspace.icash-brand-workspace .console-main{padding-inline:30px}.icash-brand-workspace.icash-brand-workspace .product-disclosure{margin-inline:30px}}
+@media(max-width:640px){
+ .icash-brand-workspace.icash-brand-workspace .console-header{width:calc(100% - 36px);margin-inline:18px;min-height:72px;padding:5px 0;gap:12px}
+ .icash-brand-workspace.icash-brand-workspace .console-header img{width:91px;height:52px}
+ .icash-brand-workspace.icash-brand-workspace .brand-version{display:none}
+ .icash-brand-workspace.icash-brand-workspace .workspace-header-links{gap:1px;flex-wrap:wrap;justify-content:flex-end}
+ .icash-brand-workspace.icash-brand-workspace .console-header :is(.header-access,.workspace-help,.workspace-updates-button){padding-inline:6px;font-size:9px;min-height:38px}
+ .icash-brand-workspace.icash-brand-workspace .console-main{padding:26px 18px 0}
+ .workspace-brand-intro{padding-bottom:23px}
+ .workspace-brand-intro>span{font-size:8px;letter-spacing:.1em}
+ .workspace-brand-intro h1{font-size:clamp(24px,7.4vw,35px);margin-top:13px;white-space:nowrap}
+ .workspace-brand-intro p{font-size:11px}
+ .icash-brand-workspace.icash-brand-workspace .bot-run-centered{padding:21px 20px;gap:15px;margin-bottom:25px}
+ .icash-brand-workspace.icash-brand-workspace .bot-run-status h2{font-size:22px}
+ .icash-brand-workspace.icash-brand-workspace .bot-run-status p{font-size:11px}
+ .icash-brand-workspace.icash-brand-workspace .workspace-section-heading h3{font-size:21px}
+ .icash-brand-workspace.icash-brand-workspace .workspace-review-section{padding:18px 16px 0;margin-bottom:25px}
+ .icash-brand-workspace.icash-brand-workspace .property-summary{padding:20px;gap:13px}
+ .icash-brand-workspace.icash-brand-workspace .property-address strong{font-size:15px}
+ .icash-brand-workspace.icash-brand-workspace .property-cash-preview strong{font-size:26px}
+ .icash-brand-workspace.icash-brand-workspace .property-quick-actions{padding:0 19px 19px;gap:7px}
+ .icash-brand-workspace.icash-brand-workspace .property-quick-actions button{font-size:10px}
+ .icash-brand-workspace.icash-brand-workspace .product-disclosure{flex-direction:column;gap:0;margin:28px 18px 0;font-size:9px;padding:18px 0}
+}
+@media(prefers-reduced-motion:reduce){.icash-brand-workspace .live-property{transition:none}}
