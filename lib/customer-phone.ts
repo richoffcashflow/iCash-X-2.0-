@@ -1,14 +1,15 @@
 import {createHash,createHmac} from 'node:crypto';
 import {db} from '@/lib/stripe-test';
-import {boundedBytes} from '@/lib/required-call-recording-provider';
+import {boundedBytes,createRecordingProviders} from '@/lib/required-call-recording-provider';
 import {verifiedTwilioForm,object,sid,uuid} from '@/lib/required-call-recording';
 import {twilioUsdChargeMicros} from '@/lib/twilio-usd-cost';
 export const customerPhoneBase='https://www.geticashx.com/api/customer-phone';
+export const customerPhoneRecordingPolicy='customer-phone-recorded-v1';
 const terminal=new Set(['completed','failed','busy','no-answer','canceled']);
 const phone=(n:string)=>/^\+1[2-9]\d{9}$/.test(n);
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const xml=(s:string)=>s.replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]!));
-export type CustomerPhoneCall={id:string;account_id:string;actor_id:string;screening_id:string;callback_phone:string;recipient_phone:string;business_phone:string;provider_account_sid:string;nonce_hash:string;state:string;parent_sid:string|null;child_sid:string|null;connected_at:string|null;ended_at:string|null;created_at:string;parent_receipt:unknown;child_receipt:unknown;settled_at:string|null;max_seconds:number};
+export type CustomerPhoneCall={id:string;account_id:string;actor_id:string;screening_id:string;callback_phone:string;recipient_phone:string;business_phone:string;provider_account_sid:string;nonce_hash:string;state:string;parent_sid:string|null;child_sid:string|null;connected_at:string|null;ended_at:string|null;created_at:string;parent_receipt:unknown;child_receipt:unknown;settled_at:string|null;max_seconds:number;recording_required:boolean;recording_sid:string|null;recording_receipt:unknown;recording_state:string;recording_expires_at:string|null;recording_deleted_at:string|null};
 export function customerPhoneQuote(raw:unknown,to:string,from:string){
  const q=object(raw),prices=q.outbound_call_prices;
  if(q.destination_number!==to||q.origination_number!==from||q.iso_country!=='US'||String(q.price_unit).toUpperCase()!=='USD'||!Array.isArray(prices)||!prices.length)throw Error('PHONE_PRICE_UNAVAILABLE');
@@ -30,12 +31,12 @@ export function customerPhoneProvider(env:NodeJS.ProcessEnv=process.env,fetcher:
   return object(JSON.parse((await boundedBytes(r,262144)).toString('utf8')));
  }
  const base=`https://api.twilio.com/2010-04-01/Accounts/${account}`;
- return {account,secret,
+ return {account,secret,recordings:createRecordingProviders(env,fetcher),
   callerId:async(number:string)=>{const owned=await read(base+'/IncomingPhoneNumbers.json?'+new URLSearchParams({PhoneNumber:number,PageSize:'2'}));if(Array.isArray(owned.incoming_phone_numbers)&&owned.incoming_phone_numbers.some(n=>object(n).phone_number===number&&object(n).account_sid===account))return true;const verified=await read(base+'/OutgoingCallerIds.json?'+new URLSearchParams({PhoneNumber:number,PageSize:'100'}));return Array.isArray(verified.outgoing_caller_ids)&&verified.outgoing_caller_ids.some(n=>object(n).phone_number===number&&object(n).account_sid===account);},
   price:(to:string,from:string)=>read('https://pricing.twilio.com/v2/Voice/Numbers/'+encodeURIComponent(to)+'?'+new URLSearchParams({OriginationNumber:from})),
   call:(id:string)=>{if(!sid(id,'CA'))throw Error('PHONE_CALL_REQUIRED');return read(base+'/Calls/'+id+'.json');},
   children:(id:string)=>{if(!sid(id,'CA'))throw Error('PHONE_CALL_REQUIRED');return read(base+'/Calls.json?'+new URLSearchParams({ParentCallSid:id,PageSize:'10'}));},
-  dial:(c:CustomerPhoneCall,nonce:string)=>read(base+'/Calls.json',new URLSearchParams({From:c.business_phone,To:c.callback_phone,Url:`${customerPhoneBase}/answer?id=${c.id}&nonce=${nonce}`,Method:'POST',Timeout:'25',TimeLimit:'600',Record:'false',StatusCallback:`${customerPhoneBase}/status?id=${c.id}&nonce=${nonce}`,StatusCallbackMethod:'POST',StatusCallbackEvent:'completed'})),
+  dial:(c:CustomerPhoneCall,nonce:string)=>{if(!c.recording_required)throw Error('PHONE_RECORDING_SETUP_REQUIRED');return read(base+'/Calls.json',new URLSearchParams({From:c.business_phone,To:c.callback_phone,Url:`${customerPhoneBase}/answer?id=${c.id}&nonce=${nonce}`,Method:'POST',Timeout:'25',TimeLimit:'600',Record:'true',RecordingChannels:'dual',RecordingTrack:'both',Trim:'do-not-trim',RecordingStatusCallback:`${customerPhoneBase}/recording?id=${c.id}&nonce=${nonce}`,RecordingStatusCallbackMethod:'POST',RecordingStatusCallbackEvent:'completed absent',StatusCallback:`${customerPhoneBase}/status?id=${c.id}&nonce=${nonce}`,StatusCallbackMethod:'POST',StatusCallbackEvent:'completed'}));},
  };
 }
 function nonceFor(id:string,secret:string){return createHmac('sha256',secret).update('customer-phone-v1\0'+id).digest('hex');}
@@ -47,6 +48,17 @@ function bound(c:CustomerPhoneCall,r:Record<string,unknown>,child=false){
 }
 function receipt(r:Record<string,unknown>){
  return {sid:r.sid,status:r.status,currency:'USD',costMicros:twilioUsdChargeMicros(r.price,r.price_unit),receiptHash:hash(JSON.stringify(r))};
+}
+/** Provider metadata, not a callback URL, binds playback and costs to this call. */
+export function customerPhoneRecordingReceipt(c:CustomerPhoneCall,r:Record<string,unknown>){
+ if(!c.recording_required||!sid(c.parent_sid,'CA')||!sid(r.sid,'RE')||c.recording_sid&&c.recording_sid!==r.sid||r.account_sid!==c.provider_account_sid||r.call_sid!==c.parent_sid||r.source!=='OutboundAPI'||r.channels!==2||!['completed','absent'].includes(String(r.status)))return null;
+ const start=Date.parse(String(r.start_time)),duration=Number(r.duration);
+ if(r.status==='completed'&&(!Number.isFinite(start)||start<Date.parse(c.created_at)-5000||start>Date.parse(c.created_at)+120000||!Number.isInteger(duration)||duration<1||duration>c.max_seconds+2))return null;
+ const minutes=r.status==='completed'?Math.ceil(duration/60):0,providerCost=twilioUsdChargeMicros(r.price,r.price_unit);
+ return {sid:r.sid,callSid:c.parent_sid,providerAccountSid:c.provider_account_sid,status:r.status,currency:'USD',costMicros:(minutes?(providerCost??minutes*2500):0)+minutes*500,recordingPriceEstimated:minutes>0&&providerCost===null,storagePriceEstimated:minutes>0,policy:customerPhoneRecordingPolicy,durationSeconds:minutes?duration:0,receiptHash:hash(JSON.stringify(r)),expiresAt:minutes?new Date(start+duration*1000+30*86400000).toISOString():null};
+}
+export function customerPhoneAudioAvailable(c:Pick<CustomerPhoneCall,'recording_required'|'recording_state'|'recording_sid'|'recording_deleted_at'|'recording_expires_at'>,now=Date.now()){
+ return c.recording_required&&c.recording_state==='available'&&sid(c.recording_sid,'RE')&&!c.recording_deleted_at&&!!c.recording_expires_at&&Date.parse(c.recording_expires_at)>now;
 }
 export async function startCustomerPhoneCall(input:{accountId:string;userId:string;screeningId:string;phone:string;callbackPhone:string;requestKey:string}){
  const {accountId,userId,screeningId,callbackPhone,requestKey}=input;
@@ -60,7 +72,7 @@ export async function startCustomerPhoneCall(input:{accountId:string;userId:stri
  if(!thread||!phone(thread.sender)||thread.sender===callbackPhone)throw Error('PHONE_SENDER_UNAVAILABLE');
  const p=customerPhoneProvider(),nonce=nonceFor(requestKey,p.secret);
  const [a,b,callerId]=await Promise.all([p.price(callbackPhone,thread.sender),p.price(input.phone,thread.sender),p.callerId(thread.sender)]);if(!callerId)throw Error('PHONE_SENDER_UNAVAILABLE');
- const quote={currency:'USD',country:'US',from:thread.sender,callback:callbackPhone,recipient:input.phone,checkedAt:new Date().toISOString(),callbackMicrosPerMinute:customerPhoneQuote(a,callbackPhone,thread.sender),recipientMicrosPerMinute:customerPhoneQuote(b,input.phone,thread.sender),receiptHash:hash(JSON.stringify([a,b]))};
+ const quote={recordingPolicy:customerPhoneRecordingPolicy,currency:'USD',country:'US',from:thread.sender,callback:callbackPhone,recipient:input.phone,checkedAt:new Date().toISOString(),callbackMicrosPerMinute:customerPhoneQuote(a,callbackPhone,thread.sender),recipientMicrosPerMinute:customerPhoneQuote(b,input.phone,thread.sender),receiptHash:hash(JSON.stringify([a,b]))};
  const result=await db<{created?:boolean;call?:CustomerPhoneCall;error?:string;holdCents?:number}>('rpc/icash_begin_customer_phone_call','POST',{p_actor:userId,p_account:accountId,p_screening:screeningId,p_recipient:input.phone,p_callback:callbackPhone,p_id:requestKey,p_sender:thread.sender,p_provider_account:p.account,p_nonce_hash:hash(nonce),p_quote:quote});
  if(result.error)return {error:result.error};if(!result.call)throw Error('PHONE_SETUP_REQUIRED');if(!result.created)return {id:result.call.id,status:result.call.state};
  try{
@@ -81,6 +93,15 @@ export async function reconcileCustomerPhoneCall(c:CustomerPhoneCall,p=customerP
  if(noChildReceipt)patch.child_receipt=noChildReceipt;
  if(child){patch.child_sid=child.sid;if(childEnded)patch.child_receipt=receipt(child);}
  if(parentEnded){patch.parent_receipt=receipt(parent);if(!c.connected_at||childEnded||noChildReceipt){patch.ended_at=c.ended_at??new Date().toISOString();patch.state=child?.status==='completed'?'completed':'failed';}}
+ if(parentEnded&&c.recording_required&&!c.recording_receipt&&!c.recording_deleted_at){
+  const list=object(await p.recordings.listRecordings(c.parent_sid).catch(()=>null));
+  if(Array.isArray(list.recordings)&&!list.next_page_uri&&list.recordings.length===1){
+   const rec=customerPhoneRecordingReceipt(c,object(list.recordings[0]));
+   if(rec)Object.assign(patch,{recording_sid:rec.sid,recording_receipt:rec,recording_state:rec.status==='completed'?'available':'absent',recording_expires_at:rec.expiresAt});
+  }else if(Array.isArray(list.recordings)&&!list.next_page_uri&&!list.recordings.length&&parent.status!=='completed'&&Number(parent.duration)===0){
+   Object.assign(patch,{recording_state:'absent',recording_receipt:{status:'absent',callSid:c.parent_sid,providerAccountSid:c.provider_account_sid,kind:'unanswered_parent_with_empty_recordings',currency:'USD',costMicros:0,policy:customerPhoneRecordingPolicy,receiptHash:hash(JSON.stringify({parent,list}))}});
+  }
+ }
  await db(`icash_customer_phone_calls?id=eq.${c.id}&account_id=eq.${c.account_id}`,'PATCH',patch);
  if(patch.ended_at)await db('rpc/icash_settle_customer_phone_call','POST',{p_id:c.id}).catch(()=>false);
  return await getCustomerPhoneCall(c.id,c.account_id)??c;
@@ -98,7 +119,7 @@ export async function customerPhoneWebhook(request:Request,part:string){
   if(part==='child'){if(!bound(c,providerCall,true))return hangup();await reconcileCustomerPhoneCall(c,p);return hangup();}
   if(!bound(c,providerCall)||c.parent_sid&&c.parent_sid!==providerCall.sid)return hangup();
   if(!c.parent_sid){await db(`icash_customer_phone_calls?id=eq.${id}&parent_sid=is.null`,'PATCH',{parent_sid:providerCall.sid,state:'ringing',updated_at:new Date().toISOString()});c=(await getCustomerPhoneCall(id))!;}
-  if(part==='status'||part==='done'){await reconcileCustomerPhoneCall(c,p);return hangup();}
+  if(part==='status'||part==='done'||part==='recording'){await reconcileCustomerPhoneCall(c,p);return hangup();}
   if(c.ended_at||!['in-progress','ringing'].includes(String(providerCall.status)))return hangup();
   if(part==='answer'&&c.state==='ringing'&&!c.connected_at)return new Response(customerPhoneTwiml(c,'answer',nonce),{headers:{'Content-Type':'application/xml'}});
   if(part==='connect'&&form.get('Digits')==='1'&&await db<boolean>('rpc/icash_connect_customer_phone_call','POST',{p_id:id,p_parent:c.parent_sid}))return new Response(customerPhoneTwiml(c,'connect',nonce),{headers:{'Content-Type':'application/xml'}});
@@ -108,7 +129,16 @@ export async function customerPhoneWebhook(request:Request,part:string){
 
 export async function maintainCustomerPhoneCalls(){
  const rows=await db<CustomerPhoneCall[]>(`icash_customer_phone_calls?settled_at=is.null&parent_sid=not.is.null&order=updated_at.asc&limit=3&select=*`);
- const outcomes=await Promise.allSettled(rows.map(c=>reconcileCustomerPhoneCall(c)));return {checked:outcomes.length};
+ const outcomes=await Promise.allSettled(rows.map(c=>reconcileCustomerPhoneCall(c)));
+ const expired=await db<CustomerPhoneCall[]>(`icash_customer_phone_calls?recording_sid=not.is.null&recording_deleted_at=is.null&recording_expires_at=lt.${encodeURIComponent(new Date().toISOString())}&order=recording_expires_at.asc&limit=3&select=*`);
+ const deletions=await Promise.allSettled(expired.map(async c=>{
+  const p=customerPhoneProvider();if(p.account!==c.provider_account_sid||!c.recording_sid)return false;
+  const r=await p.recordings.getRecording(c.recording_sid,true);
+  if(r.sid!==c.recording_sid||r.account_sid!==c.provider_account_sid||r.call_sid!==c.parent_sid)return false;
+  if(r.status!=='deleted')await p.recordings.deleteRecording(c.recording_sid);
+  await db(`icash_customer_phone_calls?id=eq.${c.id}&account_id=eq.${c.account_id}&recording_sid=eq.${c.recording_sid}`,'PATCH',{recording_state:'deleted',recording_deleted_at:new Date().toISOString()});
+  return true;
+ }));return {checked:outcomes.length,deleted:deletions.filter(x=>x.status==='fulfilled'&&x.value===true).length};
 }
 
 export async function customerPhoneReadiness(accountId:string,screeningId:string){
