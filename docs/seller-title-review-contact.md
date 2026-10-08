@@ -12,3 +12,5 @@ Changes:
 Validation: isolated actual SQL routing and limited-contact suites, including fresh-opener routing, idempotency, tenant boundaries, expiry, manual/STOP controls, fixed replies and worker ticket; actual webhook simulation; TypeScript; production webpack build. Financial/provider delegates in the routing simulation are stubs. These checks do not establish live delivery.
 
 Release order: deploy the neutral limited-call prompt, then apply fresh-intake and limited-reply migrations, then the title-review contact admission. No historical message replay or permission renewal. Any old provider outcome remains unchanged.
+
+Production verification: PR #43 merged as `0629c948a28f821d9b15959497c4f82da6d070bd`; deployment `dpl_4a7Q7ck6dr22gVMVcuW3fbTnJFcg` READY on both public domains. All three migrations applied. Service-only routine grants and table RLS verified; no new security warning or runtime error observed. Redbud assigned through the normal worker at 7:59 PM Central. Its live SMS delivery remains unverified; subsequent preparation reached the existing 8:00 PM Central contact-hour cutoff. The previous Arden recovery event was not replayed.
