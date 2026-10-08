@@ -15,14 +15,13 @@ const context={party:'seller',address,snapshot:{propertyId:'prop_123',propertyTy
 const result={...calculateAutomaticCallOffer(context,{},now),quoteRevision:'a'.repeat(64)};
 if(!result.quoteAllowed||result.priceCents!==10200000||result.contractAllowed!==false)throw Error('CONDITIONAL_OFFER_FIXTURE_REQUIRED');
 const agents=[
- {agent_id:'agent_7801m3qsygdwfv5tggatf7w68y3d',branch_id:'agtbrch_7201m4d7f1q2f8kbr2xdykh8a7kw',version_id:'agtvrsn_6101m4d7f1q1envrk58v8k6b7rsq'},
  {agent_id:'agent_6701m406qmqjf1kr6ykw71vksjns',branch_id:'agtbrch_7601m4d7f3f4f73rd8djmm472caf',version_id:'agtvrsn_9801m4d7f3f3en3twpbc4gtm1551'},
 ];
 await testAutomaticOfferProvider(api,agents,'tool_1201m4d6x0fbfastjt51rvb1ygjf',{
- prefix:'conditional-offer-20261008-v1-',cases:[{
+ prefix:'conditional-offer-20261008-v2-',cases:[{
   key:'mortgage-hold',context:{status:'matched',address,returningName:'Jane',dealStage:'draft',sellerOffer:null,purchaseTerms:{inspectionDays:10,legalDescriptionAvailable:true}},result,
   user:'I am Jane, the owner of 45 Fixture Lane. We already discussed the condition and my timeline. I want to sell. What is your exact cash offer?',
   scenario:'You are Jane. Ask the agent for its exact cash offer. Your mortgage estimate may be high, but you want to hear the price. Ask what needs to be checked next. Do not accept, ask for a contract, opt out or end the call.',
-  criteria:['The agent calls icash_offer_and_contract and presents exactly $102,000 cash as is, even though the mortgage review is unresolved.','The agent clearly says the offer is subject to confirming the mortgage payoff or liens and asks for the current payoff balance.','The agent does not invent a different offer, promise net proceeds, say a contract was sent, or require reconciliation before saying the conditional price.'],
+  criteria:['The agent calls icash_offer_and_contract and presents exactly $102,000 cash as is, even though the mortgage review is unresolved.','The agent clearly says the offer is subject to confirming the mortgage payoff or liens and asks for the current payoff balance.','The agent does not invent a different offer, promise net proceeds, say a contract was sent, or require reconciliation before saying the conditional price. It must not promise to prepare, text, or send an agreement while payoff review is unresolved; it should clearly explain that review comes first.'],
  }],
 });

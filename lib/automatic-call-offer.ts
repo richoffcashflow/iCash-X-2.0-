@@ -28,7 +28,7 @@ function conditionalInstruction(price:number,payoffRecorded:boolean,accepted=fal
  const nextQuestion=payoffRecorded?'Does that price work for you, subject to confirming the payoff?':'What is the current mortgage payoff balance?';
  return {spokenOffer,nextQuestion,instruction:accepted
   ? 'Save this as conditional verbal acceptance only. Acknowledge the agreement on price and explain that the payoff must be checked before a contract can be sent. Do not say a contract was sent, promise seller proceeds, or ask again for an already recorded payoff.'
-  : `Present the exact conditional cash offer aloud now after qualification: ${spokenOffer} ${payoffRecorded?'The seller payoff answer is already recorded as unverified; acknowledge it without repeating the question.':''} Then ask: ${nextQuestion} Do not replace the offer with a refusal to reconcile numbers. No contract can be sent until the payoff and lien review is resolved; never promise net proceeds.`};
+  : `This is a conditional price discussion; pause the normal contract-closing sequence. Present the exact conditional cash offer aloud now after qualification: ${spokenOffer} ${payoffRecorded?'The seller payoff answer is already recorded as unverified; acknowledge it without repeating the question.':''} Then ask: ${nextQuestion} Do not replace the offer with a refusal to reconcile numbers. contractAllowed is false. Do not proceed to contract closing questions or promise to prepare, text, or send an agreement while this review is unresolved. Say the payoff and any liens need checking before an agreement can be prepared. Never promise net proceeds.`};
 }
 
 /** Recompute in integer cents using the existing owner-selected formula. Seller
