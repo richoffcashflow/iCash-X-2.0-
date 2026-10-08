@@ -1,1 +1,24 @@
-{"kind": "purchase", "roles": ["Seller", "Customer"], "fieldMap": {"seller": "seller", "buyer": "buyer", "address": "address", "legalDescription": "legalDescription", "state": "state", "priceCents": "priceCents", "effectiveDate": "effectiveDate", "closingDate": "closingDate", "escrowAgent": "escrowAgent", "titleEmail": "titleEmail", "dealNotes": "dealNotes", "earnestCents": "earnestCents", "inspectionDays": "inspectionDays"}, "customerSignatureField": "Customer Signature", "customerConsentField": "Customer Electronic Consent", "maxLegalDescriptionChars": 2000}
+{
+  "kind": "purchase",
+  "roles": [
+    "Seller",
+    "Customer"
+  ],
+  "fieldMap": {
+    "seller": "seller",
+    "buyer": "buyer",
+    "address": "address",
+    "legalDescription": "legalDescription",
+    "state": "state",
+    "priceCents": "priceCents",
+    "effectiveDate": "effectiveDate",
+    "closingDate": "closingDate",
+    "escrowAgent": "escrowAgent",
+    "titleEmail": "titleEmail",
+    "dealNotes": "dealNotes",
+    "inspectionDays": "inspectionDays"
+  },
+  "customerSignatureField": "Customer Signature",
+  "customerConsentField": "Customer Electronic Consent",
+  "maxLegalDescriptionChars": 2000
+}

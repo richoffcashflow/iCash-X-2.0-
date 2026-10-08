@@ -15,7 +15,6 @@ const instructions:Record<string,string>={
  price_review_required:'That price needs review. Do not promise a price outside the authorized offer.',
  existing_price_changed:'A different price is already saved. The existing agreement needs revision before sending.',
  closing_date_review_required:'Confirm an exact future closing date, including the year. Do not invent a date.',
- earnest_terms_required:'The earnest money terms still need to be prepared by the buyer. Record the agreed price and closing date for follow-up; do not invent an earnest amount or say the contract was sent.',
  agreement_changed:'The pending agreement differs from the confirmed price, date or seller name. It must be revised before sending.',
  agreement_in_progress:'Agreement preparation is already in progress or needs review. Do not submit a second signing request.',
 };

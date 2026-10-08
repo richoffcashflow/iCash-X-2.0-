@@ -9,8 +9,6 @@ export function signingTermsHash(terms:unknown){const t=dealTermsSchema.parse(te
 /** Enforce objective completeness again at the final send/sign step; never supply missing legal terms. */
 export function signingDocumentReadiness(kind:SigningKind,input:DealTerms,now=Date.now()){
  const t=dealTermsSchema.parse(input);
- if(kind==='purchase'&&t.earnestCents===null)throw new Error('Enter the agreed earnest money amount. Enter 0 only if no earnest money was agreed.');
- if(kind==='purchase'&&t.earnestCents!>0&&!t.escrowAgent.trim())throw new Error('Name the escrow or title company that will receive earnest money.');
  if(kind==='assignment'&&(t.assignmentFeeCents===null||t.assignmentDepositCents===null||!t.escrowAgent.trim()))throw new Error('Confirm the assignment fee, deposit amount and escrow company.');
  if(t.effectiveDate&&t.closingDate&&t.closingDate<t.effectiveDate)throw new Error('Closing cannot be before the contract effective date.');
  // Blank purchase effective date means the last required signature. Blank closing keeps the existing 30-day clause.
@@ -32,7 +30,8 @@ export function signingReadiness(kind:SigningKind,t:DealTerms,parties:Signer[],p
  if(parties.length<1||parties.length>8||new Set(parties.map(p=>p.phone??p.email?.toLowerCase())).size!==parties.length||parties.some(p=>!signerSchema.safeParse(p).success))throw new Error('Enter each required signer with a separate phone number.');
  return true;
 }
-export function signingFields(t:DealTerms,kind:SigningKind='purchase'){const excluded=new Set(kind==='purchase'?['assignee','assignmentFeeCents','assignmentDepositCents','payoutMethod','payoutHandle','priceSource']:['earnestCents','inspectionDays','payoutMethod','payoutHandle','priceSource']);return Object.fromEntries(Object.entries(t).filter(([k])=>!excluded.has(k)).map(([k,v])=>[k,k.endsWith('Cents')?(v===null?'':(Number(v)/100).toFixed(2)):v===null?'':String(v)]));}
+// Existing envelopes retain their original template fields and terms hash.
+export function signingFields(t:DealTerms,kind:SigningKind='purchase',legacyEarnest=false){const excluded=new Set(kind==='purchase'?['assignee','assignmentFeeCents','assignmentDepositCents','payoutMethod','payoutHandle','priceSource',...(legacyEarnest?[]:['earnestCents'])]:['earnestCents','inspectionDays','payoutMethod','payoutHandle','priceSource']);return Object.fromEntries(Object.entries(t).filter(([k])=>!excluded.has(k)).map(([k,v])=>[k,k.endsWith('Cents')?(v===null?'':(Number(v)/100).toFixed(2)):v===null?'':String(v)]));}
 export type ProviderDocument={id:string;test_mode:boolean;status:string;apply_signing_order:boolean;metadata?:Record<string,string>;recipients:{id:string;email?:string|null;phone?:string|null;status:string;signing_order:number}[]};
 /** A browser callback, a pasted signature or a manually completed envelope never counts. */
 export function verifiedSigningStatus(d:ProviderDocument,e:{providerId:string;id:string;termsHash:string;testMode:boolean;recipients:{id:string;email?:string|null;phone?:string|null}[]}){
