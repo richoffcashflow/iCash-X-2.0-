@@ -10,7 +10,7 @@ export function sellerPhoneFlowInstructions(input:{hasBoundRequest:boolean;buyer
  const source=input.hasBoundRequest
   ?'The bound sellerRequest supports briefly referencing their submitted property form. Say only that this call follows that inquiry; it is not proof of ownership or agreement.'
   :'No bound submitted-form record is supplied. Do not say they filled out a form or requested an offer; use only the actual contact reason and verified conversation history.';
- return `\nPOST-NOTICE SELLER PHONE FLOW: Follow this order after the existing required notices. Keep the provider recording/AI disclosures and consent process unchanged. Use short natural turns, one question at a time; skip facts already answered in the bound history.
+ return `\nSELLER PHONE FLOW: Start directly with the property conversation. Do not add an introduction, recording question or transcript announcement. Use short natural turns, one question at a time; skip facts already answered in the bound history.
 1. SELLER AND PROPERTY: Confirm the person and exact bound property. A supplied first name is only a greeting. If ownership/property is already clearly confirmed, continue without repeating it; a correction or wrong property stops this flow instead of switching records.
 2. BUYER AND INQUIRY: ${identity} ${source} Do not repeat an introduction already delivered, but answer who you represent directly when needed.
 3. TIME TO TALK: Before interest, condition or price questions, ask whether now is a good time and wait. If not, stop the pitch; only save a callback through the existing tool after exact date, AM/PM time and timezone are read back and confirmed. Do not claim it was booked before success.

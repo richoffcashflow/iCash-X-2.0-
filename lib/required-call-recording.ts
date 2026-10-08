@@ -1,3 +1,4 @@
+import {recordingAuthorized} from './direct-call-entry.ts';
 import {type NetworkBuyerKind} from './homeoffer-buyer-identity.ts';
 import {finalAffirmativeSpeech,recordingConsentEvidenceVersion,recordingContactOptOut} from './recording-consent-evidence.ts';
 import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
@@ -46,7 +47,7 @@ export function verifiedTwilioForm(raw:string,signature:string|null,token:string
  const expected=createHmac('sha1',token).update(url+keys.sort().map(k=>k+f.get(k)).join('')).digest('base64');
  const a=Buffer.from(signature),b=Buffer.from(expected);return a.length===b.length&&timingSafeEqual(a,b)?f:null;
 }
-export function audioAvailable(row:RecordingRow,now=Date.now()){return row.state==='available'&&sid(row.recording_sid,'RE')&&!!row.consent_at&&Number.isFinite(Date.parse(row.audio_expires_at??''))&&Date.parse(row.audio_expires_at!)>now&&!row.deleted_at;}
+export function audioAvailable(row:RecordingRow,now=Date.now()){return row.state==='available'&&sid(row.recording_sid,'RE')&&recordingAuthorized(row)&&Number.isFinite(Date.parse(row.audio_expires_at??''))&&Date.parse(row.audio_expires_at!)>now&&!row.deleted_at;}
 export function requiredRecordingHold(base:{elevenlabsMicros:number;otherMicros:number}){
  if(!Number.isSafeInteger(base.elevenlabsMicros)||base.elevenlabsMicros<0||!Number.isSafeInteger(base.otherMicros)||base.otherMicros<0)throw Error('REVIEWED_COSTS_REQUIRED');
  const required=(BigInt(base.elevenlabsMicros)*BigInt(3)+(BigInt(base.otherMicros)+BigInt(31000)+BigInt(20000))*BigInt(5))*BigInt(12000);

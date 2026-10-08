@@ -1,3 +1,4 @@
+import {recordingAuthorized,directCallTwiml} from './direct-call-entry.ts';
 import {randomBytes} from 'node:crypto';
 import {affirmativeSpeech,recordingGateOptOut,object,privateHeaders,sha,sid,uuid,verifiedTwilioForm} from './required-call-recording.ts';
 import {boundedBytes} from './required-call-recording-provider.ts';
@@ -64,6 +65,19 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
   const row=await getRecordedReception(rpc,id);if(!row||row.call_sid!==f.get('CallSid')||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||nonceRequired&&row.nonce_hash!==sha(nonce!))return null;
   return {row,f,nonce};
  }
+ async function recordAndConnect(row:RecordedReceptionRow,c:RecordedReceptionConfig){
+    let next=await transition(row,'claim_start');if(!next)throw Error('START_ALREADY_CLAIMED');Object.assign(row,next);
+    const recording=await provider.start(row.call_sid,recordedReceptionUrl+'/status?id='+row.id);
+    if(!receptionRecordingMatches(row,recording)||recording.status!=='in-progress'||!Number.isFinite(Date.parse(String(recording.start_time))))throw Error('START_UNCONFIRMED');
+    next=await transition(row,'started',{recordingSid:recording.sid,providerStartedAt:new Date(String(recording.start_time)).toISOString()});
+    if(next)Object.assign(row,next);else{const fresh=await getRecordedReception(rpc,row.id,row.account_id);if(!fresh||fresh.recording_sid!==recording.sid||fresh.state!=='recording'||fresh.end_requested_at||Date.parse(fresh.provider_started_at??'')!==Date.parse(String(recording.start_time)))throw Error('RECORDING_NOT_SAVED');Object.assign(row,fresh);}
+    let context:unknown=null;
+    if(propertyReceptionEnabled(c))try{context=await rpc('icash_recorded_reception_property_context',{p_id:row.id,p_nonce_hash:row.nonce_hash});}catch{/* Only ask caller for address; never infer tenant. */}
+    next=await transition(row,'claim_register');if(!next)throw Error('REGISTER_ALREADY_CLAIMED');Object.assign(row,next);
+    const remaining=Math.floor((Date.parse(row.call_deadline_at)-now())/1000);if(remaining<1||remaining>row.max_total_seconds)throw Error('CALL_CAP_EXHAUSTED');
+    return xml(await provider.register(row,remaining,context));
+ }
+
  return {
   async inbound(request:Request){
    let row:RecordedReceptionRow|null=null,stage='release';
@@ -88,10 +102,10 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
     stage='agent_readback';if(!await checkAgent(c))return deny('agent_mismatch');
     const nonce=randomBytes(32).toString('hex'),op='recorded-reception:'+call.sid,token=receptionStopToken({operation_key:op},env);
     stage='credit_reservation';
-    const admission=await rpc<{allowed:boolean;reason?:string;session:RecordedReceptionRow}>('icash_reserve_flexible_reception',{p_config_id:c.id,p_call_sid:call.sid,p_provider_account_sid:c.provider_account_sid,p_from_phone:from,p_to_phone:c.called_number,p_direction:'inbound',p_caller_hash:callerHash,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(token),p_config_hash:c.config_hash,p_version_id:c.reviewed_version_id});
+    const admission=await rpc<{allowed:boolean;reason?:string;session:RecordedReceptionRow}>(c.entry_policy==='direct_recorded_v1'?'icash_reserve_direct_reception':'icash_reserve_flexible_reception',{p_config_id:c.id,p_call_sid:call.sid,p_provider_account_sid:c.provider_account_sid,p_from_phone:from,p_to_phone:c.called_number,p_direction:'inbound',p_caller_hash:callerHash,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(token),p_config_hash:c.config_hash,p_version_id:c.reviewed_version_id});
     if(admission?.allowed!==true||!admission.session)return deny(typeof admission?.reason==='string'&&/^[a-z_]{1,60}$/.test(admission.reason)?admission.reason:'reservation_denied');row=admission.session;
-    if(row.operation_key!==op||row.account_id!==c.account_id||row.config_id!==c.id||row.call_sid!==call.sid||row.provider_account_sid!==c.provider_account_sid||row.from_phone!==from||row.to_phone!==c.called_number||!validReceptionCreditBound(c,row)||row.rate_id!==c.rate_id||row.nonce_hash!==sha(nonce)||row.stop_token_hash!==sha(token))throw Error('RESERVATION_BINDING_REQUIRED');
-    return xml(receptionAnswerTwiml(row.id,nonce));
+    if(row.operation_key!==op||row.account_id!==c.account_id||row.config_id!==c.id||c.entry_policy==='direct_recorded_v1'&&row.entry_policy!==c.entry_policy||row.call_sid!==call.sid||row.provider_account_sid!==c.provider_account_sid||row.from_phone!==from||row.to_phone!==c.called_number||!validReceptionCreditBound(c,row)||row.rate_id!==c.rate_id||row.nonce_hash!==sha(nonce)||row.stop_token_hash!==sha(token))throw Error('RESERVATION_BINDING_REQUIRED');
+    return xml(c.entry_policy==='direct_recorded_v1'?directCallTwiml(recordedReceptionUrl+'/setup',row.id,nonce):receptionAnswerTwiml(row.id,nonce));
    }catch(error){console.error('recorded_reception_admission_failed',{stage,sessionId:row?.id,code:error instanceof Error&&/^[A-Z0-9_:]{1,100}$/.test(error.message)?error.message:'ADMISSION_FAILED'});if(row)await endRecordedReception(rpc,provider,row,'admission_failed');return hangup();}
   },
   async setup(request:Request){
@@ -109,16 +123,31 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
     stage='save_bound';
     const saved=await transition(row,'bounded',{callSid:row.call_sid,providerAccountSid:row.provider_account_sid,fromPhone:row.from_phone,toPhone:row.to_phone,direction:'inbound',timeLimitSeconds:row.max_total_seconds});if(!saved)throw Error('PROVIDER_BOUND_NOT_SAVED');
     row=saved;stage='bind_answer_time';row=await bindRecordedReceptionCallStart(rpc,row,bounded);
+    if(row.entry_policy==='direct_recorded_v1')return xml(`<Response><Redirect method="POST">${recordedReceptionUrl}/connect?id=${row.id}&amp;nonce=${auth.nonce}</Redirect></Response>`);
     return xml(receptionConsentTwiml(row.id,auth.nonce!,false));
    }catch(error){
     console.error('recorded_reception_setup_failed',{sessionId:row?.id,stage,code:error instanceof Error&&/^[A-Z0-9_:]{1,100}$/.test(error.message)?error.message:'SETUP_FAILED'});
-    if(row){if(row.setup_claimed_at&&!row.setup_confirmed_at)await transition(row,'setup_unknown').catch(()=>null);await endRecordedReception(rpc,provider,row,'setup_failed');}return hangup();
+    if(row){if(row.register_claimed_at)await transition(row,'register_unknown').catch(()=>null);else if(row.start_claimed_at&&!row.recording_sid)await transition(row,'start_unknown').catch(()=>null);if(row.setup_claimed_at&&!row.setup_confirmed_at)await transition(row,'setup_unknown').catch(()=>null);await endRecordedReception(rpc,provider,row,'setup_failed');}return hangup();
+   }
+  },
+  async connect(request:Request){
+   let row:RecordedReceptionRow|null=null;
+   try{
+    const auth=await signed(request,'connect',true);if(!auth)return hangup();row=auth.row;
+    if(row.entry_policy!=='direct_recorded_v1'||row.state!=='consent_pending'||row.recording_authorized_at||row.start_claimed_at||row.end_requested_at||row.call_ended_at)return hangup();
+    const c=await currentConfig(row.to_phone);if(!c||c.id!==row.config_id||c.entry_policy!=='direct_recorded_v1')throw Error('DIRECT_ENTRY_CONFIGURATION_REQUIRED');
+    const call=await provider.getCall(row.call_sid);if(!incomingCallMatches(row,call,now(),true))throw Error('ANSWERED_CALL_REQUIRED');
+    const authorized=await transition(row,'authorize_recording',{nonceHash:row.nonce_hash,policy:'direct_recorded_v1'});if(!authorized)throw Error('RECORDING_AUTHORITY_REQUIRED');row=authorized;
+    return await recordAndConnect(row,c);
+   }catch(error){
+    console.error('direct_reception_connection_failed',{sessionId:row?.id,code:error instanceof Error&&/^[A-Z0-9_:]{1,100}$/.test(error.message)?error.message:'CONNECTION_FAILED'});
+    if(row){if(row.register_claimed_at)await transition(row,'register_unknown').catch(()=>null);else if(row.start_claimed_at&&!row.recording_sid)await transition(row,'start_unknown').catch(()=>null);await endRecordedReception(rpc,provider,row,'connection_failed');}return hangup();
    }
   },
   async consent(request:Request){
    let row:RecordedReceptionRow|null=null;
    try{
-    const auth=await signed(request,'consent',true);if(!auth)return hangup();row=auth.row;
+    const auth=await signed(request,'consent',true);if(!auth)return hangup();row=auth.row;if(row.entry_policy==='direct_recorded_v1')return hangup();
     const call=await provider.getCall(row.call_sid);if(!incomingCallIdentityMatches(row,call))return hangup();
     if(!incomingCallMatches(row,call,now(),true)){console.warn('recorded_reception_call_mismatch',{sessionId:row.id,carrierStatus:['ringing','in-progress',...terminalStatuses].includes(String(call.status))?call.status:'unknown',startDeltaMs:row.call_started_at&&Number.isFinite(Date.parse(String(call.start_time)))?Date.parse(String(call.start_time))-Date.parse(row.call_started_at):null});await endRecordedReception(rpc,provider,row,'call_clock_or_status_conflict');return hangup();}
     if(row.state!=='consent_pending'||row.consent_at){await endRecordedReception(rpc,provider,row,'replayed_consent');return hangup();}
@@ -130,23 +159,14 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
     const yes=affirmativeSpeech(auth.f);
     if(!yes){await transition(row,'decline',{reason:auth.f.has('SpeechResult')?'ambiguous':'timeout'});await endRecordedReception(rpc,provider,row,'consent_declined');return xml(receptionEndTwiml);}
     let next=await transition(row,'consent',{nonceHash:row.nonce_hash,source:'twilio_gather_speech',...yes,disclosureVersion:'required-audio-30d-speech-2026-10-03'});if(!next)throw Error('CONSENT_NOT_SAVED');row=next;
-    next=await transition(row,'claim_start');if(!next)throw Error('START_ALREADY_CLAIMED');row=next;
-    const recording=await provider.start(row.call_sid,recordedReceptionUrl+'/status?id='+row.id);
-    if(!receptionRecordingMatches(row,recording)||recording.status!=='in-progress'||!Number.isFinite(Date.parse(String(recording.start_time))))throw Error('START_UNCONFIRMED');
-    next=await transition(row,'started',{recordingSid:recording.sid,providerStartedAt:new Date(String(recording.start_time)).toISOString()});
-    if(next)row=next;else{const fresh=await getRecordedReception(rpc,row.id,row.account_id);if(!fresh||fresh.recording_sid!==recording.sid||fresh.state!=='recording'||fresh.end_requested_at||Date.parse(fresh.provider_started_at??'')!==Date.parse(String(recording.start_time)))throw Error('RECORDING_NOT_SAVED');row=fresh;}
-    let context:unknown=null;
-    if(propertyReceptionEnabled(c))try{context=await rpc('icash_recorded_reception_property_context',{p_id:row.id,p_nonce_hash:row.nonce_hash});}catch{/* Only ask caller for address; never infer tenant. */}
-    next=await transition(row,'claim_register');if(!next)throw Error('REGISTER_ALREADY_CLAIMED');row=next;
-    const remaining=Math.floor((Date.parse(row.call_deadline_at)-now())/1000);if(remaining<1||remaining>row.max_total_seconds)throw Error('CALL_CAP_EXHAUSTED');
-    return xml(await provider.register(row,remaining,context));
+    return await recordAndConnect(row,c);
    }catch{if(row){await transition(row,row.register_claimed_at?'register_unknown':'start_unknown').catch(()=>null);await endRecordedReception(rpc,provider,row,'recording_failed');}return hangup();}
   },
   async status(request:Request){
    try{
     const auth=await signed(request,'status');if(!auth)return new Response(null,{status:401,headers:privateHeaders});let row=auth.row;
     if(!sid(auth.f.get('RecordingSid'),'RE')||row.recording_sid&&row.recording_sid!==auth.f.get('RecordingSid'))return new Response(null,{status:401,headers:privateHeaders});
-    const p=await provider.getRecording(auth.f.get('RecordingSid')!);if(!receptionRecordingMatches(row,p)||!row.consent_at||!row.start_claimed_at)return new Response(null,{status:409,headers:privateHeaders});
+    const p=await provider.getRecording(auth.f.get('RecordingSid')!);if(!receptionRecordingMatches(row,p)||!recordingAuthorized(row)||!row.start_claimed_at)return new Response(null,{status:409,headers:privateHeaders});
     if(!row.recording_sid){const next=await transition(row,'started',{recordingSid:p.sid,providerStartedAt:new Date(String(p.start_time)).toISOString()});if(!next)return new Response(null,{status:409,headers:privateHeaders});row=next;}
     if(['completed','absent'].includes(String(p.status))&&!['deleted','deletion_pending','expired'].includes(row.state)){
      const ended=await endRecordedReception(rpc,provider,row,'audio_terminal');row=ended.row;
@@ -172,7 +192,7 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
     const u=new URL(request.url);if(request.method!=='POST'||u.pathname!=='/api/reception/recorded/stop'||u.search)return Response.json({stopped:false},{status:400,headers:privateHeaders});
     const token=request.headers.get('authorization')?.replace(/^Bearer /,'');if(!token||!/^[a-f0-9]{64}$/.test(token))return Response.json({stopped:false},{status:401,headers:privateHeaders});
     const b=object(JSON.parse((await boundedBytes(request,2048)).toString('utf8')));if(Object.keys(b).length!==1||!uuid(b.recordingId))return Response.json({stopped:false},{status:400,headers:privateHeaders});
-    let row=await getRecordedReception(rpc,b.recordingId);if(!row||row.stop_token_hash!==sha(token)||!row.consent_at||!row.start_claimed_at||now()-Date.parse(row.created_at)>20*60000)return Response.json({stopped:false},{status:401,headers:privateHeaders});
+    let row=await getRecordedReception(rpc,b.recordingId);if(!row||row.stop_token_hash!==sha(token)||!recordingAuthorized(row)||!row.start_claimed_at||now()-Date.parse(row.created_at)>20*60000)return Response.json({stopped:false},{status:401,headers:privateHeaders});
     const next=await transition(row,'stop',{stopTokenHash:sha(token)});if(next)row=next;
     const ended=await endRecordedReception(rpc,provider,row,'permission_withdrawn');row=ended.row;let stopped=ended.ended;
     if(!ended.ended&&row.recording_sid)try{const p=await provider.stop(row.call_sid,row.recording_sid);stopped=receptionRecordingMatches(row,p)&&['stopped','completed','processing'].includes(String(p.status));}catch{/* Durable termination remains due. */}

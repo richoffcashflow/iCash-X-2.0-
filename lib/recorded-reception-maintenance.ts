@@ -1,3 +1,4 @@
+import {recordingAuthorized} from './direct-call-entry.ts';
 import {object} from './required-call-recording.ts';
 import {RecordingProviderError} from './required-call-recording-provider.ts';
 import {finalRecordingPayload} from './required-call-recording-service.ts';
@@ -45,7 +46,7 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
     // An unavailable read cannot cancel already-durable termination authority.
     // The helper may POST ended to this exact reserved SID, but still refuses
     // to mark terminal until a full account/number/direction readback succeeds.
-    if(!row.call_ended_at&&(row.end_requested_at||now>=Date.parse(row.call_deadline_at)||!row.consent_at&&now>=Date.parse(row.consent_deadline_at))){const ended=await endRecordedReception(rpc,provider,row,'carrier_read_outage_end');row=ended.row;}
+    if(!row.call_ended_at&&(row.end_requested_at||now>=Date.parse(row.call_deadline_at)||!recordingAuthorized(row)&&now>=Date.parse(row.consent_deadline_at))){const ended=await endRecordedReception(rpc,provider,row,'carrier_read_outage_end');row=ended.row;}
     throw Error('CALL_READ_REQUIRED');
    }
    if(!incomingCallIdentityMatches(row,call))throw Error('CALL_BINDING_REQUIRED');
@@ -54,7 +55,7 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
    if(terminal){
     if(!row.end_requested_at){const next=await transitionRecordedReception(rpc,row,'request_end',{reason:'carrier_terminal'});if(next)row=next;}
     if(!row.call_ended_at){const next=await transitionRecordedReception(rpc,row,'call_ended',boundEndReceipt(row,call));if(!next)throw Error('TERMINAL_SAVE_REQUIRED');row=next;}
-   }else if(clockConflict||row.end_requested_at||now>=Date.parse(row.call_deadline_at)||!row.consent_at&&now>=Date.parse(row.consent_deadline_at)){
+   }else if(clockConflict||row.end_requested_at||now>=Date.parse(row.call_deadline_at)||!recordingAuthorized(row)&&now>=Date.parse(row.consent_deadline_at)){
     const ended=await endRecordedReception(rpc,provider,row,'deadline_or_requested_end');row=ended.row;if(!ended.ended)throw Error('TERMINATION_UNCONFIRMED');
    }
    if(recordingDiscoveryFailed)throw Error('RECORDING_DISCOVERY_REQUIRED');

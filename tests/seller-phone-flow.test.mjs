@@ -10,8 +10,8 @@ assert(company.includes('actual buying company'));
 assert(company.includes('briefly referencing their submitted property form'));
 assert(company.includes('Before interest, condition or price questions'));
 assert(company.includes('exact date, AM/PM time and timezone'));
-assert(company.includes('existing required notices'));
-assert(company.includes('provider recording/AI disclosures and consent process unchanged'));
+assert(company.includes('Start directly with the property conversation'));
+assert(company.includes('Do not add an introduction, recording question or transcript announcement'));
 assert(company.includes('Move upward only as needed within the current maximum, never beyond it'));
 assert(company.includes('Preserve an already agreed lower price'));
 assert(company.includes('Never invent repair/holding costs, comparable sales, a fixed discount or competing offers'));
@@ -43,10 +43,10 @@ assert(prepared.includes('existing matched-envelope and successful-delivery chec
 assert.throws(()=>sellerCallPrompt(submitted,15000000,{...terms,priceCents:20000000},true,15000000),/CALL_OFFER_AUTHORITY_INVALID/);
 assert.throws(()=>sellerCallPrompt(submitted,15000000,null,true,20000000),/CALL_OFFER_AUTHORITY_INVALID/);
 assert(sellerCallPrompt(context).includes('If null, do not quote an offer'));
-// This task changes the post-notice flow, not the paused first utterance/disclosure topic.
-assert.equal(sellerFirstMessage(context),"Hi, I'm Robin, the AI assistant for Fixture Homes. Is this the owner of 45 Oak Road?");
+// Direct opening retains the exact property and skips the separate introduction.
+assert.equal(sellerFirstMessage(context),"Is this the owner of 45 Oak Road?");
 assert.equal(sellerFirstMessage(context,true),'Is this the owner of 45 Oak Road?');
-assert.equal(sellerFirstMessage(submitted),"Hi, I'm Robin, the AI assistant for Fixture Investor. Is this Jane, the owner of 45 Oak Road?");
+assert.equal(sellerFirstMessage(submitted),"Is this Jane, the owner of 45 Oak Road?");
 const source=readFileSync(new URL('../lib/seller-call-context.ts',import.meta.url),'utf8');
 assert(source.includes('sellerPhoneFlowInstructions({hasBoundRequest:!!c.request,buyerKind:c.buyerKind,hasPendingAgreement:closing!==null})'));
-console.log('Seller phone flow: ordered post-notice sequence, actual principal/form evidence, time-to-talk gate, bounded supported negotiation, saved contract terms and unchanged first disclosure passed. Synthetic context only.');
+console.log('Seller phone flow: ordered property sequence, actual principal/form evidence, time-to-talk gate, bounded supported negotiation, saved contract terms and direct first question passed. Synthetic context only.');

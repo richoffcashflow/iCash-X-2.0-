@@ -1,5 +1,6 @@
+import {boundedVoiceSmsContext} from './voice-sms-context.ts';
 import {createHash} from 'node:crypto';
-import {safeInboundPropertyContext} from './seller-call-context.ts';
+import {safeInboundPropertyContext,ownershipAlreadyConfirmed} from './seller-call-context.ts';
 export const buyerReceptionPolicy='buyer_seller_v1';
 export const buyerReceptionGreeting='{{icash_property_greeting}}';
 export const buyerReceptionPrompt=`You are the AI property assistant for the business the caller reached. Keep every turn short and natural, with one question at a time. The server greeting already asked the first question: wait for the answer. SERVER CONTEXT: {{icash_property_context}}
@@ -12,8 +13,10 @@ export function buyerReceptionVariables(value:unknown){
  const v=value as Record<string,unknown>|null;
  if(v?.status==='buyer'&&typeof v.address==='string'&&v.address.trim().length>0&&v.address.length<=300&&!/[<>\x00-\x1f]/.test(v.address)&&[v.askingPriceCents,v.purchasePriceCents,v.assignmentFeeCents].every(n=>typeof n==='number'&&Number.isSafeInteger(n)&&n>=0)&&Number(v.purchasePriceCents)>0&&Number(v.askingPriceCents)===Number(v.purchasePriceCents)+Number(v.assignmentFeeCents)){
   const context={status:'buyer',address:v.address,askingPriceCents:v.askingPriceCents,purchasePriceCents:v.purchasePriceCents,assignmentFeeCents:v.assignmentFeeCents,buyerPaysClosingCosts:true};
-  return {icash_property_greeting:`Hi, I'm the AI property assistant. Are you calling about buying ${v.address}?`,icash_property_context:JSON.stringify(context)};
+  return {icash_property_greeting:`Are you calling about buying ${v.address}?`,icash_property_context:JSON.stringify(context)};
  }
  const context=safeInboundPropertyContext(value);
- return {icash_property_greeting:context?.status==='matched'?`Hi, I'm the AI property assistant. Is this the owner of ${context.address}?`:"Hi, I'm the AI property assistant. Are you looking to buy or sell a property?",icash_property_context:JSON.stringify(context)};
+ const confirmed=context?.status==='matched'&&ownershipAlreadyConfirmed(boundedVoiceSmsContext(v?.smsContext),context.address);
+ const safeContext=context?.status==='matched'?{...context,ownershipAlreadyConfirmed:confirmed}:context;
+ return {icash_property_greeting:context?.status==='matched'?confirmed?`About ${context.address}—are you considering a cash sale?`:`Is this the owner of ${context.address}?`:"Which property are you calling about?",icash_property_context:JSON.stringify(safeContext)};
 }

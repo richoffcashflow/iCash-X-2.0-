@@ -75,4 +75,5 @@ export async function testFlexibleInboundCredits(f){
    await q('savepoint immutable');await assert.rejects(q(sql),/immutable/);await q('rollback to savepoint immutable');
   }
  });
+ if(process.env.RECEPTION_DIRECT_ONLY==='1')await (await import('./direct-recorded-inbound-fixture.mjs')).testDirectRecordedInbound({...f,scenario});
 }

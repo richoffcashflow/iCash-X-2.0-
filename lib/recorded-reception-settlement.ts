@@ -1,3 +1,4 @@
+import {recordingAuthorized} from './direct-call-entry.ts';
 import {object,sha} from './required-call-recording.ts';
 import {twilioUsdChargeMicros} from './twilio-usd-cost.ts';
 import {receptionUsdNumberMicros} from './general-reception-reconcile.ts';
@@ -15,7 +16,7 @@ export function receptionSettlementAttestation(row:RecordedReceptionRow,call:Rec
  const providers:Record<string,unknown>={twilio:{amountMicros:estimated?Math.max(1,Math.ceil(duration/60))*8500:carrierMicros,currency:'USD',receiptHash:sha(JSON.stringify(call)),...(estimated?{basis:'estimated',tariffVersion:'us-local-inbound-20261007',pricePending:true}:{})}};
  let recordingMicros=0,storageMicros=0,streamMicros=0,recordingEstimated=false;
  if(!gate){
-  if(!row.conversation_id||!row.recording_sid||!row.consent_at||!row.start_claimed_at||!row.register_claimed_at||!['available','expired','deletion_pending','deleted'].includes(row.state)||row.duration_seconds===null||!row.ended_at||!row.provider_started_at||!conversation||conversation.status!=='done'||!receptionConversationMatches(row,conversation))return null;
+  if(!row.conversation_id||!row.recording_sid||!recordingAuthorized(row)||!row.start_claimed_at||!row.register_claimed_at||!['available','expired','deletion_pending','deleted'].includes(row.state)||row.duration_seconds===null||!row.ended_at||!row.provider_started_at||!conversation||conversation.status!=='done'||!receptionConversationMatches(row,conversation))return null;
   const metadata=object(conversation.metadata),aiSeconds=metadata.call_duration_secs,price=receptionUsdNumberMicros(metadata.cost_fiat);
   if(price===null||typeof aiSeconds!=='number'||!Number.isFinite(aiSeconds)||aiSeconds<0||aiSeconds>row.max_total_seconds||recording&&!receptionRecordingMatches(row,recording))return null;
   const costs=receptionRecordingCosts(row);recordingMicros=costs.recording;storageMicros=costs.storage;recordingEstimated=!costs.recordingObserved;
@@ -25,7 +26,7 @@ export function receptionSettlementAttestation(row:RecordedReceptionRow,call:Rec
   providers.elevenlabs={amountMicros:price,currency:'USD',receiptHash:sha(JSON.stringify(conversation))};
  }
  return {schemaVersion:1,mode:gate?'gate_only':'recorded',binding:{sessionId:row.id,configId:row.config_id,accountId:row.account_id,operationKey:row.operation_key,providerAccountSid:row.provider_account_sid,callSid:row.call_sid,fromPhone:row.from_phone,toPhone:row.to_phone,direction:'inbound',agentId:row.agent_id,branchId:row.branch_id,versionId:row.version_id,rateId:row.rate_id,chargeCapCents:row.charge_cap_cents,maxTotalSeconds:row.max_total_seconds,conversationId:row.conversation_id,recordingSid:row.recording_sid},durationSeconds:duration,providers,
-  recording:{policyVersion:recordedReceptionPolicy,speechGatherMicros:row.setup_confirmed_at?20000:0,recordingMicros,storageMicros,streamMicros,recordingEstimated}};
+  recording:{policyVersion:recordedReceptionPolicy,speechGatherMicros:row.entry_policy==='direct_recorded_v1'?0:row.setup_confirmed_at?20000:0,recordingMicros,storageMicros,streamMicros,recordingEstimated}};
 }
 export async function settleRecordedReception(rpc:RecordedReceptionRpc,row:RecordedReceptionRow,call:Record<string,unknown>,conversation:Record<string,unknown>|null,recording:Record<string,unknown>|null){
  let attestation=receptionSettlementAttestation(row,call,conversation,recording);
