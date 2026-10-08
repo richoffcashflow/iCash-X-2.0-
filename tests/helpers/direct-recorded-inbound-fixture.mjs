@@ -70,4 +70,5 @@ export async function testDirectRecordedInbound(f){
   assert.equal(await val('select count(*) from public.icash_operation_spend'),0);
  });
  for(const role of ['anon','authenticated'])assert.equal(await val("select has_function_privilege($1,'public.icash_reserve_direct_reception(uuid,text,text,text,text,text,text,text,text,text,text)','execute')",[role]),false);
+ if(process.env.RECEPTION_SELLER_OFFER_ONLY==='1')await (await import('./seller-offer-inbound-fixture.mjs')).testSellerOfferInbound({...f,reserve});
 }

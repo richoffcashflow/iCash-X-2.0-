@@ -1,3 +1,4 @@
+import {sellerOfferPresentation} from './seller-offer-presentation.ts';
 import {VoiceActivationBudgetError} from './voice-budget-failure.ts';
 import {limitedSellerPrompt} from './seller-limited-contact.ts';
 import {selectedCustomCallVoice} from './custom-voice.ts';
@@ -97,7 +98,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext,request:request??undefined};
  // Validate the complete opening/context before reserving credits or dialing.
  let sellerGreeting:string|undefined,sellerPrompt:string|undefined;
- if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext,true);sellerPrompt=limited?limitedSellerPrompt(address,identity.principal,account.assistant_name):sellerCallPrompt(sellerContext,ceiling,closing,!!recordedReview.contractToolId,cashOfferPrice);}catch{return hold('property_context_required');}}
+ if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext,true);sellerPrompt=limited?limitedSellerPrompt(address,identity.principal,account.assistant_name):sellerCallPrompt(sellerContext,ceiling,closing,!!recordedReview.contractToolId,cashOfferPrice,sellerOfferPresentation(snapshot.snapshot,address));}catch{return hold('property_context_required');}}
  const operationKey=`voice:${j.id}`;
  const reserveHold=recordingReleaseHold();if(reserveHold)return hold(reserveHold);
  const reservationInput={p_account:accountId,p_job:j.id,p_rate:rateId,p_permission_until:p.permission_until,p_financial_checked_at:eligible?.ready?new Date(eligible.screening.financialCheck.checkedAt).toISOString():null,p_financial_eligible:eligible?.ready&&eligible.screening.financialCheck.status==='eligible'};
