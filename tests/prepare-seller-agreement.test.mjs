@@ -2,7 +2,7 @@ import {legacyAutomaticOfferGuardrail,automaticOfferGuardrails} from '../lib/aut
 import assert from 'node:assert/strict';
 import {prepareSellerAgreement} from '../scripts/prepare-seller-agreement.mjs';
 import {sellerOfferReceptionPolicyHash,sellerOfferReceptionPrompt} from '../lib/seller-offer-reception.ts';
-import {sellerAgreementReceptionPolicy,sellerAgreementReceptionPolicyHash,sellerAgreementReceptionPrompt,noEmdReceptionPolicy,noEmdReceptionPolicyHash,noEmdReceptionPrompt,automaticOfferReceptionPolicy,automaticOfferReceptionPolicyHash,automaticOfferReceptionPrompt,legacyAutomaticOfferReceptionPolicy,legacyAutomaticOfferReceptionPolicyHash,legacyAutomaticOfferReceptionPrompt} from '../lib/seller-agreement-reception.ts';
+import {sellerAgreementReceptionPolicy,sellerAgreementReceptionPolicyHash,sellerAgreementReceptionPrompt,noEmdReceptionPolicy,noEmdReceptionPolicyHash,noEmdReceptionPrompt,automaticOfferReceptionPolicy,automaticOfferReceptionPolicyHash,automaticOfferReceptionPrompt,streamingAutomaticOfferReceptionPolicy,streamingAutomaticOfferReceptionPolicyHash,streamingAutomaticOfferReceptionPrompt} from '../lib/seller-agreement-reception.ts';
 import {sellerAgreementToolConfig,noEmdAgreementToolConfig,automaticOfferToolConfig} from '../lib/seller-agreement-tool.ts';
 import {inspectRecordedReceptionAgent,recordedReceptionUrl} from '../lib/recorded-reception.ts';
 import {receptionTarget} from '../lib/general-reception.ts';
@@ -15,13 +15,13 @@ const c={id:'11111111-1111-4111-8111-111111111111',account_id:receptionTarget.ac
 const stop={id:c.stop_tool_id,tool_config:{type:'webhook',name:'icash_stop_reception_recording',api_schema:{url:recordedReceptionUrl+'/stop',method:'POST',request_headers:{Authorization:{variable_name:'secret__icash_reception_stop_token'}},request_body_schema:{type:'object',required:['recordingId'],properties:{recordingId:{type:'string',dynamic_variable:'icash_reception_recording_id'}}}}}};
 const incoming={agent_id:c.agent_id,branch_id:c.branch_id,version_id:c.reviewed_version_id,main_branch_id:'agtbrch_mainin',conversation_config:{asr:{user_input_audio_format:'ulaw_8000'},tts:{agent_output_audio_format:'ulaw_8000'},conversation:{max_duration_seconds:600},agent:{first_message:'{{icash_property_greeting}}',prompt:{prompt:sellerOfferReceptionPrompt+directRecordedInstructions,max_tokens:120,tool_ids:[stop.id],tools:[],knowledge_base:[]}}},platform_settings:{privacy:{record_voice:false},auth:{enable_auth:true},call_limits:{agent_concurrency_limit:1,bursting_enabled:false},queueing_config:{enabled:false},overrides:{enable_conversation_initiation_client_data_from_webhook:false,conversation_config_override:{conversation:{max_duration_seconds:true}}},workspace_overrides:{webhooks:{post_call_webhook_id:null,events:[],send_audio:false}}}};
 const branch=a=>({id:a.branch_id,agent_id:a.agent_id,current_live_percentage:0,is_archived:false,draft_exists:false});
-if(noEmd||automatic){Object.assign(c,{context_policy:automatic?legacyAutomaticOfferReceptionPolicy:sellerAgreementReceptionPolicy,context_policy_hash:automatic?legacyAutomaticOfferReceptionPolicyHash:sellerAgreementReceptionPolicyHash,agreement_tool_id:oldAgreementTool.id});Object.assign(incoming.conversation_config.agent.prompt,{prompt:(automatic?legacyAutomaticOfferReceptionPrompt:sellerAgreementReceptionPrompt)+directRecordedInstructions,tool_ids:[stop.id,oldAgreementTool.id],tools:[oldAgreementTool.tool_config]});}
-if(automatic){incoming.platform_settings.guardrails=automaticOfferGuardrails();incoming.platform_settings.guardrails.custom.config.configs=[legacyAutomaticOfferGuardrail];}
+if(noEmd||automatic){Object.assign(c,{context_policy:automatic?streamingAutomaticOfferReceptionPolicy:sellerAgreementReceptionPolicy,context_policy_hash:automatic?streamingAutomaticOfferReceptionPolicyHash:sellerAgreementReceptionPolicyHash,agreement_tool_id:oldAgreementTool.id});Object.assign(incoming.conversation_config.agent.prompt,{prompt:(automatic?streamingAutomaticOfferReceptionPrompt:sellerAgreementReceptionPrompt)+directRecordedInstructions,tool_ids:[stop.id,oldAgreementTool.id],tools:[oldAgreementTool.tool_config]});}
+if(automatic){incoming.platform_settings.guardrails=automaticOfferGuardrails();}
 c.config_hash=inspectRecordedReceptionAgent(c,incoming,branch(incoming),true,stop,noEmd||automatic?oldAgreementTool:undefined).hash;
 const outgoing=structuredClone(incoming);Object.assign(outgoing,{agent_id:'agent_outbound',branch_id:'agtbrch_oldout',version_id:'agtvrsn_oldout',main_branch_id:'agtbrch_mainout'});
 outgoing.conversation_config.agent.prompt.tool_ids=['tool_outstop','tool_callback','tool_handoff','tool_oldcontract'];
 Object.assign(outgoing.platform_settings.overrides.conversation_config_override,{agent:{first_message:true,prompt:{prompt:true}},tts:{voice_id:true}});
-const now=Date.now(),review={...(automatic?{offerPolicy:'automatic_offer_v5'}:{}),enabled:true,reviewedAt:new Date(now-60000).toISOString(),reviewedUntil:new Date(now+86400000).toISOString(),agentId:outgoing.agent_id,branchId:outgoing.branch_id,versionId:outgoing.version_id,configHash:sha(JSON.stringify(canonical({conversation_config:outgoing.conversation_config,platform_settings:outgoing.platform_settings,workflow:null,procedures:null}))),fromPhone:'+12125550100',providerAccountSid:'AC'+'a'.repeat(32),stopToolId:'tool_outstop',contractToolId:'tool_oldcontract',toolIds:outgoing.conversation_config.agent.prompt.tool_ids,approvedHoldCents:977,retentionDays:30,maxTotalSeconds:600,policyVersion:recordingPolicy.version};
+const now=Date.now(),review={...(automatic?{offerPolicy:'automatic_offer_v6'}:{}),enabled:true,reviewedAt:new Date(now-60000).toISOString(),reviewedUntil:new Date(now+86400000).toISOString(),agentId:outgoing.agent_id,branchId:outgoing.branch_id,versionId:outgoing.version_id,configHash:sha(JSON.stringify(canonical({conversation_config:outgoing.conversation_config,platform_settings:outgoing.platform_settings,workflow:null,procedures:null}))),fromPhone:'+12125550100',providerAccountSid:'AC'+'a'.repeat(32),stopToolId:'tool_outstop',contractToolId:'tool_oldcontract',toolIds:outgoing.conversation_config.agent.prompt.tool_ids,approvedHoldCents:977,retentionDays:30,maxTotalSeconds:600,policyVersion:recordingPolicy.version};
 assert(recordingAgentMatches(review,outgoing));
 const env={VERCEL_ENV:'production',ICASH_DIRECT_CALLS_PREPARE:'true',SUPABASE_URL:'https://db.invalid',SUPABASE_SECRET_KEY:'synthetic-private',ELEVENLABS_API_KEY:'synthetic-key',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review)};
 for(const scenario of (automatic?['ok','changed_tool','source_changed']:['ok','claim_denied','changed_tool','source_changed'])){
@@ -31,7 +31,7 @@ for(const scenario of (automatic?['ok','changed_tool','source_changed']:['ok','c
   if(init.method==='POST')writes.push({path:u.pathname,body});
   if(u.pathname.endsWith('icash_get_recorded_reception_config'))value=c;
   else if(u.pathname.endsWith('icash_claim_seller_agreement_rollout'))value=scenario!=='claim_denied';
-  else if(u.pathname.endsWith(automatic?'icash_stage_voice_offer_rollout':'icash_stage_seller_agreement_rollout')){
+  else if(u.pathname.endsWith(automatic?'icash_stage_payoff_voice_rollout':'icash_stage_seller_agreement_rollout')){
    assert.equal(body.p_tool,'tool_agreement');assert.equal(body.p_branch,'agtbrch_newin');assert.equal(body.p_outbound_review.branchId,'agtbrch_newout');
    assert.equal(body.p_outbound_review.contractToolId,body.p_tool);assert(!body.p_outbound_review.toolIds.includes('tool_oldcontract'));
    assert(recordingAgentMatches(body.p_outbound_review,created.get(outgoing.agent_id)));
@@ -48,8 +48,8 @@ for(const scenario of (automatic?['ok','changed_tool','source_changed']:['ok','c
    const isIn=u.pathname.includes(incoming.agent_id),source=isIn?incoming:outgoing,id=isIn?'agtbrch_newin':'agtbrch_newout';
    if(u.pathname.endsWith('/branches')&&init.method==='POST'){
     assert.equal(body.parent_version_id,source.version_id);if(!automatic)assert.equal(body.platform_settings,undefined);
-    assert.deepEqual(Object.keys(body.conversation_config),['agent']);
-    const copy=structuredClone(source);if(body.platform_settings)Object.assign(copy.platform_settings,body.platform_settings);Object.assign(copy,{branch_id:id,version_id:isIn?'agtvrsn_newin':'agtvrsn_newout'});
+    assert.deepEqual(Object.keys(body.conversation_config),automatic?['turn','agent']:['agent']);
+    const copy=structuredClone(source);if(body.conversation_config.turn)copy.conversation_config.turn=structuredClone(body.conversation_config.turn);if(body.platform_settings)Object.assign(copy.platform_settings,body.platform_settings);Object.assign(copy,{branch_id:id,version_id:isIn?'agtvrsn_newin':'agtvrsn_newout'});
     copy.conversation_config.agent={...copy.conversation_config.agent,...body.conversation_config.agent,prompt:{...copy.conversation_config.agent.prompt,...body.conversation_config.agent.prompt}};
     // Provider GET may expand canonical webhook definitions alongside tool IDs.
     copy.conversation_config.agent.prompt.tools=isIn?[stop.tool_config,tool.tool_config]:[tool.tool_config];

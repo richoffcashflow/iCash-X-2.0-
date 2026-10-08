@@ -1,4 +1,5 @@
 import {sellerAgreementInput,confirmedSellerTerms} from './seller-agreement-flow.ts';
+import {calculateAutomaticCallOffer,type CallOfferContext} from './automatic-call-offer.ts';
 import {runScreeningJob} from './screening-job.ts';
 import {dealTermsSchema} from './deal-documents.ts';
 import {signingReadiness} from './signing-policy.ts';
@@ -38,7 +39,10 @@ export async function sellerAgreementAction(token:string,input:unknown,d:Depende
  const [identity]=await d.db<{principal:string}[]>(`icash_customer_identities?account_id=eq.${scope.accountId}&select=principal`);
  if(!deal||deal.stage!=='draft'||!screening||!identity?.principal)throw Error('property_binding_changed');
  const result=runScreeningJob(screening.snapshot,(d.now??Date.now)());
- if(!result.offerAuthorized||result.financialCheck.status!=='eligible'||!result.preliminarySellerCeilingCents)throw Error('updated_property_review_required');
+ const offerContext=await d.db<CallOfferContext|null>('rpc/icash_call_offer_context','POST',{p_hash:hash,p_conversation:i.conversationId});
+ const callOffer=offerContext?calculateAutomaticCallOffer(offerContext,offerContext.offerState??{},(d.now??Date.now)()):null;
+ const acceptedCallOffer=callOffer?.quoteAllowed&&'contractAllowed' in callOffer&&callOffer.contractAllowed===true&&'status' in callOffer&&['verbally_accepted','pending_agreement'].includes(callOffer.status)&&callOffer.priceCents===i.confirmation.agreedPriceCents;
+ if(((!result.offerAuthorized||result.financialCheck.status!=='eligible')&&!acceptedCallOffer)||!result.preliminarySellerCeilingCents)throw Error('updated_property_review_required');
  const current=dealTermsSchema.parse(deal.terms);
  const terms=confirmedSellerTerms(current,i.confirmation,{address:result.property.address,principal:identity.principal,legalDescription:result.property.legalDescription??'',ceilingCents:result.preliminarySellerCeilingCents,now:(d.now??Date.now)()});
  const signers=[{name:terms.seller,phone:scope.phone}];

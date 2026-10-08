@@ -36,7 +36,7 @@ export async function prepareSellerAgreement(env=process.env,fetcher=fetch,noEmd
  const c=await rpc('icash_get_recorded_reception_config',{p_called_number:receptionTarget.calledNumber});
  if(!automatic&&automaticOfferPolicy(c?.context_policy)||c?.context_policy===automaticOfferReceptionPolicy&&c?.context_policy_hash===automaticOfferReceptionPolicyHash||!automatic&&(c?.context_policy===noEmdReceptionPolicy&&c?.context_policy_hash===noEmdReceptionPolicyHash||!noEmd&&c?.context_policy===sellerAgreementReceptionPolicy&&c?.context_policy_hash===sellerAgreementReceptionPolicyHash))return {status:'already_active'};
  const oldReview=readRecordingReview(env.RECORDED_OUTBOUND_REVIEW_JSON);
- if(!c||(automatic?c.context_policy!=='automatic_offer_v5':c.context_policy!==(noEmd?sellerAgreementReceptionPolicy:'seller_offer_v2'))||c.entry_policy!=='direct_recorded_v1'||!oldReview)throw Error('REVIEWED_SOURCE_REQUIRED');
+ if(!c||(automatic?c.context_policy!=='automatic_offer_v6':c.context_policy!==(noEmd?sellerAgreementReceptionPolicy:'seller_offer_v2'))||c.entry_policy!=='direct_recorded_v1'||!oldReview)throw Error('REVIEWED_SOURCE_REQUIRED');
  const incomingPath='/v1/convai/agents/'+c.agent_id,outgoingPath='/v1/convai/agents/'+oldReview.agentId;
  const [incoming,outgoing,workspace,stop,listedIncoming,listedOutgoing,toolList,oldAgreementTool]=await Promise.all([
   api(incomingPath+'?branch_id='+c.branch_id),api(outgoingPath+'?branch_id='+oldReview.branchId),api('/v1/convai/settings'),api('/v1/convai/tools/'+c.stop_tool_id),api(incomingPath+'/branches?include_archived=true&limit=100'),api(outgoingPath+'/branches?include_archived=true&limit=100'),api('/v1/convai/tools?search='+toolName+'&page_size=100'),noEmd||automatic?api('/v1/convai/tools/'+c.agreement_tool_id):Promise.resolve(undefined),
@@ -82,18 +82,20 @@ export async function prepareSellerAgreement(env=process.env,fetcher=fetch,noEmd
  }
  // Branch creation accepts overrides. Inherit audio/runtime settings from the
  // exact parent version instead of posting output-only GET configuration fields.
- const inputConfig={agent:{first_message:'{{icash_property_greeting}}',prompt:{prompt:prompt+directRecordedInstructions,tool_ids:[c.stop_tool_id,tool.id]}}};
+ const responsive=automatic?{turn:{turn_eagerness:'eager',turn_model:'turn_v3',spelling_patience:'auto',speculative_turn:false,soft_timeout_config:{timeout_seconds:2,message:'One moment.',use_llm_generated_message:false,max_soft_timeouts_per_generation:1,disable_until_first_user_message:true}}}:{};
+ const quickPrompt=automatic?{llm:'gpt-4.1-mini',thinking_budget:0,enable_reasoning_summary:false,temperature:0.2,max_tokens:150,backup_llm_config:{preference:'default'},cascade_timeout_seconds:4}:{};
+ const inputConfig={...responsive,agent:{first_message:'{{icash_property_greeting}}',prompt:{...quickPrompt,prompt:prompt+directRecordedInstructions,tool_ids:[c.stop_tool_id,tool.id]}}};
  const inPrepared=await branch(incomingPath,incoming,inRows,inputConfig,automatic?{guardrails:automaticOfferGuardrails(object(incoming.platform_settings).guardrails)}:undefined);
  const candidate={...c,context_policy:policy,context_policy_hash:policyHash,agreement_tool_id:tool.id,branch_id:inPrepared.branch.id,reviewed_version_id:inPrepared.agent.version_id,config_hash:''};
  const inspected=inspectRecordedReceptionAgent(candidate,inPrepared.agent,inPrepared.branch,receptionWorkspacePostcallAbsent(workspace),stop,tool);
  if(!inspectRecordedReceptionAgent({...candidate,config_hash:inspected.hash},inPrepared.agent,inPrepared.branch,receptionWorkspacePostcallAbsent(workspace),stop,tool).safe)throw Error('INBOUND_AGREEMENT_READBACK_REQUIRED');
- const outputConfig={agent:{prompt:{tool_ids:oldReview.toolIds.map(id=>id===oldReview.contractToolId?tool.id:id),...(automatic?{prompt:automaticOfferReceptionPrompt}:{})}}};
+ const outputConfig={...responsive,agent:{prompt:{...quickPrompt,tool_ids:oldReview.toolIds.map(id=>id===oldReview.contractToolId?tool.id:id),...(automatic?{prompt:automaticOfferReceptionPrompt}:{})}}};
  const outPrepared=await branch(outgoingPath,outgoing,outRows,outputConfig,automatic?{guardrails:automaticOfferGuardrails(object(outgoing.platform_settings).guardrails)}:undefined);
  const a=outPrepared.agent,newReview={...oldReview,...(automatic?{offerPolicy:automaticOfferReceptionPolicy}:{}),branchId:outPrepared.branch.id,versionId:a.version_id,contractToolId:tool.id,toolIds:outputConfig.agent.prompt.tool_ids,reviewedAt:new Date().toISOString(),configHash:sha(JSON.stringify(canonical({conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null})))};
  if(!recordingAgentMatches(newReview,a)||!readRecordingReview(JSON.stringify(newReview)))throw Error('OUTBOUND_AGREEMENT_READBACK_REQUIRED');
  if(automatic&&(!automaticOfferGuardrailMatches(object(inPrepared.agent.platform_settings).guardrails)||!automaticOfferGuardrailMatches(object(outPrepared.agent.platform_settings).guardrails)))throw Error('PRICE_ENFORCEMENT_READBACK_REQUIRED');
- if(automatic)await verifyProvider(api,[inPrepared.agent,outPrepared.agent],tool.id,{prefix:'voice-offer-v6-'+policyHash.slice(0,12)+'-'});
- const staged=await rpc(automatic?'icash_stage_voice_offer_rollout':'icash_stage_seller_agreement_rollout',{p_source:c.id,p_tool:tool.id,p_branch:inPrepared.branch.id,p_version:inPrepared.agent.version_id,p_hash:inspected.hash,p_outbound_review:newReview});
+ if(automatic)await verifyProvider(api,[inPrepared.agent,outPrepared.agent],tool.id,{prefix:'voice-offer-v7-'+policyHash.slice(0,12)+'-',payoffCases:true});
+ const staged=await rpc(automatic?'icash_stage_payoff_voice_rollout':'icash_stage_seller_agreement_rollout',{p_source:c.id,p_tool:tool.id,p_branch:inPrepared.branch.id,p_version:inPrepared.agent.version_id,p_hash:inspected.hash,p_outbound_review:newReview});
  if(!staged?.inboundConfigId||!staged.outboundReview)throw Error('STAGING_UNCONFIRMED');
  return {status:'staged',configId:staged.inboundConfigId,toolId:tool.id,inboundBranch:inPrepared.branch.id,outboundBranch:outPrepared.branch.id};
 }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {sellerAgreementReceptionPolicyHash,noEmdReceptionPolicyHash,legacyAutomaticOfferReceptionPolicyHash,automaticOfferReceptionPolicyHash} from '../../lib/seller-agreement-reception.ts';
+import {sellerAgreementReceptionPolicyHash,noEmdReceptionPolicyHash,legacyAutomaticOfferReceptionPolicyHash,streamingAutomaticOfferReceptionPolicyHash,automaticOfferReceptionPolicyHash} from '../../lib/seller-agreement-reception.ts';
 export async function testSellerAgreement(f){
  const {db,q,val,rpc,read,scenario,account,reserve,trans,boundPayload,startPayload}=f;
  await db.exec(`alter table auth.users add email text default 'fixture@example.test',add email_confirmed_at timestamptz default now();
@@ -12,14 +12,15 @@ export async function testSellerAgreement(f){
  await db.exec("create table public.icash_template_drafts(key text primary key,state text default 'claimed',result jsonb);");
  await db.exec(read('config/seller-no-emd.sql'));
  const id='11111111-1111-4111-8111-111111111111',date=new Date(Date.now()+14*86400000).toISOString().slice(0,10);
- async function call(party='seller',noEmd=true,automatic=false){
-  const admission=await reserve({context_policy:automatic==='v6'?'automatic_offer_v6':automatic?'automatic_offer_v5':noEmd?'seller_agreement_v4':'seller_agreement_v3',context_policy_hash:automatic==='v6'?automaticOfferReceptionPolicyHash:automatic?legacyAutomaticOfferReceptionPolicyHash:noEmd?noEmdReceptionPolicyHash:sellerAgreementReceptionPolicyHash,context_approval_reference:'Synthetic seller agreement approval',agreement_tool_id:'tool_agreement'});assert(admission.allowed,JSON.stringify(admission));
+ async function call(party='seller',noEmd=true,automatic=false,companyName){
+  const admission=await reserve({context_policy:automatic==='v7'?'automatic_offer_v7':automatic==='v6'?'automatic_offer_v6':automatic?'automatic_offer_v5':noEmd?'seller_agreement_v4':'seller_agreement_v3',context_policy_hash:automatic==='v7'?automaticOfferReceptionPolicyHash:automatic==='v6'?streamingAutomaticOfferReceptionPolicyHash:automatic?legacyAutomaticOfferReceptionPolicyHash:noEmd?noEmdReceptionPolicyHash:sellerAgreementReceptionPolicyHash,context_approval_reference:'Synthetic seller agreement approval',agreement_tool_id:'tool_agreement'});assert(admission.allowed,JSON.stringify(admission));
   let r=admission.session;await trans('claim_setup');await trans('bounded',boundPayload(r));await trans('bind_call_start',startPayload(r));r=await trans('authorize_recording',{nonceHash:r.nonce_hash,policy:'direct_recorded_v1'});await trans('claim_start');await trans('started',{recordingSid:'RE'+'c'.repeat(32),providerStartedAt:r.recording_authorized_at});
   await q('insert into public.icash_screening_jobs(id,account_id,snapshot,result) values($1,$2,$3,$4)',[id,account,{propertyId:'prop_123'},{property:{legalDescription:'Lot 1 block 2'}}]);
   const terms={address:'45 Oak Road',buyer:'Fixture buyer',state:'TX',inspectionDays:10};
   await q('insert into public.icash_deal_files(id,account_id,screening_id,stage,terms) values($1,$2,$1,$3,$4)',[id,account,party==='seller'?'draft':'under_contract',terms]);
   await q("insert into public.icash_text_threads(id,account_id,deal_id,party,recipient,sender,paused) values($1,$2,$1,$3,$4,'+14243948384',false)",[id,account,party,r.from_phone]);
   await q("insert into public.icash_text_messages(id,account_id,thread_id,direction,state,created_at,body,provider_id) values(gen_random_uuid(),$1,$2,'outgoing','delivered',now()-interval '1 minute','About 45 Oak Road','synthetic')",[account,id]);
+  if(companyName!==undefined)await q('insert into public.icash_customer_identities values($1,$2)',[account,companyName]);
   const context=await rpc('icash_recorded_reception_property_context',{p_id:r.id,p_nonce_hash:r.nonce_hash});
   await trans('claim_register');r=await trans('bind_conversation',{conversationId:'conv_agreement',agentId:r.agent_id,branchId:r.branch_id,versionId:r.version_id});
   return {r,context,terms,scope:()=>rpc('icash_seller_agreement_call_context',{p_hash:r.stop_token_hash,p_conversation:'conv_agreement'})};

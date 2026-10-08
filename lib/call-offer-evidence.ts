@@ -43,7 +43,11 @@ export function callPayoffEvidence(value:unknown,input:Record<string,unknown>){
  const turns=rows.map(object).filter(t=>['user','agent'].includes(String(t.role))&&typeof t.message==='string');
  const index=turns.findLastIndex(t=>t.role==='user');
  const latest=String(turns[index]?.message??''),previous=String(turns.slice(0,index).findLast(t=>t.role==='agent')?.message??'');
- if(!/\b(mortgage|payoff|loan|heloc|debt|owe)\b/i.test(previous))return false;
- if(/\b(owner|owners|ownership|deed|inherited|divorce|title|repair|repairs|roof|condition|foundation|damage|offer|price|address)\b/i.test(latest))return false;
- return spokenMoneyAmounts(latest).length===1||/\b(paid off|free and clear|no mortgage|no loans?)\b/i.test(latest);
+ const debtQuestion=/\b(mortgage|payoff|loan|heloc|debts?|liens?|taxes|hoa|owe)\b/i.test(previous);
+ const coverageQuestion=/\b(cover|bring|pay)\b/i.test(previous)&&/\b(difference|shortfall|out of pocket|closing)\b/i.test(previous);
+ if(!debtQuestion&&!coverageQuestion)return false;
+ if(/\b(owner|owners|ownership|buyer|deed|title|inherited|divorce|repair|repairs|roof|condition|foundation|damage|offer|price|address|property|properties)\b/i.test(latest))return false;
+ // An unclear answer to a debt question stays an unresolved debt question.
+ // Only sellerPayoffEvidence can supply amounts or clear that pending state.
+ return true;
 }
