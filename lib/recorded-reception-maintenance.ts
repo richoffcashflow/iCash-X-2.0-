@@ -64,7 +64,22 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
     if(!receptionRecordingMatches(row,receipt))throw Error('RECORDING_BINDING_REQUIRED');
     if(['completed','absent'].includes(String(receipt.status))&&!row.call_ended_at){const ended=await endRecordedReception(rpc,provider,row,'audio_terminal');row=ended.row;if(!ended.ended)throw Error('TERMINATION_UNCONFIRMED');}
     if(receipt.status==='completed'&&(!['available','expired','deletion_pending','deleted'].includes(row.state)||row.state==='available'&&row.provider_recording_price_micros===null&&finalRecordingPayload(receipt).providerRecordingPriceMicros!==undefined)){
-     const next=await transitionRecordedReception(rpc,row,'available',finalRecordingPayload(receipt));if(!next)throw Error('RECORDING_RECEIPT_SAVE_REQUIRED');row=next;
+     const payload=finalRecordingPayload(receipt),next=await transitionRecordedReception(rpc,row,'available',payload);
+     if(!next){
+      const current=await getRecordedReception(rpc,row.id,row.account_id);
+      const start=Date.parse(payload.providerStartedAt),end=Date.parse(payload.endedAt);
+      // Numeric timing differences and fixed flags diagnose provider metadata
+      // conflicts without exposing audio, transcripts, phones or credentials.
+      console.warn('recorded_reception_receipt_conflict',{sessionId:row.id,
+       versionChanged:current?.row_version!==row.row_version,
+       startDeltaMs:start-Date.parse(row.provider_started_at??''),
+       authorityDeltaMs:start-Date.parse(String(row.consent_at??row.recording_authorized_at??'')),
+       endDeadlineDeltaMs:end-Date.parse(row.call_deadline_at),
+       durationSeconds:payload.durationSeconds,
+       priorEnd:row.ended_at!==null,priorPrice:row.provider_recording_price_micros!==null,
+      });
+      throw Error('RECORDING_RECEIPT_SAVE_REQUIRED');
+     }row=next;
     }else if(receipt.status==='absent'&&row.state!=='absent'){
      const next=await transitionRecordedReception(rpc,row,'absent');if(!next)throw Error('ABSENT_RECEIPT_SAVE_REQUIRED');row=next;
     }
