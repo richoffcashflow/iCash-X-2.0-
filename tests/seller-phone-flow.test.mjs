@@ -46,7 +46,7 @@ assert(sellerCallPrompt(context).includes('If null, do not quote an offer'));
 // Direct opening retains the exact property and skips the separate introduction.
 assert.equal(sellerFirstMessage(context),"Is this the owner of 45 Oak Road?");
 assert.equal(sellerFirstMessage(context,true),'Is this the owner of 45 Oak Road?');
-assert.equal(sellerFirstMessage(submitted),"Is this Jane, the owner of 45 Oak Road?");
+assert.equal(sellerFirstMessage(submitted),"Hi Jane. Is this the owner of 45 Oak Road?");
 const source=readFileSync(new URL('../lib/seller-call-context.ts',import.meta.url),'utf8');
 assert(source.includes('sellerPhoneFlowInstructions({hasBoundRequest:!!c.request,buyerKind:c.buyerKind,hasPendingAgreement:closing!==null})'));
 console.log('Seller phone flow: ordered property sequence, actual principal/form evidence, time-to-talk gate, bounded supported negotiation, saved contract terms and direct first question passed. Synthetic context only.');
