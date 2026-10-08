@@ -54,7 +54,7 @@
 .workspace.workspace :global(.attention-heading-copy){display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
 .workspace.workspace :global(.attention-heading-copy strong){font-size:14px;font-weight:600;color:#292929;line-height:1.4;overflow-wrap:anywhere}
 .workspace.workspace :global(.attention-heading-copy small){font-size:12px;font-weight:400;color:#707070;line-height:1.4;overflow-wrap:anywhere}
-.workspace.workspace :global(.attention-review-label){font-size:12px;color:#616161}
+.workspace.workspace :global(.attention-review-label){display:inline-flex;align-items:center;justify-content:center;flex:none;min-height:36px;padding:8px 10px;border:1px solid #dedede;border-radius:8px;background:#fff;font-size:12px;font-weight:600;color:#333;white-space:nowrap}
 .workspace.workspace :global(.attention-chevron){flex:none;color:#737373;transition:transform .15s ease}
 .workspace.workspace :global(.workspace-attention[open]>.attention-heading){border-bottom:1px solid #eee}
 .workspace.workspace :global(.workspace-attention[open]>.attention-heading .attention-chevron){transform:rotate(180deg)}
@@ -71,6 +71,8 @@
 .workspace.workspace :global(.sms-review-actions){display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px}
 .workspace.workspace :global(.sms-review-actions button){width:auto;min-height:44px;padding:11px 18px;border:0;border-radius:10px;background:#181818;color:#fff;font-size:14px;font-weight:600}
 .workspace.workspace :global(.sms-review-actions small){display:block;font-size:12px;color:#777;line-height:1.5}
+.workspace.workspace :global(.attention-reason){display:block;font-size:12px;font-weight:400;color:#707070;line-height:1.5;margin-top:4px}
+.workspace.workspace :global(.sms-review-card .sms-review-next){font-size:13px;color:#525252}
 .workspace.workspace :global(.sms-review-card .sms-review-hold){font-size:12px;color:#595959}
 .workspace.workspace :global(.sms-review-card [role=alert]){margin-top:12px;color:#575757}
 @media(max-width:640px){
@@ -86,6 +88,6 @@
  .workspace.workspace :global(.property-latest-update){margin-inline:16px}
  .workspace.workspace :global(.property-details){padding:16px}
  .workspace.workspace :global(.property-contact-dialog){padding-bottom:env(safe-area-inset-bottom,0)}
- .workspace.workspace :global(.attention-review-label){display:none}
+ .workspace.workspace :global(.attention-chevron){display:none}
 }
 @media(prefers-reduced-motion:reduce){.workspace.workspace :global(.attention-chevron){transition:none}}
