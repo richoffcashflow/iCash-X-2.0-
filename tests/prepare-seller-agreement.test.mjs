@@ -42,7 +42,9 @@ for(const scenario of ['ok','claim_denied','changed_tool','source_changed']){
    const isIn=u.pathname.includes(incoming.agent_id),source=isIn?incoming:outgoing,id=isIn?'agtbrch_newin':'agtbrch_newout';
    if(u.pathname.endsWith('/branches')&&init.method==='POST'){
     assert.equal(body.parent_version_id,source.version_id);assert.equal(body.platform_settings,undefined);
-    const copy=structuredClone(source);Object.assign(copy,{branch_id:id,version_id:isIn?'agtvrsn_newin':'agtvrsn_newout',conversation_config:body.conversation_config});
+    assert.deepEqual(Object.keys(body.conversation_config),['agent']);
+    const copy=structuredClone(source);Object.assign(copy,{branch_id:id,version_id:isIn?'agtvrsn_newin':'agtvrsn_newout'});
+    copy.conversation_config.agent={...copy.conversation_config.agent,...body.conversation_config.agent,prompt:{...copy.conversation_config.agent.prompt,...body.conversation_config.agent.prompt}};
     // Provider GET may expand canonical webhook definitions alongside tool IDs.
     copy.conversation_config.agent.prompt.tools=isIn?[stop.tool_config,tool.tool_config]:[tool.tool_config];
     created.set(source.agent_id,copy);value={created_branch_id:id};
