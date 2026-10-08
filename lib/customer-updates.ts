@@ -21,10 +21,10 @@ export type UpdateSource={source_key:string;kind:UpdateKind;screening_id:string|
 export type BotUpdatePreferences={email?:string|null;phone?:string|null;emailEnabled:boolean;smsEnabled:boolean;timezone:string;seenAt?:string|null;emailAvailable:boolean;smsAvailable:boolean;emailSuppressed?:boolean};
 export type InboxItem={id:string;kind:UpdateKind;screeningId:string|null;createdAt:string;title:string;detail:string;address:string|null};
 export function normalizeUpdatePhone(value:string){const clean=value.replace(/[\s().-]/g,'');return /^\d{10}$/.test(clean)?`+1${clean}`:/^1\d{10}$/.test(clean)?`+${clean}`:clean;}
-export function customerUpdateConfiguration(env:Record<string,string|undefined>){
+export function customerUpdateConfiguration(env:Record<string,string|undefined>,messagingSender?:string){
  let origin:string|null=null;
  try{const url=new URL(env.ICASH_APP_ORIGIN??'');if(url.protocol==='https:'&&!url.username&&!url.password&&url.pathname==='/'&&!url.search&&!url.hash)origin=url.origin;}catch{}
- const sender=env.ICASH_ATTENTION_FROM_EMAIL??env.ICASH_TITLE_FROM_EMAIL??'';
+ const sender=messagingSender??env.ICASH_ATTENTION_FROM_EMAIL??env.ICASH_TITLE_FROM_EMAIL??'';
  const address=sender.match(/<([^<>]+)>$/)?.[1]??sender;
  const email=!!(origin&&env.RESEND_API_KEY&&env.RESEND_RECEIVING_WEBHOOK_SECRET&&/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(address));
  const sms=!!(origin&&env.CONTIGUITY_API_KEY&&env.CONTIGUITY_WEBHOOK_SECRET);

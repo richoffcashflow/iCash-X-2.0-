@@ -1,5 +1,6 @@
 import {customerUpdateConfiguration,updateCopy,type UpdateKind} from './customer-updates.ts';
 import {uuidPattern,unsubscribePattern} from './attention-notifications.ts';
+import {readCampaignSettings} from './messaging-settings.ts';
 type Database=<T>(path:string,method?:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;
 type Job={id:string;channel:'email'|'sms';kind:UpdateKind;screeningId:string|null;sender?:string;recipient:string;unsubscribeToken:string};
 /** Call only after verifying the provider's webhook signature. */
@@ -10,12 +11,13 @@ export async function recordCustomerUpdateDelivery(event:{type?:string;data?:{em
  await db('rpc/icash_customer_update_delivery_event','POST',{p_id:typeof id==='string'&&uuidPattern.test(id)?id:null,p_provider:data.email_id,p_recipient:recipient,p_event:event.type});
 }
 export async function dispatchCustomerUpdate(accountId:string,{db,env=process.env,transport=fetch,signal:parent}:{db:Database;env?:Record<string,string|undefined>;transport?:typeof fetch;signal?:AbortSignal}){
- const config=customerUpdateConfiguration(env);
- if(!config.origin||!uuidPattern.test(accountId)||(!config.email&&!config.sms))return {status:'updates_disabled'};
+ if(!uuidPattern.test(accountId)||(!env.RESEND_API_KEY&&!env.CONTIGUITY_API_KEY))return {status:'updates_disabled'};
  const signal=parent?AbortSignal.any([parent,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000);
  let id:string|null=null;
  try{
   signal.throwIfAborted();
+  const {settings}=await readCampaignSettings(db,signal),config=customerUpdateConfiguration(env,settings.fromEmail);
+  if(!config.origin||(!config.email&&!config.sms))return {status:'updates_disabled'};
   id=await db<string|null>('rpc/icash_claim_customer_update','POST',{p_account:accountId,p_email_ready:config.email,p_sms_ready:config.sms},signal);
   if(!id)return {status:'updates_idle'};
   if(!uuidPattern.test(id))throw Error('Invalid claim');
