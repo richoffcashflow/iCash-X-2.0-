@@ -1,18 +1,18 @@
 /* A quiet, full-height pause between the homepage and the saved setup. */
-.bot-setup .bot-building{min-height:calc(100svh - 240px);max-width:500px;margin:0 auto;padding:44px 12px 38px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#18181b;animation:bot-build-enter .3s ease-out}
+.bot-setup .bot-building{min-height:calc(100svh - 240px);max-width:500px;margin:0 auto;padding:44px 12px 38px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#181818;animation:bot-build-enter .3s ease-out}
 .bot-building-art{position:relative;width:180px;height:180px;display:grid;place-items:center;margin-bottom:38px}
-.bot-building-mark{width:84px;height:84px;border-radius:26px;background:#18181b;color:#fff;display:grid;place-items:center;font-size:30px;font-weight:600;letter-spacing:-1px;box-shadow:0 12px 36px #18181b14;animation:bot-build-breathe 2.8s ease-in-out infinite}
-.bot-building-orbit{position:absolute;inset:0;border:1px solid #18181b12;border-radius:50%}
-.bot-building-orbit-inner{inset:17px;border-color:#18181b1c}
+.bot-building-mark{width:84px;height:84px;border-radius:26px;background:#181818;color:#fff;display:grid;place-items:center;font-size:30px;font-weight:600;letter-spacing:-1px;box-shadow:0 12px 36px #18181814;animation:bot-build-breathe 2.8s ease-in-out infinite}
+.bot-building-orbit{position:absolute;inset:0;border:1px solid #18181812;border-radius:50%}
+.bot-building-orbit-inner{inset:17px;border-color:#1818181c}
 .bot-building-spark{position:absolute;inset:0;animation:bot-build-orbit 6s linear infinite}
-.bot-building-spark::before{content:'';display:block;width:7px;height:7px;border-radius:50%;background:#18181b;position:absolute;left:calc(50% - 3.5px);top:-3px;box-shadow:0 0 0 6px #f7f7f8}
+.bot-building-spark::before{content:'';display:block;width:7px;height:7px;border-radius:50%;background:#181818;position:absolute;left:calc(50% - 3.5px);top:-3px;box-shadow:0 0 0 6px #f7f7f7}
 .bot-building-eyebrow{font-size:10px;letter-spacing:2px;font-weight:600;color:#737373;margin-bottom:15px}
 .bot-setup .bot-building h1{font-size:clamp(30px,6vw,40px);line-height:1.15;letter-spacing:-1.5px;font-weight:600;margin:0 0 15px;outline:none}
 .bot-building-description{max-width:330px;font-size:15px;line-height:1.65;color:#737373;margin:0;overflow-wrap:anywhere}
-.bot-building-status{display:flex;align-items:center;justify-content:center;gap:9px;min-height:60px;margin-top:27px;font-size:12px;line-height:1.5;color:#52525b}
-.bot-building-status>svg{flex-shrink:0}.bot-building-dot{width:6px;height:6px;border-radius:50%;background:#52525b;flex-shrink:0;animation:bot-build-breathe 1.5s ease-in-out infinite}
+.bot-building-status{display:flex;align-items:center;justify-content:center;gap:9px;min-height:60px;margin-top:27px;font-size:12px;line-height:1.5;color:#535353}
+.bot-building-status>svg{flex-shrink:0}.bot-building-dot{width:6px;height:6px;border-radius:50%;background:#535353;flex-shrink:0;animation:bot-build-breathe 1.5s ease-in-out infinite}
 .bot-building-note{font-size:11px;line-height:1.5;color:#737373;margin:24px 0 0}
-.bot-building-recovery{width:100%;max-width:330px;margin-top:18px}.bot-building-recovery>p{font-size:13px;line-height:1.6;color:#52525b;margin:0 0 20px}.bot-building .setup-primary{background:#18181b;color:#fff}.bot-building-back{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;min-height:48px;border:0;background:transparent;font-size:13px;color:#52525b;margin-top:8px}
+.bot-building-recovery{width:100%;max-width:330px;margin-top:18px}.bot-building-recovery>p{font-size:13px;line-height:1.6;color:#535353;margin:0 0 20px}.bot-building .setup-primary{background:#181818;color:#fff}.bot-building-back{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;min-height:48px;border:0;background:transparent;font-size:13px;color:#535353;margin-top:8px}
 .bot-building[data-phase=error] .bot-building-spark,.bot-building[data-phase=error] .bot-building-mark,.bot-building[data-phase=saved] .bot-building-mark{animation:none}
 @keyframes bot-build-orbit{to{transform:rotate(360deg)}}
 @keyframes bot-build-breathe{50%{opacity:.55;transform:scale(.97)}}
