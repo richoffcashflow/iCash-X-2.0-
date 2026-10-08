@@ -92,4 +92,5 @@ export async function testDirectRecordedInbound(f){
  for(const role of ['anon','authenticated'])assert.equal(await val("select has_function_privilege($1,'public.icash_reserve_direct_reception(uuid,text,text,text,text,text,text,text,text,text,text)','execute')",[role]),false);
  await (await import('./reception-return-call-limit-fixture.mjs')).testReceptionReturnCallLimit(f);
  if(process.env.RECEPTION_SELLER_OFFER_ONLY==='1')await (await import('./seller-offer-inbound-fixture.mjs')).testSellerOfferInbound({...f,reserve});
+ if(process.env.RECEPTION_AVAILABLE_CREDITS==='1')await (await import('./available-inbound-credits-fixture.mjs')).testAvailableInboundCredits({...f,reserve});
 }

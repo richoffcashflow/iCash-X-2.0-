@@ -24,6 +24,9 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
  for(let row of await db<RecordingRow[]>('rpc/icash_claim_call_recording_work','POST',{p_kind:'reconcile',p_limit:3,p_lease_seconds:120})){
   try{
    if(row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!sid(row.call_sid,'CA'))throw Error('CALL_BINDING_REVIEW_REQUIRED');
+   if(!row.call_ended_at&&!row.end_requested_at&&await db<boolean>('rpc/icash_call_credit_available','POST',{p_account:row.account_id,p_operation:row.operation_key})===false){
+    const requested=await recordingTransition(db,row,'stop',{stopTokenHash:row.stop_token_hash});if(!requested)throw Error('CALL_TERMINATION_REQUEST_REQUIRED');row=requested;
+   }
    if(row.end_requested_at&&!row.call_ended_at){
     let call=await provider.getCall(row.call_sid!);
     if(!['completed','failed','busy','no-answer','canceled'].includes(String(call.status)))call=await provider.end(row.call_sid!);

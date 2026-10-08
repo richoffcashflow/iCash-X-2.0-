@@ -111,5 +111,15 @@ assert.equal(gateWrites.length,1);assert.equal(gateWrites[0].path,'rpc/icash_not
 gateWrites=[];await settleRecordingGateOnly(terminalDb,{getCall:async()=>({...terminalCall,to:'+12125550999'})},row,now);assert.equal(gateWrites.length,0);
 await settleRecordingGateOnly(terminalDb,{getCall:async()=>({...terminalCall,status:'in-progress'})},row,now);assert.equal(gateWrites.length,0);
 console.log('PASS ended gate-only calls save bound terminal status while unknown prices remain held; mismatched and active calls cannot complete.');
+gateWrites=[];
+const unansweredDb=async(path,method,body)=>{
+ if(path.startsWith('icash_operation_rates?'))return [{costs_micros:{dealmachine:0,elevenlabs:0,twilio:0,messaging:0,email:0,llm:0,vercel:0,railway:0,supabase:0,github:0,payments:0,title_and_signing:0,support_and_overhead:0,acquisition:0,refund_and_dispute_reserve:0,other:0}}];
+ gateWrites.push({path,body});return {settled:true};
+};
+assert.equal((await settleRecordingGateOnly(unansweredDb,{getCall:async()=>({...terminalCall,status:'canceled',duration:null,price:null,price_unit:null})},row,now)).settled,true);
+assert.equal(gateWrites.at(-1).path,'rpc/icash_settle_unstarted_recorded_call');
+assert.equal(gateWrites.at(-1).body.p_receipt.priceMicros,0);assert.equal(gateWrites.at(-1).body.p_receipt.speechGatherUsed,false);
+assert.equal(gateWrites.at(-1).body.p_components.elevenlabs.amountMicros,0);
+console.log('PASS canonical unanswered outbound calls reconcile without an invented AI or speech charge.');
 
 await wire.dial(row.from_phone,row.to_phone,'<Response/>','https://www.geticashx.com/fixture',120);assert.equal(new URLSearchParams(network.at(-1).init.body).get('TimeLimit'),'120','carrier enforces funded call duration');const priorNetwork=network.length;assert.throws(()=>wire.dial(row.from_phone,row.to_phone,'<Response/>','https://www.geticashx.com/fixture',119));assert.equal(network.length,priorNetwork,'invalid bound never dials');

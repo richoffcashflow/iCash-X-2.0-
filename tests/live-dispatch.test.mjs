@@ -128,7 +128,7 @@ const agentMutations=[
  a=>a.platform_settings.overrides.conversation_config_override.conversation.max_duration_seconds=false,a=>a.platform_settings.overrides.conversation_config_override.tts.voice_id=false,
  a=>a.workflow.nodes.push({id:'unreviewed'}),a=>a.procedures.push({id:'unreviewed'}),
 ];
-for(const party of ['seller','buyer'])for(const mutate of agentMutations){reset();permission={...permission,party};mutate(providerAgent);assert.equal((await dispatchLiveVoice('account','job')).status,'production_agent_review_required');noAdmission();}
+for(const mutate of agentMutations){reset();mutate(providerAgent);assert.equal((await dispatchLiveVoice('account','job')).status,'production_agent_review_required');noAdmission();}
 permission={...permission,party:'seller'};
 for(const malformed of [null,{},[],{conversation_config:null}]){reset();providerAgent=malformed;assert.equal((await dispatchLiveVoice('account','job')).status,'production_agent_review_required');noAdmission();}
 reset();agentReadFailed=true;assert.equal((await dispatchLiveVoice('account','job')).status,'production_agent_review_required');noAdmission();
@@ -144,8 +144,12 @@ reset();allowClaim=false;await dispatchLiveVoice('account','job');assert.equal(p
 reset();timeout=true;assert.equal((await dispatchLiveVoice('account','job')).status,'provider_outcome_unknown_no_retry');assert.equal(jobState,'dispatching');await dispatchLiveVoice('account','job');assert.equal(postCount,1,'uncertain dial must never retry');
 const readiness=evaluateLaunch({cashReserve:true,discovery:true,voice:true,contactPermission:true,productionContracts:true,unresolvedDispatches:false},{data:true,voice:true,email:true,billing:true});assert.equal(readiness.acquisitionReady,true);assert.equal(readiness.ready,true);assert.deepEqual(readiness.blockers,[]);
 assert(evaluateLaunch({cashReserve:true,discovery:true,voice:true,contactPermission:true,productionContracts:true,unresolvedDispatches:false},{data:true,voice:false,email:true,billing:true}).blockers.includes('voiceProvider'));
-reset();permission={...permission,party:'buyer'};assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);
-reset();buyerApproved=false;assert.equal((await dispatchLiveVoice('account','job')).status,'buyer_marketing_release_required');assert.equal(postCount,0);
+for(const flexible of [false,true])for(const callback of [null,'callback']){
+ reset();permission={...permission,party:'buyer'};callbackId=callback;process.env.ICASH_FLEXIBLE_VOICE_READY=String(flexible);
+ assert.equal((await dispatchLiveVoice('account','job')).status,'buyer_outbound_calls_disabled');
+ assert.equal(providerReads,0);noAdmission();assert(!records.some(r=>r.path==='rpc/icash_reserve_flexible_voice'));
+}
+permission={...permission,party:'seller'};
 reset();providerNumber='+12125550100';assert.equal((await dispatchLiveVoice('account','job')).status,'business_number_mismatch');assert.equal(postCount,0);
 reset();suppressed=true;assert.equal((await dispatchLiveVoice('account','job')).status,'contact_opted_out');assert.equal(postCount,0);
 reset();paced=false;buyerApproved=true;assert.equal((await dispatchLiveVoice('account','job')).status,'waiting_for_daytime_budget');assert.equal(postCount,0);
@@ -157,9 +161,10 @@ reset();operational=true;allowClaim=false;await dispatchLiveVoice('account','job
 // Legacy enabled configuration/rate cannot start seller, buyer, callback, or operational calls.
 for(const party of ['seller','buyer'])for(const operationalTarget of [false,true])for(const callback of [null,'callback']){
  reset();permission={...permission,party};operational=operationalTarget;callbackId=callback;legacyRate=true;process.env.ICASH_RECORDED_OUTBOUND_READY='false';
- assert.equal((await dispatchLiveVoice('account','job')).status,'recorded_call_release_required');assert.equal(providerReads,0);assert.equal(postCount,0);
+ assert.equal((await dispatchLiveVoice('account','job')).status,party==='buyer'?'buyer_outbound_calls_disabled':'recorded_call_release_required');assert.equal(providerReads,0);assert.equal(postCount,0);
  assert(!records.some(r=>['rpc/icash_reserve_paced_voice','rpc/icash_claim_reviewed_voice_job','rpc/icash_claim_automatic_offer_voice_job'].includes(r.path)));assert.equal(jobState,'held');
 }
+permission={...permission,party:'seller'};
 for(const change of [()=>delete process.env.ICASH_RECORDED_OUTBOUND_READY,()=>process.env.ICASH_RECORDING_RECEIPTS_READY='false',()=>process.env.RECORDED_OUTBOUND_REVIEW_JSON='invalid',()=>process.env.TWILIO_ACCOUNT_SID='AC'+'b'.repeat(32),()=>delete process.env.TWILIO_AUTH_TOKEN]){
  reset();change();assert.notEqual((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(providerReads,0);assert.equal(postCount,0);assert(!records.some(r=>r.path==='rpc/icash_reserve_paced_voice'));
 }
