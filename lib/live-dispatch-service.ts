@@ -11,6 +11,7 @@ import {recordingServer} from './required-call-recording-server.ts';
 import {object,readRecordingReview,recordingAgentMatches,recordingPolicy} from './required-call-recording.ts';
 import {createHash} from 'node:crypto';
 import {sameBusinessNumber,consistentTextSenders} from './number-continuity.ts';
+import {selectBusinessCaller,secondaryBusinessPhone,secondaryCallingReady} from './business-voice-numbers.ts';
 import {boundedVoiceSmsContext} from './voice-sms-context.ts';
 import {db} from '@/lib/stripe-test';
 import {elevenRequest} from '@/lib/elevenlabs';
@@ -73,12 +74,22 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const [account]=await db<{assistant_name:string;bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=assistant_name,bot_paused`);
  if(!identity?.principal||!account||account.bot_paused)return hold('identity_or_start_required');
  // Verify the actual provider caller ID before reserving credits or placing a call.
- const businessNumber=process.env.CONTIGUITY_FROM;
- const threads=await db<{sender:string;sender_pool_assigned?:boolean}[]>(`icash_text_threads?account_id=eq.${accountId}&recipient=eq.${encodeURIComponent(p.phone)}&select=sender,sender_pool_assigned`);
- if(!consistentTextSenders(businessNumber,threads.filter(t=>!t.sender_pool_assigned)))return hold('business_number_mismatch');
- let phone:{phone_number:string};
- try{phone=await elevenRequest<{phone_number:string}>(`/v1/convai/phone-numbers/${encodeURIComponent(c.phone_number_id)}`);}catch{return hold('business_number_verification_required');}
- if(!sameBusinessNumber(businessNumber,phone.phone_number))return hold('business_number_mismatch');
+ const primaryNumber=process.env.CONTIGUITY_FROM;
+ const threads=await db<{sender:string;sender_pool_assigned?:boolean}[]>('rpc/icash_property_voice_threads','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone});
+ let businessNumber:string;
+ try{businessNumber=selectBusinessCaller(primaryNumber,threads);}catch{return hold('business_number_mismatch');}
+ if(businessNumber===secondaryBusinessPhone){
+  const [secondary]=await db<{outbound_enabled:boolean}[]>(`icash_business_voice_numbers?phone=eq.${encodeURIComponent(secondaryBusinessPhone)}&select=outbound_enabled`);
+  // Keep the existing caller until the owner finishes secondary activation.
+  if(!secondary?.outbound_enabled)businessNumber=primaryNumber!;
+  else try{if(!await secondaryCallingReady(db,process.env))return hold('business_number_verification_required');}catch{return hold('business_number_verification_required');}
+ }
+ if(businessNumber!==secondaryBusinessPhone){
+  if(!consistentTextSenders(businessNumber,threads.filter(t=>!t.sender_pool_assigned)))return hold('business_number_mismatch');
+  let phone:{phone_number:string};
+  try{phone=await elevenRequest<{phone_number:string}>(`/v1/convai/phone-numbers/${encodeURIComponent(c.phone_number_id)}`);}catch{return hold('business_number_verification_required');}
+  if(!sameBusinessNumber(businessNumber,phone.phone_number))return hold('business_number_mismatch');
+ }
  let agent:unknown;
  try{agent=await elevenRequest<unknown>(`/v1/convai/agents/${encodeURIComponent(recordedReview.agentId)}?branch_id=${encodeURIComponent(recordedReview.branchId)}`);}catch{return hold('production_agent_review_required');}
  // Share the recording service's exact non-main branch/version, privacy,
@@ -92,7 +103,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const rateId=p.party==='buyer'?c.buyer_rate_id:c.seller_rate_id;if(!rateId)return hold('full_call_cost_quote_required');
  const [rate]=await db<{operation:string;enabled:boolean;expires_at:string;voice_max_duration_seconds:number|null;charge_cents?:number;version?:string}[]>(`icash_operation_rates?id=eq.${rateId}&select=operation,enabled,expires_at,voice_max_duration_seconds,charge_cents,version`);
  if(!rate?.enabled||rate.operation!==(p.party==='buyer'?'buyer_call':'seller_call')||!(Date.parse(rate.expires_at)>Date.now())||!rate.voice_max_duration_seconds||rate.voice_max_duration_seconds<c.max_duration_seconds)return hold('full_call_cost_quote_required');
- if(!sameBusinessNumber(businessNumber,recordedReview.fromPhone)||rate.charge_cents!==recordingPolicy.minimumHoldCents||!rate.version?.startsWith(recordingPolicy.version+':'))return hold('recorded_call_review_required');
+ if(!sameBusinessNumber(primaryNumber,recordedReview.fromPhone)||rate.charge_cents!==recordingPolicy.minimumHoldCents||!rate.version?.startsWith(recordingPolicy.version+':'))return hold('recorded_call_review_required');
  // The displayed formula result is the actual seller offer, under standing operator policy.
  const cashOfferPrice=eligible?.ready?eligible.screening.cashOfferPriceCents:null;
  const ceiling=cashOfferPrice;
@@ -140,7 +151,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const prompt=automaticOfferPolicy(recordedReview.offerPolicy)
   ?(recordedReview.offerPolicy==='automatic_offer_v5'?legacyAutomaticOfferReceptionPrompt:automaticOfferReceptionPrompt).replace('{{icash_property_context}}',JSON.stringify({...automaticContext,principal:identity.principal,assistantName:account.assistant_name}))+'\nOUTBOUND CAPABILITIES: Use the callback tool only for an explicitly agreed date, time and timezone; use the handoff tool when requested. Claim either action only after its successful result. Do not claim an immediate transfer unless the tool confirms one.'
   :buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!;
- const result=await recordingServer().dispatch({accountId,operationKey,maxTotalSeconds:fundedCall.maxSeconds,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:callVoiceId,firstMessage:sellerGreeting??buyerFirstMessage(buyerContext!),prompt,strategyKey:strategy});
+ const result=await recordingServer().dispatch({accountId,operationKey,fromPhone:businessNumber,maxTotalSeconds:fundedCall.maxSeconds,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:callVoiceId,firstMessage:sellerGreeting??buyerFirstMessage(buyerContext!),prompt,strategyKey:strategy});
  // A started call is connecting; only the recording service can confirm capture.
  if(result.status==='recording_consent_pending')return {status:'call_started'};
  if(result.status==='recording_dial_unknown_no_retry')return {status:'provider_outcome_unknown_no_retry'}; // Keep the durable claim recoverable; never redial.

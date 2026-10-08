@@ -1,4 +1,5 @@
 import {recordingAuthorized,directCallTwiml} from './direct-call-entry.ts';
+import {secondaryBusinessPhone,primaryBusinessPhone,secondaryCallingReady} from './business-voice-numbers.ts';
 import {sellerContractToolMatches} from './seller-contract-tool.ts';
 import {recordingConfidence} from './recording-consent-evidence.ts';
 import {sellerContinuedSpeech,sellerNoticeTwiml,sellerNoticeEndTwiml} from './seller-call-notice.ts';
@@ -48,14 +49,19 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
  return {
   /** Internal adapter only. SQL requires already-reserved/dispatched operation and reviewed contact gates.
    * Wired only after normal dispatcher reserve/claim; recorded rate/config rollout is required first. */
-  async dispatch(input:{maxTotalSeconds?:number;buyerKind?:'company'|'individual';accountId:string;operationKey:string;principal:string;assistantName:string;voiceId?:string;firstMessage:string;prompt:string;strategyKey:'cash_interest'|'flexible_timing'}){
+  async dispatch(input:{fromPhone?:string;maxTotalSeconds?:number;buyerKind?:'company'|'individual';accountId:string;operationKey:string;principal:string;assistantName:string;voiceId?:string;firstMessage:string;prompt:string;strategyKey:'cash_interest'|'flexible_timing'}){
    if(!dispatchAllowed())return {status:'recording_release_required'};
    const review=await readReview();if(!review||!await checkAgent(review))return {status:'recording_review_required'};
+   const fromPhone=input.fromPhone??review.fromPhone;
+   if(fromPhone!==review.fromPhone){
+    if(review.fromPhone!==primaryBusinessPhone||fromPhone!==secondaryBusinessPhone)return {status:'business_number_verification_required'};
+    try{if(!await secondaryCallingReady(db,env))return {status:'business_number_verification_required'};}catch{return {status:'business_number_verification_required'};}
+   }
    if(!dispatchAllowed())return {status:'recording_release_required'};
    if(!uuid(input.accountId)||!/^voice:[0-9a-f-]{36}$/i.test(input.operationKey)||input.prompt.length>24000||input.firstMessage.length>2000)throw Error('RECORDING_CONTEXT_REQUIRED');
    const maxSeconds=input.maxTotalSeconds??600;if(!Number.isInteger(maxSeconds)||maxSeconds<120||maxSeconds>600||maxSeconds%60!==0)throw Error('CALL_CAP_REQUIRED');
    const disclosure=recordingDisclosure(input.principal,input.assistantName,input.buyerKind),nonce=randomBytes(32).toString('hex'),stop=recordingStopToken(input.operationKey,env);
-   let row=await db<RecordingRow|null>('rpc/icash_create_direct_recorded_call','POST',{p_account:input.accountId,p_operation:input.operationKey,p_provider_account_sid:review.providerAccountSid,p_call_sid:null,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(stop),p_disclosure_version:recordingPolicy.disclosureVersion,p_pricing_policy:recordingPricing,p_context:{fromPhone:review.fromPhone,branchId:review.branchId,versionId:review.versionId,maxTotalSeconds:maxSeconds,callContext:{principal:input.principal,assistantName:input.assistantName,firstMessage:input.firstMessage,prompt:input.prompt,strategyKey:input.strategyKey,...(input.voiceId?{voiceId:input.voiceId}:{})}}});
+   let row=await db<RecordingRow|null>('rpc/icash_create_direct_recorded_call','POST',{p_account:input.accountId,p_operation:input.operationKey,p_provider_account_sid:review.providerAccountSid,p_call_sid:null,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(stop),p_disclosure_version:recordingPolicy.disclosureVersion,p_pricing_policy:recordingPricing,p_context:{fromPhone,branchId:review.branchId,versionId:review.versionId,maxTotalSeconds:maxSeconds,callContext:{principal:input.principal,assistantName:input.assistantName,firstMessage:input.firstMessage,prompt:input.prompt,strategyKey:input.strategyKey,...(input.voiceId?{voiceId:input.voiceId}:{})}}});
    if(!row)return {status:'recording_admission_held'};
    if(!dispatchAllowed())return {status:'recording_release_required'};
    row=await transition(db,row,'claim_dial');if(!row)return {status:'recording_dial_already_claimed'};
