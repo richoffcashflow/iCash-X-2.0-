@@ -1,3 +1,4 @@
+import {directRecordedInstructions,recordingAuthorized} from '../lib/direct-call-entry.ts';
 // LOCAL SYNTHETIC TESTS ONLY: every RPC/provider operation is an in-memory fixture.
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -40,6 +41,7 @@ const inboundRequest = (fields={}, options={}) => signed('inbound',{To:reception
 
 function fixture(options={}) {
   const cfg=configuration(options.profile), events=[];
+  if(options.direct){cfg.c.entry_policy='direct_recorded_v1';cfg.agent.conversation_config.agent.prompt.prompt=receptionPrompt+directRecordedInstructions;cfg.c.config_hash=inspectRecordedReceptionAgent(cfg.c,cfg.agent,cfg.branch,true).hash;}
   options.mutate?.(cfg);
   let row=null, nonce=null, clock=now, canonicalCall={sid:callSid,account_sid:accountSid,from:caller,to:receptionTarget.calledNumber,direction:'inbound',status:'ringing',date_created:iso,start_time:iso,...options.call};
   const snapshot = () => row ? clone(row) : null;
@@ -47,9 +49,9 @@ function fixture(options={}) {
     events.push({rpc:name,body:clone(body)});
     if (name==='icash_get_recorded_reception_config') return options.missingConfig?null:clone(cfg.c);
     if (name==='icash_get_recorded_reception_session') return row && body.p_id===row.id && (!body.p_account || body.p_account===row.account_id) ? snapshot() : null;
-    if (name==='icash_reserve_flexible_reception') {
+    if (name==='icash_reserve_flexible_reception'||name==='icash_reserve_direct_reception') {
       if (row || options.denied) return {allowed:false};
-      row={id, account_id:cfg.c.account_id, config_id:cfg.c.id, configuration:clone(cfg.c), operation_key:operation, provider_account_sid:accountSid, call_sid:callSid, from_phone:caller, to_phone:cfg.c.called_number, caller_hash:body.p_caller_hash, nonce_hash:body.p_nonce_hash, stop_token_hash:body.p_stop_token_hash, state:'reserved', row_version:1, agent_id:cfg.c.agent_id, branch_id:cfg.c.branch_id, version_id:cfg.c.reviewed_version_id, max_total_seconds:cfg.c.max_duration_seconds, rate_id:cfg.c.rate_id, charge_cap_cents:cfg.c.customer_charge_cap_cents, pricing_policy:clone(cfg.c.pricing_policy), created_at:iso, call_started_at:null, call_deadline_at:new Date(now+60000).toISOString(), consent_deadline_at:new Date(now+45000).toISOString(), consent_at:null, setup_claimed_at:null, bounded_at:null, setup_confirmed_at:null, start_claimed_at:null, register_claimed_at:null, recording_sid:null, provider_started_at:null, ended_at:null, duration_seconds:null, audio_expires_at:null, deleted_at:null, conversation_id:null, end_requested_at:null, call_ended_at:null, provider_recording_price_micros:null, ...options.badRow};
+      row={id, entry_policy:options.direct?'direct_recorded_v1':'spoken_v1',recording_authorized_at:null, account_id:cfg.c.account_id, config_id:cfg.c.id, configuration:clone(cfg.c), operation_key:operation, provider_account_sid:accountSid, call_sid:callSid, from_phone:caller, to_phone:cfg.c.called_number, caller_hash:body.p_caller_hash, nonce_hash:body.p_nonce_hash, stop_token_hash:body.p_stop_token_hash, state:'reserved', row_version:1, agent_id:cfg.c.agent_id, branch_id:cfg.c.branch_id, version_id:cfg.c.reviewed_version_id, max_total_seconds:cfg.c.max_duration_seconds, rate_id:cfg.c.rate_id, charge_cap_cents:cfg.c.customer_charge_cap_cents, pricing_policy:clone(cfg.c.pricing_policy), created_at:iso, call_started_at:null, call_deadline_at:new Date(now+60000).toISOString(), consent_deadline_at:new Date(now+45000).toISOString(), consent_at:null, setup_claimed_at:null, bounded_at:null, setup_confirmed_at:null, start_claimed_at:null, register_claimed_at:null, recording_sid:null, provider_started_at:null, ended_at:null, duration_seconds:null, audio_expires_at:null, deleted_at:null, conversation_id:null, end_requested_at:null, call_ended_at:null, provider_recording_price_micros:null, ...options.badRow};
       return {allowed:true,session:snapshot()};
     }
     if (name==='icash_recorded_reception_property_context') return options.propertyContext??null;
@@ -61,8 +63,9 @@ function fixture(options={}) {
     if (action==='claim_setup') {if(row.setup_claimed_at) return null; row.setup_claimed_at=iso;row.state='setup_pending';}
     else if (action==='bounded') {assert(row.setup_claimed_at);assert.equal(payload.timeLimitSeconds,row.max_total_seconds);row.bounded_at=iso;row.setup_confirmed_at=iso;row.state='consent_pending';}
     else if (action==='bind_call_start') {if(row.call_started_at)return null;row.call_started_at=payload.callStartedAt;row.call_deadline_at=new Date(Date.parse(payload.callStartedAt)+row.max_total_seconds*1000).toISOString();row.consent_deadline_at=new Date(Date.parse(payload.callStartedAt)+45000).toISOString();}
+    else if (action==='authorize_recording'){if(row.recording_authorized_at||row.entry_policy!=='direct_recorded_v1')return null;assert.equal(payload.nonceHash,row.nonce_hash);row.recording_authorized_at=iso;}
     else if (action==='consent') {if(row.consent_at||row.state!=='consent_pending') return null;assert.equal(payload.nonceHash,row.nonce_hash);row.consent_at=iso;row.consent_evidence=clone(payload);}
-    else if (action==='claim_start') {if(!row.consent_at||row.start_claimed_at||row.end_requested_at)return null;row.start_claimed_at=iso;row.state='starting';}
+    else if (action==='claim_start') {if(!recordingAuthorized(row)||row.start_claimed_at||row.end_requested_at)return null;row.start_claimed_at=iso;row.state='starting';}
     else if (action==='started') {if(row.recording_sid||row.end_requested_at)return null;assert(row.start_claimed_at);row.recording_sid=payload.recordingSid;row.provider_started_at=payload.providerStartedAt;row.audio_expires_at=new Date(now+30*86400000).toISOString();row.state='recording';}
     else if (action==='claim_register') {if(row.register_claimed_at||!row.recording_sid||row.end_requested_at)return null;row.register_claimed_at=iso;}
     else if (action==='decline') row.state='declined';
@@ -81,8 +84,8 @@ function fixture(options={}) {
     workspace:async()=>{events.push({provider:'workspace'});return options.workspace??{webhooks:{post_call_webhook_id:null}};},
     tool:async()=>{events.push({provider:'tool'});return clone(cfg.tool);},
     boundCall:async r=>{events.push({provider:'boundCall',seconds:r.max_total_seconds});assert(row.setup_claimed_at);assert.equal(canonicalCall.status,'in-progress','carrier cannot update a ringing call');if(options.boundThrows)throw Error('synthetic-write-unknown');return clone({...canonicalCall,...options.boundReceipt});},
-    start:async(sid,callback)=>{events.push({provider:'start',callback});assert.equal(sid,callSid);assert(row.bounded_at);assert(row.consent_at);assert(row.start_claimed_at);assert.equal(row.register_claimed_at,null);if(options.startThrows)throw Error('synthetic-write-unknown');if(options.startCallback){const response=await service.status(signed('status?id='+id,{RecordingSid:recordingSid,RecordingStatus:'in-progress'}));assert.equal(response.status,204);}return {sid:recordingSid,call_sid:callSid,account_sid:accountSid,status:'in-progress',start_time:iso,...options.startReceipt};},
-    register:async(r,seconds,context)=>{events.push({provider:'register',seconds,context});assert(r.consent_at);assert(r.start_claimed_at);assert(r.recording_sid);assert(r.register_claimed_at);assert.equal(r.state,'recording');if(options.registerThrows)throw Error('synthetic-write-unknown');return streamXml;},
+    start:async(sid,callback)=>{events.push({provider:'start',callback});assert.equal(sid,callSid);assert(row.bounded_at);assert(recordingAuthorized(row));assert(row.start_claimed_at);assert.equal(row.register_claimed_at,null);if(options.startThrows)throw Error('synthetic-write-unknown');if(options.startCallback){const response=await service.status(signed('status?id='+id,{RecordingSid:recordingSid,RecordingStatus:'in-progress'}));assert.equal(response.status,204);}return {sid:recordingSid,call_sid:callSid,account_sid:accountSid,status:'in-progress',start_time:iso,...options.startReceipt};},
+    register:async(r,seconds,context)=>{events.push({provider:'register',seconds,context});assert(recordingAuthorized(r));assert(r.start_claimed_at);assert(r.recording_sid);assert(r.register_claimed_at);assert.equal(r.state,'recording');if(options.registerThrows)throw Error('synthetic-write-unknown');return streamXml;},
     end:async sid=>{events.push({provider:'end'});assert.equal(sid,callSid);if(options.endThrows)throw Error('synthetic-write-unknown');canonicalCall.status='completed';return {sid:callSid,account_sid:accountSid,status:'completed',...options.endReceipt};},
     stop:async(sid,re)=>{events.push({provider:'stop'});assert.equal(sid,callSid);assert.equal(re,recordingSid);if(options.stopThrows)throw Error('synthetic-write-unknown');return {sid:recordingSid,call_sid:callSid,account_sid:accountSid,status:'stopped',...options.stopReceipt};},
     getRecording:async sid=>{events.push({provider:'getRecording'});assert.equal(sid,recordingSid);return {sid:recordingSid,call_sid:callSid,account_sid:accountSid,status:'in-progress',start_time:iso,...options.recordingReceipt};},
@@ -410,4 +413,22 @@ test('affordable incoming calls preserve reviewed config and use exact funded du
  const owner=fixture({profile:'owner_quick_test',badRow:{max_total_seconds:120}});
  assert.match((await owner.admit()).text,/<Hangup/);
  assert(!providerWrites(owner).some(e=>e.provider==='boundCall'));
+});
+
+for(const bad of [false,true])test('direct inbound keeps audio and skips spoken gate; start failure '+bad,async()=>{
+ const f=fixture({direct:true,startThrows:bad});
+ const response=await f.service.inbound(inboundRequest());const xml=await response.text();
+ assert(!/notice|question|<Gather|<Say/.test(xml));assert(xml.includes('call-connect-silence.wav'));
+ const target=xml.match(/<Redirect method="POST">([^<]+)/)[1].replaceAll('&amp;','&');
+ f.setCall({status:'in-progress'});
+ const setup=await f.service.setup(signed('setup'+new URL(target).search,{CallStatus:'in-progress'}));
+ const next=await setup.text();assert.match(next,/<Redirect/);assert(!/<Say|<Gather|notice/.test(next));
+ const connection=next.match(/<Redirect method="POST">([^<]+)/)[1].replaceAll('&amp;','&');
+ const connected=await f.service.connect(signed('connect'+new URL(connection).search,{CallStatus:'in-progress'}));
+ assert.match(await connected.text(),bad?/<Hangup/:/<Connect/);
+ const row=f.row;assert.equal(row.consent_at,null);assert.equal(row.consent_evidence,undefined);assert(row.recording_authorized_at);
+ assert.equal(f.events.filter(e=>e.provider==='start').length,1);
+ assert.equal(f.events.filter(e=>e.provider==='register').length,bad?0:1);
+ await f.service.setup(signed('setup'+new URL(target).search,{CallStatus:'in-progress'}));
+ assert.equal(f.events.filter(e=>e.provider==='start').length,1);
 });

@@ -89,6 +89,7 @@ try{
  await pg.exec(fn('config/fulfillment-completion.sql','icash_settle_complete_costs'));
  await pg.exec(read('config/required-call-recording.sql'));await pg.exec(read('config/recording-consent-evidence-v4.sql'));await pg.exec(read('config/required-call-recording-consent-v4.sql'));
  await pg.exec(read('tests/required-call-recording-database.sql'));
+ if(process.env.RECORDING_DIRECT_ONLY==='1'){await (await import('../tests/helpers/direct-recorded-outbound-fixture.mjs')).testDirectRecordedOutbound({pg,q,rpc,read,scenario,trans,get,context,account,permission,operation,ac,call,rec,admin});}else{
  await scenario('service-only ACL and actual anon/auth/public denials',async()=>{
   for(const role of ['anon','authenticated','untrusted_test_role']){
    await q(`set local role ${role}`);await denied(()=>create());await denied(()=>q('select * from public.icash_call_recordings'));
@@ -223,6 +224,7 @@ try{
   const response=await service.consent(request());ok((await response.text()).includes('<Connect>'));eq((await get()).state,'recording');eq((await get()).consent_evidence.confidenceReported,reported);eq((await get()).consent_evidence.confidencePolicy,'advisory');eq(network.map(x=>x.action),['dial','start','register']);
   await service.consent(request());eq(network.filter(x=>x.action==='start').length,1);ok(network.some(x=>x.action==='end'));
  });
+ }
  console.log(`Required recording SQL: ${scenarios} local scenarios and ${assertions} assertions passed.`);
  console.log('Not verified: real PostgreSQL multi-session locks, provider signatures/recording/deletion, production installation or activation.');
 }finally{await pg.close();}

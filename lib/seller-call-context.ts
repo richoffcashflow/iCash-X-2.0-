@@ -65,8 +65,8 @@ export function sellerCallContext(input:SellerCallContext){
 }
 export function sellerFirstMessage(input:SellerCallContext,alreadyIntroduced=false){
  const c=sellerCallContext(input),history=combinedHistory(c),name=returningSellerName(history)??c.request?.firstName;
- const introduction=alreadyIntroduced?'':`Hi, I'm ${c.assistantName}, the AI assistant for ${c.principal}. `;
- if(ownershipAlreadyConfirmed(history,c.address))return alreadyIntroduced?`I’m calling about a cash offer for ${c.address}.`:`${introduction}Is now a good time to talk about ${c.address}?`;
+ const introduction='';
+ if(ownershipAlreadyConfirmed(history,c.address))return `Is now a good time to talk about ${c.address}?`;
  return `${introduction}Is this ${name?name+', ':''}the owner of ${c.address}?`;
 }
 export function sellerCallPrompt(input:SellerCallContext,privateOfferCeilingCents:number|null=null,closing:SellerClosingContext|null=null,contractTextEnabled=false,cashOfferPriceCents:number|null=null){

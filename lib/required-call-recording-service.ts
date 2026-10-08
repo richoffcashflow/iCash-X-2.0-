@@ -1,3 +1,4 @@
+import {recordingAuthorized,directCallTwiml} from './direct-call-entry.ts';
 import {sellerContractToolMatches} from './seller-contract-tool.ts';
 import {recordingConfidence} from './recording-consent-evidence.ts';
 import {sellerContinuedSpeech,sellerNoticeTwiml,sellerNoticeEndTwiml} from './seller-call-notice.ts';
@@ -54,29 +55,29 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
    if(!uuid(input.accountId)||!/^voice:[0-9a-f-]{36}$/i.test(input.operationKey)||input.prompt.length>24000||input.firstMessage.length>2000)throw Error('RECORDING_CONTEXT_REQUIRED');
    const maxSeconds=input.maxTotalSeconds??600;if(!Number.isInteger(maxSeconds)||maxSeconds<120||maxSeconds>600||maxSeconds%60!==0)throw Error('CALL_CAP_REQUIRED');
    const disclosure=recordingDisclosure(input.principal,input.assistantName,input.buyerKind),nonce=randomBytes(32).toString('hex'),stop=recordingStopToken(input.operationKey,env);
-   let row=await db<RecordingRow|null>('rpc/icash_create_call_recording','POST',{p_account:input.accountId,p_operation:input.operationKey,p_provider_account_sid:review.providerAccountSid,p_call_sid:null,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(stop),p_disclosure_version:recordingPolicy.disclosureVersion,p_pricing_policy:recordingPricing,p_context:{fromPhone:review.fromPhone,branchId:review.branchId,versionId:review.versionId,maxTotalSeconds:maxSeconds,callContext:{principal:input.principal,assistantName:input.assistantName,firstMessage:input.firstMessage,prompt:input.prompt,strategyKey:input.strategyKey,...(input.voiceId?{voiceId:input.voiceId}:{})}}});
+   let row=await db<RecordingRow|null>('rpc/icash_create_direct_recorded_call','POST',{p_account:input.accountId,p_operation:input.operationKey,p_provider_account_sid:review.providerAccountSid,p_call_sid:null,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(stop),p_disclosure_version:recordingPolicy.disclosureVersion,p_pricing_policy:recordingPricing,p_context:{fromPhone:review.fromPhone,branchId:review.branchId,versionId:review.versionId,maxTotalSeconds:maxSeconds,callContext:{principal:input.principal,assistantName:input.assistantName,firstMessage:input.firstMessage,prompt:input.prompt,strategyKey:input.strategyKey,...(input.voiceId?{voiceId:input.voiceId}:{})}}});
    if(!row)return {status:'recording_admission_held'};
    if(!dispatchAllowed())return {status:'recording_release_required'};
    row=await transition(db,row,'claim_dial');if(!row)return {status:'recording_dial_already_claimed'};
    // A changed release after any asynchronous preflight/admission cannot start a call.
    if(!dispatchAllowed())return {status:'recording_release_required'};
    try{
-    const call=await provider.dial(row.from_phone,row.to_phone,input.buyerKind?sellerNoticeTwiml(row.id,nonce):consentTwiml(row.id,nonce,disclosure),recordingBaseUrl+'/terminal?id='+row.id,row.max_total_seconds);
+    const call=await provider.dial(row.from_phone,row.to_phone,directCallTwiml(recordingBaseUrl+'/connect',row.id,nonce),recordingBaseUrl+'/terminal?id='+row.id,row.max_total_seconds);
     const bound=await bindCall(row,call);if(!bound)throw Error('CALL_BINDING_UNCERTAIN');
     return {status:'recording_consent_pending',recordingId:row.id};
    }catch{await transition(db,row,'dial_unknown').catch(()=>null);return {status:'recording_dial_unknown_no_retry'};}
   },
-  async consent(request:Request,noticeMode=false){
+  async consent(request:Request,noticeMode=false,directMode=false){
    let row:RecordingRow|null=null;
    const finishTwiml=noticeMode?sellerNoticeEndTwiml:endTwiml;
    try{
     const u=new URL(request.url),id=u.searchParams.get('id'),nonce=u.searchParams.get('nonce');
-    const path=noticeMode?'notice':'consent';
+    const path=directMode?'connect':noticeMode?'notice':'consent';
     if(request.method!=='POST'||u.pathname!=='/api/internal/voice/recording/'+path||u.searchParams.size!==2||!uuid(id)||!nonce||!/^[a-f0-9]{64}$/.test(nonce)||request.headers.get('content-type')?.split(';')[0]!=='application/x-www-form-urlencoded')return hangup();
     const canonical=recordingBaseUrl+'/'+path+'?id='+id+'&nonce='+nonce;
     const form=verifiedTwilioForm((await boundedBytes(request,16384)).toString('utf8'),request.headers.get('x-twilio-signature'),env.TWILIO_AUTH_TOKEN??'',canonical);
     if(!form||form.get('AccountSid')!==env.TWILIO_ACCOUNT_SID||!sid(form.get('CallSid'),'CA'))return hangup();
-    row=await getRow(db,id);if(!row||row.nonce_hash!==sha(nonce)||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||noticeMode&&row.party!=='seller')return hangup();
+    row=await getRow(db,id);if(!row||row.nonce_hash!==sha(nonce)||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||noticeMode&&row.party!=='seller'||directMode!==(row.entry_policy==='direct_recorded_v1'))return hangup();
     const call=await provider.getCall(form.get('CallSid')!);
     if(!canonicalCall(row,call,now(),true))return hangup();
     row=await bindCall(row,call);if(!row)return hangup();
@@ -89,6 +90,9 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
     if(!review||row.agent_id!==review.agentId||row.branch_id!==review.branchId||row.version_id!==review.versionId||row.disclosure_version!==recordingPolicy.disclosureVersion||!Number.isFinite(age)||age<0||age>recordingPolicy.consentWindowSeconds*1000||!await checkAgent(review)){
      await transition(db,row,'decline',{reason:'timeout'});await endBound(row);return hangup();
     }
+    if(directMode){
+     const authorized=await transition(db,row,'authorize_recording',{nonceHash:sha(nonce),policy:'direct_recorded_v1'});if(!authorized){await endBound(row);return hangup();}row=authorized;
+    }else{
     const yes=noticeMode?sellerContinuedSpeech(form):affirmativeSpeech(form);
     if(!yes){
      const confidence=recordingConfidence(form.get('Confidence'));
@@ -97,6 +101,7 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
      await endBound(row);return xml(finishTwiml);
     }
     const consented=await transition(db,row,noticeMode?'notice_continue':'consent',{nonceHash:sha(nonce),source:'twilio_gather_speech',...yes,disclosureVersion:recordingPolicy.disclosureVersion});if(!consented){await endBound(row);return hangup();}row=consented;
+    }
     const claimed=await transition(db,row,'claim_start');if(!claimed){await endBound(row);return hangup();}row=claimed;
     try{
      const p=await provider.start(row.call_sid!,recordingBaseUrl+'/status?id='+row.id);
@@ -105,7 +110,7 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
      if(saved)row=saved;else{
       // The authenticated in-progress callback may win the same immutable binding first.
       const current=await getRow(db,row.id);
-      if(!current||current.account_id!==row.account_id||current.operation_key!==row.operation_key||current.state!=='recording'||current.end_requested_at||!current.consent_at||!current.start_claimed_at||current.recording_sid!==p.sid||Date.parse(current.provider_started_at??'')!==Date.parse(String(p.start_time)))throw Error('START_NOT_SAVED');
+      if(!current||current.account_id!==row.account_id||current.operation_key!==row.operation_key||current.state!=='recording'||current.end_requested_at||!recordingAuthorized(current)||!current.start_claimed_at||current.recording_sid!==p.sid||Date.parse(current.provider_started_at??'')!==Date.parse(String(p.start_time)))throw Error('START_NOT_SAVED');
       row=current;
      }
      const seconds=Math.floor((now()-Date.parse(String(call.start_time)))/1000),remaining=row.max_total_seconds-seconds;
@@ -122,7 +127,7 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
     const u=new URL(request.url),id=u.searchParams.get('id');if(!uuid(id)||u.searchParams.size!==1||request.method!=='POST'||u.pathname!=='/api/internal/voice/recording/status')return new Response(null,{status:400});
     const f=verifiedTwilioForm((await boundedBytes(request,16384)).toString('utf8'),request.headers.get('x-twilio-signature'),env.TWILIO_AUTH_TOKEN??'',recordingBaseUrl+'/status?id='+id);
     const row=await getRow(db,id);if(!f||!row||f.get('AccountSid')!==row.provider_account_sid||f.get('CallSid')!==row.call_sid||!sid(f.get('RecordingSid'),'RE')||row.recording_sid&&row.recording_sid!==f.get('RecordingSid'))return new Response(null,{status:401});
-    const p=await provider.getRecording(f.get('RecordingSid')!);if(!recordingReceipt(row,p)||!row.consent_at||!row.start_claimed_at)return new Response(null,{status:409});
+    const p=await provider.getRecording(f.get('RecordingSid')!);if(!recordingReceipt(row,p)||!recordingAuthorized(row)||!row.start_claimed_at)return new Response(null,{status:409});
     let current=row;
     if(!current.recording_sid&&['starting','failed'].includes(current.state)){const bound=await transition(db,current,'started',{recordingSid:p.sid,providerStartedAt:new Date(String(p.start_time)).toISOString()});if(!bound)return new Response(null,{status:409});current=bound;}
     if(p.status==='completed'&&!['deleted','expired','deletion_pending'].includes(current.state)){await endBound(current);await transition(db,current,'available',finalRecordingPayload(p));}
@@ -134,7 +139,7 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
    try{
     const token=request.headers.get('authorization')?.replace(/^Bearer /,'');if(!token||!/^[a-f0-9]{64}$/.test(token))return Response.json({stopped:false},{status:401,headers:privateHeaders});
     const b=object(JSON.parse((await boundedBytes(request,2048)).toString('utf8')));if(Object.keys(b).length!==1||!uuid(b.recordingId))return Response.json({stopped:false},{status:400,headers:privateHeaders});
-    let row=await getRow(db,b.recordingId);if(!row||row.stop_token_hash!==sha(token)||!row.call_sid||!row.consent_at||now()-Date.parse(row.created_at)>20*60000)return Response.json({stopped:false},{status:401,headers:privateHeaders});
+    let row=await getRow(db,b.recordingId);if(!row||row.stop_token_hash!==sha(token)||!row.call_sid||!recordingAuthorized(row)||now()-Date.parse(row.created_at)>20*60000)return Response.json({stopped:false},{status:401,headers:privateHeaders});
     const next=await transition(db,row,'stop',{stopTokenHash:sha(token)});if(next)row=next;
     // Required-recording withdrawal ends the whole call. Partial success is not completion.
     const ended=await endBound(row);let stopped=ended;

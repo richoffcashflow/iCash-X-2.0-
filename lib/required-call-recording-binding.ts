@@ -1,3 +1,4 @@
+import {recordingAuthorized} from './direct-call-entry.ts';
 import {object,sha,type RecordingRow} from './required-call-recording.ts';
 import {createRecordingProviders,type RecordingEnv,type RecordingProviders} from './required-call-recording-provider.ts';
 import {recordingTransition,type RecordingDb} from './required-call-recording-service.ts';
@@ -9,7 +10,7 @@ export async function ensureRecordedConversationBinding(token:string,conversatio
  const rows=await db<RecordingRow[]>(`icash_call_recordings?stop_token_hash=eq.${sha(token)}&select=*&limit=2`);
  if(rows.length===0)return false;if(rows.length!==1)throw Error('RECORDING_BINDING_CONFLICT');const row=rows[0];
  if(row.conversation_id){if(row.conversation_id!==conversationId)throw Error('RECORDING_BINDING_CONFLICT');return true;}
- if(!row.consent_at||!row.recording_sid||!row.call_sid||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!['recording','processing','available','expired','deletion_pending','absent','failed'].includes(row.state))throw Error('RECORDING_BINDING_REQUIRED');
+ if(!recordingAuthorized(row)||!row.recording_sid||!row.call_sid||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!['recording','processing','available','expired','deletion_pending','absent','failed'].includes(row.state))throw Error('RECORDING_BINDING_REQUIRED');
  const p=provider??createRecordingProviders(env),c=await p.conversation(conversationId),phone=object(object(c.metadata).phone_call),init=object(c.conversation_initiation_client_data);
  if(c.conversation_id!==conversationId||c.agent_id!==row.agent_id||c.branch_id!==row.branch_id||c.version_id!==row.version_id||c.user_id!=='icash-recorded:'+row.id||init.user_id!==c.user_id||phone.call_sid!==row.call_sid||phone.direction!=='outbound'||phone.external_number!==row.to_phone||phone.agent_number!==row.from_phone)throw Error('CANONICAL_CONVERSATION_BINDING_REQUIRED');
  const bound=await recordingTransition(db,row,'bind_conversation',{conversationId,toolTokenHash:sha(token)});

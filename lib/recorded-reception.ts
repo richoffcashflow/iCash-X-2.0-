@@ -1,3 +1,4 @@
+import {recordingAuthorized,directRecordedInstructions} from './direct-call-entry.ts';
 import {receptionContextPrompt,receptionContextVariables} from './reception-property-context.ts';
 import {createHmac} from 'node:crypto';
 import {inspectReceptionAgent,receptionTarget,receptionPrompt,type ReceptionConfig} from './general-reception.ts';
@@ -55,7 +56,7 @@ export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:un
  const inlineStopMatchesReviewedDefinition=inlineTools.bounded&&inlineTools.shape!=='invalid'&&inlineTools.matchingStopCount<=1&&inlineTools.unrecognizedCount===0;
  if(inlineStopMatchesReviewedDefinition&&Array.isArray(prompt.tools))prompt.tools=prompt.tools.filter((_,index)=>inlineTools.entries[index].kind!=='reviewed_stop');
  const expectedPrompt=propertyReceptionEnabled(c)?receptionContextPrompt(c):receptionPrompt;
- const exactPrompt=prompt.prompt===expectedPrompt+recordedReceptionStopInstruction;
+ const exactPrompt=prompt.prompt===expectedPrompt+(c.entry_policy==='direct_recorded_v1'?directRecordedInstructions:recordedReceptionStopInstruction);
  prompt.tool_ids=[];prompt.prompt=expectedPrompt;
  const base=inspectReceptionAgent({...c,config_hash:''},a,branch,workspaceAbsent);
  const snapshot={main_branch_id:raw.main_branch_id,agent_id:raw.agent_id,branch_id:raw.branch_id,version_id:raw.version_id,conversation_config:raw.conversation_config,platform_settings:raw.platform_settings,workflow:raw.workflow??null,procedures:raw.procedures??null};
@@ -94,9 +95,10 @@ export function receptionConversationMatches(r:RecordedReceptionRow,value:unknow
  const c=object(value),init=object(c.conversation_initiation_client_data),vars=object(init.dynamic_variables),phone=object(object(c.metadata).phone_call),user='icash-recorded-reception:'+r.id;
  return /^conv_[A-Za-z0-9]+$/.test(String(c.conversation_id))&&(!r.conversation_id||r.conversation_id===c.conversation_id)&&c.agent_id===r.agent_id&&c.branch_id===r.branch_id&&c.version_id===r.version_id&&c.user_id===user&&init.user_id===user&&init.branch_id===r.branch_id&&vars.icash_reception_recording_id===r.id&&phone.call_sid===r.call_sid&&phone.direction==='inbound'&&phone.external_number===r.from_phone&&phone.agent_number===r.to_phone;
 }
-export function receptionAudioAvailable(r:RecordedReceptionRow,now=Date.now()){return r.state==='available'&&sid(r.recording_sid,'RE')&&!!r.consent_at&&!!r.start_claimed_at&&!!r.conversation_id&&!!r.call_ended_at&&!r.deleted_at&&Number.isFinite(Date.parse(r.audio_expires_at??''))&&Date.parse(r.audio_expires_at!)>now;}
+export function receptionAudioAvailable(r:RecordedReceptionRow,now=Date.now()){return r.state==='available'&&sid(r.recording_sid,'RE')&&recordingAuthorized(r)&&!!r.start_claimed_at&&!!r.conversation_id&&!!r.call_ended_at&&!r.deleted_at&&Number.isFinite(Date.parse(r.audio_expires_at??''))&&Date.parse(r.audio_expires_at!)>now;}
 export function receptionRecordingCosts(r:RecordedReceptionRow){
  if(r.pricing_policy.version!==recordedReceptionPolicy||!Number.isInteger(r.duration_seconds)||r.duration_seconds!<0||r.duration_seconds!>r.max_total_seconds)throw Error('RECORDING_DURATION_REQUIRED');
  const minutes=Math.ceil(r.duration_seconds!/60),recording=r.provider_recording_price_micros??minutes*2500,storage=Math.ceil(minutes*500*30/28);
- return {recording,storage,speech:20000,total:recording+storage+20000,recordingObserved:r.provider_recording_price_micros!==null};
+ const speech=r.entry_policy==='direct_recorded_v1'?0:20000;
+ return {recording,storage,speech,total:recording+storage+speech,recordingObserved:r.provider_recording_price_micros!==null};
 }

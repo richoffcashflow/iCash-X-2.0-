@@ -1,5 +1,5 @@
 {
-  "buildCommand": "node scripts/check-buyer-search.mjs && node scripts/check-signing-connection.mjs && node scripts/check-text-connection.mjs && node scripts/check-text-ai-config.mjs && node --experimental-strip-types scripts/check-telephony-connection.mjs && pnpm build",
+  "buildCommand": "node scripts/check-buyer-search.mjs && node scripts/check-signing-connection.mjs && node scripts/check-text-connection.mjs && node scripts/check-text-ai-config.mjs && node --experimental-strip-types scripts/check-telephony-connection.mjs && node --experimental-strip-types scripts/prepare-direct-reception.mjs && pnpm build",
   "crons": [
     {
       "path": "/api/billing/reconcile",

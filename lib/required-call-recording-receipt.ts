@@ -17,7 +17,7 @@ export async function recordingPresentation(db:RecordingDb,accountId:string,conv
  let amount:number|null=null;try{if(el.length===1)amount=usdMicros(el[0].amount);}catch{/* Missing/null/invalid receipt stays unknown. */}
  items.push({label:'ElevenLabs AI and model',basis:amount!==null?'observed':'pending',amountMicros:amount});
  items.push({label:'Carrier and streaming',basis:'pending',amountMicros:null});
- items.push({label:'Spoken-consent recognition',basis:'estimated',amountMicros:row.call_sid?20000:null});
+ if(row.entry_policy!=='direct_recorded_v1')items.push({label:'Spoken-consent recognition',basis:'estimated',amountMicros:row.call_sid?20000:null});
  if(row.duration_seconds!==null){const add=recordingAddonCosts(row);items.push({label:'Twilio audio recording',basis:add.recordingObserved?'observed':'estimated',amountMicros:add.recording},{label:'30-day audio storage allocation',basis:'estimated',amountMicros:add.storage});}
  else items.push({label:'Twilio audio recording',basis:'pending',amountMicros:null},{label:'30-day audio storage allocation',basis:'pending',amountMicros:null});
  const manifests=await db<{components:unknown}[]>(`icash_cost_manifests?operation_key=eq.${eq(row.operation_key)}&select=components`);

@@ -22,7 +22,7 @@ export async function settleRecordingGateOnly(db:RecordingDb,provider:RecordingP
  // A verified ended call must not remain dispatching just because its price is pending.
  await db('rpc/icash_note_recorded_gate_terminal','POST',{p_id:row.id,p_account:row.account_id,p_operation:row.operation_key,p_receipt:{sid:c.sid,account_sid:c.account_sid,from:c.from,to:c.to,direction:c.direction,status:c.status,date_created:c.date_created,duration:c.duration}});
  if(typeof c.price!=='string'||!/^-[0-9]+(?:\.[0-9]{1,6})?$|^0(?:\.0{1,6})?$/.test(c.price)||c.price_unit!=='USD')return {status:'held',reason:'terminal_carrier_receipt_required'};
- const price=usdMicros(c.price.replace(/^-/,'') ),speech=row.state==='declined'||c.status==='completed';
+ const price=usdMicros(c.price.replace(/^-/,'') ),speech=row.entry_policy!=='direct_recorded_v1'&&(row.state==='declined'||c.status==='completed');
  const [rate]=await db<{costs_micros:Record<string,number>}[]>(`icash_operation_rates?id=eq.${row.rate_id}&select=costs_micros`);if(!rate)return {status:'held',reason:'reviewed_costs_required'};
  const components=Object.fromEntries(costCategories.map(k=>[k,{amountMicros:rate.costs_micros[k],basis:'estimated',evidenceRef:'Reviewed gate-only operation overhead; '+row.rate_id}]));
  components.elevenlabs={amountMicros:0,basis:'not_applicable',evidenceRef:'No ElevenLabs registration or recording-start attempt for '+row.id};
