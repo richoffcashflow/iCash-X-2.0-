@@ -11,7 +11,7 @@ import {boundedVoiceSmsContext} from './voice-sms-context.ts';
 import {db} from '@/lib/stripe-test';
 import {elevenRequest} from '@/lib/elevenlabs';
 import {buyerCallInstructions,type BuyerCallContext} from './buyer-call-policy.ts';
-import {contactEligibility,callEligibility,type VoicePermission} from './live-dispatch-policy.ts';
+import {contactEligibility,callEligibility,nextContactWindow,type VoicePermission} from './live-dispatch-policy.ts';
 import {sellerFirstMessage,sellerCallPrompt,type SellerRequestContext} from './seller-call-context.ts';
 type Job={id:string;account_id:string;permission_id:string|null;operational_contact_id?:string|null;callback_id:string|null;state:string};
 type Config={approved_voice_ids:string[];enabled:boolean;agent_id:string;phone_number_id:string;agent_config_hash:string;reviewed_until:string;seller_rate_id:string;buyer_rate_id:string|null;max_duration_seconds:number;required_tool_ids:string[]};
@@ -46,7 +46,15 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const suppressed=await db<{phone:string}[]>(`icash_text_suppressions?phone=eq.${encodeURIComponent(p.phone)}&select=phone&limit=1`);if(suppressed.length)return hold('contact_opted_out');
  // This flag is derived exclusively from a fresh server-side database check.
  p.sellerConsentVerified=p.seller_intake_id?await db<boolean>('rpc/icash_seller_voice_permission_current','POST',{p_account:accountId,p_permission:p.id})===true:false;
- const contact=contactEligibility(p);if(!contact.ready){if(contact.reason==='outside_contact_hours'&&!j.callback_id){await db(`icash_voice_jobs?id=eq.${j.id}&state=eq.issued`,'PATCH',{state:'ready',due_at:new Date(Date.now()+30*60000).toISOString()});return {status:contact.reason};}return hold(contact.reason);}
+ const contact=contactEligibility(p);
+ if(!contact.ready){
+  const dueAt=contact.reason==='outside_contact_hours'&&!j.callback_id?nextContactWindow(p):null;
+  if(dueAt){
+   await db(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&state=eq.issued`,'PATCH',{state:'ready',due_at:dueAt,outcome:'Waiting for calling hours'});
+   return {status:contact.reason,dueAt};
+  }
+  return hold(contact.reason);
+ }
  const eligible=p.party==='seller'?callEligibility(p,snapshot.snapshot):null;
  const limited=p.party==='seller'&&eligible&&!eligible.ready&&eligible.reason==='financial_hold'&&p.sellerConsentVerified&&await db<boolean>('rpc/icash_seller_limited_contact','POST',{p_account:accountId,p_screening:p.screening_id})===true;
  if(eligible&&!eligible.ready&&!limited)return hold(eligible.reason);
@@ -107,7 +115,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
   if(!held)throw error;
   return {status:'activation_budget_held'};
  }
- if(!fundedCall)return {status:'waiting_for_daytime_budget'};
+ if(!fundedCall)return {status:process.env.ICASH_FLEXIBLE_VOICE_READY==='true'?'waiting_for_available_credits':'waiting_for_daytime_budget'};
  const claimHold=recordingReleaseHold();if(claimHold)return hold(claimHold);
  const claimed=p.party==='seller'
   ?limited?await db<boolean>('rpc/icash_claim_limited_seller_voice','POST',{p_job:j.id,p_snapshot:snapshot.snapshot}):await db<boolean>('rpc/icash_claim_automatic_offer_voice_job','POST',{p_job:j.id,p_snapshot:snapshot.snapshot,p_offer_price_cents:cashOfferPrice})
