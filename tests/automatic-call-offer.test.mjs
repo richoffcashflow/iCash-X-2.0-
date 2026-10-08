@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {automaticCallOffer,calculateAutomaticCallOffer} from '../lib/automatic-call-offer.ts';
+import {automaticCallOffer,calculateAutomaticCallOffer,offerPricePresentation} from '../lib/automatic-call-offer.ts';
 import {callOfferEvidence,callPayoffEvidence,spokenMoneyAmounts} from '../lib/call-offer-evidence.ts';
 import {automaticOfferGuardrails,automaticOfferGuardrailMatches} from '../lib/automatic-offer-policy.ts';
 import {automaticOfferToolConfig,sellerAgreementToolMatches} from '../lib/seller-agreement-tool.ts';
@@ -16,7 +16,7 @@ for(const ctx of [{...context,address:'Other property'},{...context,snapshot:{..
 const heldContext={...context,snapshot:{...snapshot,raw:{data:{...snapshot.raw.data,estimated_equity_percentage:20,total_estimated_loan_balance:180000}}}};
 const conditional=calculateAutomaticCallOffer(heldContext,{},now);
 assert.equal(conditional.priceCents,10200000);assert.equal(conditional.quoteAllowed,true);assert.equal(conditional.contractAllowed,false);assert.equal(conditional.conditional,true);assert.equal(conditional.payoffVerified,false);
-assert.match(conditional.spokenOffer,/\$102,000 cash, as is, subject to confirming/);
+assert.match(conditional.spokenOffer,/\$102,000 cash, as is\. .*subject to confirming/);
 for(const state of [{conditionPending:true},{factsPending:true},{agreementRevisionRequired:true}])assert.equal(calculateAutomaticCallOffer(context,state,now).quoteAllowed,false);
 assert.equal(calculateAutomaticCallOffer({party:'buyer',buyer:{askingPriceCents:11200000,address}}, {},now).priceCents,11200000,'buyer total returned without a second assignment fee');
 assert.equal(calculateAutomaticCallOffer({party:'buyer'}, {},now).quoteAllowed,false);
@@ -80,3 +80,8 @@ const provider={conversation_id:'conv_fixture',agent_id:row.agent_id,branch_id:r
 assert(receptionLiveConversationMatches(row,provider),'provider may omit initiation metadata during an active call');
 for(const patch of [{user_id:'other'},{version_id:'agtvrsn_other'},{conversation_initiation_client_data:{user_id:'other'}},{metadata:{phone_call:{...provider.metadata.phone_call,external_number:'+12125550999'}}}])assert(!receptionLiveConversationMatches(row,{...provider,...patch}));
 console.log('PASS automatic offers: exact formula, saved acceptance, changed repairs, financial holds, buyer totals, transcript evidence, concurrent updates and live identity. No external contacts.');
+
+assert.deepEqual(offerPricePresentation(15793700),{displayPrice:'$157,937',spokenPrice:'one hundred fifty-seven thousand nine hundred thirty-seven dollars'});
+assert.equal(offerPricePresentation(10200000).spokenPrice,'one hundred two thousand dollars');
+assert.equal(offerPricePresentation(11200001).spokenPrice,'one hundred twelve thousand dollars and one cent');
+assert.throws(()=>offerPricePresentation(0));

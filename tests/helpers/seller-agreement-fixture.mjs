@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {sellerAgreementReceptionPolicyHash,noEmdReceptionPolicyHash,automaticOfferReceptionPolicyHash} from '../../lib/seller-agreement-reception.ts';
+import {sellerAgreementReceptionPolicyHash,noEmdReceptionPolicyHash,legacyAutomaticOfferReceptionPolicyHash,automaticOfferReceptionPolicyHash} from '../../lib/seller-agreement-reception.ts';
 export async function testSellerAgreement(f){
  const {db,q,val,rpc,read,scenario,account,reserve,trans,boundPayload,startPayload}=f;
  await db.exec(`alter table auth.users add email text default 'fixture@example.test',add email_confirmed_at timestamptz default now();
@@ -13,7 +13,7 @@ export async function testSellerAgreement(f){
  await db.exec(read('config/seller-no-emd.sql'));
  const id='11111111-1111-4111-8111-111111111111',date=new Date(Date.now()+14*86400000).toISOString().slice(0,10);
  async function call(party='seller',noEmd=true,automatic=false){
-  const admission=await reserve({context_policy:automatic?'automatic_offer_v5':noEmd?'seller_agreement_v4':'seller_agreement_v3',context_policy_hash:automatic?automaticOfferReceptionPolicyHash:noEmd?noEmdReceptionPolicyHash:sellerAgreementReceptionPolicyHash,context_approval_reference:'Synthetic seller agreement approval',agreement_tool_id:'tool_agreement'});assert(admission.allowed,JSON.stringify(admission));
+  const admission=await reserve({context_policy:automatic==='v6'?'automatic_offer_v6':automatic?'automatic_offer_v5':noEmd?'seller_agreement_v4':'seller_agreement_v3',context_policy_hash:automatic==='v6'?automaticOfferReceptionPolicyHash:automatic?legacyAutomaticOfferReceptionPolicyHash:noEmd?noEmdReceptionPolicyHash:sellerAgreementReceptionPolicyHash,context_approval_reference:'Synthetic seller agreement approval',agreement_tool_id:'tool_agreement'});assert(admission.allowed,JSON.stringify(admission));
   let r=admission.session;await trans('claim_setup');await trans('bounded',boundPayload(r));await trans('bind_call_start',startPayload(r));r=await trans('authorize_recording',{nonceHash:r.nonce_hash,policy:'direct_recorded_v1'});await trans('claim_start');await trans('started',{recordingSid:'RE'+'c'.repeat(32),providerStartedAt:r.recording_authorized_at});
   await q('insert into public.icash_screening_jobs(id,account_id,snapshot,result) values($1,$2,$3,$4)',[id,account,{propertyId:'prop_123'},{property:{legalDescription:'Lot 1 block 2'}}]);
   const terms={address:'45 Oak Road',buyer:'Fixture buyer',state:'TX',inspectionDays:10};

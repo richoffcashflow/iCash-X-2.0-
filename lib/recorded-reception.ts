@@ -1,5 +1,5 @@
 import {recordingAuthorized,directRecordedInstructions} from './direct-call-entry.ts';
-import {automaticOfferGuardrailMatches} from './automatic-offer-policy.ts';
+import {automaticOfferGuardrailMatches,automaticOfferPolicy} from './automatic-offer-policy.ts';
 import {sellerAgreementReceptionEnabled} from './seller-agreement-reception.ts';
 import {sellerAgreementToolMatches} from './seller-agreement-tool.ts';
 import {receptionContextPrompt,receptionContextVariables} from './reception-property-context.ts';
@@ -73,7 +73,7 @@ export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:un
  const base=inspectReceptionAgent({...c,config_hash:''},a,branch,workspaceAbsent);
  const snapshot={main_branch_id:raw.main_branch_id,agent_id:raw.agent_id,branch_id:raw.branch_id,version_id:raw.version_id,conversation_config:raw.conversation_config,platform_settings:raw.platform_settings,workflow:raw.workflow??null,procedures:raw.procedures??null};
  const hash=sha(JSON.stringify(canonical(snapshot)));
- const priceEnforcement=c.context_policy!=='automatic_offer_v5'||automaticOfferGuardrailMatches(object(raw.platform_settings).guardrails);
+ const priceEnforcement=!automaticOfferPolicy(c.context_policy)||automaticOfferGuardrailMatches(object(raw.platform_settings).guardrails,c.context_policy);
  return {safe:exactStop&&exactAgreement&&exactPrompt&&priceEnforcement&&inlineStopMatchesReviewedDefinition&&Object.values(base.checks).every(Boolean)&&hash===c.config_hash,hash,checks:{...base.checks,exactStop,exactAgreement,exactPrompt,priceEnforcement,inlineStopMatchesReviewedDefinition},inlineTools};
 }
 export function recordedReceptionToolMatches(id:string,input:unknown){
