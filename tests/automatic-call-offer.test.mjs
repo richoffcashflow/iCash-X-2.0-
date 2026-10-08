@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {automaticCallOffer,calculateAutomaticCallOffer,offerPricePresentation} from '../lib/automatic-call-offer.ts';
-import {callOfferEvidence,callPayoffEvidence,spokenMoneyAmounts} from '../lib/call-offer-evidence.ts';
+import {callOfferEvidence,callPayoffEvidence,callSellerStatement,spokenMoneyAmounts} from '../lib/call-offer-evidence.ts';
 import {automaticOfferGuardrails,automaticOfferGuardrailMatches} from '../lib/automatic-offer-policy.ts';
 import {automaticOfferToolConfig,sellerAgreementToolMatches} from '../lib/seller-agreement-tool.ts';
 import {receptionLiveConversationMatches} from '../lib/recorded-reception.ts';
@@ -43,8 +43,8 @@ assert.equal((await call({action:'accept_offer',priceCents:3500000,quoteRevision
 verified=false;assert.equal((await call({action:'accept_offer',priceCents:quoted.priceCents,quoteRevision:quoted.quoteRevision})).quoteAllowed,false);
 verified=true;assert.equal((await call({action:'accept_offer',priceCents:quoted.priceCents,quoteRevision:quoted.quoteRevision})).status,'verbally_accepted');
 assert.equal((await call({action:'get_offer'})).priceCents,quoted.priceCents,'return call uses saved accepted amount');
-assert.equal((await call({action:'update_repairs',sellerStatement:'The roof needs replacement.'})).quoteAllowed,false);
-assert.equal((await call({action:'get_offer'})).quoteAllowed,false,'a held change persists');
+assert.equal((await call({action:'update_repairs',sellerStatement:'The roof needs replacement.',repairEstimateCents:null})).priceCents,10200000,'a null optional estimate retains the existing research budget');
+assert.equal((await call({action:'get_offer'})).priceCents,10200000,'saved repair description does not erase researched pricing');
 const revised=await call({action:'update_repairs',sellerStatement:statement,repairEstimateCents:6000000});assert.equal(revised.priceCents,8800000);
 assert.notEqual(revised.quoteRevision,quoted.quoteRevision);
 assert.equal((await call({action:'accept_offer',priceCents:quoted.priceCents,quoteRevision:quoted.quoteRevision})).quoteAllowed,false);
@@ -85,3 +85,15 @@ assert.deepEqual(offerPricePresentation(15793700),{displayPrice:'$157,937',spoke
 assert.equal(offerPricePresentation(10200000).spokenPrice,'one hundred two thousand dollars');
 assert.equal(offerPricePresentation(11200001).spokenPrice,'one hundred twelve thousand dollars and one cent');
 assert.throws(()=>offerPricePresentation(0));
+
+// Exact request shape from the failed call: provider emitted null and summarized
+// the repair answer. Save the full actual transcript and retain research pricing.
+current=structuredClone(context);
+const actual='So it needs a new roof. It is basically... Yeah, it just needs a new roof and new AC.';
+const transcript={transcript:[{role:'agent',message:'What repairs or updates does the property need?'},{role:'user',message:actual}]};
+const repaired=await automaticCallOffer(token,{action:'update_repairs',conversationId,sellerStatement:'Needs a new roof and new AC.',repairEstimateCents:null},{...d,resolveStatement:async i=>callSellerStatement(transcript,i),verifyInput:async i=>callOfferEvidence(transcript,i)});
+assert.equal(repaired.priceCents,10200000);assert.equal(current.offerState.sellerStatement,actual);assert.equal(current.offerState.conditionPending,false);
+assert.equal(current.offerState.repairEstimateCents,undefined,'no invented seller repair budget');
+const wrong=await automaticCallOffer(token,{action:'update_repairs',conversationId,sellerStatement:'Repairs are sixty thousand dollars.',repairEstimateCents:6000000},{...d,resolveStatement:async i=>callSellerStatement(transcript,i),verifyInput:async i=>callOfferEvidence(transcript,i)});
+assert.equal(wrong.quoteAllowed,false,'canonical transcript cannot manufacture an unspoken dollar amount');
+console.log('PASS real provider null-estimate request and paraphrased repair transcript regression.');

@@ -4,7 +4,7 @@ import {bindSellerAgreementCall} from '@/lib/seller-agreement-binding';
 import {automaticCallOffer,blockedOffer} from '@/lib/automatic-call-offer';
 import {sellerListingEvidence} from '@/lib/seller-listing';
 import {sellerPayoffEvidence} from '@/lib/seller-payoff';
-import {callOfferEvidence,callPayoffEvidence} from '@/lib/call-offer-evidence';
+import {callOfferEvidence,callPayoffEvidence,callSellerStatement} from '@/lib/call-offer-evidence';
 import {createRecordedReceptionProviders} from '@/lib/recorded-reception-provider';
 import {sellerAgreementAction,sellerAgreementFailure} from '@/lib/seller-agreement-service';
 import {sellerAgreementInput} from '@/lib/seller-agreement-flow';
@@ -24,7 +24,7 @@ export async function POST(request:Request){
   if(process.env.ICASH_LIVE_WORK_READY!=='true'||process.env.ICASH_RECORDING_RECEIPTS_READY!=='true')return NextResponse.json(blockedOffer('unavailable','The live property workflow is not currently available.'),{status:409,headers});
   let evidence:Promise<unknown>|undefined;
   const transcript=(i:Record<string,unknown>)=>evidence??=createRecordedReceptionProviders(process.env).conversation(String(i.conversationId));
-  const d={db,bind:bindSellerAgreementCall,verifyInput:async(i:Record<string,unknown>)=>callOfferEvidence(await transcript(i),i),verifyPayoffChange:async(i:Record<string,unknown>)=>callPayoffEvidence(await transcript(i),i),verifyListingStatus:async(i:Record<string,unknown>)=>sellerListingEvidence(await transcript(i),i),verifyPayoffFacts:async(i:Record<string,unknown>)=>sellerPayoffEvidence(await transcript(i),i)};
+  const d={db,bind:bindSellerAgreementCall,resolveStatement:async(i:Record<string,unknown>)=>callSellerStatement(await transcript(i),i),verifyInput:async(i:Record<string,unknown>)=>callOfferEvidence(await transcript(i),i),verifyPayoffChange:async(i:Record<string,unknown>)=>callPayoffEvidence(await transcript(i),i),verifyListingStatus:async(i:Record<string,unknown>)=>sellerListingEvidence(await transcript(i),i),verifyPayoffFacts:async(i:Record<string,unknown>)=>sellerPayoffEvidence(await transcript(i),i)};
   if(input.action!=='confirm_and_send'&&input.action!=='status')return NextResponse.json(await automaticCallOffer(token,input,d),{headers});
   const agreement=sellerAgreementInput.parse(input);
   if(process.env.DOCUSEAL_MODE!=='live')return NextResponse.json({sent:false,status:'unavailable',instruction:'Live agreement delivery is not ready.'},{status:409,headers});

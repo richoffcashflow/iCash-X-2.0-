@@ -10,7 +10,7 @@ const cents=z.number().int().safe().nonnegative().max(100000000000);
 export const automaticOfferInput=z.discriminatedUnion('action',[
  z.object({action:z.literal('get_offer'),conversationId}).strict(),
  z.object({action:z.literal('accept_offer'),conversationId,priceCents:cents.positive(),quoteRevision:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),
- z.object({action:z.literal('update_repairs'),conversationId,sellerStatement:z.string().trim().min(3).max(1000),repairEstimateCents:cents.optional()}).strict(),
+ z.object({action:z.literal('update_repairs'),conversationId,sellerStatement:z.string().trim().min(3).max(1000),repairEstimateCents:cents.nullish().transform(v=>v??undefined)}).strict(),
  z.object({action:z.literal('report_change'),conversationId,sellerStatement:z.string().trim().min(1).max(1000)}).strict(),
 ]);
 export type AutomaticOfferState={listedWithAgent?:boolean;listingStatement?:string;payoffReport?:SellerPayoffReport;repairEstimateCents?:number;conditionPending?:boolean;factsPending?:boolean;payoffPending?:boolean;payoffStatement?:string;contractBlocked?:boolean;acceptanceConditional?:boolean;agreementRevisionRequired?:boolean;sellerStatement?:string;acceptedPriceCents?:number|null;quotedPriceCents?:number|null;quoteRevision?:string;snapshotHash?:string};
@@ -92,7 +92,7 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
 }
 
 type Db=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
-type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;verifyInput:(input:Record<string,unknown>)=>Promise<boolean>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyListingStatus?:(input:Record<string,unknown>)=>Promise<boolean|null>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
+type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;resolveStatement?:(input:Record<string,unknown>)=>Promise<string|null>;verifyInput:(input:Record<string,unknown>)=>Promise<boolean>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyListingStatus?:(input:Record<string,unknown>)=>Promise<boolean|null>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
 export async function automaticCallOffer(token:string,input:unknown,d:Dependencies){
  const i=automaticOfferInput.parse(input),hash=sha(token);await d.bind(token,i.conversationId);
  const context=await d.db<CallOfferContext|null>('rpc/icash_call_offer_context','POST',{p_hash:hash,p_conversation:i.conversationId});
@@ -102,6 +102,7 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
  const state:AutomaticOfferState={...context.offerState},snapshotHash=sha(JSON.stringify(canonical(context.snapshot))),now=(d.now??Date.now)();
  if(i.action==='accept_offer'&&!await d.verifyInput(i))return blockedOffer('acceptance_confirmation_required','Please confirm that the exact cash price we just discussed works for you.');
  if(i.action==='update_repairs'||i.action==='report_change'){
+  const actual=await d.resolveStatement?.(i);if(actual)i.sellerStatement=actual;
   if(context.pendingAgreement)state.agreementRevisionRequired=true;
   const verified=await d.verifyInput(i);state.sellerStatement=verified?i.sellerStatement:'Statement confirmation required';state.acceptedPriceCents=null;
   if(i.action==='report_change'){
@@ -123,7 +124,11 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
    }
    }
   }
-  else {state.conditionPending=!verified||i.repairEstimateCents===undefined;if(verified&&i.repairEstimateCents!==undefined)state.repairEstimateCents=i.repairEstimateCents;}
+  else {
+   let researchRepairs:number|null=null;try{researchRepairs=runScreeningJob(context.snapshot,now).property.repairs.baselineCents;}catch{}
+   state.conditionPending=!verified||(i.repairEstimateCents===undefined&&state.repairEstimateCents===undefined&&researchRepairs===null);
+   if(verified&&i.repairEstimateCents!==undefined)state.repairEstimateCents=i.repairEstimateCents;
+  }
  }
  const offer=calculateAutomaticCallOffer(context,state,now);
  const contractBlocked=!offer.quoteAllowed||('contractAllowed' in offer&&offer.contractAllowed===false);

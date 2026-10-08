@@ -6,7 +6,7 @@ const accountId='48dfb798-8c1a-404f-88c0-c396cc067062';
 const sessionId='b2688521-5790-4761-89d9-b0cf7ef71ce6';
 const conversationId='conv_5001m4ejmgvsfyyakvb2cy8myw9r';
 const callSid='CA114c9e2c6d3b43b56340f1afd7954b34';
-const provider='owner_call_20261008_2018';
+const provider='owner_call_20261008_2018_full';
 if(process.env.VERCEL_ENV!=='production'||process.env.VERCEL_GIT_COMMIT_REF!=='main'
   ||Date.now()>Date.parse('2026-10-09T17:30:00Z'))process.exit(0);
 try{
@@ -33,7 +33,7 @@ try{
   }
   return value;
  }));
- const turns=Array.isArray(conversation.transcript)?conversation.transcript.slice(0,60).map(t=>({role:t.role,message:t.message,time:t.time_in_call_secs,interrupted:t.interrupted,toolCalls:t.tool_calls,toolResults:t.tool_results,feedback:t.feedback})):[];
+ const turns=Array.isArray(conversation.transcript)?conversation.transcript.slice(0,160).map(t=>({role:t.role,message:t.message,time:t.time_in_call_secs,interrupted:t.interrupted,toolCalls:t.tool_calls,toolResults:t.tool_results,feedback:t.feedback})):[];
  const metadata=conversation.metadata??{};
  const result=redact({accountId,sessionId,conversationId,callSid,status:conversation.status,
   terminationReason:metadata.termination_reason,error:metadata.error,warnings:metadata.warnings,
