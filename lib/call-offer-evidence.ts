@@ -51,3 +51,18 @@ export function callPayoffEvidence(value:unknown,input:Record<string,unknown>){
  // Only sellerPayoffEvidence can supply amounts or clear that pending state.
  return true;
 }
+
+/** Model summaries are not evidence. Bind material updates to the complete latest
+ * caller turn, preserving negations and amounts before the ordinary validators. */
+export function callSellerStatement(value:unknown,input:Record<string,unknown>):string|null{
+ if(!['update_repairs','report_change'].includes(String(input.action)))return null;
+ const rows=object(value).transcript;if(!Array.isArray(rows))return null;
+ const turns=rows.map(object).filter(t=>['user','agent'].includes(String(t.role))&&typeof t.message==='string');
+ const index=turns.findLastIndex(t=>t.role==='user');if(index<0)return null;
+ const latest=String(turns[index].message).trim();if(!latest||latest.length>1000)return null;
+ if(input.action==='update_repairs'){
+  const previous=String(turns.slice(0,index).findLast(t=>t.role==='agent')?.message??'');
+  if(!/\b(repair|repairs|roof|foundation|renovation|rehab|ac|air condition|hvac|plumbing|electrical|damage|condition|fix|budget)\b/i.test(latest+' '+previous))return null;
+ }
+ return latest;
+}
