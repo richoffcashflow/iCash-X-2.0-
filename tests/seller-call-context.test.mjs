@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {boundedSellerPriorCalls,returningSellerName,ownershipAlreadyConfirmed,sellerFirstMessage,sellerCallPrompt,safeInboundPropertyContext,sellerCallContext} from '../lib/seller-call-context.ts';
+import {boundedSellerPriorCalls,returningSellerName,ownershipAlreadyConfirmed,sellerFirstMessage,sellerCallPrompt,safeInboundPropertyContext,sellerCallContext,compactSellerProgress} from '../lib/seller-call-context.ts';
 import {sellerAgreementReceptionVariables} from '../lib/seller-agreement-reception.ts';
 import {inboundInitiation} from '../lib/inbound-voice.ts';
 const msg=(body,direction='incoming')=>({id:'m',body,direction,at:'2026-10-02T12:00:00Z'});
@@ -51,7 +51,7 @@ assert(JSON.stringify(progress.priorCalls).includes('A roof and AC.'));
 const incomingFollowup=sellerAgreementReceptionVariables({status:'matched',address:'45 Oak Road',returningName:'Pop',priorCalls:longCall});
 assert(incomingFollowup.icash_property_greeting.startsWith("Hi Keyshawn. Let's continue"));
 assert.equal(JSON.parse(incomingFollowup.icash_property_context).ownershipAlreadyConfirmed,true);
-assert(JSON.parse(incomingFollowup.icash_property_context).priorCalls.length===1);
+assert(JSON.parse(incomingFollowup.icash_property_context).priorExchanges.length>0);
 assert(ownershipAlreadyConfirmed({threadId:'t',messages:[msg('Is this the owner of 45 Oak Road?','outgoing'),msg('Y'),msg('yes ')]},'45 Oak Road'));
 
 assert(!ownershipAlreadyConfirmed({threadId:'t',messages:[msg('Is this the owner of 45 Oak Road Extension?','outgoing'),msg('Yes.')]},'45 Oak Road'));
@@ -70,3 +70,5 @@ for(const question of ['AI for Fixture Homes. Do you own 45 Oak Road? Reply STOP
  assert(sellerFirstMessage({...context,history:variant}).includes('good time to talk about 45 Oak Road'));
  assert(!ownershipAlreadyConfirmed({...variant,messages:[...variant.messages,msg('Wrong property.')]},'45 Oak Road'));
 }
+
+const packed=compactSellerProgress(progress);assert(JSON.stringify(packed).length<6000);assert(JSON.stringify(packed).includes('A roof and AC.'));assert(JSON.stringify(packed).includes('Keyshawn Russell'));assert(!JSON.stringify(packed).includes('completedAt'));

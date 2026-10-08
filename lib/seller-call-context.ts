@@ -67,6 +67,27 @@ export function sellerConversationProgress(address:string,sms:unknown,calls:unkn
  const history=combinedHistory(context);
  return {...context,returningName:returningSellerName(history),ownershipAlreadyConfirmed:ownershipAlreadyConfirmed(history,address)};
 }
+/** Keep whole seller answers with their question, without transport IDs or
+ * repeated agent filler. Original transcripts remain in the database. */
+export function compactSellerProgress(progress:{history:VoiceSmsContext|null;priorCalls:SellerPriorCall[]}){
+ const exchanges=(messages:VoiceSmsContext['messages'])=>messages.flatMap((turn,index)=>{
+  if(turn.direction!=='incoming'||!/[a-z0-9]/i.test(turn.body))return [];
+  const question=messages.slice(0,index).findLast(m=>m.direction==='outgoing')?.body??'';
+  return [{question,answer:turn.body}];
+ });
+ const bounded=(pairs:{question:string;answer:string}[],budget:number)=>{
+  const selected:typeof pairs=[];let used=2;
+  // Latest answers win when space is tight, with qualification pairs retained
+  // ahead of conversational filler. Never cut off half an answer or correction.
+  const ordered=pairs.map((pair,index)=>({pair,index,priority:/\b(owner|name|repair|condition|mortgage|lien|tax|debt|sell|selling|clos(?:e|ing)|occup|vacant|price|offer|agent|listed|inspection)\b/i.test(pair.question)?1:0})).sort((a,b)=>b.priority-a.priority||b.index-a.index);
+  const keep=new Set<number>();
+  for(const item of ordered){const size=JSON.stringify(item.pair).length+1;if(used+size<=budget){keep.add(item.index);used+=size;}}
+  pairs.forEach((pair,index)=>{if(keep.has(index))selected.push(pair);});return selected;
+ };
+ const recentSms=bounded(exchanges(progress.history?.messages??[]),1500);
+ const priorExchanges=bounded(progress.priorCalls.slice().reverse().flatMap(call=>exchanges(call.messages)),4300);
+ return {recentSms,priorExchanges};
+}
 export type SellerRequestContext={name:string;submittedAt:string};
 function sellerRequest(value:SellerRequestContext|undefined){
  if(!value||!Number.isFinite(Date.parse(value.submittedAt))||Date.parse(value.submittedAt)>Date.now())return null;
