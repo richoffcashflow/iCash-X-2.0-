@@ -28,5 +28,5 @@ const {SmsRouteReviewCard}=await import('data:text/javascript;base64,'+Buffer.fr
 const html=renderToStaticMarkup(React.createElement(SmsRouteReviewCard,{item:{message_id:messageId,revision:7,recipient:'+12145550123',body:'<script>unsafe</script>',created_at:'2026-10-07',needs_review:true,candidates:[{threadId:messageId,screeningId:messageId,address:'2149 Arden Rd'}],attachments:[{url:'https://api.contiguity.com/attachments/fixture'},{url:'javascript:alert(1)'},{url:'https://untrusted.invalid/private'}]},onOpen:()=>{},onHandled:()=>{}}));
 assert.ok(html.includes('&lt;script&gt;unsafe&lt;/script&gt;'));assert.ok(!html.includes('<script>'));
 assert.ok(html.includes('https://api.contiguity.com/attachments/fixture'));assert.ok(!html.includes('href="javascript:'));assert.ok(!html.includes('https://untrusted.invalid'));
-assert.ok(html.includes('2149 Arden Rd'));assert.ok(html.includes('Reviewed, allow new replies'));
+assert.ok(html.includes('2149 Arden Rd'));assert.ok(html.includes('Mark reviewed'));
 console.log('SMS review actual React render: escaped quotes, permitted attachment links only, property links, and clear hold-release action passed.');

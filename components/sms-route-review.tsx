@@ -11,15 +11,14 @@ export function SmsRouteReviewCard({item,onHandled,onOpen}:{item:SmsRouteReview;
   }catch(e){setError(e instanceof Error?e.message:'Could not save. Refresh and try again.');}
   finally{pending.current=false;setBusy(false);}
  }
- return <article><p>A message from {item.recipient} could refer to more than one property.</p><blockquote className="reply-quote">{item.body||'Attachment-only message'}</blockquote>
+ const phone=item.recipient.replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3');
+ return <article className="sms-review-card"><p className="sms-review-explanation">{item.needs_review?'This number is linked to several leads. Review the reply before the bot continues.':'The property is now identified. This earlier reply still needs a quick review.'}</p><blockquote className="reply-quote"><span className="sms-review-sender">Reply from {phone}</span>{item.body||'Attachment-only message'}</blockquote>
   {item.attachments?.map((attachment,index)=>{
    let safe=false;try{const url=new URL(attachment.url);safe=url.protocol==='https:'&&url.hostname==='api.contiguity.com'&&url.pathname.startsWith('/attachments/')&&!url.username&&!url.password;}catch{}
    return safe?<p key={index}><a href={attachment.url} target="_blank" rel="noopener noreferrer">View attachment {index+1}</a></p>:<p key={index}>Attachment held for review. Check the original attachment before releasing this hold.</p>;
   })}
-  <p>This message is saved without a property assignment. Review the conversations below before preparing any reply.</p>
-  <ul>{item.candidates.map(c=><li key={c.threadId}><button type="button" onClick={()=>onOpen(c.screeningId)}>{c.address||'Open property conversation'}</button></li>)}</ul>
-  <p>{item.needs_review?'New outgoing texts to this number are on hold until every unresolved message is reviewed.':'The sender has since identified a property. Review this earlier message separately.'}</p>
-  <button type="button" disabled={busy} onClick={()=>void reviewed()}>{busy?'Saving…':'Reviewed, allow new replies'}</button>
-  <small>Reviewing sends nothing, does not assign these words to a property, and keeps existing manual controls and opt-outs in place.</small>{error&&<p role="alert">{error}</p>}
+  {item.candidates.length>0&&<div className="sms-review-conversations"><span>Related conversations</span><ul>{item.candidates.map(c=><li key={c.threadId}><button type="button" onClick={()=>onOpen(c.screeningId)}><span>{c.address||'Property conversation'}</span><span className="sms-review-view">View</span></button></li>)}</ul></div>}
+  {item.needs_review&&<p className="sms-review-hold">New texts to this number stay paused until these replies are reviewed.</p>}
+  <div className="sms-review-actions"><button type="button" disabled={busy} onClick={()=>void reviewed()}>{busy?'Saving…':'Mark reviewed'}</button><small>No message is sent.</small></div>{error&&<p role="alert">{error}</p>}
  </article>;
 }
