@@ -33,6 +33,7 @@ for(const scenario of ['ok','claim_denied','changed_tool','source_changed']){
    value={inboundConfigId:'candidate',outboundReview:body.p_outbound_review};
   }else if(u.pathname.endsWith('/settings'))value={webhooks:{post_call_webhook_id:null}};
   else if(u.pathname.endsWith('/tools/tool_stop'))value=stop;
+  else if(u.pathname.endsWith('/tools/tool_agreement'))value=tool;
   else if(u.pathname.endsWith('/tools')&&init.method==='POST'){
    assert.deepEqual(body.tool_config,sellerAgreementToolConfig);tool={id:'tool_agreement',tool_config:structuredClone(body.tool_config)};
    if(scenario==='changed_tool')tool.tool_config.api_schema.url='https://unexpected.invalid';value=tool;
