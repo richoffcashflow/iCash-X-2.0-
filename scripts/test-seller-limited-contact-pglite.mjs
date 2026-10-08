@@ -57,12 +57,18 @@ try{
  const t=await one('select * from icash_text_threads where account_id=$1 and retired_at is null',[account]);
 
  await pg.exec(read('config/seller-limited-contact.sql'));
+ await pg.exec(read('config/seller-title-review-contact.sql'));
  await q("insert into icash_seller_controls(id,enabled,limited_contact_enabled) values(1,true,false)");
  await q("update icash_screening_jobs set snapshot=jsonb_set(snapshot,'{sellerRequest}',jsonb_build_object('id',$2::text)),result=$3,completed_at=now() where id=$1",[screening,lead,{financialCheck:{status:"hold"},property:{financialScreening:{status:"payoff_may_exceed_budget"}},offerAuthorized:false}]);
  const limited=()=>rpc('icash_seller_limited_contact',{p_account:account,p_screening:screening});
  assert.equal(await limited(),false,'disabled until deployment');
  await q('update icash_seller_controls set limited_contact_enabled=true');
  assert.equal(await limited(),true);
+ for(const [status,expected] of [['title_review_needed',true],['payoff_may_exceed_budget',true],['unknown',false],['missing',false]]){
+  await isolated(async()=>{await q("update icash_screening_jobs set result=jsonb_set(result,'{property,financialScreening,status}',to_jsonb($1::text)) where id=$2",[status,screening]);assert.equal(await limited(),expected,status);});
+ }
+ await isolated(async()=>{await q("update icash_screening_jobs set result=jsonb_set(result,'{offerAuthorized}','true') where id=$1",[screening]);assert.equal(await limited(),false,'no offer authorization exception');});
+ await isolated(async()=>{await q("update icash_screening_jobs set completed_at=now()-interval '25 hours' where id=$1",[screening]);assert.equal(await limited(),false,'fresh screening required');});
  assert.equal(await rpc('icash_seller_limited_contact',{p_account:other,p_screening:screening}),false,'tenant isolated');
  await isolated(async()=>{await q("update icash_seller_matches set assigned_at=now()-interval '25 hours'");assert.equal(await limited(),false,'window expires');});
  await isolated(async()=>{await q("update icash_seller_intakes set ai_consented=false");assert.equal(await limited(),false,'consent required');});
