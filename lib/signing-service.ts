@@ -14,7 +14,7 @@ async function request(path:string,body?:unknown,testMode=false,method='POST'){
  if(!r.ok)throw new Error('Signing provider request failed. Do not resend until its status is checked.');return r;
 }
 const numericId=(id:unknown)=>String(z.coerce.number().int().positive().safe().parse(id));
-export async function sendForSignatures(i:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:SigningKind;signers:Signer[];autoSignature?:string}){
+export async function sendForSignatures(i:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:SigningKind;signers:Signer[];autoSignature?:string;phoneLinkOnly?:boolean}){
  if(!process.env.DOCUSEAL_API_KEY&&!process.env.DOCUSEAL_TEST_API_KEY)throw new Error('Signing setup is not finished.');
  const [deal]=await db<{terms:unknown;stage:string}[]>(`icash_deal_files?id=eq.${i.dealId}&account_id=eq.${i.accountId}&select=terms,stage`);
  const [identity]=await db<{principal:string}[]>(`icash_customer_identities?account_id=eq.${i.accountId}&select=principal`);
@@ -61,7 +61,7 @@ export async function sendForSignatures(i:{accountId:string;userId:string;custom
   const send=async()=>{
    signingReadiness(i.kind,dealTermsSchema.parse(envelope.terms),i.signers,identity.principal,deal.stage);
    if(i.autoSignature)await db('icash_signature_authorizations','POST',{envelope_id:envelope.id,account_id:i.accountId,actor_user_id:i.userId,terms_hash:envelope.terms_hash,signature_text:i.autoSignature,expires_at:new Date(Math.min(Date.now()+30*86400000,Date.parse(template.reviewed_until))).toISOString()});
-   const raw=await (await request('submissions',{template_id:Number(numericId(template.provider_template_id)),order:'preserved',send_email:true,send_sms:false,submitters:recipients.map((r,n)=>({name:r.name,...(r.email?{email:r.email}:{}),...('phone' in r&&r.phone?{phone:r.phone,send_email:false,send_sms:true,require_phone_2fa:true}:{}),role:r.placeholder_name,order:n,external_id:`${envelope.id}:${r.id}`,metadata:{terms_hash:envelope.terms_hash},require_email_2fa:!('phone' in r&&r.phone),fields:n===0?Object.entries(values).map(([k,v])=>({name:template.field_map[k],default_value:v,readonly:true})):[]}))},testMode)).json();
+   const raw=await (await request('submissions',{template_id:Number(numericId(template.provider_template_id)),order:'preserved',send_email:true,send_sms:false,submitters:recipients.map((r,n)=>({name:r.name,...(r.email?{email:r.email}:{}),...('phone' in r&&r.phone?{phone:r.phone,send_email:false,send_sms:i.phoneLinkOnly!==true,require_phone_2fa:true}:{}),role:r.placeholder_name,order:n,external_id:`${envelope.id}:${r.id}`,metadata:{terms_hash:envelope.terms_hash},require_email_2fa:!('phone' in r&&r.phone),fields:n===0?Object.entries(values).map(([k,v])=>({name:template.field_map[k],default_value:v,readonly:true})):[]}))},testMode)).json();
    if(!Array.isArray(raw)||raw.length!==recipients.length||raw.some(r=>r.submission_id!==raw[0].submission_id))throw new Error('Signature response needs review.');
    const providerId=numericId(raw[0].submission_id);
    await db(`icash_signing_envelopes?id=eq.${envelope.id}&state=eq.creating`,'PATCH',{provider_id:providerId,state:'awaiting_counterparty',provider_status:'Created'});

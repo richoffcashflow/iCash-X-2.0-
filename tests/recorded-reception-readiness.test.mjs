@@ -109,7 +109,7 @@ test('inline diagnostics are fixed, bounded, redacted classifications rather tha
  const result=(await inspect(f)).result,b=result.branches[0];
  assert.equal(b.providerChecksPass,false);assert.equal(b.inlineTools.bounded,false);assert.equal(b.inlineTools.count,10);assert.equal(b.inlineTools.entries.length,8);assert.equal(b.inlineTools.unrecognizedCount,8);assert(!JSON.stringify(result).includes(sentinel));
  for(const entry of b.inlineTools.entries)assert.deepEqual(Object.keys(entry).sort(),['definitionMatches','kind','stopNameMatches','type','wrappedDefinitionPresent']);
- const service=readFileSync('lib/recorded-reception-service.ts','utf8');assert.match(service,/inspectRecordedReceptionAgent\(c,agent,found\[0\],receptionWorkspacePostcallAbsent\(workspace\),tool\)\.safe/);
+ const service=readFileSync('lib/recorded-reception-service.ts','utf8');assert.match(service,/inspectRecordedReceptionAgent\(c,agent,found\[0\],receptionWorkspacePostcallAbsent\(workspace\),tool,agreementTool\)\.safe/);
  const ui=readFileSync('app/owner-reception/recorded-readiness/readiness.tsx','utf8');assert.match(ui,/Inline tool evidence/);assert.match(ui,/validInline\(b.inlineTools\)/);
 });
 

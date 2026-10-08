@@ -1,0 +1,21 @@
+import {createHash} from 'node:crypto';
+import {sellerOfferReceptionPrompt,sellerOfferReceptionVariables} from './seller-offer-reception.ts';
+import {buyerReceptionGreeting} from './buyer-reception-context.ts';
+import {sellerAgreementFlowInstructions} from './seller-agreement-flow.ts';
+import {object} from './required-call-recording.ts';
+export const sellerAgreementReceptionPolicy='seller_agreement_v3';
+export const sellerAgreementReceptionPrompt=sellerOfferReceptionPrompt
+ .replace('You have no SMS, email, signing, payment or scheduling tool in this incoming session; never claim you sent a package, saved an appointment, accepted a buyer, signed or received money.','Only a matched seller can use the call-bound seller agreement tool. Buyer inquiries have no package-sending, signing, payment or scheduling tool. Never claim delivery, an appointment, buyer acceptance, a signature or payment without the corresponding verified result.')
+ .replace('INBOUND CAPABILITIES: You may explain the proposal and record the seller response in this conversation. You cannot send a contract, book a callback or claim a saved agreement in this call. If they accept, confirm the proposed price and say the agreement needs to be prepared for review. Never claim a successful handoff, delivery or signature without a tool result.','INBOUND CAPABILITIES: For the exact matched seller only, icash_seller_agreement can prepare/text the purchase agreement after the closing confirmations and check provider-verified signature status. Use only server results. It cannot sign for anyone, accept a buyer, take payment or book an appointment. When purchaseTerms includes missing information, obtain or arrange that specific information before promising an agreement. Only use an existing pending agreement at its exact price and terms.')
+ +sellerAgreementFlowInstructions;
+export const sellerAgreementReceptionPolicyHash=createHash('sha256').update(JSON.stringify({policy:sellerAgreementReceptionPolicy,greeting:buyerReceptionGreeting,prompt:sellerAgreementReceptionPrompt})).digest('hex');
+export function sellerAgreementReceptionEnabled(c:Record<string,unknown>){return c.context_policy===sellerAgreementReceptionPolicy&&c.context_policy_hash===sellerAgreementReceptionPolicyHash&&typeof c.context_approval_reference==='string'&&c.context_approval_reference.trim().length>=10&&/^tool_[A-Za-z0-9]+$/.test(String(c.agreement_tool_id));}
+export function sellerAgreementReceptionVariables(value:unknown,now=Date.now()){
+ const base=sellerOfferReceptionVariables(value,now),safe=JSON.parse(base.icash_property_context);
+ if(safe?.status!=='matched')return base;
+ const t=object(object(value).purchaseTerms),pending=object(object(value).pendingAgreement);
+ const money=(v:unknown)=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0?v:null;
+ const purchaseTerms={earnestCents:money(t.earnestCents),inspectionDays:Number.isInteger(t.inspectionDays)&&Number(t.inspectionDays)>=0&&Number(t.inspectionDays)<=90?t.inspectionDays:10,closingDate:typeof t.closingDate==='string'?t.closingDate:'',escrowAgent:typeof t.escrowAgent==='string'?t.escrowAgent.slice(0,200):'',legalDescriptionAvailable:t.legalDescriptionAvailable===true};
+ const agreed=money(pending.priceCents);
+ return {...base,icash_property_context:JSON.stringify({...safe,purchaseTerms,pendingAgreement:agreed&&typeof pending.closingDate==='string'?{priceCents:agreed,closingDate:pending.closingDate}:null})};
+}

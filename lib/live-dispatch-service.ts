@@ -1,3 +1,4 @@
+import {sellerContractToolId} from './seller-contract-tool.ts';
 import {sellerOfferPresentation} from './seller-offer-presentation.ts';
 import {VoiceActivationBudgetError} from './voice-budget-failure.ts';
 import {limitedSellerPrompt} from './seller-limited-contact.ts';
@@ -95,10 +96,13 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const buyerKind=identity.company_name?.trim()?'company' as const:'individual' as const;
  const request=p.party==='seller'&&object(snapshot.snapshot).sellerRequest?await db<SellerRequestContext|null>('rpc/icash_seller_call_request','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone}):null;
  const closing=!limited&&p.party==='seller'&&recordedReview.contractToolId?await loadSellerClosingContext(db,accountId,p.screening_id,p.phone,ceiling):null;
+ const agreementToolsEnabled=!!recordedReview.contractToolId&&recordedReview.contractToolId!==sellerContractToolId;
+ const [purchaseDraft]=agreementToolsEnabled&&p.party==='seller'?await db<{terms:Record<string,unknown>}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&stage=eq.draft&select=terms&limit=1`):[];
+ const purchaseTerms=purchaseDraft?{earnestCents:purchaseDraft.terms.earnestCents??null,inspectionDays:purchaseDraft.terms.inspectionDays??10,closingDate:purchaseDraft.terms.closingDate??'',escrowAgent:purchaseDraft.terms.escrowAgent??''}:null;
  const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext,request:request??undefined};
  // Validate the complete opening/context before reserving credits or dialing.
  let sellerGreeting:string|undefined,sellerPrompt:string|undefined;
- if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext,true);sellerPrompt=limited?limitedSellerPrompt(address,identity.principal,account.assistant_name):sellerCallPrompt(sellerContext,ceiling,closing,!!recordedReview.contractToolId,cashOfferPrice,sellerOfferPresentation(snapshot.snapshot,address));}catch{return hold('property_context_required');}}
+ if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext,true);sellerPrompt=limited?limitedSellerPrompt(address,identity.principal,account.assistant_name):sellerCallPrompt(sellerContext,ceiling,closing,!!recordedReview.contractToolId,cashOfferPrice,sellerOfferPresentation(snapshot.snapshot,address),agreementToolsEnabled,purchaseTerms);}catch{return hold('property_context_required');}}
  const operationKey=`voice:${j.id}`;
  const reserveHold=recordingReleaseHold();if(reserveHold)return hold(reserveHold);
  const reservationInput={p_account:accountId,p_job:j.id,p_rate:rateId,p_permission_until:p.permission_until,p_financial_checked_at:eligible?.ready?new Date(eligible.screening.financialCheck.checkedAt).toISOString():null,p_financial_eligible:eligible?.ready&&eligible.screening.financialCheck.status==='eligible'};

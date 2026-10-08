@@ -1,4 +1,6 @@
 import {recordingAuthorized,directRecordedInstructions} from './direct-call-entry.ts';
+import {sellerAgreementReceptionEnabled} from './seller-agreement-reception.ts';
+import {sellerAgreementToolMatches} from './seller-agreement-tool.ts';
 import {receptionContextPrompt,receptionContextVariables} from './reception-property-context.ts';
 import {createHmac} from 'node:crypto';
 import {inspectReceptionAgent,receptionTarget,receptionPrompt,type ReceptionConfig} from './general-reception.ts';
@@ -49,10 +51,19 @@ export function recordedReceptionInlineToolEvidence(input:unknown,stopToolId:str
 }
 /** Reuse every existing receptionist safety check after removing only the one
  * independently verified stop capability. Fingerprint the ORIGINAL object. */
-export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:unknown,branch:unknown,workspaceAbsent:boolean,toolInput?:unknown){
+export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:unknown,branch:unknown,workspaceAbsent:boolean,toolInput?:unknown,agreementToolInput?:unknown){
  const raw=object(input),a=structuredClone(raw),conversation=object(a.conversation_config),agent=object(conversation.agent),prompt=object(agent.prompt);
- const exactStop=Array.isArray(prompt.tool_ids)&&prompt.tool_ids.length===1&&prompt.tool_ids[0]===c.stop_tool_id;
- const inlineTools=recordedReceptionInlineToolEvidence(raw,c.stop_tool_id,toolInput);
+ const closing=sellerAgreementReceptionEnabled(c),agreementId=String(c.agreement_tool_id??'');
+ const expectedIds=closing?[c.stop_tool_id,agreementId]:[c.stop_tool_id];
+ const exactStop=new Set(expectedIds).size===expectedIds.length&&Array.isArray(prompt.tool_ids)&&prompt.tool_ids.length===expectedIds.length&&expectedIds.every(id=>(prompt.tool_ids as unknown[]).includes(id));
+ let exactAgreement=!closing;
+ if(closing&&sellerAgreementToolMatches(agreementToolInput,agreementId)){
+  const definition=JSON.stringify(canonical(object(agreementToolInput).tool_config));
+  const matches=Array.isArray(prompt.tools)?prompt.tools.filter(t=>JSON.stringify(canonical(t))===definition):[];
+  exactAgreement=matches.length<=1;
+  if(exactAgreement&&Array.isArray(prompt.tools))prompt.tools=prompt.tools.filter(t=>JSON.stringify(canonical(t))!==definition);
+ }
+ const inlineTools=recordedReceptionInlineToolEvidence(a,c.stop_tool_id,toolInput);
  const inlineStopMatchesReviewedDefinition=inlineTools.bounded&&inlineTools.shape!=='invalid'&&inlineTools.matchingStopCount<=1&&inlineTools.unrecognizedCount===0;
  if(inlineStopMatchesReviewedDefinition&&Array.isArray(prompt.tools))prompt.tools=prompt.tools.filter((_,index)=>inlineTools.entries[index].kind!=='reviewed_stop');
  const expectedPrompt=propertyReceptionEnabled(c)?receptionContextPrompt(c):receptionPrompt;
@@ -61,7 +72,7 @@ export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:un
  const base=inspectReceptionAgent({...c,config_hash:''},a,branch,workspaceAbsent);
  const snapshot={main_branch_id:raw.main_branch_id,agent_id:raw.agent_id,branch_id:raw.branch_id,version_id:raw.version_id,conversation_config:raw.conversation_config,platform_settings:raw.platform_settings,workflow:raw.workflow??null,procedures:raw.procedures??null};
  const hash=sha(JSON.stringify(canonical(snapshot)));
- return {safe:exactStop&&exactPrompt&&inlineStopMatchesReviewedDefinition&&Object.values(base.checks).every(Boolean)&&hash===c.config_hash,hash,checks:{...base.checks,exactStop,exactPrompt,inlineStopMatchesReviewedDefinition},inlineTools};
+ return {safe:exactStop&&exactAgreement&&exactPrompt&&inlineStopMatchesReviewedDefinition&&Object.values(base.checks).every(Boolean)&&hash===c.config_hash,hash,checks:{...base.checks,exactStop,exactAgreement,exactPrompt,inlineStopMatchesReviewedDefinition},inlineTools};
 }
 export function recordedReceptionToolMatches(id:string,input:unknown){
  const t=object(input),c=object(t.tool_config),a=object(c.api_schema),b=object(a.request_body_schema),p=object(b.properties),r=object(p.recordingId),h=object(object(a.request_headers).Authorization);
