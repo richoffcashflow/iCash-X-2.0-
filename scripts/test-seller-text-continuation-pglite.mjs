@@ -206,7 +206,7 @@ try {
  e=event('yes');await ingest(e);assert.equal(await route('yes'),null,'latest sent opener does not claim bare yes');
  e=event('1816 Redbud Cir');await ingest(e);assert.equal(await route('yes'),t3,'recipient explicitly selects the new property');
  await pg.exec(`alter table icash_sms_seller_openings add column owner_question_id uuid;
- create function icash_prepare_sms_inbound_reply(p_account uuid,p_thread uuid,p_reply uuid) returns uuid language plpgsql as $$declare opening public.icash_sms_seller_openings;begin
+ create function icash_prepare_sms_inbound_reply(p_account uuid,p_thread uuid,p_reply uuid) returns uuid language plpgsql as $$declare t public.icash_text_threads;opening public.icash_sms_seller_openings;begin
  select * into opening from public.icash_sms_seller_openings where thread_id=p_thread and account_id=p_account;
  return null;end$$;
  create function icash_claim_text_before_owner_question(p_account uuid,p_message uuid,p_sender text) returns jsonb language plpgsql as $$declare m public.icash_text_messages;begin
@@ -214,6 +214,7 @@ try {
  if false or m.body='Are there any mortgages, liens, or unpaid taxes that would need to be paid at closing?' then return '{}'::jsonb;end if;return null;end$$;
  create or replace function icash_seller_limited_contact(uuid,uuid) returns boolean language sql as $$select exists(select 1 from public.icash_screening_jobs where id=$2 and account_id=$1 and result->>'limited'='true')$$;`);
  await pg.exec(read('config/seller-limited-text-replies.sql'));
+ await pg.exec(read('config/seller-limited-reply-alias.sql'));
  await q("update icash_screening_jobs set result='{\"limited\":true}' where id=$1",[s3]);
  await q('insert into icash_sms_seller_openings(thread_id,account_id,owner_question_id) values($1,$2,$3)',[t3,a,freshOpening]);
  const source3=(await one('select id from icash_text_messages where event_id=$1',[e.id])).id;
@@ -233,6 +234,40 @@ try {
  await sent(ack);e=event('Okay');await ingest(e);
  assert.equal(await rpc('icash_prepare_sms_inbound_reply',[a,t3,(await one('select id from icash_text_messages where event_id=$1',[e.id])).id]),null,'bounded contact stops after two replies');
  assert.equal((await one('select count(*)::int n from icash_seller_limited_text_replies where thread_id=$1',[t3])).n,2);
+
+ // Reproduce the delivered Redbud question followed by an unbound Yes and the
+ // redundant address question. Fixture-only timestamps isolate this conversation.
+ await q("update icash_text_messages set created_at=created_at-interval '1 day',last_delivery_at=last_delivery_at-interval '1 day'");
+ await q("update icash_seller_text_replies set created_at=created_at-interval '1 day'");
+ await q('delete from icash_sms_conversation_focus');
+ await q('delete from icash_seller_limited_text_replies where thread_id=$1',[t3]);
+ await q("update icash_text_messages set state='delivered',created_at=now()-interval '2 minutes',last_delivery_at=now()-interval '1 minute' where id=$1",[freshOpening]);
+ e=event('Yes ');await ingest(e);const ownerYes=await one('select * from icash_text_messages where event_id=$1',[e.id]);assert.equal(ownerYes.thread_id,null,'regression reproduced before fix');
+ const redundant=await prepareReply(e);assert(redundant.messageId);await sent(redundant.messageId);
+ await pg.exec(read('config/seller-owner-question-context.sql'));
+ const resolve=()=>rpc('icash_resolve_recent_owner_reply',[a,ownerYes.id]);
+ assert.equal(await rpc('icash_resolve_recent_owner_reply',[b,ownerYes.id]),null,'repair is tenant bound');
+ const fixed=await resolve();assert.equal(fixed.threadId,t3);assert.ok(fixed.messageId,'existing limited response engine continues');
+ const repaired=await one('select * from icash_text_messages where id=$1',[ownerYes.id]);
+ assert.equal(repaired.body,ownerYes.body);assert.equal(repaired.created_at.toISOString(),ownerYes.created_at.toISOString());assert.equal(repaired.event_id,ownerYes.event_id);
+ assert.equal(repaired.thread_id,t3);assert.equal(repaired.state,'received');
+ assert.equal((await one('select thread_id from icash_text_messages where id=$1',[ambiguousId])).thread_id,null,'older ambiguous reply is untouched');
+ assert.equal(await rpc('icash_sms_message_route_current',[a,fixed.messageId]),true,'funded dispatch still validates actual source/property');
+ assert.equal(await lastBody(fixed.messageId),'Are there any mortgages, liens, or unpaid taxes that would need to be paid at closing?');
+ assert.equal(await resolve(),null,'repair does not replay or duplicate the response');
+ await assert.rejects(q('update icash_text_messages set thread_id=$1 where id=$2',[t2,ownerYes.id]),/immutable/,'bound messages cannot be moved');
+ assert.equal(await route('No mortgage'),t3,'short next reply keeps property focus');
+ // New incoming confirmations resolve before INSERT and naturally reach the
+ // existing message/AI hooks; a generic address question is not a new property.
+ const isolated=async action=>{await q('begin');try{await action();}finally{await q('rollback');}};
+ const questionOnly=async()=>{await q('delete from icash_sms_conversation_focus');await q("update icash_text_messages set state='cancelled' where id=$1",[fixed.messageId]);};
+ await isolated(async()=>{await questionOnly();assert.equal(await route('Yes'),t3);const ev=event('Yes');await ingest(ev);assert.equal((await one('select thread_id from icash_text_messages where event_id=$1',[ev.id])).thread_id,t3,'first new Yes binds from delivered question');assert.equal(await route('No mortgage'),t3);});
+ await isolated(async()=>{await questionOnly();await q("update icash_text_messages set state='accepted',last_delivery_at=null where id=$1",[freshOpening]);assert.equal(await route('Yes'),null,'unknown delivery is not conversational evidence');});
+ await isolated(async()=>{await questionOnly();await q("update icash_text_messages set created_at=now()-interval '3 hours',last_delivery_at=now()-interval '3 hours' where id=$1",[freshOpening]);assert.equal(await route('Yes'),null,'stale question does not capture a new reply');});
+ await isolated(async()=>{await questionOnly();await q('update icash_text_threads set paused=true where id=$1',[t3]);assert.equal(await route('Yes'),null,'paused thread cannot establish question context');});
+ await isolated(async()=>{await questionOnly();await q("insert into icash_text_suppressions(phone,reason) values($1,'SIMULATION STOP')",[phone]);assert.equal(await route('Yes'),null,'STOP cannot establish question context');});
+ assert.equal(await route('123 Unknown Street'),null);assert.equal(await route('1816 Redbud Cir and 2149 Arden Rd'),null);
+ console.log('PASS: delivered ownership question routes Yes to its property; audited current-reply repair preserves source and historical messages; duplicate, expiry, unknown delivery, manual/STOP and cross-property guards pass.');
  e=event('2149 Arden Rd');await ingest(e);await prepareReply(e);
  e=event('I want a real person');await ingest(e);assert.equal(await prepareReply(e),null);
  assert.equal((await one('select paused from icash_text_threads where id=$1',[t2])).paused,true,'human request retains manual takeover');
