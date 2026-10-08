@@ -99,6 +99,7 @@ create function icash_seller_voice_permission_current(a uuid,p uuid) returns boo
 create function icash_prepare_seller_text_event(p_event text) returns jsonb language sql as $$select '{"legacy":true}'::jsonb$$;
 `);
 await pg.exec(read('seller-sms-immediate-callback'));
+await pg.exec(read('unstarted-sms-call-recovery'));
 let cases=0;
 async function fixture(prompt=true){
  await q('insert into icash_accounts(id,assistant_name,owner_user_id) values($1,\'Casey\',$2)',[account,actor]);
@@ -146,5 +147,6 @@ await scenario('expired Now is never called much later',async()=>{await incoming
 await scenario('owner-approved restart keeps original statement and audited actor',async()=>{const id=await incomingText('Call me','20 minutes');assert.equal(await count(),0);assert.equal(await queue(id,other),null);const jobId=await queue(id,actor);assert(jobId);assert.equal((await getJob()).sms_requested_by,actor);assert.equal((await one('select body from icash_text_messages where id=$1',[id])).body,'Call me');assert.equal(await queue(id,actor),jobId);});
 for(const state of ['waiting','review'])await scenario('active or uncertain conversation cannot be dialed again: '+state,async()=>{await q('insert into icash_live_conversations values(\'fixture-contact\',$1)',[state]);await incomingText('Call me');assert.equal(await count(),0);});
 await scenario('buyer cannot create outbound call',async()=>{await q("update icash_text_threads set party='buyer'");await incomingText('Call me');assert.equal(await count(),0);});
+await scenario('verified local pre-dial rejection permits one owner restart with retained history',async()=>{const id=await incomingText('Call me');const first=await getJob();await q("update icash_voice_jobs set state='canceled',outcome='context_rejected_before_dial'");const retry=await queue(id,actor);assert(retry);assert.notEqual(retry,first.id);assert.equal(await count(),2);assert.equal(await queue(id,actor),retry);assert.equal(await count(),2);});
 await scenario('anonymous cannot use queue',async()=>{await q('set local role anon');await assert.rejects(()=>queue(incoming),/permission denied/);});
 await pg.close();console.log(`${cases} immediate seller callback scenarios passed. Provider and billing delegates are synthetic; no real calls or texts.`);

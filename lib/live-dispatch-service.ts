@@ -18,7 +18,7 @@ import {dispatchTextMessage} from './text-message-service';
 import {elevenRequest} from '@/lib/elevenlabs';
 import {buyerCallInstructions,buyerFirstMessage,type BuyerCallContext} from './buyer-call-policy.ts';
 import {contactEligibility,callEligibility,nextContactWindow,type VoicePermission} from './live-dispatch-policy.ts';
-import {sellerFirstMessage,sellerCallPrompt,sellerCallContext,type SellerRequestContext} from './seller-call-context.ts';
+import {sellerFirstMessage,sellerCallPrompt,sellerCallContext,compactSellerProgress,type SellerRequestContext} from './seller-call-context.ts';
 type Job={id:string;account_id:string;permission_id:string|null;operational_contact_id?:string|null;callback_id:string|null;sms_source_message_id?:string|null;state:string};
 type Config={approved_voice_ids:string[];enabled:boolean;agent_id:string;phone_number_id:string;agent_config_hash:string;reviewed_until:string;seller_rate_id:string;buyer_rate_id:string|null;max_duration_seconds:number;required_tool_ids:string[]};
 type Permission=VoicePermission&{id:string;account_id:string;screening_id:string;party:'seller'|'buyer';contact_key:string;seller_intake_id?:string|null};
@@ -120,6 +120,13 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  // Validate the complete opening/context before reserving credits or dialing.
  let sellerGreeting:string|undefined,sellerPrompt:string|undefined;
  if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext,true);sellerPrompt=limited?limitedSellerPrompt(address,identity.principal,account.assistant_name):sellerCallPrompt(sellerContext,ceiling,closing,!!recordedReview.contractToolId,cashOfferPrice,sellerOfferPresentation(snapshot.snapshot,address),agreementToolsEnabled,purchaseTerms);}catch{return hold('property_context_required');}}
+ const sellerProgress=sellerCallContext(sellerContext);
+ const {history:fullSms,priorCalls:fullCalls,...sellerData}=sellerProgress;
+ const automaticContext=!automaticOfferPolicy(recordedReview.offerPolicy)?null:buyerContext?{status:'buyer',address:buyerContext.address,returningName:buyerContext.firstName,buyerPaysClosingCosts:buyerContext.buyerPaysClosingCosts,repairsCents:buyerContext.repairsCents,packageUrl:buyerContext.packageUrl}:{...sellerData,...compactSellerProgress({history:fullSms,priorCalls:fullCalls}),status:'matched',purchaseTerms};
+ const prompt=automaticOfferPolicy(recordedReview.offerPolicy)
+  ?(recordedReview.offerPolicy==='automatic_offer_v5'?legacyAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v6'?streamingAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v7'?payoffAutomaticOfferReceptionPrompt:automaticOfferReceptionPrompt).replace('{{icash_property_context}}',JSON.stringify({...automaticContext,principal:identity.principal,companyName:identity.company_name?.trim()||null,assistantName:account.assistant_name}))+'\nOUTBOUND CAPABILITIES: Use the callback tool only for an explicitly agreed date, time and timezone; use the handoff tool when requested. Claim either action only after its successful result. Do not claim an immediate transfer unless the tool confirms one.'
+  :buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!;
+ if(prompt.length>24000||(sellerGreeting?.length??0)>2000)return hold('voice_context_too_large');
  const operationKey=`voice:${j.id}`;
  const reserveHold=recordingReleaseHold();if(reserveHold)return hold(reserveHold);
  const reservationInput={p_account:accountId,p_job:j.id,p_rate:rateId,p_permission_until:p.permission_until,p_financial_checked_at:eligible?.ready?new Date(eligible.screening.financialCheck.checkedAt).toISOString():null,p_financial_eligible:eligible?.ready&&eligible.screening.financialCheck.status==='eligible'};
@@ -148,10 +155,6 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  try{
  await db(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&state=eq.dispatching`,'PATCH',{sms_context:smsContext});
  const dispatchHold=recordingReleaseHold();if(dispatchHold)return hold(dispatchHold);
- const automaticContext=!automaticOfferPolicy(recordedReview.offerPolicy)?null:buyerContext?{status:'buyer',address:buyerContext.address,returningName:buyerContext.firstName,buyerPaysClosingCosts:buyerContext.buyerPaysClosingCosts,repairsCents:buyerContext.repairsCents,packageUrl:buyerContext.packageUrl}:{...sellerCallContext(sellerContext),status:'matched',purchaseTerms};
- const prompt=automaticOfferPolicy(recordedReview.offerPolicy)
-  ?(recordedReview.offerPolicy==='automatic_offer_v5'?legacyAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v6'?streamingAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v7'?payoffAutomaticOfferReceptionPrompt:automaticOfferReceptionPrompt).replace('{{icash_property_context}}',JSON.stringify({...automaticContext,principal:identity.principal,companyName:identity.company_name?.trim()||null,assistantName:account.assistant_name}))+'\nOUTBOUND CAPABILITIES: Use the callback tool only for an explicitly agreed date, time and timezone; use the handoff tool when requested. Claim either action only after its successful result. Do not claim an immediate transfer unless the tool confirms one.'
-  :buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!;
  const result=await recordingServer().dispatch({accountId,operationKey,fromPhone:businessNumber,maxTotalSeconds:fundedCall.maxSeconds,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:callVoiceId,firstMessage:sellerGreeting??buyerFirstMessage(buyerContext!),prompt,strategyKey:strategy});
  // A started call is connecting; only the recording service can confirm capture.
  if(result.status==='recording_consent_pending'){
