@@ -47,6 +47,7 @@ function fixture(options={}) {
   const snapshot = () => row ? clone(row) : null;
   const rpc = async (name,body={}) => {
     events.push({rpc:name,body:clone(body)});
+    if (name==='icash_call_credit_available') return !options.emptyCredits;
     if (name==='icash_get_recorded_reception_config') return options.missingConfig?null:clone(cfg.c);
     if (name==='icash_get_recorded_reception_session') return row && body.p_id===row.id && (!body.p_account || body.p_account===row.account_id) ? snapshot() : null;
     if (name==='icash_reserve_flexible_reception'||name==='icash_reserve_direct_reception') {
@@ -296,6 +297,25 @@ test('gate-only settlement contains no AI or recording charge; confirmed disclos
   const f=await fixture().ready();f.row.call_ended_at=iso;f.row.call_started_at=iso;f.row.setup_confirmed_at=f.row.bounded_at;const call={sid:callSid,account_sid:accountSid,from:caller,to:f.row.to_phone,direction:'inbound',start_time:iso,status:'completed',price_unit:'USD',price:'-0.001000',duration:'5'};
   const a=receptionSettlementAttestation(f.row,call,null,null);assert.equal(a.mode,'gate_only');assert.equal(a.providers.elevenlabs,undefined);assert.equal(a.recording.recordingMicros,0);assert.equal(a.recording.storageMicros,0);assert.equal(a.recording.streamMicros,0);assert.equal(a.recording.speechGatherMicros,20000);
   f.row.setup_confirmed_at=null;f.row.bounded_at=null;assert.equal(receptionSettlementAttestation(f.row,call,null,null).recording.speechGatherMicros,0);
+});
+test('failed AI conversations settle verified usage, but active conversations cannot settle',async()=>{
+  const s=settlementInput(await fixture().ready());s.conversation.status='failed';
+  assert.equal(receptionSettlementAttestation(s.row,s.call,s.conversation,s.recording).providers.elevenlabs.amountMicros,200000);
+  for(const status of ['processing','in-progress','initiated']){s.conversation.status=status;assert.equal(receptionSettlementAttestation(s.row,s.call,s.conversation,s.recording),null);}
+});
+test('unanswered gate releases only with canonical terminal identity and no AI attempt',async()=>{
+  const f=await fixture().ready();Object.assign(f.row,{call_ended_at:iso,call_started_at:iso,setup_confirmed_at:null,bounded_at:null});
+  const call={sid:callSid,account_sid:accountSid,from:caller,to:f.row.to_phone,direction:'inbound',start_time:iso,status:'canceled',price_unit:null,price:null,duration:null};
+  const a=receptionSettlementAttestation(f.row,call,null,null);assert.equal(a.mode,'gate_only');assert.equal(a.providers.twilio.amountMicros,0);
+  assert.equal(receptionSettlementAttestation(f.row,{...call,status:'completed'},null,null),null);
+  assert.equal(receptionSettlementAttestation(f.row,{...call,account_sid:'AC'+'d'.repeat(32)},null,null),null);
+  f.row.register_claimed_at=iso;assert.equal(receptionSettlementAttestation(f.row,call,null,null),null);
+});
+test('empty credits end an active incoming call without starting another provider action',async()=>{
+  const f=await fixture({emptyCredits:true}).ready();const completions=[];
+  const rpc=async(name,body)=>{if(name==='icash_claim_recorded_reception_work')return body.p_kind==='reconcile'?[{...clone(f.row),reconcile_lease_token:rateId}]:[];if(name==='icash_finish_recorded_reception_work'){completions.push(body);return clone(f.row);}return f.rpc(name,body);};
+  await maintainRecordedReception(rpc,f.provider,env,now);
+  assert(f.row.end_requested_at);assert(f.row.call_ended_at);assert.equal(providerWrites(f).filter(e=>e.provider==='end').length,1);
 });
 test('incomplete, foreign, excessive or unknown-price settlement evidence cannot reach charging RPC',async()=>{
   const changes=[s=>s.call.price=null,s=>s.call.price='0.1',s=>s.call.price_unit='credits',s=>s.call.duration='601',s=>s.call.direction='outbound-api',s=>s.call.account_sid='AC'+'d'.repeat(32),s=>s.conversation.metadata.cost_fiat=null,s=>s.conversation.metadata.cost_fiat='0.2',s=>s.conversation.metadata.call_duration_secs=601,s=>s.conversation.branch_id='agtbrch_foreignfixture',s=>s.recording.call_sid='CA'+'d'.repeat(32),s=>s.row.pricing_policy.streamMicrosPerMinute=undefined];

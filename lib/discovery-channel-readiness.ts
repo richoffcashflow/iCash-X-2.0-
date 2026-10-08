@@ -15,18 +15,16 @@ async function dataAccountReadiness(accountId:string,userId:string,operation:'pr
  if(!(contacts?contactWorkEnabled():discoveryWorkEnabled()))return blocked('discovery_not_released');
  if(!/^dm_sk_live_[A-Za-z0-9_-]+$/.test(process.env.DEALMACHINE_API_KEY??''))return blocked('provider_not_configured');
  try{
-  const [[config],[account],[wallet],[budget],[activation],funding,spend,usage]=await Promise.all([
+  const [[config],[account],[wallet],[budget],[activation],funding]=await Promise.all([
    db<{enabled:boolean;auto_enabled:boolean;exhausted:boolean;zip:string;rate_id:string;per_page:number;property_credit_micros:number;data_rights_until:string;contacts_enabled:boolean;contact_rate_id:string;contact_credit_cap:number}[]>(`icash_discovery_configs?account_id=eq.${accountId}&select=enabled,auto_enabled,exhausted,zip,rate_id,per_page,property_credit_micros,data_rights_until,contacts_enabled,contact_rate_id,contact_credit_cap`),
-   db<{owner_user_id:string;daily_limit_cents:number}[]>(`icash_accounts?id=eq.${accountId}&select=owner_user_id,daily_limit_cents`),
-   db<{balance_cents:number;reserved_cents:number}[]>(`icash_wallets?account_id=eq.${accountId}&select=balance_cents,reserved_cents`),
+   db<{owner_user_id:string}[]>(`icash_accounts?id=eq.${accountId}&select=owner_user_id`),
+   db<{balance_cents:number}[]>(`icash_wallets?account_id=eq.${accountId}&select=balance_cents`),
    db<{enabled:boolean;require_company_reserve:boolean;standard_cost_multiplier:number;funded_micros:number;spent_micros:number;protected_micros:number;reserved_micros:number}[]>('icash_operating_budget?id=eq.1&select=enabled,require_company_reserve,standard_cost_multiplier,funded_micros,spent_micros,protected_micros,reserved_micros'),
-   db<{enabled:boolean;customer_cap_cents:number}[]>(`icash_spend_activations?account_id=eq.${accountId}&select=enabled,customer_cap_cents`),
+   db<{enabled:boolean}[]>(`icash_spend_activations?account_id=eq.${accountId}&select=enabled`),
    db<{id:string}[]>(`icash_funding_orders?account_id=eq.${accountId}&mode=eq.live&state=eq.paid&credited_at=not.is.null&select=id&limit=1`),
-   db<{state:string;charge_cap_cents:number;charged_cents:number|null}[]>(`icash_operation_spend?account_id=eq.${accountId}&state=in.(reserved,dispatched,settled)&select=state,charge_cap_cents,charged_cents&limit=1001`),
-   db<{delta_cents:number}[]>(`icash_credit_ledger?account_id=eq.${accountId}&kind=eq.usage&created_at=gt.${encodeURIComponent(new Date(Date.now()-86400000).toISOString())}&select=delta_cents&limit=1001`),
   ]);
   // Reasons describe existing gates only; they never create or relax authority.
-  if(account?.owner_user_id!==userId||!wallet||spend.length>1000||usage.length>1000)return held;
+  if(account?.owner_user_id!==userId||!wallet)return held;
   if(!config)return blocked('discovery_configuration_required');
   if(!config.enabled||!config.auto_enabled)return blocked('discovery_not_enabled');
   if(!contacts&&config.exhausted)return blocked('inventory_exhausted');
@@ -52,18 +50,11 @@ async function dataAccountReadiness(accountId:string,userId:string,operation:'pr
   if(data===null||BigInt(quantity)*BigInt(config.property_credit_micros)>BigInt(data))return held;
   const required=Math.ceil(cost.estimatedTotalMicros*budget.standard_cost_multiplier*(10000+rate.buffer_bps)/10000);
   if(!Number.isSafeInteger(required)||rate.charge_cents*10000<required)return held;
-  const amounts=[wallet.balance_cents,wallet.reserved_cents,account.daily_limit_cents];
-  if(!amounts.every(integer))return held;
-  if(wallet.balance_cents-wallet.reserved_cents<rate.charge_cents)return blocked('available_credits_required');
-  let daily=0,lifetime=0;
-  for(const entry of usage){if(!integer(-entry.delta_cents))return held;daily-=entry.delta_cents;}
-  for(const entry of spend){const n=entry.state==='settled'?entry.charged_cents:entry.charge_cap_cents;if(n===null||!integer(n))return held;lifetime+=n;}
-  if(!integer(daily)||!integer(lifetime))return held;
-  if(daily+wallet.reserved_cents+rate.charge_cents>account.daily_limit_cents)return blocked('daily_budget_limit');
+  if(!integer(wallet.balance_cents))return held;
+  if(wallet.balance_cents<rate.charge_cents)return blocked('available_credits_required');
   if(!budget.require_company_reserve){
    if(!funding.length)return blocked('confirmed_funding_required');
-   if(!activation?.enabled||!integer(activation.customer_cap_cents))return blocked('spending_activation_required');
-   if(lifetime+rate.charge_cents>activation.customer_cap_cents)return blocked('account_spending_limit');
+   if(!activation?.enabled)return blocked('spending_activation_required');
   }else if(![budget.funded_micros,budget.spent_micros,budget.protected_micros,budget.reserved_micros].every(integer)
    ||budget.funded_micros-budget.spent_micros-budget.protected_micros-budget.reserved_micros<cost.reserveCents*10000)return held;
   if(!contacts&&!await propertyResearchMarketKnown(config.zip,accountId))return blocked('market_review_required');

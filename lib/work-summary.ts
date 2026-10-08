@@ -8,7 +8,7 @@ export function summaryExplanation(s:WorkSummary){
  return 'No completed property analysis or funded closing is recorded. These records cannot establish why a deal did not close.';
 }
 export function summaryLines(s:WorkSummary){return [
- s.scope,`Generated: ${s.generatedAt}`,`Confirmed funding: $${(s.fundedCents/100).toFixed(2)}`,`Settled usage charges: $${(s.spentCents/100).toFixed(2)}`,`Available: $${((s.balanceCents-s.reservedCents)/100).toFixed(2)} | Reserved: $${(s.reservedCents/100).toFixed(2)}`,
+ s.scope,`Generated: ${new Date(s.generatedAt).toLocaleString('en-US',{timeZone:'America/Chicago',hour12:true})}`,`Confirmed funding: $${(s.fundedCents/100).toFixed(2)}`,`Settled usage charges: $${(s.spentCents/100).toFixed(2)}`,`Available credits: $${(s.balanceCents/100).toFixed(2)}`,
  '',`Properties analyzed: ${s.analyzed}`,`Preliminary screening candidates: ${s.screeningCandidates}`,`Properties with owner information: ${s.ownerRecords}`,`Signed contracts recorded: ${s.contracts}`,`Active signed contracts: ${s.activeContracts}`,`Funded closings recorded: ${s.closed}`,`Pending operations: ${s.pending}`,
  '', 'WHAT THE RECORDS SHOW',summaryExplanation(s),...s.reasons.map(r=>`${r.count} screening result(s): ${r.reason||'No detailed reason recorded.'}`),
  '', 'WHAT REMAINS',s.activeContracts>0?'Active contracts still need verified closing coordination.':s.screeningCandidates>0?'Candidates still need authorized contact, seller qualification and agreement.':'Further research or review may be needed. Review screening reasons before funding more work.',

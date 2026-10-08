@@ -87,5 +87,21 @@ try{
  await q('begin');await q("update icash_recorded_reception_private.sessions set from_phone='+12145550199' where id=$1",[session]);assert.equal(await incoming(),null);await q('rollback');
  await q('begin');await q("update icash_recorded_reception_private.sessions set call_ended_at=now() where id=$1",[session]);assert.equal(await incoming(),null);await q('rollback');
  for(const role of ['anon','authenticated'])assert.equal((await one("select has_function_privilege($1,'icash_read_buyer_package(text)','execute') allowed",[role])).allowed,false);
+ // Apply the complete channel restriction over the same functioning buyer
+ // package/SMS/inbound fixture. Never execute an outbound provider request.
+ const buyerJob=(await one("insert into icash_voice_jobs(account_id,permission_id) values($1,$2) returning id",[account,permission])).id;
+ await pg.exec('set check_function_bodies=off;');
+ await pg.exec(readFileSync('supabase/migrations/20261008181246_buyer_written_outreach_only.sql','utf8'));
+ await pg.exec('set check_function_bodies=on;');
+ assert.equal((await one('select state,outcome from icash_voice_jobs where id=$1',[buyerJob])).outcome,'buyer_outbound_calls_disabled');
+ assert.equal((await incoming()).status,'buyer','inbound buyer routing remains available');
+ await pg.exec(`create table if not exists icash_timezone_names(name text primary key);insert into icash_timezone_names values('America/Chicago') on conflict do nothing;`);
+ const incomingOperation='SIMULATION:incoming-buyer',incomingReservation=(await one("insert into icash_credit_reservations(account_id,operation_key,amount_cents) values($1,$2,100) returning id",[account,incomingOperation])).id;
+ await q("insert into icash_operation_spend(operation_key,account_id,rate_id,credit_reservation_id,charge_cap_cents,reserved_micros,state,permission_until) values($1,$2,$3,$4,100,1000,'dispatched',now()+interval '1 hour')",[incomingOperation,account,f.incoming,incomingReservation]);
+ await q("insert into icash_live_conversations(account_id,screening_id,party,agent_id,conversation_id,operation_key,contact_key,strategy_key,tool_token_hash,tool_expires_at) values($1,$2,'buyer','agent_fixture','conv_buyercallback',$3,repeat('d',64),'buyer_followup',repeat('e',64),now()+interval '1 hour')",[account,screening,incomingOperation]);
+ const callback=await rpc('icash_live_callback_tool',{p_hash:'e'.repeat(64),p_conversation:'conv_buyercallback',p_due:new Date(Date.now()+600000).toISOString(),p_timezone:'America/Chicago',p_readback:'SIMULATION confirmed future time',p_confirmation:'yes'});
+ assert.equal(callback.saved,false);assert.equal(callback.reason,'buyer_outbound_calls_disabled');assert.equal((await one('select count(*) n from icash_live_callbacks')).n,0);
+ assert.equal((await data()).askingPriceCents,4893700,'buyer package survives channel change');
+ console.log('PASS buyer written-only migration: untouched queued calls retired, callback denied, inbound buyer calls and signed-price package retained.');
  console.log('PASS: seller-only signature held; all signatures trigger one research job; signed price + $10000; share link without private seller data; tenant isolation; cancellation, changed price, revocation and expiry invalidate package. Synthetic evidence only.');
 }finally{await pg.close();}

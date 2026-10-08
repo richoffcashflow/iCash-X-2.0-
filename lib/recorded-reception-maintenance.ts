@@ -55,6 +55,8 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
    if(terminal){
     if(!row.end_requested_at){const next=await transitionRecordedReception(rpc,row,'request_end',{reason:'carrier_terminal'});if(next)row=next;}
     if(!row.call_ended_at){const next=await transitionRecordedReception(rpc,row,'call_ended',boundEndReceipt(row,call));if(!next)throw Error('TERMINAL_SAVE_REQUIRED');row=next;}
+   }else if(await rpc<boolean>('icash_call_credit_available',{p_account:row.account_id,p_operation:row.operation_key})===false){
+    const ended=await endRecordedReception(rpc,provider,row,'credits_exhausted');row=ended.row;if(!ended.ended)throw Error('TERMINATION_UNCONFIRMED');
    }else if(clockConflict||row.end_requested_at||now>=Date.parse(row.call_deadline_at)||!recordingAuthorized(row)&&now>=Date.parse(row.consent_deadline_at)){
     const ended=await endRecordedReception(rpc,provider,row,'deadline_or_requested_end');row=ended.row;if(!ended.ended)throw Error('TERMINATION_UNCONFIRMED');
    }

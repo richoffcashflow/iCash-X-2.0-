@@ -20,11 +20,16 @@ import {sellerFirstMessage,sellerCallPrompt,sellerCallContext,type SellerRequest
 type Job={id:string;account_id:string;permission_id:string|null;operational_contact_id?:string|null;callback_id:string|null;state:string};
 type Config={approved_voice_ids:string[];enabled:boolean;agent_id:string;phone_number_id:string;agent_config_hash:string;reviewed_until:string;seller_rate_id:string;buyer_rate_id:string|null;max_duration_seconds:number;required_tool_ids:string[]};
 type Permission=VoicePermission&{id:string;account_id:string;screening_id:string;party:'seller'|'buyer';contact_key:string;seller_intake_id?:string|null};
+const outboundVoiceParties:ReadonlySet<string>=new Set(['seller']);
 export async function dispatchLiveVoice(accountId:string,jobId:string){
  if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
  const [j]=await db<Job[]>(`icash_voice_jobs?id=eq.${jobId}&account_id=eq.${accountId}&select=*`);if(!j||j.state!=='issued')return {status:'held'};
  let ownsDispatch=false;
  const hold=async(reason:string)=>{await db('rpc/icash_hold_voice_job','POST',{p_account:accountId,p_job:j.id,p_reason:reason,p_after_claim:ownsDispatch});return {status:reason};};
+ // Resolve the channel policy before provider reads, credit reservations or calls.
+ if((j.permission_id==null)===(j.operational_contact_id==null))return hold('contact_binding_invalid');
+ const [p]=await db<Permission[]>(`${j.operational_contact_id?'icash_voice_contact_targets':'icash_contact_permissions'}?id=eq.${j.operational_contact_id??j.permission_id}&account_id=eq.${accountId}&select=*`);
+ if(p&&!outboundVoiceParties.has(p.party))return hold('buyer_outbound_calls_disabled');
  // Every customer call uses consent-first recording. Capture OFF is a hold, never a legacy fallback.
  const reviewJson=process.env.RECORDED_OUTBOUND_REVIEW_JSON;
  const recordingReleaseHold=()=>{
@@ -38,8 +43,6 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const recordedReview=readRecordingReview(reviewJson)!;
  const [c]=await db<Config[]>(`icash_voice_configs?account_id=eq.${accountId}&select=*`);
  // Operational targets contain routing/DNC evidence only, never a fabricated consent record.
- if((j.permission_id==null)===(j.operational_contact_id==null))return hold('contact_binding_invalid');
- const [p]=await db<Permission[]>(`${j.operational_contact_id?'icash_voice_contact_targets':'icash_contact_permissions'}?id=eq.${j.operational_contact_id??j.permission_id}&account_id=eq.${accountId}&select=*`);
  if(j.operational_contact_id&&await db<boolean>('rpc/icash_operational_contact_current','POST',{p_account:accountId,p_contact:j.operational_contact_id,p_channel:'voice',p_check_hour:false})!==true)return hold('contact_operating_checks_required');
  const [snapshot]=p?await db<{snapshot:unknown}[]>(`icash_screening_jobs?id=eq.${p.screening_id}&account_id=eq.${accountId}&state=eq.complete&select=snapshot`):[];
  if(!c?.enabled||!(Date.parse(c.reviewed_until)>Date.now())||!p||!snapshot||!process.env.ELEVENLABS_API_KEY)return hold('voice_configuration_required');

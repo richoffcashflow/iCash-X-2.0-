@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {prepareVoiceTemplate} from '../scripts/prepare-voice-template.mjs';
+const now=Date.now(),hash='a'.repeat(64),prior='b'.repeat(64);
+const review={enabled:true,reviewedAt:new Date(now-1000).toISOString(),reviewedUntil:new Date(now+3600000).toISOString(),agentId:'agent_fixture',branchId:'agtbrch_fixture',versionId:'agtvrsn_fixture',configHash:hash,fromPhone:'+14243948384',providerAccountSid:'AC'+'a'.repeat(32),stopToolId:'tool_stop',toolIds:['tool_callback','tool_handoff','tool_stop'],approvedHoldCents:977,retentionDays:30,maxTotalSeconds:600,policyVersion:'required-audio-30d-speech-v1'};
+const env={VERCEL_ENV:'production',ICASH_RECORDED_OUTBOUND_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),SUPABASE_URL:'https://fixture.invalid',SUPABASE_SECRET_KEY:'SYNTHETIC'};
+let template={id:1,enabled:true,agent_id:review.agentId,agent_config_hash:prior,required_tool_ids:review.toolIds,max_duration_seconds:600},writes=0,inspects=0;
+const fetcher=async(url,init)=>{assert(url.startsWith('https://fixture.invalid/rest/v1/icash_voice_production_template?id=eq.1'));if(init.method==='PATCH'){writes++;assert(url.endsWith('agent_config_hash=eq.'+prior));assert.deepEqual(JSON.parse(init.body),{agent_config_hash:hash});template.agent_config_hash=hash;}return Response.json([template]);};
+const inspect=async()=>{inspects++;return {providerChecksPass:true,observedConfigHash:hash,observedVersionId:review.versionId};};
+assert.equal((await prepareVoiceTemplate({...env,VERCEL_ENV:'preview'},fetcher,inspect)).status,'not_requested');
+assert.equal((await prepareVoiceTemplate(env,fetcher,inspect)).status,'synchronized');assert.equal(writes,1);assert.equal(inspects,1);
+assert.equal((await prepareVoiceTemplate(env,fetcher,inspect)).status,'current');assert.equal(writes,1);
+template.agent_config_hash=prior;
+await assert.rejects(prepareVoiceTemplate(env,fetcher,async()=>({providerChecksPass:true,observedConfigHash:prior,observedVersionId:review.versionId})),/PROVIDER_REVIEW/);assert.equal(writes,1);
+template.required_tool_ids=['tool_unapproved'];await assert.rejects(prepareVoiceTemplate(env,fetcher,inspect),/CAPABILITY_REVIEW/);assert.equal(writes,1);
+console.log('PASS new-account template: verified hash sync, idempotent readback, no preview writes, drift and capability mismatch held. No provider traffic.');

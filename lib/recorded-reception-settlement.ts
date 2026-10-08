@@ -1,22 +1,23 @@
 import {recordingAuthorized} from './direct-call-entry.ts';
 import {object,sha} from './required-call-recording.ts';
-import {twilioUsdChargeMicros} from './twilio-usd-cost.ts';
+import {twilioUsdChargeMicros,twilioUnansweredCall} from './twilio-usd-cost.ts';
 import {receptionUsdNumberMicros} from './general-reception-reconcile.ts';
 import {incomingCallMatches,receptionConversationMatches,receptionRecordingMatches,receptionRecordingCosts,recordedReceptionPolicy,type RecordedReceptionRow,type RecordedReceptionRpc} from './recorded-reception.ts';
 
 /** Provider readback attests identity and USD; it never manufactures a cost
  * approval. SQL requires a separate exact, immutable all-16-category review. */
 export function receptionSettlementAttestation(row:RecordedReceptionRow,call:Record<string,unknown>,conversation:Record<string,unknown>|null,recording:Record<string,unknown>|null,carrierEstimate=false){
- const carrierMicros=twilioUsdChargeMicros(call.price,call.price_unit);
- const estimated=carrierEstimate&&call.price===null&&call.status==='completed'&&call.price_unit==='USD';
- if(!row.call_ended_at||!incomingCallMatches(row,call)||!['completed','failed','busy','no-answer','canceled'].includes(String(call.status))||carrierMicros===null&&!estimated||typeof call.duration!=='string'||!/^\d+$/.test(call.duration))return null;
- if(row.setup_confirmed_at&&!row.call_started_at&&(call.status==='completed'||call.start_time!==null&&call.start_time!==undefined))return null;
- const duration=Number(call.duration);if(!Number.isSafeInteger(duration)||duration<0||duration>row.max_total_seconds)return null;
  const gate=!row.start_claimed_at&&!row.register_claimed_at&&!row.recording_sid&&!row.conversation_id;
+ const unanswered=gate&&twilioUnansweredCall(call);
+ const carrierMicros=unanswered?0:twilioUsdChargeMicros(call.price,call.price_unit);
+ const estimated=carrierEstimate&&call.price===null&&call.status==='completed'&&call.price_unit==='USD';
+ if(!row.call_ended_at||!incomingCallMatches(row,call)||!['completed','failed','busy','no-answer','canceled'].includes(String(call.status))||carrierMicros===null&&!estimated||!unanswered&&(typeof call.duration!=='string'||!/^\d+$/.test(call.duration)))return null;
+ if(row.setup_confirmed_at&&!row.call_started_at&&(call.status==='completed'||call.start_time!==null&&call.start_time!==undefined))return null;
+ const duration=unanswered?0:Number(call.duration);if(!Number.isSafeInteger(duration)||duration<0||duration>row.max_total_seconds)return null;
  const providers:Record<string,unknown>={twilio:{amountMicros:estimated?Math.max(1,Math.ceil(duration/60))*8500:carrierMicros,currency:'USD',receiptHash:sha(JSON.stringify(call)),...(estimated?{basis:'estimated',tariffVersion:'us-local-inbound-20261007',pricePending:true}:{})}};
  let recordingMicros=0,storageMicros=0,streamMicros=0,recordingEstimated=false;
  if(!gate){
-  if(!row.conversation_id||!row.recording_sid||!recordingAuthorized(row)||!row.start_claimed_at||!row.register_claimed_at||!['available','expired','deletion_pending','deleted'].includes(row.state)||row.duration_seconds===null||!row.ended_at||!row.provider_started_at||!conversation||conversation.status!=='done'||!receptionConversationMatches(row,conversation))return null;
+  if(!row.conversation_id||!row.recording_sid||!recordingAuthorized(row)||!row.start_claimed_at||!row.register_claimed_at||!['available','expired','deletion_pending','deleted'].includes(row.state)||row.duration_seconds===null||!row.ended_at||!row.provider_started_at||!conversation||!['done','failed'].includes(String(conversation.status))||!receptionConversationMatches(row,conversation))return null;
   const metadata=object(conversation.metadata),aiSeconds=metadata.call_duration_secs,price=receptionUsdNumberMicros(metadata.cost_fiat);
   if(price===null||typeof aiSeconds!=='number'||!Number.isFinite(aiSeconds)||aiSeconds<0||aiSeconds>row.max_total_seconds||recording&&!receptionRecordingMatches(row,recording))return null;
   const costs=receptionRecordingCosts(row);recordingMicros=costs.recording;storageMicros=costs.storage;recordingEstimated=!costs.recordingObserved;
