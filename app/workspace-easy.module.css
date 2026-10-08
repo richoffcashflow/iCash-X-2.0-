@@ -47,6 +47,10 @@
 .activity :global(.workspace-activity){margin:0;padding:12px 0 20px;border:0}
 .workspace.workspace :global(.leads-heading){display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .workspace.workspace :global(.open-workspace-assistant){display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:44px;padding:10px 13px;border:1px solid #171717;border-radius:12px;background:#171717;color:#fff;font-size:13px;font-weight:600;white-space:nowrap}
+.workspace.workspace :global(.workspace-review-section){margin:0 0 22px;padding:0}
+.workspace.workspace :global(.workspace-review-heading){display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
+.workspace.workspace :global(.workspace-review-heading h3){margin:0;font-size:18px;font-weight:700;line-height:1.35;letter-spacing:-.3px;color:#171717}
+.workspace.workspace :global(.workspace-review-heading p){margin:4px 0 0;font-size:12px;font-weight:400;line-height:1.5;color:#666;text-align:left}
 .workspace.workspace :global(.workspace-attention){margin:0 0 16px;padding:0;border:0;border-bottom:1px solid #e5e5e5;border-radius:0;background:#fff;overflow:hidden}
 .workspace.workspace :global(.attention-heading){display:flex;align-items:center;gap:10px;min-height:56px;margin:0;padding:10px 0;list-style:none;cursor:pointer}
 .workspace.workspace :global(.attention-heading::-webkit-details-marker){display:none}
