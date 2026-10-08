@@ -29,19 +29,19 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
   }catch{await finish(row,'delete','retry',{reason:'deletion_confirmation_required'}).catch(()=>null);result.held++;}
  }
  for(const initial of await rpc<RecordedReceptionRow[]>('icash_claim_recorded_reception_work',{p_kind:'reconcile',p_limit:3,p_lease_seconds:120})){
-  let row=initial;
+  let row=initial,stage='provider_binding';
   try{
    if(row.provider_account_sid!==env.TWILIO_ACCOUNT_SID)throw Error('PROVIDER_BINDING_REQUIRED');
    // A once-claimed start may have created audio even if its response was lost.
    // Bind its exact Call/account identity and expiry before carrier/end/cost
    // dependencies, so their outage cannot prevent the deletion queue.
-   let receipt:Record<string,unknown>|null=null,recordingDiscoveryFailed=false;
+   let receipt:Record<string,unknown>|null=null,recordingDiscoveryFailed=false;stage='recording_discovery';
    if(!row.recording_sid&&row.start_claimed_at)try{
     const listed=await provider.listRecordings(row.call_sid);if(listed.next_page_uri!==null||!Array.isArray(listed.recordings)||listed.recordings.length!==1)throw Error('UNIQUE_RECORDING_REQUIRED');
     receipt=object(listed.recordings[0]);if(!receptionRecordingMatches(row,receipt))throw Error('RECORDING_BINDING_REQUIRED');
     const next=await transitionRecordedReception(rpc,row,'started',{recordingSid:receipt.sid,providerStartedAt:new Date(String(receipt.start_time)).toISOString()});if(!next)throw Error('RECORDING_BINDING_SAVE_REQUIRED');row=next;
    }catch{recordingDiscoveryFailed=true;}
-   let call:Record<string,unknown>;
+   let call:Record<string,unknown>;stage='carrier_readback';
    try{call=await provider.getCall(row.call_sid);}catch{
     // An unavailable read cannot cancel already-durable termination authority.
     // The helper may POST ended to this exact reserved SID, but still refuses
@@ -58,9 +58,9 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
    }else if(clockConflict||row.end_requested_at||now>=Date.parse(row.call_deadline_at)||!recordingAuthorized(row)&&now>=Date.parse(row.consent_deadline_at)){
     const ended=await endRecordedReception(rpc,provider,row,'deadline_or_requested_end');row=ended.row;if(!ended.ended)throw Error('TERMINATION_UNCONFIRMED');
    }
-   if(recordingDiscoveryFailed)throw Error('RECORDING_DISCOVERY_REQUIRED');
+   if(recordingDiscoveryFailed)throw Error('RECORDING_DISCOVERY_REQUIRED');stage='recording_readback';
    if(!receipt&&row.recording_sid&&row.state!=='deleted')receipt=await provider.getRecording(row.recording_sid);
-   if(receipt){
+   if(receipt){stage='recording_receipt';
     if(!receptionRecordingMatches(row,receipt))throw Error('RECORDING_BINDING_REQUIRED');
     if(['completed','absent'].includes(String(receipt.status))&&!row.call_ended_at){const ended=await endRecordedReception(rpc,provider,row,'audio_terminal');row=ended.row;if(!ended.ended)throw Error('TERMINATION_UNCONFIRMED');}
     if(receipt.status==='completed'&&(!['available','expired','deletion_pending','deleted'].includes(row.state)||row.state==='available'&&row.provider_recording_price_micros===null&&finalRecordingPayload(receipt).providerRecordingPriceMicros!==undefined)){
@@ -69,7 +69,7 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
      const next=await transitionRecordedReception(rpc,row,'absent');if(!next)throw Error('ABSENT_RECEIPT_SAVE_REQUIRED');row=next;
     }
    }
-   let conversation:Record<string,unknown>|null=null;
+   let conversation:Record<string,unknown>|null=null;stage='conversation_readback';
    // No agent query for declined/unstarted calls. A lost register response is
    // discovered by immutable user-id; it is NEVER registered a second time.
    if(row.register_claimed_at){
@@ -83,15 +83,21 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
    }
    // Disputed clocks hold costs, never exact-call recording discovery, expiry
    // scheduling, terminal marking or identity recovery needed for deletion.
-   if(clockConflict)throw Error('CALL_START_CONFLICT');
+   stage='clock_binding';if(clockConflict)throw Error('CALL_START_CONFLICT');
    if(row.call_ended_at){
+    stage='settlement';
     const freshCall=terminal?call:await provider.getCall(row.call_sid);
     const settled=await settleRecordedReception(rpc,row,freshCall,conversation,receipt);
     if(settled.settled===true)result.settled++;
     if('reviewRequired' in settled&&settled.reviewRequired)result.held++;
    }
    await finish(initial,'reconcile','checked');result.reconciled++;
-  }catch{await finish(initial,'reconcile','retry',{reason:'provider_reconciliation_required'}).catch(()=>null);result.held++;}
+  }catch(error){
+   // Fixed stage/code fields only: no provider body, numbers, headers or secrets.
+   const code=error instanceof Error&&/^[A-Z0-9_]{1,100}$/.test(error.message)?error.message:'RECONCILIATION_REQUIRED';
+   console.warn('recorded_reception_reconciliation_held',{sessionId:row.id,stage,code,...(error instanceof RecordingProviderError?{httpStatus:error.status}:{})});
+   await finish(initial,'reconcile','retry',{reason:'provider_reconciliation_required'}).catch(()=>null);result.held++;
+  }
  }
  return result;
 }
