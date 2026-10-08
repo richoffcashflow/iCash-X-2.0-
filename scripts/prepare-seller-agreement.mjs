@@ -13,7 +13,7 @@ import {testAutomaticOfferProvider} from './test-automatic-offer-provider.mjs';
 
 const stable=a=>JSON.stringify(canonical({main_branch_id:a.main_branch_id,agent_id:a.agent_id,branch_id:a.branch_id,version_id:a.version_id,conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null}));
 export async function prepareSellerAgreement(env=process.env,fetcher=fetch,noEmd=false,automatic=false,verifyProvider=testAutomaticOfferProvider){
- const name=automatic?'automatic-offer-flow-20261008-v1':noEmd?'seller-agreement-no-emd-20261008':'seller-agreement-on-call-20261008';
+ const name=automatic?'automatic-offer-flow-'+automaticOfferReceptionPolicyHash.slice(0,16):noEmd?'seller-agreement-no-emd-20261008':'seller-agreement-on-call-20261008';
  const policy=automatic?automaticOfferReceptionPolicy:noEmd?noEmdReceptionPolicy:sellerAgreementReceptionPolicy,policyHash=automatic?automaticOfferReceptionPolicyHash:noEmd?noEmdReceptionPolicyHash:sellerAgreementReceptionPolicyHash,prompt=automatic?automaticOfferReceptionPrompt:noEmd?noEmdReceptionPrompt:sellerAgreementReceptionPrompt;
  const toolName=automatic?automaticOfferToolName:noEmd?noEmdAgreementToolName:sellerAgreementToolName,toolConfig=automatic?automaticOfferToolConfig:noEmd?noEmdAgreementToolConfig:sellerAgreementToolConfig;
  if(env.VERCEL_ENV!=='production'||env.ICASH_DIRECT_CALLS_PREPARE!=='true')return {status:'not_requested'};
@@ -87,7 +87,7 @@ export async function prepareSellerAgreement(env=process.env,fetcher=fetch,noEmd
  const candidate={...c,context_policy:policy,context_policy_hash:policyHash,agreement_tool_id:tool.id,branch_id:inPrepared.branch.id,reviewed_version_id:inPrepared.agent.version_id,config_hash:''};
  const inspected=inspectRecordedReceptionAgent(candidate,inPrepared.agent,inPrepared.branch,receptionWorkspacePostcallAbsent(workspace),stop,tool);
  if(!inspectRecordedReceptionAgent({...candidate,config_hash:inspected.hash},inPrepared.agent,inPrepared.branch,receptionWorkspacePostcallAbsent(workspace),stop,tool).safe)throw Error('INBOUND_AGREEMENT_READBACK_REQUIRED');
- const outputConfig={agent:{prompt:{tool_ids:oldReview.toolIds.map(id=>id===oldReview.contractToolId?tool.id:id),...(automatic?{prompt:String(object(object(object(outgoing.conversation_config).agent).prompt).prompt)+automaticOfferInstructions}:{})}}};
+ const outputConfig={agent:{prompt:{tool_ids:oldReview.toolIds.map(id=>id===oldReview.contractToolId?tool.id:id),...(automatic?{prompt:automaticOfferReceptionPrompt}:{})}}};
  const outPrepared=await branch(outgoingPath,outgoing,outRows,outputConfig,automatic?{guardrails:automaticOfferGuardrails(object(outgoing.platform_settings).guardrails)}:undefined);
  const a=outPrepared.agent,newReview={...oldReview,...(automatic?{offerPolicy:automaticOfferReceptionPolicy}:{}),branchId:outPrepared.branch.id,versionId:a.version_id,contractToolId:tool.id,toolIds:outputConfig.agent.prompt.tool_ids,reviewedAt:new Date().toISOString(),configHash:sha(JSON.stringify(canonical({conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null})))};
  if(!recordingAgentMatches(newReview,a)||!readRecordingReview(JSON.stringify(newReview)))throw Error('OUTBOUND_AGREEMENT_READBACK_REQUIRED');

@@ -4,6 +4,7 @@ export async function testAutomaticCallOffer(f){
  await db.exec('alter table public.icash_live_conversations add operation_key text;alter table public.icash_voice_jobs add operation_key text,add permission_id uuid;');
  await db.exec(read('supabase/migrations/20261008071731_automatic_call_offer_authority.sql'));
  await db.exec(read('supabase/migrations/20261008073432_automatic_offer_voice_guardrail.sql'));
+ await db.exec(read('supabase/migrations/20261008074050_automatic_offer_conversation_policy.sql'));
  await scenario('automatic v5 binds the current seller and stores the exact quote and acceptance across calls',async()=>{
   const {r,terms}=await call('seller',true,true),now=Date.now();
   const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:0,raw:{data:{dm_property_id:'prop_123',full_address:terms.address,estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:20000,estimated_equity_percentage:90}}};
