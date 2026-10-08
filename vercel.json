@@ -22,7 +22,7 @@
       "schedule": "* * * * *"
     },
     {
-      "path": "/api/webinar/followups",
+      "path": "/api/internal/messaging",
       "schedule": "*/5 * * * *"
     },
     {

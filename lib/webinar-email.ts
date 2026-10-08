@@ -5,10 +5,11 @@ import {followupCopy,followupPhase} from '@/lib/webinar-followup-policy';
 import {webinarSite} from '@/lib/webinar-site';
 import {campaignCopy,type CampaignDestination} from '@/lib/webinar-campaign';
 import {resolveCampaignTarget} from '@/lib/webinar-campaign-server';
+import {readCampaignSettings,type CampaignSettings} from './messaging-settings.ts';
 type Database=typeof db;
 export type FollowupJob={campaign_id?:string|null;destination?:CampaignDestination;id:string;visitor_id:string;session_id:string;channel:'email'|'sms';recipient:string;step:number;attempts:number;payload:Record<string,unknown>|null;first_attempt_at:string|null};
 export function webinarMailTime(timezone:string,now=new Date()){let next=new Date(now);for(let n=0;n<26;n++){const hour=localHour(timezone,next);if(hour>=9&&hour<20)return next;next=new Date(next.getTime()+3600000);}return next;}
-export function webinarFollowupReadiness(settings:WebinarSettings,env:Record<string,string|undefined>=process.env){
+export function webinarFollowupReadiness(settings:CampaignSettings,env:Record<string,string|undefined>=process.env){
  const production=env.VERCEL_ENV==='production',origin=env.ICASH_APP_ORIGIN;
  let validOrigin=false;try{const url=new URL(origin||'');validOrigin=url.protocol==='https:'&&!url.username&&!url.password;}catch{}
  const emailConnection=!!env.RESEND_API_KEY&&!!(env.RESEND_RECEIVING_WEBHOOK_SECRET||env.ICASH_WEBINAR_EMAIL_WEBHOOK_SECRET)&&validOrigin;
@@ -16,10 +17,10 @@ export function webinarFollowupReadiness(settings:WebinarSettings,env:Record<str
  return {emailConnection,smsConnection,senderCount:0,email:production&&settings.enabled&&emailConnection&&!!settings.fromEmail&&!!settings.postalAddress.trim(),sms:production&&settings.smsEnabled&&smsConnection};
 }
 export async function processWebinarFollowups({database=db,transport=fetch,env=process.env,clock=()=>new Date()}:{database?:Database;transport?:typeof fetch;env?:Record<string,string|undefined>;clock?:()=>Date}={}){
- const [row]=await database<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config'),settings=settingsSchema.parse(row.config);
+ const {settings:campaign}=await readCampaignSettings(database);
+ const [row]=await database<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config'),settings=settingsSchema.parse({...row.config,...campaign});
  const ready=webinarFollowupReadiness(settings,env);
  if(ready.sms){const senders=await database<unknown[]>('icash_webinar_text_senders?enabled=eq.true&select=phone');ready.senderCount=senders.length;ready.sms=senders.length>0;}
- if(env.VERCEL_ENV==='production')await database('rpc/icash_webinar_activate_customers','POST',{});
  if(!ready.email&&!ready.sms)return {emailReady:ready.email,textReady:ready.sms,setupRequired:settings.enabled||settings.smsEnabled,sent:0};
  const origin=new URL(env.ICASH_APP_ORIGIN!).origin;
  const jobs=await database<FollowupJob[]>('rpc/icash_webinar_claim_followups','POST',{p_email_ready:ready.email,p_sms_ready:ready.sms});
