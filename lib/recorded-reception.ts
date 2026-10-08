@@ -20,6 +20,13 @@ export function validRecordedReceptionConfig(c:RecordedReceptionConfig|null,now=
  if(!c||!uuid(c.id)||c.enabled!==true||c.account_id!==receptionTarget.accountId||c.owner_user_id!==receptionTarget.ownerUserId||c.called_number!==receptionTarget.calledNumber||c.agent_id!==receptionTarget.agentId||c.policy_version!==recordedReceptionPolicy||!sid(c.provider_account_sid,'AC')||!uuid(c.rate_id)||!/^tool_[A-Za-z0-9]+$/.test(c.stop_tool_id)||!/^agtbrch_[A-Za-z0-9]+$/.test(c.branch_id)||!/^agtvrsn_[A-Za-z0-9]+$/.test(c.reviewed_version_id)||!/^[a-f0-9]{64}$/.test(c.config_hash)||!Number.isSafeInteger(c.customer_charge_cap_cents)||c.customer_charge_cap_cents<1||c.funding_mode!=='customer_credits'||c.receipt_mode!=='provider_readback'||!(c.context_policy==='message_only'||propertyReceptionEnabled(c))||!Number.isFinite(Date.parse(c.approved_at))||Date.parse(c.approved_at)>now||!Number.isFinite(Date.parse(c.reviewed_until))||Date.parse(c.reviewed_until)<now+(c.max_duration_seconds+60)*1000)return false;
  return c.call_profile==='normal'&&c.max_duration_seconds===600||c.call_profile==='owner_quick_test'&&c.max_duration_seconds===60&&c.owner_quick_test_enabled===true&&typeof c.owner_quick_test_approval_reference==='string'&&c.owner_quick_test_approval_reference.trim().length>=10&&/^[a-f0-9]{64}$/.test(c.owner_caller_hash??'');
 }
+/** The database atomically binds the affordable hold to this exact call. */
+export function validReceptionCreditBound(c:RecordedReceptionConfig,r:RecordedReceptionRow){
+ const seconds=r.max_total_seconds,price=r.charge_cap_cents;
+ return Number.isSafeInteger(price)&&price>0&&price<=c.customer_charge_cap_cents
+  &&(c.call_profile==='owner_quick_test'?seconds===60&&price===c.customer_charge_cap_cents:
+   Number.isInteger(seconds)&&seconds>=120&&seconds<=c.max_duration_seconds&&seconds%60===0);
+}
 export type ReceptionInlineToolEvidence={shape:'absent'|'array'|'invalid';count:number|null;reviewedStopDefinition:boolean;matchingStopCount:number;nativeEndCallCount:number;unrecognizedCount:number;bounded:boolean;entries:{kind:'native_end_call'|'reviewed_stop'|'unrecognized';type:'system'|'webhook'|'client'|'other';stopNameMatches:boolean;wrappedDefinitionPresent:boolean;definitionMatches:boolean}[]};
 /** Only a direct canonical tool config, equal in every field to the separately
  * fetched and checked stop definition, may be removed from the base no-tools
