@@ -47,7 +47,7 @@ function fixture(options={}) {
     events.push({rpc:name,body:clone(body)});
     if (name==='icash_get_recorded_reception_config') return options.missingConfig?null:clone(cfg.c);
     if (name==='icash_get_recorded_reception_session') return row && body.p_id===row.id && (!body.p_account || body.p_account===row.account_id) ? snapshot() : null;
-    if (name==='icash_reserve_recorded_reception') {
+    if (name==='icash_reserve_flexible_reception') {
       if (row || options.denied) return {allowed:false};
       row={id, account_id:cfg.c.account_id, config_id:cfg.c.id, configuration:clone(cfg.c), operation_key:operation, provider_account_sid:accountSid, call_sid:callSid, from_phone:caller, to_phone:cfg.c.called_number, caller_hash:body.p_caller_hash, nonce_hash:body.p_nonce_hash, stop_token_hash:body.p_stop_token_hash, state:'reserved', row_version:1, agent_id:cfg.c.agent_id, branch_id:cfg.c.branch_id, version_id:cfg.c.reviewed_version_id, max_total_seconds:cfg.c.max_duration_seconds, rate_id:cfg.c.rate_id, charge_cap_cents:cfg.c.customer_charge_cap_cents, pricing_policy:clone(cfg.c.pricing_policy), created_at:iso, call_started_at:null, call_deadline_at:new Date(now+60000).toISOString(), consent_deadline_at:new Date(now+45000).toISOString(), consent_at:null, setup_claimed_at:null, bounded_at:null, setup_confirmed_at:null, start_claimed_at:null, register_claimed_at:null, recording_sid:null, provider_started_at:null, ended_at:null, duration_seconds:null, audio_expires_at:null, deleted_at:null, conversation_id:null, end_requested_at:null, call_ended_at:null, provider_recording_price_micros:null, ...options.badRow};
       return {allowed:true,session:snapshot()};
@@ -122,11 +122,11 @@ test('invalid signature, duplicate keys, method/content type, target/account/dir
   for(const req of requests){const f=fixture();assert.equal(await(await f.service.inbound(req)).text(),rejectTwiml);assert.deepEqual(f.events,[]);}
 });
 test('authenticated canonical incoming call must match every binding and be fresh',async()=>{
-  for(const call of [{sid:'CA'+'d'.repeat(32)},{account_sid:'AC'+'d'.repeat(32)},{from:'+12125550999'},{to:'+12125550999'},{direction:'outbound-api'},{status:'completed'},{date_created:new Date(now-120001).toISOString()},{date_created:new Date(now+1).toISOString()},{date_created:'invalid'}]){const f=fixture({call});assert.equal((await f.admit()).text,rejectTwiml);assert.equal(providerWrites(f).length,0);assert(!f.events.some(e=>e.rpc==='icash_reserve_recorded_reception'));}
+  for(const call of [{sid:'CA'+'d'.repeat(32)},{account_sid:'AC'+'d'.repeat(32)},{from:'+12125550999'},{to:'+12125550999'},{direction:'outbound-api'},{status:'completed'},{date_created:new Date(now-120001).toISOString()},{date_created:new Date(now+1).toISOString()},{date_created:'invalid'}]){const f=fixture({call});assert.equal((await f.admit()).text,rejectTwiml);assert.equal(providerWrites(f).length,0);assert(!f.events.some(e=>e.rpc==='icash_reserve_flexible_reception'));}
 });
 test('review/config failures cannot reserve or write provider state',async()=>{
   const changes=[c=>c.enabled=false,c=>c.account_id=foreignAccount,c=>c.owner_user_id=foreignAccount,c=>c.called_number='+12125550999',c=>c.agent_id='agent_foreignfixture',c=>c.provider_account_sid='AC'+'d'.repeat(32),c=>c.approved_at=new Date(now+1).toISOString(),c=>c.reviewed_until=new Date(now+1000).toISOString(),c=>c.policy_version='unknown',c=>c.max_duration_seconds=60,c=>c.funding_mode='business'];
-  for(const change of changes){const f=fixture({mutate:({c})=>change(c)});assert.equal((await f.admit()).text,rejectTwiml);assert.equal(providerWrites(f).length,0);assert(!f.events.some(e=>e.rpc==='icash_reserve_recorded_reception'));}
+  for(const change of changes){const f=fixture({mutate:({c})=>change(c)});assert.equal((await f.admit()).text,rejectTwiml);assert.equal(providerWrites(f).length,0);assert(!f.events.some(e=>e.rpc==='icash_reserve_flexible_reception'));}
 });
 test('only a reviewed stop tool is admitted; recording, transfer, MCP, alternate prompt and inherited exports fail closed',async()=>{
   const changes=[x=>x.agent.conversation_config.agent.prompt.tool_ids.push('tool_outboundfixture'),x=>x.agent.conversation_config.agent.prompt.prompt+=' Make an outbound call.',x=>x.agent.platform_settings.privacy.record_voice=true,x=>x.agent.conversation_config.agent.prompt.mcp_server_ids=['mcp_outboundfixture'],x=>x.agent.conversation_config.agent.prompt.built_in_tools={transfer_to_number:{type:'system',name:'transfer_to_number'}},x=>x.agent.conversation_config.agent.prompt.tools=[{type:'webhook',name:'send_email'}],x=>x.agent.platform_settings.workspace_overrides.webhooks.send_audio=true,x=>x.branch.current_live_percentage=1,x=>x.branch.draft_exists=true,x=>x.tool.tool_config.api_schema.url='https://other.invalid/stop',x=>x.tool.tool_config.api_schema.request_body_schema.properties.accountId={type:'string'},x=>x.tool.tool_config.api_schema.auth_connection='privileged'];
@@ -137,8 +137,8 @@ test('normal600 and explicitly approved owner60 each keep immutable funded tier 
   for(const profile of ['normal','owner_quick_test']){const f=fixture({profile});assert(validRecordedReceptionConfig(f.c,now));await f.ready();assert.equal(f.row.max_total_seconds,profile==='normal'?600:60);assert.equal(f.row.charge_cap_cents,f.c.customer_charge_cap_cents);assert.deepEqual(providerWrites(f).map(e=>[e.provider,e.seconds]),[['boundCall',f.c.max_duration_seconds]]);const r=await f.consent();assert.match(await r.text(),/<Connect>/);assert.equal(providerWrites(f).find(e=>e.provider==='register').seconds,f.c.max_duration_seconds);}
   for(const mutate of [({c})=>c.owner_quick_test_enabled=false,({c})=>c.owner_quick_test_approval_reference='',({c})=>c.owner_caller_hash='0'.repeat(64)]){const f=fixture({profile:'owner_quick_test',mutate});assert.equal((await f.admit()).text,rejectTwiml);assert.equal(providerWrites(f).length,0);}
 });
-test('unaffordable reservation does not fall back to an owner test or shorter call',async()=>{
-  const f=fixture({denied:true});assert.equal((await f.admit()).text,rejectTwiml);const attempts=f.events.filter(e=>e.rpc==='icash_reserve_recorded_reception');assert.equal(attempts.length,1);assert.equal(attempts[0].body.p_config_id,configId);assert.equal(providerWrites(f).length,0);
+test('denied reservation never retries or fabricates a shorter funded call',async()=>{
+  const f=fixture({denied:true});assert.equal((await f.admit()).text,rejectTwiml);const attempts=f.events.filter(e=>e.rpc==='icash_reserve_flexible_reception');assert.equal(attempts.length,1);assert.equal(attempts[0].body.p_config_id,configId);assert.equal(providerWrites(f).length,0);
 });
 test('spoken disclosure precedes listening; no recording or AI starts before speech consent',async()=>{
   const f=fixture();const {text}=await f.admit();assert(text.indexOf('</Play>')<text.indexOf('<Gather'));assert.match(text,/reception-v4-20261007\/notice.mp3/);assert.match(text,/reception-v4-20261007\/question.mp3/);assert(!text.includes('<Say'));assert.match(text,/input="speech"/);assert(!/<Record|<Connect|dtmf/.test(text));assert(text.includes(recordedReceptionUrl+'/consent'));assert.equal(f.row.state,'consent_pending');assert.deepEqual(providerWrites(f).map(e=>e.provider),['boundCall']);
@@ -222,7 +222,7 @@ test('recorded provider transport has no dial capability and binds carrier/AI di
   const f=await fixture().ready();await f.consent();const network=[];
   const provider=createRecordedReceptionProviders(env,async(url,init={})=>{network.push({url,init});return url.includes('register-call')?new Response(streamXml):Response.json({sid:callSid,account_sid:accountSid});});
   assert.equal(provider.dial,undefined);
-  for(const max_total_seconds of [60,600]){await provider.boundCall({...f.row,max_total_seconds});const body=new URLSearchParams(network.at(-1).init.body);assert.equal(body.get('TimeLimit'),String(max_total_seconds));assert.equal(body.get('StatusCallback'),recordedReceptionUrl+'/terminal?id='+id);assert.equal(body.get('Record'),null);assert.equal(network.at(-1).init.redirect,'error');}
+  for(const max_total_seconds of [60,120,240,540,600]){await provider.boundCall({...f.row,max_total_seconds});const body=new URLSearchParams(network.at(-1).init.body);assert.equal(body.get('TimeLimit'),String(max_total_seconds));assert.equal(body.get('StatusCallback'),recordedReceptionUrl+'/terminal?id='+id);assert.equal(body.get('Record'),null);assert.equal(network.at(-1).init.redirect,'error');}
   await provider.register(f.row,587);const body=JSON.parse(network.at(-1).init.body);assert.equal(body.direction,'inbound');assert.equal(body.from_number,caller);assert.equal(body.to_number,receptionTarget.calledNumber);assert.equal(body.conversation_initiation_client_data.conversation_config_override.conversation.max_duration_seconds,587);assert.equal(body.conversation_initiation_client_data.dynamic_variables.secret__icash_reception_stop_token,receptionStopToken(f.row,env));assert(!JSON.stringify(body).includes('secret__icash_call_token'));
   const count=network.length;await assert.rejects(provider.boundCall({...f.row,max_total_seconds:61}));await assert.rejects(provider.boundCall({...f.row,provider_account_sid:'AC'+'d'.repeat(32)}));await assert.rejects(provider.media('https://other.invalid/media'));assert.equal(network.length,count);
 });
@@ -332,7 +332,7 @@ test('runtime admission uses independent exact inline stop proof for both bounde
  for(const profile of ['normal','owner_quick_test']){
   const f=fixture({profile,mutate:x=>{x.agent.conversation_config.agent.prompt.tools=[clone(x.tool.tool_config),{type:'system',name:'end_call',params:{system_tool_type:'end_call'}}];x.c.config_hash=inspectRecordedReceptionAgent(x.c,x.agent,x.branch,true).hash;}});
   const {text}=await f.admit();assert.match(text,/<Gather/);assert.equal(f.row.state,'consent_pending');
-  assert.equal(f.events.filter(e=>e.rpc==='icash_reserve_recorded_reception').length,1);
+  assert.equal(f.events.filter(e=>e.rpc==='icash_reserve_flexible_reception').length,1);
   assert.deepEqual(providerWrites(f).map(e=>e.provider),['boundCall']);assert.equal(f.row.max_total_seconds,profile==='normal'?600:60);
  }
 });
@@ -340,7 +340,7 @@ test('runtime rejects inline stop mismatches, duplicate tools and missing indepe
  const changes=[x=>x.tool=null,x=>x.tool.id='tool_foreign',x=>x.agent.conversation_config.agent.prompt.tools[0].api_schema.url='https://foreign.invalid/stop',x=>x.agent.conversation_config.agent.prompt.tools[0].description='different from independent definition',x=>x.agent.conversation_config.agent.prompt.tools.push(clone(x.tool.tool_config))];
  for(const change of changes){
   const f=fixture({mutate:x=>{x.agent.conversation_config.agent.prompt.tools=[clone(x.tool.tool_config)];change(x);x.c.config_hash=inspectRecordedReceptionAgent(x.c,x.agent,x.branch,true).hash;}});
-  assert.equal((await f.admit()).text,rejectTwiml);assert.equal(f.row,null);assert.equal(providerWrites(f).length,0);assert(!f.events.some(e=>e.rpc==='icash_reserve_recorded_reception'));
+  assert.equal((await f.admit()).text,rejectTwiml);assert.equal(f.row,null);assert.equal(providerWrites(f).length,0);assert(!f.events.some(e=>e.rpc==='icash_reserve_flexible_reception'));
  }
 });
 
@@ -392,4 +392,22 @@ test('missing carrier price uses only an explicit tariff approval, remains estim
  for(const mutation of [x=>x.call.price='bad',x=>x.call.price='0.01',x=>x.call.price_unit='EUR',x=>x.call.sid='CA'+'f'.repeat(32),x=>x.call.duration='601',x=>x.call.status='in-progress',x=>x.conversation.metadata.cost_fiat=null]){
   const bad=structuredClone(s);mutation(bad);let reads=0;assert.equal((await settleRecordedReception(async()=>{reads++;},bad.row,bad.call,bad.conversation,bad.recording)).settled,false);assert.equal(reads,0);
  }
+});
+
+// Carrier and AI must use the affordable bound returned by the atomic reserve.
+test('affordable incoming calls preserve reviewed config and use exact funded duration',async()=>{
+ for(const max_total_seconds of [120,180,240,300,360,420,480,540]){
+  const f=fixture({badRow:{max_total_seconds,charge_cap_cents:196}});await f.ready();
+  assert.equal(f.c.max_duration_seconds,600);
+  assert.deepEqual(providerWrites(f).map(e=>[e.provider,e.seconds]),[['boundCall',max_total_seconds]]);
+  assert.match(await (await f.consent()).text(),/<Connect>/);
+  assert.equal(providerWrites(f).find(e=>e.provider==='register').seconds,max_total_seconds);
+ }
+ for(const badRow of [{max_total_seconds:60},{max_total_seconds:121},{max_total_seconds:660},{charge_cap_cents:0},{charge_cap_cents:480}]){
+  const f=fixture({badRow});assert.match((await f.admit()).text,/<Hangup/);
+  assert(!providerWrites(f).some(e=>['boundCall','start','register'].includes(e.provider)));
+ }
+ const owner=fixture({profile:'owner_quick_test',badRow:{max_total_seconds:120}});
+ assert.match((await owner.admit()).text,/<Hangup/);
+ assert(!providerWrites(owner).some(e=>e.provider==='boundCall'));
 });

@@ -4,7 +4,7 @@ import {boundedBytes} from './required-call-recording-provider.ts';
 import {finalRecordingPayload} from './required-call-recording-service.ts';
 import {receptionTarget,receptionUrl,rejectTwiml,receptionWorkspacePostcallAbsent} from './general-reception.ts';
 import {propertyReceptionEnabled} from './reception-property-context.ts';
-import {recordedReceptionUrl,recordedReceptionPolicy,receptionEndTwiml,receptionConsentTwiml,receptionAnswerTwiml,receptionCallerHash,receptionStopToken,validRecordedReceptionConfig,inspectRecordedReceptionAgent,recordedReceptionToolMatches,incomingCallMatches,incomingCallIdentityMatches,receptionRecordingMatches,receptionAudioAvailable,type RecordedReceptionRpc,type RecordedReceptionRow,type RecordedReceptionConfig,type RecordedReceptionEnv} from './recorded-reception.ts';
+import {recordedReceptionUrl,recordedReceptionPolicy,receptionEndTwiml,receptionConsentTwiml,receptionAnswerTwiml,receptionCallerHash,receptionStopToken,validRecordedReceptionConfig,validReceptionCreditBound,inspectRecordedReceptionAgent,recordedReceptionToolMatches,incomingCallMatches,incomingCallIdentityMatches,receptionRecordingMatches,receptionAudioAvailable,type RecordedReceptionRpc,type RecordedReceptionRow,type RecordedReceptionConfig,type RecordedReceptionEnv} from './recorded-reception.ts';
 import type {RecordedReceptionProviders} from './recorded-reception-provider.ts';
 const xml=(body:string)=>new Response(body,{headers:{...privateHeaders,'Content-Type':'application/xml; charset=utf-8'}});
 const hangup=()=>xml('<Response><Hangup/></Response>');
@@ -66,27 +66,33 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
  }
  return {
   async inbound(request:Request){
-   let row:RecordedReceptionRow|null=null;
+   let row:RecordedReceptionRow|null=null,stage='release';
+   const deny=(reason:string)=>{console.warn('recorded_reception_admission_denied',{stage,reason});return xml(rejectTwiml);};
    try{
-    if(env.ICASH_RECORDED_RECEPTION_READY!=='true')return xml(rejectTwiml);
+    if(env.ICASH_RECORDED_RECEPTION_READY!=='true')return deny('not_released');
+    stage='authenticate';
     // Keep the already-installed carrier URL working during the recorded rollout.
     // Verify against its exact canonical URL; never rewrite a signed request or
     // infer its signature target from Host/X-Forwarded headers.
     const u=new URL(request.url),target=u.pathname==='/api/reception/inbound'?receptionUrl:u.pathname==='/api/reception/recorded/inbound'?recordedReceptionUrl+'/inbound':null;
-    if(request.method!=='POST'||!target||u.search||request.headers.get('content-type')?.split(';')[0].trim()!=='application/x-www-form-urlencoded')return xml(rejectTwiml);
+    if(request.method!=='POST'||!target||u.search||request.headers.get('content-type')?.split(';')[0].trim()!=='application/x-www-form-urlencoded')return deny('invalid_request');
     const f=verifiedTwilioForm((await boundedBytes(request,16384)).toString('utf8'),request.headers.get('x-twilio-signature'),env.TWILIO_AUTH_TOKEN??'',target);
-    if(!f||f.get('AccountSid')!==env.TWILIO_ACCOUNT_SID||f.get('Direction')!=='inbound'||f.get('CallStatus')!=='ringing'||f.get('To')!==receptionTarget.calledNumber||!sid(f.get('CallSid'),'CA'))return xml(rejectTwiml);
-    const from=f.get('From')??'';if(!/^\+[1-9]\d{7,14}$/.test(from)&&!['anonymous','restricted','unknown'].includes(from))return xml(rejectTwiml);
-    const c=await currentConfig(f.get('To')!);if(!c)return xml(rejectTwiml);
-    const callerHash=receptionCallerHash(from,env);if(c.call_profile==='owner_quick_test'&&c.owner_caller_hash!==callerHash)return xml(rejectTwiml);
+    if(!f||f.get('AccountSid')!==env.TWILIO_ACCOUNT_SID||f.get('Direction')!=='inbound'||f.get('CallStatus')!=='ringing'||f.get('To')!==receptionTarget.calledNumber||!sid(f.get('CallSid'),'CA'))return deny('authentication_or_call_fields');
+    const from=f.get('From')??'';if(!/^\+[1-9]\d{7,14}$/.test(from)&&!['anonymous','restricted','unknown'].includes(from))return deny('invalid_caller');
+    stage='configuration';
+    const c=await currentConfig(f.get('To')!);if(!c)return deny('configuration_unavailable');
+    const callerHash=receptionCallerHash(from,env);if(c.call_profile==='owner_quick_test'&&c.owner_caller_hash!==callerHash)return deny('caller_not_authorized');
+    stage='carrier_readback';
     const call=await provider.getCall(f.get('CallSid')!);const age=now()-Date.parse(String(call.date_created));
-    if(call.sid!==f.get('CallSid')||call.account_sid!==c.provider_account_sid||call.from!==from||call.to!==c.called_number||call.direction!=='inbound'||call.status!=='ringing'||!Number.isFinite(age)||age<0||age>120000||!await checkAgent(c))return xml(rejectTwiml);
+    if(call.sid!==f.get('CallSid')||call.account_sid!==c.provider_account_sid||call.from!==from||call.to!==c.called_number||call.direction!=='inbound'||call.status!=='ringing'||!Number.isFinite(age)||age<0||age>120000)return deny('carrier_mismatch');
+    stage='agent_readback';if(!await checkAgent(c))return deny('agent_mismatch');
     const nonce=randomBytes(32).toString('hex'),op='recorded-reception:'+call.sid,token=receptionStopToken({operation_key:op},env);
-    const admission=await rpc<{allowed:boolean;session:RecordedReceptionRow}>('icash_reserve_recorded_reception',{p_config_id:c.id,p_call_sid:call.sid,p_provider_account_sid:c.provider_account_sid,p_from_phone:from,p_to_phone:c.called_number,p_direction:'inbound',p_caller_hash:callerHash,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(token),p_config_hash:c.config_hash,p_version_id:c.reviewed_version_id});
-    if(admission?.allowed!==true||!admission.session)return xml(rejectTwiml);row=admission.session;
-    if(row.operation_key!==op||row.account_id!==c.account_id||row.config_id!==c.id||row.call_sid!==call.sid||row.provider_account_sid!==c.provider_account_sid||row.from_phone!==from||row.to_phone!==c.called_number||row.max_total_seconds!==c.max_duration_seconds||row.charge_cap_cents!==c.customer_charge_cap_cents||row.rate_id!==c.rate_id||row.nonce_hash!==sha(nonce)||row.stop_token_hash!==sha(token))throw Error('RESERVATION_BINDING_REQUIRED');
+    stage='credit_reservation';
+    const admission=await rpc<{allowed:boolean;reason?:string;session:RecordedReceptionRow}>('icash_reserve_flexible_reception',{p_config_id:c.id,p_call_sid:call.sid,p_provider_account_sid:c.provider_account_sid,p_from_phone:from,p_to_phone:c.called_number,p_direction:'inbound',p_caller_hash:callerHash,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(token),p_config_hash:c.config_hash,p_version_id:c.reviewed_version_id});
+    if(admission?.allowed!==true||!admission.session)return deny(typeof admission?.reason==='string'&&/^[a-z_]{1,60}$/.test(admission.reason)?admission.reason:'reservation_denied');row=admission.session;
+    if(row.operation_key!==op||row.account_id!==c.account_id||row.config_id!==c.id||row.call_sid!==call.sid||row.provider_account_sid!==c.provider_account_sid||row.from_phone!==from||row.to_phone!==c.called_number||!validReceptionCreditBound(c,row)||row.rate_id!==c.rate_id||row.nonce_hash!==sha(nonce)||row.stop_token_hash!==sha(token))throw Error('RESERVATION_BINDING_REQUIRED');
     return xml(receptionAnswerTwiml(row.id,nonce));
-   }catch{if(row)await endRecordedReception(rpc,provider,row,'admission_failed');return hangup();}
+   }catch(error){console.error('recorded_reception_admission_failed',{stage,sessionId:row?.id,code:error instanceof Error&&/^[A-Z0-9_:]{1,100}$/.test(error.message)?error.message:'ADMISSION_FAILED'});if(row)await endRecordedReception(rpc,provider,row,'admission_failed');return hangup();}
   },
   async setup(request:Request){
    let row:RecordedReceptionRow|null=null,stage='authenticate';
@@ -114,7 +120,7 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
    try{
     const auth=await signed(request,'consent',true);if(!auth)return hangup();row=auth.row;
     const call=await provider.getCall(row.call_sid);if(!incomingCallIdentityMatches(row,call))return hangup();
-    if(!incomingCallMatches(row,call,now(),true)){await endRecordedReception(rpc,provider,row,'call_clock_or_status_conflict');return hangup();}
+    if(!incomingCallMatches(row,call,now(),true)){console.warn('recorded_reception_call_mismatch',{sessionId:row.id,carrierStatus:['ringing','in-progress',...terminalStatuses].includes(String(call.status))?call.status:'unknown',startDeltaMs:row.call_started_at&&Number.isFinite(Date.parse(String(call.start_time)))?Date.parse(String(call.start_time))-Date.parse(row.call_started_at):null});await endRecordedReception(rpc,provider,row,'call_clock_or_status_conflict');return hangup();}
     if(row.state!=='consent_pending'||row.consent_at){await endRecordedReception(rpc,provider,row,'replayed_consent');return hangup();}
     row=await bindRecordedReceptionCallStart(rpc,row,call);
     const optOut=recordingGateOptOut(auth.f);
