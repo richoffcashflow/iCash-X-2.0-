@@ -29,7 +29,7 @@ Block complete offers without quoteAllowed=true, wrong prices, ranges, invented 
 Block a claim that a contract was sent or signed without the corresponding successful delivery or verified-signature tool RESULT. Discussing a future next step or conditional offer is not claiming delivery or signature. Judge the current chunk, not past mistakes or an imagined continuation.`,
  trigger_action:{type:'retry',feedback:'Do not repeat the blocked sentence or restart the repairs/holding-cost explanation. Do not substitute another price. Call icash_offer_and_contract get_offer once to refresh authority, then use its exact spokenPrice or displayPrice in one short sentence. If you cannot quote it, say: Let me confirm that amount. Ask one missing property question and wait. Do not call end_call because of a pricing retry.'},
 };
-export function automaticOfferPolicy(value:unknown){return value==='automatic_offer_v5'||value==='automatic_offer_v6'||value==='automatic_offer_v7';}
+export function automaticOfferPolicy(value:unknown){return value==='automatic_offer_v5'||value==='automatic_offer_v6'||value==='automatic_offer_v7'||value==='automatic_offer_v8';}
 export function automaticOfferGuardrails(existing:unknown={}){
  const value=object(existing),custom=object(object(value.custom).config),configs=Array.isArray(custom.configs)?custom.configs.filter(c=>object(c).name!==automaticOfferGuardrail.name):[];
  return {...value,version:'1',focus:{is_enabled:true},custom:{config:{configs:[...configs,structuredClone(automaticOfferGuardrail)]}}};

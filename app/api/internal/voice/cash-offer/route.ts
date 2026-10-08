@@ -2,6 +2,7 @@ import {NextResponse} from 'next/server';
 import {db} from '@/lib/stripe-test';
 import {bindSellerAgreementCall} from '@/lib/seller-agreement-binding';
 import {automaticCallOffer,blockedOffer} from '@/lib/automatic-call-offer';
+import {sellerListingEvidence} from '@/lib/seller-listing';
 import {sellerPayoffEvidence} from '@/lib/seller-payoff';
 import {callOfferEvidence,callPayoffEvidence} from '@/lib/call-offer-evidence';
 import {createRecordedReceptionProviders} from '@/lib/recorded-reception-provider';
@@ -15,13 +16,15 @@ export const maxDuration=60;
 export async function POST(request:Request){
  const headers={'Cache-Control':'private, no-store'},token=request.headers.get('authorization')?.replace(/^Bearer /,'');
  if(!token||!/^[a-f0-9]{64}$/.test(token))return NextResponse.json({quoteAllowed:false,sent:false},{status:401,headers});
+ let action='unknown';
  try{
   const raw=await request.text();if(raw.length>6000)throw Error('invalid_input');
   const input=object(JSON.parse(raw));
+  if(['get_offer','accept_offer','update_repairs','report_change','confirm_and_send','status'].includes(String(input.action)))action=String(input.action);
   if(process.env.ICASH_LIVE_WORK_READY!=='true'||process.env.ICASH_RECORDING_RECEIPTS_READY!=='true')return NextResponse.json(blockedOffer('unavailable','The live property workflow is not currently available.'),{status:409,headers});
   let evidence:Promise<unknown>|undefined;
   const transcript=(i:Record<string,unknown>)=>evidence??=createRecordedReceptionProviders(process.env).conversation(String(i.conversationId));
-  const d={db,bind:bindSellerAgreementCall,verifyInput:async(i:Record<string,unknown>)=>callOfferEvidence(await transcript(i),i),verifyPayoffChange:async(i:Record<string,unknown>)=>callPayoffEvidence(await transcript(i),i),verifyPayoffFacts:async(i:Record<string,unknown>)=>sellerPayoffEvidence(await transcript(i),i)};
+  const d={db,bind:bindSellerAgreementCall,verifyInput:async(i:Record<string,unknown>)=>callOfferEvidence(await transcript(i),i),verifyPayoffChange:async(i:Record<string,unknown>)=>callPayoffEvidence(await transcript(i),i),verifyListingStatus:async(i:Record<string,unknown>)=>sellerListingEvidence(await transcript(i),i),verifyPayoffFacts:async(i:Record<string,unknown>)=>sellerPayoffEvidence(await transcript(i),i)};
   if(input.action!=='confirm_and_send'&&input.action!=='status')return NextResponse.json(await automaticCallOffer(token,input,d),{headers});
   const agreement=sellerAgreementInput.parse(input);
   if(process.env.DOCUSEAL_MODE!=='live')return NextResponse.json({sent:false,status:'unavailable',instruction:'Live agreement delivery is not ready.'},{status:409,headers});
@@ -33,5 +36,10 @@ export async function POST(request:Request){
    // still stop any unresolved change reported after this quote was calculated.
   }
   return NextResponse.json(await sellerAgreementAction(token,agreement,{db,bind:bindSellerAgreementCall,send:sendForSignatures,text:textPendingContract,refresh:refreshSigning}),{headers});
- }catch(error){const failure=sellerAgreementFailure(error);console.warn('automatic_offer_held',{reason:failure.reason});return NextResponse.json({...failure,quoteAllowed:false,priceCents:null},{status:409,headers});}
+ }catch(error){
+  const failure=sellerAgreementFailure(error),invalid=error instanceof Error&&error.name==='ZodError';
+  console.warn('automatic_offer_held',{action,reason:failure.reason,code:invalid?'invalid_tool_arguments':error instanceof Error&&/^[A-Za-z_]{3,80}$/.test(error.message)?error.message:'invalid_or_unavailable'});
+  const recovery=invalid?{reason:'invalid_tool_arguments',instruction:'Retry once with only the fields required for this action and the exact conversationId. Omit unused optional fields. Do not ask the seller to repeat their answers. If it fails again, explain the technical problem once and arrange follow-up.'}:failure.reason==='agreement_review_required'?{reason:'call_temporarily_unavailable',instruction:'The call action is temporarily unavailable. Retry this action at most once. If it still fails, explain the technical problem once; do not repeat answered questions or claim that the offer or contract is ready.'}:{};
+  return NextResponse.json({...failure,...recovery,quoteAllowed:false,priceCents:null},{status:409,headers});
+ }
 }
