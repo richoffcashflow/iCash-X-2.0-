@@ -69,7 +69,7 @@ begin
  definition:=pg_get_functiondef('public.icash_prepare_sms_inbound_reply(uuid,uuid,uuid)'::regprocedure);
  needle:=' select * into opening from public.icash_sms_seller_openings where thread_id=p_thread and account_id=p_account;';
  if position(needle in definition)=0 then raise exception 'Limited reply enqueue prerequisite changed';end if;
- execute replace(definition,needle,$new$ if exists(select 1 from public.icash_text_threads t join public.icash_deal_files d on d.id=t.deal_id and d.account_id=t.account_id where t.id=p_thread and t.account_id=p_account and public.icash_seller_limited_contact(p_account,d.screening_id)) then
+ execute replace(definition,needle,$new$ if exists(select 1 from public.icash_text_threads candidate_thread join public.icash_deal_files candidate_deal on candidate_deal.id=candidate_thread.deal_id and candidate_deal.account_id=candidate_thread.account_id where candidate_thread.id=p_thread and candidate_thread.account_id=p_account and public.icash_seller_limited_contact(p_account,candidate_deal.screening_id)) then
   return public.icash_prepare_limited_seller_text(p_account,p_thread,p_reply);
  end if;
 $new$||needle);
