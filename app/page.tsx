@@ -4,6 +4,7 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import {workspaceNextAction,workspaceActionDisabled} from '@/lib/workspace-status';
 import {X} from 'lucide-react';
+import styles from './workspace-easy.module.css';
 import {WorkspaceConversion} from '@/components/workspace-conversion';
 import {FundingCheckout} from '@/components/funding-checkout';
 import {FundingDialog} from '@/components/funding-dialog';
@@ -106,7 +107,7 @@ export default function Home(){
  const needsIdentity=account?.signedIn===true&&!workspaceLocked&&!account.identity;
  const needsBotName=account?.signedIn===true&&((account.balanceCents??0)>0||account.billingModel==='prepaid'||account.membershipActive===true)&&!account.botSetup?.profile.displayName?.trim();
  if(guest)return <WebinarExpressCheckout checkingAccount={!account} accountError={accountError} signInReady={account?.signInReady??true} onRetry={()=>void refreshAccount()} onSignedIn={()=>void refreshAccount()}/>;
- return <div className="console-shell personalized-workspace minimal-workspace assistant-workspace" style={{'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties}>
+ return <div className={`console-shell personalized-workspace minimal-workspace assistant-workspace ${styles.workspace}`} style={{'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties}>
   <header className="console-header"><div>{profile?.displayName?<BotBrand profile={profile} compact/>:<><Image src="/icash-x-logo.png" alt="iCash X" width={111} height={62} priority/><b className="brand-version">2.0</b></>}</div><div className="workspace-header-links">{account?.signedIn?<SupportLauncher key={account.email??'account'} onMembershipChanged={membershipChanged}/>:<a className="workspace-help" href="/support">Help</a>}{account?.signedIn?<>{!workspaceLocked&&<><WorkspaceUpdates onPreferences={()=>showDetails('notification-settings')} onBudget={()=>openFunding()}/><button className="header-access" aria-expanded={settingsOpen} onClick={()=>setSettingsOpen(v=>!v)}>Settings</button></>}<button className="header-access" onClick={()=>void signOut()}>Sign out</button></>:<button id="balance-sign-in" className="header-access" aria-expanded={signInOpen} aria-controls="inline-sign-in" onClick={()=>setSignInOpen(v=>!v)}>Sign in</button>}</div></header>
   <main className="console-main">
    {accountError&&<p role="alert">Could not load your account. <button onClick={()=>void refreshAccount()}>Retry</button></p>}
@@ -132,8 +133,8 @@ export default function Home(){
      {account.mode==='live'&&account.billingModel==='legacy'&&<SpendActivationReview key={activationKey} onAvailabilityChange={updateActivationAvailability} onSaved={()=>void refreshAccount()}/>}
      <CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}>
      <SpendingAllowance/>
-     <BudgetSummary/>
      <LiveWorkspace propertyRequest={propertyRequest} onAsk={(screeningId,address)=>setAssistantRequest({screeningId,address,nonce:Date.now()})} principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/>
+     <details className={styles.activity}><summary>Activity & results</summary><BudgetSummary/></details>
      </CreditActionGate>
      </>}
     </section>
