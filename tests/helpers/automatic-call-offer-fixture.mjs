@@ -18,6 +18,7 @@ export async function testAutomaticCallOffer(f){
  await db.exec(read('supabase/migrations/20261008203215_voice_offer_progress_policy.sql'));
  await db.exec(read('supabase/migrations/20261008204029_voice_offer_progress_evidence.sql'));
  await db.exec(read('supabase/migrations/20261008213733_live_agreement_history.sql'));
+ await db.exec(read('config/voice-delivery-failure-response.sql'));
  await db.exec('alter table public.icash_live_conversations add completed_at timestamptz,add result jsonb;');
  await db.exec(read('supabase/migrations/20261008214709_completed_seller_inbound_history.sql'));
  await scenario('completed inbound memory stays bound to its original seller, property and account',async()=>{
