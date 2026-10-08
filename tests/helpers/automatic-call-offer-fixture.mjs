@@ -7,15 +7,23 @@ export async function testAutomaticCallOffer(f){
  await db.exec(read('supabase/migrations/20261008074050_automatic_offer_conversation_policy.sql'));
  await db.exec(read('supabase/migrations/20261008153612_conditional_voice_offer_contract_hold.sql'));
  await db.exec(read('supabase/migrations/20261008174508_voice_offer_streaming_policy.sql'));
+ await db.exec('create table public.icash_customer_identities(account_id uuid primary key,company_name text);');
+ await db.exec(read('supabase/migrations/20261008194454_seller_payoff_conversation.sql'));
  await scenario('v6 binds seller context and exact price authority',async()=>{const {scope,r}=await call('seller',true,'v6');assert.equal((await scope()).dealId,'11111111-1111-4111-8111-111111111111');assert.equal((await rpc('icash_call_offer_context',{p_hash:r.stop_token_hash,p_conversation:'conv_agreement'})).party,'seller');});
- await scenario('automatic v5 binds the current seller and stores the exact quote and acceptance across calls',async()=>{
-  const {r,terms}=await call('seller',true,true),now=Date.now();
+ await scenario('v5 remains bound during the payoff rollout',async()=>{const {scope}=await call('seller',true,true);assert.equal((await scope()).dealId,'11111111-1111-4111-8111-111111111111');});
+ for(const company of [undefined,'Clear Path Homes','  '])await scenario('v7 exposes only the saved company after authenticated property binding: '+(company?.trim()||'none'),async()=>{
+  const {r,context,scope}=await call('seller',true,'v7',company);assert.equal(context.companyName,company?.trim()||null);
+  assert.equal((await scope()).dealId,'11111111-1111-4111-8111-111111111111');
+  assert.equal(await rpc('icash_recorded_reception_property_context',{p_id:r.id,p_nonce_hash:'f'.repeat(64)}),null);
+ });
+ await scenario('automatic v7 binds the current seller and stores the exact quote, reported payoff and acceptance across calls',async()=>{
+  const {r,terms}=await call('seller',true,'v7'),now=Date.now();
   const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:0,raw:{data:{dm_property_id:'prop_123',full_address:terms.address,estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:20000,estimated_equity_percentage:90}}};
   await q('update public.icash_screening_jobs set snapshot=$1',[snapshot]);
   const args={p_hash:r.stop_token_hash,p_conversation:'conv_agreement'};
   assert.equal((await rpc('icash_call_offer_context',args)).party,'seller');
   assert.equal(await rpc('icash_call_offer_context',{...args,p_hash:'f'.repeat(64)}),null);
-  let state={quotedPriceCents:10200000,quoteRevision:'c'.repeat(64),acceptedPriceCents:null};
+  let state={quotedPriceCents:10200000,quoteRevision:'c'.repeat(64),acceptedPriceCents:null,payoffReport:{mortgageCents:5000000,otherDebtCents:0},factsPending:false,payoffPending:false,contractBlocked:false,acceptanceConditional:false};
   const save=(version,patch={},action='get_offer')=>rpc('icash_save_call_offer',{...args,p_expected_version:version,p_expected_snapshot:snapshot,p_state:{...state,...patch},p_action:action});
   assert.equal(await save(0),true);assert.equal(await save(0),false,'concurrent stale write rejected');
   assert.equal(await save(1,{acceptedPriceCents:3500000},'accept_offer'),false);
@@ -40,5 +48,6 @@ export async function testAutomaticCallOffer(f){
  });
  for(const role of ['anon','authenticated','service_role'])assert.equal(await val("select has_table_privilege($1,'icash_call_offer_private.offers','SELECT,INSERT,UPDATE,DELETE')",[role]),false);
  for(const role of ['anon','authenticated'])for(const name of ['icash_call_offer_context(text,text)','icash_save_call_offer(text,text,bigint,jsonb,jsonb,text)'])assert.equal(await val("select has_function_privilege($1,$2,'execute')",[role,'public.'+name]),false);
+ for(const role of ['anon','authenticated','service_role'])assert.equal(await val("select has_function_privilege($1,'public.icash_reception_context_before_payoff(uuid,text)','execute')",[role]),false);
  console.log('PASS automatic offer SQL: current call only, atomic price lock, stale-data hold, contract price equality and private ledger.');
 }

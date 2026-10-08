@@ -34,6 +34,7 @@ const scope={accountId:'account',ownerUserId:'owner',ownerEmail:'owner@example.t
 let envelopes=[],savedTerms=terms,providerSends=0,texts=0,status='awaiting_counterparty',claim=null;
 const d={now:()=>now,bind:async()=>{},db:async(path,method,body)=>{
  if(path==='rpc/icash_seller_agreement_call_context')return scope;
+ if(path==='rpc/icash_call_offer_context')return null;
  if(path.startsWith('icash_signing_envelopes?'))return envelopes;
  if(path.startsWith('icash_deal_files?'))return [{terms:savedTerms,stage:'draft'}];
  if(path.startsWith('icash_screening_jobs?'))return [{snapshot}];
