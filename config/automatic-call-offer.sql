@@ -102,7 +102,8 @@ begin
   select s.snapshot into snapshot from public.icash_screening_jobs s where s.id=d.screening_id and s.account_id=d.account_id for share;
   if snapshot is distinct from o.snapshot or coalesce(o.state->>'acceptedPriceCents','') !~ '^[1-9][0-9]*$'
    or o.state->'acceptedPriceCents' is distinct from p_terms->'priceCents' or o.state->'quotedPriceCents' is distinct from p_terms->'priceCents'
-   or o.state->'factsPending'='true'::jsonb or o.state->'conditionPending'='true'::jsonb or o.state->'agreementRevisionRequired'='true'::jsonb then return null;end if;
+   or o.state->'factsPending'='true'::jsonb or o.state->'conditionPending'='true'::jsonb or o.state->'agreementRevisionRequired'='true'::jsonb
+   or o.state->'contractBlocked'='true'::jsonb or o.state->'acceptanceConditional'='true'::jsonb or o.state->'payoffPending'='true'::jsonb then return null;end if;
  end if;
  return public.icash_claim_seller_agreement_before_offer(p_hash,p_conversation,p_confirmation,p_expected_terms,p_terms);
 end $$;

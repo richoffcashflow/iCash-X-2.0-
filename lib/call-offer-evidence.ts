@@ -34,3 +34,16 @@ export function callOfferEvidence(value:unknown,input:Record<string,unknown>){
  const repairs=/\b(?:repair|rehab|renovat|work|fix|budget)/i.test(latest+' '+String(previous?.message??''));
  return repairs&&amounts.length===1&&amounts[0]===input.repairEstimateCents;
 }
+
+/** A short balance answer needs the preceding payoff question to establish its
+ * meaning. Matching a number alone must not turn an ownership change into debt. */
+export function callPayoffEvidence(value:unknown,input:Record<string,unknown>){
+ if(input.action!=='report_change'||!callOfferEvidence(value,input))return false;
+ const rows=object(value).transcript;if(!Array.isArray(rows))return false;
+ const turns=rows.map(object).filter(t=>['user','agent'].includes(String(t.role))&&typeof t.message==='string');
+ const index=turns.findLastIndex(t=>t.role==='user');
+ const latest=String(turns[index]?.message??''),previous=String(turns.slice(0,index).findLast(t=>t.role==='agent')?.message??'');
+ if(!/\b(mortgage|payoff|loan|heloc|debt|owe)\b/i.test(previous))return false;
+ if(/\b(owner|owners|ownership|deed|inherited|divorce|title|repair|repairs|roof|condition|foundation|damage|offer|price|address)\b/i.test(latest))return false;
+ return spokenMoneyAmounts(latest).length===1||/\b(paid off|free and clear|no mortgage|no loans?)\b/i.test(latest);
+}

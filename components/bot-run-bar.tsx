@@ -31,9 +31,9 @@ export function BotRunBar({running,stopped,paymentRequired,busy,stale,balanceCen
  const title=stale?'Checking status':paymentRequired?'Restore access':active?'Bot working':!funded?(balanceCents===undefined?'Ready when you are':hasCreditHistory?'Out of credits':'Add money to start your bot'):stopped?'Bot paused':running?'Bot running':'Bot ready';
  const detail=stale?'Reconnecting…':paymentRequired?'Update your subscription to continue.':active?current!.label:!funded?(hasCreditHistory?'Add money to continue. Your properties and conversations are saved.':'Choose an amount. Your bot starts after payment.'):running?(current?.label??'Checking for the next task…'):stopped?'Your properties and conversations are saved.':'Waiting for eligible work.';
  return <section className={`bot-run-bar bot-run-centered${active?' is-active':''}`} aria-label="Bot controls">
-  <div className="bot-run-status"><span className="bot-work-dots" aria-hidden="true"><i/><i/><i/></span><div aria-live="polite" aria-atomic="true"><div className="bot-run-eyebrow">Your AI workspace</div><h2>{title}</h2><p>{detail}</p></div></div>
+  <div className="bot-run-status"><span className="bot-work-dots" aria-hidden="true"><i/><i/><i/></span><div aria-live="polite" aria-atomic="true"><h2>{title}</h2><p>{detail}</p></div></div>
   <div className="bot-run-actions">
-   <button id="workspace-funding-toggle" className="bot-main-action" type="button" aria-haspopup="dialog" disabled={busy||stale} onClick={onBudget}><Plus size={18} aria-hidden="true"/>{busy?'One moment…':paymentRequired?'Restore access':'Add money'}</button>
+   <button id="workspace-funding-toggle" className="bot-main-action" type="button" aria-haspopup="dialog" disabled={busy||stale} onClick={onBudget}><Plus size={18} aria-hidden="true"/>{busy?'One moment…':paymentRequired?'Restore access':'Add credits'}</button>
    {funded&&!paymentRequired&&(canPause||stopped)&&<button className="bot-run-budget" type="button" disabled={busy||stale} onClick={canPause?onPause:onResume}>{canPause?<Pause size={14} aria-hidden="true"/>:<Play size={14} aria-hidden="true"/>}{canPause?'Pause bot':'Run bot'}</button>}
 
   </div>

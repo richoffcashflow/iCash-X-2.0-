@@ -5,6 +5,7 @@ export async function testAutomaticCallOffer(f){
  await db.exec(read('supabase/migrations/20261008071731_automatic_call_offer_authority.sql'));
  await db.exec(read('supabase/migrations/20261008073432_automatic_offer_voice_guardrail.sql'));
  await db.exec(read('supabase/migrations/20261008074050_automatic_offer_conversation_policy.sql'));
+ await db.exec(read('supabase/migrations/20261008153612_conditional_voice_offer_contract_hold.sql'));
  await scenario('automatic v5 binds the current seller and stores the exact quote and acceptance across calls',async()=>{
   const {r,terms}=await call('seller',true,true),now=Date.now();
   const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:0,raw:{data:{dm_property_id:'prop_123',full_address:terms.address,estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:20000,estimated_equity_percentage:90}}};
@@ -26,6 +27,11 @@ export async function testAutomaticCallOffer(f){
   assert.equal(await rpc('icash_claim_seller_agreement',claim),null,'updated research invalidates the prior quote before contract claim');
   assert.equal(await save(2),false,'stale screening cannot overwrite quote');
   await q('update public.icash_screening_jobs set snapshot=$1',[snapshot]);
+  for(const flag of ['contractBlocked','acceptanceConditional','payoffPending']){
+   await q('update icash_call_offer_private.offers set state=state||$1::jsonb',[{[flag]:true}]);
+   assert.equal(await rpc('icash_claim_seller_agreement',claim),null,flag+' prevents contract creation even with a matching accepted price');
+   await q('update icash_call_offer_private.offers set state=state-$1',[flag]);
+  }
   assert.equal((await rpc('icash_claim_seller_agreement',claim)).claimed,true);
   assert.equal(await val('select terms->>\'priceCents\' from public.icash_deal_files'),'10200000');
   await q('update public.icash_text_threads set paused=true');assert.equal(await rpc('icash_call_offer_context',args),null);
