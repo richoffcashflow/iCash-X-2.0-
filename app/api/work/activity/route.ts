@@ -38,11 +38,12 @@ export async function GET(req:Request){
   let properties:Property[];
   if(screeningId){
    properties=await db<Property[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=eq.${screeningId}&state=eq.complete&select=id,state,result,completed_at&limit=1`);
-  }else if(query){
-   const filters=new URLSearchParams({account_id:`eq.${accountId}`,state:'eq.complete',select:'id,state,result,completed_at','result->property->>address':`ilike.*${query}*`,order:'completed_at.desc,id.desc',limit:String(pageSize+1),offset:String(page*pageSize)});
-   properties=await db<Property[]>(`icash_screening_jobs?${filters}`);
   }else{
-   properties=await db<Property[]>('rpc/icash_prioritized_work','POST',{p_account:accountId,p_page:page});
+   // Lead arrival order stays stable when calls, replies or research update it.
+   // Apply the same order before pagination, with or without an address search.
+   const filters=new URLSearchParams({account_id:`eq.${accountId}`,state:'eq.complete',select:'id,state,result,completed_at',order:'created_at.desc,id.desc',limit:String(pageSize+1),offset:String(page*pageSize)});
+   if(query)filters.set('result->property->>address',`ilike.*${query}*`);
+   properties=await db<Property[]>(`icash_screening_jobs?${filters}`);
   }
   const visible=properties.slice(0,pageSize);
   const ids=visible.map(p=>p.id).join(',');

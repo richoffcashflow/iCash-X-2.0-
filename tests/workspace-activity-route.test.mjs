@@ -18,7 +18,6 @@ const paginate=(rows,q)=>rows.slice(Number(q.get('offset')??0),Number(q.get('off
 const mocks={z,NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
  paths.push({path,method,body});
  if(path==='rpc/icash_sms_route_review_items'){assert.equal(body.p_account,account);assert.equal(body.p_limit,7);return queue.slice(body.p_offset,body.p_offset+body.p_limit).map((q,i)=>({message_id:q.id,recipient:'+12145550123',body:'Which property?',revision:7,needs_review:true,candidates:[]}));}
- if(path==='rpc/icash_prioritized_work'){assert.equal(body.p_account,account);return properties.slice(body.p_page*6,body.p_page*6+7);}
  const [table,params]=path.split('?');const q=new URLSearchParams(params);
  assert.equal(q.get(table==='icash_seller_intakes'?'assigned_account':'account_id'),`eq.${account}`,'Every read is tenant scoped');
  if(table==='icash_screening_jobs'){
