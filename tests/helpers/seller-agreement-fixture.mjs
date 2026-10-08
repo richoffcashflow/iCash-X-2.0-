@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {sellerAgreementReceptionPolicyHash,noEmdReceptionPolicyHash} from '../../lib/seller-agreement-reception.ts';
+import {sellerAgreementReceptionPolicyHash,noEmdReceptionPolicyHash,automaticOfferReceptionPolicyHash} from '../../lib/seller-agreement-reception.ts';
 export async function testSellerAgreement(f){
  const {db,q,val,rpc,read,scenario,account,reserve,trans,boundPayload,startPayload}=f;
  await db.exec(`alter table auth.users add email text default 'fixture@example.test',add email_confirmed_at timestamptz default now();
@@ -12,8 +12,8 @@ export async function testSellerAgreement(f){
  await db.exec("create table public.icash_template_drafts(key text primary key,state text default 'claimed',result jsonb);");
  await db.exec(read('config/seller-no-emd.sql'));
  const id='11111111-1111-4111-8111-111111111111',date=new Date(Date.now()+14*86400000).toISOString().slice(0,10);
- async function call(party='seller',noEmd=true){
-  const admission=await reserve({context_policy:noEmd?'seller_agreement_v4':'seller_agreement_v3',context_policy_hash:noEmd?noEmdReceptionPolicyHash:sellerAgreementReceptionPolicyHash,context_approval_reference:'Synthetic seller agreement approval',agreement_tool_id:'tool_agreement'});assert(admission.allowed,JSON.stringify(admission));
+ async function call(party='seller',noEmd=true,automatic=false){
+  const admission=await reserve({context_policy:automatic?'automatic_offer_v5':noEmd?'seller_agreement_v4':'seller_agreement_v3',context_policy_hash:automatic?automaticOfferReceptionPolicyHash:noEmd?noEmdReceptionPolicyHash:sellerAgreementReceptionPolicyHash,context_approval_reference:'Synthetic seller agreement approval',agreement_tool_id:'tool_agreement'});assert(admission.allowed,JSON.stringify(admission));
   let r=admission.session;await trans('claim_setup');await trans('bounded',boundPayload(r));await trans('bind_call_start',startPayload(r));r=await trans('authorize_recording',{nonceHash:r.nonce_hash,policy:'direct_recorded_v1'});await trans('claim_start');await trans('started',{recordingSid:'RE'+'c'.repeat(32),providerStartedAt:r.recording_authorized_at});
   await q('insert into public.icash_screening_jobs(id,account_id,snapshot,result) values($1,$2,$3,$4)',[id,account,{propertyId:'prop_123'},{property:{legalDescription:'Lot 1 block 2'}}]);
   const terms={address:'45 Oak Road',buyer:'Fixture buyer',state:'TX',inspectionDays:10};
@@ -50,5 +50,6 @@ export async function testSellerAgreement(f){
   const scope=()=>rpc('icash_seller_agreement_call_context',{p_hash:'f'.repeat(64),p_conversation:'conv_outbound'});assert.equal((await scope()).dealId,id);
   await q("update public.icash_live_conversations set party='buyer'");assert.equal(await scope(),null);
  });
+ await (await import('./automatic-call-offer-fixture.mjs')).testAutomaticCallOffer({...f,call});
  for(const role of ['anon','authenticated'])for(const fn of ['icash_seller_agreement_call_context(text,text)','icash_claim_seller_agreement(text,text,jsonb,jsonb,jsonb)','icash_finish_seller_agreement(uuid,uuid,uuid)','icash_seller_agreement_recording(text)'])assert.equal(await val('select has_function_privilege($1,$2,\'execute\')',[role,'public.'+fn]),false);
 }
