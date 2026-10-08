@@ -1,6 +1,6 @@
 import {buyerReceptionEnabled,buyerReceptionVariables,buyerReceptionPrompt} from './buyer-reception-context.ts';
 import {sellerOfferReceptionEnabled,sellerOfferReceptionPrompt,sellerOfferReceptionVariables} from './seller-offer-reception.ts';
-import {sellerAgreementReceptionEnabled,sellerAgreementReceptionPrompt,sellerAgreementReceptionVariables} from './seller-agreement-reception.ts';
+import {sellerAgreementReceptionEnabled,sellerAgreementPrompt,sellerAgreementReceptionVariables} from './seller-agreement-reception.ts';
 import {createHash} from 'node:crypto';
 import {safeInboundPropertyContext} from './seller-call-context.ts';
 /** New, separately reviewed policy. Legacy reception remains the default. */
@@ -16,5 +16,5 @@ export function propertyReceptionVariables(value:unknown){
  return {icash_property_greeting:context?.status==='matched'?`${context.returningName?'Hi '+context.returningName+'.':'Hi,'} I'm the iCash X AI property assistant. Is this the owner of ${context.address}?`:"Hi, I'm the iCash X AI property assistant. Which property are you calling about?",icash_property_context:JSON.stringify(context)};
 }
 
-export function receptionContextPrompt(config:Record<string,unknown>){return sellerAgreementReceptionEnabled(config)?sellerAgreementReceptionPrompt:sellerOfferReceptionEnabled(config)?sellerOfferReceptionPrompt:buyerReceptionEnabled(config)?buyerReceptionPrompt:propertyReceptionPrompt;}
+export function receptionContextPrompt(config:Record<string,unknown>){return sellerAgreementReceptionEnabled(config)?sellerAgreementPrompt(config):sellerOfferReceptionEnabled(config)?sellerOfferReceptionPrompt:buyerReceptionEnabled(config)?buyerReceptionPrompt:propertyReceptionPrompt;}
 export function receptionContextVariables(config:Record<string,unknown>,value:unknown){return sellerAgreementReceptionEnabled(config)?sellerAgreementReceptionVariables(value):sellerOfferReceptionEnabled(config)?sellerOfferReceptionVariables(value):buyerReceptionEnabled(config)?buyerReceptionVariables(value):propertyReceptionVariables(value);}

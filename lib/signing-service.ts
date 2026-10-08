@@ -80,7 +80,7 @@ export async function refreshSigning(accountId:string,id:string){
  let state=verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients});
  if(state==='customer_signature_needed'){
   const [reviewedTemplate]=await db<Template[]>(`icash_signing_templates?id=eq.${e.template_id}&select=*`);
-  const expectedFields=signingFields(dealTermsSchema.parse(e.terms),e.kind);
+  const expectedFields=signingFields(dealTermsSchema.parse(e.terms),e.kind,Object.hasOwn(reviewedTemplate.field_map,'earnestCents'));
   const actualFields=raw.submitters.flatMap(s=>s.values??[]);
   if(Object.entries(expectedFields).some(([key,value])=>!actualFields.some(f=>f.field===reviewedTemplate.field_map[key]&&String(f.value??'')===value)))throw new Error('Agreement field values need review before signing.');
   await db('rpc/icash_save_signing_status','POST',{p_id:e.id,p_state:state,p_evidence:d});

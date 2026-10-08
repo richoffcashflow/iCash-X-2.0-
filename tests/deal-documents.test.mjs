@@ -15,3 +15,7 @@ assert.deepEqual(planningEstimate(2000,{lookup_cents:10,voice_minute_cents:100,l
 assert.throws(()=>planningEstimate(999,{lookup_cents:10,voice_minute_cents:100,lookup_share_percent:20,call_minutes_low:2,call_minutes_high:5}));
 
 for(const kind of ['purchase','assignment','buyer_package','title_packet'])assert.match(renderDealDocument(kind,terms),/title-company/);
+
+const noEmdPurchase=renderDealDocument('purchase',{earnestCents:10000});
+assert(!/earnest|\bEMD\b/i.test(noEmdPurchase),'seller purchase draft omits EMD even with a legacy stored value');
+assert(renderDealDocument('assignment',{assignmentDepositCents:10000}).includes('$100.00'),'buyer assignment deposit remains');

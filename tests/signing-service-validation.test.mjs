@@ -27,7 +27,7 @@ const db=async(path,method,body)=>{
 };
 const fixtureFetch=async(url,options)=>{
  assert(String(url).startsWith('https://api.docuseal.com/'));
- if(options.method!=='GET'){providerWrites++;return Response.json([{submission_id:123},{submission_id:123}]);}
+ if(options.method!=='GET'){providerWrites++;assert(!JSON.parse(options.body).submitters?.some(s=>s.fields.some(f=>f.name==='earnestCents')));return Response.json([{submission_id:123},{submission_id:123}]);}
  return Response.json({id:123,submitters_order:'preserved',completed_at:null,submitters:recipients.map((r,index)=>({id:index+1,submission_id:123,email:r.email,external_id:`envelope:${r.id}`,status:index===0?'completed':'awaiting',completed_at:index===0?'2026-09-30T12:00:00Z':null,metadata:{terms_hash:signingTermsHash(terms)},values:Object.entries(signingFields(terms)).map(([field,value])=>({field,value})),slug:'fixture'}))});
 };
 globalThis.__signingValidationFixture={normalize,z,db,dispatchReservedOperation:async(_i,send)=>send(),signingReadiness,signingDocumentReadiness,signingTermsHash,signingFields,verifiedSigningStatus,dealTermsSchema};
@@ -40,10 +40,12 @@ const input={accountId:'account',userId:'user',customerEmail:'customer@example.i
 try{
  await sendForSignatures(input);assert.equal(providerWrites,1);
  records=[];providerWrites=0;terms={...terms,earnestCents:null};
- await assert.rejects(()=>sendForSignatures(input),/Enter the agreed earnest/);
+ await sendForSignatures(input);assert.equal(providerWrites,1,'missing seller EMD does not block signing');
+ records=[];providerWrites=0;terms={...terms,legalDescription:''};
+ await assert.rejects(()=>sendForSignatures(input),/legal description/);
  assert.equal(providerWrites,0);assert(!records.some(r=>r.path==='rpc/icash_begin_signing'));
 
- terms={...terms,earnestCents:0};advanceBeforeSend=true;records=[];
+ terms={...terms,legalDescription:'Fixture lot'};advanceBeforeSend=true;records=[];
  await assert.rejects(()=>sendForSignatures(input),/deadline has passed/);
  assert.equal(providerWrites,0,'deadline is checked again after the server claim, before provider dispatch');
  assert(!records.some(r=>r.path==='icash_signature_authorizations'),'no auto-sign authorization saved after final validation fails');

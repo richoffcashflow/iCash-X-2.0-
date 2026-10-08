@@ -30,11 +30,12 @@ const now=Date.parse('2026-09-30T12:00:00Z');
 const complete={...terms,earnestCents:0};
 const parties=[{name:'Seller One',email:'seller@example.invalid'}];
 const ready=(patch={},kind='purchase',stage='draft')=>signingReadiness(kind,{...complete,...patch},parties,'Customer One',stage,now);
-assert.equal(ready(),true,'explicit zero earnest and the existing signature-relative date defaults are valid');
-assert.equal(signingFields(complete).earnestCents,'0.00','zero is deliberate and does not render as a blank');
-assert.throws(()=>ready({earnestCents:null}),/Enter the agreed earnest/);
-assert.throws(()=>ready({earnestCents:undefined}),/Enter the agreed earnest/);
-assert.throws(()=>ready({earnestCents:10000}),/escrow or title company/);
+assert.equal(ready(),true,'purchase agreement uses no EMD and preserves signature-relative dates');
+assert.equal(signingFields(complete).earnestCents,undefined,'new purchase fields omit EMD entirely');
+assert.equal(signingFields(complete,'purchase',true).earnestCents,'0.00','issued legacy envelopes retain their original fields');
+assert.equal(ready({earnestCents:null}),true);
+assert.equal(ready({earnestCents:undefined}),true);
+assert.equal(ready({earnestCents:10000}),true,'legacy saved value is not a requirement in a new no-EMD form');
 assert.equal(ready({earnestCents:10000,escrowAgent:'Fixture escrow'}),true);
 for(const amount of [-1,0.1,NaN,Infinity,Number.MAX_SAFE_INTEGER+1])assert.throws(()=>ready({earnestCents:amount}));
 for(const date of ['2026-02-30','2026-04-31','1900-02-29','2025-02-29','0000-01-01','2026-13-01','2026-00-01','2026-09-00','2026-9-30','2026-09-30T00:00:00Z']){
@@ -62,7 +63,7 @@ assert.equal(deadlineDateStatus('2026-09-29',Date.parse('2026-09-30T11:59:59Z'))
 assert.equal(deadlineDateStatus('2026-09-29',Date.parse('2026-09-30T12:00:00Z')),'past','deadline is past in every timezone');
 assert.equal(deadlineDateStatus('2026-10-01',Date.parse('2026-09-30T23:00:00Z')),'current_or_future','future UTC date may already be today at UTC+14');
 assert.throws(()=>deadlineDateStatus('2026-10-01',NaN));
-console.log('Signing completeness: deliberate zero vs blank, payable escrow, real/leap dates, order, preserved 30-day defaults, global timezone boundaries and final-sign expiry passed.');
+console.log('Signing completeness: no seller EMD, preserved buyer deposit, real/leap dates, order, preserved 30-day defaults, global timezone boundaries and final-sign expiry passed.');
 
 // Title can legitimately open or schedule closing before an assignment is signed.
 for(const stage of ['under_contract','buyer_selected','title_open','closing'])assert.equal(ready(assignment,'assignment',stage),true);

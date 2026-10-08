@@ -98,7 +98,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const closing=!limited&&p.party==='seller'&&recordedReview.contractToolId?await loadSellerClosingContext(db,accountId,p.screening_id,p.phone,ceiling):null;
  const agreementToolsEnabled=!!recordedReview.contractToolId&&recordedReview.contractToolId!==sellerContractToolId;
  const [purchaseDraft]=agreementToolsEnabled&&p.party==='seller'?await db<{terms:Record<string,unknown>}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&stage=eq.draft&select=terms&limit=1`):[];
- const purchaseTerms=purchaseDraft?{earnestCents:purchaseDraft.terms.earnestCents??null,inspectionDays:purchaseDraft.terms.inspectionDays??10,closingDate:purchaseDraft.terms.closingDate??'',escrowAgent:purchaseDraft.terms.escrowAgent??''}:null;
+ const purchaseTerms=purchaseDraft?{inspectionDays:purchaseDraft.terms.inspectionDays??10,closingDate:purchaseDraft.terms.closingDate??'',escrowAgent:purchaseDraft.terms.escrowAgent??''}:null;
  const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext,request:request??undefined};
  // Validate the complete opening/context before reserving credits or dialing.
  let sellerGreeting:string|undefined,sellerPrompt:string|undefined;
