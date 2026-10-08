@@ -18,7 +18,7 @@ export async function GET(){
   const ids=[...new Set(sources.map(item=>item.screening_id))].filter(id=>z.string().uuid().safeParse(id).success);
   const properties=ids.length?await db<{id:string;home:{address?:string}}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=in.(${ids.join(',')})&select=id,home:result->property`):[];
   const config=customerUpdateConfiguration(process.env);
-  const items=sources.filter(item=>Object.hasOwn(updateCopy,item.kind)&&properties.some(p=>p.id===item.screening_id)).map(item=>({id:item.source_key,kind:item.kind,screeningId:item.screening_id,createdAt:item.event_at,...updateCopy[item.kind],address:properties.find(p=>p.id===item.screening_id)?.home?.address??null}));
+  const items=sources.filter(item=>Object.hasOwn(updateCopy,item.kind)&&(item.kind==='credits_low'||properties.some(p=>p.id===item.screening_id))).map(item=>({id:item.source_key,kind:item.kind,screeningId:item.screening_id,createdAt:item.event_at,...updateCopy[item.kind],address:properties.find(p=>p.id===item.screening_id)?.home?.address??null}));
   return NextResponse.json({items,preferences:{...preferences,emailAvailable:config.email&&settings[0]?.enabled===true,smsAvailable:config.sms&&settings[0]?.enabled===true}}, {headers});
  }catch{return NextResponse.json({error:'Updates could not load. Your properties and conversations are still available.'},{status:503,headers});}
 }

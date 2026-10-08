@@ -29,7 +29,7 @@ function reset(channel='email'){
  visitor={id:'visitor',name:'Casey Smith',timezone:'UTC'};paid=false;authorized=true;transportError=false;responseStatus=200;calls=[];sends=[];
 }
 const database=async(path,method,body)=>{
- calls.push({path,method,body});if(path.startsWith('icash_webinar_settings'))return [{config:settings}];if(path.startsWith('icash_text_senders'))return [{phone:env.CONTIGUITY_FROM}];
+ calls.push({path,method,body});if(path.startsWith('icash_webinar_settings'))return [{config:settings}];if(path.startsWith('icash_webinar_text_senders'))return [{phone:env.CONTIGUITY_FROM}];
  if(path==='rpc/icash_webinar_claim_followups')return (job.channel==='email'?body.p_email_ready:body.p_sms_ready)?[job]:[];
  if(path.startsWith('icash_webinar_visitors'))return [visitor];if(path.startsWith('icash_webinar_sessions'))return history;if(path.startsWith('icash_webinar_events'))return [];
  if(path==='rpc/icash_webinar_authorize_followup')return authorized?{...job,payload:job.payload??body.p_payload}:null;

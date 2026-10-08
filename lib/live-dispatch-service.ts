@@ -71,8 +71,8 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  if(!identity?.principal||!account||account.bot_paused)return hold('identity_or_start_required');
  // Verify the actual provider caller ID before reserving credits or placing a call.
  const businessNumber=process.env.CONTIGUITY_FROM;
- const threads=await db<{sender:string}[]>(`icash_text_threads?account_id=eq.${accountId}&recipient=eq.${encodeURIComponent(p.phone)}&select=sender`);
- if(!consistentTextSenders(businessNumber,threads))return hold('business_number_mismatch');
+ const threads=await db<{sender:string;sender_pool_assigned?:boolean}[]>(`icash_text_threads?account_id=eq.${accountId}&recipient=eq.${encodeURIComponent(p.phone)}&select=sender,sender_pool_assigned`);
+ if(!consistentTextSenders(businessNumber,threads.filter(t=>!t.sender_pool_assigned)))return hold('business_number_mismatch');
  let phone:{phone_number:string};
  try{phone=await elevenRequest<{phone_number:string}>(`/v1/convai/phone-numbers/${encodeURIComponent(c.phone_number_id)}`);}catch{return hold('business_number_verification_required');}
  if(!sameBusinessNumber(businessNumber,phone.phone_number))return hold('business_number_mismatch');

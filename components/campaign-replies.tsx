@@ -1,0 +1,11 @@
+'use client';
+import {useEffect,useState} from 'react';
+import {webinarRequest} from '@/lib/webinar-client';
+type Reply={event_id:string;role:'customer'|'prospect'|'ambiguous'|'unknown';sender:string;recipient:string;body:string;created_at:string};
+const labels={customer:'Customer',prospect:'Webinar lead',ambiguous:'Role needs review',unknown:'Unrecognized contact'};
+export function CampaignReplies(){
+ const [replies,setReplies]=useState<Reply[]>([]),[loaded,setLoaded]=useState(false),[error,setError]=useState(''),[busy,setBusy]=useState<string|null>(null);
+ useEffect(()=>{let active=true;void webinarRequest<{replies:Reply[]}>('/api/webinar/studio/replies',{cache:'no-store'}).then(d=>{if(active){setReplies(d.replies);setLoaded(true);}}).catch(()=>{if(active)setError('Replies could not load. Reload this page to try again.');});return()=>{active=false;};},[]);
+ async function resolve(id:string){setBusy(id);setError('');try{await webinarRequest('/api/webinar/studio/replies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});setReplies(rows=>rows.filter(row=>row.event_id!==id));}catch{setError('Could not mark the reply reviewed. Try again.');}finally{setBusy(null);}}
+ return <details className="ws-card"><summary>Replies to review · {replies.length}</summary><p className="ws-hint">Customer and webinar replies arrive here. Property conversations stay in their property. A contact with two possible roles waits for review.</p>{replies.map(reply=><article key={reply.event_id} className="ws-followup-template"><span className="wb-eyebrow">{labels[reply.role]}</span><b>{reply.sender}</b><small> to {reply.recipient} · {new Date(reply.created_at).toLocaleString('en-US',{hour12:true,dateStyle:'medium',timeStyle:'short'})}</small><p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{reply.body||'Attachment received. Review in Contiguity.'}</p><button type="button" className="ws-secondary" disabled={busy!==null} onClick={()=>void resolve(reply.event_id)}>{busy===reply.event_id?'Saving…':'Mark reviewed'}</button></article>)}{!loaded&&!error&&<p className="ws-hint">Loading replies…</p>}{loaded&&!replies.length&&!error&&<p className="ws-hint">No replies waiting.</p>}{error&&<p role="alert">{error}</p>}</details>;
+}
