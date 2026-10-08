@@ -109,7 +109,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const cashOfferPrice=eligible?.ready?eligible.screening.cashOfferPriceCents:null;
  const ceiling=cashOfferPrice;
  const smsContext=p.party==='seller'?boundedVoiceSmsContext(await db<unknown>('rpc/icash_voice_sms_context','POST',{p_account:accountId,p_permission:p.id})):null;
- const priorCalls=p.party==='seller'?await db<unknown>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&contact_key=eq.${p.contact_key}&party=eq.seller&state=eq.complete&operation_key=like.voice:*&completed_at=gte.${encodeURIComponent(new Date(Date.now()-30*86400000).toISOString())}&order=completed_at.desc&limit=3&select=completed_at,result`):[];
+ const priorCalls=p.party==='seller'?await db<unknown>('rpc/icash_seller_prior_call_context','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone}):[];
  const buyerKind=identity.company_name?.trim()?'company' as const:'individual' as const;
  const request=p.party==='seller'&&object(snapshot.snapshot).sellerRequest?await db<SellerRequestContext|null>('rpc/icash_seller_call_request','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone}):null;
  const closing=!limited&&p.party==='seller'&&recordedReview.contractToolId?await loadSellerClosingContext(db,accountId,p.screening_id,p.phone,ceiling):null;

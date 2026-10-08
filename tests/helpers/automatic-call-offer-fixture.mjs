@@ -18,6 +18,40 @@ export async function testAutomaticCallOffer(f){
  await db.exec(read('supabase/migrations/20261008203215_voice_offer_progress_policy.sql'));
  await db.exec(read('supabase/migrations/20261008204029_voice_offer_progress_evidence.sql'));
  await db.exec(read('supabase/migrations/20261008213733_live_agreement_history.sql'));
+ await db.exec('alter table public.icash_live_conversations add completed_at timestamptz,add result jsonb;');
+ await db.exec(read('supabase/migrations/20261008214709_completed_seller_inbound_history.sql'));
+ await scenario('completed inbound memory stays bound to its original seller, property and account',async()=>{
+  await db.exec("create or replace function icash_recorded_reception_private.clock_now() returns timestamptz language sql volatile set search_path='' as $$select now()$$;");
+  const {r}=await call('seller',true,'v9');
+  const transcript=[{role:'agent',message:'Your legal name?'},{role:'user',message:'Jane Seller.'}];
+  const save=()=>rpc('icash_save_seller_inbound_history',{p_session:r.id,p_conversation:'conv_agreement',p_transcript:transcript});
+  assert.equal(await save(),false,'active calls are not stored as complete');
+  const {timeLimitSeconds,...identity}=f.boundPayload(r);await f.trans('call_ended',{...identity,status:'completed'},r);
+  assert.equal(await save(),true);assert.equal(await save(),true);
+  const readHistory=(a=account,phone=r.from_phone)=>rpc('icash_seller_prior_call_context',{p_account:a,p_screening:'11111111-1111-4111-8111-111111111111',p_phone:phone});
+  assert.deepEqual((await readHistory())[0].result.transcript,transcript);
+  assert.equal((await readHistory()).length,1,'repeat saves do not duplicate calls');
+  assert.deepEqual(await readHistory('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),[]);
+  assert.deepEqual(await readHistory(account,'+12125550999'),[]);
+  assert.equal(await rpc('icash_save_seller_inbound_history',{p_session:r.id,p_conversation:'conv_other',p_transcript:transcript}),false);
+ });
+ for(const role of ['anon','authenticated','service_role'])assert.equal(await val("select has_table_privilege($1,'icash_seller_agreement_private.call_history','SELECT,INSERT,UPDATE,DELETE')",[role]),false);
+ for(const role of ['anon','authenticated'])assert.equal(await val("select has_function_privilege($1,'public.icash_save_seller_inbound_history(uuid,text,jsonb)','execute')",[role]),false);
+ await db.exec('create or replace function public.icash_sms_thread_review_current(uuid,uuid,boolean) returns boolean language sql as $$select true$$;');
+ await db.exec(read('supabase/migrations/20261008214943_owner_agreement_delivery_recovery.sql'));
+ await scenario('owner recovery claims only the exact owned draft and current recipient once',async()=>{
+  const {r,terms}=await call('seller',true,'v9'),id='11111111-1111-4111-8111-111111111111';
+  const prepared={...terms,seller:'Jane Seller',priceCents:4812800};
+  await q('update public.icash_deal_files set terms=$1 where id=$2',[prepared,id]);
+  const job=await val("insert into icash_seller_agreement_private.delivery_recovery(request_key,account_id,requested_by,deal_id,phone,seller_name,expected_terms,authorization_reference,expires_at) values('fixture',$1,$2,$3,$4,'Jane Seller',$5,'Owner requested unsigned agreement recovery',now()+interval '1 hour') returning id",[account,f.owner,id,r.from_phone,prepared]);
+  await q('update public.icash_accounts set bot_paused=true');assert.equal(await rpc('icash_claim_agreement_delivery_recovery'),null);await q('update public.icash_accounts set bot_paused=false');
+  await q("insert into public.icash_text_suppressions(phone) values($1)",[r.from_phone]);assert.equal(await rpc('icash_claim_agreement_delivery_recovery'),null);await q('delete from public.icash_text_suppressions');
+  const claimed=await rpc('icash_claim_agreement_delivery_recovery');assert.equal(claimed.id,job);assert.equal(claimed.phone,r.from_phone);assert.equal(claimed.userId,f.owner);
+  assert.equal(await rpc('icash_claim_agreement_delivery_recovery'),null,'only one worker can claim');
+  assert.equal(await rpc('icash_finish_agreement_delivery_recovery',{p_id:job,p_envelope:null,p_result:{sent:false,status:'needs_review'}}),true);
+ });
+ for(const role of ['anon','authenticated','service_role'])assert.equal(await val("select has_table_privilege($1,'icash_seller_agreement_private.delivery_recovery','SELECT,INSERT,UPDATE,DELETE')",[role]),false);
+ for(const role of ['anon','authenticated'])assert.equal(await val("select has_function_privilege($1,'public.icash_claim_agreement_delivery_recovery()','execute')",[role]),false);
  await scenario('v9 remains bound to the reviewed seller call',async()=>{const {scope}=await call('seller',true,'v9');assert.equal((await scope()).dealId,'11111111-1111-4111-8111-111111111111');});
  await scenario('outbound offer API reaches real SQL when no text thread exists; paused and foreign calls stay blocked',async()=>{
   const {r,terms}=await call('seller',true,'v8'),id='22222222-2222-4222-8222-222222222222',token='c'.repeat(64),hash=sha(token),contact=sha(r.from_phone);

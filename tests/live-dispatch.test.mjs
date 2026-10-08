@@ -77,7 +77,7 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_offer_authorities'))return [];
  if(path==='rpc/icash_claim_automatic_offer_voice_job'){assert.equal(permission.party,'seller');assert.equal(body.p_job,'job');assert.deepEqual(body.p_snapshot,snapshot);assert.equal(body.p_offer_price_cents,10200000);if(allowClaim)jobState='dispatching';return allowClaim;}
  if(path==='rpc/icash_claim_reviewed_voice_job'){if(allowClaim)jobState='dispatching';return allowClaim;}
- if(path.startsWith('icash_live_conversations?')){assert(path.includes('account_id=eq.account&screening_id=eq.screening&contact_key=eq.'));assert(path.includes('party=eq.seller&state=eq.complete&operation_key=like.voice:*'));return [];}
+ if(path==='rpc/icash_seller_prior_call_context'){assert.equal(body.p_account,'account');assert.equal(body.p_screening,'screening');assert.equal(body.p_phone,permission.phone);return [];}
  if(path==='icash_live_conversations')return [];
  throw Error('Unexpected request '+path);
 };
