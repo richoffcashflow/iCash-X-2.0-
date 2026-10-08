@@ -75,3 +75,12 @@ try{
  assert.equal(snapshotWrites,beforeWrites);assert.equal(stored.length,0);
 }finally{Date.now=realNow;}
 console.log('PASS: request crossing pricing lag boundary inserts no immutable snapshot');
+
+// Secondary caller settlement is bound to the immutable admission receipt.
+apiReset();call.from='+14244377030';pricing.origination_number=call.from;
+const secondaryRule={...apiRule,from:'+14243948384'};
+let secondaryReceipt={from_phone:call.from,provider_account_sid:ac,caller_id_sid:'PN'+'c'.repeat(32),call_sid:ca,conversation_id:binding.conversation_id};
+const secondaryDb=async(path,method,body)=>path.startsWith('icash_call_recordings?')?[secondaryReceipt]:apiDb(path,method,body);
+const secondaryResult=await outboundCarrierInput(secondaryDb,'account',binding,secondaryRule,env,apiFetch);assert.equal(secondaryResult.amountMicros,195100);assert.equal(stored[0].snapshot.from,call.from);
+for(const key of ['caller_id_sid','provider_account_sid','call_sid','conversation_id','from_phone']){const saved=secondaryReceipt[key];secondaryReceipt[key]=null;await assert.rejects(outboundCarrierInput(secondaryDb,'account',binding,secondaryRule,env,apiFetch));secondaryReceipt[key]=saved;}
+console.log('PASS secondary usage requires exact caller receipt and prices the actual originating number');

@@ -44,6 +44,15 @@ export async function outboundCarrierInput(db:VoiceUsageDb,accountId:string,b:Bi
  if(c.conversation_id!==b.conversation_id||c.agent_id!==b.agent_id||c.metadata?.phone_call?.call_sid!==j.provider_call_sid)fail();
  if(c.status!=='done')unavailable();
  const call=await get(`https://api.twilio.com/2010-04-01/Accounts/${r.twilioAccountSid}/Calls/${j.provider_call_sid}.json`,{Authorization:'Basic '+Buffer.from(r.twilioAccountSid+':'+env.TWILIO_AUTH_TOKEN).toString('base64')});
+ if(call.from!==r.from){
+  // The immutable recording row carries the caller ID receipt captured at
+  // admission. Later number retirement must not prevent actual usage settlement.
+  if(r.from!=='+14243948384'||call.from!=='+14244377030'||r.source.kind!=='twilio_pricing_api')fail();
+  const bindings=await db<{from_phone:string;provider_account_sid:string;caller_id_sid:string|null;call_sid:string;conversation_id:string}[]>(`icash_call_recordings?account_id=eq.${eq(accountId)}&operation_key=eq.${eq(b.operation_key)}&select=from_phone,provider_account_sid,caller_id_sid,call_sid,conversation_id`);
+  const binding=bindings[0];
+  if(bindings.length!==1||binding.from_phone!==call.from||binding.provider_account_sid!==r.twilioAccountSid||!sid(binding.caller_id_sid,'PN')||binding.call_sid!==call.sid||binding.conversation_id!==b.conversation_id)fail();
+  r={...r,from:binding.from_phone};
+ }
  if(call.sid!==j.provider_call_sid||call.account_sid!==r.twilioAccountSid||!phone(call.to)||(r.source.kind==='reviewed_destination_allowlist'&&call.to!==r.destination)||createHash('sha256').update(call.to).digest('hex')!==b.contact_key||call.from!==r.from||call.direction!=='outbound-api')fail();
  if(['queued','initiated','ringing','in-progress'].includes(call.status))unavailable();
  if(call.status!=='completed')fail();
