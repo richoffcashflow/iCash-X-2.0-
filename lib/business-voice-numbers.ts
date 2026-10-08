@@ -16,7 +16,9 @@ export function businessVoiceProviders(env:Env,fetcher:typeof fetch=fetch){
  const account=env.TWILIO_ACCOUNT_SID!,auth='Basic '+Buffer.from(account+':'+env.TWILIO_AUTH_TOKEN).toString('base64');
  async function read(url:string,headers:Record<string,string>,body?:unknown){
   const r=await fetcher(url,{method:body===undefined?'GET':'POST',headers:{...headers,Accept:'application/json',...(body!==undefined?{'Content-Type':'application/json'}:{})},body:body===undefined?undefined:JSON.stringify(body),redirect:'error',cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(8000)});
-  if(!r.ok||r.redirected||r.url&&r.url!==url||!/^application\/json(?:;|$)/i.test(r.headers.get('content-type')??''))throw new BusinessPhoneError(body===undefined?'Could not check the calling provider. Refresh to try again.':'The provider has not confirmed the change. Refresh before trying again.');
+  const label=url.includes('OutgoingCallerIds')?'Twilio caller ID':url.includes('IncomingPhoneNumbers')?'Twilio reception':url.includes('call_forwarding')?'Contiguity call routing':'Contiguity leased numbers';
+  if(!r.ok)throw new BusinessPhoneError(`${label} returned HTTP ${r.status}. ${body===undefined?'Refresh to check again.':'Refresh before retrying the change.'}`);
+  if(r.redirected||r.url&&r.url!==url||!/^application\/json(?:;|$)/i.test(r.headers.get('content-type')??''))throw new BusinessPhoneError(`${label} returned an unexpected response.`);
   return JSON.parse((await boundedBytes(r,262144)).toString('utf8')) as unknown;
  }
  async function forwarding(){const r=forwardingSchema.parse(await read(`https://api.contiguity.com/numbers/lease/${encodeURIComponent(secondaryBusinessPhone)}/call_forwarding`,{Authorization:'Bearer '+env.CONTIGUITY_API_KEY}));if(r.data.number!==secondaryBusinessPhone)throw new BusinessPhoneError('The provider returned a different number.');return r.data.call_forwarding;}
@@ -38,8 +40,9 @@ export function businessVoiceProviders(env:Env,fetcher:typeof fetch=fetch){
  }};
 }
 export async function inspectBusinessPhone(env:Env,fetcher:typeof fetch=fetch){
- const p=businessVoiceProviders(env,fetcher),[lease,f,caller,ingress]=await Promise.all([p.leased(),p.forwarding(),p.callerId(),p.ingress()]);
- return {phone:secondaryBusinessPhone,leaseActive:lease,incoming:lease&&ingress&&f.enabled&&f.to===businessVoiceIngress&&f.status==='active',incomingPending:f.enabled&&f.to===businessVoiceIngress&&f.status==='queued',differentDestination:f.enabled&&f.to!==businessVoiceIngress,callerIdVerified:caller!==null,callerIdSid:caller,providerAccountSid:p.account,ingressReady:ingress};
+ const p=businessVoiceProviders(env,fetcher),[lease,f,callerRead,ingress]=await Promise.all([p.leased(),p.forwarding(),p.callerId().then(value=>({value,error:null as string|null})).catch(e=>({value:null,error:e instanceof BusinessPhoneError?e.message:'Caller ID could not be checked.'})),p.ingress()]);
+ const caller=callerRead.value;
+ return {phone:secondaryBusinessPhone,leaseActive:lease,incoming:lease&&ingress&&f.enabled&&f.to===businessVoiceIngress&&f.status==='active',incomingPending:f.enabled&&f.to===businessVoiceIngress&&f.status==='queued',differentDestination:f.enabled&&f.to!==businessVoiceIngress,callerIdVerified:caller!==null,callerIdError:callerRead.error,callerIdSid:caller,providerAccountSid:p.account,ingressReady:ingress};
 }
 /** Explicit owner action. Provider receipts, not submitted booleans, enable calls. */
 export async function connectBusinessPhone(database:Database,env:Env,fetcher:typeof fetch=fetch){
