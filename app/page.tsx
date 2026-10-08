@@ -35,6 +35,7 @@ type Account={vip?:boolean;readinessPending?:boolean;billingModel?:string;member
 export default function Home(){
  const [account,setAccount]=useState<Account|null>(null),[accountError,setAccountError]=useState(false),[signInOpen,setSignInOpen]=useState(false),[fundingOpen,setFundingOpen]=useState(false),[fundingCode,setFundingCode]=useState(''),[controlBusy,setControlBusy]=useState(false),[controlError,setControlError]=useState(''),[draftBrand,setDraftBrand]=useState<BotProfile|null>(null);
  const [reviewVip,setReviewVip]=useState(false);
+ const [assistantOpenRequest,setAssistantOpenRequest]=useState(0);
  const [fundingSuggestion,setFundingSuggestion]=useState<{amountCents:number;reason:string}|null>(null);
  const [assistantRequest,setAssistantRequest]=useState<AssistantRequest|null>(null),[propertyRequest,setPropertyRequest]=useState<{id:string;nonce:number}|null>(null);
  const [settingsOpen,setSettingsOpen]=useState(false),[preferencesOpen,setPreferencesOpen]=useState(false);
@@ -95,7 +96,7 @@ export default function Home(){
   if(creditsExhausted&&action.kind!=='pause'&&action.kind!=='support'){openFunding();return;}
   if(action.kind==='pause'||action.kind==='resume'){if(!await toggleBot(action.kind))throw Error('Could not confirm the bot update. Please check its status above.');return;}
   if(action.kind==='property'&&action.screeningId){setPropertyRequest({id:action.screeningId,nonce:Date.now()});return;}
-  if(action.kind==='attention'){const section=document.getElementById('workspace-attention');if(section){section.scrollIntoView({behavior:'smooth',block:'center'});section.focus();}else throw Error('The request list is refreshing. Check Needs you in a moment.');return;}
+  if(action.kind==='attention'){const section=document.getElementById('workspace-attention');if(section){if(section instanceof HTMLDetailsElement)section.open=true;section.scrollIntoView({behavior:'smooth',block:'center'});section.focus();}else throw Error('The request list is refreshing. Check Needs you in a moment.');return;}
   if(action.kind==='support')window.location.assign('/support');
  }
  const botRunning=(account?.billingModel!=='membership_credits'||account?.membershipActive===true)&&account?.paused===false&&(account.billingActive===true||account.billingModel==='prepaid'||account.billingModel==='membership_credits')&&!account?.billingReview&&!!account?.identity&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady||account.activeWork);
@@ -135,12 +136,12 @@ export default function Home(){
      {account.mode==='live'&&account.billingModel==='legacy'&&<SpendActivationReview key={activationKey} onAvailabilityChange={updateActivationAvailability} onSaved={()=>void refreshAccount()}/>}
      <CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}>
      <SpendingAllowance/>
-     <LiveWorkspace propertyRequest={propertyRequest} onAsk={(screeningId,address)=>setAssistantRequest({screeningId,address,nonce:Date.now()})} principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/>
+     <LiveWorkspace onOpenAssistant={()=>setAssistantOpenRequest(v=>v+1)} propertyRequest={propertyRequest} onAsk={(screeningId,address)=>setAssistantRequest({screeningId,address,nonce:Date.now()})} principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/>
      <details className={styles.activity}><summary>Activity & results</summary><BudgetSummary/></details>
      </CreditActionGate>
      </>}
     </section>
-    {!guest&&<CreditActionGate blocked={creditsExhausted} onRequireCredits={()=>openFunding()}><WorkspaceAssistant key={account.email} request={assistantRequest} stale={accountError} onAction={assistantAction}/></CreditActionGate>}
+    {!guest&&<CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}><WorkspaceAssistant key={account.email} openRequest={assistantOpenRequest} request={assistantRequest} stale={accountError} onAction={assistantAction}/></CreditActionGate>}
     </>}
    </>}
   </main>

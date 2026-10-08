@@ -1,6 +1,6 @@
 'use client';
 import {Activity,useEffect,useRef,useState} from 'react';
-import {Phone,MessageCircle,Sparkles,X} from 'lucide-react';
+import {Phone,MessageCircle,Sparkles,X,ChevronDown} from 'lucide-react';
 import {analysisMoney,propertyAnalysisView} from '@/lib/property-analysis-view';
 import {mostPromisingProperty,propertyBotStatus,propertyNextMove} from '@/lib/workspace-guidance';
 import {ManualCallOptions} from '@/components/manual-call-options';
@@ -33,7 +33,7 @@ function milestone(property:Property,work:Work){
 }
 function leaveDrafts(){return !document.querySelector('[data-unsaved-draft="true"]')||window.confirm('Leave this view? Unsent drafts and unsaved contract changes in this view will be lost.');}
 async function post(path:string,data:unknown){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const out=await r.json();if(!r.ok)throw new Error(out.error||'Please retry.');return out;}
-export function LiveWorkspace({principal,botPaused=false,botAvailable=false,accountStale=false,showCoach=true,propertyRequest,onAsk}:{propertyRequest?:{id:string;nonce:number}|null;onAsk?:(id:string,address:string)=>void;principal:string;botPaused?:boolean;botAvailable?:boolean;accountStale?:boolean;showCoach?:boolean}){
+export function LiveWorkspace({principal,botPaused=false,botAvailable=false,accountStale=false,showCoach=true,propertyRequest,onAsk,onOpenAssistant}:{propertyRequest?:{id:string;nonce:number}|null;onAsk?:(id:string,address:string)=>void;onOpenAssistant?:()=>void;principal:string;botPaused?:boolean;botAvailable?:boolean;accountStale?:boolean;showCoach?:boolean}){
  const [work,setWork]=useState<Work|null>(null),[error,setError]=useState(''),[page,setPage]=useState(0),[attentionPage,setAttentionPage]=useState(0),[activeId,setActiveId]=useState(''),[visited,setVisited]=useState<string[]>([]);
  const openPropertyId=useRef('');openPropertyId.current=activeId;
  const [filter,setFilter]=useState<WorkspaceFilter>('all'),[query,setQuery]=useState(''),[search,setSearch]=useState(''),[focusedId,setFocusedId]=useState(''),[refresh,setRefresh]=useState(0),[loading,setLoading]=useState(true),[updated,setUpdated]=useState<Date|null>(null);
@@ -61,7 +61,7 @@ export function LiveWorkspace({principal,botPaused=false,botAvailable=false,acco
   {error&&<div className="workspace-notice" role="alert"><p>{error}</p><button onClick={()=>{setLoading(true);setRefresh(v=>v+1);}}>Try again</button></div>}
   {!work&&loading&&<p className="workspace-empty" role="status">Loading your saved work…</p>}
   {work&&<WorkspaceAttention work={work} page={attentionPage} onPage={setAttentionPage} onOpen={openProperty} onRefresh={()=>setRefresh(v=>v+1)}/>}
-  <div className="workspace-section-heading"><h3>Your leads</h3></div>
+  <div className="workspace-section-heading leads-heading"><h3>Your leads</h3>{onOpenAssistant&&<button type="button" className="open-workspace-assistant" aria-haspopup="dialog" onClick={onOpenAssistant}><MessageCircle size={18} aria-hidden="true"/>Ask your bot</button>}</div>
   <section className="property-library" aria-labelledby="properties-heading">
    <div className="workspace-section-heading property-list-meta"><h4 className="sr-only" id="properties-heading">Properties</h4></div>
    <label className="workspace-search"><span className="sr-only">Search your properties</span><input type="search" placeholder="Search your leads" value={query} maxLength={100} onChange={e=>{if(!leaveDrafts())return;setActiveId('');setVisited([]);setWork(null);setLoading(true);setQuery(e.target.value);setFocusedId('');}} /></label>
@@ -153,18 +153,18 @@ function WorkspaceAttention({work,page,onPage,onOpen,onRefresh}:{work:Work;page:
  const [handled,setHandled]=useState<string[]>([]),[expanded,setExpanded]=useState(false);
  function done(id:string){setHandled(v=>[...v,id]);onPage(0);onRefresh();}
  const requests=[
-  ...(work.smsRouteReviews??[]).map(a=>({id:'routing:'+a.message_id+':'+a.revision,propertyId:'',address:a.recipient,priority:0,title:'Identify the property before replying',node:<SmsRouteReviewCard item={a} onOpen={onOpen} onHandled={()=>done('routing:'+a.message_id+':'+a.revision)}/>})),
+  ...(work.smsRouteReviews??[]).map(a=>({id:'routing:'+a.message_id+':'+a.revision,propertyId:'',address:a.recipient.replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3'),priority:0,title:a.needs_review?'Review a text reply':'Review an earlier reply',node:<SmsRouteReviewCard item={a} onOpen={onOpen} onHandled={()=>done('routing:'+a.message_id+':'+a.revision)}/>})),
   ...(work.textAttention??[]).map(a=>({id:'text:'+a.id+':'+a.message_id,propertyId:a.screening_id,address:a.address,priority:a.kind==='withdrawal'?0:a.kind==='human'?2:3,title:a.kind==='withdrawal'?'Review a change of plans':a.kind==='callback'?'Confirm a callback':'Review a message',node:<TextAttentionCard item={a} onHandled={()=>done('text:'+a.id+':'+a.message_id)}/>})),
   ...work.signatureActions.map(e=>({id:'sign:'+e.id,propertyId:e.screening_id??'',address:e.address,priority:1,title:'Review & sign an agreement',node:<SigningAttention envelope={e}/>})),
   ...work.handoffs.filter(h=>h.state==='open').map(h=>({id:'human:'+h.id,propertyId:h.screening_id,address:h.address,priority:2,title:'A person was requested',node:<HandoffCard handoff={h} onHandled={()=>done('human:'+h.id)}/>})),
   ...(work.callRequests??[]).filter(c=>c.state==='needs_review'&&!work.textAttention?.some(a=>a.screening_id===c.screening_id&&a.kind==='callback')).map(c=>({id:'call:'+c.id,propertyId:c.screening_id,address:c.address,priority:3,title:'Confirm a callback',node:<CallRequest id={c.id} onHandled={()=>done('call:'+c.id)}/>}))
  ].filter(r=>!handled.includes(r.id)).sort((a,b)=>a.priority-b.priority);
  if(!requests.length&&page===0&&!work.attentionHasMore)return null;
- return <section className="workspace-attention" id="workspace-attention" tabIndex={-1} aria-labelledby="attention-title"><div className="attention-heading"><div><h4 id="attention-title">Needs you</h4><p>{requests.length?`${requests.length} request${requests.length===1?'':'s'} shown${work.attentionHasMore?' · More available':''}`:'No open requests on this page'}</p></div><span className="attention-count" aria-hidden="true">{requests.length}</span></div>
- {requests.length>0&&<div className="attention-list">{requests.slice(0,expanded?requests.length:3).map((r,index)=><details className="attention-item" key={r.id}><summary><strong>{r.title}</strong><span className="attention-address">{r.address??work.properties.find(p=>p.id===r.propertyId)?.result.property.address??(r.propertyId?'Property conversation':'Contract request')}</span></summary>{r.node}{r.propertyId&&<button className="attention-open" onClick={()=>onOpen(r.propertyId)}>Open property & conversations</button>}</details>)}</div>}
- {requests.length>3&&<button className="attention-more" aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)}>{expanded?'Show fewer requests':`Show ${requests.length-3} more on this page`}</button>}
- {(page>0||work.attentionHasMore)&&<nav className="live-pages" aria-label="Request pages"><button disabled={page===0} onClick={()=>{setExpanded(false);onPage(page-1);}}>Previous requests</button><span>Page {page+1}</span><button disabled={!work.attentionHasMore} onClick={()=>{setExpanded(false);onPage(page+1);}}>More requests</button></nav>}
- {requests.length>0&&<small>Property handoffs stay paused. SMS routing reviews release only the number’s routing hold.</small>}</section>;
+ return <details className="workspace-attention" id="workspace-attention" tabIndex={-1} aria-labelledby="attention-title"><summary className="attention-heading"><span className="attention-count" aria-hidden="true">{requests.length}{work.attentionHasMore?'+':''}</span><span className="attention-heading-copy"><strong id="attention-title">{requests.length===1?requests[0].title:requests.length?`${requests.length}${work.attentionHasMore?'+':''} updates to review`:'Review updates'}</strong>{requests.length===1&&<small>{requests[0].address??'Open for details'}</small>}</span><span className="attention-review-label">Review</span><ChevronDown className="attention-chevron" size={18} aria-hidden="true"/></summary>
+ {requests.length===1?<div className="attention-single">{requests[0].node}{requests[0].propertyId&&<button className="attention-open" onClick={()=>onOpen(requests[0].propertyId)}>Open conversation</button>}</div>:requests.length>0&&<div className="attention-list">{requests.slice(0,expanded?requests.length:3).map(r=><details className="attention-item" key={r.id}><summary><strong>{r.title}</strong><span className="attention-address">{r.address??work.properties.find(p=>p.id===r.propertyId)?.result.property.address??(r.propertyId?'Property conversation':'Contract request')}</span></summary>{r.node}{r.propertyId&&<button className="attention-open" onClick={()=>onOpen(r.propertyId)}>Open conversation</button>}</details>)}</div>}
+ {requests.length>3&&<button className="attention-more" aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)}>{expanded?'Show fewer':`Show ${requests.length-3} more`}</button>}
+ {(page>0||work.attentionHasMore)&&<nav className="live-pages" aria-label="Request pages"><button disabled={page===0} onClick={()=>{setExpanded(false);onPage(page-1);}}>Previous</button><span>Page {page+1}</span><button disabled={!work.attentionHasMore} onClick={()=>{setExpanded(false);onPage(page+1);}}>Next</button></nav>}
+ </details>;
 }
 function TextAttentionCard({item,onHandled}:{item:TextAttention;onHandled:()=>void}){
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
