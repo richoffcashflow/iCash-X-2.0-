@@ -7,6 +7,6 @@ const result=boundedVoiceSmsContext({threadId:'t',messages:[{...message,body:'x'
 assert.equal(result.messages[0].body.length,1000);
 assert.equal(result.messages[1].body,message.body);
 assert(!('maxOfferCents' in result));
-assert.equal(boundedVoiceSmsContext({threadId:'t',messages:Array.from({length:20},(_,i)=>({...message,id:String(i)}))}).messages.length,12);
+assert.equal(boundedVoiceSmsContext({threadId:'t',messages:Array.from({length:60},(_,i)=>({...message,id:String(i)}))}).messages.length,48);
 assert.equal(boundedVoiceSmsContext({threadId:'t',messages:[{...message,direction:'system'}]}),null);
 console.log('Voice SMS context: bounded history, invalid input and authority exclusion passed');

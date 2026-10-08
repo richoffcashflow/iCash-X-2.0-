@@ -5,18 +5,21 @@ import {replyToSellerText} from '../lib/seller-text-replies.ts';
 let result=null,calls=[];
 const db=async(path,method,body)=>{assert.equal(path,'rpc/icash_prepare_seller_text_event');assert.equal(method,'POST');assert.deepEqual(body,{p_event:'signed-provider-event'});return result;};
 const text=async(a,id)=>{calls.push(['sms',a,id]);return {status:'message_accepted'};};
+const voice=async(a,id)=>{calls.push(['voice',a,id]);return {status:'call_started'};};
 const ai=async(a,id)=>{calls.push(['ai',a,id]);return {status:'message_accepted'};};
-assert.equal((await replyToSellerText(db,text,'signed-provider-event',ai)).status,'no_seller_reply');assert.equal(calls.length,0);
+assert.equal((await replyToSellerText(db,text,'signed-provider-event',ai,voice)).status,'no_seller_reply');assert.equal(calls.length,0);
 result={accountId:'database-bound-account',messageId:'database-bound-message'};
-assert.equal((await replyToSellerText(db,text,'signed-provider-event',ai)).status,'message_accepted');assert.deepEqual(calls,[['sms',result.accountId,result.messageId]]);
+assert.equal((await replyToSellerText(db,text,'signed-provider-event',ai,voice)).status,'message_accepted');assert.deepEqual(calls,[['sms',result.accountId,result.messageId]]);
 calls=[];result={accountId:'database-bound-account',textAiJobId:'database-bound-job'};
-assert.equal((await replyToSellerText(db,text,'signed-provider-event',ai)).status,'message_accepted');assert.deepEqual(calls,[['ai',result.accountId,result.textAiJobId]],'AI job cannot receive an arbitrary account or message');
+assert.equal((await replyToSellerText(db,text,'signed-provider-event',ai,voice)).status,'message_accepted');assert.deepEqual(calls,[['ai',result.accountId,result.textAiJobId]],'AI job cannot receive an arbitrary account or message');
+calls=[];result={accountId:'database-bound-account',voiceJobId:'database-bound-voice'};
+assert.equal((await replyToSellerText(db,text,'signed-provider-event',ai,voice)).status,'call_started');assert.deepEqual(calls,[['voice',result.accountId,result.voiceJobId]],'Immediate callback bypasses AI and repeated date questions');
 // Execute the actual route with provider/database stand-ins. Authentication must
 // precede ingestion; STOP must never reach either reply engine.
 let verified=true,event={id:'event-1',type:'text.incoming.sms',optOut:false,data:{to:'+12145550001',from:'+12145550002'}};
 let effects=[],role='property';
 const deps={NextResponse:{json:(body,o={})=>new Response(JSON.stringify(body),{status:o.status??200})},verifyContiguityWebhook:()=>verified,parseTextWebhook:()=>event,
- db:async(path)=>{effects.push(path);if(path==='rpc/icash_route_lifecycle_text')return role;return path.startsWith('icash_text_senders')?[{phone:event.data.to}]:path.startsWith('icash_webinar_text_senders')?[]:null;},ownerPracticeReply:async()=>effects.push('practice'),replyToSellerText:async()=>effects.push('seller'),dispatchTextMessage:()=>{},processTextAi:()=>{}};
+ db:async(path)=>{effects.push(path);if(path==='rpc/icash_route_lifecycle_text')return role;return path.startsWith('icash_text_senders')?[{phone:event.data.to}]:path.startsWith('icash_webinar_text_senders')?[]:null;},ownerPracticeReply:async()=>effects.push('practice'),replyToSellerText:async()=>effects.push('seller'),dispatchTextMessage:()=>{},processTextAi:()=>{},dispatchLiveVoice:()=>{}};
 globalThis.__sellerTextWebhook=deps;
 const source=ts.transpileModule(readFileSync(new URL('../app/api/webhooks/contiguity/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
 const {POST}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__sellerTextWebhook;\n'+source).toString('base64'));delete globalThis.__sellerTextWebhook;

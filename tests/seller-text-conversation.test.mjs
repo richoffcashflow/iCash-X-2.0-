@@ -19,7 +19,7 @@ assert.equal(enabled('My kitchen needs repairs',{...raw,facts:[{kind:'callback',
 assert.equal(enabled('No roof photos yet',{...raw,facts:[{kind:'photos',quote:'roof photos'}]}).facts[0].quote,'No roof photos yet');
 for(const action of ['reply_identity','ask_photos','ask_callback_details','acknowledge_callback','photo_received','explain_process','explain_price'])assert(textActions.includes(action));
 assert.match(textConversationInstructions('seller',true),/No offer or negotiation is authorized/);
-assert.match(textConversationInstructions('seller',true),/exact date, time and time zone/);
+assert.match(textConversationInstructions('seller',true),/Never ask them for a date, year, time or time zone to call now/);
 assert.match(textConversationInstructions('seller',true),/have not inspected images/);
 assert.match(textConversationInstructions('seller',false),/call requests go to the existing handoff/);
 let payload;

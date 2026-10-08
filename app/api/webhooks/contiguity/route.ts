@@ -5,6 +5,7 @@ import {ownerPracticeReply} from '@/lib/owner-practice-replies';
 import {replyToSellerText} from '@/lib/seller-text-replies';
 import {dispatchTextMessage} from '@/lib/text-message-service';
 import {processTextAi} from '@/lib/text-ai-service';
+import {dispatchLiveVoice} from '@/lib/live-dispatch-service';
 export const runtime='nodejs';
 export const maxDuration=60;
 export async function POST(req:Request){
@@ -25,7 +26,7 @@ export async function POST(req:Request){
  if(inbound&&!event.optOut){
   // Queuing is idempotent and provider claims are atomic. A failed immediate
   // attempt remains durable for the automation worker; never replay a send.
-  try{await replyToSellerText(db,dispatchTextMessage,event.id,processTextAi);}catch{/* Durable queue is retried only before provider claim. */}
+  try{await replyToSellerText(db,dispatchTextMessage,event.id,processTextAi,dispatchLiveVoice);}catch{/* Durable queue is retried only before provider claim. */}
   await ownerPracticeReply(event.id);
  }
  return NextResponse.json({received:true});
