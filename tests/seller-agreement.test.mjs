@@ -16,6 +16,11 @@ assert.throws(()=>confirmedSellerTerms({...terms,priceCents:8000000,priceSource:
 assert(!sellerAgreementInput.safeParse({action:'status',conversationId:'conv_fixture',phone:'+12125550100'}).success);
 const tool={id:'tool_fixture',tool_config:structuredClone(sellerAgreementToolConfig)};
 assert(sellerAgreementToolMatches(tool));
+const serialized=structuredClone(tool);
+function defaults(s){if(s.properties){for(const p of Object.values(s.properties))defaults(p);}else Object.assign(s,{description:s.description??'',enum:s.enum??null,is_system_provided:false,dynamic_variable:s.dynamic_variable??'',allowed_values:null,allowed_values_dynamic_variable:'',constant_value:'',is_omitted:false});}
+defaults(serialized.tool_config.api_schema.request_body_schema);serialized.tool_config.dynamic_variables={dynamic_variable_placeholders:{}};
+assert(sellerAgreementToolMatches(serialized),'neutral provider defaults must preserve the exact tool schema');
+for(const patch of [{is_system_provided:true},{is_omitted:true},{constant_value:1},{dynamic_variable:'price'},{allowed_values:['yes']},{allowed_values_dynamic_variable:'choices'}]){const changed=structuredClone(serialized);Object.assign(changed.tool_config.api_schema.request_body_schema.properties.confirmation.properties.agreedPriceCents,patch);assert(!sellerAgreementToolMatches(changed));}
 for(const change of [t=>t.tool_config.api_schema.url='https://example.com',t=>t.tool_config.api_schema.request_headers.Authorization.variable_name='other',t=>t.tool_config.api_schema.request_body_schema.properties.confirmation.properties.agreedPriceCents.dynamic_variable='price']){const bad=structuredClone(tool);change(bad);assert(!sellerAgreementToolMatches(bad));}
 const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:0,raw:{data:{dm_property_id:'prop_123',full_address:terms.address,legal_description:terms.legalDescription,estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:20000,estimated_equity_percentage:90}}};
 const scope={accountId:'account',ownerUserId:'owner',ownerEmail:'owner@example.test',dealId:'deal',screeningId:'screen',phone:'+12125550199',callKey:'inbound:fixture'};

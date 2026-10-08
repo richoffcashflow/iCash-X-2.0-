@@ -23,9 +23,15 @@ export const sellerAgreementToolConfig={
 export function sellerAgreementToolMatches(raw:unknown,id?:string){
  const r=object(raw),c=object(r.tool_config),a=object(c.api_schema);
  const empty=(v:unknown)=>v==null||Array.isArray(v)&&v.length===0||typeof v==='object'&&Object.keys(v).length===0;
- const normalizeSchema=(v:unknown):unknown=>Array.isArray(v)?v.map(normalizeSchema):v!==null&&typeof v==='object'?Object.fromEntries(Object.entries(v).filter(([k,x])=>!(x===null&&['dynamic_variable','constant_value','enum','items'].includes(k))).map(([k,x])=>[k,normalizeSchema(x)])):v;
+ // ElevenLabs serializes inactive value sources as empty strings/false/null.
+ // Remove only those neutral defaults; any active source or omitted field fails.
+ const neutral=(k:string,x:unknown)=>x===null&&['dynamic_variable','constant_value','enum','items','allowed_values','allowed_values_dynamic_variable'].includes(k)
+  ||x===''&&['description','dynamic_variable','constant_value','allowed_values_dynamic_variable'].includes(k)
+  ||x===false&&['is_system_provided','is_omitted'].includes(k);
+ const normalizeSchema=(v:unknown):unknown=>Array.isArray(v)?v.map(normalizeSchema):v!==null&&typeof v==='object'?Object.fromEntries(Object.entries(v).filter(([k,x])=>!neutral(k,x)).map(([k,x])=>[k,normalizeSchema(x)])):v;
+ const variables=object(c.dynamic_variables),noVariables=empty(c.dynamic_variables)||Object.keys(variables).length===1&&Object.hasOwn(variables,'dynamic_variable_placeholders')&&empty(variables.dynamic_variable_placeholders);
  return /^tool_[A-Za-z0-9]+$/.test(String(r.id))&&(!id||r.id===id)&&c.type==='webhook'&&c.name===sellerAgreementToolName&&c.follow_redirects===false&&a.url===sellerAgreementToolUrl&&a.method==='POST'
   &&JSON.stringify(canonical(a.request_headers))===JSON.stringify(canonical(sellerAgreementToolConfig.api_schema.request_headers))
   &&JSON.stringify(canonical(normalizeSchema(a.request_body_schema)))===JSON.stringify(canonical(normalizeSchema(sellerAgreementToolConfig.api_schema.request_body_schema)))
-  &&a.auth_connection==null&&empty(a.path_params_schema)&&empty(a.query_params_schema)&&empty(r.response_mocks)&&empty(c.response_mocks)&&empty(c.dynamic_variables);
+  &&a.auth_connection==null&&empty(a.path_params_schema)&&empty(a.query_params_schema)&&empty(r.response_mocks)&&empty(c.response_mocks)&&noVariables;
 }

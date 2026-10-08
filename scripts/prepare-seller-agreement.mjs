@@ -42,18 +42,19 @@ export async function prepareSellerAgreement(env=process.env,fetcher=fetch){
  if(/^tool_[A-Za-z0-9]+$/.test(String(tool?.id)))tool=await api('/v1/convai/tools/'+tool.id);
  if(!sellerAgreementToolMatches(tool)){
   // Shape-only diagnostics: never log header values, tool secrets or raw payloads.
-  const kind=v=>v===undefined?'absent':v===null?'null':v===''?'empty_string':Array.isArray(v)?'array_'+v.length:typeof v==='object'?'object_'+Object.keys(v).length:typeof v;
+  const kind=v=>v===undefined?'absent':v===null?'null':v===''?'empty_string':typeof v==='boolean'?String(v):Array.isArray(v)?'array_'+v.length:typeof v==='object'?'object_'+Object.keys(v).length:typeof v;
   const differences=[];
   function compare(expected,actual,path){
    if(JSON.stringify(canonical(expected))===JSON.stringify(canonical(actual)))return;
    if(expected&&actual&&typeof expected==='object'&&typeof actual==='object'&&!Array.isArray(expected)&&!Array.isArray(actual)){
-    for(const k of new Set([...Object.keys(expected),...Object.keys(actual)]))compare(expected[k],actual[k],path+'.'+(Object.hasOwn(expected,k)||['dynamic_variable','constant_value','enum','items','description','dynamic_variable_placeholders','properties','required'].includes(k)?k:'extra'));
+    for(const k of new Set([...Object.keys(expected),...Object.keys(actual)]))compare(expected[k],actual[k],path+'.'+(/^[a-zA-Z_]{1,70}$/.test(k)?k:'extra'));
    }else differences.push({path,expected:kind(expected),actual:kind(actual)});
   }
   const config=object(tool?.tool_config),schema=object(config.api_schema);
   compare(sellerAgreementToolConfig.api_schema.request_body_schema,schema.request_body_schema,'body');
   compare(sellerAgreementToolConfig.api_schema.request_headers,schema.request_headers,'headers');
-  console.log('Seller agreement tool readback:',JSON.stringify({toolId:tool?.id,bodyDifferences:differences.slice(0,70),dynamicVariables:kind(config.dynamic_variables),dynamicPlaceholder:kind(object(config.dynamic_variables).dynamic_variable_placeholders),path:kind(schema.path_params_schema),query:kind(schema.query_params_schema),redirects:config.follow_redirects===false,authAbsent:schema.auth_connection==null,mocks:kind(tool?.response_mocks)}));
+  const compact=[...new Set(differences.map(d=>d.path.split('.').at(-1)+':'+d.expected+'>'+d.actual))];
+  console.log('Seller agreement tool readback:',JSON.stringify({toolId:tool?.id,bodyDifferences:compact.slice(0,30),dynamicVariables:kind(config.dynamic_variables),dynamicPlaceholder:kind(object(config.dynamic_variables).dynamic_variable_placeholders),path:kind(schema.path_params_schema),query:kind(schema.query_params_schema),redirects:config.follow_redirects===false,authAbsent:schema.auth_connection==null,mocks:kind(tool?.response_mocks)}));
   throw Error('AGREEMENT_TOOL_READBACK_REQUIRED');
  }
  async function branch(path,source,list,conversation_config){
