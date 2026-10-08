@@ -1,6 +1,11 @@
 import {buyerPhoneFlowInstructions} from './buyer-phone-flow.ts';
 import {conversationTrustInstructions} from './conversation-trust.ts';
-export type BuyerCallContext={dealId:string;address:string;askingPriceCents:number;repairsCents:number;packageId:string;purchasePriceCents?:number;assignmentFeeCents?:number;packageUrl?:string;buyerPaysClosingCosts?:boolean};
+import {callFirstName} from './call-contact-name.ts';
+export type BuyerCallContext={dealId:string;address:string;askingPriceCents:number;repairsCents:number;packageId:string;purchasePriceCents?:number;assignmentFeeCents?:number;packageUrl?:string;buyerPaysClosingCosts?:boolean;firstName?:string};
+export function buyerFirstMessage(context:BuyerCallContext){
+ const name=callFirstName(context.firstName);
+ return `${name?'Hi '+name+'. ':''}Are you buying investment properties near ${context.address}?`;
+}
 export function buyerCallInstructions(context:BuyerCallContext,principal:string,assistantName:string){
  if(!context.dealId||!context.address||!context.packageId||![context.askingPriceCents,context.repairsCents].every(n=>Number.isSafeInteger(n)&&n>=0)||context.askingPriceCents===0)throw Error('Approved buyer context required');
  if((context.purchasePriceCents!==undefined||context.assignmentFeeCents!==undefined)&&(!Number.isSafeInteger(context.purchasePriceCents)||context.purchasePriceCents!<=0||!Number.isSafeInteger(context.assignmentFeeCents)||context.assignmentFeeCents!<0||context.purchasePriceCents!+context.assignmentFeeCents! !==context.askingPriceCents))throw Error('Buyer price breakdown mismatch');

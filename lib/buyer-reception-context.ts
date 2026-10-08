@@ -1,4 +1,5 @@
 import {boundedVoiceSmsContext} from './voice-sms-context.ts';
+import {callFirstName} from './call-contact-name.ts';
 import {createHash} from 'node:crypto';
 import {safeInboundPropertyContext,ownershipAlreadyConfirmed} from './seller-call-context.ts';
 export const buyerReceptionPolicy='buyer_seller_v1';
@@ -11,12 +12,13 @@ export const buyerReceptionPolicyHash=createHash('sha256').update(JSON.stringify
 export function buyerReceptionEnabled(c:Record<string,unknown>){return c.context_policy===buyerReceptionPolicy&&c.context_policy_hash===buyerReceptionPolicyHash&&typeof c.context_approval_reference==='string'&&c.context_approval_reference.trim().length>=10;}
 export function buyerReceptionVariables(value:unknown){
  const v=value as Record<string,unknown>|null;
+ const firstName=callFirstName(v?.returningName),greeting=firstName?`Hi ${firstName}. `:'';
  if(v?.status==='buyer'&&typeof v.address==='string'&&v.address.trim().length>0&&v.address.length<=300&&!/[<>\x00-\x1f]/.test(v.address)&&[v.askingPriceCents,v.purchasePriceCents,v.assignmentFeeCents].every(n=>typeof n==='number'&&Number.isSafeInteger(n)&&n>=0)&&Number(v.purchasePriceCents)>0&&Number(v.askingPriceCents)===Number(v.purchasePriceCents)+Number(v.assignmentFeeCents)){
-  const context={status:'buyer',address:v.address,askingPriceCents:v.askingPriceCents,purchasePriceCents:v.purchasePriceCents,assignmentFeeCents:v.assignmentFeeCents,buyerPaysClosingCosts:true};
-  return {icash_property_greeting:`Are you calling about buying ${v.address}?`,icash_property_context:JSON.stringify(context)};
+  const context={status:'buyer',address:v.address,askingPriceCents:v.askingPriceCents,purchasePriceCents:v.purchasePriceCents,assignmentFeeCents:v.assignmentFeeCents,buyerPaysClosingCosts:true,...(firstName?{returningName:firstName}:{})};
+  return {icash_property_greeting:`${greeting}Are you calling about buying ${v.address}?`,icash_property_context:JSON.stringify(context)};
  }
  const context=safeInboundPropertyContext(value);
  const confirmed=context?.status==='matched'&&ownershipAlreadyConfirmed(boundedVoiceSmsContext(v?.smsContext),context.address);
  const safeContext=context?.status==='matched'?{...context,ownershipAlreadyConfirmed:confirmed}:context;
- return {icash_property_greeting:context?.status==='matched'?confirmed?`About ${context.address}—are you considering a cash sale?`:`Is this the owner of ${context.address}?`:"Which property are you calling about?",icash_property_context:JSON.stringify(safeContext)};
+ return {icash_property_greeting:context?.status==='matched'?greeting+(confirmed?`About ${context.address}—are you considering a cash sale?`:`Is this the owner of ${context.address}?`):"Which property are you calling about?",icash_property_context:JSON.stringify(safeContext)};
 }

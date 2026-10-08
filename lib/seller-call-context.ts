@@ -1,4 +1,5 @@
 import type {SellerOfferPresentation} from './seller-offer-presentation.ts';
+import {callFirstName} from './call-contact-name.ts';
 import {sellerPhoneFlowInstructions} from './seller-phone-flow.ts';
 import type {SellerClosingContext} from './seller-closing-context.ts';
 import {homeOfferIdentityInstructions,type NetworkBuyerKind} from './homeoffer-buyer-identity.ts';
@@ -65,10 +66,10 @@ export function sellerCallContext(input:SellerCallContext){
  return {buyerKind:input.buyerKind,address:field(input.address,300),principal:field(input.principal,120),assistantName:field(input.assistantName,80),history:boundedVoiceSmsContext(input.history),priorCalls:boundedSellerPriorCalls(input.priorCalls),request:sellerRequest(input.request)};
 }
 export function sellerFirstMessage(input:SellerCallContext,alreadyIntroduced=false){
- const c=sellerCallContext(input),history=combinedHistory(c),name=returningSellerName(history)??c.request?.firstName;
- const introduction='';
- if(ownershipAlreadyConfirmed(history,c.address))return `Is now a good time to talk about ${c.address}?`;
- return `${introduction}Is this ${name?name+', ':''}the owner of ${c.address}?`;
+ const c=sellerCallContext(input),history=combinedHistory(c),name=callFirstName(returningSellerName(history)??c.request?.firstName);
+ const greeting=name?`Hi ${name}. `:'';
+ if(ownershipAlreadyConfirmed(history,c.address))return `${greeting}Is now a good time to talk about ${c.address}?`;
+ return `${greeting}Is this the owner of ${c.address}?`;
 }
 export function sellerCallPrompt(input:SellerCallContext,privateOfferCeilingCents:number|null=null,closing:SellerClosingContext|null=null,contractTextEnabled=false,cashOfferPriceCents:number|null=null,proposal:SellerOfferPresentation|null=null){
  const c=sellerCallContext(input);
@@ -84,5 +85,6 @@ export function safeInboundPropertyContext(value:unknown):InboundPropertyContext
  const v=value as Record<string,unknown>;
  if(v.status==='ambiguous')return {status:'ambiguous'};
  if(v.status!=='matched'||typeof v.address!=='string')return null;
- try{return {status:'matched',address:field(v.address,300),...(typeof v.returningName==='string'&&/^[A-Z][a-z]{1,24}$/.test(v.returningName)&&!/^(interested|owner|selling|ready|not|yes|no)$/i.test(v.returningName)?{returningName:v.returningName}:{})};}catch{return null;}
+ const name=callFirstName(v.returningName);
+ try{return {status:'matched',address:field(v.address,300),...(name?{returningName:name}:{})};}catch{return null;}
 }
