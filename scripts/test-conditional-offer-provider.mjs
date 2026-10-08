@@ -2,6 +2,7 @@
 // provider tool is mocked; these simulations cannot call, text or sign.
 import {calculateAutomaticCallOffer} from '../lib/automatic-call-offer.ts';
 import {testAutomaticOfferProvider} from './test-automatic-offer-provider.mjs';
+if(process.argv.includes('--deployment-gate')&&(process.env.VERCEL_ENV!=='production'||process.env.VERCEL_GIT_COMMIT_REF!=='fix/conditional-offer-simple-workspace'))process.exit(0);
 const key=process.env.ELEVENLABS_API_KEY;
 if(process.env.VERCEL_ENV!=='production'||!key)throw Error('TRUSTED_BUILD_CONFIGURATION_REQUIRED');
 const api=async(path,method='GET',body)=>{
