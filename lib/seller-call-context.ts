@@ -11,9 +11,12 @@ import {voiceSmsInstructions} from './voice-sms-context.ts';
  * A property-record owner is not necessarily the person answering the phone. */
 export function returningSellerName(history:VoiceSmsContext|null):string|null{
  if(!history?.messages.some(m=>m.direction==='outgoing'))return null;
- for(const m of [...history.messages].reverse()){
+ for(const [index,m] of [...history.messages.entries()].reverse()){
   if(m.direction!=='incoming'||!history.messages.some(sent=>sent.direction==='outgoing'&&Date.parse(sent.at)<=Date.parse(m.at)))continue;
-  const match=m.body.match(/^(?:Hi[, ]+|Hello[, ]+)?(?:[Tt]his is|[Mm]y name is|I'm|I am) ([A-Z][a-z]{1,24}(?:[ '-][A-Z][a-z]{1,24}){0,2})[.!]?(?:\s|$)/);
+  const previous=history.messages.slice(0,index).findLast(turn=>turn.direction==='outgoing');
+  const nameAnswer=previous&&/\b(?:full |legal |your )?name\b/i.test(previous.body)&&/\?/.test(previous.body)
+   ?m.body.match(/^(?:(?:Uh|Um|uh|um)[, ]+)?(?:(?:it'll be|it will be|it's|it is|This is|My name is)\s+)?([A-Z][a-z]{1,24}(?:[ '-][A-Z][a-z]{1,24}){0,2})[.!]?$/):null;
+  const match=nameAnswer??m.body.match(/^(?:Hi[, ]+|Hello[, ]+)?(?:[Tt]his is|[Mm]y name is|I'm|I am) ([A-Z][a-z]{1,24}(?:[ '-][A-Z][a-z]{1,24}){0,2})[.!]?(?:\s|$)/);
   if(match){const name=match[1].split(/[ '-]/)[0];if(!/^(interested|owner|selling|ready|not|yes|no)$/i.test(name))return name;}
  }
  return null;
@@ -27,10 +30,11 @@ export function ownershipAlreadyConfirmed(history:VoiceSmsContext|null,address:s
   if(message.direction==='incoming'&&/\b(not (?:the )?owner|wrong (?:person|number|property|address)|sold (?:it|that|the property)|no longer own)\b/i.test(message.body))return false;
   const exactAddress=address.toLowerCase(),question=message.body.toLowerCase();
   if(message.direction!=='outgoing'||!['owner of '+exactAddress+'?','do you own '+exactAddress+'?','is '+exactAddress+' your property?'].some(phrase=>question.includes(phrase)))continue;
-  const answer=messages[i+1];
-  return !!answer&&answer.direction==='incoming'&&Date.parse(answer.at)>=Date.parse(message.at)
-   &&/^(?:yes|yeah|yep|correct|that's me|that is me)(?:[,!.]?\s+(?:that is mine|that's mine|i own it|i am the owner))?[.!]?$/i.test(answer.body.trim())
-   &&! /\b(?:not|wrong|no longer|sold)\b/i.test(answer.body);
+  const answers=messages.slice(i+1);const nextQuestion=answers.findIndex(answer=>answer.direction==='outgoing');
+  const replies=nextQuestion<0?answers:answers.slice(0,nextQuestion);
+  if(replies.some(answer=>/\b(?:not|wrong|no longer|sold|no|nope)\b/i.test(answer.body)))return false;
+  return replies.some(answer=>answer.direction==='incoming'&&Date.parse(answer.at)>=Date.parse(message.at)
+   &&/^(?:y|yes|yeah|yep|correct|that's me|that is me)(?:[,!.]?\s+(?:that is mine|that's mine|i own it|i am the owner|i am))?[.!]?$/i.test(answer.body.trim()));
  }
  return false;
 }
@@ -42,7 +46,10 @@ export function boundedSellerPriorCalls(value:unknown):SellerPriorCall[]{
   if(!raw||typeof raw!=='object')return [];
   const v=raw as Record<string,unknown>,r=v.result as Record<string,unknown>|null;
   if(typeof v.completed_at!=='string'||!Number.isFinite(Date.parse(v.completed_at))||!r||!Array.isArray(r.transcript))return [];
-  const messages=r.transcript.slice(-12).flatMap((raw,index)=>{
+  // Keep the opening answers as well as the closing turns. The old last-12
+  // window discarded ownership, condition and legal name on ordinary calls.
+  const turns=r.transcript.length>80?[...r.transcript.slice(0,40),...r.transcript.slice(-40)]:r.transcript;
+  const messages=turns.flatMap((raw,index)=>{
    if(!raw||typeof raw!=='object')return [];
    const t=raw as Record<string,unknown>;
    if(!['user','agent'].includes(String(t.role))||typeof t.message!=='string')return [];
@@ -55,6 +62,11 @@ function combinedHistory(c:{history:VoiceSmsContext|null;priorCalls:SellerPriorC
  const messages=[...c.priorCalls.flatMap(call=>call.messages),...(c.history?.messages??[])].sort((a,b)=>Date.parse(a.at)-Date.parse(b.at));
  return messages.length?{threadId:c.history?.threadId??'bound-prior-calls',messages}:null;
 }
+export function sellerConversationProgress(address:string,sms:unknown,calls:unknown){
+ const context={history:boundedVoiceSmsContext(sms),priorCalls:boundedSellerPriorCalls(calls)};
+ const history=combinedHistory(context);
+ return {...context,returningName:returningSellerName(history),ownershipAlreadyConfirmed:ownershipAlreadyConfirmed(history,address)};
+}
 export type SellerRequestContext={name:string;submittedAt:string};
 function sellerRequest(value:SellerRequestContext|undefined){
  if(!value||!Number.isFinite(Date.parse(value.submittedAt))||Date.parse(value.submittedAt)>Date.now())return null;
@@ -62,13 +74,16 @@ function sellerRequest(value:SellerRequestContext|undefined){
  if(!/^[\p{L}][\p{L}'’-]{0,30}$/u.test(firstName))return null;
  return {firstName,submittedAt:value.submittedAt};
 }
-export type SellerCallContext={address:string;principal:string;assistantName:string;history:VoiceSmsContext|null;priorCalls?:unknown;buyerKind?:NetworkBuyerKind;request?:SellerRequestContext};
+export type SellerCallContext={address:string;principal:string;assistantName:string;history:VoiceSmsContext|null;priorCalls?:unknown;buyerKind?:NetworkBuyerKind;request?:SellerRequestContext;callbackRequestedNow?:boolean};
 export function sellerCallContext(input:SellerCallContext){
- return {buyerKind:input.buyerKind,address:field(input.address,300),principal:field(input.principal,120),assistantName:field(input.assistantName,80),history:boundedVoiceSmsContext(input.history),priorCalls:boundedSellerPriorCalls(input.priorCalls),request:sellerRequest(input.request)};
+ const context={buyerKind:input.buyerKind,address:field(input.address,300),principal:field(input.principal,120),assistantName:field(input.assistantName,80),history:boundedVoiceSmsContext(input.history),priorCalls:boundedSellerPriorCalls(input.priorCalls),request:sellerRequest(input.request)};
+ const history=combinedHistory(context);
+ return {...context,returningName:returningSellerName(history),ownershipAlreadyConfirmed:ownershipAlreadyConfirmed(history,context.address),callbackRequestedNow:input.callbackRequestedNow===true};
 }
 export function sellerFirstMessage(input:SellerCallContext,alreadyIntroduced=false){
  const c=sellerCallContext(input),history=combinedHistory(c),name=callFirstName(returningSellerName(history)??c.request?.firstName);
  const greeting=name?`Hi ${name}. `:'';
+ if(c.ownershipAlreadyConfirmed&&c.callbackRequestedNow)return `${greeting}Let's go over the cash offer for ${c.address}.`;
  if(ownershipAlreadyConfirmed(history,c.address))return `${greeting}Is now a good time to talk about ${c.address}?`;
  return `${greeting}Is this the owner of ${c.address}?`;
 }

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import {boundedSellerPriorCalls,returningSellerName,ownershipAlreadyConfirmed,sellerFirstMessage,sellerCallPrompt,safeInboundPropertyContext} from '../lib/seller-call-context.ts';
+import {boundedSellerPriorCalls,returningSellerName,ownershipAlreadyConfirmed,sellerFirstMessage,sellerCallPrompt,safeInboundPropertyContext,sellerCallContext} from '../lib/seller-call-context.ts';
+import {sellerAgreementReceptionVariables} from '../lib/seller-agreement-reception.ts';
 import {inboundInitiation} from '../lib/inbound-voice.ts';
 const msg=(body,direction='incoming')=>({id:'m',body,direction,at:'2026-10-02T12:00:00Z'});
 const history={threadId:'bound-thread',messages:[msg('Is this the owner of 45 Oak Road?','outgoing'),msg('This is Jane. Yes, that is mine.')]};
@@ -37,6 +38,21 @@ const priorCalls=[{completed_at:'2026-10-02T12:00:00Z',result:{summary:'Discusse
 assert.equal(boundedSellerPriorCalls(priorCalls).length,1);assert(!JSON.stringify(boundedSellerPriorCalls(priorCalls)).includes('999999'));
 const followup=sellerFirstMessage({...context,history:null,priorCalls});assert(followup.startsWith('Hi Jane. Is now a good time'));assert(followup.includes('good time to talk about'));
 assert(sellerCallPrompt({...context,history:null,priorCalls}).includes('Discussed roof.'));
+const longCall=[{completed_at:'2026-10-02T12:00:00Z',result:{transcript:[
+ {role:'agent',message:'Is this the owner of 45 Oak Road?'},{role:'user',message:'Yes.'},
+ {role:'agent',message:'What repairs does it need?'},{role:'user',message:'A roof and AC.'},
+ {role:'agent',message:'What is your full legal name for the agreement?'},{role:'user',message:"Uh, it'll be Keyshawn Russell."},
+ ...Array.from({length:20},()=>({role:'agent',message:'Other conversation.'}))
+]}}];
+const progress=sellerCallContext({...context,history:null,priorCalls:longCall,callbackRequestedNow:true});
+assert.equal(progress.returningName,'Keyshawn');assert.equal(progress.ownershipAlreadyConfirmed,true);
+assert.equal(sellerFirstMessage({...context,history:null,priorCalls:longCall,callbackRequestedNow:true}),"Hi Keyshawn. Let's go over the cash offer for 45 Oak Road.");
+assert(JSON.stringify(progress.priorCalls).includes('A roof and AC.'));
+const incomingFollowup=sellerAgreementReceptionVariables({status:'matched',address:'45 Oak Road',returningName:'Pop',priorCalls:longCall});
+assert(incomingFollowup.icash_property_greeting.startsWith("Hi Keyshawn. Let's continue"));
+assert.equal(JSON.parse(incomingFollowup.icash_property_context).ownershipAlreadyConfirmed,true);
+assert(JSON.parse(incomingFollowup.icash_property_context).priorCalls.length===1);
+assert(ownershipAlreadyConfirmed({threadId:'t',messages:[msg('Is this the owner of 45 Oak Road?','outgoing'),msg('Y'),msg('yes ')]},'45 Oak Road'));
 
 assert(!ownershipAlreadyConfirmed({threadId:'t',messages:[msg('Is this the owner of 45 Oak Road Extension?','outgoing'),msg('Yes.')]},'45 Oak Road'));
 assert(!ownershipAlreadyConfirmed({threadId:'t',messages:[msg('Is this the owner of 45 Oak Road?','outgoing'),msg('Yes, my brother is the owner.')]},'45 Oak Road'));

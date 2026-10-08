@@ -3,6 +3,7 @@ import {sellerOfferReceptionPrompt,sellerOfferReceptionVariables} from './seller
 import {buyerReceptionGreeting} from './buyer-reception-context.ts';
 import {legacySellerAgreementFlowInstructions,sellerAgreementFlowInstructions} from './seller-agreement-flow.ts';
 import {object} from './required-call-recording.ts';
+import {sellerConversationProgress} from './seller-call-context.ts';
 import {automaticOfferInstructions,automaticOfferGuardrail,legacyAutomaticOfferGuardrail} from './automatic-offer-policy.ts';
 import {sellerQualificationAndOfferInstructions} from './seller-offer-presentation.ts';
 export const sellerAgreementReceptionPolicy='seller_agreement_v3';
@@ -48,6 +49,12 @@ export function sellerAgreementReceptionVariables(value:unknown,now=Date.now()){
  const companyName=typeof company==='string'&&company.trim().length<=160&&!/[\x00-\x1f{}<>]/.test(company)?company.trim()||null:null;
  if(safe?.status==='matched'||safe?.status==='buyer'){safe.companyName=companyName;base.icash_property_context=JSON.stringify(safe);}
  if(safe?.status!=='matched')return base;
+ const progress=sellerConversationProgress(safe.address,object(value).smsContext,object(value).priorCalls);
+ safe.returningName=progress.returningName??safe.returningName;
+ safe.ownershipAlreadyConfirmed=progress.ownershipAlreadyConfirmed;
+ safe.recentSms=progress.history;
+ safe.priorCalls=progress.priorCalls;
+ if(progress.ownershipAlreadyConfirmed)base.icash_property_greeting=`${safe.returningName?'Hi '+safe.returningName+'. ':''}Let's continue with the cash offer for ${safe.address}.`;
  const t=object(object(value).purchaseTerms),pending=object(object(value).pendingAgreement);
  const money=(v:unknown)=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0?v:null;
  const purchaseTerms={inspectionDays:Number.isInteger(t.inspectionDays)&&Number(t.inspectionDays)>=0&&Number(t.inspectionDays)<=90?t.inspectionDays:10,closingDate:typeof t.closingDate==='string'?t.closingDate:'',escrowAgent:typeof t.escrowAgent==='string'?t.escrowAgent.slice(0,200):'',legalDescriptionAvailable:t.legalDescriptionAvailable===true};

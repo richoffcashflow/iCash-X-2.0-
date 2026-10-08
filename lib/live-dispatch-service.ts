@@ -14,11 +14,12 @@ import {sameBusinessNumber,consistentTextSenders} from './number-continuity.ts';
 import {selectBusinessCaller,secondaryBusinessPhone,secondaryCallingReady} from './business-voice-numbers.ts';
 import {boundedVoiceSmsContext} from './voice-sms-context.ts';
 import {db} from '@/lib/stripe-test';
+import {dispatchTextMessage} from './text-message-service';
 import {elevenRequest} from '@/lib/elevenlabs';
 import {buyerCallInstructions,buyerFirstMessage,type BuyerCallContext} from './buyer-call-policy.ts';
 import {contactEligibility,callEligibility,nextContactWindow,type VoicePermission} from './live-dispatch-policy.ts';
 import {sellerFirstMessage,sellerCallPrompt,sellerCallContext,type SellerRequestContext} from './seller-call-context.ts';
-type Job={id:string;account_id:string;permission_id:string|null;operational_contact_id?:string|null;callback_id:string|null;state:string};
+type Job={id:string;account_id:string;permission_id:string|null;operational_contact_id?:string|null;callback_id:string|null;sms_source_message_id?:string|null;state:string};
 type Config={approved_voice_ids:string[];enabled:boolean;agent_id:string;phone_number_id:string;agent_config_hash:string;reviewed_until:string;seller_rate_id:string;buyer_rate_id:string|null;max_duration_seconds:number;required_tool_ids:string[]};
 type Permission=VoicePermission&{id:string;account_id:string;screening_id:string;party:'seller'|'buyer';contact_key:string;seller_intake_id?:string|null};
 const outboundVoiceParties:ReadonlySet<string>=new Set(['seller']);
@@ -56,7 +57,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  p.sellerConsentVerified=p.seller_intake_id?await db<boolean>('rpc/icash_seller_voice_permission_current','POST',{p_account:accountId,p_permission:p.id})===true:false;
  const contact=contactEligibility(p);
  if(!contact.ready){
-  const dueAt=contact.reason==='outside_contact_hours'&&!j.callback_id?nextContactWindow(p):null;
+  const dueAt=contact.reason==='outside_contact_hours'&&!j.callback_id&&!j.sms_source_message_id?nextContactWindow(p):null;
   if(dueAt){
    await db(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&state=eq.issued`,'PATCH',{state:'ready',due_at:dueAt,outcome:'Waiting for calling hours'});
    return {status:contact.reason,dueAt};
@@ -115,7 +116,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const agreementToolsEnabled=!!recordedReview.contractToolId&&recordedReview.contractToolId!==sellerContractToolId;
  const [purchaseDraft]=agreementToolsEnabled&&p.party==='seller'?await db<{terms:Record<string,unknown>}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&stage=eq.draft&select=terms&limit=1`):[];
  const purchaseTerms=purchaseDraft?{inspectionDays:purchaseDraft.terms.inspectionDays??10,closingDate:purchaseDraft.terms.closingDate??'',escrowAgent:purchaseDraft.terms.escrowAgent??''}:null;
- const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext,request:request??undefined};
+ const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext,request:request??undefined,callbackRequestedNow:!!j.sms_source_message_id};
  // Validate the complete opening/context before reserving credits or dialing.
  let sellerGreeting:string|undefined,sellerPrompt:string|undefined;
  if(p.party==='seller'){try{sellerGreeting=sellerFirstMessage(sellerContext,true);sellerPrompt=limited?limitedSellerPrompt(address,identity.principal,account.assistant_name):sellerCallPrompt(sellerContext,ceiling,closing,!!recordedReview.contractToolId,cashOfferPrice,sellerOfferPresentation(snapshot.snapshot,address),agreementToolsEnabled,purchaseTerms);}catch{return hold('property_context_required');}}
@@ -153,7 +154,13 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
   :buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!;
  const result=await recordingServer().dispatch({accountId,operationKey,fromPhone:businessNumber,maxTotalSeconds:fundedCall.maxSeconds,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:callVoiceId,firstMessage:sellerGreeting??buyerFirstMessage(buyerContext!),prompt,strategyKey:strategy});
  // A started call is connecting; only the recording service can confirm capture.
- if(result.status==='recording_consent_pending')return {status:'call_started'};
+ if(result.status==='recording_consent_pending'){
+  if(j.sms_source_message_id)try{
+   const message=await db<string|null>('rpc/icash_seller_sms_call_ack','POST',{p_account:accountId,p_job:j.id});
+   if(message)await dispatchTextMessage(accountId,message);
+  }catch{/* A text failure must never retry a call already accepted by the provider. */}
+  return {status:'call_started'};
+ }
  if(result.status==='recording_dial_unknown_no_retry')return {status:'provider_outcome_unknown_no_retry'}; // Keep the durable claim recoverable; never redial.
  return hold(result.status);
  }catch{return hold('provider_outcome_unknown_no_retry');}

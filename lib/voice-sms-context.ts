@@ -4,7 +4,7 @@ export function boundedVoiceSmsContext(value:unknown):VoiceSmsContext|null{
  if(!value||typeof value!=='object')return null;
  const v=value as Record<string,unknown>;
  if(typeof v.threadId!=='string'||!Array.isArray(v.messages))return null;
- const messages=v.messages.slice(-12).flatMap(raw=>{
+ const messages=v.messages.slice(-48).flatMap(raw=>{
   if(!raw||typeof raw!=='object')return [];
   const m=raw as Record<string,unknown>;
   if(typeof m.id!=='string'||!['incoming','outgoing'].includes(String(m.direction))||typeof m.body!=='string'||typeof m.at!=='string'||!Number.isFinite(Date.parse(m.at)))return [];
