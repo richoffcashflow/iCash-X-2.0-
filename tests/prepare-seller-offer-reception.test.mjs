@@ -32,4 +32,13 @@ for(const denied of [false,true]){
  assert(!writes.some(w=>w.path.includes('/Calls')||w.path.includes('enable')));
 }
 assert.equal((await prepareSellerOfferReception({...env,VERCEL_ENV:'preview'},()=>{throw Error('MUST_NOT_RUN');})).status,'not_requested');
+for(const policy of ['automatic_offer_v8','automatic_offer_v9']){
+ let reads=0;
+ const result=await prepareSellerOfferReception(env,async(url)=>{
+  assert(new URL(url).pathname.endsWith('icash_get_recorded_reception_config'));
+  reads++;
+  return new Response(JSON.stringify({...c,context_policy:policy}));
+ });
+ assert.equal(result.status,'already_active');assert.equal(reads,1);
+}
 console.log('Direct reception staging: isolated verified branch, durable single create claim, no activation/routing/spend, preview inert.');
