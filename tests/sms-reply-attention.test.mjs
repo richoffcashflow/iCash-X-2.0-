@@ -21,9 +21,9 @@ console.log('SMS reply attention: actual card renders truthful review-only copy 
 
 slots=[];let work={textAttention:[{...item,screening_id:'property',message_id:'reply-A'}],signatureActions:[],handoffs:[],callRequests:[],properties:[]};
 const renderQueue=()=>{cursor=0;return mod.exports.WorkspaceAttention({work,page:0,onPage:()=>{},onOpen:()=>{},onRefresh:()=>{}});};
-let queue=renderQueue();assert.equal(queue.props.open,undefined,'request queue starts compact');assert.match(text(queue),/1 request shown/);
-const oldKey=all(queue).find(n=>n.type==='details'&&n.props.className==='attention-item').key;
+let queue=renderQueue();assert.equal(queue.props.open,undefined,'request queue starts compact');assert.match(text(queue),/Review a message/);
+const oldKey=all(queue).find(n=>n.type==='div'&&n.props.className==='attention-single').key;
 all(queue).find(n=>n.type===mod.exports.TextAttentionCard).props.onHandled();queue=renderQueue();assert.equal(queue,null,'empty attention panel stays out of the workspace');
-work={...work,textAttention:[{...work.textAttention[0],message_id:'reply-B',quote:'A newer reply'}]};queue=renderQueue();assert.match(text(queue),/1 request shown/);assert.notEqual(all(queue).find(n=>n.type==='details'&&n.props.className==='attention-item').key,oldKey,'new reply gets a fresh child key and busy state');
+work={...work,textAttention:[{...work.textAttention[0],message_id:'reply-B',quote:'A newer reply'}]};queue=renderQueue();assert.match(text(queue),/Review a message/);assert.notEqual(all(queue).find(n=>n.type==='div'&&n.props.className==='attention-single').key,oldKey,'new reply gets a fresh child key and busy state');
 assert.equal(all(queue).find(n=>n.type===mod.exports.TextAttentionCard).props.item.message_id,'reply-B');
 console.log('Attention queue: a later reply on the same row reappears after its predecessor was handled.');
