@@ -17,7 +17,19 @@ export function businessVoiceProviders(env:Env,fetcher:typeof fetch=fetch){
  async function read(url:string,headers:Record<string,string>,body?:unknown){
   const r=await fetcher(url,{method:body===undefined?'GET':'POST',headers:{...headers,Accept:'application/json',...(body!==undefined?{'Content-Type':'application/json'}:{})},body:body===undefined?undefined:JSON.stringify(body),redirect:'error',cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(8000)});
   const label=url.includes('OutgoingCallerIds')?'Twilio caller ID':url.includes('IncomingPhoneNumbers')?'Twilio reception':url.includes('call_forwarding')?'Contiguity call routing':'Contiguity leased numbers';
-  if(!r.ok)throw new BusinessPhoneError(`${label} returned HTTP ${r.status}. ${body===undefined?'Refresh to check again.':'Refresh before retrying the change.'}`);
+  if(!r.ok){
+   let reason='';
+   try{
+    const v=obj(JSON.parse((await boundedBytes(r,8192)).toString('utf8'))),candidate=obj(v.data).error;
+    // Only the provider's short error label is relevant to this owner-only
+    // setup. Never forward bodies, request metadata, or credential-like values.
+    if(typeof candidate==='string'&&candidate.length<=300){
+     reason=candidate;for(const secret of Object.values(env).filter((s):s is string=>typeof s==='string'&&s.length>=16))reason=reason.split(secret).join('[redacted]');
+     reason=reason.replace(/[A-Za-z0-9_-]{24,}/g,'[redacted]').replace(/[<>\r\n]/g,' ').slice(0,240);
+    }
+   }catch{/* Status remains available when the provider has no safe error label. */}
+   throw new BusinessPhoneError(`${label} returned HTTP ${r.status}${reason?': '+reason:'.'} ${body===undefined?'':'Refresh before retrying the change.'}`.trim());
+  }
   if(r.redirected||r.url&&r.url!==url||!/^application\/json(?:;|$)/i.test(r.headers.get('content-type')??''))throw new BusinessPhoneError(`${label} returned an unexpected response.`);
   return JSON.parse((await boundedBytes(r,262144)).toString('utf8')) as unknown;
  }
