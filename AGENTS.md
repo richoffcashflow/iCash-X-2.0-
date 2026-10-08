@@ -14,3 +14,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Use 12-hour clock time with explicit AM/PM everywhere users or owners see or enter a time. Never display military / 24-hour clock time, including in admin tools, schedules, notifications, date/time pickers, and new features.
 - Set `hour12: true` and an English AM/PM locale for formatted timestamps. Use the shared `DateTimeInput` for date/time entry; native `time` and `datetime-local` controls can display military time depending on the device.
 - Keep timestamps, numeric scheduling hours, and timezone calculations in their existing internal formats. Playback positions and durations are elapsed time, not clock time.
+
+- Keep call connection instructions short. Do not put recording announcements or internal cost multipliers in the call controls; recording behavior belongs in the service implementation.
