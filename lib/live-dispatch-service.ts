@@ -1,4 +1,5 @@
 import {sellerContractToolId} from './seller-contract-tool.ts';
+import {automaticOfferInstructions} from './automatic-offer-policy.ts';
 import {sellerOfferPresentation} from './seller-offer-presentation.ts';
 import {VoiceActivationBudgetError} from './voice-budget-failure.ts';
 import {limitedSellerPrompt} from './seller-limited-contact.ts';
@@ -131,7 +132,8 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  try{
  await db(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&state=eq.dispatching`,'PATCH',{sms_context:smsContext});
  const dispatchHold=recordingReleaseHold();if(dispatchHold)return hold(dispatchHold);
- const result=await recordingServer().dispatch({accountId,operationKey,maxTotalSeconds:fundedCall.maxSeconds,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:callVoiceId,firstMessage:sellerGreeting??buyerFirstMessage(buyerContext!),prompt:buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!,strategyKey:strategy});
+ const prompt=(buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!)+(recordedReview.offerPolicy==='automatic_offer_v5'?automaticOfferInstructions:'');
+ const result=await recordingServer().dispatch({accountId,operationKey,maxTotalSeconds:fundedCall.maxSeconds,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:callVoiceId,firstMessage:sellerGreeting??buyerFirstMessage(buyerContext!),prompt,strategyKey:strategy});
  // A started call is connecting; only the recording service can confirm capture.
  if(result.status==='recording_consent_pending')return {status:'call_started'};
  if(result.status==='recording_dial_unknown_no_retry')return {status:'provider_outcome_unknown_no_retry'}; // Keep the durable claim recoverable; never redial.

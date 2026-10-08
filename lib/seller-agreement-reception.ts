@@ -3,6 +3,7 @@ import {sellerOfferReceptionPrompt,sellerOfferReceptionVariables} from './seller
 import {buyerReceptionGreeting} from './buyer-reception-context.ts';
 import {legacySellerAgreementFlowInstructions,sellerAgreementFlowInstructions} from './seller-agreement-flow.ts';
 import {object} from './required-call-recording.ts';
+import {automaticOfferInstructions,automaticOfferGuardrail} from './automatic-offer-policy.ts';
 export const sellerAgreementReceptionPolicy='seller_agreement_v3';
 export const sellerAgreementReceptionPrompt=sellerOfferReceptionPrompt
  .replace('You have no SMS, email, signing, payment or scheduling tool in this incoming session; never claim you sent a package, saved an appointment, accepted a buyer, signed or received money.','Only a matched seller can use the call-bound seller agreement tool. Buyer inquiries have no package-sending, signing, payment or scheduling tool. Never claim delivery, an appointment, buyer acceptance, a signature or payment without the corresponding verified result.')
@@ -12,8 +13,11 @@ export const sellerAgreementReceptionPolicyHash=createHash('sha256').update(JSON
 export const noEmdReceptionPolicy='seller_agreement_v4';
 export const noEmdReceptionPrompt=sellerAgreementReceptionPrompt.replace(legacySellerAgreementFlowInstructions,sellerAgreementFlowInstructions).replaceAll('icash_seller_agreement can','icash_seller_agreement_no_emd can');
 export const noEmdReceptionPolicyHash=createHash('sha256').update(JSON.stringify({policy:noEmdReceptionPolicy,greeting:buyerReceptionGreeting,prompt:noEmdReceptionPrompt})).digest('hex');
-export function sellerAgreementReceptionEnabled(c:Record<string,unknown>){return (c.context_policy===sellerAgreementReceptionPolicy&&c.context_policy_hash===sellerAgreementReceptionPolicyHash||c.context_policy===noEmdReceptionPolicy&&c.context_policy_hash===noEmdReceptionPolicyHash)&&typeof c.context_approval_reference==='string'&&c.context_approval_reference.trim().length>=10&&/^tool_[A-Za-z0-9]+$/.test(String(c.agreement_tool_id));}
-export function sellerAgreementPrompt(c:Record<string,unknown>){return c.context_policy===noEmdReceptionPolicy?noEmdReceptionPrompt:sellerAgreementReceptionPrompt;}
+export const automaticOfferReceptionPolicy='automatic_offer_v5';
+export const automaticOfferReceptionPrompt=noEmdReceptionPrompt.replaceAll('icash_seller_agreement_no_emd','icash_offer_and_contract')+automaticOfferInstructions;
+export const automaticOfferReceptionPolicyHash=createHash('sha256').update(JSON.stringify({policy:automaticOfferReceptionPolicy,greeting:buyerReceptionGreeting,prompt:automaticOfferReceptionPrompt,guardrail:automaticOfferGuardrail})).digest('hex');
+export function sellerAgreementReceptionEnabled(c:Record<string,unknown>){return (c.context_policy===sellerAgreementReceptionPolicy&&c.context_policy_hash===sellerAgreementReceptionPolicyHash||c.context_policy===noEmdReceptionPolicy&&c.context_policy_hash===noEmdReceptionPolicyHash||c.context_policy===automaticOfferReceptionPolicy&&c.context_policy_hash===automaticOfferReceptionPolicyHash)&&typeof c.context_approval_reference==='string'&&c.context_approval_reference.trim().length>=10&&/^tool_[A-Za-z0-9]+$/.test(String(c.agreement_tool_id));}
+export function sellerAgreementPrompt(c:Record<string,unknown>){return c.context_policy===automaticOfferReceptionPolicy?automaticOfferReceptionPrompt:c.context_policy===noEmdReceptionPolicy?noEmdReceptionPrompt:sellerAgreementReceptionPrompt;}
 export function sellerAgreementReceptionVariables(value:unknown,now=Date.now()){
  const base=sellerOfferReceptionVariables(value,now),safe=JSON.parse(base.icash_property_context);
  if(safe?.status!=='matched')return base;
