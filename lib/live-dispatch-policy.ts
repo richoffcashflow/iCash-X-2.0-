@@ -7,6 +7,19 @@ export function contactEligibility(p:VoicePermission,now=Date.now()){
  try{const h=Number(new Intl.DateTimeFormat('en-US',{timeZone:p.timezone,hour:'2-digit',hourCycle:'h23'}).format(new Date(now)));if(h<start||h>=end)return {ready:false as const,reason:'outside_contact_hours'};}catch{return {ready:false as const,reason:'contact_timezone_required'};}
  return {ready:true as const};
 }
+// Search real instants so DST changes and fractional-hour timezones are respected.
+export function nextContactWindow(p:VoicePermission,now=Date.now()):string|null{
+ const current=contactEligibility(p,now);
+ if(current.ready)return new Date(now).toISOString();
+ if(current.reason!=='outside_contact_hours')return null;
+ const start=Math.max(9,p.local_start_hour),end=Math.min(p.sellerConsentVerified?20:18,p.local_end_hour);
+ const hour=new Intl.DateTimeFormat('en-US',{timeZone:p.timezone,hour:'2-digit',hourCycle:'h23'});
+ for(let at=Math.ceil(now/60000)*60000;at<=now+48*3600000;at+=60000){
+  const h=Number(hour.format(new Date(at)));
+  if(h>=start&&h<end)return contactEligibility(p,at).ready?new Date(at).toISOString():null;
+ }
+ return null;
+}
 export function callEligibility(p:VoicePermission,snapshot:unknown,now=Date.now()){
  const contact=contactEligibility(p,now);if(!contact.ready)return contact;
  try{const screening=runScreeningJob(snapshot,now);if(screening.financialCheck.status!=='eligible')return {ready:false as const,reason:'financial_hold'};return {ready:true as const,screening};}catch{return {ready:false as const,reason:'fresh_screening_required'};}
