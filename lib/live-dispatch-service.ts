@@ -132,7 +132,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  try{
  await db(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&state=eq.dispatching`,'PATCH',{sms_context:smsContext});
  const dispatchHold=recordingReleaseHold();if(dispatchHold)return hold(dispatchHold);
- const automaticContext=buyerContext?{status:'buyer',address:buyerContext.address,returningName:buyerContext.firstName,buyerPaysClosingCosts:buyerContext.buyerPaysClosingCosts,repairsCents:buyerContext.repairsCents,packageUrl:buyerContext.packageUrl}:{...sellerCallContext(sellerContext),status:'matched',purchaseTerms};
+ const automaticContext=recordedReview.offerPolicy!=='automatic_offer_v5'?null:buyerContext?{status:'buyer',address:buyerContext.address,returningName:buyerContext.firstName,buyerPaysClosingCosts:buyerContext.buyerPaysClosingCosts,repairsCents:buyerContext.repairsCents,packageUrl:buyerContext.packageUrl}:{...sellerCallContext(sellerContext),status:'matched',purchaseTerms};
  const prompt=recordedReview.offerPolicy==='automatic_offer_v5'
   ?automaticOfferReceptionPrompt.replace('{{icash_property_context}}',JSON.stringify({...automaticContext,principal:identity.principal,assistantName:account.assistant_name}))+'\nOUTBOUND CAPABILITIES: Use the callback tool only for an explicitly agreed date, time and timezone; use the handoff tool when requested. Claim either action only after its successful result. Do not claim an immediate transfer unless the tool confirms one.'
   :buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!;
