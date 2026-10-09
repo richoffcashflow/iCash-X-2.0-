@@ -1,9 +1,14 @@
 // Isolated PostgreSQL simulation. No real signatures, recipients or provider calls.
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {createOperationalContactFixture} from '../tests/helpers/operational-contact-fixture.mjs';
+import {databaseAdapter,loadService} from '../tests/helpers/simulated-journey-services.mjs';
 import {buyerAskingPrice,buyerPackageText,renderBuyerPackage} from '../lib/buyer-disposition.ts';
+import {dealTermsSchema} from '../lib/deal-documents.ts';
+const originalFetch=globalThis.fetch,originalReady=process.env.ICASH_LIVE_WORK_READY;
+globalThis.fetch=async()=>{throw Error('NETWORK BLOCKED: buyer test is local only');};
+process.env.ICASH_LIVE_WORK_READY='true';
 const f=await createOperationalContactFixture(process.argv[2]);
 const {pg,q,one,rpc,account,other,user,screening,deal}=f;
 try{
@@ -47,6 +52,60 @@ try{
  const packageBody=buyerPackageText(l.askingPriceCents,l.url);
  const message=await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:thread.id,p_body:packageBody});assert(message);
  assert.equal(await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:thread.id,p_body:packageBody}),message);
+ // Install the real manual send entry point, then test the same hold on every
+ // final SMS/email claim. No provider transport is permitted in this fixture.
+ const manualSql=readFileSync('supabase/migrations/20261006001029_manual_property_contacts_and_texting.sql','utf8');
+ const manualStart=manualSql.indexOf('create or replace function public.icash_claim_customer_text(');
+ await pg.exec(manualSql.slice(manualStart,manualSql.indexOf('end $$;',manualStart)+7));
+ await pg.exec(readFileSync('config/buyer-outreach-hold.sql','utf8'));
+ const emailRate=(await one("insert into icash_operation_rates(operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled) select 'manual_email','SIMULATION buyer hold',charge_cents,costs_micros,'SIMULATION email costs',verified_at,expires_at,true from icash_operation_rates where id=$1 returning id",[f.sms])).id;
+ const incomingEmail=(await one("insert into icash_text_messages(account_id,thread_id,direction,body,state) values($1,$2,'incoming','Please email the package to buyer@example.invalid','received') returning id",[account,thread.id])).id;
+ const email=await rpc('icash_queue_deal_email',{p_account:account,p_actor:user,p_deal:deal,p_contact:'buyer-request:'+incomingEmail,p_key:randomUUID(),p_subject:'SIMULATION buyer package',p_body:'Synthetic package only',p_rate:emailRate});
+ const hold=(held,p_actor=user,p_account=account)=>rpc('icash_set_buyer_outreach_hold',{p_account,p_deal:deal,p_actor,p_held:held,p_reason:'Owner requested local test without buyer outreach'});
+ await assert.rejects(hold(true,f.otherUser),/Owned deal/);
+ await assert.rejects(hold(true,f.otherUser,other),/Owned deal/);
+ assert.equal(await hold(true),true);assert.equal(await hold(true),true);
+ assert.equal((await one('select count(*) n from icash_buyer_outreach_holds where deal_id=$1',[deal])).n,1);
+ const heldAt=(await one('select held_at from icash_buyer_outreach_holds where deal_id=$1',[deal])).held_at;
+ assert.equal(await rpc('icash_buyer_outreach_held',{p_account:other,p_deal:deal}),false);
+ assert.equal(await rpc('icash_buyer_outreach_held',{p_account:account,p_deal:randomUUID()}),false);
+ const spendBefore=(await one('select count(*) n from icash_operation_spend')).n;
+ for(const name of ['icash_claim_text','icash_claim_customer_text'])assert.equal(await rpc(name,{p_account:account,p_message:message,p_sender:f.sender}),null);
+ assert.equal(await rpc('icash_claim_deal_email',{p_account:account,p_id:email}),null);
+ assert.equal((await one('select state from icash_text_messages where id=$1',[message])).state,'ready');
+ assert.equal((await one('select state from icash_deal_emails where id=$1',[email])).state,'ready');
+ assert.equal((await one('select count(*) n from icash_operation_spend')).n,spendBefore,'held outreach incurs no spend claim');
+ assert.deepEqual(await rpc('icash_buyer_package_text_targets',{p_account:account,p_deal:deal}),[]);
+ assert.equal(await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:thread.id,p_body:packageBody}),null);
+ assert(!(await rpc('icash_deal_email_contacts',{p_account:account,p_deal:deal})).some(c=>c.party==='buyer'));
+ assert.equal((await data()).askingPriceCents,4893700,'hold preserves prepared package');
+ const {db}=databaseAdapter(pg);
+ let transportCalls=0;const noTransport=async()=>{transportCalls++;throw Error('Unexpected buyer transport');};
+ const textService=await loadService('lib/buyer-outreach-service.ts',{db,buyerPackageText,dispatchTextMessage:noTransport});
+ const emailService=await loadService('lib/buyer-package-email.ts',{db,createHash,dealTermsSchema,dealEmailConfigured:()=>true,dispatchDealEmail:noTransport});
+ assert.equal((await textService.sendBuyerPackageTexts(account,deal)).accepted,0);
+ assert.equal((await emailService.sendRequestedBuyerPackages(account,deal)).accepted,0);
+ assert.equal(transportCalls,0,'actual package services do not reach either provider transport while held');
+ // A seller claim on the same deal still delegates to the existing authority
+ // chain; this transaction discards the explicit sentinel used to observe it.
+ await q('begin');try{
+  await q("update icash_text_threads set party='seller' where id=$1",[thread.id]);
+  for(const name of ['icash_claim_text_before_buyer_hold','icash_claim_customer_text_before_buyer_hold'])await pg.exec(`create or replace function public.${name}(p_account uuid,p_message uuid,p_sender text) returns jsonb language sql as $$select '{"sellerDelegated":true}'::jsonb$$;`);
+  for(const name of ['icash_claim_text','icash_claim_customer_text'])assert.deepEqual(await rpc(name,{p_account:account,p_message:message,p_sender:f.sender}),{sellerDelegated:true});
+ }finally{await q('rollback');}
+ // Repeated signature polling cannot silently remove the owner's test hold.
+ await rpc('icash_save_signing_status',{p_id:envelope,p_state:'completed',p_evidence:{id:'777',test_mode:false,status:'completed'}});
+ assert.equal(await rpc('icash_buyer_outreach_held',{p_account:account,p_deal:deal}),true);
+ assert.equal(String((await one('select held_at from icash_buyer_outreach_holds where deal_id=$1',[deal])).held_at),String(heldAt));
+ for(const role of ['anon','authenticated']){
+  assert.equal((await one("select has_function_privilege($1,'icash_set_buyer_outreach_hold(uuid,uuid,uuid,boolean,text)','execute') allowed",[role])).allowed,false);
+  assert.equal((await one("select has_table_privilege($1,'icash_buyer_outreach_holds','select') allowed",[role])).allowed,false);
+ }
+ assert.equal(await hold(false),false);
+ assert((await rpc('icash_deal_email_contacts',{p_account:account,p_deal:deal})).some(c=>c.party==='buyer'));
+ assert.equal((await rpc('icash_claim_deal_email',{p_account:account,p_id:email})).to,'buyer@example.invalid');
+ assert.equal(await rpc('icash_claim_deal_email',{p_account:account,p_id:email}),null,'released email still claims only once');
+ console.log('PASS buyer test hold: no SMS/email transport or spend, queued sends blocked, package preserved, seller path preserved, exact owner/deal scope, no automatic expiry, explicit fixture-only release.');
  await q("update icash_screening_jobs set completed_at=now()-interval '2 days' where id=$1",[screening]);
  const claimed=await rpc('icash_claim_text',{p_account:account,p_message:message,p_sender:f.sender});assert.equal(claimed.message,packageBody);
  assert.equal(await rpc('icash_claim_text',{p_account:account,p_message:message,p_sender:f.sender}),null);
@@ -104,4 +163,5 @@ try{
  assert.equal((await data()).askingPriceCents,4893700,'buyer package survives channel change');
  console.log('PASS buyer written-only migration: untouched queued calls retired, callback denied, inbound buyer calls and signed-price package retained.');
  console.log('PASS: seller-only signature held; all signatures trigger one research job; signed price + $10000; share link without private seller data; tenant isolation; cancellation, changed price, revocation and expiry invalidate package. Synthetic evidence only.');
-}finally{await pg.close();}
+}catch(e){console.error('BUYER SIMULATION FAILED:',e.message,e.where??'',e.stack?.split('\n').slice(1,4).join('\n'));process.exitCode=1;}
+finally{await pg.close();globalThis.fetch=originalFetch;if(originalReady===undefined)delete process.env.ICASH_LIVE_WORK_READY;else process.env.ICASH_LIVE_WORK_READY=originalReady;}
