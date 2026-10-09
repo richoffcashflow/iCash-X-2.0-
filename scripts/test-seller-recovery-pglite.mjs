@@ -50,6 +50,7 @@ try{
  grant usage on schema public to service_role;grant select on all tables in schema public to service_role;
  `);
  await pg.exec(readFileSync('supabase/migrations/20261009223901_seller_gap_recovery_learning.sql','utf8'));
+ await pg.exec(readFileSync('supabase/migrations/20261009224932_seller_recovery_pause_preserves_gaps.sql','utf8'));
  assert.equal((await one('select count(*)::int n from icash_seller_recovery_variants where enabled')).n,0,'migration stages outreach disabled until the application is ready');
  await q('update icash_seller_recovery_variants set enabled=true');
  await q('insert into auth.users values($1)',[owner]);
@@ -83,6 +84,15 @@ try{
   assert.equal((await one('select state from icash_seller_gaps where id=$1',[id])).state,'waiting');
   assert.equal((await one('select count(*)::int n from icash_seller_gaps')).n,1,'a recovery does not start another reminder');
   assert.equal(await prepare(id),null);
+ });
+ await test('release pause keeps eligible recovery open for resume',async()=>{
+  const {id}=await open();
+  await q('update icash_seller_recovery_variants set enabled=false');
+  assert.equal(await prepare(id),null);
+  assert.equal((await one('select state from icash_seller_gaps where id=$1',[id])).state,'open');
+  assert.equal((await one('select count(*)::int n from icash_seller_recovery_attempts')).n,0);
+  await q('update icash_seller_recovery_variants set enabled=true');
+  assert(await prepare(id),'resuming approved variants must recover the same eligible case');
  });
  await test('new seller reply stops old queue before send',async()=>{
   const {id}=await open(),m=await prepare(id);await q("insert into icash_text_messages(account_id,thread_id,direction,body,state,created_at) values($1,$2,'incoming','Actually no thanks','received',now()+interval '1 millisecond')",[a,thread]);
@@ -212,6 +222,6 @@ try{
   assert.equal((await one("select has_function_privilege('anon','icash_prepare_seller_recovery(uuid,uuid)','EXECUTE') v")).v,false);
   assert.equal((await one("select has_function_privilege('service_role','icash_prepare_seller_recovery(uuid,uuid)','EXECUTE') v")).v,true);
  });
- assert.equal(checks,38);completed=true;
+ assert.equal(checks,39);completed=true;
  console.log(JSON.stringify({checks,passed:checks,network:'disabled',scope:'real recovery SQL, isolated delegate fixtures'}));
 }catch(error){console.error(JSON.stringify({error:error.message,code:error.code,where:error.where,detail:error.detail}));process.exitCode=1;}finally{await pg.close();}
