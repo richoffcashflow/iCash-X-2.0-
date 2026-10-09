@@ -4,7 +4,7 @@ import {dealTermsSchema} from './deal-documents.ts';
 
 type Db=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 type Job={id:string;accountId:string;envelopeId:string;signerId:string;phone:string;providerId:string;submitterId:number;termsHash:string};
-type Envelope={id:string;account_id:string;provider_id:string;terms_hash:string;test_mode:boolean;state:string;kind:SigningKind;terms:unknown;recipients:{id:string;email?:string|null;phone?:string|null}[]};
+type Envelope={id:string;template_id:string;account_id:string;provider_id:string;terms_hash:string;test_mode:boolean;state:string;kind:SigningKind;terms:unknown;recipients:{id:string;email?:string|null;phone?:string|null}[]};
 type Dependencies={db:Db;key:string;fetcher?:typeof fetch};
 
 /** Read provider send events for a spent authorization. This path cannot send or re-arm it. */
@@ -53,13 +53,15 @@ export async function resendContractText(hash:string,{db,key,fetcher=fetch}:Depe
   return r.json();
  };
  try{
-  const [e]=await db<Envelope[]>(`icash_signing_envelopes?id=eq.${job.envelopeId}&account_id=eq.${job.accountId}&select=id,account_id,provider_id,terms_hash,test_mode,state,kind,terms,recipients`);
+  const [e]=await db<Envelope[]>(`icash_signing_envelopes?id=eq.${job.envelopeId}&account_id=eq.${job.accountId}&select=id,template_id,account_id,provider_id,terms_hash,test_mode,state,kind,terms,recipients`);
   if(!e||e.id!==job.envelopeId||e.account_id!==job.accountId||e.test_mode||e.state!=='awaiting_counterparty'||e.provider_id!==job.providerId||e.terms_hash!==job.termsHash||!/^\d+$/.test(job.providerId)||!Number.isSafeInteger(job.submitterId)||job.submitterId<=0)throw Error('ENVELOPE_CHANGED');
   const raw=await request('submissions/'+job.providerId) as Submission & {archived_at?:string|null};
   if(raw.archived_at||['expired','declined','completed'].includes(raw.status??''))throw Error('AGREEMENT_NOT_PENDING');
   const d=normalizeDocuseal(raw,e);
   if(verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:false,recipients:e.recipients})!=='awaiting_counterparty')throw Error('SIGNING_ORDER_CHANGED');
-  signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms));
+  const [template]=await db<{form_profile:string}[]>(`icash_signing_templates?id=eq.${e.template_id}&select=form_profile`);
+  if(!template)throw Error('TEMPLATE_MISSING');
+  signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms),Date.now(),template.form_profile);
   const next=d.recipients.find(r=>r.status!=='signed');
   const expected=e.recipients.find(r=>r.id===job.signerId);
   const signer=raw.submitters.find(s=>s.external_id===`${e.id}:${job.signerId}`);

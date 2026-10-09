@@ -1,0 +1,18 @@
+{
+  "purchase": {
+    "sourceSha256": "ccda5968bbe54ab821c2428f5aa2377b30ff8e71b2b1be8d2e7be79497a6fa93",
+    "backgroundSha256": "3e70afd018302df3c252ec221eacc2b9ab266c504bcee3869b48e1751386c265",
+    "pdfSha256": "8bbe0a785fecf149503a7def6849fa81d7a5caefb8a15797936a40b010e01a36",
+    "pages": 1,
+    "width": 612,
+    "height": 792
+  },
+  "assignment": {
+    "sourceSha256": "017ffba8fab3a641f0dd107a206b98391f8f7048d01d6c6d3eb46974423a03bc",
+    "backgroundSha256": "6864901683d6c1c95c7fab46375534aa6f8b2fa71aa214d803028a929bab1d05",
+    "pdfSha256": "21ec1f3c39f878badb06d19af543d9560279dc54e196b6bfeaeb0e77e2f080f6",
+    "pages": 1,
+    "width": 612,
+    "height": 792
+  }
+}
