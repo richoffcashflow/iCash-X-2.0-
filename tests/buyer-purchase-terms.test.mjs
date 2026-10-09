@@ -17,11 +17,11 @@ test('only future valid windows reach buyer copy, with AM/PM and timezone',()=>{
 test('buyer gets exact total price, additional closing costs, deposit dollars and optional viewing',()=>{
  const result=calculateAutomaticCallOffer({party:'buyer',buyer},{},now);
  assert.equal(result.priceCents,16227050);assert.equal(result.depositCents,200000);assert.equal(result.viewingOptional,true);assert.equal(result.closingCostsIncluded,false);
- assert.equal(result.spokenDeposit,'The non-refundable deposit is two thousand dollars, under the assignment agreement. It is credited toward your assignment fee, not added to the asking price.');
+ assert.equal(result.spokenDeposit,'The non-refundable deposit is two thousand dollars, credited toward the included assignment fee under the agreement.');
  assert(!/20%|twenty percent|5,000|five thousand/.test(result.spokenDeposit));
  assert.deepEqual(result.depositPaymentMethods,['check','wire','cash_app','zelle']);assert.match(result.viewingSlots[0],/2:00 PM/);
  assert.equal(result.contractAllowed,false);assert.equal(result.sent,false);assert.equal(result.agreementStatus,'not_sent');
- assert.match(result.spokenOffer,/^I'm the AI assistant coordinating for the contract holder\./);assert.match(result.spokenOffer,/The package closing date is November 7, 2026\./);assert(result.spokenOffer.includes(result.spokenDeposit));
+ assert.match(result.spokenOffer,/^I'm the AI assistant for the contract holder\./);assert.match(result.spokenOffer,/Closing is November 7, 2026\./);assert(result.spokenOffer.includes(result.spokenDeposit));
  assert.match(result.instruction,/without verified evidence/);assert.match(result.instruction,/Viewing is optional/);assert.match(result.instruction,/cleared deposit funds are verified/);
 });
 test('buyer contract actions cannot report a sent agreement or mutate seller terms',async()=>{
