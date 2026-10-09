@@ -31,7 +31,7 @@ try{
   seller_intake_id uuid,party text not null default 'seller',paused boolean default false,ai_mode text default 'auto',retired_at timestamptz,permission_current boolean default true);
  create unique index icash_text_threads_active_property_number on public.icash_text_threads(account_id,deal_id,sender,recipient) where retired_at is null;
  create table public.icash_sms_routes(sender text,recipient text,account_id uuid,primary key(sender,recipient));
- create table public.icash_text_messages(id uuid primary key default gen_random_uuid(),thread_id uuid,account_id uuid,direction text,body text,state text,provider_id text,request_key uuid unique,created_at timestamptz default now());
+ create table public.icash_text_messages(id uuid primary key default gen_random_uuid(),thread_id uuid,account_id uuid,direction text,body text,state text,provider_id text,request_key uuid unique,created_at timestamptz default now(),updated_at timestamptz default now());
  create table public.icash_seller_opener_assignments(thread_id uuid primary key,account_id uuid,body text,message_id uuid);
  create table public.icash_sms_seller_openings(thread_id uuid primary key,account_id uuid,owner_question_id uuid);
  create function public.icash_outreach_sms_current(uuid) returns boolean language sql as $$select true$$;
@@ -64,19 +64,21 @@ try{
  // Insert in reverse chronological order to prove one-time chronological backfill.
  const second=await add({when:'2026-10-02 10:00:00+00'}),first=await add();
  const legacy=await add({leadId:null,match:false,principal:'Legacy Buyer'});
- const oldId=await queue(legacy),oldMessage=await one('select * from public.icash_text_messages where id=$1',[oldId]);
+ const oldId=await queue(legacy);await q("update public.icash_text_messages set state='accepted',provider_id='SIMULATED historical receipt' where id=$1",[oldId]);
+ const oldMessage=await one('select * from public.icash_text_messages where id=$1',[oldId]);
  const before=await scalar("select pg_get_functiondef('public.icash_queue_seller_opener(uuid,uuid)'::regprocedure)");
  await pg.exec(migration);
  const after=await scalar("select pg_get_functiondef('public.icash_queue_seller_opener(uuid,uuid)'::regprocedure)");
  const needle="message_body:='Hi, is this '||case when seller is null then '' else seller||', ' end||'the owner of '||address||'?';";
  assert.equal(after,before.replace(needle,'message_body:=public.icash_seller_recipient_opener(p_account,t.id,seller,principal,address);\n  if message_body is null then return null;end if;'),'Only the intended current body expression may change');
+ await pg.exec(read('config/sms-template-footer-removal.sql'));
  assert.deepEqual(await one('select * from public.icash_text_messages where id=$1',[oldId]),oldMessage,'Existing history is unchanged');
  assert.equal(await ordinal(first),1);assert.equal(await ordinal(second),2);
  const third=await add({when:'2026-10-04 10:00:00+00'});assert.equal(await ordinal(third),3);
  const expected=[
-  'Hi Jordan, AI for Bright Homes here about a possible cash offer. Are you the owner of 123 Main Street? Reply STOP to opt out.',
-  'Hi Jordan, AI for Bright Homes asking about a possible cash offer. Do you own 123 Main Street? Reply STOP to opt out.',
-  'Hi Jordan, AI for Bright Homes reaching out about a possible cash offer. Is 123 Main Street your property? Reply STOP to opt out.',
+  'Hi Jordan, AI for Bright Homes here about a possible cash offer. Are you the owner of 123 Main Street?',
+  'Hi Jordan, AI for Bright Homes asking about a possible cash offer. Do you own 123 Main Street?',
+  'Hi Jordan, AI for Bright Homes reaching out about a possible cash offer. Is 123 Main Street your property?',
  ];
  const bodies=[];
  for(const [i,t] of [first,second,third].entries()){
@@ -127,7 +129,7 @@ try{
  // Existing non-intake copy and owner-confirmation semantics remain untouched.
  const nonIntake=await add({leadId:null,match:false,principal:'Actual Person'});
  const nonIntakeId=await queue(nonIntake);
- assert.equal(await scalar('select body from public.icash_text_messages where id=$1',[nonIntakeId]),'Hi, AI for Actual Person. Is this the owner of 123 Main Street? Reply STOP to opt out.');
+ assert.equal(await scalar('select body from public.icash_text_messages where id=$1',[nonIntakeId]),'Hi, AI for Actual Person. Is this the owner of 123 Main Street?');
  const personal=await fresh({principal:'Pat Buyer'});const personalId=await queue(personal);
  assert.match(await scalar('select body from public.icash_text_messages where id=$1',[personalId]),/AI for Pat Buyer/);
  assert.equal(await scalar("select relrowsecurity from pg_class where oid='public.icash_seller_recipient_ordinals'::regclass"),true);
@@ -143,5 +145,5 @@ try{
  await pg.exec('create unique index icash_text_threads_active_number on public.icash_text_threads(id)');
  await assert.rejects(pg.exec(migration),/property-scoped SMS routing/);await pg.exec('rollback');
  assert.equal(await ordinal(third),3);
- console.log('PASS: three stable distinct recipient openers; actual principal/AI/address/STOP; immutable non-reused ordinals; retry/tenant/property/consent gates; one-segment holds; unchanged historical and legacy copy; routing prerequisite; private invoker-only permissions. Isolated stubs, no provider or billing code.');
+ console.log('PASS: three stable distinct recipient openers; actual principal/AI/address without SMS footer; immutable non-reused ordinals; retry/tenant/property/consent gates; one-segment holds; unchanged historical and legacy copy; routing prerequisite; private invoker-only permissions. Isolated stubs, no provider or billing code.');
 }finally{await pg.close();}

@@ -44,7 +44,7 @@ const {processWebinarFollowups,webinarMailTime,webinarFollowupReadiness}=await i
 const run=(override={})=>processWebinarFollowups({database,transport,env,clock:()=>now,...override});
 test('email waits for a mailing address while explicitly opted-in texts can run',async()=>{
  reset();settings.postalAddress='';await run();assert.equal(sends.length,0);assert.equal(calls.find(c=>c.path==='rpc/icash_webinar_claim_followups').body.p_email_ready,false);
- reset('sms');settings.postalAddress='';await run();assert.equal(sends.length,1);assert.match(JSON.parse(sends[0].init.body).message,/Hey Casey.*STOP/);assert.equal(calls.at(-1).path,'rpc/icash_webinar_finish_followup');
+ reset('sms');settings.postalAddress='';await run();assert.equal(sends.length,1);assert.match(JSON.parse(sends[0].init.body).message,/Hey Casey/);assert.doesNotMatch(JSON.parse(sends[0].init.body).message,/Reply STOP/);assert.equal(calls.at(-1).path,'rpc/icash_webinar_finish_followup');
 });
 test('preview deployments never dispatch and quiet hours defer in the viewer timezone',async()=>{
  reset();await run({env:{...env,VERCEL_ENV:'preview'}});assert.equal(sends.length,0);assert.ok(!calls.some(c=>c.path.includes('claim_followups')));

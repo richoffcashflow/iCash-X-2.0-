@@ -45,7 +45,7 @@ export async function processWebinarFollowups({database=db,transport=fetch,env=p
     if(job.channel==='sms'){
      const from=job.campaign_id?await database<string|null>('rpc/icash_webinar_campaign_sender','POST',{p_recipient:job.recipient}):env.CONTIGUITY_FROM;
      if(!from){await database(`icash_webinar_outbox?id=eq.${job.id}&state=eq.claimed`,'PATCH',{state:'pending',due_at:new Date(now.getTime()+3600000).toISOString(),attempts:Math.max(0,job.attempts-1)});return;}
-     payload={from,to:job.recipient,message:`${copy.sms} ${link} Reply STOP to opt out.`,attachments:[],fast_track:false};
+     payload={from,to:job.recipient,message:`${copy.sms} ${link}`,attachments:[],fast_track:false};
     }
     else {const unsubscribe=`${origin}/api/webinar/unsubscribe?t=${webinarToken(v.id,'unsubscribe',86400*365)}`;
      payload={from:`${webinarSite.hostName} at ${webinarSite.brandName} <${settings.fromEmail}>`,to:[job.recipient],subject:copy.subject,text:`${copy.body}\n${link}\n\n${copy.signature}\n\n${webinarSite.brandName} session reminders and offers\n${settings.postalAddress}\nUnsubscribe: ${unsubscribe}`,headers:{'List-Unsubscribe':`<${unsubscribe}>`,'List-Unsubscribe-Post':'List-Unsubscribe=One-Click'},tags:[{name:'webinar_job',value:job.id}]};

@@ -1,9 +1,11 @@
 // SIMULATION ONLY. In-memory PostgreSQL and synthetic owner/DNC evidence.
 // No provider requests, customer data, external writes, or real outreach.
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {createOperationalContactFixture} from '../tests/helpers/operational-contact-fixture.mjs';
 const {pg,q,rpc,one,isolated,account,user,otherUser,other,newOwner,phone,sender,called,hash,sms,owners,incoming,timezone,screening,deal,sourceResult,source,dnc,prepare,project}=await createOperationalContactFixture(process.argv[2]);
 try{
+ await pg.exec(readFileSync(new URL('../config/sms-template-footer-removal.sql',import.meta.url),'utf8'));
  assert.equal(await prepare(),2);
  assert.equal(await prepare(),0,'Source preparation is idempotent');
  for(const [sql,args] of [
@@ -35,7 +37,7 @@ try{
  const opener=()=>rpc('icash_queue_seller_opener',{p_account:account,p_thread:thread});
  const claim=id=>rpc('icash_claim_text',{p_account:account,p_message:id,p_sender:sender});
  const accept=id=>rpc('icash_accept_text',{p_account:account,p_message:id,p_provider:'SIMULATION accepted '+id});
- const start=async()=>{const id=await opener();assert(id);assert(await claim(id));assert.equal(await claim(id),null);await accept(id);return id;};
+ const start=async()=>{const id=await opener();assert(id);assert.doesNotMatch((await one('select body from icash_text_messages where id=$1',[id])).body,/Reply STOP/);assert(await claim(id));assert.equal(await claim(id),null);await accept(id);return id;};
  let event=0;
  const ingest=async body=>{const id='SIMULATION incoming '+(++event);await rpc('icash_ingest_text_event',{p_event:{id,type:'text.incoming.sms',timestamp:Date.now()/1000,data:{from:phone,to:sender,body,message_id:id}},p_optout:body==='STOP'});return (await one('select id from icash_text_messages where event_id=$1',[id])).id;};
  for(const [sql,args] of [

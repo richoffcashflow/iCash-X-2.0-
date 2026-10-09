@@ -4,13 +4,13 @@
 
 `config/seller-recipient-variants.sql` is an unapplied, one-time SQL change. Apply it only after the current `sms-property-routing` migration and the natural seller opener migration. It performs no provider calls, creates no contact threads or consent, and changes no funding, reservations, launch flags, sender numbers, or previously queued messages.
 
-The current production consented-intake opener loses the buyer/AI identity. This change replaces only that branch's body expression, using the existing verified intake first name, actual customer identity principal, and the same property's complete address. It includes AI disclosure and the STOP instruction in each first message.
+The current production consented-intake opener loses the buyer/AI identity. This change replaces only that branch's body expression, using the existing verified intake first name, actual customer identity principal, and the same property's complete address. It includes AI disclosure in each first message. The October 9 footer update removes the appended opt-out sentence; STOP replies still suppress further contact.
 
 The three messages for a synthetic lead are:
 
-1. Hi Jordan, AI for Bright Homes here about a possible cash offer. Are you the owner of 123 Main Street? Reply STOP to opt out.
-2. Hi Jordan, AI for Bright Homes asking about a possible cash offer. Do you own 123 Main Street? Reply STOP to opt out.
-3. Hi Jordan, AI for Bright Homes reaching out about a possible cash offer. Is 123 Main Street your property? Reply STOP to opt out.
+1. Hi Jordan, AI for Bright Homes here about a possible cash offer. Are you the owner of 123 Main Street?
+2. Hi Jordan, AI for Bright Homes asking about a possible cash offer. Do you own 123 Main Street?
+3. Hi Jordan, AI for Bright Homes reaching out about a possible cash offer. Is 123 Main Street your property?
 
 All three disclose the same buying purpose, a possible cash offer, and ask the same ownership question. None claims a ready offer, verified funds, ownership confirmation, a prior conversation, or a booked call. The account's actual principal is used even when it is an individual person's name. No bot name is invented. This change does not modify later conversation responses.
 
@@ -27,7 +27,7 @@ No historical assignment, queued message or delivery record is rewritten. An ope
 - The migration requires the actual unique index on `(account_id, deal_id, sender, recipient)` for non-retired threads and rejects the old global active-number index. It never creates a global-number uniqueness constraint.
 - The existing sender/recipient route still belongs to one account. This change does not authorize different buyers to share that pair. Three distinct phrases do not imply that three sends will be eligible.
 - All original campaign, consent, thread, account, prior-message, property-stage, practice and queue checks remain byte-for-byte unchanged outside the targeted body expression. The existing sender and downstream route checks are untouched.
-- Long identities or addresses, unsupported characters, missing identity/address, absent ordinal and ordinals above three return no opener. The existing 160-character one-segment cap is preserved; identity/address are never truncated and AI/STOP text is never removed to fit.
+- Long identities or addresses, unsupported characters, missing identity/address, absent ordinal and ordinals above three return no opener. The existing 160-character one-segment cap is preserved; identity/address are never truncated and AI disclosure is never removed to fit.
 - Table RLS is enabled. Public, anonymous and authenticated access is revoked. The service role has only SELECT/INSERT on the new ledger. New functions use invoker security and an empty search path, with execution available only to the service role. The existing opener function's privileges are preserved.
 - The migration takes a brief match-table lock and aborts atomically if busy or if its current-opener/routing prerequisites differ. A failed prerequisite requires reviewing source drift, not broadening the patch automatically.
 
