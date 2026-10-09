@@ -10,7 +10,7 @@ assert.deepEqual(buyerPackagePhotos({latitude:0,longitude:0}),[]);
 const html=renderBuyerPackage({address:'123 Main <Street>',principal:'Fixture',purchasePriceCents:15227050,assignmentFeeCents:1000000,askingPriceCents:16227050,repairsCents:null,arvCents:null,closingDate:'2026-11-07',businessPhone:'+12145550188',fetchedAt:null,latitude:30.03,longitude:-97.79,sellerPhotos:[seller]});
 assert(html.includes('Property photos'));assert(html.includes('123 Main &lt;Street&gt;'));assert.equal((html.match(/<img /g)||[]).length,2);assert(html.includes('$162,270.50'));assert(!html.includes('onerror'));
 const quote=calculateAutomaticCallOffer({party:'buyer',buyer:{askingPriceCents:16227050,purchasePriceCents:15227050,assignmentFeeCents:1000000,address:'123 Main',closingDate:'2026-11-07'}},{});
-assert.equal(quote.closingDateSpoken,'November 7, 2026');assert.equal(quote.viewingStatus,'needs_confirmation');assert.match(quote.instruction,/preferred date, time and timezone/);
+assert.equal(quote.closingDateSpoken,'November 7, 2026');assert.equal(quote.viewingStatus,'needs_confirmation');assert.match(quote.spokenViewingFollowup,/check with the seller and get back/);
 // The October 9 handset test incorrectly combined the included assignment fee
 // with additional buyer closing costs. Supply an explicit, server-written line.
 assert.equal(quote.closingCostsIncluded,false);assert.equal(quote.buyerPaysClosingCosts,true);
