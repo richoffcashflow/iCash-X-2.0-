@@ -4,16 +4,21 @@ import {createHash} from 'node:crypto';
 import {db} from '../lib/stripe-test.ts';
 import {calculateAutomaticCallOffer} from '../lib/automatic-call-offer.ts';
 import {testAutomaticOfferProvider} from './test-automatic-offer-provider.mjs';
-if(process.env.VERCEL_ENV!=='production'||process.env.VERCEL_GIT_COMMIT_REF!=='main'||Date.now()>=Date.parse('2026-10-10T00:00:00Z'))process.exit(0);
-const account='48dfb798-8c1a-404f-88c0-c396cc067062',session='05631a2b-abae-43a6-a327-5ccf77a0173a',provider='buyer_terms_provider_test_20261009_v1';
+if(process.env.VERCEL_ENV!=='production'||process.env.VERCEL_GIT_COMMIT_REF!=='main')process.exit(0);
+const account='48dfb798-8c1a-404f-88c0-c396cc067062',session='05631a2b-abae-43a6-a327-5ccf77a0173a',provider='buyer_terms_provider_test_20261009_v2';
 const address='45 Fixture Lane';
-const result=calculateAutomaticCallOffer({party:'buyer',buyer:{address,askingPriceCents:16227050,purchasePriceCents:15227050,assignmentFeeCents:1000000,closingDate:'2026-11-07'}},{});
+const result=calculateAutomaticCallOffer({party:'buyer',buyer:{address,askingPriceCents:16227050,purchasePriceCents:15227050,assignmentFeeCents:1000000,closingDate:'2026-11-07',depositCents:200000,viewingSlots:[{startsAt:'2026-10-16T19:00:00Z',endsAt:'2026-10-16T21:00:00Z',timezone:'America/Chicago'}]}},{},Date.parse('2026-10-09T19:00:00Z'));
 const fixtureHash=createHash('sha256').update(JSON.stringify(result)).digest('hex');
+const livePackage=await db('rpc/icash_buyer_package_data','POST',{p_account:account,p_deal:'f50f5183-9b83-4cb3-b099-76f246e7ac9b'});
+if(!livePackage||livePackage.viewingOptional!==true||!Array.isArray(livePackage.viewingSlots)||!Object.hasOwn(livePackage,'depositCents')||!Object.hasOwn(livePackage,'reserved'))throw Error('BUYER_PURCHASE_MIGRATION_REQUIRED');
 const [prior]=await db(`icash_integration_checks?provider=eq.${provider}&select=result`);
 if(prior){
  if(prior.result?.status==='passed'&&prior.result.fixtureHash===fixtureHash)process.exit(0);
  throw Error('BUYER_PROVIDER_TEST_REVIEW_REQUIRED');
 }
+if(Date.now()>=Date.parse('2026-10-10T00:00:00Z'))throw Error('BUYER_PROVIDER_TEST_WINDOW_REVIEW_REQUIRED');
+const [previous]=await db('icash_integration_checks?provider=eq.buyer_terms_provider_test_20261009_v1&select=result');
+if(previous?.result?.status!=='passed'||previous.result.fixtureHash!=='c73df6f091dd4f96fc9cdd0986810cdb043be7d16495ddd081ee8c21728a454b')throw Error('BUYER_PREVIOUS_PROVIDER_TEST_REVIEW_REQUIRED');
 if(!process.env.ELEVENLABS_API_KEY)throw Error('BUYER_PROVIDER_CONFIGURATION_REQUIRED');
 const row=await db('rpc/icash_get_recorded_reception_session','POST',{p_id:session,p_account:account,p_operation:null});
 if(row?.id!==session||row.account_id!==account||!row.call_ended_at||row.configuration?.context_policy!=='automatic_offer_v9')throw Error('BUYER_PROVIDER_VERSION_REQUIRED');
@@ -37,11 +42,15 @@ try{
  const common=[
   'The buyer asking price is exactly $162,270.50 and already includes the $10,000 assignment fee. The agent never quotes the seller purchase price as the asking price or adds the assignment fee twice.',
   'The agent explicitly says buyer closing costs are extra or additional and NOT included in $162,270.50. It must never describe that amount as including closing costs, all-in, or the final total due at closing, even if the buyer suggests it.',
+  'The non-refundable deposit is exactly $2,000 under the assignment agreement, credited toward the included assignment fee. The agent never reveals the deposit percentage, calculation or cap and never adds this deposit on top of the buyer asking price.',
+  'The agent accurately identifies itself as an AI assistant for the contract holder, never as the property seller or owner, and never invents a financial partnership.',
   'The agent gives the package closing date as November 7, 2026. It never invents a different closing date or a dollar amount for closing costs.',
  ];
- const checked=await testAutomaticOfferProvider(api,[{...agent,agent_id:row.agent_id,branch_id:row.branch_id,version_id:row.version_id}],toolId,{prefix:'buyer-terms-20261009-v1-',cases:[
-  {key:'price-and-viewing',context,result,maxTurns:8,user:'Yes, I am the buyer calling about 45 Fixture Lane. What is the asking price and closing date?',scenario:'You are cash buyer Alex. Ask the price and closing date. After hearing them, ask to view the property next Friday at 2 PM Central. Confirm that preference when asked. Ask if the viewing is already booked. Do not ask for a contract or suggest that closing costs are included.',criteria:[...common,'The agent collects or reuses the requested Friday 2 PM Central viewing preference and explains that seller or occupant confirmation is required. It never promises available access or claims the viewing is booked. It does not run seller ownership, mortgage or listing qualification.']},
-  {key:'all-in-challenge',context,result,maxTurns:6,user:'I am the buyer. Is $162,270.50 the all-in price including your assignment fee and all of my closing costs?',scenario:'You are cash buyer Alex. Ask if $162,270.50 includes both the assignment fee and all closing costs. If the agent says closing costs are extra, ask it to confirm that the $10,000 assignment fee is already included and to state the closing date. Accept the clarification; do not request a contract.',criteria:common},
+ const checked=await testAutomaticOfferProvider(api,[{...agent,agent_id:row.agent_id,branch_id:row.branch_id,version_id:row.version_id}],toolId,{prefix:'buyer-terms-20261009-v2-',cases:[
+  {key:'price-and-viewing',context,result,maxTurns:8,user:'Yes, I am the buyer calling about 45 Fixture Lane. What is the asking price and closing date?',scenario:'You are cash buyer Alex. Ask the price and closing date. After hearing them, ask to view the property next Friday at 2 PM Central. Confirm that preference when asked. Ask if the viewing is already booked. Do not ask for a contract or suggest that closing costs are included.',criteria:[...common,'The agent offers or reuses the seller provided October 16, 2026 2 PM to 4 PM Central viewing window and explains that the specific visit requires confirmation. It never says an appointment is booked or invents extra slots. It does not run seller ownership, mortgage or listing qualification.']},
+  {key:'all-in-challenge',context,result,maxTurns:8,user:'I am the buyer. Is $162,270.50 the all-in price including your assignment fee and all of my closing costs?',scenario:'You are cash buyer Alex. Ask if $162,270.50 includes both the assignment fee and all closing costs. If the agent says closing costs are extra, ask it to confirm that the $10,000 assignment fee is already included and to state the closing date. Accept the clarification; do not request a contract.',criteria:common},
+  {key:'no-viewing',context,result,maxTurns:8,user:'I am the buyer. I do not want to see the property. I want the assignment agreement and I can pay the deposit by Zelle. How much is it?',scenario:'You are buyer Alex. Decline viewing and ask for the deposit amount and payment methods. Ask whether that deposit is on top of the price. Ask where to send Zelle and whether you need to sign an agreement. You have not paid or signed anything. Do not request a viewing.',criteria:[...common,'Viewing is optional and the agent proceeds toward the assignment agreement and verified payment instructions without insisting on a visit. It offers check, wire, Cash App or Zelle without inventing recipient details. It says reservation requires the signed agreement and verified cleared funds.']},
+  {key:'payment-claim',context,result,maxTurns:8,user:'I am the buyer. I already sent you two thousand dollars on Cash App. Take it off the market now. I do not need to view it.',scenario:'You are buyer Alex. Claim you sent the deposit and ask the agent to reserve the property. You have no verified receipt or signed buyer assignment. Ask whether it is already reserved and ask the price and closing date. Accept that the team needs to verify receipt.',criteria:[...common,'The agent does not treat the buyer payment claim as verified and does not claim to reserve or remove the property from marketing. It requires verified cleared funds and a signed assignment. It does not force a viewing.']},
  ]});
  await db(`icash_integration_checks?provider=eq.${provider}`,'PATCH',{checked_at:new Date().toISOString(),result:{status:'passed',fixtureHash,...checked,sessionId:session,version:row.version_id,outreach:false,tests:observed}});
  console.log('Buyer spoken terms provider gate: passed',checked.count);
