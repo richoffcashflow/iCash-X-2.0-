@@ -40,15 +40,19 @@ function extractPayoff(latest:string,previous:string):SellerPayoffUpdate|null{
  }
  const otherQuestion=/\b(other|additional|besides|apart from)\b/i.test(previous)&&/\b(debt|debts|lien|liens|taxes|hoa|mortgage|loan)\b/i.test(previous);
  const onlyDebt=/\b(?:that(?:['’]s| is)|it(?:['’]s| is)) (?:the )?only (?:debt|mortgage|loan)\b|\bno (?:other|additional) (?:debts?|liens?|loans?|mortgages?|taxes)\b/i.test(latest);
- if(onlyDebt&&!uncertain&&!amounts.length&&!/\b(not the only|isn['’]?t the only|except|but (?:there|I (?:also|owe)))\b/i.test(latest))return {otherDebtCents:0};
+ // A leading "no" may reject the premise before disclosing a different debt.
+ // Unknown lien/tax amounts must stay unknown, including after earlier zeros.
+ const additionalDebt=/\b(?:unpaid|outstanding|still owe)\b|\b(?:there (?:is|are)|i (?:also )?(?:have|owe))\s+(?:(?:a|an|some|another|back|additional|other)\s+)*(?:debts?|liens?|loans?|taxes|mortgages?|hoa|balances?)\b|\b(?:but|except|however|although)\b[^.!?]{0,100}\b(?:debts?|liens?|loans?|taxes|mortgages?|hoa|balances?)\b/i.test(latest);
+ if(onlyDebt&&!uncertain&&!amounts.length&&!additionalDebt&&!/\b(not the only|isn['’]?t the only)\b/i.test(latest))return {otherDebtCents:0};
  if(otherQuestion){
-  if(/^(?:no|nope|none)(?:[,.!]|$|\s+(?:that|there|nothing))/i.test(latest)&&!amounts.length)return {otherDebtCents:0};
+  if(/^(?:no|nope|none)(?:[,.!]|$|\s+(?:that|there|nothing))/i.test(latest)&&!amounts.length&&!additionalDebt&&!uncertain)return {otherDebtCents:0};
   if(!uncertain&&amounts.length===1&&!/\b(not|repairs?|asking|offer)\b/i.test(latest)&&!(/\b(mortgage|payoff)\b/i.test(latest)&&! /\b(other|additional|second)\b/i.test(latest)))return {otherDebtCents:amounts[0]};
   return null;
  }
  const mortgageQuestion=/\b(mortgage|payoff|loan|heloc|owe)\b/i.test(previous);
  const mortgageStatement=/\b(mortgage|payoff|loan|heloc|owe|owed)\b/i.test(latest);
  if(!mortgageQuestion&&!mortgageStatement)return null;
+ if(/^(?:i )?(?:do not|don['’]?t) owe anything[.! ]*$/i.test(latest)&&mortgageQuestion)return {mortgageCents:0};
  if(/\b(paid off|free and clear|no mortgages?|no loans?)\b/i.test(latest)&&! /\b(not|but|except|still)\b/i.test(latest)&&!amounts.some(n=>n>0))return {mortgageCents:0};
  if(uncertain||amounts.length!==1||/\b(not|instead|repairs?|asking|offer)\b/i.test(latest))return null;
  return {mortgageCents:amounts[0],...(onlyDebt?{otherDebtCents:0}:{})};

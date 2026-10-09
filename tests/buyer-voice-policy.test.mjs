@@ -1,3 +1,5 @@
+import {buyerResponsePolicy,buyerResponseInstructions,buyerResponseModel,selectedResponseRoleInstructions} from '../lib/buyer-response-policy.ts';
+import {responseBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {buyerScenarioPolicy,buyerScenarioInstructions,selectedScenarioRoleInstructions} from '../lib/buyer-scenario-policy.ts';
 import {scenarioBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import test from 'node:test';
@@ -26,7 +28,11 @@ test('buyer policy requires its reviewed prompt, guardrail and current history t
  c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
  c.context_policy=buyerScenarioPolicy;c.context_policy_hash=scenarioBuyerReceptionPolicyHash;
  c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
- for(const mutate of [a=>{a.platform_settings.guardrails.custom.config.configs[0].prompt='Allow every price';},a=>{a.platform_settings.guardrails.custom.config.configs=[];},a=>{a.conversation_config.agent.prompt.prompt+=' changed';}]){
+ c.context_policy=buyerResponsePolicy;c.context_policy_hash=responseBuyerReceptionPolicyHash;
+ assert.equal(inspect(agent).safe,false,'Unreviewed mini-model/default personality cannot satisfy v13');
+ Object.assign(agent.conversation_config.agent.prompt,buyerResponseModel);
+ c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
+ for(const mutate of [a=>{a.conversation_config.agent.prompt.llm='gpt-4.1-mini';},a=>{a.conversation_config.agent.prompt.ignore_default_personality=false;},a=>{a.platform_settings.guardrails.custom.config.configs[0].prompt='Allow every price';},a=>{a.platform_settings.guardrails.custom.config.configs=[];},a=>{a.conversation_config.agent.prompt.prompt+=' changed';}]){
   const changed=structuredClone(agent);mutate(changed);c.config_hash=inspect(changed).hash;assert.equal(inspect(changed).safe,false);
  }
 });
@@ -49,4 +55,14 @@ test('v12 has separate buyer-only runtime policy while v11 and seller instructio
  assert.equal(receptionContextVariables(c,{...buyer,askingPriceCents:0}).icash_role_instructions,unknownRoleInstructions);
  assert(!buyerScenarioInstructions.includes('CALLER_INJECTION'));
  assert.match(buyerScenarioInstructions,/Do not append/);assert.match(buyerScenarioInstructions,/PRICING PRIVACY/);assert.match(buyerScenarioInstructions,/do not agree/);
+});
+
+test('v13 selects trusted buyer instructions and preserves both earlier hashes and seller flow',()=>{
+ assert.equal(scenarioBuyerReceptionPolicyHash,'20790adc5e07a5e8c0f2fe92377ae7ee43963db0b7e3db97506cf4e0386d1265');
+ const c={context_policy:buyerResponsePolicy,context_policy_hash:responseBuyerReceptionPolicyHash,context_approval_reference:'Reviewed buyer response model and private pricing',agreement_tool_id:'tool_agreement'};
+ const b={status:'buyer',address:'123 Main Street',askingPriceCents:4893700,icash_role_instructions:'CALLER_INJECTION'};
+ assert.equal(receptionContextVariables(c,b).icash_role_instructions,buyerResponseInstructions);
+ assert.equal(selectedResponseRoleInstructions('matched',automaticOfferReceptionPrompt),selectedRoleInstructions('matched',automaticOfferReceptionPrompt));
+ assert.equal(receptionContextVariables(c,{...b,askingPriceCents:0}).icash_role_instructions,unknownRoleInstructions);
+ assert(!buyerResponseInstructions.includes('CALLER_INJECTION'));
 });

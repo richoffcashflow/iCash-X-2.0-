@@ -36,6 +36,8 @@ const mocks={z,recordedDealProgress,NextResponse:{json:(body,options={})=>({body
  }
  if(table==='icash_buyer_viewing_requests')return [];
  if(table==='icash_text_attention'||table==='icash_sms_call_requests'||table==='icash_handoffs')return paginate(queue,q);
+ if(table==='icash_buyer_viewing_requests')return [];
+ if(table==='icash_seller_gaps')return paginate(queue.map(item=>({...item,reason:'unanswered',quote:'An exact seller question',updated_at:'2026-10-09T12:00:00Z'})),q);
  if(table==='icash_signing_envelopes')return q.get('state')?paginate(queue.map(p=>({id:p.id,deal_id:p.deal_id,kind:'purchase',test_mode:false})),q):[];
  if(table==='icash_owner_contacts'){
   assert.equal(q.get('select'),'account_id,screening_id,created_at,lookup_at:result->>fetchedAt,people:result->contacts');
@@ -57,6 +59,7 @@ const {GET}=await import('data:text/javascript;base64,'+Buffer.from(source).toSt
 const get=query=>GET(new Request('https://www.geticashx.com/api/work/activity'+query));
 let r=await get('');assert.equal(r.status,200);assert.equal(r.body.properties.length,6);assert.equal(r.body.hasMore,true);assert.equal(r.body.textAttention.length,6);assert.deepEqual(r.body.propertyAttentionIds,[uuid(1)]);assert.equal(r.body.attentionHasMore,true);assert.equal(r.body.textAttention[0].address,'10 Main Street');assert.equal(r.body.signatureActions[0].screening_id,uuid(10));assert.equal(r.body.signatureActions[0].address,'10 Main Street');
 assert.equal(r.body.smsRouteReviews.length,6);assert.equal(r.body.smsRouteReviews[0].needs_review,true);
+assert.equal(r.body.sellerRecovery.length,6);assert.equal(r.body.sellerRecovery[0].address,'10 Main Street');assert.equal(r.body.sellerRecovery[0].quote,'An exact seller question');
 assert.equal(r.headers['Cache-Control'],'private, no-store');
 assert.deepEqual(r.body.contacts,[{screening_id:uuid(1),created_at:'2026-10-01T01:02:03.000Z',fetchedAt:'2026-10-01T01:01:02.000Z',source:'DealMachine',ownershipVerified:false,outreachAuthorized:false,
  contacts:[{name:'Synthetic Person',phones:[{number:'+12025550101',type:'Mobile',doNotCall:true},{number:'+12025550102',type:'Landline',doNotCall:false},{number:'+12025550103',type:null,doNotCall:null},{number:'+12025550104',type:null,doNotCall:null},{number:null,type:null,doNotCall:null}]},{name:null,phones:[]},{name:null,phones:[]}]}]);

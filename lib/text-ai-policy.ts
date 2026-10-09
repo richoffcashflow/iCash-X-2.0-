@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {isContactOptOut,asksForCallback} from './contact-intent.ts';
 import {sellerConversationGuide} from './seller-outreach.ts';
 import {conversationTrustInstructions,groundedConversationSummary} from './conversation-trust.ts';
 export const textActions=['ask_condition','ask_price','ask_timing','ask_owners','ask_occupancy','ask_callback','ask_flexibility','ask_payoff','reply_identity','ask_photos','ask_callback_details','acknowledge_callback','photo_received','explain_process','explain_price','review','handoff'] as const;
@@ -8,8 +9,8 @@ export const safeTextReplies:Partial<Record<typeof textActions[number],string>>=
  ask_condition:'What repairs or updates does the property need?',ask_price:'What price did you have in mind?',ask_timing:'When would you like to sell?',ask_owners:'Are all property owners on board with selling?',ask_occupancy:'Is the property vacant, owner occupied, or rented?',ask_callback:'When is a good time to talk about a cash offer?'
 };
 export type TextParty='seller'|'buyer';
-export function declinedTextContact(body:string){return /\b(?:(?:stop (?:calling|texting|contacting)|do not (?:call|text|contact)|don['’]t (?:call|text|contact))\b(?!\s+(?:it|that|the house|the property)\b)|remove (?:me|my number)\b|leave me alone\b)|^\s*(?:stop|unsubscribe|end|quit)\s*[.!]?\s*$/i.test(body);}
-export function declinedTextConversation(body:string){return declinedTextContact(body)||/\b(no thanks|no thank you|not interested|wrong number|not now)\b|^\s*(?:i['’]m |i am )?not selling\s*[.!]?\s*$/i.test(body);}
+export function declinedTextContact(body:string){return isContactOptOut(body);}
+export function declinedTextConversation(body:string){return declinedTextContact(body)||/\b(no thanks|no thank you|not interested|wrong number)\b|^\s*(?:i['’]m |i am )?not selling\s*[.!]?\s*$/i.test(body)||/\bnot now\b/i.test(body)&&!asksForCallback(body);}
 export function mentionsMissedCall(body:string){return /\b(?:missed (?:your|the) call|couldn['’]t answer|could not answer|sorry i missed (?:it|you))\b/i.test(body);}
 export function requestedHuman(body:string){return /\b(human|real person|(?:speak|talk) (?:to|with) (?:someone|(?:a |an |the |your )?(?:person|manager|owner|supervisor|representative)))\b/i.test(body)||(!declinedTextContact(body)&&/\b(call me|call back|callback|can you call|could you call)\b/i.test(body));}
 /** Identity questions are not requests to transfer to a person. Every clause must
@@ -31,7 +32,7 @@ export function validateTextAnalysis(input:unknown,incoming:string[],party:TextP
  }).filter((f,index,all)=>all.findIndex(other=>other.kind===f.kind&&other.quote===f.quote)===index);
  const latest=incoming.at(-1)??'';
  const optedOut=incoming.some(declinedTextContact),declined=declinedTextConversation(latest);
- const callRequested=party==='seller'&&conversationEnabled&&!optedOut&&!declined&&(/\b(call me|call back|callback|can you call|could you call|call tomorrow|call today)\b/i.test(latest)||facts.some(f=>f.kind==='callback'&&f.quote===latest));
+ const callRequested=party==='seller'&&conversationEnabled&&!optedOut&&!declined&&(asksForCallback(latest)||facts.some(f=>f.kind==='callback'&&f.quote===latest));
  const identityQuestion=conversationEnabled&&sellerIdentityQuestion(latest);
  const explicitlyHuman=incoming.some(body=>!sellerIdentityQuestion(body)&&/\b(human|real person|(?:speak|talk) (?:to|with) (?:someone|(?:a |an |the |your )?(?:person|manager|owner|supervisor|representative)))\b/i.test(body));
  const humanRequested=!optedOut&&!declined&&(conversationEnabled?(explicitlyHuman||(value.action==='handoff'&&!identityQuestion&&!callRequested&&!mentionsMissedCall(latest))):((value.action==='handoff'&&!mentionsMissedCall(latest))||incoming.some(requestedHuman)));

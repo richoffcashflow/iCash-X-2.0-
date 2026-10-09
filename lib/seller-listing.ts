@@ -9,6 +9,7 @@ export function sellerListingEvidence(value:unknown,input:Record<string,unknown>
  if(!answer||answer!==String(input.sellerStatement??'').trim())return null;
  const question=String(turns.slice(0,i).findLast(t=>t.role==='agent')?.message??'');
  const listingQuestion=/\b(listed|listing)\b/i.test(question)&&/\b(agent|realtor|broker)\b/i.test(question);
+ if(/\b(?:but|however|although|except)\b/i.test(answer)&&/\b(?:agent|realtor|broker|agreement|listed|listing)\b/i.test(answer))return null;
  if(listingQuestion&&/^(no|nope|not currently|not anymore)[.! ]*$/i.test(answer))return false;
  if(listingQuestion&&/^(yes|yeah|yep|correct|it is)[.! ]*$/i.test(answer))return true;
  if(/\b(not|isn['’]t|is not|no longer)\s+(currently\s+)?listed\b/i.test(answer))return false;
