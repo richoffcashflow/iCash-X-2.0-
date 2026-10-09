@@ -16,6 +16,9 @@ const body={sessionId:id,name:'Casey',email:'casey@example.invalid',phone:'21255
 await post(contact,body);assert.equal(calls.at(-1).body.p_sms_consent,false,'Phone alone is never text consent');
 await post(contact,{...body,smsConsent:true});assert.equal(calls.at(-1).body.p_sms_consent,false,'SMS requires its own versioned checkbox');
 await post(contact,{...body,smsConsent:true,smsVersion:policy.webinarSmsConsentVersion});assert.equal(calls.at(-1).body.p_sms_consent,true);
+assert.equal(calls.at(-1).path,'rpc/icash_webinar_contact_ongoing_campaign','Current consent automatically enters the ongoing campaign');
+await post(contact,{...body,version:'webinar-email-campaign-2026-10-08',smsConsent:true,smsVersion:'webinar-sms-campaign-2026-10-08'});assert.equal(calls.at(-1).path,'rpc/icash_webinar_contact_campaign','Previously opened clients retain their original consent limits');
+preview=true;await post(contact,{...body,smsConsent:true,smsVersion:policy.webinarSmsConsentVersion});assert.equal(calls.at(-1).body.p_email_consent,false);assert.equal(calls.at(-1).body.p_sms_consent,false);preview=false;
 assert.equal((await post(contact,{...body,phone:'1234567'})).status,400);
 assert.equal((await post(contact,{...body,email:'',consent:false,smsConsent:true,smsVersion:policy.webinarSmsConsentVersion})).status,200,'Text-only opt-in does not require email');
 const get=token=>link.GET(new Request('https://example.test/w/'+token),{params:Promise.resolve({token})});
