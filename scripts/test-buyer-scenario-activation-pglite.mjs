@@ -10,14 +10,14 @@ create table icash_recorded_reception_private.configs(id uuid primary key,accoun
 create unique index one_enabled on icash_recorded_reception_private.configs(called_number) where enabled;
 create table icash_recorded_reception_private.sessions(config_id uuid,call_ended_at timestamptz,call_deadline_at timestamptz);`);
 const source='11111111-1111-4111-8111-111111111111',candidate='22222222-2222-4222-8222-222222222222';
-const policyHash='58678e5c229ad2b6cc41be0fccb8ec01f0fc4c95b55f5e98b42a3a82e2fdb496';
-const audit={status:'passed',count:30,passedCount:30,fixtureHash:'d122040ff176d09d208e77fafdc7c67f5c42024d0118ce5d76221feff1b988e0',policyHash,sourceConfigId:source,sourceBranchId:'agtbrch_source',sourceVersion:'agtvrsn_source',sourceConfigHash:'sourceHash',stagedConfigId:candidate,branchId:'agtbrch_fixture',version:'agtvrsn_fixture',configHash:'fixtureHash',commit:'fixtureCommit',tests:Array.from({length:30},(_,i)=>({name:'case-'+i,status:'passed',branch:'agtbrch_fixture',version:'agtvrsn_fixture'}))};
+const policyHash='b3f477756bc851a6a8dd1ff1962146d68b95f72a1e0544b132a2037e9504feb5';
+const audit={status:'passed',count:30,passedCount:30,fixtureHash:'6ba249db4fa63a03edd69a364c3f9e86f2638e56ac0bde093d3549995833a89e',policyHash,sourceConfigId:source,sourceBranchId:'agtbrch_source',sourceVersion:'agtvrsn_source',sourceConfigHash:'sourceHash',stagedConfigId:candidate,branchId:'agtbrch_fixture',version:'agtvrsn_fixture',configHash:'fixtureHash',commit:'fixtureCommit',tests:Array.from({length:30},(_,i)=>({name:'case-'+i,status:'passed',branch:'agtbrch_fixture',version:'agtvrsn_fixture'}))};
 const ready={state:'READY',commit:audit.commit,deploymentId:'dpl_fixture',pricingPrivacyVerified:true};
 await db.query(`insert into icash_recorded_reception_private.configs values
 ($1,$1,$1,'fixture-number','agent_fixture','agtbrch_source','agtvrsn_source','sourceHash','automatic_offer_v11','2f40ffd420387c93f6fe66fd9093285a657a928f429d71ad177637840932fc8a',true,now()+interval '1 day'),
-($2,$1,$1,'fixture-number','agent_fixture','agtbrch_fixture','agtvrsn_fixture','fixtureHash','automatic_offer_v16',$3,false,now()+interval '1 day')`,[source,candidate,policyHash]);
+($2,$1,$1,'fixture-number','agent_fixture','agtbrch_fixture','agtvrsn_fixture','fixtureHash','automatic_offer_v17',$3,false,now()+interval '1 day')`,[source,candidate,policyHash]);
 const evidence=async(a=audit,r=ready)=>{
- for(const [provider,result] of [['buyer_scenario_audit_20261009_v7',a],['buyer_scenario_application_ready_20261009_v1',r]])await db.query('insert into icash_integration_checks(provider,result) values($1,$2) on conflict(provider) do update set result=excluded.result',[provider,result]);
+ for(const [provider,result] of [['buyer_scenario_audit_20261009_v8',a],['buyer_scenario_application_ready_20261009_v1',r]])await db.query('insert into icash_integration_checks(provider,result) values($1,$2) on conflict(provider) do update set result=excluded.result',[provider,result]);
 };
 const held=async()=>{
  await assert.rejects(db.exec(sql));await db.exec('rollback;');
