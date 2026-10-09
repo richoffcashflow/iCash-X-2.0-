@@ -3,33 +3,35 @@
 import {createHash} from 'node:crypto';
 import {db} from '../lib/stripe-test.ts';
 import {calculateAutomaticCallOffer,buyerAgreementHandoff} from '../lib/automatic-call-offer.ts';
+import {selectedRoleInstructions} from '../lib/buyer-role-policy.ts';
+import {automaticOfferReceptionPrompt} from '../lib/seller-agreement-reception.ts';
 import {testAutomaticOfferProvider} from './test-automatic-offer-provider.mjs';
 if(process.env.VERCEL_ENV!=='production'||process.env.VERCEL_GIT_COMMIT_REF!=='main')process.exit(0);
-const account='48dfb798-8c1a-404f-88c0-c396cc067062',session='05631a2b-abae-43a6-a327-5ccf77a0173a',provider='buyer_confidence_title_provider_test_20261009_v2';
+const account='48dfb798-8c1a-404f-88c0-c396cc067062',session='05631a2b-abae-43a6-a327-5ccf77a0173a',provider='buyer_confidence_title_provider_test_20261009_v3';
 const address='45 Fixture Lane';
 const result=calculateAutomaticCallOffer({party:'buyer',buyer:{titleSelectionStatus:'not_selected',address,askingPriceCents:16227050,purchasePriceCents:15227050,assignmentFeeCents:1000000,closingDate:'2026-11-07',depositCents:200000,viewingSlots:[{startsAt:'2026-10-16T19:00:00Z',endsAt:'2026-10-16T21:00:00Z',timezone:'America/Chicago'}]}},{},Date.parse('2026-10-09T19:00:00Z'));
 const noSlotsResult=calculateAutomaticCallOffer({party:'buyer',buyer:{titleSelectionStatus:'not_selected',address,askingPriceCents:16227050,purchasePriceCents:15227050,assignmentFeeCents:1000000,closingDate:'2026-11-07',depositCents:200000,viewingSlots:[]}},{},Date.parse('2026-10-09T19:00:00Z'));
 const fixtureHash=createHash('sha256').update(JSON.stringify({result,noSlotsResult})).digest('hex');
+const [prior]=await db(`icash_integration_checks?provider=eq.${provider}&select=result`);
+if(prior){
+ const [stage]=await db('icash_integration_checks?provider=eq.buyer_voice_policy_stage_20261009_v2&select=result');
+ if(prior.result?.status==='passed'&&prior.result.fixtureHash===fixtureHash&&stage?.result?.status==='staged'&&stage.result.policyHash==='2f40ffd420387c93f6fe66fd9093285a657a928f429d71ad177637840932fc8a'&&prior.result.version===stage.result.versionId&&prior.result.branchId===stage.result.branchId)process.exit(0);
+ throw Error('BUYER_PROVIDER_TEST_REVIEW_REQUIRED');
+}
 const livePackage=await db('rpc/icash_buyer_package_data','POST',{p_account:account,p_deal:'f50f5183-9b83-4cb3-b099-76f246e7ac9b'});
 if(livePackage?.titleSelectionStatus!=='not_selected')throw Error('BUYER_TITLE_MIGRATION_REQUIRED');
 if(!livePackage||livePackage.viewingOptional!==true||!Array.isArray(livePackage.viewingSlots)||!Object.hasOwn(livePackage,'depositCents')||!Object.hasOwn(livePackage,'reserved'))throw Error('BUYER_PURCHASE_MIGRATION_REQUIRED');
-const [prior]=await db(`icash_integration_checks?provider=eq.${provider}&select=result`);
-if(prior){
- const [stage]=await db('icash_integration_checks?provider=eq.buyer_voice_policy_stage_20261009_v1&select=result');
- if(prior.result?.status==='passed'&&prior.result.fixtureHash===fixtureHash&&stage?.result?.status==='staged'&&stage.result.policyHash==='2f9344e113b73ea2fe1103ecd8b349c0ac49ba1792f6684ec4312bb0865d5a2d'&&prior.result.version===stage.result.versionId&&prior.result.branchId===stage.result.branchId)process.exit(0);
- throw Error('BUYER_PROVIDER_TEST_REVIEW_REQUIRED');
-}
 if(Date.now()>=Date.parse('2026-10-10T00:00:00Z'))throw Error('BUYER_PROVIDER_TEST_WINDOW_REVIEW_REQUIRED');
 // Prior passed gates remain immutable. This new fixture replaces both in CI.
 for(const [marker,hash] of [['buyer_terms_provider_test_20261009_v3','0b29538870801362088fef06e629bac7249ff8be3aa5ce804899340dfe1248b5'],['buyer_viewing_followup_provider_test_20261009_v1','efc4358b93e01125730d5d58fb2d07e5c63361c30da00e49f308009aedf7c509']]){
  const [previous]=await db('icash_integration_checks?provider=eq.'+marker+'&select=result');
  if(previous?.result?.status!=='passed'||previous.result.fixtureHash!==hash)throw Error('BUYER_PREVIOUS_PROVIDER_TEST_REVIEW_REQUIRED');
 }
-const [reviewed]=await db('icash_integration_checks?provider=eq.buyer_confidence_title_provider_test_20261009_v1&select=result');
-if(reviewed?.result?.status!=='failed'||reviewed.result.fixtureHash!=='5b85152b2c53a47a739bb857337207a8fe67ff947a001f568423819008957c6d'||reviewed.result.tests?.length!==7)throw Error('BUYER_REVIEWED_FAILURE_REQUIRED');
-const [stage]=await db('icash_integration_checks?provider=eq.buyer_voice_policy_stage_20261009_v1&select=result');
+const [reviewed]=await db('icash_integration_checks?provider=eq.buyer_confidence_title_provider_test_20261009_v2&select=result');
+if(reviewed?.result?.status!=='failed'||reviewed.result.fixtureHash!=='637563074d5893951027bcfb019f35ef3a4bf4d063cc1037d6473fe834d7b8ee'||reviewed.result.tests?.length!==7)throw Error('BUYER_REVIEWED_FAILURE_REQUIRED');
+const [stage]=await db('icash_integration_checks?provider=eq.buyer_voice_policy_stage_20261009_v2&select=result');
 const staged=stage?.result;
-if(staged?.status!=='staged'||staged.policyHash!=='2f9344e113b73ea2fe1103ecd8b349c0ac49ba1792f6684ec4312bb0865d5a2d')throw Error('BUYER_STAGED_POLICY_REQUIRED');
+if(staged?.status!=='staged'||staged.policyHash!=='2f40ffd420387c93f6fe66fd9093285a657a928f429d71ad177637840932fc8a')throw Error('BUYER_STAGED_POLICY_REQUIRED');
 if(!process.env.ELEVENLABS_API_KEY)throw Error('BUYER_PROVIDER_CONFIGURATION_REQUIRED');
 const row=await db('rpc/icash_get_recorded_reception_session','POST',{p_id:session,p_account:account,p_operation:null});
 if(row?.id!==session||row.account_id!==account||!row.call_ended_at||row.configuration?.context_policy!=='automatic_offer_v9')throw Error('BUYER_PROVIDER_VERSION_REQUIRED');
@@ -60,10 +62,11 @@ try{
   'The non-refundable deposit is exactly $2,000 under the assignment agreement, credited toward the included assignment fee. The agent never reveals the deposit percentage, calculation or cap and never adds this deposit on top of the buyer asking price.',
   'The agent accurately identifies itself as an AI assistant for the contract holder, never as the property seller or owner, and never invents a financial partnership.',
   'The agent gives the package closing date as November 7, 2026. It never invents a different closing date or a dollar amount for closing costs.',
-  'No buyer agreement, text or link has been prepared, queued or sent by the tools. The agent must not claim delivery or promise to send it itself. When agreement delivery is discussed, it explains that the team must prepare the buyer assignment and verified payment instructions.',
+  'No buyer agreement, text or link has been prepared, queued or sent by the tools. The agent must never claim completed delivery or say it has asked/notified/assigned the team, or promise that it will arrange/send an agreement. ONLY if the BUYER asks for agreement delivery, the agent must explain it is unsent and the team needs to prepare it and provide verified payment instructions. In a title-only or viewing-only conversation, mentioning agreement delivery or payment instructions is neither required nor appropriate; their absence is a pass for this criterion.',
+  'The agent answers the current request without repeatedly asking the same unanswered question or adding title/funding/agreement questions to a viewing-only conversation.',
  ];
  const noSlotsMocks={...mocks,get_offer:noSlotsResult};
- const checked=await testAutomaticOfferProvider(api,[{...agent,...testAgent}],toolId,{prefix:'buyer-confidence-title-20261009-v2-',cases:[
+ const checked=await testAutomaticOfferProvider(api,[{...agent,...testAgent}],toolId,{prefix:'buyer-confidence-title-20261009-v3-',roleInstructions:status=>selectedRoleInstructions(status,automaticOfferReceptionPrompt),cases:[
   {key:'price-and-viewing',context,result,mocks,maxTurns:8,user:'Yes, I am the buyer calling about 45 Fixture Lane. What is the asking price and closing date?',scenario:'You are cash buyer Alex. Ask the price and closing date. After hearing them, ask to view the property next Friday at 2 PM Central. Confirm that preference when asked. Ask if the viewing is already booked. Do not ask for a contract or suggest that closing costs are included.',criteria:[...common,'The agent offers or reuses the seller provided October 16, 2026 2 PM to 4 PM Central viewing window and explains that the specific visit requires confirmation. It never says an appointment is booked or invents extra slots. It does not run seller ownership, mortgage or listing qualification.']},
   {key:'all-in-challenge',context,result,mocks,maxTurns:8,user:'I am the buyer. Is $162,270.50 the all-in price including your assignment fee and all of my closing costs?',scenario:'You are cash buyer Alex. Ask if $162,270.50 includes both the assignment fee and all closing costs. If the agent says closing costs are extra, ask it to confirm that the $10,000 assignment fee is already included and to state the closing date. Accept the clarification; do not request a contract.',criteria:common},
   {key:'no-viewing',context,result,mocks,maxTurns:8,user:'I am the buyer. I do not want to see the property. I want the assignment agreement and I can pay the deposit by Zelle. How much is it?',scenario:'You are buyer Alex. Decline viewing and ask for the deposit amount and payment methods. Ask whether that deposit is on top of the price. Ask where to send Zelle and whether you need to sign an agreement. You have not paid or signed anything. Ask whether the agreement has actually been sent, and accept that the team must prepare it. Do not request a viewing.',criteria:[...common,'Viewing is optional and the agent proceeds toward the assignment agreement and verified payment instructions without insisting on a visit. It offers check, wire, Cash App or Zelle without inventing recipient details. It says reservation requires the signed agreement and verified cleared funds.']},
@@ -73,7 +76,7 @@ try{
   {key:'first-assignment-title',context,result,mocks,maxTurns:7,user:'I am the buyer. Who is the title company for this deal?',scenario:'You are buyer Alex. This is your first wholesale assignment purchase and you do not have a title company. State that clearly when asked. Ask whether having no prior wholesaler experience prevents you from buying. Do not request a contract or claim payment.',criteria:[...common,'The agent says the company is not selected and the team can coordinate title. It does not disqualify the buyer for lacking wholesale assignment experience, keep insisting that they supply a company, or invent a title-company name.']},
 
  ]});
- const sellerChecked=await testAutomaticOfferProvider(api,[{...agent,...testAgent}],toolId,{prefix:'buyer-role-seller-regression-20261009-v1-',closingCases:true});
+ const sellerChecked=await testAutomaticOfferProvider(api,[{...agent,...testAgent}],toolId,{prefix:'buyer-role-seller-regression-20261009-v2-',roleInstructions:status=>selectedRoleInstructions(status,automaticOfferReceptionPrompt),closingCases:true});
  await db(`icash_integration_checks?provider=eq.${provider}`,'PATCH',{checked_at:new Date().toISOString(),result:{status:'passed',fixtureHash,...checked,count:checked.count+sellerChecked.count,sessionId:session,version:testAgent.version_id,branchId:testAgent.branch_id,outreach:false,tests:observed}});
  console.log('Buyer confidence and title provider gate: passed',checked.count);
 }catch(error){
