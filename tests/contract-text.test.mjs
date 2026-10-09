@@ -1,3 +1,4 @@
+import {signatureRequestMessage} from '../lib/signing-invitation.ts';
 import {originalContractProfile,originalContractFieldsForRole} from '../lib/original-contracts.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -25,9 +26,9 @@ const db=async(path,method)=>{
  throw Error('Unexpected fixture '+path);
 };
 const originals={fetch:globalThis.fetch,mode:process.env.DOCUSEAL_MODE,key:process.env.DOCUSEAL_TEST_API_KEY,liveKey:process.env.DOCUSEAL_API_KEY,live:process.env.ICASH_LIVE_WORK_READY};
-globalThis.__contractFixture={originalContractProfile,originalContractFieldsForRole,normalize,z,db,dispatchReservedOperation:async(_i,send)=>send(),signingReadiness,signingDocumentReadiness,signingTermsHash,signingFields,verifiedSigningStatus,dealTermsSchema};
+globalThis.__contractFixture={signatureRequestMessage,originalContractProfile,originalContractFieldsForRole,normalize,z,db,dispatchReservedOperation:async(_i,send)=>send(),signingReadiness,signingDocumentReadiness,signingTermsHash,signingFields,verifiedSigningStatus,dealTermsSchema};
 const src=ts.transpileModule(readFileSync(new URL('../lib/signing-service.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-const service=await import('data:text/javascript;base64,'+Buffer.from('const {originalContractProfile,originalContractFieldsForRole,normalize,z,db,dispatchReservedOperation,signingReadiness,signingDocumentReadiness,signingTermsHash,signingFields,verifiedSigningStatus,dealTermsSchema}=globalThis.__contractFixture;\n'+src).toString('base64'));
+const service=await import('data:text/javascript;base64,'+Buffer.from('const {signatureRequestMessage,originalContractProfile,originalContractFieldsForRole,normalize,z,db,dispatchReservedOperation,signingReadiness,signingDocumentReadiness,signingTermsHash,signingFields,verifiedSigningStatus,dealTermsSchema}=globalThis.__contractFixture;\n'+src).toString('base64'));
 globalThis.fetch=async(_url,options)=>{
  if(options.method==='POST'){payload=JSON.parse(options.body);return Response.json([{submission_id:123},{submission_id:123}]);}
  return Response.json({id:123,submitters_order:'preserved',completed_at:null,submitters:recipients.map((r,index)=>({id:index+1,submission_id:123,phone:index===0?providerPhone:undefined,email:r.email,external_id:`envelope:${r.id}`,status:'awaiting',completed_at:null,metadata:{terms_hash:signingTermsHash(terms)},slug:'fixture_only'}))});

@@ -3,10 +3,12 @@ import {useEffect,useRef,useState} from 'react';
 import {MessageCircle,ArrowDown,ArrowUp} from 'lucide-react';
 import {smsLength} from '@/lib/sms-length';
 import {reconcileTextAttempt,textStateLabel,type SendAttempt,type TextReceipt} from '@/lib/text-send-state';
+import {CallConversation} from './call-conversation';
+import {conversationTimeline,type ConversationCall} from '@/lib/conversation-timeline';
 import {messageSpeaker,safeLocalTime} from './workspace-view';
 type Thread={id:string;recipient:string;paused:boolean;manualReply?:boolean;sendReason?:string|null;name?:string;party?:string};
 type Message={id:string;thread_id:string;direction:string;body:string;state:string;created_at:string;retryKey?:string|null;attachments?:{url:string;filename?:string}[]};
-type Data={threads:Thread[];messages:Message[];receipt?:TextReceipt|null;threadId?:string;nextThread:string|null;next:{before:string;beforeId:string}|null};
+type Data={threads:Thread[];messages:Message[];calls?:ConversationCall[];callsUnavailable?:boolean;receipt?:TextReceipt|null;threadId?:string;nextThread:string|null;next:{before:string;beforeId:string}|null};
 export function DealMessages({dealId,initialThreadId='',contactNames={},active=true,onTakeover}:{dealId:string;initialThreadId?:string;contactNames?:Record<string,string>;active?:boolean;onTakeover?:()=>void}){
  const [data,setData]=useState<(Data&{scope:string})|null>(null),[error,setError]=useState(''),[threadId,setThreadId]=useState(initialThreadId),[afterThread,setAfterThread]=useState(''),[page,setPage]=useState<{before:string;beforeId:string}|null>(null),[refresh,setRefresh]=useState(0),[drafts,setDrafts]=useState<Record<string,string>>({});
  const attempts=useRef<Record<string,SendAttempt>>({});
@@ -36,16 +38,18 @@ export function DealMessages({dealId,initialThreadId='',contactNames={},active=t
  {!!data?.threads.length&&(data.threads.length>1||data.nextThread||afterThread)&&<aside className="conversation-contacts" aria-label="Text contacts"><div className="conversation-contacts-title">Contacts</div>{data.threads.map(t=><button type="button" key={t.id} aria-pressed={(threadId||data.threadId)===t.id} onClick={()=>choose(t.id)}><span className="conversation-contact-avatar">{t.party==='buyer'?'B':'S'}</span><span><strong>{contactNames[t.recipient]??(t.party==='buyer'?'Buyer':'Seller')}</strong><small>{t.recipient}</small>{drafts[t.id]?.trim()&&<em>Draft saved</em>}</span></button>)}<div className="history-pages">{afterThread&&<button onClick={()=>{setAfterThread('');setThreadId('');setPage(null);setData(null);}}>First contacts</button>}{data.nextThread&&<button onClick={()=>{setAfterThread(data.nextThread!);setThreadId('');setPage(null);setData(null);}}>More contacts</button>}</div></aside>}
  <div className="conversation-thread-pane">
  {!current&&(!data||data.scope!==scope)&&<p className="conversation-loading" role="status">Loading conversation…</p>}
- {current&&<><div className="conversation-thread-heading"><div><strong>{contactNames[current.recipient]??(current.party==='buyer'?'Buyer':'Seller')}</strong><span>{current.recipient}</span></div></div><div className="history-pages">{page&&<button onClick={()=>setPage(null)}>Latest texts</button>}{data?.next&&<button onClick={()=>setPage(data.next)}>Older texts</button>}</div><Conversation onTakeover={onTakeover} key={current.id} attempts={attempts.current} stale={!!error||!active} draft={drafts[current.id]??''} onDraft={value=>setDrafts(d=>({...d,[current.id]:value}))} thread={current} messages={data?.messages.slice().reverse()??[]} onSent={()=>{setPage(null);setRefresh(v=>v+1);}}/></>}
+ {current&&<><div className="conversation-thread-heading"><div><strong>{contactNames[current.recipient]??(current.party==='buyer'?'Buyer':'Seller')}</strong><span>{current.recipient}</span></div></div><div className="history-pages">{page&&<button onClick={()=>setPage(null)}>Latest texts</button>}{data?.next&&<button onClick={()=>setPage(data.next)}>Older texts</button>}</div><Conversation calls={active?(data?.calls??[]):[]} callsUnavailable={data?.callsUnavailable??false} onTakeover={onTakeover} key={current.id} attempts={attempts.current} stale={!!error||!active} draft={drafts[current.id]??''} onDraft={value=>setDrafts(d=>({...d,[current.id]:value}))} thread={current} messages={data?.messages.slice().reverse()??[]} onSent={()=>{setPage(null);setRefresh(v=>v+1);}}/></>}
  </div></div>
  </div>;
 }
-function Conversation({onTakeover,thread,messages,onSent,draft,onDraft,attempts,stale}:{onTakeover?:()=>void;thread:Thread;messages:Message[];onSent:()=>void;draft:string;onDraft:(value:string)=>void;attempts:Record<string,SendAttempt>;stale:boolean}){
+function Conversation({calls,callsUnavailable,onTakeover,thread,messages,onSent,draft,onDraft,attempts,stale}:{calls:ConversationCall[];callsUnavailable:boolean;onTakeover?:()=>void;thread:Thread;messages:Message[];onSent:()=>void;draft:string;onDraft:(value:string)=>void;attempts:Record<string,SendAttempt>;stale:boolean}){
+ const timeline=conversationTimeline(messages,calls);
  const log=useRef<HTMLDivElement>(null),nearLatest=useRef(true),[showLatest,setShowLatest]=useState(false);
- useEffect(()=>{if(nearLatest.current&&log.current)log.current.scrollTop=log.current.scrollHeight;},[messages.at(-1)?.id]);
- return <div className="conversation-body"><div className="conversation-log-wrap"><div ref={log} className="message-history" role="log" aria-live="polite" aria-label="Text history" onScroll={()=>{const node=log.current;if(node){nearLatest.current=node.scrollHeight-node.scrollTop-node.clientHeight<64;setShowLatest(!nearLatest.current);}}}>
-  {!messages.length&&<p>No messages yet.</p>}
-  {messages.map(message=><article key={message.id} className={`message-bubble ${message.direction==='outgoing'?'message-outgoing':'message-incoming'}`}>
+ useEffect(()=>{if(nearLatest.current&&log.current)log.current.scrollTop=log.current.scrollHeight;},[timeline.at(-1)?.key]);
+ return <div className="conversation-body"><div className="conversation-log-wrap"><div ref={log} className="message-history" role="log" aria-live="polite" aria-label="Conversation history" onScroll={()=>{const node=log.current;if(node){nearLatest.current=node.scrollHeight-node.scrollTop-node.clientHeight<64;setShowLatest(!nearLatest.current);}}}>
+  {callsUnavailable&&<p role="status">Call history could not refresh. <button type="button" className="workspace-quiet" onClick={onSent}>Retry call history</button></p>}
+  {!timeline.length&&<p>No conversation yet.</p>}
+  {timeline.map(entry=>{if(entry.kind==='call')return <CallConversation key={entry.key} {...entry.call}/>;const message=entry.message;return <article key={entry.key} className={`message-bubble ${message.direction==='outgoing'?'message-outgoing':'message-incoming'}`}>
    <strong className="message-speaker">{messageSpeaker(message.direction,thread.party)}</strong><p className="message-body" style={{whiteSpace:'pre-wrap'}}>{message.body}</p>
    {message.direction==='incoming'&&message.attachments?.map((attachment,index)=>{
     let safe=false;try{const url=new URL(attachment.url);safe=url.protocol==='https:'&&url.hostname==='api.contiguity.com'&&url.pathname.startsWith('/attachments/')&&!url.username&&!url.password;}catch{}
@@ -53,7 +57,7 @@ function Conversation({onTakeover,thread,messages,onSent,draft,onDraft,attempts,
    })}
    <small>{message.direction==='outgoing'?textStateLabel(message.state):'Received'} · {safeLocalTime(message.created_at)}</small>
    {message.retryKey&&<button type="button" className="message-retry" disabled={stale||attempts[thread.id]?.busy||attempts[thread.id]?.held} onClick={()=>{if(draft.trim()&&draft.trim()!==message.body&&!window.confirm('Replace your draft with this unsent text?'))return;attempts[thread.id]={key:message.retryKey!,body:message.body,busy:false,held:false,retryable:true,status:''};onDraft(message.body);document.getElementById(`reply-${thread.id}`)?.focus();}}>Retry text</button>}
-  </article>)}
+  </article>;})}
   </div>{showLatest&&<button type="button" className="conversation-latest" onClick={()=>{nearLatest.current=true;setShowLatest(false);if(log.current)log.current.scrollTop=log.current.scrollHeight;}}><ArrowDown size={14}/>Latest texts</button>}</div>
   <TextComposer onTakeover={onTakeover} attempts={attempts} stale={stale} thread={thread} message={draft} setMessage={onDraft} onSent={()=>{nearLatest.current=true;onSent();}}/>
  </div>;

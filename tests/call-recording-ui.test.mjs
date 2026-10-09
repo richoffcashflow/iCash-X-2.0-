@@ -35,45 +35,24 @@ let html = renderReceipt(readReceipt(fixture));
 assert.match(html, /<audio[^>]*controls=""[^>]*preload="none"[^>]*aria-label="Call recording"/);
 assert.match(html, new RegExp('src="/api/work/recording/audio\\?id=' + recordingId + '"'));
 assert.doesNotMatch(html, /autoplay|https:\/\/|download prevention|cannot (?:download|save)/i);
-assert.match(html, /Twilio · RE[a-f0-9]{32}/);
-assert.match(html, /62 seconds/);
-assert.match(html, /Recording started/);
-assert.match(html, /Recording ended/);
-assert.match(html, /Audio is retained for 30 days\. Transcript retention is separate/);
-assert.match(html, /Anyone who can play audio in a browser can save a copy/);
-assert.match(html, /Raw provider cost observations/);
-assert.match(html, /Telephony: \$0.134 \(provider observation\)/);
-assert.match(html, /Estimated provider costs/);
-assert.match(html, /Recording storage: \$0.000123 \(estimate\)/);
-assert.match(html, /Voice agent: Not yet reported/);
-assert.match(html, /Unused service: Not applicable/);
-assert.match(html, /Reserved maximum: \$9.77\. This reservation is not a charge/);
-assert.match(html, /Settled customer charge: \$1.47/);
-assert.match(html, /does not verify provider costs/);
-
+assert.match(html, /Available until/);
+assert.doesNotMatch(html, /Twilio|RE[a-f0-9]{32}|Reserved|cost|charge|\$[0-9]/);
 for (const status of Object.keys(recordingStates)) {
   html = renderReceipt(readReceipt({...fixture, status}));
   assert.equal(html.includes('<audio'), status === 'available', `audio is gated by ${status}`);
-  assert(html.includes(recordingStates[status]));
+  if(status!=='available')assert(html.includes(recordingStates[status]));
 }
 html = renderReceipt(readReceipt({status: 'not_recorded'}));
 assert.match(html, /This call was not recorded/);
 assert.doesNotMatch(html, /<audio|Could not|\$0.00|Settled customer charge/);
-html = renderReceipt(readReceipt({...fixture, durationSeconds: null, providerReceipt: null, costs: {...fixture.costs, items: [], customerChargeCents: null}}));
-assert.match(html, /Recording duration<\/dt><dd>Not reported/);
-assert.match(html, /Provider receipt<\/dt><dd>Not available/);
-assert.match(html, /Settled customer charge: Pending/);
-assert.match(html, /No provider cost observations/);
-html = renderReceipt(readReceipt({...fixture, durationSeconds: 0, costs: {...fixture.costs, customerChargeCents: 0}}));
-assert.match(html, /0 seconds/);
-assert.match(html, /Settled customer charge: \$0.00/);
-html = renderReceipt(readReceipt({...fixture, audioUrl: 'https://provider.example/private-secret', costs: {...fixture.costs, items: [{label: '<script>not markup</script>', basis: 'observed', amountMicros: 1}]}}));
-assert.doesNotMatch(html, /provider\.example|private-secret|<script>/);
-assert.match(html, /&lt;script&gt;/);
-assert.match(html, /\$0.000001/);
-for (const invalid of [null, {}, {...fixture, status: 'toString'}, {...fixture, id: providerSid}, {...fixture, id: null}, {...fixture, status: 'available', id: 'https://provider.example/audio'}, {...fixture, durationSeconds: -1}, {...fixture, costs: {...fixture.costs, holdCents: Infinity}}, {...fixture, costs: {...fixture.costs, items: [{label: 'Invalid', basis: 'verified', amountMicros: 1}]}}]) {
-  assert.throws(() => readReceipt(invalid), /Invalid recording receipt/);
-}
+html = renderReceipt(readReceipt({...fixture, durationSeconds: null, providerReceipt: null}));
+assert.match(html, /<audio/);
+html = renderReceipt(readReceipt({...fixture, audioUrl:'https://provider.example/private-secret'}));
+assert.doesNotMatch(html, /provider\.example|private-secret/);
+html = renderToStaticMarkup(ReceiptDetails({receipt:readReceipt({...fixture,audioAvailable:true}),source:'reception'}));
+assert.match(html,/reception-recording\/audio/);
+html = renderReceipt(readReceipt({...fixture,audioAvailable:false}));assert.doesNotMatch(html, /<audio/);
+for(const invalid of [null,{}, {...fixture,status:'toString'},{...fixture,id:providerSid},{...fixture,id:null},{...fixture,durationSeconds:-1},{...fixture,audioExpiresAt:'not-a-date'}])assert.throws(()=>readReceipt(invalid),/Invalid recording/);
 
 // Small hook runner matching repository conventions; promises and effect cleanups are real.
 const elements = root => !root || typeof root !== 'object' ? [] : Array.isArray(root) ? root.flatMap(elements) : [root, ...elements(root.props?.children)];
@@ -135,7 +114,7 @@ assert.equal(calls[0].url, `/api/work/recording?conversationId=${conversationId}
 assert.equal(calls[0].options.cache, 'no-store');
 assert.equal(calls[0].options.credentials, 'same-origin');
 assert.equal(calls[0].options.signal.aborted, false);
-assert.match(view.markup(), /role="status">Loading recording receipt/);
+assert.match(view.markup(), /role="status">Loading recording/);
 view.render(); await view.flush(); assert.equal(calls.length, 1, 'rerenders do not refetch');
 calls[0].resolve(new Response(null, {status: 404})); await view.flush();
 assert.match(view.markup(), /This call was not recorded/);
@@ -145,10 +124,10 @@ view.unmount(); assert.equal(calls[0].options.signal.aborted, true);
 
 calls = queuedFetch(); view = harness(recordingSource, 'CallRecording', {conversationId});
 await view.flush(); calls[0].resolve(Response.json({error: 'PRIVATE_PROVIDER_SECRET'}, {status: 503})); await view.flush();
-assert.match(view.markup(), /role="alert">Could not load the recording receipt/);
-assert.doesNotMatch(view.markup(), /PRIVATE_PROVIDER_SECRET|Loading recording receipt/);
-const retry = view.button('Retry recording receipt'); retry.props.onClick(); retry.props.onClick();
-view.render(); assert.match(view.markup(), /Loading recording receipt/); assert.doesNotMatch(view.markup(), /role="alert"/);
+assert.match(view.markup(), /role="alert">Could not load this recording/);
+assert.doesNotMatch(view.markup(), /PRIVATE_PROVIDER_SECRET|Loading recording/);
+const retry = view.button('Retry recording'); retry.props.onClick(); retry.props.onClick();
+view.render(); assert.match(view.markup(), /Loading recording/); assert.doesNotMatch(view.markup(), /role="alert"/);
 await view.flush(); assert.equal(calls.length, 2, 'double retry starts only one request');
 calls[1].resolve(Response.json(fixture)); await view.flush();
 assert.match(view.markup(), /<audio/);
@@ -177,10 +156,10 @@ view = harness(recordingSource, 'CallRecording', {conversationId}); await view.f
 assert.equal(calls.length, 2, 'reopening resets an aborted request');
 assert.equal(calls[1].options.signal.aborted, false);
 calls[1].resolve(Response.json({...fixture, status: 'processing'})); await view.flush();
-const refresh = view.button('Refresh recording receipt'); refresh.props.onClick(); refresh.props.onClick(); await view.flush();
-assert.equal(calls.length, 3); assert.match(view.markup(), /Loading recording receipt/);
+const refresh = view.button('Refresh recording'); refresh.props.onClick(); refresh.props.onClick(); await view.flush();
+assert.equal(calls.length, 3); assert.match(view.markup(), /Loading recording/);
 calls[2].resolve(Response.json({...fixture, id: providerSid})); await view.flush();
-assert.match(view.markup(), /Could not load the recording receipt/); assert.doesNotMatch(view.markup(), /<audio/);
+assert.match(view.markup(), /Could not load this recording/); assert.doesNotMatch(view.markup(), /<audio/);
 view.unmount();
 
 // Transcript integration stays lazy, retains pagination, and passes application ID unchanged.
@@ -189,29 +168,29 @@ const dependencies = {'./call-recording': {CallRecording: recordingStub}, './wor
 calls = queuedFetch();
 view = harness(conversationSource, 'CallConversation', {id: conversationId, party: 'seller'}, dependencies);
 await view.flush(); assert.equal(calls.length, 0);
-assert(!elements(view.tree).some(node => node.type === recordingStub), 'no receipt while collapsed');
+assert(elements(view.tree).some(node => node.type === recordingStub), 'player visible before opening transcript');
 function toggle(open) {const details = elements(view.tree).find(node => node.type === 'details'); const target = {open}; details.props.onToggle({target, currentTarget: target});}
 toggle(true); await view.flush(); assert.equal(calls.length, 1);
-assert.equal(calls[0].url, `/api/work/conversation?id=${conversationId}`);
+assert.equal(calls[0].url, `/api/work/conversation?id=${conversationId}&source=outbound`);
 let receiptNode = elements(view.tree).find(node => node.type === recordingStub);
-assert.equal(receiptNode.props.conversationId, conversationId); assert.equal(receiptNode.key, conversationId);
+assert.equal(receiptNode.props.conversationId, conversationId); assert.equal(receiptNode.key, `outbound:${conversationId}`);
 calls[0].resolve(Response.json({transcript: [{role: 'agent', message: 'Current transcript'}], next: 60})); await view.flush();
 assert.match(text(view.tree), /Current transcript/); assert.equal(calls.length, 1);
 view.button('Earlier in call').props.onClick(); await view.flush();
-assert.equal(calls[1].url, `/api/work/conversation?id=${conversationId}&before=60`);
+assert.equal(calls[1].url, `/api/work/conversation?id=${conversationId}&source=outbound&before=60`);
 calls[1].resolve(Response.json({transcript: [{role: 'user', message: 'Earlier transcript'}], next: null})); await view.flush();
 assert.match(text(view.tree), /Earlier transcript/);
 view.props({id: otherConversationId, party: 'buyer'});
 assert.doesNotMatch(text(view.tree), /Earlier transcript/, 'new conversation never displays stale transcript');
-await view.flush(); assert.equal(calls[2].url, `/api/work/conversation?id=${otherConversationId}`, 'pagination resets for a new call');
+await view.flush(); assert.equal(calls[2].url, `/api/work/conversation?id=${otherConversationId}&source=outbound`, 'pagination resets for a new call');
 receiptNode = elements(view.tree).find(node => node.type === recordingStub);
-assert.equal(receiptNode.key, otherConversationId);
+assert.equal(receiptNode.key, `outbound:${otherConversationId}`);
 calls[2].resolve(new Response(null, {status: 500})); await view.flush();
 assert.match(text(view.tree), /Could not load this call/);
 const transcriptRetry = view.button('Retry conversation'); transcriptRetry.props.onClick(); transcriptRetry.props.onClick(); await view.flush();
 assert.equal(calls.length, 4); assert.match(text(view.tree), /Loading conversation/); assert.doesNotMatch(text(view.tree), /Could not load/);
 toggle(false); await view.flush(); assert.equal(calls[3].options.signal.aborted, true);
-assert(!elements(view.tree).some(node => node.type === recordingStub), 'close unmounts audio/receipt');
+assert(elements(view.tree).some(node => node.type === recordingStub), 'closing transcript keeps recording available');
 calls[3].resolve(Response.json({transcript: [{role: 'agent', message: 'Late response'}], next: null})); await view.flush();
 toggle(true); await view.flush(); assert.equal(calls.length, 5);
 assert.doesNotMatch(text(view.tree), /Late response|Could not load/);
@@ -220,4 +199,8 @@ assert.equal(calls.length, 5); assert.doesNotMatch(text(view.tree), /Loading con
 view.unmount();
 
 assert.doesNotMatch(recordingSource, /localStorage|sessionStorage|dangerouslySetInnerHTML|recordingUrl|controlsList|autoPlay/);
-console.log('Call recording UI passed: lazy private application-ID receipt/audio routes, all statuses, truthful cost/retention labels, 404/off handling, sanitized failures, micro-dollar precision, no duplicate retries, abort/close/reopen/ID races, and transcript pagination.');
+calls=queuedFetch();view=harness(recordingSource,'CallRecording',{conversationId,source:'reception'});
+await view.flush();assert.equal(calls[0].url,`/api/work/reception-recording?id=${conversationId}`);
+calls[0].resolve(Response.json({...fixture,audioAvailable:true}));await view.flush();assert.match(view.markup(),/reception-recording\/audio/);
+view.props({conversationId,source:'outbound'});assert.doesNotMatch(view.markup(),/<audio/,'source switches hide stale audio');await view.flush();view.unmount();
+console.log('Call player/transcript: authenticated playback, lazy audio, sanitized states, inbound/outbound routes, contact-switch races, retries and transcript pagination passed.');

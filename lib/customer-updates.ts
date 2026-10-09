@@ -1,5 +1,6 @@
 export const botUpdateConsentVersion='bot-updates-2026-10-08.1';
 export const updateCopy={
+ signature_needed:{title:'Urgent deal review',detail:'The other party has signed. Review the agreement and add your signature.'},
  credits_low:{title:'Your bot needs more credits',detail:'Your available credits are running low. Open your workspace to review your balance and add credits for the next eligible work.'},
  lead_assigned:{title:'A seller request is ready',detail:'Open the property to see the request and response status.'},
  response_held:{title:'A seller response needs attention',detail:'The first response is waiting for setup or review. Open the property to continue.'},
@@ -9,7 +10,7 @@ export const updateCopy={
  title_reply:{title:'Your title company replied',detail:'Review the title reply and any documents or deadlines requested.'},
  buyer_package:{title:'A buyer package was sent',detail:'The email provider accepted the package. This does not confirm delivery or buyer acceptance.'},
  seller_reply:{title:'A seller replied',detail:'Open the conversation to see their latest message.'},
- contract_signed:{title:'A signed agreement is ready',detail:'Review the completed signing record in your property.'},
+ contract_signed:{title:'Agreement fully signed',detail:'All required signatures are verified. Open the property for the next steps.'},
  deal_title_open:{title:'Your deal reached title',detail:'Check the title file and remaining closing steps.'},
  deal_closing:{title:'Your deal is in closing',detail:'Review the current closing requirements and deadlines.'},
  deal_closed:{title:'Your deal is marked closed',detail:'Open the closing record and final documents.'},

@@ -19,49 +19,23 @@ const recordingStates = {
 } as const;
 
 type RecordingStatus = keyof typeof recordingStates;
-type CostBasis = 'observed' | 'estimated' | 'not_applicable' | 'pending';
-type RecordingReceipt = {
-  id: string | null;
-  status: RecordingStatus;
-  durationSeconds: number | null;
-  audioExpiresAt: string | null;
-  providerReceipt: null | {provider: 'Twilio'; recordingSid: string; startAt: string | null; endAt: string | null};
-  costs: {
-    status: 'pending' | 'estimated' | 'verified';
-    holdCents: number;
-    customerChargeCents: number | null;
-    items: {label: string; basis: CostBasis; amountMicros: number | null}[];
-  };
-};
+type RecordingSource = 'outbound' | 'reception';
+type RecordingReceipt = {id: string | null; status: RecordingStatus; durationSeconds: number | null; audioExpiresAt: string | null};
 type ReceiptResult = RecordingReceipt | {status: 'not_recorded'};
-type ReceiptState = {conversationId: string; phase: 'loading' | 'error' | 'ready'; receipt?: ReceiptResult};
-
+type ReceiptState = {conversationId: string; source: RecordingSource; phase: 'loading' | 'error' | 'ready'; receipt?: ReceiptResult};
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
-const nullableNumber = (value: unknown) => value === null || finite(value);
-const nullableString = (value: unknown) => value === null || typeof value === 'string';
-const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
-
 function readReceipt(value: unknown): ReceiptResult {
-  if (!object(value) || typeof value.status !== 'string' || !Object.hasOwn(recordingStates, value.status)) throw Error('Invalid recording receipt');
-  // Disabled/legacy calls may return only this status, without invented zero costs.
-  if (value.status === 'not_recorded' && !('costs' in value)) return {status: 'not_recorded'};
-  const costs = value.costs;
-  const provider = value.providerReceipt;
-  if (!(value.id === null || (typeof value.id === 'string' && uuid.test(value.id))) ||
-    (value.status === 'available' && value.id === null) ||
-    !nullableNumber(value.durationSeconds) || (finite(value.durationSeconds) && value.durationSeconds < 0) ||
-    !nullableString(value.audioExpiresAt) ||
-    !(provider === null || (object(provider) && provider.provider === 'Twilio' &&
-      typeof provider.recordingSid === 'string' && /^RE[0-9a-f]{32}$/i.test(provider.recordingSid) &&
-      nullableString(provider.startAt) && nullableString(provider.endAt))) ||
-    !object(costs) || !['pending', 'estimated', 'verified'].includes(String(costs.status)) ||
-    !finite(costs.holdCents) || costs.holdCents < 0 || !nullableNumber(costs.customerChargeCents) ||
-    !Array.isArray(costs.items) || !costs.items.every(item => object(item) && typeof item.label === 'string' &&
-      ['observed', 'estimated', 'not_applicable', 'pending'].includes(String(item.basis)) && nullableNumber(item.amountMicros))) {
-    throw Error('Invalid recording receipt');
-  }
-  return value as RecordingReceipt;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('Invalid recording receipt');
+  const r = value as Record<string, unknown>;
+  if (r.status === 'not_recorded') return {status: 'not_recorded'};
+  const status = ['reserved', 'setup_pending'].includes(String(r.status)) ? 'processing' : r.status;
+  if (typeof status !== 'string' || !Object.hasOwn(recordingStates, status) ||
+    !(r.id === null || typeof r.id === 'string' && uuid.test(r.id)) ||
+    status === 'available' && r.id === null ||
+    !(r.durationSeconds === null || typeof r.durationSeconds === 'number' && Number.isFinite(r.durationSeconds) && r.durationSeconds >= 0) ||
+    !(r.audioExpiresAt === null || typeof r.audioExpiresAt === 'string' && Number.isFinite(Date.parse(r.audioExpiresAt)))) throw Error('Invalid recording receipt');
+  return {id:r.id as string|null, status:status === 'available' && r.audioAvailable === false ? 'expired' : status as RecordingStatus,
+    durationSeconds:r.durationSeconds as number|null, audioExpiresAt:r.audioExpiresAt as string|null};
 }
 
 function dateLabel(value: string | null) {
@@ -69,103 +43,65 @@ function dateLabel(value: string | null) {
   return new Date(value).toLocaleString('en-US',{hour12:true});
 }
 
-function dollars(amount: number, divisor: number) {
-  return new Intl.NumberFormat('en-US', {style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: divisor === 1_000_000 ? 6 : 2}).format(amount / divisor);
-}
-
-function ReceiptDetails({receipt}: {receipt: ReceiptResult}) {
-  if (!('costs' in receipt)) return <p>{recordingStates.not_recorded} A saved transcript may still be available.</p>;
-  const costGroups: {basis: CostBasis; title: string}[] = [
-    {basis: 'observed', title: 'Raw provider cost observations'},
-    {basis: 'estimated', title: 'Estimated provider costs'},
-    {basis: 'pending', title: 'Provider costs still pending'},
-    {basis: 'not_applicable', title: 'Provider costs not applicable'},
-  ];
+function ReceiptDetails({receipt, source='outbound'}: {receipt: ReceiptResult; source?: RecordingSource}) {
   return <>
-    <p>{recordingStates[receipt.status]}</p>
-    <dl>
-      <dt>Recording duration</dt><dd>{receipt.durationSeconds === null ? 'Not reported' : `${receipt.durationSeconds} seconds`}</dd>
-      <dt>Provider receipt</dt><dd>{receipt.providerReceipt ? `${receipt.providerReceipt.provider} · ${receipt.providerReceipt.recordingSid}` : 'Not available'}</dd>
-      {receipt.providerReceipt && <>
-        <dt>Recording started</dt><dd>{dateLabel(receipt.providerReceipt.startAt)}</dd>
-        <dt>Recording ended</dt><dd>{dateLabel(receipt.providerReceipt.endAt)}</dd>
-      </>}
-    </dl>
-    {receipt.status === 'available' && receipt.id && <audio
-      key={receipt.id}
-      controls
-      preload="none"
-      aria-label="Call recording"
-      src={`/api/work/recording/audio?id=${encodeURIComponent(receipt.id)}`}
-      style={{maxWidth: '100%'}}
-    >Your browser does not support audio playback.</audio>}
-    <p><small>Audio is retained for 30 days. Transcript retention is separate.{receipt.audioExpiresAt && ` Audio expires: ${dateLabel(receipt.audioExpiresAt)}.`}</small></p>
-    <p><small>Anyone who can play audio in a browser can save a copy.</small></p>
-    <h4>Call cost receipt</h4>
-    <p>Provider cost status: {receipt.costs.status}.</p>
-    {costGroups.map(group => {
-      const items = receipt.costs.items.filter(item => item.basis === group.basis);
-      return items.length > 0 && <div key={group.basis}>
-        <strong>{group.title}</strong>
-        <ul>{items.map((item, index) => <li key={`${item.label}-${index}`}>
-          {item.label}: {item.amountMicros === null ? (item.basis === 'not_applicable' ? 'Not applicable' : 'Not yet reported') : dollars(item.amountMicros, 1_000_000)}
-          {item.basis === 'estimated' ? ' (estimate)' : item.basis === 'observed' ? ' (provider observation)' : ''}
-        </li>)}</ul>
-      </div>;
-    })}
-    {!receipt.costs.items.length && <p>No provider cost observations have been reported.</p>}
-    <p>Reserved maximum: {dollars(receipt.costs.holdCents, 100)}. This reservation is not a charge.</p>
-    <p><strong>Settled customer charge: {receipt.costs.customerChargeCents === null ? 'Pending' : dollars(receipt.costs.customerChargeCents, 100)}</strong></p>
-    <p><small>A recording documents conversation content. It does not verify provider costs; those require separate provider cost records.</small></p>
+    {receipt.status !== 'available' && <p>{recordingStates[receipt.status]}</p>}
+    {receipt.status === 'available' && 'id' in receipt && receipt.id && <>
+      <audio key={receipt.id} controls preload="none" aria-label="Call recording"
+        src={`/api/work/${source === 'reception' ? 'reception-recording' : 'recording'}/audio?id=${encodeURIComponent(receipt.id)}`} style={{width:'100%'}}>
+        Your browser does not support audio playback.
+      </audio>
+      {receipt.audioExpiresAt && <small>Available until {dateLabel(receipt.audioExpiresAt)}.</small>}
+    </>}
   </>;
 }
 
-/** Mount only inside an expanded completed-call transcript. Closing unmounts and aborts. */
-export function CallRecording({conversationId}: {conversationId: string}) {
-  const [state, setState] = useState<ReceiptState>({conversationId, phase: 'loading'});
+/** Show the player with the call; audio downloads only when the user presses play. */
+export function CallRecording({conversationId, source='outbound'}: {conversationId: string; source?: RecordingSource}) {
+  const [state, setState] = useState<ReceiptState>({conversationId, source, phase: 'loading'});
   const [attempt, setAttempt] = useState(0);
   const running = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
     running.current = true;
-    setState({conversationId, phase: 'loading'});
-    void fetch(`/api/work/recording?conversationId=${encodeURIComponent(conversationId)}`, {
+    setState({conversationId, source, phase: 'loading'});
+    void fetch(`/api/work/${source === 'reception' ? 'reception-recording?id=' : 'recording?conversationId='}${encodeURIComponent(conversationId)}`, {
       signal: controller.signal, cache: 'no-store', credentials: 'same-origin',
     }).then(async response => {
       if (response.status === 404) return {status: 'not_recorded'} as const;
       if (!response.ok) throw Error('Recording receipt unavailable');
       return readReceipt(await response.json());
     }).then(receipt => {
-      if (!controller.signal.aborted) setState({conversationId, phase: 'ready', receipt});
+      if (!controller.signal.aborted) setState({conversationId, source, phase: 'ready', receipt});
     }).catch(() => {
-      if (!controller.signal.aborted) setState({conversationId, phase: 'error'});
+      if (!controller.signal.aborted) setState({conversationId, source, phase: 'error'});
     }).finally(() => {
       if (!controller.signal.aborted) running.current = false;
     });
     return () => {controller.abort(); running.current = false;};
-  }, [conversationId, attempt]);
+  }, [conversationId, source, attempt]);
 
   function retry() {
     if (running.current) return;
     running.current = true;
-    setState({conversationId, phase: 'loading'});
+    setState({conversationId, source, phase: 'loading'});
     setAttempt(value => value + 1);
   }
 
   // Never render a previous conversation's audio, even before the new effect runs.
-  const current = state.conversationId === conversationId ? state : {phase: 'loading' as const};
-  return <section aria-label="Call recording and cost receipt">
-    <h4>Recording receipt</h4>
-    {current.phase === 'loading' && <p role="status">Loading recording receipt…</p>}
+  const current = state.conversationId === conversationId && state.source === source ? state : {phase: 'loading' as const};
+  return <section className="conversation-call-player" aria-label="Call recording">
+    <h4>Call recording</h4>
+    {current.phase === 'loading' && <p role="status">Loading recording…</p>}
     {current.phase === 'error' && <>
-      <p role="alert">Could not load the recording receipt.</p>
-      <button type="button" onClick={retry}>Retry recording receipt</button>
+      <p role="alert">Could not load this recording.</p>
+      <button type="button" onClick={retry}>Retry recording</button>
     </>}
     {current.phase === 'ready' && 'receipt' in current && current.receipt && <>
-      <ReceiptDetails receipt={current.receipt}/>
+      <ReceiptDetails receipt={current.receipt} source={source}/>
       {['consent_pending', 'starting', 'recording', 'stopping', 'processing'].includes(current.receipt.status) &&
-        <button type="button" onClick={retry}>Refresh recording receipt</button>}
+        <button type="button" onClick={retry}>Refresh recording</button>}
     </>}
   </section>;
 }
