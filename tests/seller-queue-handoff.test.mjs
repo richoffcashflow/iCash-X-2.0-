@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+let allocation={status:'assigned',leadId:'recovered-lead'},target,allowed=true,calls=[];
+const mocks={authorizeOutboundBilling:()=>allowed,recoverAgreementDelivery:async()=>({status:'idle'}),sendForSignatures:()=>{},textPendingContract:()=>{},processSellerIntake:async()=>({status:'property_checked'}),deliverSellerEvent:async()=>({status:'idle'}),dispatchTextMessage:()=>{},dispatchLiveVoice:()=>{},db:async(path)=>{
+ calls.push(path);
+ if(path==='icash_seller_controls?id=eq.1&select=enabled')return [{enabled:true}];
+ if(path==='rpc/icash_collect_seller_milestones')return [];
+ if(path==='rpc/icash_assign_seller_lead')return allocation;
+ throw Error('Unexpected database call');
+},processSellerResponses:async(db,text,voice,leadId)=>{target=leadId;return [{leadId,status:'queued'}];}};
+globalThis.__queueHandoff=mocks;
+let source=ts.transpileModule(readFileSync(new URL('../app/api/internal/seller/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
+source='const {'+Object.keys(mocks).join(',')+'}=globalThis.__queueHandoff;\n'+source;
+const route=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const req=new Request('https://www.geticashx.com/api/internal/seller');
+assert.equal((await route.GET(req)).status,200);assert.equal(target,'recovered-lead','Recovered assignment bypasses unrelated setup retries');
+allocation=null;assert.equal((await route.GET(req)).status,200);assert.equal(target,undefined,'An idle assignment tick still services the existing response queue');
+allocation={status:'waiting_for_budget'};await route.GET(req);assert.equal(target,undefined);
+allowed=false;calls=[];assert.equal((await route.GET(req)).status,401);assert.equal(calls.length,0);
+console.log('PASS immediate recovered-lead handoff, existing queue fallback and cron authentication.');
