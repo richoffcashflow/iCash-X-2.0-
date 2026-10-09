@@ -4,6 +4,6 @@ export function callFirstName(value:unknown):string|null{
  const name=value.trim();
  if(!/^[\p{L}\p{M}'’ -]+$/u.test(name)||/\b(?:llc|inc|corp|corporation|company|properties|investments|holdings|trust|homes|partners|group)\b/i.test(name))return null;
  const first=name.split(/\s+/)[0];
- if(!/^[\p{L}][\p{L}\p{M}'’-]{0,39}$/u.test(first)||/^(?:unknown|potential|buyer|seller|owner|interested|selling|ready|not|yes|no|test|null|undefined)$/i.test(first))return null;
+ if(!/^[\p{L}][\p{L}\p{M}'’-]{0,39}$/u.test(first)||/^(?:unknown|potential|buyer|seller|owner|interested|selling|ready|not|yes|no|test|null|undefined|ignore)$/i.test(first))return null;
  return first===first.toLocaleUpperCase('en-US')?first[0].toLocaleUpperCase('en-US')+first.slice(1).toLocaleLowerCase('en-US'):first;
 }

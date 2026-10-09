@@ -1,3 +1,4 @@
+import {conversationStreet,conversationAddressFields} from './conversation-address.ts';
 import {buyerReceptionEnabled,buyerReceptionVariables,buyerReceptionPrompt} from './buyer-reception-context.ts';
 import {sellerOfferReceptionEnabled,sellerOfferReceptionPrompt,sellerOfferReceptionVariables} from './seller-offer-reception.ts';
 import {sellerAgreementReceptionEnabled,sellerAgreementPrompt,sellerAgreementReceptionVariables} from './seller-agreement-reception.ts';
@@ -13,8 +14,13 @@ export function propertyReceptionEnabled(config:Record<string,unknown>){
 }
 export function propertyReceptionVariables(value:unknown){
  const context=safeInboundPropertyContext(value);
- return {icash_property_greeting:context?.status==='matched'?`${context.returningName?'Hi '+context.returningName+'.':'Hi,'} I'm the iCash X AI property assistant. Is this the owner of ${context.address}?`:"Hi, I'm the iCash X AI property assistant. Which property are you calling about?",icash_property_context:JSON.stringify(context)};
+ return {icash_property_greeting:context?.status==='matched'?`${context.returningName?'Hi '+context.returningName+'.':'Hi,'} I'm the iCash X AI property assistant. Is this the owner of ${conversationStreet(context.address)}?`:"Hi, I'm the iCash X AI property assistant. Which property are you calling about?",icash_property_context:JSON.stringify(context)};
 }
 
 export function receptionContextPrompt(config:Record<string,unknown>){return sellerAgreementReceptionEnabled(config)?sellerAgreementPrompt(config):sellerOfferReceptionEnabled(config)?sellerOfferReceptionPrompt:buyerReceptionEnabled(config)?buyerReceptionPrompt:propertyReceptionPrompt;}
-export function receptionContextVariables(config:Record<string,unknown>,value:unknown){return sellerAgreementReceptionEnabled(config)?sellerAgreementReceptionVariables(value):sellerOfferReceptionEnabled(config)?sellerOfferReceptionVariables(value):buyerReceptionEnabled(config)?buyerReceptionVariables(value):propertyReceptionVariables(value);}
+export function receptionContextVariables(config:Record<string,unknown>,value:unknown){
+ const result=sellerAgreementReceptionEnabled(config)?sellerAgreementReceptionVariables(value):sellerOfferReceptionEnabled(config)?sellerOfferReceptionVariables(value):buyerReceptionEnabled(config)?buyerReceptionVariables(value):propertyReceptionVariables(value);
+ const context=JSON.parse(result.icash_property_context);
+ if(context&&typeof context.address==='string')Object.assign(context,conversationAddressFields(context.address));
+ return {...result,icash_property_context:JSON.stringify(context)};
+}
