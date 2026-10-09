@@ -1,3 +1,4 @@
+import {buyerSpeakingPolicy} from '../lib/buyer-speaking-policy.ts';
 import {buyerValidatedPolicy} from '../lib/buyer-validated-policy.ts';
 import {buyerAnswerPolicy} from '../lib/buyer-answer-policy.ts';
 import {buyerConversationPolicy,buyerConversationResult,buyerConversationToolInstruction} from '../lib/buyer-conversation-policy.ts';
@@ -71,11 +72,11 @@ test('buyer package, call tool and model context omit acquisition cost and sprea
 
 test('compact presentation is selected only by the trusted bound call policy',async()=>{
  const base=calculateAutomaticCallOffer({party:'buyer',buyer},{},now);
- for(const contextPolicy of [undefined,'automatic_offer_v14',buyerConversationPolicy,buyerAnswerPolicy,buyerValidatedPolicy]){
+ for(const contextPolicy of [undefined,'automatic_offer_v14',buyerConversationPolicy,buyerAnswerPolicy,buyerValidatedPolicy,buyerSpeakingPolicy]){
   const result=await automaticCallOffer('a'.repeat(64),{action:'get_offer',conversationId:'conv_fixture'},{db:async()=>({party:'buyer',buyer,contextPolicy}),bind:async()=>assert.fail(),verifyInput:async()=>false,now:()=>now});
   const {instruction,...facts}=result,{instruction:oldInstruction,...oldFacts}=base;
   assert.deepEqual(facts,oldFacts,'All authoritative facts remain unchanged');
-  assert.equal(instruction,[buyerConversationPolicy,buyerAnswerPolicy,buyerValidatedPolicy].includes(contextPolicy)?' '+buyerConversationToolInstruction:oldInstruction);
+  assert.equal(instruction,[buyerConversationPolicy,buyerAnswerPolicy,buyerValidatedPolicy,buyerSpeakingPolicy].includes(contextPolicy)?' '+buyerConversationToolInstruction:oldInstruction);
  }
  const seller={party:'seller',quoteAllowed:true,priceCents:100,instruction:'Seller instructions'};assert.equal(buyerConversationResult(seller),seller);
  for(const patch of [{reserved:true},{closingDate:'2026-10-01'},{askingPriceCents:0}]){

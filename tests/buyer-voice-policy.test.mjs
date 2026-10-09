@@ -1,3 +1,6 @@
+import {buyerSpeakingPolicy,buyerSpeakingInstructions,buyerSpeakingModel,buyerSpeakingPrompt,buyerSpeakingEntryInstructions,selectedSpeakingRoleInstructions} from '../lib/buyer-speaking-policy.ts';
+import {speakingBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
+import {buyerSpeakingBranchOverrides} from '../scripts/stage-buyer-speaking-policy.mjs';
 import {buyerValidatedPolicy,buyerValidatedInstructions,buyerValidatedPrompt,buyerValidatedModel,buyerValidatedEntryInstructions,buyerOpeningGuardrail,selectedValidatedRoleInstructions} from '../lib/buyer-validated-policy.ts';
 import {validatedBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {buyerValidatedBranchOverrides} from '../scripts/stage-buyer-validated-policy.mjs';
@@ -53,6 +56,10 @@ test('buyer policy requires its reviewed prompt, guardrail and current history t
  Object.assign(agent.conversation_config.agent.prompt,buyerAnswerModel,{prompt:buyerAnswerPrompt+buyerAnswerEntryInstructions,thinking_budget:null});
  c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
  const missingFinal=structuredClone(agent);missingFinal.conversation_config.agent.prompt.prompt=buyerAnswerPrompt+directRecordedInstructions;c.config_hash=inspect(missingFinal).hash;assert.equal(inspect(missingFinal).safe,false);
+ c.context_policy=buyerSpeakingPolicy;c.context_policy_hash=speakingBuyerReceptionPolicyHash;
+ Object.assign(agent.conversation_config.agent.prompt,buyerSpeakingModel,{prompt:buyerSpeakingPrompt+buyerSpeakingEntryInstructions,thinking_budget:null});
+ c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
+ for(const mutate of [a=>{a.conversation_config.agent.prompt.llm='gpt-5.4-mini';},a=>{a.conversation_config.agent.prompt.reasoning_effort='high';},a=>{a.conversation_config.agent.prompt.prompt=buyerAnswerPrompt+directRecordedInstructions;}]){const changed=structuredClone(agent);mutate(changed);c.config_hash=inspect(changed).hash;assert.equal(inspect(changed).safe,false);}
  c.context_policy=buyerValidatedPolicy;c.context_policy_hash=validatedBuyerReceptionPolicyHash;
  Object.assign(agent.conversation_config.agent.prompt,buyerValidatedModel,{prompt:buyerValidatedPrompt+buyerValidatedEntryInstructions,thinking_budget:null});
  agent.platform_settings.guardrails.custom.config.configs.push(buyerOpeningGuardrail);
@@ -147,4 +154,18 @@ test('v17 adds complete-reply validation without replacing streaming price autho
  const c={context_policy:buyerValidatedPolicy,context_policy_hash:validatedBuyerReceptionPolicyHash,context_approval_reference:'Reviewed full buyer response validation',agreement_tool_id:'tool_agreement'};
  assert.equal(receptionContextVariables(c,{status:'buyer',address:'45 Fixture Lane',askingPriceCents:16227050}).icash_role_instructions,buyerValidatedInstructions);
  assert.equal(selectedValidatedRoleInstructions('matched',automaticOfferReceptionPrompt),selectedRoleInstructions('matched',automaticOfferReceptionPrompt));
+});
+
+test('v18 uses a distinct spoken-answer model without unsupported full-response voice guards',()=>{
+ const parent={platform_settings:{guardrails:{custom:{config:{configs:[buyerConversationGuardrail]}}}}};
+ const before=structuredClone(parent),patch=buyerSpeakingBranchOverrides(parent);
+ assert.deepEqual(parent,before);assert.equal(patch.platform_settings,undefined);
+ assert.equal(patch.conversation_config.agent.prompt.llm,'gpt-5.4');
+ assert.equal(patch.conversation_config.agent.prompt.reasoning_effort,'none');
+ assert.equal(patch.conversation_config.agent.prompt.max_tokens,150);
+ assert.equal(patch.conversation_config.agent.prompt.prompt,buyerSpeakingPrompt+buyerSpeakingEntryInstructions);
+ const c={context_policy:buyerSpeakingPolicy,context_policy_hash:speakingBuyerReceptionPolicyHash,context_approval_reference:'Reviewed streaming buyer model candidate',agreement_tool_id:'tool_agreement'};
+ assert.equal(receptionContextVariables(c,{status:'buyer',address:'45 Fixture Lane',askingPriceCents:16227050}).icash_role_instructions,buyerSpeakingInstructions);
+ assert.equal(selectedSpeakingRoleInstructions('matched',automaticOfferReceptionPrompt),selectedRoleInstructions('matched',automaticOfferReceptionPrompt));
+ assert.equal(isolatedBuyerReceptionPolicyHash,'2f40ffd420387c93f6fe66fd9093285a657a928f429d71ad177637840932fc8a');
 });
