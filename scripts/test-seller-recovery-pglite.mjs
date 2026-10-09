@@ -52,6 +52,7 @@ try{
  await pg.exec(readFileSync('supabase/migrations/20261009223901_seller_gap_recovery_learning.sql','utf8'));
  await pg.exec(readFileSync('supabase/migrations/20261009224932_seller_recovery_pause_preserves_gaps.sql','utf8'));
  await pg.exec(readFileSync('supabase/migrations/20261009225857_seller_recovery_signing_replay.sql','utf8'));
+ await pg.exec(readFileSync('supabase/migrations/20261009230421_seller_recovery_positive_credits.sql','utf8'));
  assert.equal((await one('select count(*)::int n from icash_seller_recovery_variants where enabled')).n,0,'migration stages outreach disabled until the application is ready');
  await q('update icash_seller_recovery_variants set enabled=true');
  await q('insert into auth.users values($1)',[owner]);
@@ -107,6 +108,14 @@ try{
   await q("update icash_text_threads set timezone=(select name from pg_timezone_names where extract(hour from now() at time zone name) between 9 and 19 limit 1)");
   assert((await rpc('icash_next_automation')).token);assert.equal((await rpc('icash_next_automation')).token,undefined);
   assert.equal((await one('select kind from icash_automation_tickets')).kind,'seller_recovery');
+ });
+ await test('positive credits are not withheld by legacy reservation balances',async()=>{
+  await open();
+  await q("update icash_text_threads set timezone=(select name from pg_timezone_names where extract(hour from now() at time zone name) between 9 and 19 limit 1)");
+  await q('update icash_wallets set balance_cents=1,reserved_cents=100000');
+  assert((await rpc('icash_next_automation')).token,'completed-usage billing admits positive credits without withholding a quoted maximum');
+  assert.equal((await one('select kind from icash_automation_tickets')).kind,'seller_recovery');
+  assert.equal((await one('select balance_cents from icash_wallets')).balance_cents,1,'scheduling itself does not charge usage');
  });
  for(const mutation of ["update fixture_guard set allowed=false","insert into icash_text_suppressions(phone) values('+12145550199')","update icash_deal_files set stage='under_contract'","update icash_seller_recovery_variants set enabled=false","update icash_text_messages set body='Unapproved promise' where direction='outgoing'"])
   await test('final dispatch holds changed authority: '+mutation,async()=>{const {id}=await open(),m=await prepare(id);await q(mutation);assert.equal(await claim(m),null);assert.equal((await one('select claims from fixture_guard')).claims,0);});
@@ -232,6 +241,6 @@ try{
   assert.equal((await one("select has_function_privilege('anon','icash_prepare_seller_recovery(uuid,uuid)','EXECUTE') v")).v,false);
   assert.equal((await one("select has_function_privilege('service_role','icash_prepare_seller_recovery(uuid,uuid)','EXECUTE') v")).v,true);
  });
- assert.equal(checks,40);completed=true;
+ assert.equal(checks,41);completed=true;
  console.log(JSON.stringify({checks,passed:checks,network:'disabled',scope:'real recovery SQL, isolated delegate fixtures'}));
 }catch(error){console.error(JSON.stringify({error:error.message,code:error.code,where:error.where,detail:error.detail}));process.exitCode=1;}finally{await pg.close();}
