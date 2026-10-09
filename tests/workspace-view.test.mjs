@@ -15,6 +15,7 @@ const cleared={...work,textAttention:[],propertyAttentionIds:[]};
 assert.equal(propertyGroup(uuid(1),cleared),'active');
 assert.equal(propertyGroup(uuid(5),cleared),'history');
 assert.equal(propertyGroup(uuid(6),cleared),'history');
+assert.equal(propertyGroup(uuid(1),{...cleared,deals:[{id:uuid(501),screening_id:uuid(1),stage:'cancelled'}]}),'history','Both persisted cancellation spellings go to History');
 assert.equal(needsAttention(uuid(1),{...cleared,handoffs:[{screening_id:uuid(1),state:'acknowledged'}]}),false,'seen handoffs do not look like new requests');
 assert.equal(needsAttention(uuid(1),{...cleared,callRequests:[{screening_id:uuid(1),state:'handled'}]}),false);
 assert.equal(needsAttention(uuid(1),{...cleared,signing:[{deal_id:cleared.deals[0].id,state:'customer_signature_needed',test_mode:true}]}),true,'test signatures still require action without implying production completion');

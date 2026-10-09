@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {z} from 'zod';
+import {recordedDealProgress} from '../lib/deal-card-summary.ts';
 const uuid=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const account=uuid(999),otherAccount=uuid(998);
 const property=n=>({id:uuid(n),state:'complete',completed_at:'2026-09-30T10:00:00Z',result:{property:{propertyId:`prop_${n}`,address:`${n} Main Street`},financialCheck:{status:'eligible',reason:'Fixture'},preliminarySellerCeilingCents:100000}});
@@ -13,9 +14,9 @@ const person={name:'Synthetic Person',personId:'per_private',emails:['private@ex
  {number:'+12025550102',type:'Landline',doNotCall:false},{number:'+12025550103',doNotCall:null},{number:'+12025550104',doNotCall:'false'},{}]};
 const contactRows=[lookup(1,[person,{},null,'invalid',{name:34,phones:'invalid'}]),lookup(7,[{name:'Page two contact',phones:[]}]),lookup(20,[{name:'Retained contact',phones:[]}]),
  {...lookup(998,[{name:'Other tenant contact',phones:[]}]),account_id:otherAccount}];
-let paths=[],authorized=true,sellerFixtures=[];
+let paths=[],authorized=true,sellerFixtures=[],dealFixtures=[];
 const paginate=(rows,q)=>rows.slice(Number(q.get('offset')??0),Number(q.get('offset')??0)+Number(q.get('limit')??rows.length));
-const mocks={z,NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
+const mocks={z,recordedDealProgress,NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
  paths.push({path,method,body});
  if(path==='rpc/icash_buyer_reception_calls'){assert.equal(body.p_account,account);return [];}
  if(path==='rpc/icash_sms_route_review_items'){assert.equal(body.p_account,account);assert.equal(body.p_limit,7);return queue.slice(body.p_offset,body.p_offset+body.p_limit).map((q,i)=>({message_id:q.id,recipient:'+12145550123',body:'Which property?',revision:7,needs_review:true,candidates:[]}));}
@@ -30,8 +31,10 @@ const mocks={z,NextResponse:{json:(body,options={})=>({body,status:options.statu
  }
  if(table==='icash_deal_files'){
   if(q.get('id'))return queue.filter(p=>q.get('id').includes(p.deal_id)).map(p=>({id:p.deal_id,screening_id:p.screening_id}));
-  return [];
+  if(dealFixtures.length){for(const alias of ['deposit','scheduled','payment']){assert.equal(q.get(alias+'.account_id'),'eq.'+account);assert.equal(q.get(alias+'.limit'),'1');}assert.equal(q.get('scheduled.kind'),'eq.closing_scheduled');assert.equal(q.get('payment.kind'),'eq.funds_disbursed');}
+  return dealFixtures.filter(d=>q.get('screening_id').includes(d.screening_id));
  }
+ if(table==='icash_buyer_viewing_requests')return [];
  if(table==='icash_text_attention'||table==='icash_sms_call_requests'||table==='icash_handoffs')return paginate(queue,q);
  if(table==='icash_buyer_viewing_requests')return [];
  if(table==='icash_seller_gaps')return paginate(queue.map(item=>({...item,reason:'unanswered',quote:'An exact seller question',updated_at:'2026-10-09T12:00:00Z'})),q);
@@ -79,6 +82,13 @@ for(const bad of ['?query=*','?query=%25','?query=abc%26account_id=eq.other','?q
 for(const bad of ['?page=-1','?page=1.5','?page=Infinity','?attentionPage=10001','?screeningId=invalid']){paths=[];r=await get(bad);assert.notEqual(r.status,200);assert.equal(paths.length,0);}
 sellerFixtures=[{account_id:account,screening_id:uuid(1),lead:{name:'Assigned seller',phone:'+12025550111'}},{account_id:otherAccount,screening_id:uuid(1),lead:{name:'Wrong seller',phone:'+12025550112'}},{account_id:account,screening_id:uuid(19),lead:{name:'Nonvisible seller',phone:'+12025550113'}}];
 r=await get('');const shared=r.body.contacts.find(c=>c.source==='HomeOffer Network · seller-submitted');assert.equal(shared.contacts[0].name,'Assigned seller');assert.equal(shared.created_at,null);assert.equal(shared.fetchedAt,null);assert(!JSON.stringify(r.body).includes('Wrong seller'));assert(!JSON.stringify(r.body).includes('Nonvisible seller'));
+const proof={account_id:account,deal_id:uuid(501)};
+dealFixtures=[{id:uuid(501),screening_id:uuid(1),stage:'closing',terms:{priceCents:10000000},deposit:[proof],scheduled:[{...proof,effective_date:'2026-10-23'}],payment:[]}];
+r=await get('');assert.equal(r.status,200);assert.deepEqual(r.body.deals[0].progress,{depositConfirmed:true,closingScheduledDate:'2026-10-23',paymentSent:false});
+assert.ok(!('deposit' in r.body.deals[0])&&!('scheduled' in r.body.deals[0])&&!('payment' in r.body.deals[0]),'Only projected progress leaves the API');
+dealFixtures[0].deposit=[{...proof,account_id:otherAccount}];dealFixtures[0].scheduled=[{...proof,deal_id:uuid(502),effective_date:'2026-10-23'}];
+r=await get('');assert.deepEqual(r.body.deals[0].progress,{depositConfirmed:false,closingScheduledDate:null,paymentSent:false},'Other accounts and other deals cannot advance this card');
+dealFixtures=[];
 authorized=false;paths=[];r=await get('');assert.notEqual(r.status,200);assert.equal(paths.length,0,'No data access without account ownership');
 delete globalThis.__activityRoute;
 console.log('Activity route: tenant-bound purchased contacts, explicit field projection, DNC states, missing/malformed results, bounded arrays, pagination, retained views, search and authentication passed. Synthetic fixtures only.');

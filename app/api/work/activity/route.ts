@@ -3,6 +3,7 @@ import {z} from 'zod';
 import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
 import type {SmsRouteReview} from '@/components/sms-route-review';
+import {recordedDealProgress,type DealProgressRows} from '@/lib/deal-card-summary';
 export const dynamic='force-dynamic';
 const pageSize=6;
 type Property={id:string;state:string;result:{property:{propertyId:string;address:string};financialCheck:{status:string;reason:string};preliminarySellerCeilingCents:number|null};completed_at:string};
@@ -48,8 +49,9 @@ export async function GET(req:Request){
   const visible=properties.slice(0,pageSize);
   const ids=visible.map(p=>p.id).join(',');
   const propertyIds=visible.map(p=>p.result.property.propertyId).filter(id=>/^prop_[a-zA-Z0-9]+$/.test(id)).join(',');
-  const [deals,contactRows,controls,conversations,callbacks,sellerRows,buyerCalls]=ids?await Promise.all([
-   db<{id:string;screening_id:string}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=in.(${ids})&select=id,screening_id,terms,stage,updated_at`),
+  const [dealRows,contactRows,controls,conversations,callbacks,sellerRows,buyerCalls]=ids?await Promise.all([
+   // Each embedded confirmation is bounded per deal, not across the whole page.
+   db<(DealProgressRows&{screening_id:string})[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=in.(${ids})&select=id,screening_id,terms,stage,updated_at,deposit:icash_buyer_deposit_receipts(account_id,deal_id),scheduled:icash_closing_updates(account_id,deal_id,effective_date),payment:icash_closing_updates(account_id,deal_id)&deposit.account_id=eq.${accountId}&deposit.limit=1&scheduled.account_id=eq.${accountId}&scheduled.kind=eq.closing_scheduled&scheduled.order=created_at.desc,id.desc&scheduled.limit=1&payment.account_id=eq.${accountId}&payment.kind=eq.funds_disbursed&payment.limit=1`),
    db<ContactRow[]>(`icash_owner_contacts?account_id=eq.${accountId}&screening_id=in.(${ids})&select=account_id,screening_id,created_at,lookup_at:result->>fetchedAt,people:result->contacts&limit=${pageSize}`),
    propertyIds?db<unknown[]>(`icash_property_controls?account_id=eq.${accountId}&property_id=in.(${propertyIds})&manual=eq.true&select=property_id`):Promise.resolve([]),
    db<unknown[]>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=in.(${ids})&state=eq.complete&select=id,screening_id,party,completed_at,summary:result->>summary,durationSeconds:result->durationSeconds,nextAction:result->>nextAction,interested:result->interested,optedOut:result->optedOut,humanRequested:result->humanRequested&order=completed_at.desc,id.desc&limit=24`),
@@ -57,6 +59,7 @@ export async function GET(req:Request){
    db<{account_id:string;screening_id:string;lead:{name:string;phone:string}|null}[]>(`icash_seller_matches?account_id=eq.${accountId}&screening_id=in.(${ids})&select=account_id,screening_id,lead:icash_seller_intakes(name,phone)&limit=${pageSize}`),
    db<unknown[]>('rpc/icash_buyer_reception_calls','POST',{p_account:accountId,p_screenings:visible.map(p=>p.id)})
   ]):[[],[],[],[],[],[],[]];
+  const deals=dealRows.map(({deposit,scheduled,payment,...deal})=>({...deal,progress:recordedDealProgress({...deal,deposit,scheduled,payment},accountId)}));
   conversations.push(...buyerCalls);
   const contacts=purchasedContacts(contactRows,accountId,visible);
   // Self-reported seller identity is displayed separately from provider owner matches.

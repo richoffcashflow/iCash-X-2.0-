@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
+import {notifyWorkUpdated,startWorkPolling} from '@/lib/work-refresh';
 import {DateTimeInput} from './date-time-input';
 import {analysisMoney} from '@/lib/property-analysis-view';
 import {buyerDepositMethods,buyerDepositMethodLabels,sellerViewingSlots,viewingSlotLabel} from '@/lib/buyer-purchase-terms';
@@ -17,15 +18,20 @@ export function BuyerDealCoordination({dealId}:{dealId:string}){
  const [statement,setStatement]=useState(''),[timezone,setTimezone]=useState<keyof typeof zones>('America/Chicago'),[windows,setWindows]=useState([{start:'',end:''}]),[sellerConfirmed,setSellerConfirmed]=useState(false);
  const [method,setMethod]=useState<typeof buyerDepositMethods[number]>('wire'),[reference,setReference]=useState(''),[cleared,setCleared]=useState(false);
  const attempts=useRef<{body:string;key:string}|null>(null);
- useEffect(()=>{if(!open)return;const controller=new AbortController();setError('');void fetch(`/api/work/buyer-coordination?dealId=${dealId}`,{cache:'no-store',signal:controller.signal}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error);setData(d);}).catch(e=>{if(!controller.signal.aborted)setError(e instanceof Error?e.message:'Could not load coordination.');});return()=>controller.abort();},[dealId,refresh,open]);
+ useEffect(()=>{if(!open)return;return startWorkPolling<Data>({
+  load:async signal=>{const r=await fetch(`/api/work/buyer-coordination?dealId=${dealId}`,{cache:'no-store',signal});const d=await r.json();if(!r.ok)throw Error(d.error||'Could not refresh coordination.');return d;},
+  onData:d=>{setData(d);setError('');},
+  onError:e=>setError(`${e instanceof Error?e.message:'Could not refresh coordination.'} The last loaded times and deposit are still shown.`)
+ });},[dealId,refresh,open]);
+ useEffect(()=>{setCleared(false);setReference('');},[data?.assignment?.id]);
  async function save(body:Record<string,unknown>){
   if(busy)return;setBusy(true);setError('');setMessage('');
   const serialized=JSON.stringify(body);if(attempts.current?.body!==serialized)attempts.current={body:serialized,key:crypto.randomUUID()};
-  try{const r=await fetch('/api/work/buyer-coordination',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,dealId,key:attempts.current.key})});const out=await r.json();if(!r.ok)throw Error(out.error);setMessage(body.action==='deposit'?'Cleared deposit recorded. Property reserved; buyer marketing is held.':'Seller availability saved. Specific buyer visits still need confirmation.');setRefresh(v=>v+1);}
+  try{const r=await fetch('/api/work/buyer-coordination',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,dealId,key:attempts.current.key})});const out=await r.json();if(!r.ok)throw Error(out.error);setMessage(body.action==='deposit'?'Cleared deposit recorded. Property reserved; buyer marketing is held.':'Seller availability saved. Specific buyer visits still need confirmation.');notifyWorkUpdated();}
   catch(e){setError(e instanceof Error?e.message:'Could not save.');}finally{setBusy(false);}
  }
  const slots=sellerViewingSlots(data?.availability?.slots),deposit=data?.assignment?.depositCents;
- return <details className="deal-contract-tools" onToggle={e=>setOpen(e.currentTarget.open)}><summary>Viewing times & buyer deposit</summary>
+ return <details className="deal-contract-tools" onToggle={e=>{if(e.target===e.currentTarget)setOpen(e.currentTarget.open);}}><summary>Viewing times & buyer deposit</summary>
   {error&&<p role="alert">{error}</p>}{message&&<p role="status">{message}</p>}{!data&&!error&&<p>Loading…</p>}
   {data&&<><button type="button" disabled={busy} onClick={()=>setRefresh(v=>v+1)}>Refresh times & deposit</button><h4>Seller viewing availability</h4>{data.availability?<><blockquote>{data.availability.quote}</blockquote><small>{safeLocalTime(data.availability.stated_at,data.availability.timezone)}</small>{slots.length?<ul>{slots.map(s=><li key={s.startsAt}>{viewingSlotLabel(s)}</li>)}</ul>:<p>{data.availability.state==='withdrawn'?'The previous viewing times were withdrawn.':'Exact future times need confirmation with the seller.'}</p>}</>:<p>No seller times are saved yet. Ask for two or three dates, start/end times and the timezone.</p>}
    <p>Viewing is optional for the buyer. Seller windows are offered as options; a specific visit still needs confirmation.</p>
