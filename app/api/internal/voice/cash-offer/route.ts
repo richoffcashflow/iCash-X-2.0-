@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 import {db} from '@/lib/stripe-test';
 import {bindSellerAgreementCall} from '@/lib/seller-agreement-binding';
-import {automaticCallOffer,blockedOffer} from '@/lib/automatic-call-offer';
+import {automaticCallOffer,blockedOffer,buyerAgreementHandoff} from '@/lib/automatic-call-offer';
 import {sellerListingEvidence} from '@/lib/seller-listing';
 import {sellerPayoffEvidence} from '@/lib/seller-payoff';
 import {callOfferEvidence,callPayoffEvidence,callSellerStatement} from '@/lib/call-offer-evidence';
@@ -33,6 +33,7 @@ export async function POST(request:Request){
   if(process.env.DOCUSEAL_MODE!=='live')return NextResponse.json({sent:false,status:'unavailable',instruction:'Live agreement delivery is not ready.'},{status:409,headers});
   if(agreement.action==='confirm_and_send'){
    const quote=await automaticCallOffer(token,{action:'get_offer',conversationId:agreement.conversationId},d);
+   if('party' in quote&&quote.party==='buyer')return NextResponse.json(buyerAgreementHandoff(),{headers});
    if(quote.quoteAllowed&&'contractAllowed' in quote&&quote.contractAllowed===false)return NextResponse.json({...quote,sent:false,reason:'payoff_review_required',instruction:quote.instruction},{headers});
    if(!quote.quoteAllowed||!('party' in quote)||quote.party!=='seller'||!('status' in quote)||!['verbally_accepted','pending_agreement'].includes(quote.status)||quote.priceCents!==agreement.confirmation.agreedPriceCents)return NextResponse.json({...blockedOffer('confirmed_price_required','Confirm and save the exact current offer before preparing the agreement.'),sent:false},{status:409,headers});
    // Preserve the caller's changed-facts flag; the agreement validator must

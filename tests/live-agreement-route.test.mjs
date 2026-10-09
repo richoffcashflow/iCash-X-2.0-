@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {liveToolHistory} from '../lib/live-tool-history.ts';
-import {automaticCallOffer,blockedOffer} from '../lib/automatic-call-offer.ts';
+import {automaticCallOffer,blockedOffer,buyerAgreementHandoff} from '../lib/automatic-call-offer.ts';
 import {callOfferEvidence,callPayoffEvidence,callSellerStatement} from '../lib/call-offer-evidence.ts';
 import {sellerListingEvidence} from '../lib/seller-listing.ts';
 import {sellerPayoffEvidence} from '../lib/seller-payoff.ts';
@@ -27,7 +27,7 @@ const db=async(path,method,b)=>{
 const route=await loadService('app/api/internal/voice/cash-offer/route.ts',{
  liveToolHistory,NextResponse:{json:Response.json},process:{env:{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',DOCUSEAL_MODE:'live'}},db,
  bindSellerAgreementCall:async()=>{},createRecordedReceptionProviders:()=>({conversation:async()=>assert.fail('The live tool history must work even when a provider GET is stale')}),
- callOfferEvidence,callPayoffEvidence,callSellerStatement,sellerPayoffEvidence,sellerListingEvidence,automaticCallOffer,blockedOffer,sellerAgreementInput,object,sellerAgreementFailure,sellerAgreementAction,
+ callOfferEvidence,callPayoffEvidence,callSellerStatement,sellerPayoffEvidence,sellerListingEvidence,automaticCallOffer,blockedOffer,buyerAgreementHandoff,sellerAgreementInput,object,sellerAgreementFailure,sellerAgreementAction,
  sendForSignatures:async i=>{sends++;assert.equal(i.signers[0].phone,scope.phone);assert.equal(terms.priceCents,15227050);assert.equal(terms.earnestCents,null);envelopes=[{id:'envelope',state:'awaiting_counterparty',test_mode:false,terms,recipients:[i.signers[0],{name:'Fixture buyer'}]}];return {id:'envelope',testMode:false};},
  textPendingContract:async(account,id,phone)=>{texts++;assert.deepEqual([account,id,phone],['account','envelope',scope.phone]);return {sent:true,status:'accepted'};},refreshSigning:async()=>({status:'awaiting_counterparty'}),
 });
@@ -41,4 +41,7 @@ entries.push({role:'agent',message:'The price is $152,270.50, closing '+confirma
 assert.equal((await post({action:'confirm_and_send',confirmation})).sent,true);
 assert.equal((await post({action:'confirm_and_send',confirmation})).sent,true);
 assert.equal(sends,1,'retries reuse the existing signing request');assert.equal(texts,2,'SMS service receives the same idempotent envelope key');
+context.party='buyer';context.buyer={address,askingPriceCents:16227050,depositCents:200000,closingDate:confirmation.closingDate};
+const buyerVersion=context.offerVersion,buyerResult=await post({action:'confirm_and_send',confirmation});
+assert.equal(buyerResult.sent,false);assert.equal(buyerResult.reason,'buyer_assignment_team_required');assert.equal(context.offerVersion,buyerVersion);assert.equal(sends,1);assert.equal(texts,2,'buyer request cannot send a seller agreement or claim delivery');
 console.log('PASS real route → saved acceptance → prepared no-EMD terms → one signing request → exact-recipient text, with stale provider GET and no live contacts.');
