@@ -9,7 +9,7 @@ type Props={request:AssistantRequest|null;openRequest?:number;stale:boolean;onAc
 const suggestions=['What happened today?','What needs me?','What is my bot doing?'];
 export function WorkspaceAssistant({request,openRequest=0,stale,onAction}:Props){
  const [open,setOpen]=useState(false),[question,setQuestion]=useState(''),[items,setItems]=useState<Reply[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[loading,setLoading]=useState(false),[context,setContext]=useState<AssistantRequest|null>(null),[actionBusy,setActionBusy]=useState(false);
- const inFlight=useRef(false),loaded=useRef(false),alive=useRef(true),handled=useRef<number|null>(null),input=useRef<HTMLInputElement>(null),end=useRef<HTMLDivElement>(null),controller=useRef<AbortController|null>(null);
+ const inFlight=useRef(false),loaded=useRef(false),alive=useRef(true),handled=useRef<number|null>(null),end=useRef<HTMLDivElement>(null),controller=useRef<AbortController|null>(null);
  const pending=useRef<{requestId:string;question:string;screeningId?:string}|null>(null);
  useEffect(()=>{alive.current=true;const selected=new URLSearchParams(window.location.search).get('assistant');if(selected)setOpen(true);return()=>{alive.current=false;controller.current?.abort();};},[]);
  useEffect(()=>{if(openRequest)setOpen(true);},[openRequest]);
@@ -34,8 +34,15 @@ export function WorkspaceAssistant({request,openRequest=0,stale,onAction}:Props)
  }
  useEffect(()=>{if(!request||handled.current===request.nonce)return;handled.current=request.nonce;setContext(request);setOpen(true);setQuestion('Explain this offer');if(!inFlight.current)void ask('Explain this offer',request);},[request]);
  async function act(action:AssistantAction){if(actionBusy||stale)return;setActionBusy(true);setError('');try{await onAction(action);if(['property','attention','funding'].includes(action.kind))setOpen(false);}catch(e){setError(e instanceof Error?e.message:'Could not complete that action.');}finally{setActionBusy(false);}}
- if(!open)return null;
- return <FundingDialog title="Ask your bot" onClose={()=>setOpen(false)}><section id="ask-bot" className="workspace-assistant is-open" aria-label="Ask your bot">
+ const propertyContext=context&&<div className="assistant-property-context"><span>{context.address}</span><button type="button" aria-label="Clear property context" onClick={()=>setContext(null)}><X size={14}/></button></div>;
+ const composer=(dock:boolean)=><form className="assistant-composer" data-credit-action onSubmit={event=>{event.preventDefault();void ask();}}>
+  {dock?<button type="button" className="assistant-toggle" aria-label="Open bot conversation" aria-haspopup="dialog" aria-expanded={open} onClick={()=>setOpen(true)}><MessageCircle size={20}/></button>:<span className="assistant-toggle" aria-hidden="true"><MessageCircle size={20}/></span>}
+  <label className="sr-only" htmlFor={dock?'ask-bot-dock-question':'ask-bot-question'}>Ask your bot</label><input id={dock?'ask-bot-dock-question':'ask-bot-question'} data-credit-action value={question} maxLength={1500} placeholder="Ask your bot…" autoComplete="off" enterKeyHint="send" disabled={stale} onChange={event=>setQuestion(event.target.value)}/>
+  <button type="submit" data-credit-action className="assistant-send" aria-label="Send question" disabled={busy||stale||!question.trim()}><ArrowUp size={19}/></button>
+ </form>;
+ return <>
+ <section className="workspace-assistant assistant-dock" aria-label="Message your AI bot">{propertyContext}{composer(true)}</section>
+ {open&&<FundingDialog title="Ask your bot" onClose={()=>setOpen(false)}><section id="ask-bot" className="workspace-assistant is-open" aria-label="Ask your bot">
   <div className="assistant-panel" id="assistant-replies">
    <div className="assistant-history" role="log" aria-label="Bot replies" aria-live="polite" aria-relevant="additions">
     {!items.length&&!loading&&<div className="assistant-welcome"><strong>What would you like to know?</strong><p>Ask about a lead or your next step. Answers use credits; VIP gets 20% off.</p></div>}
@@ -47,11 +54,7 @@ export function WorkspaceAssistant({request,openRequest=0,stale,onAction}:Props)
    <div className="assistant-suggestions" data-credit-action>{suggestions.map(value=><button key={value} type="button" disabled={busy||stale} onClick={()=>{setContext(null);void ask(value,null);}}>{value}</button>)}</div>
    {error&&<p className="assistant-error" role="alert">{error} <button type="button" disabled={loading} onClick={()=>void history()}>Check replies</button></p>}
   </div>
-  {context&&open&&<div className="assistant-property-context"><span>{context.address}</span><button type="button" aria-label="Clear property context" onClick={()=>setContext(null)}><X size={14}/></button></div>}
-  <form className="assistant-composer" data-credit-action onSubmit={event=>{event.preventDefault();void ask();}}>
-   <span className="assistant-toggle" aria-hidden="true"><MessageCircle size={20}/></span>
-   <label className="sr-only" htmlFor="ask-bot-question">Ask your bot</label><input id="ask-bot-question" ref={input} value={question} maxLength={1500} placeholder="Ask your bot…" autoComplete="off" disabled={stale} onFocus={()=>setOpen(true)} onChange={event=>setQuestion(event.target.value)}/>
-   <button type="submit" className="assistant-send" aria-label="Send question" disabled={busy||stale||!question.trim()}><ArrowUp size={19}/></button>
-  </form>
- </section></FundingDialog>;
+  {propertyContext}{composer(false)}
+ </section></FundingDialog>}
+ </>;
 }
