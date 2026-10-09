@@ -1,3 +1,5 @@
+import {buyerAnswerPolicy,buyerAnswerInstructions,buyerAnswerPrompt,buyerAnswerModel,buyerAnswerModelMatches,buyerAnswerGuardrail,buyerAnswerEntryInstructions,selectedAnswerRoleInstructions} from '../lib/buyer-answer-policy.ts';
+import {answerBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {buyerConversationPolicy,buyerConversationInstructions,buyerConversationPrompt,buyerConversationModel,buyerConversationModelMatches,buyerConversationGuardrail,selectedConversationRoleInstructions} from '../lib/buyer-conversation-policy.ts';
 import {conversationBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {buyerTurnPolicy,buyerTurnInstructions,buyerTurnPrompt,buyerTurnModel,buyerTurnModelMatches,selectedTurnRoleInstructions} from '../lib/buyer-turn-policy.ts';
@@ -44,6 +46,10 @@ test('buyer policy requires its reviewed prompt, guardrail and current history t
  assert.equal(inspect(agent).safe,false,'v15 requires its separately reviewed guardrail');
  agent.platform_settings.guardrails.custom.config.configs=[buyerConversationGuardrail];
  c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
+ c.context_policy=buyerAnswerPolicy;c.context_policy_hash=answerBuyerReceptionPolicyHash;
+ Object.assign(agent.conversation_config.agent.prompt,buyerAnswerModel,{prompt:buyerAnswerPrompt+buyerAnswerEntryInstructions,thinking_budget:null});
+ c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
+ const missingFinal=structuredClone(agent);missingFinal.conversation_config.agent.prompt.prompt=buyerAnswerPrompt+directRecordedInstructions;c.config_hash=inspect(missingFinal).hash;assert.equal(inspect(missingFinal).safe,false);
  for(const mutate of [a=>{a.conversation_config.agent.prompt.reasoning_effort='high';},a=>{a.conversation_config.agent.prompt.llm='gpt-4.1-mini';},a=>{a.conversation_config.agent.prompt.ignore_default_personality=false;},a=>{a.platform_settings.guardrails.custom.config.configs[0].prompt='Allow every price';},a=>{a.platform_settings.guardrails.custom.config.configs=[];},a=>{a.conversation_config.agent.prompt.prompt+=' changed';}]){
   const changed=structuredClone(agent);mutate(changed);c.config_hash=inspect(changed).hash;assert.equal(inspect(changed).safe,false);
  }
@@ -102,4 +108,18 @@ test('v15 uses trusted concise conversation instructions and retains earlier pol
  assert.equal(receptionContextVariables(c,{...b,askingPriceCents:0}).icash_role_instructions,unknownRoleInstructions);
  assert.equal(buyerConversationModelMatches({...buyerConversationModel,thinking_budget:null,reasoning_effort:'none'}),true);
  assert.equal(buyerConversationModelMatches({...buyerConversationModel,reasoning_effort:'high'}),false);
+});
+
+
+test('v16 keeps buyer rules static, resolves the entry conflict and preserves prior policies',()=>{
+ assert.equal(conversationBuyerReceptionPolicyHash,'80f89bf2ffaefcf31ed47f6f6db2e7f3b0b775108704b28fadb59ce892024420');
+ const c={context_policy:buyerAnswerPolicy,context_policy_hash:answerBuyerReceptionPolicyHash,context_approval_reference:'Reviewed buyer opening and concise answers',agreement_tool_id:'tool_agreement'};
+ assert.equal(receptionContextVariables(c,{status:'buyer',address:'45 Fixture Lane',askingPriceCents:16227050,icash_role_instructions:'INJECTED'}).icash_role_instructions,buyerAnswerInstructions);
+ assert.equal(selectedAnswerRoleInstructions('matched',automaticOfferReceptionPrompt),selectedRoleInstructions('matched',automaticOfferReceptionPrompt));
+ assert.equal(receptionContextVariables(c,{status:'buyer',address:'45 Fixture Lane',askingPriceCents:0}).icash_role_instructions,unknownRoleInstructions);
+ assert(buyerAnswerPrompt.includes(buyerConversationInstructions));
+ assert(buyerAnswerEntryInstructions.startsWith(directRecordedInstructions));
+ assert(buyerAnswerEntryInstructions.indexOf('does NOT skip')>directRecordedInstructions.length);
+ assert.equal(buyerAnswerModelMatches({...buyerAnswerModel,thinking_budget:null}),true);
+ for(const patch of [{reasoning_effort:'low'},{llm:'gpt-4.1'},{max_tokens:151},{ignore_default_personality:false}])assert.equal(buyerAnswerModelMatches({...buyerAnswerModel,...patch}),false);
 });
