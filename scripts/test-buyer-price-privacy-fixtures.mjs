@@ -3,6 +3,10 @@ export async function testBuyerPricePrivacy({q,one,rpc,a,d,t}){
  const p=await rpc('icash_buyer_package_data',[a,d]);
  assert.equal(p.askingPriceCents,16227050);assert.equal(p.depositCents,200000);assert.equal(p.privacyPolicy,'buyer_price_only_v1');
  for(const field of ['purchasePriceCents','assignmentFeeCents','depositPolicy'])assert(!Object.hasOwn(p,field),field);
+ const volunteered='Who is the title company? I have closed assignments before with Fixture Local Title, Pat, pat@example.invalid.';
+ assert.equal(await rpc('icash_buyer_title_quote',[[{role:'user',message:volunteered}]]),volunteered);
+ assert.equal(await rpc('icash_buyer_title_quote',[[{role:'agent',message:'Have you closed an assignment deal with a wholesaler before?'},{role:'user',message:'Yes, with First American.'}]]),'Yes, with First American.');
+ assert.equal(await rpc('icash_buyer_title_quote',[[{role:'user',message:'Can I use my own title company?'}]]),null);
  for(const question of ['What is the assignment fee?','How much did you pay?','How much did you get it under contract for?','What is your spread?','Is the seller getting $152,270.50?','Is the $2,000 deposit twenty percent of your spread?']){
   const answer=await rpc('icash_buyer_factual_text',[a,t,question]);
   assert.match(answer,/Internal acquisition pricing and margins are private/);assert.match(answer,/\$162,270\.50/);

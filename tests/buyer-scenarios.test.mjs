@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {calculateAutomaticCallOffer} from '../lib/automatic-call-offer.ts';
+import {automaticCallOffer,calculateAutomaticCallOffer,currentCallUnavailableOffer} from '../lib/automatic-call-offer.ts';
 import {renderBuyerPackage} from '../lib/buyer-disposition.ts';
 import {buyerReceptionVariables} from '../lib/buyer-reception-context.ts';
 const now=Date.parse('2026-10-09T19:00:00Z');
@@ -25,7 +25,31 @@ test('voice receives supplied photo counts and research estimates, never raw att
 });
 test('unconfirmed title and buyer exceptions have explicit review boundaries',()=>{
  const r=calculateAutomaticCallOffer({party:'buyer',buyer:{...buyer,titleSelectionStatus:'needs_confirmation'}},{},now);
+ assert.equal(r.spokenTitleStatus,'A title contact is recorded, but it still needs confirmation.');
  assert.match(r.instruction,/title contact is recorded but needs confirmation/);assert.match(r.instruction,/not an accepted change/);assert.match(r.instruction,/forfeited under every circumstance/);assert.match(r.instruction,/cannot text\/email a package/);
+});
+test('blocked availability cannot fall through to generic viewing coordination',()=>{
+ for(const patch of [{reserved:true},{reserved:true,askingPriceCents:null},{closingDate:'2026-10-01'},{askingPriceCents:null}]){
+  const r=calculateAutomaticCallOffer({party:'buyer',buyer:{...buyer,...patch}},{},now);
+  assert.equal(r.quoteAllowed,false);assert.equal(r.contractAllowed,false);assert.equal(r.party,'buyer');
+  assert.equal(r.viewingAllowed,false);assert.equal(r.viewingFollowupRequired,false);assert.equal(r.callbackScheduled,false);
+  assert.equal(r.spokenViewingFollowup,undefined);assert.equal(r.depositCents,undefined);
+  assert.match(r.instruction,/Do not offer seller-availability follow-up/);
+ }
+});
+test('missing terms prevent payment authorization without adopting buyer guesses',()=>{
+ for(const patch of [{depositCents:null},{closingDate:null}]){
+  const r=calculateAutomaticCallOffer({party:'buyer',buyer:{...buyer,...patch}},{},now);
+  assert.equal(r.quoteAllowed,true);assert.equal(r.paymentAuthorized,false);assert.equal(r.buyerTermsComplete,false);assert.equal(r.callbackScheduled,false);
+ }
+ assert.equal(calculateAutomaticCallOffer({party:'buyer',buyer},{},now).buyerTermsComplete,true);
+ assert.equal(calculateAutomaticCallOffer({party:'buyer',buyer},{},now).paymentAuthorized,false);
+});
+test('provider lookup-failure fixture matches the actual no-context result',async()=>{
+ let reads=0,binds=0;
+ const r=await automaticCallOffer('a'.repeat(64),{action:'get_offer',conversationId:'conv_fixture'},{db:async()=>{reads++;return null;},bind:async()=>{binds++;},verifyInput:async()=>false});
+ assert.equal(reads,2);assert.equal(binds,1);assert.deepEqual(r,currentCallUnavailableOffer());
+ assert.equal(r.callbackScheduled,false);assert.match(r.instruction,/Do not agree when the caller assumes someone will reach out/);
 });
 test('buyer package, call tool and model context omit acquisition cost and spread',()=>{
  const quote=calculateAutomaticCallOffer({party:'buyer',buyer},{},now);

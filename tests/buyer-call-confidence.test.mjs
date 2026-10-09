@@ -18,7 +18,7 @@ test('unbound, expired or denied calls cannot skip canonical identity or authori
 test('buyer speech stays concise with complete terms and a conditional title preference',()=>{
  const result=calculateAutomaticCallOffer({party:'buyer',buyer},{},Date.parse('2026-10-09T19:00:00Z'));
  assert(result.spokenOffer.split(/\s+/).length<80);assert.match(result.spokenOffer,/fifty cents/);assert.match(result.spokenOffer,/closing costs separately/);assert.match(result.spokenOffer,/November 7, 2026/);assert.match(result.spokenOffer,/non-refundable deposit is two thousand dollars/);
- assert.equal(result.titleSelectionStatus,'not_selected');assert.match(result.instruction,/closed an assignment deal with a wholesaler/);assert.match(result.instruction,/one question at a time/);assert.match(result.instruction,/not a selected or verified closer/);assert.match(result.instruction,/one or two short sentences/);
+ assert.equal(result.titleSelectionStatus,'not_selected');assert.match(result.instruction,/closed an assignment deal with a wholesaler/);assert.match(result.instruction,/one question per turn/);assert.match(result.instruction,/not a selected or verified closer/);assert.match(result.instruction,/one or two short sentences/);
  const selected=calculateAutomaticCallOffer({party:'buyer',buyer:{...buyer,titleSelectionStatus:'selected'}},{},0);assert(!selected.instruction.includes('No title company has been selected'));assert.match(selected.instruction,/Do not say title is undecided/);
  const unknown=calculateAutomaticCallOffer({party:'buyer',buyer:{...buyer,titleSelectionStatus:undefined}},{},0);assert(!unknown.instruction.includes('No title company has been selected'));
 });

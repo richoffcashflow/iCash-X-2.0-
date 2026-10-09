@@ -19,3 +19,8 @@ for(const kind of ['buyer_package','title_packet'])assert.match(renderDealDocume
 const noEmdPurchase=renderDealDocument('purchase',{earnestCents:10000});
 assert(!/earnest|\bEMD\b/i.test(noEmdPurchase),'seller purchase draft omits EMD even with a legacy stored value');
 assert(renderDealDocument('assignment',{assignmentDepositCents:10000}).includes('100.00'),'buyer assignment deposit remains');
+
+const privateBuyerDraft=renderDealDocument('buyer_package',{priceCents:15227050,assignmentFeeCents:1000000,assignmentDepositCents:200000,dealNotes:'Internal acquisition $152,270.50, spread $10,000; do not distribute.'});
+assert.match(privateBuyerDraft,/\$162,270\.50/);assert.match(privateBuyerDraft,/\$2,000\.00/);
+assert.doesNotMatch(privateBuyerDraft,/152,270|10,000|Proposed underlying price|Assignment fee:|Internal acquisition|signed purchase agreement/);
+assert.match(renderDealDocument('title_packet',{dealNotes:'Internal review only'}),/Internal review only/);
