@@ -34,7 +34,7 @@ try{
   }
   return value;
  }));
- const turns=Array.isArray(conversation.transcript)?conversation.transcript.slice(0,60).map(t=>({role:t.role,message:t.message,time:t.time_in_call_secs,interrupted:t.interrupted,toolCalls:t.tool_calls,toolResults:t.tool_results,feedback:t.feedback,metrics:t.conversation_turn_metrics,source:t.source_medium,originalMessage:t.original_message,agentMetadata:t.agent_metadata,keys:Object.keys(t)})):[];
+ const turns=Array.isArray(conversation.transcript)?conversation.transcript.slice(0,60).map(t=>({role:t.role,message:t.message,time:t.time_in_call_secs,interrupted:t.interrupted,toolCalls:t.tool_calls,toolResults:t.tool_results,feedback:t.feedback,metrics:t.conversation_turn_metrics,triggeredGuardrails:t.triggered_guardrails,llmUsage:t.llm_usage,source:t.source_medium,originalMessage:t.original_message,agentMetadata:t.agent_metadata,keys:Object.keys(t)})):[];
  const metadata=conversation.metadata??{};
  const result=redact({accountId,sessionId,conversationId,callSid,status:conversation.status,fullBinding:receptionConversationMatches(row,conversation),initiation:conversation.conversation_initiation_client_data,
   metadata,conversationKeys:Object.keys(conversation),terminationReason:metadata.termination_reason,error:metadata.error,warnings:metadata.warnings,guardrails:metadata.guardrails,analysis:conversation.analysis,turns,
