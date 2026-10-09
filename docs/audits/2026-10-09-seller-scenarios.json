@@ -1,0 +1,3394 @@
+{
+  "commit": "2a48dbf6a02afb6a80068ac528b2e17330b1e9e7",
+  "createdAt": "2026-10-09T21:23:00.849Z",
+  "scope": "Local deterministic functions and isolated PostgreSQL checks. No live calls, messages, signatures, model completions or database changes.",
+  "summary": {
+    "checks": 100,
+    "passed": 83,
+    "gaps": 17,
+    "errors": 0
+  },
+  "results": [
+    {
+      "id": "CONTACT-1",
+      "stage": "Contact permission",
+      "scenario": "STOP",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CONTACT-2",
+      "stage": "Contact permission",
+      "scenario": "Please stop.",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": true,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CONTACT-3",
+      "stage": "Contact permission",
+      "scenario": "Stop please.",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": true,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CONTACT-4",
+      "stage": "Contact permission",
+      "scenario": "Dont text me again.",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CONTACT-5",
+      "stage": "Contact permission",
+      "scenario": "Please remove me.",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CONTACT-6",
+      "stage": "Contact permission",
+      "scenario": "Do not contact me.",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CONTACT-7",
+      "stage": "Contact permission",
+      "scenario": "Leave me alone.",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": true,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CONTACT-8",
+      "stage": "Contact permission",
+      "scenario": "Unsubscribe",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CALLBACK-TEXT-1",
+      "stage": "Callback",
+      "scenario": "Not now, call me tomorrow.",
+      "expectedAction": "Recognize a callback separately from refusal; ask only for missing scheduling details.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": true,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/text-ai-policy.ts:validateTextAnalysis"
+    },
+    {
+      "id": "CALLBACK-TEXT-2",
+      "stage": "Callback",
+      "scenario": "Call me tomorrow.",
+      "expectedAction": "Recognize a callback separately from refusal; ask only for missing scheduling details.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/text-ai-policy.ts:validateTextAnalysis"
+    },
+    {
+      "id": "CALLBACK-TEXT-3",
+      "stage": "Callback",
+      "scenario": "I missed your call.",
+      "expectedAction": "Recognize a callback separately from refusal; ask only for missing scheduling details.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/text-ai-policy.ts:validateTextAnalysis"
+    },
+    {
+      "id": "CALLBACK-TEXT-4",
+      "stage": "Callback",
+      "scenario": "Wrong number.",
+      "expectedAction": "Recognize a callback separately from refusal; ask only for missing scheduling details.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/text-ai-policy.ts:validateTextAnalysis"
+    },
+    {
+      "id": "IDENTITY-1",
+      "stage": "First conversation",
+      "scenario": "Are you a real person?",
+      "expectedAction": "Answer honestly and continue the current context.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "reply_identity",
+      "actual": "reply_identity",
+      "evidence": "Executed local check",
+      "source": "lib/text-ai-policy.ts:validateTextAnalysis"
+    },
+    {
+      "id": "HUMAN-1",
+      "stage": "Human handoff",
+      "scenario": "I want to talk to a human.",
+      "expectedAction": "Pause automation and request a person.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/text-ai-policy.ts:validateTextAnalysis"
+    },
+    {
+      "id": "CONTACT-9",
+      "stage": "Contact permission",
+      "scenario": "Mixed message: STOP, call me tomorrow.",
+      "expectedAction": "Hold conflicting stop/callback instructions for clarification; do not queue a callback.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": false,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/text-ai-policy.ts:validateTextAnalysis"
+    },
+    {
+      "id": "ACCEPT-1",
+      "stage": "Offer acceptance",
+      "scenario": "Yes.",
+      "expectedAction": "Accept only an unqualified yes to the exact currently quoted price.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "ACCEPT-2",
+      "stage": "Offer acceptance",
+      "scenario": "No.",
+      "expectedAction": "Accept only an unqualified yes to the exact currently quoted price.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "ACCEPT-3",
+      "stage": "Offer acceptance",
+      "scenario": "Yes, but I need $110,000.",
+      "expectedAction": "Accept only an unqualified yes to the exact currently quoted price.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "ACCEPT-4",
+      "stage": "Offer acceptance",
+      "scenario": "Yes if you close tomorrow.",
+      "expectedAction": "Accept only an unqualified yes to the exact currently quoted price.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "ACCEPT-5",
+      "stage": "Offer acceptance",
+      "scenario": "That works.",
+      "expectedAction": "Accept only an unqualified yes to the exact currently quoted price.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "ACCEPT-6",
+      "stage": "Offer acceptance",
+      "scenario": "Sounds good.",
+      "expectedAction": "Accept only an unqualified yes to the exact currently quoted price.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "WITHDRAW-1",
+      "stage": "Offer acceptance",
+      "scenario": "After an earlier yes: I am not ready to sell.",
+      "expectedAction": "Invalidate acceptance and resolve the latest objection before preparing an agreement.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": false,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "WITHDRAW-2",
+      "stage": "Offer acceptance",
+      "scenario": "After an earlier yes: Wait, I need to think.",
+      "expectedAction": "Invalidate acceptance and resolve the latest objection before preparing an agreement.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": false,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "WITHDRAW-3",
+      "stage": "Offer acceptance",
+      "scenario": "After an earlier yes: I never agreed to that.",
+      "expectedAction": "Invalidate acceptance and resolve the latest objection before preparing an agreement.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": false,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "WITHDRAW-4",
+      "stage": "Offer acceptance",
+      "scenario": "After an earlier yes: Actually I need my spouse to agree first.",
+      "expectedAction": "Invalidate acceptance and resolve the latest objection before preparing an agreement.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": false,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "WITHDRAW-5",
+      "stage": "Offer acceptance",
+      "scenario": "After an earlier yes: I changed my mind.",
+      "expectedAction": "Invalidate acceptance and resolve the latest objection before preparing an agreement.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "WITHDRAW-6",
+      "stage": "Offer acceptance",
+      "scenario": "After an earlier yes: Cancel the agreement.",
+      "expectedAction": "Invalidate acceptance and resolve the latest objection before preparing an agreement.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "ACCEPT-7",
+      "stage": "Offer acceptance",
+      "scenario": "Seller accepts a different spoken price",
+      "expectedAction": "Hold until the exact current price is confirmed.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "DEBT-1",
+      "stage": "Mortgage and liens",
+      "scenario": "No.",
+      "expectedAction": "Preserve qualifications and debt disclosures; unknown additional debt must not become zero.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": {
+        "otherDebtCents": 0
+      },
+      "actual": {
+        "otherDebtCents": 0
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-2",
+      "stage": "Mortgage and liens",
+      "scenario": "No, there is a lien.",
+      "expectedAction": "Preserve qualifications and debt disclosures; unknown additional debt must not become zero.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": null,
+      "actual": {
+        "otherDebtCents": 0
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-3",
+      "stage": "Mortgage and liens",
+      "scenario": "No, there are unpaid taxes.",
+      "expectedAction": "Preserve qualifications and debt disclosures; unknown additional debt must not become zero.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": null,
+      "actual": {
+        "otherDebtCents": 0
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-4",
+      "stage": "Mortgage and liens",
+      "scenario": "No other loans, but unpaid taxes remain.",
+      "expectedAction": "Preserve qualifications and debt disclosures; unknown additional debt must not become zero.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": null,
+      "actual": {
+        "otherDebtCents": 0
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-5",
+      "stage": "Mortgage and liens",
+      "scenario": "I owe $5,000 in taxes.",
+      "expectedAction": "Preserve qualifications and debt disclosures; unknown additional debt must not become zero.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": {
+        "otherDebtCents": 500000
+      },
+      "actual": {
+        "otherDebtCents": 500000
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-6",
+      "stage": "Mortgage and liens",
+      "scenario": "Not sure.",
+      "expectedAction": "Preserve qualifications and debt disclosures; unknown additional debt must not become zero.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-7",
+      "stage": "Mortgage and liens",
+      "scenario": "Between $2,000 and $4,000.",
+      "expectedAction": "Preserve qualifications and debt disclosures; unknown additional debt must not become zero.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-8",
+      "stage": "Mortgage and liens",
+      "scenario": "My mortgage is $20,000.",
+      "expectedAction": "Record only an unambiguous seller-reported balance, or ask for clarification.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": {
+        "mortgageCents": 2000000
+      },
+      "actual": {
+        "mortgageCents": 2000000
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-9",
+      "stage": "Mortgage and liens",
+      "scenario": "The house is paid off.",
+      "expectedAction": "Record only an unambiguous seller-reported balance, or ask for clarification.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": {
+        "mortgageCents": 0
+      },
+      "actual": {
+        "mortgageCents": 0
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-10",
+      "stage": "Mortgage and liens",
+      "scenario": "I do not owe anything.",
+      "expectedAction": "Record only an unambiguous seller-reported balance, or ask for clarification.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": {
+        "mortgageCents": 0
+      },
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-11",
+      "stage": "Mortgage and liens",
+      "scenario": "Not sure, maybe $20,000.",
+      "expectedAction": "Record only an unambiguous seller-reported balance, or ask for clarification.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-12",
+      "stage": "Mortgage and liens",
+      "scenario": "The other owner owes $20,000.",
+      "expectedAction": "Record only an unambiguous seller-reported balance, or ask for clarification.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "SHORTFALL-1",
+      "stage": "Mortgage and liens",
+      "scenario": "Yes.",
+      "expectedAction": "Capture ability to cover the stated $10,000 shortfall without treating conditional funding as available.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": {
+        "coveredShortfallCents": 1000000,
+        "coverageDeclined": false
+      },
+      "actual": {
+        "coveredShortfallCents": 1000000,
+        "coverageDeclined": false
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "SHORTFALL-2",
+      "stage": "Mortgage and liens",
+      "scenario": "No.",
+      "expectedAction": "Capture ability to cover the stated $10,000 shortfall without treating conditional funding as available.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": {
+        "coveredShortfallCents": 0,
+        "coverageDeclined": true
+      },
+      "actual": {
+        "coveredShortfallCents": 0,
+        "coverageDeclined": true
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "SHORTFALL-3",
+      "stage": "Mortgage and liens",
+      "scenario": "Yes if I can borrow it.",
+      "expectedAction": "Capture ability to cover the stated $10,000 shortfall without treating conditional funding as available.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "SHORTFALL-4",
+      "stage": "Mortgage and liens",
+      "scenario": "Debt exceeds price; seller cannot cover difference",
+      "expectedAction": "Keep contract preparation blocked.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffPosition"
+    },
+    {
+      "id": "PRICE-1",
+      "stage": "Pricing",
+      "scenario": "Current value $200,000; repairs $40,000; fee $10,000",
+      "expectedAction": "Use supported numbers and preserve an already agreed lower price.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": 10200000,
+      "actual": 10200000,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-2",
+      "stage": "Pricing",
+      "scenario": "Repairs increase to $60,000",
+      "expectedAction": "Use supported numbers and preserve an already agreed lower price.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": 8800000,
+      "actual": 8800000,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-3",
+      "stage": "Pricing",
+      "scenario": "Seller claims lower repairs than research",
+      "expectedAction": "Use supported numbers and preserve an already agreed lower price.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": 10200000,
+      "actual": 10200000,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-4",
+      "stage": "Pricing",
+      "scenario": "A lower $90,000 price was already accepted",
+      "expectedAction": "Use supported numbers and preserve an already agreed lower price.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": 9000000,
+      "actual": 9000000,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-HOLD-1",
+      "stage": "Pricing",
+      "scenario": "{\"acceptedPriceCents\":11000000}",
+      "expectedAction": "Hold price/contract discussion while this material issue is unresolved.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-HOLD-2",
+      "stage": "Pricing",
+      "scenario": "{\"conditionPending\":true}",
+      "expectedAction": "Hold price/contract discussion while this material issue is unresolved.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-HOLD-3",
+      "stage": "Pricing",
+      "scenario": "{\"factsPending\":true}",
+      "expectedAction": "Hold price/contract discussion while this material issue is unresolved.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-HOLD-4",
+      "stage": "Pricing",
+      "scenario": "{\"agreementRevisionRequired\":true}",
+      "expectedAction": "Hold price/contract discussion while this material issue is unresolved.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-HOLD-5",
+      "stage": "Pricing",
+      "scenario": "{\"listedWithAgent\":true}",
+      "expectedAction": "Hold price/contract discussion while this material issue is unresolved.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "RESEARCH-STALE",
+      "stage": "Property research",
+      "scenario": "STALE",
+      "expectedAction": "Hold until the right property has current, applicable research.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "RESEARCH-ADDRESS",
+      "stage": "Property research",
+      "scenario": "ADDRESS",
+      "expectedAction": "Hold until the right property has current, applicable research.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "RESEARCH-LAND",
+      "stage": "Property research",
+      "scenario": "LAND",
+      "expectedAction": "Hold until the right property has current, applicable research.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "RESEARCH-VALUE",
+      "stage": "Property research",
+      "scenario": "VALUE",
+      "expectedAction": "Hold until the right property has current, applicable research.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-5",
+      "stage": "Pricing",
+      "scenario": "Low equity with unresolved mortgage",
+      "expectedAction": "Discuss a conditional price but block contract preparation.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "LISTING-1",
+      "stage": "Ownership and listing",
+      "scenario": "Yes.",
+      "expectedAction": "Clarify conflicting representation facts before quoting or ending the lead.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/seller-listing.ts:sellerListingEvidence"
+    },
+    {
+      "id": "LISTING-2",
+      "stage": "Ownership and listing",
+      "scenario": "No.",
+      "expectedAction": "Clarify conflicting representation facts before quoting or ending the lead.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/seller-listing.ts:sellerListingEvidence"
+    },
+    {
+      "id": "LISTING-3",
+      "stage": "Ownership and listing",
+      "scenario": "I might list it with a realtor.",
+      "expectedAction": "Clarify conflicting representation facts before quoting or ending the lead.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-listing.ts:sellerListingEvidence"
+    },
+    {
+      "id": "LISTING-4",
+      "stage": "Ownership and listing",
+      "scenario": "It is not listed with an agent.",
+      "expectedAction": "Clarify conflicting representation facts before quoting or ending the lead.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/seller-listing.ts:sellerListingEvidence"
+    },
+    {
+      "id": "LISTING-5",
+      "stage": "Ownership and listing",
+      "scenario": "It is not listed, but I have an agent agreement.",
+      "expectedAction": "Clarify conflicting representation facts before quoting or ending the lead.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": null,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/seller-listing.ts:sellerListingEvidence"
+    },
+    {
+      "id": "CONTRACT-1",
+      "stage": "Purchase contract",
+      "scenario": "{\"soleOwner\":false}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "all_owners_required",
+      "actual": "all_owners_required",
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-2",
+      "stage": "Purchase contract",
+      "scenario": "{\"allDecisionMakersAgree\":false}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "all_owners_required",
+      "actual": "all_owners_required",
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-3",
+      "stage": "Purchase contract",
+      "scenario": "{\"sendTextRequested\":false}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "confirmation_required",
+      "actual": "confirmation_required",
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-4",
+      "stage": "Purchase contract",
+      "scenario": "{\"termsConfirmed\":false}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "confirmation_required",
+      "actual": "confirmation_required",
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-5",
+      "stage": "Purchase contract",
+      "scenario": "{\"materialFactsChanged\":true}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "updated_property_review_required",
+      "actual": "updated_property_review_required",
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-6",
+      "stage": "Purchase contract",
+      "scenario": "{\"agreedPriceCents\":10300000}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "price_review_required",
+      "actual": "price_review_required",
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-7",
+      "stage": "Purchase contract",
+      "scenario": "{\"closingDate\":\"2000-01-01\"}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "closing_date_review_required",
+      "actual": "closing_date_review_required",
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-8",
+      "stage": "Purchase contract",
+      "scenario": "{\"inspectionAccess\":\"no\"}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-9",
+      "stage": "Purchase contract",
+      "scenario": "Seller purchase deposit",
+      "expectedAction": "Do not add buyer-assignment deposit rules to the seller purchase agreement.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "SIGN-1",
+      "stage": "Signatures",
+      "scenario": "{}",
+      "expectedAction": "Advance only on verified signatures and required owners/terms.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "seller_signs_first",
+      "actual": "seller_signs_first",
+      "evidence": "Executed local check",
+      "source": "lib/contract-readiness.ts:contractReadiness"
+    },
+    {
+      "id": "SIGN-2",
+      "stage": "Signatures",
+      "scenario": "{\"sellerSignaturesVerified\":true}",
+      "expectedAction": "Advance only on verified signatures and required owners/terms.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "request_customer_signature",
+      "actual": "request_customer_signature",
+      "evidence": "Executed local check",
+      "source": "lib/contract-readiness.ts:contractReadiness"
+    },
+    {
+      "id": "SIGN-3",
+      "stage": "Signatures",
+      "scenario": "{\"sellerSignaturesVerified\":true,\"customerSignatureVerified\":true}",
+      "expectedAction": "Advance only on verified signatures and required owners/terms.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "fully_signed",
+      "actual": "fully_signed",
+      "evidence": "Executed local check",
+      "source": "lib/contract-readiness.ts:contractReadiness"
+    },
+    {
+      "id": "SIGN-4",
+      "stage": "Signatures",
+      "scenario": "{\"allOwnersConfirmed\":false}",
+      "expectedAction": "Advance only on verified signatures and required owners/terms.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "wait_for_decision_makers",
+      "actual": "wait_for_decision_makers",
+      "evidence": "Executed local check",
+      "source": "lib/contract-readiness.ts:contractReadiness"
+    },
+    {
+      "id": "SIGN-5",
+      "stage": "Signatures",
+      "scenario": "{\"legalDescriptionReviewed\":false}",
+      "expectedAction": "Advance only on verified signatures and required owners/terms.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "review_legal_description",
+      "actual": "review_legal_description",
+      "evidence": "Executed local check",
+      "source": "lib/contract-readiness.ts:contractReadiness"
+    },
+    {
+      "id": "CALLBACK-1",
+      "stage": "Callback",
+      "scenario": "{}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "ready",
+      "actual": "ready",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "CALLBACK-2",
+      "stage": "Callback",
+      "scenario": "{\"timeConfirmed\":false}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "needs_confirmation",
+      "actual": "needs_confirmation",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "CALLBACK-3",
+      "stage": "Callback",
+      "scenario": "{\"humanTakeover\":true}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "paused",
+      "actual": "paused",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "CALLBACK-4",
+      "stage": "Callback",
+      "scenario": "{\"permitted\":false}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "blocked_by_permission",
+      "actual": "blocked_by_permission",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "CALLBACK-5",
+      "stage": "Callback",
+      "scenario": "{\"canceled\":true}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "do_not_dispatch",
+      "actual": "do_not_dispatch",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "CALLBACK-6",
+      "stage": "Callback",
+      "scenario": "{\"exclusiveLease\":false}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "already_claimed",
+      "actual": "already_claimed",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "CALLBACK-7",
+      "stage": "Callback",
+      "scenario": "{\"now\":1791581579817}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "missed_callback_review",
+      "actual": "missed_callback_review",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "CALLBACK-8",
+      "stage": "Callback",
+      "scenario": "{\"contactWindowOpen\":false}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "outside_contact_hours",
+      "actual": "outside_contact_hours",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "POSTSIGN-1",
+      "stage": "After contract",
+      "scenario": "Returning seller already has a signed contract",
+      "expectedAction": "Resume access coordination; do not requalify or quote a new offer.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "seller_viewing_coordination",
+      "actual": "seller_viewing_coordination",
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "VIEW-PUBLIC-1",
+      "stage": "Viewing",
+      "scenario": "Expired slot",
+      "expectedAction": "Do not advertise past availability.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": [],
+      "actual": [],
+      "evidence": "Executed local check",
+      "source": "lib/buyer-purchase-terms.ts:sellerViewingSlots"
+    },
+    {
+      "id": "VIEW-PUBLIC-2",
+      "stage": "Viewing",
+      "scenario": "Slot contains private access code",
+      "expectedAction": "Only publish time fields.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/buyer-purchase-terms.ts:sellerViewingSlots"
+    },
+    {
+      "id": "DEPOSIT-1",
+      "stage": "Buyer handoff",
+      "scenario": "Assignment fee in cents: 1000000",
+      "expectedAction": "Calculate 20% of assignment fee, capped at $5,000, only on the buyer side.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": 200000,
+      "actual": 200000,
+      "evidence": "Executed local check",
+      "source": "lib/buyer-purchase-terms.ts:buyerDepositCents"
+    },
+    {
+      "id": "DEPOSIT-2",
+      "stage": "Buyer handoff",
+      "scenario": "Assignment fee in cents: 5000000",
+      "expectedAction": "Calculate 20% of assignment fee, capped at $5,000, only on the buyer side.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": 500000,
+      "actual": 500000,
+      "evidence": "Executed local check",
+      "source": "lib/buyer-purchase-terms.ts:buyerDepositCents"
+    },
+    {
+      "id": "CLOSE-1",
+      "stage": "Closing",
+      "scenario": "Seller says the sale is closed; title has not confirmed",
+      "expectedAction": "Keep closing incomplete.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "Missing verified condition: closeConfirmedByTitle",
+      "actual": "Missing verified condition: closeConfirmedByTitle",
+      "evidence": "Executed local check",
+      "source": "lib/closing-workflow.ts:nextClosingStage"
+    },
+    {
+      "id": "CLOSE-2",
+      "stage": "Closing",
+      "scenario": "Verified title close confirmation",
+      "expectedAction": "Advance to closed.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "closed",
+      "actual": "closed",
+      "evidence": "Executed local check",
+      "source": "lib/closing-workflow.ts:nextClosingStage"
+    },
+    {
+      "id": "VIEW-1",
+      "stage": "Viewing",
+      "scenario": "One complete viewing window",
+      "expectedAction": "Keep only the latest confirmed seller availability; clarification must recover without publishing an outdated time.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": {
+        "state": "available",
+        "n": 1
+      },
+      "actual": {
+        "state": "available",
+        "n": 1
+      },
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_capture_seller_viewing"
+    },
+    {
+      "id": "VIEW-2",
+      "stage": "Viewing",
+      "scenario": "Unclear time, then exact answer in the same call",
+      "expectedAction": "Keep only the latest confirmed seller availability; clarification must recover without publishing an outdated time.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": {
+        "state": "available",
+        "n": 1
+      },
+      "actual": {
+        "state": "needs_review",
+        "n": 0
+      },
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_capture_seller_viewing"
+    },
+    {
+      "id": "VIEW-3",
+      "stage": "Viewing",
+      "scenario": "Withdraw old time, then supply replacement in the same call",
+      "expectedAction": "Keep only the latest confirmed seller availability; clarification must recover without publishing an outdated time.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": {
+        "state": "available",
+        "n": 1
+      },
+      "actual": {
+        "state": "withdrawn",
+        "n": 0
+      },
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_capture_seller_viewing"
+    },
+    {
+      "id": "VIEW-4",
+      "stage": "Viewing",
+      "scenario": "Explicit withdrawal only",
+      "expectedAction": "Keep only the latest confirmed seller availability; clarification must recover without publishing an outdated time.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": {
+        "state": "withdrawn",
+        "n": 0
+      },
+      "actual": {
+        "state": "withdrawn",
+        "n": 0
+      },
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_capture_seller_viewing"
+    },
+    {
+      "id": "VIEW-5",
+      "stage": "Viewing",
+      "scenario": "Missing timezone",
+      "expectedAction": "Keep only the latest confirmed seller availability; clarification must recover without publishing an outdated time.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": {
+        "state": "needs_review",
+        "n": 0
+      },
+      "actual": {
+        "state": "needs_review",
+        "n": 0
+      },
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_capture_seller_viewing"
+    },
+    {
+      "id": "VIEW-6",
+      "stage": "Viewing",
+      "scenario": "Two complete windows",
+      "expectedAction": "Keep only the latest confirmed seller availability; clarification must recover without publishing an outdated time.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": {
+        "state": "available",
+        "n": 2
+      },
+      "actual": {
+        "state": "available",
+        "n": 2
+      },
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_capture_seller_viewing"
+    },
+    {
+      "id": "VIEW-7",
+      "stage": "Viewing",
+      "scenario": "Seller corrects the window without repeating the word viewing",
+      "expectedAction": "Keep only the latest confirmed seller availability; clarification must recover without publishing an outdated time.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": {
+        "state": "needs_review",
+        "n": 0
+      },
+      "actual": {
+        "state": "available",
+        "n": 1
+      },
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_capture_seller_viewing"
+    },
+    {
+      "id": "VIEW-8",
+      "stage": "Viewing",
+      "scenario": "DST clock repeats 1:30 AM",
+      "expectedAction": "Request an unambiguous viewing time.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_parse_viewing_slot"
+    }
+  ],
+  "baseline": {
+    "suites": [
+      {
+        "suite": "automatic-call-offer",
+        "passed": true
+      },
+      {
+        "suite": "seller-payoff",
+        "passed": true
+      },
+      {
+        "suite": "seller-listing",
+        "passed": true
+      },
+      {
+        "suite": "seller-agreement",
+        "passed": true
+      },
+      {
+        "suite": "seller-phone-flow",
+        "passed": true
+      },
+      {
+        "suite": "seller-text-conversation",
+        "passed": true
+      },
+      {
+        "suite": "seller-text-replies",
+        "passed": true
+      },
+      {
+        "suite": "seller-response-service",
+        "passed": true
+      },
+      {
+        "suite": "callback-policy",
+        "passed": true
+      },
+      {
+        "suite": "text-ai",
+        "passed": true
+      },
+      {
+        "suite": "contract-text-resend",
+        "passed": true
+      },
+      {
+        "suite": "signing-service-validation",
+        "passed": true
+      },
+      {
+        "suite": "standard-contract-signing",
+        "passed": false
+      },
+      {
+        "suite": "closing-workflow",
+        "passed": true
+      },
+      {
+        "suite": "seller-call-context",
+        "passed": true
+      },
+      {
+        "suite": "seller-workflow",
+        "passed": true
+      },
+      {
+        "suite": "conversation-trust",
+        "passed": true
+      },
+      {
+        "suite": "contract-preparation",
+        "passed": true
+      },
+      {
+        "suite": "seller-closing",
+        "passed": false
+      },
+      {
+        "suite": "buyer-purchase-terms",
+        "passed": true
+      },
+      {
+        "suite": "buyer-coordination-route",
+        "passed": true
+      },
+      {
+        "suite": "offer-loop-route",
+        "passed": true
+      },
+      {
+        "suite": "conditional-offer-route",
+        "passed": true
+      },
+      {
+        "suite": "live-agreement-route",
+        "passed": true
+      }
+    ],
+    "sql": [
+      {
+        "suite": "test-seller-conversation-pglite",
+        "passed": true,
+        "output": "spatch remains blocked\nPASS original campaign future DNC guard remains effective\nPASS question repetition cannot loop\nPASS ambiguous unassigned SMS holds reviewed seller voice\nPASS ambiguous unassigned SMS holds limited seller voice\nPASS ambiguous route never rewrites dispatching voice\nPASS ambiguous route never rewrites dispatched voice\nPASS ambiguous route preserves other tenant scope\nPASS ambiguous route preserves other phone scope\nPASS ambiguous route preserves buyer scope\nPASS pending callback holds ready voice without stopping SMS\nPASS pending callback holds issued voice without stopping SMS\nPASS pending request never rewrites already dispatching voice\nPASS pending request never rewrites already dispatched voice\nPASS cancel before first claim cannot authorize original voice: Cancel the call\nPASS cancel before first claim cannot authorize original voice: Cancel my call\nPASS canceled request also holds previously unclaimed limited voice\nPASS attention acknowledgment cannot release voice request\nPASS resolving request never automatically reopens held voice\nPASS financial transition still holds limited voice\nPASS callback guard leaves other phone on unchanged delegate\nPASS callback guard leaves other tenant on unchanged delegate\nPASS callback guard leaves other property on unchanged delegate\nPASS callback guard leaves other intake on unchanged delegate\nPASS callback guard leaves legacy contact on unchanged delegate\nPASS callback guard leaves buyer on unchanged delegate\nPASS no callback request delegates once for normal and limited voice\nPASS availability answer records hold before model runs\nPASS explain_process callback question recognizes later availability\nPASS photo_received callback question recognizes later availability\nPASS unsent question cannot manufacture an availability request\nPASS anonymous callers have no access\n123 seller conversation SQL scenarios passed. Synthetic authorization/spend delegates; no provider calls, live mutation or contention claim."
+      },
+      {
+        "suite": "test-seller-response-pglite",
+        "passed": true,
+        "output": "PASS response SQL: durable assignment handoff, no fabricated permission, prior terms preserved, bounded retries, Stop, single-channel failure visibility, no duplicate text, suppression and tenant-isolated alerts. SIMULATED ONLY."
+      },
+      {
+        "suite": "test-buyer-purchase-pglite",
+        "passed": true,
+        "output": "PASS buyer title preferences: exact call/SMS evidence, unchanged viewing request, replay and identity gates, selected/unselected state, no automatic verification or reservation."
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "G1",
+      "priority": "P0",
+      "title": "Reconfirm withdrawn or conditional acceptance",
+      "cases": "WITHDRAW-1 to WITHDRAW-4",
+      "observation": "An earlier yes stays valid after seller hesitation, denial, or a newly required spouse.",
+      "action": "Bind acceptance to the latest relevant seller turn. Invalidate on hesitation, withdrawal, new decision-makers or conditions, then request fresh exact-price consent."
+    },
+    {
+      "id": "G2",
+      "priority": "P0",
+      "title": "Do not erase liens or unpaid taxes",
+      "cases": "DEBT-2 to DEBT-4",
+      "observation": "Qualified no answers are saved as zero additional debt.",
+      "action": "Parse the whole answer before matching an initial no. Unknown amount must remain unknown, require clarification and block unsupported contract readiness."
+    },
+    {
+      "id": "G3",
+      "priority": "P0",
+      "title": "Unify contact-stop handling",
+      "cases": "CONTACT-2, CONTACT-3, CONTACT-7, CONTACT-9",
+      "observation": "Webhook opt-out parser misses polite stop wording; analysis disagrees on mixed STOP/callback language.",
+      "action": "Use one durable stop policy at ingestion and dispatch. Some lower layers already hold replies; reproduce cross-channel suppression before claiming any unwanted call occurred."
+    },
+    {
+      "id": "G4",
+      "priority": "P1",
+      "title": "Recover and replace viewing availability",
+      "cases": "VIEW-2, VIEW-3, VIEW-7",
+      "observation": "Clarification cannot recover earlier unclear/withdrawn state in the same call; a later correction can leave the old slot published.",
+      "action": "Store revision-aware availability. A later valid replacement supersedes earlier uncertainty; an unparsed correction clears old slots and requests clarification."
+    },
+    {
+      "id": "G5",
+      "priority": "P1",
+      "title": "Keep busy sellers in the callback flow",
+      "cases": "CALLBACK-TEXT-1",
+      "observation": "Not now, call me tomorrow is marked declined by the text validator.",
+      "action": "Prioritize explicit later availability over a temporary busy phrase. Reconcile with the SQL scheduling hold and acknowledge the saved next step."
+    },
+    {
+      "id": "G6",
+      "priority": "P1",
+      "title": "Finish seller-to-buyer viewing follow-through",
+      "cases": "FLOW-41",
+      "observation": "Request capture and follow-up copy exist; completed contact and return-to-buyer automation were not found in the reviewed flow.",
+      "action": "Create tracked ask-seller, await-reply, relay-options, await-buyer-choice and confirm-access work with cancellation and failure recovery."
+    },
+    {
+      "id": "G7",
+      "priority": "P1",
+      "title": "Support multiple seller signers",
+      "cases": "FLOW-11",
+      "observation": "Automatic seller contract flow requires soleOwner=true and builds one seller signer.",
+      "action": "Add the verified multi-signer preparation path or explicitly assign the human task, track all signers and resume only on completed signatures."
+    },
+    {
+      "id": "G8",
+      "priority": "P1",
+      "title": "Define no-answer and interruption recovery",
+      "cases": "FLOW-27, FLOW-28",
+      "observation": "Initial response and requested callback exist; a complete bounded no-answer cadence was not found.",
+      "action": "Separate no-answer, voicemail, busy, technical failure and unknown outcome. Save a permitted next step with deduplication and stop/takeover checks."
+    },
+    {
+      "id": "G9",
+      "priority": "P1",
+      "title": "Define fresh lower-price acceptance",
+      "cases": "FLOW-24",
+      "observation": "New quote uses the calculated ceiling; accept_offer must equal the quote. Lower saved agreements work.",
+      "action": "Choose an explicit negotiation policy and save an authorized proposed price below the ceiling with seller evidence, then accept that exact revision."
+    },
+    {
+      "id": "G10",
+      "priority": "P2",
+      "title": "Handle common payoff and representation wording",
+      "cases": "DEBT-10, LISTING-5",
+      "observation": "No-debt wording can remain unresolved; contradictory agent-agreement wording can be classified unlisted.",
+      "action": "Clarify ambiguous representation and recognize equivalent debt-free answers without clearing other debt or authority holds."
+    },
+    {
+      "id": "G11",
+      "priority": "P1",
+      "title": "Repair baseline tests before using a green release claim",
+      "cases": "standard-contract-signing; seller-closing",
+      "observation": "Two of 24 existing suites fail: a fixture omits signatureRequestMessage, and a source-text assertion expects obsolete prompt wording.",
+      "action": "Update the isolated test fixture and assert current behavior. These failures do not by themselves establish live contract failure."
+    },
+    {
+      "id": "G12",
+      "priority": "P1",
+      "title": "Verify real conversation quality and handoff completion",
+      "cases": "FLOW-09, FLOW-31, FLOW-32",
+      "observation": "Local deterministic checks cannot demonstrate latency, interruptions, actual message receipt or completed human transfers.",
+      "action": "Run controlled full conversations across voice/SMS with real timing, provider receipts, signing sandbox and handoff acknowledgements."
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "CONTACT-1",
+      "stage": "Contact permission",
+      "scenario": "STOP",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CONTACT-2",
+      "stage": "Contact permission",
+      "scenario": "Please stop.",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": true,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CONTACT-3",
+      "stage": "Contact permission",
+      "scenario": "Stop please.",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": true,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CONTACT-4",
+      "stage": "Contact permission",
+      "scenario": "Dont text me again.",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CONTACT-5",
+      "stage": "Contact permission",
+      "scenario": "Please remove me.",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CONTACT-6",
+      "stage": "Contact permission",
+      "scenario": "Do not contact me.",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CONTACT-7",
+      "stage": "Contact permission",
+      "scenario": "Leave me alone.",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": true,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CONTACT-8",
+      "stage": "Contact permission",
+      "scenario": "Unsubscribe",
+      "expectedAction": "Persist contact suppression and cancel queued outreach.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/contiguity.ts:isMessageOptOut"
+    },
+    {
+      "id": "CALLBACK-TEXT-1",
+      "stage": "Callback",
+      "scenario": "Not now, call me tomorrow.",
+      "expectedAction": "Recognize a callback separately from refusal; ask only for missing scheduling details.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": true,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/text-ai-policy.ts:validateTextAnalysis"
+    },
+    {
+      "id": "CALLBACK-TEXT-2",
+      "stage": "Callback",
+      "scenario": "Call me tomorrow.",
+      "expectedAction": "Recognize a callback separately from refusal; ask only for missing scheduling details.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/text-ai-policy.ts:validateTextAnalysis"
+    },
+    {
+      "id": "CALLBACK-TEXT-3",
+      "stage": "Callback",
+      "scenario": "I missed your call.",
+      "expectedAction": "Recognize a callback separately from refusal; ask only for missing scheduling details.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/text-ai-policy.ts:validateTextAnalysis"
+    },
+    {
+      "id": "CALLBACK-TEXT-4",
+      "stage": "Callback",
+      "scenario": "Wrong number.",
+      "expectedAction": "Recognize a callback separately from refusal; ask only for missing scheduling details.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/text-ai-policy.ts:validateTextAnalysis"
+    },
+    {
+      "id": "IDENTITY-1",
+      "stage": "First conversation",
+      "scenario": "Are you a real person?",
+      "expectedAction": "Answer honestly and continue the current context.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "reply_identity",
+      "actual": "reply_identity",
+      "evidence": "Executed local check",
+      "source": "lib/text-ai-policy.ts:validateTextAnalysis"
+    },
+    {
+      "id": "HUMAN-1",
+      "stage": "Human handoff",
+      "scenario": "I want to talk to a human.",
+      "expectedAction": "Pause automation and request a person.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/text-ai-policy.ts:validateTextAnalysis"
+    },
+    {
+      "id": "CONTACT-9",
+      "stage": "Contact permission",
+      "scenario": "Mixed message: STOP, call me tomorrow.",
+      "expectedAction": "Hold conflicting stop/callback instructions for clarification; do not queue a callback.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": false,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/text-ai-policy.ts:validateTextAnalysis"
+    },
+    {
+      "id": "ACCEPT-1",
+      "stage": "Offer acceptance",
+      "scenario": "Yes.",
+      "expectedAction": "Accept only an unqualified yes to the exact currently quoted price.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "ACCEPT-2",
+      "stage": "Offer acceptance",
+      "scenario": "No.",
+      "expectedAction": "Accept only an unqualified yes to the exact currently quoted price.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "ACCEPT-3",
+      "stage": "Offer acceptance",
+      "scenario": "Yes, but I need $110,000.",
+      "expectedAction": "Accept only an unqualified yes to the exact currently quoted price.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "ACCEPT-4",
+      "stage": "Offer acceptance",
+      "scenario": "Yes if you close tomorrow.",
+      "expectedAction": "Accept only an unqualified yes to the exact currently quoted price.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "ACCEPT-5",
+      "stage": "Offer acceptance",
+      "scenario": "That works.",
+      "expectedAction": "Accept only an unqualified yes to the exact currently quoted price.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "ACCEPT-6",
+      "stage": "Offer acceptance",
+      "scenario": "Sounds good.",
+      "expectedAction": "Accept only an unqualified yes to the exact currently quoted price.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "WITHDRAW-1",
+      "stage": "Offer acceptance",
+      "scenario": "After an earlier yes: I am not ready to sell.",
+      "expectedAction": "Invalidate acceptance and resolve the latest objection before preparing an agreement.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": false,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "WITHDRAW-2",
+      "stage": "Offer acceptance",
+      "scenario": "After an earlier yes: Wait, I need to think.",
+      "expectedAction": "Invalidate acceptance and resolve the latest objection before preparing an agreement.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": false,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "WITHDRAW-3",
+      "stage": "Offer acceptance",
+      "scenario": "After an earlier yes: I never agreed to that.",
+      "expectedAction": "Invalidate acceptance and resolve the latest objection before preparing an agreement.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": false,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "WITHDRAW-4",
+      "stage": "Offer acceptance",
+      "scenario": "After an earlier yes: Actually I need my spouse to agree first.",
+      "expectedAction": "Invalidate acceptance and resolve the latest objection before preparing an agreement.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": false,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "WITHDRAW-5",
+      "stage": "Offer acceptance",
+      "scenario": "After an earlier yes: I changed my mind.",
+      "expectedAction": "Invalidate acceptance and resolve the latest objection before preparing an agreement.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "WITHDRAW-6",
+      "stage": "Offer acceptance",
+      "scenario": "After an earlier yes: Cancel the agreement.",
+      "expectedAction": "Invalidate acceptance and resolve the latest objection before preparing an agreement.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "ACCEPT-7",
+      "stage": "Offer acceptance",
+      "scenario": "Seller accepts a different spoken price",
+      "expectedAction": "Hold until the exact current price is confirmed.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/call-offer-evidence.ts:callOfferEvidence"
+    },
+    {
+      "id": "DEBT-1",
+      "stage": "Mortgage and liens",
+      "scenario": "No.",
+      "expectedAction": "Preserve qualifications and debt disclosures; unknown additional debt must not become zero.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": {
+        "otherDebtCents": 0
+      },
+      "actual": {
+        "otherDebtCents": 0
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-2",
+      "stage": "Mortgage and liens",
+      "scenario": "No, there is a lien.",
+      "expectedAction": "Preserve qualifications and debt disclosures; unknown additional debt must not become zero.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": null,
+      "actual": {
+        "otherDebtCents": 0
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-3",
+      "stage": "Mortgage and liens",
+      "scenario": "No, there are unpaid taxes.",
+      "expectedAction": "Preserve qualifications and debt disclosures; unknown additional debt must not become zero.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": null,
+      "actual": {
+        "otherDebtCents": 0
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-4",
+      "stage": "Mortgage and liens",
+      "scenario": "No other loans, but unpaid taxes remain.",
+      "expectedAction": "Preserve qualifications and debt disclosures; unknown additional debt must not become zero.",
+      "priority": "P0",
+      "status": "GAP",
+      "expected": null,
+      "actual": {
+        "otherDebtCents": 0
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-5",
+      "stage": "Mortgage and liens",
+      "scenario": "I owe $5,000 in taxes.",
+      "expectedAction": "Preserve qualifications and debt disclosures; unknown additional debt must not become zero.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": {
+        "otherDebtCents": 500000
+      },
+      "actual": {
+        "otherDebtCents": 500000
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-6",
+      "stage": "Mortgage and liens",
+      "scenario": "Not sure.",
+      "expectedAction": "Preserve qualifications and debt disclosures; unknown additional debt must not become zero.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-7",
+      "stage": "Mortgage and liens",
+      "scenario": "Between $2,000 and $4,000.",
+      "expectedAction": "Preserve qualifications and debt disclosures; unknown additional debt must not become zero.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-8",
+      "stage": "Mortgage and liens",
+      "scenario": "My mortgage is $20,000.",
+      "expectedAction": "Record only an unambiguous seller-reported balance, or ask for clarification.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": {
+        "mortgageCents": 2000000
+      },
+      "actual": {
+        "mortgageCents": 2000000
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-9",
+      "stage": "Mortgage and liens",
+      "scenario": "The house is paid off.",
+      "expectedAction": "Record only an unambiguous seller-reported balance, or ask for clarification.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": {
+        "mortgageCents": 0
+      },
+      "actual": {
+        "mortgageCents": 0
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-10",
+      "stage": "Mortgage and liens",
+      "scenario": "I do not owe anything.",
+      "expectedAction": "Record only an unambiguous seller-reported balance, or ask for clarification.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": {
+        "mortgageCents": 0
+      },
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-11",
+      "stage": "Mortgage and liens",
+      "scenario": "Not sure, maybe $20,000.",
+      "expectedAction": "Record only an unambiguous seller-reported balance, or ask for clarification.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "DEBT-12",
+      "stage": "Mortgage and liens",
+      "scenario": "The other owner owes $20,000.",
+      "expectedAction": "Record only an unambiguous seller-reported balance, or ask for clarification.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "SHORTFALL-1",
+      "stage": "Mortgage and liens",
+      "scenario": "Yes.",
+      "expectedAction": "Capture ability to cover the stated $10,000 shortfall without treating conditional funding as available.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": {
+        "coveredShortfallCents": 1000000,
+        "coverageDeclined": false
+      },
+      "actual": {
+        "coveredShortfallCents": 1000000,
+        "coverageDeclined": false
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "SHORTFALL-2",
+      "stage": "Mortgage and liens",
+      "scenario": "No.",
+      "expectedAction": "Capture ability to cover the stated $10,000 shortfall without treating conditional funding as available.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": {
+        "coveredShortfallCents": 0,
+        "coverageDeclined": true
+      },
+      "actual": {
+        "coveredShortfallCents": 0,
+        "coverageDeclined": true
+      },
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "SHORTFALL-3",
+      "stage": "Mortgage and liens",
+      "scenario": "Yes if I can borrow it.",
+      "expectedAction": "Capture ability to cover the stated $10,000 shortfall without treating conditional funding as available.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffEvidence"
+    },
+    {
+      "id": "SHORTFALL-4",
+      "stage": "Mortgage and liens",
+      "scenario": "Debt exceeds price; seller cannot cover difference",
+      "expectedAction": "Keep contract preparation blocked.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/seller-payoff.ts:sellerPayoffPosition"
+    },
+    {
+      "id": "PRICE-1",
+      "stage": "Pricing",
+      "scenario": "Current value $200,000; repairs $40,000; fee $10,000",
+      "expectedAction": "Use supported numbers and preserve an already agreed lower price.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": 10200000,
+      "actual": 10200000,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-2",
+      "stage": "Pricing",
+      "scenario": "Repairs increase to $60,000",
+      "expectedAction": "Use supported numbers and preserve an already agreed lower price.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": 8800000,
+      "actual": 8800000,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-3",
+      "stage": "Pricing",
+      "scenario": "Seller claims lower repairs than research",
+      "expectedAction": "Use supported numbers and preserve an already agreed lower price.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": 10200000,
+      "actual": 10200000,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-4",
+      "stage": "Pricing",
+      "scenario": "A lower $90,000 price was already accepted",
+      "expectedAction": "Use supported numbers and preserve an already agreed lower price.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": 9000000,
+      "actual": 9000000,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-HOLD-1",
+      "stage": "Pricing",
+      "scenario": "{\"acceptedPriceCents\":11000000}",
+      "expectedAction": "Hold price/contract discussion while this material issue is unresolved.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-HOLD-2",
+      "stage": "Pricing",
+      "scenario": "{\"conditionPending\":true}",
+      "expectedAction": "Hold price/contract discussion while this material issue is unresolved.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-HOLD-3",
+      "stage": "Pricing",
+      "scenario": "{\"factsPending\":true}",
+      "expectedAction": "Hold price/contract discussion while this material issue is unresolved.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-HOLD-4",
+      "stage": "Pricing",
+      "scenario": "{\"agreementRevisionRequired\":true}",
+      "expectedAction": "Hold price/contract discussion while this material issue is unresolved.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-HOLD-5",
+      "stage": "Pricing",
+      "scenario": "{\"listedWithAgent\":true}",
+      "expectedAction": "Hold price/contract discussion while this material issue is unresolved.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "RESEARCH-STALE",
+      "stage": "Property research",
+      "scenario": "STALE",
+      "expectedAction": "Hold until the right property has current, applicable research.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "RESEARCH-ADDRESS",
+      "stage": "Property research",
+      "scenario": "ADDRESS",
+      "expectedAction": "Hold until the right property has current, applicable research.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "RESEARCH-LAND",
+      "stage": "Property research",
+      "scenario": "LAND",
+      "expectedAction": "Hold until the right property has current, applicable research.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "RESEARCH-VALUE",
+      "stage": "Property research",
+      "scenario": "VALUE",
+      "expectedAction": "Hold until the right property has current, applicable research.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "PRICE-5",
+      "stage": "Pricing",
+      "scenario": "Low equity with unresolved mortgage",
+      "expectedAction": "Discuss a conditional price but block contract preparation.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "LISTING-1",
+      "stage": "Ownership and listing",
+      "scenario": "Yes.",
+      "expectedAction": "Clarify conflicting representation facts before quoting or ending the lead.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": true,
+      "actual": true,
+      "evidence": "Executed local check",
+      "source": "lib/seller-listing.ts:sellerListingEvidence"
+    },
+    {
+      "id": "LISTING-2",
+      "stage": "Ownership and listing",
+      "scenario": "No.",
+      "expectedAction": "Clarify conflicting representation facts before quoting or ending the lead.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/seller-listing.ts:sellerListingEvidence"
+    },
+    {
+      "id": "LISTING-3",
+      "stage": "Ownership and listing",
+      "scenario": "I might list it with a realtor.",
+      "expectedAction": "Clarify conflicting representation facts before quoting or ending the lead.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-listing.ts:sellerListingEvidence"
+    },
+    {
+      "id": "LISTING-4",
+      "stage": "Ownership and listing",
+      "scenario": "It is not listed with an agent.",
+      "expectedAction": "Clarify conflicting representation facts before quoting or ending the lead.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/seller-listing.ts:sellerListingEvidence"
+    },
+    {
+      "id": "LISTING-5",
+      "stage": "Ownership and listing",
+      "scenario": "It is not listed, but I have an agent agreement.",
+      "expectedAction": "Clarify conflicting representation facts before quoting or ending the lead.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": null,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/seller-listing.ts:sellerListingEvidence"
+    },
+    {
+      "id": "CONTRACT-1",
+      "stage": "Purchase contract",
+      "scenario": "{\"soleOwner\":false}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "all_owners_required",
+      "actual": "all_owners_required",
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-2",
+      "stage": "Purchase contract",
+      "scenario": "{\"allDecisionMakersAgree\":false}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "all_owners_required",
+      "actual": "all_owners_required",
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-3",
+      "stage": "Purchase contract",
+      "scenario": "{\"sendTextRequested\":false}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "confirmation_required",
+      "actual": "confirmation_required",
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-4",
+      "stage": "Purchase contract",
+      "scenario": "{\"termsConfirmed\":false}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "confirmation_required",
+      "actual": "confirmation_required",
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-5",
+      "stage": "Purchase contract",
+      "scenario": "{\"materialFactsChanged\":true}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "updated_property_review_required",
+      "actual": "updated_property_review_required",
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-6",
+      "stage": "Purchase contract",
+      "scenario": "{\"agreedPriceCents\":10300000}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "price_review_required",
+      "actual": "price_review_required",
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-7",
+      "stage": "Purchase contract",
+      "scenario": "{\"closingDate\":\"2000-01-01\"}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "closing_date_review_required",
+      "actual": "closing_date_review_required",
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-8",
+      "stage": "Purchase contract",
+      "scenario": "{\"inspectionAccess\":\"no\"}",
+      "expectedAction": "Require valid confirmations; declining a visit alone does not waive terms or kill the deal.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "CONTRACT-9",
+      "stage": "Purchase contract",
+      "scenario": "Seller purchase deposit",
+      "expectedAction": "Do not add buyer-assignment deposit rules to the seller purchase agreement.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "lib/seller-agreement-flow.ts:confirmedSellerTerms"
+    },
+    {
+      "id": "SIGN-1",
+      "stage": "Signatures",
+      "scenario": "{}",
+      "expectedAction": "Advance only on verified signatures and required owners/terms.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "seller_signs_first",
+      "actual": "seller_signs_first",
+      "evidence": "Executed local check",
+      "source": "lib/contract-readiness.ts:contractReadiness"
+    },
+    {
+      "id": "SIGN-2",
+      "stage": "Signatures",
+      "scenario": "{\"sellerSignaturesVerified\":true}",
+      "expectedAction": "Advance only on verified signatures and required owners/terms.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "request_customer_signature",
+      "actual": "request_customer_signature",
+      "evidence": "Executed local check",
+      "source": "lib/contract-readiness.ts:contractReadiness"
+    },
+    {
+      "id": "SIGN-3",
+      "stage": "Signatures",
+      "scenario": "{\"sellerSignaturesVerified\":true,\"customerSignatureVerified\":true}",
+      "expectedAction": "Advance only on verified signatures and required owners/terms.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "fully_signed",
+      "actual": "fully_signed",
+      "evidence": "Executed local check",
+      "source": "lib/contract-readiness.ts:contractReadiness"
+    },
+    {
+      "id": "SIGN-4",
+      "stage": "Signatures",
+      "scenario": "{\"allOwnersConfirmed\":false}",
+      "expectedAction": "Advance only on verified signatures and required owners/terms.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "wait_for_decision_makers",
+      "actual": "wait_for_decision_makers",
+      "evidence": "Executed local check",
+      "source": "lib/contract-readiness.ts:contractReadiness"
+    },
+    {
+      "id": "SIGN-5",
+      "stage": "Signatures",
+      "scenario": "{\"legalDescriptionReviewed\":false}",
+      "expectedAction": "Advance only on verified signatures and required owners/terms.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "review_legal_description",
+      "actual": "review_legal_description",
+      "evidence": "Executed local check",
+      "source": "lib/contract-readiness.ts:contractReadiness"
+    },
+    {
+      "id": "CALLBACK-1",
+      "stage": "Callback",
+      "scenario": "{}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "ready",
+      "actual": "ready",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "CALLBACK-2",
+      "stage": "Callback",
+      "scenario": "{\"timeConfirmed\":false}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "needs_confirmation",
+      "actual": "needs_confirmation",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "CALLBACK-3",
+      "stage": "Callback",
+      "scenario": "{\"humanTakeover\":true}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "paused",
+      "actual": "paused",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "CALLBACK-4",
+      "stage": "Callback",
+      "scenario": "{\"permitted\":false}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "blocked_by_permission",
+      "actual": "blocked_by_permission",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "CALLBACK-5",
+      "stage": "Callback",
+      "scenario": "{\"canceled\":true}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "do_not_dispatch",
+      "actual": "do_not_dispatch",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "CALLBACK-6",
+      "stage": "Callback",
+      "scenario": "{\"exclusiveLease\":false}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "already_claimed",
+      "actual": "already_claimed",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "CALLBACK-7",
+      "stage": "Callback",
+      "scenario": "{\"now\":1791581579817}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "missed_callback_review",
+      "actual": "missed_callback_review",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "CALLBACK-8",
+      "stage": "Callback",
+      "scenario": "{\"contactWindowOpen\":false}",
+      "expectedAction": "Dispatch once only at an allowed, confirmed time and recheck current controls.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "outside_contact_hours",
+      "actual": "outside_contact_hours",
+      "evidence": "Executed local check",
+      "source": "lib/callback-policy.ts:callbackDecision"
+    },
+    {
+      "id": "POSTSIGN-1",
+      "stage": "After contract",
+      "scenario": "Returning seller already has a signed contract",
+      "expectedAction": "Resume access coordination; do not requalify or quote a new offer.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "seller_viewing_coordination",
+      "actual": "seller_viewing_coordination",
+      "evidence": "Executed local check",
+      "source": "lib/automatic-call-offer.ts:calculateAutomaticCallOffer"
+    },
+    {
+      "id": "VIEW-PUBLIC-1",
+      "stage": "Viewing",
+      "scenario": "Expired slot",
+      "expectedAction": "Do not advertise past availability.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": [],
+      "actual": [],
+      "evidence": "Executed local check",
+      "source": "lib/buyer-purchase-terms.ts:sellerViewingSlots"
+    },
+    {
+      "id": "VIEW-PUBLIC-2",
+      "stage": "Viewing",
+      "scenario": "Slot contains private access code",
+      "expectedAction": "Only publish time fields.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": false,
+      "actual": false,
+      "evidence": "Executed local check",
+      "source": "lib/buyer-purchase-terms.ts:sellerViewingSlots"
+    },
+    {
+      "id": "DEPOSIT-1",
+      "stage": "Buyer handoff",
+      "scenario": "Assignment fee in cents: 1000000",
+      "expectedAction": "Calculate 20% of assignment fee, capped at $5,000, only on the buyer side.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": 200000,
+      "actual": 200000,
+      "evidence": "Executed local check",
+      "source": "lib/buyer-purchase-terms.ts:buyerDepositCents"
+    },
+    {
+      "id": "DEPOSIT-2",
+      "stage": "Buyer handoff",
+      "scenario": "Assignment fee in cents: 5000000",
+      "expectedAction": "Calculate 20% of assignment fee, capped at $5,000, only on the buyer side.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": 500000,
+      "actual": 500000,
+      "evidence": "Executed local check",
+      "source": "lib/buyer-purchase-terms.ts:buyerDepositCents"
+    },
+    {
+      "id": "CLOSE-1",
+      "stage": "Closing",
+      "scenario": "Seller says the sale is closed; title has not confirmed",
+      "expectedAction": "Keep closing incomplete.",
+      "priority": "P0",
+      "status": "PASS",
+      "expected": "Missing verified condition: closeConfirmedByTitle",
+      "actual": "Missing verified condition: closeConfirmedByTitle",
+      "evidence": "Executed local check",
+      "source": "lib/closing-workflow.ts:nextClosingStage"
+    },
+    {
+      "id": "CLOSE-2",
+      "stage": "Closing",
+      "scenario": "Verified title close confirmation",
+      "expectedAction": "Advance to closed.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": "closed",
+      "actual": "closed",
+      "evidence": "Executed local check",
+      "source": "lib/closing-workflow.ts:nextClosingStage"
+    },
+    {
+      "id": "VIEW-1",
+      "stage": "Viewing",
+      "scenario": "One complete viewing window",
+      "expectedAction": "Keep only the latest confirmed seller availability; clarification must recover without publishing an outdated time.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": {
+        "state": "available",
+        "n": 1
+      },
+      "actual": {
+        "state": "available",
+        "n": 1
+      },
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_capture_seller_viewing"
+    },
+    {
+      "id": "VIEW-2",
+      "stage": "Viewing",
+      "scenario": "Unclear time, then exact answer in the same call",
+      "expectedAction": "Keep only the latest confirmed seller availability; clarification must recover without publishing an outdated time.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": {
+        "state": "available",
+        "n": 1
+      },
+      "actual": {
+        "state": "needs_review",
+        "n": 0
+      },
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_capture_seller_viewing"
+    },
+    {
+      "id": "VIEW-3",
+      "stage": "Viewing",
+      "scenario": "Withdraw old time, then supply replacement in the same call",
+      "expectedAction": "Keep only the latest confirmed seller availability; clarification must recover without publishing an outdated time.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": {
+        "state": "available",
+        "n": 1
+      },
+      "actual": {
+        "state": "withdrawn",
+        "n": 0
+      },
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_capture_seller_viewing"
+    },
+    {
+      "id": "VIEW-4",
+      "stage": "Viewing",
+      "scenario": "Explicit withdrawal only",
+      "expectedAction": "Keep only the latest confirmed seller availability; clarification must recover without publishing an outdated time.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": {
+        "state": "withdrawn",
+        "n": 0
+      },
+      "actual": {
+        "state": "withdrawn",
+        "n": 0
+      },
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_capture_seller_viewing"
+    },
+    {
+      "id": "VIEW-5",
+      "stage": "Viewing",
+      "scenario": "Missing timezone",
+      "expectedAction": "Keep only the latest confirmed seller availability; clarification must recover without publishing an outdated time.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": {
+        "state": "needs_review",
+        "n": 0
+      },
+      "actual": {
+        "state": "needs_review",
+        "n": 0
+      },
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_capture_seller_viewing"
+    },
+    {
+      "id": "VIEW-6",
+      "stage": "Viewing",
+      "scenario": "Two complete windows",
+      "expectedAction": "Keep only the latest confirmed seller availability; clarification must recover without publishing an outdated time.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": {
+        "state": "available",
+        "n": 2
+      },
+      "actual": {
+        "state": "available",
+        "n": 2
+      },
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_capture_seller_viewing"
+    },
+    {
+      "id": "VIEW-7",
+      "stage": "Viewing",
+      "scenario": "Seller corrects the window without repeating the word viewing",
+      "expectedAction": "Keep only the latest confirmed seller availability; clarification must recover without publishing an outdated time.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": {
+        "state": "needs_review",
+        "n": 0
+      },
+      "actual": {
+        "state": "available",
+        "n": 1
+      },
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_capture_seller_viewing"
+    },
+    {
+      "id": "VIEW-8",
+      "stage": "Viewing",
+      "scenario": "DST clock repeats 1:30 AM",
+      "expectedAction": "Request an unambiguous viewing time.",
+      "priority": "P1",
+      "status": "PASS",
+      "expected": null,
+      "actual": null,
+      "evidence": "Executed local check",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql:icash_parse_viewing_slot"
+    },
+    {
+      "id": "FLOW-01",
+      "stage": "Intake",
+      "scenario": "Seller submits the same property twice",
+      "expectedAction": "Reuse the bound lead; avoid duplicate billing, texts, and calls.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Verify duplicate submissions across phone/address formatting and concurrent requests.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-optin-server.ts"
+    },
+    {
+      "id": "FLOW-02",
+      "stage": "Intake",
+      "scenario": "Address autocomplete selects the wrong house",
+      "expectedAction": "Read back the property; correct the address before fresh research or contact.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Address correction paths exist. Exercise mobile correction and downstream identity together.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "docs/seller-title-review-contact.md"
+    },
+    {
+      "id": "FLOW-03",
+      "stage": "Intake",
+      "scenario": "Research provider times out or returns multiple matches",
+      "expectedAction": "Preserve the inquiry and request review without pretending an offer is ready.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Exercise partial/ambiguous provider outcomes and a later successful lookup.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-qualification.ts"
+    },
+    {
+      "id": "FLOW-04",
+      "stage": "First conversation",
+      "scenario": "Wrong number or person is not the owner",
+      "expectedAction": "Stop that contact and resolve the owner without exposing debt or contract information.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Check suppression and identity correction across SMS and voice.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-phone-flow.ts"
+    },
+    {
+      "id": "FLOW-05",
+      "stage": "First conversation",
+      "scenario": "Why are several buyers contacting me?",
+      "expectedAction": "Explain the actual network and principal, without inventing competitors or urgency.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Review truthful wording and stable contact identity across assigned accounts.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/homeoffer-buyer-identity.ts"
+    },
+    {
+      "id": "FLOW-06",
+      "stage": "Contact permission",
+      "scenario": "New form arrives from an already suppressed number",
+      "expectedAction": "Keep existing suppression until a valid scoped repermission path completes.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Test resubmission, STOP race, and queued work cancellation as one journey.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "config/text-messaging.sql"
+    },
+    {
+      "id": "FLOW-07",
+      "stage": "First conversation",
+      "scenario": "Seller speaks Spanish or another unsupported language",
+      "expectedAction": "Offer a supported language or a qualified person; do not infer acceptance from unclear speech.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Language capability and human routing were not verified live.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-phone-flow.ts"
+    },
+    {
+      "id": "FLOW-08",
+      "stage": "First conversation",
+      "scenario": "Heavy accent, noise, interruption, or unclear number",
+      "expectedAction": "Ask one concise clarification and read back the amount/date before saving.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Requires recorded audio tests with interruptions and number recognition.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/call-offer-evidence.ts"
+    },
+    {
+      "id": "FLOW-09",
+      "stage": "Human handoff",
+      "scenario": "Seller demands a person during an offer",
+      "expectedAction": "Pause the bot, preserve the conversation, assign the handoff, and confirm only actual transfer.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Handoff records are not proof a person received or completed the transfer.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "docs/seller-workflow-continuity.md"
+    },
+    {
+      "id": "FLOW-10",
+      "stage": "Contact preference",
+      "scenario": "Text only; do not call",
+      "expectedAction": "Honor the channel preference and continue permitted texting without restarting voice.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Test channel-specific suppression rather than treating every preference as global refusal.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/contiguity.ts"
+    },
+    {
+      "id": "FLOW-11",
+      "stage": "Ownership",
+      "scenario": "Two owners both agree and want the contract",
+      "expectedAction": "Collect both legal names and signing destinations; route through the required multi-signer workflow.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": null,
+      "actual": "Automatic confirm_and_send requires soleOwner=true and constructs one seller signer. Human preparation is needed.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-agreement-service.ts"
+    },
+    {
+      "id": "FLOW-12",
+      "stage": "Ownership",
+      "scenario": "Spouse or co-owner is unavailable",
+      "expectedAction": "Save who must agree, schedule a joint follow-up, and hold the agreement.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Blocking exists; automatic collection and follow-through for all signers remains to verify.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-agreement-flow.ts"
+    },
+    {
+      "id": "FLOW-13",
+      "stage": "Ownership",
+      "scenario": "Inherited house; probate is incomplete",
+      "expectedAction": "Collect the claimed authority and route to title/legal review before promises or signatures.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Dedicated executor-authority document and deadline workflow needs review.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-agreement-flow.ts"
+    },
+    {
+      "id": "FLOW-14",
+      "stage": "Ownership",
+      "scenario": "LLC, trust, guardian, or power of attorney seller",
+      "expectedAction": "Identify the actual owner and authorized signer; verify authority before contract execution.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Do not translate a spoken sole-owner answer into verified organizational authority.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-agreement-flow.ts"
+    },
+    {
+      "id": "FLOW-15",
+      "stage": "Ownership",
+      "scenario": "Divorce, disputed ownership, or competing heirs",
+      "expectedAction": "Hold price acceptance/contract changes and route the dispute to the appropriate reviewer.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Material-change hold exists; reviewer ownership and resolution need acceptance testing.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/automatic-call-offer.ts"
+    },
+    {
+      "id": "FLOW-16",
+      "stage": "Ownership",
+      "scenario": "Currently listed or under another purchase agreement",
+      "expectedAction": "Record the exact restriction, avoid encouraging a breach, and follow the supported deal policy.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Listed-agent branch exists; an existing third-party purchase agreement needs separate handling.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-listing.ts"
+    },
+    {
+      "id": "FLOW-17",
+      "stage": "Property condition",
+      "scenario": "Tenant-occupied property with a lease",
+      "expectedAction": "Record lease, occupancy, and possession needs; confirm access with the authorized occupant.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Do not promise a vacant property or disregard tenant access requirements.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-phone-flow.ts"
+    },
+    {
+      "id": "FLOW-18",
+      "stage": "Viewing",
+      "scenario": "Tenant refuses access or seller cannot get a key",
+      "expectedAction": "Save the access blocker, seek an approved alternative, and update the waiting buyer.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "No visit should be confirmed until actual access permission exists.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql"
+    },
+    {
+      "id": "FLOW-19",
+      "stage": "Property condition",
+      "scenario": "Unsafe building, squatter, pets, or hazardous access",
+      "expectedAction": "Record the access concern and route it to a person; do not instruct buyers to enter.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Verify private access notes and human review before any showing.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql"
+    },
+    {
+      "id": "FLOW-20",
+      "stage": "Property condition",
+      "scenario": "New fire, foundation, flood, or major repair disclosure",
+      "expectedAction": "Save the full statement, refresh material numbers, and invalidate old acceptance as needed.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Description-only repair updates retain researched repair dollars; test when new evidence requires fresh research.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/automatic-call-offer.ts"
+    },
+    {
+      "id": "FLOW-21",
+      "stage": "Property research",
+      "scenario": "Seller offers two houses or corrects the parcel",
+      "expectedAction": "Keep each property separate and bind any offer to the right address/parcel.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Do not silently switch a call-bound contract to another property.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-agreement-binding.ts"
+    },
+    {
+      "id": "FLOW-22",
+      "stage": "Property research",
+      "scenario": "No credible comparable sales or unsupported property type",
+      "expectedAction": "Explain what needs review and assign research rather than invent an ARV.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "House-only and stale/missing-data guards passed locally. Alternative underwriting not exercised.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/offer-policy.ts"
+    },
+    {
+      "id": "FLOW-23",
+      "stage": "Negotiation",
+      "scenario": "Seller will not accept the supported maximum",
+      "expectedAction": "Ask once whether price or timing is flexible, then save a specific next step or end respectfully.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Do not raise the ceiling, invent comparable sales, or repeat the same objection loop.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-phone-flow.ts"
+    },
+    {
+      "id": "FLOW-24",
+      "stage": "Negotiation",
+      "scenario": "Seller offers a lower price or asks to negotiate incrementally",
+      "expectedAction": "Record the actual proposed price and obtain exact acceptance with price provenance.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": null,
+      "actual": "Current new-offer path quotes the calculated ceiling; accept_offer must equal it. Lower existing agreements are preserved, but fresh lower counteroffer acceptance needs a defined path.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/automatic-call-offer.ts"
+    },
+    {
+      "id": "FLOW-25",
+      "stage": "Negotiation",
+      "scenario": "Seller claims a competing cash offer",
+      "expectedAction": "Ask about their decision criteria; compare only supported terms and avoid inventing a competing buyer.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Prompt behavior requires a model conversation test.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-phone-flow.ts"
+    },
+    {
+      "id": "FLOW-26",
+      "stage": "After contract",
+      "scenario": "Seller asks for a higher price after signing",
+      "expectedAction": "Keep the signed agreement intact, route the requested amendment, and reapprove economics.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Never change a signed document or treat conversation as a completed amendment.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-agreement-service.ts"
+    },
+    {
+      "id": "FLOW-27",
+      "stage": "Call recovery",
+      "scenario": "Call drops during the offer or contract preparation",
+      "expectedAction": "Preserve the last completed action; reconcile provider outcomes before a follow-up.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Test interruption before and after each irreversible provider response.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-response-service.ts"
+    },
+    {
+      "id": "FLOW-28",
+      "stage": "No answer",
+      "scenario": "Busy, voicemail, disconnected, or no answer",
+      "expectedAction": "Distinguish outcomes and use an explicit bounded follow-up policy where contact is permitted.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": null,
+      "actual": "A complete automatic no-answer cadence was not found in the reviewed seller flow. Initial-response attempts and requested callbacks are separate.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "docs/audits/2026-10-05-seller-to-closing.md"
+    },
+    {
+      "id": "FLOW-29",
+      "stage": "Callback",
+      "scenario": "Seller reschedules, cancels, or misses a callback",
+      "expectedAction": "Cancel the old job, preserve the latest confirmed time, and avoid duplicate or late calls.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Local policy checks passed; provider timing and worker contention remain to verify.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/callback-policy.ts"
+    },
+    {
+      "id": "FLOW-30",
+      "stage": "Callback",
+      "scenario": "Tomorrow near midnight or during a DST change",
+      "expectedAction": "Use the seller timezone, exact date and AM/PM readback; clarify ambiguous times.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "DST viewing ambiguity passed locally. Full SMS-to-voice callback execution remains unverified.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/relative-callback.ts"
+    },
+    {
+      "id": "FLOW-31",
+      "stage": "Voice quality",
+      "scenario": "AI pauses, speaks over seller, or repeatedly says it is checking",
+      "expectedAction": "Use one short acknowledgement, bounded tool retries, and resume at the last answered question.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Measure real response delay and interruption recovery. Prompt text alone cannot verify confidence or audio quality.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "app/api/internal/voice/cash-offer/route.ts"
+    },
+    {
+      "id": "FLOW-32",
+      "stage": "Conversation continuity",
+      "scenario": "Seller texts while on a call or the customer takes over",
+      "expectedAction": "Use one current conversation state, stop conflicting automation, and preserve both messages.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Requires simultaneous-channel acceptance testing beyond isolated validators.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "docs/sms-voice-continuity.md"
+    },
+    {
+      "id": "FLOW-33",
+      "stage": "Purchase contract",
+      "scenario": "Signing link never arrives or will not open",
+      "expectedAction": "Check provider delivery, exact recipient and envelope, then use the bounded resend/recovery path.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Delivery-accepted is not delivered; do not create another agreement just to resend.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/contract-text-resend.ts"
+    },
+    {
+      "id": "FLOW-34",
+      "stage": "Purchase contract",
+      "scenario": "Seller has no smartphone or needs accessibility help",
+      "expectedAction": "Offer the supported alternative signing/help workflow without signing for the seller.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "No universal voice-only signing fallback was verified.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-agreement-flow.ts"
+    },
+    {
+      "id": "FLOW-35",
+      "stage": "Purchase contract",
+      "scenario": "Seller legal name, address, or closing date is wrong",
+      "expectedAction": "Pause sending and revise through the authorized agreement version path.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Existing pending agreements reject mismatches; test cancel/reissue recovery end to end.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-agreement-service.ts"
+    },
+    {
+      "id": "FLOW-36",
+      "stage": "Purchase contract",
+      "scenario": "Seller wants their attorney to change terms",
+      "expectedAction": "Save the requested changes and send them to an authorized reviewer.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "AI should explain approved terms without inventing legal rights or agreeing to amendments.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-phone-flow.ts"
+    },
+    {
+      "id": "FLOW-37",
+      "stage": "Purchase contract",
+      "scenario": "Seller wants payment before signing or demands purchase EMD",
+      "expectedAction": "Explain the actual saved seller agreement and route unsupported concessions.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Keep buyer assignment deposits separate from the seller purchase agreement.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-agreement-flow.ts"
+    },
+    {
+      "id": "FLOW-38",
+      "stage": "Signatures",
+      "scenario": "Seller says done, but signing status is still pending",
+      "expectedAction": "Check the provider and ask for the final submit step only if still needed.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Local status tests passed; no live signature was created in this audit.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-agreement-service.ts"
+    },
+    {
+      "id": "FLOW-39",
+      "stage": "Signatures",
+      "scenario": "Seller signs but the customer signature fails",
+      "expectedAction": "Keep the deal awaiting the required signature and notify the responsible person.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Do not start buyer matching merely because the seller signed.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/contract-readiness.ts"
+    },
+    {
+      "id": "FLOW-40",
+      "stage": "Deadlines",
+      "scenario": "Inspection or closing deadline approaches with unfinished work",
+      "expectedAction": "Track the contractual deadline, assign the blocker, and obtain an authorized extension if needed.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "A complete seller-facing deadline/extension acceptance flow remains unverified.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/closing-workflow.ts"
+    },
+    {
+      "id": "FLOW-41",
+      "stage": "Viewing",
+      "scenario": "Buyer wants to visit but the seller has no saved availability",
+      "expectedAction": "Ask the seller, save the reply, relay options to the waiting buyer, then confirm access.",
+      "priority": "P1",
+      "status": "GAP",
+      "expected": null,
+      "actual": "Current flow records needs_confirmation and gives follow-up wording. Reviewed functions do not complete the autonomous seller-contact/response/return-to-buyer loop.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "config/buyer-viewing-seller-followup.sql"
+    },
+    {
+      "id": "FLOW-42",
+      "stage": "Title selection",
+      "scenario": "Seller suggests a local title company",
+      "expectedAction": "Collect the company/contact and verify suitability and authority before selection or sending documents.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Suggestion is not verified selection; never invent the closer.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/title-service.ts"
+    },
+    {
+      "id": "FLOW-43",
+      "stage": "Viewing",
+      "scenario": "Buyer declines to view the property",
+      "expectedAction": "Continue the supported assignment process if the buyer wants to proceed.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Viewing is optional; preserve any written inspection rights and actual condition disclosures.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/automatic-call-offer.ts"
+    },
+    {
+      "id": "FLOW-44",
+      "stage": "Viewing",
+      "scenario": "Seller or buyer cancels a previously arranged visit",
+      "expectedAction": "Withdraw the slot and notify the other party; do not leave stale access instructions active.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Automated two-party cancellation delivery was not demonstrated.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "config/seller-viewing-availability-and-buyer-intent.sql"
+    },
+    {
+      "id": "FLOW-45",
+      "stage": "Viewing",
+      "scenario": "Buyer asks for lockbox, alarm code, or permission to enter",
+      "expectedAction": "Provide only specifically authorized access information to the correct recipient.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Public slot output strips unrelated fields. Private access authorization still needs an end-to-end check.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/buyer-purchase-terms.ts"
+    },
+    {
+      "id": "FLOW-46",
+      "stage": "Buyer handoff",
+      "scenario": "Buyer claims deposit payment or sends a screenshot",
+      "expectedAction": "Keep the property unreserved until required agreement and cleared-funds verification complete.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Buyer deposit arithmetic is tested; actual payment receipt is outside this audit.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "config/buyer-purchase-terms-and-reservations.sql"
+    },
+    {
+      "id": "FLOW-47",
+      "stage": "Buyer handoff",
+      "scenario": "Buyer backs out, cannot fund, or misses deposit deadline",
+      "expectedAction": "Alert the operator, preserve seller obligations, and follow an authorized backup-buyer plan.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Do not promise the seller closing is still guaranteed or invent a replacement buyer.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/closing-workflow.ts"
+    },
+    {
+      "id": "FLOW-48",
+      "stage": "Title and payoff",
+      "scenario": "Title finds a lien, payoff shortfall, or foreclosure deadline",
+      "expectedAction": "Save the verified title facts, pause unsupported promises, and route the issue with a responsible person and deadline.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Never treat a seller estimate as title clearance or promise foreclosure will stop.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/seller-payoff.ts"
+    },
+    {
+      "id": "FLOW-49",
+      "stage": "Closing",
+      "scenario": "Closing moves, seller needs more time to move, or possession changes",
+      "expectedAction": "Confirm the request, coordinate title/buyer, and obtain any required signed amendment.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Do not silently edit the saved closing date or promise possession terms.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/closing-workflow.ts"
+    },
+    {
+      "id": "FLOW-50",
+      "stage": "Closing",
+      "scenario": "Seller asks when money will arrive or for changed wire details",
+      "expectedAction": "Use verified title/payment status and independently verified instructions. Mark paid only with actual evidence.",
+      "priority": "P2",
+      "status": "REVIEW",
+      "expected": null,
+      "actual": "Local close-confirmation gate passed. Actual funding and disbursement remain unverified.",
+      "evidence": "Source review; not an executed end-to-end test",
+      "source": "lib/closing-workflow.ts"
+    }
+  ],
+  "matrixSummary": {
+    "total": 150,
+    "executed": 100,
+    "passed": 83,
+    "reproducedMismatches": 17,
+    "reviewedWorkflowGaps": 4,
+    "awaitingWorkflowVerification": 46
+  }
+}
