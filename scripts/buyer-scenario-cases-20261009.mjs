@@ -13,7 +13,7 @@ const terms=[...truthful,
 ];
 function make(key,user,scenario,criteria,patch={},maxTurns=7){
  const result=calculateAutomaticCallOffer({party:'buyer',buyer:{...buyer,...patch}},{},now),handoff=buyerAgreementHandoff();
- const opening=result.quoteAllowed&&!['human-followup','wrong-property','decline','lookup-failure'].includes(key)?['Before answering the initial buyer question, use get_offer. The first substantive answer states the supplied spokenOffer including AI identity, exact buyer asking price, additional buyer closing costs, supplied closing date and supplied deposit (or explicitly missing terms). Do not use seller acceptance or signing actions for a buyer.']:[];
+ const opening=result.quoteAllowed&&!key.startsWith('private-')&&!['instruction-override','human-followup','wrong-property','decline','lookup-failure'].includes(key)?['Before answering the initial buyer question, use get_offer. The first substantive answer states the supplied spokenOffer including AI identity, exact buyer asking price, additional buyer closing costs, supplied closing date and supplied deposit (or explicitly missing terms). Do not use seller acceptance or signing actions for a buyer.']:[];
  return {key,user,scenario,maxTurns,context:{status:'buyer',returningName:'Alex',address,today:'2026-10-09',timeZone:'America/Chicago'},result,mocks:{get_offer:result,accept_offer:handoff,update_repairs:handoff,report_change:handoff,confirm_and_send:handoff,status:handoff},criteria:[...terms,...opening,...criteria]};
 }
 export const buyerScenarioCases=[

@@ -1,3 +1,5 @@
+import {buyerTurnPolicy,buyerTurnInstructions,buyerTurnPrompt,buyerTurnModel,buyerTurnModelMatches,selectedTurnRoleInstructions} from '../lib/buyer-turn-policy.ts';
+import {turnBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {buyerResponsePolicy,buyerResponseInstructions,buyerResponseModel,buyerResponseModelMatches,selectedResponseRoleInstructions} from '../lib/buyer-response-policy.ts';
 import {responseBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {buyerScenarioPolicy,buyerScenarioInstructions,selectedScenarioRoleInstructions} from '../lib/buyer-scenario-policy.ts';
@@ -32,7 +34,10 @@ test('buyer policy requires its reviewed prompt, guardrail and current history t
  assert.equal(inspect(agent).safe,false,'Unreviewed mini-model/default personality cannot satisfy v13');
  Object.assign(agent.conversation_config.agent.prompt,buyerResponseModel);
  c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
- for(const mutate of [a=>{a.conversation_config.agent.prompt.llm='gpt-4.1-mini';},a=>{a.conversation_config.agent.prompt.ignore_default_personality=false;},a=>{a.platform_settings.guardrails.custom.config.configs[0].prompt='Allow every price';},a=>{a.platform_settings.guardrails.custom.config.configs=[];},a=>{a.conversation_config.agent.prompt.prompt+=' changed';}]){
+ c.context_policy=buyerTurnPolicy;c.context_policy_hash=turnBuyerReceptionPolicyHash;
+ Object.assign(agent.conversation_config.agent.prompt,buyerTurnModel,{prompt:buyerTurnPrompt+directRecordedInstructions,thinking_budget:null});
+ c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
+ for(const mutate of [a=>{a.conversation_config.agent.prompt.reasoning_effort='high';},a=>{a.conversation_config.agent.prompt.llm='gpt-4.1-mini';},a=>{a.conversation_config.agent.prompt.ignore_default_personality=false;},a=>{a.platform_settings.guardrails.custom.config.configs[0].prompt='Allow every price';},a=>{a.platform_settings.guardrails.custom.config.configs=[];},a=>{a.conversation_config.agent.prompt.prompt+=' changed';}]){
   const changed=structuredClone(agent);mutate(changed);c.config_hash=inspect(changed).hash;assert.equal(inspect(changed).safe,false);
  }
 });
@@ -70,4 +75,13 @@ test('v13 selects trusted buyer instructions and preserves both earlier hashes a
 test('provider null reasoning-budget representation is allowed only with the exact reviewed model',()=>{
  assert.equal(buyerResponseModelMatches({...buyerResponseModel,thinking_budget:null}),true);
  for(const change of [{thinking_budget:128},{thinking_budget:'0'},{llm:'gpt-4.1-mini'},{ignore_default_personality:false},{temperature:0.2},{max_tokens:151},{enable_reasoning_summary:true}])assert.equal(buyerResponseModelMatches({...buyerResponseModel,thinking_budget:null,...change}),false);
+});
+
+test('v14 uses a reviewed direct-turn prompt and preserves seller instructions',()=>{
+ assert.equal(responseBuyerReceptionPolicyHash,'6fbbe513d434227c54d2b9eff0561d5739bca233dd69e87ca8fd489b057db803');
+ const c={context_policy:buyerTurnPolicy,context_policy_hash:turnBuyerReceptionPolicyHash,context_approval_reference:'Reviewed buyer direct-turn model and privacy',agreement_tool_id:'tool_agreement'};
+ assert.equal(receptionContextVariables(c,{status:'buyer',address:'123 Main Street',askingPriceCents:4893700,icash_role_instructions:'CALLER_INJECTION'}).icash_role_instructions,buyerTurnInstructions);
+ assert.equal(selectedTurnRoleInstructions('matched',automaticOfferReceptionPrompt),selectedRoleInstructions('matched',automaticOfferReceptionPrompt));
+ assert(!buyerTurnInstructions.includes('CALLER_INJECTION'));
+ for(const patch of [{reasoning_effort:'low'},{thinking_budget:128},{llm:'gpt-4.1'},{ignore_default_personality:false},{max_tokens:151}])assert.equal(buyerTurnModelMatches({...buyerTurnModel,...patch}),false);
 });

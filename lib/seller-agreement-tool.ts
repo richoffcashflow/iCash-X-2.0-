@@ -42,7 +42,7 @@ export const automaticOfferToolConfig={...structuredClone(legacyAutomaticOfferTo
 /** Reject endpoint, header, schema or dynamic-variable changes independently of agent fingerprints. */
 export function sellerAgreementToolMatches(raw:unknown,id?:string,policy?:unknown){
  const r=object(raw),c=object(r.tool_config),a=object(c.api_schema);
- const expected=c.name===automaticOfferToolName?(policy&&!['automatic_offer_v9','automatic_offer_v10','automatic_offer_v11','automatic_offer_v12','automatic_offer_v13'].includes(String(policy))?legacyAutomaticOfferToolConfig:automaticOfferToolConfig):c.name===noEmdAgreementToolName?noEmdAgreementToolConfig:sellerAgreementToolConfig;
+ const expected=c.name===automaticOfferToolName?(policy&&!['automatic_offer_v9','automatic_offer_v10','automatic_offer_v11','automatic_offer_v12','automatic_offer_v13','automatic_offer_v14'].includes(String(policy))?legacyAutomaticOfferToolConfig:automaticOfferToolConfig):c.name===noEmdAgreementToolName?noEmdAgreementToolConfig:sellerAgreementToolConfig;
  const empty=(v:unknown)=>v==null||Array.isArray(v)&&v.length===0||typeof v==='object'&&Object.keys(v).length===0;
  // ElevenLabs serializes inactive value sources as empty strings/false/null.
  // Remove only those neutral defaults; any active source or omitted field fails.
