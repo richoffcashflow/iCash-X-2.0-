@@ -1,3 +1,4 @@
+import {webinarViewerLocation} from '../lib/webinar-viewer-location.ts';
 import assert from 'node:assert/strict';
 import {randomUUID,randomBytes} from 'node:crypto';
 import {readFileSync} from 'node:fs';
@@ -29,10 +30,10 @@ const db=async(path,method,body)=>{
  return {};
 };
 async function load(path,deps,key){globalThis[key]=deps;const source=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');return import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.'+key+';\n'+source).toString('base64'));}
-const common={...policy,z,db,Date:Clock,webinarHeaders:{'Cache-Control':'private, no-store'},WebinarError,webinarBody:req=>req.json(),webinarOrigin:()=>{},webinarLimit:async()=>{},webinarOwner:async()=>{if(!owner)throw new WebinarError(403,'Owner only');},webinarError:e=>Response.json({error:e.message},{status:e.status||503})};
+const common={webinarViewerLocation,...policy,z,db,Date:Clock,webinarHeaders:{'Cache-Control':'private, no-store'},WebinarError,webinarBody:req=>req.json(),webinarOrigin:()=>{},webinarLimit:async()=>{},webinarOwner:async()=>{if(!owner)throw new WebinarError(403,'Owner only');},webinarError:e=>Response.json({error:e.message},{status:e.status||503})};
 const returns=await load('../lib/webinar-ad-returns.ts',{...common,returnVisit,paidAdArrival,confirmedWatch,bestConvertingWebinar,stableWebinarOrder,selectRecording,availableWebinarRows:rows=>rows.map(policy.webinarFromRow),webinarConversionRecordings:async()=>stats},'__adReturns');
 const {POST}=await load('../app/api/webinar/start/route.ts',{...common,...returns,webinarLink,randomUUID,randomBytes,selectRecording:(w,t,_now,...rest)=>selectRecording(w,t,new Date(now),...rest),selectOffer,snapshotChat,returnVisit,approximateRegion:()=>null,webinarSite:{workspacePath:'/',checkoutPath:'/webinar/checkout'},webinarVipAccess:async()=>vipPaid,webinarVisitor:async()=>visitor,webinarCustomerAccount:async()=>account,webinarPaid:async()=>false,webinarCustomerPaid:async()=>paid,validGuest:()=>true,guestHash:()=> 'guest',cookies:async()=>({get:()=>({value:'guest'}),set:()=>{}})},'__fixedRoute');
-const post=body=>POST(new Request('https://example.test/api/webinar/start',{method:'POST',body:JSON.stringify({timezone:'America/Chicago',...body})}));
+const post=(body,headers={})=>POST(new Request('https://example.test/api/webinar/start',{method:'POST',headers,body:JSON.stringify({timezone:'America/Chicago',...body})}));
 let data=await(await post({attribution:{ad_id:'55555',email:'ignored@example.invalid'}})).json();
 assert.equal(data.webinar.id,one.id);assert.ok(calls.some(c=>c.path==='rpc/icash_webinar_begin'));assert.ok(!calls.some(c=>c.path.includes('intelligence')),'Legacy enabled settings never assign experiments');assert.equal(calls.find(c=>c.method==='PATCH').body.attribution.email,undefined);
 const saved={...one,title:'Saved main'};
@@ -66,4 +67,25 @@ const vipSaved={...vip,title:'Saved VIP day',nightVersion:null,nightEnabled:fals
 history=[{id:randomUUID(),webinar_id:vip.id,revision:1,progress_seconds:1550,max_seconds:1550,completed_at:null,superseded_at:null,is_preview:false,config:vipSaved,created_at:new Date(now-60000).toISOString(),updated_at:new Date(now-60000).toISOString()}];events=[{session_id:history[0].id,kind:'pitch_shown',event_key:'once',created_at:new Date(now-30000).toISOString()}];data=await(await post({code:'123457'})).json();assert.equal(data.webinar.title,'Saved VIP day','VIP never routes back to checkout at its offer');
 account=null;vipPaid=false;owner=false;assert.equal((await post({preview:vip.id})).status,403);
 const admin=await load('../app/api/webinar/intelligence/route.ts',common,'__retiredAdmin');assert.equal((await admin.GET()).status,403);owner=true;assert.deepEqual(await(await admin.GET()).json(),{enabled:false,retired:true});assert.equal((await admin.POST(new Request('https://example.test/api/webinar/intelligence',{method:'POST',body:'{"enabled":true}'}))).status,410);
+// Use the real location adapter through the live entry and ad-return handlers.
+const originalVercel=process.env.VERCEL;process.env.VERCEL='1';
+try{
+ const dallasHeaders={'x-vercel-ip-latitude':'32.7767','x-vercel-ip-longitude':'-96.797','x-vercel-ip-timezone':'America/Chicago'};
+ const nyHeaders={'x-vercel-ip-latitude':'40.7128','x-vercel-ip-longitude':'-74.006','x-vercel-ip-timezone':'America/New_York'};
+ now=Date.parse('2026-10-08T23:30:00Z');history=[];events=[];account=null;paid=false;
+ one.nightEnabled=true;one.nightVersion={...createNightRecording(one),videoUrl:'https://example.test/main-night.mp4'};
+ data=await(await post({code:'123456'},dallasHeaders)).json();assert.equal(data.webinar.recordingVersion,'day');
+ calls=[];data=await(await post({code:'123456'},nyHeaders)).json();assert.equal(data.webinar.recordingVersion,'night');
+ assert.ok(!JSON.stringify(calls).includes('40.7128'),'Coordinates are not saved in sessions or visitor records');
+ const frozen={...calls.find(c=>c.path==='rpc/icash_webinar_begin').body.p_config,title:'Night already started'};
+ history=[{...prior,id:randomUUID(),config:frozen,webinar_id:one.id,completed_at:null,max_seconds:100,watched_seconds:100,created_at:new Date(now-60000).toISOString(),updated_at:new Date(now-60000).toISOString()}];
+ data=await(await post({code:'123456'},dallasHeaders)).json();assert.equal(data.webinar.title,'Night already started');assert.equal(data.webinar.recordingVersion,'night','Resume does not replace an existing recording');
+ history=[{...prior,completed_at:new Date(now-9*3600000).toISOString(),watched_seconds:1700}];
+ stats=[{webinarId:three.id,version:'day',viewers:100,cohortBuyers:30},{webinarId:three.id,version:'night',viewers:100,cohortBuyers:30}];
+ data=await(await post({code:'123456',attribution:{ad_id:'55555'}},dallasHeaders)).json();assert.equal(data.webinar.id,three.id);assert.equal(data.webinar.recordingVersion,'day','Ad alternatives use the same daylight context');
+ data=await(await post({code:'123456',attribution:{ad_id:'55555'}},nyHeaders)).json();assert.equal(data.webinar.id,three.id);assert.equal(data.webinar.recordingVersion,'night');
+ history=[];vipPaid=true;vip.nightEnabled=true;vip.nightVersion.videoUrl='https://example.test/vip-night.mp4';
+ data=await(await post({code:'123457'},dallasHeaders)).json();assert.equal(data.webinar.recordingVersion,'day');
+ data=await(await post({code:'123457'},nyHeaders)).json();assert.equal(data.webinar.recordingVersion,'night','Paid VIP playback uses local daylight');
+}finally{if(originalVercel===undefined)delete process.env.VERCEL;else process.env.VERCEL=originalVercel;}
 console.log('PASS fixed routing: no experiments, stable acquisition attribution, same-webinar returns, paid VIP gate, local Day/Night fallback, saved VIP resume and retired controls.');
