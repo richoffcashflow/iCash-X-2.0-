@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {signatureRequestMessage} from '../lib/signing-invitation.ts';
+const seller=signatureRequestMessage('Clear Path Homes','650 GLADIOLA LOOP, KYLE, TX 78640',false);
+assert.equal(seller.subject,'Clear Path Homes: review your agreement');
+assert.match(seller.body,/Clear Path Homes has sent your agreement for 650 GLADIOLA LOOP/);
+assert.doesNotMatch(seller.body,/KYLE|78640|Cashflow Vlogs/);
+assert.match(seller.body,/\{\{submitter.link\}\}/);
+const owner=signatureRequestMessage('Clear Path Homes','650 GLADIOLA LOOP, KYLE, TX 78640',true);
+assert.match(owner.subject,/Urgent deal review/);assert.match(owner.body,/other party has signed/);
+const injection=signatureRequestMessage('{{submitter.link}} <script>\n[Click](https://example.invalid)','123 Test [A]',false);
+assert.equal((injection.body.match(/\{\{submitter.link\}\}/g)||[]).length,1);
+assert.doesNotMatch(injection.subject,/[\r\n<>{}\[\]]/);
+console.log('Per-business signing invitation, street wording, urgent customer copy and template-injection checks passed.');

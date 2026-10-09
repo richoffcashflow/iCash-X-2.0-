@@ -1,3 +1,4 @@
+import {signatureRequestMessage} from '../lib/signing-invitation.ts';
 /**
  * SIMULATION ONLY: synthetic accounts, properties, authority evidence, signatures,
  * provider receipts and title confirmations inside one ephemeral PostgreSQL DB.
@@ -215,7 +216,7 @@ try{await (async()=>{
  const reviewedTerms=fillEmptyTerms({...draft,priceCents:null},prep.patch);
  const dealId=await rpc('icash_prepare_deal',{p_account:account,p_screening:screen.id,p_terms:reviewedTerms});
  await assert.rejects(rpc('icash_prepare_deal',{p_account:otherAccount,p_screening:screen.id,p_terms:reviewedTerms}),/property missing/);
- const signing=await loadService('lib/signing-service.ts',{normalize,z,db,dispatchReservedOperation:operating.dispatchReservedOperation,signingReadiness,signingDocumentReadiness,signingTermsHash,signingFields,verifiedSigningStatus,dealTermsSchema});
+ const signing=await loadService('lib/signing-service.ts',{signatureRequestMessage,normalize,z,db,dispatchReservedOperation:operating.dispatchReservedOperation,signingReadiness,signingDocumentReadiness,signingTermsHash,signingFields,verifiedSigningStatus,dealTermsSchema});
  const signInput={accountId:account,userId:user,customerEmail:'customer@example.invalid',dealId,kind:'purchase',signers:[{name:'SIMULATION Seller',email:'seller@example.invalid'}]};
  await rpc('icash_prepare_deal',{p_account:account,p_screening:screen.id,p_terms:{...reviewedTerms,legalDescription:''}});
  await assert.rejects(signing.sendForSignatures(signInput),/legal description/);assert.equal(signatureWrites,0);

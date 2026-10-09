@@ -5,7 +5,7 @@ import {CallRecording} from './call-recording';
 
 type TranscriptPage = {id: string; before: number | null; transcript: {role: string; message: string}[]; next: number | null};
 
-export function CallConversation({id, party, summary, completedAt, durationSeconds, nextAction, interested, optedOut, humanRequested}: {id: string; party: string; summary?: string; completedAt?: string;durationSeconds?:number;nextAction?:string;interested?:boolean;optedOut?:boolean;humanRequested?:boolean}) {
+export function CallConversation({id, source='outbound', party, summary, completedAt, durationSeconds, nextAction, interested, optedOut, humanRequested}: {id: string; source?: 'outbound'|'reception'; party: string; summary?: string; completedAt?: string;durationSeconds?:number;nextAction?:string;interested?:boolean;optedOut?:boolean;humanRequested?:boolean}) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<TranscriptPage | null>(null);
   const [error, setError] = useState<{id: string; before: number | null; message: string} | null>(null);
@@ -22,7 +22,7 @@ export function CallConversation({id, party, summary, completedAt, durationSecon
     running.current = true;
     setData(null);
     setError(null);
-    void fetch(`/api/work/conversation?id=${encodeURIComponent(id)}${before !== null ? `&before=${before}` : ''}`, {
+    void fetch(`/api/work/conversation?id=${encodeURIComponent(id)}&source=${source}${before !== null ? `&before=${before}` : ''}`, {
       signal: controller.signal, cache: 'no-store',
     }).then(async response => {
       if (!response.ok) throw Error();
@@ -34,14 +34,14 @@ export function CallConversation({id, party, summary, completedAt, durationSecon
       if (!controller.signal.aborted) running.current = false;
     });
     return () => {controller.abort(); running.current = false;};
-  }, [id, open, before, attempt]);
+  }, [id, source, open, before, attempt]);
 
-  return <article className="call-summary-card"><header><strong>{party === 'seller' ? 'Seller' : party === 'buyer' ? 'Buyer' : 'Contact'} call</strong><span>{optedOut?'Do not contact':humanRequested?'Needs you':interested?'Interested':'Completed'}</span></header><small>{completedAt ? safeLocalTime(completedAt) : 'Time not recorded'}{typeof durationSeconds==='number'&&Number.isFinite(durationSeconds)&&durationSeconds>=0?` · ${Math.floor(durationSeconds/60)}m ${Math.floor(durationSeconds%60)}s`:''}</small><h5>Call summary</h5><p className="call-summary-copy">{summary?.trim() || 'No summary is available for this call yet.'}</p>{nextAction&&<div className="call-next-step"><strong>Next step</strong><p>{nextAction}</p></div>}<details onToggle={event => {
+  return <article className="call-summary-card"><header><strong>{party === 'seller' ? 'Seller' : party === 'buyer' ? 'Buyer' : 'Contact'} call{source === 'reception' ? ' · Incoming' : ''}</strong><span>{optedOut?'Do not contact':humanRequested?'Needs you':interested?'Interested':'Completed'}</span></header><small>{completedAt ? safeLocalTime(completedAt) : 'Time not recorded'}{typeof durationSeconds==='number'&&Number.isFinite(durationSeconds)&&durationSeconds>=0?` · ${Math.floor(durationSeconds/60)}m ${Math.floor(durationSeconds%60)}s`:''}</small><h5>Call summary</h5><p className="call-summary-copy">{summary?.trim() || 'No summary is available for this call yet.'}</p>{nextAction&&<div className="call-next-step"><strong>Next step</strong><p>{nextAction}</p></div>}<CallRecording key={`${source}:${id}`} conversationId={id} source={source}/><details onToggle={event => {
     if (event.target !== event.currentTarget) return;
     setOpen(event.currentTarget.open);
     if (!event.currentTarget.open) {setData(null); setError(null);}
   }}>
-    <summary>Transcript &amp; recording</summary>
+    <summary>Read call transcript</summary>
     {open && <>
       {!current && (currentError ? <>
         <p role="alert">{currentError}</p>
@@ -59,7 +59,6 @@ export function CallConversation({id, party, summary, completedAt, durationSecon
         {current?.next !== null && current?.next !== undefined && <button type="button" onClick={() => setPage({id, before: current.next})}>Earlier in call</button>}
         {before !== null && <button type="button" onClick={() => setPage({id, before: null})}>End of call</button>}
       </div>
-      <CallRecording key={id} conversationId={id}/>
     </>}
   </details></article>;
 }

@@ -25,7 +25,7 @@ const copy: Record<AttentionKind, {title: string; detail: string; focus: string}
   handoff: {title: 'Your assistant needs your input', detail: 'Your assistant saved a request for you to review.', focus: 'needs_you'},
   sms_callback: {title: 'Review a callback request', detail: 'A callback request needs your review. This does not confirm a scheduled call.', focus: 'callback'},
   live_callback: {title: 'A callback needs your attention', detail: 'A saved callback is held for you or marked missed. Check its current status in your workspace.', focus: 'callback'},
-  signature: {title: 'The other party signed — your signature is next', detail: 'The seller or cash buyer has signed. Open the agreement to review and add your signature.', focus: 'signature'},
+  signature: {title: 'Urgent deal review — your signature is next', detail: 'The seller or cash buyer has signed. Open the agreement to review and add your signature.', focus: 'signature'},
   title_review: {title: 'Review a title task', detail: 'A title task needs your review. A date mentioned in a title message may still need your confirmation.', focus: 'title_review'},
   closing_deadline: {title: 'Review an upcoming or overdue deadline', detail: 'A confirmed title deadline is within two days or overdue. Open the property to review the date and next step.', focus: 'closing_deadline'},
 };

@@ -21,8 +21,9 @@ export async function GET(req:Request){
  requestKey?db<{state:string;request_key:string}[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threadId}&customer_author_id=eq.${userId}&request_key=eq.${requestKey}&select=state,request_key&limit=1`):Promise.resolve([])
  ]):[[],[]];
  const messages=rows.slice(0,20).map(({customer_author_id,request_key,...message})=>({...message,retryKey:customer_author_id===userId&&message.state==='ready'?request_key:null})),last=messages.at(-1);
+ const callsResult=threadId?db<unknown[]>('rpc/icash_thread_calls','POST',{p_account:accountId,p_thread:threadId,p_before:before??null,p_after:rows.length>20&&last?last.created_at:null}).then(calls=>({calls,callsUnavailable:false})).catch(()=>({calls:[],callsUnavailable:true})):Promise.resolve({calls:[],callsUnavailable:false});
  const sendReason=threadId?await db<string|null>('rpc/icash_manual_text_reason','POST',{p_account:accountId,p_thread:threadId}):null;
- return NextResponse.json({threads:threads.map(t=>({...t,manualReply:true,sendReason:t.id===threadId?sendReason:null})),threadId,messages,receipt:requestKey?(receipts[0]??{state:'not_found',request_key:requestKey}):null,nextThread:threadRows.length>20?threads.at(-1)!.id:null,next:rows.length>20&&last?{before:last.created_at,beforeId:last.id}:null},{headers});
+ return NextResponse.json({...await callsResult,threads:threads.map(t=>({...t,manualReply:true,sendReason:t.id===threadId?sendReason:null})),threadId,messages,receipt:requestKey?(receipts[0]??{state:'not_found',request_key:requestKey}):null,nextThread:threadRows.length>20?threads.at(-1)!.id:null,next:rows.length>20&&last?{before:last.created_at,beforeId:last.id}:null},{headers});
  }catch{return NextResponse.json({error:'Messages unavailable'},{status:400,headers});}
 }
 export async function POST(req:Request){

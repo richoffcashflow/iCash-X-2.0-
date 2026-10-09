@@ -69,3 +69,6 @@ console.log('Signing completeness: no seller EMD, preserved buyer deposit, real/
 for(const stage of ['under_contract','buyer_selected','title_open','closing'])assert.equal(ready(assignment,'assignment',stage),true);
 for(const stage of ['draft','closed','cancelled','stopped','unknown'])assert.throws(()=>ready(assignment,'assignment',stage));
 console.log('Assignment signing supports active title stages and rejects completed/ineligible deals.');
+
+assert.equal(verifiedSigningStatus(normalizeDocuseal({...submission,submitters:[...submission.submitters].reverse()},env),{...e,providerId:'100'}),'customer_signature_needed','response array order does not change bound signing order');
+assert.throws(()=>normalizeDocuseal({...submission,submitters:[submission.submitters[0],submission.submitters[0]]},env),/Duplicate signature recipient/);
