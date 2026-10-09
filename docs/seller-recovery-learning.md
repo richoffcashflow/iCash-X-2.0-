@@ -1,6 +1,6 @@
 # Seller recovery and conversion learning
 
-This release repairs the 17 failures reproduced by the October 9 seller audit and adds a durable recovery loop to the existing call, SMS, signing and viewing workflows. It does not replace the underlying contact, financial, signing or billing authority. Implementation and local verification are complete. The recovery migration was applied to production on October 9, 2026 as version `20261009223901`; all seven message variants remain disabled until the matching application release is live. PR #135 is merged and its preview is READY. The production worker successfully deployed the merged seller code; application deployment remains held by the shared buyer voice release gate. The follow-up migration `20261009224932` preserves eligible cases while recovery is paused.
+This release repairs the 17 failures reproduced by the October 9 seller audit and adds a durable recovery loop to the existing call, SMS, signing and viewing workflows. It does not replace the underlying contact, financial, signing or billing authority. Implementation and local verification are complete. The recovery migration was applied to production on October 9, 2026 as version `20261009223901`; all seven message variants remain disabled until the matching application release is live. PR #135 is merged and its preview is READY. The production worker successfully deployed the merged seller code; application deployment remains held by the shared buyer voice release gate. Follow-up migrations `20261009224932` and `20261009225857` preserve eligible cases while recovery is paused and prevent replayed signing callbacks from falsely crediting a later recovery.
 
 ## Repairs
 
@@ -40,13 +40,13 @@ Unresolved seller cases appear in the workspace's existing â€œNeeds your reviewâ
 ## Verification
 
 - Original executable seller audit: **100 passed, 0 gaps, 0 errors**, compared with 83 passed and 17 gaps before repairs.
-- New isolated PostgreSQL migration suite: **39 scenarios passed**, including source capture, idempotency, stale-message rejection, STOP, quiet hours, zero balance, unknown delivery, source-channel/tenant isolation, learning promotion/rollback, owner resolution and seller-to-buyer viewing relay.
+- New isolated PostgreSQL migration suite: **40 scenarios passed**, including source capture, idempotency, stale-message rejection, STOP, quiet hours, zero balance, unknown delivery, source-channel/tenant isolation, learning promotion/rollback, owner resolution and seller-to-buyer viewing relay.
 - **39 focused test suites passed**, including actual offer/contract route bodies, grounded lower-price proposals, final acceptance, account activity pagination, contact policy, recovery review authorization and the latest buyer scenario/privacy changes.
 - Existing seller conversation (123 scenarios), seller response and buyer purchase SQL suites passed separately with their documented fixture delegates.
 - Local production-mode Next build and TypeScript passed. No live sellers/buyers were called or texted and no signing request was sent by this verification. The production migration was applied with sending disabled; a rollback-only synthetic database check passed event capture, cross-account rejection, owner-only resolution, stale-version rejection and no outbound message creation. Production readback confirmed RLS and service-only table/function access.
 - After integrating main (#134; later reconciled through #137), the broad `pnpm test` run stops at `contact-channel-admission.test.mjs`, which still expects the retired account daily spending cap to block admission. That test and its readiness implementation are unchanged from main. A separately checked old static copy assertion in `workspace-view.test.mjs` also remains stale. Product behavior was not changed to restore obsolete expectations.
 
-The latest integrated release also passed the 100-case seller audit, all 39 recovery migration checks, buyer SQL integration, standard contract signing, seller policy, agreement route, buyer scenario and buyer voice policy tests. The shared production provider audit v3 passed 19 of 30 conversations and remains a release blocker; its immutable results and required build gate are preserved.
+The latest integrated release also passed the 100-case seller audit, all 40 recovery migration checks, buyer SQL integration, standard contract signing, seller policy, agreement route, buyer scenario and buyer voice policy tests. The shared production provider audit v3 passed 19 of 30 conversations and remains a release blocker; its immutable results and required build gate are preserved. The later v4 provider audit also failed (20/30), including one seller delivery-failure dialogue; the candidate remains inactive.
 
 Tests execute the shipped recovery migration with synthetic data. Older consent/billing/provider dispatch functions are explicit fixture delegates in the new SQL suite; their existing suites cover those separate boundaries. Local passing tests do not establish real-model dialogue quality, live carrier delivery, live provider latency or an actual conversion lift.
 
@@ -60,6 +60,8 @@ The release-pause regression was reproduced before the follow-up fix: disabled v
 4. Observe delivery/unknown rates, unresolved cases, opt-outs, signatures and closing outcomes separately. There is no claimed conversion improvement until live evidence matures.
 
 To pause new recoveries without disabling ordinary work, an authorized database operator can disable the approved recovery variants and hold pending `seller_recovery` tickets. Final claims then reject queued recovery templates. Do not reset an uncertain provider operation or delete its receipt. Retain the migration when rolling back application code so saved cases and evidence remain intact.
+
+The signing-replay regression also failed before its fix: repeating an already-completed purchase callback attributed that old signature to a subsequently delivered viewing follow-up. The trigger now ignores completed-to-completed updates; new verified signing events still count. Migration `20261009225857_seller_recovery_signing_replay.sql` is installed.
 
 ## Local commands
 
