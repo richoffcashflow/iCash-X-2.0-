@@ -1,4 +1,4 @@
-import {buyerResponsePolicy,buyerResponseModel} from './buyer-response-policy.ts';
+import {buyerResponsePolicy,buyerResponseModelMatches} from './buyer-response-policy.ts';
 import {buyerVoicePolicy,buyerVoiceGuardrail} from './buyer-voice-policy.ts';
 import {recordingAuthorized,directRecordedInstructions} from './direct-call-entry.ts';
 import {automaticOfferGuardrailMatches,automaticOfferPolicy} from './automatic-offer-policy.ts';
@@ -70,7 +70,7 @@ export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:un
  const inlineStopMatchesReviewedDefinition=inlineTools.bounded&&inlineTools.shape!=='invalid'&&inlineTools.matchingStopCount<=1&&inlineTools.unrecognizedCount===0;
  if(inlineStopMatchesReviewedDefinition&&Array.isArray(prompt.tools))prompt.tools=prompt.tools.filter((_,index)=>inlineTools.entries[index].kind!=='reviewed_stop');
  const expectedPrompt=propertyReceptionEnabled(c)?receptionContextPrompt(c):receptionPrompt;
- const responseModel=c.context_policy!==buyerResponsePolicy||Object.entries(buyerResponseModel).every(([key,value])=>prompt[key]===value);
+ const responseModel=c.context_policy!==buyerResponsePolicy||buyerResponseModelMatches(prompt);
  const exactPrompt=prompt.prompt===expectedPrompt+(c.entry_policy==='direct_recorded_v1'?directRecordedInstructions:recordedReceptionStopInstruction);
  prompt.tool_ids=[];prompt.prompt=expectedPrompt;
  const base=inspectReceptionAgent({...c,config_hash:''},a,branch,workspaceAbsent);
