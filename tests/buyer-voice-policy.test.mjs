@@ -1,4 +1,4 @@
-import {buyerResponsePolicy,buyerResponseInstructions,buyerResponseModel,selectedResponseRoleInstructions} from '../lib/buyer-response-policy.ts';
+import {buyerResponsePolicy,buyerResponseInstructions,buyerResponseModel,buyerResponseModelMatches,selectedResponseRoleInstructions} from '../lib/buyer-response-policy.ts';
 import {responseBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {buyerScenarioPolicy,buyerScenarioInstructions,selectedScenarioRoleInstructions} from '../lib/buyer-scenario-policy.ts';
 import {scenarioBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
@@ -65,4 +65,9 @@ test('v13 selects trusted buyer instructions and preserves both earlier hashes a
  assert.equal(selectedResponseRoleInstructions('matched',automaticOfferReceptionPrompt),selectedRoleInstructions('matched',automaticOfferReceptionPrompt));
  assert.equal(receptionContextVariables(c,{...b,askingPriceCents:0}).icash_role_instructions,unknownRoleInstructions);
  assert(!buyerResponseInstructions.includes('CALLER_INJECTION'));
+});
+
+test('provider null reasoning-budget representation is allowed only with the exact reviewed model',()=>{
+ assert.equal(buyerResponseModelMatches({...buyerResponseModel,thinking_budget:null}),true);
+ for(const change of [{thinking_budget:128},{thinking_budget:'0'},{llm:'gpt-4.1-mini'},{ignore_default_personality:false},{temperature:0.2},{max_tokens:151},{enable_reasoning_summary:true}])assert.equal(buyerResponseModelMatches({...buyerResponseModel,thinking_budget:null,...change}),false);
 });
