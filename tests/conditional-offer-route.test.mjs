@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {sellerAgreementInput} from '../lib/seller-agreement-flow.ts';
 import {blockedOffer} from '../lib/automatic-call-offer.ts';
+import {callOfferEvidence} from '../lib/call-offer-evidence.ts';
 import {object} from '../lib/required-call-recording.ts';
 let sends=0,quote={quoteAllowed:true,party:'seller',priceCents:10200000,status:'conditional_accepted',conditional:true,contractAllowed:false};
 const forbidden=()=>assert.fail('A conditional offer must not reach providers');
 const route=await loadService('app/api/internal/voice/cash-offer/route.ts',{
  liveToolHistory,NextResponse:{json:Response.json},process:{env:{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',DOCUSEAL_MODE:'live'}},
- db:forbidden,bindSellerAgreementCall:forbidden,callOfferEvidence:forbidden,callPayoffEvidence:forbidden,createRecordedReceptionProviders:forbidden,
+ db:forbidden,bindSellerAgreementCall:forbidden,callOfferEvidence,callPayoffEvidence:forbidden,createRecordedReceptionProviders:()=>({conversation:async()=>({transcript:[{role:'agent',message:'The cash offer is $102,000. Does that work?'},{role:'user',message:'Yes.'}]})}),
  automaticCallOffer:async()=>quote,blockedOffer,sellerAgreementInput,object,
  sellerAgreementAction:async()=>{sends++;return {sent:true};},sellerAgreementFailure:()=>({sent:false,status:'held'}),sendForSignatures:forbidden,textPendingContract:forbidden,refreshSigning:forbidden,
 });

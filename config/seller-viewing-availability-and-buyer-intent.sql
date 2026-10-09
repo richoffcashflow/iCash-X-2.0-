@@ -46,27 +46,37 @@ end $$;
 
 create function public.icash_capture_seller_viewing(p_account uuid,p_deal uuid,p_thread uuid,p_source text,p_id uuid,p_turns jsonb,p_at timestamptz) returns void
 language plpgsql security definer set search_path='' as $$
-declare t public.icash_text_threads;d public.icash_deal_files;turn jsonb;previous text:='';answer text;quote text:='';slots jsonb:='[]';slot jsonb;slot_state text:='available';candidate boolean;
+declare t public.icash_text_threads;d public.icash_deal_files;turn jsonb;previous text:='';answer text;quote text:='';slots jsonb:='[]';slot jsonb;slot_state text:='available';candidate boolean;correction boolean;has_schedule boolean;
 begin
  select * into t from public.icash_text_threads where id=p_thread and account_id=p_account and deal_id=p_deal and party='seller' and retired_at is null;if not found then return;end if;
  select * into d from public.icash_deal_files where id=p_deal and account_id=p_account and stage in ('under_contract','buyer_selected','title_open','closing');
  if not found or coalesce(d.terms->>'practice','false')='true' or not exists(select 1 from public.icash_signing_envelopes where account_id=p_account and deal_id=p_deal and kind='purchase' and state='completed' and not test_mode) then return;end if;
  if jsonb_typeof(p_turns) is distinct from 'array' or jsonb_array_length(p_turns)>80 or p_at>now() or p_at<now()-interval '30 days' then return;end if;
+ has_schedule:=exists(select 1 from public.icash_seller_viewing_availability where account_id=p_account and deal_id=p_deal and stated_at<=p_at);
  for turn in select value from jsonb_array_elements(p_turns) loop
   answer:=btrim(turn->>'message');
   if turn->>'role'='agent' then previous:=answer;continue;end if;
   if turn->>'role'<>'user' or length(answer) not between 1 and 1500 then continue;end if;
-  candidate:=(previous ~* '\m(viewing|viewings|showing|showings|visit|tour|access)\M' and previous ~* '\m(day|days|date|dates|time|times|when|available|availability|works|work|window|windows)\M')
+  correction:=(quote<>'' or has_schedule) and answer ~* '^((actually[, ]+)?make it|change (it|that) to|instead)\M';
+  candidate:=correction or (previous ~* '\m(viewing|viewings|showing|showings|visit|tour|access)\M' and previous ~* '\m(day|days|date|dates|time|times|when|available|availability|works|work|window|windows)\M')
    or (answer ~* '\m(viewing|viewings|showing|showings|visit|tour)\M' and answer ~* '\m(available|cancel|cannot|can''t|works|work|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\M');
   if not candidate or answer ~* '^(yes|yeah|yep|correct|that works|those work|ok|okay|thanks|thank you)[.! ]*$' then continue;end if;
   if answer !~ '[[:alnum:]]' then continue;end if;
   quote:=left(case when quote='' then answer else quote||E'\n'||answer end,4000);
-  if answer ~* '\m(cancel|unavailable|cannot|can''t|not|don''t|do not|no longer|never)\M' then
+  if correction then
+   -- Hold a changed time until the complete replacement is clarified. Never
+   -- keep advertising the old slot merely because the word viewing was omitted.
+   slots:='[]';slot_state:='needs_review';
+  elsif answer ~* '\m(cancel|unavailable|cannot|can''t|not|don''t|do not|no longer|never)\M' then
    slots:='[]';slot_state:=case when answer ~* '\m(cancel|no longer|unavailable)\M' then 'withdrawn' else 'needs_review' end;
   else
    slot:=public.icash_parse_viewing_slot(answer,p_at);
    if slot is null then slot_state:='needs_review';slots:='[]';
-   elsif slot_state='available' and jsonb_array_length(slots)<8 then slots:=slots||jsonb_build_array(slot);end if;
+   else
+    if slot_state<>'available' then slots:='[]';end if;
+    slot_state:='available';
+    if jsonb_array_length(slots)<8 then slots:=slots||jsonb_build_array(slot);end if;
+   end if;
   end if;
  end loop;
  if quote='' then return;end if;

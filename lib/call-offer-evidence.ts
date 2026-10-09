@@ -69,7 +69,7 @@ export function callOfferEvidence(value:unknown,input:Record<string,unknown>){
     const last=turns.lastIndexOf(agent);agent=turns.slice(0,last).findLast(t=>t.role==='agent');
    }
    if(agent&&priceQuestion(String(agent.message)))accepted=yes(text)&&!spokenMoneyAmounts(text).some(amount=>amount!==Number(input.priceCents));
-   else if(/\b(?:only if|changed my mind|do not accept|don't accept|not selling|don['’]?t want to sell|no longer interested|cancel|hold off)\b/i.test(text)||/\b(?:offer|price|instead|but|unless)\b/i.test(text)||spokenMoneyAmounts(text).some(amount=>amount!==Number(input.priceCents))&&/\b(?:could you|can you|need|want|at least|only accept)\b/i.test(text))accepted=false;
+   else if(/\b(?:only if|changed my mind|do not accept|don['’]?t accept|not selling|don['’]?t want to sell|no longer interested|cancel|hold off|not ready|wait|need to think|never agreed|didn['’]?t agree|did not agree|not sure|let me think)\b/i.test(text)||/\b(?:need|want|have)\b.{0,60}\b(?:spouse|wife|husband|partner|co[- ]?owner|attorney|lawyer)\b.{0,40}\b(?:agree|approval|approve|review|first|permission)\b/i.test(text)||/\b(?:offer|price|instead|but|unless)\b/i.test(text)||spokenMoneyAmounts(text).some(amount=>amount!==Number(input.priceCents))&&/\b(?:could you|can you|need|want|at least|only accept)\b/i.test(text))accepted=false;
   }
   return accepted;
  }
@@ -111,4 +111,19 @@ export function callSellerStatement(value:unknown,input:Record<string,unknown>):
   if(!/\b(repair|repairs|roof|foundation|renovation|rehab|ac|air condition|hvac|plumbing|electrical|damage|condition|fix|budget)\b/i.test(latest+' '+previous))return null;
  }
  return latest;
+}
+
+/** An exact, unconditional seller asking price can seed a fresh proposal. It
+ * never becomes acceptance until the server quotes it and the seller confirms. */
+export function callSellerPriceEvidence(value:unknown,input:Record<string,unknown>):number|null{
+ if(input.action!=='report_change'||!callOfferEvidence(value,input))return null;
+ const text=String(input.sellerStatement??'').trim(),amounts=spokenMoneyAmounts(text);
+ if(amounts.length!==1||amounts[0]<=0||/\b(not|no|but|if|unless|maybe|between|at least|more than|less than|mortgage|owe|repair|tax|lien|deposit|net|after fees)\b/i.test(text))return null;
+ const prefix=/^(?:my asking price is|i am asking|i['’]m asking|i would (?:take|accept)|i['’]d (?:take|accept)|i can (?:take|accept)|i will (?:take|accept)|i['’]ll (?:take|accept))\s+/i.exec(text);
+ if(!prefix)return null;
+ const rest=text.slice(prefix[0].length).replace(/[.!]+$/,'').trim();
+ const words=Object.keys(units).concat('hundred','thousand','million','and').join('|');
+ const moneyOnly=new RegExp(`^(?:\\$?\\d[\\d,]*(?:\\.\\d{1,2})?\\s*(?:k|thousand|million)?(?: dollars?)?|(?:${words})(?:[ -]+(?:${words}))*(?: dollars?)?)$`,'i');
+ if(!moneyOnly.test(rest))return null;
+ return amounts[0];
 }

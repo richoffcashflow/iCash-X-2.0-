@@ -7,13 +7,14 @@ export type WorkspaceEvidence = {
  viewingRequests?:{screening_id:string}[];
  deals:WorkspaceDeal[];
  handoffs:{screening_id:string;state:string}[];
+ sellerRecovery?:{screening_id:string}[];
  textAttention?:{screening_id:string}[];
  callRequests?:{screening_id:string;state:string}[];
  signing:{deal_id:string;state:string;test_mode:boolean}[];
 };
 export function needsAttention(id:string, work:WorkspaceEvidence) {
  const deal=work.deals.find(d=>d.screening_id===id);
- return !!work.viewingRequests?.some(v=>v.screening_id===id)||!!work.propertyAttentionIds?.includes(id)||!!work.textAttention?.some(a=>a.screening_id===id)
+ return !!work.sellerRecovery?.some(g=>g.screening_id===id)||!!work.viewingRequests?.some(v=>v.screening_id===id)||!!work.propertyAttentionIds?.includes(id)||!!work.textAttention?.some(a=>a.screening_id===id)
   ||work.handoffs.some(h=>h.screening_id===id&&h.state==='open')
   ||!!work.callRequests?.some(c=>c.screening_id===id&&c.state==='needs_review')
   ||work.signing.some(s=>s.deal_id===deal?.id&&s.state==='customer_signature_needed');
