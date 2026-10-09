@@ -19,9 +19,11 @@ test('oversized or corrupt buyer prices fail closed without throwing during a ca
 test('voice receives supplied photo counts and research estimates, never raw attachments',()=>{
  const b={...buyer,latitude:30.03,longitude:-97.79,sellerPhotos:[{url:'https://api.contiguity.com/attachments/fixture.jpg',mime:'image/jpeg'},{url:'https://untrusted.example/a.jpg',mime:'image/jpeg'}],arvCents:25000000,repairsCents:2000000};
  const r=calculateAutomaticCallOffer({party:'buyer',buyer:b},{},now);
- assert.equal(r.propertyPhotoCount,2);assert.equal(r.sellerPhotoCount,1);assert.equal(r.estimatedArvCents,25000000);assert.equal(r.estimatedRepairsCents,2000000);
+ assert.equal(r.propertyPhotoCount,2);assert.equal(r.sellerPhotoCount,1);assert.deepEqual(r.researchEstimates,{arv:'$250,000',repairs:'$20,000'});
+ assert.match(r.spokenResearchEstimates,/two hundred fifty thousand dollars/);assert.match(r.spokenResearchEstimates,/twenty thousand dollars/);
+ assert.equal(r.estimatedArvCents,undefined);assert.equal(r.estimatedRepairsCents,undefined);
  assert(!JSON.stringify(r).includes('https://api.contiguity.com'));assert.match(r.instruction,/not guarantees or an inspection/);
- const empty=calculateAutomaticCallOffer({party:'buyer',buyer},{},now);assert.equal(empty.propertyPhotoCount,0);assert.equal(empty.estimatedArvCents,null);
+ const empty=calculateAutomaticCallOffer({party:'buyer',buyer},{},now);assert.equal(empty.propertyPhotoCount,0);assert.equal(empty.researchEstimates.arv,null);assert.match(empty.spokenResearchEstimates,/No ARV estimate/);
 });
 test('unconfirmed title and buyer exceptions have explicit review boundaries',()=>{
  const r=calculateAutomaticCallOffer({party:'buyer',buyer:{...buyer,titleSelectionStatus:'needs_confirmation'}},{},now);

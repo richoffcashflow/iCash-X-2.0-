@@ -41,3 +41,12 @@ The owner explicitly required private acquisition pricing and assignment spread 
 
 
 A subsequent surface audit found the separate downloadable buyer draft still exposed acquisition/fee amounts and appended internal deal notes. The draft now shows only the combined buyer price and deposit, omits those notes and does not instruct distribution of the acquisition contract. Existing assignment templates contain a fee field: new sends and counterparty-link delivery are blocked for templates mapped to private acquisition/fee fields, before any provider dispatch. Existing executed agreements and internal owner/title documents are unchanged. A reviewed buyer agreement is still required before buyer contract delivery can resume; no contract clauses or existing signatures were rewritten.
+
+
+## Follow-up policy review
+
+The v2 run finished with 5/28 passing under the added conversational-repetition check and blocked its production build. The private-price tests continued to protect the numbers, and reserved-property viewing stopped. Tool-level guidance did not reliably suppress generic closing questions or implied callbacks. The research scenario also exposed a genuine cents-to-dollars error: the agent spoke $2.5 million instead of $250,000 ARV and $200,000 instead of $20,000 repairs. Research now returns server-formatted dollar amounts and exact spoken estimates, with no raw cents for the model to reinterpret.
+
+The authoritative buyer instructions are now a separately hashed `automatic_offer_v12` policy. v11 and seller prompts/hashes are retained unchanged. The reviewed provider role-slot prompt, branch, tools and version are unchanged; only the repository-owned runtime buyer instruction selection is new. Migration `20261009222759_buyer_scenario_policy.sql` allows staging a disabled v12 configuration from the exact active v11 source after the retained failed v2 audit. It does not enable a configuration or change existing sessions.
+
+The v3 gate tests all 28 buyer scenarios and 2 seller contract-flow regressions with all tools mocked. It inspects the provider prompt, tools, guardrail and configuration hash before testing. Activation requires a passed exact audit and compatible READY deployment. The repetition criterion explicitly means the same request/invitation across two or more responses; a single final goodbye is not repeated questioning. This corrects several v2 grader false positives without accepting repeated closers, pricing errors, promises, bookings or disclosures. No failed evidence is deleted or relabeled.
