@@ -70,6 +70,19 @@ begin
  return public.icash_buyer_reply_before_price_privacy(p_account,p_thread,p_incoming);
 end $$;
 
+-- The owner's delivery-test composer uses the same public buyer projection.
+-- Remove its legacy fee amount so a future test still produces a complete email.
+do $owner_test$
+declare definition text;updated text;
+begin
+ if to_regprocedure('public.icash_owner_buyer_test_content(uuid)') is not null then
+  definition:=pg_get_functiondef('public.icash_owner_buyer_test_content(uuid)'::regprocedure);
+  updated:=replace(definition,'''Includes the $''||to_char((p.data->>''assignmentFeeCents'')::numeric/100,''FM999,999,999,990.00'')||'' assignment fee.''','''Our assignment fee is included in the buyer price.''');
+  if updated=definition then raise exception 'Expected owner buyer-test composer required';end if;
+  execute updated;
+ end if;
+end $owner_test$;
+
 -- Old queued package emails must not send the former price breakdown.
 alter function public.icash_claim_deal_email(uuid,uuid) rename to icash_claim_deal_email_before_price_privacy;
 create function public.icash_claim_deal_email(p_account uuid,p_id uuid) returns jsonb
@@ -77,7 +90,8 @@ language plpgsql security invoker set search_path='' as $$
 declare m public.icash_deal_emails;
 begin
  select * into m from public.icash_deal_emails where id=p_id and account_id=p_account;
- if m.contact_key like 'buyer-request:%' and m.body_text ~* '(underlying purchase price|assignment fee)\s*:' then return null;end if;
+ if (m.contact_key like 'buyer-request:%' or m.contact_key like 'owner-buyer-test:%')
+  and m.body_text ~* '(underlying purchase price|assignment fee)\s*:|includes the \$[0-9][0-9,.]* assignment fee' then return null;end if;
  return public.icash_claim_deal_email_before_price_privacy(p_account,p_id);
 end $$;
 

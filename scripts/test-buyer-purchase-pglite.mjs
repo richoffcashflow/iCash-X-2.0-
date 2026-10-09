@@ -90,6 +90,14 @@ alter table icash_text_messages add last_delivery_at timestamptz;
  await pg.exec(readFileSync('config/buyer-scenario-followups.sql','utf8'));
  await (await import('./test-buyer-scenario-fixtures.mjs')).testBuyerScenarios({q,one,rpc,a,d,sc,t,session,hash});
  await (await import('./test-buyer-title-fixtures.mjs')).testBuyerTitle({q,one,rpc,a,d,sc,t,session,hash});
+ // Install the actual legacy owner-test email composer before the privacy migration.
+ await pg.exec(`create table icash_owner_buyer_tests(id uuid primary key,account_id uuid,deal_id uuid,asking_price_cents bigint,enabled boolean);
+ create table icash_buyer_package_links(account_id uuid,deal_id uuid,revoked_at timestamptz,asking_price_cents bigint,token text);
+ create or replace function icash_owner_buyer_test_current(p_id uuid) returns boolean language sql as $$select exists(select 1 from public.icash_owner_buyer_tests where id=p_id and enabled)$$;`);
+ const ownerComposer=readFileSync('config/owner-buyer-delivery-test.sql','utf8').match(/create function public.icash_owner_buyer_test_content[\s\S]*?\$\$;/)[0];
+ await pg.exec(ownerComposer);
+ await q("insert into icash_owner_buyer_tests values('88888888-8888-4888-8888-888888888888',$1,$2,16227050,true)",[a,d]);
+ await q("insert into icash_buyer_package_links values($1,$2,null,16227050,'fixture-token')",[a,d]);
  await pg.exec(readFileSync('config/buyer-price-privacy.sql','utf8'));
  await (await import('./test-buyer-price-privacy-fixtures.mjs')).testBuyerPricePrivacy({q,one,rpc,a,d,t});
  // A buyer can wait for seller options without inventing or choosing a time.
