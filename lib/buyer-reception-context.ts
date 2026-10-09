@@ -15,7 +15,8 @@ export function buyerReceptionVariables(value:unknown){
  const v=value as Record<string,unknown>|null;
  const firstName=callFirstName(v?.returningName),greeting=firstName?`Hi ${firstName}. `:'';
  if(v?.status==='buyer'&&typeof v.address==='string'&&v.address.trim().length>0&&v.address.length<=300&&!/[<>\x00-\x1f]/.test(v.address)&&[v.askingPriceCents,v.purchasePriceCents,v.assignmentFeeCents].every(n=>typeof n==='number'&&Number.isSafeInteger(n)&&n>=0)&&Number(v.purchasePriceCents)>0&&Number(v.askingPriceCents)===Number(v.purchasePriceCents)+Number(v.assignmentFeeCents)){
-  const context={status:'buyer',address:v.address,askingPriceCents:v.askingPriceCents,purchasePriceCents:v.purchasePriceCents,assignmentFeeCents:v.assignmentFeeCents,buyerPaysClosingCosts:true,...(firstName?{returningName:firstName}:{})};
+  const closingDate=typeof v.closingDate==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v.closingDate)?v.closingDate:null;
+  const context={status:'buyer',address:v.address,askingPriceCents:v.askingPriceCents,purchasePriceCents:v.purchasePriceCents,assignmentFeeCents:v.assignmentFeeCents,buyerPaysClosingCosts:true,...(closingDate?{closingDate}:{}),...(firstName?{returningName:firstName}:{})};
   return {icash_property_greeting:`${greeting}Are you calling about buying ${conversationStreet(v.address)}?`,icash_property_context:JSON.stringify(context)};
  }
  const context=safeInboundPropertyContext(value);

@@ -1,0 +1,15 @@
+# Buyer callback and package recovery
+
+The owner's October 9 call recognized the buyer and property, but both `get_offer` requests returned `current_call_required`. The price function re-ran a context lookup restricted to pre-registration sessions. The provider's completed transcript and canonical identities were inspected; the early reconciliation binding warning was transient, and the final readback passed the full binding check.
+
+The fix freezes the buyer's account, deal and text thread when the call starts. During the call, the price tool uses that binding and rechecks the current signed package, session deadline, account, membership, manual holds, opt-outs and owner-test expiry. Seller prompts, price guardrails and outbound-buyer-call restrictions remain intact. The caller-number literal-plus check was also corrected.
+
+The price tool now supplies the exact buyer total, fee breakdown and closing date and directs the AI to collect a preferred viewing date, time and timezone. Completed buyer calls appear in the property conversation and call history. Viewing requests become dashboard review items using exact caller statements. The owner can mark a request reviewed; this does not book or confirm access. Buyer text requests also create these review items and use deterministic replies.
+
+Buyer packages include the research property's ID-matched imagery and raster images received on that deal's seller threads. The gallery validates provider hosts and MIME types, escapes output and excludes buyer attachments and documents. The tested property currently has a provider street image and no saved seller photos.
+
+Discovery broadens after the first focused page to corporate-owned properties in the property's ZIP, including owners outside the recent-sale/no-recorded-mortgage filters. The existing maximum pages, actual-cost claims, rights, deduplication and contact controls remain. Empty estimates save a free cursor. Broader searches have distinct operation keys, preserving uncertain earlier requests without replaying them. The owner-requested one-time corporate search is scoped to this deal, gated to production/main, expires today and cannot send outreach.
+
+Live data changes: the real failed buyer call was restored to buyer call history from the exact verified provider diagnostic. No viewing request was fabricated for that call. The real-buyer outreach hold remains active. The successful owner SMS at 1:04 PM Central was not resent.
+
+Validation: the new migration regression covers post-registration price access, immutable property binding, cross-account rejection, opt-out/pause/deadline checks, gallery scoping, transcript pagination, viewing requests, replay safety, permissions, free search cursors and uncertain paid-request protection. Seventy-two focused application checks and TypeScript passed. An unrelated existing workspace copy assertion still expects the removed phrase “Blank is not $0”; the baseline source already lacks it. A new handset call is still needed to verify the updated spoken conversation end to end.

@@ -115,7 +115,10 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
     if(conversation?.status==='done'&&Array.isArray(conversation.transcript)){
      const turns=conversation.transcript.map(object).filter(t=>['agent','user'].includes(String(t.role))&&typeof t.message==='string'&&t.message.length<=12000).map(t=>({role:t.role,message:t.message}));
      const transcript=turns.length>80?[...turns.slice(0,40),...turns.slice(-40)]:turns;
-     if(transcript.length)await rpc('icash_save_seller_inbound_history',{p_session:row.id,p_conversation:row.conversation_id,p_transcript:transcript});
+     if(transcript.length){
+      await rpc('icash_save_seller_inbound_history',{p_session:row.id,p_conversation:row.conversation_id,p_transcript:transcript});
+      await rpc('icash_save_buyer_inbound_history',{p_session:row.id,p_conversation:row.conversation_id,p_transcript:transcript});
+     }
     }
     stage='settlement';
     const freshCall=terminal?call:await provider.getCall(row.call_sid);
