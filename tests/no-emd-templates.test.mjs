@@ -4,6 +4,7 @@ import {prepareNoEmdTemplates} from '../scripts/prepare-no-emd-templates.mjs';
 const config=JSON.parse(readFileSync(new URL('../config/signing-templates/purchase-config.json',import.meta.url)));
 const base=JSON.parse(readFileSync(new URL('../config/signing-templates/purchase.json',import.meta.url)));
 assert.equal(base.html,readFileSync(new URL('../config/signing-templates/purchase.html',import.meta.url),'utf8'));
+assert(!/\bEMD\b/i.test(base.name));
 assert(!/earnest|\bEMD\b/i.test(base.html));assert(base.html.includes('security deposits'),'tenant provisions remain intact');
 assert(readFileSync(new URL('../config/signing-templates/assignment.html',import.meta.url),'utf8').includes('assignmentDepositCents'));
 const env={VERCEL_ENV:'production',ICASH_DIRECT_CALLS_PREPARE:'true',SUPABASE_URL:'https://db.invalid',SUPABASE_SECRET_KEY:'fixture',DOCUSEAL_API_KEY:'live-fixture',DOCUSEAL_TEST_API_KEY:'test-fixture'};
@@ -20,11 +21,11 @@ for(const scenario of ['ok','missing_signature','interrupted']){
   }
   assert.equal(u.hostname,'api.docuseal.com');
   if(init.method==='POST'){
-   creates++;assert.equal(body.shared_link,false);assert(!/earnest|\bEMD\b/i.test(body.html));
+   creates++;assert.equal(body.shared_link,false);assert(!/earnest|\bEMD\b/i.test(body.html));assert(!/\bEMD\b/i.test(body.name));
    assert.equal(body.html.includes('TEST DRAFT - NOT FOR A LIVE TRANSACTION'),init.headers['X-Auth-Token']==='test-fixture');
    const roles=config.roles.map((name,i)=>({name,uuid:'role'+i}));
    const fields=[...Object.values(config.fieldMap).map(name=>({name,type:'text',readonly:true,submitter_uuid:'role0'})),...roles.flatMap(r=>['signature','checkbox'].map(type=>({name:r.name+' '+type,type,required:scenario!=='missing_signature',submitter_uuid:r.uuid})))];
-   const d={id:creates,external_id:body.external_id,submitters:roles,fields,documents:[]};templates.set(creates,d);return Response.json(d);
+   const d={id:creates,name:body.name,external_id:body.external_id,submitters:roles,fields,documents:[]};templates.set(creates,d);return Response.json(d);
   }
   return Response.json(templates.get(Number(u.pathname.split('/').at(-1))));
  };
@@ -38,4 +39,22 @@ for(const scenario of ['ok','missing_signature','interrupted']){
  }
 }
 assert.equal((await prepareNoEmdTemplates({...env,VERCEL_ENV:'preview'},()=>{throw Error('UNEXPECTED_NETWORK');})).status,'not_requested');
+// Existing approved templates get a name-only correction; issued agreements are never rewritten or sent.
+const existingTasks=new Map(['live','test'].map((mode,i)=>['icash-x-'+mode+'-purchase-no-emd-v1',{state:'created',result:{id:i+1,name:'iCash X - Contract to Purchase - No EMD'+(mode==='test'?' - TEST DRAFT':''),fieldValidation:true,ownerApproval:{approved:true}}}]));
+const existingTemplates=new Map([...existingTasks].map(([task,t])=>[t.result.id,{id:t.result.id,external_id:task,name:t.result.name,fields:[{name:'purchasePrice'}],submitters:[{name:'Seller'}],schema:[{attachment_uuid:'unchanged'}]}]));
+const renames=[];
+const renameFetcher=async(url,init)=>{
+ const u=new URL(url),body=init.body?JSON.parse(init.body):null;
+ if(u.hostname==='db.invalid'){
+  const task=existingTasks.get(u.searchParams.get('key').slice(3));assert(task);
+  if(init.method==='PATCH')Object.assign(task,body);else assert.equal(init.method,'GET');
+  return Response.json([task]);
+ }
+ assert(/^\/templates\/[12]$/.test(u.pathname),'no signing or document endpoint may be changed');
+ const template=existingTemplates.get(Number(u.pathname.split('/').at(-1)));
+ if(init.method==='PUT'){assert.deepEqual(Object.keys(body),['name']);assert(!/\bEMD\b/i.test(body.name));renames.push(body);template.name=body.name;}else assert.equal(init.method,'GET');
+ return Response.json(template);
+};
+await prepareNoEmdTemplates(env,renameFetcher);assert.equal(renames.length,2);
+await prepareNoEmdTemplates(env,renameFetcher);assert.equal(renames.length,2,'title correction is not repeated on rebuild');
 console.log('PASS no-EMD template fields, required signatures, live/test isolation, no automatic repeat and no submission creation.');
