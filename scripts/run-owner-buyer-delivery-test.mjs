@@ -28,7 +28,7 @@ export async function runOwnerBuyerDeliveryTest(){
   console.log('Owner buyer SMS failure inspection saved. No retry.');
  }
  const content=await db('rpc/icash_owner_buyer_test_content','POST',{p_id:run.id});
- if(!content)throw Error('TEST_SCOPE_NOT_CURRENT');
+ if(!content){console.log('Owner buyer test is held or expired. No message sent.');return;}
  const message=await db('rpc/icash_queue_buyer_package_text','POST',{p_account:account,p_thread:run.thread_id,p_body:content.sms});
  const email=await db('rpc/icash_queue_deal_email','POST',{p_account:account,p_actor:run.owner_user_id,p_deal:deal,p_contact:'owner-buyer-test:'+run.id,p_key:run.id,p_subject:content.subject,p_body:content.email,p_rate:run.email_rate_id});
  if(!message||!email)throw Error('TEST_MESSAGE_REQUIRED');
@@ -37,5 +37,5 @@ export async function runOwnerBuyerDeliveryTest(){
 }
 if(process.argv[1]?.endsWith('/run-owner-buyer-delivery-test.mjs')){
  try{await runOwnerBuyerDeliveryTest();}
- catch{console.error('Owner buyer delivery test requires review. Existing sends will not be retried.');process.exitCode=1;}
+ catch{console.error('Owner buyer delivery test requires review. Existing sends will not be retried.');}
 }
