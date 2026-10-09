@@ -15,7 +15,7 @@ export const automaticOfferInput=z.discriminatedUnion('action',[
  z.object({action:z.literal('update_repairs'),conversationId,sellerStatement:z.string().trim().min(3).max(1000),repairEstimateCents:cents.nullish().transform(v=>v??undefined)}).strict(),
  z.object({action:z.literal('report_change'),conversationId,sellerStatement:z.string().trim().min(1).max(1000)}).strict(),
 ]);
-export type AutomaticOfferState={listedWithAgent?:boolean;listingStatement?:string;payoffReport?:SellerPayoffReport;repairEstimateCents?:number;conditionPending?:boolean;factsPending?:boolean;payoffPending?:boolean;payoffStatement?:string;contractBlocked?:boolean;acceptanceConditional?:boolean;agreementRevisionRequired?:boolean;sellerStatement?:string;acceptedPriceCents?:number|null;quotedPriceCents?:number|null;quoteRevision?:string;snapshotHash?:string};
+export type AutomaticOfferState={proposedPriceCents?:number;listedWithAgent?:boolean;listingStatement?:string;payoffReport?:SellerPayoffReport;repairEstimateCents?:number;conditionPending?:boolean;factsPending?:boolean;payoffPending?:boolean;payoffStatement?:string;contractBlocked?:boolean;acceptanceConditional?:boolean;agreementRevisionRequired?:boolean;sellerStatement?:string;acceptedPriceCents?:number|null;quotedPriceCents?:number|null;quoteRevision?:string;snapshotHash?:string};
 export type CallOfferContext={party:'seller'|'buyer'|'unknown';sellerContractSigned?:boolean;viewingSlots?:unknown;accountId?:string;dealId?:string;address?:string;snapshot?:unknown;terms?:unknown;pendingAgreement?:{priceCents:number;closingDate:string}|null;buyer?:{askingPriceCents:number;purchasePriceCents?:number;assignmentFeeCents?:number;closingDate?:string|null;address:string;depositCents?:number|null;viewingSlots?:unknown;reserved?:boolean;titleSelectionStatus?:'not_selected'|'selected'|'needs_confirmation'};offerState?:AutomaticOfferState|null;offerVersion?:number};
 export const blockedOffer=(reason:string,instruction:string)=>({quoteAllowed:false as const,priceCents:null,reason,instruction});
 export const buyerAgreementHandoff=()=>({...blockedOffer('buyer_assignment_team_required','No buyer agreement has been prepared, queued or sent by this tool. The team must prepare the buyer assignment and provide verified payment instructions. The completed call records the request for review. Do not claim delivery, promise delivery timing, change buyer terms or run seller signing questions.'),party:'buyer',contractAllowed:false,sent:false,status:'not_sent'});
@@ -94,11 +94,13 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
   const providerRepairs=base.property.repairs.baselineCents;
   const repairs=state.repairEstimateCents===undefined?providerRepairs:providerRepairs===null?state.repairEstimateCents:Math.max(providerRepairs,state.repairEstimateCents);
   const calculation=cashOfferCalculation(base.property.estimatedMarketValueCents,repairs);
-  const financial=sellerCallFinancialGate(base.property.financialScreening,{sellerOfferCents:calculation?.sellerCeilingCents??null,sellerCostReserveCents:Number.isSafeInteger(object(context.snapshot).sellerCostReserveCents)?Number(object(context.snapshot).sellerCostReserveCents):null,checkedAt:now});
   if(object(context.snapshot).propertyType!=='house'||!calculation?.sellerCeilingCents)return blockedOffer('calculation_required','I need current value and repair estimates before calculating a cash offer.');
   const agreed=state.acceptedPriceCents;
   if(agreed&&agreed>calculation.sellerCeilingCents)return blockedOffer('agreed_price_needs_update','The updated numbers do not support the previously discussed price. We need to reconcile that before confirming revised terms.');
-  const price=agreed??calculation.sellerCeilingCents;
+  const proposed=state.proposedPriceCents;
+  if(proposed!==undefined&&(!Number.isSafeInteger(proposed)||proposed<=0||proposed>calculation.sellerCeilingCents))return blockedOffer('seller_price_needs_review','The requested price is outside the current calculation. Discuss the current supported cash proposal without accepting the higher ask.');
+  const price=agreed??proposed??calculation.sellerCeilingCents;
+const financial=sellerCallFinancialGate(base.property.financialScreening,{sellerOfferCents:price,sellerCostReserveCents:Number.isSafeInteger(object(context.snapshot).sellerCostReserveCents)?Number(object(context.snapshot).sellerCostReserveCents):null,checkedAt:now});
   const payoff=sellerPayoffPosition(state.payoffReport,price);
   const conditional=!!state.payoffPending||(payoff?(!payoff.complete||!payoff.canProceed):financial.status!=='eligible');
   const accepted=!!agreed&&!state.acceptanceConditional;
@@ -114,7 +116,7 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
 }
 
 type Db=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
-type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;resolveStatement?:(input:Record<string,unknown>)=>Promise<string|null>;verifyInput:(input:Record<string,unknown>)=>Promise<boolean>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyListingStatus?:(input:Record<string,unknown>)=>Promise<boolean|null>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
+type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;resolveStatement?:(input:Record<string,unknown>)=>Promise<string|null>;verifyInput:(input:Record<string,unknown>)=>Promise<boolean>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyListingStatus?:(input:Record<string,unknown>)=>Promise<boolean|null>;verifySellerPrice?:(input:Record<string,unknown>)=>Promise<number|null>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
 export async function automaticCallOffer(token:string,input:unknown,d:Dependencies){
  const i=automaticOfferInput.parse(input),hash=sha(token);
  // The context RPC independently checks the exact capability, bound conversation,
@@ -134,6 +136,12 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
   if(context.pendingAgreement)state.agreementRevisionRequired=true;
   const verified=await d.verifyInput(i);state.sellerStatement=verified?i.sellerStatement:'Statement confirmation required';state.acceptedPriceCents=null;
   if(i.action==='report_change'){
+   const sellerPrice=verified?await d.verifySellerPrice?.(i):null;
+   if(sellerPrice!=null){
+    // Persist the correction even when unsupported, invalidating any earlier
+    // acceptance. The calculation below independently enforces the ceiling.
+    state.proposedPriceCents=sellerPrice;
+   }else{
    const listing=await d.verifyListingStatus?.(i);
    if(typeof listing==='boolean'){state.listedWithAgent=listing;state.listingStatement=i.sellerStatement;}
    else {
@@ -149,6 +157,7 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
    state.payoffPending=verified&&(!state.factsPending||!!state.payoffPending)&&(payoffOnly(i.sellerStatement)||!!await d.verifyPayoffChange?.(i));
    if(state.payoffPending)state.payoffStatement=i.sellerStatement;
    state.factsPending=true;
+   }
    }
    }
   }

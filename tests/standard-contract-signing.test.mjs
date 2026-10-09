@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import {z} from 'zod';
+import {originalContractProfile,originalContractFieldsForRole} from '../lib/original-contracts.ts';
+import {signatureRequestMessage} from '../lib/signing-invitation.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {dealTermsSchema} from '../lib/deal-documents.ts';
 import {signingReadiness,signingFields,signingTermsHash} from '../lib/signing-policy.ts';
@@ -10,7 +12,7 @@ let terms=dealTermsSchema.parse({seller:'Fixture Seller',buyer:'Fixture Principa
 let kind='purchase',queries=[],writes=[],provider=[],reservations=[],exact=false,standard=true,duplicate=false,exactExpired=false,exactRate=true,standardRate=true,budgetBlocked=false;
 const expires='2099-01-01T00:00:00Z';
 const makeTemplate=scope=>({id:scope,provider_template_id:scope==='standard'?(kind==='purchase'?'6101264':'6101265'):(kind==='purchase'?'6101299':'6101300'),template_scope:scope,state_code:'TX',reviewed_until:scope==='state'&&exactExpired?'2020-01-01':expires,rate_id:scope+'-rate',max_legal_description_chars:2000,placeholder_names:['Counterparty','Customer'],field_map:Object.fromEntries(Object.keys(signingFields(terms,kind)).map(k=>[k,'mapped_'+k]))});
-const signing=await loadService('lib/signing-service.ts',{z,dealTermsSchema,signingReadiness,signingFields,signingTermsHash,
+const signing=await loadService('lib/signing-service.ts',{z,signatureRequestMessage,originalContractProfile,originalContractFieldsForRole,dealTermsSchema,signingReadiness,signingFields,signingTermsHash,
  db:async(path,method='GET',body)=>{
   if(method!=='GET'){writes.push({path,method,body});if(path==='rpc/icash_begin_signing')return {id:'envelope',terms,terms_hash:signingTermsHash(terms)};return [];}
   queries.push(path);

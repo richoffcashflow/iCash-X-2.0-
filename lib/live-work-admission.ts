@@ -17,7 +17,7 @@ export function automationWorkReady(kind:string,env:NodeJS.ProcessEnv=process.en
  if(kind==='contacts')return contactWorkEnabled(env);
  return liveWorkReady(env)||(kind==='seller_opener'&&smsWorkEnabled(env));
 }
-export const newLiveWorkKinds=new Set(['seller_opener','market_research','text_ai','title_followup','fulfillment','voice_dispatch','discovery','contacts']);
+export const newLiveWorkKinds=new Set(['seller_opener','seller_recovery','market_research','text_ai','title_followup','fulfillment','voice_dispatch','discovery','contacts']);
 type Ticket={id:string;accountId:string;kind:string;screeningId?:string|null;voiceJobId?:string|null;fulfillmentJobId?:string|null;titleTaskId?:string|null;textAiJobId?:string|null;marketResearchJobId?:string|null;openerMessageId?:string|null};
 type Database=<T=unknown>(path:string,method?:string,body?:unknown)=>Promise<T>;
 /** Only unstarted work is deferred. Consumed capability is never rearmed or reused. */
@@ -45,7 +45,7 @@ export async function deferUnstartedAutomation(db:Database,t:Ticket,token:string
  if(t.kind==='text_ai'&&t.textAiJobId)await db(`icash_text_ai_jobs?id=eq.${t.textAiJobId}&account_id=eq.${t.accountId}&state=eq.issued`,'PATCH',{state:'pending',next_attempt_at:later,updated_at:now});
  if(t.kind==='market_research'&&t.marketResearchJobId)await db(`icash_market_research_jobs?id=eq.${t.marketResearchJobId}&account_id=eq.${t.accountId}&state=eq.issued`,'PATCH',{state:'pending',next_attempt_at:later,updated_at:now});
  if(t.kind==='title_followup'&&t.titleTaskId)await db(`icash_title_tasks?id=eq.${t.titleTaskId}&account_id=eq.${t.accountId}&email_state=eq.issued`,'PATCH',{email_state:'waiting',email_retry_at:later,updated_at:now});
- if(t.kind==='seller_opener'&&t.openerMessageId)await db(`icash_text_messages?id=eq.${t.openerMessageId}&account_id=eq.${t.accountId}&state=eq.ready`,'PATCH',{state:'needs_review',updated_at:now});
+ if(['seller_opener','seller_recovery'].includes(t.kind)&&t.openerMessageId)await db(`icash_text_messages?id=eq.${t.openerMessageId}&account_id=eq.${t.accountId}&state=eq.ready`,'PATCH',{state:'needs_review',updated_at:now});
  if(t.kind==='discovery'||t.kind==='contacts')await db(`icash_discovery_configs?account_id=eq.${t.accountId}`,'PATCH',{next_run_at:later});
  return {status:'live_work_not_ready'};
 }

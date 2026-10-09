@@ -1,4 +1,5 @@
 'use client';
+import {SellerRecoveryCard,type SellerRecoveryCase} from './seller-recovery-card';
 import {buyerDepositCents} from '@/lib/buyer-purchase-terms';
 import {BuyerDealCoordination} from './buyer-deal-coordination';
 import {buyerRequestTitle,BuyerViewingRequestCard,type BuyerViewingRequest} from './buyer-viewing-request';
@@ -29,7 +30,7 @@ type Conversation={source?:'outbound'|'reception';id:string;screening_id:string;
 type AttentionRequest={id:string;propertyId:string;address?:string|null;priority:number;title:string;description?:string;actionLabel?:string;node:ReactNode};
 type TextAttention={address?:string|null;id:string;message_id:string;screening_id:string;deal_id:string;kind:string;party:string;quote:string;timezone:string};
 type PurchasedLookup={screening_id:string;created_at?:string|null;fetchedAt?:string|null;source?:string;ownershipVerified?:false;outreachAuthorized?:false;contacts?:{name:string|null;phones:{number:string|null;type:string|null;doNotCall:boolean|null}[]}[]};
-type Work={viewingRequests?:BuyerViewingRequest[];smsRouteReviews?:SmsRouteReview[];propertyAttentionIds?:string[];textAttention?:TextAttention[];callRequests?:{address?:string|null;id:string;screening_id:string;requested_at:string;state:string}[];signatureActions:{id:string;kind:string;test_mode:boolean;screening_id?:string|null;address?:string|null}[];signing:SigningEnvelope[];signingConfigured:boolean;handoffs:Handoff[];conversations:Conversation[];callbacks:{id:string;screening_id:string;due_at:string;timezone:string;state:string}[];properties:Property[];deals:Deal[];contacts:PurchasedLookup[];hasMore:boolean;controls:{property_id:string}[];attentionHasMore?:boolean;searchSupported?:boolean;retainedIds?:string[]};
+type Work={sellerRecovery?:SellerRecoveryCase[];viewingRequests?:BuyerViewingRequest[];smsRouteReviews?:SmsRouteReview[];propertyAttentionIds?:string[];textAttention?:TextAttention[];callRequests?:{address?:string|null;id:string;screening_id:string;requested_at:string;state:string}[];signatureActions:{id:string;kind:string;test_mode:boolean;screening_id?:string|null;address?:string|null}[];signing:SigningEnvelope[];signingConfigured:boolean;handoffs:Handoff[];conversations:Conversation[];callbacks:{id:string;screening_id:string;due_at:string;timezone:string;state:string}[];properties:Property[];deals:Deal[];contacts:PurchasedLookup[];hasMore:boolean;controls:{property_id:string}[];attentionHasMore?:boolean;searchSupported?:boolean;retainedIds?:string[]};
 function milestone(property:Property,work:Work){
  const deal=work.deals.find(d=>d.screening_id===property.id);
  const signatures=work.signing.filter(e=>e.deal_id===deal?.id&&!e.test_mode);
@@ -157,6 +158,7 @@ function WorkspaceAttention({work,page,onPage,onOpen,onRefresh}:{work:Work;page:
  const [handled,setHandled]=useState<string[]>([]),[expanded,setExpanded]=useState(false);
  function done(id:string){setHandled(v=>[...v,id]);onPage(0);onRefresh();}
  const requests:AttentionRequest[]=[
+  ...(work.sellerRecovery??[]).map(a=>({id:'recovery:'+a.id+':'+a.updated_at,propertyId:a.screening_id,address:a.address,priority:2,title:'Seller follow-up needs review',node:<SellerRecoveryCard item={a} onResolved={()=>done('recovery:'+a.id+':'+a.updated_at)}/>})),
   ...(work.viewingRequests??[]).map(v=>({id:'viewing:'+v.id,propertyId:v.screening_id,address:v.address,priority:1,title:buyerRequestTitle(v),node:<BuyerViewingRequestCard request={v} onReviewed={()=>done('viewing:'+v.id)}/>})),
   ...(work.smsRouteReviews??[]).map(a=>({id:'routing:'+a.message_id+':'+a.revision,propertyId:'',address:a.recipient.replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3'),priority:0,title:'A text needs your review',description:a.needs_review?'The bot couldn’t match this reply to a property.':'An earlier reply wasn’t matched to a property.',actionLabel:'View reply',node:<SmsRouteReviewCard item={a} onOpen={onOpen} onHandled={()=>done('routing:'+a.message_id+':'+a.revision)}/>})),
   ...(work.textAttention??[]).map(a=>({id:'text:'+a.id+':'+a.message_id,propertyId:a.screening_id,address:a.address,priority:a.kind==='withdrawal'?0:a.kind==='human'?2:3,title:a.kind==='withdrawal'?'Review a change of plans':a.kind==='callback'?'Confirm a callback':'Review a message',node:<TextAttentionCard item={a} onHandled={()=>done('text:'+a.id+':'+a.message_id)}/>})),

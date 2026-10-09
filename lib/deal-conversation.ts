@@ -1,4 +1,5 @@
 import {voiceResult,type VoiceConversation} from './voice-result.ts';
+import {isContactOptOut} from './contact-intent.ts';
 import {conversationTrustInstructions} from './conversation-trust.ts';
 
 /** Stable variants are assigned before contact; never rotate an opener mid-conversation. */
@@ -37,7 +38,7 @@ export function liveConversationResult(c:VoiceConversation,expected:{conversatio
  const humanQuote=quote('human_request_quote');
  // A conservative pause is preferable to ignoring an explicit request, even if extraction omitted a quote.
  const humanRequested=fields.human_requested?.value===true||r.transcript.some(t=>t.role==='user'&&/\b(speak|talk) (?:to|with) (?:a |an |the |your )?(?:human|person|manager|owner|supervisor|representative)\b|\breal person\b|\bhave (?:someone|a person) call me\b/i.test(t.message));
- const optedOut=fields.opted_out?.value===true||r.transcript.some(t=>t.role==='user'&&/\b(stop (?:calling|texting|contacting)|do not (?:call|text|contact)|don't (?:call|text|contact)|remove (?:me|my number))\b/i.test(t.message));
+ const optedOut=fields.opted_out?.value===true||r.transcript.some(t=>t.role==='user'&&isContactOptOut(t.message));
  const interested=fields.interested?.value===true&&!!quote('interest_quote');
  return {summary:r.summary,transcript:r.transcript,durationSeconds:r.durationSeconds,providerCostUsd:r.providerCostUsd,
   humanRequested,humanQuote,optedOut,interested,interestQuote:quote('interest_quote'),party:expected.party,
