@@ -17,3 +17,22 @@ Verification: `node --experimental-strip-types scripts/test-buyer-disposition-pg
 The owner email has a delivered receipt. The separate test SMS was accepted, then received a signed `text.delivery.failed` webhook. A read-only lookup of that exact provider message confirms `failed`; the leased line is active and advertises SMS/MMS. No successful delivery is claimed and no retry was issued. The sender is held in the application's send allowlist pending provider repair; its lease and message history are retained. The primary seller line has successful delivery receipts and remains enabled.
 
 The test is optional deployment verification: a held/expired test or provider inspection failure never blocks a later product deployment. Buyer SMS reply and call routing passed isolated SQL tests, but the live owner SMS/reply/inbound-call test has **not** passed. Real buyer outreach remains held.
+
+## Explicit owner retry, October 9, 2026
+
+The owner asked to resolve the failed delivery to their verified phone. A fresh,
+SMS-only authorization can use the already-working primary line while the failed
+secondary line stays held. Revoke the previous test before provisioning the new
+one; never rewrite its sender, provider receipt, timestamps, or message history.
+
+`owner_buyer_test_id` isolates an explicitly authorized test from the owner's
+existing seller thread for the same deal and number pair. Normal conversations
+retain their original unique binding and consent checks. Only one unrevoked test
+per account/deal is allowed. Each test still expires within four hours. The
+existing seller thread remains active and unchanged. Set `send_email=false` for
+an SMS-only retry so an already-delivered email is not sent again.
+
+The PostgreSQL fixture now covers the same-property collision, fresh authorization,
+preserved seller/failed-attempt history, unchanged ordinary uniqueness, buyer reply
+and inbound-call routing, expiration, duplicate claims, and the real-buyer hold.
+Live delivery must still be confirmed from the new provider receipt.
