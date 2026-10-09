@@ -24,7 +24,7 @@ globalThis.__package={createHash,db,dealEmailConfigured:()=>true,dispatchDealEma
 let source=ts.transpileModule(readFileSync('lib/buyer-package-email.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
 const {sendRequestedBuyerPackages}=await import('data:text/javascript;base64,'+Buffer.from('const {createHash,db,dealEmailConfigured,dispatchDealEmail,dealTermsSchema}=globalThis.__package;\n'+source).toString('base64'));
 assert.equal((await sendRequestedBuyerPackages('account','deal')).accepted,1);assert.equal(sends,1);
-assert.match(writes[0].p_body,/\$120,000.00/);assert.equal(writes[0].p_contact,'buyer-request:request');
+assert.match(writes[0].p_body,/\$120,000.00/);assert(!/Underlying purchase price|Assignment fee:|\$100,000|\$20,000/.test(writes[0].p_body));assert.equal(writes[0].p_contact,'buyer-request:request');
 prior=[{id:'email',state:'accepted'}];await sendRequestedBuyerPackages('account','deal');assert.equal(sends,1);
 prior=[{id:'email',state:'needs_review'}];await sendRequestedBuyerPackages('account','deal');assert.equal(sends,1);
 prior=[];paused=true;await sendRequestedBuyerPackages('account','deal');assert.equal(sends,1);

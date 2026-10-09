@@ -33,7 +33,7 @@ try{
  create table fixture_guard(allowed boolean default true,claims integer default 0);insert into fixture_guard default values;
  create table fixture_scope(value jsonb);
  create table fixture_slots(slots jsonb default '[]');insert into fixture_slots default values;
- create table icash_buyer_viewing_requests(id uuid primary key,account_id uuid,deal_id uuid,thread_id uuid,source_id uuid,kind text,state text,quote text default 'What viewing times are available?',created_at timestamptz default now());
+ create table icash_buyer_viewing_requests(id uuid primary key,account_id uuid,deal_id uuid,thread_id uuid,source_id uuid,kind text,state text,quote text default 'What viewing times are available?',viewing_quote text,created_at timestamptz default now());
  create function icash_seller_conversation_context(uuid,uuid) returns jsonb language sql as $$select case when allowed then '{}'::jsonb end from public.fixture_guard$$;
  create function icash_seller_conversation_human(text) returns boolean language sql as $$select coalesce($1 ~* 'talk to a human|real person',false)$$;
  create function icash_seller_agreement_call_context(text,text) returns jsonb language sql as $$select value from public.fixture_scope$$;
@@ -48,7 +48,7 @@ try{
  create function icash_next_automation() returns jsonb language sql as $$select '{}'::jsonb$$;
  grant usage on schema public to service_role;grant select on all tables in schema public to service_role;
  `);
- await pg.exec(readFileSync('supabase/migrations/20261009215249_seller_gap_recovery_learning.sql','utf8'));
+ await pg.exec(readFileSync('supabase/migrations/20261009221637_seller_gap_recovery_learning.sql','utf8'));
  await q('insert into auth.users values($1)',[owner]);
  await q('insert into icash_accounts(id,owner_user_id) values($1,$3),($2,$3)',[a,other,owner]);
  await q('insert into icash_screening_jobs values($1,$2)',[screen,a]);
@@ -176,6 +176,23 @@ try{
   const message=await one('select * from icash_text_messages where id=$1',[buyerMessage]);assert.equal(message.thread_id,buyer);assert.match(message.body,/PM/);assert.match(message.body,/still needs confirmation/);assert(await claim(buyerMessage));
   assert.equal((await one('select state from icash_buyer_viewing_requests where id=$1',[request])).state,'needs_confirmation');
   await q("update fixture_slots set slots='[]'");assert.equal(await claim(buyerMessage),null,'withdrawn seller slot blocks stale buyer delivery');
+ });
+ for(const kind of ['reservation','payment_reported'])await test('combined buyer '+kind+' and viewing request retains seller follow-up on update',async()=>{
+  const buyer=randomUUID(),request=randomUUID();
+  await q("update icash_deal_files set stage='under_contract'");
+  await q("insert into icash_text_threads(id,account_id,deal_id,party,recipient) values($1,$2,$3,'buyer','+12145550200')",[buyer,a,deal]);
+  await q("insert into icash_buyer_viewing_requests(id,account_id,deal_id,thread_id,source_id,kind,state,quote) values($1,$2,$3,$4,$5,$6,'needs_confirmation','Send the agreement')",[request,a,deal,buyer,randomUUID(),kind]);
+  assert.equal((await one('select count(*)::int n from icash_seller_viewing_followups')).n,0,'agreement alone does not request a visit');
+  await q("update icash_buyer_viewing_requests set viewing_quote='I also want to see the property' where id=$1",[request]);
+  const saved=await one('select * from icash_seller_viewing_followups where request_id=$1',[request]);assert(saved.gap_id);assert.equal(saved.request_quote,'I also want to see the property');
+  await q("update icash_buyer_viewing_requests set viewing_quote='Which viewing dates are available?' where id=$1",[request]);
+  assert.equal((await one('select count(*)::int n from icash_seller_gaps')).n,1,'updated request reuses seller ask');
+  assert.equal((await one('select request_quote from icash_seller_viewing_followups where request_id=$1',[request])).request_quote,'Which viewing dates are available?');
+  await q('update fixture_slots set slots=$1',[[{startsAt:new Date(Date.now()+86400000).toISOString(),timezone:'America/Chicago'}]]);
+  const message=await rpc('icash_prepare_viewing_relay',[request]);assert(message);assert(await claim(message));
+  await q('update icash_buyer_viewing_requests set viewing_quote=null where id=$1',[request]);
+  assert.equal(await claim(message),null,'withdrawn viewing part prevents stale delivery while retaining purchase request');
+  assert.equal((await one('select kind from icash_buyer_viewing_requests where id=$1',[request])).kind,kind);
  });
  await test('verified inbound opt-out suppresses phone and invalidates queued recovery',async()=>{
   const {id}=await open(),m=await prepare(id);const key=(await one("select encode(sha256(convert_to('+12145550199','UTF8')),'hex') v")).v;

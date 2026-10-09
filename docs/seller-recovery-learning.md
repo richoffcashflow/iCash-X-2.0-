@@ -29,7 +29,7 @@ The learning loop chooses only versioned, approved message variants. It does not
 
 ## Viewing coordination
 
-A saved buyer viewing request can create one shared seller-availability case. Multiple buyers reuse the outstanding seller request. When exact seller windows exist, a deterministic text can relay at most two dated AM/PM options to the buyer. The final dispatch checks that both the buyer request and seller windows are still current. No access codes or raw seller messages are copied to buyers.
+A saved buyer viewing request can create one shared seller-availability case, including a viewing request saved alongside an agreement or reported payment. Multiple buyers reuse the outstanding seller request. When exact seller windows exist, a deterministic text can relay at most two dated AM/PM options to the buyer. The final dispatch checks that both the buyer request and seller windows are still current. No access codes or raw seller messages are copied to buyers.
 
 The buyer request remains `needs_confirmation`; relaying options does not book a visit. A selected window, occupant/access requirements and final coordination remain in the existing viewing review workflow. Requests without current seller/buyer contact authority remain there as well.
 
@@ -40,17 +40,17 @@ Unresolved seller cases appear in the workspace's existing â€œNeeds your reviewâ
 ## Verification
 
 - Original executable seller audit: **100 passed, 0 gaps, 0 errors**, compared with 83 passed and 17 gaps before repairs.
-- New isolated PostgreSQL migration suite: **36 scenarios passed**, including source capture, idempotency, stale-message rejection, STOP, quiet hours, zero balance, unknown delivery, source-channel/tenant isolation, learning promotion/rollback, owner resolution and seller-to-buyer viewing relay.
-- **34 focused test suites passed**, including actual offer/contract route bodies, grounded lower-price proposals, final acceptance, account activity pagination, contact policy and recovery review authorization.
+- New isolated PostgreSQL migration suite: **38 scenarios passed**, including source capture, idempotency, stale-message rejection, STOP, quiet hours, zero balance, unknown delivery, source-channel/tenant isolation, learning promotion/rollback, owner resolution and seller-to-buyer viewing relay.
+- **39 focused test suites passed**, including actual offer/contract route bodies, grounded lower-price proposals, final acceptance, account activity pagination, contact policy, recovery review authorization and the latest buyer scenario/privacy changes.
 - Existing seller conversation (123 scenarios), seller response and buyer purchase SQL suites passed separately with their documented fixture delegates.
 - Production Next build and TypeScript passed. No live sellers/buyers were called or texted, no signing request was sent, and no production database was modified.
-- The broad `pnpm test` run stops at the pre-existing full-sentence buyer copy expectation in `buyer-package-photos.test.mjs`. A separately checked old static copy assertion in `workspace-view.test.mjs` also remains stale. Neither affected implementation was changed to make those assertions pass.
+- After integrating current main (#134), the broad `pnpm test` run stops at `contact-channel-admission.test.mjs`, which still expects the retired account daily spending cap to block admission. That test and its readiness implementation are unchanged from main. A separately checked old static copy assertion in `workspace-view.test.mjs` also remains stale. Product behavior was not changed to restore obsolete expectations.
 
 Tests execute the shipped recovery migration with synthetic data. Older consent/billing/provider dispatch functions are explicit fixture delegates in the new SQL suite; their existing suites cover those separate boundaries. Local passing tests do not establish real-model dialogue quality, live carrier delivery, live provider latency or an actual conversion lift.
 
 ## Rollout
 
-1. Apply `20261009215249_seller_gap_recovery_learning.sql` before the application change. It is transactional, creates private/RLS-protected storage, revokes client execution of internal functions, and performs no provider calls or historical outreach backfill.
+1. Apply `20261009221637_seller_gap_recovery_learning.sql` after the current buyer scenario/privacy migrations and before the application change. It is transactional, creates private/RLS-protected storage, revokes client execution of internal functions, and performs no provider calls or historical outreach backfill.
 2. Deploy the application commit together with the existing automation worker and refreshed seller voice guidance. The new recovery kind requires `ICASH_LIVE_WORK_READY=true`; the SMS-only release flag does not independently enable it. Existing financial/contact gates still govern each attempt.
 3. Verify the first synthetic account case through capture, queue, final claim, receipt and review UI before admitting real recovery work. Verify the authenticated provider callbacks and actual Supabase privileges in the deployed environment.
 4. Observe delivery/unknown rates, unresolved cases, opt-outs, signatures and closing outcomes separately. There is no claimed conversion improvement until live evidence matures.

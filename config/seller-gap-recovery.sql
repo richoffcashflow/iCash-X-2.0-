@@ -286,9 +286,10 @@ grant select on public.icash_seller_viewing_followups to service_role;
 
 create function public.icash_capture_viewing_followup() returns trigger
 language plpgsql security definer set search_path='' as $$
-declare sellers uuid[];g uuid;
+declare sellers uuid[];g uuid;request_quote text;
 begin
- if new.kind<>'viewing' or new.state<>'needs_confirmation' then return new;end if;
+ request_quote:=coalesce(nullif(new.viewing_quote,''),case when new.kind='viewing' then new.quote end);
+ if request_quote is null or new.state<>'needs_confirmation' then return new;end if;
  if not exists(select 1 from public.icash_text_threads where id=new.thread_id and account_id=new.account_id and deal_id=new.deal_id and party='buyer') then return new;end if;
  select array_agg(t.id) into sellers from public.icash_text_threads t where t.account_id=new.account_id and t.deal_id=new.deal_id and t.party='seller' and t.retired_at is null
   and public.icash_seller_viewing_context(new.account_id,t.id) is not null;
@@ -298,18 +299,22 @@ begin
   if g is null then g:=public.icash_open_seller_gap(new.account_id,sellers[1],'viewing',new.id,'viewing','Buyer requested seller viewing availability',new.created_at);end if;
  end if;
  insert into public.icash_seller_viewing_followups(request_id,account_id,deal_id,seller_thread_id,buyer_thread_id,gap_id,request_quote)
- values(new.id,new.account_id,new.deal_id,sellers[1],new.thread_id,g,new.quote) on conflict do nothing;
+ values(new.id,new.account_id,new.deal_id,sellers[1],new.thread_id,g,request_quote)
+ on conflict(request_id) do update set request_quote=excluded.request_quote
+ where icash_seller_viewing_followups.outgoing_id is null
+ and icash_seller_viewing_followups.account_id=excluded.account_id and icash_seller_viewing_followups.deal_id=excluded.deal_id
+ and icash_seller_viewing_followups.buyer_thread_id=excluded.buyer_thread_id;
  return new;
 end $$;
-create trigger seller_viewing_followup after insert on public.icash_buyer_viewing_requests for each row execute function public.icash_capture_viewing_followup();
+create trigger seller_viewing_followup after insert or update of state,kind,quote,viewing_quote on public.icash_buyer_viewing_requests for each row execute function public.icash_capture_viewing_followup();
 
 create function public.icash_viewing_relay_body(p_request uuid) returns text
 language plpgsql stable security invoker set search_path='' as $$
 declare f public.icash_seller_viewing_followups;r public.icash_buyer_viewing_requests;slots jsonb;options text;package jsonb;
 begin
  select * into f from public.icash_seller_viewing_followups where request_id=p_request;if not found then return null;end if;
- select * into r from public.icash_buyer_viewing_requests where id=f.request_id and account_id=f.account_id and deal_id=f.deal_id and thread_id=f.buyer_thread_id and kind='viewing' and state='needs_confirmation' and created_at>now()-interval '7 days';if not found then return null;end if;
- if r.quote is distinct from f.request_quote then return null;end if;
+ select * into r from public.icash_buyer_viewing_requests where id=f.request_id and account_id=f.account_id and deal_id=f.deal_id and thread_id=f.buyer_thread_id and state='needs_confirmation' and created_at>now()-interval '7 days';if not found then return null;end if;
+ if coalesce(nullif(r.viewing_quote,''),case when r.kind='viewing' then r.quote end) is distinct from f.request_quote then return null;end if;
  if public.icash_seller_viewing_context(f.account_id,f.seller_thread_id) is null or public.icash_sms_thread_review_current(f.account_id,f.buyer_thread_id,false) is distinct from true then return null;end if;
  if not exists(select 1 from public.icash_text_threads where id=f.buyer_thread_id and account_id=f.account_id and deal_id=f.deal_id and party='buyer' and not paused and not manual_only and retired_at is null and ai_mode='auto') then return null;end if;
  if exists(select 1 from public.icash_text_messages where account_id=f.account_id and thread_id=f.buyer_thread_id and direction='incoming' and created_at>r.created_at and id<>r.source_id) then return null;end if;
