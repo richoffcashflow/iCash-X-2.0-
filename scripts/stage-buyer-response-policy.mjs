@@ -12,6 +12,24 @@ export async function stageBuyerResponsePolicy(api,sourceConfig){
  const [prior]=await db('icash_integration_checks?provider=eq.'+marker+'&select=result');
  if(prior){
   if(prior.result?.status==='staged'&&prior.result.policyHash===responseBuyerReceptionPolicyHash&&prior.result.sourceConfigId===sourceConfig.id)return prior.result;
+  if(prior.result?.status==='creating'&&prior.result.policyHash===responseBuyerReceptionPolicyHash&&prior.result.sourceConfigId===sourceConfig.id){
+   // Read-only diagnosis of the already-created candidate. Do not retry branch
+   // creation, relax inspection, stage a config or start any simulations.
+   const diagnostic='buyer_response_stage_inspection_20261009_v1';
+   if((await db('icash_integration_checks?provider=eq.'+diagnostic+'&select=provider')).length)throw Error('BUYER_RESPONSE_INSPECTION_REVIEW_REQUIRED');
+   const path='/v1/convai/agents/'+sourceConfig.agent_id;
+   const [list,workspace,stop,tool]=await Promise.all([api(path+'/branches?include_archived=true&limit=100'),api('/v1/convai/settings'),api('/v1/convai/tools/'+sourceConfig.stop_tool_id),api('/v1/convai/tools/'+sourceConfig.agreement_tool_id)]);
+   if(!Array.isArray(list.results)||list.results.length>=100||list.next_cursor||list.results.filter(b=>b.name===name).length!==1)throw Error('BUYER_RESPONSE_INSPECTION_BRANCH_REQUIRED');
+   const branch=list.results.find(b=>b.name===name),agent=await api(path+'?branch_id='+branch.id);
+   const c={...sourceConfig,context_policy:buyerResponsePolicy,context_policy_hash:responseBuyerReceptionPolicyHash,branch_id:branch.id,reviewed_version_id:agent.version_id,config_hash:''};
+   const observed=inspectRecordedReceptionAgent(c,agent,branch,receptionWorkspacePostcallAbsent(workspace),stop,tool);
+   const prompt=agent.conversation_config?.agent?.prompt??{};
+   const model=Object.fromEntries(Object.keys(buyerResponseModel).map(key=>[key,prompt[key]??null]));
+   const result={status:'review_required',branchId:branch.id,versionId:agent.version_id,configHash:observed.hash,policyHash:responseBuyerReceptionPolicyHash,checks:observed.checks,model,expectedModel:buyerResponseModel,outreach:false,activated:false};
+   await db('icash_integration_checks','POST',{provider:diagnostic,checked_at:new Date().toISOString(),result});
+   console.log('Buyer candidate readback:',JSON.stringify(result));
+   throw Error('BUYER_RESPONSE_INSPECTION_REVIEW_REQUIRED');
+  }
   throw Error('BUYER_RESPONSE_STAGE_REVIEW_REQUIRED');
  }
  const c=sourceConfig;
@@ -30,7 +48,7 @@ export async function stageBuyerResponsePolicy(api,sourceConfig){
  if(!Array.isArray(after.results)||after.results.length>=100||after.next_cursor)throw Error('BUYER_RESPONSE_BRANCH_READBACK_REQUIRED');
  const branch=after.results.find(b=>b.id===branchId),candidate={...c,context_policy:buyerResponsePolicy,context_policy_hash:responseBuyerReceptionPolicyHash,branch_id:branchId,reviewed_version_id:agent.version_id,config_hash:''};
  const observed=inspectRecordedReceptionAgent(candidate,agent,branch,receptionWorkspacePostcallAbsent(workspace),stop,tool);
- if(!inspectRecordedReceptionAgent({...candidate,config_hash:observed.hash},agent,branch,receptionWorkspacePostcallAbsent(workspace),stop,tool).safe)throw Error('BUYER_RESPONSE_PROVIDER_REVIEW_REQUIRED');
+ if(!inspectRecordedReceptionAgent({...candidate,config_hash:observed.hash},agent,branch,receptionWorkspacePostcallAbsent(workspace),stop,tool).safe){console.log('Buyer candidate checks:',JSON.stringify(observed.checks));throw Error('BUYER_RESPONSE_PROVIDER_REVIEW_REQUIRED');}
  const configId=await db('rpc/icash_stage_buyer_response_policy','POST',{p_source:c.id,p_branch:branchId,p_version:agent.version_id,p_hash:observed.hash});
  if(typeof configId!=='string')throw Error('BUYER_RESPONSE_STAGING_REQUIRED');
  const result={status:'staged',policyHash:responseBuyerReceptionPolicyHash,sourceConfigId:c.id,configId,agentId:c.agent_id,branchId,versionId:agent.version_id,configHash:observed.hash,model:buyerResponseModel,sourceModel:source.conversation_config.agent.prompt.llm,sourceDefaultPersonalityDisabled:source.conversation_config.agent.prompt.ignore_default_personality===true,toolId:c.agreement_tool_id,outreach:false,activated:false};
