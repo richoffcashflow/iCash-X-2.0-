@@ -56,6 +56,7 @@ try{
  create function icash_queue_seller_conversation_reply(uuid,uuid) returns uuid language sql as $$select $2$$;
 alter table icash_text_messages add last_delivery_at timestamptz;
  create table icash_operating_budget(id integer primary key);insert into icash_operating_budget values(1);
+ create table icash_title_contacts(deal_id uuid primary key,account_id uuid,email text,enabled boolean,verified_until timestamptz);
  create table icash_signing_envelopes(id uuid primary key,account_id uuid,deal_id uuid,kind text,state text,test_mode boolean,provider_id text,terms_hash text,terms jsonb,created_at timestamptz default now(),recipients jsonb default '[]');
  create table icash_closing_updates(id uuid primary key default gen_random_uuid(),account_id uuid,deal_id uuid,kind text,amount_cents bigint,confirmed_by uuid);
  create table icash_signature_confirmation_texts(message_id uuid,account_id uuid,envelope_id uuid,kind text);
@@ -85,6 +86,8 @@ alter table icash_text_messages add last_delivery_at timestamptz;
  await pg.exec(readFileSync('config/buyer-purchase-terms-and-reservations.sql','utf8'));
  await pg.exec(readFileSync('config/seller-viewing-availability-and-buyer-intent.sql','utf8'));
  await pg.exec(readFileSync('config/buyer-viewing-seller-followup.sql','utf8'));
+ await pg.exec(readFileSync('config/buyer-title-company-preferences.sql','utf8'));
+ await (await import('./test-buyer-title-fixtures.mjs')).testBuyerTitle({q,one,rpc,a,d,sc,t,session,hash});
  // A buyer can wait for seller options without inventing or choosing a time.
  const availabilityQuestion='What times are available?';
  assert.equal(await rpc('icash_buyer_viewing_quote',[[{role:'user',message:availabilityQuestion}]]),availabilityQuestion);
