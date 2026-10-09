@@ -1,7 +1,8 @@
 import {conversationStreet,conversationAddressFields} from './conversation-address.ts';
 import {buyerReceptionEnabled,buyerReceptionVariables,buyerReceptionPrompt} from './buyer-reception-context.ts';
 import {sellerOfferReceptionEnabled,sellerOfferReceptionPrompt,sellerOfferReceptionVariables} from './seller-offer-reception.ts';
-import {sellerAgreementReceptionEnabled,sellerAgreementPrompt,sellerAgreementReceptionVariables} from './seller-agreement-reception.ts';
+import {sellerAgreementReceptionEnabled,sellerAgreementPrompt,sellerAgreementReceptionVariables,automaticOfferReceptionPrompt} from './seller-agreement-reception.ts';
+import {buyerRolePolicy,selectedRoleInstructions} from './buyer-role-policy.ts';
 import {createHash} from 'node:crypto';
 import {safeInboundPropertyContext} from './seller-call-context.ts';
 /** New, separately reviewed policy. Legacy reception remains the default. */
@@ -22,5 +23,5 @@ export function receptionContextVariables(config:Record<string,unknown>,value:un
  const result=sellerAgreementReceptionEnabled(config)?sellerAgreementReceptionVariables(value):sellerOfferReceptionEnabled(config)?sellerOfferReceptionVariables(value):buyerReceptionEnabled(config)?buyerReceptionVariables(value):propertyReceptionVariables(value);
  const context=JSON.parse(result.icash_property_context);
  if(context&&typeof context.address==='string')Object.assign(context,conversationAddressFields(context.address));
- return {...result,icash_property_context:JSON.stringify(context)};
+ return {...result,icash_property_context:JSON.stringify(context),...(config.context_policy===buyerRolePolicy?{icash_role_instructions:selectedRoleInstructions(context?.status,automaticOfferReceptionPrompt)}:{})};
 }

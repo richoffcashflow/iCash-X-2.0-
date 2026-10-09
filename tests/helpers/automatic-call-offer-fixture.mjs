@@ -144,5 +144,17 @@ export async function testAutomaticCallOffer(f){
   }
  });
  for(const role of ['anon','authenticated'])assert.equal(await val("select has_function_privilege($1,'public.icash_stage_buyer_voice_policy(uuid,text,text,text)','execute')",[role]),false);
+ await db.exec(read('config/buyer-role-isolation.sql'));
+ await scenario('v11 role isolation retains bound seller authority and stages a disabled exact branch',async()=>{
+  const {r,scope}=await call('seller',true,'v11');assert.equal((await scope()).dealId,'11111111-1111-4111-8111-111111111111');
+  assert.equal(await rpc('icash_call_offer_context',{p_hash:r.stop_token_hash,p_conversation:'conv_other'}),null);
+ });
+ await scenario('v11 stage preserves the active v9 source and cannot activate itself',async()=>{
+  const {r}=await call('seller',true,'v9');const args={p_source:r.config_id,p_branch:'agtbrch_isolatedfixture',p_version:'agtvrsn_isolatedfixture',p_hash:'d'.repeat(64)};
+  const id=await rpc('icash_stage_buyer_role_policy',args);assert.equal(await rpc('icash_stage_buyer_role_policy',args),id);
+  assert.equal(await val('select enabled from icash_recorded_reception_private.configs where id=$1',[id]),false);
+  assert.equal(await val('select enabled from icash_recorded_reception_private.configs where id=$1',[r.config_id]),true);
+ });
+ for(const role of ['anon','authenticated'])assert.equal(await val("select has_function_privilege($1,'public.icash_stage_buyer_role_policy(uuid,text,text,text)','execute')",[role]),false);
  console.log('PASS automatic offer SQL: current call only, atomic price lock, stale-data hold, contract price equality and private ledger.');
 }

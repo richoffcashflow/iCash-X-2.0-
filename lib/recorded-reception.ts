@@ -76,7 +76,7 @@ export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:un
  const hash=sha(JSON.stringify(canonical(snapshot)));
  const guardrails=object(raw.platform_settings).guardrails;
  const buyerGuards=object(object(object(guardrails).custom).config).configs;
- const priceEnforcement=c.context_policy===buyerVoicePolicy?object(guardrails).version==='1'&&object(object(guardrails).focus).is_enabled===true&&Array.isArray(buyerGuards)&&buyerGuards.filter(g=>object(g).name===buyerVoiceGuardrail.name).length===1&&buyerGuards.some(g=>Object.entries(buyerVoiceGuardrail).every(([key,value])=>JSON.stringify(canonical(object(g)[key]))===JSON.stringify(canonical(value)))):!automaticOfferPolicy(c.context_policy)||automaticOfferGuardrailMatches(guardrails,c.context_policy);
+ const priceEnforcement=(c.context_policy===buyerVoicePolicy||c.context_policy==='automatic_offer_v11')?object(guardrails).version==='1'&&object(object(guardrails).focus).is_enabled===true&&Array.isArray(buyerGuards)&&buyerGuards.filter(g=>object(g).name===buyerVoiceGuardrail.name).length===1&&buyerGuards.some(g=>Object.entries(buyerVoiceGuardrail).every(([key,value])=>JSON.stringify(canonical(object(g)[key]))===JSON.stringify(canonical(value)))):!automaticOfferPolicy(c.context_policy)||automaticOfferGuardrailMatches(guardrails,c.context_policy);
  return {safe:exactStop&&exactAgreement&&exactPrompt&&priceEnforcement&&inlineStopMatchesReviewedDefinition&&Object.values(base.checks).every(Boolean)&&hash===c.config_hash,hash,checks:{...base.checks,exactStop,exactAgreement,exactPrompt,priceEnforcement,inlineStopMatchesReviewedDefinition},inlineTools};
 }
 export function recordedReceptionToolMatches(id:string,input:unknown){
