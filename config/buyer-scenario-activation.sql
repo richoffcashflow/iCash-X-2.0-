@@ -5,11 +5,11 @@ set local lock_timeout='3s';
 do $$
 declare audit jsonb;ready jsonb;source icash_recorded_reception_private.configs;candidate icash_recorded_reception_private.configs;
 begin
- select result into audit from public.icash_integration_checks where provider='buyer_scenario_audit_20261009_v6';
+ select result into audit from public.icash_integration_checks where provider='buyer_scenario_audit_20261009_v7';
  select result into ready from public.icash_integration_checks where provider='buyer_scenario_application_ready_20261009_v1';
  if audit->>'status' is distinct from 'passed' or audit->>'count' is distinct from '30' or audit->>'passedCount' is distinct from '30'
-  or audit->>'fixtureHash' is distinct from '6bb2dfa557991735758ecf0ac5df39c77b9012bbcdaeafab3ea8508d91d67237'
-  or audit->>'policyHash' is distinct from '80f89bf2ffaefcf31ed47f6f6db2e7f3b0b775108704b28fadb59ce892024420'
+  or audit->>'fixtureHash' is distinct from 'd122040ff176d09d208e77fafdc7c67f5c42024d0118ce5d76221feff1b988e0'
+  or audit->>'policyHash' is distinct from '58678e5c229ad2b6cc41be0fccb8ec01f0fc4c95b55f5e98b42a3a82e2fdb496'
   or jsonb_array_length(audit->'tests') is distinct from 30
   or exists(select 1 from jsonb_array_elements(audit->'tests') t where t->>'status' is distinct from 'passed' or t->>'branch' is distinct from audit->>'branchId' or t->>'version' is distinct from audit->>'version') then raise exception 'Exact passed scenario audit required';end if;
  if ready->>'state' is distinct from 'READY' or ready->>'commit' is distinct from audit->>'commit'
@@ -19,7 +19,7 @@ begin
   or source.context_policy_hash<>'2f40ffd420387c93f6fe66fd9093285a657a928f429d71ad177637840932fc8a'
   or source.branch_id is distinct from audit->>'sourceBranchId' or source.version_id is distinct from audit->>'sourceVersion' or source.config_hash is distinct from audit->>'sourceConfigHash' then raise exception 'Reviewed source changed';end if;
  select * into candidate from icash_recorded_reception_private.configs where id=(audit->>'stagedConfigId')::uuid for update;
- if not found or candidate.enabled or candidate.context_policy<>'automatic_offer_v15' or candidate.context_policy_hash<>audit->>'policyHash'
+ if not found or candidate.enabled or candidate.context_policy<>'automatic_offer_v16' or candidate.context_policy_hash<>audit->>'policyHash'
   or candidate.account_id<>source.account_id or candidate.owner_user_id<>source.owner_user_id or candidate.called_number<>source.called_number
   or candidate.agent_id<>source.agent_id or candidate.branch_id=source.branch_id or candidate.version_id=source.version_id
   or candidate.branch_id<>audit->>'branchId' or candidate.version_id<>audit->>'version' or candidate.config_hash<>audit->>'configHash'

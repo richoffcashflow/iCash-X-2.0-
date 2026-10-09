@@ -32,7 +32,12 @@ export async function testAutomaticOfferProvider(api,agents,toolId,options={}){
   const name=prefix+item.key+'-'+toolId.slice(-8),existing=list.tests.filter(t=>t.name===name);if(existing.length>1)throw Error('UNIQUE_PROVIDER_TEST_REQUIRED');
   const body={name,type:'simulation',chat_history:[{role:'user',message:item.user,time_in_call_secs:0}],dynamic_variables:{...(options.roleInstructions?{icash_role_instructions:options.roleInstructions(item.context.status)}:{}),icash_recording_id:'11111111-1111-4111-8111-111111111111',secret__icash_recording_stop_token:'c'.repeat(64),principal:'Fixture Buyer',assistant_name:'Alex',icash_property_context:JSON.stringify(item.context),icash_property_greeting:'Hi '+item.context.returningName+', are you calling about 45 Fixture Lane?',icash_reception_recording_id:'11111111-1111-4111-8111-111111111111',secret__icash_call_token:'a'.repeat(64),secret__icash_reception_stop_token:'b'.repeat(64)},success_conditions:item.criteria,simulation_scenario:item.scenario,simulation_max_turns:item.maxTurns??5,tool_mock_config:{mocking_strategy:'selected',fallback_strategy:'raise_error',mocked_tool_ids:[...new Set(agents.flatMap(a=>a.conversation_config?.agent?.prompt?.tool_ids??[]).concat(toolId))]},tool_mock_overrides:{[toolId]:item.mocks?Object.entries(item.mocks).map(([action,result])=>({parameter_conditions:[{path:'action',eval:{type:'exact',expected_value:action}}],mock_result:JSON.stringify(result),is_error:false})):[{parameter_conditions:[],mock_result:JSON.stringify(item.result),is_error:false}]}};
   const made=existing[0]??await api('/v1/convai/agent-testing/create','POST',body);
-  if(!made.id)throw Error('PROVIDER_TEST_ID_REQUIRED');tests.push({test_id:made.id});
+  if(!made.id)throw Error('PROVIDER_TEST_ID_REQUIRED');
+  if(options.verifyStored){
+   const saved=await api('/v1/convai/agent-testing/'+made.id);
+   if(saved.name!==name||saved.type!=='simulation'||saved.dynamic_variables?.icash_role_instructions!==body.dynamic_variables.icash_role_instructions||saved.dynamic_variables?.icash_property_context!==body.dynamic_variables.icash_property_context||JSON.stringify(saved.success_conditions)!==JSON.stringify(body.success_conditions)||saved.tool_mock_config?.fallback_strategy!=='raise_error'||saved.tool_mock_config?.mocking_strategy!=='selected'||JSON.stringify([...(saved.tool_mock_config?.mocked_tool_ids??[])].sort())!==JSON.stringify([...body.tool_mock_config.mocked_tool_ids].sort()))throw Error('EXACT_PROVIDER_TEST_INPUT_REQUIRED');
+  }
+  tests.push({test_id:made.id});
  }
  for(const a of agents){
   const started=await api('/v1/convai/agents/'+a.agent_id+'/run-tests','POST',{branch_id:a.branch_id,tests,repeat_count:1});

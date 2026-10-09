@@ -1,3 +1,4 @@
+import {buyerAnswerPolicy,buyerAnswerModelMatches,buyerAnswerGuardrail,buyerAnswerEntryInstructions} from './buyer-answer-policy.ts';
 import {buyerConversationPolicy,buyerConversationModelMatches,buyerConversationGuardrail} from './buyer-conversation-policy.ts';
 import {buyerTurnPolicy,buyerTurnModelMatches} from './buyer-turn-policy.ts';
 import {buyerResponsePolicy,buyerResponseModelMatches} from './buyer-response-policy.ts';
@@ -72,16 +73,16 @@ export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:un
  const inlineStopMatchesReviewedDefinition=inlineTools.bounded&&inlineTools.shape!=='invalid'&&inlineTools.matchingStopCount<=1&&inlineTools.unrecognizedCount===0;
  if(inlineStopMatchesReviewedDefinition&&Array.isArray(prompt.tools))prompt.tools=prompt.tools.filter((_,index)=>inlineTools.entries[index].kind!=='reviewed_stop');
  const expectedPrompt=propertyReceptionEnabled(c)?receptionContextPrompt(c):receptionPrompt;
- const responseModel=c.context_policy===buyerConversationPolicy?buyerConversationModelMatches(prompt):c.context_policy===buyerTurnPolicy?buyerTurnModelMatches(prompt):c.context_policy!==buyerResponsePolicy||buyerResponseModelMatches(prompt);
- const exactPrompt=prompt.prompt===expectedPrompt+(c.entry_policy==='direct_recorded_v1'?directRecordedInstructions:recordedReceptionStopInstruction);
+ const responseModel=c.context_policy===buyerAnswerPolicy?buyerAnswerModelMatches(prompt):c.context_policy===buyerConversationPolicy?buyerConversationModelMatches(prompt):c.context_policy===buyerTurnPolicy?buyerTurnModelMatches(prompt):c.context_policy!==buyerResponsePolicy||buyerResponseModelMatches(prompt);
+ const exactPrompt=prompt.prompt===expectedPrompt+(c.entry_policy==='direct_recorded_v1'?(c.context_policy===buyerAnswerPolicy?buyerAnswerEntryInstructions:directRecordedInstructions):recordedReceptionStopInstruction);
  prompt.tool_ids=[];prompt.prompt=expectedPrompt;
  const base=inspectReceptionAgent({...c,config_hash:''},a,branch,workspaceAbsent);
  const snapshot={main_branch_id:raw.main_branch_id,agent_id:raw.agent_id,branch_id:raw.branch_id,version_id:raw.version_id,conversation_config:raw.conversation_config,platform_settings:raw.platform_settings,workflow:raw.workflow??null,procedures:raw.procedures??null};
  const hash=sha(JSON.stringify(canonical(snapshot)));
  const guardrails=object(raw.platform_settings).guardrails;
  const buyerGuards=object(object(object(guardrails).custom).config).configs;
- const expectedBuyerGuardrail=c.context_policy===buyerConversationPolicy?buyerConversationGuardrail:buyerVoiceGuardrail;
- const priceEnforcement=(c.context_policy===buyerVoicePolicy||['automatic_offer_v11','automatic_offer_v12','automatic_offer_v13','automatic_offer_v14','automatic_offer_v15'].includes(String(c.context_policy)))?object(guardrails).version==='1'&&object(object(guardrails).focus).is_enabled===true&&Array.isArray(buyerGuards)&&buyerGuards.filter(g=>object(g).name===expectedBuyerGuardrail.name).length===1&&buyerGuards.some(g=>Object.entries(expectedBuyerGuardrail).every(([key,value])=>JSON.stringify(canonical(object(g)[key]))===JSON.stringify(canonical(value)))):!automaticOfferPolicy(c.context_policy)||automaticOfferGuardrailMatches(guardrails,c.context_policy);
+ const expectedBuyerGuardrail=c.context_policy===buyerAnswerPolicy?buyerAnswerGuardrail:c.context_policy===buyerConversationPolicy?buyerConversationGuardrail:buyerVoiceGuardrail;
+ const priceEnforcement=(c.context_policy===buyerVoicePolicy||['automatic_offer_v11','automatic_offer_v12','automatic_offer_v13','automatic_offer_v14','automatic_offer_v15','automatic_offer_v16'].includes(String(c.context_policy)))?object(guardrails).version==='1'&&object(object(guardrails).focus).is_enabled===true&&Array.isArray(buyerGuards)&&buyerGuards.filter(g=>object(g).name===expectedBuyerGuardrail.name).length===1&&buyerGuards.some(g=>Object.entries(expectedBuyerGuardrail).every(([key,value])=>JSON.stringify(canonical(object(g)[key]))===JSON.stringify(canonical(value)))):!automaticOfferPolicy(c.context_policy)||automaticOfferGuardrailMatches(guardrails,c.context_policy);
  return {safe:responseModel&&exactStop&&exactAgreement&&exactPrompt&&priceEnforcement&&inlineStopMatchesReviewedDefinition&&Object.values(base.checks).every(Boolean)&&hash===c.config_hash,hash,checks:{...base.checks,responseModel,exactStop,exactAgreement,exactPrompt,priceEnforcement,inlineStopMatchesReviewedDefinition},inlineTools};
 }
 export function recordedReceptionToolMatches(id:string,input:unknown){
