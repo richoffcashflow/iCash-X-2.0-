@@ -7,6 +7,31 @@ type Job={id:string;accountId:string;envelopeId:string;signerId:string;phone:str
 type Envelope={id:string;account_id:string;provider_id:string;terms_hash:string;test_mode:boolean;state:string;kind:SigningKind;terms:unknown;recipients:{id:string;email?:string|null;phone?:string|null}[]};
 type Dependencies={db:Db;key:string;fetcher?:typeof fetch};
 
+/** Read provider send events for a spent authorization. This path cannot send or re-arm it. */
+export async function inspectContractTextResend(hash:string,{db,key,fetcher=fetch}:Dependencies){
+ if(!/^[a-f0-9]{64}$/.test(hash)||!key)throw Error('CONFIGURATION_REQUIRED');
+ type Row={id:string;envelope_id:string;signer_id:string;recipient:string;expected_provider_id:string;expected_submitter_id:number;terms_hash:string;state:string};
+ const [j]=await db<Row[]>(`icash_contract_text_resends?token_hash=eq.${hash}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&state=in.(dispatching,accepted,needs_review)&select=id,envelope_id,signer_id,recipient,expected_provider_id,expected_submitter_id,terms_hash,state&limit=1`);
+ if(!j)return {status:'not_authorized' as const};
+ if(!Number.isSafeInteger(j.expected_submitter_id)||j.expected_submitter_id<=0)throw Error('SIGNER_BINDING_MISMATCH');
+ const r=await fetcher(`https://api.docuseal.com/submitters/${j.expected_submitter_id}`,{method:'GET',headers:{'X-Auth-Token':key},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(20000)});
+ if(!r.ok)return {status:'inspection_unavailable' as const,code:`PROVIDER_HTTP_${r.status}`};
+ const p=await r.json();
+ if(p.id!==j.expected_submitter_id||String(p.submission_id??p.submission?.id)!==j.expected_provider_id||p.external_id!==`${j.envelope_id}:${j.signer_id}`||p.phone!==j.recipient||p.metadata?.terms_hash!==j.terms_hash)throw Error('SIGNER_BINDING_MISMATCH');
+ const rawEvents=Array.isArray(p.submission_events)?p.submission_events:[];
+ const events=rawEvents.filter((e:{submitter_id?:number})=>e.submitter_id===undefined||e.submitter_id===j.expected_submitter_id).slice(-40).map((e:{event_type?:unknown;event_timestamp?:unknown;data?:Record<string,unknown>})=>({
+  type:typeof e.event_type==='string'?e.event_type.slice(0,80):null,
+  at:typeof e.event_timestamp==='string'?e.event_timestamp.slice(0,40):null,
+  dataKeys:e.data&&typeof e.data==='object'?Object.keys(e.data).slice(0,15):[],
+  codes:Object.fromEntries(Object.entries(e.data??{}).filter(([k,v])=>['status','code','error_code'].includes(k)&&typeof v==='string'&&/^[A-Za-z0-9_ .-]{1,100}$/.test(v)))
+ }));
+ return {status:'inspected' as const,recipientLast4:j.recipient.slice(-4),attemptState:j.state,signerStatus:p.status,
+  templateName:typeof p.template?.name==='string'?p.template.name.slice(0,200):null,
+  documentNames:Array.isArray(p.documents)?p.documents.map((d:{name?:unknown})=>typeof d.name==='string'?d.name.slice(0,200):null):[],
+  sentAt:p.sent_at??null,openedAt:p.opened_at??null,completedAt:p.completed_at??null,
+  smsPreference:p.preferences?.send_sms??null,events};
+}
+
 /** One explicit authorization, one provider attempt. Never create, edit, or sign an agreement. */
 export async function resendContractText(hash:string,{db,key,fetcher=fetch}:Dependencies){
  if(!/^[a-f0-9]{64}$/.test(hash)||!key)throw Error('CONFIGURATION_REQUIRED');

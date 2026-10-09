@@ -14,12 +14,27 @@ export async function prepareNoEmdTemplates(env=process.env,fetcher=fetch){
  const results=[];
  for(const mode of ['live','test']){
   const task='icash-x-'+mode+'-purchase-no-emd-v1';
+  const name='iCash X - Contract to Purchase'+(mode==='test'?' - TEST DRAFT':'');
   const rows=await db('icash_template_drafts?key=eq.'+task+'&select=state,result');
   if(rows.length!==1||rows[0].result?.ownerApproval?.approved!==true)throw Error('TEMPLATE_TASK_REQUIRED');
-  if(rows[0].state==='created'&&rows[0].result.fieldValidation===true){results.push({mode,id:rows[0].result.id,status:'already_created'});continue;}
-  if(rows[0].state!=='claimed')throw Error('PRIOR_TEMPLATE_CREATE_UNCONFIRMED');
   const key=mode==='live'?env.DOCUSEAL_API_KEY:env.DOCUSEAL_TEST_API_KEY;if(!key)throw Error('SIGNING_CONFIGURATION_REQUIRED');
-  const payload={...base,external_id:task,name:'iCash X - Contract to Purchase - No EMD'+(mode==='test'?' - TEST DRAFT':''),folder_name:mode==='live'?'iCash X Approved Contracts':'iCash X Test Contracts',shared_link:false};
+  if(rows[0].state==='created'&&rows[0].result.fieldValidation===true){
+   const prior=rows[0].result,id=prior.id;
+   if(prior.name!==name){
+    if(!Number.isSafeInteger(id)||id<=0)throw Error('TEMPLATE_ID_REQUIRED');
+    const request=async(method='GET',body)=>{const r=await fetcher('https://api.docuseal.com/templates/'+id,{method,headers:{'X-Auth-Token':key,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('TEMPLATE_TITLE_UNCONFIRMED');return r.json();};
+    const before=await request();
+    if(before.id!==id||before.external_id!==task)throw Error('TEMPLATE_BINDING_REQUIRED');
+    // A display-name update only: no document, field, role, submission or notification changes.
+    if(before.name!==name)await request('PUT',{name});
+    const after=await request();
+    if(after.id!==id||after.name!==name||after.external_id!==task||JSON.stringify([after.fields,after.submitters,after.schema])!==JSON.stringify([before.fields,before.submitters,before.schema]))throw Error('TEMPLATE_TITLE_READBACK_REQUIRED');
+    await db('icash_template_drafts?key=eq.'+task,'PATCH',{result:{...prior,name},updated_at:new Date().toISOString()});
+   }
+   results.push({mode,id,status:'already_created'});continue;
+  }
+  if(rows[0].state!=='claimed')throw Error('PRIOR_TEMPLATE_CREATE_UNCONFIRMED');
+  const payload={...base,external_id:task,name,folder_name:mode==='live'?'iCash X Approved Contracts':'iCash X Test Contracts',shared_link:false};
   if(mode==='live')payload.html=payload.html.replaceAll('TEST DRAFT - NOT FOR A LIVE TRANSACTION','').replaceAll('This draft is not an attorney-approved state form.','This agreement is not an attorney-approved state form.');
   const claim=await db('icash_template_drafts?key=eq.'+task+'&state=eq.claimed','PATCH',{state:'needs_review',updated_at:new Date().toISOString()});
   if(claim.length!==1)throw Error('TEMPLATE_CLAIM_REQUIRED');
