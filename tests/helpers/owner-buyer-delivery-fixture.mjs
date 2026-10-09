@@ -105,5 +105,48 @@ export async function testOwnerBuyerDelivery(f,{link,realBuyerThread,realBuyerEm
   assert.equal((await one("select has_function_privilege($1,'icash_owner_buyer_test_current(uuid)','execute') ok",[role])).ok,false);
  }
  assert.equal(await rpc('icash_buyer_outreach_held',{p_account:account,p_deal:deal}),true);
+ // Regression: the working line already holds the owner's seller conversation
+ // for this SAME signed deal. A fresh buyer test must coexist with it, retain
+ // the failed attempt, and leave the real buyer/email hold in force.
+ await pg.exec(read('config/owner-buyer-test-retry-scope.sql'));
+ assert.equal((await one('select owner_buyer_test_id from icash_text_threads where id=$1',[thread])).owner_buyer_test_id,run);
+ const recoverySender='+14245550189',recoveryRun=randomUUID(),recoveryThread=randomUUID(),sameDealSeller=randomUUID();
+ await q('insert into icash_text_senders(phone,enabled) values($1,true)',[recoverySender]);
+ await q("insert into icash_text_threads(id,account_id,deal_id,party,sender,recipient,timezone,sms_rate_id,paused) values($1,$2,$3,'seller',$4,$5,$6,$7,false)",[sameDealSeller,account,deal,recoverySender,ownerPhone,timezone,sms]);
+ const sellerBefore=await one('select * from icash_text_threads where id=$1',[sameDealSeller]);
+ const oldMessages=await q('select * from icash_text_messages where thread_id=$1 order by id',[thread]);
+ await q('begin');
+ await q('update icash_owner_buyer_tests set revoked_at=now() where id=$1',[run]);
+ await q("insert into icash_owner_buyer_tests(id,account_id,deal_id,owner_user_id,thread_id,sender,phone,email,sms_rate_id,email_rate_id,asking_price_cents,approval_reference,expires_at,send_email) values($1,$2,$3,$4,$5,$6,$7,'operational-sms@example.invalid',$8,$9,$10,'SIMULATION new explicit SMS-only retry approval',now()+interval '2 hours',false)",[recoveryRun,account,deal,user,recoveryThread,recoverySender,ownerPhone,sms,emailRate,link.askingPriceCents]);
+ await q("insert into icash_text_threads(id,account_id,deal_id,party,sender,recipient,timezone,sms_rate_id,paused,ai_mode,sender_pool_assigned,owner_buyer_test_id) values($1,$2,$3,'buyer',$4,$5,$6,$7,false,'auto',true,$8)",[recoveryThread,account,deal,recoverySender,ownerPhone,timezone,sms,recoveryRun]);
+ await q('commit');
+ assert.equal(await current(),false,'old approval is revoked');
+ assert.equal(await rpc('icash_owner_buyer_test_current',{p_id:recoveryRun}),true);
+ const recoveryContent=await rpc('icash_owner_buyer_test_content',{p_id:recoveryRun});
+ const recoveryMessage=await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:recoveryThread,p_body:recoveryContent.sms});assert(recoveryMessage);
+ assert.equal(await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:recoveryThread,p_body:recoveryContent.sms}),recoveryMessage);
+ assert.equal((await rpc('icash_claim_text',{p_account:account,p_message:recoveryMessage,p_sender:recoverySender})).to,ownerPhone);
+ assert.equal(await rpc('icash_claim_text',{p_account:account,p_message:recoveryMessage,p_sender:recoverySender}),null);
+ assert.equal((await rpc('icash_deal_email_contacts',{p_account:account,p_deal:deal})).some(c=>c.contact_key==='owner-buyer-test:'+recoveryRun),false,'SMS-only retry has no email authority');
+ await q("update icash_text_messages set state='accepted',provider_id='SIMULATED-recovery-package' where id=$1",[recoveryMessage]);
+ assert.equal(await rpc('icash_sms_resolve_property',{p_sender:recoverySender,p_recipient:ownerPhone,p_body:"What's the price?"}),recoveryThread);
+ assert.equal((await focus()).id,recoveryThread);
+ const recoveryEvent={id:'SIMULATION-recovery-reply',type:'text.incoming.sms',data:{from:ownerPhone,to:recoverySender,body:"What's the price?",message_id:'SIMULATION-recovery-incoming'}};
+ await rpc('icash_ingest_text_event',{p_event:recoveryEvent,p_optout:false});
+ assert.equal((await one('select thread_id from icash_text_messages where event_id=$1',[recoveryEvent.id])).thread_id,recoveryThread);
+ assert.deepEqual(await one('select * from icash_text_threads where id=$1',[sameDealSeller]),sellerBefore,'seller conversation is unchanged');
+ assert.deepEqual(await q('select * from icash_text_messages where thread_id=$1 order by id',[thread]),oldMessages,'prior attempt message evidence remains unchanged');
+ await assert.rejects(q('update icash_text_threads set owner_buyer_test_id=null where id=$1',[recoveryThread]),/immutable/);
+ await assert.rejects(q("insert into icash_text_threads(account_id,deal_id,party,sender,recipient,timezone,sms_rate_id,paused) values($1,$2,'seller',$3,$4,$5,$6,false)",[account,deal,recoverySender,ownerPhone,timezone,sms]),/unique/,'normal conversation uniqueness is preserved');
+ await assert.rejects(q("insert into icash_text_threads(account_id,deal_id,party,sender,recipient,timezone,sms_rate_id,paused,owner_buyer_test_id) values($1,$2,'buyer',$3,$4,$5,$6,false,$7)",[account,deal,recoverySender,ownerPhone,timezone,sms,recoveryRun]),/Current exact owner test/);
+ await q('begin');try{
+  await q("update icash_owner_buyer_tests set created_at=now()-interval '3 hours',expires_at=now()-interval '1 hour' where id=$1",[recoveryRun]);
+  assert.equal(await rpc('icash_sms_resolve_property',{p_sender:recoverySender,p_recipient:ownerPhone,p_body:"What's the price?"}),null,'expired buyer reply is not interpreted as a seller reply');
+  assert.equal(await rpc('icash_sms_resolve_property',{p_sender:recoverySender,p_recipient:ownerPhone,p_body:'123 Main Street'}),sameDealSeller,'explicit seller address still resolves after expiry');
+ }finally{await q('rollback');}
+ assert.equal(await rpc('icash_buyer_outreach_held',{p_account:account,p_deal:deal}),true);
+ assert.equal(await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:realBuyerThread,p_body:recoveryContent.sms}),null);
+ assert.equal(await rpc('icash_claim_deal_email',{p_account:account,p_id:realBuyerEmail}),null);
+ console.log('PASS same-property owner retry: fresh authorization, original seller/history retained, isolated buyer reply/call routing, SMS-only, no duplicates, expiry, real buyer hold.');
  console.log('PASS owner buyer delivery: exact verified owner, signed price, real buyer hold, no fabricated DNC, one-time claims, header guard, STOP/expiry/tenant isolation, separate reply and inbound buyer context.');
 }
