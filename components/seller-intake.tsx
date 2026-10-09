@@ -4,12 +4,14 @@ import {Check,MapPin,Phone,ShieldCheck,House,ArrowLeft,X,BadgeDollarSign} from '
 import {SellerAddressInput} from '@/components/seller-address-input';
 import {sellerBrand,sellerConsentVersion,sellerConsentText,sellerSharingText} from '@/lib/seller-leads';
 import {sellerOptinCopy,sellerOptinSource,sellerOptinCampaign} from '@/lib/seller-optin';
+import {sellerSubmissionStatus,type SellerSubmissionStatus} from '@/lib/seller-submission-status';
 
 export function SellerIntake(){
  const [step,setStep]=useState<'address'|'contact'>('address');
  const [variant,setVariant]=useState('fast_cash');
  const [name,setName]=useState(''),[address,setAddress]=useState(''),[phone,setPhone]=useState('');
  const [consented,setConsented]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[done,setDone]=useState(false),[trap,setTrap]=useState('');
+ const [progress,setProgress]=useState<SellerSubmissionStatus|null>(null),[statusRound,setStatusRound]=useState(0),[polling,setPolling]=useState(false);
  const nameInput=useRef<HTMLInputElement>(null),success=useRef<HTMLHeadingElement>(null),info=useRef<HTMLDialogElement>(null);
  const request=useRef(''),lock=useRef(false),interacted=useRef(false),measured=useRef(false),started=useRef(false);
  const copy=sellerOptinCopy(variant);
@@ -32,6 +34,28 @@ export function SellerIntake(){
    }).catch(()=>{});
   return()=>{active=false;};
  },[]);
+ useEffect(()=>{
+  if(!done||!request.current)return;
+  let active=true,attempts=0,timer:ReturnType<typeof setTimeout>|undefined;
+  const controller=new AbortController();
+  setPolling(true);
+  const poll=async()=>{
+   attempts++;
+   try{
+    const response=await fetch('/api/seller/status?request='+encodeURIComponent(request.current),{cache:'no-store',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(8000)])});
+    if(response.ok){
+     const status=await response.json() as SellerSubmissionStatus;
+     if(!active)return;
+     setProgress(status);
+     if(status.terminal){setPolling(false);return;}
+    }
+   }catch{/* Saved submission survives an unavailable status request. */}
+   if(!active)return;
+   if(attempts<30)timer=setTimeout(poll,2000);else setPolling(false);
+  };
+  void poll();
+  return()=>{active=false;controller.abort();if(timer)clearTimeout(timer);};
+ },[done,statusRound]);
  function begin(){interacted.current=true;if(!started.current){started.current=true;track('start');}}
  async function submit(e:FormEvent){
   e.preventDefault();if(!consented){setError('Please check the contact agreement to continue.');return;}if(lock.current)return;
@@ -41,7 +65,7 @@ export function SellerIntake(){
    const campaign=sellerOptinCampaign(q.get('campaign')||q.get('utm_campaign')),clickId=(q.get('fbclid')||q.get('gclid')||q.get('ttclid')||'').replace(/[^a-zA-Z0-9_.:-]/g,'').slice(0,300);
    await Promise.race([eventQueue.current,new Promise(resolve=>setTimeout(resolve,800))]);
    const r=await fetch('/api/seller/intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,address,phone,consented,consentVersion:sellerConsentVersion,contactTimezone:Intl.DateTimeFormat().resolvedOptions().timeZone,requestId:request.current,campaign,source,clickId,honeypot:trap})});
-   const d=await r.json();if(!r.ok)throw Error(d.error||'Please retry.');setDone(true);requestAnimationFrame(()=>success.current?.focus());
+   const d=await r.json();if(!r.ok)throw Error(d.error||'Please retry.');setProgress(sellerSubmissionStatus('received'));setDone(true);requestAnimationFrame(()=>success.current?.focus());
   }catch(e){setError(e instanceof Error?e.message:'Please retry.');}finally{lock.current=false;setBusy(false);}
  }
  return <main className={`seller-shell seller-step-${done?'done':step}`}>
@@ -51,7 +75,13 @@ export function SellerIntake(){
   </header>
   <section className="seller-hero" aria-label="Request a cash offer">
    <div className="seller-story">
-    {done?<div className="seller-success" role="status"><span className="seller-success-icon"><Check size={28}/></span><h1 ref={success} tabIndex={-1}>You’re on your way.</h1><p>Your request is saved. We’ll review your property and match it with available buyers.</p><div className="seller-next"><Phone size={21}/><span><strong>Keep your phone nearby.</strong><br/>Matched buyers may call or text you. You decide whether to accept any offer.</span></div><a href="/sell/privacy">Your information & contact choices</a></div>:<>
+    {done?<div className="seller-success">
+     <span className="seller-success-icon"><Check size={28}/></span>
+     <div role="status" aria-live="polite"><h1 ref={success} tabIndex={-1}>{progress?.title??'Your request is saved.'}</h1><p>{progress?.message??'We’re checking your property.'}</p></div>
+     <div className="seller-next"><MapPin size={21}/><span><strong>Your property</strong><br/>{address}</span></div>
+     {progress?.phase==='address_review'?<button className="seller-submit" onClick={()=>{setDone(false);setProgress(null);setStep('address');setError('');request.current='';requestAnimationFrame(()=>document.getElementById('seller-address')?.focus());}}>Review address</button>:!polling&&!progress?.terminal?<button className="seller-submit" onClick={()=>setStatusRound(v=>v+1)}>Check progress</button>:null}
+     <a href="/sell/privacy">Your information & contact choices</a>
+    </div>:<>
      <div className="seller-heading">
       {step==='address'?<><h1><em>{copy.accent}</em><span>{copy.headline}</span></h1><p className="seller-intro">{copy.description}</p></>:<><span className="seller-kicker">ONE LAST STEP</span><h1>Where can buyers<br/><em>reach you?</em></h1><p className="seller-intro">Your request is free. You’re in control.</p></>}
      </div>
