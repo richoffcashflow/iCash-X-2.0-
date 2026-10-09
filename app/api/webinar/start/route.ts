@@ -9,6 +9,7 @@ import {db} from '@/lib/stripe-test';
 import {publicWebinar,settingsSchema,webinarSchema,visitorTimezone,webinarFromRow,webinarOffers,offerDestination,type WebinarSettings,type WebinarRow} from '@/lib/webinar-policy';
 import {selectOffer} from '@/packages/webinar-engine/src/index';
 import {selectRecording} from '@/lib/webinar-recordings';
+import {webinarViewerLocation} from '@/lib/webinar-viewer-location';
 import {snapshotChat} from '@/lib/webinar-variants';
 import {approximateRegion} from '@/lib/webinar-activity';
 import {adReturnWebinar,webinarReturnJourney} from '@/lib/webinar-ad-returns';
@@ -31,6 +32,7 @@ export async function POST(req:Request){try{
   return Response.json({redirect:account.destination,needsBudget:account.needsBudget},{headers:webinarHeaders});
  }
  const visitor=await webinarVisitor(true,i.resume);const timezone=visitorTimezone(process.env.VERCEL?req.headers.get('x-vercel-ip-timezone'):null,i.timezone);
+ const location=webinarViewerLocation(req.headers);
  const attribution=Object.fromEntries(Object.entries(i.attribution??{}).filter(([k])=>['utm_source','utm_medium','utm_campaign','utm_content','utm_term','ad_id','adset_id','campaign_id'].includes(k)));
  const jar=await cookies();let fundingGuest=jar.get('icash_funding_guest')?.value;if(!validGuest(fundingGuest)){fundingGuest=randomBytes(32).toString('hex');jar.set('icash_funding_guest',fundingGuest,{httpOnly:true,secure:process.env.NODE_ENV!=='development',sameSite:'lax',path:'/',maxAge:86400*30});}
  const activityRegion=process.env.VERCEL?approximateRegion(req.headers.get('x-vercel-ip-country'),req.headers.get('x-vercel-ip-country-region')):null;
@@ -51,7 +53,7 @@ export async function POST(req:Request){try{
   journey={kind:'advance',sessionId:previous.id};
  }
  if(attempt===0&&i.code&&!i.preview&&!current.parentWebinarId&&journey.kind==='advance'){
-  const next=await adReturnWebinar(current,history,visitor.id,i.attribution,timezone,settings,offers);
+  const next=await adReturnWebinar(current,history,visitor.id,i.attribution,timezone,settings,offers,new Date(),location);
   if(next){target=next.webinar;history=next.history;journey=webinarReturnJourney(history,offers,timezone,settings.routing.checkoutWindowHours);continue;}
  }
  break;
@@ -60,7 +62,7 @@ export async function POST(req:Request){try{
  const unfinished=history.find(h=>h.id===resumeId);
  const webinar=unfinished?.config??target;
  const sessionId=randomUUID();
- const snapshot=snapshotChat((unfinished&&!i.preview)||target.id!==current.id?webinarSchema.parse(webinar):selectRecording(webinarSchema.parse(webinar),timezone,new Date(),settings.routing,i.preview?i.variant??'day':undefined),sessionId);
+ const snapshot=snapshotChat((unfinished&&!i.preview)||target.id!==current.id?webinarSchema.parse(webinar):selectRecording(webinarSchema.parse(webinar),timezone,new Date(),settings.routing,i.preview?i.variant??'day':undefined,location),sessionId);
  const session=await db<WebinarSession>('rpc/icash_webinar_begin','POST',{p_visitor:visitor.id,p_id:sessionId,p_config:snapshot,p_advance_from:!i.preview&&journey.kind==='advance'?journey.sessionId:null,p_preview:!!i.preview});
  const messages=await db<{id:string;role:'user'|'assistant';text:string}[]>(`icash_webinar_messages?session_id=eq.${session.id}&select=id,role,text&order=created_at.asc&limit=60`).catch(()=>[]);
  return Response.json({webinar:publicWebinar(webinarSchema.parse(session.config)),...(session.config.id!==current.id?{canonicalPath:webinarLink(session.config)}:{}),sessionId:session.id,progress:session.completed_at?0:session.progress_seconds,name:visitor.name??'',email:visitor.email??'',phone:visitor.phone??'',contactSaved:!!visitor.email&&!!visitor.phone,messages,preview:!!i.preview,serverNow:Date.now()},{headers:webinarHeaders});

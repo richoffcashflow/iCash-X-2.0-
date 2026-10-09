@@ -79,3 +79,5 @@ The portable `intelligence` exports remain available for historical integrations
 ### Display timers
 
 Import `timerDisplay` and the `WebinarTimer` / `TimerDeadlines` types from `@cashflowkey/webinar-engine/timers`. The pure renderer supports video cue timing, persisted relative deadlines, fixed timestamps, and hide/message expiry. Supply a trusted current time and server-persisted deadlines. The iCash X adapter stores the first deadline per visitor/webinar/recording/timer, independently of analytics and payments; another website can supply its own persistence.
+
+Day/Night selection accepts an optional `{latitude, longitude}` location through `isNight(timezone, now, routing, location)`. It estimates sunrise/sunset with NOAA solar-position equations, including seasonal and polar daylight. Missing or invalid coordinates use the configured hours in the viewer’s timezone. Host adapters supply approximate request geolocation; the engine requires no provider, network request, or location permission. Keep the selected recording in the saved session so sunset never replaces a video in progress.

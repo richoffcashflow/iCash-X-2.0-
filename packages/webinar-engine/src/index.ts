@@ -4,11 +4,31 @@ export type WebinarDefinition={id:string;revision:number;status:'draft'|'publish
 export type WatchHistory={webinar_id:string;revision:number;progress_seconds:number;completed_at:string|null;updated_at:string;created_at?:string};
 export type OptimizerSettings={enabled:boolean;explorationPercent:number;minVisitors:number};
 export type RoutingSettings={nightStartsAt:number;nightEndsAt:number};
+export type ViewerLocation={latitude:number;longitude:number};
 export type TimelineMessage={id:string;at:number;name:string;text:string;kind:'host'|'replay'|'ai';variations?:string[]};
 export function localHour(timezone:string,now=new Date()){try{return Number(new Intl.DateTimeFormat('en-US',{timeZone:timezone,hour:'numeric',hourCycle:'h23'}).format(now));}catch{return now.getUTCHours();}}
 export function visitorTimezone(ipTimezone:string|null,browserTimezone:string){for(const zone of [ipTimezone,browserTimezone,'America/Chicago']){if(!zone)continue;try{new Intl.DateTimeFormat('en-US',{timeZone:zone});return zone;}catch{/* Try the browser, then the default. */}}return 'America/Chicago';}
 export function sameLocalDay(value:string,timezone:string,now=new Date()){try{const f=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'});return f.format(new Date(value))===f.format(now);}catch{return false;}}
-export function isNight(timezone:string,now=new Date(),routing={nightStartsAt:18,nightEndsAt:6}){const hour=localHour(timezone,now);return routing.nightStartsAt>routing.nightEndsAt?hour>=routing.nightStartsAt||hour<routing.nightEndsAt:hour>=routing.nightStartsAt&&hour<routing.nightEndsAt;}
+/** Approximate sunrise/sunset at this instant, including seasonal and polar daylight.
+ * NOAA solar-position equations: https://gml.noaa.gov/grad/solcalc/solareqns.PDF
+ * UTC inputs avoid local-date and DST ambiguity. No remote lookup is required.
+ */
+export function solarNight(location:ViewerLocation|null|undefined,now=new Date()):boolean|null{
+ if(!location||!Number.isFinite(location.latitude)||Math.abs(location.latitude)>90||!Number.isFinite(location.longitude)||Math.abs(location.longitude)>180||!Number.isFinite(now.getTime()))return null;
+ const year=now.getUTCFullYear(),start=Date.UTC(year,0,1),days=(Date.UTC(year+1,0,1)-start)/86400000;
+ const gamma=2*Math.PI/days*((now.getTime()-start)/86400000-.5),radians=Math.PI/180;
+ const equation=229.18*(.000075+.001868*Math.cos(gamma)-.032077*Math.sin(gamma)-.014615*Math.cos(2*gamma)-.040849*Math.sin(2*gamma));
+ const declination=.006918-.399912*Math.cos(gamma)+.070257*Math.sin(gamma)-.006758*Math.cos(2*gamma)+.000907*Math.sin(2*gamma)-.002697*Math.cos(3*gamma)+.00148*Math.sin(3*gamma);
+ const minutes=now.getUTCHours()*60+now.getUTCMinutes()+now.getUTCSeconds()/60+now.getUTCMilliseconds()/60000;
+ const hourAngle=((minutes+equation+4*location.longitude)/4-180)*radians,latitude=location.latitude*radians;
+ const cosineZenith=Math.sin(latitude)*Math.sin(declination)+Math.cos(latitude)*Math.cos(declination)*Math.cos(hourAngle);
+ // The solar disk and atmospheric refraction put sunrise/sunset at 90.833°.
+ return cosineZenith<Math.cos(90.833*radians);
+}
+export function isNight(timezone:string,now=new Date(),routing:RoutingSettings={nightStartsAt:18,nightEndsAt:6},location?:ViewerLocation|null){
+ const solar=solarNight(location,now);if(solar!==null)return solar;
+ const hour=localHour(timezone,now);return routing.nightStartsAt>routing.nightEndsAt?hour>=routing.nightStartsAt||hour<routing.nightEndsAt:hour>=routing.nightStartsAt&&hour<routing.nightEndsAt;
+}
 export type ReturnSession=WatchHistory&{id:string;created_at:string;superseded_at:string|null;is_preview:boolean;max_seconds:number;offer_seen_at:string|null;config:{pitchAt:number}};
 export type ReturnVisit={kind:'new'}|{kind:'resume'|'advance';sessionId:string}|{kind:'checkout';sessionId:string;until:string};
 /** A fixed offer window never extends when someone refreshes or opens another tab. */
