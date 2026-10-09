@@ -36,3 +36,13 @@ The PostgreSQL fixture now covers the same-property collision, fresh authorizati
 preserved seller/failed-attempt history, unchanged ordinary uniqueness, buyer reply
 and inbound-call routing, expiration, duplicate claims, and the real-buyer hold.
 Live delivery must still be confirmed from the new provider receipt.
+
+## Verified owner SMS recovery, October 9, 2026
+
+PR #119 deployed as `ff777b029f0e1a491601060850b7cff0c701334f`. The fresh
+SMS-only test on the primary sender received a signed `text.delivery.confirmed`
+receipt at **1:04 PM Central**. The package page returned HTTP 200 with the
+$162,270.50 buyer price and included $10,000 assignment fee. The earlier failed
+attempt and seller conversation were preserved; no duplicate email was sent.
+Real buyer outreach remains held. A real handset reply and inbound callback
+remain separate acceptance checks; delivery alone does not establish them.
