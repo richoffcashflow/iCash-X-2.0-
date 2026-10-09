@@ -84,6 +84,18 @@ alter table icash_text_messages add last_delivery_at timestamptz;
  await q("insert into icash_signing_envelopes(id,account_id,deal_id,kind,state,test_mode,provider_id,terms_hash,terms) values($1,$2,$3,'purchase','completed',false,'fixture-purchase','purchase-hash',$4)",[purchase,a,d,terms]);
  await pg.exec(readFileSync('config/buyer-purchase-terms-and-reservations.sql','utf8'));
  await pg.exec(readFileSync('config/seller-viewing-availability-and-buyer-intent.sql','utf8'));
+ await pg.exec(readFileSync('config/buyer-viewing-seller-followup.sql','utf8'));
+ // A buyer can wait for seller options without inventing or choosing a time.
+ const availabilityQuestion='What times are available?';
+ assert.equal(await rpc('icash_buyer_viewing_quote',[[{role:'user',message:availabilityQuestion}]]),availabilityQuestion);
+ assert.equal(await rpc('icash_buyer_viewing_quote',[[{role:'user',message:availabilityQuestion},{role:'user',message:"I don't want to view the property"}]]),null);
+ assert.equal(await rpc('icash_buyer_viewing_quote',[[{role:'user',message:'What payment methods are available?'}]]),null);
+ const waitingMessage=(await one("insert into icash_text_messages(account_id,thread_id,direction,state,body) values($1,$2,'incoming','received',$3) returning id",[a,t,availabilityQuestion])).id;
+ assert.equal((await one('select quote from icash_buyer_viewing_requests where source_id=$1',[waitingMessage])).quote,availabilityQuestion);
+ await q('update icash_text_messages set thread_id=thread_id where id=$1',[waitingMessage]);
+ assert.equal((await one('select count(*)::int n from icash_buyer_viewing_requests where source_id=$1',[waitingMessage])).n,1);
+ assert.match(await rpc('icash_buyer_factual_text',[a,t,availabilityQuestion]),/check with the seller and get back to you with available viewing times/);
+ assert.equal((await rpc('icash_buyer_package_data',[a,d])).viewingSlots.length,0);
  await q("update icash_deal_files set terms=jsonb_set(terms,'{assignmentDepositCents}','null') where id=$1",[d]);
  await rpc('icash_prepare_buyer_disposition',[a,d]);
  assert.equal((await one('select terms from icash_deal_files where id=$1',[d])).terms.assignmentDepositCents,200000);

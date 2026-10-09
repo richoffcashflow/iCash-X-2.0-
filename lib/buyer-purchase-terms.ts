@@ -4,6 +4,7 @@ export function buyerDepositCents(assignmentFeeCents:number){
  return Math.min(Math.round(assignmentFeeCents/5),500_000);
 }
 export const buyerDepositMethods=['check','wire','cash_app','zelle'] as const;
+export const buyerViewingFollowup="We'll check with the seller and get back to you with available viewing times.";
 export const buyerDepositMethodLabels:Record<typeof buyerDepositMethods[number],string>={check:'Check',wire:'Wire',cash_app:'Cash App',zelle:'Zelle'};
 export type SellerViewingSlot={startsAt:string;endsAt:string|null;timezone:string};
 /** Public output contains only validated dates, never raw seller messages. */

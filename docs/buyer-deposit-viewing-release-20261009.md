@@ -1,6 +1,8 @@
 # Buyer deposits and seller viewing availability
 
-Status: production migrations applied; application promotion stopped by provider speech checks. PR #126 merged as `50da06811844c30a50d41a02eaebdcbc0f90633e`, but that deployment did not become production. The prior live application remains `9e7044631d22b542757839f32e285486ef39f237`. Correction branch: `fix/buyer-release-provider-20261009`.
+Status: the core release is live at `2b606b9bfbf6f5246c29abe805f45678a220bf78` through PR #127. All four version 3 provider simulations passed, and the production package, photo and voice authentication checks passed. The earlier version 2 failure remains in the audit history. Final handset acceptance and real seller viewing windows remain outstanding; real-buyer outreach is held.
+
+The October 9 seller-follow-up refinement tells buyers without available viewing slots: “We'll check with the seller and get back to you with available viewing times.” Buyers can wait for seller options without choosing a preferred time. Call and SMS requests still create dashboard attention, including the bare question “What times are available?” The dashboard directs the team to contact the seller and return with options. This is a team coordination request; no seller contact, returned message or booked visit is fabricated. The database refinement applied as `20261009202931_buyer_viewing_seller_followup`; the application build adds one bounded provider simulation for this path and retains the unchanged successful four-simulation fixture.
 
 Production access recovered after the owner authorized shipping. Both migrations applied successfully on October 9 at 2:28 PM Central. The live deal has one completed purchase and no issued buyer assignment. The service-role package returns a $2,000 deposit, optional viewing, no seller windows yet and no reservation. The real-buyer test hold remains active. No delivered messages were resent.
 
@@ -27,13 +29,13 @@ Production access checks confirm anonymous users cannot read either new table or
 - `tsc --noEmit --pretty false` and `git diff --check` passed.
 - Next.js webpack compile mode passed with application network fetches disabled. The default local Turbopack attempt failed because this workspace's `node_modules` symlink points outside its filesystem root. No production build or visual browser/handset result is claimed.
 
-## Remaining release work
+## Release history and remaining acceptance
 
 1. Completed: inspect production deal and issued assignment state before changing the schema.
 2. Completed: apply both migrations in order, run security advisors and check table/function privileges. Local migration filenames match the production-assigned versions: `20261009192829_buyer_purchase_terms_and_reservations.sql`, then `20261009192835_seller_viewing_availability_and_buyer_intent.sql`.
 3. Keep the real-buyer testing hold and existing delivery history. Do not resend delivered signature/package notifications. The active owner test has its existing October 9 expiration; a seller-availability backfill on that same number must not collide with buyer test routing.
 4. PR #126 preview passed. All four version 2 simulations completed and failed because the AI omitted its role introduction; the no-viewing scenario also omitted the closing date. The payment-claim transcript additionally claimed agreement delivery without evidence. The failed run remains intact under `buyer_terms_provider_test_20261009_v2` (fixture `03d8766fd5f6033a7e8b2478c93549229946ff027112498864f0fbf7eb10e180`). The correction gives one complete exact spoken opening, explicit unsent agreement status and a buyer team-preparation response that cannot invoke seller signing. Version 3 uses action-specific mock responses and adds delivery-claim checks; it requires the exact terminal version 2 evidence before one new bounded run. No failed/ambiguous marker is reset. If the October 10 UTC run window has elapsed, review timing before any new run.
-5. Deploy, verify the production alias/commit, and test the actual seller availability → buyer package/call → dashboard request flow. Confirm payment only from real cleared-funds evidence and a signed buyer assignment. No fake deposit or production receipt should be inserted for testing.
+5. Completed core deployment: `dpl_8fdsSv2fYrMUPDN96P83gvacSic4` became READY on www.geticashx.com. Version 3 passed all four simulations with fixture `0b29538870801362088fef06e629bac7249ff8be3aa5ce804899340dfe1248b5`. A final handset test of seller availability → buyer package/call → dashboard request is still required. Confirm payment only from real cleared-funds evidence and a signed buyer assignment. No fake deposit or production receipt should be inserted for testing.
 
 The local SQL test needs a PGlite module path:
 

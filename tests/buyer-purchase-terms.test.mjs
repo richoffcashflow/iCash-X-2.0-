@@ -33,6 +33,14 @@ test('reserved property never solicits a second deposit and missing deposit is n
  const reserved=calculateAutomaticCallOffer({party:'buyer',buyer:{...buyer,reserved:true}},{},now);assert.equal(reserved.quoteAllowed,false);assert.equal(reserved.reason,'buyer_reserved');
  for(const value of [undefined,null,0,500001,-1,'200000']){const r=calculateAutomaticCallOffer({party:'buyer',buyer:{...buyer,depositCents:value}},{},now);assert.equal(r.depositCents,null);assert.equal(r.spokenDeposit,null);}
 });
+test('missing or expired viewing slots request seller follow-up without requiring buyer times',()=>{
+ for(const viewingSlots of [undefined,[],[{...slot,startsAt:'2026-10-01T19:00:00Z',endsAt:'2026-10-01T21:00:00Z'}]]){
+  const result=calculateAutomaticCallOffer({party:'buyer',buyer:{...buyer,viewingSlots}},{},now);
+  assert.equal(result.viewingFollowupRequired,true);assert.equal(result.spokenViewingFollowup,"We'll check with the seller and get back to you with available viewing times.");
+  assert.deepEqual(result.viewingSlots,[]);assert.match(result.instruction,/may wait for seller options without choosing/);assert(result.instruction.includes(result.spokenViewingFollowup));
+ }
+ const available=calculateAutomaticCallOffer({party:'buyer',buyer},{},now);assert.equal(available.viewingFollowupRequired,undefined);assert.equal(available.viewingSlots.length,1);
+});
 test('signed seller contract goes directly to viewing coordination, without offer writes',async()=>{
  const calls=[];const result=await automaticCallOffer('fixture',{action:'get_offer',conversationId:'conv_fixture'},{bind:async()=>{},verifyInput:async()=>false,db:async(path)=>{calls.push(path);return {party:'seller',sellerContractSigned:true,address:'45 Fixture Lane',viewingSlots:[slot]};},now:()=>now});
  assert.equal(result.status,'seller_viewing_coordination');assert.equal(result.quoteAllowed,false);assert.deepEqual(calls,['rpc/icash_call_offer_context']);assert.match(result.instruction,/already signed/);
