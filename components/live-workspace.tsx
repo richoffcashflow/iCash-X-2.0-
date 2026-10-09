@@ -13,8 +13,8 @@ import {showPropertyContract} from '@/lib/property-contract-visibility';
 import {ContractReviewGuide} from '@/components/contract-review-guide';
 import {BuyerQualificationPanel} from '@/components/buyer-qualification-panel';
 import {fillEmptyTerms} from '@/lib/contract-preparation';
-import {dealCardSummary} from '@/lib/deal-card-summary';
-import {workMilestone} from '@/lib/work-milestone';
+import {dealCardSummary,type DealProgressEvidence} from '@/lib/deal-card-summary';
+import {startWorkPolling} from '@/lib/work-refresh';
 import {CallConversation} from '@/components/call-conversation';
 import {SmsRouteReviewCard,type SmsRouteReview} from '@/components/sms-route-review';
 import {PropertyMessages} from '@/components/property-messages';
@@ -23,18 +23,13 @@ import {SigningControls,SigningAttention,type SigningEnvelope} from '@/component
 import {dealTermsSchema,type DealTerms,type DocumentKind} from '@/lib/deal-documents';
 import {filterProperties,needsAttention,propertyAddressLines,propertyGroup,safeLocalTime,type WorkspaceFilter,type WorkspaceProperty} from './workspace-view';
 type Property=WorkspaceProperty;
-type Deal={id:string;screening_id:string;terms:DealTerms;stage:string};
+type Deal={id:string;screening_id:string;terms:DealTerms;stage:string;progress?:DealProgressEvidence};
 type Handoff={address?:string|null;id:string;screening_id:string;party:string;reason:string;summary:string;next_action:string;state:string};
 type Conversation={source?:'outbound'|'reception';id:string;screening_id:string;party:string;summary?:string;completed_at?:string;durationSeconds?:number;nextAction?:string;interested?:boolean;optedOut?:boolean;humanRequested?:boolean};
 type AttentionRequest={id:string;propertyId:string;address?:string|null;priority:number;title:string;description?:string;actionLabel?:string;node:ReactNode};
 type TextAttention={address?:string|null;id:string;message_id:string;screening_id:string;deal_id:string;kind:string;party:string;quote:string;timezone:string};
 type PurchasedLookup={screening_id:string;created_at?:string|null;fetchedAt?:string|null;source?:string;ownershipVerified?:false;outreachAuthorized?:false;contacts?:{name:string|null;phones:{number:string|null;type:string|null;doNotCall:boolean|null}[]}[]};
 type Work={viewingRequests?:BuyerViewingRequest[];smsRouteReviews?:SmsRouteReview[];propertyAttentionIds?:string[];textAttention?:TextAttention[];callRequests?:{address?:string|null;id:string;screening_id:string;requested_at:string;state:string}[];signatureActions:{id:string;kind:string;test_mode:boolean;screening_id?:string|null;address?:string|null}[];signing:SigningEnvelope[];signingConfigured:boolean;handoffs:Handoff[];conversations:Conversation[];callbacks:{id:string;screening_id:string;due_at:string;timezone:string;state:string}[];properties:Property[];deals:Deal[];contacts:PurchasedLookup[];hasMore:boolean;controls:{property_id:string}[];attentionHasMore?:boolean;searchSupported?:boolean;retainedIds?:string[]};
-function milestone(property:Property,work:Work){
- const deal=work.deals.find(d=>d.screening_id===property.id);
- const signatures=work.signing.filter(e=>e.deal_id===deal?.id&&!e.test_mode);
- return workMilestone({stage:deal?.stage,needsHuman:needsAttention(property.id,work),needsSignature:signatures.some(e=>e.state==='customer_signature_needed'),purchaseSigned:signatures.some(e=>e.kind==='purchase'&&e.state==='completed'),assignmentSigned:signatures.some(e=>e.kind==='assignment'&&e.state==='completed'),eligible:property.result.financialCheck.status==='eligible'});
-}
 function leaveDrafts(){return !document.querySelector('[data-unsaved-draft="true"]')||window.confirm('Leave this view? Unsent drafts and unsaved contract changes in this view will be lost.');}
 async function post(path:string,data:unknown){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const out=await r.json();if(!r.ok)throw new Error(out.error||'Please retry.');return out;}
 export function LiveWorkspace({principal,botPaused=false,botAvailable=false,accountStale=false,showCoach=true,propertyRequest,onAsk,onOpenAssistant}:{propertyRequest?:{id:string;nonce:number}|null;onAsk?:(id:string,address:string)=>void;onOpenAssistant?:()=>void;principal:string;botPaused?:boolean;botAvailable?:boolean;accountStale?:boolean;showCoach?:boolean}){
@@ -44,15 +39,22 @@ export function LiveWorkspace({principal,botPaused=false,botAvailable=false,acco
  useEffect(()=>{const warn=(event:BeforeUnloadEvent)=>{if(document.querySelector('[data-unsaved-draft="true"]'))event.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
  useEffect(()=>{const id=new URLSearchParams(window.location.search).get('screeningId');if(id&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)){setFocusedId(id);setActiveId(id);setVisited([id]);}},[]);
  useEffect(()=>{const timer=setTimeout(()=>{setSearch(query.trim());setPage(0);},300);return()=>clearTimeout(timer);},[query]);
- useEffect(()=>{let active=true,inFlight=false;const controller=new AbortController();async function load(){if(document.hidden||inFlight)return;inFlight=true;try{const params=new URLSearchParams({page:String(page),attentionPage:String(attentionPage),...(search?{query:search}:{}),...(focusedId?{screeningId:focusedId}:{})});const r=await fetch(`/api/work/activity?${params}`,{cache:'no-store',signal:controller.signal});const d=await r.json();if(!r.ok)throw new Error(d.error||'Could not refresh your work.');if(active){
- const heldIds=[...new Set([openPropertyId.current,...Array.from(document.querySelectorAll<HTMLElement>('.live-property')).filter(node=>node.querySelector('[data-unsaved-draft="true"]')).map(node=>node.id.replace('property-',''))])].filter(id=>id&&!d.properties.some((p:Property)=>p.id===id));
- if(heldIds.length){
-  const held=await Promise.all(heldIds.slice(0,6).map(async id=>{const response=await fetch(`/api/work/activity?screeningId=${encodeURIComponent(id)}`,{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error('Could not refresh an open property.');return response.json() as Promise<Work>;}));
-  for(const extra of held)for(const key of ['properties','deals','signing','contacts','controls','conversations','callbacks'] as const)d[key].push(...extra[key]);
-  d.propertyAttentionIds=[...(d.propertyAttentionIds??[]),...held.flatMap(item=>item.propertyAttentionIds??[])];d.retainedIds=heldIds;
- }
- if(active){setWork(d);setError('');setUpdated(new Date());}
-}}catch(e){if(active)setError(`${e instanceof Error?e.message:'Could not refresh your work.'} The last loaded records and open drafts are still here.`);}finally{inFlight=false;if(active)setLoading(false);}}void load();const timer=setInterval(load,30000);document.addEventListener('visibilitychange',load);return()=>{active=false;controller.abort();clearInterval(timer);document.removeEventListener('visibilitychange',load);};},[page,attentionPage,search,focusedId,refresh]);
+ useEffect(()=>startWorkPolling<Work>({
+ load:async signal=>{
+  const params=new URLSearchParams({page:String(page),attentionPage:String(attentionPage),...(search?{query:search}:{}),...(focusedId?{screeningId:focusedId}:{})});
+  const r=await fetch(`/api/work/activity?${params}`,{cache:'no-store',signal});const d=await r.json();
+  if(!r.ok)throw new Error(d.error||'Could not refresh your work.');
+  const heldIds=[...new Set([openPropertyId.current,...Array.from(document.querySelectorAll<HTMLElement>('.live-property')).filter(node=>node.querySelector('[data-unsaved-draft="true"]')).map(node=>node.id.replace('property-',''))])].filter(id=>id&&!d.properties.some((p:Property)=>p.id===id));
+  if(heldIds.length){
+   const held=await Promise.all(heldIds.slice(0,6).map(async id=>{const response=await fetch(`/api/work/activity?screeningId=${encodeURIComponent(id)}`,{cache:'no-store',signal});if(!response.ok)throw Error('Could not refresh an open property.');return response.json() as Promise<Work>;}));
+   for(const extra of held)for(const key of ['properties','deals','signing','contacts','controls','conversations','callbacks'] as const)d[key].push(...extra[key]);
+   d.propertyAttentionIds=[...(d.propertyAttentionIds??[]),...held.flatMap(item=>item.propertyAttentionIds??[])];d.retainedIds=heldIds;
+  }
+  return d;
+ },
+ onData:d=>{setWork(d);setError('');setUpdated(new Date());setLoading(false);},
+ onError:e=>{setError(`${e instanceof Error?e.message:'Could not refresh your work.'} The last loaded records and open drafts are still here.`);setLoading(false);}
+ }),[page,attentionPage,search,focusedId,refresh]);
  useEffect(()=>{if(focusedId&&work?.properties.some(p=>p.id===focusedId))document.getElementById(`property-${focusedId}`)?.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});},[focusedId,work?.properties[0]?.id]);
  const visible=work?filterProperties(work.properties,work,filter,work.searchSupported?'':search):[];
  const promisingId=work?mostPromisingProperty(visible,work):null;
@@ -95,7 +97,6 @@ function PropertyCard({onAsk,property:p,work,principal,active,visited,onToggle,o
  const dealSummary=dealCardSummary(deal,work.signing);
  const practice=p.result.property.propertyId.startsWith('practice_')||[true,'true'].includes((deal?.terms as (DealTerms&{practice?:boolean|string})|undefined)?.practice??false);
  const bot=propertyBotStatus({manual,paused:botPaused,available:botAvailable,stale,attention:needsAttention(p.id,work),stage:deal?.stage,practice});
- const phase=milestone(p,work).replace(/^[^A-Za-z]+/,'');
  const owner=lookups.flatMap(l=>l.contacts??[]).find(c=>c.name)?.name;
  const sellerSummary=calls.find(c=>c.party==='seller'&&c.summary)?.summary;
  async function control(){if(controlBusy)return;setControlBusy(true);setControlMessage('');try{await post('/api/work/control',{action:manual?'return_to_bot':'takeover',screeningId:p.id});setManual(!manual);setControlMessage(manual?'Bot control restored. Setup, credits and contact permissions still apply.':'You have control. New automatic work is paused for this property. Already-started work may finish.');onRefresh();}catch{setControlMessage('Could not confirm the control change. Refresh and check before continuing.');}finally{setControlBusy(false);}}
@@ -106,7 +107,7 @@ function PropertyCard({onAsk,property:p,work,principal,active,visited,onToggle,o
     <span className="property-summary-main">
      <span className="property-address" id={`property-address-${p.id}`}><strong>{address.street}</strong>{address.location&&<span>{address.location}</span>}</span>
      {owner&&<span className="property-owner-name">{owner}</span>}
-     <span className="property-summary-status">{(p.result.property.propertyId.startsWith('practice_')||[true,'true'].includes((deal?.terms as (DealTerms&{practice?:boolean|string})|undefined)?.practice??false))&&<span className="property-manual-label">Practice only · no real property</span>}{dealSummary?.contractSigned&&<span className="property-status">{phase}</span>}</span>
+     <span className="property-summary-status">{(p.result.property.propertyId.startsWith('practice_')||[true,'true'].includes((deal?.terms as (DealTerms&{practice?:boolean|string})|undefined)?.practice??false))&&<span className="property-manual-label">Practice only · no real property</span>}{dealSummary?.contractSigned&&<span className="property-status">{dealSummary.status}</span>}</span>
      <span className={`property-bot-status tone-${bot.tone}`}><span className="ai-status-dot" aria-hidden="true"/>{bot.label}</span>
     </span>
     <span className="property-cash-preview" aria-label={dealSummary?.priceCents!=null?'Purchase price':'Estimated cash offer'}><small>{dealSummary?.priceCents!=null?'Purchase price':'Estimated cash offer'}</small><strong>{analysisMoney(dealSummary?.priceCents??analysis.cashOfferCeilingCents)}</strong></span>

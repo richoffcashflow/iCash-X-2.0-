@@ -20,7 +20,7 @@ export function needsAttention(id:string, work:WorkspaceEvidence) {
 }
 export function propertyGroup(id:string,work:WorkspaceEvidence):Exclude<WorkspaceFilter,'all'> {
  if(needsAttention(id,work))return 'attention';
- return work.deals.some(d=>d.screening_id===id&&['closed','canceled'].includes(d.stage))?'history':'active';
+ return work.deals.some(d=>d.screening_id===id&&['closed','canceled','cancelled'].includes(d.stage))?'history':'active';
 }
 export function filterProperties<T extends WorkspaceProperty>(properties:T[],work:WorkspaceEvidence,filter:WorkspaceFilter,query=''):T[] {
  const needle=query.trim().toLocaleLowerCase();
