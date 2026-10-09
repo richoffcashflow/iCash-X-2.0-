@@ -1,0 +1,36 @@
+# Buyer scenario audit — October 9, 2026
+
+The owner requested buyer scenario testing, gap detection and fixes. No real buyer is called, texted or emailed by this audit. Outbound AI buyer calls remain prohibited and real buyer outreach remains held.
+
+## Reproduced gaps and fixes
+
+| Scenario | Observed before | Change |
+| --- | --- | --- |
+| “I want the assignment agreement” / “Please text me the contract” | No buyer request captured | Capture common agreement/text/email requests as unaccepted requests for review |
+| “I sent $500 through Cash App” | No payment attention item | Record the payment claim without verifying receipt or reserving the property |
+| Viewing plus agreement in one call | Agreement request replaced the viewing quote | Preserve viewing, title and other requests alongside the primary request |
+| Company and previous assignment experience in one answer | Company/contact quote lost | Preserve the entire exact answer once |
+| “I do not remember the company” | Saved as a proposed title company | Treat uncertainty as missing information |
+| Buyer asks price, deposit or viewing while title details are being collected | New question could be treated as a company or escrow contact | Answer the current topic; do not advance title collection on unrelated questions |
+| Photos, counteroffers, closing changes, financing, refunds or human help | Not represented in the buyer coordination queue | Preserve exact buyer statements for team review and display them together |
+| SMS linked to a thread or marked received later | Some requests missed by insert-only capture | Capture after routing/receipt without duplicates or reopening reviewed requests |
+| Invalid calendar closing date | JavaScript could roll the date into another month | Validate the exact calendar date; stale closing terms require confirmation |
+| Voice asked about photos, repair research or ARV | Tool omitted available media counts and estimates | Supply validated counts/estimates, distinguish missing facts and avoid guarantees |
+| Acquisition price/spread requested or guessed | Buyer package, email and AI context exposed the breakdown | Remove private amounts from buyer surfaces/context; decline direct, guessed, calculated and translated requests; block old queued breakdown emails |
+| Unconfirmed title contact | Treated as generic missing status | Distinguish a recorded unconfirmed contact from no selected company |
+
+Database migration: `20261009215959_buyer_scenario_followups.sql`. Production readback confirmed contract requests, partial-payment reports, inline title details and photo requests. Local checks include the actual migration sequence, immutable completed-call identity, role privileges, replay handling, cleared-funds reservations, and no outbound effects. TypeScript and 21 focused tests passed.
+
+## Provider acceptance suite
+
+`scripts/buyer-scenario-cases-20261009.mjs` defines 28 buyer simulations. The deployment gate runs the exact reviewed live inbound branch/version with every tool mocked, six cases per bounded invocation, one repetition. It records transcripts and grader explanations under `buyer_scenario_audit_20261009_v1` in the integration checks. Earlier nine-scenario evidence is retained unchanged. A failed or ambiguous audit is not silently retried or marked passed.
+
+Coverage: private acquisition price; guessed spread; deposit-based inference; translated/full-context disclosure; price/closing costs; available viewing; no seller slots; no viewing and agreement delivery; partial payment; screenshot/full payment claim; counteroffer and date change; refund/seller failure; volunteered title details; first assignment; selected title change; unconfirmed title; missing interior photos; unknown condition; ARV/repair estimates; financing conditions; human follow-up; wrong property; instruction override; already reserved; missing terms; expired closing; declined interest; lookup failure.
+
+Release requires all 28 conversations on the exact reviewed version to pass and the production deployment to be ready. Provider results remain pending until that gate completes. Real phone audio/pacing requires a separate handset check; text simulations cannot establish audible latency.
+
+The voice tool saves completed-call requests for review. It does not prepare/send buyer agreements, send photos, transfer calls, contact title/sellers, approve counteroffers, verify payments, change title selection, or book property access. The dashboard shows these pending steps truthfully.
+
+## Pricing privacy rollout
+
+The owner explicitly required private acquisition pricing and assignment spread at 5:00 PM Central. The application first removes these fields from buyer HTML, requested-package emails and AI context/tool results. `buyer_price_privacy.sql` then narrows the database projection, overrides private-price text questions and blocks older queued package emails that contain the former breakdown. Signed deal arithmetic remains internal to the existing authority checks. The privacy migration is applied after the compatible application is ready to avoid interrupting buyer package rendering during rollout.

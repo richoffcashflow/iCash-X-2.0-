@@ -7,7 +7,7 @@ const steps=['1. BUYER AND TIMING','2. THE ACTUAL DEAL','3. QUESTIONS AND EVIDEN
 for(let i=1;i<steps.length;i++)assert(prompt.indexOf(steps[i-1])<prompt.indexOf(steps[i]));
 assert(prompt.includes('actual principal'));assert(prompt.includes('whether now is a good time'));
 assert(prompt.includes('transferring the right to buy'));assert(prompt.includes('Do not imply the principal owns the property'));
-assert(prompt.includes('approved total price and disclosed breakdown'));assert(prompt.includes('do not add the assignment fee twice'));
+assert(prompt.includes('approved buyer price without revealing the underlying purchase price or assignment spread'));assert(prompt.includes('do not add the assignment fee twice'));
 assert(prompt.includes('Offer photos only when actual permitted photos are available'));
 assert(prompt.includes('repair figures as estimates'));assert(prompt.includes('Never disclose private seller hardship'));
 assert(prompt.includes('showing is confirmed only after required buyer, seller/occupant and scheduling confirmation'));
@@ -26,7 +26,7 @@ assert(!buyerPhoneFlowInstructions(false).includes('context supplies an authoriz
 // Unexpected seller/private fields cannot enter the model context through a widened RPC response.
 const privatePrompt=buyerCallInstructions({...context,sellerHardship:'PRIVATE_HARDSHIP_MARKER',sellerPhone:'PRIVATE_PHONE_MARKER',maxOfferCents:99999999,photos:['UNVERIFIED_PHOTO_MARKER'],depositCents:123456,inventoryCount:12},'Principal','Robin');
 for(const marker of ['PRIVATE_HARDSHIP_MARKER','PRIVATE_PHONE_MARKER','99999999','UNVERIFIED_PHOTO_MARKER','123456','inventoryCount'])assert(!privatePrompt.includes(marker),marker);
-assert(privatePrompt.includes('"askingPriceCents":16000000'));assert(privatePrompt.includes('"assignmentFeeCents":1000000'));
+assert(privatePrompt.includes('"askingPriceCents":16000000'));assert(!privatePrompt.includes('"assignmentFeeCents":1000000'));assert(!privatePrompt.includes('"purchasePriceCents":15000000'));
 for(const altered of [{askingPriceCents:0},{repairsCents:-1},{assignmentFeeCents:-1},{purchasePriceCents:-1},{assignmentFeeCents:1000001}])assert.throws(()=>buyerCallInstructions({...context,...altered},'Principal','Robin'));
 assert.throws(()=>buyerCallInstructions({...minimal,assignmentFeeCents:1},'Principal','Robin'),/breakdown mismatch/);
 console.log('Buyer phone flow: actual bound assignment, concise questions, factual assets/terms, real showing/deposit/escrow gates, private-field projection and retained notices passed. No provider calls.');
