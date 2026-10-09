@@ -206,6 +206,8 @@ begin
  perform 1 from public.icash_operating_budget where id=1 for update;
  select * into g from public.icash_seller_gaps where id=p_gap and account_id=p_account for update;
  if not found or g.state<>'open' or g.due_at>now() or g.expires_at<=now() or g.outgoing_id is not null then return null;end if;
+ -- A release/operator pause is temporary, not evidence that the seller needs review.
+ if not exists(select 1 from public.icash_seller_recovery_variants where reason=g.reason and enabled) then return null;end if;
  perform 1 from public.icash_text_threads where id=g.thread_id and account_id=p_account for update;
  if not public.icash_seller_recovery_current(g.id) then return null;end if;
  if (select count(*) from public.icash_seller_recovery_attempts where account_id=p_account and thread_id=g.thread_id and assigned_at>now()-interval '7 days')>=3
@@ -256,6 +258,8 @@ create trigger seller_recovery_text after insert or update of state on public.ic
 create function public.icash_observe_seller_recovery_contract() returns trigger
 language plpgsql security definer set search_path='' as $$
 begin
+ -- Repeated completion callbacks are not a new signing outcome.
+ if tg_op='UPDATE' and old.state='completed' then return new;end if;
  if new.kind='purchase' and new.state='completed' and not new.test_mode and new.provider_id is not null then
   update public.icash_seller_recovery_attempts set contract_at=coalesce(contract_at,now()) where account_id=new.account_id and deal_id=new.deal_id and delivered_at is not null and delivered_at<=now();
   update public.icash_seller_gaps set state='resolved',resolved_at=now(),resolution='Purchase signatures verified',updated_at=now() where account_id=new.account_id and deal_id=new.deal_id and stage='draft' and state in ('open','queued','waiting');

@@ -50,6 +50,8 @@ try{
  grant usage on schema public to service_role;grant select on all tables in schema public to service_role;
  `);
  await pg.exec(readFileSync('supabase/migrations/20261009223901_seller_gap_recovery_learning.sql','utf8'));
+ await pg.exec(readFileSync('supabase/migrations/20261009224932_seller_recovery_pause_preserves_gaps.sql','utf8'));
+ await pg.exec(readFileSync('supabase/migrations/20261009225857_seller_recovery_signing_replay.sql','utf8'));
  assert.equal((await one('select count(*)::int n from icash_seller_recovery_variants where enabled')).n,0,'migration stages outreach disabled until the application is ready');
  await q('update icash_seller_recovery_variants set enabled=true');
  await q('insert into auth.users values($1)',[owner]);
@@ -83,6 +85,15 @@ try{
   assert.equal((await one('select state from icash_seller_gaps where id=$1',[id])).state,'waiting');
   assert.equal((await one('select count(*)::int n from icash_seller_gaps')).n,1,'a recovery does not start another reminder');
   assert.equal(await prepare(id),null);
+ });
+ await test('release pause keeps eligible recovery open for resume',async()=>{
+  const {id}=await open();
+  await q('update icash_seller_recovery_variants set enabled=false');
+  assert.equal(await prepare(id),null);
+  assert.equal((await one('select state from icash_seller_gaps where id=$1',[id])).state,'open');
+  assert.equal((await one('select count(*)::int n from icash_seller_recovery_attempts')).n,0);
+  await q('update icash_seller_recovery_variants set enabled=true');
+  assert(await prepare(id),'resuming approved variants must recover the same eligible case');
  });
  await test('new seller reply stops old queue before send',async()=>{
   const {id}=await open(),m=await prepare(id);await q("insert into icash_text_messages(account_id,thread_id,direction,body,state,created_at) values($1,$2,'incoming','Actually no thanks','received',now()+interval '1 millisecond')",[a,thread]);
@@ -134,6 +145,15 @@ try{
   assert.equal((await one('select contract_at from icash_seller_recovery_attempts')).contract_at,null);
   await q("insert into icash_signing_envelopes values($1,$2,$3,'purchase','completed',false,'verified')",[randomUUID(),a,deal]);assert((await one('select contract_at from icash_seller_recovery_attempts')).contract_at);
   await q("insert into icash_closing_updates(id,account_id,deal_id,kind,confirmed_by,confirmation_source) values($1,$2,$3,'closed',$4,'user_review')",[randomUUID(),a,deal,owner]);assert((await one('select closed_at from icash_seller_recovery_attempts')).closed_at);
+ });
+ await test('completed signing replay never credits a later recovery as a new conversion',async()=>{
+  const envelope=randomUUID();
+  await q("insert into icash_signing_envelopes values($1,$2,$3,'purchase','completed',false,'verified-before-recovery')",[envelope,a,deal]);
+  await q("update icash_deal_files set stage='under_contract' where id=$1",[deal]);
+  const {id}=await open('viewing'),m=await prepare(id);assert(m);
+  await q("update icash_text_messages set state='delivered',provider_id='fixture',last_delivery_at=now() where id=$1",[m]);
+  await q("update icash_signing_envelopes set state='completed' where id=$1",[envelope]);
+  assert.equal((await one('select contract_at from icash_seller_recovery_attempts where message_id=$1',[m])).contract_at,null);
  });
  await test('owner review needs exact version and explanation; no tenant reassignment',async()=>{
   const {id}=await open('owners');const {updated_at}=await one('select updated_at from icash_seller_gaps where id=$1',[id]);
@@ -212,6 +232,6 @@ try{
   assert.equal((await one("select has_function_privilege('anon','icash_prepare_seller_recovery(uuid,uuid)','EXECUTE') v")).v,false);
   assert.equal((await one("select has_function_privilege('service_role','icash_prepare_seller_recovery(uuid,uuid)','EXECUTE') v")).v,true);
  });
- assert.equal(checks,38);completed=true;
+ assert.equal(checks,40);completed=true;
  console.log(JSON.stringify({checks,passed:checks,network:'disabled',scope:'real recovery SQL, isolated delegate fixtures'}));
 }catch(error){console.error(JSON.stringify({error:error.message,code:error.code,where:error.where,detail:error.detail}));process.exitCode=1;}finally{await pg.close();}
