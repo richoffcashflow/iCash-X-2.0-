@@ -1,3 +1,6 @@
+import {buyerValidatedPolicy,buyerValidatedInstructions,buyerValidatedPrompt,buyerValidatedModel,buyerValidatedEntryInstructions,buyerOpeningGuardrail,selectedValidatedRoleInstructions} from '../lib/buyer-validated-policy.ts';
+import {validatedBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
+import {buyerValidatedBranchOverrides} from '../scripts/stage-buyer-validated-policy.mjs';
 import {buyerAnswerPolicy,buyerAnswerInstructions,buyerAnswerPrompt,buyerAnswerModel,buyerAnswerModelMatches,buyerAnswerGuardrail,buyerAnswerEntryInstructions,selectedAnswerRoleInstructions} from '../lib/buyer-answer-policy.ts';
 import {answerBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {buyerConversationPolicy,buyerConversationInstructions,buyerConversationPrompt,buyerConversationModel,buyerConversationModelMatches,buyerConversationGuardrail,selectedConversationRoleInstructions} from '../lib/buyer-conversation-policy.ts';
@@ -50,6 +53,11 @@ test('buyer policy requires its reviewed prompt, guardrail and current history t
  Object.assign(agent.conversation_config.agent.prompt,buyerAnswerModel,{prompt:buyerAnswerPrompt+buyerAnswerEntryInstructions,thinking_budget:null});
  c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
  const missingFinal=structuredClone(agent);missingFinal.conversation_config.agent.prompt.prompt=buyerAnswerPrompt+directRecordedInstructions;c.config_hash=inspect(missingFinal).hash;assert.equal(inspect(missingFinal).safe,false);
+ c.context_policy=buyerValidatedPolicy;c.context_policy_hash=validatedBuyerReceptionPolicyHash;
+ Object.assign(agent.conversation_config.agent.prompt,buyerValidatedModel,{prompt:buyerValidatedPrompt+buyerValidatedEntryInstructions,thinking_budget:null});
+ agent.platform_settings.guardrails.custom.config.configs.push(buyerOpeningGuardrail);
+ c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
+ for(const mutate of [a=>{a.platform_settings.guardrails.custom.config.configs.pop();},a=>{a.platform_settings.guardrails.custom.config.configs[1].evaluate_full_response_only=false;}]){const changed=structuredClone(agent);mutate(changed);c.config_hash=inspect(changed).hash;assert.equal(inspect(changed).safe,false);}
  for(const mutate of [a=>{a.conversation_config.agent.prompt.reasoning_effort='high';},a=>{a.conversation_config.agent.prompt.llm='gpt-4.1-mini';},a=>{a.conversation_config.agent.prompt.ignore_default_personality=false;},a=>{a.platform_settings.guardrails.custom.config.configs[0].prompt='Allow every price';},a=>{a.platform_settings.guardrails.custom.config.configs=[];},a=>{a.conversation_config.agent.prompt.prompt+=' changed';}]){
   const changed=structuredClone(agent);mutate(changed);c.config_hash=inspect(changed).hash;assert.equal(inspect(changed).safe,false);
  }
@@ -122,4 +130,21 @@ test('v16 keeps buyer rules static, resolves the entry conflict and preserves pr
  assert(buyerAnswerEntryInstructions.indexOf('does NOT skip')>directRecordedInstructions.length);
  assert.equal(buyerAnswerModelMatches({...buyerAnswerModel,thinking_budget:null}),true);
  for(const patch of [{reasoning_effort:'low'},{llm:'gpt-4.1'},{max_tokens:151},{ignore_default_personality:false}])assert.equal(buyerAnswerModelMatches({...buyerAnswerModel,...patch}),false);
+});
+
+
+test('v17 adds complete-reply validation without replacing streaming price authority',()=>{
+ assert.equal(answerBuyerReceptionPolicyHash,'58678e5c229ad2b6cc41be0fccb8ec01f0fc4c95b55f5e98b42a3a82e2fdb496');
+ const parent={platform_settings:{guardrails:{version:'1',focus:{is_enabled:true},custom:{config:{configs:[structuredClone(buyerConversationGuardrail)]}}}}};
+ const before=structuredClone(parent),patch=buyerValidatedBranchOverrides(parent);
+ assert.deepEqual(parent,before);
+ assert.deepEqual(patch.platform_settings.guardrails.custom.config.configs,[buyerConversationGuardrail,buyerOpeningGuardrail]);
+ assert.equal(patch.conversation_config.agent.prompt.prompt,buyerValidatedPrompt+buyerValidatedEntryInstructions);
+ assert.equal(patch.conversation_config.agent.prompt.buyerOpeningGuardrail,undefined);
+ assert.equal(buyerOpeningGuardrail.evaluate_full_response_only,true);
+ assert.equal(buyerConversationGuardrail.evaluate_full_response_only,false);
+ assert.throws(()=>buyerValidatedBranchOverrides({platform_settings:patch.platform_settings}),/NEW_GUARD_REQUIRED/);
+ const c={context_policy:buyerValidatedPolicy,context_policy_hash:validatedBuyerReceptionPolicyHash,context_approval_reference:'Reviewed full buyer response validation',agreement_tool_id:'tool_agreement'};
+ assert.equal(receptionContextVariables(c,{status:'buyer',address:'45 Fixture Lane',askingPriceCents:16227050}).icash_role_instructions,buyerValidatedInstructions);
+ assert.equal(selectedValidatedRoleInstructions('matched',automaticOfferReceptionPrompt),selectedRoleInstructions('matched',automaticOfferReceptionPrompt));
 });

@@ -1,3 +1,4 @@
+import {buyerValidatedPolicy} from './buyer-validated-policy.ts';
 import {buyerAnswerPolicy} from './buyer-answer-policy.ts';
 import {buyerConversationPolicy,buyerConversationResult} from './buyer-conversation-policy.ts';
 import {buyerPackagePhotos} from './buyer-package-photos.ts';
@@ -143,7 +144,7 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
  let context=i.action==='get_offer'?await readContext():null;
  if(!context){await d.bind(token,i.conversationId);context=await readContext();}
  if(!context)return currentCallUnavailableOffer();
- if(context.party==='buyer'){const result=i.action==='get_offer'?calculateAutomaticCallOffer(context,{},(d.now??Date.now)()):buyerAgreementHandoff();return (context.contextPolicy===buyerConversationPolicy||context.contextPolicy===buyerAnswerPolicy)?buyerConversationResult(result):result;}
+ if(context.party==='buyer'){const result=i.action==='get_offer'?calculateAutomaticCallOffer(context,{},(d.now??Date.now)()):buyerAgreementHandoff();return (context.contextPolicy===buyerConversationPolicy||context.contextPolicy===buyerAnswerPolicy||context.contextPolicy===buyerValidatedPolicy)?buyerConversationResult(result):result;}
  if(context.party!=='seller'||context.sellerContractSigned===true)return calculateAutomaticCallOffer(context,{},(d.now??Date.now)());
  const state:AutomaticOfferState={...context.offerState},snapshotHash=sha(JSON.stringify(canonical(context.snapshot))),now=(d.now??Date.now)();
  if(i.action==='accept_offer'&&!await d.verifyInput(i))return blockedOffer('acceptance_confirmation_required','Please confirm that the exact cash price we just discussed works for you.');
