@@ -1,5 +1,5 @@
-import {customerEmailDomains,customerEmailIdentity} from './customer-email-identity';
-import {db} from '@/lib/stripe-test';
+import {customerEmailDomains,customerEmailIdentity} from './customer-email-identity.ts';
+import {db} from './stripe-test.ts';
 import {titleEmailAddress} from './title-inbound-policy.ts';
 import {emailFromName} from './deal-email-policy.ts';
 export function dealEmailConfigured(){return !!(process.env.RESEND_API_KEY&&process.env.RESEND_RECEIVING_WEBHOOK_SECRET&&(customerEmailDomains()||(titleEmailAddress(process.env.ICASH_TITLE_FROM_EMAIL)&&titleEmailAddress(process.env.ICASH_TITLE_REPLY_EMAIL))));}
