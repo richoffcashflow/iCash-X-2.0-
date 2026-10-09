@@ -30,6 +30,9 @@ assert.equal(callEligibility({...permission,revoked_at:new Date(now).toISOString
 assert.equal(callEligibility({...permission,dnc_checked_at:new Date(now+1000).toISOString()},snapshot,now).ready,false);
 assert.equal(callEligibility({...permission,timezone:'bogus'},snapshot,now).ready,false);
 assert.equal(callEligibility({...permission,timezone:'Pacific/Honolulu'},snapshot,now).reason,'outside_contact_hours');
+assert.equal(callEligibility({...permission,timezone:'Pacific/Honolulu',sellerConsentVerified:true,sellerCallbackVerified:true},snapshot,now).ready,true);
+assert.equal(callEligibility({...permission,timezone:'Pacific/Honolulu',sellerCallbackVerified:true},snapshot,now).reason,'outside_contact_hours','A callback flag alone cannot replace verified seller consent');
+assert.equal(callEligibility({...permission,revoked_at:new Date(now).toISOString(),sellerConsentVerified:true,sellerCallbackVerified:true},snapshot,now).ready,false);
 assert.equal(callEligibility(permission,{...snapshot,fetchedAt:new Date(now-86400001).toISOString()},now).reason,'fresh_screening_required');
 assert.equal(verifiedOfferCeiling(9000000,{max_offer_cents:8000000,expires_at:new Date(now+1000).toISOString()},now),8000000);
 assert.equal(verifiedOfferCeiling(9000000,undefined,now),null);
@@ -41,7 +44,7 @@ const configTemplate={enabled:true,agent_id:review.agentId,phone_number_id:'numb
 let textThreads=[{sender:'+14243948384'}],secondEnabled=false,secondVerified=false;
 const secondaryCallingReady=async()=>secondVerified;
 let reservationError=null,budgetHoldAccepted=true,flexibleFunding={maxSeconds:120};
-let sellerConsentCurrent=true;
+let sellerConsentCurrent=true,callbackRequestCurrent=true;
 let customVoice=null;
 const selectedCustomCallVoice=async()=>customVoice;
 let c=structuredClone(configTemplate),providerAgent=structuredClone(agent),providerPaths=[],agentReadFailed=false,identityVoice='voice';
@@ -59,6 +62,7 @@ const db=async(path,method,body)=>{
  if(path==='rpc/icash_voice_sms_context')return null;
  if(path==='rpc/icash_seller_sms_call_ack')return 'ack-message';
  if(path==='rpc/icash_seller_voice_permission_current')return sellerConsentCurrent;
+ if(path==='rpc/icash_requested_seller_call_current'){assert.equal(body.p_account,'account');assert.equal(body.p_job,'job');return callbackRequestCurrent;}
  if(path==='rpc/icash_operational_contact_current'){assert.equal(body.p_account,'account');assert.equal(body.p_contact,'operational');assert.equal(body.p_channel,'voice');return operationalCurrent;}
  if(path==='rpc/icash_reserve_flexible_voice')return flexibleFunding;
  if(path==='rpc/icash_reserve_paced_voice'){if(reservationError)throw reservationError;return paced;}
@@ -88,7 +92,7 @@ let source=ts.transpileModule(readFileSync(new URL('../lib/live-dispatch-service
 source='const {dispatchTextMessage,selectBusinessCaller,secondaryBusinessPhone,secondaryCallingReady,sellerOfferPresentation,VoiceActivationBudgetError,selectedCustomCallVoice,recordingServer,object,readRecordingReview,recordingAgentMatches,recordingPolicy,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation,contactEligibility,nextContactWindow,buyerCallInstructions,buyerFirstMessage,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt,sellerCallContext,compactSellerProgress,automaticOfferReceptionPrompt,loadSellerClosingContext,sellerContractToolId,legacyAutomaticOfferReceptionPrompt,streamingAutomaticOfferReceptionPrompt,automaticOfferPolicy}=globalThis.__voiceTest;\n'+source;
 const {dispatchLiveVoice}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 process.env.ELEVENLABS_API_KEY='fixture-no-network';process.env.CONTIGUITY_FROM='+14243948384';
-const reset=()=>{smsSource=null;ackFails=false;textThreads=[{sender:'+14243948384'}];secondEnabled=false;secondVerified=false;delete process.env.ICASH_FLEXIBLE_VOICE_READY;flexibleFunding={maxSeconds:120};reservationError=null;budgetHoldAccepted=true;c=structuredClone(configTemplate);providerAgent=structuredClone(agent);providerPaths=[];agentReadFailed=false;identityVoice='voice';providerReads=0;flipAt=null;flip=()=>{};legacyRate=false;recordingStatus='recording_consent_pending';Object.assign(process.env,{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:review.providerAccountSid,TWILIO_AUTH_TOKEN:'synthetic-provider-token'});operational=false;operationalCurrent=true;contextOverrides=true;outboundBody=undefined;buyerApproved=true;records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;callbackId=null;providerNumber='+14243948384';suppressed=false;paced=true;};
+const reset=()=>{callbackRequestCurrent=true;smsSource=null;ackFails=false;textThreads=[{sender:'+14243948384'}];secondEnabled=false;secondVerified=false;delete process.env.ICASH_FLEXIBLE_VOICE_READY;flexibleFunding={maxSeconds:120};reservationError=null;budgetHoldAccepted=true;c=structuredClone(configTemplate);providerAgent=structuredClone(agent);providerPaths=[];agentReadFailed=false;identityVoice='voice';providerReads=0;flipAt=null;flip=()=>{};legacyRate=false;recordingStatus='recording_consent_pending';Object.assign(process.env,{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:review.providerAccountSid,TWILIO_AUTH_TOKEN:'synthetic-provider-token'});operational=false;operationalCurrent=true;contextOverrides=true;outboundBody=undefined;buyerApproved=true;records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;callbackId=null;providerNumber='+14243948384';suppressed=false;paced=true;};
 reset();reservationError=new VoiceActivationBudgetError();assert.equal((await dispatchLiveVoice('account','job')).status,'activation_budget_held');assert.equal(jobState,'held');assert.equal(postCount,0);assert(!records.some(r=>r.path?.startsWith('rpc/icash_claim_')));assert.equal((await dispatchLiveVoice('account','job')).status,'held');assert.equal(postCount,0);
 reset();reservationError=new Error('Ambiguous network failure');await assert.rejects(()=>dispatchLiveVoice('account','job'),/Ambiguous network failure/);assert(!records.some(r=>r.path==='rpc/icash_hold_voice_activation_budget'));assert.equal(postCount,0);
 reset();reservationError=new VoiceActivationBudgetError();budgetHoldAccepted=false;await assert.rejects(()=>dispatchLiveVoice('account','job'),VoiceActivationBudgetError);assert.equal(postCount,0);
@@ -161,6 +165,11 @@ reset();suppressed=true;assert.equal((await dispatchLiveVoice('account','job')).
 reset();paced=false;buyerApproved=true;assert.equal((await dispatchLiveVoice('account','job')).status,'waiting_for_daytime_budget');assert.equal(postCount,0);
 reset();permission={...permission,timezone:'Pacific/Honolulu'};const scheduled=await dispatchLiveVoice('account','job');assert.equal(scheduled.dueAt,'2026-09-29T19:00:00.000Z');assert(records.some(r=>r.method==='PATCH'&&r.body?.outcome==='Waiting for calling hours'));assert.equal(postCount,0);
 reset();callbackId='callback';permission={...permission,timezone:'Pacific/Honolulu'};assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');assert.equal(jobState,'held');assert(!records.some(r=>r.method==='PATCH'&&r.body?.due_at),'Do not silently move an agreed callback');
+reset();permission={...permission,party:'seller',timezone:'Pacific/Honolulu',seller_intake_id:'lead'};smsSource='requested-message';
+assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);assert(records.some(r=>r.path==='rpc/icash_requested_seller_call_current'));
+reset();smsSource='requested-message';callbackRequestCurrent=false;
+assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');assert.equal(postCount,0,'Expired or changed request never reaches provider dispatch');
+delete permission.seller_intake_id;
 reset();permission={...permission,party:'seller',timezone:'America/Chicago'};operational=true;assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);assert(records.some(r=>r.path.startsWith('icash_voice_contact_targets')));assert(!records.some(r=>r.path==='icash_contact_permissions'&&r.method==='POST'));
 reset();operational=true;operationalCurrent=false;assert.equal((await dispatchLiveVoice('account','job')).status,'contact_operating_checks_required');assert.equal(postCount,0);assert(!records.some(r=>r.path==='rpc/icash_reserve_paced_voice'));
 reset();operational=true;allowClaim=false;await dispatchLiveVoice('account','job');assert.equal(postCount,0,'Operational contacts still need the final atomic claim');

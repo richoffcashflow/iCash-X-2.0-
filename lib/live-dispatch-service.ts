@@ -55,6 +55,10 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const suppressed=await db<{phone:string}[]>(`icash_text_suppressions?phone=eq.${encodeURIComponent(p.phone)}&select=phone&limit=1`);if(suppressed.length)return hold('contact_opted_out');
  // This flag is derived exclusively from a fresh server-side database check.
  p.sellerConsentVerified=p.seller_intake_id?await db<boolean>('rpc/icash_seller_voice_permission_current','POST',{p_account:accountId,p_permission:p.id})===true:false;
+ // The seller's current, explicit request to call now is distinct from timed
+ // outreach. The database binds the source reply to this job/phone/property and
+ // rechecks its five-minute validity again during the final atomic claim.
+ p.sellerCallbackVerified=!!j.sms_source_message_id&&p.sellerConsentVerified&&await db<boolean>('rpc/icash_requested_seller_call_current','POST',{p_account:accountId,p_job:j.id})===true;
  const contact=contactEligibility(p);
  if(!contact.ready){
   const dueAt=contact.reason==='outside_contact_hours'&&!j.callback_id&&!j.sms_source_message_id?nextContactWindow(p):null;
