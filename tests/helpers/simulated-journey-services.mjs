@@ -6,7 +6,7 @@ import {read} from './simulated-journey-db.mjs';
 const identifier=x=>{assert(/^[a-z_][a-z_0-9]*$/i.test(x),`Unsafe fixture identifier: ${x}`);return '"'+x+'"';};
 const value=x=>x!==null&&typeof x==='object'?JSON.stringify(x):x;
 export function databaseAdapter(pg){
- const calls=[],functions=new Map();
+ const calls=[],functions=new Map(),booleanColumns=new Map();
  const q=(sql,args=[])=>pg.query(sql,args.map(value));
  const rpc=async(name,args={})=>{
   identifier(name);calls.push({rpc:name,args});
@@ -19,6 +19,8 @@ export function databaseAdapter(pg){
  const db=async(path,method='GET',body)=>{
   if(path.startsWith('rpc/')){assert.equal(method,'POST');return rpc(path.slice(4),body);}
   const [table,search='']=path.split('?');identifier(table);calls.push({table,path,method});
+  if(!booleanColumns.has(table))booleanColumns.set(table,new Set((await q("select attname from pg_attribute where attrelid=to_regclass('public.'||$1) and atttypid='boolean'::regtype and not attisdropped",[table])).rows.map(r=>r.attname)));
+  const filterValue=(key,val)=>booleanColumns.get(table).has(key)&&['true','false'].includes(val)?val==='true':val;
   const params=new URLSearchParams(search),args=[],where=[],order=[];let limit='';
   for(const [key,expression] of params){
    if(key==='select')continue;
@@ -28,8 +30,8 @@ export function databaseAdapter(pg){
    if(op==='like'){args.push(val.replaceAll('*','%'));where.push(col+' like $'+args.length);}
    else if(op==='cs'){assert(/^\{[A-Za-z0-9_, -]*\}$/.test(val));args.push(val);where.push(col+' @> $'+args.length+'::text[]');}
    else if(op==='is'){assert.equal(val,'null');where.push(col+' is null');}
-   else if(op==='in'){assert(/^\([^()]*\)$/.test(val));const values=val.slice(1,-1).split(',');where.push(col+' in ('+values.map(x=>{args.push(x);return '$'+args.length;}).join(',')+')');}
-   else{assert(['eq','gt','gte','lt','lte','neq'].includes(op),`Unsupported fixture filter ${expression}`);args.push(val);where.push(col+({eq:'=',gt:'>',gte:'>=',lt:'<',lte:'<=',neq:'<>'}[op])+'$'+args.length);}
+   else if(op==='in'){assert(/^\([^()]*\)$/.test(val));const values=val.slice(1,-1).split(',');where.push(col+' in ('+values.map(x=>{args.push(filterValue(key,x));return '$'+args.length;}).join(',')+')');}
+   else{assert(['eq','gt','gte','lt','lte','neq'].includes(op),`Unsupported fixture filter ${expression}`);args.push(filterValue(key,val));where.push(col+({eq:'=',gt:'>',gte:'>=',lt:'<',lte:'<=',neq:'<>'}[op])+'$'+args.length);}
   }
   const condition=where.length?' where '+where.join(' and '):'';
   if(method==='GET')return (await q('select to_jsonb(t) as row from public.'+identifier(table)+' t'+condition+(order.length?' order by '+order.join(','):'')+limit,args)).rows.map(r=>r.row);
