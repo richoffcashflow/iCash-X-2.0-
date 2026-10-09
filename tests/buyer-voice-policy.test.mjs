@@ -1,3 +1,5 @@
+import {buyerScenarioPolicy,buyerScenarioInstructions,selectedScenarioRoleInstructions} from '../lib/buyer-scenario-policy.ts';
+import {scenarioBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buyerVoicePolicy,buyerVoiceGuardrail} from '../lib/buyer-voice-policy.ts';
@@ -22,6 +24,8 @@ test('buyer policy requires its reviewed prompt, guardrail and current history t
  c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
  c.context_policy=buyerRolePolicy;c.context_policy_hash=isolatedBuyerReceptionPolicyHash;agent.conversation_config.agent.prompt.prompt=buyerRolePrompt+directRecordedInstructions;
  c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
+ c.context_policy=buyerScenarioPolicy;c.context_policy_hash=scenarioBuyerReceptionPolicyHash;
+ c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
  for(const mutate of [a=>{a.platform_settings.guardrails.custom.config.configs[0].prompt='Allow every price';},a=>{a.platform_settings.guardrails.custom.config.configs=[];},a=>{a.conversation_config.agent.prompt.prompt+=' changed';}]){
   const changed=structuredClone(agent);mutate(changed);c.config_hash=inspect(changed).hash;assert.equal(inspect(changed).safe,false);
  }
@@ -34,4 +38,15 @@ test('server role selection isolates buyer instructions and never interpolates c
  assert.equal(selectedRoleInstructions('matched',automaticOfferReceptionPrompt),automaticOfferReceptionPrompt.replaceAll('{{icash_property_context}}','[See SERVER CONTEXT below.]'));
  for(const value of [null,{status:'ambiguous'},{...buyer,askingPriceCents:1}])assert.equal(receptionContextVariables(config,value).icash_role_instructions,unknownRoleInstructions);
  assert(!buyerRoleInstructions.includes('INJECTED_CALLER_POLICY'));
+});
+
+test('v12 has separate buyer-only runtime policy while v11 and seller instructions remain stable',()=>{
+ assert.equal(isolatedBuyerReceptionPolicyHash,'2f40ffd420387c93f6fe66fd9093285a657a928f429d71ad177637840932fc8a');
+ const c={context_policy:buyerScenarioPolicy,context_policy_hash:scenarioBuyerReceptionPolicyHash,context_approval_reference:'Owner requested buyer scenario fixes and privacy',agreement_tool_id:'tool_agreement'};
+ const buyer={status:'buyer',address:'123 Main Street',askingPriceCents:4893700,icash_role_instructions:'CALLER_INJECTION'};
+ assert.equal(receptionContextVariables(c,buyer).icash_role_instructions,buyerScenarioInstructions);
+ assert.equal(selectedScenarioRoleInstructions('matched',automaticOfferReceptionPrompt),selectedRoleInstructions('matched',automaticOfferReceptionPrompt));
+ assert.equal(receptionContextVariables(c,{...buyer,askingPriceCents:0}).icash_role_instructions,unknownRoleInstructions);
+ assert(!buyerScenarioInstructions.includes('CALLER_INJECTION'));
+ assert.match(buyerScenarioInstructions,/Do not append/);assert.match(buyerScenarioInstructions,/PRICING PRIVACY/);assert.match(buyerScenarioInstructions,/do not agree/);
 });

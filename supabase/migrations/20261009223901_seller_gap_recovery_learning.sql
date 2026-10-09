@@ -59,7 +59,7 @@ create table public.icash_seller_gaps(
 create index seller_gaps_due on public.icash_seller_gaps(due_at) where state='open';
 create index seller_gaps_account on public.icash_seller_gaps(account_id,state,updated_at desc);
 create table public.icash_seller_recovery_variants(
- key text primary key,reason text not null,body text not null check(length(body) between 10 and 320),enabled boolean not null default true
+ key text primary key,reason text not null,body text not null check(length(body) between 10 and 320),enabled boolean not null default false
 );
 insert into public.icash_seller_recovery_variants(key,reason,body) values
  ('unanswered-v1','unanswered','I want to get that right. Could you clarify the part you need help with?'),
@@ -353,6 +353,7 @@ create function public.icash_viewing_relay_body(p_request uuid) returns text
 language plpgsql stable security invoker set search_path='' as $$
 declare f public.icash_seller_viewing_followups;r public.icash_buyer_viewing_requests;slots jsonb;options text;package jsonb;
 begin
+ if not exists(select 1 from public.icash_seller_recovery_variants where reason='viewing' and enabled) then return null;end if;
  select * into f from public.icash_seller_viewing_followups where request_id=p_request;if not found then return null;end if;
  select * into r from public.icash_buyer_viewing_requests where id=f.request_id and account_id=f.account_id and deal_id=f.deal_id and thread_id=f.buyer_thread_id and state='needs_confirmation' and created_at>now()-interval '7 days';if not found then return null;end if;
  if coalesce(nullif(r.viewing_quote,''),case when r.kind='viewing' then r.quote end) is distinct from f.request_quote then return null;end if;

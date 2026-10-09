@@ -16,6 +16,11 @@ async function request(path:string,body?:unknown,testMode=false,method='POST'){
  if(!r.ok)throw new Error('Signing provider request failed. Do not resend until its status is checked.');return r;
 }
 const numericId=(id:unknown)=>String(z.coerce.number().int().positive().safe().parse(id));
+// Existing assignment forms disclose the private fee. Do not silently relabel
+// or remove contractual terms: require a reviewed buyer agreement before delivery.
+function buyerPricePrivacy(kind:SigningKind,template:Template){
+ if(kind==='assignment'&&['priceCents','assignmentFeeCents'].some(key=>Object.hasOwn(template.field_map,key)))throw Error('This buyer agreement exposes private acquisition pricing or the assignment fee. A reviewed buyer agreement is required before sending.');
+}
 export async function sendForSignatures(i:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:SigningKind;signers:Signer[];autoSignature?:string;phoneLinkOnly?:boolean}){
  if(!process.env.DOCUSEAL_API_KEY&&!process.env.DOCUSEAL_TEST_API_KEY)throw new Error('Signing setup is not finished.');
  const [deal]=await db<{terms:unknown;stage:string}[]>(`icash_deal_files?id=eq.${i.dealId}&account_id=eq.${i.accountId}&select=terms,stage`);
@@ -50,6 +55,7 @@ export async function sendForSignatures(i:{accountId:string;userId:string;custom
  };
  const template=await usable(exact)??await usable(await db<Template[]>(`icash_signing_templates?template_scope=eq.standard&${templateQuery}`));
  if(!template||!(Date.parse(template.reviewed_until)>Date.now()))throw new Error('An active contract template supporting every required signer is needed.');
+ buyerPricePrivacy(i.kind,template);
  signingReadiness(i.kind,terms,i.signers,identity.principal,deal.stage,Date.now(),template.form_profile);
  if(terms.legalDescription.length>template.max_legal_description_chars)throw new Error(template.form_profile===originalContractProfile?'The legal description does not fit the original form. Review it before sending.':'Legal description needs an attached exhibit before signing.');
  if(i.autoSignature&&(!template.automated_signing_reviewed||!template.customer_signature_field||!template.customer_consent_field))throw new Error('Auto-signing authorization is not enabled for this template.');
@@ -145,6 +151,7 @@ export async function pendingCounterpartySigningLink(accountId:string,id:string,
  const raw=await (await request(`submissions/${numericId(e.provider_id)}`,undefined,false)).json() as Submission;
  const d=normalize(raw,e);if(verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients})!=='awaiting_counterparty')throw Error('Waiting for another signing step.');
  const [reviewedTemplate]=await db<Template[]>(`icash_signing_templates?id=eq.${e.template_id}&select=*`);
+ buyerPricePrivacy(e.kind,reviewedTemplate);
  signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms),Date.now(),reviewedTemplate.form_profile);
  const next=d.recipients.find(r=>r.status!=='signed');
  const expected=e.recipients.find(r=>r.id===next?.id);

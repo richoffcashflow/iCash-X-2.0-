@@ -9,7 +9,8 @@ globalThis.fetch=async()=>{throw Error('NO_NETWORK_IN_RECOVERY_TEST');};
 const q=(sql,args=[])=>pg.query(sql,args),one=async(sql,args=[])=>(await q(sql,args)).rows[0];
 const rpc=async(name,args=[])=>(await one(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) v`,args)).v;
 const a=randomUUID(),other=randomUUID(),owner=randomUUID(),deal=randomUUID(),screen=randomUUID(),thread=randomUUID();
-let checks=0;
+let checks=0,completed=false;
+process.on('exit',()=>{if(!completed){console.error('Recovery suite did not reach its completion check.');process.exitCode=1;}});
 async function test(name,fn){await q('begin');try{await fn();checks++;console.log('PASS '+name);}finally{await q('rollback');}}
 try{
  await pg.exec(`create role anon;create role authenticated;create role service_role bypassrls;
@@ -48,7 +49,9 @@ try{
  create function icash_next_automation() returns jsonb language sql as $$select '{}'::jsonb$$;
  grant usage on schema public to service_role;grant select on all tables in schema public to service_role;
  `);
- await pg.exec(readFileSync('supabase/migrations/20261009221637_seller_gap_recovery_learning.sql','utf8'));
+ await pg.exec(readFileSync('supabase/migrations/20261009223901_seller_gap_recovery_learning.sql','utf8'));
+ assert.equal((await one('select count(*)::int n from icash_seller_recovery_variants where enabled')).n,0,'migration stages outreach disabled until the application is ready');
+ await q('update icash_seller_recovery_variants set enabled=true');
  await q('insert into auth.users values($1)',[owner]);
  await q('insert into icash_accounts(id,owner_user_id) values($1,$3),($2,$3)',[a,other,owner]);
  await q('insert into icash_screening_jobs values($1,$2)',[screen,a]);
@@ -175,6 +178,8 @@ try{
   const buyerMessage=await rpc('icash_prepare_viewing_relay',[request]);assert(buyerMessage);assert.equal(await rpc('icash_prepare_viewing_relay',[request]),null);
   const message=await one('select * from icash_text_messages where id=$1',[buyerMessage]);assert.equal(message.thread_id,buyer);assert.match(message.body,/PM/);assert.match(message.body,/still needs confirmation/);assert(await claim(buyerMessage));
   assert.equal((await one('select state from icash_buyer_viewing_requests where id=$1',[request])).state,'needs_confirmation');
+  await q("update icash_seller_recovery_variants set enabled=false where reason='viewing'");assert.equal(await claim(buyerMessage),null,'release pause also blocks viewing relays');
+  await q("update icash_seller_recovery_variants set enabled=true where reason='viewing'");
   await q("update fixture_slots set slots='[]'");assert.equal(await claim(buyerMessage),null,'withdrawn seller slot blocks stale buyer delivery');
  });
  for(const kind of ['reservation','payment_reported'])await test('combined buyer '+kind+' and viewing request retains seller follow-up on update',async()=>{
@@ -207,5 +212,6 @@ try{
   assert.equal((await one("select has_function_privilege('anon','icash_prepare_seller_recovery(uuid,uuid)','EXECUTE') v")).v,false);
   assert.equal((await one("select has_function_privilege('service_role','icash_prepare_seller_recovery(uuid,uuid)','EXECUTE') v")).v,true);
  });
+ assert.equal(checks,38);completed=true;
  console.log(JSON.stringify({checks,passed:checks,network:'disabled',scope:'real recovery SQL, isolated delegate fixtures'}));
 }catch(error){console.error(JSON.stringify({error:error.message,code:error.code,where:error.where,detail:error.detail}));process.exitCode=1;}finally{await pg.close();}
