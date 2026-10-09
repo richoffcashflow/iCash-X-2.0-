@@ -22,7 +22,20 @@ assert.equal(calculateAutomaticCallOffer({party:'buyer',buyer:{askingPriceCents:
 assert.equal(calculateAutomaticCallOffer({party:'buyer'}, {},now).quoteAllowed,false);
 assert.equal(calculateAutomaticCallOffer({...context,pendingAgreement:{priceCents:9000000}}, {},now).priceCents,9000000);
 for(const [text,cents] of [['eighty-five thousand dollars',8500000],['thirty five thousand',3500000],['one hundred two thousand dollars',10200000],['$85,000',8500000],['35k',3500000],['forty dollars',4000]])assert.deepEqual(spokenMoneyAmounts(text),[cents],text);
+// The provider speaks server-owned amounts; every word and the cents must
+// round-trip exactly or an actual seller yes is incorrectly rejected.
+for(const dollars of [1,7,17,19,27,70,77,100,170,717,1000,70000,152270,777777,1000000])for(const fraction of [0,1,7,17,50,70,99]){
+ const cents=dollars*100+fraction,speech=offerPricePresentation(cents).spokenPrice;
+ assert.deepEqual(spokenMoneyAmounts(speech),[cents],speech);
+}
+assert.deepEqual(spokenMoneyAmounts('152270 dollars and 50 cents'),[15227050]);
+assert.deepEqual(spokenMoneyAmounts('seven hundred and seventy dollars and seventy cents'),[77070]);
+assert.deepEqual(spokenMoneyAmounts('fifty cents'),[50]);
 const evidence=(agent,user,input)=>callOfferEvidence({transcript:[{role:'agent',message:agent},{role:'user',message:user}]},input);
+const exactOffer='We can offer one hundred fifty-two thousand two hundred seventy dollars and fifty cents cash, as is. This price accounts for repairs and holding costs. Does that fit your needs?';
+assert(evidence(exactOffer,'Yes, that fits my needs.',{action:'accept_offer',priceCents:15227050}));
+for(const priceCents of [15227000,15220700,15227051])assert(!evidence(exactOffer,'Yes',{action:'accept_offer',priceCents}));
+assert(!evidence(exactOffer,'Yes, but I need one hundred sixty thousand dollars',{action:'accept_offer',priceCents:15227050}));
 assert(evidence('We can offer $102,000. Does that work?','Yes',{action:'accept_offer',priceCents:10200000}));
 for(const answer of ['No','Yes, but I need $110,000','Yes if you can close tomorrow'])assert(!evidence('We can offer $102,000.',answer,{action:'accept_offer',priceCents:10200000}));
 assert(!evidence('We can offer $85,000.','Yes',{action:'accept_offer',priceCents:3500000}));

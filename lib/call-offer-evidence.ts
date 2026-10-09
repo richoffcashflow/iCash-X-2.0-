@@ -2,16 +2,38 @@ import {object} from './required-call-recording.ts';
 const units:Record<string,number>={zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
 export function spokenMoneyAmounts(text:string){
  const found:number[]=[];
- for(const m of text.matchAll(/\$?\b(\d+(?:,\d{3})*(?:\.\d{1,2})?)\s*(k\b|thousand\b|million\b)?/gi)){
+ // Match whole number words: "seven" must never consume "seventy".
+ const words=Object.keys(units).concat('hundred','thousand','million','billion').join('|');
+ const wordNumber=`(?:${words})\\b(?:[ -]+(?:and[ -]+)?(?:${words})\\b)*`;
+ const amount=`(?:\\d+(?:,\\d{3})*(?:\\.\\d{1,2})?|${wordNumber})`;
+ const number=(raw:string)=>{
+  if(/^\d/.test(raw))return Number(raw.replaceAll(',',''));
+  let total=0,group=0;
+  for(const word of raw.toLowerCase().split(/[ -]+/).filter(t=>t!=='and')){
+   if(word==='hundred')group=(group||1)*100;
+   else if(['thousand','million','billion'].includes(word)){total+=(group||1)*({thousand:1000,million:1000000,billion:1000000000}[word]!);group=0;}
+   else group+=units[word]??0;
+  }
+  return total+group;
+ };
+ // Consume explicit dollar/cents phrases together so the cents are neither
+ // dropped nor treated as a second, conflicting dollar amount.
+ let remaining=text.replace(new RegExp(`\\b(${amount})\\s+dollars?\\s+(?:and\\s+)?(${amount})\\s+cents?\\b`,'gi'),(match,dollars:string,cents:string)=>{
+  const d=number(dollars),c=number(cents),value=d*100+c;
+  if(Number.isSafeInteger(d)&&Number.isInteger(c)&&c>=0&&c<100&&Number.isSafeInteger(value))found.push(value);
+  return ' '.repeat(match.length);
+ });
+ remaining=remaining.replace(new RegExp(`\\b(${amount})\\s+(dollars?|cents?)\\b`,'gi'),(match,raw:string,unit:string)=>{
+  const n=number(raw),value=/^cent/i.test(unit)?n:Math.round(n*100);
+  if(Number.isSafeInteger(value))found.push(value);
+  return ' '.repeat(match.length);
+ });
+ for(const m of remaining.matchAll(/\$?\b(\d+(?:,\d{3})*(?:\.\d{1,2})?)\s*(k\b|thousand\b|million\b)?/gi)){
   const value=Math.round(Number(m[1].replaceAll(',',''))*(m[2]?.toLowerCase()==='million'?1000000:m[2]?1000:1)*100);if(Number.isSafeInteger(value))found.push(value);
  }
- const words=Object.keys(units).join('|');
- const pattern=new RegExp('\\b(?:(?:'+words+'|hundred|thousand|million)(?:[ -]+|(?=\\b)))(?:(?:and[ -]+)?(?:'+words+'|hundred|thousand|million)[ -]*)*','gi');
- for(const m of text.matchAll(pattern)){
-  const tokens=m[0].trim().toLowerCase().split(/[ -]+/).filter(t=>t!=='and');
-  if(!tokens.some(t=>['hundred','thousand','million'].includes(t))&&!/^\s*dollars?\b/i.test(text.slice(m.index!+m[0].length)))continue;
-  let total=0,group=0;for(const word of tokens){if(word==='hundred')group=(group||1)*100;else if(word==='thousand'||word==='million'){total+=(group||1)*(word==='thousand'?1000:1000000);group=0;}else group+=units[word]??0;}
-  if(Number.isSafeInteger((total+group)*100))found.push((total+group)*100);
+ for(const m of remaining.matchAll(new RegExp(`\\b${wordNumber}`,'gi'))){
+  if(!/\b(hundred|thousand|million|billion)\b/i.test(m[0]))continue;
+  const value=number(m[0])*100;if(Number.isSafeInteger(value))found.push(value);
  }
  return [...new Set(found)];
 }

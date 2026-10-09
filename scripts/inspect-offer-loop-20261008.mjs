@@ -3,10 +3,10 @@
 import {createRecordedReceptionProviders} from '../lib/recorded-reception-provider.ts';
 import {boundedBytes} from '../lib/required-call-recording-provider.ts';
 const accountId='48dfb798-8c1a-404f-88c0-c396cc067062';
-const sessionId='29c89081-c64f-46e2-8acc-bf87726f1776';
-const conversationId='conv_4601m4epktn1f3xbk6pzmv0x1rhr';
-const callSid='CA3b78b3d7ffce017d88d60170b1a7cba8';
-const provider='owner_call_20261008_2127_agreement';
+const sessionId='e870b945-cfa8-4e26-8848-0d6af755e7ea';
+const conversationId='conv_1501m4fddbh1ft79d3p2jr64r6bn';
+const callSid='CA4dfcde5cd19e769f4f7ae3cf6781edd2';
+const provider='owner_call_20261009_0405_agreement';
 if(process.env.VERCEL_ENV!=='production'||process.env.VERCEL_GIT_COMMIT_REF!=='main'
   ||Date.now()>Date.parse('2026-10-09T17:30:00Z'))process.exit(0);
 try{
