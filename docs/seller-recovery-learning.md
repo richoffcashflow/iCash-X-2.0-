@@ -65,6 +65,8 @@ The signing-replay regression also failed before its fix: repeating an already-c
 
 The positive-credit regression failed when a legacy reservation exceeded a positive wallet balance. Migration `20261009230421_seller_recovery_positive_credits.sql` makes both seller-recovery and viewing-relay scheduling require a positive balance, without subtracting old reservations. Completed usage remains billed by the existing dispatch path; zero-balance, consent, quiet-time and suppression checks still pass.
 
+The supplementary `inspect-voice-audit-traces.mjs` reads the exact completed v5 synthetic invocations and records only model, triggered-guardrail and tool-action metadata. It never runs another simulation, changes an agent or rewrites an acceptance result. Headers, arguments, tool payloads and reasoning are excluded. The mandatory voice gate remains unchanged. This distinguishes repeated model replies from provider guardrail retries before another policy change.
+
 ## Local commands
 
 ```sh

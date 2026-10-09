@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {inspectVoiceAuditTraces} from '../scripts/inspect-voice-audit-traces.mjs';
+const branch='agtbrch_fixture',version='agtvrsn_fixture';
+const tests=Array.from({length:30},(_,i)=>({name:'buyer-scenarios-20261009-v5-fixture-'+i,status:i===0?'failed':'passed',branch,version}));
+const audit={status:'failed',code:'BUYER_SCENARIO_FAILURES_REQUIRE_FIX',outreach:false,count:30,fixtureHash:'a'.repeat(64),branchId:branch,version,tests,invocations:Array.from({length:6},(_,i)=>'suite_fixture'+i)};
+const replies=Object.fromEntries(audit.invocations.map((id,batch)=>[id,{id,test_runs:tests.slice(batch*5,batch*5+5).map(t=>({test_name:t.name,status:t.status,branch_id:branch,version_id:version,agent_responses:[{role:'agent',message:'Let me confirm that amount',producing_llm:'gpt-5.4-mini',triggered_guardrails:[{guardrail_type:'custom',guardrail_name:'price_authority'}],tool_calls:[{tool_name:'icash_offer_and_contract',params_as_json:'{"action":"get_offer","secret":"DO_NOT_RETAIN"}',tool_has_been_called:true,tool_details:{headers:{Authorization:'DO_NOT_RETAIN'}}}],tool_results:[{tool_name:'icash_offer_and_contract',is_error:false,is_blocked:false,tool_has_been_called:true,result_value:'DO_NOT_RETAIN'}],reasoning:[{summary:'DO_NOT_RETAIN'}]}]}))}]));
+const original=structuredClone(audit),reads=[];
+const api=async(...args)=>{assert.equal(args.length,1);assert.match(args[0],/^\/v1\/convai\/test-invocations\/suite_fixture[0-5]$/);reads.push(args[0]);return replies[args[0].split('/').at(-1)];};
+const result=await inspectVoiceAuditTraces(api,audit);
+assert.equal(reads.length,6);assert.equal(result.count,30);assert.equal(result.mutatedProvider,false);
+assert.equal(result.tests[0].guardrailTurns,1);assert.equal(result.tests[0].getOfferCalls,1);
+assert(!JSON.stringify(result).includes('DO_NOT_RETAIN'));
+for(const change of [{status:'running'},{outreach:true},{count:29},{invocations:['suite_fixture0']},{tests:tests.slice(1)}])await assert.rejects(inspectVoiceAuditTraces(api,{...audit,...change}),/VOICE_TRACE_/);
+const changed=structuredClone(replies.suite_fixture0);changed.test_runs[0].version_id='agtvrsn_wrong';
+await assert.rejects(inspectVoiceAuditTraces(async()=>changed,audit),/VOICE_TRACE_RESULT_CHANGED/);
+assert.deepEqual(audit,original,'diagnostics never relabel original failures');
+console.log('PASS voice trace diagnostics: exact completed synthetic invocations, GET-only provider access, changed evidence rejection, metadata projection, no credentials/arguments/reasoning retained.');
