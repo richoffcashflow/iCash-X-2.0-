@@ -11,3 +11,9 @@ The one-time deployment runner is restricted to production/main, one existing ac
 Buyer replies also now enter the buyer reply queue instead of being intercepted by the seller acquisition campaign.
 
 Verification: `node --experimental-strip-types scripts/test-buyer-disposition-pglite.mjs /absolute/path/to/@electric-sql/pglite/dist/index.js`. The fixture blocks all network traffic and covers the real SQL claims, exact owner bindings, price, duplicate claims, expiry, opt-out, tenant isolation, the preserved buyer hold, buyer routing, and header validation.
+
+## Live result, October 9, 2026
+
+The owner email has a delivered receipt. The separate test SMS was accepted, then received a signed `text.delivery.failed` webhook. A read-only lookup of that exact provider message confirms `failed`; the leased line is active and advertises SMS/MMS. No successful delivery is claimed and no retry was issued. The sender is held in the application's send allowlist pending provider repair; its lease and message history are retained. The primary seller line has successful delivery receipts and remains enabled.
+
+The test is optional deployment verification: a held/expired test or provider inspection failure never blocks a later product deployment. Buyer SMS reply and call routing passed isolated SQL tests, but the live owner SMS/reply/inbound-call test has **not** passed. Real buyer outreach remains held.
