@@ -8,11 +8,12 @@ import {receptionWorkspacePostcallAbsent} from '../lib/general-reception.ts';
 import {automaticOfferReceptionPrompt,isolatedBuyerReceptionPolicyHash,conversationBuyerReceptionPolicyHash as scenarioBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {testAutomaticOfferProvider} from './test-automatic-offer-provider.mjs';
 import {buyerScenarioCases} from './buyer-scenario-cases-20261009.mjs';
+import {buyerProviderValidation} from './buyer-provider-validation.mjs';
 if(process.env.VERCEL_ENV!=='production'||process.env.VERCEL_GIT_COMMIT_REF!=='main')process.exit(0);
 const provider='buyer_scenario_audit_20261009_v6',sourceBranch='agtbrch_8101m4h801smere91ege6f978hc7',sourceVersion='agtvrsn_7001m4h801skee292g590meg3yg0';
 const fixtureHash=createHash('sha256').update(JSON.stringify({cases:buyerScenarioCases,role:selectedScenarioRoleInstructions('buyer',automaticOfferReceptionPrompt),sellerRole:selectedScenarioRoleInstructions('matched',automaticOfferReceptionPrompt),sellerRegression:'closingCases-v2-review-needed',policyHash:scenarioBuyerReceptionPolicyHash})).digest('hex');
 const [prior]=await db('icash_integration_checks?provider=eq.'+provider+'&select=result');
-const [stageEvidence]=await db('icash_integration_checks?provider=eq.buyer_conversation_stage_20261009_v1&select=result');
+const [stageEvidence]=await db('icash_integration_checks?provider=eq.buyer_conversation_stage_20261009_v2&select=result');
 if(prior){if(stageEvidence?.result?.status==='staged'&&stageEvidence.result.policyHash===scenarioBuyerReceptionPolicyHash&&prior.result?.status==='passed'&&prior.result.fixtureHash===fixtureHash&&prior.result.branchId===stageEvidence.result.branchId&&prior.result.version===stageEvidence.result.versionId&&prior.result.configHash===stageEvidence.result.configHash&&prior.result.stagedConfigId===stageEvidence.result.configId&&prior.result.count===buyerScenarioCases.length+2&&prior.result.policyHash===scenarioBuyerReceptionPolicyHash)process.exit(0);throw Error('BUYER_SCENARIO_AUDIT_REVIEW_REQUIRED');}
 if(Date.now()>Date.parse('2026-10-10T00:00:00Z'))throw Error('BUYER_SCENARIO_AUDIT_WINDOW_REQUIRED');
 // Earlier failures stay immutable. v6 separates factual tool data from speaking
@@ -29,7 +30,14 @@ if(!process.env.ELEVENLABS_API_KEY)throw Error('BUYER_PROVIDER_CONFIGURATION_REQ
 const observations=new Map(),invocations=new Set();
 const api=async(path,method='GET',body)=>{
  const r=await fetch('https://api.us.elevenlabs.io'+path,{method,headers:{'xi-api-key':process.env.ELEVENLABS_API_KEY,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)}),redirect:'error',signal:AbortSignal.timeout(20000)});
- if(!r.ok)throw Error('BUYER_SCENARIO_HTTP_'+r.status);
+ if(!r.ok){
+  const error=Error('BUYER_SCENARIO_HTTP_'+r.status);
+  if(method==='POST'&&path.endsWith('/branches')){
+   error.providerValidation=buyerProviderValidation(await r.json().catch(()=>null),process.env.ELEVENLABS_API_KEY);
+   console.log('Buyer branch validation:',JSON.stringify({status:r.status,validation:error.providerValidation}));
+  }
+  throw error;
+ }
  const data=await r.json();
  if(path.startsWith('/v1/convai/test-invocations/')&&Array.isArray(data.test_runs)){
   invocations.add(path.split('/').at(-1));

@@ -7,9 +7,14 @@ import {directRecordedInstructions} from '../lib/direct-call-entry.ts';
 import {canonical} from '../lib/required-call-recording.ts';
 
 export async function stageBuyerConversationPolicy(api,c){
- const marker='buyer_conversation_stage_20261009_v1',name='buyer-conversation-'+conversationBuyerReceptionPolicyHash.slice(0,16);
+ const marker='buyer_conversation_stage_20261009_v2',name='buyer-conversation-'+conversationBuyerReceptionPolicyHash.slice(0,16);
  const [prior]=await db('icash_integration_checks?provider=eq.'+marker+'&select=result');
  if(prior){if(prior.result?.status==='staged'&&prior.result.policyHash===conversationBuyerReceptionPolicyHash&&prior.result.sourceConfigId===c.id)return prior.result;throw Error('BUYER_CONVERSATION_STAGE_REVIEW_REQUIRED');}
+ // The original create returned HTTP 400 before recording a branch ID. Retain
+ // that record and allow one separately recorded recovery only after proving
+ // no branch with this exact name exists. Never retry a partial/readback failure.
+ const [original]=await db('icash_integration_checks?provider=eq.buyer_conversation_stage_20261009_v1&select=result');
+ if(original?.result?.status!=='creating'||original.result.policyHash!==conversationBuyerReceptionPolicyHash||original.result.sourceConfigId!==c.id||original.result.outreach!==false||original.result.branchId||original.result.configId)throw Error('BUYER_CONVERSATION_EXACT_CREATE_FAILURE_REQUIRED');
  const [audit]=await db('icash_integration_checks?provider=eq.buyer_scenario_audit_20261009_v5&select=result');
  if(audit?.result?.status!=='failed'||audit.result.code!=='BUYER_SCENARIO_FAILURES_REQUIRE_FIX'||audit.result.fixtureHash!=='d1012080ea3ac92001d5467ed78c4c5e81f929131f2671b3e41ba30658a1b1ea'||audit.result.tests?.length!==30||audit.result.tests.some(t=>!['passed','failed'].includes(t.status)))throw Error('BUYER_CONVERSATION_COMPLETED_FAILURE_REQUIRED');
  const [diagnostic]=await db('icash_integration_checks?provider=eq.buyer_scenario_guardrail_inspection_20261009_v1&select=result');
@@ -20,9 +25,19 @@ export async function stageBuyerConversationPolicy(api,c){
  if(!inspectRecordedReceptionAgent(c,source,list.results.find(b=>b.id===c.branch_id),receptionWorkspacePostcallAbsent(workspace),stop,tool).safe)throw Error('BUYER_CONVERSATION_SOURCE_CHANGED');
  const parentConfig={...c,context_policy:'automatic_offer_v14',context_policy_hash:turnBuyerReceptionPolicyHash,branch_id:evidence.branchId,reviewed_version_id:evidence.version,config_hash:evidence.configHash};
  if(!inspectRecordedReceptionAgent(parentConfig,parent,list.results.find(b=>b.id===evidence.branchId),receptionWorkspacePostcallAbsent(workspace),stop,tool).safe)throw Error('BUYER_CONVERSATION_PARENT_CHANGED');
- await db('icash_integration_checks','POST',{provider:marker,checked_at:new Date().toISOString(),result:{status:'creating',policyHash:conversationBuyerReceptionPolicyHash,sourceConfigId:c.id,outreach:false}});
+ const creating={status:'creating',policyHash:conversationBuyerReceptionPolicyHash,sourceConfigId:c.id,recoveryOf:'buyer_conversation_stage_20261009_v1',absentBranchName:name,outreach:false,activated:false};
+ await db('icash_integration_checks','POST',{provider:marker,checked_at:new Date().toISOString(),result:creating});
  const guards=structuredClone(parent.platform_settings.guardrails);guards.custom.config.configs=guards.custom.config.configs.map(g=>g.name===buyerConversationGuardrail.name?buyerConversationGuardrail:g);
- const created=await api(path+'/branches','POST',{name,parent_version_id:parent.version_id,description:'Isolated buyer conversation candidate: persistent opening state, concise tool facts, private-price refusal validation and truthful action status.',include_draft:false,conversation_config:{agent:{prompt:{...buyerConversationModel,prompt:buyerConversationPrompt+directRecordedInstructions}}},platform_settings:{guardrails:guards}});
+ let created;
+ try{
+  // Branch overrides merge with the GPT-5 parent. GPT-4.1 needs an explicit
+  // null here so that a parent reasoning_effort cannot survive that merge.
+  created=await api(path+'/branches','POST',{name,parent_version_id:parent.version_id,description:'Isolated buyer conversation candidate: persistent state, private pricing and truthful action status.',include_draft:false,conversation_config:{agent:{prompt:{...buyerConversationModel,reasoning_effort:null,prompt:buyerConversationPrompt+directRecordedInstructions}}},platform_settings:{guardrails:guards}});
+ }catch(error){
+  const code=/^BUYER_SCENARIO_HTTP_\d{3}$/.test(error.message)?error.message:'BUYER_CONVERSATION_CREATE_UNCONFIRMED';
+  await db('icash_integration_checks?provider=eq.'+marker,'PATCH',{checked_at:new Date().toISOString(),result:{...creating,status:'create_failed',code,validation:error.providerValidation??null}});
+  throw error;
+ }
  const branchId=created.created_branch_id;
  if(!/^agtbrch_[A-Za-z0-9]+$/.test(branchId??'')||[c.branch_id,parent.branch_id,parent.main_branch_id].includes(branchId))throw Error('BUYER_CONVERSATION_NEW_BRANCH_REQUIRED');
  const [agent,after,sourceAfter,parentAfter,mainAfter]=await Promise.all([api(path+'?branch_id='+branchId),api(path+'/branches?include_archived=true&limit=100'),api(path+'?branch_id='+c.branch_id),api(path+'?branch_id='+parent.branch_id),api(path)]);
