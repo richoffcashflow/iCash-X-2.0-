@@ -11,7 +11,7 @@ try{
  for(const t of JSON.parse(read('tests/fixtures/automatic-credits-baseline.json')).tables.filter(t=>names.includes(t.name)))await pg.exec(t.definition);
  await pg.exec(`create table public.icash_contract_text_deliveries(envelope_id uuid,signer_id text,account_id uuid,thread_id uuid,message_id uuid);
  create function public.icash_sms_thread_review_current(uuid,uuid,boolean) returns boolean language sql as $$select not paused from public.icash_text_threads where account_id=$1 and id=$2$$;`);
- await pg.exec(read('supabase/migrations/20261009010519_contract_text_resend.sql'));
+ await pg.exec(read('supabase/migrations/20261009010741_contract_text_resend.sql'));
  const account=uuid(),other=uuid(),deal=uuid(),env=uuid(),thread=uuid(),message=uuid(),retry=uuid(),phone='+12025550100',hash='a'.repeat(64),termsHash='b'.repeat(64);
  await q('insert into icash_accounts(id) values($1),($2)',[account,other]);
  await q("insert into icash_deal_files(id,account_id,terms) values($1,$2,'{}')",[deal,account]);
