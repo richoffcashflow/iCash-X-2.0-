@@ -41,6 +41,7 @@ export async function processWebinarFollowups({database=db,transport=fetch,env=p
     const history=sessions.map(s=>({...s,config:{...s.config,pitchAt:webinarPitchAt(s.config)},offer_seen_at:events.find(e=>e.session_id===s.id)?.created_at??null}));
     const phase=followupPhase(history,v.timezone,settings.routing.checkoutWindowHours,now),emailStep=job.step===0?0:job.step===2?1:2;
     const target=job.campaign_id?await resolveCampaignTarget(v.id,source.webinar_id,job.destination??'smart',v.timezone,settings,database,now):null;
+    if(job.destination==='webinar'&&target?.phase==='checkout'){await database(`icash_webinar_outbox?id=eq.${job.id}&state=eq.claimed`,'PATCH',{state:'pending',due_at:new Date(now.getTime()+3600000).toISOString(),attempts:Math.max(0,job.attempts-1),last_error:'Waiting for a published webinar'});return;}
     const copy=target?campaignCopy({name:v.name??'',brand:webinarSite.brandName,host:webinarSite.hostName,phase:target.phase,title:target.title,step:job.step,reply:!!job.reply_event_id}):followupCopy({name:v.name??'',title:latest.config.title,seconds:latest.progress_seconds,phase,step:job.step,brand:webinarSite.brandName,host:webinarSite.hostName,smart:settings.smartFollowups,subject:settings.subjects[emailStep],message:settings.messages[emailStep]});
     const link=`${origin}/w/${job.id}`;
     if(job.channel==='sms'){

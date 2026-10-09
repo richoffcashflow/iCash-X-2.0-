@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {campaignCopy} from '../lib/webinar-message-copy.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
@@ -23,7 +24,7 @@ test('personal copy uses real progress and sanitizes headers without inventing a
  const custom=followupCopy({...args,smart:false,subject:'Hi {{first_name}}',message:'{{webinar}} at {{watch_time}}. {{next_step}}.'});assert.equal(custom.subject,'Hi Casey');assert.match(custom.body,/The walkthrough at 3:05/);
  assert.doesNotMatch(followupCopy({...args,phase:'checkout'}).body,/finished|expires|spots/i);
 });
-let settings,job,visitor,paid,authorized,transportError,responseStatus,calls,sends;
+let settings,job,visitor,paid,authorized,transportError,responseStatus,calls,sends,campaignTargetMock;
 const env={VERCEL_ENV:'production',RESEND_API_KEY:'fake-email-key',RESEND_RECEIVING_WEBHOOK_SECRET:'fake-signed-receipts',CONTIGUITY_API_KEY:'fake-text-key',CONTIGUITY_WEBHOOK_SECRET:'fake-text-receipts',CONTIGUITY_FROM:'+12125550199',ICASH_APP_ORIGIN:'https://example.test'};
 function reset(channel='email'){
  settings=policy.settingsSchema.parse({enabled:true,smsEnabled:true,fromEmail:'sessions@example.test',postalAddress:'123 Example Street',subjects:['a','b','c'],messages:['a','b','c']});
@@ -38,7 +39,7 @@ const database=async(path,method,body)=>{
  return null;
 };
 const transport=async(url,init)=>{sends.push({url,init});if(transportError)throw Error('Unconfirmed provider timeout');return Response.json(job.channel==='email'?{id:'provider-id'}:{data:{message_id:'provider-id'}},{status:responseStatus});};
-const deps={webinarReplyAddress,readCampaignSettings,db:database,...policy,webinarPaid:async()=>paid,webinarToken:()=> 'signed-unsubscribe',followupCopy,followupPhase,webinarSite:{brandName:'Brand',hostName:'Host'}};
+const deps={campaignCopy,resolveCampaignTarget:async()=>campaignTargetMock,webinarReplyAddress,readCampaignSettings,db:database,...policy,webinarPaid:async()=>paid,webinarToken:()=> 'signed-unsubscribe',followupCopy,followupPhase,webinarSite:{brandName:'Brand',hostName:'Host'}};
 globalThis.__followupTest=deps;
 const code=ts.transpileModule(readFileSync(new URL('../lib/webinar-email.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
 const {processWebinarFollowups,webinarMailTime,webinarFollowupReadiness}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__followupTest;\n'+code).toString('base64'));
@@ -65,3 +66,5 @@ test('ambiguous SMS never retries; transient email failure retries within its du
  reset();responseStatus=503;await run();assert.equal(calls.at(-1).body.state,'pending');
  reset();responseStatus=422;await run();assert.equal(calls.at(-1).body.state,'failed');
 });
+
+test('webinar invitations wait instead of sending a checkout link when no webinar is available',async()=>{reset();job.campaign_id='campaign';job.destination='webinar';campaignTargetMock={phase:'checkout',path:'/webinar/checkout',title:''};await run();assert.equal(sends.length,0);assert(calls.some(c=>c.body?.state==='pending'&&c.body?.last_error==='Waiting for a published webinar'));});
