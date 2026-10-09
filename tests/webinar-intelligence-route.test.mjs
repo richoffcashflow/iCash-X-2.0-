@@ -40,6 +40,7 @@ const saved={...one,title:'Saved main'};
 history=[{id:randomUUID(),webinar_id:one.id,revision:1,progress_seconds:100,max_seconds:100,completed_at:null,superseded_at:null,is_preview:false,config:saved,created_at:new Date(now).toISOString(),updated_at:new Date(now).toISOString()}];
 data=await(await post({code:'123456',attribution:{ad_id:'55555'}})).json();assert.equal(data.webinar.title,'Saved main');
 history[0].completed_at=new Date(now-3600000).toISOString();history[0].max_seconds=1800;data=await(await post({code:'123456',attribution:{ad_id:'55555'}})).json();assert.equal(data.redirect,`/webinar/checkout?webinar_session=${history[0].id}`);
+calls=[];data=await(await post({code:'123456',returnToWebinar:true})).json();assert.equal(data.webinar.id,one.id,'A webinar reminder can replay during the checkout window');assert.equal(data.redirect,undefined);assert.equal(calls.find(c=>c.path==='rpc/icash_webinar_begin').body.p_advance_from,history[0].id);
 history[0].completed_at=new Date(now-9*3600000).toISOString();calls=[];data=await(await post({code:'123456'})).json();assert.equal(data.webinar.id,one.id,'Unpaid returns stay in the same main webinar');assert.equal(calls.find(c=>c.path==='rpc/icash_webinar_begin').body.p_advance_from,history[0].id);
 // Only a fresh tagged ad repeating confirmed viewing can advance. No experiment RPCs.
 history[0].watched_seconds=1700;

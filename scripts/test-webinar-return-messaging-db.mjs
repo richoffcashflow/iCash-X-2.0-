@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {randomUUID} from 'node:crypto';
+export async function verifyWebinarReturnMessaging(pg,q,config){
+ const scalar=async(sql,args=[])=>Object.values((await q(sql,args)).rows[0])[0];
+ await pg.exec(readFileSync(new URL('../supabase/migrations/20261009184344_webinar_return_messaging.sql',import.meta.url),'utf8'));
+ const steps=(await q('select * from icash_webinar_return_steps()')).rows;
+ assert.equal(steps.filter(s=>s.channel==='email').length,45);assert.equal(steps.filter(s=>s.channel==='sms').length,23);
+ assert(steps.every(s=>s.destination==='webinar'));
+ for(let d=0;d<60;d++){const day=steps.filter(s=>Math.floor(s.delay_minutes/1440)===d);assert(day.filter(s=>s.channel==='email').length<=2);assert(day.filter(s=>s.channel==='sms').length<=1);}
+ const make=async()=>{
+  const id=randomUUID(),session=randomUUID(),email=`${id}@example.invalid`,phone=`+1212${String(Math.floor(Math.random()*10000000)).padStart(7,'0')}`;
+  await q("insert into icash_webinar_visitors(id,timezone) values($1,(select name from pg_timezone_names where extract(hour from now() at time zone name)=12 limit 1))",[id]);
+  await q('insert into icash_webinar_sessions(id,visitor_id,webinar_id,revision,config) values($1,$2,$3,1,$4)',[session,id,config.id,config]);
+  await q("select icash_webinar_contact_ongoing_campaign($1,$2,'Alex',$3,$4,true,true)",[id,session,email,phone]);
+  await q("update icash_webinar_visitors set last_seen_at=now()-interval '1 hour' where id=$1",[id]);
+  const sender=await scalar('select icash_webinar_campaign_sender($1)',[phone]);
+  assert(sender);return {id,session,email,phone,sender};
+ };
+ const a=await make();
+ assert.equal(await scalar("select count(*)::int from icash_webinar_outbox where visitor_id=$1 and state='pending'",[a.id]),68);
+ await q("select icash_webinar_contact_ongoing_campaign($1,$2,'Alex',$3,$4,true,true)",[a.id,a.session,a.email,a.phone]);
+ assert.equal(await scalar("select count(*)::int from icash_webinar_outbox where visitor_id=$1 and state='pending'",[a.id]),68,'Repeated opt-in does not restart');
+ const event=(person,body,id=randomUUID())=>({id,type:'text.incoming.sms',data:{from:person.phone,to:person.sender,body}});
+ const request=event(a,'send me the link');
+ assert.equal(await scalar('select icash_route_lifecycle_text($1,false)',[request]),'prospect');
+ const job=(await q("select * from icash_webinar_outbox where reply_event_id=$1",['sms:'+request.id])).rows[0];
+ assert.equal(job.destination,'webinar');assert.equal(job.state,'pending');
+ assert.equal(await scalar('select sms_replied_at from icash_webinar_visitors where id=$1',[a.id]),null);
+ await q('select icash_route_lifecycle_text($1,false)',[request]);
+ assert.equal(await scalar('select state from icash_webinar_outbox where id=$1',[job.id]),'pending','Duplicate webhook cannot cancel queued reply');
+ assert.equal(await scalar('select count(*)::int from icash_webinar_outbox where reply_event_id=$1',['sms:'+request.id]),1);
+ await q("update icash_webinar_visitors set last_seen_at=now()-interval '1 hour' where id=$1",[a.id]);
+ await q("update icash_messaging_settings set config=config||'{\"enabled\":true,\"smsEnabled\":true}'::jsonb");
+ await q("update icash_webinar_outbox set state='claimed' where id=$1",[job.id]);
+ const payload={from:a.sender,to:a.phone,message:'Your webinar link'};
+ assert.equal((await scalar('select to_jsonb(icash_webinar_authorize_followup($1,$2))',[job.id,payload])).state,'sending');
+ await q('select icash_webinar_finish_followup($1,$2)',[job.id,'reply-test-'+request.id]);
+ const blocked=await scalar("select id from icash_webinar_outbox where visitor_id=$1 and channel='sms' and state='pending' limit 1",[a.id]);
+ await q("update icash_webinar_outbox set state='claimed' where id=$1",[blocked]);
+ assert.equal(await scalar('select to_jsonb(icash_webinar_authorize_followup($1,$2))',[blocked,payload]),null,'A return link consumes the same daily SMS allowance');
+ const stop=event(a,'please stop');await q('select icash_route_lifecycle_text($1,false)',[stop]);
+ assert(await scalar('select sms_opted_out_at from icash_webinar_visitors where id=$1',[a.id]));
+ assert.equal(await scalar("select count(*)::int from icash_webinar_outbox where visitor_id=$1 and channel='sms' and state in ('pending','claimed')",[a.id]),0);
+ const b=await make();await q('select icash_route_lifecycle_text($1,false)',[event(b,'I need a refund')]);
+ assert(await scalar('select sms_replied_at from icash_webinar_visitors where id=$1',[b.id]));
+ assert.equal(await scalar('select count(*)::int from icash_webinar_outbox where visitor_id=$1 and reply_event_id is not null',[b.id]),0);
+ const paid=await make();await q("insert into icash_memberships(id,mode,payer_email,paid_through) values($1,'live',$2,now()+interval '30 days')",[randomUUID(),paid.email]);
+ await q('select icash_route_lifecycle_text($1,false)',[event(paid,'yes')]);
+ assert.equal(await scalar('select count(*)::int from icash_webinar_outbox where visitor_id=$1 and reply_event_id is not null',[paid.id]),0,'Buyer never receives another sales return link');
+ const email=await make(),emailEvent='email:'+randomUUID();
+ assert.equal(await scalar("select icash_webinar_queue_return($1,'email',$2,'how do I join?')",[emailEvent,email.email]),'queued');
+ assert.equal(await scalar("select icash_webinar_queue_return($1,'email',$2,'how do I join?')",[emailEvent,email.email]),'queued');
+ assert.equal(await scalar('select count(*)::int from icash_webinar_outbox where reply_event_id=$1',[emailEvent]),1);
+ assert.equal(await scalar("select icash_webinar_queue_return($1,'email',$2,'unsubscribe')",['email:'+randomUUID(),email.email]),'stopped');
+ assert(await scalar('select opted_out_at from icash_webinar_visitors where id=$1',[email.id]));
+ const property=await make();await q('insert into icash_text_threads(id,sender,recipient) values($1,$2,$3)',[randomUUID(),property.sender,property.phone]);
+ assert.equal(await scalar('select icash_route_lifecycle_text($1,false)',[event(property,'yes')]),'ambiguous');
+ assert.equal(await scalar('select count(*)::int from icash_webinar_outbox where visitor_id=$1 and reply_event_id is not null',[property.id]),0,'Property conflicts never enter webinar auto-replies');
+ for(const role of ['anon','authenticated']){assert.equal(await scalar("select has_function_privilege($1,'icash_webinar_queue_return(text,text,text,text)','execute')",[role]),false);assert.equal(await scalar("select has_table_privilege($1,'icash_webinar_reply_events','select')",[role]),false);}
+ console.log('Webinar return messaging passed: cadence, enrollment idempotency, reply links, webhook deduplication, final authorization, daily limits, STOP, support hold, purchases, email replies, property isolation and private access.');
+}

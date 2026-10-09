@@ -24,14 +24,14 @@ export async function GET(req:Request,{params}:{params:Promise<{token:string}>})
     else{
      const [row]=await db<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config');
      const target=await resolveCampaignTarget(v.id,session.webinar_id,job.destination,v.timezone,settingsSchema.parse(row.config));
-     destination.pathname=target.path;
-     if(target.phase==='checkout'){
+     destination.pathname=job.destination==='webinar'&&target.phase==='checkout'?webinarSite.viewerPath:target.path;
+     if(target.phase==='checkout'&&job.destination!=='webinar'){
       // A new device gets a new checkout identity, never another device's payment session.
       const jar=await cookies();let guest=jar.get('icash_funding_guest')?.value;
       if(!validGuest(guest)){guest=randomBytes(32).toString('hex');jar.set('icash_funding_guest',guest,{httpOnly:true,secure:process.env.NODE_ENV!=='development',sameSite:'lax',path:'/',maxAge:86400*30});}
       await db(`icash_webinar_visitors?id=eq.${v.id}`,'PATCH',{funding_guest_hash:guestHash(guest)});
       if(target.sessionId)destination.searchParams.set('webinar_session',target.sessionId);
-     }else destination.searchParams.set('r',webinarToken(v.id,'resume',3600));
+     }else {destination.searchParams.set('r',webinarToken(v.id,'resume',3600));if(job.destination==='webinar')destination.searchParams.set('watch','1');}
     }
    }else{
     if(session){const [webinar]=await db<{public_code:number}[]>(`icash_webinars?id=eq.${session.webinar_id}&select=public_code&limit=1`);if(webinar)destination.pathname=webinarLink({publicCode:String(webinar.public_code)});}

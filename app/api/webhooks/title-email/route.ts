@@ -1,3 +1,4 @@
+import {intakeWebinarReply} from '@/lib/webinar-email-replies';
 import {customerEmailDomains,customerReplyReference} from '@/lib/customer-email-identity';
 import {NextResponse} from 'next/server';
 import {db} from '@/lib/stripe-test';
@@ -19,6 +20,7 @@ export async function POST(req:Request){
  const prior=await db<{id:string}[]>(`icash_title_replies?provider_email_id=eq.${id}&select=id&limit=1`);const priorMail=await db<{id:string}[]>(`icash_deal_emails?provider_id=eq.${id}&direction=eq.incoming&select=id&limit=1`);if(prior.length||priorMail.length)return NextResponse.json({received:true});
  const res=await fetch(`https://api.resend.com/emails/receiving/${id}`,{headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(15000)});
  if(!res.ok)throw Error('Receiving temporarily unavailable');const email=await res.json();
+ if(await intakeWebinarReply(id,email,db))return NextResponse.json({received:true});
  // Reuse this route's verified delivery context; email requests cannot cancel anything.
  if(await intakeVerifiedSupportEmail(id,email))return NextResponse.json({received:true});
  if(email.id!==id||!Array.isArray(email.to))return NextResponse.json({received:true});

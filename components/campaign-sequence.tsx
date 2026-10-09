@@ -1,0 +1,35 @@
+'use client';
+import './campaign-sequence.css';
+import {useState} from 'react';
+import {ChevronDown,RefreshCw} from 'lucide-react';
+import {webinarRequest} from '@/lib/webinar-client';
+import {campaignCopy,campaignReason} from '@/lib/webinar-message-copy';
+import {webinarSite} from '@/lib/webinar-site';
+type Step={step:number;channel:'email'|'sms';delay_minutes:number;destination:string};
+type Job={id:string;channel:'email'|'sms';recipient:string;step:number;state:string;due_at:string;sent_at:string|null;last_error:string|null;destination:string;payload:{subject?:string;text?:string;message?:string}|null;reply_event_id:string|null;visitor:{name:string|null;timezone:string}|null};
+type Reply={event_id:string;channel:string;recipient:string;body:string;outcome:string;created_at:string};
+type Sequence={steps:Step[];jobs:Job[];replies:Reply[];readiness:{email:boolean;sms:boolean};fromEmail:string;postalAddress:string};
+const date=(value:string,timezone?:string)=>{try{return new Date(value).toLocaleString('en-US',{hour12:true,dateStyle:'medium',timeStyle:'short',timeZone:timezone||undefined});}catch{return new Date(value).toLocaleString('en-US',{hour12:true});}};
+const timing=(mins:number)=>{const day=Math.floor(mins/1440)+1,h=Math.floor(mins%1440/60),m=mins%60;return `Day ${day} · ${h?`${h} hr `:''}${m?`${m} min`:''} after signup time`.replace('  ',' ');};
+export function CampaignSequence(){
+ const [data,setData]=useState<Sequence|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[channel,setChannel]=useState<'email'|'sms'>('sms'),[phase,setPhase]=useState<'resume'|'next'>('resume'),[name,setName]=useState('Alex');
+ async function load(){setBusy(true);setError('');try{setData(await webinarRequest<Sequence>('/api/messaging/admin/sequence',{cache:'no-store'}));}catch{setError('Messages could not load. Try again.');}finally{setBusy(false);}}
+ const copy=(step:number,reply=false)=>campaignCopy({name,brand:webinarSite.brandName,host:webinarSite.hostName,title:'Your selected webinar',phase,step,reply});
+ const text=(step:number,reply=false)=>{const c=copy(step,reply);return channel==='sms'?`${c.sms}\n[Personal webinar link]`:`${c.body}\n[Personal webinar link]\n\n${c.signature}\n\n${webinarSite.brandName} session reminders and offers\n${data?.postalAddress||'[Business mailing address required]'}\nUnsubscribe: [Personal unsubscribe link]`;};
+ return <details className="ms-sequence" onToggle={e=>{if(e.currentTarget.open&&!data&&!busy&&!error)void load();}}><summary><span>Messages & timing <small>See what sends, when, and why</small></span><ChevronDown size={16}/></summary><div className="ms-details-content">
+  <p><b>Webinar-first follow-ups.</b> Days 1–7: up to 2 emails + 1 text daily. Days 8–28: daily email and a text about every other day. After that: an email every 3 days and a weekly text through day 60, then one of each weekly.</p>
+  <p>Times below are planned offsets from signup. Sends may move later for 9 AM–8 PM local hours, watching, spacing, or daily limits. No missed-message pileups. Purchases and opt-outs stop sales messages.</p>
+  <div className="ms-sequence-controls"><button type="button" aria-pressed={channel==='sms'} onClick={()=>setChannel('sms')}>Texts</button><button type="button" aria-pressed={channel==='email'} onClick={()=>setChannel('email')}>Emails</button><button type="button" disabled={busy} onClick={()=>void load()}><RefreshCw size={14}/> {busy?'Loading…':'Refresh'}</button></div>
+  {error&&<p role="alert">{error}</p>}
+  {data&&<>
+   <p className="ws-hint">{channel==='email'&&!data.readiness.email?'Email sending is waiting for setup. These are previews.':channel==='sms'&&!data.readiness.sms?'Text sending is waiting for setup. These are previews.':'Preview the copy below. Actual sent messages appear in Recent activity.'}</p>
+   <div className="ms-preview-inputs"><label>Preview name<input value={name} maxLength={80} onChange={e=>setName(e.target.value)}/></label><label>Destination<select value={phase} onChange={e=>setPhase(e.target.value as 'resume'|'next')}><option value="resume">Return to current webinar</option><option value="next">Another available webinar</option></select></label></div>
+   <p><b>{data.steps.filter(s=>s.channel===channel).length} planned {channel==='sms'?'texts':'emails'} in the first 60 days</b> · New signups. Older signups keep their original cadence.</p>
+   <div className="ms-sequence-steps">{data.steps.filter(s=>s.channel===channel).map(s=><details key={s.step}><summary><span>{timing(s.delay_minutes)}<small>{channel==='email'?copy(s.step).subject:copy(s.step).sms}</small></span><ChevronDown size={14}/></summary><p>{campaignReason(s.step)}</p><pre>{text(s.step)}</pre></details>)}
+   <details><summary><span>{channel==='email'?'Day 61':'Day 64'}, then weekly<small>Continues until purchase or opt-out</small></span><ChevronDown size={14}/></summary><p>{campaignReason(1000)} Wording rotates each week.</p><pre>{text(1000)}</pre></details>
+   <details><summary><span>When they ask to join<small>“Yes,” “send the link,” “how do I join?”</small></span><ChevronDown size={14}/></summary><p>Queue a personal webinar link for the next permitted send. The same quiet hours and channel limits apply. Opt-outs stop messages; support questions stay for review.</p><pre>{text(1000000,true)}</pre></details></div>
+   <details className="ms-sequence-activity"><summary>Recent activity · latest 100 jobs <ChevronDown size={14}/></summary>{!data.jobs.filter(j=>j.channel===channel).length?<p>No {channel==='email'?'emails':'texts'} queued or sent yet.</p>:data.jobs.filter(j=>j.channel===channel).map(j=><details key={j.id}><summary><span>{j.visitor?.name||j.recipient}<small>{j.state} · {date(j.sent_at||j.due_at,j.visitor?.timezone)}</small></span><ChevronDown size={14}/></summary><p>To: {j.recipient}<br/>{j.sent_at?'Sent':'Scheduled'}: {date(j.sent_at||j.due_at,j.visitor?.timezone)} ({j.visitor?.timezone||'your timezone'})<br/>Why: {campaignReason(j.step,!!j.reply_event_id)}<br/>Destination: {j.destination==='webinar'?'Webinar':j.destination==='checkout'?'Checkout':'Based on viewing progress'}</p>{j.last_error&&<p>{j.last_error}</p>}{j.state==='pending'&&!data.readiness[j.channel]&&<p>Waiting for channel setup.</p>}<pre>{j.payload?`${j.payload.subject?`Subject: ${j.payload.subject}\n\n`:''}${j.payload.text||j.payload.message||'Content not available.'}`:'Copy is personalized and saved immediately before sending. Preview the sequence above.'}</pre></details>)}</details>
+   <details className="ms-sequence-activity"><summary>Reply activity · latest 30 <ChevronDown size={14}/></summary>{!data.replies.length?<p>No campaign replies yet.</p>:data.replies.map(r=><article key={r.event_id}><b>{r.recipient} · {r.channel}</b><p>{r.body}</p><small>{r.outcome==='queued'?'Return link queued':r.outcome==='stopped'?'Opted out':r.outcome==='ignored'?'No additional return link queued':'Needs review'} · {date(r.created_at)}</small></article>)}</details>
+  </>}
+ </div></details>;
+}
