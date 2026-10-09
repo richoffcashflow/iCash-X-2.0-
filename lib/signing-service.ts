@@ -1,3 +1,4 @@
+import {originalContractProfile,originalContractFieldsForRole} from './original-contracts.ts';
 import {dispatchAttentionNotification} from './attention-notifications-service';
 import {dispatchCustomerUpdate} from './customer-updates-service';
 import {normalizeDocuseal as normalize,type Submission} from './docuseal-policy.ts';
@@ -6,7 +7,7 @@ import {db} from '@/lib/stripe-test';
 import {dispatchReservedOperation} from '@/lib/operating-costs';
 import {signingReadiness,signingDocumentReadiness,signingTermsHash,signingFields,verifiedSigningStatus,type Signer,type SigningKind,type ProviderDocument} from './signing-policy.ts';
 import {dealTermsSchema} from './deal-documents.ts';
-type Template={max_legal_description_chars:number;customer_consent_field:string|null;provider:string;customer_signature_field:string|null;automated_signing_reviewed:boolean;id:string;provider_template_id:string;placeholder_names:string[];field_map:Record<string,string>;test_mode:boolean;rate_id:string|null;reviewed_until:string};
+type Template={form_profile?:string;max_legal_description_chars:number;customer_consent_field:string|null;provider:string;customer_signature_field:string|null;automated_signing_reviewed:boolean;id:string;provider_template_id:string;placeholder_names:string[];field_map:Record<string,string>;test_mode:boolean;rate_id:string|null;reviewed_until:string};
 type Envelope={id:string;account_id:string;deal_id:string;terms:unknown;kind:SigningKind;terms_hash:string;template_id:string;provider_id:string|null;state:string;test_mode:boolean;recipients:{id:string;email?:string|null;phone?:string|null;name:string;placeholder_name:string}[]};
 async function request(path:string,body?:unknown,testMode=false,method='POST'){
  const key=testMode?process.env.DOCUSEAL_TEST_API_KEY:process.env.DOCUSEAL_API_KEY;if(!key)throw new Error('Signing setup is not finished.');
@@ -19,7 +20,7 @@ export async function sendForSignatures(i:{accountId:string;userId:string;custom
  const [deal]=await db<{terms:unknown;stage:string}[]>(`icash_deal_files?id=eq.${i.dealId}&account_id=eq.${i.accountId}&select=terms,stage`);
  const [identity]=await db<{principal:string}[]>(`icash_customer_identities?account_id=eq.${i.accountId}&select=principal`);
  if(!deal||!identity)throw new Error('Deal or legal name missing.');
- const terms=dealTermsSchema.parse(deal.terms);signingReadiness(i.kind,terms,i.signers,identity.principal,deal.stage);
+ const terms=dealTermsSchema.parse(deal.terms);
  if(i.signers.some(s=>s.email?.toLowerCase()===i.customerEmail.toLowerCase()))throw new Error('Each party must use their own email.');
  for(const signer of i.signers.filter(s=>s.phone)){
   const threads=await db<{id:string}[]>(`icash_text_threads?account_id=eq.${i.accountId}&deal_id=eq.${i.dealId}&recipient=eq.${encodeURIComponent(signer.phone!)}&party=eq.${i.kind==='purchase'?'seller':'buyer'}&select=id&limit=2`);
@@ -48,9 +49,10 @@ export async function sendForSignatures(i:{accountId:string;userId:string;custom
  };
  const template=await usable(exact)??await usable(await db<Template[]>(`icash_signing_templates?template_scope=eq.standard&${templateQuery}`));
  if(!template||!(Date.parse(template.reviewed_until)>Date.now()))throw new Error('An active contract template supporting every required signer is needed.');
- if(terms.legalDescription.length>template.max_legal_description_chars)throw new Error('Legal description needs an attached exhibit before signing.');
+ signingReadiness(i.kind,terms,i.signers,identity.principal,deal.stage,Date.now(),template.form_profile);
+ if(terms.legalDescription.length>template.max_legal_description_chars)throw new Error(template.form_profile===originalContractProfile?'The legal description does not fit the original form. Review it before sending.':'Legal description needs an attached exhibit before signing.');
  if(i.autoSignature&&(!template.automated_signing_reviewed||!template.customer_signature_field||!template.customer_consent_field))throw new Error('Auto-signing authorization is not enabled for this template.');
- const values=signingFields(terms,i.kind);
+ const values=signingFields(terms,i.kind,false,template.form_profile);
  // Every term must be deliberately mapped; silently dropping a term is not acceptable.
  if(Object.keys(values).some(k=>!template.field_map[k])||new Set(Object.values(template.field_map)).size!==Object.keys(values).length)throw new Error('Contract field mapping needs review.');
  const recipients=[...i.signers,{name:identity.principal,email:i.customerEmail}].map((s,n)=>({...s,id:String(n+1),placeholder_name:template.placeholder_names[n],delivery_method:'phone' in s&&s.phone?'sms':'email'}));
@@ -59,9 +61,9 @@ export async function sendForSignatures(i:{accountId:string;userId:string;custom
  try{
   if(signingTermsHash(envelope.terms)!==envelope.terms_hash)throw new Error('Contract changed. Review required before sending.');
   const send=async()=>{
-   signingReadiness(i.kind,dealTermsSchema.parse(envelope.terms),i.signers,identity.principal,deal.stage);
+   signingReadiness(i.kind,dealTermsSchema.parse(envelope.terms),i.signers,identity.principal,deal.stage,Date.now(),template.form_profile);
    if(i.autoSignature)await db('icash_signature_authorizations','POST',{envelope_id:envelope.id,account_id:i.accountId,actor_user_id:i.userId,terms_hash:envelope.terms_hash,signature_text:i.autoSignature,expires_at:new Date(Math.min(Date.now()+30*86400000,Date.parse(template.reviewed_until))).toISOString()});
-   const raw=await (await request('submissions',{template_id:Number(numericId(template.provider_template_id)),order:'preserved',send_email:true,send_sms:false,submitters:recipients.map((r,n)=>({name:r.name,...(r.email?{email:r.email}:{}),...('phone' in r&&r.phone?{phone:r.phone,send_email:false,send_sms:i.phoneLinkOnly!==true,require_phone_2fa:true}:{}),role:r.placeholder_name,order:n,external_id:`${envelope.id}:${r.id}`,metadata:{terms_hash:envelope.terms_hash},require_email_2fa:!('phone' in r&&r.phone),fields:n===0?Object.entries(values).map(([k,v])=>({name:template.field_map[k],default_value:v,readonly:true})):[]}))},testMode)).json();
+   const raw=await (await request('submissions',{template_id:Number(numericId(template.provider_template_id)),order:'preserved',send_email:true,send_sms:false,submitters:recipients.map((r,n)=>({name:r.name,...(r.email?{email:r.email}:{}),...('phone' in r&&r.phone?{phone:r.phone,send_email:false,send_sms:i.phoneLinkOnly!==true,require_phone_2fa:true}:{}),role:r.placeholder_name,order:n,external_id:`${envelope.id}:${r.id}`,metadata:{terms_hash:envelope.terms_hash},require_email_2fa:!('phone' in r&&r.phone),fields:template.form_profile===originalContractProfile?originalContractFieldsForRole(i.kind,r.placeholder_name,values):n===0?Object.entries(values).map(([k,v])=>({name:template.field_map[k],default_value:v,readonly:true})):[]}))},testMode)).json();
    if(!Array.isArray(raw)||raw.length!==recipients.length||raw.some(r=>r.submission_id!==raw[0].submission_id))throw new Error('Signature response needs review.');
    const providerId=numericId(raw[0].submission_id);
    await db(`icash_signing_envelopes?id=eq.${envelope.id}&state=eq.creating`,'PATCH',{provider_id:providerId,state:'awaiting_counterparty',provider_status:'Created'});
@@ -80,12 +82,16 @@ export async function refreshSigning(accountId:string,id:string){
  let state=verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients});
  if(state==='customer_signature_needed'){
   const [reviewedTemplate]=await db<Template[]>(`icash_signing_templates?id=eq.${e.template_id}&select=*`);
-  const expectedFields=signingFields(dealTermsSchema.parse(e.terms),e.kind,Object.hasOwn(reviewedTemplate.field_map,'earnestCents'));
+  const expectedFields=signingFields(dealTermsSchema.parse(e.terms),e.kind,Object.hasOwn(reviewedTemplate.field_map,'earnestCents'),reviewedTemplate.form_profile);
   const actualFields=raw.submitters.flatMap(s=>s.values??[]);
-  if(Object.entries(expectedFields).some(([key,value])=>!actualFields.some(f=>f.field===reviewedTemplate.field_map[key]&&String(f.value??'')===value)))throw new Error('Agreement field values need review before signing.');
+  if(Object.entries(expectedFields).some(([key,value])=>{
+   const found=actualFields.filter(f=>f.field===reviewedTemplate.field_map[key]);
+   // DocuSeal can omit unfilled optional blanks. Never treat a nonempty expected value as optional.
+   return found.length?found.some(f=>String(f.value??'')!==value):!(reviewedTemplate.form_profile===originalContractProfile&&value==='');
+  }))throw new Error('Agreement field values need review before signing.');
   await db('rpc/icash_save_signing_status','POST',{p_id:e.id,p_state:state,p_evidence:d});
   // A send-time pass does not authorize an expired or incomplete agreement to be signed days later.
-  signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms));
+  signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms),Date.now(),reviewedTemplate.form_profile);
   // Poll/save existing evidence while new live signatures remain blocked.
   if(!e.test_mode&&process.env.ICASH_LIVE_WORK_READY!=='true')return {status:state};
   const signature=await db<string|null>('rpc/icash_claim_auto_signature','POST',{p_account:accountId,p_envelope:e.id,p_hash:e.terms_hash});
@@ -93,7 +99,7 @@ export async function refreshSigning(accountId:string,id:string){
    const [template]=await db<Template[]>(`icash_signing_templates?id=eq.${e.template_id}&select=*`);
    const customer=raw.submitters.find(s=>s.external_id===`${e.id}:${e.recipients.at(-1)!.id}`)!;
    // One claim, one write. Unknown completion is resolved with GET on later polls, never re-signed blindly.
-   signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms));
+   signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms),Date.now(),template.form_profile);
    await request(`submitters/${numericId(customer.id)}`,{completed:true,fields:[{name:template.customer_signature_field,default_value:signature,readonly:true},{name:template.customer_consent_field,default_value:true,readonly:true}]},e.test_mode,'PUT');
    raw=await (await request(`submissions/${numericId(e.provider_id)}`,undefined,e.test_mode)).json();d=normalize(raw,e);
    state=verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients});
@@ -124,7 +130,8 @@ export async function customerSigningLink(accountId:string,id:string,email:strin
  const raw=await (await request(`submissions/${numericId(e.provider_id)}`,undefined,e.test_mode)).json() as Submission;const d=normalize(raw,e);
  const status=verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients});
  if(status!=='customer_signature_needed')throw new Error('Waiting for the other party to sign.');
- signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms));
+ const [reviewedTemplate]=await db<Template[]>(`icash_signing_templates?id=eq.${e.template_id}&select=*`);
+ signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms),Date.now(),reviewedTemplate.form_profile);
  const last=e.recipients.at(-1)!;const r=raw.submitters.find(x=>x.external_id===`${e.id}:${last.id}`);
  if(!r||r.email?.toLowerCase()!==email.toLowerCase()||!/^[a-zA-Z0-9_-]+$/.test(r.slug))throw new Error('Use the signing email sent to your verified address.');
  return {url:`https://docuseal.com/s/${r.slug}`};
@@ -136,7 +143,8 @@ export async function pendingCounterpartySigningLink(accountId:string,id:string,
  if(!e?.provider_id||e.test_mode||e.state!=='awaiting_counterparty')throw Error('An approved live contract is required.');
  const raw=await (await request(`submissions/${numericId(e.provider_id)}`,undefined,false)).json() as Submission;
  const d=normalize(raw,e);if(verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients})!=='awaiting_counterparty')throw Error('Waiting for another signing step.');
- signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms));
+ const [reviewedTemplate]=await db<Template[]>(`icash_signing_templates?id=eq.${e.template_id}&select=*`);
+ signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms),Date.now(),reviewedTemplate.form_profile);
  const next=d.recipients.find(r=>r.status!=='signed');
  const expected=e.recipients.find(r=>r.id===next?.id);
  const recipient=raw.submitters.find(s=>s.external_id===`${e.id}:${next?.id}`);

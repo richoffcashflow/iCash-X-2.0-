@@ -9,7 +9,7 @@ const job={id:'retry',accountId:'account',envelopeId:'envelope',signerId:'1',pho
 function fixture(patch={}){
  let state='ready',writes=[],audit=[];
  const recipients=[{id:'1',phone},{id:'2',email:'owner@example.invalid'}];
- const envelope={id:'envelope',account_id:'account',provider_id:'123',terms_hash:hash,test_mode:false,state:'awaiting_counterparty',kind:'purchase',terms,recipients,...patch.envelope};
+ const envelope={id:'envelope',template_id:'template',account_id:'account',provider_id:'123',terms_hash:hash,test_mode:false,state:'awaiting_counterparty',kind:'purchase',terms,recipients,...patch.envelope};
  const submission={id:123,submitters_order:'preserved',completed_at:null,status:'pending',submitters:recipients.map((r,i)=>({...r,id:i===0?321:322,submission_id:123,external_id:`envelope:${r.id}`,status:'awaiting',completed_at:null,slug:'private-fixture',metadata:{terms_hash:hash}})),...patch.submission};
  if(patch.signer)Object.assign(submission.submitters[0],patch.signer);
  const db=async(path,method,body)=>{
@@ -17,6 +17,7 @@ function fixture(patch={}){
    if(state!=='ready')return null;state='dispatching';return {...job};
   }
   if(path.startsWith('icash_signing_envelopes?'))return [envelope];
+  if(path.startsWith('icash_signing_templates?'))return [{form_profile:'legacy'}];
   if(path.startsWith('icash_contract_text_resends?')){
    audit.push(body);
    if(patch.storageFailure&&body.state==='accepted')throw Error('fixture storage failure');
