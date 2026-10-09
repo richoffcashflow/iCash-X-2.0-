@@ -1,3 +1,4 @@
+import {buyerConversationPolicy,buyerConversationResult,buyerConversationToolInstruction} from '../lib/buyer-conversation-policy.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {automaticCallOffer,calculateAutomaticCallOffer,currentCallUnavailableOffer} from '../lib/automatic-call-offer.ts';
@@ -63,5 +64,22 @@ test('buyer package, call tool and model context omit acquisition cost and sprea
   const html=renderBuyerPackage({...details,principal:'Fixture',repairsCents:null,arvCents:null,businessPhone:null,fetchedAt:null});
   assert.match(html,/\$162,270\.50/);assert.match(html,/\$2,000\.00/);
   assert(!/\$152,270\.50|\$10,000|Purchase contract<\/dt>|Assignment fee<\/dt>|fee shown above/.test(html));
+ }
+});
+
+test('compact presentation is selected only by the trusted bound call policy',async()=>{
+ const base=calculateAutomaticCallOffer({party:'buyer',buyer},{},now);
+ for(const contextPolicy of [undefined,'automatic_offer_v14',buyerConversationPolicy]){
+  const result=await automaticCallOffer('a'.repeat(64),{action:'get_offer',conversationId:'conv_fixture'},{db:async()=>({party:'buyer',buyer,contextPolicy}),bind:async()=>assert.fail(),verifyInput:async()=>false,now:()=>now});
+  const {instruction,...facts}=result,{instruction:oldInstruction,...oldFacts}=base;
+  assert.deepEqual(facts,oldFacts,'All authoritative facts remain unchanged');
+  assert.equal(instruction,contextPolicy===buyerConversationPolicy?' '+buyerConversationToolInstruction:oldInstruction);
+ }
+ const seller={party:'seller',quoteAllowed:true,priceCents:100,instruction:'Seller instructions'};assert.equal(buyerConversationResult(seller),seller);
+ for(const patch of [{reserved:true},{closingDate:'2026-10-01'},{askingPriceCents:0}]){
+  const original=calculateAutomaticCallOffer({party:'buyer',buyer:{...buyer,...patch}},{},now),projected=buyerConversationResult(original);
+  const {instruction,...facts}=projected,{instruction:oldInstruction,...oldFacts}=original;
+  assert.deepEqual(facts,oldFacts);assert.equal(projected.quoteAllowed,false);assert.equal(projected.viewingAllowed,false);
+  assert(!/Read spokenOffer exactly and completely/.test(instruction));
  }
 });
