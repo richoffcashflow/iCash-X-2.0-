@@ -1,3 +1,4 @@
+import {buyerResponsePolicy,selectedResponseRoleInstructions} from './buyer-response-policy.ts';
 import {buyerScenarioPolicy,selectedScenarioRoleInstructions} from './buyer-scenario-policy.ts';
 import {conversationStreet,conversationAddressFields} from './conversation-address.ts';
 import {buyerReceptionEnabled,buyerReceptionVariables,buyerReceptionPrompt} from './buyer-reception-context.ts';
@@ -24,5 +25,5 @@ export function receptionContextVariables(config:Record<string,unknown>,value:un
  const result=sellerAgreementReceptionEnabled(config)?sellerAgreementReceptionVariables(value):sellerOfferReceptionEnabled(config)?sellerOfferReceptionVariables(value):buyerReceptionEnabled(config)?buyerReceptionVariables(value):propertyReceptionVariables(value);
  const context=JSON.parse(result.icash_property_context);
  if(context&&typeof context.address==='string')Object.assign(context,conversationAddressFields(context.address));
- return {...result,icash_property_context:JSON.stringify(context),...(config.context_policy===buyerScenarioPolicy?{icash_role_instructions:selectedScenarioRoleInstructions(context?.status,automaticOfferReceptionPrompt)}:config.context_policy===buyerRolePolicy?{icash_role_instructions:selectedRoleInstructions(context?.status,automaticOfferReceptionPrompt)}:{})};
+ return {...result,icash_property_context:JSON.stringify(context),...(config.context_policy===buyerResponsePolicy?{icash_role_instructions:selectedResponseRoleInstructions(context?.status,automaticOfferReceptionPrompt)}:config.context_policy===buyerScenarioPolicy?{icash_role_instructions:selectedScenarioRoleInstructions(context?.status,automaticOfferReceptionPrompt)}:config.context_policy===buyerRolePolicy?{icash_role_instructions:selectedRoleInstructions(context?.status,automaticOfferReceptionPrompt)}:{})};
 }
