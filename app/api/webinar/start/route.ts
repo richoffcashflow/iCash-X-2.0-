@@ -18,7 +18,7 @@ import {webinarVipAccess} from '@/lib/webinar-vip';
 import {webinarBody,webinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarOwner,webinarVisitor,webinarPaid,type WebinarSession} from '@/lib/webinar-server';
 export const dynamic='force-dynamic';
 export async function POST(req:Request){try{
- webinarOrigin(req);const i=z.object({timezone:z.string().max(80),code:z.string().regex(/^\d{6,12}$/).optional(),variant:z.enum(['day','night']).optional(),resume:z.string().max(600).optional(),preview:z.string().uuid().optional(),attribution:z.record(z.string().max(250)).optional()}).strict().parse(await webinarBody(req,3000));
+ webinarOrigin(req);const i=z.object({timezone:z.string().max(80),code:z.string().regex(/^\d{6,12}$/).optional(),variant:z.enum(['day','night']).optional(),resume:z.string().max(600).optional(),returnToWebinar:z.boolean().optional(),preview:z.string().uuid().optional(),attribution:z.record(z.string().max(250)).optional()}).strict().parse(await webinarBody(req,3000));
  await webinarLimit(req,'entry','entry',120,60);
  if(i.preview)await webinarOwner();
  const rows=await db<WebinarRow[]>(`icash_webinars?${i.preview?'id=eq.'+i.preview+'&':i.code?'public_code=eq.'+i.code+'&':'parent_webinar_id=is.null&config->>status=eq.published&'}select=config,public_code,parent_webinar_id&order=public_code.asc&limit=1`);
@@ -42,6 +42,8 @@ export async function POST(req:Request){try{
  const settings=settingsSchema.parse(settingsRows[0].config);
  let target=current,history=initialHistory.filter(h=>h.webinar_id===current.id);
  let journey=webinarReturnJourney(history,offers,timezone,settings.routing.checkoutWindowHours);
+ // A reminder explicitly inviting a webinar honors that choice; ad entry stays unchanged.
+ if(i.returnToWebinar&&journey.kind==='checkout')journey={kind:'advance',sessionId:journey.sessionId};
  // Honor the original checkout first, then a saved alternative; switch at most once.
  for(let attempt=0;attempt<2;attempt++){
  if(!i.preview&&!target.parentWebinarId&&journey.kind==='checkout'){
@@ -52,7 +54,7 @@ export async function POST(req:Request){try{
   if(offer)return Response.json({redirect:offer.action==='checkout'?`${offerDestination(offer)}?webinar_session=${previous.id}`:offerDestination(offer)},{headers:webinarHeaders});
   journey={kind:'advance',sessionId:previous.id};
  }
- if(attempt===0&&i.code&&!i.preview&&!current.parentWebinarId&&journey.kind==='advance'){
+ if(!i.returnToWebinar&&attempt===0&&i.code&&!i.preview&&!current.parentWebinarId&&journey.kind==='advance'){
   const next=await adReturnWebinar(current,history,visitor.id,i.attribution,timezone,settings,offers,new Date(),location);
   if(next){target=next.webinar;history=next.history;journey=webinarReturnJourney(history,offers,timezone,settings.routing.checkoutWindowHours);continue;}
  }

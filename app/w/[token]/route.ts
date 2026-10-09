@@ -31,7 +31,7 @@ export async function GET(req:Request,{params}:{params:Promise<{token:string}>})
       if(!validGuest(guest)){guest=randomBytes(32).toString('hex');jar.set('icash_funding_guest',guest,{httpOnly:true,secure:process.env.NODE_ENV!=='development',sameSite:'lax',path:'/',maxAge:86400*30});}
       await db(`icash_webinar_visitors?id=eq.${v.id}`,'PATCH',{funding_guest_hash:guestHash(guest)});
       if(target.sessionId)destination.searchParams.set('webinar_session',target.sessionId);
-     }else destination.searchParams.set('r',webinarToken(v.id,'resume',3600));
+     }else {destination.searchParams.set('r',webinarToken(v.id,'resume',3600));if(job.destination==='webinar')destination.searchParams.set('watch','1');}
     }
    }else{
     if(session){const [webinar]=await db<{public_code:number}[]>(`icash_webinars?id=eq.${session.webinar_id}&select=public_code&limit=1`);if(webinar)destination.pathname=webinarLink({publicCode:String(webinar.public_code)});}

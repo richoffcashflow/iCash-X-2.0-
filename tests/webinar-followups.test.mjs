@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
+import {webinarReplyAddress} from '../lib/webinar-email-replies.ts';
 import {readCampaignSettings,campaignSettingsSchema} from '../lib/messaging-settings.ts';
 import * as policy from '../lib/webinar-policy.ts';
 import {returnVisit} from '../packages/webinar-engine/src/index.ts';
@@ -37,7 +38,7 @@ const database=async(path,method,body)=>{
  return null;
 };
 const transport=async(url,init)=>{sends.push({url,init});if(transportError)throw Error('Unconfirmed provider timeout');return Response.json(job.channel==='email'?{id:'provider-id'}:{data:{message_id:'provider-id'}},{status:responseStatus});};
-const deps={readCampaignSettings,db:database,...policy,webinarPaid:async()=>paid,webinarToken:()=> 'signed-unsubscribe',followupCopy,followupPhase,webinarSite:{brandName:'Brand',hostName:'Host'}};
+const deps={webinarReplyAddress,readCampaignSettings,db:database,...policy,webinarPaid:async()=>paid,webinarToken:()=> 'signed-unsubscribe',followupCopy,followupPhase,webinarSite:{brandName:'Brand',hostName:'Host'}};
 globalThis.__followupTest=deps;
 const code=ts.transpileModule(readFileSync(new URL('../lib/webinar-email.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
 const {processWebinarFollowups,webinarMailTime,webinarFollowupReadiness}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__followupTest;\n'+code).toString('base64'));

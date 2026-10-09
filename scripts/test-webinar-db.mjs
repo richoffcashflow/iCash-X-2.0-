@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {verifyWebinarReturnMessaging} from './test-webinar-return-messaging-db.mjs';
 import {verifyIndependentMessaging} from './test-independent-messaging-db.mjs';
 import {verifyOngoingSalesFollowups} from './test-ongoing-sales-followups-db.mjs';
 import {verifyWebinarLifecycle} from './test-webinar-lifecycle-db.mjs';
@@ -224,6 +225,7 @@ try{
  await verifyWebinarLifecycle(pg,q);
  await verifyIndependentMessaging(pg,q);
  await verifyOngoingSalesFollowups(pg,q,config);
+ await verifyWebinarReturnMessaging(pg,q,config);
  const grants=(await q("select has_table_privilege('anon','icash_webinar_visitors','select') as read,has_function_privilege('authenticated','icash_webinar_contact(uuid,text,text,text,boolean)','execute') as write")).rows[0];assert.equal(grants.read,false);assert.equal(grants.write,false);
  const rls=await q("select relname,relrowsecurity from pg_class where relname like 'icash_webinar%' and relkind='r'");assert.ok(rls.rows.every(r=>r.relrowsecurity));
  console.log('Webinar database checks passed: sessions, attribution, audience, activity, verified checkout triggers, daily funnel, local midnight, DST, earlier-day buyers, preserved revisions, renewals, test/refund exclusion and RLS.');

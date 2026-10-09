@@ -2,6 +2,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {ArrowUpRight,Bell,ChevronDown,Mail,MessageSquare,RefreshCw,X} from 'lucide-react';
 import type {CampaignSettings} from '@/lib/messaging-settings';
+import {CampaignSequence} from '@/components/campaign-sequence';
 import {CampaignReplies} from '@/components/campaign-replies';
 import {webinarRequest} from '@/lib/webinar-client';
 export type FollowupReadiness={emailConnection:boolean;smsConnection:boolean;email:boolean;sms:boolean;senderCount?:number};
@@ -38,8 +39,8 @@ export function MessagingSettings({settings,readiness,stats,customerEnabled,cust
    <div><strong>{customerStats?(customerStats.emails+customerStats.texts).toLocaleString():'—'}</strong><span>Customer updates <small>Last 24 hr</small></span></div>
    <div><strong>{reviewCount?.toLocaleString()??'—'}</strong><span>Deliveries to review</span></div>
   </div>
-  <div className="ms-details-list"><CampaignReplies/>
-   <details className="ms-how"><summary>How it works <ChevronDown size={16}/></summary><div className="ms-details-content"><p>Follow-ups bring people back to a saved or unwatched webinar, or straight to checkout. After purchase, their selected channels switch to customer updates.</p><p>Messages run between 9 AM and 8 PM in their timezone, at least 3 hours apart. They stop on purchase or opt-out, pause while a person watches, and hold automated texts when someone replies.</p><p>Starts with up to 2 emails and 1 text per day, then tapers over 60 days. After that, an email and a text continue each week until purchase or opt-out. Each channel needs its own opt-in; older signups keep their original limits.</p><p>Customer reminders use the channels each customer chooses. Seller and buyer conversations stay with their property.</p>
+  <div className="ms-details-list"><CampaignSequence/><CampaignReplies/>
+   <details className="ms-how"><summary>How it works <ChevronDown size={16}/></summary><div className="ms-details-content"><p>Follow-ups bring people back to a saved or unwatched webinar, with a personal return link. After purchase, their selected channels switch to customer updates.</p><p>Messages run between 9 AM and 8 PM in their timezone, at least 3 hours apart. They stop on purchase or opt-out, pause while a person watches, and queue a return link when someone asks to join. Other text replies pause for review.</p><p>Starts with up to 2 emails and 1 text per day, then tapers over 60 days. After that, an email and a text continue each week until purchase or opt-out. Each channel needs its own opt-in; older signups keep their original limits.</p><p>Customer reminders use the channels each customer chooses. Seller and buyer conversations stay with their property.</p>
     <div className="ms-detail-totals"><span>Campaign emails sent <b>{stats?.emailSent.toLocaleString()??'—'}</b></span><span>Campaign texts sent <b>{stats?.textsSent.toLocaleString()??'—'}</b></span><span>Opted-in customers <b>{customerStats?.subscribers.toLocaleString()??'—'}</b></span></div>
    </div></details>
   </div>
