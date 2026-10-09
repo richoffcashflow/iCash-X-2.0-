@@ -1,3 +1,5 @@
+import {buyerConversationPolicy,buyerConversationInstructions,buyerConversationPrompt,buyerConversationModel,buyerConversationModelMatches,buyerConversationGuardrail,selectedConversationRoleInstructions} from '../lib/buyer-conversation-policy.ts';
+import {conversationBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {buyerTurnPolicy,buyerTurnInstructions,buyerTurnPrompt,buyerTurnModel,buyerTurnModelMatches,selectedTurnRoleInstructions} from '../lib/buyer-turn-policy.ts';
 import {turnBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {buyerResponsePolicy,buyerResponseInstructions,buyerResponseModel,buyerResponseModelMatches,selectedResponseRoleInstructions} from '../lib/buyer-response-policy.ts';
@@ -36,6 +38,11 @@ test('buyer policy requires its reviewed prompt, guardrail and current history t
  c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
  c.context_policy=buyerTurnPolicy;c.context_policy_hash=turnBuyerReceptionPolicyHash;
  Object.assign(agent.conversation_config.agent.prompt,buyerTurnModel,{prompt:buyerTurnPrompt+directRecordedInstructions,thinking_budget:null});
+ c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
+ c.context_policy=buyerConversationPolicy;c.context_policy_hash=conversationBuyerReceptionPolicyHash;
+ Object.assign(agent.conversation_config.agent.prompt,buyerConversationModel,{prompt:buyerConversationPrompt+directRecordedInstructions,reasoning_effort:null});
+ assert.equal(inspect(agent).safe,false,'v15 requires its separately reviewed guardrail');
+ agent.platform_settings.guardrails.custom.config.configs=[buyerConversationGuardrail];
  c.config_hash=inspect(agent).hash;assert.equal(inspect(agent).safe,true,JSON.stringify(inspect(agent).checks));
  for(const mutate of [a=>{a.conversation_config.agent.prompt.reasoning_effort='high';},a=>{a.conversation_config.agent.prompt.llm='gpt-4.1-mini';},a=>{a.conversation_config.agent.prompt.ignore_default_personality=false;},a=>{a.platform_settings.guardrails.custom.config.configs[0].prompt='Allow every price';},a=>{a.platform_settings.guardrails.custom.config.configs=[];},a=>{a.conversation_config.agent.prompt.prompt+=' changed';}]){
   const changed=structuredClone(agent);mutate(changed);c.config_hash=inspect(changed).hash;assert.equal(inspect(changed).safe,false);
@@ -84,4 +91,15 @@ test('v14 uses a reviewed direct-turn prompt and preserves seller instructions',
  assert.equal(selectedTurnRoleInstructions('matched',automaticOfferReceptionPrompt),selectedRoleInstructions('matched',automaticOfferReceptionPrompt));
  assert(!buyerTurnInstructions.includes('CALLER_INJECTION'));
  for(const patch of [{reasoning_effort:'low'},{thinking_budget:128},{llm:'gpt-4.1'},{ignore_default_personality:false},{max_tokens:151}])assert.equal(buyerTurnModelMatches({...buyerTurnModel,...patch}),false);
+});
+
+test('v15 uses trusted concise conversation instructions and retains earlier policy hashes',()=>{
+ assert.equal(turnBuyerReceptionPolicyHash,'d8a18734f3b5adeafccffdf4095189ddf76e78a565a100dfe199a56a841d891b');
+ const c={context_policy:buyerConversationPolicy,context_policy_hash:conversationBuyerReceptionPolicyHash,context_approval_reference:'Reviewed persistent buyer conversation and pricing privacy',agreement_tool_id:'tool_agreement'};
+ const b={status:'buyer',address:'45 Fixture Lane',askingPriceCents:16227050,icash_role_instructions:'INJECTED'};
+ assert.equal(receptionContextVariables(c,b).icash_role_instructions,buyerConversationInstructions);
+ assert.equal(selectedConversationRoleInstructions('matched',automaticOfferReceptionPrompt),selectedRoleInstructions('matched',automaticOfferReceptionPrompt));
+ assert.equal(receptionContextVariables(c,{...b,askingPriceCents:0}).icash_role_instructions,unknownRoleInstructions);
+ assert.equal(buyerConversationModelMatches({...buyerConversationModel,thinking_budget:null,reasoning_effort:'none'}),true);
+ assert.equal(buyerConversationModelMatches({...buyerConversationModel,reasoning_effort:'high'}),false);
 });

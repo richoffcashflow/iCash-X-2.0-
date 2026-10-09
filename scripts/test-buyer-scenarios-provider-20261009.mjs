@@ -1,25 +1,25 @@
 // Bounded synthetic conversations. Every tool is mocked; nobody is contacted.
 import {createHash} from 'node:crypto';
 import {db} from '../lib/stripe-test.ts';
-import {selectedTurnRoleInstructions as selectedScenarioRoleInstructions,buyerTurnPolicy as buyerScenarioPolicy} from '../lib/buyer-turn-policy.ts';
-import {stageBuyerTurnPolicy} from './stage-buyer-turn-policy.mjs';
+import {selectedConversationRoleInstructions as selectedScenarioRoleInstructions,buyerConversationPolicy as buyerScenarioPolicy} from '../lib/buyer-conversation-policy.ts';
+import {stageBuyerConversationPolicy} from './stage-buyer-conversation-policy.mjs';
 import {inspectRecordedReceptionAgent} from '../lib/recorded-reception.ts';
 import {receptionWorkspacePostcallAbsent} from '../lib/general-reception.ts';
-import {automaticOfferReceptionPrompt,isolatedBuyerReceptionPolicyHash,turnBuyerReceptionPolicyHash as scenarioBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
+import {automaticOfferReceptionPrompt,isolatedBuyerReceptionPolicyHash,conversationBuyerReceptionPolicyHash as scenarioBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {testAutomaticOfferProvider} from './test-automatic-offer-provider.mjs';
 import {buyerScenarioCases} from './buyer-scenario-cases-20261009.mjs';
 if(process.env.VERCEL_ENV!=='production'||process.env.VERCEL_GIT_COMMIT_REF!=='main')process.exit(0);
-const provider='buyer_scenario_audit_20261009_v5',sourceBranch='agtbrch_8101m4h801smere91ege6f978hc7',sourceVersion='agtvrsn_7001m4h801skee292g590meg3yg0';
+const provider='buyer_scenario_audit_20261009_v6',sourceBranch='agtbrch_8101m4h801smere91ege6f978hc7',sourceVersion='agtvrsn_7001m4h801skee292g590meg3yg0';
 const fixtureHash=createHash('sha256').update(JSON.stringify({cases:buyerScenarioCases,role:selectedScenarioRoleInstructions('buyer',automaticOfferReceptionPrompt),sellerRole:selectedScenarioRoleInstructions('matched',automaticOfferReceptionPrompt),sellerRegression:'closingCases-v2-review-needed',policyHash:scenarioBuyerReceptionPolicyHash})).digest('hex');
 const [prior]=await db('icash_integration_checks?provider=eq.'+provider+'&select=result');
-const [stageEvidence]=await db('icash_integration_checks?provider=eq.buyer_turn_stage_20261009_v1&select=result');
+const [stageEvidence]=await db('icash_integration_checks?provider=eq.buyer_conversation_stage_20261009_v1&select=result');
 if(prior){if(stageEvidence?.result?.status==='staged'&&stageEvidence.result.policyHash===scenarioBuyerReceptionPolicyHash&&prior.result?.status==='passed'&&prior.result.fixtureHash===fixtureHash&&prior.result.branchId===stageEvidence.result.branchId&&prior.result.version===stageEvidence.result.versionId&&prior.result.configHash===stageEvidence.result.configHash&&prior.result.stagedConfigId===stageEvidence.result.configId&&prior.result.count===buyerScenarioCases.length+2&&prior.result.policyHash===scenarioBuyerReceptionPolicyHash)process.exit(0);throw Error('BUYER_SCENARIO_AUDIT_REVIEW_REQUIRED');}
 if(Date.now()>Date.parse('2026-10-10T00:00:00Z'))throw Error('BUYER_SCENARIO_AUDIT_WINDOW_REQUIRED');
-// Earlier failures stay immutable. v5 changes the provider prompt and model to
-// enforce direct turns and reject implied future delivery. Privacy-only refusals
-// do not need a deal lookup; public terms still require the current tool result.
-const [failedAudit]=await db('icash_integration_checks?provider=eq.buyer_scenario_audit_20261009_v4&select=result');
-if(failedAudit?.result?.status!=='failed'||failedAudit.result.fixtureHash!=='34dfeb72b8671468924faf1612acaac07d9dce2b773c25552c4444216ed44254'||failedAudit.result.code!=='BUYER_SCENARIO_FAILURES_REQUIRE_FIX'||failedAudit.result.count!==30||failedAudit.result.tests?.length!==30||failedAudit.result.branchId!=='agtbrch_5701m4hdfzwhf5abr1d5pd8fdj77'||failedAudit.result.version!=='agtvrsn_1101m4hdfzwgep6sf9d60ngtqm9h'||failedAudit.result.sourceBranchId!==sourceBranch||failedAudit.result.sourceVersion!==sourceVersion)throw Error('BUYER_FAILED_AUDIT_REVIEW_REQUIRED');
+// Earlier failures stay immutable. v6 separates factual tool data from speaking
+// instructions, preserves the once-per-call opening, and makes nonnumeric privacy
+// refusals explicitly valid without relaxing authorized-price validation.
+const [failedAudit]=await db('icash_integration_checks?provider=eq.buyer_scenario_audit_20261009_v5&select=result');
+if(failedAudit?.result?.status!=='failed'||failedAudit.result.fixtureHash!=='d1012080ea3ac92001d5467ed78c4c5e81f929131f2671b3e41ba30658a1b1ea'||failedAudit.result.code!=='BUYER_SCENARIO_FAILURES_REQUIRE_FIX'||failedAudit.result.count!==30||failedAudit.result.tests?.length!==30||failedAudit.result.branchId!=='agtbrch_9501m4heehy0eftbhsq5za6ghzkx'||failedAudit.result.version!=='agtvrsn_0801m4heehxzedxsa4p74a39ev59'||failedAudit.result.sourceBranchId!==sourceBranch||failedAudit.result.sourceVersion!==sourceVersion)throw Error('BUYER_FAILED_AUDIT_REVIEW_REQUIRED');
 const [previous]=await db('icash_integration_checks?provider=eq.buyer_confidence_title_provider_test_20261009_v4&select=result');
 if(previous?.result?.status!=='passed'||previous.result.count!==9||previous.result.version!==sourceVersion||previous.result.branchId!==sourceBranch)throw Error('BUYER_PRIOR_ACCEPTANCE_REQUIRED');
 const config=await db('rpc/icash_get_recorded_reception_config','POST',{p_called_number:'+17816093521'});
@@ -33,11 +33,11 @@ const api=async(path,method='GET',body)=>{
  const data=await r.json();
  if(path.startsWith('/v1/convai/test-invocations/')&&Array.isArray(data.test_runs)){
   invocations.add(path.split('/').at(-1));
-  for(const t of data.test_runs)observations.set(t.test_name,{name:t.test_name,status:t.status,branch:t.branch_id,version:t.version_id,condition:t.condition_result,turns:(t.agent_responses??[]).filter(m=>typeof m.message==='string').map(m=>({role:m.role,message:m.message.slice(0,4000)}))});
+  for(const t of data.test_runs)observations.set(t.test_name,{name:t.test_name,status:t.status,branch:t.branch_id,version:t.version_id,condition:t.condition_result,guardrailEvents:(t.agent_responses??[]).flatMap(m=>(m.tool_calls??[]).filter(c=>c.tool_name==='guardrail_triggered').map(c=>{try{const p=JSON.parse(c.params_as_json);return {message:typeof p.agent_message==='string'?p.agent_message.slice(0,4000):null};}catch{return {message:null};}})),turns:(t.agent_responses??[]).filter(m=>typeof m.message==='string').map(m=>({role:m.role,message:m.message.slice(0,4000)}))});
  }
  return data;
 };
-const staged=await stageBuyerTurnPolicy(api,config);
+const staged=await stageBuyerConversationPolicy(api,config);
 const branch=staged.branchId,version=staged.versionId;
 const agent=await api('/v1/convai/agents/'+config.agent_id+'?branch_id='+branch);
 if(agent.version_id!==version||!agent.conversation_config?.agent?.prompt?.tool_ids?.includes(config.agreement_tool_id))throw Error('BUYER_PROVIDER_VERSION_CHANGED');
@@ -50,11 +50,11 @@ const result=status=>({status,fixtureHash,branchId:branch,version,policyHash:sce
 await db('icash_integration_checks','POST',{provider,checked_at:new Date().toISOString(),result:result('started')});
 try{
  for(let i=0;i<buyerScenarioCases.length;i+=6){
-  try{await testAutomaticOfferProvider(api,[{...agent,agent_id:config.agent_id,branch_id:branch,version_id:version}],config.agreement_tool_id,{prefix:'buyer-scenarios-20261009-v5-',roleInstructions:status=>selectedScenarioRoleInstructions(status,automaticOfferReceptionPrompt),cases:buyerScenarioCases.slice(i,i+6)});}
+  try{await testAutomaticOfferProvider(api,[{...agent,agent_id:config.agent_id,branch_id:branch,version_id:version}],config.agreement_tool_id,{prefix:'buyer-scenarios-20261009-v6-',roleInstructions:status=>selectedScenarioRoleInstructions(status,automaticOfferReceptionPrompt),cases:buyerScenarioCases.slice(i,i+6)});}
   catch(e){if(e.message!=='AUTOMATIC_OFFER_PROVIDER_TESTS_REQUIRED'||observations.size!==Math.min(i+6,buyerScenarioCases.length)||[...observations.values()].some(t=>!['passed','failed'].includes(t.status)))throw e;}
   await db('icash_integration_checks?provider=eq.'+provider,'PATCH',{checked_at:new Date().toISOString(),result:result('running')});
  }
- try{await testAutomaticOfferProvider(api,[{...agent,agent_id:config.agent_id,branch_id:branch,version_id:version}],config.agreement_tool_id,{prefix:'buyer-scenarios-20261009-v5-seller-',roleInstructions:status=>selectedScenarioRoleInstructions(status,automaticOfferReceptionPrompt),closingCases:true});}
+ try{await testAutomaticOfferProvider(api,[{...agent,agent_id:config.agent_id,branch_id:branch,version_id:version}],config.agreement_tool_id,{prefix:'buyer-scenarios-20261009-v6-seller-',roleInstructions:status=>selectedScenarioRoleInstructions(status,automaticOfferReceptionPrompt),closingCases:true});}
  catch(e){if(e.message!=='AUTOMATIC_OFFER_PROVIDER_TESTS_REQUIRED'||observations.size!==buyerScenarioCases.length+2||[...observations.values()].some(t=>!['passed','failed'].includes(t.status)))throw e;}
  if(observations.size!==buyerScenarioCases.length+2||[...observations.values()].some(t=>t.status!=='passed'||t.branch!==branch||t.version!==version))throw Error('BUYER_SCENARIO_FAILURES_REQUIRE_FIX');
  await db('icash_integration_checks?provider=eq.'+provider,'PATCH',{checked_at:new Date().toISOString(),result:result('passed')});
