@@ -6,6 +6,7 @@ import {createOperationalContactFixture} from '../tests/helpers/operational-cont
 import {databaseAdapter,loadService} from '../tests/helpers/simulated-journey-services.mjs';
 import {buyerAskingPrice,buyerPackageText,renderBuyerPackage} from '../lib/buyer-disposition.ts';
 import {dealTermsSchema} from '../lib/deal-documents.ts';
+import {testOwnerBuyerDelivery} from '../tests/helpers/owner-buyer-delivery-fixture.mjs';
 const originalFetch=globalThis.fetch,originalReady=process.env.ICASH_LIVE_WORK_READY;
 globalThis.fetch=async()=>{throw Error('NETWORK BLOCKED: buyer test is local only');};
 process.env.ICASH_LIVE_WORK_READY='true';
@@ -162,6 +163,7 @@ try{
  assert.equal(callback.saved,false);assert.equal(callback.reason,'buyer_outbound_calls_disabled');assert.equal((await one('select count(*) n from icash_live_callbacks')).n,0);
  assert.equal((await data()).askingPriceCents,4893700,'buyer package survives channel change');
  console.log('PASS buyer written-only migration: untouched queued calls retired, callback denied, inbound buyer calls and signed-price package retained.');
+ await testOwnerBuyerDelivery(f,{link:l,realBuyerThread:thread.id,realBuyerEmail:email,emailRate,session});
  console.log('PASS: seller-only signature held; all signatures trigger one research job; signed price + $10000; share link without private seller data; tenant isolation; cancellation, changed price, revocation and expiry invalidate package. Synthetic evidence only.');
 }catch(e){console.error('BUYER SIMULATION FAILED:',e.message,e.where??'',e.stack?.split('\n').slice(1,4).join('\n'));process.exitCode=1;}
 finally{await pg.close();globalThis.fetch=originalFetch;if(originalReady===undefined)delete process.env.ICASH_LIVE_WORK_READY;else process.env.ICASH_LIVE_WORK_READY=originalReady;}

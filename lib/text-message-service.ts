@@ -1,8 +1,8 @@
 import {liveWorkReady,smsWorkEnabled} from './live-work-admission.ts';
 import {sameBusinessNumber} from './number-continuity.ts';
-import {elevenRequest} from '@/lib/elevenlabs';
-import {db} from '@/lib/stripe-test';
-import {sendContiguityText,textPayload} from '@/lib/contiguity';
+import {elevenRequest} from './elevenlabs.ts';
+import {db} from './stripe-test.ts';
+import {sendContiguityText,textPayload} from './contiguity.ts';
 export async function dispatchTextMessage(accountId:string,messageId:string,manual=false){
  if(!smsWorkEnabled())return {status:'live_work_not_ready'};
  const key=process.env.CONTIGUITY_API_KEY;
