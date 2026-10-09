@@ -19,9 +19,10 @@ export async function processTextAi(accountId:string,jobId:string){
   const party=thread.party as 'seller'|'buyer';
   // This flag is emitted only by the database's current consent/binding gate, never a message.
   const conversationEnabled=party==='seller'&&!!input.context&&typeof input.context==='object'&&!Array.isArray(input.context)&&(input.context as Record<string,unknown>).sellerConversation===true;
+  const viewingCoordination=conversationEnabled&&(input.context as Record<string,unknown>).sellerViewingAvailability===true;
   const [identity]=await db<{principal:string;company_name?:string}[]>(`icash_customer_identities?account_id=eq.${accountId}&select=principal,company_name`);
   const property=party==='seller'?await db<TextProperty|null>('rpc/icash_text_property_context','POST',{p_account:accountId,p_thread:job.thread_id}):null;
-  const {analysis,usage,providerId}=await analyzeText({...input,party,conversationEnabled,context:{principal:identity?.principal??null,buyerKind:identity?.company_name?.trim()?'company':'individual',qualification:input.context,property,preliminarySellerCeilingCents:property?.ceilingCents??null,offerAuthorized:false}},process.env.OPENAI_API_KEY);
+  const {analysis,usage,providerId}=await analyzeText({...input,party,conversationEnabled,viewingCoordination,context:{principal:identity?.principal??null,buyerKind:identity?.company_name?.trim()?'company':'individual',qualification:input.context,property,preliminarySellerCeilingCents:property?.ceilingCents??null,offerAuthorized:false}},process.env.OPENAI_API_KEY);
   if(property?.contactOnly&&!analysis.humanRequested&&!analysis.callbackRequested&&!analysis.optedOut&&!analysis.declined)analysis.action='ask_payoff';
   if(!propertyQuestionAllowed(analysis.action,property,input.messages))analysis.action='review';
   await db('rpc/icash_save_text_ai','POST',{p_account:accountId,p_job:jobId,p_analysis:analysis,p_reply:analysis.reply,p_provider:providerId,p_usage:usage});

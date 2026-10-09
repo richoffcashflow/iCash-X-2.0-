@@ -6,10 +6,10 @@ import {analyzeText,safeTextReplies} from '../lib/text-ai-policy.ts';
 import {propertyQuestionAllowed} from '../lib/text-property-policy.ts';
 
 // Run the actual service with local database/provider fakes. No emails, SMS or paid AI calls.
-let party='seller',incoming='The house needs a roof.',action='ask_price',records=[],packages=0,dispatches=0,modelCalls=0,buyerReplyAllowed=false,sellerConversation=false,sellerReplyAllowed=true;
+let party='seller',incoming='The house needs a roof.',action='ask_price',records=[],packages=0,dispatches=0,modelCalls=0,buyerReplyAllowed=false,sellerConversation=false,sellerReplyAllowed=true,viewingCoordination=false;
 const db=async(path,method,body)=>{
  records.push({path,method,body});
- if(path==='rpc/icash_claim_text_ai')return {model:'fixture',context:{stage:'draft',sellerConversation},messages:[{direction:'incoming',body:incoming}]};
+ if(path==='rpc/icash_claim_text_ai')return {model:'fixture',context:{stage:'draft',sellerConversation,sellerViewingAvailability:viewingCoordination},messages:[{direction:'incoming',body:incoming}]};
  if(path.startsWith('icash_text_ai_jobs')&&method!=='PATCH')return [{thread_id:'thread'}];
  if(path.startsWith('icash_text_threads'))return party?[{deal_id:'deal',party}]:[];
  if(path.startsWith('icash_customer_identities'))return [{principal:'Fixture company'}];
@@ -26,6 +26,7 @@ const analyze=async(input)=>analyzeText(input,'fixture',async(_url,options)=>{
  assert.equal(data.party,party);
  assert.equal(data.context.principal,'Fixture company');
  assert.equal(data.context.offerAuthorized,false);
+ if(viewingCoordination)assert.match(request.messages[0].content,/purchase agreement is signed/);
  if(party==='buyer'){
   assert.match(request.messages[0].content,/potential buyer, not a property seller/);
   assert.equal(data.context.property,null);
@@ -90,7 +91,12 @@ try{
  reset();incoming='How does this work?';action='explain_process';sellerReplyAllowed=false;
  assert.equal((await processTextAi('account','job')).status,'text_ai_drafted');
  assert.equal(dispatches,0);assert(!records.some(r=>r.path==='rpc/icash_queue_ai_reply'),'A blocked new lane never bypasses the DB through a legacy queue');
- sellerConversation=false;
+ reset();viewingCoordination=true;sellerReplyAllowed=true;incoming='Tomorrow 2 PM to 4 PM Central';action='review';
+ assert.equal((await processTextAi('account','job')).status,'message_accepted');
+ assert(records.some(r=>r.path==='rpc/icash_queue_seller_conversation_reply'));
+ assert(!records.some(r=>r.path==='rpc/icash_queue_ai_reply'));
+ assert.equal(saved().callRequested,false);
+ viewingCoordination=false;sellerConversation=false;
 
  for(const missingOrOther of ['', 'title']){
   reset();party=missingOrOther;

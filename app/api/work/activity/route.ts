@@ -77,7 +77,7 @@ export async function GET(req:Request){
    dealIds?db<unknown[]>(`icash_signing_envelopes?account_id=eq.${accountId}&deal_id=in.(${dealIds})&select=id,deal_id,kind,state,test_mode,updated_at`):Promise.resolve([]),
    db<Attention[]>(`icash_signing_envelopes?account_id=eq.${accountId}&state=eq.customer_signature_needed&select=id,deal_id,kind,test_mode&order=created_at,id${queuePage}`),
    db<SmsRouteReview[]>('rpc/icash_sms_route_review_items','POST',{p_account:accountId,p_offset:attentionPage*pageSize,p_limit:pageSize+1}),
-   db<Attention[]>(`icash_buyer_viewing_requests?account_id=eq.${accountId}&state=eq.needs_confirmation&select=id,screening_id,deal_id,quote,timezone,created_at&order=created_at,id${queuePage}`)
+   db<Attention[]>(`icash_buyer_viewing_requests?account_id=eq.${accountId}&state=eq.needs_confirmation&select=id,screening_id,deal_id,kind,quote,timezone,created_at&order=created_at,id${queuePage}`)
   ]);
   const viewingRequests=viewingRows.slice(0,pageSize);
   const textAttention=textRows.slice(0,pageSize),callRequests=callRows.slice(0,pageSize),handoffs=handoffRows.slice(0,pageSize),signatureActions=signatureRows.slice(0,pageSize);
