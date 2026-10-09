@@ -20,7 +20,7 @@ try{
  create table icash_screening_jobs(id uuid primary key,account_id uuid);
  create table icash_deal_files(id uuid primary key,account_id uuid,screening_id uuid,stage text,terms jsonb default '{}');
  create table icash_text_threads(id uuid primary key,account_id uuid,deal_id uuid,party text,recipient text,retired_at timestamptz,paused boolean default false,manual_only boolean default false,ai_mode text default 'auto',timezone text default 'UTC');
- create table icash_text_messages(id uuid primary key default gen_random_uuid(),account_id uuid,thread_id uuid,direction text,body text,state text,provider_id text,last_delivery_at timestamptz,created_at timestamptz default now());
+ create table icash_text_messages(id uuid primary key default gen_random_uuid(),account_id uuid,thread_id uuid,direction text,body text,state text,provider_id text,last_delivery_at timestamptz,created_at timestamptz default now(),request_key uuid,customer_author_id uuid,asset_ids uuid[] default '{}',attachments jsonb default '[]');
  create table icash_text_ai_jobs(id uuid primary key default gen_random_uuid(),account_id uuid,thread_id uuid,message_id uuid,state text,analysis jsonb,outgoing_id uuid);
  create table icash_live_conversations(id uuid primary key,account_id uuid,screening_id uuid,contact_key text,party text,state text,operation_key text,result jsonb,completed_at timestamptz);
  create table icash_seller_agreement_private.call_history(session_id uuid primary key,account_id uuid,screening_id uuid,contact_key text,transcript jsonb,completed_at timestamptz);
@@ -44,7 +44,7 @@ try{
  create function icash_sms_thread_review_current(uuid,uuid,boolean) returns boolean language sql as $$select allowed from public.fixture_guard$$;
  create function icash_buyer_package_data(uuid,uuid) returns jsonb language sql as $$select '{"reserved":false}'::jsonb$$;
  create function icash_queue_text(a uuid,t uuid,k uuid,b text,assets uuid[]) returns uuid language plpgsql as $$declare m uuid;begin
-  insert into public.icash_text_messages(account_id,thread_id,direction,body,state) values(a,t,'outgoing',b,'ready') returning id into m;return m;end$$;
+  insert into public.icash_text_messages(account_id,thread_id,direction,body,state,request_key,asset_ids) values(a,t,'outgoing',b,'ready',k,assets) returning id into m;return m;end$$;
  create function icash_claim_text(uuid,uuid,text) returns jsonb language plpgsql as $$begin update public.fixture_guard set claims=claims+1;return '{"fixture":"existing dispatch gate"}'::jsonb;end$$;
  create function icash_next_automation() returns jsonb language sql as $$select '{}'::jsonb$$;
  grant usage on schema public to service_role;grant select on all tables in schema public to service_role;
@@ -61,6 +61,10 @@ try{
  await q("insert into icash_deal_files(id,account_id,screening_id,stage) values($1,$2,$3,'draft')",[deal,a,screen]);
  await q("insert into icash_text_threads(id,account_id,deal_id,party,recipient) values($1,$2,$3,'seller','+12145550199')",[thread,a,deal]);
  await q('insert into icash_wallets values($1,100,0)',[a]);
+ await pg.exec(`alter table icash_screening_jobs add column state text default 'complete',add column result jsonb default '{"financialCheck":{"status":"eligible"}}',add column completed_at timestamptz default now();`);
+ // Exercise the shipped exact-message helper. The final dispatch patch is tested
+ // against installed production functions by the rollback-only integration SQL.
+ await pg.exec(readFileSync('config/seller-recovery-dispatch.sql','utf8').split('do $patch$')[0]+'commit;');
  const turn=(role,message)=>({role,message});
  const open=async(reason='unanswered',source='text_ai')=>{
   const mid=randomUUID(),job=randomUUID();
@@ -116,6 +120,30 @@ try{
   assert((await rpc('icash_next_automation')).token,'completed-usage billing admits positive credits without withholding a quoted maximum');
   assert.equal((await one('select kind from icash_automation_tickets')).kind,'seller_recovery');
   assert.equal((await one('select balance_cents from icash_wallets')).balance_cents,1,'scheduling itself does not charge usage');
+ });
+ const reminder=async()=>{const {id}=await open('no_response','call');await q("update icash_seller_gaps set due_at=now() where id=$1",[id]);await q('delete from icash_text_messages');await q('delete from icash_text_ai_jobs');return {id,message:await prepare(id)};};
+ await test('only bound non-price reminder survives expired valuation',async()=>{
+  const {message}=await reminder();assert(message);
+  await q("update icash_screening_jobs set completed_at=now()-interval '25 hours'");
+  assert.equal(await rpc('icash_seller_recovery_nonprice_current',[a,message]),true);
+  assert.equal(await rpc('icash_seller_recovery_nonprice_current',[other,message]),false);
+  for(const mutation of ["update icash_screening_jobs set result='{\"financialCheck\":{\"status\":\"ineligible\"}}'","update icash_screening_jobs set result='{\"financialCheck\":{\"status\":\"eligible\"}}',completed_at=now()+interval '1 hour'","update icash_screening_jobs set completed_at=now()-interval '8 days'"]){await q(mutation);assert.equal(await rpc('icash_seller_recovery_nonprice_current',[a,message]),false);}
+ });
+ await test('non-price scope rejects tampered message and disabled approval',async()=>{
+  const {message}=await reminder();assert(message);
+  for(const mutation of ["update icash_text_messages set body='I can offer $250,000' where id=$1","update icash_text_messages set request_key=gen_random_uuid() where id=$1","update icash_text_messages set attachments='[\"https://example.invalid/offer\"]' where id=$1","update icash_text_messages set customer_author_id=gen_random_uuid() where id=$1"]){
+   await q('savepoint authority');await q(mutation,[message]);assert.equal(await rpc('icash_seller_recovery_nonprice_current',[a,message]),false);await q('rollback to authority');
+  }
+  await q('update icash_seller_recovery_variants set enabled=false');assert.equal(await rpc('icash_seller_recovery_nonprice_current',[a,message]),false);
+ });
+ await test('ordinary clarification keeps valuation gate and viewing retains current agreement context',async()=>{
+  const {id}=await open(),message=await prepare(id);assert(message);
+  assert.equal(await rpc('icash_seller_recovery_nonprice_current',[a,message]),false);
+  await q('delete from icash_seller_recovery_attempts');await q('delete from icash_seller_gaps');await q('delete from icash_text_messages');
+  await q("update icash_deal_files set stage='under_contract'");
+  const viewing=await open('viewing'),outgoing=await prepare(viewing.id);assert(outgoing);
+  assert.equal(await rpc('icash_seller_recovery_nonprice_current',[a,outgoing]),true);
+  await q('update fixture_guard set allowed=false');assert.equal(await rpc('icash_seller_recovery_nonprice_current',[a,outgoing]),false);
  });
  for(const mutation of ["update fixture_guard set allowed=false","insert into icash_text_suppressions(phone) values('+12145550199')","update icash_deal_files set stage='under_contract'","update icash_seller_recovery_variants set enabled=false","update icash_text_messages set body='Unapproved promise' where direction='outgoing'"])
   await test('final dispatch holds changed authority: '+mutation,async()=>{const {id}=await open(),m=await prepare(id);await q(mutation);assert.equal(await claim(m),null);assert.equal((await one('select claims from fixture_guard')).claims,0);});
@@ -241,6 +269,6 @@ try{
   assert.equal((await one("select has_function_privilege('anon','icash_prepare_seller_recovery(uuid,uuid)','EXECUTE') v")).v,false);
   assert.equal((await one("select has_function_privilege('service_role','icash_prepare_seller_recovery(uuid,uuid)','EXECUTE') v")).v,true);
  });
- assert.equal(checks,41);completed=true;
+ assert.equal(checks,44);completed=true;
  console.log(JSON.stringify({checks,passed:checks,network:'disabled',scope:'real recovery SQL, isolated delegate fixtures'}));
 }catch(error){console.error(JSON.stringify({error:error.message,code:error.code,where:error.where,detail:error.detail}));process.exitCode=1;}finally{await pg.close();}
