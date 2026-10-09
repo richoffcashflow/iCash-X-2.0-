@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {webinarRequest,webinarBeacon} from '@/lib/webinar-client';
-import {Users} from 'lucide-react';
+import {Users,Info} from 'lucide-react';
 import {simulatedAudience,type AudienceDisplay} from '@/packages/webinar-engine/src/index';
 
 export function WebinarAudience({sessionId,enabled,preview,playing,display,seconds,durationSeconds}:{sessionId:string;enabled:boolean;preview:boolean;playing:boolean;display:AudienceDisplay;seconds:number;durationSeconds:number}){
@@ -22,7 +22,7 @@ export function WebinarAudience({sessionId,enabled,preview,playing,display,secon
   return()=>{disposed=true;controller.abort();clearInterval(interval);document.removeEventListener('visibilitychange',visibility);window.removeEventListener('pagehide',leave);update(true);};
  },[sessionId,enabled,preview,playing,display.mode]);
  const simulated=simulatedAudience(display,sessionId,seconds,durationSeconds);
- if(enabled&&simulated!==null)return <span className="wb-audience" title="A simulated audience display configured by the host. This is not a count of connected viewers."><Users size={14}/><b>{simulated.toLocaleString()}</b> simulated viewers</span>;
+ if(enabled&&simulated!==null)return <div className="wb-audience"><Users size={14} aria-hidden="true"/><b>{simulated.toLocaleString()}</b><span>viewers</span><details className="wb-audience-info"><summary aria-label="About the viewer count"><Info size={15} aria-hidden="true"/></summary><p>This audience display is generated from a number set by the host. It is not a count of people currently watching.</p></details></div>;
  if(!enabled||preview||count===null||count===0)return null;
  return <span className="wb-audience" title="Active viewers of this recording. Updated every 30 seconds; inactive connections expire within 75 seconds."><Users size={14}/><b>{count.toLocaleString()}</b> live attendees</span>;
 }
