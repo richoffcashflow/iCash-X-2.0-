@@ -391,7 +391,7 @@ begin
  if exists(select 1 from public.icash_automation_tickets where kind='seller_recovery' and created_at>now()-interval '1 minute') then return prior;end if;
  for f in select followup.* from public.icash_seller_viewing_followups followup join public.icash_text_threads t on t.id=followup.buyer_thread_id and t.account_id=followup.account_id
   join public.icash_accounts a on a.id=followup.account_id and not a.bot_paused
-  join public.icash_wallets w on w.account_id=a.id and w.balance_cents>w.reserved_cents
+  join public.icash_wallets w on w.account_id=a.id and w.balance_cents>0
   join pg_timezone_names tz on tz.name=t.timezone
   where followup.outgoing_id is null and followup.created_at>now()-interval '7 days' and extract(hour from now() at time zone tz.name) between 9 and 19
   order by followup.created_at for update of followup skip locked limit 20 loop
@@ -403,7 +403,7 @@ begin
  end loop;
  for g in select gap.* from public.icash_seller_gaps gap join public.icash_text_threads t on t.id=gap.thread_id and t.account_id=gap.account_id
   join public.icash_accounts a on a.id=gap.account_id and not a.bot_paused
-  join public.icash_wallets w on w.account_id=a.id and w.balance_cents>w.reserved_cents
+  join public.icash_wallets w on w.account_id=a.id and w.balance_cents>0
   join pg_timezone_names tz on tz.name=t.timezone
   where gap.state='open' and gap.due_at<=now() and gap.expires_at>now() and extract(hour from now() at time zone tz.name) between 9 and 19
   order by gap.due_at for update of gap skip locked limit 20 loop
