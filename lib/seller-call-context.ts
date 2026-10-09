@@ -1,4 +1,5 @@
 import type {SellerOfferPresentation} from './seller-offer-presentation.ts';
+import {conversationStreet} from './conversation-address.ts';
 import {sellerAgreementFlowInstructions} from './seller-agreement-flow.ts';
 import {callFirstName} from './call-contact-name.ts';
 import {sellerPhoneFlowInstructions} from './seller-phone-flow.ts';
@@ -28,8 +29,8 @@ export function ownershipAlreadyConfirmed(history:VoiceSmsContext|null,address:s
  for(let i=messages.length-1;i>=0;i--){
   const message=messages[i];
   if(message.direction==='incoming'&&/\b(not (?:the )?owner|wrong (?:person|number|property|address)|sold (?:it|that|the property)|no longer own)\b/i.test(message.body))return false;
-  const exactAddress=address.toLowerCase(),question=message.body.toLowerCase();
-  if(message.direction!=='outgoing'||!['owner of '+exactAddress+'?','do you own '+exactAddress+'?','is '+exactAddress+' your property?'].some(phrase=>question.includes(phrase)))continue;
+  const addresses=[address,conversationStreet(address)].map(a=>a.toLowerCase()),question=message.body.toLowerCase();
+  if(message.direction!=='outgoing'||!addresses.some(a=>['owner of '+a+'?','do you own '+a+'?','is '+a+' your property?'].some(phrase=>question.includes(phrase))))continue;
   const answers=messages.slice(i+1);const nextQuestion=answers.findIndex(answer=>answer.direction==='outgoing');
   const replies=nextQuestion<0?answers:answers.slice(0,nextQuestion);
   if(replies.some(answer=>/\b(?:not|wrong|no longer|sold|no|nope)\b/i.test(answer.body)))return false;
@@ -105,9 +106,10 @@ export function sellerCallContext(input:SellerCallContext){
 export function sellerFirstMessage(input:SellerCallContext,alreadyIntroduced=false){
  const c=sellerCallContext(input),history=combinedHistory(c),name=callFirstName(returningSellerName(history)??c.request?.firstName);
  const greeting=name?`Hi ${name}. `:'';
- if(c.ownershipAlreadyConfirmed&&c.callbackRequestedNow)return `${greeting}Let's go over the cash offer for ${c.address}.`;
- if(ownershipAlreadyConfirmed(history,c.address))return `${greeting}Is now a good time to talk about ${c.address}?`;
- return `${greeting}Is this the owner of ${c.address}?`;
+ const address=conversationStreet(c.address);
+ if(c.ownershipAlreadyConfirmed&&c.callbackRequestedNow)return `${greeting}Let's go over the cash offer for ${address}.`;
+ if(ownershipAlreadyConfirmed(history,c.address))return `${greeting}Is now a good time to talk about ${address}?`;
+ return `${greeting}Is this the owner of ${address}?`;
 }
 export function sellerCallPrompt(input:SellerCallContext,privateOfferCeilingCents:number|null=null,closing:SellerClosingContext|null=null,contractTextEnabled=false,cashOfferPriceCents:number|null=null,proposal:SellerOfferPresentation|null=null,agreementToolsEnabled=false,purchaseTerms:Record<string,unknown>|null=null){
  const c=sellerCallContext(input);

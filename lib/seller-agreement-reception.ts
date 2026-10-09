@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {conversationStreet} from './conversation-address.ts';
 import {sellerOfferReceptionPrompt,sellerOfferReceptionVariables} from './seller-offer-reception.ts';
 import {buyerReceptionGreeting} from './buyer-reception-context.ts';
 import {legacySellerAgreementFlowInstructions,sellerAgreementFlowInstructions} from './seller-agreement-flow.ts';
@@ -64,7 +65,7 @@ export function sellerAgreementReceptionVariables(value:unknown,now=Date.now()){
  safe.ownershipAlreadyConfirmed=progress.ownershipAlreadyConfirmed;
  safe.today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);safe.timeZone='America/Chicago';
  Object.assign(safe,compactSellerProgress(progress,3500));
- if(progress.ownershipAlreadyConfirmed)base.icash_property_greeting=`${safe.returningName?'Hi '+safe.returningName+'. ':''}Let's continue with the cash offer for ${safe.address}.`;
+ if(progress.ownershipAlreadyConfirmed)base.icash_property_greeting=`${safe.returningName?'Hi '+safe.returningName+'. ':''}Let's continue with the cash offer for ${conversationStreet(safe.address)}.`;
  const t=object(object(value).purchaseTerms),pending=object(object(value).pendingAgreement);
  const money=(v:unknown)=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0?v:null;
  const purchaseTerms={inspectionDays:Number.isInteger(t.inspectionDays)&&Number(t.inspectionDays)>=0&&Number(t.inspectionDays)<=90?t.inspectionDays:10,closingDate:typeof t.closingDate==='string'?t.closingDate:'',escrowAgent:typeof t.escrowAgent==='string'?t.escrowAgent.slice(0,200):'',legalDescriptionAvailable:t.legalDescriptionAvailable===true};

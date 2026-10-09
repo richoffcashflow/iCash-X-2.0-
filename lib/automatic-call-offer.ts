@@ -1,3 +1,4 @@
+import {conversationAddressFields} from './conversation-address.ts';
 import {z} from 'zod';
 import {runScreeningJob} from './screening-job.ts';
 import {cashOfferCalculation} from './cash-offer-math.ts';
@@ -55,7 +56,7 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
   const b=context.buyer;
   if(!b||!Number.isSafeInteger(b.askingPriceCents)||b.askingPriceCents<=0)return blockedOffer('buyer_release_required','I need to confirm the current buyer package before quoting a price.');
   const breakdown=Number.isSafeInteger(b.purchasePriceCents)&&Number(b.purchasePriceCents)>0&&Number.isSafeInteger(b.assignmentFeeCents)&&Number(b.assignmentFeeCents)>=0&&Number(b.purchasePriceCents)+Number(b.assignmentFeeCents)===b.askingPriceCents?{purchasePriceCents:b.purchasePriceCents,assignmentFeeCents:b.assignmentFeeCents}:{};
-  return {quoteAllowed:true as const,party:'buyer',priceCents:b.askingPriceCents,...offerPricePresentation(b.askingPriceCents),...breakdown,address:b.address,status:'approved_buyer_price',instruction:'Quote this exact total buyer price in dollars. The assignment fee is already included. Explain a numerical breakdown only if returned here. Use only the actual agreement for closing-cost terms.'};
+  return {quoteAllowed:true as const,party:'buyer',priceCents:b.askingPriceCents,...offerPricePresentation(b.askingPriceCents),...breakdown,...conversationAddressFields(b.address),status:'approved_buyer_price',instruction:'Quote this exact total buyer price in dollars. The assignment fee is already included. Explain a numerical breakdown only if returned here. Use only the actual agreement for closing-cost terms.'};
  }
  if(context.party!=='seller'||!context.address)return blockedOffer('property_context_required','Which property are you calling about, and are you buying or selling?');
  if(state.listedWithAgent===true)return blockedOffer('listed_with_agent','We do not purchase properties currently listed with an agent. Thank them and politely end the offer conversation. Do not quote, accept an offer or send an agreement. Do not suggest cancelling their listing.');
@@ -64,7 +65,7 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
  if(state.conditionPending)return blockedOffer('repair_estimate_required','About how much do you estimate the total repairs will cost?');
  const pending=context.pendingAgreement;
  if(pending&&Number.isSafeInteger(pending.priceCents)&&pending.priceCents>0&&state.repairEstimateCents===undefined){
-  return {quoteAllowed:true as const,contractAllowed:true,party:'seller',priceCents:pending.priceCents,...offerPricePresentation(pending.priceCents),address:context.address,status:'pending_agreement',instruction:'Continue from this exact prepared agreement price and its saved terms. A verbal yes is not a signature.'};
+  return {quoteAllowed:true as const,contractAllowed:true,party:'seller',priceCents:pending.priceCents,...offerPricePresentation(pending.priceCents),...conversationAddressFields(context.address),status:'pending_agreement',instruction:'Continue from this exact prepared agreement price and its saved terms. A verbal yes is not a signature.'};
  }
  try{
   const base=runScreeningJob(context.snapshot,now);
@@ -80,7 +81,7 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
   const payoff=sellerPayoffPosition(state.payoffReport,price);
   const conditional=!!state.payoffPending||(payoff?(!payoff.complete||!payoff.canProceed):financial.status!=='eligible');
   const accepted=!!agreed&&!state.acceptanceConditional;
-  const common={quoteAllowed:true as const,party:'seller',priceCents:price,...offerPricePresentation(price),address:context.address,repairEstimateCents:repairs,repairSource:state.repairEstimateCents===undefined?'property_research':'seller_reported_total_budget',asIs:true,payment:'cash'};
+  const common={quoteAllowed:true as const,party:'seller',priceCents:price,...offerPricePresentation(price),...conversationAddressFields(context.address),repairEstimateCents:repairs,repairSource:state.repairEstimateCents===undefined?'property_research':'seller_reported_total_budget',asIs:true,payment:'cash'};
   if(payoff){
    const nextQuestion=state.payoffPending?'Can you confirm the current mortgage payoff balance?':!payoff.complete?'Are there any other loans, liens, unpaid taxes or HOA balances besides that mortgage?':payoff.shortfallCents>0&&!payoff.canProceed?state.payoffReport?.coverageDeclined?'Would you like a person to review any other options?':`The difference is ${offerPricePresentation(payoff.shortfallCents).displayPrice}. Would you be willing and able to bring that amount to closing to sell the property?`:null;
    return {...common,payoffVerified:false,titleVerificationRequiredBeforeClosing:true,payoffSource:'seller_reported',reportedPayoff:payoff,conditional,contractAllowed:!conditional,status:conditional?'conditional_proposal':accepted?'verbally_accepted':'calculated_proposal',nextQuestion,

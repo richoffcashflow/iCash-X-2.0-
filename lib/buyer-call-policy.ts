@@ -1,10 +1,11 @@
 import {buyerPhoneFlowInstructions} from './buyer-phone-flow.ts';
 import {conversationTrustInstructions} from './conversation-trust.ts';
 import {callFirstName} from './call-contact-name.ts';
+import {conversationStreet} from './conversation-address.ts';
 export type BuyerCallContext={dealId:string;address:string;askingPriceCents:number;repairsCents:number;packageId:string;purchasePriceCents?:number;assignmentFeeCents?:number;packageUrl?:string;buyerPaysClosingCosts?:boolean;firstName?:string};
 export function buyerFirstMessage(context:BuyerCallContext){
  const name=callFirstName(context.firstName);
- return `${name?'Hi '+name+'. ':''}Are you buying investment properties near ${context.address}?`;
+ return `${name?'Hi '+name+'. ':''}Are you buying investment properties near ${conversationStreet(context.address)}?`;
 }
 export function buyerCallInstructions(context:BuyerCallContext,principal:string,assistantName:string){
  if(!context.dealId||!context.address||!context.packageId||![context.askingPriceCents,context.repairsCents].every(n=>Number.isSafeInteger(n)&&n>=0)||context.askingPriceCents===0)throw Error('Approved buyer context required');
