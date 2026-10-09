@@ -18,6 +18,11 @@ export async function inspectContractTextResend(hash:string,{db,key,fetcher=fetc
  if(!r.ok)return {status:'inspection_unavailable' as const,code:`PROVIDER_HTTP_${r.status}`};
  const p=await r.json();
  if(p.id!==j.expected_submitter_id||String(p.submission_id??p.submission?.id)!==j.expected_provider_id||p.external_id!==`${j.envelope_id}:${j.signer_id}`||p.phone!==j.recipient||p.metadata?.terms_hash!==j.terms_hash)throw Error('SIGNER_BINDING_MISMATCH');
+ const submissionResponse=await fetcher(`https://api.docuseal.com/submissions/${j.expected_provider_id}`,{method:'GET',headers:{'X-Auth-Token':key},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(20000)});
+ if(!submissionResponse.ok)return {status:'inspection_unavailable' as const,code:`PROVIDER_HTTP_${submissionResponse.status}`};
+ const submission=await submissionResponse.json();
+ if(String(submission.id)!==j.expected_provider_id||!submission.submitters?.some((s:{id?:number;external_id?:string})=>s.id===j.expected_submitter_id&&s.external_id===p.external_id))throw Error('SIGNER_BINDING_MISMATCH');
+ const creatorEmail=submission.created_by_user?.email;
  const rawEvents=Array.isArray(p.submission_events)?p.submission_events:[];
  const events=rawEvents.filter((e:{submitter_id?:number})=>e.submitter_id===undefined||e.submitter_id===j.expected_submitter_id).slice(-40).map((e:{event_type?:unknown;event_timestamp?:unknown;data?:Record<string,unknown>})=>({
   type:typeof e.event_type==='string'?e.event_type.slice(0,80):null,
@@ -27,6 +32,8 @@ export async function inspectContractTextResend(hash:string,{db,key,fetcher=fetc
  }));
  return {status:'inspected' as const,recipientLast4:j.recipient.slice(-4),attemptState:j.state,signerStatus:p.status,
   templateName:typeof p.template?.name==='string'?p.template.name.slice(0,200):null,
+  providerTestUser:typeof creatorEmail==='string'?/\+test@/i.test(creatorEmail):null,
+  submissionName:typeof submission.name==='string'?submission.name.slice(0,200):null,
   documentNames:Array.isArray(p.documents)?p.documents.map((d:{name?:unknown})=>typeof d.name==='string'?d.name.slice(0,200):null):[],
   sentAt:p.sent_at??null,openedAt:p.opened_at??null,completedAt:p.completed_at??null,
   smsPreference:p.preferences?.send_sms??null,events};

@@ -57,10 +57,12 @@ console.log('PASS same-agreement SMS only, recipient/order/terms isolation, conc
 const inspectorRow={id:'retry',envelope_id:'envelope',signer_id:'1',recipient:phone,expected_provider_id:'123',expected_submitter_id:321,terms_hash:hash,state:'accepted'};
 let inspectorReads=0;
 const inspection=await inspectContractTextResend('a'.repeat(64),{key:'fixture',db:async(path,method)=>{assert.equal(method,undefined);assert(path.includes('state=in.(dispatching,accepted,needs_review)'));return [inspectorRow];},fetcher:async(url,options)=>{
- assert.equal(options.method,'GET');assert.equal(url,'https://api.docuseal.com/submitters/321');inspectorReads++;
+ assert.equal(options.method,'GET');inspectorReads++;
+ if(url==='https://api.docuseal.com/submissions/123')return Response.json({id:123,submitters:[{id:321,external_id:'envelope:1'}],created_by_user:{email:'fixture+test@example.invalid'}});
+ assert.equal(url,'https://api.docuseal.com/submitters/321');
  return Response.json({id:321,submission_id:123,external_id:'envelope:1',phone,metadata:{terms_hash:hash},status:'sent',sent_at:'2026-10-09T01:18:27Z',opened_at:null,preferences:{send_sms:true},slug:'PRIVATE_SIGNING_CAPABILITY',submission_events:[{submitter_id:321,event_type:'send_sms',event_timestamp:'2026-10-09T01:18:27Z',data:{message:'private text https://example.invalid/private',status:'sent'}}]});
 }});
-assert.equal(inspectorReads,1);assert.equal(inspection.status,'inspected');assert.equal(inspection.events[0].type,'send_sms');
+assert.equal(inspectorReads,2);assert.equal(inspection.status,'inspected');assert.equal(inspection.events[0].type,'send_sms');assert.equal(inspection.providerTestUser,true);assert(!JSON.stringify(inspection).includes('fixture+test@example.invalid'));
 assert.equal(inspection.events[0].codes.status,'sent');assert(!JSON.stringify(inspection).includes('PRIVATE_SIGNING_CAPABILITY'));assert(!JSON.stringify(inspection).includes('example.invalid'));assert(!JSON.stringify(inspection).includes(phone));
 assert.equal((await inspectContractTextResend('a'.repeat(64),{key:'fixture',db:async()=>[],fetcher:async()=>{throw Error('must not reach provider');}})).status,'not_authorized');
 await assert.rejects(()=>inspectContractTextResend('a'.repeat(64),{key:'fixture',db:async()=>[inspectorRow],fetcher:async()=>Response.json({id:321,submission_id:123,external_id:'envelope:1',phone:'+12025550199',metadata:{terms_hash:hash}})}),/SIGNER_BINDING_MISMATCH/);
