@@ -11,4 +11,9 @@ const html=renderBuyerPackage({address:'123 Main <Street>',principal:'Fixture',p
 assert(html.includes('Property photos'));assert(html.includes('123 Main &lt;Street&gt;'));assert.equal((html.match(/<img /g)||[]).length,2);assert(html.includes('$162,270.50'));assert(!html.includes('onerror'));
 const quote=calculateAutomaticCallOffer({party:'buyer',buyer:{askingPriceCents:16227050,purchasePriceCents:15227050,assignmentFeeCents:1000000,address:'123 Main',closingDate:'2026-11-07'}},{});
 assert.equal(quote.closingDateSpoken,'November 7, 2026');assert.equal(quote.viewingStatus,'needs_confirmation');assert.match(quote.instruction,/preferred date, time and timezone/);
+// The October 9 handset test incorrectly combined the included assignment fee
+// with additional buyer closing costs. Supply an explicit, server-written line.
+assert.equal(quote.closingCostsIncluded,false);assert.equal(quote.buyerPaysClosingCosts,true);
+assert.equal(quote.spokenOffer,'The buyer asking price is one hundred sixty-two thousand two hundred seventy dollars and fifty cents. The assignment fee is included. Buyer closing costs are extra and are not included in that price.');
+assert(quote.instruction.includes(quote.spokenOffer));assert.match(quote.instruction,/Read spokenOffer exactly/);
 console.log('Buyer gallery and spoken terms: exact price/date, seller raster images, escaping, CDN allowlist and pending viewing language passed.');
