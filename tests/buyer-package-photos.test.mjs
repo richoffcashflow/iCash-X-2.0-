@@ -14,6 +14,6 @@ assert.equal(quote.closingDateSpoken,'November 7, 2026');assert.equal(quote.view
 // The October 9 handset test incorrectly combined the included assignment fee
 // with additional buyer closing costs. Supply an explicit, server-written line.
 assert.equal(quote.closingCostsIncluded,false);assert.equal(quote.buyerPaysClosingCosts,true);
-assert.equal(quote.spokenOffer,'The buyer asking price is one hundred sixty-two thousand two hundred seventy dollars and fifty cents. The assignment fee is included. Buyer closing costs are extra and are not included in that price.');
+assert.equal(quote.spokenOffer,"I'm the AI assistant coordinating for the contract holder. The buyer asking price is one hundred sixty-two thousand two hundred seventy dollars and fifty cents. The assignment fee is included. Buyer closing costs are extra and are not included in that price. The package closing date is November 7, 2026. The deposit amount needs confirmation in the assignment agreement.");
 assert(quote.instruction.includes(quote.spokenOffer));assert.match(quote.instruction,/Read spokenOffer exactly/);
 console.log('Buyer gallery and spoken terms: exact price/date, seller raster images, escaping, CDN allowlist and pending viewing language passed.');
