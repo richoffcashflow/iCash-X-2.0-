@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {buyerSearchBody,discoverBuyerPage} from '../lib/buyer-discovery.ts';
+import {buyerSearchBody,discoverBuyerPage,nextBuyerSearch} from '../lib/buyer-discovery.ts';
 const config={zip:'75201',page:1,perPage:10,since:'2025-09-29',unitCostMicros:10000,quotedCostMicros:100000};
 assert.equal(buyerSearchBody(config).anchor,'people');assert.deepEqual(buyerSearchBody(config).fields,['full_address']);
 let paid=0,claims=0,saved;
@@ -12,3 +12,14 @@ assert.equal((await discoverBuyerPage(config,{...deps,claim:async()=>false})).st
 await assert.rejects(()=>discoverBuyerPage(config,{...deps,request:async()=>({estimated_credits:{this_page:2,breakdown:{properties:1,people:1}}})}));
 const uncertain={...deps,request:async body=>{if(body.estimate_cost)return request(body);paid++;throw Error('timeout');}};paid=0;await assert.rejects(()=>discoverBuyerPage(config,uncertain));assert.equal(paid,1,'No implicit retry after ambiguous paid request');
 console.log('Buyer discovery: owner-only cost estimate, cost cap, claim gate, person deduplication, DNC retention and no implicit paid retry passed.');
+
+assert.deepEqual(buyerSearchBody({...config,strategy:'corporate_owners'}).filters,[{filter_id:'is_corporate_owned',value:true}]);
+assert.deepEqual(nextBuyerSearch(undefined,5),{page:1,providerPage:1,strategy:'recent_corporate'});
+assert.deepEqual(nextBuyerSearch({page:1,has_next_page:false,receipt:{}},5),{page:2,providerPage:1,strategy:'corporate_owners'});
+assert.deepEqual(nextBuyerSearch({page:4,has_next_page:true,receipt:{}},5),{page:5,providerPage:1,strategy:'corporate_owners'});
+assert.equal(nextBuyerSearch({page:5,has_next_page:true,receipt:{}},5),null);
+assert.equal(nextBuyerSearch({page:2,has_next_page:false,receipt:{strategy:'corporate_owners',providerPage:1}},5),null);
+let empty=0;paid=0;claims=0;
+await discoverBuyerPage(config,{...deps,request:async()=>({estimated_credits:{this_page:0,breakdown:{properties:0,people:0}}}),empty:async()=>{empty++;}});
+assert.equal(empty,1);assert.equal(paid,0);assert.equal(claims,0);
+console.log('Corporate expansion: first-page broadening, empty-result progression, configured bounds and no charges for empty estimates passed.');
