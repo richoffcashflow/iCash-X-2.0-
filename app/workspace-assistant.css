@@ -24,6 +24,14 @@
 .property-progress-compact li:before{content:'';width:5px;height:5px;border-radius:50%;background:#d4d4d4}
 .property-progress-compact li.done{color:#535353}.property-progress-compact li.done:before{background:#535353}.property-progress-compact li.current{color:#181818;font-weight:650}.property-progress-compact li.current:before{background:#181818;box-shadow:0 0 0 3px #e4e4e4}
 .workspace-assistant{position:static;width:100%;margin-top:12px;background:#fff;border:0;border-radius:0;box-shadow:none;overflow:hidden;text-align:left;color:#181818}
+.assistant-workspace.assistant-workspace:has(.assistant-dock){padding-bottom:calc(132px + env(safe-area-inset-bottom,0px))}
+.workspace-assistant.assistant-dock{position:fixed;z-index:40;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(860px,calc(100% - 32px));margin:0;border:1px solid #dedede;border-radius:18px;background:#fff;box-shadow:0 8px 36px #00000012}
+.assistant-dock .assistant-composer{min-height:66px;padding:9px 12px;gap:8px}
+.assistant-dock .assistant-composer input{font-size:16px;line-height:1.5}
+.assistant-dock .assistant-toggle,.assistant-dock .assistant-send{width:44px;height:44px}
+.assistant-dock .assistant-toggle:hover{background:#f5f5f5;color:#181818}
+.assistant-dock .assistant-composer:focus-within{box-shadow:inset 0 0 0 1px #a2a2a2;border-radius:17px}
+@media(max-width:600px){.workspace-assistant.assistant-dock{width:calc(100% - 24px);bottom:calc(12px + env(safe-area-inset-bottom,0px));border-radius:16px}.assistant-dock .assistant-composer{min-height:64px;padding:8px;gap:6px}}
 .assistant-composer{display:flex;align-items:center;gap:10px;padding:10px 12px;margin:0;min-height:58px;box-sizing:border-box;background:#fff}
 .workspace-assistant button{font:inherit;cursor:pointer}.workspace-assistant button:disabled{opacity:.45;cursor:default}
 .assistant-toggle{width:36px;height:36px;border:0;background:transparent;color:#727272;display:grid;place-items:center;flex-shrink:0;border-radius:9px}
