@@ -1,4 +1,4 @@
-export const sellerAddressFormatVersion = 'us-structured-2026-10-06.1';
+export const sellerAddressFormatVersion = 'us-structured-2026-10-09.1';
 
 export type DealMachineAddress = {full_address: string} | {
   street: string; unit?: string; city: string; state: string; zip?: string;
@@ -28,6 +28,11 @@ export function dealMachineAddress(value: string): DealMachineAddress {
     if (unit) return fallback;
     street = inlineUnit[1]; unit = inlineUnit[2];
   }
+  // Google address selection can abbreviate Loop as Lp. Keep the submitted
+  // address intact, but send the spelled-out suffix to the property matcher.
+  // Only a terminal suffix after a street name is eligible; never alter units,
+  // street names such as "Lp Ranch", or ambiguous free-form address strings.
+  street = street.replace(/^(\d\S*\s+.+)\s+lp\.?$/i, '$1 Loop');
   return {street, ...(unit ? {unit} : {}), city, state: region[1].toUpperCase(), ...(region[2] ? {zip: region[2]} : {})};
 }
 
