@@ -7,7 +7,7 @@ type Props={sessionId:string;videoUrl:string;posterUrl:string;title:string;progr
 export function WebinarPlayer(props:Props){
  const video=useRef<HTMLVideoElement>(null),position=useRef(props.progress),loaded=useRef(false),lastLocalSave=useRef(-1),resumeOnVisible=useRef(false),alive=useRef(true);
  const callbacks=useRef(props);callbacks.current=props;
- const [playing,setPlaying]=useState(false),[muted,setMuted]=useState(true),[error,setError]=useState(''),[buffering,setBuffering]=useState(true),[slow,setSlow]=useState(false),[offline,setOffline]=useState(false);
+ const [playing,setPlaying]=useState(false),[muted,setMuted]=useState(true),[error,setError]=useState(''),[buffering,setBuffering]=useState(!!props.videoUrl),[slow,setSlow]=useState(false),[offline,setOffline]=useState(false);
  const playback=useCallback((value:boolean)=>{setPlaying(value);callbacks.current.onPlayingChange(value);},[]);
  const checkpoint=useCallback(()=>{if(!callbacks.current.preview&&!video.current?.ended)savePosition(callbacks.current.sessionId,position.current);callbacks.current.onCheckpoint();},[]);
  const reload=useCallback(()=>{const v=video.current;if(!v)return;checkpoint();loaded.current=false;setError('');setSlow(false);setBuffering(true);v.load();},[checkpoint]);
@@ -44,6 +44,7 @@ export function WebinarPlayer(props:Props){
   const v=video.current as (HTMLVideoElement&{webkitEnterFullscreen?:()=>void})|null;
   try{if(v?.requestFullscreen)await v.requestFullscreen();else v?.webkitEnterFullscreen?.();}catch{/* Fullscreen is optional in embedded browsers. */}
  }
+ if(props.preview&&!props.videoUrl)return <div className="wb-player"><div className="wb-stream-status"><span>Owner preview</span></div><div className="wb-video-placeholder" role="status"><Play size={32} aria-hidden="true"/><strong>Your video goes here</strong><p>Upload your recording in the studio to preview playback.</p></div></div>;
  return <div className="wb-player">
   <video ref={video} src={props.videoUrl||undefined} poster={props.posterUrl||undefined} playsInline autoPlay muted preload="auto" aria-label={props.title}
    onLoadedMetadata={metadata} onCanPlay={()=>{metadata();setBuffering(false);setSlow(false);}}
