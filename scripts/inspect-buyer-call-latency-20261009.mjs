@@ -6,7 +6,7 @@ const accountId='48dfb798-8c1a-404f-88c0-c396cc067062';
 const sessionId='d6913388-da56-4d46-862d-659ba980e2cd';
 const conversationId='conv_6601m4h59akeezmrerfe91hzh227';
 const callSid='CAdc77993e6b35e76f639bb5c83bb06306';
-const provider='owner_buyer_call_20261009_2022_latency';
+const provider='owner_buyer_call_20261009_2022_turn_metrics';
 if(process.env.VERCEL_ENV!=='production'||process.env.VERCEL_GIT_COMMIT_REF!=='main'||Date.now()>Date.parse('2026-10-10T00:00:00Z'))process.exit(0);
 try{
  const env=process.env;
@@ -34,10 +34,10 @@ try{
   }
   return value;
  }));
- const turns=Array.isArray(conversation.transcript)?conversation.transcript.slice(0,60).map(t=>({role:t.role,message:t.message,time:t.time_in_call_secs,interrupted:t.interrupted,toolCalls:t.tool_calls,toolResults:t.tool_results,feedback:t.feedback,metrics:t.metrics})):[];
+ const turns=Array.isArray(conversation.transcript)?conversation.transcript.slice(0,60).map(t=>({role:t.role,message:t.message,time:t.time_in_call_secs,interrupted:t.interrupted,toolCalls:t.tool_calls,toolResults:t.tool_results,feedback:t.feedback,metrics:t.conversation_turn_metrics,triggeredGuardrails:t.triggered_guardrails,llmUsage:t.llm_usage,source:t.source_medium,originalMessage:t.original_message,agentMetadata:t.agent_metadata,keys:Object.keys(t)})):[];
  const metadata=conversation.metadata??{};
  const result=redact({accountId,sessionId,conversationId,callSid,status:conversation.status,fullBinding:receptionConversationMatches(row,conversation),initiation:conversation.conversation_initiation_client_data,
-  terminationReason:metadata.termination_reason,error:metadata.error,warnings:metadata.warnings,guardrails:metadata.guardrails,analysis:conversation.analysis,turns,
+  metadata,conversationKeys:Object.keys(conversation),terminationReason:metadata.termination_reason,error:metadata.error,warnings:metadata.warnings,guardrails:metadata.guardrails,analysis:conversation.analysis,turns,
   agent:{firstMessage:agent.conversation_config?.agent?.first_message,dynamicVariables:agent.conversation_config?.agent?.dynamic_variables,conversation:agent.conversation_config?.conversation,turn:agent.conversation_config?.turn,llm:agent.conversation_config?.agent?.prompt?.llm},
   carrier:{status:call.status,duration:call.duration,startTime:call.start_time,endTime:call.end_time}});
  await db('icash_integration_checks?on_conflict=provider','POST',{provider,checked_at:new Date().toISOString(),result});

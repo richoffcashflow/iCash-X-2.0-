@@ -5,7 +5,7 @@ import {db} from '../lib/stripe-test.ts';
 import {calculateAutomaticCallOffer,buyerAgreementHandoff} from '../lib/automatic-call-offer.ts';
 import {testAutomaticOfferProvider} from './test-automatic-offer-provider.mjs';
 if(process.env.VERCEL_ENV!=='production'||process.env.VERCEL_GIT_COMMIT_REF!=='main')process.exit(0);
-const account='48dfb798-8c1a-404f-88c0-c396cc067062',session='05631a2b-abae-43a6-a327-5ccf77a0173a',provider='buyer_confidence_title_provider_test_20261009_v1';
+const account='48dfb798-8c1a-404f-88c0-c396cc067062',session='05631a2b-abae-43a6-a327-5ccf77a0173a',provider='buyer_confidence_title_provider_test_20261009_v2';
 const address='45 Fixture Lane';
 const result=calculateAutomaticCallOffer({party:'buyer',buyer:{titleSelectionStatus:'not_selected',address,askingPriceCents:16227050,purchasePriceCents:15227050,assignmentFeeCents:1000000,closingDate:'2026-11-07',depositCents:200000,viewingSlots:[{startsAt:'2026-10-16T19:00:00Z',endsAt:'2026-10-16T21:00:00Z',timezone:'America/Chicago'}]}},{},Date.parse('2026-10-09T19:00:00Z'));
 const noSlotsResult=calculateAutomaticCallOffer({party:'buyer',buyer:{titleSelectionStatus:'not_selected',address,askingPriceCents:16227050,purchasePriceCents:15227050,assignmentFeeCents:1000000,closingDate:'2026-11-07',depositCents:200000,viewingSlots:[]}},{},Date.parse('2026-10-09T19:00:00Z'));
@@ -15,7 +15,8 @@ if(livePackage?.titleSelectionStatus!=='not_selected')throw Error('BUYER_TITLE_M
 if(!livePackage||livePackage.viewingOptional!==true||!Array.isArray(livePackage.viewingSlots)||!Object.hasOwn(livePackage,'depositCents')||!Object.hasOwn(livePackage,'reserved'))throw Error('BUYER_PURCHASE_MIGRATION_REQUIRED');
 const [prior]=await db(`icash_integration_checks?provider=eq.${provider}&select=result`);
 if(prior){
- if(prior.result?.status==='passed'&&prior.result.fixtureHash===fixtureHash)process.exit(0);
+ const [stage]=await db('icash_integration_checks?provider=eq.buyer_voice_policy_stage_20261009_v1&select=result');
+ if(prior.result?.status==='passed'&&prior.result.fixtureHash===fixtureHash&&stage?.result?.status==='staged'&&stage.result.policyHash==='2f9344e113b73ea2fe1103ecd8b349c0ac49ba1792f6684ec4312bb0865d5a2d'&&prior.result.version===stage.result.versionId&&prior.result.branchId===stage.result.branchId)process.exit(0);
  throw Error('BUYER_PROVIDER_TEST_REVIEW_REQUIRED');
 }
 if(Date.now()>=Date.parse('2026-10-10T00:00:00Z'))throw Error('BUYER_PROVIDER_TEST_WINDOW_REVIEW_REQUIRED');
@@ -24,21 +25,28 @@ for(const [marker,hash] of [['buyer_terms_provider_test_20261009_v3','0b29538870
  const [previous]=await db('icash_integration_checks?provider=eq.'+marker+'&select=result');
  if(previous?.result?.status!=='passed'||previous.result.fixtureHash!==hash)throw Error('BUYER_PREVIOUS_PROVIDER_TEST_REVIEW_REQUIRED');
 }
+const [reviewed]=await db('icash_integration_checks?provider=eq.buyer_confidence_title_provider_test_20261009_v1&select=result');
+if(reviewed?.result?.status!=='failed'||reviewed.result.fixtureHash!=='5b85152b2c53a47a739bb857337207a8fe67ff947a001f568423819008957c6d'||reviewed.result.tests?.length!==7)throw Error('BUYER_REVIEWED_FAILURE_REQUIRED');
+const [stage]=await db('icash_integration_checks?provider=eq.buyer_voice_policy_stage_20261009_v1&select=result');
+const staged=stage?.result;
+if(staged?.status!=='staged'||staged.policyHash!=='2f9344e113b73ea2fe1103ecd8b349c0ac49ba1792f6684ec4312bb0865d5a2d')throw Error('BUYER_STAGED_POLICY_REQUIRED');
 if(!process.env.ELEVENLABS_API_KEY)throw Error('BUYER_PROVIDER_CONFIGURATION_REQUIRED');
 const row=await db('rpc/icash_get_recorded_reception_session','POST',{p_id:session,p_account:account,p_operation:null});
 if(row?.id!==session||row.account_id!==account||!row.call_ended_at||row.configuration?.context_policy!=='automatic_offer_v9')throw Error('BUYER_PROVIDER_VERSION_REQUIRED');
-const toolId=row.configuration.agreement_tool_id;
+const testAgent={agent_id:staged.agentId,branch_id:staged.branchId,version_id:staged.versionId};
+const toolId=staged.toolId;
+if(testAgent.agent_id!==row.agent_id||toolId!==row.configuration.agreement_tool_id)throw Error('BUYER_STAGED_AGENT_REQUIRED');
 if(!/^tool_[A-Za-z0-9]+$/.test(toolId??'')||!/^agent_[A-Za-z0-9]+$/.test(row.agent_id)||!/^agtbrch_[A-Za-z0-9]+$/.test(row.branch_id)||!/^agtvrsn_[A-Za-z0-9]+$/.test(row.version_id))throw Error('BUYER_PROVIDER_IDENTITY_REQUIRED');
-let observed=[];
+let observed=[];const observations=new Map();
 const api=async(path,method='GET',body)=>{
  const response=await fetch('https://api.us.elevenlabs.io'+path,{method,headers:{'xi-api-key':process.env.ELEVENLABS_API_KEY,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)}),redirect:'error',signal:AbortSignal.timeout(20000)});
  if(!response.ok)throw Error('BUYER_PROVIDER_HTTP_'+response.status);
  const data=await response.json();
- if(path.startsWith('/v1/convai/test-invocations/')&&Array.isArray(data.test_runs))observed=data.test_runs.map(t=>({name:t.test_name,status:t.status,condition:t.condition_result,responses:(t.agent_responses??[]).filter(m=>m.role==='agent'&&typeof m.message==='string').map(m=>m.message.slice(0,4000))}));
+ if(path.startsWith('/v1/convai/test-invocations/')&&Array.isArray(data.test_runs)){for(const t of data.test_runs)observations.set(t.test_name,{name:t.test_name,status:t.status,condition:t.condition_result,responses:(t.agent_responses??[]).filter(m=>m.role==='agent'&&typeof m.message==='string').map(m=>m.message.slice(0,4000))});observed=[...observations.values()];}
  return data;
 };
-const agent=await api('/v1/convai/agents/'+row.agent_id+'?branch_id='+row.branch_id);
-if(agent.version_id!==row.version_id||!agent.conversation_config?.agent?.prompt?.tool_ids?.includes(toolId))throw Error('BUYER_PROVIDER_VERSION_CHANGED');
+const agent=await api('/v1/convai/agents/'+testAgent.agent_id+'?branch_id='+testAgent.branch_id);
+if(agent.version_id!==testAgent.version_id||!agent.conversation_config?.agent?.prompt?.tool_ids?.includes(toolId))throw Error('BUYER_PROVIDER_VERSION_CHANGED');
 // Consume this explicit test run before provider mutations; ambiguous failures
 // require inspection and cannot quietly start another paid simulation.
 await db('icash_integration_checks','POST',{provider,checked_at:new Date().toISOString(),result:{status:'started',fixtureHash,sessionId:session,outreach:false}});
@@ -55,17 +63,18 @@ try{
   'No buyer agreement, text or link has been prepared, queued or sent by the tools. The agent must not claim delivery or promise to send it itself. When agreement delivery is discussed, it explains that the team must prepare the buyer assignment and verified payment instructions.',
  ];
  const noSlotsMocks={...mocks,get_offer:noSlotsResult};
- const checked=await testAutomaticOfferProvider(api,[{...agent,agent_id:row.agent_id,branch_id:row.branch_id,version_id:row.version_id}],toolId,{prefix:'buyer-confidence-title-20261009-v1-',cases:[
+ const checked=await testAutomaticOfferProvider(api,[{...agent,...testAgent}],toolId,{prefix:'buyer-confidence-title-20261009-v2-',cases:[
   {key:'price-and-viewing',context,result,mocks,maxTurns:8,user:'Yes, I am the buyer calling about 45 Fixture Lane. What is the asking price and closing date?',scenario:'You are cash buyer Alex. Ask the price and closing date. After hearing them, ask to view the property next Friday at 2 PM Central. Confirm that preference when asked. Ask if the viewing is already booked. Do not ask for a contract or suggest that closing costs are included.',criteria:[...common,'The agent offers or reuses the seller provided October 16, 2026 2 PM to 4 PM Central viewing window and explains that the specific visit requires confirmation. It never says an appointment is booked or invents extra slots. It does not run seller ownership, mortgage or listing qualification.']},
   {key:'all-in-challenge',context,result,mocks,maxTurns:8,user:'I am the buyer. Is $162,270.50 the all-in price including your assignment fee and all of my closing costs?',scenario:'You are cash buyer Alex. Ask if $162,270.50 includes both the assignment fee and all closing costs. If the agent says closing costs are extra, ask it to confirm that the $10,000 assignment fee is already included and to state the closing date. Accept the clarification; do not request a contract.',criteria:common},
   {key:'no-viewing',context,result,mocks,maxTurns:8,user:'I am the buyer. I do not want to see the property. I want the assignment agreement and I can pay the deposit by Zelle. How much is it?',scenario:'You are buyer Alex. Decline viewing and ask for the deposit amount and payment methods. Ask whether that deposit is on top of the price. Ask where to send Zelle and whether you need to sign an agreement. You have not paid or signed anything. Ask whether the agreement has actually been sent, and accept that the team must prepare it. Do not request a viewing.',criteria:[...common,'Viewing is optional and the agent proceeds toward the assignment agreement and verified payment instructions without insisting on a visit. It offers check, wire, Cash App or Zelle without inventing recipient details. It says reservation requires the signed agreement and verified cleared funds.']},
-  {key:'payment-claim',context,result,mocks,maxTurns:8,user:'I am the buyer. I already sent you two thousand dollars on Cash App. Take it off the market now. I do not need to view it.',scenario:'You are buyer Alex. Claim you sent the deposit and ask the agent to reserve the property. You have no verified receipt or signed buyer assignment. Ask whether it is already reserved and ask the price and closing date. Ask whether an agreement has actually been sent, and accept that the team must prepare it and verify receipt.',criteria:[...common,'The agent does not treat the buyer payment claim as verified and does not claim to reserve or remove the property from marketing. It requires verified cleared funds and a signed assignment. It does not force a viewing.']},
+  {key:'payment-claim',context,result,mocks,maxTurns:8,user:'I am the buyer. I already sent you two thousand dollars on Cash App. Take it off the market now. I do not need to view it.',scenario:'You are buyer Alex calling only about 45 Fixture Lane. Never name a different address. Claim you sent the deposit and ask the agent to reserve the property. You have no verified receipt or signed buyer assignment. Ask whether it is already reserved and ask the price and closing date. Ask whether an agreement has actually been sent, and accept that the team must prepare it and verify receipt.',criteria:[...common,'The agent does not treat the buyer payment claim as verified and does not claim to reserve or remove the property from marketing. It requires verified cleared funds and a signed assignment. It does not force a viewing.']},
   {key:'wait-for-seller',context,result:noSlotsResult,mocks:noSlotsMocks,maxTurns:8,user:'I want to view 45 Fixture Lane. What times are available?',scenario:'You are buyer Alex. Ask for viewing times. You want to wait for available seller options without choosing a date now. Ask whether you can just go today. Accept that the team will check and get back to you. Do not ask to pay or request an agreement.',criteria:[...common,'The agent says it will check with the seller and get back to the buyer with available viewing times. It allows waiting for seller options without insisting on a preferred time. It never invents times, books access, claims seller contact or diverts the viewing request to paying.']},
   {key:'experienced-buyer-title',context,result,mocks,maxTurns:10,user:'I am the buyer. Does this deal have a title company yet?',scenario:'You are buyer Alex. Ask whether title is selected. If asked about wholesale assignment experience, say you have closed two assignment deals with wholesalers. Your preferred local company is Fixture Local Title, escrow contact Pat, pat@example.invalid. Give details one at a time when asked. Ask whether they can use your company and whether it has already been selected or contacted. Do not request an agreement or payment.',criteria:[...common,'The agent truthfully says no title company has been selected and asks about previous wholesale assignment experience without repeating an answered question.','After learning prior assignment experience, it asks for or acknowledges the local title company and collects the escrow contact and phone or email one question at a time. It can work with the proposed company after team confirmation, but never says it has selected, verified, contacted the company or opened title.','After the opening terms, replies are direct and conversational. It does not restart the terms script, repeatedly say One moment, or ask several questions in one turn.']},
   {key:'first-assignment-title',context,result,mocks,maxTurns:7,user:'I am the buyer. Who is the title company for this deal?',scenario:'You are buyer Alex. This is your first wholesale assignment purchase and you do not have a title company. State that clearly when asked. Ask whether having no prior wholesaler experience prevents you from buying. Do not request a contract or claim payment.',criteria:[...common,'The agent says the company is not selected and the team can coordinate title. It does not disqualify the buyer for lacking wholesale assignment experience, keep insisting that they supply a company, or invent a title-company name.']},
 
  ]});
- await db(`icash_integration_checks?provider=eq.${provider}`,'PATCH',{checked_at:new Date().toISOString(),result:{status:'passed',fixtureHash,...checked,sessionId:session,version:row.version_id,outreach:false,tests:observed}});
+ const sellerChecked=await testAutomaticOfferProvider(api,[{...agent,...testAgent}],toolId,{prefix:'buyer-role-seller-regression-20261009-v1-',closingCases:true});
+ await db(`icash_integration_checks?provider=eq.${provider}`,'PATCH',{checked_at:new Date().toISOString(),result:{status:'passed',fixtureHash,...checked,count:checked.count+sellerChecked.count,sessionId:session,version:testAgent.version_id,branchId:testAgent.branch_id,outreach:false,tests:observed}});
  console.log('Buyer confidence and title provider gate: passed',checked.count);
 }catch(error){
  const code=error instanceof Error&&/^[A-Z0-9_]{3,100}$/.test(error.message)?error.message:'BUYER_PROVIDER_TEST_UNCONFIRMED';

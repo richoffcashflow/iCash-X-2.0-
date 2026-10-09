@@ -122,5 +122,27 @@ export async function testAutomaticCallOffer(f){
  for(const role of ['anon','authenticated','service_role'])assert.equal(await val("select has_table_privilege($1,'icash_call_offer_private.offers','SELECT,INSERT,UPDATE,DELETE')",[role]),false);
  for(const role of ['anon','authenticated'])for(const name of ['icash_call_offer_context(text,text)','icash_save_call_offer(text,text,bigint,jsonb,jsonb,text)'])assert.equal(await val("select has_function_privilege($1,$2,'execute')",[role,'public.'+name]),false);
  for(const role of ['anon','authenticated','service_role'])assert.equal(await val("select has_function_privilege($1,'public.icash_reception_context_before_payoff(uuid,text)','execute')",[role]),false);
+ await db.exec(read('config/buyer-voice-coordination-policy.sql'));
+ await scenario('v10 retains live identity, seller authority and old v9 sessions',async()=>{
+  const {r,scope}=await call('seller',true,'v10');assert.equal((await scope()).dealId,'11111111-1111-4111-8111-111111111111');
+  assert.equal((await rpc('icash_call_offer_context',{p_hash:r.stop_token_hash,p_conversation:'conv_agreement'})).party,'seller');
+  assert.equal(await rpc('icash_call_offer_context',{p_hash:r.stop_token_hash,p_conversation:'conv_other'}),null);
+ });
+ await scenario('v9 keeps its old context after adding v10',async()=>{const {scope}=await call('seller',true,'v9');assert.equal((await scope()).dealId,'11111111-1111-4111-8111-111111111111');});
+ await scenario('buyer voice staging is disabled, exact, replayable and preserves its reviewed source',async()=>{
+  const {r}=await call('seller',true,'v9');
+  const source=await val('select to_jsonb(c) from icash_recorded_reception_private.configs c where id=$1',[r.config_id]);
+  const args={p_source:r.config_id,p_branch:'agtbrch_buyerfixture',p_version:'agtvrsn_buyerfixture',p_hash:'e'.repeat(64)};
+  const staged=await rpc('icash_stage_buyer_voice_policy',args);
+  const candidate=await val('select to_jsonb(c) from icash_recorded_reception_private.configs c where id=$1',[staged]);
+  assert.equal(candidate.enabled,false);assert.equal(candidate.context_policy,'automatic_offer_v10');
+  assert.equal(candidate.agreement_tool_id,source.agreement_tool_id);assert.equal(candidate.reviewed_until,source.reviewed_until);
+  assert.equal(await rpc('icash_stage_buyer_voice_policy',args),staged);
+  assert.deepEqual(await val('select to_jsonb(c) from icash_recorded_reception_private.configs c where id=$1',[r.config_id]),source);
+  for(const patch of [{p_branch:source.branch_id},{p_hash:'f'.repeat(64)},{p_source:staged}]){
+   await q('savepoint stage_denied');await assert.rejects(rpc('icash_stage_buyer_voice_policy',{...args,...patch}),/required|differs/);await q('rollback to savepoint stage_denied');
+  }
+ });
+ for(const role of ['anon','authenticated'])assert.equal(await val("select has_function_privilege($1,'public.icash_stage_buyer_voice_policy(uuid,text,text,text)','execute')",[role]),false);
  console.log('PASS automatic offer SQL: current call only, atomic price lock, stale-data hold, contract price equality and private ledger.');
 }

@@ -1,3 +1,4 @@
+import {buyerVoicePolicy,buyerVoiceGuardrail} from './buyer-voice-policy.ts';
 import {recordingAuthorized,directRecordedInstructions} from './direct-call-entry.ts';
 import {automaticOfferGuardrailMatches,automaticOfferPolicy} from './automatic-offer-policy.ts';
 import {sellerAgreementReceptionEnabled} from './seller-agreement-reception.ts';
@@ -73,7 +74,9 @@ export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:un
  const base=inspectReceptionAgent({...c,config_hash:''},a,branch,workspaceAbsent);
  const snapshot={main_branch_id:raw.main_branch_id,agent_id:raw.agent_id,branch_id:raw.branch_id,version_id:raw.version_id,conversation_config:raw.conversation_config,platform_settings:raw.platform_settings,workflow:raw.workflow??null,procedures:raw.procedures??null};
  const hash=sha(JSON.stringify(canonical(snapshot)));
- const priceEnforcement=!automaticOfferPolicy(c.context_policy)||automaticOfferGuardrailMatches(object(raw.platform_settings).guardrails,c.context_policy);
+ const guardrails=object(raw.platform_settings).guardrails;
+ const buyerGuards=object(object(object(guardrails).custom).config).configs;
+ const priceEnforcement=c.context_policy===buyerVoicePolicy?object(guardrails).version==='1'&&object(object(guardrails).focus).is_enabled===true&&Array.isArray(buyerGuards)&&buyerGuards.filter(g=>object(g).name===buyerVoiceGuardrail.name).length===1&&buyerGuards.some(g=>Object.entries(buyerVoiceGuardrail).every(([key,value])=>JSON.stringify(canonical(object(g)[key]))===JSON.stringify(canonical(value)))):!automaticOfferPolicy(c.context_policy)||automaticOfferGuardrailMatches(guardrails,c.context_policy);
  return {safe:exactStop&&exactAgreement&&exactPrompt&&priceEnforcement&&inlineStopMatchesReviewedDefinition&&Object.values(base.checks).every(Boolean)&&hash===c.config_hash,hash,checks:{...base.checks,exactStop,exactAgreement,exactPrompt,priceEnforcement,inlineStopMatchesReviewedDefinition},inlineTools};
 }
 export function recordedReceptionToolMatches(id:string,input:unknown){
