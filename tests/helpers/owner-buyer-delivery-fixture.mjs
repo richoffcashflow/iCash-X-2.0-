@@ -31,12 +31,14 @@ export async function testOwnerBuyerDelivery(f,{link,realBuyerThread,realBuyerEm
  const unbranded=await rpc('icash_buyer_outreach_content',{p_account:account,p_deal:deal});
  assert.equal(read('config/homeoffer-buyer-package-links.sql'),read('supabase/migrations/20261010222242_homeoffer_buyer_package_links.sql'));
  await pg.exec(read('config/homeoffer-buyer-package-links.sql'));
+ assert.equal(read('config/buyer-package-reply-copy.sql'),read('supabase/migrations/20261010222502_buyer_package_reply_copy.sql'));
+ await pg.exec(read('config/buyer-package-reply-copy.sql'));
  const branded=await rpc('icash_buyer_outreach_content',{p_account:account,p_deal:deal});
  assert(branded.sms.includes('https://homeoffernetwork.com/d/'));assert(branded.email.includes('https://homeoffernetwork.com/d/'));
  assert.equal(branded.sms,unbranded.sms.replace('https://www.geticashx.com/d/','https://homeoffernetwork.com/d/'));
  const brandedLink=await rpc('icash_ensure_buyer_package',{p_account:account,p_deal:deal});
  assert.equal(brandedLink.id,link.id);assert.equal(brandedLink.url,link.url.replace('https://www.geticashx.com/','https://homeoffernetwork.com/'));
- assert((await rpc('icash_buyer_factual_text',{p_account:account,p_thread:realBuyerThread,p_incoming:'Send me the package'})).includes('https://homeoffernetwork.com/d/'));
+ assert.equal(await rpc('icash_buyer_factual_text',{p_account:account,p_thread:realBuyerThread,p_incoming:'Send me the package'}),'Here is the buyer package: '+brandedLink.url);
  await q('begin');try{
   await q('delete from icash_buyer_package_texts where thread_id=$1',[realBuyerThread]);
   const brandedMessage=await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:realBuyerThread,p_body:branded.sms});assert(brandedMessage);
