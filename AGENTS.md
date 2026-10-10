@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- The owner approved an admin-only Standard/VIP appearance preview on October 10, 2026. This explicit preview may show gold branding without a VIP entitlement, but must never change billing, access, usage prices or recorded savings. Normal customer views still use the verified account entitlement.
+
 - Keep Standard iCash product UI monochrome: black, white, and neutral grays. The owner approved gold accents for the VIP workspace and VIP upgrade controls on October 10, 2026. Keep the workspace background white, body text legible, and VIP styling tied to the account’s verified active entitlement; opening upgrade review must not grant access or change billing. Use labels, icons, borders, and contrast for status and emphasis instead of colored alerts, buttons, or badges. The public HomeOffer Network seller page (`/sell`, homeoffernetwork.com) is an explicit exception: preserve its original coral-orange accents, warm supporting colors, and neighborhood photography.
 - Use 12-hour clock time with explicit AM/PM everywhere users or owners see or enter a time. Never display military / 24-hour clock time, including in admin tools, schedules, notifications, date/time pickers, and new features.
 - Set `hour12: true` and an English AM/PM locale for formatted timestamps. Use the shared `DateTimeInput` for date/time entry; native `time` and `datetime-local` controls can display military time depending on the device.
