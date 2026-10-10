@@ -3,8 +3,8 @@ import {useEffect,useState} from 'react';
 import {Play,Pause,Plus,Crown} from 'lucide-react';
 import {creditAmount} from '@/lib/workspace-progress';
 import type {BotActivity} from '@/lib/bot-activity';
-type Props={vip?:boolean;running:boolean;stopped:boolean;paymentRequired:boolean;busy:boolean;stale:boolean;hasCreditHistory?:boolean;balanceCents?:number;principalKey?:string;canPause?:boolean;onBudget:()=>void;onResume:()=>void;onPause:()=>void};
-export function BotRunBar({vip=false,running,stopped,paymentRequired,busy,stale,balanceCents,hasCreditHistory=false,principalKey,canPause=false,onBudget,onPause,onResume}:Props){
+type Props={vip?:boolean;running:boolean;stopped:boolean;paymentRequired:boolean;busy:boolean;stale:boolean;hasCreditHistory?:boolean;balanceCents?:number;principalKey?:string;canPause?:boolean;onVip?:()=>void;onBudget:()=>void;onResume:()=>void;onPause:()=>void};
+export function BotRunBar({vip=false,running,stopped,paymentRequired,busy,stale,balanceCents,hasCreditHistory=false,principalKey,canPause=false,onVip,onBudget,onPause,onResume}:Props){
  const [activity,setActivity]=useState<(BotActivity&{principalKey?:string})|null>(null);
  useEffect(()=>{
   if(!running||stale){setActivity(null);return;}
@@ -37,6 +37,9 @@ export function BotRunBar({vip=false,running,stopped,paymentRequired,busy,stale,
    {funded&&!paymentRequired&&(canPause||stopped)&&<button className="bot-run-budget" type="button" disabled={busy||stale} onClick={canPause?onPause:onResume}>{canPause?<Pause size={14} aria-hidden="true"/>:<Play size={14} aria-hidden="true"/>}{canPause?'Pause bot':'Run bot'}</button>}
 
   </div>
-  {balanceCents!==undefined&&(hasCreditHistory||funded)&&<div className="bot-credit-caption">{stale?'—':creditAmount(balanceCents)} credits left</div>}
+  {(onVip||balanceCents!==undefined&&(hasCreditHistory||funded))&&<div className="bot-plan-row">
+   {balanceCents!==undefined&&(hasCreditHistory||funded)&&<div className="bot-credit-caption">{stale?'—':creditAmount(balanceCents)} credits left</div>}
+   {onVip&&<button type="button" className="workspace-vip-switch" aria-haspopup="dialog" disabled={busy||stale} onClick={onVip}><Crown size={16} aria-hidden="true"/>{vip?'VIP settings':'Switch to VIP'}</button>}
+  </div>}
  </section>;
 }
