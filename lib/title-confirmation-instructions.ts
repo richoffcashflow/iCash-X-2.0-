@@ -1,5 +1,5 @@
 /** Deliberately no sample completed milestone that a quoted reply could accidentally confirm. */
-export const titleConfirmationInstructions=`For automatic status updates, send a separate plain-text reply containing only these six lines, replacing each placeholder with confirmed facts:
+export const titleConfirmationInstructions=`Please reply normally with your file status, confirmed dates, amounts and any documents you need. Our team can review ordinary replies in the workspace. For optional automatic status updates, send a separate plain-text reply containing only these six lines, replacing each placeholder with confirmed facts:
 ICASH CONFIRMATION
 Status: <title_opened, deposit_received, closing_scheduled, closed, or funds_disbursed>
 Date: <YYYY-MM-DD or none>

@@ -1,9 +1,12 @@
 import {titleConfirmationInstructions} from './title-confirmation-instructions';
 import {db} from '@/lib/stripe-test';
 import {titleEmailAddress} from '@/lib/title-inbound-policy';
+import {dispatchTitleUpdate} from './title-update-service';
 /** One claimed send; ambiguous delivery is never automatically retried. */
 export async function dispatchTitleFollowup(accountId:string,taskId:string){
  if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
+ const [task]=await db<{kind:string}[]>(`icash_title_tasks?id=eq.${taskId}&account_id=eq.${accountId}&select=kind`);
+ if(task?.kind==='document_update')return dispatchTitleUpdate(accountId,taskId);
  const retry=async()=>db(`icash_title_tasks?id=eq.${taskId}&account_id=eq.${accountId}&email_state=eq.issued`,'PATCH',{email_state:'waiting',email_retry_at:new Date(Date.now()+6*3600000).toISOString(),updated_at:new Date().toISOString()});
  if(!process.env.RESEND_API_KEY||!process.env.RESEND_RECEIVING_WEBHOOK_SECRET||!titleEmailAddress(process.env.ICASH_TITLE_FROM_EMAIL)||!titleEmailAddress(process.env.ICASH_TITLE_REPLY_EMAIL)){
  await retry();return {status:'title_followup_configuration_required'};

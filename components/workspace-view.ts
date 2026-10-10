@@ -3,6 +3,7 @@ export type WorkspaceFilter = 'all' | 'attention' | 'active' | 'history';
 export type WorkspaceProperty = {id:string;completed_at:string;result:{property:{address:string;propertyId:string;legalDescription?:string|null;images?:unknown;bedrooms?:number|null;bathrooms?:number|null;livingAreaSqft?:number|null;yearBuilt?:number|null};financialCheck:{status:string;reason:string};preliminarySellerCeilingCents:number|null}};
 export type WorkspaceDeal = {id:string;screening_id:string;stage:string};
 export type WorkspaceEvidence = {
+ closingTasks?:{screening_id:string}[];
  closingReview?:{screening_id:string}[];
  propertyAttentionIds?:string[];
  viewingRequests?:{screening_id:string}[];
@@ -15,7 +16,7 @@ export type WorkspaceEvidence = {
 };
 export function needsAttention(id:string, work:WorkspaceEvidence) {
  const deal=work.deals.find(d=>d.screening_id===id);
- return deal?.stage==='cancellation_pending'||!!work.closingReview?.some(c=>c.screening_id===id)||!!work.sellerRecovery?.some(g=>g.screening_id===id)||!!work.viewingRequests?.some(v=>v.screening_id===id)||!!work.propertyAttentionIds?.includes(id)||!!work.textAttention?.some(a=>a.screening_id===id)
+ return deal?.stage==='cancellation_pending'||!!work.closingTasks?.some(t=>t.screening_id===id)||!!work.closingReview?.some(c=>c.screening_id===id)||!!work.sellerRecovery?.some(g=>g.screening_id===id)||!!work.viewingRequests?.some(v=>v.screening_id===id)||!!work.propertyAttentionIds?.includes(id)||!!work.textAttention?.some(a=>a.screening_id===id)
   ||work.handoffs.some(h=>h.screening_id===id&&h.state==='open')
   ||!!work.callRequests?.some(c=>c.screening_id===id&&c.state==='needs_review')
   ||work.signing.some(s=>s.deal_id===deal?.id&&s.state==='customer_signature_needed');
