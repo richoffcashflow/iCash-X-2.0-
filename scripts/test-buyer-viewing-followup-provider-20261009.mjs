@@ -3,7 +3,8 @@
 import {createHash} from 'node:crypto';
 import {db} from '../lib/stripe-test.ts';
 import {calculateAutomaticCallOffer,buyerAgreementHandoff} from '../lib/automatic-call-offer.ts';
-import {testAutomaticOfferProvider} from './test-automatic-offer-provider.mjs';
+import {testAutomaticOfferProvider,assertPaidProviderSimulationsAllowed} from './test-automatic-offer-provider.mjs';
+assertPaidProviderSimulationsAllowed();
 if(process.env.VERCEL_ENV!=='production'||process.env.VERCEL_GIT_COMMIT_REF!=='main')process.exit(0);
 const account='48dfb798-8c1a-404f-88c0-c396cc067062',session='05631a2b-abae-43a6-a327-5ccf77a0173a',provider='buyer_viewing_followup_provider_test_20261009_v1';
 const address='45 Fixture Lane';

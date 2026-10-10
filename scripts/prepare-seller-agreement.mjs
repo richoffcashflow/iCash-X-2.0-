@@ -9,7 +9,7 @@ import {canonical,object,readRecordingReview,recordingAgentMatches,sha} from '..
 import {directRecordedInstructions} from '../lib/direct-call-entry.ts';
 import {receptionTarget,receptionWorkspacePostcallAbsent} from '../lib/general-reception.ts';
 import {boundedBytes} from '../lib/required-call-recording-provider.ts';
-import {testAutomaticOfferProvider} from './test-automatic-offer-provider.mjs';
+import {testAutomaticOfferProvider,assertPaidProviderSimulationsAllowed} from './test-automatic-offer-provider.mjs';
 
 const stable=a=>JSON.stringify(canonical({main_branch_id:a.main_branch_id,agent_id:a.agent_id,branch_id:a.branch_id,version_id:a.version_id,conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null}));
 export async function prepareSellerAgreement(env=process.env,fetcher=fetch,noEmd=false,automatic=false,verifyProvider=testAutomaticOfferProvider){
@@ -35,6 +35,8 @@ export async function prepareSellerAgreement(env=process.env,fetcher=fetch,noEmd
  const api=(path,method,body)=>request('https://api.us.elevenlabs.io'+path,{'xi-api-key':env.ELEVENLABS_API_KEY},method,body);
  const c=await rpc('icash_get_recorded_reception_config',{p_called_number:receptionTarget.calledNumber});
  if(c?.context_policy==='automatic_offer_v18'||c?.context_policy==='automatic_offer_v17'||c?.context_policy==='automatic_offer_v16'||c?.context_policy==='automatic_offer_v15'||c?.context_policy==='automatic_offer_v14'||c?.context_policy==='automatic_offer_v13'||c?.context_policy==='automatic_offer_v12'||c?.context_policy==='automatic_offer_v11'||c?.context_policy==='automatic_offer_v10'||!automatic&&automaticOfferPolicy(c?.context_policy)||c?.context_policy===automaticOfferReceptionPolicy&&c?.context_policy_hash===automaticOfferReceptionPolicyHash||!automatic&&(c?.context_policy===noEmdReceptionPolicy&&c?.context_policy_hash===noEmdReceptionPolicyHash||!noEmd&&c?.context_policy===sellerAgreementReceptionPolicy&&c?.context_policy_hash===sellerAgreementReceptionPolicyHash))return {status:'already_active'};
+ // Stop before any provider staging if this preparation needs paid validation.
+ if(automatic&&verifyProvider===testAutomaticOfferProvider)assertPaidProviderSimulationsAllowed();
  const oldReview=readRecordingReview(env.RECORDED_OUTBOUND_REVIEW_JSON);
  if(!c||(automatic?c.context_policy!=='automatic_offer_v8':c.context_policy!==(noEmd?sellerAgreementReceptionPolicy:'seller_offer_v2'))||c.entry_policy!=='direct_recorded_v1'||!oldReview)throw Error('REVIEWED_SOURCE_REQUIRED');
  const incomingPath='/v1/convai/agents/'+c.agent_id,outgoingPath='/v1/convai/agents/'+oldReview.agentId;

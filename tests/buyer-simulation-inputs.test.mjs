@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {testAutomaticOfferProvider} from '../scripts/test-automatic-offer-provider.mjs';
+import {runMockedAutomaticOfferProvider as testAutomaticOfferProvider} from './helpers/automatic-offer-provider-fixture.mjs';
 test('stored role, criteria and all-tool mocks must match before any simulation runs',async()=>{
  for(const patch of [null,b=>{b.dynamic_variables.icash_role_instructions='changed';},b=>{b.dynamic_variables.icash_property_context='{}';},b=>{b.success_conditions=[];},b=>{b.tool_mock_config.fallback_strategy='execute';},b=>{b.tool_mock_config.mocked_tool_ids=[];}]){
   let body,runs=0;
