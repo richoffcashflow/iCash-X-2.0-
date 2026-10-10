@@ -2,9 +2,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {canonical,sha} from '../lib/required-call-recording.ts';
-import {diagnoseReceptionFingerprint} from '../scripts/reception-fingerprint-diagnostic.mjs';
+import {diagnoseReceptionFingerprint,receptionFingerprintSettings} from '../scripts/reception-fingerprint-diagnostic.mjs';
 const hash=value=>sha(JSON.stringify(canonical(value)));
 const fixture=()=>({agent_id:'fixture',version_id:'fixture-version',conversation_config:{agent:{prompt:{prompt:'private fixture prompt',tools:[{name:'private tool A'},{name:'private tool B'},{name:'private tool C'}],tool_ids:['private ID A','private ID B']}}},platform_settings:{privacy:{record_voice:false}},workflow:null,procedures:null});
+
+test('settings report never includes provider-controlled strings, keys, headers or allowlist entries',()=>{
+ const input=fixture();
+ input.platform_settings.auth={enable_auth:true,allowlist:['private.example'],privateKey:'private value'};
+ input.platform_settings.privacy.retention_days=730;
+ input.conversation_config.turn={turn_timeout:'private malicious value'};
+ const before=structuredClone(input),report=receptionFingerprintSettings(input);
+ assert.equal(report.find(f=>f.path==='platform_settings.privacy.retention_days').value,730);
+ assert.equal(report.find(f=>f.path==='platform_settings.auth.allowlist').value,'array:1');
+ assert.equal(report.find(f=>f.path==='conversation_config.turn.turn_timeout').value,'redacted');
+ assert(!JSON.stringify(report).includes('private'));
+ assert.deepEqual(input,before);
+});
 
 test('proves array-only drift against the original hash without modifying input or exposing values',()=>{
  const original=fixture(),input=structuredClone(original);
