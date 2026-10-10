@@ -4,7 +4,7 @@ const fingerprint=value=>sha(JSON.stringify(canonical(value)));
 const schemaKeys=new Set(('main_branch_id agent_id branch_id version_id conversation_config platform_settings workflow procedures agent prompt tools tool_ids built_in_tools mcp_server_ids native_mcp_server_ids knowledge_base rag custom_llm asr tts conversation turn language_presets first_message language max_tokens llm temperature voice_id model_id stability speed similarity_boost optimize_streaming_latency agent_output_audio_format user_input_audio_format max_duration_seconds privacy record_voice auth enable_auth call_limits agent_concurrency_limit bursting_enabled queueing_config enabled overrides conversation_config_override workspace_overrides webhooks events post_call_webhook_id send_audio guardrails version focus custom config configs is_enabled type name params system_tool_type api_schema request_headers request_body_schema properties required dynamic_variables dynamic_variable_placeholders evaluation criteria data_collection retention_days conversation_retention_days delete_transcript_and_pii audio_save_locally use_zero_retention_mode soft_timeout turn_timeout turn_eagerness spelling_patience silence_end_call_timeout').split(' '));
 const safePath=path=>path.map(part=>typeof part==='number'?`[${part}]`:schemaKeys.has(part)?part:'[unrecognized_key]').join('.');
 const shape=value=>value===null?'null':Array.isArray(value)?`array:${value.length}`:typeof value;
-const maxAttempts=8192;
+const maxAttempts=16384;
 for(const key of ['description','dynamic_variable','constant_value','enum','items','allowed_values','allowed_values_dynamic_variable','is_system_provided','is_omitted'])schemaKeys.add(key);
 
 /** Fixed schema paths and primitive values only. In particular, never walk
@@ -53,6 +53,24 @@ export function diagnoseReceptionFingerprint(input,expectedHash){
   attempts++;
   if(fingerprint(snapshot)!==expectedHash)return false;
   result.matched=true;result.changes=changes;return true;
+ }
+ // Provider serializers can introduce more than one optional field together.
+ // Check pairs of neutral key groups against the complete original hash.
+ // This is diagnostic reconstruction only, not a runtime normalization rule.
+ const neutralGroups=new Map();
+ for(const field of fields){
+  if(!(field.value===null||field.value===false||field.value===''||Array.isArray(field.value)&&field.value.length===0))continue;
+  const key=field.key+':'+shape(field.value),group=neutralGroups.get(key)??[];
+  group.push(field);neutralGroups.set(key,group);
+ }
+ const neutral=[...neutralGroups.values()];
+ for(let i=0;i<neutral.length;i++)for(let j=i+1;j<neutral.length;j++){
+  const group=[...neutral[i],...neutral[j]];
+  for(const field of group)delete field.parent[field.key];
+  const found=check(group.map(field=>({kind:'remove_neutral_fields',path:safePath(field.path),observedShape:shape(field.value)})));
+  for(const field of group)field.parent[field.key]=field.value;
+  if(found)return {...result,attempts};
+  if(attempts>=maxAttempts)return {...result,attempts,truncated:true};
  }
  // Numeric settings remain version-external in some provider responses.
  // Test bounded historical/default values without changing any live setting.

@@ -55,8 +55,20 @@ test('bounds work, recognizes exact inputs, and cannot approve an unknown finger
  assert.deepEqual(diagnoseReceptionFingerprint(input,hash(input)),{matched:false,exact:true,attempts:0,truncated:false,changes:[]});
  const huge=fixture();huge.platform_settings.extra=Array.from({length:1500},(_,i)=>({field:i}));
  const result=diagnoseReceptionFingerprint(huge,'0'.repeat(64));
- assert.equal(result.matched,false);assert(result.attempts<=8192);
+ assert.equal(result.matched,false);assert(result.attempts<=16384);
  assert.equal(diagnoseReceptionFingerprint(input,'invalid').matched,false);
+});
+
+test('identifies paired optional serializer fields without accepting changed behavior',()=>{
+ const original=fixture(),input=structuredClone(original);
+ input.conversation_config.agent.prompt.initial_wait_time=null;
+ for(const tool of input.conversation_config.agent.prompt.tools)tool.is_omitted=false;
+ const before=structuredClone(input),result=diagnoseReceptionFingerprint(input,hash(original));
+ assert.equal(result.matched,true);assert.equal(result.changes.length,4);
+ assert(result.changes.every(change=>change.kind==='remove_neutral_fields'));
+ assert.deepEqual(input,before);
+ input.conversation_config.agent.prompt.prompt='changed';
+ assert.equal(diagnoseReceptionFingerprint(input,hash(original)).matched,false);
 });
 
 test('identifies a single numeric setting while changed tool content remains unmatched',()=>{
