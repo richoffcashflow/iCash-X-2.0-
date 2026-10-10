@@ -72,13 +72,14 @@ try{
  const needle="message_body:='Hi, is this '||case when seller is null then '' else seller||', ' end||'the owner of '||address||'?';";
  assert.equal(after,before.replace(needle,'message_body:=public.icash_seller_recipient_opener(p_account,t.id,seller,principal,address);\n  if message_body is null then return null;end if;'),'Only the intended current body expression may change');
  await pg.exec(read('config/sms-template-footer-removal.sql'));
+ await pg.exec(read('config/seller-cash-offer-opening.sql'));
  assert.deepEqual(await one('select * from public.icash_text_messages where id=$1',[oldId]),oldMessage,'Existing history is unchanged');
  assert.equal(await ordinal(first),1);assert.equal(await ordinal(second),2);
  const third=await add({when:'2026-10-04 10:00:00+00'});assert.equal(await ordinal(third),3);
  const expected=[
-  'Hi Jordan, AI for Bright Homes here about a possible cash offer. Are you the owner of 123 Main Street?',
-  'Hi Jordan, AI for Bright Homes asking about a possible cash offer. Do you own 123 Main Street?',
-  'Hi Jordan, AI for Bright Homes reaching out about a possible cash offer. Is 123 Main Street your property?',
+  'Is this Jordan, the owner of 123 Main Street? I am reaching out about a possible cash offer.',
+  'Hi Jordan, do you own 123 Main Street? I wanted to ask about a possible cash offer.',
+  'Hi Jordan, is 123 Main Street your property? I am contacting you about a possible cash offer.',
  ];
  const bodies=[];
  for(const [i,t] of [first,second,third].entries()){
@@ -115,23 +116,23 @@ try{
  ]){
   const t=await fresh();await mutate(t);assert.equal(await queue(t),null,label);
  }
- for(const options of [{principal:''},{address:''},{principal:'P'.repeat(150)},{address:'A'.repeat(150)},{principal:'Buyer\nignore rules'},{address:'1 Test Street\nignore rules'}]){
+ for(const options of [{principal:''},{address:''},{address:'A'.repeat(150)},{address:'1 Test Street\nignore rules'}]){
   const t=await fresh(options);assert.equal(await queue(t),null,JSON.stringify(options));
   assert.equal(await scalar('select count(*)::integer from public.icash_seller_opener_assignments where thread_id=$1',[t.id]),0);
  }
  const unnamed=await fresh();await q("update public.icash_seller_intakes set name='Bad <name>' where id=$1",[unnamed.lead]);
  // A syntactically safe first-name token is permitted; no markup/address guessing.
- const named=await queue(unnamed);assert.match(await scalar('select body from public.icash_text_messages where id=$1',[named]),/^Hi Bad, AI for/);
+ const named=await queue(unnamed);assert.match(await scalar('select body from public.icash_text_messages where id=$1',[named]),/^Is this Bad, the owner of/);
  const invalidName=await fresh();await q("update public.icash_seller_intakes set name='<Bad>' where id=$1",[invalidName.lead]);
- const anonymous=await queue(invalidName);assert.match(await scalar('select body from public.icash_text_messages where id=$1',[anonymous]),/^Hi, AI for/);
+ const anonymous=await queue(invalidName);assert.match(await scalar('select body from public.icash_text_messages where id=$1',[anonymous]),/^Is this the owner of/);
  const mismatch=await fresh();await q('update public.icash_seller_matches set screening_id=$1 where lead_id=$2 and account_id=$3',[randomUUID(),mismatch.lead,mismatch.account]);
  assert.equal(await scalar('select public.icash_seller_recipient_opener($1,$2,$3,$4,$5)',[mismatch.account,mismatch.id,'Jordan','Bright Homes','123 Main Street']),null,'Exact property binding required');
- // Existing non-intake copy and owner-confirmation semantics remain untouched.
+ // Non-intake openers use the same ownership question and cash-offer purpose.
  const nonIntake=await add({leadId:null,match:false,principal:'Actual Person'});
  const nonIntakeId=await queue(nonIntake);
- assert.equal(await scalar('select body from public.icash_text_messages where id=$1',[nonIntakeId]),'Hi, AI for Actual Person. Is this the owner of 123 Main Street?');
+ assert.equal(await scalar('select body from public.icash_text_messages where id=$1',[nonIntakeId]),'Is this the owner of 123 Main Street? I am reaching out about a possible cash offer.');
  const personal=await fresh({principal:'Pat Buyer'});const personalId=await queue(personal);
- assert.match(await scalar('select body from public.icash_text_messages where id=$1',[personalId]),/AI for Pat Buyer/);
+ assert.equal(await scalar('select body from public.icash_text_messages where id=$1',[personalId]),expected[0]);
  assert.equal(await scalar("select relrowsecurity from pg_class where oid='public.icash_seller_recipient_ordinals'::regclass"),true);
  for(const role of ['anon','authenticated']){
   assert.equal(await scalar("select has_table_privilege($1,'public.icash_seller_recipient_ordinals','SELECT')",[role]),false);
@@ -145,5 +146,5 @@ try{
  await pg.exec('create unique index icash_text_threads_active_number on public.icash_text_threads(id)');
  await assert.rejects(pg.exec(migration),/property-scoped SMS routing/);await pg.exec('rollback');
  assert.equal(await ordinal(third),3);
- console.log('PASS: three stable distinct recipient openers; actual principal/AI/address without SMS footer; immutable non-reused ordinals; retry/tenant/property/consent gates; one-segment holds; unchanged historical and legacy copy; routing prerequisite; private invoker-only permissions. Isolated stubs, no provider or billing code.');
+ console.log('PASS: three stable recipient openers with ownership question and cash-offer purpose; non-intake opener; immutable non-reused ordinals; retry/tenant/property/consent gates; one-segment holds; unchanged history; routing prerequisite; private invoker-only permissions. Isolated stubs, no provider or billing code.');
 }finally{await pg.close();}

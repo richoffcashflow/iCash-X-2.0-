@@ -1,5 +1,13 @@
 # Stable seller recipient openers
 
+## October 10 opening copy
+
+`config/seller-cash-offer-opening.sql` supersedes the first-message wording below after the SMS footer removal migration. New seller conversations start with the submitted first name and property ownership question, followed by the cash-offer purpose:
+
+> Is this Sarah, the owner of 123 Main Street? I am reaching out about a possible cash offer.
+
+The other two recipient slots retain distinct ownership questions with the same cash-offer purpose. A missing or unsafe name uses the owner question without a name. Non-intake conversations use this opening with a previously verified self-introduced name when available. The opening does not add an AI introduction. Direct identity questions still receive the existing truthful response. Saved messages, contact permissions, stable recipient ordinals, duplicate prevention and the one-segment limit are unchanged.
+
 ## Prepared change
 
 `config/seller-recipient-variants.sql` is an unapplied, one-time SQL change. Apply it only after the current `sms-property-routing` migration and the natural seller opener migration. It performs no provider calls, creates no contact threads or consent, and changes no funding, reservations, launch flags, sender numbers, or previously queued messages.
