@@ -7,6 +7,19 @@ const shape=value=>value===null?'null':Array.isArray(value)?`array:${value.lengt
 const maxAttempts=8192;
 for(const key of ['description','dynamic_variable','constant_value','enum','items','allowed_values','allowed_values_dynamic_variable','is_system_provided','is_omitted'])schemaKeys.add(key);
 
+/** Fixed schema paths and primitive values only. In particular, never walk
+ * prompts, dynamic variables, headers, webhook payloads or provider key names. */
+export function receptionFingerprintSettings(input){
+ const raw=object(input),paths=[
+  ...['auth.enable_auth','auth.allowlist','privacy.record_voice','privacy.retention_days','privacy.conversation_retention_days','privacy.delete_transcript_and_pii','privacy.audio_save_locally','privacy.apply_to_existing_conversations','privacy.use_zero_retention_mode','call_limits.agent_concurrency_limit','call_limits.daily_limit','call_limits.bursting_enabled','queueing_config.enabled','queueing_config.wait_timeout_seconds'].map(p=>'platform_settings.'+p),
+  ...['turn.turn_timeout','turn.initial_wait_time','turn.silence_end_call_timeout','turn.speculative_turn','turn.retranscribe_on_turn_timeout','turn.transcribe_on_disabled_interruptions','turn.soft_timeout_config.timeout_seconds','turn.soft_timeout_config.max_soft_timeouts_per_generation','turn.soft_timeout_config.disable_until_first_user_message','tts.stability','tts.speed','tts.similarity_boost','tts.optimize_streaming_latency','agent.prompt.temperature','agent.prompt.max_tokens','agent.prompt.thinking_budget','agent.prompt.cascade_timeout_seconds'].map(p=>'conversation_config.'+p),
+ ];
+ return paths.map(path=>{
+  const value=path.split('.').reduce((v,key)=>object(v)[key],raw);
+  return {path,value:value===undefined?'absent':value===null?null:typeof value==='boolean'||typeof value==='number'&&Number.isFinite(value)?value:Array.isArray(value)?`array:${value.length}`:typeof value==='object'?'object':'redacted'};
+ });
+}
+
 function* permutations(values){
  if(values.length<2){yield values;return;}
  for(let i=0;i<values.length;i++)for(const rest of permutations(values.filter((_,j)=>i!==j)))yield [values[i],...rest];
