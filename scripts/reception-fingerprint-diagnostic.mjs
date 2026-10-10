@@ -12,10 +12,11 @@ for(const key of ['description','dynamic_variable','constant_value','enum','item
 export function receptionFingerprintSettings(input){
  const raw=object(input),paths=[
   ...['auth.enable_auth','auth.allowlist','privacy.record_voice','privacy.retention_days','privacy.conversation_retention_days','privacy.delete_transcript_and_pii','privacy.audio_save_locally','privacy.apply_to_existing_conversations','privacy.use_zero_retention_mode','call_limits.agent_concurrency_limit','call_limits.daily_limit','call_limits.bursting_enabled','queueing_config.enabled','queueing_config.wait_timeout_seconds'].map(p=>'platform_settings.'+p),
-  ...['turn.turn_timeout','turn.initial_wait_time','turn.silence_end_call_timeout','turn.speculative_turn','turn.retranscribe_on_turn_timeout','turn.transcribe_on_disabled_interruptions','turn.soft_timeout_config.timeout_seconds','turn.soft_timeout_config.max_soft_timeouts_per_generation','turn.soft_timeout_config.disable_until_first_user_message','tts.stability','tts.speed','tts.similarity_boost','tts.optimize_streaming_latency','agent.prompt.temperature','agent.prompt.max_tokens','agent.prompt.thinking_budget','agent.prompt.cascade_timeout_seconds'].map(p=>'conversation_config.'+p),
+  ...['turn.turn_timeout','turn.initial_wait_time','turn.silence_end_call_timeout','turn.speculative_turn','turn.retranscribe_on_turn_timeout','turn.transcribe_on_disabled_interruptions','turn.soft_timeout_config.timeout_seconds','turn.soft_timeout_config.max_soft_timeouts_per_generation','turn.soft_timeout_config.disable_until_first_user_message','tts.stability','tts.speed','tts.similarity_boost','tts.optimize_streaming_latency','agent.prompt.temperature','agent.prompt.max_tokens','agent.prompt.llm','agent.prompt.thinking_budget','agent.prompt.enable_reasoning_summary','agent.prompt.cascade_timeout_seconds'].map(p=>'conversation_config.'+p),
  ];
  return paths.map(path=>{
   const value=path.split('.').reduce((v,key)=>object(v)[key],raw);
+  if(path==='conversation_config.agent.prompt.llm')return {path,value:['gpt-4.1-mini','gpt-4.1','gpt-4o-mini','gpt-4o','gpt-6.1-sol','gpt-6-astra','gpt-6-sol','gpt-6-luna','gpt-5.6-sol'].includes(value)?value:'unrecognized_model'};
   return {path,value:value===undefined?'absent':value===null?null:typeof value==='boolean'||typeof value==='number'&&Number.isFinite(value)?value:Array.isArray(value)?`array:${value.length}`:typeof value==='object'?'object':'redacted'};
  });
 }
@@ -53,6 +54,21 @@ export function diagnoseReceptionFingerprint(input,expectedHash){
   attempts++;
   if(fingerprint(snapshot)!==expectedHash)return false;
   result.matched=true;result.changes=changes;return true;
+ }
+ // prepare-seller-agreement.mjs explicitly created this lane with a zero
+ // thinking budget and no reasoning summary. Some model readbacks now use
+ // null for unsupported reasoning settings. Prove that exact prior snapshot
+ // before drawing any conclusion about compatibility.
+ const savedPrompt=object(object(object(snapshot.conversation_config).agent).prompt);
+ const historicalReasoning=[['thinking_budget',0],['enable_reasoning_summary',false],['llm','gpt-4.1-mini']]
+  .filter(([key,value])=>Object.hasOwn(savedPrompt,key)&&savedPrompt[key]!==value);
+ const observedReasoning=Object.fromEntries(historicalReasoning.map(([key])=>[key,savedPrompt[key]]));
+ for(let mask=1;mask<(1<<historicalReasoning.length);mask++){
+  const selected=historicalReasoning.filter((_,i)=>mask&(1<<i));
+  for(const [key,value] of selected)savedPrompt[key]=value;
+  const found=check(selected.map(([key,value])=>({kind:'restore_requested_reasoning_default',path:'conversation_config.agent.prompt.'+key,restoredValue:value})));
+  for(const [key] of selected)savedPrompt[key]=observedReasoning[key];
+  if(found)return {...result,attempts};
  }
  // Provider serializers can introduce more than one optional field together.
  // Check pairs of neutral key groups against the complete original hash.
