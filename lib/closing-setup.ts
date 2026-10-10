@@ -30,16 +30,17 @@ export type ClosingDirectoryOption={id:string;name:string;source_url:string;publ
 export type ClosingSetupView={setup:ClosingSetupRecord|null;verifiedContact:{email:string}|null;directory:ClosingDirectoryOption[];buyerSuggestions:{id:string;title_quote:string}[];titleEmailInAgreement:string|null};
 
 export const closingReviewLabels:Record<string,string>={setup:'Prepare title and your payment',human_requested:'Closing needs a person',title_declined:'Title cannot handle this file',payment_change:'Payment instructions need verification',title_issue:'Title or contract issue needs review'};
-export function closingSetupNext(view:ClosingSetupView){
- if(view.setup?.review_reason&&view.setup.review_reason!=='setup')return {code:'human_review',text:'A person needs to resolve this with the closer. Property automation stays paused until you return control.'};
+export function closingSetupNext(view:ClosingSetupView):{code:string;title:string;text:string;action:'title'|'payout'|'verify'|null;label:string|null}{
+ if(view.setup?.review_reason&&view.setup.review_reason!=='setup')return {code:'human_review',title:'Resolve the closing issue',text:'Read the title reply and contact the closing office. Record the resolution before returning this property to the bot.',action:null,label:null};
  if(!view.verifiedContact){
-  if(view.setup?.title_proposal||view.buyerSuggestions.length)return {code:'verify_preference',text:'Confirm the suggested company handles assignments in this county. Verify the closer using the company’s official phone number before selecting them.'};
-  if(view.directory.length)return {code:'review_directory',text:'Review a local title candidate below. A directory listing is not confirmation that the office accepts this deal.'};
-  return {code:'research_required',text:'No current title candidate covers this property. Find a local title or closing attorney through their official website, then confirm assignment handling and county coverage. No paid search runs here.'};
+  const p=view.setup?.title_proposal,complete=!!(p?.closer&&p.email&&p.phone);
+  if(p||view.buyerSuggestions.length)return {code:'verify_preference',title:complete?'Verify your title company':'Add the title contact',text:'Call the company using its official number. Confirm the closer’s name and email, assignment handling and coverage for this property. You can use the buyer’s suggested company.',action:complete?'verify':'title',label:complete?'Review title verification':'Add title contact'};
+  if(view.directory.length)return {code:'review_directory',title:'Choose a title company',text:'Review the local candidates below or add a company suggested by the buyer. Call the office to confirm it can handle this assignment.',action:'title',label:'Add a title company'};
+  return {code:'research_required',title:'Choose a title company',text:'No current title candidate covers this property. Ask the buyer for a company they have used, or find a local title office through its official website. Confirm it handles assignments here.',action:'title',label:'Add a title company'};
  }
- if(!view.setup?.payout)return {code:'payout_preference',text:'Choose the legal payee and how you want title to send your proceeds.'};
- if(!view.setup.payout.detailsSharedWithTitle)return {code:'secure_details',text:view.setup.payout.method==='wire'?'Give the verified closer your bank name, account holder, routing and account numbers through their secure process. Confirm by calling their independently verified number.':'Confirm the check payee and pickup or mailing arrangements directly with your closer.'};
- return {code:'title_confirmation_pending',text:'Your payment preference is saved and you reported sharing the details. Title still needs to approve the payee, final settlement amount and disbursement timing.'};
+ if(!view.setup?.payout)return {code:'payout_preference',title:'Tell title how to pay you',text:'Save the legal name that should receive the proceeds. Choose check pickup, a mailed check or wire. Add a mailing address only for a mailed check.',action:'payout',label:'Set up my payment'};
+ if(!view.setup.payout.detailsSharedWithTitle)return {code:'secure_details',title:'Share payment details with title',text:view.setup.payout.method==='wire'?'Contact your verified closer for its secure bank-details process. After you share the details, mark that step complete below.':'Confirm the check payee and pickup or mailing arrangements directly with your closer. Then mark that step complete below.',action:'payout',label:'Review payment details'};
+ return {code:'title_confirmation_pending',title:'Your closing setup is saved',text:'Title still needs to approve the payee, final settlement amount and payment timing. Review any requests or documents from the office below.',action:null,label:null};
 }
 
 /** Title receives preferences, never bank credentials, tax IDs or an implied payment authorization. */

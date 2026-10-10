@@ -40,7 +40,7 @@ export function AgreementCancellationControls({dealId,stage,signingVersion,onUpd
  const pending=view?.requests.find(c=>c.state==='pending');
  const needsRelease=!!pending&&(pending.requires_release||pending.has_deposit||pending.has_title);
  const history=view?.requests.filter(c=>c.state==='completed')??[];
- return <section className="agreement-cancellation" aria-label="Cancel agreements">
+ return <section className="agreement-cancellation" data-deal-section="cancellation" aria-label="Cancel agreements">
   {pending?<div className="cancellation-pending" role="status">
    <h4>{pending.kind==='purchase'?'Contract':'Assignment'} cancellation pending</h4>
    <p>Automatic work is paused. {pending.kind==='assignment'?'The seller contract stays in place.':''} Signed documents and payment records are saved.</p>
