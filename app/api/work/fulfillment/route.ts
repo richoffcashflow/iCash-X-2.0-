@@ -33,7 +33,7 @@ export async function GET(req:Request){
  db<BuyerAssignmentPricing|null>('rpc/icash_unreleased_buyer_pricing','POST',{p_account:accountId,p_deal:deal.id})
  ]);
  const link=packageLinks[0];
- const buyerPackage=packageData&&link?.asking_price_cents===packageData.askingPriceCents?{...packageData,url:`https://www.geticashx.com/d/${link.token}`}:null;
+ const buyerPackage=packageData&&link?.asking_price_cents===packageData.askingPriceCents?{...packageData,url:`https://homeoffernetwork.com/d/${link.token}`}:null;
  return NextResponse.json({dealStage:deal.stage,buyerPricingReview:buyerPricingReviewMessage(pricing),buyerOutreachHeld,closingSetup:{setup:closingSetups[0]??null,verifiedContact:titleContact?{email:titleContact.email}:null,directory:titleDirectory,buyerSuggestions:buyerTitleSuggestions,titleEmailInAgreement:deal.terms.titleEmail??null},buyerPackage,closingUpdates,titleTasks,titleReplies,title:title?.state??null,titleReady:!!titleContact&&!!process.env.RESEND_API_KEY&&!!process.env.RESEND_RECEIVING_WEBHOOK_SECRET&&!!process.env.ICASH_TITLE_FROM_EMAIL&&!!process.env.ICASH_TITLE_REPLY_EMAIL,candidates:candidateNames.map(c=>({id:c.id,name:c.display_name})),job,documents,buyers:matches.map(m=>({...m,name:buyers.find(b=>b.id===m.buyer_id)?.display_name??'Buyer'}))},{headers:{'Cache-Control':'private, no-store'}});
  }catch{return NextResponse.json({error:'Could not load deal progress.'},{status:503});}
 }
