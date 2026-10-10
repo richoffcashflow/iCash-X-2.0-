@@ -1,5 +1,5 @@
 'use client';
-import {useState} from 'react';
+import {useId,useState} from 'react';
 export type TitleTask={email_state?:string;id:string;kind:string;label:string;due_date:string|null;state:string;evidence:string|null};
 export const titleTaskLabel=(task:TitleTask)=>task.email_state==='needs_review'?'Title delivery needs review: '+task.label:task.label;
 function displayDate(value:string){
@@ -7,6 +7,7 @@ function displayDate(value:string){
  return Number.isFinite(date.getTime())?date.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}):value;
 }
 export function TitleTasks({initialTasks,onChanged,expanded=false,embedded=false}:{initialTasks:TitleTask[];onChanged?:()=>void;expanded?:boolean;embedded?:boolean}){
+ const instanceId=useId();
  const [tasks,setTasks]=useState(initialTasks),[busy,setBusy]=useState<string|null>(null),[error,setError]=useState('');
  async function update(task:TitleTask,action:string,dueDate?:string){
   if(busy)return;
@@ -29,9 +30,9 @@ export function TitleTasks({initialTasks,onChanged,expanded=false,embedded=false
     <p>{task.email_state==='needs_review'?'Check delivery with your closer before sending anything again.':'Queued for the verified closer while automation and delivery checks allow it.'}</p>
     <div className="review-actions"><button className="review-secondary" type="button" disabled={busy!==null} onClick={()=>void update(task,'dismissed')}>Dismiss</button></div>
    </>:task.kind==='deadline'&&task.state==='needs_review'?<form className="review-form" onSubmit={e=>{e.preventDefault();const date=new FormData(e.currentTarget).get('dueDate');if(typeof date==='string'&&date)void update(task,'confirm',date);}}>
-    <label htmlFor={`title-date-${task.id}`}>Confirm the date</label>
-    <input id={`title-date-${task.id}`} aria-describedby={`title-date-help-${task.id}`} name="dueDate" type="date" required disabled={busy!==null} defaultValue={task.due_date??''}/>
-    <small id={`title-date-help-${task.id}`}>Use the date in the signed agreement or confirmed by your closer.</small>
+    <label htmlFor={`${instanceId}-date-${task.id}`}>Confirm the date</label>
+    <input id={`${instanceId}-date-${task.id}`} aria-describedby={`${instanceId}-help-${task.id}`} name="dueDate" type="date" required disabled={busy!==null} defaultValue={task.due_date??''}/>
+    <small id={`${instanceId}-help-${task.id}`}>Use the date in the signed agreement or confirmed by your closer.</small>
     <div className="review-actions">
      <button className="review-primary" type="submit" disabled={busy!==null}>{busy===task.id?'Saving…':'Save reminder'}</button>
      <button className="review-secondary" type="button" disabled={busy!==null} onClick={()=>void update(task,'dismissed')}>Dismiss</button>
