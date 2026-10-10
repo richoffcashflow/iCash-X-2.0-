@@ -86,6 +86,7 @@
 .closing-progress input,.closing-progress select{min-height:46px;padding:10px;border:1px solid #ddd;border-radius:8px;width:100%;font-size:16px;background:white;color:#222;min-width:0}
 .closing-progress blockquote{margin:0;padding:12px;border-left:3px solid #ddd;background:#fff;font-size:12px;max-height:220px;overflow:auto;overflow-wrap:anywhere}.closing-progress blockquote p{white-space:pre-wrap}
 .closing-progress .closing-attestation{display:flex;align-items:flex-start;line-height:1.5}.closing-progress .closing-attestation input{width:20px;height:20px;min-height:20px;flex:none}
+.closing-setup>div{border-top:1px solid #e5e5e5;margin-top:16px;padding-top:16px}.closing-setup button{min-height:44px;white-space:normal}.closing-setup p{overflow-wrap:anywhere;font-size:13px;line-height:1.6}.closing-setup textarea{width:100%;min-height:88px;resize:vertical;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:16px;background:#fff;color:#222;box-sizing:border-box}.closing-setup details{margin:12px 0}.closing-setup summary{cursor:pointer;line-height:1.5;min-height:32px}.closing-setup a{color:inherit;text-decoration:underline;text-underline-offset:3px}.closing-setup input:focus-visible,.closing-setup select:focus-visible,.closing-setup textarea:focus-visible,.closing-setup button:focus-visible{outline:2px solid #222;outline-offset:2px}
 
 /* Deal volume never expands the default workspace or its message history. */
 .live-work,.live-property,.deal-communications,.deal-mailbox,.deal-tools{min-width:0;overflow-wrap:anywhere}

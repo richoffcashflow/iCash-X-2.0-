@@ -18,7 +18,7 @@ export async function workspaceAssistantContext(accountId:string,timezone:string
   db<{kind:string;state:string;expires_at:string}[]>(`icash_automation_tickets?account_id=eq.${accountId}&state=eq.consumed&expires_at=gt.${new Date().toISOString()}&select=kind,state,expires_at&order=created_at.desc&limit=10`),
   db<{state:string;lease_until:string|null}[]>(`icash_screening_jobs?account_id=eq.${accountId}&state=eq.running&select=state,lease_until&limit=10`),
   db<{message_id:string}[]>(`icash_sms_route_reviews?account_id=eq.${accountId}&resolved_at=is.null&select=message_id&limit=1`),
-  ...[['icash_buyer_viewing_requests','needs_confirmation'],['icash_text_attention','open'],['icash_seller_gaps','needs_review'],['icash_handoffs','open'],['icash_sms_call_requests','needs_review'],['icash_signing_envelopes','customer_signature_needed']].map(([table,state])=>db<{id:string}[]>(`${table}?account_id=eq.${accountId}&state=eq.${state}&select=id&limit=1`))
+  ...[['icash_buyer_viewing_requests','needs_confirmation'],['icash_text_attention','open'],['icash_seller_gaps','needs_review'],['icash_closing_setup','needs_review'],['icash_handoffs','open'],['icash_sms_call_requests','needs_review'],['icash_signing_envelopes','customer_signature_needed']].map(([table,state])=>db<{id:string}[]>(`${table}?account_id=eq.${accountId}&state=eq.${state}&select=id&limit=1`))
  ]);
  if(!accounts[0]||!wallets[0]||!validActivityReport(report,days))throw Error('CONTEXT_UNAVAILABLE');
  if(screeningId&&!allProperties.length)throw Error('PROPERTY_NOT_FOUND');
