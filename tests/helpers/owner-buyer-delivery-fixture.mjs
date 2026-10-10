@@ -28,6 +28,25 @@ export async function testOwnerBuyerDelivery(f,{link,realBuyerThread,realBuyerEm
  await pg.exec(read('config/owner-buyer-delivery-test.sql'));
  await pg.exec(read('config/owner-buyer-test-routing.sql'));
  await pg.exec(read('config/buyer-outreach-copy.sql'));
+ const unbranded=await rpc('icash_buyer_outreach_content',{p_account:account,p_deal:deal});
+ assert.equal(read('config/homeoffer-buyer-package-links.sql'),read('supabase/migrations/20261010222242_homeoffer_buyer_package_links.sql'));
+ await pg.exec(read('config/homeoffer-buyer-package-links.sql'));
+ assert.equal(read('config/buyer-package-reply-copy.sql'),read('supabase/migrations/20261010222502_buyer_package_reply_copy.sql'));
+ await pg.exec(read('config/buyer-package-reply-copy.sql'));
+ const branded=await rpc('icash_buyer_outreach_content',{p_account:account,p_deal:deal});
+ assert(branded.sms.includes('https://homeoffernetwork.com/d/'));assert(branded.email.includes('https://homeoffernetwork.com/d/'));
+ assert.equal(branded.sms,unbranded.sms.replace('https://www.geticashx.com/d/','https://homeoffernetwork.com/d/'));
+ const brandedLink=await rpc('icash_ensure_buyer_package',{p_account:account,p_deal:deal});
+ assert.equal(brandedLink.id,link.id);assert.equal(brandedLink.url,link.url.replace('https://www.geticashx.com/','https://homeoffernetwork.com/'));
+ assert.equal(await rpc('icash_buyer_factual_text',{p_account:account,p_thread:realBuyerThread,p_incoming:'Send me the package'}),'Here is the buyer package: '+brandedLink.url);
+ await q('begin');try{
+  await q('delete from icash_buyer_package_texts where thread_id=$1',[realBuyerThread]);
+  const brandedMessage=await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:realBuyerThread,p_body:branded.sms});assert(brandedMessage);
+  const args={p_account:account,p_message:brandedMessage,p_sender:f.sender};
+  assert.equal((await rpc('icash_claim_text',args)).message,branded.sms);
+  assert.equal(await rpc('icash_claim_text',args),null);
+ }finally{await q('rollback');}
+
  const ownerPhone='+12145550188',sender='+14245550188',run=randomUUID(),thread=randomUUID(),seller=randomUUID(),oldDeal=randomUUID(),oldScreen=randomUUID();
  await q('update auth.users set email_confirmed_at=now() where id=$1',[user]);
  await q('insert into icash_owner_voice_acceptance_config values($1,$2,$3)',[account,user,ownerPhone]);
@@ -50,6 +69,15 @@ export async function testOwnerBuyerDelivery(f,{link,realBuyerThread,realBuyerEm
  const message=await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:thread,p_body:content.sms});assert(message);
  assert.equal(await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:thread,p_body:content.sms}),message);
  const sendArgs={p_account:account,p_message:message,p_sender:sender};
+ assert.equal(await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:thread,p_body:content.sms.replace('homeoffernetwork.com','untrusted.example')}),null);
+ await q('begin');try{
+  await q('update icash_text_messages set body=$2 where id=$1',[message,content.sms.replace('homeoffernetwork.com','untrusted.example')]);
+  assert.equal(await rpc('icash_claim_text',sendArgs),null,'unapproved domain never dispatches');
+  const legacyBody=content.sms.replace('https://homeoffernetwork.com/d/','https://www.geticashx.com/d/');
+  await q('update icash_text_messages set body=$2 where id=$1',[message,legacyBody]);
+  assert.equal((await rpc('icash_claim_text',sendArgs)).message,legacyBody,'already queued approved legacy link remains sendable');
+ }finally{await q('rollback');}
+
  assert.equal(await rpc('icash_claim_text',{...sendArgs,p_account:other}),null);
  assert.equal(await rpc('icash_claim_text',{...sendArgs,p_sender:f.sender}),null);
  assert.equal(await rpc('icash_claim_customer_text',sendArgs),null,'manual buyer claim remains held');
@@ -150,5 +178,6 @@ export async function testOwnerBuyerDelivery(f,{link,realBuyerThread,realBuyerEm
  assert.equal(await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:realBuyerThread,p_body:recoveryContent.sms}),null);
  assert.equal(await rpc('icash_claim_deal_email',{p_account:account,p_id:realBuyerEmail}),null);
  console.log('PASS same-property owner retry: fresh authorization, original seller/history retained, isolated buyer reply/call routing, SMS-only, no duplicates, expiry, real buyer hold.');
+ console.log('PASS HomeOffer buyer links: same package token, initial SMS/email and factual reply links, normal/owner dispatch, old links accepted, unapproved domains held.');
  console.log('PASS owner buyer delivery: exact verified owner, signed price, real buyer hold, no fabricated DNC, one-time claims, header guard, STOP/expiry/tenant isolation, separate reply and inbound buyer context.');
 }
