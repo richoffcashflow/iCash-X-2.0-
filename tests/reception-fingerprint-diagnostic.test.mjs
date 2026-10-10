@@ -71,6 +71,18 @@ test('identifies paired optional serializer fields without accepting changed beh
  assert.equal(diagnoseReceptionFingerprint(input,hash(original)).matched,false);
 });
 
+test('reconstructs explicitly requested reasoning defaults from null only against the full historical hash',()=>{
+ const original=fixture(),input=structuredClone(original);
+ Object.assign(original.conversation_config.agent.prompt,{thinking_budget:0,enable_reasoning_summary:false,llm:'gpt-4.1-mini'});
+ Object.assign(input.conversation_config.agent.prompt,{thinking_budget:null,enable_reasoning_summary:null,llm:'gpt-6-luna'});
+ const before=structuredClone(input),result=diagnoseReceptionFingerprint(input,hash(original));
+ assert.equal(result.matched,true);assert.equal(result.changes.length,3);
+ assert(result.changes.every(change=>change.kind==='restore_requested_reasoning_default'));
+ assert.deepEqual(input,before);
+ input.version_id='changed';
+ assert.equal(diagnoseReceptionFingerprint(input,hash(original)).matched,false);
+});
+
 test('identifies a single numeric setting while changed tool content remains unmatched',()=>{
  const original=fixture(),input=structuredClone(original);
  original.platform_settings.call_limits={agent_concurrency_limit:10};
