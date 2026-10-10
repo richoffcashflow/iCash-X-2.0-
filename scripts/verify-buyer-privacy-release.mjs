@@ -49,7 +49,8 @@ if(!observed.safe){
  // log provider configuration, prompt text, webhook headers or credentials.
  console.error('Buyer provider verification mismatch',JSON.stringify({failedChecks:Object.entries(observed.checks).filter(([,passed])=>!passed).map(([name])=>name),hashMatches:observed.hash===c.config_hash,versionMatches:agent.version_id===c.reviewed_version_id,inlineTools:observed.inlineTools}));
  if(observed.hash!==c.config_hash)console.error('Buyer provider fingerprint diagnostic',JSON.stringify(diagnoseReceptionFingerprint(agent,c.config_hash)));
- console.error('Buyer provider fixed settings diagnostic',JSON.stringify(receptionFingerprintSettings(agent)));
+ const fixedSettings=receptionFingerprintSettings(agent);
+ for(let i=0;i<fixedSettings.length;i+=8)console.error('Buyer provider fixed settings diagnostic',JSON.stringify(fixedSettings.slice(i,i+8)));
  // Compare the provider's explicitly version-pinned read, without accepting it
  // in place of the active branch or exposing either response in logs.
  try{
