@@ -13,5 +13,6 @@ import "./conversation-hub.css";
 import "./membership.css";
 import "./workspace-minimal.css";
 import "./workspace-assistant.css";
+import "./agreement-cancellation.css";
 export const metadata: Metadata = { title: "iCash X | Real Estate Wholesaling, Made Easy", description: "Create your AI real estate bot. Get software access, add prepaid work credits, and follow property research, seller conversations, and deal progress in one workspace.", icons: { icon: "/favicon.svg" } };
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="en"><body>{children}<WebinarMeasurement/></body></html>; }
