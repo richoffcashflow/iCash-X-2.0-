@@ -14,8 +14,8 @@ export async function GET(req:Request){
    return Response.json({error:'Choose a valid period and search of up to 100 characters.'},{status:400,headers});
   }
   const filters:OverviewFilters={days:Number(days) as 1|7|30,includeOwner:include==='true',query,page:Number(page)};
-  const report=await db<unknown>('rpc/icash_owner_overview','POST',{p_actor:user.id,p_days:filters.days,p_include_owner:filters.includeOwner,p_query:filters.query,p_page:filters.page},req.signal);
-  if(!validOwnerOverview(report,filters))throw Error('Incomplete overview');
+  const report=await db<unknown>('rpc/icash_owner_overview_with_funnel','POST',{p_actor:user.id,p_days:filters.days,p_include_owner:filters.includeOwner,p_query:filters.query,p_page:filters.page},req.signal);
+  if(!validOwnerOverview(report,filters)||!report.funnel)throw Error('Incomplete overview');
   return Response.json({report},{headers});
  }catch{
   return Response.json({error:'The overview could not load. Try refreshing in a moment.'},{status:503,headers});

@@ -1,6 +1,8 @@
 'use client';
 import {useEffect,useState} from 'react';
 import {AccountAccess} from '@/components/account-access';
+import {ConversionFunnel} from '@/components/conversion-funnel';
+import {sellerFunnelStages} from '@/lib/conversion-funnel';
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {overviewLeadStatus,overviewMoney,overviewTime,validOwnerOverview,type OwnerOverview,type OverviewFilters} from '@/lib/owner-overview';
 import styles from './overview.module.css';
@@ -22,7 +24,7 @@ export function OwnerOverviewView(){
     const params=new URLSearchParams({days:String(days),includeOwner:String(includeOwner),q:query,page:String(page)});
     const data=await workspaceRequest<{report:OwnerOverview}>(`/api/admin/overview?${params}`,{cache:'no-store',signal:controller.signal});
     if(!active)return;
-    if(!validOwnerOverview(data.report,{days,includeOwner,query,page}))throw Error('The overview returned incomplete data. Please refresh.');
+    if(!validOwnerOverview(data.report,{days,includeOwner,query,page})||!data.report.funnel)throw Error('The overview returned incomplete data. Please refresh.');
     setLoaded({key,report:data.report});setFailure(null);setDenied(null);
    }catch(e){
     if(!active)return;
@@ -59,6 +61,7 @@ export function OwnerOverviewView(){
    <div className={styles.meta}><span>{includeOwner?'Customers + your account':'Customer usage only'} · Central time</span><span role="status">{report?`${error?'Last successful update':'Updated'} ${overviewTime(report.endAt)} CT`:error?'No totals available':'Loading overview…'}</span></div>
    {usage&&usage.pendingCount>0&&<p className={styles.pending}>{usage.pendingCount} operations started in this period are still awaiting settlement. They are not included in these totals.</p>}
    {usage&&usage.completedCount===0&&!includeOwner&&<p className={styles.pending}>No customer usage in this period. Turn on “Include my account” to see your own usage.</p>}
+   <ConversionFunnel title="Lead to close" description="Leads received in this period, followed through the latest update." stages={sellerFunnelStages} steps={report?.funnel} unavailable={!!error&&!report}/>
    <section className={styles.leads} aria-labelledby="inbound-leads-title">
     <div className={styles.leadHeading}><div><h2 id="inbound-leads-title">Inbound seller leads</h2><p>Newest first. Select a property for contact details.</p></div>
      <form className={styles.search} role="search" onSubmit={e=>{e.preventDefault();update({query:search.trim()});}}><label htmlFor="admin-lead-search" className={styles.srOnly}>Search leads by name, property, phone or email</label><input id="admin-lead-search" type="search" value={search} maxLength={100} placeholder="Search leads" onChange={e=>setSearch(e.target.value)}/><button type="submit" className={styles.button}>Search</button></form>
@@ -70,7 +73,7 @@ export function OwnerOverviewView(){
     </tr>)}</tbody></table>:<div className={styles.empty} role="status">{report?query?'No leads match this search.':page>1?'No more leads on this page.':'No inbound seller leads in this period.':error?'Leads could not be loaded.':'Loading leads…'}</div>}
     {report&&<div className={styles.pagination}><span>{report.matchedCount===0?'0 leads':report.leads.length===0?`${report.matchedCount} leads total`:`${(page-1)*25+1}–${(page-1)*25+report.leads.length} of ${report.matchedCount} leads`}</span><div><button className={styles.button} disabled={busy||page<=1} onClick={()=>update({page:page-1})}>Previous</button><button className={styles.button} disabled={busy||page*25>=report.matchedCount} onClick={()=>update({page:page+1})}>Next</button></div></div>}
    </section>
-   <details className={styles.explanation}><summary>How these numbers work</summary><div><p>Leads are unique seller submissions received during the selected period. Repeat submissions are excluded. The account switch changes usage totals only.</p><p>Usage charged is whole cents deducted from work credits for completed operations, after subtracting platform-covered overruns. Fractional charges appear when they are posted. Credits can include promotional grants; this is not a cash-receipts report.</p><p>Usage costs include recorded provider costs and allocated overhead. Estimates are labelled. Missing costs or charges leave the margin blank. Credit top-ups, unused credits, subscriptions, standalone advertising spend and assignment proceeds are not usage earnings.</p><p>Your account is excluded unless you turn on the switch. Accounts funded only in payment test mode are excluded. Usage margin is not a withdrawable balance.</p>{usage&&usage.coveredCents>0&&<p>Platform-covered usage in this period: {overviewMoney(usage.coveredCents,'cents')}.</p>}</div></details>
+   <details className={styles.explanation}><summary>How these numbers work</summary><div><p>Leads are unique seller submissions received during the selected period. Repeat submissions are excluded. The account switch changes usage totals only.</p><p>The funnel follows those same leads. Seller engagement requires an actual reply or conversation. Contracts and buyer assignments require completed live signatures; a closed deal requires verified title confirmation. A later verified milestone also counts the earlier steps as reached. Each lead counts once, even when assigned to multiple accounts. Lead search does not change the funnel.</p><p>Usage charged is whole cents deducted from work credits for completed operations, after subtracting platform-covered overruns. Fractional charges appear when they are posted. Credits can include promotional grants; this is not a cash-receipts report.</p><p>Usage costs include recorded provider costs and allocated overhead. Estimates are labelled. Missing costs or charges leave the margin blank. Credit top-ups, unused credits, subscriptions, standalone advertising spend and assignment proceeds are not usage earnings.</p><p>Your account is excluded unless you turn on the switch. Accounts funded only in payment test mode are excluded. Usage margin is not a withdrawable balance.</p>{usage&&usage.coveredCents>0&&<p>Platform-covered usage in this period: {overviewMoney(usage.coveredCents,'cents')}.</p>}</div></details>
   </>}
  </main>;
 }
