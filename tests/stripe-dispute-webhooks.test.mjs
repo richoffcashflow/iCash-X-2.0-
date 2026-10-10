@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import {prepareDisputeWebhooks,disputeEvents} from '../scripts/prepare-dispute-webhooks.mjs';
+const env={VERCEL_ENV:'production',VERCEL_GIT_COMMIT_REF:'main',STRIPE_SECRET_KEY:'sk_live_fixture'};
+let calls=[],entries=[{id:'we_fixture',url:'https://www.geticashx.com/api/webhooks/stripe',livemode:true,status:'enabled',enabled_events:['checkout.session.completed','charge.dispute.created']}];
+const stripe={webhookEndpoints:{list:async()=>({has_more:false,data:entries}),update:async(id,body)=>{calls.push({id,body});entries[0].enabled_events=body.enabled_events;},retrieve:async()=>entries[0]},accounts:{retrieve:async()=>({settings:{payments:{statement_descriptor:'ICASH X'}}})}};
+assert.deepEqual(await prepareDisputeWebhooks({...env,VERCEL_ENV:'preview'},()=>{throw Error('No provider access in preview');}),{status:'skipped'});
+await prepareDisputeWebhooks(env,()=>stripe);assert.equal(calls.length,1);assert(calls[0].body.enabled_events.includes('checkout.session.completed'));for(const type of disputeEvents)assert(calls[0].body.enabled_events.includes(type));await prepareDisputeWebhooks(env,()=>stripe);assert.equal(calls.length,1,'Already subscribed endpoints are not rewritten');
+entries[0].enabled_events=['*'];await prepareDisputeWebhooks(env,()=>stripe);assert.equal(calls.length,1);entries[0].url='https://unrelated.invalid/api/webhooks/stripe';await assert.rejects(prepareDisputeWebhooks(env,()=>stripe),/NOT_FOUND/);assert.equal(calls.length,1);
+entries[0].url='https://www.geticashx.com/api/webhooks/stripe';entries[0].livemode=false;await assert.rejects(prepareDisputeWebhooks(env,()=>stripe),/NOT_FOUND/);
+let event,recorded=[],writes=[];process.env.STRIPE_WEBHOOK_SECRET='local-fixture-only';
+const deps={NextResponse:{json:Response.json},fundingMode:()=> 'live',fundingStripe:()=>({webhooks:{constructEvent:(_body,sig)=>{if(sig!=='fixture')throw Error('Invalid signature');return event;}}}),recordDisputeEvent:async e=>recorded.push(e.type),db:async(path,_method,body)=>{writes.push({path,body});return [];}};
+globalThis.__disputeHook=deps;const code=ts.transpileModule(readFileSync(new URL('../app/api/webhooks/stripe/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .*;\s*$/gm,'');const route=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__disputeHook;\n'+code).toString('base64'));
+const post=(sig='fixture')=>route.POST(new Request('https://www.geticashx.com/api/webhooks/stripe',{method:'POST',headers:{'stripe-signature':sig},body:'fixture'}));
+event={id:'evt_fixture',type:'charge.dispute.created',livemode:true,data:{object:{payment_intent:'pi_fixture'}}};assert.equal((await post('bad')).status,400);assert.equal(recorded.length,0);event.livemode=false;assert.equal((await post()).status,400);assert.equal(recorded.length,0);event.livemode=true;assert.equal((await post()).status,200);assert.equal(recorded.length,1);assert(writes.some(w=>w.path==='rpc/icash_flag_billing_issue'));assert(writes.some(w=>w.path==='rpc/icash_flag_membership_issue'));
+writes=[];event.type='charge.dispute.closed';assert.equal((await post()).status,200);assert.equal(recorded.at(-1),'charge.dispute.closed');assert.equal(writes.length,0,'Closing a dispute never automatically lifts existing review holds');
+console.log('PASS dispute webhooks: canonical live endpoints only, existing event preservation, idempotent setup, signature/mode gates, existing payment holds, no automatic hold release. Fixture only.');

@@ -1,3 +1,5 @@
+import {recordPurchaseAcceptance} from '@/lib/purchase-acceptance';
+import {finalSaleSummary} from '@/lib/final-sale-policy';
 import {acceptedEarlyAccessTerms,earlyAccessTermsVersion,earlyAccessDailyDisclosure} from '@/lib/funding-consent';
 import {setupEvent} from '@/lib/bot-setup-server';
 import {customerFundingReady} from "@/lib/launch-readiness";
@@ -43,6 +45,7 @@ export async function POST(req:Request){
  if(!p?.stripe_subscription_id||p.state!=='active')return NextResponse.json({error:'Start your bot before changing its daily billing.'},{status:409});
  const sub=await stripe.subscriptions.retrieve(p.stripe_subscription_id);if(sub.id!==p.stripe_subscription_id||sub.metadata.icash_daily_plan!==p.id||sub.livemode!==(p.mode==='live')||sub.status!=='active'||sub.items.data.length!==1)throw new Error();
  const q=await dailyQuote(p,i.packCode,consentText);
+ await recordPurchaseAcceptance(req,{kind:'daily',reference:q.id,mode:p.mode,accountId:p.account_id,guestHash:guestHash(token!),version:consentVersion,terms:consentText,amountCents:i.totalCents});
  await stripe.subscriptions.update(sub.id,{items:[{id:sub.items.data[0].id,price:q.budget_price,quantity:1}],proration_behavior:'none',payment_behavior:'error_if_incomplete'},{idempotencyKey:`daily-change:${q.id}`});
  return NextResponse.json({saved:true,message:'Daily budget saved. Your new amount starts at the next daily renewal; no charge now.'});
  }
@@ -55,7 +58,8 @@ export async function POST(req:Request){
  return NextResponse.json({error:'A daily plan is already being prepared. Stop it before starting another.'},{status:409});}
  const [plan]=await db<DailyPlan[]>('icash_daily_plans','POST',{mode,guest_hash:guestHash(token!),account_id:account?.id??null,consent_version:consentVersion,consent_text:consentText});
  const q=await dailyQuote(plan,i.packCode,consentText);const origin=req.headers.get('origin')!;
- const s=await stripe.checkout.sessions.create({mode:'subscription',customer_email:user?.email,automatic_tax:{enabled:false},payment_method_types:['card'],phone_number_collection:{enabled:true},line_items:[{price:q.budget_price,quantity:1}],subscription_data:{metadata:{icash_daily_plan:plan.id}},metadata:{icash_daily_plan:plan.id,...(earlyAccess?{icash_early_access_terms_version:earlyAccessTermsVersion}:{})},custom_text:{submit:{message:(earlyAccess?earlyAccessDailyDisclosure+' ':'')+'Renews every day until you stop your bot. You pay for activity, not a guaranteed deal or income. Your budget may be used without a closing. No separately added processing fee or tax.'}},success_url:`${origin}/?payment=funded&session_id={CHECKOUT_SESSION_ID}`,cancel_url:`${origin}/?payment=canceled`},{idempotencyKey:`daily-checkout:${plan.id}`});
+ await recordPurchaseAcceptance(req,{kind:'daily',reference:q.id,mode,accountId:account?.id??null,guestHash:guestHash(token!),version:consentVersion,terms:consentText,amountCents:i.totalCents});
+ const s=await stripe.checkout.sessions.create({mode:'subscription',customer_email:user?.email,automatic_tax:{enabled:false},payment_method_types:['card'],phone_number_collection:{enabled:true},line_items:[{price:q.budget_price,quantity:1}],subscription_data:{metadata:{icash_daily_plan:plan.id}},metadata:{icash_daily_plan:plan.id,...(earlyAccess?{icash_early_access_terms_version:earlyAccessTermsVersion}:{})},custom_text:{submit:{message:finalSaleSummary+' '+(earlyAccess?earlyAccessDailyDisclosure+' ':'')+'Renews every day until you stop your bot. You pay for activity, not a guaranteed deal or income. Your budget may be used without a closing. No separately added processing fee or tax.'}},success_url:`${origin}/?payment=funded&session_id={CHECKOUT_SESSION_ID}`,cancel_url:`${origin}/?payment=canceled`},{idempotencyKey:`daily-checkout:${plan.id}`});
  if(s.livemode!==(mode==='live')||!s.url)throw new Error();const [saved]=await db<DailyPlan[]>(`icash_daily_plans?id=eq.${plan.id}`,'PATCH',{stripe_session_id:s.id,checkout_url:s.url});if(saved.state==='stop_requested'||saved.state==='stopped'){await stopDaily(saved);throw new Error('Plan stopped');}
  await setupEvent('checkout_opened');
  return NextResponse.json({url:s.url});

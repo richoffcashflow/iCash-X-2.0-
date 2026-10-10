@@ -1,3 +1,4 @@
+import * as finalSale from '../lib/final-sale-policy.ts';
 import * as embeddedPolicy from '../lib/embedded-checkout-policy.ts';
 import * as fundingAmounts from '../lib/funding-amount.ts';
 import * as rechargePolicy from '../lib/auto-recharge-policy.ts';
@@ -17,7 +18,7 @@ assert.equal(earlyAccessFundingEnabled({...env,VERCEL_ENV:'preview'}),false);
 assert.equal(earlyAccessFundingEnabled({...env,STRIPE_SECRET_KEY:'sk_test_fixture'}),false);
 Object.assign(process.env,env);
 let seq=0;
-async function load(file,deps){const key='__fundingFixture'+seq++;globalThis[key]=deps;let code=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;code=code.replace(/^import .* from .*;$/gm,'').replace(/^export \{.*\} from .*;$/gm,'');assert(!/^import /m.test(code));try{return await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.'+key+';\n'+code).toString('base64'));}finally{delete globalThis[key];}}
+async function load(file,deps){deps={...finalSale,recordPurchaseAcceptance:async()=>{},...deps};const key='__fundingFixture'+seq++;globalThis[key]=deps;let code=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;code=code.replace(/^import .* from .*;$/gm,'').replace(/^export \{.*\} from .*;$/gm,'');assert(!/^import /m.test(code));try{return await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.'+key+';\n'+code).toString('base64'));}finally{delete globalThis[key];}}
 const readiness=await load('lib/launch-readiness.ts',{earlyAccessFundingEnabled,fundingEnabled,fundingMode,evaluateLaunch,readContractCoverage:async()=>({states:[]}),db:async path=>path.startsWith('rpc/')?{cashReserve:true,discovery:true,voice:false,contactPermission:false,productionContracts:false,unresolvedDispatches:false}:[]});
 assert.equal(await readiness.customerFundingReady(),true);assert.equal(await readiness.liveFundingReady(),false);let launch=await readiness.launchReadiness();assert.equal(launch.ready,false);assert.equal(launch.acquisitionReady,false);assert(launch.blockers.includes('voice'));assert(launch.blockers.includes('productionContracts'));
 const billing=await load('lib/daily-billing.ts',{earlyAccessFundingEnabled,fundingEnabled,fundingMode,dailyConsent,db:async()=>[],fundingStripe:()=>{throw Error('Unexpected provider call');},processingFeeCents:()=>0});

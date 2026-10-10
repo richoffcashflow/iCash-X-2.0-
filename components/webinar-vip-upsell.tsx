@@ -1,4 +1,5 @@
 'use client';
+import {finalSalePolicy} from '@/lib/final-sale-policy';
 import {useEffect,useRef,useState} from 'react';
 import {ArrowRight,Check,ShieldCheck} from 'lucide-react';
 import {AccountAccess} from '@/components/account-access';
@@ -55,7 +56,8 @@ export function WebinarVipUpsell({phase,email,customerName,needsClaim,paidThroug
    <ul className="membership-includes">{vipBenefits.map(benefit=><li key={benefit}><Check size={15} aria-hidden="true"/>{benefit}</li>)}</ul>
    <p className="membership-renewal" id="vip-upgrade-terms">{priceLabel(vipUpgradeCents)} once today. Your subscription becomes {priceLabel(vipMonthlyCents)}/month total at your next renewal{paidThrough?` on ${new Date(paidThrough).toLocaleDateString('en-US')}`:''}. Your renewal date stays the same. Work credits are separate. Cancel in Help.</p>
    {retentionEndsAt&&Date.parse(retentionEndsAt)>Date.now()&&<p className="membership-note">Your existing subscription discount continues for its remaining term.</p>}
-   <label className="membership-consent"><input type="checkbox" checked={accepted} disabled={busy} onChange={e=>setAccepted(e.target.checked)} aria-describedby="vip-upgrade-terms"/><span>I authorize the VIP upgrade and updated monthly subscription above.</span></label>
+   <p className="membership-renewal">{finalSalePolicy} <a href="/costs-and-disclosures#refunds" target="_blank" rel="noopener noreferrer">Billing policy</a></p>
+   <label className="membership-consent"><input type="checkbox" checked={accepted} disabled={busy} onChange={e=>setAccepted(e.target.checked)} aria-describedby="vip-upgrade-terms"/><span>I authorize the VIP upgrade, updated monthly subscription and final-sale policy above.</span></label>
    <button className="setup-primary" disabled={!accepted||busy} onClick={()=>void upgrade()}>{busy?'Opening secure upgrade…':`Upgrade to VIP — ${priceLabel(vipUpgradeCents)}`}<ArrowRight size={17}/></button>
    <p className="membership-secure"><ShieldCheck size={14}/>Secure payment through Stripe</p>
   </>}
