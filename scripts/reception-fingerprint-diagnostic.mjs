@@ -4,6 +4,7 @@ const fingerprint=value=>sha(JSON.stringify(canonical(value)));
 const schemaKeys=new Set(('main_branch_id agent_id branch_id version_id conversation_config platform_settings workflow procedures agent prompt tools tool_ids built_in_tools mcp_server_ids native_mcp_server_ids knowledge_base rag custom_llm asr tts conversation turn language_presets first_message language max_tokens llm temperature voice_id model_id stability speed similarity_boost optimize_streaming_latency agent_output_audio_format user_input_audio_format max_duration_seconds privacy record_voice auth enable_auth call_limits agent_concurrency_limit bursting_enabled queueing_config enabled overrides conversation_config_override workspace_overrides webhooks events post_call_webhook_id send_audio guardrails version focus custom config configs is_enabled type name params system_tool_type api_schema request_headers request_body_schema properties required dynamic_variables dynamic_variable_placeholders evaluation criteria data_collection retention_days conversation_retention_days delete_transcript_and_pii audio_save_locally use_zero_retention_mode soft_timeout turn_timeout turn_eagerness spelling_patience silence_end_call_timeout').split(' '));
 const safePath=path=>path.map(part=>typeof part==='number'?`[${part}]`:schemaKeys.has(part)?part:'[unrecognized_key]').join('.');
 const shape=value=>value===null?'null':Array.isArray(value)?`array:${value.length}`:typeof value;
+for(const key of ['description','dynamic_variable','constant_value','enum','items','allowed_values','allowed_values_dynamic_variable','is_system_provided','is_omitted'])schemaKeys.add(key);
 
 function* permutations(values){
  if(values.length<2){yield values;return;}
@@ -64,19 +65,33 @@ export function diagnoseReceptionFingerprint(input,expectedHash){
    if(attempts>=4096)return {...result,attempts,truncated:true};
   }
  }
- // Identify a single added field or an absent/null representation change.
+ // Schema serializers can add the same neutral default to every tool field.
+ // Grouped hypotheses still require reconstruction of the complete old hash.
+ const groups=new Map();
+ for(const field of fields){const group=groups.get(field.key)??[];group.push(field);groups.set(field.key,group);}
+ for(const group of groups.values()){
+  if(group.length<2)continue;
+  for(const kind of ['remove_field','restore_null','restore_empty_string','restore_empty_array','restore_empty_object','restore_false','restore_true']){
+   const replacement=kind==='restore_null'?null:kind==='restore_empty_string'?'':kind==='restore_empty_array'?[]:kind==='restore_empty_object'?{}:kind==='restore_false'?false:true;
+   for(const field of group){if(kind==='remove_field')delete field.parent[field.key];else field.parent[field.key]=replacement;}
+   const found=check(group.map(field=>({kind,path:safePath(field.path),observedShape:shape(field.value)})));
+   for(const field of group)field.parent[field.key]=field.value;
+   if(found)return {...result,attempts};
+   if(attempts>=4096)return {...result,attempts,truncated:true};
+  }
+ }
+ // Identify a single default/empty representation change. These diagnostic
+ // hypotheses do not become permitted differences in the runtime inspector.
  for(const field of fields){
-  delete field.parent[field.key];
-  let found=check([{kind:'remove_field',path:safePath(field.path),observedShape:shape(field.value)}]);
-  field.parent[field.key]=field.value;
-  if(found)return {...result,attempts};
-  if(field.value!==null){
-   field.parent[field.key]=null;
-   found=check([{kind:'restore_null',path:safePath(field.path),observedShape:shape(field.value)}]);
+  const kinds=['remove_field','restore_null',...(Array.isArray(field.value)?['restore_empty_array']:field.value&&typeof field.value==='object'?['restore_empty_object']:typeof field.value==='boolean'?['restore_false','restore_true']:typeof field.value==='string'?['restore_empty_string']:[])];
+  for(const kind of kinds){
+   const replacement=kind==='restore_null'?null:kind==='restore_empty_string'?'':kind==='restore_empty_array'?[]:kind==='restore_empty_object'?{}:kind==='restore_false'?false:true;
+   if(kind==='remove_field')delete field.parent[field.key];else field.parent[field.key]=replacement;
+   const found=check([{kind,path:safePath(field.path),observedShape:shape(field.value)}]);
    field.parent[field.key]=field.value;
    if(found)return {...result,attempts};
+   if(attempts>=4096)return {...result,attempts,truncated:true};
   }
-  if(attempts>=4096)return {...result,attempts,truncated:true};
  }
  return {...result,attempts};
 }

@@ -49,6 +49,13 @@ if(!observed.safe){
  // log provider configuration, prompt text, webhook headers or credentials.
  console.error('Buyer provider verification mismatch',JSON.stringify({failedChecks:Object.entries(observed.checks).filter(([,passed])=>!passed).map(([name])=>name),hashMatches:observed.hash===c.config_hash,versionMatches:agent.version_id===c.reviewed_version_id,inlineTools:observed.inlineTools}));
  if(observed.hash!==c.config_hash)console.error('Buyer provider fingerprint diagnostic',JSON.stringify(diagnoseReceptionFingerprint(agent,c.config_hash)));
+ // Compare the provider's explicitly version-pinned read, without accepting it
+ // in place of the active branch or exposing either response in logs.
+ try{
+  const pinned=await api(path+'?branch_id='+c.branch_id+'&version_id='+c.reviewed_version_id);
+  const pinnedObservation=inspectRecordedReceptionAgent(c,pinned,branches.results.find(b=>b.id===c.branch_id),receptionWorkspacePostcallAbsent(workspace),stop,tool);
+  console.error('Buyer provider version-pinned diagnostic',JSON.stringify({safe:pinnedObservation.safe,hashMatches:pinnedObservation.hash===c.config_hash,sameAsBranch:pinnedObservation.hash===observed.hash,versionMatches:pinned.version_id===c.reviewed_version_id,failedChecks:Object.entries(pinnedObservation.checks).filter(([,passed])=>!passed).map(([name])=>name)}));
+ }catch{console.error('Buyer provider version-pinned diagnostic unavailable');}
  throw Error('BUYER_PRIVACY_PROVIDER_SOURCE_CHANGED');
 }
 if(!p||p.askingPriceCents!==16227050||p.depositCents!==200000||p.closingDate!=='2026-11-07')throw Error('BUYER_PRIVACY_CURRENT_PACKAGE_REQUIRED');
