@@ -17,6 +17,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - Keep call connection instructions short. Do not put recording announcements or internal cost multipliers in the call controls; recording behavior belongs in the service implementation.
 - Buyer outreach uses outbound SMS and email only. Never schedule or dispatch outbound AI calls to buyers. Preserve inbound buyer calls and outbound seller calls.
+- Buyer packages must not describe where property images came from. Use neutral captions and image descriptions such as Street view, Aerial view or Property photo; keep source metadata internal.
 - Customer credits are charged for completed usage. Do not withhold the maximum quoted amount from the wallet or impose daily/lifetime activation spending caps. Keep idempotent usage authorizations, actual-cost records, bounded calls, paid access, contact permissions, and zero-balance admission checks.
 
 # Development test spending

@@ -69,7 +69,7 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
   const date=buyerClosingDate(b.closingDate);
   if(date&&Date.parse(date+'T23:59:59Z')+14*3600000<now)return blockedBuyerOffer('buyer_terms_stale','The package closing date has passed. Current availability and terms need team confirmation. Do not solicit a deposit, invent an extension, offer a viewing or promise access.');
   const photos=buyerPackagePhotos(b);
-  const propertyPhotoCount=photos.length,sellerPhotoCount=photos.filter(photo=>photo.caption==='Seller-provided property photo').length;
+  const propertyPhotoCount=photos.length,sellerPhotoCount=photos.filter(photo=>photo.origin==='seller').length;
   const estimate=(v:unknown)=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0&&v<=100000000000?v:null;
   const estimatedArvCents=estimate(b.arvCents),estimatedRepairsCents=estimate(b.repairsCents);
   const researchMoney=(amount:number|null)=>amount===null?null:amount===0?{displayPrice:'$0',spokenPrice:'zero dollars'}:offerPricePresentation(amount);
