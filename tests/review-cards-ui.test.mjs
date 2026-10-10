@@ -8,7 +8,7 @@ const text=root=>typeof root==='string'?root:typeof root==='number'?String(root)
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 function mount(file,name,props){
  let cursor=0,slots=[],requests=[],fail=false;
- const hooks={useState(initial){const index=cursor++;if(!(index in slots))slots[index]=initial;return [slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;}];}};
+ const hooks={useId:()=>':fixture:',useState(initial){const index=cursor++;if(!(index in slots))slots[index]=initial;return [slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;}];}};
  const mod={exports:{}};
  const source=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
  const fetch=async(url,options)=>{requests.push({url,...JSON.parse(options.body)});return {ok:!fail,json:async()=>fail?{error:'Could not save. Please try again.'}:{saved:true}};};
