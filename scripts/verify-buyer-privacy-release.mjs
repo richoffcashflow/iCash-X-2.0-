@@ -43,7 +43,12 @@ const [agent,branches,workspace,stop,tool]=await Promise.all([
 ]);
 if(!Array.isArray(branches.results)||branches.results.length>=100||branches.next_cursor||branches.results.some(b=>b.name==='buyer-validated-b3f477756bc851a6a'))throw Error('BUYER_PRIVACY_REJECTED_BRANCH_REVIEW_REQUIRED');
 const observed=inspectRecordedReceptionAgent(c,agent,branches.results.find(b=>b.id===c.branch_id),receptionWorkspacePostcallAbsent(workspace),stop,tool);
-if(!observed.safe)throw Error('BUYER_PRIVACY_PROVIDER_SOURCE_CHANGED');
+if(!observed.safe){
+ // Only internal check names, booleans and bounded tool-shape evidence. Never
+ // log provider configuration, prompt text, webhook headers or credentials.
+ console.error('Buyer provider verification mismatch',JSON.stringify({failedChecks:Object.entries(observed.checks).filter(([,passed])=>!passed).map(([name])=>name),hashMatches:observed.hash===c.config_hash,versionMatches:agent.version_id===c.reviewed_version_id,inlineTools:observed.inlineTools}));
+ throw Error('BUYER_PRIVACY_PROVIDER_SOURCE_CHANGED');
+}
 if(!p||p.askingPriceCents!==16227050||p.depositCents!==200000||p.closingDate!=='2026-11-07')throw Error('BUYER_PRIVACY_CURRENT_PACKAGE_REQUIRED');
 const offer=calculateAutomaticCallOffer({party:'buyer',buyer:p},{});
 const variables=receptionContextVariables(c,{...p,status:'buyer'});
