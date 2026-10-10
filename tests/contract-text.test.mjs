@@ -10,7 +10,7 @@ import {signingReadiness,signingDocumentReadiness,signingTermsHash,signingFields
 import {normalizeSigningPhone} from '../lib/signing-phone.ts';
 const terms=dealTermsSchema.parse({seller:'Fixture seller',buyer:'Fixture principal',address:'Fixture property',legalDescription:'Fixture lot',state:'TX',priceCents:100000,priceSource:'seller_reported',earnestCents:0});
 const phone='+12025550100',recipients=[{id:'1',phone,name:'Fixture seller',placeholder_name:'Seller'},{id:'2',email:'owner@example.invalid',name:'Fixture principal',placeholder_name:'Customer'}];
-let testMode=true,allowed=true,providerPhone=phone,pricing=400000,payload=null;
+let testMode=true,allowed=true,signingActive=true,providerPhone=phone,pricing=400000,payload=null;
 const envelope=()=>({id:'envelope',account_id:'account',deal_id:'deal',terms,kind:'purchase',terms_hash:signingTermsHash(terms),template_id:'template',provider_id:'123',state:'awaiting_counterparty',test_mode:testMode,recipients});
 const template={id:'template',provider:'docuseal',provider_template_id:'123',placeholder_names:['Seller','Customer'],field_map:Object.fromEntries(Object.keys(signingFields(terms)).map(k=>[k,k])),rate_id:'rate',reviewed_until:'2099-01-01',max_legal_description_chars:2000};
 const db=async(path,method)=>{
@@ -22,6 +22,7 @@ const db=async(path,method)=>{
  if(path.startsWith('icash_signing_templates'))return [template];
  if(path.startsWith('icash_operation_rates'))return [{operation:'contract_signing',enabled:true,expires_at:'2099-01-01',costs_micros:{messaging:pricing}}];
  if(path==='rpc/icash_begin_signing')return envelope();
+ if(path==='rpc/icash_signing_action_allowed')return signingActive;
  if(path.startsWith('icash_signing_envelopes')){assert(path.includes('account_id=eq.account')||method==='PATCH');return method==='PATCH'?[]:[envelope()];}
  throw Error('Unexpected fixture '+path);
 };
@@ -42,6 +43,8 @@ try{
  await assert.rejects(()=>service.pendingCounterpartySigningLink('account','envelope',phone),/approved live/);
  testMode=false;process.env.DOCUSEAL_MODE='live';
  assert.deepEqual(await service.pendingCounterpartySigningLink('account','envelope',phone),{signerId:'1',url:'https://docuseal.com/s/fixture_only'});
+ signingActive=false;payload=null;await assert.rejects(()=>service.sendForSignatures(input),/cancellation/);assert.equal(payload,null);
+ await assert.rejects(()=>service.pendingCounterpartySigningLink('account','envelope',phone),/cancellation/);signingActive=true;
  await assert.rejects(()=>service.pendingCounterpartySigningLink('account','envelope','+12025550199'),/next signer/);
  providerPhone='+12025550199';await assert.rejects(()=>service.pendingCounterpartySigningLink('account','envelope',phone),/Signer evidence/);providerPhone=phone;
  pricing=0;payload=null;await assert.rejects(()=>service.sendForSignatures(input),/pricing needs setup/);assert.equal(payload,null);
