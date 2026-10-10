@@ -23,9 +23,9 @@ export async function sendRequestedBuyerPackages(accountId:string,dealId:string)
  if(manual.length)return {status:'buyer_package_held',accepted:0};
  const link=await db<{url:string}|null>('rpc/icash_ensure_buyer_package','POST',{p_account:accountId,p_deal:dealId});
  if(!link)return {status:'buyer_package_unavailable',accepted:0};
- const money=(v:number)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(v/100);
- const subject=`Requested buyer package: ${t.address}`.replace(/[\r\n]/g,' ').slice(0,180);
- const body=`Here are the property details you requested.\n\nBuyer package: ${link.url}\n\nProperty: ${t.address}\nContract interest offered for assignment.\nBuyer asking price, including our fee and before closing costs: ${money(authority.asking_price_cents)}\nBuyer deposit: ${t.assignmentDepositCents===null?'To be agreed in writing':money(t.assignmentDepositCents)}\nClosing: ${t.closingDate||'Date to be confirmed'}\n\nBuyer pays legally allocable closing and title-company fees under the signed agreements. Any non-refundable deposit provisions and exceptions must be agreed in writing. Verify property condition, value and title independently.\n\nReply with your questions or a preferred showing time. Access must be confirmed before visiting. Reply if you no longer want updates about this deal.`;
+ const content=await db<{subject:string;email:string}|null>('rpc/icash_buyer_outreach_content','POST',{p_account:accountId,p_deal:dealId});
+ if(!content)return {status:'buyer_package_unavailable',accepted:0};
+ const subject=content.subject,body=content.email;
  let accepted=0;
  for(const c of contacts.filter(c=>c.party==='buyer'&&c.contact_key.startsWith('buyer-request:')).slice(0,3)){
   // One package per buyer email and purchase agreement, even if they request it twice.
