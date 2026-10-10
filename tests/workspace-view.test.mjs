@@ -39,9 +39,10 @@ assert.ok(source.includes('attentionPage')&&source.includes('screeningId')&&sour
 assert.ok(source.includes('Take over')&&source.includes('Already-started work may finish'));
 const messages=readFileSync(new URL('../components/deal-messages.tsx',import.meta.url),'utf8');assert.ok(messages.includes('drafts[current.id]'));assert.ok(messages.includes('request.key'));assert.ok(!messages.includes('Check latest status')&&!messages.includes('Search texts')&&!messages.includes('AI conversation notes'));
 const review=readFileSync(new URL('../components/contract-review-guide.tsx',import.meta.url),'utf8');
-assert.ok(!review.includes("!t.closingDate&&'Closing date'"),'legitimate default closing clause is not marked missing');
-assert.ok(review.includes('Blank is not $0'));assert.ok(review.includes('Within 30 calendar days after the effective date'));
-assert.ok(source.includes('date of the last required signature'));assert.ok(source.includes('enter 0 only if no earnest money is intended'));
+assert.ok(review.includes("!assignment&&!t.closingDate&&'Closing date'"),'the approved original purchase form needs an agreed closing date');
+assert.ok(!review.includes('Within 30 calendar days after the effective date'),'do not invent a deadline for the original contract');
+assert.ok(review.includes("v===null?'Not entered'"),'missing amounts are not presented as zero');
+assert.ok(source.includes('date of the last required signature'));assert.ok(!source.includes("amount('earnestCents'"),'do not reintroduce seller earnest money removed from the approved purchase form');
 const home=readFileSync(new URL('../app/page.tsx',import.meta.url),'utf8');
 assert.match(home,/<SupportLauncher key=\{account.email/,'signed-in support opens without leaving drafts');assert.match(home,/href="\/support"/,'guest support stays available');
 console.log('Workspace volume, evidence, search, grouping, labels and recovery tests passed');

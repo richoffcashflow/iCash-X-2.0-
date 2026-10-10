@@ -19,19 +19,28 @@ export function propertyBotStatus(input: {manual: boolean; paused: boolean; avai
  return {label: 'AI active', tone: 'green', detail: 'Bot-managed. Each next action follows your current setup and budget.'};
 }
 
-export function propertyNextMove(property: WorkspaceProperty, work: Context) {
+export type DealSection='contracts'|'fulfillment'|'coordination'|'cancellation'|'attention';
+export function propertyNextAction(property: WorkspaceProperty, work: Context):{detail:string;label:string|null;target:DealSection|null} {
  const deal = work.deals.find(item => item.screening_id === property.id);
- if(deal?.stage === 'cancellation_pending') return 'Finish the cancellation review below. Automatic work is paused.';
- if(deal?.stage === 'closed') return 'Review the closing record and final documents.';
- if(['canceled','cancelled'].includes(deal?.stage??'')) return 'This deal is stopped. Its history is saved here.';
- if(needsAttention(property.id, work)) return 'Review the request below so this property can move forward.';
+ const action=(detail:string,label:string|null=null,target:DealSection|null=null)=>({detail,label,target});
+ if(deal?.stage === 'cancellation_pending') return action('Complete the cancellation review. Automatic work is paused.','Review cancellation','cancellation');
+ if(deal?.stage === 'closed') return action('Review the closing record and confirm your payment arrived.','Review closing record','fulfillment');
+ if(['canceled','cancelled'].includes(deal?.stage??'')) return action('This deal is stopped. Review its saved agreements and any remaining obligations.','Review agreements','contracts');
+ if(work.signing.some(s=>s.deal_id===deal?.id&&s.state==='customer_signature_needed'))return action('The other party signed. Read the agreement and complete your signature.','Review & sign','contracts');
+ if(work.handoffs.some(h=>h.screening_id===property.id&&h.state==='open'))return action('A seller or buyer asked for a person. Read the request and follow up.','Review request','attention');
+ const closing=work.closingReview?.find(c=>c.screening_id===property.id);
+ if(closing?.review_reason&&closing.review_reason!=='setup')return action('Resolve the closing issue with the title office. Property automation is paused.','Review closing issue','fulfillment');
+ if(work.viewingRequests?.some(v=>v.screening_id===property.id))return action('A buyer needs a response. Review their request, follow up and record the outcome.','Review buyer request','attention');
+ if(work.closingTasks?.some(t=>t.screening_id===property.id))return action('Review the closing tasks. Confirm dates from the signed agreement or respond to the title office.','Review closing tasks','fulfillment');
+ if(closing)return action('Choose your title company and save how you want to receive your proceeds.','Set up closing','fulfillment');
+ if(needsAttention(property.id, work)) return action('Read the saved request and complete the action it asks for.','Review request','attention');
  const callback = work.callbacks.find(item => item.screening_id === property.id && ['pending','scheduled','ready','held_for_human'].includes(item.state));
- if(callback) return 'Check the saved callback time before the next conversation.';
- if(deal?.stage === 'closing') return 'Track title, signatures and the closing requirements.';
- if(deal && ['under_contract','assigned','buyer_matched','purchase_signed','assignment_signed','title_open'].includes(deal.stage)) return 'Keep the buyer and title work moving toward closing.';
- if(property.result.financialCheck.status !== 'eligible') return 'Review the property numbers before discussing an offer.';
- return 'Confirm the seller’s interest, price and repair needs.';
+ if(callback) return action('Check the saved callback time below before the next conversation.');
+ if(deal && ['closing','under_contract','buyer_selected','assigned','buyer_matched','purchase_signed','assignment_signed','title_open'].includes(deal.stage)) return action('Open buyer and closing progress to see what needs your attention and what is waiting on title.','Open buyers & closing','fulfillment');
+ if(property.result.financialCheck.status !== 'eligible') return action('Review the property numbers before discussing an offer.');
+ return action('Check the seller conversation for their interest, price and repair needs. Requests needing your decision appear in Needs your review.');
 }
+export function propertyNextMove(property:WorkspaceProperty,work:Context){return propertyNextAction(property,work).detail;}
 
 /** Rank saved evidence, not forecast earnings or inferred seller interest. */
 export function mostPromisingProperty(properties: WorkspaceProperty[], work: Context) {

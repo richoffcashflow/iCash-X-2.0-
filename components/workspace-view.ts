@@ -4,7 +4,7 @@ export type WorkspaceProperty = {id:string;completed_at:string;result:{property:
 export type WorkspaceDeal = {id:string;screening_id:string;stage:string};
 export type WorkspaceEvidence = {
  closingTasks?:{screening_id:string}[];
- closingReview?:{screening_id:string}[];
+ closingReview?:{screening_id:string;review_reason?:string}[];
  propertyAttentionIds?:string[];
  viewingRequests?:{screening_id:string}[];
  deals:WorkspaceDeal[];
