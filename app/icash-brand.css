@@ -3,20 +3,33 @@
 @font-face{font-family:'iCash Montserrat';font-style:normal;font-weight:900;font-display:swap;src:url('/fonts/montserrat-black.ttf') format('truetype')}
 .wb-plan-home,.icash-brand-workspace{font-family:'iCash Montserrat',Arial,Helvetica,sans-serif}
 .icash-brand-workspace.icash-brand-workspace{min-height:100dvh;background:#fff!important;color:#151515;padding-bottom:28px;color-scheme:light}
-.icash-brand-workspace.icash-brand-workspace .console-header{width:calc(100% - 60px);max-width:1120px;min-height:86px;padding:10px 0;margin:auto;background:transparent;color:#111;border-bottom:1px solid #e7e7e7}
-.icash-brand-workspace.icash-brand-workspace .console-header img{filter:brightness(0);width:119px;height:66px}
+.icash-brand-workspace.icash-brand-workspace .console-header{width:calc(100% - 60px);max-width:1120px;min-height:76px;padding:8px 0;margin:auto;background:transparent;color:#111;border-bottom:1px solid #e7e7e7;flex-wrap:nowrap;gap:20px}
+.icash-brand-workspace.icash-brand-workspace .console-header>div{height:auto}
+.icash-brand-workspace.icash-brand-workspace .console-header img{filter:brightness(0);width:101px;height:56px;flex:none}
+.icash-brand-workspace.icash-brand-workspace .workspace-logo{min-width:0;flex:1}
+.icash-brand-workspace.icash-brand-workspace .workspace-logo .setup-brand{min-width:0}
+.icash-brand-workspace.icash-brand-workspace .workspace-logo .setup-brand>div{min-width:0}
+.icash-brand-workspace.icash-brand-workspace .workspace-logo .setup-brand strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .icash-brand-workspace.icash-brand-workspace .brand-version{font-size:9px;color:#777;letter-spacing:.08em}
 .icash-brand-workspace.icash-brand-workspace .console-header :is(.header-access,.workspace-help,.workspace-updates-button){color:#555;font-size:10px;font-weight:700;letter-spacing:.02em}
 .icash-brand-workspace.icash-brand-workspace .console-header .header-access:hover{color:#111;background:#f1f1f1}
 .icash-brand-workspace.icash-brand-workspace .console-header .setup-brand strong{color:#111}
 .icash-brand-workspace.icash-brand-workspace .console-header .setup-brand>div>span{color:#666}
 .icash-brand-workspace.icash-brand-workspace .console-header .setup-mark{border:1px solid #111;background:#111!important;color:#fff}
-.icash-brand-workspace.icash-brand-workspace .console-main{max-width:1120px;padding:34px 0 0}
-.workspace-brand-intro{position:relative;padding:0 0 28px;margin:0;overflow:hidden}
-.workspace-brand-intro>span{display:flex;align-items:center;gap:10px;font-size:9px;font-weight:700;letter-spacing:.17em;color:#666}
-.workspace-brand-intro>span:before{content:'';width:25px;height:1px;background:#777}
-.workspace-brand-intro h1{font-size:clamp(28px,4vw,45px);line-height:1.1;letter-spacing:-.055em;font-weight:900;color:#111;margin:13px 0 10px}
-.workspace-brand-intro p{color:#666;font-size:12px;line-height:1.6;margin:0}
+.icash-brand-workspace.icash-brand-workspace .console-main{max-width:1120px;padding:24px 0 0}
+.icash-brand-workspace.icash-brand-workspace .console-header .workspace-header-links{gap:8px;flex:none;flex-wrap:nowrap;margin-left:auto}
+.icash-brand-workspace.icash-brand-workspace .workspace-support-launcher{min-height:44px;padding:8px;gap:6px;font-size:12px;font-weight:500;border-radius:10px;white-space:nowrap}
+.icash-brand-workspace.icash-brand-workspace .console-header .workspace-updates-button{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;width:44px;height:44px;min-height:44px;padding:0;border:0;border-radius:10px;background:transparent;color:#555}
+.icash-brand-workspace.icash-brand-workspace .console-header .workspace-updates-button>span{display:none}
+.icash-brand-workspace.icash-brand-workspace .console-header .workspace-updates-button>b{position:absolute;top:1px;right:0;display:grid;place-items:center;min-width:18px;height:18px;margin:0;padding:0 4px;border-radius:10px;background:#171717;color:#fff;font-size:10px;line-height:1}
+.icash-brand-workspace.icash-brand-workspace .workspace-account-menu{position:relative;flex:none;margin:0;padding:0;border:0;background:transparent}
+.icash-brand-workspace.icash-brand-workspace .workspace-account-menu>summary{display:flex;align-items:center;justify-content:center;width:44px;height:44px;min-height:44px;padding:0;border:0;border-radius:10px;background:transparent;color:#555;list-style:none;cursor:pointer}
+.icash-brand-workspace.icash-brand-workspace .workspace-account-menu>summary::-webkit-details-marker{display:none}
+.icash-brand-workspace.icash-brand-workspace .workspace-account-menu>summary::after{content:none}
+.icash-brand-workspace.icash-brand-workspace .console-header :is(.workspace-support-launcher,.workspace-updates-button,.workspace-account-menu>summary):hover,.icash-brand-workspace.icash-brand-workspace .workspace-account-menu[open]>summary{background:#f4f4f4;color:#111}
+.icash-brand-workspace.icash-brand-workspace .workspace-account-options{position:absolute;z-index:50;top:calc(100% + 8px);right:0;width:176px;padding:6px;border:1px solid #e7e7e7;border-radius:12px;background:#fff;box-shadow:0 8px 28px #00000012}
+.icash-brand-workspace.icash-brand-workspace .workspace-account-options :is(a,button){display:flex;align-items:center;width:100%;min-height:44px;padding:10px 12px;border:0;border-radius:7px;background:transparent;color:#333;font:inherit;font-size:13px;font-weight:500;text-align:left;text-decoration:none;cursor:pointer}
+.icash-brand-workspace.icash-brand-workspace .workspace-account-options :is(a,button):hover{background:#f5f5f5;color:#111}
 .icash-brand-workspace.icash-brand-workspace .bot-run-centered{border:1px solid #d8d8d8;border-radius:10px;background:linear-gradient(125deg,#f3f3f3,#fff 80%);box-shadow:0 12px 35px #00000005;padding:25px 28px;gap:12px 24px;margin-bottom:30px}
 .icash-brand-workspace.icash-brand-workspace .bot-run-status h2{font-size:24px;font-weight:700;letter-spacing:-.045em;color:#111}
 .icash-brand-workspace.icash-brand-workspace .bot-run-status p{font-size:12px;color:#666}
@@ -83,16 +96,11 @@
 .icash-brand-workspace.icash-brand-workspace :is(button,summary,input,a):focus-visible{outline:2px solid #111;outline-offset:4px}
 @media(max-width:1180px){.icash-brand-workspace.icash-brand-workspace .console-header{margin-inline:30px}.icash-brand-workspace.icash-brand-workspace .console-main{padding-inline:30px}.icash-brand-workspace.icash-brand-workspace .product-disclosure{margin-inline:30px}}
 @media(max-width:640px){
- .icash-brand-workspace.icash-brand-workspace .console-header{width:calc(100% - 36px);margin-inline:18px;min-height:72px;padding:5px 0;gap:12px}
+ .icash-brand-workspace.icash-brand-workspace .console-header{width:calc(100% - 36px);margin-inline:18px;min-height:64px;padding:5px 0;gap:12px}
  .icash-brand-workspace.icash-brand-workspace .console-header img{width:91px;height:52px}
  .icash-brand-workspace.icash-brand-workspace .brand-version{display:none}
- .icash-brand-workspace.icash-brand-workspace .workspace-header-links{gap:1px;flex-wrap:wrap;justify-content:flex-end}
- .icash-brand-workspace.icash-brand-workspace .console-header :is(.header-access,.workspace-help,.workspace-updates-button){padding-inline:6px;font-size:9px;min-height:38px}
- .icash-brand-workspace.icash-brand-workspace .console-main{padding:26px 18px 0}
- .workspace-brand-intro{padding-bottom:23px}
- .workspace-brand-intro>span{font-size:8px;letter-spacing:.1em}
- .workspace-brand-intro h1{font-size:clamp(24px,7.4vw,35px);margin-top:13px;white-space:nowrap}
- .workspace-brand-intro p{font-size:11px}
+ .icash-brand-workspace.icash-brand-workspace .console-header .workspace-header-links{gap:2px;justify-content:flex-end}
+ .icash-brand-workspace.icash-brand-workspace .console-main{padding:18px 18px 0}
  .icash-brand-workspace.icash-brand-workspace .bot-run-centered{padding:21px 20px;gap:15px;margin-bottom:25px}
  .icash-brand-workspace.icash-brand-workspace .bot-run-status h2{font-size:22px}
  .icash-brand-workspace.icash-brand-workspace .bot-run-status p{font-size:11px}
