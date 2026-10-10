@@ -32,7 +32,7 @@ export function WebinarMeasurement(){
   }catch{/* Playback is independent of measurement. */}
  }
  useEffect(()=>{
-  if(['/admin','/webinar-studio','/webinaradmin'].includes(location.pathname)||new URLSearchParams(location.search).has('preview'))return;
+  if(location.pathname.startsWith('/next/')||['/admin','/webinar-studio','/webinaradmin'].includes(location.pathname)||new URLSearchParams(location.search).has('preview'))return;
   setChoice(storage.get('wb-meta-choice'));
   try{session.current=sessionStorage.getItem('icash-webinar-session')||'';}catch{/* Optional measurement. */}
   const ready=(event:Event)=>{session.current=(event as CustomEvent<{sessionId:string}>).detail.sessionId;void refresh();};

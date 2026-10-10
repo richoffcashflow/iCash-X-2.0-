@@ -66,15 +66,16 @@ export async function GET(req:Request){
   // or the separately selected attention page. Empty embeds avoid transferring messages.
   const propertyAttentionRows=ids?await Promise.all([
    ['icash_text_attention','open'],['icash_handoffs','open'],['icash_sms_call_requests','needs_review'],['icash_buyer_viewing_requests','needs_confirmation'],['icash_seller_gaps','needs_review'],['icash_closing_setup','needs_review']
-  ].map(([table,state])=>db<{id:string}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=in.(${ids})&select=id,${table}!inner()&${table}.account_id=eq.${accountId}&${table}.state=eq.${state}&limit=${pageSize}`))):[];
+  ].map(([table,state])=>db<{id:string}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=in.(${ids})&select=id,${table}!inner()&${table}.account_id=eq.${accountId}&${table}.state=${table==='icash_handoffs'?'neq.resolved':`eq.${state}`}&limit=${pageSize}`))):[];
   const propertyAttentionIds=[...new Set(propertyAttentionRows.flat().map(p=>p.id))];
+  const journeys=ids?await db('rpc/icash_journey_progress','POST',{p_account:accountId,p_screenings:visible.map(p=>p.id)}):[];
   const dealIds=deals.map(d=>d.id).join(',');
   const queuePage=`&limit=${pageSize+1}&offset=${attentionPage*pageSize}`;
   const [closingTaskRows,textRows,callRows,handoffRows,signing,signatureRows,routeRows,viewingRows,recoveryRows,closingRows]=await Promise.all([
    db<Attention[]>('rpc/icash_closing_task_attention','POST',{p_account:accountId,p_offset:attentionPage*pageSize,p_limit:pageSize+1}),
    db<Attention[]>(`icash_text_attention?account_id=eq.${accountId}&state=eq.open&select=id,message_id,screening_id,deal_id,kind,party,quote,timezone&order=created_at,id${queuePage}`),
    db<Attention[]>(`icash_sms_call_requests?account_id=eq.${accountId}&state=eq.needs_review&select=id,screening_id,requested_at,state&order=requested_at,id${queuePage}`),
-   db<Attention[]>(`icash_handoffs?account_id=eq.${accountId}&state=eq.open&select=id,screening_id,party,reason,summary,next_action,state&order=created_at,id${queuePage}`),
+   db<Attention[]>(`icash_handoffs?account_id=eq.${accountId}&state=neq.resolved&select=id,screening_id,party,reason,summary,next_action,state,assigned_to,due_at,resolution&order=created_at,id${queuePage}`),
    dealIds?db<unknown[]>(`icash_signing_envelopes?account_id=eq.${accountId}&deal_id=in.(${dealIds})&select=id,deal_id,kind,state,test_mode,provider_status,updated_at`):Promise.resolve([]),
    db<Attention[]>(`icash_signing_envelopes?account_id=eq.${accountId}&state=eq.customer_signature_needed&select=id,deal_id,kind,test_mode&order=created_at,id${queuePage}`),
    db<SmsRouteReview[]>('rpc/icash_sms_route_review_items','POST',{p_account:accountId,p_offset:attentionPage*pageSize,p_limit:pageSize+1}),
@@ -98,6 +99,6 @@ export async function GET(req:Request){
   for(const item of allAttention)item.address=item.screening_id?addressById.get(item.screening_id)??null:null;
   const smsRouteReviews=routeRows.slice(0,pageSize);
   const attentionHasMoreByKind={closingTasks:closingTaskRows.length>pageSize,closing:closingRows.length>pageSize,sellerRecovery:recoveryRows.length>pageSize,viewings:viewingRows.length>pageSize,routing:routeRows.length>pageSize,texts:textRows.length>pageSize,calls:callRows.length>pageSize,handoffs:handoffRows.length>pageSize,signatures:signatureRows.length>pageSize};
-  return NextResponse.json({closingTasks,closingReview,sellerRecovery,viewingRequests,smsRouteReviews,textAttention,signatureActions,signing,signingConfigured:!!(process.env.DOCUSEAL_API_KEY||process.env.DOCUSEAL_TEST_API_KEY),properties:visible,propertyAttentionIds,hasMore:!screeningId&&properties.length>pageSize,deals,contacts,controls,conversations,callbacks,callRequests,handoffs,page,attentionPage,attentionHasMore:Object.values(attentionHasMoreByKind).some(Boolean),attentionHasMoreByKind,searchSupported:true,query},{headers});
+  return NextResponse.json({journeys,closingTasks,closingReview,sellerRecovery,viewingRequests,smsRouteReviews,textAttention,signatureActions,signing,signingConfigured:!!(process.env.DOCUSEAL_API_KEY||process.env.DOCUSEAL_TEST_API_KEY),properties:visible,propertyAttentionIds,hasMore:!screeningId&&properties.length>pageSize,deals,contacts,controls,conversations,callbacks,callRequests,handoffs,page,attentionPage,attentionHasMore:Object.values(attentionHasMoreByKind).some(Boolean),attentionHasMoreByKind,searchSupported:true,query},{headers});
  }catch{return NextResponse.json({error:'Could not load your work. Sign in and retry.'},{status:503,headers});}
 }
