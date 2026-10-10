@@ -17,6 +17,7 @@ try{
  await pg.exec(readFileSync('supabase/migrations/20261005215816_contract_text_delivery.sql','utf8'));
  await pg.exec(readFileSync('config/buyer-disposition-workflow.sql','utf8'));
  await pg.exec(readFileSync('config/rounded-buyer-prices.sql','utf8'));
+ await pg.exec(readFileSync('config/buyer-outreach-copy.sql','utf8'));
  await pg.exec(readFileSync('config/buyer-sms-review.sql','utf8'));
  await pg.exec(readFileSync('config/buyer-introduction-calls.sql','utf8'));
  const terms={seller:'Synthetic seller',buyer:'SIMULATION business',address:'123 Main Street',state:'TX',priceCents:3893700,assignmentFeeCents:null,priceSource:'seller_reported'};
@@ -116,6 +117,16 @@ try{
  assert.equal(await rpc('icash_claim_deal_email',{p_account:account,p_id:email}),null,'released email still claims only once');
  console.log('PASS buyer test hold: no SMS/email transport or spend, queued sends blocked, package preserved, seller path preserved, exact owner/deal scope, no automatic expiry, explicit fixture-only release.');
  await q("update icash_screening_jobs set completed_at=now()-interval '2 days' where id=$1",[screening]);
+ const updatedCopy=await rpc('icash_buyer_outreach_content',{p_account:account,p_deal:deal});
+ assert(updatedCopy.sms.includes('SIMULATION business'));assert(updatedCopy.sms.includes('Buying in Dallas?'));assert(updatedCopy.sms.includes('$49k'));
+ assert.equal(await rpc('icash_buyer_outreach_content',{p_account:other,p_deal:deal}),null);
+ await q('begin');try{
+  await q('update icash_text_messages set body=$2 where id=$1',[message,updatedCopy.sms+' Fee $10,063']);
+  assert.equal(await rpc('icash_claim_text',{p_account:account,p_message:message,p_sender:f.sender}),null,'tampered package copy is held');
+  await q('update icash_text_messages set body=$2 where id=$1',[message,updatedCopy.sms]);
+  assert.equal((await rpc('icash_claim_text',{p_account:account,p_message:message,p_sender:f.sender})).message,updatedCopy.sms);
+  assert.equal(await rpc('icash_claim_text',{p_account:account,p_message:message,p_sender:f.sender}),null);
+ }finally{await q('rollback');}
  const claimed=await rpc('icash_claim_text',{p_account:account,p_message:message,p_sender:f.sender});assert.equal(claimed.message,packageBody);
  assert.equal(await rpc('icash_claim_text',{p_account:account,p_message:message,p_sender:f.sender}),null);
  await q('begin');await q("insert into icash_text_suppressions(phone,reason) values($1,'SIMULATION STOP')",[f.phone]);assert.equal(await rpc('icash_sms_thread_review_current',{p_account:account,p_thread:thread.id,p_check_hour:false}),false);await q('rollback');

@@ -27,6 +27,7 @@ export async function testOwnerBuyerDelivery(f,{link,realBuyerThread,realBuyerEm
  await pg.exec(factual.slice(0,factual.indexOf('-- Seller acquisition mode'))+'commit;');
  await pg.exec(read('config/owner-buyer-delivery-test.sql'));
  await pg.exec(read('config/owner-buyer-test-routing.sql'));
+ await pg.exec(read('config/buyer-outreach-copy.sql'));
  const ownerPhone='+12145550188',sender='+14245550188',run=randomUUID(),thread=randomUUID(),seller=randomUUID(),oldDeal=randomUUID(),oldScreen=randomUUID();
  await q('update auth.users set email_confirmed_at=now() where id=$1',[user]);
  await q('insert into icash_owner_voice_acceptance_config values($1,$2,$3)',[account,user,ownerPhone]);
@@ -44,7 +45,8 @@ export async function testOwnerBuyerDelivery(f,{link,realBuyerThread,realBuyerEm
  assert.equal(await current(),true);assert.equal(await review(),true);
  assert.equal((await one('select dnc_clear from icash_text_threads where id=$1',[thread])).dnc_clear,false,'test does not invent DNC evidence');
  const content=await rpc('icash_owner_buyer_test_content',{p_id:run});
- assert(content.sms.includes('$49,000.00'));assert(content.email.includes('$10,063.00'));assert(content.sms.length<=160);
+ assert(content.sms.includes('$49k'));assert(content.sms.includes('Buying in Dallas?'));assert(!content.email.includes('$10,063'));assert(!content.email.includes('$38,937'));assert(content.sms.length<=160);
+ assert.deepEqual(content,await rpc('icash_buyer_outreach_content',{p_account:account,p_deal:deal}),'owner test and real buyer copy match');
  const message=await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:thread,p_body:content.sms});assert(message);
  assert.equal(await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:thread,p_body:content.sms}),message);
  const sendArgs={p_account:account,p_message:message,p_sender:sender};
