@@ -18,3 +18,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Keep call connection instructions short. Do not put recording announcements or internal cost multipliers in the call controls; recording behavior belongs in the service implementation.
 - Buyer outreach uses outbound SMS and email only. Never schedule or dispatch outbound AI calls to buyers. Preserve inbound buyer calls and outbound seller calls.
 - Customer credits are charged for completed usage. Do not withhold the maximum quoted amount from the wallet or impose daily/lifetime activation spending caps. Keep idempotent usage authorizations, actual-cost records, bounded calls, paid access, contact permissions, and zero-balance admission checks.
+
+# Development test spending
+
+- The owner stopped paid provider simulations after test runs exhausted ElevenLabs credits. Keep paid development simulations disabled, including direct CLI commands, deployment hooks and retries.
+- Use local fixtures and saved transcripts. New paid tests require fresh explicit owner approval of a concrete spending limit and a mechanism enforcing that limit. Earlier requests to test or ship are not approval to resume paid tests.
+- Never purchase credits, enable auto-recharge or change provider billing to continue testing without explicit owner authorization. Preserve failed and interrupted evidence; do not call incomplete evaluations passed.
+- This restriction covers development/testing spend. Preserve ordinary customer production usage and the actual-cost billing rules above.
