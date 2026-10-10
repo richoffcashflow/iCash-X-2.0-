@@ -5,6 +5,7 @@ import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
 import {dealTermsSchema} from '@/lib/deal-documents';
 import {contractPreparation,type TermMessage} from '@/lib/contract-preparation';
+import type {BuyerAssignmentPricing} from '@/lib/buyer-assignment-pricing';
 export const dynamic='force-dynamic';
 export async function GET(req:Request){
  const headers={'Cache-Control':'private, no-store'};
@@ -20,7 +21,11 @@ export async function GET(req:Request){
    for(const t of texts){const thread=threads.find(th=>th.id===t.thread_id);const party=thread?.party;if(thread&&(party==='seller'||party==='buyer'))messages.push({id:t.id,party,body:t.body,partyKey:createHash('sha256').update(thread.recipient).digest('hex')});}
   }
   const current=dealTermsSchema.parse(deal?.terms??{}),prepared=contractPreparation(messages,deal?.stage??'draft',current);
-  if((!deal||deal.stage==='draft')&&current.assignmentFeeCents===null&&prepared.patch.assignmentFeeCents===undefined)prepared.patch.assignmentFeeCents=1000000;
+  const price=prepared.patch.priceCents??current.priceCents;
+  if((!deal||deal.stage==='draft')&&price!==null&&current.assignmentFeeCents===null&&prepared.patch.assignmentFeeCents===undefined){
+   const pricing=await db<BuyerAssignmentPricing>('rpc/icash_buyer_assignment_pricing','POST',{p_price:price,p_snapshot:property.snapshot,p_fee:null});
+   if(pricing.ready&&pricing.assignmentFeeCents!==undefined)prepared.patch.assignmentFeeCents=pricing.assignmentFeeCents;
+  }
   return NextResponse.json(prepared,{headers});
  }catch{return NextResponse.json({error:'Could not load saved conversation terms.'},{status:400,headers});}
 }

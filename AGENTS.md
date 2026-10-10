@@ -22,6 +22,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Customer credits are charged for completed usage. Do not withhold the maximum quoted amount from the wallet or impose daily/lifetime activation spending caps. Keep idempotent usage authorizations, actual-cost records, bounded calls, paid access, contact permissions, and zero-balance admission checks.
 - New automatic seller offers round down to whole $1,000 amounts before quoting; new automatic buyer asking prices round up to whole $1,000 amounts before marketing, with the fee and agreement matching that total. Preserve already accepted prices, issued agreements and published buyer terms. After verified signing, congratulate the seller and make viewing availability the next step; collecting available times does not book a visit.
 
+- New assignment fee targets match seller underwriting: $10,000 below $300,000 ARV and $20,000 at or above. Reduce the automatic target in $1,000 increments only while at least $10,000 fits within 70% of (ARV minus repairs), including the signed purchase. Hold unsupported new marketing for owner review. Larger explicitly saved fees must pass the same budget check. Preserve existing released prices, fees, deposits and signed agreements.
+
 # Development test spending
 
 - The owner stopped paid provider simulations after test runs exhausted ElevenLabs credits. Keep paid development simulations disabled, including direct CLI commands, deployment hooks and retries.
