@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {pathToFileURL} from 'node:url';
+import {randomUUID as uuid} from 'node:crypto';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const {PGlite}=await import(pathToFileURL(process.argv[2]).href),pg=await PGlite.create();
+const q=(s,a=[])=>pg.query(s,a),one=async(s,a=[])=>(await q(s,a)).rows[0];
+try{
+ await pg.exec('create role anon;create role authenticated;create role service_role;create schema icash_recording_private;create function icash_recording_private.clock_now() returns timestamptz language sql as $$select now()$$;');
+ for(const t of JSON.parse(read('tests/fixtures/automatic-credits-baseline.json')).tables)await pg.exec(t.definition.replace(/icash_[a-z_]+\.clock_now\(\)/g,'now()'));
+ await pg.exec(`alter table icash_memberships add column retention_requested_at timestamptz,add column retention_started_at timestamptz,add column retention_ends_at timestamptz,add column retention_discount_id text;
+ alter table icash_operation_rates add column if not exists flat_customer_price_cents bigint;
+ create table icash_workspace_questions(id uuid primary key,account_id uuid,state text);
+ create function icash_membership_work_allowed(uuid) returns boolean language sql as $$select true$$;
+ create function icash_general_reception_pause_exempt(uuid,text,bigint) returns boolean language sql as $$select false$$;
+ create function icash_customer_text_operation(uuid,text) returns boolean language sql as $$select false$$;
+ create function icash_limited_seller_voice(uuid,text) returns boolean language sql as $$select false$$;
+ create function icash_reserve_operation(uuid,text,uuid,timestamptz,timestamptz,boolean) returns jsonb language sql as $$select '{}'::jsonb$$;`);
+ const defs=JSON.parse(read('tests/fixtures/vip-credit-baseline.json'));
+ await pg.exec(defs.find(r=>r.proname==='icash_finish_credit').def);
+ await pg.exec(read('config/vip-and-daily-allowance.sql'));
+ await pg.exec(read('config/stripe-dispute-protection.sql').split('-- Keep the previous RPC')[0]+'commit;');
+ await pg.exec(read('config/vip-retention-plan.sql'));
+ const a=uuid(),other=uuid(),user=uuid(),m=uuid(),end=new Date(Math.floor(Date.now()/1000)*1000+20*86400000).toISOString();
+ await q('insert into icash_accounts(id,owner_user_id) values($1,$2),($3,$4)',[a,user,other,uuid()]);
+ await q('insert into icash_wallets(account_id,balance_cents) values($1,1000)',[a]);
+ await q("insert into icash_memberships(id,account_id,guest_hash,mode,state,price_cents,paid_through,stripe_subscription_id,stripe_customer_id) values($1,$2,'fixture-guest','live','active',10000,$3,'sub_fixture','cus_fixture')",[m,a,end]);
+ await assert.rejects(q("select icash_begin_plan_change($1,$2,'retain_vip',$3)",[m,other,end]));
+ const c=(await one("select to_jsonb(icash_begin_plan_change($1,$2,'retain_vip',$3)) v",[m,a,end])).v;
+ assert.equal(c.to_price,5000);assert.equal((await one("select to_jsonb(icash_begin_plan_change($1,$2,'retain_vip',$3)) v",[m,a,end])).v.id,c.id);
+ await q("update icash_plan_changes set price_id='price_retained' where id=$1",[c.id]);
+ await assert.rejects(q("select icash_apply_plan_change($1,'sub_fixture','price_retained')",[c.id]),'No grant before explicit acceptance');
+ const accept=(account=a,version='vip-retention-50-ongoing-v1')=>q("select icash_record_purchase_acceptance('vip',$1,'live',$2,'fixture-guest',$3,'Fixture ongoing VIP at $50 per month; no charge today',5000,'fixture-final','All sales final','{}')",[c.id,account,version]);
+ await assert.rejects(accept(other));await assert.rejects(accept(a,'old-version'));await accept();await accept();
+ await assert.rejects(q("select icash_apply_plan_change($1,'sub_other','price_retained')",[c.id]));
+ await q("update icash_memberships set state='cancel_requested' where id=$1",[m]);await assert.rejects(q("select icash_apply_plan_change($1,'sub_fixture','price_retained')",[c.id]));
+ await q("update icash_memberships set state='active' where id=$1",[m]);await q("select icash_apply_plan_change($1,'sub_fixture','price_retained')",[c.id]);await q("select icash_apply_plan_change($1,'sub_fixture','price_retained')",[c.id]);
+ let member=await one('select * from icash_memberships where id=$1',[m]);assert.equal(member.price_cents,5000);assert(member.vip_retained_at);assert.equal(Date.parse(member.vip_until),Date.parse(end));
+ for(const action of ['upgrade','downgrade','keep_vip','retain_vip'])await assert.rejects(q('select icash_begin_plan_change($1,$2,$3,$4)',[m,a,action,end]));
+ const renewalEnd=new Date(Date.parse(end)+30*86400000).toISOString();
+ const invoice=(amount=5000,discount=null)=>q("select icash_settle_membership_invoice_v2($1,'sub_fixture','cus_fixture','in_fixture','pi_fixture',$2,'fixture@example.invalid',null,$3,$4,$5)",[m,amount,renewalEnd,end,discount]);
+ await assert.rejects(invoice(10000));await assert.rejects(invoice(2500,'di_legacy'));await invoice();await invoice();member=await one('select * from icash_memberships where id=$1',[m]);assert.equal(Date.parse(member.vip_until),Date.parse(renewalEnd));assert.equal((await one('select count(*)::integer n from icash_membership_invoices')).n,1);assert.equal((await one('select balance_cents from icash_wallets where account_id=$1',[a])).balance_cents,1000);
+ // Real savings RPC, with settled snapshots at different price/rounding paths.
+ const rate=uuid(),leadRate=uuid();await q("insert into icash_operation_rates(id,operation,version) values($1,'seller_call','fixture-call'),($2,'seller_lead','fixture-lead')",[rate,leadRate]);
+ const spend=async(key,options={})=>{const x={account:a,rate,state:'settled',cost:100000,charged:24,cap:100,multiplier:2.4,price:null,...options};await q("insert into icash_operation_spend(operation_key,account_id,rate_id,state,actual_micros,charged_cents,charge_cap_cents,standard_cost_multiplier,elevenlabs_cost_multiplier,customer_price_micros,settled_at) values($1,$2,$3,$4,$5,$6,$7,$8,$8,$9,now())",[key,x.account,x.rate,x.state,x.cost,x.charged,x.cap,x.multiplier,x.price]);};
+ await spend('voice');await spend('lead',{rate:leadRate,cost:105000,charged:26,cap:26}); // Standard 32 cents; VIP 26.
+ await spend('standard',{multiplier:3,charged:30});await spend('cancelled',{state:'cancelled'});await spend('reserved',{state:'reserved'});await spend('unverified',{cost:null});await spend('other-account',{account:other});await spend('unsupported-price',{charged:5});
+ const savings=async(account=a)=>Number((await one('select icash_vip_savings($1) v',[account])).v);
+ assert.equal(await savings(),12,'Only proven settled VIP savings count');assert.equal(await savings(uuid()),0);
+ const textId=uuid();await q('insert into icash_text_messages(id,account_id,customer_price_micros) values($1,$2,50000)',[textId,a]);await spend('text:'+textId,{cost:10000,charged:4,multiplier:1,price:40000});await q('insert into icash_fractional_usage(operation_key,account_id,price_micros,charged_cents) values($1,$2,40000,4)',['text:'+textId,a]);assert.equal(await savings(),13);
+ await spend('tokens',{cost:5000,charged:1,price:12000});await q("insert into icash_fractional_usage(operation_key,account_id,price_micros,charged_cents) values('tokens',$1,12000,1)",[a]);
+ const question=uuid();await q("insert into icash_workspace_questions values($1,$2,'complete')",[question,a]);
+ await q("insert into icash_question_usage(question_id,account_id,model,multiplier,state,provider_id,cost_micros,price_micros,charged_cents,settled_at) values($1,$2,'gpt-4.1-mini',2.4,'settled','chatcmpl-fixture',15000,36000,3,now())",[question,a]);assert.equal(await savings(),14,'Fractional discounts accumulate, round down only once');assert.equal(await savings(),14,'Reads never duplicate savings');
+ const privileges=await one("select has_function_privilege('anon','icash_vip_savings(uuid)','execute') a,has_function_privilege('authenticated','icash_begin_plan_change(uuid,uuid,text,timestamptz)','execute') b");assert.deepEqual(privileges,{a:false,b:false});
+ console.log('PASS VIP retention SQL: accepted $50 plan, exact account/price/period binding, cancellation race, replay, renewable VIP and unchanged credits. Savings: settled-only, tenant-isolated, lead/voice/text/token rounding and no duplication.');
+}catch(e){console.error(e.message,e.where??'',e.query?.slice(0,200)??'');process.exitCode=1;}finally{await pg.close();}

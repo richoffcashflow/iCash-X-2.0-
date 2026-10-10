@@ -116,3 +116,6 @@
  .icash-brand-workspace.icash-brand-workspace .product-disclosure{flex-direction:column;gap:0;margin:28px 18px 0;font-size:9px;padding:18px 0}
 }
 @media(prefers-reduced-motion:reduce){.icash-brand-workspace .live-property{transition:none}}
+
+.workspace-account-options .workspace-cancel-subscription{margin-top:6px;border-top:1px solid #e5e5e5;border-radius:0;padding-top:12px}
+.workspace-vip-savings{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;border-top:1px solid #e5e5e5;padding-top:12px;margin:4px 0 0;font-size:13px;color:#171717}.workspace-vip-savings span{color:#737373;font-size:12px}

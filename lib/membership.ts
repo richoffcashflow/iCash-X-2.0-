@@ -5,16 +5,16 @@ import {db} from '@/lib/stripe-test';
 import {fundingStripe} from '@/lib/funding';
 import {fundingMode} from '@/lib/funding-policy';
 import {membershipAccessible,validOffer,type MembershipOffer} from './membership-policy';
-export type Membership={post_purchase_webinar_id?:string|null;vip_until?:string|null;initial_price_cents?:number|null;id:string;mode:'live'|'test';account_id:string|null;guest_hash:string;price_cents:number;offer_revision:number;state:string;stripe_session_id:string|null;stripe_subscription_id:string|null;stripe_customer_id:string|null;paid_through:string|null;cancel_at_period_end:boolean;payer_email:string|null;payer_phone?:string|null;checkout_url:string|null;consent_version?:string;retention_requested_at?:string|null;retention_started_at?:string|null;retention_ends_at?:string|null;retention_discount_id?:string|null};
+export type Membership={vip_retained_at?:string|null;post_purchase_webinar_id?:string|null;vip_until?:string|null;initial_price_cents?:number|null;id:string;mode:'live'|'test';account_id:string|null;guest_hash:string;price_cents:number;offer_revision:number;state:string;stripe_session_id:string|null;stripe_subscription_id:string|null;stripe_customer_id:string|null;paid_through:string|null;cancel_at_period_end:boolean;payer_email:string|null;payer_phone?:string|null;checkout_url:string|null;consent_version?:string;retention_requested_at?:string|null;retention_started_at?:string|null;retention_ends_at?:string|null;retention_discount_id?:string|null};
 export const retentionVersion='retention-50-six-months-v1';
 const retentionCoupon='icash-retention-50-six-months-v1';
 const identifier=(value:unknown,prefix:string)=>typeof value==='string'&&new RegExp(`^${prefix}_[A-Za-z0-9]+$`).test(value);
 const ref=(value:string|{id:string}|null|undefined)=>typeof value==='string'?value:value?.id;
 export async function membershipOffer():Promise<MembershipOffer>{const [row]=await db<{revision:number;price_cents:number;enabled:boolean}[]>('icash_membership_offer?id=eq.1&select=revision,price_cents,enabled');const offer={revision:row?.revision,priceCents:row?.price_cents,interval:'month' as const,enabled:row?.enabled};if(!validOffer(offer))throw Error('Software pricing is unavailable.');return offer;}
 export async function accountMembership(accountId:string){const mode=fundingMode();if(!mode)throw Error('Billing mode unavailable');const rows=await db<Membership[]>(`icash_memberships?account_id=eq.${accountId}&mode=eq.${mode}&order=created_at.desc&limit=10&select=*`);return rows.find(m=>membershipAccessible(m))??rows.find(m=>m.state!=='cancelled')??rows[0]??null;}
-export function publicMembership(m:Membership|null){return m?{state:m.state,priceCents:m.price_cents,vip:vipActive(m),vipUntil:m.vip_until??null,pendingDowngrade:vipActive(m)&&m.price_cents===5000,paidThrough:m.paid_through,cancelAtPeriodEnd:m.cancel_at_period_end,accessible:membershipAccessible(m),retentionEndsAt:m.retention_ends_at??null}:null;}
+export function publicMembership(m:Membership|null){return m?{state:m.state,priceCents:m.price_cents,vip:vipActive(m),vipUntil:m.vip_until??null,vipRetained:!!m.vip_retained_at,pendingDowngrade:vipActive(m)&&m.price_cents===5000&&!m.vip_retained_at,paidThrough:m.paid_through,cancelAtPeriodEnd:m.cancel_at_period_end,accessible:membershipAccessible(m),retentionEndsAt:m.vip_retained_at?null:m.retention_ends_at??null}:null;}
 export async function membershipRetentionOffer(m:Membership|null){
- if(!m?.account_id||!membershipAccessible(m)||m.cancel_at_period_end||!m.stripe_subscription_id)return null;
+ if(!m?.account_id||m.vip_retained_at||!membershipAccessible(m)||m.cancel_at_period_end||!m.stripe_subscription_id)return null;
  const prior=await db<{id:string}[]>(`icash_memberships?account_id=eq.${m.account_id}&mode=eq.${m.mode}&retention_requested_at=not.is.null&select=id&limit=1`);
  return {eligible:prior.length===0,retryable:!!m.retention_requested_at&&!m.retention_discount_id,priceCents:m.price_cents-Math.round(m.price_cents*.5),months:6,version:retentionVersion};
 }
@@ -31,7 +31,7 @@ async function recordRetention(m:Membership,subId:string,value:string|Stripe.Dis
  if(saved.length!==1)throw Error('Retention record changed');return saved[0];
 }
 export async function retainMembership(m:Membership){
- if(m.mode!==fundingMode()||!m.account_id||!membershipAccessible(m)||m.cancel_at_period_end||!m.stripe_subscription_id)throw Error('Retention unavailable');
+ if(m.mode!==fundingMode()||!m.account_id||m.vip_retained_at||!membershipAccessible(m)||m.cancel_at_period_end||!m.stripe_subscription_id)throw Error('Retention unavailable');
  const stripe=fundingStripe();
  let sub=await stripe.subscriptions.retrieve(m.stripe_subscription_id,{expand:['discounts.source.coupon']});
  if((await matchingMembership(sub))?.id!==m.id||sub.status!=='active'||sub.cancel_at_period_end||sub.pending_update||sub.schedule)throw Error('Retention unavailable');
@@ -69,6 +69,7 @@ export async function settleMembershipInvoice(invoiceId:string){
  if(!subId)return false;const sub=await stripe.subscriptions.retrieve(subId);let m=await matchingMembership(sub);if(!m)return false;
  const [settled]=await db<{membership_id:string;stripe_payment_id:string;amount_cents:number;period_end:string}[]>(`icash_membership_invoices?stripe_invoice_id=eq.${invoice.id}&select=membership_id,stripe_payment_id,amount_cents,period_end`);if(settled){if(settled.membership_id!==m.id||invoice.status!=='paid'||invoice.total!==settled.amount_cents||ref(invoice.customer)!==m.stripe_customer_id||invoice.livemode!==(m.mode==='live'))throw Error('Settled invoice changed');return true;}
  const discounts=(invoice.total_discount_amounts??[]).filter(d=>d.amount!==0);let discountId:string|null=null,expected=m.price_cents;
+ if(m.vip_retained_at&&(m.price_cents!==5000||discounts.length))throw Error('Retained VIP invoice mismatch');
  if(discounts.length){
   if(discounts.length!==1||discounts[0].amount!==Math.round(m.price_cents*.5)||invoice.discounts.length!==1)throw Error('Unexpected membership discount');
   const discount=verifiedRetentionDiscount(m,subId,invoice.discounts[0]);if(ref(discounts[0].discount)!==discount.id)throw Error('Invoice discount mismatch');
@@ -77,7 +78,7 @@ export async function settleMembershipInvoice(invoiceId:string){
  if(invoice.id!==invoiceId||invoice.livemode!==sub.livemode||invoice.status!=='paid'||invoice.currency!=='usd'||invoice.amount_remaining!==0||invoice.amount_paid!==expected||invoice.total!==expected||invoice.subtotal!==m.price_cents||ref(invoice.customer)!==ref(sub.customer)||(invoice.total_taxes??[]).some(t=>t.amount!==0))throw Error('Membership invoice mismatch');
  const lines=await stripe.invoices.listLineItems(invoice.id,{limit:2});const line=lines.data[0];
  if(lines.has_more||lines.data.length!==1||line.quantity!==1||line.amount!==m.price_cents||line.pricing?.price_details?.price!==sub.items.data[0].price.id||!Number.isSafeInteger(line.period.start)||!Number.isSafeInteger(line.period.end)||line.period.end<=line.period.start||line.period.end-line.period.start>32*86400)throw Error('Membership invoice line mismatch');
- if(!discountId&&m.retention_started_at&&m.retention_ends_at&&line.period.start>=Date.parse(m.retention_started_at)/1000&&line.period.start<Date.parse(m.retention_ends_at)/1000)throw Error('Missing retention discount');
+ if(!m.vip_retained_at&&!discountId&&m.retention_started_at&&m.retention_ends_at&&line.period.start>=Date.parse(m.retention_started_at)/1000&&line.period.start<Date.parse(m.retention_ends_at)/1000)throw Error('Missing retention discount');
  if(discountId&&(line.period.start<Date.parse(m.retention_started_at!)/1000||line.period.start>=Date.parse(m.retention_ends_at!)/1000))throw Error('Retention period mismatch');
  const payments=await stripe.invoicePayments.list({invoice:invoice.id,status:'paid',limit:2});const payment=ref(payments.data[0]?.payment.payment_intent);
  if(payments.has_more||payments.data.length!==1||!payment)throw Error('Membership payment missing');

@@ -49,14 +49,14 @@ export async function prepareDisputeEvidence(id:string,signal?:AbortSignal):Prom
  }else{
   const source=invoices[0]??changes[0],memberId=source.membership_id;
   if(!uuid(memberId))throw Error('Membership reference unavailable');
-  const members=await rows(`icash_memberships?id=eq.${memberId}&mode=eq.${mode}&select=id,account_id,state,consent_version,consent_text,created_at,paid_through,cancel_at_period_end,retention_requested_at,retention_started_at,retention_ends_at&limit=1`,signal);
+  const members=await rows(`icash_memberships?id=eq.${memberId}&mode=eq.${mode}&select=id,account_id,state,consent_version,consent_text,created_at,paid_through,cancel_at_period_end,retention_requested_at,retention_started_at,retention_ends_at,vip_retained_at&limit=1`,signal);
   if(members.length!==1){gaps.push('No membership in this Stripe mode is linked to the payment.');return packet;}
   const m=members[0];accountId=m.account_id;references.push(memberId);
-  const priorUpgrades=await rows(`icash_plan_changes?membership_id=eq.${memberId}&action=eq.upgrade&state=eq.applied&applied_at=lt.${encodeURIComponent(new Date((charge.created+1)*1000).toISOString())}&select=id&order=applied_at.asc&limit=20`,signal);
-  for(const upgrade of priorUpgrades)if(uuid(upgrade.id))references.push(upgrade.id);
+  const priorChanges=await rows(`icash_plan_changes?membership_id=eq.${memberId}&action=in.(upgrade,retain_vip)&state=eq.applied&applied_at=lt.${encodeURIComponent(new Date((charge.created+1)*1000).toISOString())}&select=id&order=applied_at.asc&limit=20`,signal);
+  for(const change of priorChanges)if(uuid(change.id))references.push(change.id);
   if(changes.length)references.push(value(changes[0].id));
   const end=text(source.period_end);if(end&&Date.parse(end)<Date.parse(until))serviceEnd=end;
-  sections.push({title:changes.length?'VIP upgrade delivery':'Software subscription',lines:[`Membership: ${memberId} | Current state: ${value(m.state)}`,`Invoice/upgrade: ${value(source.stripe_invoice_id??source.id)} | Paid period ends: ${date(source.period_end)}`,...(changes.length?[`Upgrade state: ${value(source.state)} | Applied: ${date(source.applied_at)}`]:[]),`Cancellation at period end: ${value(m.cancel_at_period_end)}`,`Retention requested: ${date(m.retention_requested_at)} | Discount starts: ${date(m.retention_started_at)} | Ends: ${date(m.retention_ends_at)}`]});
+  sections.push({title:changes.length?'VIP upgrade delivery':'Software subscription',lines:[`Membership: ${memberId} | Current state: ${value(m.state)}`,`Invoice/upgrade: ${value(source.stripe_invoice_id??source.id)} | Paid period ends: ${date(source.period_end)}`,...(changes.length?[`Upgrade state: ${value(source.state)} | Applied: ${date(source.applied_at)}`]:[]),`Cancellation at period end: ${value(m.cancel_at_period_end)}`,...(m.vip_retained_at?[`Ongoing $50 VIP accepted and activated: ${date(m.vip_retained_at)}`]:[]),`Retention requested: ${date(m.retention_requested_at)} | Discount starts: ${date(m.retention_started_at)} | Ends: ${date(m.retention_ends_at)}`]});
   if(changes.length&&!source.applied_at)gaps.push('No applied timestamp is recorded for the disputed VIP upgrade.');
   historic.push({title:'Original membership terms',lines:[`Membership created: ${date(m.created_at)} | Version: ${value(m.consent_version)}`,value(m.consent_text)]});
  }
