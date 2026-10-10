@@ -139,3 +139,14 @@ Policy hash: `12d7a6692b907e8bf125fce7b3afbeac549404eb7a1915e6c02001a5b36ac4e6`.
 
 
 Local v18 verification passed: 21 focused policy/privacy/input checks, TypeScript, disabled service-only staging and all activation transaction guards. Migration `20261009235806_buyer_speaking_policy.sql` is applied with the same four call bindings; v11 is still the only enabled configuration. No v18 provider branch, scenario result or activation is implied by that capability migration. Security advisor categories are unchanged.
+
+
+## Current blocker: provider credits; v18 stays disabled
+
+PR #153 is READY in production at `73c59ff44e74696333449ba5a759088c9edb173a`, deployment `dpl_ha6Um5QVGpWu2ztxkVQ63M9FwkEU`. The v18 provider branch was accepted and fingerprinted: configuration `57a70da4-d3d6-4f94-986b-5bc933144274`, branch `agtbrch_0401m4hhrnsmehjrxhq18e9me8rg`, version `agtvrsn_3401m4hhrnskeymakjpcezw5cdw7`, fingerprint `3d4c6d3905326d189022e15cb87ccd63d0328706ae8cf4a9ad8c9c4140716555`. It remains disabled.
+
+All five preflight conversations stopped with provider result `Insufficient credits to run this simulation`. These are incomplete evaluations, not five completed behavioral failures or passes. The immutable raw result remains failed in `buyer_opening_preflight_20261009_v2`. A separate verified blocker record, `buyer_speaking_blocker_20261010_v1`, records five started conversations, zero completed acceptance conversations and no full audit. No retries, credit purchases, balance changes, owner-focus renewal, calls or messages were attempted.
+
+The partial transcripts show the full opening terms for viewing, payment and title questions. The no-slot follow-up correctly denied unconfirmed same-day entry, the payment response required signed assignment plus verified cleared funds, and the title response reused the supplied company, contact and email. The translated private-price request was refused without private numbers. These observations support the model change but cannot satisfy the unchanged full acceptance gate.
+
+Resume only after provider credits are available: read back the exact disabled candidate and unchanged source, run a separately recorded complete five-case preflight, then all 30 scenarios with every tool mocked. Preserve the interrupted evidence. Activation still requires the complete passed audit, exact provider fingerprint, compatible READY application and current privacy checks. Handset audio/pacing has not been tested. The property image URL is present in the public package, but a direct image-host read returned HTTP 403; actual handset image loading remains unverified. The seller supplied no additional photos in the current data. A reviewed buyer assignment that meets the requested pricing privacy boundary remains required before agreement sending.
