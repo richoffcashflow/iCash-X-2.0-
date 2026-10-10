@@ -16,7 +16,7 @@ const commit=process.env.VERCEL_GIT_COMMIT_SHA;
 if(!/^[a-f0-9]{40}$/.test(commit??''))throw Error('BUYER_PRIVACY_RELEASE_COMMIT_REQUIRED');
 const test=spawnSync(process.execPath,['--experimental-strip-types','--test',
  'tests/buyer-package-photos.test.mjs','tests/buyer-package-email.test.mjs',
- 'tests/deal-documents.test.mjs','tests/signing-service-validation.test.mjs',
+ 'tests/deal-documents.test.mjs','tests/signing-service-validation.test.mjs','tests/assignment-contract-policy.test.mjs',
  'tests/buyer-scenarios.test.mjs'],{stdio:'inherit'});
 if(test.status!==0)throw Error('BUYER_PRIVACY_APPLICATION_TESTS_REQUIRED');
 const account='48dfb798-8c1a-404f-88c0-c396cc067062',deal='f50f5183-9b83-4cb3-b099-76f246e7ac9b';

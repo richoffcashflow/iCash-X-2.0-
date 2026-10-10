@@ -17,10 +17,12 @@ async function request(path:string,body?:unknown,testMode=false,method='POST'){
 }
 const numericId=(id:unknown)=>String(z.coerce.number().int().positive().safe().parse(id));
 const signingAllowed=(accountId:string,id:string)=>db<boolean>('rpc/icash_signing_action_allowed','POST',{p_account:accountId,p_envelope:id});
-// Existing assignment forms disclose the private fee. Do not silently relabel
-// or remove contractual terms: require a reviewed buyer agreement before delivery.
+// The owner approved showing the fee on the original assignment contract only.
+// Acquisition pricing and unreviewed forms remain blocked; buyer outreach stays private.
 function buyerPricePrivacy(kind:SigningKind,template:Template){
- if(kind==='assignment'&&['priceCents','assignmentFeeCents'].some(key=>Object.hasOwn(template.field_map,key)))throw Error('This buyer agreement exposes private acquisition pricing or the assignment fee. A reviewed buyer agreement is required before sending.');
+ if(kind!=='assignment')return;
+ if(Object.hasOwn(template.field_map,'priceCents'))throw Error('This buyer agreement exposes private acquisition pricing. A reviewed buyer agreement is required before sending.');
+ if(Object.hasOwn(template.field_map,'assignmentFeeCents')&&template.form_profile!==originalContractProfile)throw Error('Showing the assignment fee is approved only on the original assignment contract. Review this buyer agreement before sending.');
 }
 export async function sendForSignatures(i:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:SigningKind;signers:Signer[];autoSignature?:string;phoneLinkOnly?:boolean}){
  if(!process.env.DOCUSEAL_API_KEY&&!process.env.DOCUSEAL_TEST_API_KEY)throw new Error('Signing setup is not finished.');
