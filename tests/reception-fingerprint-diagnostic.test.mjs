@@ -42,8 +42,20 @@ test('bounds work, recognizes exact inputs, and cannot approve an unknown finger
  assert.deepEqual(diagnoseReceptionFingerprint(input,hash(input)),{matched:false,exact:true,attempts:0,truncated:false,changes:[]});
  const huge=fixture();huge.platform_settings.extra=Array.from({length:1500},(_,i)=>({field:i}));
  const result=diagnoseReceptionFingerprint(huge,'0'.repeat(64));
- assert.equal(result.matched,false);assert(result.attempts<=4096);
+ assert.equal(result.matched,false);assert(result.attempts<=8192);
  assert.equal(diagnoseReceptionFingerprint(input,'invalid').matched,false);
+});
+
+test('identifies a single numeric setting while changed tool content remains unmatched',()=>{
+ const original=fixture(),input=structuredClone(original);
+ original.platform_settings.call_limits={agent_concurrency_limit:10};
+ input.platform_settings.call_limits={agent_concurrency_limit:15};
+ const before=structuredClone(input),result=diagnoseReceptionFingerprint(input,hash(original));
+ assert.equal(result.matched,true);
+ assert.deepEqual(result.changes,[{kind:'restore_numeric_setting',path:'platform_settings.call_limits.agent_concurrency_limit',restoredValue:10}]);
+ assert.deepEqual(input,before);
+ input.conversation_config.agent.prompt.tools[0].name='different';
+ assert.equal(diagnoseReceptionFingerprint(input,hash(original)).matched,false);
 });
 
 test('identifies a repeated schema default or a changed empty representation against the full original hash',()=>{

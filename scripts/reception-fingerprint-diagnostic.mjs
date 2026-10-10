@@ -4,6 +4,7 @@ const fingerprint=value=>sha(JSON.stringify(canonical(value)));
 const schemaKeys=new Set(('main_branch_id agent_id branch_id version_id conversation_config platform_settings workflow procedures agent prompt tools tool_ids built_in_tools mcp_server_ids native_mcp_server_ids knowledge_base rag custom_llm asr tts conversation turn language_presets first_message language max_tokens llm temperature voice_id model_id stability speed similarity_boost optimize_streaming_latency agent_output_audio_format user_input_audio_format max_duration_seconds privacy record_voice auth enable_auth call_limits agent_concurrency_limit bursting_enabled queueing_config enabled overrides conversation_config_override workspace_overrides webhooks events post_call_webhook_id send_audio guardrails version focus custom config configs is_enabled type name params system_tool_type api_schema request_headers request_body_schema properties required dynamic_variables dynamic_variable_placeholders evaluation criteria data_collection retention_days conversation_retention_days delete_transcript_and_pii audio_save_locally use_zero_retention_mode soft_timeout turn_timeout turn_eagerness spelling_patience silence_end_call_timeout').split(' '));
 const safePath=path=>path.map(part=>typeof part==='number'?`[${part}]`:schemaKeys.has(part)?part:'[unrecognized_key]').join('.');
 const shape=value=>value===null?'null':Array.isArray(value)?`array:${value.length}`:typeof value;
+const maxAttempts=8192;
 for(const key of ['description','dynamic_variable','constant_value','enum','items','allowed_values','allowed_values_dynamic_variable','is_system_provided','is_omitted'])schemaKeys.add(key);
 
 function* permutations(values){
@@ -35,10 +36,25 @@ export function diagnoseReceptionFingerprint(input,expectedHash){
  }
  visit(snapshot);
  function check(changes){
-  if(attempts>=4096){result.truncated=true;return false;}
+  if(attempts>=maxAttempts){result.truncated=true;return false;}
   attempts++;
   if(fingerprint(snapshot)!==expectedHash)return false;
   result.matched=true;result.changes=changes;return true;
+ }
+ // Numeric settings remain version-external in some provider responses.
+ // Test bounded historical/default values without changing any live setting.
+ // Exact reconstruction is evidence only, never automatic approval.
+ const numericDefaults=[...new Set([...Array.from({length:33},(_,i)=>i),.1,.2,.25,.3,.4,.5,.6,.7,.75,.8,.9,45,60,64,90,100,120,128,150,180,200,256,300,500,512,600,1000])];
+ for(const field of fields){
+  if(typeof field.value!=='number'||!Number.isFinite(field.value))continue;
+  for(const replacement of numericDefaults){
+   if(replacement===field.value)continue;
+   field.parent[field.key]=replacement;
+   const found=check([{kind:'restore_numeric_setting',path:safePath(field.path),restoredValue:replacement}]);
+   field.parent[field.key]=field.value;
+   if(found)return {...result,attempts};
+   if(attempts>=maxAttempts)return {...result,attempts,truncated:true};
+  }
  }
  // Array order can change in a read response without changing the version.
  // This search is deliberately broader than any eventual compatibility rule.
@@ -50,7 +66,7 @@ export function diagnoseReceptionFingerprint(input,expectedHash){
    const found=check([{kind:'array_order',path:safePath(entry.path),count:original.length,order}]);
    entry.value.splice(0,entry.value.length,...original);
    if(found)return {...result,attempts};
-   if(attempts>=4096)return {...result,attempts,truncated:true};
+   if(attempts>=maxAttempts)return {...result,attempts,truncated:true};
   }
  }
  // Tool IDs and expanded tools may both be returned in a different order.
@@ -62,7 +78,7 @@ export function diagnoseReceptionFingerprint(input,expectedHash){
    const found=check([{kind:'array_order',path:safePath(left.path),count:one.length,order:a},{kind:'array_order',path:safePath(right.path),count:two.length,order:b}]);
    left.value.splice(0,left.value.length,...one);right.value.splice(0,right.value.length,...two);
    if(found)return {...result,attempts};
-   if(attempts>=4096)return {...result,attempts,truncated:true};
+   if(attempts>=maxAttempts)return {...result,attempts,truncated:true};
   }
  }
  // Read responses can materialize optional expanded tool definitions beside
@@ -93,7 +109,7 @@ export function diagnoseReceptionFingerprint(input,expectedHash){
    const found=check(group.map(field=>({kind,path:safePath(field.path),observedShape:shape(field.value)})));
    for(const field of group)field.parent[field.key]=field.value;
    if(found)return {...result,attempts};
-   if(attempts>=4096)return {...result,attempts,truncated:true};
+   if(attempts>=maxAttempts)return {...result,attempts,truncated:true};
   }
  }
  // Identify a single default/empty representation change. These diagnostic
@@ -106,7 +122,7 @@ export function diagnoseReceptionFingerprint(input,expectedHash){
    const found=check([{kind,path:safePath(field.path),observedShape:shape(field.value)}]);
    field.parent[field.key]=field.value;
    if(found)return {...result,attempts};
-   if(attempts>=4096)return {...result,attempts,truncated:true};
+   if(attempts>=maxAttempts)return {...result,attempts,truncated:true};
   }
  }
  return {...result,attempts};
