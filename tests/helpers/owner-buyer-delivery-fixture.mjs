@@ -44,7 +44,7 @@ export async function testOwnerBuyerDelivery(f,{link,realBuyerThread,realBuyerEm
  assert.equal(await current(),true);assert.equal(await review(),true);
  assert.equal((await one('select dnc_clear from icash_text_threads where id=$1',[thread])).dnc_clear,false,'test does not invent DNC evidence');
  const content=await rpc('icash_owner_buyer_test_content',{p_id:run});
- assert(content.sms.includes('$48,937.00'));assert(content.email.includes('$10,000.00'));assert(content.sms.length<=160);
+ assert(content.sms.includes('$49,000.00'));assert(content.email.includes('$10,063.00'));assert(content.sms.length<=160);
  const message=await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:thread,p_body:content.sms});assert(message);
  assert.equal(await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:thread,p_body:content.sms}),message);
  const sendArgs={p_account:account,p_message:message,p_sender:sender};
@@ -92,7 +92,7 @@ export async function testOwnerBuyerDelivery(f,{link,realBuyerThread,realBuyerEm
  await q("update icash_text_ai_jobs set state='drafted',analysis='{\"action\":\"review\"}' where id=$1",[job.id]);
  const reply=await rpc('icash_queue_buyer_factual_reply',{p_account:account,p_job:job.id});assert(reply);
  const replyPayload=await rpc('icash_claim_text',{p_account:account,p_message:reply,p_sender:sender});
- assert.equal(replyPayload.to,ownerPhone);assert(replyPayload.message.includes('$48,937.00'));
+ assert.equal(replyPayload.to,ownerPhone);assert(replyPayload.message.includes('$49,000.00'));
  assert.equal(await rpc('icash_claim_text',{p_account:account,p_message:reply,p_sender:sender}),null);
  await q('begin');try{
   await q("update icash_owner_buyer_tests set created_at=now()-interval '3 hours',expires_at=now()-interval '1 hour' where id=$1",[run]);

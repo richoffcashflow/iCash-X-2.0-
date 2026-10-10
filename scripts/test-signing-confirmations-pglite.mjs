@@ -22,6 +22,7 @@ try{
  `);
  const streetSql=read('config/conversation-street-address.sql');await pg.exec(streetSql.slice(streetSql.indexOf('create function public.icash_conversation_street'),streetSql.indexOf('create function public.icash_conversation_street')+streetSql.slice(streetSql.indexOf('create function public.icash_conversation_street')).indexOf('$$;')+3));
  await pg.exec(read('config/signing-confirmations.sql'));
+ await pg.exec(read('config/seller-signing-viewing-next-step.sql'));
  const account=uuid(),other=uuid(),deal=uuid(),screen=uuid(),envelope=uuid(),thread=uuid(),phone='+12025550100';
  const terms={address:'123 Test St, Dallas, TX 75215',priceCents:10000000};
  await q('insert into icash_accounts(id,bot_paused) values($1,false),($2,false)',[account,other]);

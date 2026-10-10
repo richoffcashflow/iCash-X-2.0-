@@ -49,7 +49,7 @@ assert.equal((await sellerAgreementAction(token,send,d)).sent,true);assert.equal
 assert.equal((await sellerAgreementAction(token,send,d)).sent,true);assert.equal(providerSends,1,'retry must reuse the exact envelope');
 assert.equal((await sellerAgreementAction(token,{action:'status',conversationId:'conv_fixture'},d)).status,'signature_pending');
 status='customer_signature_needed';assert.equal((await sellerAgreementAction(token,{action:'status',conversationId:'conv_fixture'},d)).status,'seller_signed');
-status='completed';assert.equal((await sellerAgreementAction(token,{action:'status',conversationId:'conv_fixture'},d)).status,'fully_signed');
+status='completed';const signed=await sellerAgreementAction(token,{action:'status',conversationId:'conv_fixture'},d);assert.equal(signed.status,'fully_signed');assert.equal(signed.viewingStatus,'availability_needed');assert.match(signed.instruction,/Congratulations! The agreement is signed/);assert.match(signed.instruction,/available times to view the property/);
 assert.equal(sellerAgreementFailure(Error('confirmation_required')).reason,'confirmation_required');
 await assert.rejects(sellerAgreementAction(token,{...send,confirmation:{...confirmation,closingDate:new Date(now+15*86400000).toISOString().slice(0,10)}},d),/agreement_changed/);
 assert.equal(providerSends,1);

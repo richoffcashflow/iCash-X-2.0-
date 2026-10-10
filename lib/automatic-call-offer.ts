@@ -9,6 +9,7 @@ import {conversationAddressFields} from './conversation-address.ts';
 import {z} from 'zod';
 import {runScreeningJob} from './screening-job.ts';
 import {cashOfferCalculation} from './cash-offer-math.ts';
+import {roundedSellerPrice} from './property-price.ts';
 import {sellerCallFinancialGate} from './equity-screen.ts';
 import {sellerPayoffPosition,type SellerPayoffReport,type SellerPayoffUpdate} from './seller-payoff.ts';
 import {canonical,object,sha} from './required-call-recording.ts';
@@ -95,7 +96,7 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
  }
  if(context.party==='seller'&&context.sellerContractSigned===true){
   const slots=sellerViewingSlots(context.viewingSlots,now).map(viewingSlotLabel);
-  return {...blockedOffer('seller_contract_signed',`The purchase contract is already signed. Do not restart qualification, quote a new offer or send another contract. ${slots.length?'Saved seller viewing windows: '+slots.join('; ')+'. Confirm whether these are still available; do not repeat answered questions.':'Ask for two or three exact dates and start/end times with AM or PM and timezone for property viewings.'} Ask one question at a time, clarify relative dates, and read back each window. A specific visit still needs seller or occupant confirmation. Identify yourself as the AI assistant for the contract holder, never as the seller or property owner. Do not call a visitor a financial partner without verified evidence.`),status:'seller_viewing_coordination',viewingSlots:slots};
+  return {...blockedOffer('seller_contract_signed',`The purchase contract is already signed. The next step is collecting availability to view the property. Do not restart qualification, quote a new offer or send another contract. ${slots.length?'Saved seller viewing windows: '+slots.join('; ')+'. Confirm whether these are still available; do not repeat answered questions.':'Ask: What days and times are usually good for viewing the property?'} Collect availability only, not a booked appointment. Ask one question at a time and clarify dates, AM or PM and timezone only as needed to understand an offered window. A specific visit still needs seller or occupant confirmation. Do not start a title or closing checklist. Identify yourself as the AI assistant for the contract holder, never as the seller or property owner. Do not call a visitor a financial partner without verified evidence.`),status:'seller_viewing_coordination',viewingSlots:slots};
  }
  if(context.party!=='seller'||!context.address)return blockedOffer('property_context_required','Which property are you calling about, and are you buying or selling?');
  if(state.listedWithAgent===true)return blockedOffer('listed_with_agent','We do not purchase properties currently listed with an agent. Thank them and politely end the offer conversation. Do not quote, accept an offer or send an agreement. Do not suggest cancelling their listing.');
@@ -117,7 +118,10 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
   if(agreed&&agreed>calculation.sellerCeilingCents)return blockedOffer('agreed_price_needs_update','The updated numbers do not support the previously discussed price. We need to reconcile that before confirming revised terms.');
   const proposed=state.proposedPriceCents;
   if(proposed!==undefined&&(!Number.isSafeInteger(proposed)||proposed<=0||proposed>calculation.sellerCeilingCents))return blockedOffer('seller_price_needs_review','The requested price is outside the current calculation. Discuss the current supported cash proposal without accepting the higher ask.');
-  const price=agreed??proposed??calculation.sellerCeilingCents;
+  // Round a new proposal before quoting/saving it so acceptance and the contract
+  // share the same amount. Existing accepted and prepared terms remain exact.
+  const price=agreed??roundedSellerPrice(proposed??calculation.sellerCeilingCents);
+  if(price<1)return blockedOffer('calculation_required','The current numbers do not support a cash offer. They need review.');
 const financial=sellerCallFinancialGate(base.property.financialScreening,{sellerOfferCents:price,sellerCostReserveCents:Number.isSafeInteger(object(context.snapshot).sellerCostReserveCents)?Number(object(context.snapshot).sellerCostReserveCents):null,checkedAt:now});
   const payoff=sellerPayoffPosition(state.payoffReport,price);
   const conditional=!!state.payoffPending||(payoff?(!payoff.complete||!payoff.canProceed):financial.status!=='eligible');
