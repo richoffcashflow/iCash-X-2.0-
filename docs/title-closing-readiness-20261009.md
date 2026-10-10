@@ -36,3 +36,5 @@ Sources for the workflow, not a substitute for the assigned closer's deal-specif
 
 - CFPB: independently verify wire instructions through a previously trusted phone number; do not email financial information. https://www.consumerfinance.gov/archive/blog/mortgage-closing-scams-how-protect-yourself-and-your-closing-funds/
 - Old Republic Title's homeowner escrow checklist: identification and institution/routing/account information for proceeds wires; the escrow officer confirms the final net amount. https://media.oldrepublictitle.com/homeowners-manual/sacramento/files/basic-html/page17.html
+
+Database migration `20261010005606_closing_setup.sql` is applied (the CLI-created file was renamed to match the database-assigned migration version). Readback confirmed one real deal setup task, zero verified contacts and zero title requests. RLS and owner-only RPC access are intact; buyer facts still omit acquisition price, spread and payout details. Security advisor categories are unchanged.
