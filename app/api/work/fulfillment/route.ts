@@ -4,6 +4,7 @@ import {db} from '@/lib/stripe-test';
 import type {ClosingSetupRecord,ClosingDirectoryOption} from '@/lib/closing-setup';
 import type {ClosingUpdate} from '@/lib/closing-progress';
 import {buyerPricingReviewMessage,type BuyerAssignmentPricing} from '@/lib/buyer-assignment-pricing';
+import type {NetworkWorkspace} from '@/lib/buyer-network';
 export const dynamic='force-dynamic';
 export async function GET(req:Request){
  try{
@@ -24,16 +25,18 @@ export async function GET(req:Request){
  db<boolean>('rpc/icash_buyer_outreach_held','POST',{p_account:accountId,p_deal:deal.id})
  ]);
  const job=jobs[0],title=titles[0],titleContact=titleContacts.find(c=>deal.terms.titleEmail?.trim()?c.email.toLowerCase()===deal.terms.titleEmail.toLowerCase():c.evidence_ref.startsWith('owner-closing-verification:')),ids=matches.map(m=>m.buyer_id).join(','),candidateIds=candidates.map(c=>c.buyer_id).join(',');
- const [documents,buyers,candidateNames,packageData,packageLinks,pricing]=await Promise.all([
+ const [documents,buyers,candidateNames,packageData,packageLinks,pricing,network]=await Promise.all([
  job?db<unknown[]>(`icash_deal_documents?deal_id=eq.${deal.id}&fulfillment_job_id=eq.${job.id}&select=id,kind&limit=2`):Promise.resolve([]),
  ids?db<{id:string;display_name:string}[]>(`icash_buyer_profiles?account_id=eq.${accountId}&id=in.(${ids})&select=id,display_name`):Promise.resolve([]),
  candidateIds?db<{id:string;display_name:string}[]>(`icash_buyer_profiles?account_id=eq.${accountId}&id=in.(${candidateIds})&select=id,display_name`):Promise.resolve([]),
  db<{askingPriceCents:number;purchasePriceCents:number;assignmentFeeCents:number}|null>('rpc/icash_buyer_package_data','POST',{p_account:accountId,p_deal:deal.id}),
  db<{token:string;asking_price_cents:number}[]>(`icash_buyer_package_links?account_id=eq.${accountId}&deal_id=eq.${deal.id}&revoked_at=is.null&select=token,asking_price_cents&limit=1`),
- db<BuyerAssignmentPricing|null>('rpc/icash_unreleased_buyer_pricing','POST',{p_account:accountId,p_deal:deal.id})
+ db<BuyerAssignmentPricing|null>('rpc/icash_unreleased_buyer_pricing','POST',{p_account:accountId,p_deal:deal.id}),
+ db<NetworkWorkspace>('rpc/icash_network_workspace','POST',{p_account:accountId,p_deal:deal.id})
  ]);
  const link=packageLinks[0];
  const buyerPackage=packageData&&link?.asking_price_cents===packageData.askingPriceCents?{...packageData,url:`https://homeoffernetwork.com/d/${link.token}`}:null;
- return NextResponse.json({dealStage:deal.stage,buyerPricingReview:buyerPricingReviewMessage(pricing),buyerOutreachHeld,closingSetup:{setup:closingSetups[0]??null,verifiedContact:titleContact?{email:titleContact.email}:null,directory:titleDirectory,buyerSuggestions:buyerTitleSuggestions,titleEmailInAgreement:deal.terms.titleEmail??null},buyerPackage,closingUpdates,titleTasks,titleReplies,title:title?.state??null,titleReady:!!titleContact&&!!process.env.RESEND_API_KEY&&!!process.env.RESEND_RECEIVING_WEBHOOK_SECRET&&!!process.env.ICASH_TITLE_FROM_EMAIL&&!!process.env.ICASH_TITLE_REPLY_EMAIL,candidates:candidateNames.map(c=>({id:c.id,name:c.display_name})),job,documents,buyers:matches.map(m=>({...m,name:buyers.find(b=>b.id===m.buyer_id)?.display_name??'Buyer'}))},{headers:{'Cache-Control':'private, no-store'}});
+ const buyerNetwork=network?.vip?{matches:network.matches,emailed:network.emailed,responses:network.responses}:null;
+ return NextResponse.json({dealStage:deal.stage,buyerNetwork,buyerPricingReview:buyerPricingReviewMessage(pricing),buyerOutreachHeld,closingSetup:{setup:closingSetups[0]??null,verifiedContact:titleContact?{email:titleContact.email}:null,directory:titleDirectory,buyerSuggestions:buyerTitleSuggestions,titleEmailInAgreement:deal.terms.titleEmail??null},buyerPackage,closingUpdates,titleTasks,titleReplies,title:title?.state??null,titleReady:!!titleContact&&!!process.env.RESEND_API_KEY&&!!process.env.RESEND_RECEIVING_WEBHOOK_SECRET&&!!process.env.ICASH_TITLE_FROM_EMAIL&&!!process.env.ICASH_TITLE_REPLY_EMAIL,candidates:candidateNames.map(c=>({id:c.id,name:c.display_name})),job,documents,buyers:matches.map(m=>({...m,name:buyers.find(b=>b.id===m.buyer_id)?.display_name??'Buyer'}))},{headers:{'Cache-Control':'private, no-store'}});
  }catch{return NextResponse.json({error:'Could not load deal progress.'},{status:503});}
 }

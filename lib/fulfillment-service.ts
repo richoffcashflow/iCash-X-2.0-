@@ -1,4 +1,5 @@
 import {sendBuyerPackageTexts} from './buyer-outreach-service';
+import {processBuyerNetwork} from './buyer-network-service';
 import {sendRequestedBuyerPackages} from './buyer-package-email';
 import {coordinateTitleOpening} from './title-service.ts';
 import {discoverTitlePlaces} from './title-search-service.ts';
@@ -40,11 +41,13 @@ export async function prepareFulfillment(accountId:string,jobId:string){
  let titleSearch:{status:string}={status:'directory_candidates_available'};if(titleQualification.status==='no_title_inquiry_pending'){try{titleSearch=await discoverTitlePlaces(accountId,job.deal_id);}catch{titleSearch={status:'title_search_needs_review'};}}
  const result={titleSearch,titleQualification,buyerDiscovery,buyerStatus,buyerCount:matches.length,titleStatus:'request_prepared_not_sent',contractStatus:'verified_purchase',sent:false,depositReceived:false,closed:false};
  await db('rpc/icash_save_fulfillment','POST',{p_job:job.id,p_result:result,p_documents:documents,p_matches:matches});
+ let buyerNetwork:{status:string;accepted:number;canContinue:boolean};
+ try{buyerNetwork=await processBuyerNetwork(accountId,job.deal_id);}catch{buyerNetwork={status:'network_needs_review',accepted:0,canContinue:false};}
  // Document preparation is durable before attempting delivery; ambiguous sends stay held.
  let titleOpening:{status:string};try{titleOpening=await coordinateTitleOpening(accountId,job.deal_id);}catch{titleOpening={status:'title_request_held'};}
- await db(`icash_fulfillment_jobs?id=eq.${job.id}&account_id=eq.${accountId}&state=eq.complete`,'PATCH',{result:{...result,titleStatus:titleOpening.status}});
+ await db(`icash_fulfillment_jobs?id=eq.${job.id}&account_id=eq.${accountId}&state=eq.complete`,'PATCH',{result:{...result,buyerNetwork,titleStatus:titleOpening.status}});
  let buyerTexts:{status:string;accepted:number};try{buyerTexts=await sendBuyerPackageTexts(accountId,job.deal_id);}catch{buyerTexts={status:'buyer_text_needs_review',accepted:0};}
  let buyerEmail:{status:string;accepted:number};try{buyerEmail=await sendRequestedBuyerPackages(accountId,job.deal_id);}catch{buyerEmail={status:'buyer_email_needs_review',accepted:0};}
- await db(`icash_fulfillment_jobs?id=eq.${job.id}&account_id=eq.${accountId}&state=eq.complete`,'PATCH',{result:{...result,titleStatus:titleOpening.status,buyerTexts,buyerEmail}});
+ await db(`icash_fulfillment_jobs?id=eq.${job.id}&account_id=eq.${accountId}&state=eq.complete`,'PATCH',{result:{...result,buyerNetwork,titleStatus:titleOpening.status,buyerTexts,buyerEmail}});
  return {status:'fulfillment_prepared'};
 }
