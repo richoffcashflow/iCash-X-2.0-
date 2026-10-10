@@ -5,6 +5,7 @@ import ts from 'typescript';
 import * as status from '../lib/workspace-status.ts';
 import * as progress from '../lib/workspace-progress.ts';
 import * as activity from '../lib/activity-report.ts';
+import {propertyBotStatus} from '../lib/workspace-guidance.ts';
 const require=createRequire(import.meta.url);
 const code=file=>ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
 const all=root=>!root||typeof root!=='object'?[]:Array.isArray(root)?root.flatMap(all):[root,...all(root.props?.children)];
@@ -45,13 +46,14 @@ tree=page({...account,balanceCents:0,smsWorkReady:true},{...campaign,released:tr
 const source=readFileSync(new URL('../components/live-workspace.tsx',import.meta.url),'utf8');
 assert(source.indexOf('<PropertyNextStep property={p}')>source.indexOf('<div className="property-details"'),'detailed next steps moved inside property disclosure');
 assert(source.indexOf('className="property-control"')>source.indexOf('<div className="property-details"'),'property controls remain inside opened details');
-assert(source.includes('Paused for this property'));assert(source.includes('Owner & contact'));
+assert.match(propertyBotStatus({manual:true,paused:false,available:true,stale:false,attention:false,practice:false}).detail,/automatic work is paused for this property/);assert(source.includes('Owner & contact'));
 console.log('PASS simplified workspace: visible credit action, open spending, account recovery, stale status, saved properties and post-payment naming');
 
 tree=page({signedIn:false,signInReady:true},null);assert.equal(tree.type,component('WebinarExpressCheckout'),'visitors open the shared express checkout');assert.equal(tree.props.checkingAccount,false);assert.equal(tree.props.signInReady,true);assert.equal(typeof tree.props.onSignedIn,'function');assert(!all(tree).some(n=>n.type===component('BotRunBar')));assert(!all(tree).some(n=>n.type===component('LiveWorkspace')),'guests never fetch private property data');
 tree=page(null,null);assert.equal(tree.type,component('WebinarExpressCheckout'));assert.equal(tree.props.checkingAccount,true,'account is checked before offering checkout');
 tree=page(null,null,true);assert.equal(tree.props.checkingAccount,true);assert.equal(tree.props.accountError,true);assert.equal(typeof tree.props.onRetry,'function','account failures remain recoverable');
-tree=page({...account,balanceCents:0,billingModel:'membership_credits',membershipActive:true},campaign);assert(all(tree).some(n=>n.type===component('PostPaymentBotName')),'naming follows paid membership');
+tree=page({...account,assistantName:'',balanceCents:0,billingModel:'membership_credits',membershipActive:true},campaign);assert(all(tree).some(n=>n.type===component('PostPaymentBotName')),'naming follows paid membership for a new unnamed bot');
+tree=page({...account,balanceCents:0,billingModel:'membership_credits',membershipActive:true},campaign);assert(!all(tree).some(n=>n.type===component('PostPaymentBotName')),'existing named bots are not sent back through naming');
 tree=page({...account,balanceCents:0,billingModel:'membership_credits',membershipActive:false},campaign);assert(!all(tree).some(n=>n.type===component('PostPaymentBotName')),'unfunded accounts are not asked to name a bot');
 
 assert(all(tree).some(n=>n.type===component('MembershipSettings')&&n.props.locked),'missed membership payment shows subscription recovery');

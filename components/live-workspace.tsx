@@ -1,4 +1,5 @@
 'use client';
+import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {closingReviewLabels} from '@/lib/closing-setup';
 import {SellerRecoveryCard,type SellerRecoveryCase} from './seller-recovery-card';
 import {buyerDepositCents} from '@/lib/buyer-purchase-terms';
@@ -38,7 +39,7 @@ function milestone(property:Property,work:Work){
  return workMilestone({stage:deal?.stage,needsHuman:needsAttention(property.id,work),needsSignature:signatures.some(e=>e.state==='customer_signature_needed'),purchaseSigned:signatures.some(e=>e.kind==='purchase'&&e.state==='completed'),assignmentSigned:signatures.some(e=>e.kind==='assignment'&&e.state==='completed'),eligible:property.result.financialCheck.status==='eligible'});
 }
 function leaveDrafts(){return !document.querySelector('[data-unsaved-draft="true"]')||window.confirm('Leave this view? Unsent drafts and unsaved contract changes in this view will be lost.');}
-async function post(path:string,data:unknown){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const out=await r.json();if(!r.ok)throw new Error(out.error||'Please retry.');return out;}
+async function post(path:string,data:unknown){return workspaceRequest<any>(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});}
 export function LiveWorkspace({principal,botPaused=false,botAvailable=false,accountStale=false,showCoach=true,propertyRequest,onAsk,onOpenAssistant}:{propertyRequest?:{id:string;nonce:number}|null;onAsk?:(id:string,address:string)=>void;onOpenAssistant?:()=>void;principal:string;botPaused?:boolean;botAvailable?:boolean;accountStale?:boolean;showCoach?:boolean}){
  const [work,setWork]=useState<Work|null>(null),[error,setError]=useState(''),[page,setPage]=useState(0),[attentionPage,setAttentionPage]=useState(0),[activeId,setActiveId]=useState(''),[visited,setVisited]=useState<string[]>([]);
  const openPropertyId=useRef('');openPropertyId.current=activeId;
@@ -46,11 +47,14 @@ export function LiveWorkspace({principal,botPaused=false,botAvailable=false,acco
  useEffect(()=>{const warn=(event:BeforeUnloadEvent)=>{if(document.querySelector('[data-unsaved-draft="true"]'))event.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
  useEffect(()=>{const id=new URLSearchParams(window.location.search).get('screeningId');if(id&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)){setFocusedId(id);setActiveId(id);setVisited([id]);}},[]);
  useEffect(()=>{const timer=setTimeout(()=>{setSearch(query.trim());setPage(0);},300);return()=>clearTimeout(timer);},[query]);
- useEffect(()=>{let active=true,inFlight=false;const controller=new AbortController();async function load(){if(document.hidden||inFlight)return;inFlight=true;try{const params=new URLSearchParams({page:String(page),attentionPage:String(attentionPage),...(search?{query:search}:{}),...(focusedId?{screeningId:focusedId}:{})});const r=await fetch(`/api/work/activity?${params}`,{cache:'no-store',signal:controller.signal});const d=await r.json();if(!r.ok)throw new Error(d.error||'Could not refresh your work.');if(active){
+ useEffect(()=>{let active=true,inFlight=false;const controller=new AbortController();async function load(){if(document.hidden||inFlight)return;inFlight=true;try{const params=new URLSearchParams({page:String(page),attentionPage:String(attentionPage),...(search?{query:search}:{}),...(focusedId?{screeningId:focusedId}:{})});const d=await workspaceRequest<Work>(`/api/work/activity?${params}`,{cache:'no-store',signal:controller.signal});if(active){
  const heldIds=[...new Set([openPropertyId.current,...Array.from(document.querySelectorAll<HTMLElement>('.live-property')).filter(node=>node.querySelector('[data-unsaved-draft="true"]')).map(node=>node.id.replace('property-',''))])].filter(id=>id&&!d.properties.some((p:Property)=>p.id===id));
  if(heldIds.length){
-  const held=await Promise.all(heldIds.slice(0,6).map(async id=>{const response=await fetch(`/api/work/activity?screeningId=${encodeURIComponent(id)}`,{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error('Could not refresh an open property.');return response.json() as Promise<Work>;}));
-  for(const extra of held)for(const key of ['properties','deals','signing','contacts','controls','conversations','callbacks'] as const)d[key].push(...extra[key]);
+  const held=await Promise.all(heldIds.slice(0,6).map(id=>workspaceRequest<Work>(`/api/work/activity?screeningId=${encodeURIComponent(id)}`,{cache:'no-store',signal:controller.signal})));
+  for(const extra of held){
+   d.properties.push(...extra.properties);d.deals.push(...extra.deals);d.signing.push(...extra.signing);
+   d.contacts.push(...extra.contacts);d.controls.push(...extra.controls);d.conversations.push(...extra.conversations);d.callbacks.push(...extra.callbacks);
+  }
   d.propertyAttentionIds=[...(d.propertyAttentionIds??[]),...held.flatMap(item=>item.propertyAttentionIds??[])];d.retainedIds=heldIds;
  }
  if(active){setWork(d);setError('');setUpdated(new Date());}
@@ -194,7 +198,7 @@ function DealTools({property,principal,initial,manual,onManual,signing,signingCo
  useEffect(()=>{if(initial?.terms&&!edited.current)setTerms(initial.terms);},[initial?.terms]);
  useEffect(()=>{if(initial?.id)setDealId(initial.id);},[initial?.id]);
  const [termEvidence,setTermEvidence]=useState<{field:string;quote:string}[]>([]);
- async function prepare(){setBusy(true);setMessage('');try{const r=await fetch(`/api/work/preparation?screeningId=${property.id}`,{cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.error);edited.current=true;setDirty(true);setTerms(t=>fillEmptyTerms(t,d.patch));setTermEvidence(d.evidence);setMessage(d.conflicts.length?'Different terms were mentioned. Confirm them before signing.':d.evidence.length?'Saved conversation details filled in. Review names, price and all owners before signing.':'No clear terms to fill yet. Existing entries are unchanged.');}catch(e){setMessage(e instanceof Error?e.message:'Could not prepare terms.');}finally{setBusy(false);}}
+ async function prepare(){setBusy(true);setMessage('');try{const d=await workspaceRequest<{patch:Partial<DealTerms>;evidence:{field:string;quote:string}[];conflicts:string[]}>(`/api/work/preparation?screeningId=${property.id}`,{cache:'no-store'});edited.current=true;setDirty(true);setTerms(t=>fillEmptyTerms(t,d.patch));setTermEvidence(d.evidence);setMessage(d.conflicts.length?'Different terms were mentioned. Confirm them before signing.':d.evidence.length?'Saved conversation details filled in. Review names, price and all owners before signing.':'No clear terms to fill yet. Existing entries are unchanged.');}catch(e){setMessage(e instanceof Error?e.message:'Could not prepare terms.');}finally{setBusy(false);}}
  const issuedAssignment=signing.some(e=>e.deal_id===dealId&&e.kind==='assignment'&&!e.test_mode&&!['failed','declined','cancelled'].includes(e.state));
  const update=(key:keyof DealTerms,value:string|number|null)=>{edited.current=true;setDirty(true);setTerms(t=>({...t,[key]:value,...(key==='assignmentFeeCents'&&!issuedAssignment&&typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?{assignmentDepositCents:buyerDepositCents(value)}:{})}));};
  async function save(){const d=await post('/api/work/deals',{screeningId:property.id,terms});setDealId(d.id);setTerms(d.terms);edited.current=false;setDirty(false);return d.id as string;}

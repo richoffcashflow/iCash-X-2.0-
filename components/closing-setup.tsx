@@ -1,5 +1,6 @@
 'use client';
 import {useState} from 'react';
+import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {closingSetupNext,closingReviewLabels,type ClosingSetupView,type PayoutPreference,type TitleProposal} from '@/lib/closing-setup';
 
 const blankPayout:PayoutPreference={payeeName:'',payeeType:'individual',method:'check_pickup',mailingAddress:'',detailsSharedWithTitle:false};
@@ -12,8 +13,8 @@ export function ClosingSetup({dealId,view,onSaved}:{dealId:string;view:ClosingSe
  const next=closingSetupNext(view),proposal=view.setup?.title_proposal;
  async function save(action:string,data:unknown){
   if(busy)return;setBusy(true);setError('');setMessage('');
-  try{const r=await fetch('/api/work/closing-setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dealId,action,data})});const b=await r.json();if(!r.ok)throw Error(b.error);setEditing(null);setMessage(action==='takeover'?'You’re handling this property. Automation is paused.':action==='confirm_title'?'Closer selected. No documents or payment instructions were sent.':'Saved for this deal.');setIndependent(false);setCoverage(false);setAgreed(false);onSaved();}
-  catch(e){setError(e instanceof Error?e.message:'Could not save. Please retry.');}finally{setBusy(false);}
+  try{await workspaceRequest('/api/work/closing-setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dealId,action,data})});setEditing(null);setMessage(action==='takeover'?'You’re handling this property. Automation is paused.':action==='confirm_title'?'Closer selected. No documents or payment instructions were sent.':'Saved for this deal.');setIndependent(false);setCoverage(false);setAgreed(false);}
+  catch(e){setError(e instanceof Error?e.message:'Could not save. Please retry.');}finally{setBusy(false);onSaved();}
  }
  function changePayout(patch:Partial<PayoutPreference>){setPayout(p=>({...p,...patch,detailsSharedWithTitle:false}));}
  return <section className="closing-progress closing-setup" aria-label="Title and your payment"><h4>Title & your payment</h4><p>{next.text}</p>

@@ -1,5 +1,6 @@
 import * as refill from '../lib/credit-refill-recommendation.ts';
 import assert from 'node:assert/strict';
+import * as client from '../lib/webinar-client.ts';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import ts from 'typescript';
@@ -19,7 +20,7 @@ let daily={ready:true,plan:null};
 globalThis.window={location:{search:'',assign(url){calls.push({redirect:url});}}};globalThis.document={hidden:false};
 globalThis.fetch=async(url,options={})=>{calls.push({url,options});if(options.method==='POST')return Response.json(url==='/api/setup/event'?{ok:true}:{url:'https://checkout.stripe.com/fixture'});return Response.json(url==='/api/billing/daily'?daily:funding);};
 const hooks={useState(initial){const i=cursor++;if(!(i in slots))slots[i]=typeof initial==='function'?initial():initial;return[slots[i],next=>{const value=typeof next==='function'?next(slots[i]):next;if(!Object.is(value,slots[i])){slots[i]=value;dirty=true;}}];},useRef(initial){const i=cursor++;if(!(i in slots))slots[i]={current:initial};return slots[i];},useEffect(fn,deps){const i=cursor++,previous=slots[i];if(!previous||deps.some((value,index)=>!Object.is(value,previous.deps[index]))){slots[i]={deps,cleanup:previous?.cleanup};pending.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}}};
-const mod={exports:{}};new Function('require','module','exports',code)(name=>name==='react'?hooks:name==='@/lib/credit-refill-recommendation'?refill:name==='@/lib/funding-amount'?fundingAmounts:name==='@/lib/funding-consent'?fundingConsent:name==='@/lib/membership-policy'?membership:name==='@/lib/auto-recharge-policy'?recharge:name==='@/lib/funding-fees'?{processingFeeCents}:name==='./stripe-embedded-checkout'?{StripeEmbeddedCheckout:'StripeEmbeddedCheckout'}:name==='./account-access'?{AccountAccess:'AccountAccess'}:require(name),mod,mod.exports);
+const mod={exports:{}};new Function('require','module','exports',code)(name=>name==='@/lib/webinar-client'?client:name==='react'?hooks:name==='@/lib/credit-refill-recommendation'?refill:name==='@/lib/funding-amount'?fundingAmounts:name==='@/lib/funding-consent'?fundingConsent:name==='@/lib/membership-policy'?membership:name==='@/lib/auto-recharge-policy'?recharge:name==='@/lib/funding-fees'?{processingFeeCents}:name==='./stripe-embedded-checkout'?{StripeEmbeddedCheckout:'StripeEmbeddedCheckout'}:name==='./account-access'?{AccountAccess:'AccountAccess'}:require(name),mod,mod.exports);
 function render(){cursor=0;dirty=false;tree=mod.exports.FundingCheckout({onSignedIn(){}});return tree;}
 async function flush(){for(let i=0;i<15;i++){if(dirty)render();const tasks=pending;pending=[];tasks.forEach(fn=>fn());await new Promise(resolve=>setTimeout(resolve,2));if(!dirty&&!pending.length)return tree;}throw Error('Render did not settle');}
 function checkout(){return find(tree,n=>n.type==='button'&&n.props.className==='fund-button full');}
