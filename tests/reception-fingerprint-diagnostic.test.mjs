@@ -45,3 +45,15 @@ test('bounds work, recognizes exact inputs, and cannot approve an unknown finger
  assert.equal(result.matched,false);assert(result.attempts<=4096);
  assert.equal(diagnoseReceptionFingerprint(input,'invalid').matched,false);
 });
+
+test('identifies a repeated schema default or a changed empty representation against the full original hash',()=>{
+ const original=fixture(),input=structuredClone(original);
+ for(const tool of input.conversation_config.agent.prompt.tools)tool.is_omitted=false;
+ const result=diagnoseReceptionFingerprint(input,hash(original));
+ assert.equal(result.matched,true);assert.equal(result.changes.length,3);
+ assert(result.changes.every(change=>change.kind==='remove_field'&&change.path.endsWith('.is_omitted')));
+ const empty=fixture();empty.platform_settings.privacy={};
+ assert.equal(diagnoseReceptionFingerprint(original,hash(empty)).matched,true);
+ const altered=structuredClone(input);altered.version_id='changed';
+ assert.equal(diagnoseReceptionFingerprint(altered,hash(original)).matched,false);
+});
