@@ -21,5 +21,7 @@ Verification:
 
 No paid simulations, calls, texts, emails or payment tests were run. A read-only production check is still required after the build is ready. No customer dispute was submitted during development.
 
+Production verification of PR #161 caught a dispute-list failure: the identifier validator accepted only `dp_`, while Stripe's current Dispute object uses `du_` (https://docs.stripe.com/api/disputes/object). The follow-up accepts both formats through listing, pagination, evidence export and the database event constraint. Local fixtures cover both formats. The release preflight now reads and validates live dispute response shapes without logging customer or payment records. Safe categorized runtime error logging aids future diagnosis.
+
 Database fixture command:
 `node --experimental-strip-types scripts/test-stripe-dispute-database.mjs /path/to/@electric-sql/pglite/dist/index.js`

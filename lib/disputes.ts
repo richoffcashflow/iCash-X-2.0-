@@ -1,5 +1,6 @@
 import type Stripe from 'stripe';
-export const disputeIdPattern=/^dp_[A-Za-z0-9]{1,240}$/;
+// Stripe returns du_ IDs for live disputes as well as the older dp_ form.
+export const disputeIdPattern=/^d[pu]_[A-Za-z0-9]{1,240}$/;
 export const paymentIdPattern=/^pi_[A-Za-z0-9]{1,240}$/;
 export const referenceId=(value:string|{id:string}|null|undefined)=>typeof value==='string'?value:value?.id??null;
 export const disputeNeedsResponse=(status:string)=>status==='needs_response'||status==='warning_needs_response';

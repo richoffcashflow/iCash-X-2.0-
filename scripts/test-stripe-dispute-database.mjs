@@ -25,6 +25,14 @@ await db.exec(readFileSync(new URL('../tests/fixtures/dispute-billing-baseline.s
 const migration=readFileSync(new URL('../config/stripe-dispute-protection.sql',import.meta.url),'utf8');
 assert.equal(migration,readFileSync(new URL('../supabase/migrations/20261010024323_stripe_dispute_protection.sql',import.meta.url),'utf8'));
 await db.exec(migration);
+await db.exec(readFileSync(new URL('../supabase/migrations/20261010030300_stripe_live_dispute_ids.sql',import.meta.url),'utf8'));
+await db.exec('set role service_role');
+for(const prefix of ['dp','du']){
+ const event={eventId:'evt_'+prefix,disputeId:prefix+'_fixture',mode:'live',chargeId:'ch_fixture',paymentId:'pi_fixture',eventType:'charge.dispute.updated',status:'needs_response',reason:'fraudulent',amountCents:1000,currency:'usd',createdAt:'2026-10-10T00:00:00Z'};
+ await db.query('select icash_record_dispute_event($1)',[event]);await db.query('select icash_record_dispute_event($1)',[event]);
+}
+assert.equal((await db.query('select count(*)::int as count from icash_dispute_events')).rows[0].count,2);
+await db.exec('reset role');
 const account='00000000-0000-4000-8000-000000000001',user='00000000-0000-4000-8000-000000000002',order='00000000-0000-4000-8000-000000000003',guest='a'.repeat(64),terms='Reviewed full final-sale purchase terms.';
 await db.query(`insert into icash_accounts(id,owner_user_id) values($1,$2);`,[account,user]);
 await db.exec(`insert into icash_membership_offer values(1,5000,1,true)`);
