@@ -19,5 +19,10 @@ export async function GET(req:Request){
   if(format==='pdf')return new Response(Buffer.from(await disputePdf(packet)),{headers:{...headers,'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="${id}-evidence.pdf"`}});
   if(format==='download')return new Response(JSON.stringify(packet,null,2),{headers:{...headers,'Content-Type':'application/json','Content-Disposition':`attachment; filename="${id}-evidence.json"`}});
   return Response.json({packet},{headers});
- }catch{return Response.json({error:'Dispute records could not load. Retry, or open Stripe to check the deadline.'},{status:503,headers});}
+ }catch(error){
+  // Never log Stripe payloads, billing details, request bodies or credentials.
+  const failure=error as {type?:unknown;statusCode?:unknown;message?:unknown};
+  console.error('Dispute read failed',JSON.stringify({type:typeof failure?.type==='string'&&/^Stripe[A-Za-z]+Error$/.test(failure.type)?failure.type:'application',status:Number.isInteger(failure?.statusCode)?failure.statusCode:undefined,invalidShape:failure?.message==='Invalid dispute'}));
+  return Response.json({error:'Dispute records could not load. Retry, or open Stripe to check the deadline.'},{status:503,headers});
+ }
 }
