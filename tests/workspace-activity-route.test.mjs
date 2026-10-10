@@ -34,6 +34,7 @@ const mocks={z,NextResponse:{json:(body,options={})=>({body,status:options.statu
  }
  if(table==='icash_text_attention'||table==='icash_sms_call_requests'||table==='icash_handoffs')return paginate(queue,q);
  if(table==='icash_buyer_viewing_requests')return [];
+ if(table==='icash_closing_setup')return paginate(queue.map(item=>({...item,state:'needs_review',review_reason:'payment_change',updated_at:'2026-10-10T00:00:00Z'})),q);
  if(table==='icash_seller_gaps')return paginate(queue.map(item=>({...item,reason:'unanswered',quote:'An exact seller question',updated_at:'2026-10-09T12:00:00Z'})),q);
  if(table==='icash_signing_envelopes')return q.get('state')?paginate(queue.map(p=>({id:p.id,deal_id:p.deal_id,kind:'purchase',test_mode:false})),q):[];
  if(table==='icash_owner_contacts'){
@@ -54,7 +55,7 @@ source=source.replace(/^import .* from .*;$/gm,'');
 source='const {'+Object.keys(mocks).join(',')+'}=globalThis.__activityRoute;\n'+source;
 const {GET}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const get=query=>GET(new Request('https://www.geticashx.com/api/work/activity'+query));
-let r=await get('');assert.equal(r.status,200);assert.equal(r.body.properties.length,6);assert.equal(r.body.hasMore,true);assert.equal(r.body.textAttention.length,6);assert.deepEqual(r.body.propertyAttentionIds,[uuid(1)]);assert.equal(r.body.attentionHasMore,true);assert.equal(r.body.textAttention[0].address,'10 Main Street');assert.equal(r.body.signatureActions[0].screening_id,uuid(10));assert.equal(r.body.signatureActions[0].address,'10 Main Street');
+let r=await get('');assert.equal(r.status,200);assert.equal(r.body.closingReview.length,6);assert.equal(r.body.closingReview[0].review_reason,'payment_change');assert.equal(r.body.attentionHasMoreByKind.closing,true);assert.equal(r.body.properties.length,6);assert.equal(r.body.hasMore,true);assert.equal(r.body.textAttention.length,6);assert.deepEqual(r.body.propertyAttentionIds,[uuid(1)]);assert.equal(r.body.attentionHasMore,true);assert.equal(r.body.textAttention[0].address,'10 Main Street');assert.equal(r.body.signatureActions[0].screening_id,uuid(10));assert.equal(r.body.signatureActions[0].address,'10 Main Street');
 assert.equal(r.body.smsRouteReviews.length,6);assert.equal(r.body.smsRouteReviews[0].needs_review,true);
 assert.equal(r.body.sellerRecovery.length,6);assert.equal(r.body.sellerRecovery[0].address,'10 Main Street');assert.equal(r.body.sellerRecovery[0].quote,'An exact seller question');
 assert.equal(r.headers['Cache-Control'],'private, no-store');

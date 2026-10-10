@@ -1,15 +1,16 @@
 process.env.ICASH_LIVE_WORK_READY='true'; // Ready-state provider fixtures only.
+import {closingPayoutNote} from '../lib/closing-setup.ts';
 import {titleConfirmationInstructions} from '../lib/title-confirmation-instructions.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 let state='ready',allow=true,sends=0,timeout=false,records=[],assignments=[],payload=null;
 const db=async(path,method,body)=>{records.push({path,method,body});if(path.startsWith('icash_signing_envelopes'))return assignments;if(method==='PATCH'){state=body.state;return [];}if(path==='rpc/icash_claim_title_request'){if(allow)state='dispatching';return allow;}return [{id:'job',account_id:'account',deal_id:'deal',purchase_envelope_id:'purchase',recipient:'escrow@example.invalid',property_address:'Fixture',rate_id:'rate',verified_until:'2099-01-01',state}];};
-globalThis.__title={titleConfirmationInstructions,db,reserveOperation:async()=>{},completedSigningPdf:async()=>new Uint8Array([1,2,3]).buffer};
+globalThis.__title={closingPayoutNote,titleConfirmationInstructions,db,reserveOperation:async()=>{},completedSigningPdf:async()=>new Uint8Array([1,2,3]).buffer};
 const realFetch=globalThis.fetch;globalThis.fetch=async(_url,options)=>{payload=JSON.parse(options.body);sends++;if(timeout)throw Error('timeout');return {ok:true,json:async()=>({id:'email_fixture'})};};
 process.env.ICASH_TITLE_REPLY_EMAIL='reply@example.invalid';process.env.RESEND_API_KEY='fixture';process.env.RESEND_RECEIVING_WEBHOOK_SECRET='fixture';process.env.ICASH_TITLE_FROM_EMAIL='fixture@example.invalid';
 let source=ts.transpileModule(readFileSync('lib/title-service.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-const {dispatchTitleRequest}=await import('data:text/javascript;base64,'+Buffer.from('const {titleConfirmationInstructions,db,reserveOperation,completedSigningPdf}=globalThis.__title;\n'+source).toString('base64'));
+const {dispatchTitleRequest}=await import('data:text/javascript;base64,'+Buffer.from('const {closingPayoutNote,titleConfirmationInstructions,db,reserveOperation,completedSigningPdf}=globalThis.__title;\n'+source).toString('base64'));
 delete process.env.RESEND_RECEIVING_WEBHOOK_SECRET;
 assert.equal((await dispatchTitleRequest('account','job')).status,'title_configuration_required');assert.equal(sends,0);
 process.env.RESEND_RECEIVING_WEBHOOK_SECRET='fixture';
