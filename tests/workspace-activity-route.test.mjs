@@ -17,6 +17,7 @@ let paths=[],authorized=true,sellerFixtures=[];
 const paginate=(rows,q)=>rows.slice(Number(q.get('offset')??0),Number(q.get('offset')??0)+Number(q.get('limit')??rows.length));
 const mocks={z,NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
  paths.push({path,method,body});
+ if(path==='rpc/icash_closing_task_attention'){assert.equal(body.p_account,account);assert.equal(body.p_limit,7);return queue.slice(body.p_offset,body.p_offset+body.p_limit).map(q=>({...q,kind:'deadline',label:'Confirm closing date',state:'needs_review',due_date:null}));}
  if(path==='rpc/icash_buyer_reception_calls'){assert.equal(body.p_account,account);return [];}
  if(path==='rpc/icash_sms_route_review_items'){assert.equal(body.p_account,account);assert.equal(body.p_limit,7);return queue.slice(body.p_offset,body.p_offset+body.p_limit).map((q,i)=>({message_id:q.id,recipient:'+12145550123',body:'Which property?',revision:7,needs_review:true,candidates:[]}));}
  const [table,params]=path.split('?');const q=new URLSearchParams(params);
@@ -55,7 +56,7 @@ source=source.replace(/^import .* from .*;$/gm,'');
 source='const {'+Object.keys(mocks).join(',')+'}=globalThis.__activityRoute;\n'+source;
 const {GET}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const get=query=>GET(new Request('https://www.geticashx.com/api/work/activity'+query));
-let r=await get('');assert.equal(r.status,200);assert.equal(r.body.closingReview.length,6);assert.equal(r.body.closingReview[0].review_reason,'payment_change');assert.equal(r.body.attentionHasMoreByKind.closing,true);assert.equal(r.body.properties.length,6);assert.equal(r.body.hasMore,true);assert.equal(r.body.textAttention.length,6);assert.deepEqual(r.body.propertyAttentionIds,[uuid(1)]);assert.equal(r.body.attentionHasMore,true);assert.equal(r.body.textAttention[0].address,'10 Main Street');assert.equal(r.body.signatureActions[0].screening_id,uuid(10));assert.equal(r.body.signatureActions[0].address,'10 Main Street');
+let r=await get('');assert.equal(r.status,200);assert.equal(r.body.closingTasks.length,6);assert.equal(r.body.closingTasks[0].address,'10 Main Street');assert.equal(r.body.attentionHasMoreByKind.closingTasks,true);assert.equal(r.body.closingReview.length,6);assert.equal(r.body.closingReview[0].review_reason,'payment_change');assert.equal(r.body.attentionHasMoreByKind.closing,true);assert.equal(r.body.properties.length,6);assert.equal(r.body.hasMore,true);assert.equal(r.body.textAttention.length,6);assert.deepEqual(r.body.propertyAttentionIds,[uuid(1)]);assert.equal(r.body.attentionHasMore,true);assert.equal(r.body.textAttention[0].address,'10 Main Street');assert.equal(r.body.signatureActions[0].screening_id,uuid(10));assert.equal(r.body.signatureActions[0].address,'10 Main Street');
 assert.equal(r.body.smsRouteReviews.length,6);assert.equal(r.body.smsRouteReviews[0].needs_review,true);
 assert.equal(r.body.sellerRecovery.length,6);assert.equal(r.body.sellerRecovery[0].address,'10 Main Street');assert.equal(r.body.sellerRecovery[0].quote,'An exact seller question');
 assert.equal(r.headers['Cache-Control'],'private, no-store');

@@ -53,5 +53,5 @@ export function ClosingSetup({dealId,view,onSaved}:{dealId:string;view:ClosingSe
  <details><summary>Need a person to handle this?</summary><p>Take over for a buyer request, title rejection, payment change or a contract issue. New automated outreach pauses for the property. A call already in progress may finish. No live transfer or callback is booked.</p>
  <button className="demo-button" type="button" disabled={busy} onClick={()=>void save('takeover',{reason:view.setup?.review_reason&&view.setup.review_reason!=='setup'?view.setup.review_reason:'human_requested'})}>I’ll handle this property</button></details>
  {message&&<p role="status">{message}</p>}{error&&<p role="alert">{error}</p>}
- <small>These details stay in your workspace and go only to the verified closing office when you send the title request. They are excluded from buyer packages.</small></section>;
+ <small>Your payment preference goes only to the verified closing office. Changes after the opening request are queued as tracked updates in Closing tasks. Bank details stay with your closer.</small></section>;
 }

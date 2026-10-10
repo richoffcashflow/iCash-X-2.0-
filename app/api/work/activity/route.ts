@@ -70,24 +70,26 @@ export async function GET(req:Request){
   const propertyAttentionIds=[...new Set(propertyAttentionRows.flat().map(p=>p.id))];
   const dealIds=deals.map(d=>d.id).join(',');
   const queuePage=`&limit=${pageSize+1}&offset=${attentionPage*pageSize}`;
-  const [textRows,callRows,handoffRows,signing,signatureRows,routeRows,viewingRows,recoveryRows,closingRows]=await Promise.all([
+  const [closingTaskRows,textRows,callRows,handoffRows,signing,signatureRows,routeRows,viewingRows,recoveryRows,closingRows]=await Promise.all([
+   db<Attention[]>('rpc/icash_closing_task_attention','POST',{p_account:accountId,p_offset:attentionPage*pageSize,p_limit:pageSize+1}),
    db<Attention[]>(`icash_text_attention?account_id=eq.${accountId}&state=eq.open&select=id,message_id,screening_id,deal_id,kind,party,quote,timezone&order=created_at,id${queuePage}`),
    db<Attention[]>(`icash_sms_call_requests?account_id=eq.${accountId}&state=eq.needs_review&select=id,screening_id,requested_at,state&order=requested_at,id${queuePage}`),
    db<Attention[]>(`icash_handoffs?account_id=eq.${accountId}&state=eq.open&select=id,screening_id,party,reason,summary,next_action,state&order=created_at,id${queuePage}`),
    dealIds?db<unknown[]>(`icash_signing_envelopes?account_id=eq.${accountId}&deal_id=in.(${dealIds})&select=id,deal_id,kind,state,test_mode,provider_status,updated_at`):Promise.resolve([]),
    db<Attention[]>(`icash_signing_envelopes?account_id=eq.${accountId}&state=eq.customer_signature_needed&select=id,deal_id,kind,test_mode&order=created_at,id${queuePage}`),
    db<SmsRouteReview[]>('rpc/icash_sms_route_review_items','POST',{p_account:accountId,p_offset:attentionPage*pageSize,p_limit:pageSize+1}),
-   db<Attention[]>(`icash_buyer_viewing_requests?account_id=eq.${accountId}&state=eq.needs_confirmation&select=id,screening_id,deal_id,kind,quote,title_quote,viewing_quote,coordination_quote,timezone,created_at&order=created_at,id${queuePage}`),
+   db<Attention[]>(`icash_buyer_viewing_requests?account_id=eq.${accountId}&state=eq.needs_confirmation&select=id,screening_id,deal_id,kind,quote,title_quote,viewing_quote,coordination_quote,timezone,created_at,acknowledged_at&order=created_at,id${queuePage}`),
    db<Attention[]>(`icash_seller_gaps?account_id=eq.${accountId}&state=eq.needs_review&select=id,screening_id,deal_id,reason,quote,updated_at&order=updated_at,id${queuePage}`),
    db<Attention[]>(`icash_closing_setup?account_id=eq.${accountId}&state=eq.needs_review&select=id,screening_id,deal_id,review_reason,state,updated_at&order=created_at,id${queuePage}`)
   ]);
+  const closingTasks=closingTaskRows.slice(0,pageSize);
   const closingReview=closingRows.slice(0,pageSize),viewingRequests=viewingRows.slice(0,pageSize),sellerRecovery=recoveryRows.slice(0,pageSize);
   const textAttention=textRows.slice(0,pageSize),callRequests=callRows.slice(0,pageSize),handoffs=handoffRows.slice(0,pageSize),signatureActions=signatureRows.slice(0,pageSize);
   // Resolve bounded queue context independently of the current property page/search.
   const signatureDeals=[...new Set(signatureActions.map(s=>s.deal_id).filter((id):id is string=>!!id))];
   const linkedDeals=signatureDeals.length?await db<{id:string;screening_id:string}[]>(`icash_deal_files?account_id=eq.${accountId}&id=in.(${signatureDeals.join(',')})&select=id,screening_id`):[];
   for(const item of signatureActions)item.screening_id=linkedDeals.find(d=>d.id===item.deal_id)?.screening_id??null;
-  const allAttention=[...closingReview,...sellerRecovery,...viewingRequests,...textAttention,...callRequests,...handoffs,...signatureActions];
+  const allAttention=[...closingTasks,...closingReview,...sellerRecovery,...viewingRequests,...textAttention,...callRequests,...handoffs,...signatureActions];
   const missingIds=[...new Set(allAttention.map(a=>a.screening_id).filter((id):id is string=>!!id&&!visible.some(p=>p.id===id)))];
   const context=missingIds.length?await db<{id:string;result:{address:string}|null}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=in.(${missingIds.join(',')})&select=id,result:result->property`):[];
   // JSON projection above returns property directly; keep existing property results unchanged.
@@ -95,7 +97,7 @@ export async function GET(req:Request){
   for(const p of context)addressById.set(p.id,p.result?.address??'');
   for(const item of allAttention)item.address=item.screening_id?addressById.get(item.screening_id)??null:null;
   const smsRouteReviews=routeRows.slice(0,pageSize);
-  const attentionHasMoreByKind={closing:closingRows.length>pageSize,sellerRecovery:recoveryRows.length>pageSize,viewings:viewingRows.length>pageSize,routing:routeRows.length>pageSize,texts:textRows.length>pageSize,calls:callRows.length>pageSize,handoffs:handoffRows.length>pageSize,signatures:signatureRows.length>pageSize};
-  return NextResponse.json({closingReview,sellerRecovery,viewingRequests,smsRouteReviews,textAttention,signatureActions,signing,signingConfigured:!!(process.env.DOCUSEAL_API_KEY||process.env.DOCUSEAL_TEST_API_KEY),properties:visible,propertyAttentionIds,hasMore:!screeningId&&properties.length>pageSize,deals,contacts,controls,conversations,callbacks,callRequests,handoffs,page,attentionPage,attentionHasMore:Object.values(attentionHasMoreByKind).some(Boolean),attentionHasMoreByKind,searchSupported:true,query},{headers});
+  const attentionHasMoreByKind={closingTasks:closingTaskRows.length>pageSize,closing:closingRows.length>pageSize,sellerRecovery:recoveryRows.length>pageSize,viewings:viewingRows.length>pageSize,routing:routeRows.length>pageSize,texts:textRows.length>pageSize,calls:callRows.length>pageSize,handoffs:handoffRows.length>pageSize,signatures:signatureRows.length>pageSize};
+  return NextResponse.json({closingTasks,closingReview,sellerRecovery,viewingRequests,smsRouteReviews,textAttention,signatureActions,signing,signingConfigured:!!(process.env.DOCUSEAL_API_KEY||process.env.DOCUSEAL_TEST_API_KEY),properties:visible,propertyAttentionIds,hasMore:!screeningId&&properties.length>pageSize,deals,contacts,controls,conversations,callbacks,callRequests,handoffs,page,attentionPage,attentionHasMore:Object.values(attentionHasMoreByKind).some(Boolean),attentionHasMoreByKind,searchSupported:true,query},{headers});
  }catch{return NextResponse.json({error:'Could not load your work. Sign in and retry.'},{status:503,headers});}
 }

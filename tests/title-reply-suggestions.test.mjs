@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {titleReplySuggestions} from '../lib/title-reply-suggestions.ts';
+const suggest=body_text=>titleReplySuggestions({id:'reply',sender:'title@example.invalid',subject:'File update',body_text,received_at:'2026-10-10T12:00:00Z'});
+assert.equal(suggest('We opened your title file.')[0].kind,'title_opened');
+assert.deepEqual(suggest('Closing is scheduled for October 22, 2026.')[0],{replyId:'reply',kind:'closing_scheduled',effectiveDate:'2026-10-22',amountCents:null,fileReference:'',evidence:'Closing is scheduled for October 22, 2026.'});
+assert.equal(suggest('We received the $2,000.00 earnest money deposit.')[0].amountCents,200000);
+assert.equal(suggest('The transaction has closed on 2026-10-22.')[0].kind,'closed');
+assert.equal(suggest('Proceeds of $8,000 were sent on 2026-10-23, payment reference: ABC-123.')[0].fileReference,'ABC-123');
+assert.equal(suggest('Closing is set for February 30, 2027.')[0].effectiveDate,null);
+assert.equal(suggest('Closing is scheduled for tomorrow.')[0].effectiveDate,null);
+assert.equal(suggest('Deposit received: $2,000 and $500.')[0].amountCents,null);
+for(const body of ['We have not received the deposit.','The deposit will be received tomorrow.','If the funds are sent, we can close.','We expect the transaction to be closed on October 22, 2026.','Has the deposit been received?','Closing is not scheduled.','Please review.\nOn Monday, Title wrote:\nThe transaction has closed.','Thanks\n> We received the $2000 deposit.'])assert.equal(suggest(body).length,0,body);
+console.log('Title suggestions: 16 local ordinary-message, negation, quoted-history, date and amount fixtures passed.');
