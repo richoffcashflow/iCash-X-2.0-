@@ -1,4 +1,5 @@
 'use client';
+import {finalSalePolicy} from '@/lib/final-sale-policy';
 import {webinarRequest} from '@/lib/webinar-client';
 import {webinarBrowserEvent} from '@/lib/webinar-browser-events';
 import {useEffect,useRef,useState} from 'react';
@@ -35,7 +36,8 @@ export function MembershipCheckout({onSignedIn,embedded=false,presentation='stan
   {presentation!=='plan'&&<div className="membership-credits-note"><strong>Work credits are separate</strong><p>Start with a $0 work balance. Add $10, $25, $50, or a custom amount inside your workspace. Credits fund eligible AI activity. No daily billing or automatic credit refill.</p></div>}
   {data?.mode==='test'&&<p className="membership-note">Test checkout · No live work.</p>}
   <p className="membership-renewal" id="membership-terms">{data?priceLabel(data.offer.priceCents):'The displayed price'} billed monthly until cancelled. {presentation==='plan'?'Cancel your subscription in Help.':'Cancel future renewals in Settings.'} No work credits are included. Live work requires setup and available services; no deal or income is guaranteed.</p>
-  <label className="membership-consent"><input type="checkbox" checked={accepted} disabled={busy||!data?.ready} onChange={e=>setAccepted(e.target.checked)} aria-describedby="membership-terms"/><span>I authorize the monthly software subscription above.</span></label>
+  <p className="membership-renewal">{finalSalePolicy} <a href="/costs-and-disclosures#refunds" target="_blank" rel="noopener noreferrer">Billing policy</a></p>
+  <label className="membership-consent"><input type="checkbox" checked={accepted} disabled={busy||!data?.ready} onChange={e=>setAccepted(e.target.checked)} aria-describedby="membership-terms"/><span>I authorize the monthly subscription and accept the final-sale policy above.</span></label>
   <button className="setup-primary" disabled={busy||!accepted||!data?.ready} onClick={()=>void checkout()}>{busy?'Opening secure checkout…':data?presentation==='plan'?'Get my AI bot':`Get software access — ${priceLabel(data.offer.priceCents)}/month`:'Checking checkout…'}<ArrowRight size={17}/></button>
   <p className="membership-secure"><ShieldCheck size={14} aria-hidden="true"/>{embedded&&data?.embeddedReady?'Secure payment here through Stripe':'Continues to secure Stripe checkout'}</p>
   {data&&!data.ready&&<p role="status">Checkout is currently unavailable. <button onClick={()=>void load()}>Check again</button></p>}{error&&<p className="membership-error" role="alert">{error} <button onClick={()=>void load()}>Retry</button></p>}

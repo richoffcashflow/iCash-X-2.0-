@@ -1,4 +1,5 @@
-export const vipTermsVersion='vip-2026-10-07.1';
+import {finalSalePolicy} from './final-sale-policy.ts';
+export const vipTermsVersion='vip-2026-10-10.1';
 export const standardMonthlyCents=5000;
 export const vipMonthlyCents=10000;
 export const vipUpgradeCents=5000;
@@ -10,3 +11,5 @@ export function vipPrice(standardCents:number,_kind:'lead'|'usage'){
  return Math.ceil(standardCents*80/100);
 }
 export const vipBenefits=['20% off AI work','20% off leads','Priority for eligible new leads','Custom bot name','Your own AI voice'];
+
+export const vipPurchaseTerms='$50 once today for VIP in the current billing period. VIP renews at $100/month total on the existing renewal date, before any existing subscription discount. Work credits are separate. Cancel in Help. '+finalSalePolicy;

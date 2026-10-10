@@ -1,0 +1,4 @@
+export const finalSaleVersion='final-sales-2026-10-10.1';
+export const finalSaleSummary='All sales are final, except where refunds are required by applicable law.';
+export const finalSalePolicy=finalSaleSummary+' Software subscription payments, VIP upgrades and work-credit purchases are non-refundable. Cancelling stops future subscription renewals; turning off auto recharge stops future automatic credit purchases. Payments already processing may finish. Unused credits remain on your account and require an active subscription to use. Software and service usage do not guarantee a lead, deal, closing or income. This policy does not waive mandatory consumer rights and does not govern property deposits or closing funds.';
+export const purchaseEvidenceNotice='We retain purchase terms, acceptance times, payment references and account activity, including available IP and browser information, for billing support and dispute resolution.';

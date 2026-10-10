@@ -1,3 +1,4 @@
+import * as finalSale from '../lib/final-sale-policy.ts';
 import * as embeddedPolicy from '../lib/embedded-checkout-policy.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -8,7 +9,8 @@ import * as policy from '../lib/membership-policy.ts';
 import * as consent from '../lib/funding-consent.ts';
 let user={id:'owner',email:'fixture@example.invalid'},active=true,orders=[],calls=[],sessions=new Map();
 const stripe={checkout:{sessions:{create:async(body,options)=>{calls.push({create:body,options});const s={id:'cs_live_'+(sessions.size+1),status:'open',payment_status:'unpaid',livemode:true,url:body.ui_mode==='embedded_page'?null:'https://checkout.stripe.com/fixture',ui_mode:body.ui_mode??'hosted_page',client_secret:body.ui_mode==='embedded_page'?'cs_live_secret_fixture':null,metadata:body.metadata};sessions.set(s.id,s);return s;},retrieve:async id=>sessions.get(id),expire:async id=>{sessions.get(id).status='expired';}}}};
-const deps={...embeddedPolicy,...recharge,...amounts,...policy,...consent,NextResponse:{json:(body,o={})=>({body,status:o.status??200})},allowedOrigin:()=>true,privatePaymentCheckAllowed:async()=>false,customerFundingReady:async()=>true,earlyAccessFundingEnabled:()=>false,fundingMode:()=> 'live',cookies:async()=>({get:()=>({value:'a'.repeat(64)})}),validGuest:()=>true,guestHash:()=> 'hash',limitRequest:async()=>{},currentUser:async()=>user,accountMembership:async()=>({mode:'live',account_id:'account',stripe_customer_id:'cus_owned'}),fundingStripe:()=>stripe,processingFeeCents:()=>0,maximumFundingDays:()=>7,settleFunding:async()=>{throw Error('Unexpected payment');},db:async(path,method,body)=>{
+let acceptanceFails=false;
+const deps={...finalSale,recordPurchaseAcceptance:async(_req,receipt)=>{if(acceptanceFails)throw Error('Receipt unavailable');calls.push({acceptance:receipt});},...embeddedPolicy,...recharge,...amounts,...policy,...consent,NextResponse:{json:(body,o={})=>({body,status:o.status??200})},allowedOrigin:()=>true,privatePaymentCheckAllowed:async()=>false,customerFundingReady:async()=>true,earlyAccessFundingEnabled:()=>false,fundingMode:()=> 'live',cookies:async()=>({get:()=>({value:'a'.repeat(64)})}),validGuest:()=>true,guestHash:()=> 'hash',limitRequest:async()=>{},currentUser:async()=>user,accountMembership:async()=>({mode:'live',account_id:'account',stripe_customer_id:'cus_owned'}),fundingStripe:()=>stripe,processingFeeCents:()=>0,maximumFundingDays:()=>7,settleFunding:async()=>{throw Error('Unexpected payment');},db:async(path,method,body)=>{
  calls.push({path,method,body});
  if(path.startsWith('icash_accounts'))return [{id:'account'}];
  if(path.startsWith('icash_daily_plans'))return [];
@@ -65,3 +67,5 @@ process.env.STRIPE_PUBLISHABLE_KEY='pk_test_fixture';
 const fallback=await POST(request(inline));assert.equal(fallback.status,200);assert.match(fallback.body.url,/checkout.stripe.com/);assert.equal(fallback.body.clientSecret,undefined,'Wrong-mode keys use hosted payment');
 delete process.env.STRIPE_PUBLISHABLE_KEY;
 console.log('PASS inline funding: exact amount, matching Stripe key, saved customer, no redirect, same-session retry, uncertain-payment hold, and hosted fallback.');
+
+acceptanceFails=true;const before=calls.filter(c=>c.create).length;assert.equal((await POST(request(custom(4111)))).status,503);assert.equal(calls.filter(c=>c.create).length,before,'Failed evidence persistence prevents a new checkout');

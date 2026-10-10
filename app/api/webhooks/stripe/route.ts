@@ -1,3 +1,4 @@
+import {recordDisputeEvent} from '@/lib/dispute-service';
 import {reconcileVipCheckout} from '@/lib/vip-membership';
 import {settleAutoRecharge} from '@/lib/auto-recharge';
 import { NextResponse } from "next/server";
@@ -15,6 +16,7 @@ export async function POST(req:Request) {
  catch{return NextResponse.json({error:"Invalid signature"},{status:400});}
  if(event.livemode!==(mode==="live"))return NextResponse.json({error:"Payment mode mismatch"},{status:400});
  try{
+ if(event.type.startsWith('charge.dispute.'))await recordDisputeEvent(event);
  if(event.type==="checkout.session.completed"||event.type==="checkout.session.async_payment_succeeded"){
   const s=event.data.object;
   if(s.payment_status==="paid"){

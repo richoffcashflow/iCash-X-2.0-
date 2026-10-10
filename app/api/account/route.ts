@@ -1,3 +1,5 @@
+import {after} from 'next/server';
+import {recordSoftwareAccess} from '@/lib/purchase-acceptance';
 import {resolveRequestedPropertyMarket} from '@/lib/requested-property-market';
 import {discoveryAccountReadiness,contactAccountReadiness} from '@/lib/discovery-channel-readiness';
 import {smsAccountReady} from '@/lib/sms-channel-readiness';
@@ -27,6 +29,7 @@ export async function GET(req:Request){
   const canCheck=mode==='live'&&account.balanceCents>0&&!account.billingReview&&(account.billingModel!=='membership_credits'||membershipActive);
   const core=req&&new URL(req.url).searchParams.get('view')==='core';
   const held={workReady:false,smsWorkReady:false,discoveryWorkReady:false,contactWorkReady:false,discoveryQuote:null,contactQuote:null,discoveryBlocker:account.balanceCents<=0?'available_credits_required':null};
+  if(core&&mode==='live'&&membershipActive)after(()=>recordSoftwareAccess(req,snapshot.accountId,user.id));
   // The page paints its verified account first. Provider/setup checks are a later request.
   if(core||!canCheck)return NextResponse.json({...base,...held,readinessPending:!!core&&canCheck},{headers});
   stage='work_readiness';

@@ -1,4 +1,5 @@
 'use client';
+import {finalSalePolicy} from '@/lib/final-sale-policy';
 import {useEffect,useId,useRef,useState} from 'react';
 import {ArrowRight,Check} from 'lucide-react';
 import {AccountAccess} from './account-access';
@@ -12,6 +13,7 @@ const dollars=(cents:number)=>new Intl.NumberFormat('en-US',{style:'currency',cu
 export function DailyFundingCheckout({onSignedIn,initialCode,startBot=false,onBeforeStart,onFunded}:{onSignedIn:()=>void;initialCode?:string;startBot?:boolean;onBeforeStart?:()=>void;onFunded?:()=>Promise<void>}){
  const id=useId(),mounted=useRef(true),lock=useRef(false),notified=useRef(false),polling=useRef(false),edited=useRef(!!initialCode);
  const [funding,setFunding]=useState<Funding|null>(null),[daily,setDaily]=useState<Daily|null>(null),[code,setCode]=useState(initialCode||'budget_ten'),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[returned,setReturned]=useState(false);
+ const [accepted,setAccepted]=useState(false);
  async function refresh(){try{
   const sessionId=new URLSearchParams(window.location.search).get('session_id');
   // Reconcile a completed daily checkout before reading its funding receipts.
@@ -24,8 +26,9 @@ export function DailyFundingCheckout({onSignedIn,initialCode,startBot=false,onBe
  useEffect(()=>{if(returned&&funding?.paidCents&&!funding.needsClaim&&!notified.current){notified.current=true;const u=new URL(window.location.href);u.searchParams.delete('payment');u.searchParams.delete('session_id');window.history.replaceState(null,'',u.pathname+u.search+u.hash);void Promise.resolve(onFunded?onFunded():onSignedIn()).catch(e=>{if(mounted.current)setError(e instanceof Error?e.message:'Could not start your bot.');});}},[returned,funding?.paidCents,funding?.needsClaim,onSignedIn,onFunded]);
  const eligible=(funding?.packs??[]).filter(p=>validDailyBudget(p.price_cents)&&p.price_cents===p.credit_cents&&(funding?.mode!=='live'||p.enabled)).sort((a,b)=>a.price_cents-b.price_cents);
  const packs=eligible.filter((p,index)=>p.code===code||(!eligible.some(other=>other.price_cents===p.price_cents&&other.code===code)&&eligible.findIndex(other=>other.price_cents===p.price_cents)===index));
+ useEffect(()=>setAccepted(false),[code,funding?.earlyAccess]);
  const selected=packs.find(p=>p.code===code),amount=selected?.price_cents??1000,changing=daily?.plan?.state==='active',early=funding?.earlyAccess===true;
- async function checkout(){if(lock.current||!selected||!daily?.ready)return;lock.current=true;setBusy(true);setError('');try{
+ async function checkout(){if(!accepted||lock.current||!selected||!daily?.ready)return;lock.current=true;setBusy(true);setError('');try{
   const r=await fetch('/api/billing/daily',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:changing?'change':'start',packCode:code,totalCents:amount,accepted:true,version:dailyConsentVersion,earlyAccessAccepted:early,earlyAccessVersion:earlyAccessTermsVersion})});const d=await r.json();if(!mounted.current)return;if(!r.ok)throw Error(d.error||'Could not open checkout.');
   if(d.saved){if(startBot)onBeforeStart?.();setNotice(d.message);await refresh();if(onFunded)await onFunded();else onSignedIn();return;}
   const u=new URL(d.url);if(u.protocol!=='https:'||u.hostname!=='checkout.stripe.com')throw Error('Could not open secure checkout.');if(startBot)onBeforeStart?.();window.location.assign(u.href);
@@ -41,9 +44,10 @@ export function DailyFundingCheckout({onSignedIn,initialCode,startBot=false,onBe
   <div className="daily-slider-labels"><span>$10</span><span>{dollars(packs.at(-1)?.price_cents??100000)}</span></div>
   <p className="daily-renewal" id={id+'-terms'}>{changing?'From your next renewal. ':''}<strong>{dollars(amount)} every 24 hours until you stop.</strong></p>
   {early&&<p className="daily-availability" id={id+'-availability'}>Early access. Daily billing continues while work is waiting.</p>}
-  <button type="button" className="setup-primary daily-checkout-button" disabled={busy||!daily.ready||!selected} aria-describedby={`${id}-terms${early?` ${id}-availability`:''}`} onClick={()=>void checkout()}>{busy?'One moment…':changing?`Save ${dollars(amount)}/day`:`Run bot · ${dollars(amount)}/day`}<ArrowRight size={18}/></button>
+  <label className="membership-consent"><input type="checkbox" checked={accepted} disabled={busy||!daily.ready} onChange={e=>setAccepted(e.target.checked)}/><span>I authorize the daily charge and accept the final-sale policy below.</span></label>
+  <button type="button" className="setup-primary daily-checkout-button" disabled={!accepted||busy||!daily.ready||!selected} aria-describedby={`${id}-terms${early?` ${id}-availability`:''}`} onClick={()=>void checkout()}>{busy?'One moment…':changing?`Save ${dollars(amount)}/day`:`Run bot · ${dollars(amount)}/day`}<ArrowRight size={18}/></button>
   {daily.billingModel==='membership_credits'&&<small className="daily-membership-note">Your $50/month software subscription is separate.</small>}
-  <details className="boost-terms"><summary>Billing details</summary><p>{dailyConsent}</p><p>Eligible work must fit your available credits and daily limit. Work that doesn’t fit waits for a later funded day; tomorrow’s money is never spent early. Increasing your budget doesn’t guarantee a lead or deal.</p>{early&&<p>{earlyAccessDailyDisclosure}</p>}<a href="/costs-and-disclosures#daily-billing" target="_blank" rel="noopener noreferrer">All costs and terms ↗</a></details>
+  <p className="credit-purchase-terms">{finalSalePolicy}</p><details className="boost-terms"><summary>Billing details</summary><p>{dailyConsent}</p><p>Eligible work must fit your available credits and daily limit. Work that doesn’t fit waits for a later funded day; tomorrow’s money is never spent early. Increasing your budget doesn’t guarantee a lead or deal.</p>{early&&<p>{earlyAccessDailyDisclosure}</p>}<a href="/costs-and-disclosures#daily-billing" target="_blank" rel="noopener noreferrer">All costs and terms ↗</a></details>
   {daily.plan?.nextCharge&&<p className="daily-next-renewal">Next renewal: {new Date(daily.plan.nextCharge*1000).toLocaleString('en-US',{hour12:true})}.</p>}
   {daily.plan&&daily.plan.state!=='stopped'&&<button className="boost-refresh" disabled={busy} onClick={()=>void stop()}>Stop daily billing</button>}
   {!daily.ready&&<p role="status">Could not start daily funding. <button type="button" onClick={()=>void refresh()}>Try again</button> <a href="/support">Get help</a></p>}{notice&&<p role="status">{notice}</p>}{error&&<p role="alert">{error} <button onClick={()=>void refresh()}>Refresh</button></p>}
