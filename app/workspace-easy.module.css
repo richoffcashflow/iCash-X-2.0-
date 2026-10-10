@@ -62,7 +62,41 @@
 .workspace.workspace :global(.attention-chevron){flex:none;color:#737373;transition:transform .15s ease}
 .workspace.workspace :global(.workspace-attention[open]>.attention-heading){border-bottom:1px solid #eee}
 .workspace.workspace :global(.workspace-attention[open]>.attention-heading .attention-chevron){transform:rotate(180deg)}
-.workspace.workspace :global(.attention-single),.workspace.workspace :global(.attention-list){padding:16px}
+.workspace.workspace :global(.attention-single),.workspace.workspace :global(.attention-list){padding:0;background:#fff}
+.workspace.workspace :global(.attention-single){padding:16px 0}
+.workspace.workspace :global(.attention-item){border-top:1px solid #e5e5e5}
+.workspace.workspace :global(.attention-item:first-child){border-top:0}
+.workspace.workspace :global(.attention-item>summary){display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:5px;min-height:76px;padding:16px 36px 16px 0;list-style:none;position:relative}
+.workspace.workspace :global(.attention-item>summary>strong){font-size:14px;font-weight:600;line-height:1.5;letter-spacing:0;color:#242424;overflow-wrap:anywhere}
+.workspace.workspace :global(.attention-item>summary:after){right:2px;top:19px;display:grid;place-items:center;width:24px;height:24px;font-size:20px;font-weight:400;line-height:1;color:#686868}
+.workspace.workspace :global(.attention-item .attention-address){max-width:100%;white-space:normal;overflow:visible;text-align:left;font-size:12px;line-height:1.5;color:#666;overflow-wrap:anywhere}
+.workspace.workspace :global(.buyer-request-card),.workspace.workspace :global(.title-tasks){min-width:0;color:#444;font-size:14px;line-height:1.6}
+.workspace.workspace :global(.buyer-request-card p),.workspace.workspace :global(.title-tasks p){margin:12px 0;font-size:14px;line-height:1.6;text-align:left;letter-spacing:0}
+.workspace.workspace :global(.buyer-request-card strong),.workspace.workspace :global(.title-task>strong){font-size:14px;font-weight:600;color:#252525}
+.workspace.workspace :global(.buyer-request-card .review-quote){margin:0 0 8px;padding:12px 14px;border:0;border-radius:10px;background:#f5f5f5;color:#262626;font-size:15px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto}
+.workspace.workspace :global(.review-meta){display:block;font-size:12px!important;line-height:1.5;color:#666}
+.workspace.workspace :global(.title-task){padding:12px 0;border-bottom:1px solid #e8e8e8}
+.workspace.workspace :global(.title-task:last-child){border-bottom:0}
+.workspace.workspace :global(.attention-item .title-task),.workspace.workspace :global(.attention-single .title-task){padding-top:0}
+.workspace.workspace :global(.review-evidence){margin:0 0 12px}
+.workspace.workspace :global(.review-evidence>summary){min-height:44px;align-content:center;font-size:13px;font-weight:500;cursor:pointer}
+.workspace.workspace :global(.review-evidence p){white-space:pre-wrap;overflow-wrap:anywhere}
+.workspace.workspace :global(.review-actions){display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 0}
+.workspace.workspace :global(.review-actions button){flex:1 1 140px;width:auto;min-width:0;min-height:44px;margin:0;padding:11px 14px;border:1px solid #191919;border-radius:10px;background:#191919;color:#fff;font-size:13px;font-weight:600;line-height:1.4;box-shadow:none;white-space:normal}
+.workspace.workspace :global(.review-actions .review-secondary){border-color:#d7d7d7;background:#fff;color:#333}
+.workspace.workspace :global(.review-actions .review-primary:hover:not(:disabled)){background:#333}
+.workspace.workspace :global(.review-actions .review-secondary:hover:not(:disabled)){background:#f4f4f4}
+.workspace.workspace :global(.review-actions button:disabled){opacity:.5;cursor:default}
+.workspace.workspace :global(.review-form){display:grid;gap:8px;margin:14px 0 0;min-width:0}
+.workspace.workspace :global(.review-form label){margin:0;font-size:13px;font-weight:600;line-height:1.5;color:#292929}
+.workspace.workspace :global(.review-form input[type=date]),.workspace.workspace :global(.review-form textarea){display:block;box-sizing:border-box;width:100%;min-width:0;max-width:100%;min-height:48px;margin:0;padding:12px;border:1px solid #bcbcbc;border-radius:10px;background:#fff;color:#222;color-scheme:light;font:inherit;font-size:16px;line-height:1.5;box-shadow:none}
+.workspace.workspace :global(.review-form input[type=date]::-webkit-date-and-time-value){text-align:left;min-height:24px}
+.workspace.workspace :global(.review-form textarea){min-height:100px;resize:vertical}
+.workspace.workspace :global(.review-form input:focus-visible),.workspace.workspace :global(.review-form textarea:focus-visible){outline:2px solid #555;outline-offset:2px}
+.workspace.workspace :global(.review-form small){font-size:12px;line-height:1.5;color:#666}
+.workspace.workspace :global(.review-form .review-actions){margin-top:6px}
+.workspace.workspace :global(.workspace-attention .attention-open){display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;margin:12px 0 18px;padding:10px 14px;border:1px solid #d7d7d7;border-radius:10px;background:#fff;color:#333;font-size:13px;font-weight:500;line-height:1.5}
+.workspace.workspace :global(.attention-single>.attention-open){margin-bottom:0}
 .workspace.workspace :global(.sms-review-card p){font-size:14px;line-height:1.55;margin:0 0 14px;text-align:left;color:#525252}
 .workspace.workspace :global(.sms-review-card .reply-quote){padding:14px 16px;margin:0 0 18px;border:0;border-radius:12px;background:#f6f6f6;font-size:16px;line-height:1.5;color:#242424;overflow-wrap:anywhere}
 .workspace.workspace :global(.sms-review-sender){display:block;font-size:11px;color:#777;margin-bottom:5px}

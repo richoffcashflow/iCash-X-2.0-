@@ -1,7 +1,7 @@
 'use client';
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {HandoffCard,type Handoff} from './handoff-card';
-import {TitleTasks,type TitleTask} from './title-tasks';
+import {TitleTasks,titleTaskLabel,type TitleTask} from './title-tasks';
 import {closingReviewLabels} from '@/lib/closing-setup';
 import {SellerRecoveryCard,type SellerRecoveryCase} from './seller-recovery-card';
 import {buyerDepositCents} from '@/lib/buyer-purchase-terms';
@@ -166,10 +166,10 @@ function WorkspaceAttention({work,page,onPage,onOpen,onRefresh}:{work:Work;page:
  const [handled,setHandled]=useState<string[]>([]),[expanded,setExpanded]=useState(false);
  function done(id:string){setHandled(v=>[...v,id]);onPage(0);onRefresh();}
  const requests:AttentionRequest[]=[
-  ...(work.closingTasks??[]).map(t=>({id:'task:'+t.id+':'+t.updated_at,propertyId:t.screening_id,address:t.address,priority:t.state==='scheduled'?0:1,title:t.label,node:<TitleTasks initialTasks={[t]} expanded onChanged={onRefresh}/>})),
+  ...(work.closingTasks??[]).map(t=>({id:'task:'+t.id+':'+t.updated_at,propertyId:t.screening_id,address:t.address,priority:t.state==='scheduled'?0:1,title:titleTaskLabel(t),node:<TitleTasks initialTasks={[t]} embedded onChanged={onRefresh}/>})),
   ...(work.closingReview??[]).map(c=>({id:'closing:'+c.id+':'+c.updated_at,propertyId:c.screening_id,address:c.address,priority:c.review_reason==='setup'?2:0,title:closingReviewLabels[c.review_reason]??'Closing needs review',node:<div><p>{c.review_reason==='setup'?'Open Buyers & closing on this property to choose a closer and set how you receive your proceeds.':'Review the title reply in Buyers & closing. Property automation is paused for a person to resolve this.'}</p><button className="attention-open" onClick={()=>onOpen(c.screening_id)}>Review closing setup</button></div>})),
   ...(work.sellerRecovery??[]).map(a=>({id:'recovery:'+a.id+':'+a.updated_at,propertyId:a.screening_id,address:a.address,priority:2,title:'Seller follow-up needs review',node:<SellerRecoveryCard item={a} onResolved={()=>done('recovery:'+a.id+':'+a.updated_at)}/>})),
-  ...(work.viewingRequests??[]).map(v=>({id:'viewing:'+v.id,propertyId:v.screening_id,address:v.address,priority:1,title:buyerRequestTitle(v),node:<BuyerViewingRequestCard request={v} onReviewed={onRefresh}/>})),
+  ...(work.viewingRequests??[]).map(v=>({id:'viewing:'+v.id,propertyId:v.screening_id,address:v.address,priority:1,title:buyerRequestTitle(v),node:<BuyerViewingRequestCard request={v} embedded onReviewed={onRefresh}/>})),
   ...(work.smsRouteReviews??[]).map(a=>({id:'routing:'+a.message_id+':'+a.revision,propertyId:'',address:a.recipient.replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3'),priority:0,title:'A text needs your review',description:a.needs_review?'The bot couldn’t match this reply to a property.':'An earlier reply wasn’t matched to a property.',actionLabel:'View reply',node:<SmsRouteReviewCard item={a} onOpen={onOpen} onHandled={()=>done('routing:'+a.message_id+':'+a.revision)}/>})),
   ...(work.textAttention??[]).map(a=>({id:'text:'+a.id+':'+a.message_id,propertyId:a.screening_id,address:a.address,priority:a.kind==='withdrawal'?0:a.kind==='human'?2:3,title:a.kind==='withdrawal'?'Review a change of plans':a.kind==='callback'?'Confirm a callback':'Review a message',node:<TextAttentionCard item={a} onHandled={()=>done('text:'+a.id+':'+a.message_id)}/>})),
   ...work.signatureActions.map(e=>({id:'sign:'+e.id,propertyId:e.screening_id??'',address:e.address,priority:-1,title:'Urgent deal review',node:<SigningAttention envelope={e}/>})),
