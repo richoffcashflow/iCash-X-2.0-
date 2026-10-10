@@ -10,7 +10,7 @@ import {inspectRecordedReceptionAgent} from '../lib/recorded-reception.ts';
 import {receptionWorkspacePostcallAbsent} from '../lib/general-reception.ts';
 import {isolatedBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {boundedBytes} from '../lib/required-call-recording-provider.ts';
-import {diagnoseReceptionFingerprint,receptionFingerprintSettings} from './reception-fingerprint-diagnostic.mjs';
+import {receptionReviewReport} from './reception-review-report.mjs';
 
 if(process.env.VERCEL_ENV!=='production'||process.env.VERCEL_GIT_COMMIT_REF!=='main')process.exit(0);
 const commit=process.env.VERCEL_GIT_COMMIT_SHA;
@@ -48,9 +48,12 @@ if(!observed.safe){
  // Only internal check names, booleans and bounded tool-shape evidence. Never
  // log provider configuration, prompt text, webhook headers or credentials.
  console.error('Buyer provider verification mismatch',JSON.stringify({failedChecks:Object.entries(observed.checks).filter(([,passed])=>!passed).map(([name])=>name),hashMatches:observed.hash===c.config_hash,versionMatches:agent.version_id===c.reviewed_version_id,inlineTools:observed.inlineTools}));
- if(observed.hash!==c.config_hash)console.error('Buyer provider fingerprint diagnostic',JSON.stringify(diagnoseReceptionFingerprint(agent,c.config_hash)));
- const fixedSettings=receptionFingerprintSettings(agent);
- for(let i=0;i<fixedSettings.length;i+=8)console.error('Buyer provider fixed settings diagnostic',JSON.stringify(fixedSettings.slice(i,i+8)));
+ // Capture one complete, redacted private report instead of repeatedly
+ // guessing differences in deployment builds. This does not approve it.
+ const reviewMarker='reception_config_review_20261010_'+observed.hash.slice(0,12);
+ const [priorReview]=await db('icash_integration_checks?provider=eq.'+reviewMarker+'&select=result');
+ if(!priorReview)await db('icash_integration_checks','POST',{provider:reviewMarker,checked_at:new Date().toISOString(),result:{status:'needs_review',sourceConfigId:c.id,sourceConfigHash:c.config_hash,observedHash:observed.hash,versionId:agent.version_id,checks:observed.checks,configuration:receptionReviewReport(agent,[process.env.ELEVENLABS_API_KEY,process.env.SUPABASE_SECRET_KEY]),providerWrites:false,calls:false}});
+ console.error('Buyer provider private review saved',reviewMarker);
  // Compare the provider's explicitly version-pinned read, without accepting it
  // in place of the active branch or exposing either response in logs.
  try{
