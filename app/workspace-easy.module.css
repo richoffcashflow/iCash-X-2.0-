@@ -42,9 +42,9 @@
 .workspace.workspace :global(.property-call-list .manual-call-options){background:#f7f7f7;border-color:#e8e8e8}
 .workspace.workspace :global(.contact-help){font-size:13px;line-height:1.6;color:#616161}
 .workspace.workspace :global(button:focus-visible),.workspace.workspace summary:focus-visible{outline:2px solid #171717;outline-offset:3px}
-.activity{border-top:1px solid #e5e5e5;margin:24px 20px 0;color:#525252}
-.activity>summary{min-height:52px;align-content:center;cursor:pointer;font-size:14px;font-weight:600}
-.activity :global(.workspace-activity){margin:0;padding:12px 0 20px;border:0}
+.activity{margin:24px 0;color:#525252}
+.workspace.workspace .activity :global(.workspace-activity){margin:0;padding:0 20px 24px;border:0;border-bottom:1px solid #e5e5e5}
+.workspace.workspace .activity :global(.workspace-activity-heading){flex-wrap:wrap}
 .workspace.workspace :global(.leads-heading){display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .workspace.workspace :global(.open-workspace-assistant){display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:44px;padding:10px 13px;border:1px solid #171717;border-radius:12px;background:#171717;color:#fff;font-size:13px;font-weight:600;white-space:nowrap}
 .workspace.workspace :global(.workspace-review-section){margin:0 0 22px;padding:0}
