@@ -14,6 +14,13 @@ calls=[];result={accountId:'database-bound-account',textAiJobId:'database-bound-
 assert.equal((await replyToSellerText(db,text,'signed-provider-event',ai,voice)).status,'message_accepted');assert.deepEqual(calls,[['ai',result.accountId,result.textAiJobId]],'AI job cannot receive an arbitrary account or message');
 calls=[];result={accountId:'database-bound-account',voiceJobId:'database-bound-voice'};
 assert.equal((await replyToSellerText(db,text,'signed-provider-event',ai,voice)).status,'call_started');assert.deepEqual(calls,[['voice',result.accountId,result.voiceJobId]],'Immediate callback bypasses AI and repeated date questions');
+for(const available of ['verified-failure-message',null]){
+ calls=[];const checked=[];
+ const boundDb=async(path,method,body)=>{checked.push(path);if(path==='rpc/icash_prepare_seller_text_event')return result;assert.equal(path,'rpc/icash_seller_sms_call_unavailable');assert.deepEqual(body,{p_account:result.accountId,p_job:result.voiceJobId});return available;};
+ assert.equal((await replyToSellerText(boundDb,text,'signed-provider-event',ai,async()=>({status:'production_agent_review_required'}))).status,'production_agent_review_required');
+ assert.deepEqual(calls,available?[['sms',result.accountId,available]]:[]);
+ assert.equal(checked.length,2);
+}
 // Execute the actual route with provider/database stand-ins. Authentication must
 // precede ingestion; STOP must never reach either reply engine.
 let verified=true,event={id:'event-1',type:'text.incoming.sms',optOut:false,data:{to:'+12145550001',from:'+12145550002'}};

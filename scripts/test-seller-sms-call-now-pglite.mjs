@@ -100,6 +100,10 @@ create function icash_prepare_seller_text_event(p_event text) returns jsonb lang
 `);
 await pg.exec(read('seller-sms-immediate-callback'));
 await pg.exec(read('unstarted-sms-call-recovery'));
+// Production has a later viewing wrapper; retain its delegation when patching.
+await pg.exec(`alter function icash_seller_conversation_reply(uuid,uuid) rename to icash_seller_reply_before_viewings;
+create function icash_seller_conversation_reply(p_account uuid,p_job uuid) returns text language sql as $$select public.icash_seller_reply_before_viewings(p_account,p_job)$$;`);
+await pg.exec(read('seller-call-response-recovery'));
 let cases=0;
 async function fixture(prompt=true){
  await q('insert into icash_accounts(id,assistant_name,owner_user_id) values($1,\'Casey\',$2)',[account,actor]);
@@ -119,7 +123,7 @@ const count=async()=>(await one('select count(*)::int n from icash_voice_jobs'))
 const getJob=async()=>(await one('select * from icash_voice_jobs order by created_at desc limit 1'));
 const claim=async(id)=>(await one("select icash_claim_reviewed_voice_job($1,null,null) value",[id])).value;
 const queue=async(id,a=null)=>(await one('select icash_queue_seller_sms_call($1,$2,$3) value',[account,id,a])).value;
-for(const body of ['Now','Right now','Now works','Yes, now','I am free now',"I'm available now",'Call me','Can you call me?','Please call me now','Call me please'])await scenario(body+' queues immediately without AI',async()=>{
+for(const body of ['Now','Right now','Now works','Yes, now','I am free now',"I'm available now",'Call me','Can you call me?','Please call me now','Call me please','Can call now ','Free now ','Available now'])await scenario(body+' queues immediately without AI',async()=>{
  const id=await incomingText(body);assert.equal(await count(),1);assert.equal((await one('select count(*)::int n from icash_text_ai_jobs')).n,0);
  const j=await getJob();assert.equal(j.sms_source_message_id,id);assert.equal(j.permission_id,permission);
  assert.equal(await queue(id),j.id);assert.equal(await count(),1);
@@ -128,7 +132,7 @@ for(const body of ['Now','Right now','Now works','Yes, now','I am free now',"I'm
  assert.equal(await claim(j.id),true);assert.equal(await claim(j.id),false);
 });
 for(const body of ['Call me','Can you call me now?','Please give me a call'])await scenario('explicit request needs no earlier question: '+body,async()=>{await incomingText(body);assert.equal(await count(),1);},false);
-for(const body of ['Not now','Do not call me','Call me tomorrow','Call me at 3 PM','I want a real person to call me','Call me if you pay $100000','Now I want a contract','STOP'])await scenario('no immediate call: '+body,async()=>{await incomingText(body);assert.equal(await count(),0);});
+for(const body of ['Not now','Do not call me','Call me tomorrow','Call me at 3 PM','I want a real person to call me','Call me if you pay $100000','Now I want a contract','STOP','Can call now if you pay 100000','Free now but do not call','Free tomorrow'])await scenario('no immediate call: '+body,async()=>{await incomingText(body);assert.equal(await count(),0);});
 await scenario('free-floating Now cannot authorize a call',async()=>{await incomingText('Now');assert.equal(await count(),0);},false);
 await scenario('reuse untouched intake call',async()=>{const first=randomUUID();await q("insert into icash_voice_jobs(id,account_id,permission_id) values($1,$2,$3)",[first,account,permission]);await incomingText();assert.equal(await count(),1);assert.equal((await getJob()).id,first);});
 await scenario('provider-accepted call acknowledgement once',async()=>{
@@ -149,4 +153,24 @@ for(const state of ['waiting','review'])await scenario('active or uncertain conv
 await scenario('buyer cannot create outbound call',async()=>{await q("update icash_text_threads set party='buyer'");await incomingText('Call me');assert.equal(await count(),0);});
 await scenario('verified local pre-dial rejection permits one owner restart with retained history',async()=>{const id=await incomingText('Call me');const first=await getJob();await q("update icash_voice_jobs set state='canceled',outcome='context_rejected_before_dial'");const retry=await queue(id,actor);assert(retry);assert.notEqual(retry,first.id);assert.equal(await count(),2);assert.equal(await queue(id,actor),retry);assert.equal(await count(),2);});
 await scenario('anonymous cannot use queue',async()=>{await q('set local role anon');await assert.rejects(()=>queue(incoming),/permission denied/);});
+for(const body of ['Now','Can call now','Free now'])await scenario('live repeated-question regression: '+body,async()=>{
+ await q("update icash_text_messages set body='Are you free for a quick call now, or would later work better?'");
+ await incomingText(body);assert.equal(await count(),1);assert.equal((await one('select count(*)::int n from icash_text_ai_jobs')).n,0);
+});
+const unavailable=async(id)=>(await one('select icash_seller_sms_call_unavailable($1,$2) value',[account,id])).value;
+await scenario('known pre-dial failure explains the problem once and continues by text',async()=>{
+ await incomingText();const j=await getJob();await q("update icash_voice_jobs set state='held',outcome='production_agent_review_required'");
+ const id=await unavailable(j.id);assert(id);const message=await one('select body from icash_text_messages where id=$1',[id]);
+ assert.equal(message.body,'I could not start the call. We can keep going by text. What repairs or updates does the property need?');
+ assert.equal(await unavailable(j.id),null);assert.equal((await one('select icash_seller_conversation_message_current($1,$2) value',[account,id])).value,true);
+ await q("update icash_sms_routes set needs_review=true");assert.equal((await one('select icash_seller_conversation_message_current($1,$2) value',[account,id])).value,false);
+});
+await scenario('failure fallback skips a previously asked condition question',async()=>{
+ await q("insert into icash_text_ai_jobs(account_id,thread_id,message_id,state,analysis,outgoing_id,created_at) values($1,$2,gen_random_uuid(),'queued','{\"action\":\"ask_condition\",\"facts\":[]}',gen_random_uuid(),now()-interval '2 minutes')",[account,thread]);
+ await incomingText();const j=await getJob();await q("update icash_voice_jobs set state='held',outcome='production_agent_review_required'");
+ const id=await unavailable(j.id);assert.equal((await one('select body from icash_text_messages where id=$1',[id])).body,'I could not start the call. We can keep going by text. What price did you have in mind?');
+});
+for(const change of ["update icash_voice_jobs set state='held',outcome='provider_outcome_unknown_no_retry'","update icash_voice_jobs set state='dispatching'","update icash_voice_jobs set state='held',outcome='production_agent_review_required',operation_key='already-claimed'"])
+ await scenario('uncertain/started call never claims failure: '+change,async()=>{await incomingText();const j=await getJob();await q(change);assert.equal(await unavailable(j.id),null);});
+await scenario('failure notice remains account-bound',async()=>{await incomingText();const j=await getJob();await q("update icash_voice_jobs set state='held',outcome='production_agent_review_required'");assert.equal((await one('select icash_seller_sms_call_unavailable($1,$2) value',[other,j.id])).value,null);});
 await pg.close();console.log(`${cases} immediate seller callback scenarios passed. Provider and billing delegates are synthetic; no real calls or texts.`);
