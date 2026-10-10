@@ -4,6 +4,7 @@ import ts from 'typescript';
 import {z} from 'zod';
 import {dealTermsSchema} from '../lib/deal-documents.ts';
 import {mergeStoredDealTerms} from '../lib/deal-term-update.ts';
+import {buyerDepositCents} from '../lib/buyer-purchase-terms.ts';
 
 const stored={...dealTermsSchema.parse({address:'SIMULATION ONLY',state:'TX'}),practice:true,provenance:{kind:'practice',source:'synthetic'}};
 assert.equal(mergeStoredDealTerms({seller:'Changed fixture'},stored).practice,true);
@@ -16,12 +17,14 @@ assert.equal(mergeStoredDealTerms({}, {...stored,practice:false}).practice,false
 assert.throws(()=>mergeStoredDealTerms({priceCents:-1},stored));
 
 const account='11111111-1111-4111-8111-111111111111',screening='22222222-2222-4222-8222-222222222222';
-let current=stored,writes=[],origin=true,reads=[];
-const deps={z,mergeStoredDealTerms,dealTermsSchema,NextResponse:{json:(body,o={})=>({body,status:o.status??200})},allowedOrigin:()=>origin,workAccount:async()=>({accountId:account}),db:async(path,method,body)=>{
+let current=stored,writes=[],origin=true,reads=[],stage='draft',feeFits=true;
+const deps={z,mergeStoredDealTerms,dealTermsSchema,buyerDepositCents,NextResponse:{json:(body,o={})=>({body,status:o.status??200})},allowedOrigin:()=>origin,workAccount:async()=>({accountId:account}),db:async(path,method,body)=>{
  reads.push(path);
- if(path.startsWith('icash_deal_files?')){assert(path.includes('account_id=eq.'+account)&&path.includes('screening_id=eq.'+screening));return current?[{terms:current}]:[];}
+ if(path.startsWith('icash_deal_files?')){assert(path.includes('account_id=eq.'+account)&&path.includes('screening_id=eq.'+screening));return current?[{id:'fixture-deal',terms:current,stage}]:[];}
  if(path.startsWith('icash_customer_identities?'))return [{principal:'Fixture buyer'}];
- if(path.startsWith('icash_screening_jobs?'))return [{result:{property:{legalDescription:'Fixture legal'}}}];
+ if(path.startsWith('icash_screening_jobs?'))return [{snapshot:{propertyType:'house'},result:{property:{legalDescription:'Fixture legal'}}}];
+ if(path.startsWith('icash_signing_envelopes?'))return [];
+ if(path==='rpc/icash_buyer_assignment_pricing'){assert.equal(stage,'draft');assert.equal(body.p_fee,null);return feeFits?{ready:true,assignmentFeeCents:2000000}:{ready:false,reason:'insufficient_margin'};}
  if(path==='rpc/icash_prepare_deal'){writes.push(body);return 'fixture-deal';}
  throw Error(path);
 }};
@@ -50,6 +53,13 @@ for(const input of [{practice:false},{provenance:{kind:'real'}},{unknown:'value'
 assert.equal(writes.length,count);
 current=null;assert.equal((await route.POST(request({seller:'Real fixture'}))).status,200);assert.equal(writes.at(-1).p_terms.practice,undefined);
 assert.equal((await route.POST(request({practice:true}))).status,400);
+// New drafts use the budgeted recommendation; insufficient room is never filled with a default fee.
+assert.equal((await route.POST(request({priceCents:19000000}))).status,200);
+assert.equal(writes.at(-1).p_terms.assignmentFeeCents,2000000);assert.equal(writes.at(-1).p_terms.assignmentDepositCents,400000);
+feeFits=false;assert.equal((await route.POST(request({priceCents:20100000}))).status,200);assert.equal(writes.at(-1).p_terms.assignmentFeeCents,null);
+// A published legacy quote must not be recalculated through a routine save.
+current={...dealTermsSchema.parse({priceCents:11536650,assignmentFeeCents:1063350,assignmentDepositCents:212670})};stage='under_contract';reads=[];
+assert.equal((await route.POST(request(current))).status,200);assert(!reads.includes('rpc/icash_buyer_assignment_pricing'));assert.equal(writes.at(-1).p_terms.assignmentFeeCents,1063350);assert.equal(writes.at(-1).p_terms.assignmentDepositCents,212670);
 origin=false;reads=[];assert.equal((await route.POST(request({}))).status,403);assert.equal(reads.length,0);
 delete globalThis.__dealTermTest;
 console.log('Deal updates preserve server provenance, reject promotion/new metadata, remain tenant-scoped, and retain ordinary editable terms.');
