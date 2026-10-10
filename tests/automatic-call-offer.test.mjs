@@ -8,6 +8,11 @@ const now=Date.now(),address='45 Oak Road',conversationId='conv_fixture',token='
 const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:0,raw:{data:{dm_property_id:'prop_123',full_address:address,estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:20000,estimated_equity_percentage:90}}};
 const context={party:'seller',accountId:'account',dealId:'deal',address,snapshot,offerState:null,offerVersion:0};
 assert.equal(calculateAutomaticCallOffer(context,{},now).priceCents,10200000);
+const uneven={...context,snapshot:{...snapshot,raw:{data:{...snapshot.raw.data,estimated_value:219095}}}};
+assert.equal(calculateAutomaticCallOffer(uneven,{},now).priceCents,11500000,'new $115,366.50 ceiling quotes $115,000');
+assert.equal(calculateAutomaticCallOffer(uneven,{proposedPriceCents:11456789},now).priceCents,11400000,'new counterproposal rounds down before acceptance');
+assert.equal(calculateAutomaticCallOffer(uneven,{acceptedPriceCents:11536650},now).priceCents,11536650,'an already accepted amount is not silently changed');
+assert.equal(calculateAutomaticCallOffer({...uneven,pendingAgreement:{priceCents:11536650}}, {},now).priceCents,11536650,'an issued contract retains its exact terms');
 assert.equal(calculateAutomaticCallOffer(context,{repairEstimateCents:6000000},now).priceCents,8800000);
 assert.equal(calculateAutomaticCallOffer(context,{repairEstimateCents:1000000},now).priceCents,10200000,'smaller caller estimate cannot replace provider evidence');
 assert.equal(calculateAutomaticCallOffer(context,{acceptedPriceCents:9000000},now).priceCents,9000000);

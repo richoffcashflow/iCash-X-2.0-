@@ -16,6 +16,7 @@ try{
  await q('alter table icash_text_threads add column if not exists retired_at timestamptz');
  await pg.exec(readFileSync('supabase/migrations/20261005215816_contract_text_delivery.sql','utf8'));
  await pg.exec(readFileSync('config/buyer-disposition-workflow.sql','utf8'));
+ await pg.exec(readFileSync('config/rounded-buyer-prices.sql','utf8'));
  await pg.exec(readFileSync('config/buyer-sms-review.sql','utf8'));
  await pg.exec(readFileSync('config/buyer-introduction-calls.sql','utf8'));
  const terms={seller:'Synthetic seller',buyer:'SIMULATION business',address:'123 Main Street',state:'TX',priceCents:3893700,assignmentFeeCents:null,priceSource:'seller_reported'};
@@ -30,14 +31,21 @@ try{
  assert.equal(await prep(),false);assert.equal((await one('select count(*) n from icash_fulfillment_jobs')).n,0);
  await rpc('icash_save_signing_status',{p_id:envelope,p_state:'completed',p_evidence:{id:'777',test_mode:false,status:'completed'}});
  assert.equal((await one('select stage from icash_deal_files where id=$1',[deal])).stage,'under_contract');
- assert.equal((await one('select asking_price_cents from icash_disposition_authorities where deal_id=$1',[deal])).asking_price_cents,4893700);
+ assert.equal((await one('select asking_price_cents from icash_disposition_authorities where deal_id=$1',[deal])).asking_price_cents,4900000);
+ assert.equal((await one("select (terms->>'assignmentFeeCents')::bigint fee from icash_deal_files where id=$1",[deal])).fee,1006300,'fee and seller price reconcile to the rounded buyer total');
+ await q('begin');
+ await q("update icash_disposition_authorities set pricing_policy='signed_purchase_plus_10000_v1',asking_price_cents=4893700 where deal_id=$1",[deal]);
+ await q("update icash_deal_files set terms=jsonb_set(terms,'{assignmentFeeCents}','1000000') where id=$1",[deal]);
+ assert.equal(await prep(),true,'previously advertised exact price remains valid');
+ assert.equal((await one('select asking_price_cents from icash_disposition_authorities where deal_id=$1',[deal])).asking_price_cents,4893700,'published legacy pricing is never changed');
+ await q('rollback');
  assert.equal((await one('select count(*) n from icash_fulfillment_jobs where deal_id=$1',[deal])).n,1);
- const l=await link();assert.match(l.url,/\/d\/[a-f0-9]{32}$/);assert.deepEqual(await link(),l);assert.equal(buyerAskingPrice(3893700),4893700);
+ const l=await link();assert.match(l.url,/\/d\/[a-f0-9]{32}$/);assert.deepEqual(await link(),l);assert.equal(buyerAskingPrice(3893700),4900000);
  const token=l.url.split('/').at(-1),data=()=>rpc('icash_read_buyer_package',{p_token:token});
- assert.equal((await data()).askingPriceCents,4893700);
+ assert.equal((await data()).askingPriceCents,4900000);
  assert.equal(await rpc('icash_ensure_buyer_package',{p_account:other,p_deal:deal}),null);
  assert.equal(await rpc('icash_read_buyer_package',{p_token:'b'.repeat(32)}),null);
- const html=renderBuyerPackage(await data());assert(html.includes('$48,937.00'));assert(!html.includes('Synthetic seller'));assert(!html.includes(envelope));
+ const html=renderBuyerPackage(await data());assert(html.includes('$49,000.00'));assert(!html.includes('Synthetic seller'));assert(!html.includes(envelope));
  const reviewer=randomUUID();await q('insert into auth.users(id,email) values($1,$2)',[reviewer,'buyer-reviewer@example.invalid']);
  await q("insert into icash_trusted_operators(user_id,scopes,provisioned_by,expires_at) values($1,array['authority_review'],'SIMULATION authorization only',now()+interval '1 day')",[reviewer]);
  const market=(await one("insert into icash_authority_market_reviews(account_id,screening_id,state_code,kind,channel,source_reference,reviewed_by,reviewed_at,expires_at) values($1,$2,'TX','contact_permission','sms','SIMULATION buyer channel review','Fixture review',now()-interval '1 minute',now()+interval '1 day') returning id",[account,screening])).id;
@@ -79,7 +87,7 @@ try{
  assert.deepEqual(await rpc('icash_buyer_package_text_targets',{p_account:account,p_deal:deal}),[]);
  assert.equal(await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:thread.id,p_body:packageBody}),null);
  assert(!(await rpc('icash_deal_email_contacts',{p_account:account,p_deal:deal})).some(c=>c.party==='buyer'));
- assert.equal((await data()).askingPriceCents,4893700,'hold preserves prepared package');
+ assert.equal((await data()).askingPriceCents,4900000,'hold preserves prepared package');
  const {db}=databaseAdapter(pg);
  let transportCalls=0;const noTransport=async()=>{transportCalls++;throw Error('Unexpected buyer transport');};
  const textService=await loadService('lib/buyer-outreach-service.ts',{db,buyerPackageText,dispatchTextMessage:noTransport});
@@ -126,7 +134,7 @@ try{
  await q("insert into icash_buyer_candidates(deal_id,buyer_id,rights_until) values($1,$2,now()+interval '1 day')",[deal,buyer]);
  await q("update icash_fulfillment_jobs set state='complete' where deal_id=$1",[deal]);
  await q("insert into icash_deal_documents(deal_id,kind,html,terms,fulfillment_job_id) select $1,'buyer_package','SIMULATION',$2,id from icash_fulfillment_jobs where deal_id=$1",[deal,terms]);
- const voiceContext=await rpc('icash_buyer_voice_context',{p_permission:permission});assert.equal(voiceContext.qualificationStatus,'unconfirmed');assert.equal(voiceContext.askingPriceCents,4893700);
+ const voiceContext=await rpc('icash_buyer_voice_context',{p_permission:permission});assert.equal(voiceContext.qualificationStatus,'unconfirmed');assert.equal(voiceContext.askingPriceCents,4900000);
  await q('begin');await q('update icash_contact_permissions set revoked_at=now() where id=$1',[permission]);assert.equal(await rpc('icash_buyer_voice_context',{p_permission:permission}),null);await q('rollback');
  // Isolated incoming-session fixture: exercises the actual routing SQL without provider calls.
  await pg.exec(`create schema icash_recorded_reception_private;
@@ -140,7 +148,7 @@ try{
  await q("insert into icash_recorded_reception_private.sessions(id,config_id,account_id,operation_key,nonce_hash,state,consent_at,recording_sid,from_phone,call_deadline_at,rate_id,charge_cap_cents) select $1,$2,$3,operation_key,'fixture-nonce','recording',now(),'REfixture',$4,now()+interval '10 minutes',rate_id,charge_cap_cents from icash_operation_spend where operation_key=$5",[session,reception,account,f.phone,'text:'+message]);
  await q("update icash_text_messages set state='accepted',provider_id='fixture-provider-receipt' where id=$1",[message]);
  const incoming=()=>rpc('icash_recorded_reception_property_context',{p_id:session,p_nonce_hash:'fixture-nonce'});
- assert.deepEqual(await incoming(),{status:'buyer',address:'123 Main Street',purchasePriceCents:3893700,assignmentFeeCents:1000000,askingPriceCents:4893700,buyerPaysClosingCosts:true});
+ assert.deepEqual(await incoming(),{status:'buyer',address:'123 Main Street',purchasePriceCents:3893700,assignmentFeeCents:1006300,askingPriceCents:4900000,buyerPaysClosingCosts:true});
  assert.equal(await rpc('icash_recorded_reception_property_context',{p_id:session,p_nonce_hash:'wrong'}),null);
  await q('begin');await q('update icash_recorded_reception_private.sessions set account_id=$2 where id=$1',[session,other]);assert.equal(await incoming(),null);await q('rollback');
  await q('begin');await q("update icash_text_threads set party='seller' where id=$1",[thread.id]);assert.deepEqual(await incoming(),{status:'matched',address:'123 Main Street'});await q('rollback');
@@ -161,9 +169,9 @@ try{
  await q("insert into icash_live_conversations(account_id,screening_id,party,agent_id,conversation_id,operation_key,contact_key,strategy_key,tool_token_hash,tool_expires_at) values($1,$2,'buyer','agent_fixture','conv_buyercallback',$3,repeat('d',64),'buyer_followup',repeat('e',64),now()+interval '1 hour')",[account,screening,incomingOperation]);
  const callback=await rpc('icash_live_callback_tool',{p_hash:'e'.repeat(64),p_conversation:'conv_buyercallback',p_due:new Date(Date.now()+600000).toISOString(),p_timezone:'America/Chicago',p_readback:'SIMULATION confirmed future time',p_confirmation:'yes'});
  assert.equal(callback.saved,false);assert.equal(callback.reason,'buyer_outbound_calls_disabled');assert.equal((await one('select count(*) n from icash_live_callbacks')).n,0);
- assert.equal((await data()).askingPriceCents,4893700,'buyer package survives channel change');
+ assert.equal((await data()).askingPriceCents,4900000,'buyer package survives channel change');
  console.log('PASS buyer written-only migration: untouched queued calls retired, callback denied, inbound buyer calls and signed-price package retained.');
  await testOwnerBuyerDelivery(f,{link:l,realBuyerThread:thread.id,realBuyerEmail:email,emailRate,session});
- console.log('PASS: seller-only signature held; all signatures trigger one research job; signed price + $10000; share link without private seller data; tenant isolation; cancellation, changed price, revocation and expiry invalidate package. Synthetic evidence only.');
+ console.log('PASS: seller-only signature held; all signatures trigger one research job; rounded buyer total with matching fee; legacy advertised price retained; share link without private seller data; tenant isolation; cancellation, changed price, revocation and expiry invalidate package. Synthetic evidence only.');
 }catch(e){console.error('BUYER SIMULATION FAILED:',e.message,e.where??'',e.stack?.split('\n').slice(1,4).join('\n'));process.exitCode=1;}
 finally{await pg.close();globalThis.fetch=originalFetch;if(originalReady===undefined)delete process.env.ICASH_LIVE_WORK_READY;else process.env.ICASH_LIVE_WORK_READY=originalReady;}

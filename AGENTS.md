@@ -20,6 +20,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Buyer packages must not describe where property images came from. Use neutral captions and image descriptions such as Street view, Aerial view or Property photo; keep source metadata internal.
 - The owner approved displaying the assignment fee on the original assignment contract (`owner_original_20261009`) on October 10, 2026. Keep acquisition pricing blocked in buyer agreements and keep the fee/spread private in buyer packages, AI conversations, texts and emails. Preserve the original non-refundable deposit clause; new buyer EMD is 20% of the fee, capped at $5,000, with only the deposit dollar amount shown to buyers outside the contract.
 - Customer credits are charged for completed usage. Do not withhold the maximum quoted amount from the wallet or impose daily/lifetime activation spending caps. Keep idempotent usage authorizations, actual-cost records, bounded calls, paid access, contact permissions, and zero-balance admission checks.
+- New automatic seller offers round down to whole $1,000 amounts before quoting; new automatic buyer asking prices round up to whole $1,000 amounts before marketing, with the fee and agreement matching that total. Preserve already accepted prices, issued agreements and published buyer terms. After verified signing, congratulate the seller and make viewing availability the next step; collecting available times does not book a visit.
 
 # Development test spending
 

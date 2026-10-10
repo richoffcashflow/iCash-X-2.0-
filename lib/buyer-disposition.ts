@@ -1,10 +1,11 @@
 import {sellerViewingSlots,viewingSlotLabel,buyerViewingFollowup} from './buyer-purchase-terms.ts';
 import {buyerPackagePhotos} from './buyer-package-photos.ts';
-/** The operator's standing disposition price. Seller purchase math is separate. */
+import {roundedBuyerPrice} from './property-price.ts';
+/** Minimum fee for a new rounded buyer asking price. Seller purchase math is separate. */
 export const assignmentFeeCents=1_000_000;
 export function buyerAskingPrice(purchasePriceCents:number){
  if(!Number.isSafeInteger(purchasePriceCents)||purchasePriceCents<=0||!Number.isSafeInteger(purchasePriceCents+assignmentFeeCents))throw Error('Signed purchase price required');
- return purchasePriceCents+assignmentFeeCents;
+ return roundedBuyerPrice(purchasePriceCents+assignmentFeeCents);
 }
 export type BuyerPackage={address:string;principal:string;purchasePriceCents?:number;assignmentFeeCents?:number;askingPriceCents:number;repairsCents:number|null;arvCents:number|null;closingDate:string|null;businessPhone:string|null;fetchedAt:string|null;propertyImages?:unknown;latitude?:unknown;longitude?:unknown;sellerPhotos?:unknown;depositCents?:number|null;viewingSlots?:unknown;reserved?:boolean};
 const money=(n:number|null)=>n===null?'Not available':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(n/100);
