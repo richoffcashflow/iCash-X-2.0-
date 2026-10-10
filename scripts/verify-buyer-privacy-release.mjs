@@ -10,6 +10,7 @@ import {inspectRecordedReceptionAgent} from '../lib/recorded-reception.ts';
 import {receptionWorkspacePostcallAbsent} from '../lib/general-reception.ts';
 import {isolatedBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {boundedBytes} from '../lib/required-call-recording-provider.ts';
+import {diagnoseReceptionFingerprint} from './reception-fingerprint-diagnostic.mjs';
 
 if(process.env.VERCEL_ENV!=='production'||process.env.VERCEL_GIT_COMMIT_REF!=='main')process.exit(0);
 const commit=process.env.VERCEL_GIT_COMMIT_SHA;
@@ -47,6 +48,7 @@ if(!observed.safe){
  // Only internal check names, booleans and bounded tool-shape evidence. Never
  // log provider configuration, prompt text, webhook headers or credentials.
  console.error('Buyer provider verification mismatch',JSON.stringify({failedChecks:Object.entries(observed.checks).filter(([,passed])=>!passed).map(([name])=>name),hashMatches:observed.hash===c.config_hash,versionMatches:agent.version_id===c.reviewed_version_id,inlineTools:observed.inlineTools}));
+ if(observed.hash!==c.config_hash)console.error('Buyer provider fingerprint diagnostic',JSON.stringify(diagnoseReceptionFingerprint(agent,c.config_hash)));
  throw Error('BUYER_PRIVACY_PROVIDER_SOURCE_CHANGED');
 }
 if(!p||p.askingPriceCents!==16227050||p.depositCents!==200000||p.closingDate!=='2026-11-07')throw Error('BUYER_PRIVACY_CURRENT_PACKAGE_REQUIRED');
