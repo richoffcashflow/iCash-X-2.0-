@@ -11,6 +11,7 @@ import {receptionWorkspacePostcallAbsent} from '../lib/general-reception.ts';
 import {isolatedBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {boundedBytes} from '../lib/required-call-recording-provider.ts';
 import {receptionReviewReport} from './reception-review-report.mjs';
+import {assertBuyerPrivacyReleaseSource,receptionRecovery} from './buyer-privacy-release-source.mjs';
 
 if(process.env.VERCEL_ENV!=='production'||process.env.VERCEL_GIT_COMMIT_REF!=='main')process.exit(0);
 const commit=process.env.VERCEL_GIT_COMMIT_SHA;
@@ -18,16 +19,18 @@ if(!/^[a-f0-9]{40}$/.test(commit??''))throw Error('BUYER_PRIVACY_RELEASE_COMMIT_
 const test=spawnSync(process.execPath,['--experimental-strip-types','--test',
  'tests/buyer-package-photos.test.mjs','tests/buyer-package-email.test.mjs',
  'tests/deal-documents.test.mjs','tests/signing-service-validation.test.mjs','tests/assignment-contract-policy.test.mjs',
- 'tests/buyer-scenarios.test.mjs'],{stdio:'inherit'});
+ 'tests/buyer-scenarios.test.mjs','tests/buyer-privacy-release-source.test.mjs'],{stdio:'inherit'});
 if(test.status!==0)throw Error('BUYER_PRIVACY_APPLICATION_TESTS_REQUIRED');
 const account='48dfb798-8c1a-404f-88c0-c396cc067062',deal='f50f5183-9b83-4cb3-b099-76f246e7ac9b';
-const [c,held,p,failed]=await Promise.all([
+const [c,held,p,failed,recovery]=await Promise.all([
  db('rpc/icash_get_recorded_reception_config','POST',{p_called_number:'+17816093521'}),
  db('rpc/icash_buyer_outreach_held','POST',{p_account:account,p_deal:deal}),
  db('rpc/icash_buyer_package_data','POST',{p_account:account,p_deal:deal}),
  db('icash_integration_checks?provider=eq.buyer_scenario_audit_20261009_v7&select=result'),
+ db('icash_integration_checks?provider=eq.'+receptionRecovery.marker+'&select=result'),
 ]);
-if(c?.id!=='036a642a-2683-44b2-be50-52193aea693b'||c.context_policy!=='automatic_offer_v11'||c.context_policy_hash!==isolatedBuyerReceptionPolicyHash||c.branch_id!=='agtbrch_8101m4h801smere91ege6f978hc7'||c.version_id!=='agtvrsn_7001m4h801skee292g590meg3yg0'||c.config_hash!=='b1a4c75ebac9890933189d3b98f68c34774e9cbbd79b72a62756c70e3ebcc060')throw Error('BUYER_PRIVACY_UNCHANGED_ACTIVE_SOURCE_REQUIRED');
+assertBuyerPrivacyReleaseSource(c,recovery[0]?.result);
+if(c.context_policy_hash!==isolatedBuyerReceptionPolicyHash)throw Error('BUYER_PRIVACY_SOURCE_POLICY_REQUIRED');
 if(held!==true)throw Error('BUYER_PRIVACY_OUTREACH_HOLD_REQUIRED');
 const audit=failed[0]?.result;
 if(audit?.status!=='failed'||audit.code!=='BUYER_SCENARIO_FAILURES_REQUIRE_FIX'||audit.fixtureHash!=='d122040ff176d09d208e77fafdc7c67f5c42024d0118ce5d76221feff1b988e0'||audit.count!==30||audit.tests?.length!==30||audit.tests.some(t=>!['passed','failed'].includes(t.status)))throw Error('BUYER_PRIVACY_FAILED_VOICE_EVIDENCE_REQUIRED');
@@ -90,5 +93,5 @@ const marker='buyer_privacy_release_20261009_'+commit.slice(0,12);
 const [prior]=await db('icash_integration_checks?provider=eq.'+marker+'&select=result');
 if(prior){if(prior.result?.status!=='verified'||prior.result.commit!==commit||prior.result.sourceConfigHash!==observed.hash||prior.result.candidateActivationAllowed!==false)throw Error('BUYER_PRIVACY_RELEASE_EVIDENCE_CHANGED');}
 else await db('icash_integration_checks','POST',{provider:marker,checked_at:new Date().toISOString(),result});
-console.log('Buyer application privacy verified against unchanged active v11. Candidate activation remains blocked. Database privacy migration follows READY application deployment.');
+console.log('Buyer application privacy verified against the exact approved active v11 configuration. Candidate activation remains blocked.');
 console.log('Available voice models:',JSON.stringify(models));
