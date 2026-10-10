@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import * as client from '../lib/webinar-client.ts';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {renderToStaticMarkup} from 'react-dom/server';
@@ -9,7 +10,7 @@ const code=ts.transpileModule(readFileSync(new URL('../components/closing-setup.
 const view={setup:null,verifiedContact:null,directory:[],buyerSuggestions:[],titleEmailInAgreement:null};
 function render(editing,payout={payeeName:'Fixture LLC',payeeType:'company',method:'wire',mailingAddress:'',detailsSharedWithTitle:false}){
  let index=0;const mod={exports:{}};
- new Function('require','module','exports',code)(name=>name==='react'?{useState:initial=>{const current=index++;return [current===0?payout:current===2?editing:initial,()=>{}];}}:name==='@/lib/closing-setup'?policy:require(name),mod,mod.exports);
+ new Function('require','module','exports',code)(name=>name==='@/lib/webinar-client'?client:name==='react'?{useState:initial=>{const current=index++;return [current===0?payout:current===2?editing:initial,()=>{}];}}:name==='@/lib/closing-setup'?policy:require(name),mod,mod.exports);
  return renderToStaticMarkup(mod.exports.ClosingSetup({dealId:'fixture',view,onSaved(){}}));
 }
 let html=render('payout');

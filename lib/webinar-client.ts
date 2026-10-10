@@ -1,17 +1,22 @@
 /** Bounded browser requests. Never automatically repeat a write or payment. */
 export async function webinarRequest<T>(path:string,init:RequestInit={},timeoutMs=25000):Promise<T>{
  const controller=new AbortController();
- const abort=()=>controller.abort();
- if(init.signal?.aborted)controller.abort();
+ let rejectAbort:(error:Error)=>void=()=>{};
+ const interrupted=new Promise<never>((_,reject)=>{rejectAbort=reject;});
+ const abort=()=>{controller.abort();rejectAbort(Error('Request interrupted'));};
+ if(init.signal?.aborted)abort();
  else init.signal?.addEventListener('abort',abort,{once:true});
  const timer=setTimeout(abort,timeoutMs);
  try{
-  const response=await fetch(path,{...init,signal:controller.signal});
-  const data=await response.json().catch(()=>null);
-  if(!response.ok||!data||typeof data!=='object')throw Object.assign(Error(typeof data?.error==='string'?data.error:'Could not connect. Please try again.'),{status:response.status});
-  return data as T;
+  return await Promise.race([(async()=>{
+   if(controller.signal.aborted)throw Error('Request interrupted');
+   const response=await fetch(path,{...init,signal:controller.signal});
+   const data=await response.json().catch(()=>null);
+   if(!response.ok||!data||typeof data!=='object')throw Object.assign(Error(typeof data?.error==='string'?data.error:'Could not connect. Please try again.'),{status:response.status});
+   return data as T;
+  })(),interrupted]);
  }catch(error){
-  if(controller.signal.aborted)throw Error('The connection took too long. Please try again.');
+  if(controller.signal.aborted)throw Error(['GET','HEAD'].includes((init.method??'GET').toUpperCase())?'The connection took too long. Please try again.':'The connection took too long. This action may have completed. Check its status before trying again.');
   throw error instanceof Error?error:Error('Could not connect. Please try again.');
  }finally{clearTimeout(timer);init.signal?.removeEventListener('abort',abort);}
 }
