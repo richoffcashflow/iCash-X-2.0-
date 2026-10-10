@@ -16,6 +16,7 @@ async function request(path:string,body?:unknown,testMode=false,method='POST'){
  if(!r.ok)throw new Error('Signing provider request failed. Do not resend until its status is checked.');return r;
 }
 const numericId=(id:unknown)=>String(z.coerce.number().int().positive().safe().parse(id));
+const signingAllowed=(accountId:string,id:string)=>db<boolean>('rpc/icash_signing_action_allowed','POST',{p_account:accountId,p_envelope:id});
 // Existing assignment forms disclose the private fee. Do not silently relabel
 // or remove contractual terms: require a reviewed buyer agreement before delivery.
 function buyerPricePrivacy(kind:SigningKind,template:Template){
@@ -68,19 +69,24 @@ export async function sendForSignatures(i:{accountId:string;userId:string;custom
  try{
   if(signingTermsHash(envelope.terms)!==envelope.terms_hash)throw new Error('Contract changed. Review required before sending.');
   const send=async()=>{
+   if(!await signingAllowed(i.accountId,envelope.id))throw Error('Signing is paused for cancellation.');
    signingReadiness(i.kind,dealTermsSchema.parse(envelope.terms),i.signers,identity.principal,deal.stage,Date.now(),template.form_profile);
    if(i.autoSignature)await db('icash_signature_authorizations','POST',{envelope_id:envelope.id,account_id:i.accountId,actor_user_id:i.userId,terms_hash:envelope.terms_hash,signature_text:i.autoSignature,expires_at:new Date(Math.min(Date.now()+30*86400000,Date.parse(template.reviewed_until))).toISOString()});
    const raw=await (await request('submissions',{template_id:Number(numericId(template.provider_template_id)),order:'preserved',send_email:true,send_sms:false,reply_to:i.customerEmail,submitters:recipients.map((r,n)=>({name:r.name,message:signatureRequestMessage(identity.principal,terms.address,n===recipients.length-1),...(r.email?{email:r.email}:{}),...('phone' in r&&r.phone?{phone:r.phone,send_email:false,send_sms:i.phoneLinkOnly!==true,require_phone_2fa:true}:{}),role:r.placeholder_name,order:n,external_id:`${envelope.id}:${r.id}`,metadata:{terms_hash:envelope.terms_hash},require_email_2fa:!('phone' in r&&r.phone),fields:template.form_profile===originalContractProfile?originalContractFieldsForRole(i.kind,r.placeholder_name,values):n===0?Object.entries(values).map(([k,v])=>({name:template.field_map[k],default_value:v,readonly:true})):[]}))},testMode)).json();
    if(!Array.isArray(raw)||raw.length!==recipients.length||raw.some(r=>r.submission_id!==raw[0].submission_id))throw new Error('Signature response needs review.');
    const providerId=numericId(raw[0].submission_id);
-   await db(`icash_signing_envelopes?id=eq.${envelope.id}&state=eq.creating`,'PATCH',{provider_id:providerId,state:'awaiting_counterparty',provider_status:'Created'});
+   // Keep a late provider ID even if cancellation won the race. The database preserves the hold.
+   await db(`icash_signing_envelopes?id=eq.${envelope.id}&account_id=eq.${i.accountId}`,'PATCH',{provider_id:providerId,state:'awaiting_counterparty',provider_status:'Created'});
+   if(!await signingAllowed(i.accountId,envelope.id))await request(`submissions/${providerId}`,{expire_at:new Date(Date.now()-60000).toISOString()},testMode,'PUT');
   };
   if(testMode)await send();else await dispatchReservedOperation({accountId:i.accountId,operationKey:`signing:${envelope.id}`,rateId:template.rate_id!,permissionUntil:template.reviewed_until},send);
-  return {id:envelope.id,testMode,message:testMode?'Test signing request sent. It cannot put the property under contract.':'Signing request created. The other party signs first. You can review and sign from your workspace.'};
+  const active=await signingAllowed(i.accountId,envelope.id);
+  return {id:envelope.id,testMode,message:!active?'Signing is held for cancellation. Open the cancellation controls to check its final status.':testMode?'Test signing request sent. It cannot put the property under contract.':'Signing request created. The other party signs first. You can review and sign from your workspace.'};
  }catch(e){await db(`icash_signing_envelopes?id=eq.${envelope.id}`,'PATCH',{state:'needs_review'});throw e;}
 }
 export async function refreshSigning(accountId:string,id:string){
  const [e]=await db<Envelope[]>(`icash_signing_envelopes?id=eq.${id}&account_id=eq.${accountId}&select=*`);
+ if(e&&['cancellation_pending','cancelled'].includes(e.state))return {status:e.state};
  if(!e?.provider_id)return {status:'needs_review'};
  if(['completed','test_completed'].includes(e.state))return {status:e.state};
  if(!await db<boolean>('rpc/icash_claim_signing_poll','POST',{p_account:accountId,p_id:id}))return {status:e.state};
@@ -107,6 +113,7 @@ export async function refreshSigning(accountId:string,id:string){
    const customer=raw.submitters.find(s=>s.external_id===`${e.id}:${e.recipients.at(-1)!.id}`)!;
    // One claim, one write. Unknown completion is resolved with GET on later polls, never re-signed blindly.
    signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms),Date.now(),template.form_profile);
+   if(!await signingAllowed(accountId,e.id))return {status:'cancellation_pending'};
    await request(`submitters/${numericId(customer.id)}`,{completed:true,fields:[{name:template.customer_signature_field,default_value:signature,readonly:true},{name:template.customer_consent_field,default_value:true,readonly:true}]},e.test_mode,'PUT');
    raw=await (await request(`submissions/${numericId(e.provider_id)}`,undefined,e.test_mode)).json();d=normalize(raw,e);
    state=verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients});
@@ -115,13 +122,14 @@ export async function refreshSigning(accountId:string,id:string){
  // Do not retain provider signing URLs, passcodes or edit capabilities in customer-visible evidence.
  const evidence={id:d.id,status:d.status,test_mode:d.test_mode,metadata:d.metadata,apply_signing_order:d.apply_signing_order,recipients:d.recipients.map(r=>({id:r.id,email:r.email,phone:r.phone,status:r.status,signing_order:r.signing_order}))};
  await db('rpc/icash_save_signing_status','POST',{p_id:e.id,p_state:state,p_evidence:evidence});
+ if(!await signingAllowed(accountId,e.id))return {status:'cancellation_pending'};
  if(!e.test_mode&&state==='customer_signature_needed')try{await dispatchAttentionNotification(accountId,{db});}catch{/* Durable notification sources remain available to the worker. */}
  if(!e.test_mode&&['customer_signature_needed','completed'].includes(state))try{await dispatchCustomerUpdate(accountId,{db});}catch{/* Delivery retries remain idempotent in the notification worker. */}
  return {status:state};
 }
 export async function completedSigningPdf(accountId:string,id:string,audit=false){
  const [e]=await db<Envelope[]>(`icash_signing_envelopes?id=eq.${id}&account_id=eq.${accountId}&select=*`);
- if(!e?.provider_id||!['completed','test_completed'].includes(e.state))throw new Error('Completed signatures required.');
+ if(!e?.provider_id||!['completed','test_completed','cancellation_pending','cancelled'].includes(e.state))throw new Error('Completed signatures required.');
  const raw=await (await request(`submissions/${numericId(e.provider_id)}`,undefined,e.test_mode)).json() as Submission;
  const d=normalize(raw,e);const state=verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients});
  if(!['completed','test_completed'].includes(state))throw new Error('Completed signatures required.');
@@ -134,6 +142,7 @@ export async function completedSigningPdf(accountId:string,id:string,audit=false
 export async function customerSigningLink(accountId:string,id:string,email:string){
  const [e]=await db<Envelope[]>(`icash_signing_envelopes?id=eq.${id}&account_id=eq.${accountId}&select=*`);
  if(!e?.provider_id)throw new Error('Signing request not ready.');
+ if(!await signingAllowed(accountId,e.id))throw Error('This agreement is held for cancellation.');
  const raw=await (await request(`submissions/${numericId(e.provider_id)}`,undefined,e.test_mode)).json() as Submission;const d=normalize(raw,e);
  const status=verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients});
  if(status!=='customer_signature_needed')throw new Error('Waiting for the other party to sign.');
@@ -148,6 +157,7 @@ export async function customerSigningLink(accountId:string,id:string,email:strin
 export async function pendingCounterpartySigningLink(accountId:string,id:string,phone:string){
  const [e]=await db<Envelope[]>(`icash_signing_envelopes?id=eq.${id}&account_id=eq.${accountId}&select=*`);
  if(!e?.provider_id||e.test_mode||e.state!=='awaiting_counterparty')throw Error('An approved live contract is required.');
+ if(!await signingAllowed(accountId,e.id))throw Error('This agreement is held for cancellation.');
  const raw=await (await request(`submissions/${numericId(e.provider_id)}`,undefined,false)).json() as Submission;
  const d=normalize(raw,e);if(verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients})!=='awaiting_counterparty')throw Error('Waiting for another signing step.');
  const [reviewedTemplate]=await db<Template[]>(`icash_signing_templates?id=eq.${e.template_id}&select=*`);

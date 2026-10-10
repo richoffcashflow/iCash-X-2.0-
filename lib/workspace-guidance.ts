@@ -11,6 +11,7 @@ export function propertyBotStatus(input: {manual: boolean; paused: boolean; avai
  if(input.practice) return {label: 'Practice', tone: 'gray', detail: 'Example only. No live work.'};
  if(input.stale) return {label: 'Checking status', tone: 'amber', detail: 'Refresh to confirm the latest bot status.'};
  if(['closed','canceled','cancelled'].includes(input.stage ?? '')) return {label: input.stage === 'closed' ? 'Completed' : 'Stopped', tone: 'gray', detail: 'No new work is expected for this property.'};
+ if(input.stage==='cancellation_pending') return {label:'Cancellation pending',tone:'gray',detail:'Automatic work is paused until cancellation is resolved.'};
  if(input.manual) return {label: 'You’re in control', tone: 'gray', detail: 'New automatic work is paused for this property.'};
  if(input.attention) return {label: 'Needs you', tone: 'amber', detail: 'A saved request needs your attention.'};
  if(input.paused) return {label: 'AI paused', tone: 'gray', detail: 'Your account’s bot is paused.'};
@@ -20,6 +21,7 @@ export function propertyBotStatus(input: {manual: boolean; paused: boolean; avai
 
 export function propertyNextMove(property: WorkspaceProperty, work: Context) {
  const deal = work.deals.find(item => item.screening_id === property.id);
+ if(deal?.stage === 'cancellation_pending') return 'Finish the cancellation review below. Automatic work is paused.';
  if(deal?.stage === 'closed') return 'Review the closing record and final documents.';
  if(['canceled','cancelled'].includes(deal?.stage??'')) return 'This deal is stopped. Its history is saved here.';
  if(needsAttention(property.id, work)) return 'Review the request below so this property can move forward.';
@@ -35,7 +37,7 @@ export function propertyNextMove(property: WorkspaceProperty, work: Context) {
 export function mostPromisingProperty(properties: WorkspaceProperty[], work: Context) {
  const candidates = properties.filter(property => {
   const stage = work.deals.find(item => item.screening_id === property.id)?.stage;
-  return property.result.financialCheck.status === 'eligible' && !['closed','canceled','cancelled'].includes(stage ?? '') && !property.result.property.propertyId.startsWith('practice_');
+  return property.result.financialCheck.status === 'eligible' && !['closed','canceled','cancelled','cancellation_pending'].includes(stage ?? '') && !property.result.property.propertyId.startsWith('practice_');
  });
  const score = (property: WorkspaceProperty) => {
   const deal = work.deals.find(item => item.screening_id === property.id);
