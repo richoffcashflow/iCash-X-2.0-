@@ -11,8 +11,8 @@ export async function GET(req:Request){
   if(!['1','7','30'].includes(period)||timezone.length>100)return NextResponse.json({error:'Choose Today, 7 days or 30 days.'},{status:400,headers});
   try{new Intl.DateTimeFormat('en-US',{timeZone:timezone});}catch{return NextResponse.json({error:'Invalid timezone.'},{status:400,headers});}
   const days=Number(period) as ActivityDays;
-  const report=await db<unknown>('rpc/icash_activity_report','POST',{p_account:accountId,p_days:days,p_timezone:timezone});
+  const [report,savings]=await Promise.all([db<unknown>('rpc/icash_activity_report','POST',{p_account:accountId,p_days:days,p_timezone:timezone}),db<unknown>('rpc/icash_vip_savings','POST',{p_account:accountId}).catch(()=>null)]);
   if(!validActivityReport(report,days))throw Error();
-  return NextResponse.json(report,{headers});
+  return NextResponse.json({...report,vipSavingsCents:typeof savings==='number'&&Number.isSafeInteger(savings)&&savings>=0?savings:null},{headers});
  }catch{return NextResponse.json({error:'Could not load activity. Please retry.'},{status:503,headers});}
 }

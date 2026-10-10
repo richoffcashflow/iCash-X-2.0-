@@ -1,7 +1,6 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {ArrowDown,ArrowLeft,ArrowUp,LifeBuoy,MoreHorizontal,X} from 'lucide-react';
-import {MembershipSettings} from '@/components/membership-settings';
 import '@/app/membership.css';
 import {AccountAccess} from '@/components/account-access';
 import '@/app/support/support.css';
@@ -18,8 +17,8 @@ export function SupportChat({onClose,active=true,onMembershipChanged}:{onClose?:
  const confirmationHeading=useRef<HTMLHeadingElement>(null);
  const historyLog=useRef<HTMLDivElement>(null),composer=useRef<HTMLTextAreaElement>(null),readSequence=useRef(0);
  const nearLatest=useRef(true),reading=useRef(false),currentThread=useRef(thread);currentThread.current=thread;
- const [showLatest,setShowLatest]=useState(false),[membershipOpen,setMembershipOpen]=useState(false);
- const clearAccount=useCallback(()=>{setNeedsSignIn(true);setMembershipOpen(false);setThreads([]);setMessages([]);setThread(null);setCancellations([]);setConfirmation(null);setAck(false);setDraft('');setNotice('');setError('');request.current=null;},[]);
+ const [showLatest,setShowLatest]=useState(false);
+ const clearAccount=useCallback(()=>{setNeedsSignIn(true);setThreads([]);setMessages([]);setThread(null);setCancellations([]);setConfirmation(null);setAck(false);setDraft('');setNotice('');setError('');request.current=null;},[]);
  const load=useCallback(async(id?:string,background=false)=>{
   if(background&&reading.current)return;reading.current=true;
   const sequence=++readSequence.current;if(!background)setLoading(true);
@@ -108,8 +107,7 @@ export function SupportChat({onClose,active=true,onMembershipChanged}:{onClose?:
   </section>
   <div className="support-compose-dock">
    <form onSubmit={send} className="support-composer" data-unsaved-draft={draft.trim()?'true':undefined}><label htmlFor="support-message" className="sr-only">Your message</label><div className="support-input-row"><textarea ref={composer} id="support-message" value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing&&window.matchMedia('(pointer: fine)').matches){e.preventDefault();void send(e);}}} maxLength={2000} rows={1} placeholder="Message support…" disabled={busy}/><button type="submit" className="support-primary support-send" aria-label={busy?'Sending message':'Send message'} disabled={busy||loading||!draft.trim()}><ArrowUp size={20}/></button></div></form>
-   <div className="support-actions"><button type="button" disabled={busy||loading} onClick={()=>void escalate()}>{draft.trim()?'Send to team':'Ask the team'}</button><button type="button" onClick={()=>setMembershipOpen(v=>!v)} aria-expanded={membershipOpen}>Cancel subscription</button></div>
-   {membershipOpen&&<MembershipSettings cancellationOnly onClosed={()=>setMembershipOpen(false)} onChanged={async stopped=>{await onMembershipChanged?.(stopped);await load(thread??undefined);if(stopped!==undefined){setMembershipOpen(false);setNotice(stopped?'Subscription cancelled. Your unused credits are saved.':'Subscription updated.');}}}/>}
+   <div className="support-actions"><button type="button" disabled={busy||loading} onClick={()=>void escalate()}>{draft.trim()?'Send to team':'Ask the team'}</button></div>
   </div>
  </section>;
 }

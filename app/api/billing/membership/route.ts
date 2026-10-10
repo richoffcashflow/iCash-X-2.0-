@@ -1,3 +1,5 @@
+import {changeVipPlan,vipRetentionOffer} from '@/lib/vip-membership';
+import {vipRetentionVersion,vipRetentionCents} from '@/lib/vip-policy';
 import {recordPurchaseAcceptance} from '@/lib/purchase-acceptance';
 import {NextResponse} from 'next/server';
 import {cookies} from 'next/headers';
@@ -8,7 +10,7 @@ import {db,guestHash} from '@/lib/stripe-test';
 import {allowedOrigin,fundingMode} from '@/lib/funding-policy';
 import {fundingStripe,limitRequest,validGuest} from '@/lib/funding';
 import {customerFundingReady} from '@/lib/launch-readiness';
-import {membershipOffer,accountMembership,publicMembership,reconcileMembershipCheckout,stopMembership,membershipRetentionOffer,retainMembership,retentionVersion,type Membership} from '@/lib/membership';
+import {membershipOffer,accountMembership,publicMembership,reconcileMembershipCheckout,stopMembership,retainMembership,retentionVersion,type Membership} from '@/lib/membership';
 import {membershipTerms,membershipTermsVersion} from '@/lib/membership-policy';
 import {checkoutCustomerContext} from '@/lib/checkout-customer-context';
 import {checkoutPublishableKey,membershipCheckoutPresentation,checkoutMatchesPresentation} from '@/lib/embedded-checkout-policy';
@@ -24,15 +26,19 @@ export async function GET(req:Request){try{
  if(scope&&mode){const rows=await db<Membership[]>(`icash_memberships?${scope}&mode=eq.${mode}${sessionId?'&stripe_session_id=eq.'+sessionId:''}&order=created_at.desc&select=*&limit=1`);m=rows[0]??null;if(sessionId&&!m)return NextResponse.json({error:'Sign in with your payment email to open this purchase.'},{status:404,headers});if(m?.stripe_session_id&&(sessionId||m.state==='pending'||!m.paid_through))m=await reconcileMembershipCheckout(m);}
  const customer=await checkoutCustomerContext(hash,user?.email);
  const postPurchaseUrl=await paidVipDestination(m).catch(()=>null);
- return NextResponse.json({postPurchaseUrl,offer,mode,embeddedReady:!!checkoutPublishableKey(mode),customerName:customer.name??'',ready:offer.enabled&&await customerFundingReady(),membership:publicMembership(m),retentionOffer:await membershipRetentionOffer(m),needsClaim:!!m?.paid_through&&!m.account_id,email:m?.paid_through&&!user?m.payer_email:user?.email??customer.email??null},{headers});
+ return NextResponse.json({postPurchaseUrl,offer,mode,embeddedReady:!!checkoutPublishableKey(mode),customerName:customer.name??'',ready:offer.enabled&&await customerFundingReady(),membership:publicMembership(m),retentionOffer:await vipRetentionOffer(m),needsClaim:!!m?.paid_through&&!m.account_id,email:m?.paid_through&&!user?m.payer_email:user?.email??customer.email??null},{headers});
  }catch{return NextResponse.json({error:'Could not check software access. Please retry.'},{status:503,headers});}}
-const input=z.discriminatedUnion('action',[z.object({action:z.literal('checkout'),accepted:z.literal(true),version:z.literal(membershipTermsVersion),revision:z.number().int().positive(),totalCents:z.number().int().positive(),embedded:z.boolean().optional(),webinarSessionId:z.string().uuid().optional(),timezone:z.string().max(80).optional()}).strict(),z.object({action:z.literal('cancel')}).strict(),z.object({action:z.literal('manage')}).strict(),z.object({action:z.literal('retain'),accepted:z.literal(true),version:z.literal(retentionVersion),priceCents:z.number().int().positive(),months:z.literal(6)}).strict()]);
+const input=z.discriminatedUnion('action',[z.object({action:z.literal('checkout'),accepted:z.literal(true),version:z.literal(membershipTermsVersion),revision:z.number().int().positive(),totalCents:z.number().int().positive(),embedded:z.boolean().optional(),webinarSessionId:z.string().uuid().optional(),timezone:z.string().max(80).optional()}).strict(),z.object({action:z.literal('cancel')}).strict(),z.object({action:z.literal('manage')}).strict(),z.object({action:z.literal('retain_vip'),accepted:z.literal(true),version:z.literal(vipRetentionVersion),priceCents:z.literal(vipRetentionCents)}).strict(),z.object({action:z.literal('retain'),accepted:z.literal(true),version:z.literal(retentionVersion),priceCents:z.number().int().positive(),months:z.literal(6)}).strict()]);
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
  try{
  const raw=await req.text();if(raw.length>1024)throw Error();const i=input.parse(JSON.parse(raw)),mode=fundingMode();if(!mode)throw Error();const {token,hash,account,user}=await owner(true);await limitRequest(req,'membership',token!,8,600);const stripe=fundingStripe(),origin=req.headers.get('origin')!;
  if(i.action!=='checkout'){
   if(!account||!user)return NextResponse.json({error:'Sign in to manage your software subscription.'},{status:401,headers});const m=await accountMembership(account.id);if(!m)throw Error();
+  if(i.action==='retain_vip'){
+   try{return NextResponse.json(await changeVipPlan(m,'retain_vip',origin,{request:req}),{headers});}
+   catch{return NextResponse.json({error:'Could not confirm the VIP offer. You can retry or cancel your subscription.'},{status:409,headers});}
+  }
   if(i.action==='retain'){
    if(i.priceCents!==m.price_cents-Math.round(m.price_cents*.5))return NextResponse.json({error:'The offer changed. Reopen it to review the current price.'},{status:409,headers});
    try{await retainMembership(m);}catch{return NextResponse.json({error:'Could not confirm the offer. You can retry or cancel your subscription.'},{status:409,headers});}

@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useState} from 'react';
 import {activityPeriods,validActivityReport,type ActivityDays,type ActivityReport} from '@/lib/activity-report';
-export function BudgetSummary(){
+export function BudgetSummary({vip=false}:{vip?:boolean}={}){
  const [days,setDays]=useState<ActivityDays>(1),[report,setReport]=useState<ActivityReport|null>(null),[error,setError]=useState(''),[retry,setRetry]=useState(0);
  useEffect(()=>{
   let active=true,inFlight=false;const controller=new AbortController();const timezone=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';
@@ -19,6 +19,7 @@ export function BudgetSummary(){
  return <section className="workspace-activity" aria-labelledby="workspace-activity-title">
   <div className="workspace-activity-heading"><h3 id="workspace-activity-title">Bot activity</h3><div className="activity-periods" role="group" aria-label="Activity period">{activityPeriods.map(period=><button key={period.days} type="button" aria-pressed={days===period.days} onClick={()=>setDays(period.days)}>{period.label}</button>)}</div></div>
   <dl className="activity-metrics" aria-busy={!current&&!error}>{metrics.map(([key,label,meaning])=><div key={key}><dt title={meaning}>{label}</dt><dd>{current?current[key].toLocaleString():'—'}</dd></div>)}</dl>
+  {current?.vipSavingsCents!=null&&(vip||current.vipSavingsCents>0)&&<p className="workspace-vip-savings"><strong>VIP saved you {new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(current.vipSavingsCents/100)}</strong><span>On completed usage and leads · all time</span></p>}
   <div className="activity-report-status">{!current&&!error&&<span role="status">Loading…</span>}{error&&<span role="status">{error}{current?' Showing last update.':''} <button type="button" onClick={()=>setRetry(v=>v+1)}>Retry</button></span>}</div>
  </section>;
 }

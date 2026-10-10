@@ -25,6 +25,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - New assignment fee targets match seller underwriting: $10,000 below $300,000 ARV and $20,000 at or above. Reduce the automatic target in $1,000 increments only while at least $10,000 fits within 70% of (ARV minus repairs), including the signed purchase. Hold unsupported new marketing for owner review. Larger explicitly saved fees must pass the same budget check. Preserve existing released prices, fees, deposits and signed agreements.
 
+- Cancellation is the last item in the workspace account menu. Offer ongoing VIP at $50/month only after explicit customer acceptance, with no extra charge today and no change to the renewal date. Keep a clear decline-and-cancel path. The VIP savings counter uses settled usage and lead prices, not projected income.
+
 # Development test spending
 
 - The owner stopped paid provider simulations after test runs exhausted ElevenLabs credits. Keep paid development simulations disabled, including direct CLI commands, deployment hooks and retries.
