@@ -20,6 +20,6 @@ export async function POST(req:Request){
  }catch(e){const message=e instanceof Error?e.message:'';return NextResponse.json({error:message.startsWith('[')||message==='Database request failed'?'Could not prepare signing. An existing request may need review before another can be sent.':message||'Signing unavailable.'},{status:409});}
 }
 export async function GET(req:Request){
- try{const {accountId}=await workAccount();const id=z.string().uuid().parse(new URL(req.url).searchParams.get('id'));const bytes=await completedSigningPdf(accountId,id,new URL(req.url).searchParams.get('audit')==='true');return new Response(bytes,{headers:{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="icash-signed-contract.pdf"','Cache-Control':'private, no-store'}});
+ try{const {accountId}=await workAccount({allowInactiveMembership:true});const id=z.string().uuid().parse(new URL(req.url).searchParams.get('id'));const bytes=await completedSigningPdf(accountId,id,new URL(req.url).searchParams.get('audit')==='true');return new Response(bytes,{headers:{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="icash-signed-contract.pdf"','Cache-Control':'private, no-store'}});
  }catch{return NextResponse.json({error:'Signed PDF unavailable.'},{status:409});}
 }

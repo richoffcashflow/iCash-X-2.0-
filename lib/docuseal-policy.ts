@@ -1,5 +1,5 @@
 import type {ProviderDocument} from './signing-policy.ts';
-export type Submission={id:number;submitters_order:string;completed_at:string|null;status?:string;audit_log_url?:string;combined_document_url?:string;submitters:{id:number;submission_id:number;email?:string|null;phone?:string|null;external_id:string;status:string;completed_at:string|null;slug:string;metadata:{terms_hash?:string};values?:{field:string;value:unknown}[]}[]};
+export type Submission={id:number;submitters_order:string;completed_at:string|null;expire_at?:string|null;status?:string;audit_log_url?:string;combined_document_url?:string;submitters:{id:number;submission_id:number;email?:string|null;phone?:string|null;external_id:string;status:string;completed_at:string|null;slug:string;metadata:{terms_hash?:string};values?:{field:string;value:unknown}[]}[]};
 export function normalizeDocuseal(d:Submission,e:{provider_id:string|null;id:string;test_mode:boolean;terms_hash:string;recipients:{id:string;email?:string|null;phone?:string|null}[]}):ProviderDocument{
  if(String(d.id)!==e.provider_id||d.submitters_order!=='preserved'||!Array.isArray(d.submitters)||d.submitters.length!==e.recipients.length)throw new Error('Signature evidence mismatch');
  // The response array is not a signing-order guarantee. Bind each signer to

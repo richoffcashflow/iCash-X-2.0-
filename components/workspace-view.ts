@@ -15,14 +15,14 @@ export type WorkspaceEvidence = {
 };
 export function needsAttention(id:string, work:WorkspaceEvidence) {
  const deal=work.deals.find(d=>d.screening_id===id);
- return !!work.closingReview?.some(c=>c.screening_id===id)||!!work.sellerRecovery?.some(g=>g.screening_id===id)||!!work.viewingRequests?.some(v=>v.screening_id===id)||!!work.propertyAttentionIds?.includes(id)||!!work.textAttention?.some(a=>a.screening_id===id)
+ return deal?.stage==='cancellation_pending'||!!work.closingReview?.some(c=>c.screening_id===id)||!!work.sellerRecovery?.some(g=>g.screening_id===id)||!!work.viewingRequests?.some(v=>v.screening_id===id)||!!work.propertyAttentionIds?.includes(id)||!!work.textAttention?.some(a=>a.screening_id===id)
   ||work.handoffs.some(h=>h.screening_id===id&&h.state==='open')
   ||!!work.callRequests?.some(c=>c.screening_id===id&&c.state==='needs_review')
   ||work.signing.some(s=>s.deal_id===deal?.id&&s.state==='customer_signature_needed');
 }
 export function propertyGroup(id:string,work:WorkspaceEvidence):Exclude<WorkspaceFilter,'all'> {
  if(needsAttention(id,work))return 'attention';
- return work.deals.some(d=>d.screening_id===id&&['closed','canceled'].includes(d.stage))?'history':'active';
+ return work.deals.some(d=>d.screening_id===id&&['closed','canceled','cancelled'].includes(d.stage))?'history':'active';
 }
 export function filterProperties<T extends WorkspaceProperty>(properties:T[],work:WorkspaceEvidence,filter:WorkspaceFilter,query=''):T[] {
  const needle=query.trim().toLocaleLowerCase();

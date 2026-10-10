@@ -14,11 +14,11 @@ export async function GET(req:Request){
   const {accountId}=await workAccount();const dealId=id.parse(new URL(req.url).searchParams.get('dealId'));
   const [deal]=await db<{id:string}[]>(`icash_deal_files?account_id=eq.${accountId}&id=eq.${dealId}&select=id`);
   if(!deal)return NextResponse.json({error:'Property unavailable.'},{status:404,headers});
-  const [availability,receipts,assignments]=await Promise.all([
+  const [availability,assignments]=await Promise.all([
    db<unknown[]>(`icash_seller_viewing_availability?account_id=eq.${accountId}&deal_id=eq.${dealId}&select=id,quote,slots,state,timezone,stated_at&order=stated_at.desc,created_at.desc,id.desc&limit=1`),
-   db<unknown[]>(`icash_buyer_deposit_receipts?account_id=eq.${accountId}&deal_id=eq.${dealId}&select=id,amount_cents,method,reference,created_at&limit=1`),
-   db<unknown[]>(`icash_signing_envelopes?account_id=eq.${accountId}&deal_id=eq.${dealId}&kind=eq.assignment&state=eq.completed&test_mode=eq.false&select=id,buyer:terms->>assignee,depositCents:terms->assignmentDepositCents&limit=2`)
+   db<{id:string}[]>(`icash_signing_envelopes?account_id=eq.${accountId}&deal_id=eq.${dealId}&kind=eq.assignment&state=eq.completed&test_mode=eq.false&select=id,buyer:terms->>assignee,depositCents:terms->assignmentDepositCents&limit=2`)
   ]);
+  const receipts=assignments.length===1?await db<unknown[]>(`icash_buyer_deposit_receipts?account_id=eq.${accountId}&deal_id=eq.${dealId}&envelope_id=eq.${assignments[0].id}&select=id,amount_cents,method,reference,created_at&limit=1`):[];
   return NextResponse.json({availability:availability[0]??null,receipt:receipts[0]??null,assignment:assignments.length===1?assignments[0]:null},{headers});
  }catch{return NextResponse.json({error:'Could not load viewing times and deposit status.'},{status:503,headers});}
 }

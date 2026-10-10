@@ -32,5 +32,5 @@ test('availability saves only requested windows and cannot reserve a property',a
 });
 test('read checks property ownership before loading private seller quotes or deposit references',async()=>{
  reads=[];owned=false;assert.equal((await GET(new Request(`https://www.geticashx.com/api/work/buyer-coordination?dealId=${deal}`))).status,404);assert.equal(reads.length,1);
- owned=true;reads=[];assert.equal((await GET(new Request(`https://www.geticashx.com/api/work/buyer-coordination?dealId=${deal}`))).status,200);assert.equal(reads.length,4);
+ owned=true;reads=[];assert.equal((await GET(new Request(`https://www.geticashx.com/api/work/buyer-coordination?dealId=${deal}`))).status,200);assert.equal(reads.length,3);
 });

@@ -22,6 +22,7 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_signing_templates'))return [template()];
  if(path==='rpc/icash_begin_signing'){if(advanceBeforeSend)now=Date.parse('2026-10-04T12:00:00Z');return envelope();}
  if(path.startsWith('icash_signing_envelopes'))return method==='PATCH'?[]:[envelope()];
+ if(path==='rpc/icash_signing_action_allowed')return true;
  if(path==='rpc/icash_claim_signing_poll')return true;
  if(path==='rpc/icash_save_signing_status')return null;
  if(path==='rpc/icash_claim_auto_signature'){if(formProfile===originalContractProfile)return null;autoClaims++;if(advanceAfterAutoClaim)now=Date.parse('2026-10-04T12:00:00Z');return 'Fixture signature';}
