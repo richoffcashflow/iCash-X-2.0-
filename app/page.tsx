@@ -4,7 +4,7 @@ import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import {workspaceNextAction,workspaceActionDisabled} from '@/lib/workspace-status';
-import {Menu,X} from 'lucide-react';
+import {BookOpen,Menu,X} from 'lucide-react';
 import styles from './workspace-easy.module.css';
 import './icash-brand.css';
 import {WorkspaceConversion} from '@/components/workspace-conversion';
@@ -41,6 +41,7 @@ export default function Home(){
  const [fundingSuggestion,setFundingSuggestion]=useState<{amountCents:number;reason:string}|null>(null);
  const [assistantRequest,setAssistantRequest]=useState<AssistantRequest|null>(null),[propertyRequest,setPropertyRequest]=useState<{id:string;nonce:number}|null>(null);
  const [settingsOpen,setSettingsOpen]=useState(false),[preferencesOpen,setPreferencesOpen]=useState(false);
+ const [courseOpen,setCourseOpen]=useState(false);
  const accountMenu=useRef<HTMLDetailsElement>(null);
  function closeAccountMenu(restoreFocus=false){const menu=accountMenu.current;if(!menu)return;menu.open=false;if(restoreFocus)menu.querySelector('summary')?.focus();}
  useEffect(()=>{
@@ -124,11 +125,12 @@ export default function Home(){
   <header className="console-header">
    <div className="workspace-logo">{profile?.displayName?<BotBrand profile={profile} compact/>:<><Image src="/icash-x-logo.png" alt="iCash X" width={111} height={62} priority/><b className="brand-version">2.0</b></>}</div>
    <div className="workspace-header-links">
-    <SupportLauncher key={account.email??'account'} onMembershipChanged={membershipChanged}/>
+    <button type="button" className="workspace-course-launcher" aria-haspopup="dialog" aria-expanded={courseOpen} onClick={()=>setCourseOpen(true)}><BookOpen size={17} aria-hidden="true"/>Course</button>
     {!workspaceLocked&&<WorkspaceUpdates onPreferences={()=>showDetails('notification-settings')} onBudget={()=>openFunding()}/>}
     <details ref={accountMenu} className="workspace-account-menu" onBlur={event=>{if(event.relatedTarget instanceof Node&&!event.currentTarget.contains(event.relatedTarget))closeAccountMenu();}}>
      <summary aria-label="Account menu" title="Account menu"><Menu size={21} aria-hidden="true"/></summary>
      <div className="workspace-account-options">
+      <SupportLauncher key={account.email??'account'} onMembershipChanged={membershipChanged} onOpen={()=>closeAccountMenu(true)} onClose={()=>accountMenu.current?.querySelector('summary')?.focus()}/>
       {account.isBillingOwner&&<a href="/admin" onClick={()=>closeAccountMenu()}>Admin</a>}
       {!workspaceLocked&&<button type="button" aria-expanded={settingsOpen} onClick={()=>{closeAccountMenu(true);setSettingsOpen(v=>!v);}}>Settings</button>}
       <button type="button" onClick={()=>{closeAccountMenu(true);void signOut();}}>Sign out</button>
@@ -136,6 +138,7 @@ export default function Home(){
     </details>
    </div>
   </header>
+  {courseOpen&&<FundingDialog title="Course" onClose={()=>setCourseOpen(false)}><div className="workspace-course-empty"><BookOpen size={28} aria-hidden="true"/><p>Lessons are coming soon.</p></div></FundingDialog>}
   <main className="console-main">
    {accountError&&<p role="alert">Could not load your account. <button onClick={()=>void refreshAccount()}>Retry</button></p>}
    {signInOpen&&guest&&<section className="inline-sign-in setup-sign-in" id="inline-sign-in" aria-labelledby="sign-in-title"><div className="sign-in-heading"><h2 id="sign-in-title">Welcome back</h2><button aria-label="Close sign-in" onClick={()=>{setSignInOpen(false);document.getElementById('balance-sign-in')?.focus();}}><X size={19}/></button></div><AccountAccess ready={account?.signInReady===true} onSignedIn={()=>void refreshAccount(true)}/></section>}

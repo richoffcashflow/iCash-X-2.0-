@@ -8,7 +8,7 @@ The existing buyer-outreach hold is displayed from the owned deal's read-only st
 
 ## Planned course portal
 
-The owner intends to add a course portal inside the workspace. Course content and access rules have not yet been supplied. Add a single Course entry in the workspace header when content is ready; preserve the open property, drafts and scroll position when returning from a lesson. Keep lessons separate from required deal actions so users can tell what needs doing now. No placeholder course or empty lesson links are shipped in this change.
+The owner requested Course in the workspace header and Help inside the account menu on October 10, 2026. Course opens an in-workspace dialog with an honest “Lessons are coming soon” empty state because course content and access rules have not yet been supplied. Opening or closing it preserves the workspace, open property, drafts, and scroll position. Replace the empty state with the supplied lessons when ready; keep lessons separate from required deal actions. Help continues to open the existing support chat and returns keyboard focus to the account menu when closed.
 
 ## Verification
 
