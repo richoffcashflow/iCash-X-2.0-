@@ -17,8 +17,9 @@ test('The visual exposes accessible counts and drop-off, honest loading and true
  const props={title:'Lead to close',description:'The selected period',stages:sellerFunnelStages};
  let html=renderToStaticMarkup(ConversionFunnel({...props,steps:steps([100,70,40,20,10,5])}));
  for(const label of ['Lead to close','30 not advanced','42.9% drop-off','5 of 100 reached the final step','aria-label="Lead to close"'])assert(html.includes(label),label);
- assert.match(html,/<polygon points="0,0 100,0 85,32 15,32"/,'Width tracks actual proportions');
- html=renderToStaticMarkup(ConversionFunnel(props));assert(html.includes('Loading funnel'));assert(!html.includes('0%'));assert(!html.includes('<polygon'));
+ assert.match(html,/<polygon points="0,0 100,0 93,72 7,72"/,'Stages join into the tapered body');
+ assert.match(html,/<polygon points="35,360 65,360 65,432 35,432"/,'The last stage forms a narrow outlet');
+ html=renderToStaticMarkup(ConversionFunnel(props));assert(html.includes('Loading funnel'));assert(!html.includes('0%'));assert.equal((html.match(/<polygon/g)||[]).length,6);
  html=renderToStaticMarkup(ConversionFunnel({...props,unavailable:true}));assert(html.includes('Funnel unavailable'));assert(!html.includes('Loading funnel'));
- html=renderToStaticMarkup(ConversionFunnel({...props,steps:steps([0,0,0,0,0,0])}));assert(html.includes('0 of 0'));assert(!html.includes('NaN'));assert(!html.includes('Infinity'));assert(!html.includes('<polygon'));
+ html=renderToStaticMarkup(ConversionFunnel({...props,steps:steps([0,0,0,0,0,0])}));assert(html.includes('0 of 0'));assert(!html.includes('NaN'));assert(!html.includes('Infinity'));assert.equal((html.match(/<polygon/g)||[]).length,6,'Empty stages keep the funnel silhouette');
 });

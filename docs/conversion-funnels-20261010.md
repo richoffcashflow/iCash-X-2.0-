@@ -1,6 +1,6 @@
 # Admin and Webinar Studio conversion funnels
 
-The owner admin now follows unique inbound seller leads through assignment, actual seller engagement, a signed purchase contract, a signed buyer assignment, and verified closing. Webinar Studio follows unique viewers through offer exposure, offer selection, a verified checkout start, and a verified purchase. Both show vertical proportions, stage counts, overall conversion, and the count and percentage that have not advanced between steps.
+The owner admin now follows unique inbound seller leads through assignment, actual seller engagement, a signed purchase contract, a signed buyer assignment, and verified closing. Webinar Studio follows unique viewers through offer exposure, offer selection, a verified checkout start, and a verified purchase. Both show a continuous funnel silhouette with a wide top, tapered stages and a narrow outlet, plus stage counts, overall conversion, and the count and percentage that have not advanced between steps. Stage widths describe the sequence; the numbers show actual progress. Empty stages remain visible in light gray.
 
 ## Counting and access
 
