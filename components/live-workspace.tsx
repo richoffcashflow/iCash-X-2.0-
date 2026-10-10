@@ -1,5 +1,6 @@
 'use client';
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
+import {HandoffCard,type Handoff} from './handoff-card';
 import {TitleTasks,type TitleTask} from './title-tasks';
 import {closingReviewLabels} from '@/lib/closing-setup';
 import {SellerRecoveryCard,type SellerRecoveryCase} from './seller-recovery-card';
@@ -30,12 +31,11 @@ import {dealTermsSchema,type DealTerms,type DocumentKind} from '@/lib/deal-docum
 import {filterProperties,needsAttention,propertyAddressLines,propertyGroup,safeLocalTime,type WorkspaceFilter,type WorkspaceProperty} from './workspace-view';
 type Property=WorkspaceProperty;
 type Deal={id:string;screening_id:string;terms:DealTerms;stage:string};
-type Handoff={address?:string|null;id:string;screening_id:string;party:string;reason:string;summary:string;next_action:string;state:string};
 type Conversation={source?:'outbound'|'reception';id:string;screening_id:string;party:string;summary?:string;completed_at?:string;durationSeconds?:number;nextAction?:string;interested?:boolean;optedOut?:boolean;humanRequested?:boolean};
 type AttentionRequest={id:string;propertyId:string;address?:string|null;priority:number;title:string;description?:string;actionLabel?:string;node:ReactNode};
 type TextAttention={address?:string|null;id:string;message_id:string;screening_id:string;deal_id:string;kind:string;party:string;quote:string;timezone:string};
 type PurchasedLookup={screening_id:string;created_at?:string|null;fetchedAt?:string|null;source?:string;ownershipVerified?:false;outreachAuthorized?:false;contacts?:{name:string|null;phones:{number:string|null;type:string|null;doNotCall:boolean|null}[]}[]};
-type Work={closingTasks?:(TitleTask&{screening_id:string;updated_at:string;address?:string|null})[];closingReview?:{id:string;screening_id:string;deal_id:string;review_reason:string;updated_at:string;address?:string|null}[];sellerRecovery?:SellerRecoveryCase[];viewingRequests?:BuyerViewingRequest[];smsRouteReviews?:SmsRouteReview[];propertyAttentionIds?:string[];textAttention?:TextAttention[];callRequests?:{address?:string|null;id:string;screening_id:string;requested_at:string;state:string}[];signatureActions:{id:string;kind:string;test_mode:boolean;screening_id?:string|null;address?:string|null}[];signing:SigningEnvelope[];signingConfigured:boolean;handoffs:Handoff[];conversations:Conversation[];callbacks:{id:string;screening_id:string;due_at:string;timezone:string;state:string}[];properties:Property[];deals:Deal[];contacts:PurchasedLookup[];hasMore:boolean;controls:{property_id:string}[];attentionHasMore?:boolean;searchSupported?:boolean;retainedIds?:string[]};
+type Work={journeys?:import('@/lib/deal-journey-progress').JourneyProgress[];closingTasks?:(TitleTask&{screening_id:string;updated_at:string;address?:string|null})[];closingReview?:{id:string;screening_id:string;deal_id:string;review_reason:string;updated_at:string;address?:string|null}[];sellerRecovery?:SellerRecoveryCase[];viewingRequests?:BuyerViewingRequest[];smsRouteReviews?:SmsRouteReview[];propertyAttentionIds?:string[];textAttention?:TextAttention[];callRequests?:{address?:string|null;id:string;screening_id:string;requested_at:string;state:string}[];signatureActions:{id:string;kind:string;test_mode:boolean;screening_id?:string|null;address?:string|null}[];signing:SigningEnvelope[];signingConfigured:boolean;handoffs:Handoff[];conversations:Conversation[];callbacks:{id:string;screening_id:string;due_at:string;timezone:string;state:string}[];properties:Property[];deals:Deal[];contacts:PurchasedLookup[];hasMore:boolean;controls:{property_id:string}[];attentionHasMore?:boolean;searchSupported?:boolean;retainedIds?:string[]};
 function milestone(property:Property,work:Work){
  const deal=work.deals.find(d=>d.screening_id===property.id);
  const signatures=work.signing.filter(e=>e.deal_id===deal?.id&&!e.test_mode);
@@ -173,7 +173,7 @@ function WorkspaceAttention({work,page,onPage,onOpen,onRefresh}:{work:Work;page:
   ...(work.smsRouteReviews??[]).map(a=>({id:'routing:'+a.message_id+':'+a.revision,propertyId:'',address:a.recipient.replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3'),priority:0,title:'A text needs your review',description:a.needs_review?'The bot couldn’t match this reply to a property.':'An earlier reply wasn’t matched to a property.',actionLabel:'View reply',node:<SmsRouteReviewCard item={a} onOpen={onOpen} onHandled={()=>done('routing:'+a.message_id+':'+a.revision)}/>})),
   ...(work.textAttention??[]).map(a=>({id:'text:'+a.id+':'+a.message_id,propertyId:a.screening_id,address:a.address,priority:a.kind==='withdrawal'?0:a.kind==='human'?2:3,title:a.kind==='withdrawal'?'Review a change of plans':a.kind==='callback'?'Confirm a callback':'Review a message',node:<TextAttentionCard item={a} onHandled={()=>done('text:'+a.id+':'+a.message_id)}/>})),
   ...work.signatureActions.map(e=>({id:'sign:'+e.id,propertyId:e.screening_id??'',address:e.address,priority:-1,title:'Urgent deal review',node:<SigningAttention envelope={e}/>})),
-  ...work.handoffs.filter(h=>h.state==='open').map(h=>({id:'human:'+h.id,propertyId:h.screening_id,address:h.address,priority:2,title:'A person was requested',node:<HandoffCard handoff={h} onHandled={()=>done('human:'+h.id)}/>})),
+  ...work.handoffs.filter(h=>h.state!=='resolved').map(h=>({id:'human:'+h.id,propertyId:h.screening_id,address:h.address,priority:2,title:'A person was requested',node:<HandoffCard handoff={h} onChanged={onRefresh}/>})),
   ...(work.callRequests??[]).filter(c=>c.state==='needs_review'&&!work.textAttention?.some(a=>a.screening_id===c.screening_id&&a.kind==='callback')).map(c=>({id:'call:'+c.id,propertyId:c.screening_id,address:c.address,priority:3,title:'Confirm a callback',node:<CallRequest id={c.id} onHandled={()=>done('call:'+c.id)}/>}))
  ].filter(r=>!handled.includes(r.id)).sort((a,b)=>a.priority-b.priority);
  if(!requests.length&&page===0&&!work.attentionHasMore)return null;
@@ -214,10 +214,6 @@ function DealTools({property,principal,initial,manual,onManual,signing,signingCo
  <SigningControls dealId={dealId} save={save} envelopes={signing.filter(e=>e.deal_id===dealId)} configured={signingConfigured} reviewVersion={JSON.stringify(terms)} stage={initial?.stage??'draft'}/></details>{dealId&&signing.some(e=>e.deal_id===dealId&&e.kind==='purchase'&&e.state==='completed'&&!e.test_mode)&&!['cancellation_pending','cancelled'].includes(initial?.stage??'')&&<BuyerQualificationPanel dealId={dealId}/>} {initial&&!['draft','cancellation_pending','cancelled'].includes(initial.stage)&&<><BuyerDealCoordination dealId={initial.id}/><FulfillmentDetails dealId={initial.id}/></>}{message&&<p role="status">{message}</p>}</div>;
 }
 
-function HandoffCard({handoff:h,onHandled}:{handoff:Handoff;onHandled?:()=>void}){
- const [state,setState]=useState(h.state),[busy,setBusy]=useState(false),[error,setError]=useState('');
- return <article className="handoff-card"><strong>{h.party==='buyer'?'Buyer':'Seller'} needs a person</strong><p>{h.reason}</p><details><summary>See summary & next step</summary><p>{h.summary}</p><p>{h.next_action}</p><small>Automation is paused for this property. Return control from the property only when you are ready.</small></details>{state==='open'&&<button disabled={busy} onClick={async()=>{setBusy(true);try{await post('/api/work/handoffs',{id:h.id});setState('acknowledged');onHandled?.();}catch{setError('Could not save. Please retry.');}finally{setBusy(false);}}}>I’ll handle this</button>}{state==='acknowledged'&&<small>You’re handling this. Bot stays paused.</small>}{error&&<p role="alert">{error}</p>}</article>;
-}
 
 function CallRequest({id,onHandled}:{id:string;onHandled?:()=>void}){
  const [done,setDone]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');

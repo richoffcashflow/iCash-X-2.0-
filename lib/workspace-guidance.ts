@@ -1,3 +1,4 @@
+import {journeyNextAction} from './deal-journey-progress.ts';
 import type {WorkspaceProperty, WorkspaceEvidence} from '../components/workspace-view.ts';
 import {needsAttention} from '../components/workspace-view.ts';
 
@@ -27,9 +28,12 @@ export function propertyNextAction(property: WorkspaceProperty, work: Context):{
  if(deal?.stage === 'closed') return action('Review the closing record and confirm your payment arrived.','Review closing record','fulfillment');
  if(['canceled','cancelled'].includes(deal?.stage??'')) return action('This deal is stopped. Review its saved agreements and any remaining obligations.','Review agreements','contracts');
  if(work.signing.some(s=>s.deal_id===deal?.id&&s.state==='customer_signature_needed'))return action('The other party signed. Read the agreement and complete your signature.','Review & sign','contracts');
- if(work.handoffs.some(h=>h.screening_id===property.id&&h.state==='open'))return action('A seller or buyer asked for a person. Read the request and follow up.','Review request','attention');
+ if(work.handoffs.some(h=>h.screening_id===property.id&&h.state!=='resolved'))return action('A seller or buyer asked for a person. Read the request and follow up.','Review request','attention');
  const closing=work.closingReview?.find(c=>c.screening_id===property.id);
  if(closing?.review_reason&&closing.review_reason!=='setup')return action('Resolve the closing issue with the title office. Property automation is paused.','Review closing issue','fulfillment');
+ if(work.textAttention?.some(t=>t.screening_id===property.id))return action('Read the message that needs your response before the next automated step.','Review message','attention');
+ const journey=work.journeys?.find(j=>j.screening_id===property.id&&j.state!=='closed');
+ if(journey){const next=journeyNextAction(journey);return action(`Waiting on ${next.waitingOn.toLowerCase()}. ${next.detail}`,next.label,next.target);}
  if(work.viewingRequests?.some(v=>v.screening_id===property.id))return action('A buyer needs a response. Review their request, follow up and record the outcome.','Review buyer request','attention');
  if(work.closingTasks?.some(t=>t.screening_id===property.id))return action('Review the closing tasks. Confirm dates from the signed agreement or respond to the title office.','Review closing tasks','fulfillment');
  if(closing)return action('Choose your title company and save how you want to receive your proceeds.','Set up closing','fulfillment');

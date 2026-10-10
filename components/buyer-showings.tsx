@@ -21,7 +21,7 @@ export function BuyerShowings({dealId}:{dealId:string}){
  const needsTime=action==='propose'||action==='reschedule',confirming=action==='confirm_seller'||action==='confirm_buyer';
  const request=data?.requests.find(r=>r.id===requestId);
  return <details onToggle={e=>{if(e.target===e.currentTarget)setOpen(e.currentTarget.open);}}><summary>Buyer visits</summary>{open&&<>
-  <p>A visit is confirmed only after both parties agree to the exact time. Reminders appear in your dashboard. Contact the parties for invitations, changes and visit reminders.</p>
+  <p>A visit is confirmed only after both parties agree to the exact time. New guided buyer requests receive confirmation links and reminders automatically. Older requests remain manual; check delivery in Buyer next step.</p>
   {error&&<p role="alert">{error}</p>}{message&&<p role="status">{message}</p>}{!data&&!error&&<p>Loading visits…</p>}
   {data?.showings.map(s=><article key={s.id}><p><strong>{s.buyer_name} · {s.state}</strong></p><p>{safeLocalTime(s.starts_at,s.timezone)} to {new Date(s.ends_at).toLocaleTimeString('en-US',{timeZone:s.timezone,hour:'numeric',minute:'2-digit',hour12:true})} · {s.timezone}</p><p>Seller: {s.seller_confirmed_at?'confirmed':'awaiting confirmation'} · Buyer: {s.buyer_confirmed_at?'confirmed':'awaiting confirmation'}</p>{(s.seller_note||s.buyer_note||s.change_note)&&<details><summary>Confirmation record</summary>{s.seller_note&&<p>Seller: {s.seller_note}</p>}{s.buyer_note&&<p>Buyer: {s.buyer_note}</p>}{s.change_note&&<p>Change: {s.change_note}</p>}</details>}{['proposed','confirmed'].includes(s.state)&&<button type="button" disabled={busy} onClick={()=>edit(s)}>Manage visit</button>}</article>)}
   {data&&<form onSubmit={e=>{e.preventDefault();void save();}}>
