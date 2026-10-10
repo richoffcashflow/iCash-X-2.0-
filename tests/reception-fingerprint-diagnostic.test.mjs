@@ -57,3 +57,16 @@ test('identifies a repeated schema default or a changed empty representation aga
  const altered=structuredClone(input);altered.version_id='changed';
  assert.equal(diagnoseReceptionFingerprint(altered,hash(original)).matched,false);
 });
+
+test('proves optional expanded tool materialization while keeping the complete authoritative IDs',()=>{
+ const current=fixture(),original=structuredClone(current);
+ original.conversation_config.agent.prompt.tools=[current.conversation_config.agent.prompt.tools[2]];
+ const result=diagnoseReceptionFingerprint(current,hash(original));
+ assert.equal(result.matched,true);assert.equal(result.changes[0].kind,'expanded_tool_projection');
+ assert.deepEqual(result.changes[0].retainedIndices,[2]);
+ const before=structuredClone(current);current.conversation_config.agent.prompt.tool_ids.push('additional');
+ assert.equal(diagnoseReceptionFingerprint(current,hash(original)).matched,false);
+ assert.equal(before.conversation_config.agent.prompt.tools.length,3);
+ const empty=fixture(),nullable=structuredClone(empty);empty.platform_settings.privacy=[];nullable.platform_settings.privacy=null;
+ assert.equal(diagnoseReceptionFingerprint(nullable,hash(empty)).matched,true);
+});

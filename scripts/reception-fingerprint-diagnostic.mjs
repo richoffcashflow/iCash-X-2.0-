@@ -65,6 +65,22 @@ export function diagnoseReceptionFingerprint(input,expectedHash){
    if(attempts>=4096)return {...result,attempts,truncated:true};
   }
  }
+ // Read responses can materialize optional expanded tool definitions beside
+ // the authoritative IDs. Identify that representation by reconstructing the
+ // entire prior hash; never infer authorization from a tool name or ID here.
+ const expandedTools=arrays.find(entry=>entry.path.join('.')==='conversation_config.agent.prompt.tools');
+ if(expandedTools){
+  const original=[...expandedTools.value];
+  for(let mask=0;mask<(1<<original.length)-1;mask++){
+   const indices=original.map((_,i)=>i).filter(i=>mask&(1<<i));
+   for(const order of permutations(indices)){
+    expandedTools.value.splice(0,expandedTools.value.length,...order.map(i=>original[i]));
+    const found=check([{kind:'expanded_tool_projection',path:safePath(expandedTools.path),observedCount:original.length,retainedIndices:order}]);
+    expandedTools.value.splice(0,expandedTools.value.length,...original);
+    if(found)return {...result,attempts};
+   }
+  }
+ }
  // Schema serializers can add the same neutral default to every tool field.
  // Grouped hypotheses still require reconstruction of the complete old hash.
  const groups=new Map();
@@ -83,7 +99,7 @@ export function diagnoseReceptionFingerprint(input,expectedHash){
  // Identify a single default/empty representation change. These diagnostic
  // hypotheses do not become permitted differences in the runtime inspector.
  for(const field of fields){
-  const kinds=['remove_field','restore_null',...(Array.isArray(field.value)?['restore_empty_array']:field.value&&typeof field.value==='object'?['restore_empty_object']:typeof field.value==='boolean'?['restore_false','restore_true']:typeof field.value==='string'?['restore_empty_string']:[])];
+  const kinds=['remove_field','restore_null','restore_empty_array','restore_empty_object',...(typeof field.value==='boolean'?['restore_false','restore_true']:typeof field.value==='string'?['restore_empty_string']:[])];
   for(const kind of kinds){
    const replacement=kind==='restore_null'?null:kind==='restore_empty_string'?'':kind==='restore_empty_array'?[]:kind==='restore_empty_object'?{}:kind==='restore_false'?false:true;
    if(kind==='remove_field')delete field.parent[field.key];else field.parent[field.key]=replacement;
