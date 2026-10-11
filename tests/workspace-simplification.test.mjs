@@ -58,7 +58,7 @@ tree=page({...account,balanceCents:0,billingModel:'membership_credits',membershi
 
 assert(all(tree).some(n=>n.type===component('MembershipSettings')&&n.props.locked),'missed membership payment shows subscription recovery');
 
-const barModule={exports:{}};new Function('require','module','exports',code('components/bot-run-bar.tsx'))(name=>name==='react'?{useState:()=>[null,()=>{}],useEffect(){}}:name==='@/lib/workspace-progress'?progress:require(name),barModule,barModule.exports);
+const barModule={exports:{}};new Function('require','module','exports',code('components/bot-run-bar.tsx'))(name=>name==='react'?{useState:()=>[null,()=>{}],useEffect(){}}:name==='@/lib/workspace-progress'?progress:name==='@/components/icash-mark'?{IcashMark:component('IcashMark')}:require(name),barModule,barModule.exports);
 const renderBar=patch=>barModule.exports.BotRunBar({running:false,stopped:false,paymentRequired:false,busy:false,stale:false,balanceCents:0,onBudget(){},onPause(){},...patch});
 assert.match(text(renderBar({hasCreditHistory:true})),/Out of credits/);
 assert.match(text(renderBar({paymentRequired:true,balanceCents:1000})),/Update your subscription/);

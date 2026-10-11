@@ -10,7 +10,7 @@ export function vipPrice(standardCents:number,_kind:'lead'|'usage'){
  if(!Number.isSafeInteger(standardCents)||standardCents<0)throw Error('Invalid price');
  return Math.ceil(standardCents*80/100);
 }
-export const vipBenefits=['Platform Buyer Network — match deals with opted-in buyers across iCash X','20% off AI work','20% off leads','Priority for eligible new leads','Custom bot name','Your own AI voice'];
+export const vipBenefits=['Ask AI Bot — answers about your leads, offers and next steps','Platform Buyer Network — match deals with opted-in buyers across iCash X','20% off AI work','20% off leads','Priority for eligible new leads','Custom bot name','Your own AI voice'];
 
 export const vipPurchaseTerms='$50 once today for VIP in the current billing period. VIP renews at $100/month total on the existing renewal date, before any existing subscription discount. Work credits are separate. Cancel from the account menu. '+finalSalePolicy;
 export const vipRetentionVersion='vip-retention-50-ongoing-v1';

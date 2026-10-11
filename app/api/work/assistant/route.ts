@@ -14,9 +14,13 @@ export const maxDuration=60;
 const headers={'Cache-Control':'private, no-store'};
 const input=z.object({requestId:z.string().uuid(),question:z.string().trim().min(1).max(1500),timezone:z.string().max(100),screeningId:z.string().uuid().optional()}).strict();
 type Row={id:string;question:string;answer:AssistantAnswer|null;state:string;created_at:string};
-function error(e:unknown){const message=e instanceof Error?e.message:'';const status=['SUBSCRIPTION_REQUIRED','QUESTION_CREDITS_REQUIRED'].includes(message)?402:['SIGN_IN_REQUIRED','ACCOUNT_REQUIRED'].includes(message)?401:message==='PROPERTY_NOT_FOUND'?404:e instanceof z.ZodError||e instanceof SyntaxError?400:503;return NextResponse.json({error:message==='QUESTION_CREDITS_REQUIRED'?'Add credits or allow more spending today to ask your bot.':status===402?'Restore your subscription to ask your bot.':status===401?'Sign in to ask your bot.':status===404?'This property is not available in your workspace.':status===400?'Check your question and try again.':'Could not finish your reply. Your work is unchanged. Try again.'},{status,headers});}
+function error(e:unknown){
+ const message=e instanceof Error?e.message:'';
+ const status=message==='VIP_REQUIRED'?403:['SUBSCRIPTION_REQUIRED','QUESTION_CREDITS_REQUIRED'].includes(message)?402:['SIGN_IN_REQUIRED','ACCOUNT_REQUIRED'].includes(message)?401:message==='PROPERTY_NOT_FOUND'?404:e instanceof z.ZodError||e instanceof SyntaxError?400:503;
+ return NextResponse.json({error:message==='VIP_REQUIRED'?'Ask AI Bot is a VIP feature. Upgrade to VIP to use it.':message==='QUESTION_CREDITS_REQUIRED'?'Add credits or allow more spending today to ask your bot.':status===402?'Restore your subscription to ask your bot.':status===401?'Sign in to ask your bot.':status===404?'This property is not available in your workspace.':status===400?'Check your question and try again.':'Could not finish your reply. Your work is unchanged. Try again.',...(message==='VIP_REQUIRED'?{code:'VIP_REQUIRED'}:{})},{status,headers});
+}
 export async function GET(req:Request){try{
- const {accountId}=await workAccount(),id=new URL(req.url).searchParams.get('id');if(id)z.string().uuid().parse(id);
+ const {accountId}=await workAccount({requireVip:true}),id=new URL(req.url).searchParams.get('id');if(id)z.string().uuid().parse(id);
  const items=await db<Row[]>(`icash_workspace_questions?account_id=eq.${accountId}${id?'&id=eq.'+id:''}&select=id,question,answer,state,created_at&order=created_at.desc&limit=${id?1:20}`);
  if(id&&!items.length)return NextResponse.json({error:'Reply not found.'},{status:404,headers});
  return NextResponse.json({items:items.reverse()},{headers});
@@ -25,7 +29,7 @@ export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
  let accountId='',savedId='';
  try{
-  const owner=await workAccount();accountId=owner.accountId;
+  const owner=await workAccount({requireVip:true});accountId=owner.accountId;
   const raw=await req.text();if(raw.length>6000)return NextResponse.json({error:'Please shorten your question.'},{status:413,headers});
   const i=input.parse(JSON.parse(raw));try{new Intl.DateTimeFormat('en-US',{timeZone:i.timezone});}catch{return NextResponse.json({error:'Invalid timezone.'},{status:400,headers});}
   try{await limitRequest(req,'workspace-assistant',accountId,15,600);}catch{return NextResponse.json({error:'Please wait a few minutes before asking more questions.'},{status:429,headers});}

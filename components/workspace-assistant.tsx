@@ -5,15 +5,15 @@ import {FundingDialog} from '@/components/funding-dialog';
 import type {AssistantAction,AssistantAnswer} from '@/lib/workspace-assistant-policy';
 export type AssistantRequest={screeningId:string;address:string;nonce:number};
 type Reply={id:string;question:string;answer:AssistantAnswer|null;state:string;created_at:string};
-type Props={request:AssistantRequest|null;openRequest?:number;stale:boolean;onAction:(action:AssistantAction)=>Promise<void>|void};
+type Props={onVipRequired?:()=>void;request:AssistantRequest|null;openRequest?:number;stale:boolean;onAction:(action:AssistantAction)=>Promise<void>|void};
 const suggestions=['What happened today?','What needs me?','What is my bot doing?'];
-export function WorkspaceAssistant({request,openRequest=0,stale,onAction}:Props){
+export function WorkspaceAssistant({request,openRequest=0,stale,onAction,onVipRequired}:Props){
  const [open,setOpen]=useState(false),[question,setQuestion]=useState(''),[items,setItems]=useState<Reply[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[loading,setLoading]=useState(false),[context,setContext]=useState<AssistantRequest|null>(null),[actionBusy,setActionBusy]=useState(false);
  const inFlight=useRef(false),loaded=useRef(false),alive=useRef(true),handled=useRef<number|null>(null),end=useRef<HTMLDivElement>(null),controller=useRef<AbortController|null>(null);
  const pending=useRef<{requestId:string;question:string;screeningId?:string}|null>(null);
  useEffect(()=>{alive.current=true;const selected=new URLSearchParams(window.location.search).get('assistant');if(selected)setOpen(true);return()=>{alive.current=false;controller.current?.abort();};},[]);
  useEffect(()=>{if(openRequest)setOpen(true);},[openRequest]);
- async function history(){setLoading(true);try{const id=new URLSearchParams(window.location.search).get('assistant');const r=await fetch('/api/work/assistant'+(id?'?id='+encodeURIComponent(id):''),{cache:'no-store'});const value=await r.json();if(!r.ok)throw Error(value.error);if(alive.current){setItems(previous=>{const merged=new Map(previous.map(item=>[item.id,item]));for(const item of value.items as Reply[]){if(!merged.get(item.id)?.answer||item.answer)merged.set(item.id,item);}return [...merged.values()].sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at));});loaded.current=true;setError('');}}catch(e){if(alive.current)setError(e instanceof Error?e.message:'Could not load replies.');}finally{if(alive.current)setLoading(false);}}
+ async function history(){setLoading(true);try{const id=new URLSearchParams(window.location.search).get('assistant');const r=await fetch('/api/work/assistant'+(id?'?id='+encodeURIComponent(id):''),{cache:'no-store'});const value=await r.json();if(!r.ok){if(r.status===403&&value.code==='VIP_REQUIRED')onVipRequired?.();throw Error(value.error);}if(alive.current){setItems(previous=>{const merged=new Map(previous.map(item=>[item.id,item]));for(const item of value.items as Reply[]){if(!merged.get(item.id)?.answer||item.answer)merged.set(item.id,item);}return [...merged.values()].sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at));});loaded.current=true;setError('');}}catch(e){if(alive.current)setError(e instanceof Error?e.message:'Could not load replies.');}finally{if(alive.current)setLoading(false);}}
  useEffect(()=>{if(open&&!loaded.current)void history();},[open]);
  useEffect(()=>{if(open)end.current?.scrollIntoView({block:'nearest'});},[items,busy,open]);
  async function ask(value=question,selected=context){
@@ -25,7 +25,7 @@ export function WorkspaceAssistant({request,openRequest=0,stale,onAction}:Props)
   try{
    const r=await fetch('/api/work/assistant',{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.current.signal,body:JSON.stringify({...attempt,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC'})});const value=await r.json();
    if(!alive.current)return;
-   if(!r.ok){if([400,401,402,404,409,413,429].includes(r.status))pending.current=null;throw Error(value.error);}
+   if(!r.ok){if([400,401,402,403,404,409,413,429].includes(r.status))pending.current=null;if(r.status===403&&value.code==='VIP_REQUIRED')onVipRequired?.();throw Error(value.error);}
    if(r.status===202){setError('Your reply is still being saved. Check replies in a moment.');return;}
    if(typeof value.answer?.text!=='string'||!Array.isArray(value.answer.actions))throw Error('Could not confirm your reply. Check replies before trying again.');
    setItems(previous=>[...previous.filter(item=>item.id!==value.id),value]);setQuestion('');pending.current=null;loaded.current=true;
@@ -37,15 +37,15 @@ export function WorkspaceAssistant({request,openRequest=0,stale,onAction}:Props)
  const propertyContext=context&&<div className="assistant-property-context"><span>{context.address}</span><button type="button" aria-label="Clear property context" onClick={()=>setContext(null)}><X size={14}/></button></div>;
  const composer=(dock:boolean)=><form className="assistant-composer" data-credit-action onSubmit={event=>{event.preventDefault();void ask();}}>
   {dock?<button type="button" className="assistant-toggle" aria-label="Open bot conversation" aria-haspopup="dialog" aria-expanded={open} onClick={()=>setOpen(true)}><MessageCircle size={20}/></button>:<span className="assistant-toggle" aria-hidden="true"><MessageCircle size={20}/></span>}
-  <label className="sr-only" htmlFor={dock?'ask-bot-dock-question':'ask-bot-question'}>Ask your bot</label><input id={dock?'ask-bot-dock-question':'ask-bot-question'} data-credit-action value={question} maxLength={1500} placeholder="Ask your bot…" autoComplete="off" enterKeyHint="send" disabled={stale} onChange={event=>setQuestion(event.target.value)}/>
+  <label className="sr-only" htmlFor={dock?'ask-bot-dock-question':'ask-bot-question'}>Ask AI Bot</label><input id={dock?'ask-bot-dock-question':'ask-bot-question'} data-credit-action value={question} maxLength={1500} placeholder="Ask AI Bot…" autoComplete="off" enterKeyHint="send" disabled={stale} onChange={event=>setQuestion(event.target.value)}/>
   <button type="submit" data-credit-action className="assistant-send" aria-label="Send question" disabled={busy||stale||!question.trim()}><ArrowUp size={19}/></button>
  </form>;
  return <>
  <section className="workspace-assistant assistant-dock" aria-label="Message your AI bot">{propertyContext}{composer(true)}</section>
- {open&&<FundingDialog title="Ask your bot" onClose={()=>setOpen(false)}><section id="ask-bot" className="workspace-assistant is-open" aria-label="Ask your bot">
+ {open&&<FundingDialog title="Ask AI Bot" onClose={()=>setOpen(false)}><section id="ask-bot" className="workspace-assistant is-open" aria-label="Ask AI Bot">
   <div className="assistant-panel" id="assistant-replies">
    <div className="assistant-history" role="log" aria-label="Bot replies" aria-live="polite" aria-relevant="additions">
-    {!items.length&&!loading&&<div className="assistant-welcome"><strong>What would you like to know?</strong><p>Ask about a lead or your next step. Answers use credits; VIP gets 20% off.</p></div>}
+    {!items.length&&!loading&&<div className="assistant-welcome"><strong>What would you like to know?</strong><p>Ask about a lead or your next step. Replies use work credits at your VIP rate.</p></div>}
     {loading&&<p className="assistant-checking" role="status">Loading saved replies…</p>}
     {items.map(item=><article className="assistant-exchange" key={item.id}><p className="assistant-question">{item.question}</p>{item.answer?<><p className="assistant-answer">{item.answer.text}</p><div className="assistant-answer-actions">{item.answer.actions.map((action,index)=><button type="button" key={index} disabled={actionBusy||stale} onClick={()=>void act(action)}>{action.label}</button>)}</div><a className="assistant-reply-date" href={`/?assistant=${encodeURIComponent(item.id)}#ask-bot`}>{new Date(item.answer.checkedAt).toLocaleString('en-US',{hour12:true,month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</a></>:<p className="assistant-checking">{item.state==='pending'?'Reply is still processing.':'This reply could not finish. Ask again to retry.'}</p>}</article>)}
     {busy&&<p className="assistant-checking" role="status"><span className="assistant-loading-dots" aria-hidden="true"><i/><i/><i/></span>Checking your workspace…</p>}

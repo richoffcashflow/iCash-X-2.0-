@@ -11,7 +11,7 @@ const text=node=>typeof node==='string'?node:Array.isArray(node)?node.map(text).
 function harness(props={}){
  const state=[];let cursor=0;
  const module={exports:{}};
- const mocks={react:{useEffect:()=>{},useState:initial=>{const index=cursor++;if(!(index in state))state[index]=initial;return [state[index],next=>{state[index]=next;}];}},'next/image':{__esModule:true,default:'Image'},'@/components/account-access':{AccountAccess:'AccountAccess'},'@/components/funding-dialog':{FundingDialog:'FundingDialog'},'@/components/membership-checkout':{MembershipCheckout:'MembershipCheckout'},'@/components/plan-workspace-preview':{PlanWorkspacePreview:'PlanWorkspacePreview'},'@/lib/webinar-site':{webinarSite:{workspacePath:'/',supportPath:'/support'}}};
+ const mocks={react:{useEffect:()=>{},useState:initial=>{const index=cursor++;if(!(index in state))state[index]=initial;return [state[index],next=>{state[index]=next;}];}},'next/image':{__esModule:true,default:'Image'},'@/components/icash-mark':{IcashMark:'IcashMark'},'@/components/account-access':{AccountAccess:'AccountAccess'},'@/components/funding-dialog':{FundingDialog:'FundingDialog'},'@/components/membership-checkout':{MembershipCheckout:'MembershipCheckout'},'@/components/plan-workspace-preview':{PlanWorkspacePreview:'PlanWorkspacePreview'},'@/lib/webinar-site':{webinarSite:{workspacePath:'/',supportPath:'/support'}}};
  new Function('require','module','exports',source)(name=>name.endsWith('.css')?{}:mocks[name]??require(name),module,module.exports);
  return ()=>{cursor=0;return module.exports.WebinarExpressCheckout(props);};
 }
@@ -19,8 +19,7 @@ const find=(tree,type)=>all(tree).find(node=>node.type===type);
 
 test('checkout header exposes the existing brand and sign-in dialog without replacing checkout',()=>{
  const render=harness();let tree=render();
- assert.equal(find(tree,'Image').props.src,'/icash-x-logo.png');
- assert.equal(find(tree,'Image').props.alt,'iCash X');
+ assert.ok(find(tree,'IcashMark'));
  assert.equal(all(tree).find(node=>node.props?.['aria-label']==='iCash X home').props.href,'/');
  assert.equal(find(tree,'MembershipCheckout').props.embedded,true);
  assert.equal(find(tree,'MembershipCheckout').props.presentation,'plan');

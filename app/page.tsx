@@ -1,7 +1,6 @@
 'use client';
 import {useCallback,useEffect,useState,useRef,type CSSProperties} from 'react';
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
-import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import {workspaceNextAction,workspaceActionDisabled} from '@/lib/workspace-status';
 import {BookOpen,Menu,X} from 'lucide-react';
@@ -33,7 +32,7 @@ import type {AssistantAction} from '@/lib/workspace-assistant-policy';
 import {BotRunBar} from '@/components/bot-run-bar';
 import {WorkspaceVipBanner,AdminWorkspacePreview,type WorkspacePreviewMode} from '@/components/workspace-vip-banner';
 import {PlatformBuyerNetwork} from '@/components/platform-buyer-network';
-import {BotBrand} from '@/components/bot-brand';
+import {IcashMark} from '@/components/icash-mark';
 import {setupThemes,type BotProfile} from '@/lib/bot-setup';
 type Account={vip?:boolean;readinessPending?:boolean;billingModel?:string;membershipActive?:boolean;isBillingOwner?:boolean;identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;pendingEmail?:string|null;phone?:string;hasCreditHistory?:boolean;balanceCents?:number;reservedCents?:number;dailyLimitCents?:number;assistantName?:string;paused?:boolean;billingActive?:boolean;billingReview?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;activeWork?:boolean};
 export default function Home(){
@@ -105,6 +104,11 @@ export default function Home(){
  const nextAction=funding.needsFunding&&suggestedAction.kind==='resume'?{kind:'funding' as const,label:'Review funding',reason:'There are not enough available credits for the next eligible task. Your saved progress stays here.'}:suggestedAction;
  function showDetails(id:string){if(id==='notification-settings'){setPreferencesOpen(true);return;}setSettingsOpen(true);requestAnimationFrame(()=>document.getElementById(id)?.scrollIntoView({block:'start'}));}
  function doNextAction(){if(nextAction.kind==='membership')openFunding();else if(nextAction.kind==='identity')showDetails('account-details');else if(nextAction.kind==='campaign')showDetails('outreach-campaign-details');else if(nextAction.kind==='activation'){const review=document.getElementById('spending-activation-review');review?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'});review?.focus();}else if(nextAction.kind==='funding')openFunding();else if(nextAction.kind==='resume')void toggleBot('resume');else if(nextAction.kind==='pause')void toggleBot('pause');else if(nextAction.kind==='work')document.getElementById('workspace-properties')?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});}
+ function openAssistant(request?:AssistantRequest){
+  if(accountError)return;
+  if(account?.vip!==true){setReviewVip(true);return;}
+  if(request)setAssistantRequest(request);else setAssistantOpenRequest(v=>v+1);
+ }
  async function assistantAction(action:AssistantAction){
   if(action.kind==='funding'){openFunding();return;}
   if(creditsExhausted&&action.kind!=='pause'&&action.kind!=='support'){openFunding();return;}
@@ -129,7 +133,7 @@ export default function Home(){
  if(guest)return <WebinarExpressCheckout checkingAccount={!account} accountError={accountError} signInReady={account?.signInReady??true} onRetry={()=>void refreshAccount()} onSignedIn={()=>void refreshAccount(true)}/>;
  return <div className={`console-shell personalized-workspace minimal-workspace assistant-workspace icash-brand-workspace ${styles.workspace}${displayVip&&!workspaceLocked?' '+styles.vip:''}`} style={{'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties}>
   <header className="console-header">
-   <div className="workspace-logo">{profile?.displayName?<BotBrand profile={profile} compact/>:<><Image src="/icash-x-logo.png" alt="iCash X" width={111} height={62} priority/><b className="brand-version">2.0</b></>}</div>
+   <a className="workspace-logo" href="/" aria-label="iCash X home"><IcashMark/></a>
    <div className="workspace-header-links">
     <button type="button" className="workspace-course-launcher" aria-haspopup="dialog" aria-expanded={courseOpen} onClick={()=>setCourseOpen(true)}><BookOpen size={17} aria-hidden="true"/>Course</button>
     {!workspaceLocked&&<WorkspaceUpdates onPreferences={()=>showDetails('notification-settings')} onBudget={()=>openFunding()}/>}
@@ -177,11 +181,11 @@ export default function Home(){
      {account.mode==='live'&&account.billingModel==='legacy'&&<SpendActivationReview key={activationKey} onAvailabilityChange={updateActivationAvailability} onSaved={()=>void refreshAccount()}/>}
      <CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}>
      <SpendingAllowance/>
-     <LiveWorkspace onOpenAssistant={()=>setAssistantOpenRequest(v=>v+1)} propertyRequest={propertyRequest} onAsk={(screeningId,address)=>setAssistantRequest({screeningId,address,nonce:Date.now()})} principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/>
+     <LiveWorkspace assistantVipLocked={account.vip!==true} onOpenAssistant={()=>openAssistant()} propertyRequest={propertyRequest} onAsk={(screeningId,address)=>openAssistant({screeningId,address,nonce:Date.now()})} principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/>
      </CreditActionGate>
      </>}
     </section>
-    {!guest&&<CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}><WorkspaceAssistant key={account.email} openRequest={assistantOpenRequest} request={assistantRequest} stale={accountError} onAction={assistantAction}/></CreditActionGate>}
+    {!guest&&account.vip===true&&!accountError&&<CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}><WorkspaceAssistant key={account.email} openRequest={assistantOpenRequest} request={assistantRequest} stale={accountError} onAction={assistantAction} onVipRequired={()=>{setReviewVip(true);void refreshAccount();}}/></CreditActionGate>}
     </>}
    </>}
   </main>

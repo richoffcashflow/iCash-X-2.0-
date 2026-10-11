@@ -30,9 +30,9 @@ assert.equal(reserved,1);assert.equal(settlements.length,1);assert.equal(settlem
 const beforeCalls=fetched;await assert.rejects(ai.routeWorkspaceQuestion('Explain this offer',context,[],fake,{before:async()=>{throw Error('CREDITS_REQUIRED');},after:async()=>{throw Error('Must not settle');}}));assert.equal(fetched,beforeCalls,'No paid request without credits');
 settlements=[];await ai.routeWorkspaceQuestion('Explain this offer',context,[],async()=>{throw Error('provider timeout');},{before:async()=>true,after:async r=>settlements.push(r)});assert.deepEqual(settlements,[{providerId:null,usage:null}]);
 delete process.env.OPENAI_API_KEY;delete process.env.ICASH_SUPPORT_AI_MODEL;
-let authorized=true,origin=true,subscription=true,fresh=true,priorState='complete',paths=[],contextReads=0,classifications=0,rateLimited=false;
+let authorized=true,origin=true,subscription=true,vip=true,fresh=true,priorState='complete',paths=[],contextReads=0,classifications=0,rateLimited=false;
 const responseAnswer=policy.answerWorkspaceQuestion('offer',context,null);
-const deps={...policy,z,redactSupportQuestion,NextResponse:{json:(body,o={})=>({body,status:o.status??200,headers:o.headers})},allowedOrigin:()=>origin,workAccount:async()=>{if(!authorized)throw Error('SIGN_IN_REQUIRED');if(!subscription)throw Error('SUBSCRIPTION_REQUIRED');return {accountId:id(1),userId:id(2)};},limitRequest:async()=>{if(rateLimited)throw Error();},workspaceAssistantContext:async account=>{contextReads++;assert.equal(account,id(1));return context;},routeWorkspaceQuestion:async()=>{classifications++;return {intent:'offer',propertyId:id(5),model:null,providerId:null,usage:null,raw:null};},db:async(path,method,body)=>{
+const deps={...policy,z,redactSupportQuestion,NextResponse:{json:(body,o={})=>({body,status:o.status??200,headers:o.headers})},allowedOrigin:()=>origin,workAccount:async options=>{assert.equal(options?.requireVip,true,'Both assistant endpoints require verified VIP');if(!authorized)throw Error('SIGN_IN_REQUIRED');if(!subscription)throw Error('SUBSCRIPTION_REQUIRED');if(!vip)throw Error('VIP_REQUIRED');return {accountId:id(1),userId:id(2)};},limitRequest:async()=>{if(rateLimited)throw Error();},workspaceAssistantContext:async account=>{contextReads++;assert.equal(account,id(1));return context;},routeWorkspaceQuestion:async()=>{classifications++;return {intent:'offer',propertyId:id(5),model:null,providerId:null,usage:null,raw:null};},db:async(path,method,body)=>{
  paths.push({path,method,body});
  if(path==='rpc/icash_begin_workspace_question'){assert.equal(body.p_account,id(1));assert.equal(body.p_user,id(2));return {id:id(3),fresh,state:priorState,answer:fresh?null:priorState==='complete'?responseAnswer:null,createdAt:context.checkedAt};}
  assert(path.includes('account_id=eq.'+id(1)),'Every history/context write is tenant scoped');
@@ -45,6 +45,10 @@ const body={requestId:id(4),question:'Explain this offer',timezone:'America/Chic
 const req=data=>new Request('https://www.geticashx.com/api/work/assistant',{method:'POST',headers:{origin:'https://www.geticashx.com'},body:JSON.stringify(data)});
 authorized=false;assert.equal((await route.POST(req(body))).status,401);assert.equal(paths.length,0);authorized=true;
 subscription=false;assert.equal((await route.POST(req(body))).status,402);assert.equal(paths.length,0);subscription=true;
+vip=false;
+for(const response of [await route.POST(req(body)),await route.GET(new Request('https://www.geticashx.com/api/work/assistant')),await route.GET(new Request('https://www.geticashx.com/api/work/assistant?id='+id(3)))]){assert.equal(response.status,403);assert.equal(response.body.code,'VIP_REQUIRED');}
+assert.equal(paths.length,0,'Standard users cannot read, write, or replay assistant history');assert.equal(contextReads,0);assert.equal(classifications,0,'No provider dispatch before VIP authorization');
+vip=true;
 origin=false;assert.equal((await route.POST(req(body))).status,403);assert.equal(paths.length,0);origin=true;
 assert.equal((await route.POST(req({...body,accountId:id(99)}))).status,400);assert.equal(paths.length,0);
 assert.equal((await route.POST(req({...body,timezone:'No/Such/Zone'}))).status,400);assert.equal(paths.length,0);

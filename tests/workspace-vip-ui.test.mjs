@@ -13,7 +13,7 @@ function mount(account){
  let cursor=0;const slots=[account,false];
  const hooks={useState(initial){const index=cursor++;if(!(index in slots))slots[index]=typeof initial==='function'?initial():initial;return [slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;}];},useEffect(){},useRef:current=>({current}),useCallback:fn=>fn};
  const mod={exports:{}};
- const dependency=name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/workspace-status'?status:name==='@/lib/workspace-progress'?progress:name==='@/lib/bot-setup'?{setupThemes:{ink:{color:'#111',soft:'#eee'}}}:name==='./workspace-easy.module.css'?{__esModule:true,default:{workspace:'test-workspace',vip:'test-vip',activity:'activity',vipPanel:'vip-panel'}}:name==='next/image'?{__esModule:true,default:component('Image')}:new Proxy({},{get:(_target,key)=>component(String(key))});
+ const dependency=name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/workspace-status'?status:name==='@/lib/workspace-progress'?progress:name==='@/lib/bot-setup'?{setupThemes:{ink:{color:'#111',soft:'#eee'}}}:name==='./workspace-easy.module.css'?{__esModule:true,default:{workspace:'test-workspace',vip:'test-vip',activity:'activity',vipPanel:'vip-panel'}}:name==='next/dynamic'?{__esModule:true,default:()=>component('WorkspaceAssistant')}:name==='next/image'?{__esModule:true,default:component('Image')}:new Proxy({},{get:(_target,key)=>component(String(key))});
  new Function('require','module','exports',code('app/page.tsx'))(dependency,mod,mod.exports);
  return {render(){cursor=0;return mod.exports.default();},account(next){slots[0]=next;},stale(value){slots[1]=value;}};
 }
@@ -22,6 +22,12 @@ const account={signedIn:true,email:'admin-fixture@example.com',mode:'live',balan
 const regular=mount(account);let tree=regular.render();
 assert(props(tree,'WorkspaceVipBanner'),'Non-VIP member has the top upgrade banner, even without credits');
 assert(!props(tree,'PlatformBuyerNetwork'),'Standard accounts do not fetch VIP network data');
+assert(!props(tree,'WorkspaceAssistant'),'Standard accounts never mount the paid assistant');
+assert.equal(props(tree,'LiveWorkspace').assistantVipLocked,true);
+props(tree,'LiveWorkspace').onOpenAssistant();tree=regular.render();assert.equal(props(tree,'FundingDialog').title,'Switch to VIP','Opening the locked assistant offers VIP even with no credits');
+props(tree,'FundingDialog').onClose();tree=regular.render();
+props(tree,'LiveWorkspace').onAsk('fixture-property','123 Fixture Lane');tree=regular.render();assert.equal(props(tree,'FundingDialog').title,'Switch to VIP');assert(!props(tree,'WorkspaceAssistant'));
+props(tree,'FundingDialog').onClose();tree=regular.render();
 assert(!all(tree).some(n=>n.type==='button'&&text(n)==='Preview VIP workspace'),'Normal members have no admin preview control');
 assert(all(tree).findIndex(n=>n.type===component('WorkspaceVipBanner'))<all(tree).findIndex(n=>n.type===component('BotRunBar')),'Banner appears above bot controls');
 assert.equal(props(tree,'BotRunBar').onVip,undefined,'The banner replaces the duplicate non-VIP upgrade button');
@@ -32,6 +38,7 @@ const ownerAccount={...account,isBillingOwner:true};const owner=mount(ownerAccou
 all(tree).find(n=>n.type==='button'&&text(n)==='Preview VIP workspace').props.onClick();tree=owner.render();
 assert.match(tree.props.className,/test-vip/);assert.equal(props(tree,'BotRunBar').vip,true);assert.equal(props(tree,'BotRunBar').vipPreview,true);
 assert.equal(props(tree,'PlatformBuyerNetwork').preview,true,'Admin appearance preview never fetches paid network access');
+assert(!props(tree,'WorkspaceAssistant'),'Gold preview cannot unlock the assistant');assert.equal(props(tree,'LiveWorkspace').assistantVipLocked,true);
 assert.equal(props(tree,'WorkspaceVipBanner'),undefined);assert.equal(props(tree,'BudgetSummary').vip,false,'Preview does not fabricate member savings');assert.equal(props(tree,'BotRunBar').balanceCents,0,'Preview does not alter credits');assert.equal(props(tree,'WorkspaceConversion').hidden,true,'Preview does not show automatic upsell prompts');
 props(tree,'AdminWorkspacePreview').onChange('standard');tree=owner.render();assert.doesNotMatch(tree.props.className,/test-vip/);assert(props(tree,'WorkspaceVipBanner'));
 props(tree,'AdminWorkspacePreview').onChange('vip');owner.stale(true);tree=owner.render();assert(!props(tree,'AdminWorkspacePreview'),'Stale admin state cannot show the override');assert.equal(props(tree,'BotRunBar').vip,false);
@@ -40,6 +47,10 @@ all(tree).find(n=>n.type==='button'&&text(n)==='Preview VIP workspace').props.on
 owner.account({...ownerAccount,membershipActive:false});tree=owner.render();assert(!props(tree,'AdminWorkspacePreview'));assert(!props(tree,'BotRunBar'));assert(props(tree,'MembershipSettings').locked,'Preview cannot unlock an expired subscription');
 const member=mount({...account,vip:true});tree=member.render();assert(!props(tree,'WorkspaceVipBanner'));assert.equal(props(tree,'BotRunBar').vip,true);assert.equal(typeof props(tree,'BotRunBar').onVip,'function');
 assert.equal(props(tree,'PlatformBuyerNetwork').preview,false,'Verified VIP members get the live network card');
+assert(props(tree,'WorkspaceAssistant'),'Verified VIP members can use the assistant');assert.equal(props(tree,'LiveWorkspace').assistantVipLocked,false);
+props(tree,'LiveWorkspace').onOpenAssistant();tree=member.render();assert.equal(props(tree,'WorkspaceAssistant').openRequest,1);
+props(tree,'LiveWorkspace').onAsk('fixture-property','123 Fixture Lane');tree=member.render();assert.equal(props(tree,'WorkspaceAssistant').request.screeningId,'fixture-property');
+member.account({...account,vip:false});tree=member.render();assert(!props(tree,'WorkspaceAssistant'),'Assistant unmounts when VIP entitlement is lost');
 const bannerModule={exports:{}};new Function('require','module','exports',code('components/workspace-vip-banner.tsx'))(require,bannerModule,bannerModule.exports);
 let reviewed=0;tree=bannerModule.exports.WorkspaceVipBanner({onUpgrade(){reviewed++;}});const upgrade=all(tree).find(n=>n.type==='button');assert.equal(upgrade.props.type,'button');assert.equal(upgrade.props['aria-haspopup'],'dialog');upgrade.props.onClick();assert.equal(reviewed,1);assert.match(text(tree),/20%/);
 tree=bannerModule.exports.AdminWorkspacePreview({mode:'vip',onChange(){},onExit(){}});assert.deepEqual(all(tree).filter(n=>n.type==='button'&&n.props['aria-pressed']!==undefined).map(n=>n.props['aria-pressed']),[false,true]);

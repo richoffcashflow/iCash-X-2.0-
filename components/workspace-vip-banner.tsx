@@ -4,7 +4,7 @@ import {ArrowRight,Crown,Gem,X} from 'lucide-react';
 export function WorkspaceVipBanner({disabled=false,onUpgrade}:{disabled?:boolean;onUpgrade:()=>void}){
  return <section className="workspace-vip-banner" aria-label="Upgrade to VIP">
   <span className="vip-banner-icon" aria-hidden="true"><Gem size={27} strokeWidth={1.5}/></span>
-  <div className="vip-banner-copy"><strong>More power with VIP</strong><p>Platform Buyer Network + 20% off AI work and leads</p></div>
+  <div className="vip-banner-copy"><strong>More power with VIP</strong><p>Ask AI Bot · Buyer Network · 20% off work + leads</p></div>
   <button type="button" disabled={disabled} aria-haspopup="dialog" onClick={onUpgrade}>Explore VIP <ArrowRight size={17} aria-hidden="true"/></button>
  </section>;
 }
