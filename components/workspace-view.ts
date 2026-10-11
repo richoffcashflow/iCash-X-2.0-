@@ -37,6 +37,13 @@ export function safeLocalTime(value:string,timezone?:string) {
  const date=new Date(value);if(!Number.isFinite(date.getTime()))return 'Time unavailable';
  try{return date.toLocaleString('en-US',{hour12:true,...(timezone?{timeZone:timezone}:{})});}catch{return date.toLocaleString('en-US',{hour12:true});}
 }
+/** A contract's calendar date must not shift a day with the viewer's timezone. */
+export function safeCalendarDate(value:string) {
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return 'Date unavailable';
+ const date=new Date(`${value}T12:00:00Z`);
+ if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==value)return 'Date unavailable';
+ return date.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'});
+}
 
 /** Split only recorded address text; never infer missing city/state or rewrite proper names. */
 export function propertyAddressLines(address:string) {

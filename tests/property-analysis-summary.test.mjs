@@ -51,7 +51,7 @@ let rendered=text(mod.exports.PropertyAnalysisSummary({result:{...result,calcula
 assert.match(rendered,/Maximum cash offer.*\$90,000/);
 assert.match(rendered,/Estimated repairs.*\$40,000/);
 assert.match(rendered,/Value after repairs.*\$200,000/);
-assert.match(rendered,/maximum purchase price, not the starting offer/);
+assert.match(rendered,/estimate of the purchase limit/);
 assert.match(rendered,/estimates are not an inspection/);
 assert.match(rendered,/has not been verified/);
 assert.doesNotMatch(rendered,/DealMachine/i);assert.match(rendered,/Oct 1, 2026/);
@@ -98,8 +98,8 @@ console.log('Historical-offer presentation: visible saved amount, update/unappro
 
 assert.equal(offerMetric({...result,calculationVersion:'net_after_repairs_70_v2'}).props['data-earlier-estimate'],undefined,'historical styling never changes current-version estimates');
 const styles=readFileSync(new URL('../app/workspace-clarity.css',import.meta.url),'utf8');
-assert.match(styles,/\.property-analysis-offer\[data-earlier-estimate=true\] :is\(dt,dd,small\)\{color:#475467\}/,'historical limitations use high-contrast text');
-assert.match(styles,/\.property-analysis-offer\[data-earlier-estimate=true\]\{background:#f5f6f8\}/,'historical amount keeps a neutral treatment');
+assert.match(styles,/\.property-analysis-offer\[data-earlier-estimate=true\] :is\(dt,dd,small\)\{color:#535353\}/,'historical limitations use high-contrast text');
+assert.match(styles,/\.property-analysis-offer\[data-earlier-estimate=true\]\{background:#f6f6f6\}/,'historical amount keeps a neutral treatment');
 const historicalSmallRule=styles.match(/\.personalized-workspace \.property-analysis-offer\[data-earlier-estimate=true\] small\{([^}]+)\}/)?.[1];
 assert.ok(historicalSmallRule,'the historical limitation text has its own typography rule');
 for(const declaration of ['display:block','margin-top:6px','font-size:11px','line-height:1.5','font-weight:500','letter-spacing:normal','white-space:normal']){

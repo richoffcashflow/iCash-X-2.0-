@@ -1,3 +1,4 @@
+import * as conversationDisplay from '../lib/conversation-display.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
@@ -10,7 +11,7 @@ const conversationSource = readFileSync(new URL('../components/call-conversation
 function load(source, dependencies = {}) {
   const code = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022}}).outputText;
   const module = {exports: {}};
-  new Function('require', 'module', 'exports', code)(name => dependencies[name] ?? require(name), module, module.exports);
+  new Function('require', 'module', 'exports', code)(name => dependencies[name] ?? (name==='@/lib/conversation-display'?conversationDisplay:require(name)), module, module.exports);
   return module.exports;
 }
 const {ReceiptDetails, readReceipt, recordingStates} = load(recordingSource + '\nexport {ReceiptDetails, readReceipt, recordingStates};');

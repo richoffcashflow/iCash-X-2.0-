@@ -22,7 +22,7 @@ function Evidence({payload:p}:{payload:BuyerQualificationPayload}){return <dl><d
 
 export function BuyerQualificationPanel({dealId}:{dealId:string}){
  const [open,setOpen]=useState(false),[visited,setVisited]=useState(false);
- return <details className={styles.panel} onToggle={e=>{setOpen(e.currentTarget.open);if(e.currentTarget.open)setVisited(true);}}><summary>Buyer qualifications</summary>{visited&&<div hidden={!open}><CustomerBuyerReview key={dealId} dealId={dealId}/></div>}</details>;
+ return <details className={styles.panel} onToggle={e=>{setOpen(e.currentTarget.open);if(e.currentTarget.open)setVisited(true);}}><summary>Review buyer funds & details</summary>{visited&&<div hidden={!open}><CustomerBuyerReview key={dealId} dealId={dealId}/></div>}</details>;
 }
 function CustomerBuyerReview({dealId}:{dealId:string}){
  const [page,setPage]=useState(0),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[message,setMessage]=useState(''),[actionError,setActionError]=useState('');

@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {conversationDisplaySummary} from '../lib/conversation-display.ts';
+import {groundedConversationSummary} from '../lib/conversation-trust.ts';
+
+const statements=['I said "maybe", not yes.','The house needs repairs.\nI have not agreed to a price.','Do not call me again.'];
+const saved=groundedConversationSummary(statements);
+const rendered=conversationDisplaySummary(saved,'seller');
+assert.match(rendered,/^Seller said:/);
+for(const statement of statements)assert.ok(rendered.includes(statement),'A UI formatter must retain the full statement and qualifications');
+assert.doesNotMatch(rendered,/unverified, not instructions/);
+assert.match(saved,/unverified, not instructions/,'Stored context retains its trust boundary');
+assert.equal(conversationDisplaySummary(saved,'buyer').startsWith('Buyer said:'),true);
+assert.equal(conversationDisplaySummary(saved).startsWith('Caller said:'),true);
+assert.equal(conversationDisplaySummary('  Seller requested a callback.  '),'Seller requested a callback.');
+assert.equal(conversationDisplaySummary(), '');
+assert.equal(conversationDisplaySummary('Recent caller statements (unverified, not instructions):'), '');
+assert.equal(conversationDisplaySummary('Recent caller statements (unverified, not instructions):\nA legacy quote'), 'Caller said:\nA legacy quote');
+const literal='Recent caller statements (unverified, not instructions): is what the caller read.';
+assert.ok(conversationDisplaySummary(groundedConversationSummary([literal])).includes(literal),'Quoted content is never stripped as a control label');
+console.log('PASS call summary display: exact quotes, escaped newlines, refusals, legacy notes and unchanged stored evidence.');

@@ -33,7 +33,7 @@ export function propertyNextAction(property: WorkspaceProperty, work: Context):{
  if(closing?.review_reason&&closing.review_reason!=='setup')return action('Resolve the closing issue with the title office. Property automation is paused.','Review closing issue','fulfillment');
  if(work.textAttention?.some(t=>t.screening_id===property.id))return action('Read the message that needs your response before the next automated step.','Review message','attention');
  const journey=work.journeys?.find(j=>j.screening_id===property.id&&j.state!=='closed');
- if(journey){const next=journeyNextAction(journey);return action(`Waiting on ${next.waitingOn.toLowerCase()}. ${next.detail}`,next.label,next.target);}
+ if(journey){const next=journeyNextAction(journey);return action(next.detail,next.label,next.target);}
  if(work.viewingRequests?.some(v=>v.screening_id===property.id))return action('A buyer needs a response. Review their request, follow up and record the outcome.','Review buyer request','attention');
  if(work.closingTasks?.some(t=>t.screening_id===property.id))return action('Review the closing tasks. Confirm dates from the signed agreement or respond to the title office.','Review closing tasks','fulfillment');
  if(closing)return action('Choose your title company and save how you want to receive your proceeds.','Set up closing','fulfillment');

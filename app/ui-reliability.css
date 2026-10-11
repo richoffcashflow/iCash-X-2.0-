@@ -13,6 +13,8 @@
 .boost-widget>.fund-button{margin-top:14px}.funding-consent{align-items:flex-start;gap:10px}.funding-consent input{flex:none;margin-top:3px}.boost-refresh{min-height:44px;margin-top:12px}.account-access .demo-button{margin:0}
 .inline-funding>.boost-widget{display:block!important}.inline-funding{min-width:0}.console-main details{min-width:0}.console-main summary{overflow-wrap:anywhere}.console-main input[type=date],.console-main input[type=datetime-local]{min-width:0;max-width:100%}
 .console-shell{padding-bottom:env(safe-area-inset-bottom,0px)}
+body:has(dialog[open]){overflow:hidden}
+@media(max-width:600px){.funding-dialog :is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:16px}}
 @media(max-width:520px){.deal-fields{grid-template-columns:minmax(0,1fr)}.workspace-primary-actions{gap:12px;margin:18px 0}.operation-empty{padding:20px 16px}.operation-top{gap:10px}.balance-top>.fund-button{min-height:48px}.contract-review-guide{padding:16px}.contract-review-facts>div{grid-template-columns:minmax(90px,1fr) minmax(0,1.4fr)}}
 @media(max-width:370px){.balance-top{display:grid;grid-template-columns:minmax(0,1fr)}.balance-top>.fund-button{width:100%}.mode-badge{font-size:8px;padding:6px;max-width:40%}}
 

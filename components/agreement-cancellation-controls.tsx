@@ -40,7 +40,9 @@ export function AgreementCancellationControls({dealId,stage,signingVersion,onUpd
  const pending=view?.requests.find(c=>c.state==='pending');
  const needsRelease=!!pending&&(pending.requires_release||pending.has_deposit||pending.has_title);
  const history=view?.requests.filter(c=>c.state==='completed')??[];
- return <section className="agreement-cancellation" data-deal-section="cancellation" aria-label="Cancel agreements">
+ const needsReview=!!pending||stage==='cancellation_pending'||history.some(c=>c.late_activity)||!!error;
+ return <details className="agreement-cancellation" data-deal-section="cancellation" open={needsReview}>
+  <summary>{needsReview?'Cancellation needs your review':'Contract cancellation'}</summary>
   {pending?<div className="cancellation-pending" role="status">
    <h4>{pending.kind==='purchase'?'Contract':'Assignment'} cancellation pending</h4>
    <p>Automatic work is paused. {pending.kind==='assignment'?'The seller contract stays in place.':''} Signed documents and payment records are saved.</p>
@@ -75,5 +77,5 @@ export function AgreementCancellationControls({dealId,stage,signingVersion,onUpd
    {error&&<p role="alert">{error}</p>}
    <div className="cancellation-actions"><button disabled={busy} onClick={()=>dialog.current?.close()}>Keep {kind==='purchase'?'contract':'assignment'}</button><button className="cancellation-submit" disabled={busy||!view||view.blocked||!!pending||!confirmed||reason.trim().length<3} onClick={()=>void run({action:'request',dealId,kind,reason,key:key.current,revision:view!.revision,confirmed:true})}>{busy?'Checking…':'Confirm cancellation'}</button></div>
   </dialog>
- </section>;
+ </details>;
 }

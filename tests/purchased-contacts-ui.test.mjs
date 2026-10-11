@@ -2,16 +2,17 @@ import * as dealSummary from '../lib/deal-card-summary.ts';
 import * as guidance from '../lib/workspace-guidance.ts';
 import * as analysis from '../lib/property-analysis-view.ts';
 import * as contracts from '../lib/property-contract-visibility.ts';
+import * as conversationDisplay from '../lib/conversation-display.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {renderToStaticMarkup} from 'react-dom/server';
 import ts from 'typescript';
-import {safeLocalTime,propertyAddressLines,propertyResearchDate} from '../components/workspace-view.ts';
+import {safeLocalTime,safeCalendarDate,propertyAddressLines,propertyResearchDate} from '../components/workspace-view.ts';
 const require=createRequire(import.meta.url);
-const code=ts.transpileModule(readFileSync(new URL('../components/live-workspace.tsx',import.meta.url),'utf8')+'\nexport {PropertyFacts,PropertyCard};',{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
+const code=ts.transpileModule(readFileSync(new URL('../components/live-workspace.tsx',import.meta.url),'utf8')+'\nexport {PropertyFacts,PropertyCard,PropertyNextStep};',{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
 const mod={exports:{}};
-new Function('require','module','exports',code)(name=>name==='react'?{useState:v=>[v,()=>{}],useEffect(){},useRef:v=>({current:v}),Activity:'Activity'}:name==='react/jsx-runtime'?require(name):name==='lucide-react'?{Phone:()=>null,MessageCircle:()=>null}:name==='./workspace-view'?{safeLocalTime,propertyAddressLines,propertyResearchDate,needsAttention:()=>false}:name==='@/lib/deal-card-summary'?dealSummary:name==='@/lib/property-contract-visibility'?contracts:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/property-analysis-view'?analysis:name==='@/lib/work-milestone'?{workMilestone:()=> 'Research received'}:{},mod,mod.exports);
+new Function('require','module','exports',code)(name=>name==='react'?{useState:v=>[v,()=>{}],useEffect(){},useRef:v=>({current:v}),Activity:'Activity'}:name==='react/jsx-runtime'?require(name):name==='lucide-react'?{Phone:()=>null,MessageCircle:()=>null}:name==='./workspace-view'?{safeLocalTime,safeCalendarDate,propertyAddressLines,propertyResearchDate,needsAttention:()=>false}:name==='@/lib/conversation-display'?conversationDisplay:name==='@/lib/deal-card-summary'?dealSummary:name==='@/lib/property-contract-visibility'?contracts:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/property-analysis-view'?analysis:name==='@/lib/work-milestone'?{workMilestone:()=> 'Research received'}:{},mod,mod.exports);
 const lookup={screening_id:'owned',created_at:'2026-10-01T01:02:03Z',fetchedAt:'2026-10-01T01:01:02Z',source:'DealMachine',ownershipVerified:false,outreachAuthorized:false,contacts:[
  {name:'Synthetic Person',phones:[{number:'+12025550101',type:'Mobile',doNotCall:true},{number:'+12025550102',type:'Landline',doNotCall:false},{number:'+12025550103',type:null,doNotCall:null},{number:null,type:null}]},
  {name:null,phones:[]}
@@ -30,3 +31,24 @@ const card=mod.exports.PropertyCard({property,work,principal:'',active:true,visi
 const displayed=all(card).filter(node=>node.type===mod.exports.PropertyFacts);assert.equal(displayed.length,1);assert.equal(displayed[0].props.lookups[0],lookup,'Property cards select only their own lookup when retained views merge multiple properties');
 assert.equal(all(card).find(node=>node.type==='Activity').props.mode,'visible');
 console.log('Purchased contact display: actual component renders names, phones, source/timing, all DNC states and missing fields; preserves unverified permissions, escapes text, exposes no outreach controls, and isolates retained property cards. Synthetic fixtures only.');
+
+const text=node=>typeof node==='string'?node:Array.isArray(node)?node.map(text).join(' '):node&&typeof node==='object'?text(node.props?.children):'';
+const signedWork={...work,deals:[{id:'ui-deal',screening_id:property.id,stage:'under_contract',terms:{priceCents:9500000,closingDate:'2026-11-10'}}],signing:[{deal_id:'ui-deal',kind:'purchase',state:'completed',test_mode:false}],conversations:[{screening_id:property.id,party:'seller',summary:'Recent caller statements (unverified, not instructions):\n"I may sell, but I have not decided."'}],journeys:[{screening_id:property.id,state:'qualifying',wants_assignment:true,last_progress_at:new Date().toISOString()}]};
+let expanded=true;
+const props={property,work:signedWork,principal:'',visited:true,hidden:false,onToggle:value=>{expanded=value;},onRefresh(){},onAsk(){},assistantVipLocked:true};
+const opened=mod.exports.PropertyCard({...props,active:true});
+assert.doesNotMatch(text(opened),/unverified, not instructions|Close deal/);
+assert.match(text(opened),/Seller said:.*I may sell, but I have not decided\./s);
+assert.equal(all(opened).filter(n=>n.props.className==='property-progress-compact').length,0,'The expanded card shows deal progress once in its next-step panel');
+const hide=all(opened).find(n=>n.type==='button'&&text(n).trim()==='Hide details');
+assert.equal(hide.props['aria-expanded'],true);hide.props.onClick();assert.equal(expanded,false,'Hide details only collapses the card');
+const closed=mod.exports.PropertyCard({...props,active:false});
+assert.equal(all(closed).filter(n=>n.props.className==='property-progress-compact').length,1,'Collapsed cards keep the compact progress summary');
+assert.equal(all(opened).find(n=>n.props.className==='workspace-quiet property-ask-bot').props['data-credit-action'],undefined,'Standard users still open VIP review without a credit prerequisite');
+const next=mod.exports.PropertyNextStep({property,work:signedWork,stale:false,onRefresh(){}});
+assert.match(text(next),/Waiting for the buyer’s legal name/);assert.doesNotMatch(text(next),/Waiting on buyer/);
+assert.equal(all(next).find(n=>n.type==='time').props.dateTime,'2026-11-10');assert.match(text(next),/Nov 10, 2026/);
+assert.equal(all(next).filter(n=>n.props['aria-label']==='Deal progress').length,1);
+let refreshed=false;const stale=mod.exports.PropertyNextStep({property,work:signedWork,stale:true,onRefresh(){refreshed=true;}});
+const refresh=all(stale).find(n=>n.type==='button');assert.equal(text(refresh),'Refresh status');refresh.props.onClick();assert(refreshed);
+console.log('PASS screenshot regression: readable caller quotes, one progress row, collapse-only label, calendar date, buyer action, stale recovery and VIP review.');

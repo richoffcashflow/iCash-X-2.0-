@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {filterProperties,needsAttention,propertyAddressLines,propertyGroup,propertyResearchDate,messageSpeaker,safeLocalTime} from '../components/workspace-view.ts';
+import {filterProperties,needsAttention,propertyAddressLines,propertyGroup,propertyResearchDate,messageSpeaker,safeLocalTime,safeCalendarDate} from '../components/workspace-view.ts';
 import {makeWorkspaceFixture,uuid} from './fixtures/workspace-volume.mjs';
 const work=makeWorkspaceFixture({count:10000});
 assert.equal(work.properties.length,6,'a high-volume fixture remains bounded');
@@ -15,12 +15,21 @@ const cleared={...work,textAttention:[],propertyAttentionIds:[]};
 assert.equal(propertyGroup(uuid(1),cleared),'active');
 assert.equal(propertyGroup(uuid(5),cleared),'history');
 assert.equal(propertyGroup(uuid(6),cleared),'history');
-assert.equal(needsAttention(uuid(1),{...cleared,handoffs:[{screening_id:uuid(1),state:'acknowledged'}]}),false,'seen handoffs do not look like new requests');
+assert.equal(needsAttention(uuid(1),{...cleared,handoffs:[{screening_id:uuid(1),state:'acknowledged'}]}),true,'acknowledging a handoff does not resolve it');
+assert.equal(needsAttention(uuid(1),{...cleared,handoffs:[{screening_id:uuid(1),state:'resolved'}]}),false,'resolved handoffs leave the attention queue');
 assert.equal(needsAttention(uuid(1),{...cleared,callRequests:[{screening_id:uuid(1),state:'handled'}]}),false);
 assert.equal(needsAttention(uuid(1),{...cleared,signing:[{deal_id:cleared.deals[0].id,state:'customer_signature_needed',test_mode:true}]}),true,'test signatures still require action without implying production completion');
 assert.equal(messageSpeaker('outgoing','seller'),'From your bot number','unknown actors are not claimed to be manual or AI');
 assert.equal(messageSpeaker('incoming','buyer'),'Buyer');
 assert.equal(safeLocalTime('bad'),'Time unavailable');
+const originalTimezone=process.env.TZ;
+try{
+ for(const zone of ['America/Chicago','America/Los_Angeles','Pacific/Kiritimati']){
+  process.env.TZ=zone;assert.equal(safeCalendarDate('2026-11-10'),'Nov 10, 2026');
+ }
+ assert.equal(safeCalendarDate('2028-02-29'),'Feb 29, 2028');
+ for(const invalid of ['bad','','2026-02-29','2026-11-31','2026-11-10T00:00:00Z'])assert.equal(safeCalendarDate(invalid),'Date unavailable');
+}finally{if(originalTimezone===undefined)delete process.env.TZ;else process.env.TZ=originalTimezone;}
 assert.ok(safeLocalTime('2026-09-30T12:00:00Z','invalid/timezone').length);
 assert.deepEqual(propertyAddressLines('3462 MCKENZIE ST, MEMPHIS, TN 38118'),{street:'3462 MCKENZIE ST',location:'MEMPHIS, TN 38118'});
 assert.deepEqual(propertyAddressLines('1 Example St, Unit 2, Demo City, TX 75001'),{street:'1 Example St, Unit 2',location:'Demo City, TX 75001'});
@@ -36,7 +45,7 @@ assert.equal(makeWorkspaceFixture({count:0}).properties.length,0);
 const source=readFileSync(new URL('../components/live-workspace.tsx',import.meta.url),'utf8');
 assert.ok(!source.includes('focused.current'),'open forms must not stop metadata refresh');
 assert.ok(source.includes('attentionPage')&&source.includes('screeningId')&&source.includes('searchSupported'));
-assert.ok(source.includes('Take over')&&source.includes('Already-started work may finish'));
+assert.ok(source.includes('Pause bot for this lead')&&source.includes('Already-started work may finish'));
 const messages=readFileSync(new URL('../components/deal-messages.tsx',import.meta.url),'utf8');assert.ok(messages.includes('drafts[current.id]'));assert.ok(messages.includes('request.key'));assert.ok(!messages.includes('Check latest status')&&!messages.includes('Search texts')&&!messages.includes('AI conversation notes'));
 const review=readFileSync(new URL('../components/contract-review-guide.tsx',import.meta.url),'utf8');
 assert.ok(review.includes("!assignment&&!t.closingDate&&'Closing date'"),'the approved original purchase form needs an agreed closing date');

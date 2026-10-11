@@ -21,8 +21,8 @@
 .funding-dialog{box-sizing:border-box;width:min(440px,calc(100% - 32px));max-height:calc(100dvh - 40px);padding:24px;margin:auto;border:1px solid #e5e5e5;border-radius:20px;background:#fff;color:#181818;box-shadow:0 24px 90px #0003;overflow:auto;overscroll-behavior:contain}
 .funding-dialog::backdrop{background:#1118;backdrop-filter:blur(3px)}
 .funding-dialog-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
-.funding-dialog-heading h2{font-size:18px;font-weight:650;letter-spacing:-.4px;margin:0}
-.funding-dialog-heading>button{display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:#f5f5f5;color:#444;cursor:pointer}
+.funding-dialog-heading h2{min-width:0;overflow-wrap:anywhere;font-size:18px;font-weight:650;letter-spacing:-.4px;margin:0}
+.funding-dialog-heading>button{display:grid;place-items:center;flex:none;width:44px;height:44px;border:0;border-radius:50%;background:#f5f5f5;color:#444;cursor:pointer}
 .daily-funding{gap:16px;--tier-color:var(--bot-color,#181818)}
 .daily-funding .daily-slider{accent-color:var(--bot-color,#181818);margin:4px 0 0;min-height:44px}
 .daily-funding .daily-slider-labels{display:flex;justify-content:space-between;width:100%;gap:24px;margin-top:-14px;font-size:12px}
@@ -182,3 +182,13 @@
 .minimal-workspace .property-contact-dialog .text-contact-picker{padding:20px}
 .minimal-workspace .property-contact-dialog .text-contact-picker>summary,.minimal-workspace .property-contact-dialog .contact-unavailable>summary{font-size:13px;color:#727272;cursor:pointer;padding:8px 0}
 @media(max-width:600px){.minimal-workspace .property-contact-dialog .seller-contact-card{padding:16px;align-items:stretch}.minimal-workspace .property-contact-dialog .seller-contact-actions{width:100%}.minimal-workspace .property-contact-dialog .seller-contact-actions button{flex:1}.minimal-workspace .property-contact-dialog .conversation-control{padding:10px 16px}}
+
+.minimal-workspace .contact-dialog-heading>div{min-width:0;overflow-wrap:anywhere}
+.minimal-workspace .contact-dialog-close{width:44px;height:44px;min-width:44px;flex:none}
+.minimal-workspace .property-contact-dialog .seller-contact-identity>div{min-width:0;overflow-wrap:anywhere}
+@media(max-width:600px){
+ .minimal-workspace .contact-dialog-heading{padding-top:max(16px,env(safe-area-inset-top))}
+ .minimal-workspace .property-contact-dialog .message-composer{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
+ .minimal-workspace .property-contact-dialog .property-call-list{padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+ .minimal-workspace .property-contact-dialog .contact-alert{align-items:flex-start;flex-wrap:wrap}
+}

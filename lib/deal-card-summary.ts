@@ -12,5 +12,5 @@ export function dealCardSummary(
  const nextAction=pending?'Finish cancellation review. Automatic work is paused.':cancelled?'Review any remaining contract obligations.':closed?'Review your closing statement and final documents.':title?'Confirm title requirements, signatures and funding.':assignment?'Confirm the buyer’s deposit and open title.':purchase?'Prepare the buyer package and review interested buyers.':'Confirm the seller’s terms and prepare the agreement.';
  const done=[purchase,assignment,title,closed],current=pending||cancelled||closed?-1:done.findIndex(value=>!value);
  return {contractSigned:purchase,status,nextAction,priceCents:purchase&&Number.isSafeInteger(deal.terms.priceCents)&&deal.terms.priceCents!>=0?deal.terms.priceCents:null,
- steps:['Contract','Buyer','Title','Closed'].map((label,index)=>({label,done:done[index],current:index===current}))};
+ steps:['Contract','Buyer','Closing','Closed'].map((label,index)=>({label,done:done[index],current:index===current}))};
 }
