@@ -23,7 +23,6 @@ export function WebinarExpressCheckout({checkingAccount=false,accountError=false
  return <div className="wb-express-page wb-plan-home icash-launch-home">
   <header className="wb-express-header">
    <a className="wb-express-brand" href="/" aria-label="iCash X home"><IcashMark/></a>
-   <span className="launch-header-label">AI wholesale workspace</span>
    <button type="button" className="wb-express-sign-in" aria-haspopup="dialog" onClick={()=>setSignInOpen(true)}>Sign in</button>
   </header>
   <main className="wb-express">
