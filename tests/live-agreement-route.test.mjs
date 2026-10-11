@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {liveToolHistory} from '../lib/live-tool-history.ts';
+import {boundSellerQualification} from '../lib/seller-offer-qualification.ts';
+import {qualifiedSellerTurns} from './helpers/seller-qualification-fixture.mjs';
 import {automaticCallOffer,blockedOffer,buyerAgreementHandoff} from '../lib/automatic-call-offer.ts';
 import {callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence} from '../lib/call-offer-evidence.ts';
 import {sellerListingEvidence} from '../lib/seller-listing.ts';
@@ -26,14 +28,16 @@ const db=async(path,method,b)=>{
  throw Error(path);
 };
 const route=await loadService('app/api/internal/voice/cash-offer/route.ts',{
- liveToolHistory,NextResponse:{json:Response.json},process:{env:{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',DOCUSEAL_MODE:'live'}},db,
+ liveToolHistory,boundSellerQualification,NextResponse:{json:Response.json},process:{env:{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',DOCUSEAL_MODE:'live'}},db,
  bindSellerAgreementCall:async()=>{},createRecordedReceptionProviders:()=>({conversation:async()=>assert.fail('The live tool history must work even when a provider GET is stale')}),
  callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence,sellerPayoffEvidence,sellerListingEvidence,automaticCallOffer,blockedOffer,buyerAgreementHandoff,sellerAgreementInput,object,sha,sellerAgreementFailure,sellerAgreementAction,
  sendForSignatures:async i=>{sends++;assert.equal(i.signers[0].phone,scope.phone);assert.equal(terms.priceCents,15200000);assert.equal(terms.earnestCents,null);envelopes=[{id:'envelope',state:'awaiting_counterparty',test_mode:false,terms,recipients:[i.signers[0],{name:'Fixture buyer'}]}];return {id:'envelope',testMode:false};},
  textPendingContract:async(account,id,phone)=>{texts++;assert.deepEqual([account,id,phone],['account','envelope',scope.phone]);return {sent:true,status:'accepted'};},refreshSigning:async()=>({status:'awaiting_counterparty'}),
 });
-let entries=[];
-const post=async(body,status=200)=>{const r=await route.POST(new Request('https://fixture.test/api/internal/voice/cash-offer',{method:'POST',headers:{authorization:'Bearer '+'a'.repeat(64)},body:JSON.stringify({conversationId:'conv_fixture',conversationHistory:JSON.stringify({'x-elevenlabs-history':true,entries}),...body})}));assert.equal(r.status,status);return r.json();};
+let entries=qualifiedSellerTurns.slice(0,2),qualificationEntries=[];
+const post=async(body,status=200)=>{const r=await route.POST(new Request('https://fixture.test/api/internal/voice/cash-offer',{method:'POST',headers:{authorization:'Bearer '+'a'.repeat(64)},body:JSON.stringify({conversationId:'conv_fixture',conversationHistory:JSON.stringify({'x-elevenlabs-history':true,entries:[...qualificationEntries,...entries]}),...body})}));assert.equal(r.status,status);return r.json();};
+const early=await post({action:'get_offer'});assert.equal(early.quoteAllowed,false);assert.equal(early.priceCents,null);assert.equal(early.nextQuestion,'Is now a good time to talk about the property?');assert.equal(savedActions.length,0,'ownership alone cannot issue a price');
+qualificationEntries=qualifiedSellerTurns;entries=[];
 const quoted=await post({action:'get_offer'});assert.equal(quoted.priceCents,15200000);
 entries=[{role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',result_value:JSON.stringify(quoted)}]},{role:'agent',message:'Our cash offer is one hundred fifty-two thousand dollars. Does that work?'},{role:'user',message:'Yes, it works.'},{role:'agent',message:'What is your legal name?'},{role:'user',message:'Jane Seller.'}];
 assert.equal((await post({action:'accept_offer',priceCents:15200000,quoteRevision:quoted.quoteRevision})).status,'verbally_accepted');

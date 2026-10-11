@@ -12,6 +12,7 @@ import {sendForSignatures,refreshSigning} from '@/lib/signing-service';
 import {textPendingContract} from '@/lib/contract-text-service';
 import {object,sha} from '@/lib/required-call-recording';
 import {liveToolHistory} from '@/lib/live-tool-history';
+import {boundSellerQualification} from '@/lib/seller-offer-qualification';
 export const runtime='nodejs';
 export const maxDuration=60;
 export async function POST(request:Request){
@@ -28,12 +29,13 @@ export async function POST(request:Request){
   if(process.env.ICASH_LIVE_WORK_READY!=='true'||process.env.ICASH_RECORDING_RECEIPTS_READY!=='true')return NextResponse.json(blockedOffer('unavailable','The live property workflow is not currently available.'),{status:409,headers});
   let evidence:Promise<unknown>|undefined;
   const transcript=(i:Record<string,unknown>)=>currentHistory?Promise.resolve(currentHistory):evidence??=createRecordedReceptionProviders(process.env).conversation(String(i.conversationId));
-  const d={db,bind:bindSellerAgreementCall,resolveStatement:async(i:Record<string,unknown>)=>callSellerStatement(await transcript(i),i),verifyInput:async(i:Record<string,unknown>)=>callOfferEvidence(await transcript(i),i),verifyPayoffChange:async(i:Record<string,unknown>)=>callPayoffEvidence(await transcript(i),i),verifyListingStatus:async(i:Record<string,unknown>)=>sellerListingEvidence(await transcript(i),i),verifySellerPrice:async(i:Record<string,unknown>)=>callSellerPriceEvidence(await transcript(i),i),verifyPayoffFacts:async(i:Record<string,unknown>)=>sellerPayoffEvidence(await transcript(i),i)};
+  const d={db,bind:bindSellerAgreementCall,verifyQualification:async(i:Record<string,unknown>,context:Parameters<typeof boundSellerQualification>[1])=>boundSellerQualification(db,context,await transcript(i)),resolveStatement:async(i:Record<string,unknown>)=>callSellerStatement(await transcript(i),i),verifyInput:async(i:Record<string,unknown>)=>callOfferEvidence(await transcript(i),i),verifyPayoffChange:async(i:Record<string,unknown>)=>callPayoffEvidence(await transcript(i),i),verifyListingStatus:async(i:Record<string,unknown>)=>sellerListingEvidence(await transcript(i),i),verifySellerPrice:async(i:Record<string,unknown>)=>callSellerPriceEvidence(await transcript(i),i),verifyPayoffFacts:async(i:Record<string,unknown>)=>sellerPayoffEvidence(await transcript(i),i)};
   if(input.action!=='confirm_and_send'&&input.action!=='status')return NextResponse.json(await automaticCallOffer(token,input,d),{headers});
   const agreement=sellerAgreementInput.parse(input);
   if(process.env.DOCUSEAL_MODE!=='live')return NextResponse.json({sent:false,status:'unavailable',instruction:'Live agreement delivery is not ready.'},{status:409,headers});
   if(agreement.action==='confirm_and_send'){
    let quote=await automaticCallOffer(token,{action:'get_offer',conversationId:agreement.conversationId},d);
+   if('reason' in quote&&quote.reason==='seller_qualification_required')return NextResponse.json({...quote,sent:false},{headers});
    if('party' in quote&&quote.party==='buyer')return NextResponse.json(buyerAgreementHandoff(),{headers});
    if(quote.quoteAllowed&&'contractAllowed' in quote&&quote.contractAllowed===false)return NextResponse.json({...quote,sent:false,reason:'payoff_review_required',instruction:quote.instruction},{headers});
    if(!quote.quoteAllowed||!('party' in quote)||quote.party!=='seller'||!('status' in quote)||!['calculated_proposal','verbally_accepted','pending_agreement'].includes(quote.status)||quote.priceCents!==agreement.confirmation.agreedPriceCents)return NextResponse.json({...blockedOffer('confirmed_price_required','Confirm and save the exact current offer before preparing the agreement.'),sent:false},{status:409,headers});

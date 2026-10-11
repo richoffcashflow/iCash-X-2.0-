@@ -11,7 +11,7 @@ assert.equal(callSellerPriceEvidence(statement('I would not take $90,000.'),{act
 const now=Date.now(),snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:0,raw:{data:{dm_property_id:'prop_123',full_address:'45 Example Road',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:20000,estimated_equity_percentage:90}}};
 let context={party:'seller',address:'45 Example Road',snapshot,offerState:{},offerVersion:0};
 let body='I would take $90,000.';
-const d={now:()=>now,bind:async()=>{},verifyInput:async()=>true,verifySellerPrice:async()=>evidence(body),db:async(path,method,p)=>{
+const d={now:()=>now,bind:async()=>{},verifyQualification:async()=>({ready:true}),verifyInput:async()=>true,verifySellerPrice:async()=>evidence(body),db:async(path,method,p)=>{
  if(path==='rpc/icash_call_offer_context')return structuredClone(context);
  assert.equal(path,'rpc/icash_save_call_offer');assert.equal(p.p_expected_version,context.offerVersion);context.offerState=p.p_state;context.offerVersion++;return true;
 }};

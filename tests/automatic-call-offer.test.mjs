@@ -49,7 +49,7 @@ assert(evidence('What is the total repair budget?',statement,{action:'update_rep
 assert(!evidence('What is the total repair budget?',statement,{action:'update_repairs',sellerStatement:statement,repairEstimateCents:7000000}));
 assert(!evidence('What is the budget?','Not $60,000',{action:'update_repairs',sellerStatement:'$60,000',repairEstimateCents:6000000}));
 let current=structuredClone(context),verified=true,conflict=false,saves=0;
-const d={now:()=>now,bind:async()=>{},verifyInput:async()=>verified,db:async(path,method,body)=>{
+const d={now:()=>now,bind:async()=>{},verifyQualification:async()=>({ready:true}),verifyInput:async()=>verified,db:async(path,method,body)=>{
  if(path==='rpc/icash_call_offer_context')return structuredClone(current);
  assert.equal(path,'rpc/icash_save_call_offer');if(conflict)return false;
  assert.equal(body.p_expected_version,current.offerVersion);assert.deepEqual(body.p_expected_snapshot,current.snapshot);
