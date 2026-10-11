@@ -132,8 +132,8 @@ export default function Home(){
  if(guest)return <WebinarExpressCheckout checkingAccount={!account} accountError={accountError} signInReady={account?.signInReady??true} onRetry={()=>void refreshAccount()} onSignedIn={()=>void refreshAccount(true)}/>;
  return <div className={`console-shell personalized-workspace minimal-workspace assistant-workspace icash-brand-workspace ${styles.workspace}${displayVip&&!workspaceLocked?' '+styles.vip:''}`} style={{'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties}>
   <header className="console-header">
+   <button type="button" className="workspace-course-launcher" aria-haspopup="dialog" aria-expanded={courseOpen} onClick={()=>setCourseOpen(true)}><BookOpen size={17} aria-hidden="true"/>Course</button>
    <div className="workspace-header-links">
-    <button type="button" className="workspace-course-launcher" aria-haspopup="dialog" aria-expanded={courseOpen} onClick={()=>setCourseOpen(true)}><BookOpen size={17} aria-hidden="true"/>Course</button>
     {!workspaceLocked&&<WorkspaceUpdates onPreferences={()=>showDetails('notification-settings')} onBudget={()=>openFunding()}/>}
     <details ref={accountMenu} className="workspace-account-menu" onBlur={event=>{if(event.relatedTarget instanceof Node&&!event.currentTarget.contains(event.relatedTarget))closeAccountMenu();}}>
      <summary aria-label="Account menu" title="Account menu"><Menu size={21} aria-hidden="true"/></summary>
