@@ -1,11 +1,11 @@
 'use client';
-import {ArrowUpRight,Crown,X} from 'lucide-react';
+import {ArrowRight,Crown,Gem,X} from 'lucide-react';
 
 export function WorkspaceVipBanner({disabled=false,onUpgrade}:{disabled?:boolean;onUpgrade:()=>void}){
  return <section className="workspace-vip-banner" aria-label="Upgrade to VIP">
-  <span className="vip-banner-icon" aria-hidden="true"><Crown size={23}/></span>
-  <div className="vip-banner-copy"><strong>Give your bot the VIP advantage</strong><p>Unlock the Platform Buyer Network. Save 20% on AI work and leads.</p></div>
-  <button type="button" disabled={disabled} aria-haspopup="dialog" onClick={onUpgrade}>Upgrade to VIP <ArrowUpRight size={17} aria-hidden="true"/></button>
+  <span className="vip-banner-icon" aria-hidden="true"><Gem size={27} strokeWidth={1.5}/></span>
+  <div className="vip-banner-copy"><strong>More power with VIP</strong><p>Platform Buyer Network + 20% off AI work and leads</p></div>
+  <button type="button" disabled={disabled} aria-haspopup="dialog" onClick={onUpgrade}>Explore VIP <ArrowRight size={17} aria-hidden="true"/></button>
  </section>;
 }
 

@@ -1,10 +1,10 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {Play,Pause,Plus,Crown} from 'lucide-react';
+import {Play,Pause,Plus,Crown,Coins} from 'lucide-react';
 import {creditAmount} from '@/lib/workspace-progress';
 import type {BotActivity} from '@/lib/bot-activity';
-type Props={vip?:boolean;vipPreview?:boolean;running:boolean;stopped:boolean;paymentRequired:boolean;busy:boolean;stale:boolean;hasCreditHistory?:boolean;balanceCents?:number;principalKey?:string;canPause?:boolean;onVip?:()=>void;onBudget:()=>void;onResume:()=>void;onPause:()=>void};
-export function BotRunBar({vip=false,vipPreview=false,running,stopped,paymentRequired,busy,stale,balanceCents,hasCreditHistory=false,principalKey,canPause=false,onVip,onBudget,onPause,onResume}:Props){
+type Props={botName?:string;vip?:boolean;vipPreview?:boolean;running:boolean;stopped:boolean;paymentRequired:boolean;busy:boolean;stale:boolean;hasCreditHistory?:boolean;balanceCents?:number;principalKey?:string;canPause?:boolean;onVip?:()=>void;onBudget:()=>void;onResume:()=>void;onPause:()=>void};
+export function BotRunBar({botName,vip=false,vipPreview=false,running,stopped,paymentRequired,busy,stale,balanceCents,hasCreditHistory=false,principalKey,canPause=false,onVip,onBudget,onPause,onResume}:Props){
  const [activity,setActivity]=useState<(BotActivity&{principalKey?:string})|null>(null);
  useEffect(()=>{
   if(!running||stale){setActivity(null);return;}
@@ -30,15 +30,15 @@ export function BotRunBar({vip=false,vipPreview=false,running,stopped,paymentReq
  const funded=(balanceCents??0)>0;
  const title=stale?'Checking status':paymentRequired?'Restore access':active?'Bot working':!funded?(balanceCents===undefined?'Ready when you are':hasCreditHistory?'Out of credits':'Add money to start your bot'):stopped?'Bot paused':running?'Bot running':'Bot ready';
  const detail=stale?'Reconnecting…':paymentRequired?'Update your subscription to continue.':active?current!.label:!funded?(hasCreditHistory?'Add money to continue. Your properties and conversations are saved.':'Choose an amount. Your bot starts after payment.'):running?(current?.label??'Checking for the next task…'):stopped?'Your properties and conversations are saved.':'Waiting for eligible work.';
+ const displayTitle=botName?.trim()&&title.startsWith('Bot ')?`${botName.trim()} is ${title.slice(4)}`:title;
  return <section className={`bot-run-bar bot-run-centered${active?' is-active':''}`} aria-label="Bot controls">
-  <div className="bot-run-status"><span className="bot-work-dots" aria-hidden="true"><i/><i/><i/></span><div><div className="bot-run-title"><h2>{title}</h2>{vip&&<span className="workspace-vip-badge" aria-label={vipPreview?'VIP appearance preview':'VIP member'}><Crown size={24} strokeWidth={2} aria-hidden="true"/><span>VIP</span></span>}</div><p aria-live="polite">{detail}</p></div></div>
+  <div className="bot-run-status"><span className="bot-orb" aria-hidden="true"><span>X</span></span><div><div className="bot-run-title"><h2>{displayTitle}</h2>{active&&<span className="bot-work-dots" aria-hidden="true"><i/><i/><i/></span>}{vip&&<span className="workspace-vip-badge" aria-label={vipPreview?'VIP appearance preview':'VIP member'}><Crown size={24} strokeWidth={2} aria-hidden="true"/><span>VIP</span></span>}</div><p aria-live="polite">{detail}</p></div></div>
   <div className="bot-run-actions">
-   <button id="workspace-funding-toggle" className="bot-main-action" type="button" aria-haspopup="dialog" disabled={busy||stale} onClick={onBudget}><Plus size={18} aria-hidden="true"/>{busy?'One moment…':paymentRequired?'Restore access':'Add credits'}</button>
+   {(!funded||paymentRequired)&&<button className="bot-main-action" type="button" aria-haspopup="dialog" disabled={busy||stale} onClick={onBudget}><Plus size={18} aria-hidden="true"/>{busy?'One moment…':paymentRequired?'Restore access':'Add money to start'}</button>}
    {funded&&!paymentRequired&&(canPause||stopped)&&<button className="bot-run-budget" type="button" disabled={busy||stale} onClick={canPause?onPause:onResume}>{canPause?<Pause size={14} aria-hidden="true"/>:<Play size={14} aria-hidden="true"/>}{canPause?'Pause bot':'Run bot'}</button>}
-
   </div>
-  {(onVip||balanceCents!==undefined&&(hasCreditHistory||funded))&&<div className="bot-plan-row">
-   {balanceCents!==undefined&&(hasCreditHistory||funded)&&<div className="bot-credit-caption">{stale?'—':creditAmount(balanceCents)} credits left</div>}
+  <div className="bot-wallet"><span className="bot-wallet-icon" aria-hidden="true"><Coins size={23}/></span><div className="bot-wallet-amount"><span>{hasCreditHistory||funded?'Credits left':'Work credits'}</span><strong>{stale||balanceCents===undefined?'—':creditAmount(balanceCents)}</strong></div><button id="workspace-funding-toggle" type="button" aria-haspopup="dialog" disabled={busy||stale} onClick={onBudget}>{busy?'One moment…':paymentRequired?'Restore access':'Add money'}</button></div>
+  {onVip&&<div className="bot-plan-row">
    {onVip&&<button type="button" className="workspace-vip-switch" aria-haspopup="dialog" disabled={busy||stale} onClick={onVip}><Crown size={16} aria-hidden="true"/>{vip?'VIP settings':'Switch to VIP'}</button>}
   </div>}
  </section>;

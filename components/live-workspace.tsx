@@ -8,7 +8,7 @@ import {buyerDepositCents} from '@/lib/buyer-purchase-terms';
 import {BuyerDealCoordination} from './buyer-deal-coordination';
 import {buyerRequestTitle,BuyerViewingRequestCard,type BuyerViewingRequest} from './buyer-viewing-request';
 import {Activity,useEffect,useRef,useState,type ReactNode} from 'react';
-import {Phone,MessageCircle,Sparkles,X,ChevronDown} from 'lucide-react';
+import {Phone,MessageCircle,Sparkles,X,ChevronDown,FileText} from 'lucide-react';
 import {analysisMoney,propertyAnalysisView} from '@/lib/property-analysis-view';
 import {mostPromisingProperty,propertyBotStatus,propertyNextAction,propertyNextMove} from '@/lib/workspace-guidance';
 import {openDealSection} from '@/lib/workspace-navigation';
@@ -119,13 +119,15 @@ function PropertyCard({onAsk,property:p,work,principal,active,visited,onToggle,o
      <span className={`property-bot-status tone-${bot.tone}`}><span className="ai-status-dot" aria-hidden="true"/>{bot.label}</span>
     </span>
     <span className="property-cash-preview" aria-label={dealSummary?.priceCents!=null?'Purchase price':'Estimated cash offer'}><small>{dealSummary?.priceCents!=null?'Purchase price':'Estimated cash offer'}</small><strong>{analysisMoney(dealSummary?.priceCents??analysis.cashOfferCeilingCents)}</strong></span>
+    <span className="property-card-estimates"><span><small>ARV estimate</small><strong>{analysisMoney(analysis.arvCents)}</strong></span><span><small>Repairs estimate</small><strong>{analysisMoney(analysis.repairs.baselineCents)}</strong></span></span>
     <span className="property-open-control"><span>{active?'Close':'View details'}</span><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
    </button>
    {sellerSummary&&<p className="property-latest-update"><span>Latest update</span>{sellerSummary.length>150?sellerSummary.slice(0,147)+'…':sellerSummary}</p>}
    {dealSummary?.contractSigned&&<ol className="property-progress-compact" aria-label="Deal progress">{dealSummary.steps.map(step=><li key={step.label} className={step.done?'done':step.current?'current':''} aria-current={step.current?'step':undefined}>{step.label}</li>)}</ol>}
-   <div className="property-quick-actions" data-credit-action><button type="button" onClick={()=>openContact('calls')} aria-label={`Call ${address.street}`}><Phone size={16}/>Call</button><button type="button" onClick={()=>openContact('texts')} aria-label={`Text conversation for ${address.street}`}><MessageCircle size={16}/>Text</button>{onAsk&&<button type="button" onClick={()=>onAsk(p.id,p.result.property.address)} aria-label={`Ask bot about ${address.street}`}><Sparkles size={15}/>Ask bot</button>}</div>
+   <div className="property-quick-actions"><button type="button" data-credit-action onClick={()=>openContact('calls')} aria-label={`Call ${address.street}`}><Phone size={16}/>Call</button><button type="button" data-credit-action onClick={()=>openContact('texts')} aria-label={`Text conversation for ${address.street}`}><MessageCircle size={16}/>Text</button><button type="button" onClick={()=>onToggle(!active)} aria-expanded={active} aria-controls={`property-content-${p.id}`} aria-label={`View deal for ${address.street}`}><FileText size={16}/>{active?'Close deal':'View deal'}</button></div>
    {visited&&<Activity mode={active&&!hidden?'visible':'hidden'}><div className="property-details" id={`property-content-${p.id}`}>
     <PropertyNextStep property={p} work={work} stale={stale} onRefresh={onRefresh}/>
+    {onAsk&&<button type="button" className="workspace-quiet property-ask-bot" data-credit-action onClick={()=>onAsk(p.id,p.result.property.address)}><Sparkles size={15} aria-hidden="true"/>Ask bot about this property</button>}
     <details className="property-number-details"><summary>{dealSummary?.contractSigned?'Original deal estimates':'Offer breakdown'}</summary><PropertyAnalysisSummary result={p.result}/></details>
     <div className="property-control"><span><b className={`property-bot-status tone-${bot.tone}`}><span className="ai-status-dot" aria-hidden="true"/>{bot.label}</b><small>{bot.detail}</small></span><button className="takeover-button" title={manual?'Let the bot manage new work for this property':'Pause new automated work for this property and handle it yourself'} disabled={controlBusy||['cancellation_pending','cancelled'].includes(deal?.stage??'')} onClick={()=>void control()}>{controlBusy?'Saving…':manual?'Return to bot':'Take over'}</button></div>
     {controlMessage&&<p className="control-result" role="status">{controlMessage}</p>}
