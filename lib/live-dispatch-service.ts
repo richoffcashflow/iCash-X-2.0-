@@ -2,6 +2,7 @@ import {conversationAddressFields,conversationAddressInstructions} from './conve
 import {automaticOfferPolicy} from './automatic-offer-policy.ts';
 import {sellerContractToolId} from './seller-contract-tool.ts';
 import {automaticOfferReceptionPrompt,payoffAutomaticOfferReceptionPrompt,legacyAutomaticOfferReceptionPrompt,streamingAutomaticOfferReceptionPrompt,progressAutomaticOfferReceptionPrompt} from './seller-agreement-reception.ts';
+import {sellerAgreementDeliveryPrompt} from './seller-agreement-delivery-prompt.ts';
 import {sellerOfferPresentation} from './seller-offer-presentation.ts';
 import {VoiceActivationBudgetError} from './voice-budget-failure.ts';
 import {limitedSellerPrompt} from './seller-limited-contact.ts';
@@ -128,9 +129,10 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const sellerProgress=sellerCallContext(sellerContext);
  const {history:fullSms,priorCalls:fullCalls,...sellerData}=sellerProgress;
  const automaticContext=!automaticOfferPolicy(recordedReview.offerPolicy)?null:buyerContext?{status:'buyer',address:buyerContext.address,returningName:buyerContext.firstName,buyerPaysClosingCosts:buyerContext.buyerPaysClosingCosts,repairsCents:buyerContext.repairsCents,packageUrl:buyerContext.packageUrl}:{...sellerData,...compactSellerProgress({history:fullSms,priorCalls:fullCalls},recordedReview.offerPolicy==='automatic_offer_v9'?3500:5800),status:'matched',purchaseTerms,today:new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(Date.now()),timeZone:'America/Chicago'};
- const prompt=(automaticOfferPolicy(recordedReview.offerPolicy)
+ const basePrompt=(automaticOfferPolicy(recordedReview.offerPolicy)
   ?(recordedReview.offerPolicy==='automatic_offer_v5'?legacyAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v6'?streamingAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v7'?payoffAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v8'?progressAutomaticOfferReceptionPrompt:automaticOfferReceptionPrompt).replace('{{icash_property_context}}',JSON.stringify({...automaticContext,...conversationAddressFields(address),principal:identity.principal,companyName:identity.company_name?.trim()||null,assistantName:account.assistant_name}))+'\nOUTBOUND CAPABILITIES: Use the callback tool only for an explicitly agreed date, time and timezone; use the handoff tool when requested. Claim either action only after its successful result. Do not claim an immediate transfer unless the tool confirms one.'
   :buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!)+ '\n'+conversationAddressInstructions;
+ const prompt=p.party==='seller'&&automaticOfferPolicy(recordedReview.offerPolicy)?sellerAgreementDeliveryPrompt(basePrompt):basePrompt;
  if(prompt.length>24000||(sellerGreeting?.length??0)>2000)return hold('voice_context_too_large');
  const operationKey=`voice:${j.id}`;
  const reserveHold=recordingReleaseHold();if(reserveHold)return hold(reserveHold);

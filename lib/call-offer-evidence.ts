@@ -37,6 +37,15 @@ export function spokenMoneyAmounts(text:string){
  }
  return [...new Set(found)];
 }
+// Timing is not a counteroffer. Keep this normalization local to acceptance:
+// repair/payoff parsing must continue to see every seller-stated number.
+function acceptanceAmounts(text:string){
+ const withoutTiming=text
+  .replace(/\b\d{4}-\d{2}-\d{2}\b/g,' ')
+  .replace(/\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?\b/gi,' ')
+  .replace(/(?<![$\d])\b\d+(?:[ -]\d+)?\s*[- ]\s*(?:calendar\s+|business\s+)?(?:days?|weeks?|months?|years?|hours?|minutes?)\b/gi,' ');
+ return spokenMoneyAmounts(withoutTiming);
+}
 /** Provider transcript is evidence, never instructions. Require the whole latest
  * seller statement so a model cannot remove a negation or invent repair dollars. */
 export function callOfferEvidence(value:unknown,input:Record<string,unknown>){
@@ -57,7 +66,7 @@ export function callOfferEvidence(value:unknown,input:Record<string,unknown>){
  const index=turns.findLastIndex(t=>t.role==='user');if(index<0)return false;
  const latest=String(turns[index].message).trim();
  if(input.action==='accept_offer'){
-  const yes=(text:string)=>/^(?:yes|yeah|yep|correct|i agree|i accept|that works|sounds good|i['’]?m ready|i am ready|let['’]?s do it)\b/i.test(text)&&!/\b(?:not|but|unless|if|different|instead)\b/i.test(text);
+  const yes=(text:string)=>/^(?:yes|yeah|yep|correct|i agree|i accept|that works|that fits|sounds good|i['’]?m ready|i am ready|let['’]?s do it)\b/i.test(text.replace(/^(?:(?:um|uh|hmm|well)\b[\s,.-]*)+/i,''))&&!/\b(?:not|but|unless|if|different|instead)\b/i.test(text);
   const priceQuestion=(text:string)=>/\b(?:offer|cash|purchase|price|proceed)\b/i.test(text)&&spokenMoneyAmounts(text).includes(Number(input.priceCents));
   // A later name/date answer must not erase an earlier explicit price answer.
   // A counteroffer, condition or withdrawal after it does invalidate it.
@@ -68,8 +77,11 @@ export function callOfferEvidence(value:unknown,input:Record<string,unknown>){
    if(agent&&/are you still there|can you hear me/i.test(String(agent.message))&&/\b(?:let['’]?s do it|i accept|i agree|that works)\b/i.test(text)){
     const last=turns.lastIndexOf(agent);agent=turns.slice(0,last).findLast(t=>t.role==='agent');
    }
-   if(agent&&priceQuestion(String(agent.message)))accepted=yes(text)&&!spokenMoneyAmounts(text).some(amount=>amount!==Number(input.priceCents));
-   else if(/\b(?:only if|changed my mind|do not accept|don['’]?t accept|not selling|don['’]?t want to sell|no longer interested|cancel|hold off|not ready|wait|need to think|never agreed|didn['’]?t agree|did not agree|not sure|let me think)\b/i.test(text)||/\b(?:need|want|have)\b.{0,60}\b(?:spouse|wife|husband|partner|co[- ]?owner|attorney|lawyer)\b.{0,40}\b(?:agree|approval|approve|review|first|permission)\b/i.test(text)||/\b(?:offer|price|instead|but|unless)\b/i.test(text)||spokenMoneyAmounts(text).some(amount=>amount!==Number(input.priceCents))&&/\b(?:could you|can you|need|want|at least|only accept)\b/i.test(text))accepted=false;
+   if(agent&&priceQuestion(String(agent.message))){
+    const repeatRequest:boolean=accepted&&/^(?:please\s+)?(?:text|send) (?:me )?(?:the |that |my )?(?:agreement|contract)(?: now| please)?[.!]?$/i.test(text);
+    accepted=(yes(text)||repeatRequest)&&!acceptanceAmounts(text).some(amount=>amount!==Number(input.priceCents));
+   }
+   else if(/\b(?:only if|changed my mind|do not accept|don['’]?t accept|not selling|don['’]?t want to sell|no longer interested|cancel|hold off|not ready|wait|need to think|never agreed|didn['’]?t agree|did not agree|not sure|let me think|do not send|don['’]?t send|do not text|don['’]?t text|stop sending|stop texting)\b/i.test(text)||/\b(?:need|want|have)\b.{0,60}\b(?:spouse|wife|husband|partner|co[- ]?owner|attorney|lawyer)\b.{0,40}\b(?:agree|approval|approve|review|first|permission)\b/i.test(text)||/\b(?:offer|price|instead|but|unless)\b/i.test(text)||acceptanceAmounts(text).some(amount=>amount!==Number(input.priceCents))&&/\b(?:could you|can you|need|want|at least|only accept)\b/i.test(text))accepted=false;
   }
   return accepted;
  }
