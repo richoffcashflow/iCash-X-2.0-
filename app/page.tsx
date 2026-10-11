@@ -32,7 +32,6 @@ import type {AssistantAction} from '@/lib/workspace-assistant-policy';
 import {BotRunBar} from '@/components/bot-run-bar';
 import {WorkspaceVipBanner,AdminWorkspacePreview,type WorkspacePreviewMode} from '@/components/workspace-vip-banner';
 import {PlatformBuyerNetwork} from '@/components/platform-buyer-network';
-import {IcashMark} from '@/components/icash-mark';
 import {setupThemes,type BotProfile} from '@/lib/bot-setup';
 type Account={vip?:boolean;readinessPending?:boolean;billingModel?:string;membershipActive?:boolean;isBillingOwner?:boolean;identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;pendingEmail?:string|null;phone?:string;hasCreditHistory?:boolean;balanceCents?:number;reservedCents?:number;dailyLimitCents?:number;assistantName?:string;paused?:boolean;billingActive?:boolean;billingReview?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;activeWork?:boolean};
 export default function Home(){
@@ -133,7 +132,6 @@ export default function Home(){
  if(guest)return <WebinarExpressCheckout checkingAccount={!account} accountError={accountError} signInReady={account?.signInReady??true} onRetry={()=>void refreshAccount()} onSignedIn={()=>void refreshAccount(true)}/>;
  return <div className={`console-shell personalized-workspace minimal-workspace assistant-workspace icash-brand-workspace ${styles.workspace}${displayVip&&!workspaceLocked?' '+styles.vip:''}`} style={{'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties}>
   <header className="console-header">
-   <a className="workspace-logo" href="/" aria-label="iCash X home"><IcashMark/></a>
    <div className="workspace-header-links">
     <button type="button" className="workspace-course-launcher" aria-haspopup="dialog" aria-expanded={courseOpen} onClick={()=>setCourseOpen(true)}><BookOpen size={17} aria-hidden="true"/>Course</button>
     {!workspaceLocked&&<WorkspaceUpdates onPreferences={()=>showDetails('notification-settings')} onBudget={()=>openFunding()}/>}
