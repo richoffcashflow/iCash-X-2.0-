@@ -13,6 +13,7 @@ import {roundedSellerPrice} from './property-price.ts';
 import {sellerCallFinancialGate} from './equity-screen.ts';
 import {sellerPayoffPosition,type SellerPayoffReport,type SellerPayoffUpdate} from './seller-payoff.ts';
 import {canonical,object,sha} from './required-call-recording.ts';
+import {sellerOfferQualification,sellerQualificationHold,type SellerQualification} from './seller-offer-qualification.ts';
 
 const conversationId=z.string().regex(/^conv_[A-Za-z0-9]+$/);
 const cents=z.number().int().safe().nonnegative().max(100000000000);
@@ -23,7 +24,7 @@ export const automaticOfferInput=z.discriminatedUnion('action',[
  z.object({action:z.literal('report_change'),conversationId,sellerStatement:z.string().trim().min(1).max(1000)}).strict(),
 ]);
 export type AutomaticOfferState={proposedPriceCents?:number;listedWithAgent?:boolean;listingStatement?:string;payoffReport?:SellerPayoffReport;repairEstimateCents?:number;conditionPending?:boolean;factsPending?:boolean;payoffPending?:boolean;payoffStatement?:string;contractBlocked?:boolean;acceptanceConditional?:boolean;agreementRevisionRequired?:boolean;sellerStatement?:string;acceptedPriceCents?:number|null;quotedPriceCents?:number|null;quoteRevision?:string;snapshotHash?:string};
-export type CallOfferContext={party:'seller'|'buyer'|'unknown';contextPolicy?:string;sellerContractSigned?:boolean;viewingSlots?:unknown;accountId?:string;dealId?:string;address?:string;snapshot?:unknown;terms?:unknown;pendingAgreement?:{priceCents:number;closingDate:string}|null;buyer?:{propertyImages?:unknown;latitude?:unknown;longitude?:unknown;sellerPhotos?:unknown;arvCents?:number|null;repairsCents?:number|null;askingPriceCents:number;purchasePriceCents?:number;assignmentFeeCents?:number;closingDate?:string|null;address:string;depositCents?:number|null;viewingSlots?:unknown;reserved?:boolean;titleSelectionStatus?:'not_selected'|'selected'|'needs_confirmation'};offerState?:AutomaticOfferState|null;offerVersion?:number};
+export type CallOfferContext={party:'seller'|'buyer'|'unknown';contextPolicy?:string;sellerContractSigned?:boolean;viewingSlots?:unknown;accountId?:string;dealId?:string;screeningId?:string;phone?:string;address?:string;snapshot?:unknown;terms?:unknown;pendingAgreement?:{priceCents:number;closingDate:string}|null;buyer?:{propertyImages?:unknown;latitude?:unknown;longitude?:unknown;sellerPhotos?:unknown;arvCents?:number|null;repairsCents?:number|null;askingPriceCents:number;purchasePriceCents?:number;assignmentFeeCents?:number;closingDate?:string|null;address:string;depositCents?:number|null;viewingSlots?:unknown;reserved?:boolean;titleSelectionStatus?:'not_selected'|'selected'|'needs_confirmation'};offerState?:AutomaticOfferState|null;offerVersion?:number};
 export const blockedOffer=(reason:string,instruction:string)=>({quoteAllowed:false as const,priceCents:null,reason,instruction});
 export const currentCallUnavailableOffer=()=>({...blockedOffer('current_call_required','Current deal details could not be confirmed. Retry get_offer at most once for a technical failure; never keep retrying or guess a price. No agreement, payment, viewing or callback is authorized or scheduled. Say: "I cannot confirm the current deal details. They need team review; no callback has been scheduled." Do not agree when the caller assumes someone will reach out. Do not promise that the team will review, call, text, send or arrange anything. Answer briefly without generic closing questions.'),contractAllowed:false,sent:false,callbackScheduled:false,viewingFollowupRequired:false});
 const blockedBuyerOffer=(reason:string,instruction:string)=>({...blockedOffer(reason,`${buyerScenarioGuidance}\nCURRENT AVAILABILITY OVERRIDE: ${instruction} This overrides the normal viewing and payment flow. Do not offer seller-availability follow-up or say we will check with the seller. No visit, callback, payment or delivery is authorized or scheduled.`),party:'buyer' as const,contractAllowed:false,sent:false,viewingAllowed:false,viewingFollowupRequired:false,callbackScheduled:false});
@@ -138,7 +139,7 @@ const financial=sellerCallFinancialGate(base.property.financialScreening,{seller
 }
 
 type Db=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
-type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;resolveStatement?:(input:Record<string,unknown>)=>Promise<string|null>;verifyInput:(input:Record<string,unknown>)=>Promise<boolean>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyListingStatus?:(input:Record<string,unknown>)=>Promise<boolean|null>;verifySellerPrice?:(input:Record<string,unknown>)=>Promise<number|null>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
+type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;verifyQualification?:(input:Record<string,unknown>,context:CallOfferContext)=>Promise<SellerQualification>;resolveStatement?:(input:Record<string,unknown>)=>Promise<string|null>;verifyInput:(input:Record<string,unknown>)=>Promise<boolean>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyListingStatus?:(input:Record<string,unknown>)=>Promise<boolean|null>;verifySellerPrice?:(input:Record<string,unknown>)=>Promise<number|null>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
 export async function automaticCallOffer(token:string,input:unknown,d:Dependencies){
  const i=automaticOfferInput.parse(input),hash=sha(token);
  // The context RPC independently checks the exact capability, bound conversation,
@@ -152,6 +153,8 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
  if(context.party==='buyer'){const result=i.action==='get_offer'?calculateAutomaticCallOffer(context,{},(d.now??Date.now)()):buyerAgreementHandoff();return (context.contextPolicy===buyerConversationPolicy||context.contextPolicy===buyerAnswerPolicy||context.contextPolicy===buyerValidatedPolicy||context.contextPolicy===buyerSpeakingPolicy)?buyerConversationResult(result):result;}
  if(context.party!=='seller'||context.sellerContractSigned===true)return calculateAutomaticCallOffer(context,{},(d.now??Date.now)());
  const state:AutomaticOfferState={...context.offerState},snapshotHash=sha(JSON.stringify(canonical(context.snapshot))),now=(d.now??Date.now)();
+ const qualification=context.pendingAgreement||state.acceptedPriceCents?{ready:true as const}:d.verifyQualification?await d.verifyQualification(i,context):sellerOfferQualification(null);
+ if(qualification&&!qualification.ready&&(i.action==='get_offer'||i.action==='accept_offer'))return sellerQualificationHold(qualification);
  if(i.action==='accept_offer'&&!await d.verifyInput(i))return blockedOffer('acceptance_confirmation_required','Please confirm that the exact cash price we just discussed works for you.');
  if(i.action==='update_repairs'||i.action==='report_change'){
   const actual=await d.resolveStatement?.(i);if(actual)i.sellerStatement=actual;
@@ -201,5 +204,7 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
  state.snapshotHash=snapshotHash;state.quotedPriceCents=offer.priceCents;state.quoteRevision=revision;
  const saved=await d.db<boolean>('rpc/icash_save_call_offer','POST',{p_hash:hash,p_conversation:i.conversationId,p_expected_version:context.offerVersion??0,p_expected_snapshot:context.snapshot,p_state:state,p_action:i.action});
  if(saved!==true)return blockedOffer('quote_changed','The property record changed while I checked. Let me get the current calculation.');
+ // Recording condition/listing/debt answers must not reveal a premature price.
+ if(offer.quoteAllowed&&qualification&&!qualification.ready)return {...sellerQualificationHold(qualification),factsSaved:true};
  return {...offer,quoteRevision:revision,...(i.action==='accept_offer'?(contractBlocked?{status:'conditional_accepted',...(state.payoffReport?{instruction:offer.instruction}:conditionalInstruction(i.priceCents,!!state.payoffStatement,true))}:{status:'verbally_accepted',instruction:'Verbal acceptance saved at this exact price. Continue closing date, legal name, owners, inspection preference and prepared terms, then confirm_and_send. This is not a signature.'}):{})};
 }

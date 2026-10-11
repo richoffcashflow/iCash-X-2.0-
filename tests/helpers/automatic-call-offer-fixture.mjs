@@ -63,9 +63,9 @@ export async function testAutomaticCallOffer(f){
   await q("update public.icash_screening_jobs set snapshot=$1,state='complete'",[snapshot]);
   await q("insert into public.icash_live_conversations(id,account_id,screening_id,contact_key,tool_token_hash,conversation_id,tool_expires_at,state,party,operation_key) values($1,$2,$1,$3,$4,'conv_outbound',now()+interval '10 minutes','waiting','seller','voice:fixture')",[id,account,contact,hash]);
   await q("insert into public.icash_call_recordings(account_id,operation_key,screening_id,contact_key,party,conversation_id,stop_token_hash,to_phone) values($1,'voice:fixture',$2,$3,'seller','conv_outbound',$4,$5)",[account,id,contact,hash,r.from_phone]);
-  const deps={bind:async()=>{},db:async(path,method,body)=>rpc(path.slice(4),body),verifyInput:async()=>false};
+  const deps={bind:async()=>{},verifyQualification:async()=>({ready:true}),db:async(path,method,body)=>rpc(path.slice(4),body),verifyInput:async()=>false};
   const offer=await automaticCallOffer(token,{action:'get_offer',conversationId:'conv_outbound'},deps);
-  assert.equal(offer.quoteAllowed,true);assert.equal(offer.priceCents,4812800);
+  assert.equal(offer.quoteAllowed,true);assert.equal(offer.priceCents,4800000);
   assert.equal(await val('select count(*) from icash_call_offer_private.events'),1);
   assert.equal((await automaticCallOffer('d'.repeat(64),{action:'get_offer',conversationId:'conv_outbound'},deps)).quoteAllowed,false);
   await q("insert into public.icash_text_threads(id,account_id,deal_id,recipient,party,paused) values($1,$2,$1,$3,'seller',true)",[id,account,r.from_phone]);
