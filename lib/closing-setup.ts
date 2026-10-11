@@ -18,6 +18,7 @@ export const titleProposalSchema=z.object({
  phone:z.union([z.literal(''),z.string().regex(/^\+[1-9]\d{7,14}$/,'Use the country code, for example +12145551234.')]),
 }).strict();
 export const closingSetupInput=z.discriminatedUnion('action',[
+ z.object({action:z.literal('use_closer'),dealId:z.string().uuid(),data:z.object({sourceDealId:z.string().uuid()}).strict()}).strict(),
  z.object({action:z.literal('use_profile'),dealId:z.string().uuid(),data:z.object({}).strict()}).strict(),
  z.object({action:z.literal('payout'),dealId:z.string().uuid(),data:payoutPreferenceSchema}).strict(),
  z.object({action:z.literal('title_preference'),dealId:z.string().uuid(),data:titleProposalSchema}).strict(),
@@ -28,7 +29,7 @@ export type PayoutPreference=z.infer<typeof payoutPreferenceSchema>;
 export type TitleProposal=z.infer<typeof titleProposalSchema>;
 export type ClosingSetupRecord={id:string;deal_id:string;screening_id:string;state:'needs_review'|'acknowledged'|'ready';review_reason:string;payout:PayoutPreference|null;title_proposal:TitleProposal|null;updated_at:string};
 export type ClosingDirectoryOption={id:string;name:string;source_url:string;public_phone:string|null;public_email:string|null;status:string};
-export type ClosingSetupView={setup:ClosingSetupRecord|null;verifiedContact:{email:string}|null;directory:ClosingDirectoryOption[];buyerSuggestions:{id:string;title_quote:string}[];titleEmailInAgreement:string|null};
+export type ClosingSetupView={savedClosers?:import('./deal-completion').SavedCloser[];setup:ClosingSetupRecord|null;verifiedContact:{email:string}|null;directory:ClosingDirectoryOption[];buyerSuggestions:{id:string;title_quote:string}[];titleEmailInAgreement:string|null};
 
 export const closingReviewLabels:Record<string,string>={setup:'Prepare title and your payment',human_requested:'Closing needs a person',title_declined:'Title cannot handle this file',payment_change:'Payment instructions need verification',title_issue:'Title or contract issue needs review'};
 export function closingSetupNext(view:ClosingSetupView):{code:string;title:string;text:string;action:'title'|'payout'|'verify'|null;label:string|null}{

@@ -11,7 +11,9 @@ export async function POST(req:Request){
   const parsed=closingSetupInput.safeParse(JSON.parse(raw));
   if(!parsed.success)return NextResponse.json({error:parsed.error.issues[0]?.message??'Check the closing details.'},{status:400,headers});
   const b=parsed.data;
-  const result=await db('rpc/icash_save_closing_setup','POST',{p_account:accountId,p_actor:userId,p_deal:b.dealId,p_action:b.action,p_data:b.data});
+  const result=b.action==='use_closer'
+   ?await db('rpc/icash_select_saved_closer','POST',{p_account:accountId,p_actor:userId,p_deal:b.dealId,p_source:b.data.sourceDealId})
+   :await db('rpc/icash_save_closing_setup','POST',{p_account:accountId,p_actor:userId,p_deal:b.dealId,p_action:b.action,p_data:b.data});
   return NextResponse.json({saved:true,result},{headers});
  }catch{return NextResponse.json({error:'Could not save. Refresh the deal. Selecting a closer requires a signed purchase, complete contact details, current delivery setup and agreement with the existing title choice. A different closer on a sent file needs human review.'},{status:409,headers});}
 }

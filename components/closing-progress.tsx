@@ -3,10 +3,12 @@ import {useState} from 'react';
 import {Check} from 'lucide-react';
 import {closingKinds,closingLabels,closingSummary,type ClosingKind,type ClosingUpdate,type ClosingReply} from '@/lib/closing-progress';
 import {titleReplySuggestions,type TitleSuggestion} from '@/lib/title-reply-suggestions';
-export function ClosingProgress({dealId,updates,replies,onSaved}:{dealId:string;updates:ClosingUpdate[];replies:ClosingReply[];onSaved:()=>void}){
+import {ProceedsConfirmation} from './proceeds-confirmation';
+import type {ProceedsReceipt} from '@/lib/deal-completion';
+export function ClosingProgress({dealId,updates,replies,receipt=null,onSaved}:{dealId:string;updates:ClosingUpdate[];replies:ClosingReply[];receipt?:ProceedsReceipt|null;onSaved:()=>void}){
  const [editing,setEditing]=useState(false),[kind,setKind]=useState<ClosingKind>(closingKinds.find(k=>!updates.some(u=>u.kind===k))??'closed');
  const [replyId,setReplyId]=useState(''),[date,setDate]=useState(''),[amount,setAmount]=useState(''),[file,setFile]=useState(''),[confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
- const summary=closingSummary(updates),source=replies.find(r=>r.id===replyId),closed=updates.some(u=>u.kind==='funds_disbursed');
+ const summary=receipt?{label:'Closing complete',next:'Your payment receipt is saved.'}:closingSummary(updates),source=replies.find(r=>r.id===replyId),closed=updates.some(u=>u.kind==='funds_disbursed');
  const suggestions=replies.flatMap(titleReplySuggestions).filter(s=>!updates.some(u=>u.kind===s.kind)).slice(0,5);
  function reviewSuggestion(s:TitleSuggestion){setKind(s.kind);setReplyId(s.replyId);setDate(s.effectiveDate??'');setAmount(s.amountCents===null?'':(s.amountCents/100).toFixed(2));setFile(s.fileReference);setConfirmed(false);setError('');setEditing(true);}
  async function save(){
@@ -25,5 +27,6 @@ export function ClosingProgress({dealId,updates,replies,onSaved}:{dealId:string;
  <label className="closing-attestation"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} required/>I checked that the selected title message confirms this update.</label>
  <button className="fund-button" disabled={busy||!source||!confirmed}>{busy?'Saving…':'Save confirmed update'}</button></form>}
  {error&&<p role="alert">{error}</p>}
+ {updates.find(u=>u.kind==='funds_disbursed')&&<ProceedsConfirmation dealId={dealId} update={updates.find(u=>u.kind==='funds_disbursed')!} receipt={receipt} onSaved={onSaved}/>}
  <small>Updates link to confirmations from your closing office. iCash X does not receive deposits or move closing funds.</small></section>;
 }

@@ -3,6 +3,7 @@ import type {WorkspaceProperty, WorkspaceEvidence} from '../components/workspace
 import {needsAttention} from '../components/workspace-view.ts';
 
 type Context = WorkspaceEvidence & {
+ proceedsReceivedDealIds?:string[];
  callbacks: {screening_id: string; due_at: string; timezone: string; state: string}[];
  conversations: {screening_id: string; party: string; summary?: string; completed_at?: string}[];
 };
@@ -25,7 +26,7 @@ export function propertyNextAction(property: WorkspaceProperty, work: Context):{
  const deal = work.deals.find(item => item.screening_id === property.id);
  const action=(detail:string,label:string|null=null,target:DealSection|null=null)=>({detail,label,target});
  if(deal?.stage === 'cancellation_pending') return action('Complete the cancellation review. Automatic work is paused.','Review cancellation','cancellation');
- if(deal?.stage === 'closed') return action('Review the closing record and confirm your payment arrived.','Review closing record','fulfillment');
+ if(deal?.stage === 'closed') return action(work.proceedsReceivedDealIds?.includes(deal.id)?'Your closing and payment receipt are saved.':'Review the closing record and confirm your payment arrived.','Review closing record','fulfillment');
  if(['canceled','cancelled'].includes(deal?.stage??'')) return action('This deal is stopped. Review its saved agreements and any remaining obligations.','Review agreements','contracts');
  if(work.signing.some(s=>s.deal_id===deal?.id&&s.state==='customer_signature_needed'))return action('The other party signed. Read the agreement and complete your signature.','Review & sign','contracts');
  if(work.handoffs.some(h=>h.screening_id===property.id&&h.state!=='resolved'))return action('A seller or buyer asked for a person. Read the request and follow up.','Review request','attention');

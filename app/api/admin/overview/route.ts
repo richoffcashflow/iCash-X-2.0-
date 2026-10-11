@@ -2,6 +2,7 @@ import {currentUser} from '@/lib/account-auth';
 import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {db} from '@/lib/stripe-test';
 import {validOwnerOverview,type OverviewFilters} from '@/lib/owner-overview';
+import {closingOperationsSchema} from '@/lib/deal-completion';
 export const dynamic='force-dynamic';
 const headers={'Cache-Control':'private, no-store','Vary':'Cookie'};
 export async function GET(req:Request){
@@ -16,7 +17,8 @@ export async function GET(req:Request){
   const filters:OverviewFilters={days:Number(days) as 1|7|30,includeOwner:include==='true',query,page:Number(page)};
   const report=await db<unknown>('rpc/icash_owner_overview_with_funnel','POST',{p_actor:user.id,p_days:filters.days,p_include_owner:filters.includeOwner,p_query:filters.query,p_page:filters.page},req.signal);
   if(!validOwnerOverview(report,filters)||!report.funnel)throw Error('Incomplete overview');
-  return Response.json({report},{headers});
+  const closing=closingOperationsSchema.parse(await db('rpc/icash_closing_operations','POST',{p_actor:user.id,p_days:filters.days,p_include_owner:filters.includeOwner},req.signal));
+  return Response.json({report:{...report,closing}},{headers});
  }catch{
   return Response.json({error:'The overview could not load. Try refreshing in a moment.'},{status:503,headers});
  }
