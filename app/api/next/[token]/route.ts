@@ -1,9 +1,14 @@
 import {z} from 'zod';
 import {db} from '@/lib/stripe-test';
 import {allowedOrigin} from '@/lib/funding-policy';
+import {blockerInput} from '@/lib/deal-completion';
+import {limitRequest} from '@/lib/funding';
+import {createHash} from 'node:crypto';
 const tokenSchema=z.string().regex(/^[a-f0-9]{32}$/);
 const line=z.string().trim().min(2).max(200).refine(v=>!/[\r\n]/.test(v));
 const input=z.discriminatedUnion('action',[
+ z.object({action:z.enum(['request_assignment','request_viewing']),data:z.object({}).strict()}).strict(),
+ z.object({action:z.literal('blocker'),data:blockerInput}).strict(),
  z.object({action:z.literal('details'),data:z.object({legalName:line,signerName:line,email:z.string().trim().email().max(254),askingPriceCents:z.number().int().positive().safe(),depositCents:z.number().int().min(1).max(500000),fundsReady:z.literal(true),authorized:z.literal(true),titleCompany:z.string().trim().max(200)}).strict()}).strict(),
  z.object({action:z.literal('choose_time'),data:z.object({startsAt:z.string().min(10).max(60)}).strict()}).strict(),
  z.object({action:z.enum(['confirm','cancel']),data:z.object({id:z.string().uuid(),version:z.number().int().positive()}).strict()}).strict(),
@@ -19,6 +24,7 @@ export async function GET(_req:Request,ctx:Context){
 export async function POST(req:Request,ctx:Context){
  if(!allowedOrigin(req))return Response.json({error:'Invalid origin'},{status:403,headers});
  try{const token=tokenSchema.parse((await ctx.params).token);const raw=await req.text();if(raw.length>6000)throw Error();const body=input.parse(JSON.parse(raw));
+  if(body.action==='blocker')await limitRequest(req,'journey-help',createHash('sha256').update(token).digest('hex'),6,3600);
   const result=await db('rpc/icash_submit_journey','POST',{p_token:token,p_action:body.action,p_data:body.data});
   return Response.json(result,{headers});
  }catch{return Response.json({error:'This step changed or is missing information. Refresh and check the details. Reply to your deal contact if you need help.'},{status:409,headers});}

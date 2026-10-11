@@ -1,8 +1,10 @@
 import type {DealSection} from './workspace-guidance.ts';
-export type JourneyProgress={id:string;deal_id:string;screening_id:string;state:string;wants_assignment:boolean;wants_viewing:boolean;review_reason:string|null;deposit_due_at:string|null;last_progress_at:string;envelopeState:string|null;messageReview:boolean;hasSlots:boolean;showingState:string|null;titleState:string|null;titleSelected:boolean;closingKind:string|null};
+import {blockerNext,type JourneyBlocker} from './deal-completion.ts';
+export type JourneyProgress={requestId?:string;blocker?:JourneyBlocker|null;id:string;deal_id:string;screening_id:string;state:string;wants_assignment:boolean;wants_viewing:boolean;review_reason:string|null;deposit_due_at:string|null;last_progress_at:string;envelopeState:string|null;messageReview:boolean;hasSlots:boolean;showingState:string|null;titleState:string|null;titleSelected:boolean;closingKind:string|null};
 export function journeyNextAction(j:JourneyProgress,now=Date.now()):{waitingOn:string;detail:string;label:string;target:DealSection}{
  const step=(waitingOn:string,detail:string,label:string,target:DealSection)=>({waitingOn,detail,label,target});
  if(j.messageReview)return step('You','A deal message was not confirmed. Review delivery before sending again.','Review messages','coordination');
+ if(j.blocker){const next=blockerNext[j.blocker.kind];return step(j.blocker.kind==='access'?'Seller':'You',next.detail,next.title,'coordination');}
  if(j.state==='needs_review')return step('You',j.review_reason??'Review this buyer request to keep the deal moving.','Review buyer progress','coordination');
  if(j.envelopeState==='customer_signature_needed')return step('You','The buyer signed. Review and sign the assignment.','Review & sign','contracts');
  if(j.state==='deposit_due')return step('Buyer',`The assignment is signed. ${j.deposit_due_at&&Date.parse(j.deposit_due_at)<now?'The deposit is due. ':''}Give the buyer verified receiving instructions and confirm cleared receipt.`,'Confirm deposit receipt','coordination');

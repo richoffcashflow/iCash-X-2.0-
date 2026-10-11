@@ -2,6 +2,7 @@ import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
+import {attachTaskRecovery} from '@/lib/task-completion-service';
 import type {SmsRouteReview} from '@/components/sms-route-review';
 export const dynamic='force-dynamic';
 const pageSize=6;
@@ -70,12 +71,13 @@ export async function GET(req:Request){
   const propertyAttentionIds=[...new Set(propertyAttentionRows.flat().map(p=>p.id))];
   const journeys=ids?await db('rpc/icash_journey_progress','POST',{p_account:accountId,p_screenings:visible.map(p=>p.id)}):[];
   const dealIds=deals.map(d=>d.id).join(',');
+  const proceeds=dealIds?await db<{deal_id:string}[]>(`icash_proceeds_receipts?account_id=eq.${accountId}&deal_id=in.(${dealIds})&select=deal_id&limit=${pageSize}`):[];
   const queuePage=`&limit=${pageSize+1}&offset=${attentionPage*pageSize}`;
   const [closingTaskRows,textRows,callRows,handoffRows,signing,signatureRows,routeRows,viewingRows,recoveryRows,closingRows]=await Promise.all([
    db<Attention[]>('rpc/icash_closing_task_attention','POST',{p_account:accountId,p_offset:attentionPage*pageSize,p_limit:pageSize+1}),
    db<Attention[]>(`icash_text_attention?account_id=eq.${accountId}&state=eq.open&select=id,message_id,screening_id,deal_id,kind,party,quote,timezone&order=created_at,id${queuePage}`),
    db<Attention[]>(`icash_sms_call_requests?account_id=eq.${accountId}&state=eq.needs_review&select=id,screening_id,requested_at,state&order=requested_at,id${queuePage}`),
-   db<Attention[]>(`icash_handoffs?account_id=eq.${accountId}&state=neq.resolved&select=id,screening_id,party,reason,summary,next_action,state,assigned_to,due_at,resolution&order=created_at,id${queuePage}`),
+   db<Attention[]>(`icash_handoffs?account_id=eq.${accountId}&state=neq.resolved&portal_journey_id=is.null&select=id,screening_id,party,reason,summary,next_action,state,assigned_to,due_at,resolution&order=created_at,id${queuePage}`),
    dealIds?db<unknown[]>(`icash_signing_envelopes?account_id=eq.${accountId}&deal_id=in.(${dealIds})&select=id,deal_id,kind,state,test_mode,provider_status,updated_at`):Promise.resolve([]),
    db<Attention[]>(`icash_signing_envelopes?account_id=eq.${accountId}&state=eq.customer_signature_needed&select=id,deal_id,kind,test_mode&order=created_at,id${queuePage}`),
    db<SmsRouteReview[]>('rpc/icash_sms_route_review_items','POST',{p_account:accountId,p_offset:attentionPage*pageSize,p_limit:pageSize+1}),
@@ -83,7 +85,7 @@ export async function GET(req:Request){
    db<Attention[]>(`icash_seller_gaps?account_id=eq.${accountId}&state=eq.needs_review&select=id,screening_id,deal_id,reason,quote,updated_at&order=updated_at,id${queuePage}`),
    db<Attention[]>(`icash_closing_setup?account_id=eq.${accountId}&state=eq.needs_review&select=id,screening_id,deal_id,review_reason,state,updated_at&order=created_at,id${queuePage}`)
   ]);
-  const closingTasks=closingTaskRows.slice(0,pageSize);
+  const closingTasks=await attachTaskRecovery(accountId,closingTaskRows.slice(0,pageSize));
   const closingReview=closingRows.slice(0,pageSize),viewingRequests=viewingRows.slice(0,pageSize),sellerRecovery=recoveryRows.slice(0,pageSize);
   const textAttention=textRows.slice(0,pageSize),callRequests=callRows.slice(0,pageSize),handoffs=handoffRows.slice(0,pageSize),signatureActions=signatureRows.slice(0,pageSize);
   // Resolve bounded queue context independently of the current property page/search.
@@ -99,6 +101,6 @@ export async function GET(req:Request){
   for(const item of allAttention)item.address=item.screening_id?addressById.get(item.screening_id)??null:null;
   const smsRouteReviews=routeRows.slice(0,pageSize);
   const attentionHasMoreByKind={closingTasks:closingTaskRows.length>pageSize,closing:closingRows.length>pageSize,sellerRecovery:recoveryRows.length>pageSize,viewings:viewingRows.length>pageSize,routing:routeRows.length>pageSize,texts:textRows.length>pageSize,calls:callRows.length>pageSize,handoffs:handoffRows.length>pageSize,signatures:signatureRows.length>pageSize};
-  return NextResponse.json({journeys,closingTasks,closingReview,sellerRecovery,viewingRequests,smsRouteReviews,textAttention,signatureActions,signing,signingConfigured:!!(process.env.DOCUSEAL_API_KEY||process.env.DOCUSEAL_TEST_API_KEY),properties:visible,propertyAttentionIds,hasMore:!screeningId&&properties.length>pageSize,deals,contacts,controls,conversations,callbacks,callRequests,handoffs,page,attentionPage,attentionHasMore:Object.values(attentionHasMoreByKind).some(Boolean),attentionHasMoreByKind,searchSupported:true,query},{headers});
+  return NextResponse.json({proceedsReceivedDealIds:proceeds.map(p=>p.deal_id),journeys,closingTasks,closingReview,sellerRecovery,viewingRequests,smsRouteReviews,textAttention,signatureActions,signing,signingConfigured:!!(process.env.DOCUSEAL_API_KEY||process.env.DOCUSEAL_TEST_API_KEY),properties:visible,propertyAttentionIds,hasMore:!screeningId&&properties.length>pageSize,deals,contacts,controls,conversations,callbacks,callRequests,handoffs,page,attentionPage,attentionHasMore:Object.values(attentionHasMoreByKind).some(Boolean),attentionHasMoreByKind,searchSupported:true,query},{headers});
  }catch{return NextResponse.json({error:'Could not load your work. Sign in and retry.'},{status:503,headers});}
 }

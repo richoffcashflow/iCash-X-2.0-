@@ -1,8 +1,10 @@
 /** Presentation-only grouping over authenticated records. Never predicts deal progress. */
-export type WorkspaceFilter = 'all' | 'attention' | 'active' | 'history';
+import {journeyNextAction} from '../lib/deal-journey-progress.ts';
+export type WorkspaceFilter = 'all' | 'attention' | 'active' | 'waiting' | 'history';
 export type WorkspaceProperty = {id:string;completed_at:string;result:{property:{address:string;propertyId:string;legalDescription?:string|null;images?:unknown;bedrooms?:number|null;bathrooms?:number|null;livingAreaSqft?:number|null;yearBuilt?:number|null};financialCheck:{status:string;reason:string};preliminarySellerCeilingCents:number|null}};
 export type WorkspaceDeal = {id:string;screening_id:string;stage:string};
 export type WorkspaceEvidence = {
+ proceedsReceivedDealIds?:string[];
  journeys?:import('../lib/deal-journey-progress.ts').JourneyProgress[];
  closingTasks?:{screening_id:string}[];
  closingReview?:{screening_id:string;review_reason?:string}[];
@@ -24,7 +26,12 @@ export function needsAttention(id:string, work:WorkspaceEvidence) {
 }
 export function propertyGroup(id:string,work:WorkspaceEvidence):Exclude<WorkspaceFilter,'all'> {
  if(needsAttention(id,work))return 'attention';
- return work.deals.some(d=>d.screening_id===id&&['closed','canceled','cancelled'].includes(d.stage))?'history':'active';
+ const deal=work.deals.find(d=>d.screening_id===id);
+ if(deal?.stage==='closed'&&work.proceedsReceivedDealIds&&!work.proceedsReceivedDealIds.includes(deal.id))return 'waiting';
+ if(deal&&['closed','canceled','cancelled'].includes(deal.stage))return 'history';
+ const j=work.journeys?.find(j=>j.screening_id===id&&j.state!=='closed');
+ if(j){const next=journeyNextAction(j);return next.waitingOn==='You'?'attention':next.waitingOn==='Bot'?'active':'waiting';}
+ return 'active';
 }
 export function filterProperties<T extends WorkspaceProperty>(properties:T[],work:WorkspaceEvidence,filter:WorkspaceFilter,query=''):T[] {
  const needle=query.trim().toLocaleLowerCase();

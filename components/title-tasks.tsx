@@ -1,6 +1,8 @@
 'use client';
 import {useId,useState} from 'react';
-export type TitleTask={email_state?:string;id:string;kind:string;label:string;due_date:string|null;state:string;evidence:string|null};
+import {JourneyRecovery} from './journey-recovery';
+import type {JourneyBlocker} from '@/lib/deal-completion';
+export type TitleTask={recovery?:{journeyId:string;blocker:JourneyBlocker};email_state?:string;id:string;kind:string;label:string;due_date:string|null;state:string;evidence:string|null};
 export const titleTaskLabel=(task:TitleTask)=>task.email_state==='needs_review'?'Title delivery needs review: '+task.label:task.label;
 function displayDate(value:string){
  const date=new Date(value+'T12:00:00Z');
@@ -22,7 +24,7 @@ export function TitleTasks({initialTasks,onChanged,expanded=false,embedded=false
  if(!tasks.length)return null;
  const content=<>
   {error&&<p role="alert">{error}</p>}
-  {tasks.map(task=><article className="title-task" key={task.id}>
+  {tasks.map(task=>task.recovery?<JourneyRecovery key={task.id+':'+task.recovery.blocker.revision} journeyId={task.recovery.journeyId} blocker={task.recovery.blocker} onSaved={()=>{setTasks(items=>items.filter(t=>t.id!==task.id));onChanged?.();}}/>:<article className="title-task" key={task.id}>
    {(!embedded||tasks.length>1)&&<strong>{titleTaskLabel(task)}</strong>}
    {task.due_date&&<p className="review-meta">{task.state==='needs_review'?'Suggested date':'Due'}: {displayDate(task.due_date)}</p>}
    {task.evidence&&<details className="review-evidence"><summary>See details</summary><p>{task.evidence}</p></details>}

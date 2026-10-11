@@ -15,8 +15,9 @@ const contactRows=[lookup(1,[person,{},null,'invalid',{name:34,phones:'invalid'}
  {...lookup(998,[{name:'Other tenant contact',phones:[]}]),account_id:otherAccount}];
 let paths=[],authorized=true,sellerFixtures=[];
 const paginate=(rows,q)=>rows.slice(Number(q.get('offset')??0),Number(q.get('offset')??0)+Number(q.get('limit')??rows.length));
-const mocks={z,NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
+const mocks={z,attachTaskRecovery:async(id,tasks)=>{assert.equal(id,account);return tasks;},NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
  paths.push({path,method,body});
+ if(path==='rpc/icash_journey_progress'){assert.equal(body.p_account,account);return [];}
  if(path==='rpc/icash_closing_task_attention'){assert.equal(body.p_account,account);assert.equal(body.p_limit,7);return queue.slice(body.p_offset,body.p_offset+body.p_limit).map(q=>({...q,kind:'deadline',label:'Confirm closing date',state:'needs_review',due_date:null}));}
  if(path==='rpc/icash_buyer_reception_calls'){assert.equal(body.p_account,account);return [];}
  if(path==='rpc/icash_sms_route_review_items'){assert.equal(body.p_account,account);assert.equal(body.p_limit,7);return queue.slice(body.p_offset,body.p_offset+body.p_limit).map((q,i)=>({message_id:q.id,recipient:'+12145550123',body:'Which property?',revision:7,needs_review:true,candidates:[]}));}
@@ -65,7 +66,8 @@ assert.deepEqual(r.body.contacts,[{screening_id:uuid(1),created_at:'2026-10-01T0
 assert.doesNotMatch(JSON.stringify(r.body.contacts),/private|Private|Other tenant|Wrong account|Nonvisible|Page two|Retained/);
 assert(paths.find(x=>x.path.startsWith('icash_sms_call_requests')).path.includes('&limit=7&offset=0'));
 assert(!paths.find(x=>x.path.startsWith('icash_sms_call_requests')).path.includes('screening_id=in.'),'Callback queue spans all property pages');
-assert(paths.find(x=>x.path.startsWith('icash_handoffs')).path.includes('state=eq.open'),'Acknowledged handoffs cannot crowd out open requests');
+assert(paths.find(x=>x.path.startsWith('icash_handoffs')).path.includes('state=neq.resolved'),'Acknowledged handoffs stay visible until resolved');
+assert(paths.find(x=>x.path.startsWith('icash_handoffs')).path.includes('portal_journey_id=is.null'),'Portal handoffs appear once through their versioned recovery task');
 paths=[];r=await get('?page=1&attentionPage=1');assert.equal(r.body.properties[0].id,uuid(7));assert.equal(r.body.textAttention[0].id,uuid(106));assert.deepEqual(r.body.propertyAttentionIds,[uuid(1)],'Property attention does not depend on current request page');assert.equal(r.body.attentionHasMore,true);
 assert.deepEqual(r.body.contacts.map(c=>c.screening_id),[uuid(7)]);
 r=await get('?attentionPage=2');assert.equal(r.body.textAttention.length,2);assert.equal(r.body.attentionHasMore,false);
