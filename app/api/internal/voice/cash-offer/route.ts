@@ -33,11 +33,18 @@ export async function POST(request:Request){
   const agreement=sellerAgreementInput.parse(input);
   if(process.env.DOCUSEAL_MODE!=='live')return NextResponse.json({sent:false,status:'unavailable',instruction:'Live agreement delivery is not ready.'},{status:409,headers});
   if(agreement.action==='confirm_and_send'){
-   const quote=await automaticCallOffer(token,{action:'get_offer',conversationId:agreement.conversationId},d);
+   let quote=await automaticCallOffer(token,{action:'get_offer',conversationId:agreement.conversationId},d);
    if('party' in quote&&quote.party==='buyer')return NextResponse.json(buyerAgreementHandoff(),{headers});
    if(quote.quoteAllowed&&'contractAllowed' in quote&&quote.contractAllowed===false)return NextResponse.json({...quote,sent:false,reason:'payoff_review_required',instruction:quote.instruction},{headers});
-   if(!quote.quoteAllowed||!('party' in quote)||quote.party!=='seller'||!('status' in quote)||!['verbally_accepted','pending_agreement'].includes(quote.status)||quote.priceCents!==agreement.confirmation.agreedPriceCents)return NextResponse.json({...blockedOffer('confirmed_price_required','Confirm and save the exact current offer before preparing the agreement.'),sent:false},{status:409,headers});
+   if(!quote.quoteAllowed||!('party' in quote)||quote.party!=='seller'||!('status' in quote)||!['calculated_proposal','verbally_accepted','pending_agreement'].includes(quote.status)||quote.priceCents!==agreement.confirmation.agreedPriceCents)return NextResponse.json({...blockedOffer('confirmed_price_required','Confirm and save the exact current offer before preparing the agreement.'),sent:false},{status:409,headers});
    if(!callOfferEvidence(await transcript(agreement),{action:'accept_offer',priceCents:quote.priceCents,quoteRevision:'quoteRevision' in quote?quote.quoteRevision:undefined}))return NextResponse.json({...blockedOffer('acceptance_confirmation_required','The latest seller response needs clarification. Reconfirm the exact current price after resolving their concern before sending.'),sent:false},{status:409,headers});
+   // A provider interruption can skip the separate acceptance action. Persist
+   // only acceptance independently verified from this call's real history,
+   // through the normal current-revision and authority checks, before signing.
+   if(quote.status==='calculated_proposal'){
+    quote=await automaticCallOffer(token,{action:'accept_offer',conversationId:agreement.conversationId,priceCents:quote.priceCents,quoteRevision:'quoteRevision' in quote?quote.quoteRevision:undefined},d);
+    if(!quote.quoteAllowed||!('status' in quote)||quote.status!=='verbally_accepted')return NextResponse.json({...quote,sent:false},{status:409,headers});
+   }
    // Preserve the caller's changed-facts flag; the agreement validator must
    // still stop any unresolved change reported after this quote was calculated.
   }
