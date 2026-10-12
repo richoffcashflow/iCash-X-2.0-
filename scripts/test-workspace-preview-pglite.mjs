@@ -54,4 +54,50 @@ try{
  }
  assert.equal((await one("select relrowsecurity v from pg_class where relname='icash_workspace_previews'")).v,true);
  console.log('PASS preview SQL: admin/account boundary, expiry, membership lock, real voice gates, Standard names and unchanged pricing/credits.');
+
+ // Apply the next migration: the owner's request supersedes temporary previews.
+ await pg.exec(read('supabase/migrations/20261012040641_admin_plan_toggle.sql'));
+ const plan=(user,account,value)=>q('select icash_set_admin_plan($1,$2,$3)',[id(account),id(user),value]);
+ const adminBefore=await fingerprint();
+ await assert.rejects(plan(2,12,'vip'));await assert.rejects(plan(1,12,'vip'));await assert.rejects(plan(1,11,null));await assert.rejects(plan(1,11,'gold'));
+ await q("update icash_accounts set billing_model='prepaid' where id=$1",[id(11)]);
+ await plan(1,11,'vip');
+ assert.deepEqual(await access(11),{vip:true,vipFeatures:true,adminPlan:'vip',workspacePreview:null});
+ assert.equal((await access(12)).vip,false);
+ assert.equal((await one('select icash_vip_call_voice($1) v',[id(11)])).v,'fixture_voice');
+ await q("update icash_admin_plans set updated_at=now()-interval '5 days'");
+ assert.equal((await access(11)).vip,true,'Real plan does not expire after four hours');
+ await preview(1,11,null);assert.equal((await access(11)).vip,true,'Old sign-out cleanup cannot undo the real plan');
+ await assert.rejects(preview(1,11,'standard'),'An old preview control cannot change actual entitlements');
+ // Use the production question-pricing function with inert local credit fixtures.
+ await pg.exec(`create table icash_operating_budget(id integer);insert into icash_operating_budget values(1);
+ create table icash_workspace_questions(id uuid,account_id uuid,state text);
+ create table icash_question_usage(question_id uuid,account_id uuid,model text,multiplier numeric);
+ create function icash_reserve_credit(uuid,text,bigint) returns boolean language sql as $$select true$$;`);
+ const pricing=read('config/vip-and-daily-allowance.sql').match(/create (?:or replace )?function public\.icash_reserve_question\([\s\S]*?end \$\$;/)?.[0];
+ assert(pricing,'Real question pricing source found');await pg.exec(pricing);
+ for(const [selected,n,expected] of [['vip',21,2.4],['standard',22,3],['vip',23,2.4]]){
+  await plan(1,11,selected);
+  await q("insert into icash_workspace_questions values($1,$2,'pending')",[id(n),id(11)]);
+  await q("select icash_reserve_question($1,$2,'gpt-4.1-mini')",[id(11),id(n)]);
+  assert.equal(Number((await one('select multiplier from icash_question_usage where question_id=$1',[id(n)])).multiplier),expected);
+ }
+ assert.equal(Number((await one('select multiplier from icash_question_usage where question_id=$1',[id(21)])).multiplier),2.4,'Later switching never reprices earlier work');
+ await plan(1,11,'standard');assert.equal((await access(11)).vipFeatures,false);assert.equal((await one('select icash_vip_call_voice($1) v',[id(11)])).v,null);
+ await assert.rejects(q('select icash_set_custom_voice_enabled($1,$2,true)',[id(1),id(11)]));
+ await q("update icash_memberships set vip_until=now()+interval '1 day' where account_id=$1",[id(12)]);assert.equal((await access(12)).vip,true,'Paid customer VIP remains unchanged');
+ await q("update icash_memberships set vip_until=null where account_id=$1",[id(12)]);
+ await plan(1,11,'vip');await q("update icash_accounts set owner_user_id=$1 where id=$2",[id(2),id(11)]);assert.equal((await access(11)).vip,false,'Account transfer invalidates admin override');
+ await q("update icash_accounts set owner_user_id=$1,billing_model='membership_credits' where id=$2",[id(1),id(11)]);
+ await q("update icash_memberships set state='payment_failed' where account_id=$1",[id(11)]);assert.equal((await access(11)).vip,false);await assert.rejects(plan(1,11,'vip'));
+ await q("update icash_memberships set state='active' where account_id=$1",[id(11)]);
+ await plan(1,11,'standard');await q("update icash_memberships set vip_until=now()+interval '1 day' where account_id=$1",[id(11)]);assert.equal((await access(11)).vip,false,'Standard overrides even paid VIP for the admin');
+ await q("update icash_memberships set vip_until=null where account_id=$1",[id(11)]);
+ assert.equal(await fingerprint(),adminBefore,'Plan switching never changes subscription records or credits');
+ for(const role of ['anon','authenticated']){
+  for(const permission of ['SELECT','INSERT','UPDATE','DELETE'])assert.equal((await one("select has_table_privilege($1,'icash_admin_plans',$2) v",[role,permission])).v,false);
+  assert.equal((await one("select has_function_privilege($1,'icash_set_admin_plan(uuid,uuid,text)','EXECUTE') v",[role])).v,false);
+ }
+ assert.equal((await one("select relrowsecurity v from pg_class where relname='icash_admin_plans'")).v,true);
+ console.log('PASS actual admin plans: durable VIP/Standard, correct real usage multipliers, voice gates, customer isolation, prepaid access, account binding, membership lock, unchanged credits and subscriptions.');
 }finally{await pg.close();}

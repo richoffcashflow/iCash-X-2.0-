@@ -1,5 +1,5 @@
 'use client';
-import {ArrowRight,Crown,Gem,X} from 'lucide-react';
+import {ArrowRight,Gem} from 'lucide-react';
 
 export function WorkspaceVipBanner({disabled=false,onUpgrade}:{disabled?:boolean;onUpgrade:()=>void}){
  return <section className="workspace-vip-banner" aria-label="Upgrade to VIP">
@@ -9,14 +9,10 @@ export function WorkspaceVipBanner({disabled=false,onUpgrade}:{disabled?:boolean
  </section>;
 }
 
-export type WorkspacePreviewMode='standard'|'vip';
-export function AdminWorkspacePreview({mode,busy=false,onChange,onExit}:{mode:WorkspacePreviewMode;busy?:boolean;onChange:(mode:WorkspacePreviewMode)=>void;onExit:()=>void}){
- return <section className="workspace-preview-bar" aria-label="Admin workspace preview">
-  <div className="workspace-preview-copy"><strong>{busy?'Updating preview…':'Admin preview'}</strong><span>{mode==='vip'?'VIP features enabled · Normal usage charges apply.':'Standard features · Bot name included.'}</span></div>
-  <div className="workspace-preview-options" role="group" aria-label="Workspace plan preview">
-   <button type="button" disabled={busy} aria-pressed={mode==='standard'} onClick={()=>onChange('standard')}>Standard</button>
-   <button type="button" disabled={busy} aria-pressed={mode==='vip'} onClick={()=>onChange('vip')}><Crown size={14} aria-hidden="true"/> VIP</button>
-  </div>
-  <button type="button" disabled={busy} className="workspace-preview-exit" onClick={onExit}><X size={15} aria-hidden="true"/> Exit preview</button>
+export type AccountPlan='standard'|'vip';
+export function AdminPlanToggle({plan,busy=false,onChange}:{plan:AccountPlan;busy?:boolean;onChange:(plan:AccountPlan)=>void}){
+ return <section className="admin-plan-bar" aria-label="Admin account plan" aria-busy={busy}>
+  <div className="admin-plan-copy"><strong aria-live="polite">{busy?'Switching account…':`Your account · ${plan==='vip'?'VIP':'Standard'}`}</strong><span>Admin only · No subscription charge. Usage uses credits.</span><p>{plan==='vip'?'VIP tools, discounts and priority are active.':'Standard tools are active. Bot name included.'}</p></div>
+  <div className="admin-plan-control"><span aria-hidden="true">Standard</span><button type="button" role="switch" aria-label="VIP account access" aria-checked={plan==='vip'} disabled={busy} onClick={()=>onChange(plan==='vip'?'standard':'vip')}><span className="admin-plan-thumb"/></button><span aria-hidden="true">VIP</span></div>
  </section>;
 }

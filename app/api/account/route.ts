@@ -24,7 +24,7 @@ export async function GET(req:Request){
   if(!snapshot?.accountId||!snapshot.account||!Number.isSafeInteger(snapshot.account.balanceCents))throw Error('Invalid account snapshot');
   const {membership,...account}=snapshot.account;
   const membershipActive=membershipAccessible(membership);
-  const access=await db<{vip:boolean;vipFeatures:boolean;workspacePreview:'standard'|'vip'|null}>('rpc/icash_workspace_vip_access','POST',{p_account:snapshot.accountId});
+  const access=await db<{vip:boolean;vipFeatures:boolean;adminPlan:'standard'|'vip'|null}>('rpc/icash_workspace_vip_access','POST',{p_account:snapshot.accountId});
   const base={...account,...access,signedIn:true,mode,email:user.email,pendingEmail:user.new_email&&user.new_email!==user.email?user.new_email:null,membershipActive,isBillingOwner:user.id===ownerInboundTarget.ownerUserId};
   const canCheck=mode==='live'&&account.balanceCents>0&&!account.billingReview&&(account.billingModel!=='membership_credits'||membershipActive);
   const core=req&&new URL(req.url).searchParams.get('view')==='core';
