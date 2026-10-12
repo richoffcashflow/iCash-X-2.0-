@@ -37,6 +37,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Keep archived properties out of active workspace reminders before pagination, while preserving agreement/payment history. Test the empty workspace and active properties on later pages; do not hide real work just because the current page or search is empty.
 - A clean-slate demo must allow the same property to be submitted again. Check both address/phone deduplication and provider-property deduplication through actual assignment. Active retries must remain idempotent, and private demos must never absorb real seller requests or another account's demo.
 - Voice agreement scenarios must replay provider tool-result receipts as well as spoken turns. A successful acceptance receipt or reread of the same quote must not erase the seller's acceptance; a changed quote or later withdrawal still requires fresh confirmation.
+- Missing spoken agreement confirmations are successful conversational tool results with a specific next question. Do not hide recoverable instructions behind HTTP errors, and do not accept model-authored confirmation flags without a real terms readback and text authorization.
 - Use a small set of focused local scenarios for the affected flows. Report what was actually verified and any remaining dependency clearly.
 
 # Development test spending

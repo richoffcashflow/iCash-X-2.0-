@@ -66,7 +66,7 @@ current=accepted;
 const terms=dealTermsSchema.parse({address,buyer:'Fixture Buyer',state:'TX',legalDescription:'Lot 1 Block 2'});
 const confirmation={sellerLegalName:'Jane Seller',agreedPriceCents:8600000,closingDate:new Date(now+14*86400000).toISOString().slice(0,10),soleOwner:true,allDecisionMakersAgree:true,inspectionAccess:'no',priceAndDateConfirmed:true,termsConfirmed:true,sendTextRequested:true,materialFactsChanged:false};
 let sends=0,claimedTerms;
-const signing={now:()=>now,bind:async()=>{},db:async(path,method,body)=>{
+const signing={now:()=>now,history:async()=>({transcript:[{role:'agent',message:'The purchase price is $86000 cash, closing '+confirmation.closingDate+' with a ten-day inspection period. May I text the agreement now?'},{role:'user',message:'Yes, please.'}]}),bind:async()=>{},db:async(path,method,body)=>{
  if(path==='rpc/icash_seller_agreement_call_context')return {accountId:'account',ownerUserId:'owner',ownerEmail:'owner@example.test',dealId:'deal',screeningId:'screen',phone:'+12025550142',callKey:'outbound:fixture'};
  if(path==='rpc/icash_call_offer_context')return current;
  if(path.startsWith('icash_signing_envelopes?'))return [];

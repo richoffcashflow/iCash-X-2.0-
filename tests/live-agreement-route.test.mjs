@@ -44,9 +44,14 @@ const accepted=await post({action:'accept_offer',priceCents:15200000,quoteRevisi
 assert.equal(accepted.status,'verbally_accepted');
 entries.splice(3,0,{role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',result_value:JSON.stringify(accepted)}]});
 const confirmation={sellerLegalName:'Jane Seller',agreedPriceCents:15200000,closingDate:new Date(now+30*86400000).toISOString().slice(0,10),soleOwner:true,allDecisionMakersAgree:true,inspectionAccess:'yes',priceAndDateConfirmed:true,termsConfirmed:true,sendTextRequested:true,materialFactsChanged:false};
-entries.push({role:'agent',message:'The price is $152,000, closing '+confirmation.closingDate+' with the prepared ten-day inspection period. Do those terms work, and shall I text it now?'},{role:'user',message:'Yes, please text the agreement.'});
+// Observed failure: closing timing was answered, but no terms readback or text request occurred.
+entries.push({role:'agent',message:'What closing date works?'},{role:'user',message:'Thirty days from now.'});
+const missingReadback=await post({action:'confirm_and_send',confirmation});
+assert.equal(missingReadback.reason,'terms_confirmation_required');assert.equal(sends,0);assert.equal(texts,0);assert.equal(claim,undefined);
+assert.match(missingReadback.nextQuestion,/10-day inspection period/);assert.match(missingReadback.nextQuestion,/may I text/);
+entries.push({role:'agent',message:missingReadback.nextQuestion},{role:'user',message:'Yes, please text the agreement.'});
 entries.push({role:'agent',message:'Let me prepare it.'},{role:'user',message:'Wait, I need my spouse to agree first.'});
-assert.equal((await post({action:'confirm_and_send',confirmation},409)).reason,'acceptance_confirmation_required');
+assert.equal((await post({action:'confirm_and_send',confirmation})).reason,'acceptance_confirmation_required');
 assert.equal(sends,0);assert.equal(texts,0,'late hesitation must block actual provider preparation, not just a parser check');
 entries.splice(-2);
 const reread=await post({action:'get_offer'});
@@ -67,18 +72,18 @@ const replay=[{role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',r
  {role:'agent',message:'Our cash offer is one hundred fifty-two thousand dollars. Does that fit?'},
  {role:'user',message:"Um, yeah, that fits. I want the closing date to be in 30 days from now. What's the next step?"},
  {role:'agent',message:'Your legal name?'},{role:'user',message:'Jane Seller.'},
- {role:'agent',message:'The agreed price, chosen closing date and prepared ten-day inspection period: should I text the agreement now?'},
+ {role:'agent',message:'The purchase price is $152,000 cash, closing '+confirmation.closingDate+' with a ten-day inspection period. May I text the agreement now?'},
  {role:'user',message:'Yes.'},{role:'user',message:'Text the agreement.'}];
 for(const [extra,reason] of [["Wait, I need my spouse to approve first.",'acceptance_confirmation_required'],['No, do not send the agreement.','acceptance_confirmation_required'],['Yes, but I need $160,000.','acceptance_confirmation_required']]){
- entries=[...replay,{role:'user',message:extra}];assert.equal((await post({action:'confirm_and_send',confirmation},409)).reason,reason);assert.equal(sends,0);assert.equal(texts,0);
+ entries=[...replay,{role:'user',message:extra}];assert.equal((await post({action:'confirm_and_send',confirmation})).reason,reason);assert.equal(sends,0);assert.equal(texts,0);
 }
 entries=replay;rejectAcceptance=true;
-assert.equal((await post({action:'confirm_and_send',confirmation},409)).reason,'quote_changed');assert.equal(sends,0,'failed acceptance save cannot create an agreement');
+assert.equal((await post({action:'confirm_and_send',confirmation})).reason,'quote_changed');assert.equal(sends,0,'failed acceptance save cannot create an agreement');
 rejectAcceptance=false;
-assert.equal((await post({action:'confirm_and_send',confirmation:{...confirmation,agreedPriceCents:16000000}},409)).reason,'confirmed_price_required');assert.equal(sends,0);
+assert.equal((await post({action:'confirm_and_send',confirmation:{...confirmation,agreedPriceCents:16000000}})).reason,'confirmed_price_required');assert.equal(sends,0);
 assert.equal((await post({action:'confirm_and_send',confirmation})).sent,true);
 assert(savedActions.includes('accept_offer'));assert.equal(context.offerState.acceptedPriceCents,15200000);
 assert.equal((await post({action:'confirm_and_send',confirmation})).sent,true);assert.equal(sends,1,'recovery and retry share one signing request');
 envelopes[0].state='needs_review';
-assert.equal((await post({action:'confirm_and_send',confirmation},409)).sent,false);assert.equal(sends,1,'uncertain existing agreement cannot be replaced');
+assert.equal((await post({action:'confirm_and_send',confirmation})).sent,false);assert.equal(sends,1,'uncertain existing agreement cannot be replaced');
 console.log('PASS interrupted acceptance recovery, withdrawal, counteroffer, failed save, exact price and duplicate agreement guards; no provider traffic.');

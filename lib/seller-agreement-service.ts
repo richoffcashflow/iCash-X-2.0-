@@ -4,10 +4,11 @@ import {runScreeningJob} from './screening-job.ts';
 import {dealTermsSchema} from './deal-documents.ts';
 import {signingReadiness} from './signing-policy.ts';
 import {sha} from './required-call-recording.ts';
+import {sellerAgreementEvidence,sellerAgreementConfirmationHold} from './seller-agreement-evidence.ts';
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 export type SellerAgreementScope={callKey:string;accountId:string;ownerUserId:string;ownerEmail:string;dealId:string;screeningId:string;phone:string};
 type Envelope={id:string;state:string;test_mode:boolean;terms:unknown;recipients:{name:string;phone?:string}[]};
-type Dependencies={db:Database;bind:(token:string,conversationId:string)=>Promise<void>;send:(input:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:'purchase';signers:{name:string;phone:string}[];phoneLinkOnly:true})=>Promise<{id:string;testMode:boolean}>;text:(accountId:string,envelopeId:string,phone:string)=>Promise<{sent:boolean;status:string;instruction:string}>;refresh:(accountId:string,envelopeId:string)=>Promise<{status:string}>;now?:()=>number};
+type Dependencies={db:Database;history:(conversationId:string)=>Promise<unknown>;bind:(token:string,conversationId:string)=>Promise<void>;send:(input:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:'purchase';signers:{name:string;phone:string}[];phoneLinkOnly:true})=>Promise<{id:string;testMode:boolean}>;text:(accountId:string,envelopeId:string,phone:string)=>Promise<{sent:boolean;status:string;instruction:string}>;refresh:(accountId:string,envelopeId:string)=>Promise<{status:string}>;now?:()=>number};
 const instructions:Record<string,string>={
  all_owners_required:'Another owner or decision maker must be included. Ask who else needs to agree and arrange their participation; do not omit a required signer.',
  confirmation_required:'Confirm the exact price and closing date, prepared terms, and whether they want the agreement texted now before sending.',
@@ -51,6 +52,7 @@ export async function sellerAgreementAction(token:string,input:unknown,d:Depende
   const prepared=dealTermsSchema.parse(existing.terms);
   if(existing.state!=='awaiting_counterparty'||JSON.stringify(prepared)!==JSON.stringify(current)||prepared.priceCents!==terms.priceCents||prepared.closingDate!==terms.closingDate||prepared.seller!==terms.seller||existing.recipients.length!==2||existing.recipients[0].phone!==scope.phone)throw Error('agreement_changed');
  }
+ if(!sellerAgreementEvidence(await d.history(i.conversationId),terms))return sellerAgreementConfirmationHold(terms);
  const claim=await d.db<{id:string;claimed:boolean;envelopeId:string|null}|null>('rpc/icash_claim_seller_agreement','POST',{p_hash:hash,p_conversation:i.conversationId,p_confirmation:i.confirmation,p_expected_terms:deal.terms,p_terms:existing?deal.terms:terms});
  if(!claim)throw Error('agreement_in_progress');
  let envelopeId=claim.envelopeId;

@@ -20,5 +20,5 @@ let body=await result.json();assert.equal(body.quoteAllowed,true);assert.equal(b
 quote={...quote,status:'verbally_accepted',conditional:false,contractAllowed:true};
 result=await route.POST(request());assert.equal((await result.json()).sent,true);assert.equal(sends,1,'ordinary accepted eligible offer still reaches the existing agreement service');
 quote={...quote,status:'calculated_proposal'};
-result=await route.POST(request());assert.equal(result.status,409);assert.equal(sends,1,'fresh quote without acceptance cannot send');
+result=await route.POST(request());assert.equal(result.status,200);assert.equal((await result.json()).sent,false);assert.equal(sends,1,'fresh quote without acceptance cannot send');
 console.log('PASS conditional offer API: spoken price retained; no signing or text on hold; accepted eligible flow preserved.');
