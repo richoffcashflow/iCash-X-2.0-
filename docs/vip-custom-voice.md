@@ -1,6 +1,6 @@
 # VIP custom voice
 
-VIP includes one private Instant Voice Clone for outbound seller and buyer calls. Settings → VIP → Your voice accepts a clear recording of the account owner's own voice, with an explicit authorization checkbox. MP3/M4A/WAV/WebM files are bounded to 4 MB before multipart parsing and checked for audio signatures. The browser can play the source recording before upload. Samples go directly through the authenticated server to ElevenLabs and are not kept in app storage.
+VIP includes one private Instant Voice Clone for outbound seller calls. Workspace → Customize bot → Custom voice accepts a clear recording of the account owner's own voice, with an explicit authorization checkbox. MP3/M4A/WAV/WebM files are bounded to 4 MB before multipart parsing and checked for audio signatures. The browser can play the source recording before upload. Samples go directly through the authenticated server to ElevenLabs and are not kept in app storage.
 
 The server creates a durable account-bound job before uploading. Repeated submissions reuse that job. A provider timeout stays unknown and is reconciled by the exact server-generated voice name; it never blindly creates a second clone. Provider-required verification blocks activation. Ready voices can be enabled or switched back to the standard voice. The stored standard identity is unchanged, and VIP expiry automatically selects it again. Provider metadata is checked before dispatch; no global shared agent or voice allowlist is changed.
 
@@ -11,3 +11,5 @@ Deployment order: apply config/vip-custom-voice.sql, verify service-only functio
 Verification: provider adapter tests cover consent, duplicate upload, ambiguous timeout recovery, provider verification and account binding. Actual SQL tests cover ownership, VIP expiry, enable/disable and privileges. Existing call dispatch tests exercise the selected custom voice while retaining call readiness checks. A real uploaded recording is still required to assess clone quality and confirm provider provisioning end to end.
 
 Provider documentation checked October 7, 2026: https://elevenlabs.io/docs/api-reference/voices/ivc/create and https://elevenlabs.io/docs/api-reference/voices/get
+
+The verified admin can enable a functional VIP preview for up to four hours. This uses the same voice upload and activation controls; it does not grant discounted prices or change the subscription. Leaving preview restores the actual plan. Standard and VIP both include bot-name customization.

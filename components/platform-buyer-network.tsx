@@ -6,19 +6,19 @@ import type {NetworkWorkspace} from '@/lib/buyer-network';
 import styles from './buyer-network.module.css';
 import {BuyerDemandPanel} from './buyer-demand';
 
-export function PlatformBuyerNetwork({preview=false}:{preview?:boolean}){
+export function PlatformBuyerNetwork(){
  const locked=useRef(false);
  const [networkOpen,setNetworkOpen]=useState(false);
  const [data,setData]=useState<NetworkWorkspace|null>(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[editing,setEditing]=useState(false),[address,setAddress]=useState(''),[enabled,setEnabled]=useState(true);
  async function refresh(signal?:AbortSignal){const next=await webinarRequest<NetworkWorkspace>('/api/work/buyer-network',{cache:'no-store',signal});if(!signal?.aborted)setData(next);return next;}
- useEffect(()=>{if(preview)return;const abort=new AbortController();let inFlight=false;const load=async()=>{if(document.hidden||inFlight)return;inFlight=true;try{await refresh(abort.signal);if(!abort.signal.aborted)setError('');}catch(e){if(!abort.signal.aborted)setError(e instanceof Error?e.message:'Could not refresh the buyer network.');}finally{inFlight=false;}};void load();const timer=setInterval(load,60000);return()=>{abort.abort();clearInterval(timer);};},[preview]);
+ useEffect(()=>{const abort=new AbortController();let inFlight=false;const load=async()=>{if(document.hidden||inFlight)return;inFlight=true;try{await refresh(abort.signal);if(!abort.signal.aborted)setError('');}catch(e){if(!abort.signal.aborted)setError(e instanceof Error?e.message:'Could not refresh the buyer network.');}finally{inFlight=false;}};void load();const timer=setInterval(load,60000);return()=>{abort.abort();clearInterval(timer);};},[]);
  function edit(){setAddress(data?.settings?.mailingAddress??'');setEnabled(data?.settings?.enabled??true);setEditing(v=>!v);}
  async function save(e:FormEvent){e.preventDefault();if(locked.current)return;locked.current=true;setBusy(true);setError('');try{await webinarPost('/api/work/buyer-network',{enabled,mailingAddress:address});await refresh();setEditing(false);setNotice(enabled?'Saved. Your bot will email eligible matching buyers when it runs.':'Network delivery paused.');}catch(e){setError(e instanceof Error?e.message:'Could not save.');}finally{locked.current=false;setBusy(false);}}
  async function handled(matchId:string){if(locked.current)return;locked.current=true;setBusy(true);setError('');try{await webinarRequest('/api/work/buyer-network',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({matchId})});await refresh();setNotice('Response marked handled. A new reply will appear for review.');}catch(e){setError(e instanceof Error?e.message:'Could not save.');}finally{locked.current=false;setBusy(false);}}
  return <details id="platform-buyer-network" className={styles.workspace} onToggle={e=>{if(e.target===e.currentTarget)setNetworkOpen(e.currentTarget.open);}}>
-  <summary><span className={styles.networkIcon}><Network size={20} aria-hidden="true"/></span><span>Platform Buyer Network<small>{preview?'VIP appearance preview':error?'Network unavailable — open to review':!data?'Opening network…':data.responses?`${data.responses} buyer ${data.responses===1?'response':'responses'} to review`:!data.settings?'Set up package emails':data.matches?`${data.matches} matches · ${data.emailed} packages sent`:'Reach buyers beyond your own list'}</small></span><span className={styles.vipLabel}>VIP</span></summary>
+  <summary><span className={styles.networkIcon}><Network size={20} aria-hidden="true"/></span><span>Platform Buyer Network<small>{error?'Network unavailable — open to review':!data?'Opening network…':data.responses?`${data.responses} buyer ${data.responses===1?'response':'responses'} to review`:!data.settings?'Set up package emails':data.matches?`${data.matches} matches · ${data.emailed} packages sent`:'Reach buyers beyond your own list'}</small></span><span className={styles.vipLabel}>VIP</span></summary>
   <div className={styles.workspaceBody}>
-   {preview?<p>Match signed deals with opted-in buyers across iCash X. Your live network counts and settings appear with an active VIP membership.</p>:<>
+   <>
     {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
     {data&&<><BuyerDemandPanel enabled={networkOpen}/><div className={styles.metrics}><div><strong>{data.enrolledBuyers}</strong><span>Active network buyers</span></div><div><strong>{data.matches}</strong><span>Your matches</span></div><div><strong>{data.emailed}</strong><span>Packages sent</span></div></div>
      <p>{!data.enrolledBuyers?'The network is open for enrollment. Share the buyer sign-up link to start growing it.':'Your running bot matches released deals by ZIP, property type, price and repair budget.'}</p>
@@ -30,7 +30,7 @@ export function PlatformBuyerNetwork({preview=false}:{preview?:boolean}){
      {data.buyers.length>0&&<div className={styles.interested}><h3>Buyer responses</h3>{data.buyers.map(b=><article key={b.id}><strong>{b.name} · {b.state==='interested'?'Interested':'Replied'}</strong><span>{b.address}</span>{b.reply&&<p>{b.reply}</p>}<a href={`mailto:${encodeURIComponent(b.email)}`}>{b.email}</a><button className={styles.quiet} type="button" disabled={busy} onClick={()=>void handled(b.id)}>Mark handled</button></article>)}<small>Confirm funds and signing authority before sending an assignment. Interest does not reserve the property.</small></div>}
      <p className={styles.fine}>Private buyer lists stay private. Only buyers who join the shared network are included.</p>
     </>}
-   </>}
+   </>
   </div>
  </details>;
 }

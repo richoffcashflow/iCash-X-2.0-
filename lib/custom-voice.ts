@@ -21,7 +21,7 @@ async function reconcile(row:CustomVoice){
  return row;
 }
 export async function customVoiceStatus(accountId:string){
- const vip=await db<boolean>('rpc/icash_vip_active','POST',{p_account:accountId});
+ const vip=await db<boolean>('rpc/icash_vip_features_active','POST',{p_account:accountId});
  const row=await load(accountId);return publicCustomVoice(row?await reconcile(row):null,vip);
 }
 export async function createCustomVoice(accountId:string,userId:string,bytes:Uint8Array,consent:string,fetcher:typeof fetch=fetch){

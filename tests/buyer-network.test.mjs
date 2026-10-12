@@ -10,7 +10,7 @@ assert.deepEqual(policy.networkProfileSchema.parse(profile).zips,['75201']);
 for(const patch of [{accepted:false},{consentVersion:'old'},{zips:['7520']},{maxPriceCents:-1},{maxRepairsCents:1.5},{dailyEmails:4},{propertyTypes:[]},{accountId:id(2)}])assert.equal(policy.networkProfileSchema.safeParse({...profile,...patch}).success,false);
 const mocks={...policy,z,NextResponse:{json:(body,options={})=>({body,status:options.status??200})},currentUser:async()=>user,workAccount:async()=>{if(!user)throw Error('SIGN_IN_REQUIRED');return {userId:user.id,accountId:id(2)};},limitRequest:async()=>{},db:async(path,method,body)=>{
  calls.push({path,method,body});
- if(path==='rpc/icash_vip_active')return vip;
+ if(path==='rpc/icash_vip_features_active')return vip;
  if(path==='rpc/icash_network_workspace')return {vip:true,matches:0};
  if(path==='rpc/icash_network_profile')return null;
  if(path==='rpc/icash_network_inbox')return [];
