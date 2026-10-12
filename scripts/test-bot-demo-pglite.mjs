@@ -37,12 +37,16 @@ try{
  create function icash_claim_operation(text) returns boolean language sql as $$select true$$;
  create function icash_settle_complete_costs(text,bigint,jsonb,text) returns void language sql as $$insert into public.icash_operation_spend(operation_key) values($1)$$;
  `);
- await pg.exec(table('icash_seller_controls')+table('icash_seller_intakes')+table('icash_seller_matches'));
+ await pg.exec(table('icash_seller_controls')+table('icash_seller_intakes')+table('icash_seller_matches')+table('icash_seller_events'));
  await pg.exec(`alter table icash_seller_controls add column limited_contact_enabled boolean default true;
  alter table icash_seller_intakes add column email text,add column email_consented boolean default false,add column customer_costs jsonb,add column customer_cost_basis text,add column contact_consent_scope text constraint icash_seller_intakes_contact_consent_scope_check check(contact_consent_scope is null or contact_consent_scope='homeoffer_network_and_matched_buyers');
  insert into icash_seller_controls(id,enabled,data_rights_until,review_ref) values(1,true,now()+interval '7 days','Fixture data-use review');`);
  await pg.exec(read('tests/fixtures/bot-demo-source.sql'));
  await pg.exec(read('config/bot-demo-intake.sql'));
+ const lookupSource=read('config/seller-funnel-milestones.sql');
+ await pg.exec(lookupSource.slice(lookupSource.indexOf('CREATE OR REPLACE FUNCTION public.icash_finish_seller_lookup'),lookupSource.indexOf('-- Backfill genuine recent submissions')));
+ await pg.exec(read('config/demo-intake-resubmission.sql'));
+ await pg.exec(read('config/demo-intake-resubmission.sql'));
  // Surface fixture adapter errors instead of the production retry outcome.
  const definition=(await one("select pg_get_functiondef('public.icash_assign_seller_lead_for(uuid)'::regprocedure) d")).d;
  await pg.exec(definition.replace('   null;','   raise;'));
@@ -70,6 +74,39 @@ try{
  assert.equal(screen.snapshot.sellerRequest.maximumBuyers,1);assert.equal(screen.snapshot.sellerRequest.shared,false);
  assert((await one('select icash_seller_contact_evidence($1,$2,$3,$4) e',[account,screening_id,id,args[6]])).e,'truthful iCash consent projects contact evidence');
  assert.equal((await one('select icash_seller_contact_evidence($1,$2,$3,$4) e',[other,screening_id,id,args[6]])).e,null,'no cross-account contact evidence');
+ // Full repeat: fresh receipt -> real lookup finalizer -> real assignment SQL.
+ const finish=async(lead,propertyId='prop_demo')=>{
+  const token=randomUUID(),output={creditsUsed:0,numbersPassed:true,status:'qualified',property:{id:propertyId,city:'Dallas',state:'TX'},result:{financialCheck:{status:'eligible'},preliminarySellerCeilingCents:8000000}};
+  await q(`update icash_seller_intakes set state='checking',claim_token=$2,claimed_at=now(),lookup_cap_micros=0,lookup_costs='{"dealmachine":10000,"vercel":1000}',lookup_cost_basis='Fixture saved research',data_rights_until=now()+interval '7 days' where id=$1`,[lead,token]);
+  assert.equal((await one('select icash_finish_seller_lookup($1,$2,$3) ok',[lead,token,output])).ok,true);
+  assert.equal((await one('select icash_finish_seller_lookup($1,$2,$3) ok',[lead,token,output])).ok,false,'lookup receipt is consumed once');
+  return one('select * from icash_seller_intakes where id=$1',[lead]);
+ };
+ const differentKey=await submit(args.map((v,i)=>i===2?randomUUID():i===8?'d'.repeat(64):v));
+ assert.equal((await finish(differentKey.id)).canonical_id,id,'active run deduplicates even with a different submitted address key');
+ const oldMatchCount=Number((await one('select count(*) n from icash_seller_matches where lead_id=$1',[id])).n);
+ await q("update icash_screening_jobs set state='archived' where id=$1",[screening_id]);
+ const freshArgs=args.map((v,i)=>i===2?randomUUID():v),fresh=await submit(freshArgs);
+ assert.equal((await one('select state from icash_seller_intakes where id=$1',[fresh.id])).state,'received','same address and phone can start after archive');
+ assert.equal((await submit(freshArgs)).id,fresh.id,'retry remains the same receipt');
+ const checked=await finish(fresh.id);assert.equal(checked.state,'qualified');assert.equal(checked.canonical_id,null);assert.equal(checked.numbers_passed,true);
+ assert.equal((await one('select icash_assign_seller_lead_for($1) r',[fresh.id])).r.accountId,account);
+ const freshScreen=await one('select screening_id from icash_seller_matches where lead_id=$1',[fresh.id]);assert.notEqual(freshScreen.screening_id,screening_id);
+ assert.equal((await one('select state from icash_screening_jobs where id=$1',[screening_id])).state,'archived','old run remains history');
+ assert.equal(Number((await one('select count(*) n from icash_seller_matches where lead_id=$1',[id])).n),oldMatchCount);
+ const again=await submit(args.map((v,i)=>i===2?randomUUID():v));assert.equal((await one('select canonical_id from icash_seller_intakes where id=$1',[again.id])).canonical_id,fresh.id);
+ const otherOwner=(await one('select owner_user_id from icash_accounts where id=$1',[other])).owner_user_id;
+ const otherDemo=await submit(args.map((v,i)=>i===0?otherOwner:i===1?other:i===2?randomUUID():v));
+ assert.equal((await finish(otherDemo.id)).state,'qualified','a different demo account has its own property test');
+ // Public submissions are never swallowed by private demo history. Public
+ // property deduplication still prevents duplicate distribution among sellers.
+ const network=await submit(args.map((v,i)=>i===2?randomUUID():i===8?'e'.repeat(64):v));
+ await q("update icash_seller_intakes set contact_consent_scope='homeoffer_network_and_matched_buyers' where id=$1",[network.id]);
+ assert.equal((await finish(network.id)).state,'qualified','private demos cannot block a real seller request');
+ const networkRepeat=await submit(args.map((v,i)=>i===2?randomUUID():i===8?'f'.repeat(64):v));
+ await q("update icash_seller_intakes set contact_consent_scope='homeoffer_network_and_matched_buyers' where id=$1",[networkRepeat.id]);
+ assert.equal((await finish(networkRepeat.id)).canonical_id,network.id,'real seller duplicates still share one canonical lead');
+ for(const role of ['anon','authenticated'])assert.equal((await one("select has_function_privilege($1,'public.icash_demo_intake_current(uuid,uuid)','execute') allowed",[role])).allowed,false);
  await q("update icash_seller_intakes set consent_text='Different consent' where id=$1",[id]);
  assert.equal((await one('select icash_seller_contact_evidence($1,$2,$3,$4) e',[account,screening_id,id,args[6]])).e,null,'exact consent is required');
  // Existing network requests retain their separate routing policy.
@@ -78,5 +115,5 @@ try{
  for(const role of ['anon','authenticated'])assert.equal((await one("select has_function_privilege($1,'public.icash_submit_bot_demo_intake(uuid,uuid,uuid,text,text,text,text,boolean,text,text,text)','execute') allowed",[role])).allowed,false);
  const input={name:'Demo Seller',address:'45 Fixture Lane',phone:'2145550123',consented:true,consentVersion:botDemoConsentVersion,requestId:leadRequest};
  assert(botDemoSubmission.safeParse(input).success);assert(!botDemoSubmission.safeParse({...input,accountId:other}).success);assert(!botDemoSubmission.safeParse({...input,consented:false}).success);
- console.log('PASS: consent, presenter ownership, idempotent retry, duplicate receipt, single-account assignment, pause isolation, cross-account denial, original network routing, and service-only permissions. No paid work.');
+ console.log('PASS: consent, ownership, retries, active duplicates, archived resubmission through lookup and assignment, account/source isolation, original network routing, and service-only permissions. No paid work.');
 }catch(error){console.error({message:error.message,detail:error.detail,where:error.where,position:error.position,stack:error.stack?.split('\n').slice(0,4)});process.exitCode=1;}finally{await pg.close();}
