@@ -90,3 +90,13 @@ try{
  data=await(await post({code:'123457'},nyHeaders)).json();assert.equal(data.webinar.recordingVersion,'night','Paid VIP playback uses local daylight');
 }finally{if(originalVercel===undefined)delete process.env.VERCEL;else process.env.VERCEL=originalVercel;}
 console.log('PASS fixed routing: no experiments, stable acquisition attribution, same-webinar returns, paid VIP gate, local Day/Night fallback, saved VIP resume and retired controls.');
+
+// Matching VIP stays attached to the watched main recording across time changes.
+vipPaid=true;account=null;events=[];now=Date.parse('2026-10-08T03:00:00Z');
+history=[{id:randomUUID(),webinar_id:one.id,is_preview:false,config:{...one,recordingVersion:'day'},created_at:new Date(now-3600000).toISOString()}];
+data=await(await post({code:'123457'})).json();assert.equal(data.webinar.recordingVersion,'day');assert.equal(data.webinar.videoUrl,vip.videoUrl);
+now=Date.parse('2026-10-08T18:00:00Z');history[0].config.recordingVersion='night';
+data=await(await post({code:'123457'})).json();assert.equal(data.webinar.recordingVersion,'night');assert.equal(data.webinar.videoUrl,vip.nightVersion.videoUrl);
+const savedNight=vip.nightVersion;vip.nightVersion={...savedNight,videoUrl:''};
+data=await(await post({code:'123457'})).json();assert.equal(data.webinar.recordingVersion,'day');assert.equal(data.webinar.videoUrl,vip.videoUrl);vip.nightVersion=savedNight;
+console.log('PASS matching VIP follows watched Day/Night through clock changes, with empty Night VIP fallback.');

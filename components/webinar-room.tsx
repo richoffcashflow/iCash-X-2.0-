@@ -1,7 +1,7 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import dynamic from 'next/dynamic';
-import {webinarPurchaseDestination,type WebinarPurchaseState} from '@/lib/webinar-purchase-flow';
+import {safeVipSession,webinarPurchaseDestination,type WebinarPurchaseState} from '@/lib/webinar-purchase-flow';
 import {WebinarAudience} from '@/components/webinar-audience';
 import {WebinarPurchaseNotifications} from '@/components/webinar-purchase-notifications';
 import {availableOffers,selectOffer} from '@/packages/webinar-engine/src/index';
@@ -12,7 +12,7 @@ import {WebinarTimers, useWebinarTimers} from '@/components/webinar-timers';
 import {WebinarOfferMoment} from '@/components/webinar-offer-moment';
 import {WebinarPlayer} from '@/components/webinar-player';
 import {WebinarPanelBoundary} from '@/components/webinar-panel-boundary';
-import {webinarPost as post,webinarBeacon} from '@/lib/webinar-client';
+import {webinarPost as post,webinarBeacon,webinarRequest} from '@/lib/webinar-client';
 import {restoredPosition,savePosition,clearPosition} from '@/lib/webinar-playback';
 import {webinarPrompt,readPromptHistory,savePromptHistory,emptyPromptHistory} from '@/lib/webinar-prompts';
 import {publicWebinar,webinarSchema,formatWatchTime,webinarOffers,webinarPitchAt,webinarEndOffer,offerDestination,webinarConsent,webinarConsentVersion,webinarSmsConsent,webinarSmsConsentVersion,type Webinar,type WebinarEvent} from '@/lib/webinar-policy';
@@ -79,7 +79,12 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  function continuePurchase(){
   if(!alive.current||purchaseRedirected.current)return;
   const next=webinarPurchaseDestination(purchasedRef.current,checkoutEngagedRef.current,upgradeActiveRef.current);
-  if(next&&next!=='checkout'&&(endedRef.current||purchasedRef.current==='vip')){purchaseRedirected.current=true;location.assign(next);}
+  if(next&&next!=='checkout'&&(endedRef.current||purchasedRef.current==='vip')){
+   purchaseRedirected.current=true;
+   if(purchasedRef.current==='standard'&&!sessionRef.current?.webinar.parentWebinarId){
+    void webinarRequest<{postPurchaseUrl?:string|null}>('/api/billing/membership',{cache:'no-store'},10000).then(data=>location.assign(safeVipSession(data?.postPurchaseUrl)??next)).catch(()=>location.assign(next));
+   }else location.assign(next);
+  }
  }
  function finishWebinar(){
   endedRef.current=true;setEnded(true);const done=track('completed');continuePurchase();
