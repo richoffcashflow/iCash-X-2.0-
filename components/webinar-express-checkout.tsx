@@ -38,7 +38,7 @@ export function WebinarExpressCheckout({checkingAccount=false,accountError=false
      </section>
     </div>
     <div className="wb-express-card wb-plan-card" id="your-plan" tabIndex={-1}>
-     <MembershipCheckout embedded webinarSessionId={webinarSessionId} presentation="plan" onEngaged={()=>setCheckoutEngaged(true)} onSignedIn={openWorkspace}/>
+     <MembershipCheckout redirectToVip embedded webinarSessionId={webinarSessionId} presentation="plan" onEngaged={()=>setCheckoutEngaged(true)} onSignedIn={openWorkspace}/>
      <a className="wb-text" href={webinarSite.supportPath}>Have a question? We’re here.</a>
     </div>
     <div className="launch-product-preview">

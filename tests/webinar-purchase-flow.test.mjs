@@ -34,7 +34,32 @@ const guest=await harness('components/webinar-vip-upsell.tsx',common);tree=guest
 const paid=await harness('components/webinar-vip-upsell.tsx',common),paidProps={...props,needsClaim:false};tree=paid.render('WebinarVipUpsell',paidProps);await flush();find(tree,'input').props.onChange({target:{checked:true}});tree=paid.render('WebinarVipUpsell',paidProps);const submit=button(tree,'Upgrade to VIP').props.onClick;await Promise.all([submit(),submit()]);tree=paid.render('WebinarVipUpsell',paidProps);assert.equal(calls.filter(c=>c.init.method==='POST').length,1,'Rapid repeated clicks create one upgrade request');assert.ok(find(tree,'StripeEmbeddedCheckout'));assert.equal(active.at(-1),true);
 find(tree,'StripeEmbeddedCheckout').props.onComplete();await flush();tree=paid.render('WebinarVipUpsell',paidProps);assert.match(text(tree),/Confirming your VIP upgrade/);assert.equal(button(tree,'No thanks'),undefined,'A receipt still being verified cannot be skipped or paid again');assert.equal(redirects.length,1);verified=true;await button(tree,'Check upgrade').props.onClick();await flush();paid.close();
 // URL flags cannot bypass server verification or trigger a direct VIP video redirect.
-const member=await harness('components/membership-checkout.tsx',{...common,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserEvent:()=>{}});
-window.location.search='?membership=paid&upgrade=paid&setup=1';purchase={offer:{revision:1,priceCents:5000},ready:true,mode:'live',needsClaim:true,email:props.email,customerName:'Casey',postPurchaseUrl:'/live/123456',membership:{accessible:true,vip:false}};
+const member=await harness('components/membership-checkout.tsx',{...common,safeVipSession,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserEvent:()=>{}});
+window.location.search='?membership=paid&upgrade=paid';purchase={offer:{revision:1,priceCents:5000},ready:true,mode:'live',needsClaim:true,email:props.email,customerName:'Casey',postPurchaseUrl:'/live/123456',membership:{accessible:true,vip:false}};
 const mp={onSignedIn:()=>{},onPurchased:()=>{}};member.render('MembershipCheckout',mp);await flush();tree=member.render('MembershipCheckout',mp);assert.ok(find(tree,'WebinarVipUpsell'));assert.equal(redirects.length,1,'Verified base purchase shows upsell instead of redirecting to video');purchase.membership.vip=true;await find(tree,'WebinarVipUpsell').props.onRefresh();tree=member.render('MembershipCheckout',mp);assert.ok(find(tree,'PostPurchaseSetup'),'Only verified VIP skips the VIP session');member.close();
 console.log('PASS purchase flow: unpaid checkout, two upgrade opportunities, guest continuity, verified VIP setup, draft fallback, payment protection, and no query-string access bypass.');
+
+const redirectMember=await harness('components/membership-checkout.tsx',{...common,safeVipSession,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserEvent:()=>{}});
+purchase.membership.vip=false;purchase.postPurchaseUrl='/live/123456';
+const redirectProps={...mp,redirectToVip:true,webinarPhase:'watching'};
+redirectMember.render('MembershipCheckout',redirectProps);await flush();let beforeRedirect=redirects.length;redirectMember.render('MembershipCheckout',redirectProps);assert.equal(redirects.length,beforeRedirect,'A paid viewer keeps watching until the end');
+redirectMember.render('MembershipCheckout',{...redirectProps,webinarPhase:'ended'});assert.equal(redirects.at(-1),'/live/123456','Verified checkout opens VIP automatically once the main webinar has ended');redirectMember.close();
+console.log('PASS paid checkout handoff to VIP and watch-until-end behavior.');
+
+for(const scenario of [
+ {name:'Pending payment',accessible:false,vip:false,search:'?membership=paid',url:'/live/123456'},
+ {name:'Explicit setup after VIP',accessible:true,vip:false,search:'?setup=1',url:'/live/123456',setup:true},
+ {name:'Verified VIP member',accessible:true,vip:true,search:'',url:'/live/123456',setup:true},
+ {name:'External redirect rejected',accessible:true,vip:false,search:'',url:'https://other.test/live/123456'}
+]){
+ window.location.search=scenario.search;
+ purchase={...purchase,postPurchaseUrl:scenario.url,membership:{accessible:scenario.accessible,vip:scenario.vip}};
+ const instance=await harness('components/membership-checkout.tsx',{...common,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserEvent:()=>{}});
+ const count=redirects.length;
+ instance.render('MembershipCheckout',{...mp,redirectToVip:true});await flush();
+ const result=instance.render('MembershipCheckout',{...mp,redirectToVip:true});
+ assert.equal(redirects.length,count,scenario.name+' does not redirect');
+ if(scenario.setup)assert.ok(find(result,'PostPurchaseSetup'),scenario.name+' shows setup');
+ instance.close();
+}
+console.log('PASS pending payment, explicit setup, existing VIP, and unsafe destination guards.');
