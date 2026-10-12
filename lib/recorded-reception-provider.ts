@@ -9,9 +9,9 @@ import {propertyReceptionEnabled,propertyReceptionVariables} from './reception-p
 /** Canonical transport only. Exposes no arbitrary URL/provider write primitive. */
 export function createRecordedReceptionProviders(env:RecordingEnv,fetcher:typeof fetch=fetch,signal?:AbortSignal){
  const core=createRecordingProviders(env,fetcher,signal),origin='https://api.us.elevenlabs.io';
- async function eleven(path:string,body?:unknown){
+ async function eleven(path:string,body?:unknown,readSignal?:AbortSignal){
   if(!env.ELEVENLABS_API_KEY)throw Error('PROVIDER_CONFIGURATION_REQUIRED');const url=origin+path;
-  const r=await fetcher(url,{method:body===undefined?'GET':'POST',headers:{'xi-api-key':env.ELEVENLABS_API_KEY,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)}),redirect:'error',cache:'no-store',credentials:'omit',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000)});
+  const r=await fetcher(url,{method:body===undefined?'GET':'POST',headers:{'xi-api-key':env.ELEVENLABS_API_KEY,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)}),redirect:'error',cache:'no-store',credentials:'omit',signal:AbortSignal.any([...(signal?[signal]:[]),...(readSignal?[readSignal]:[]),AbortSignal.timeout(8000)])});
   if(!r.ok||r.redirected||r.url&&r.url!==url)throw Error('PROVIDER_UNAVAILABLE');return (await boundedBytes(r,262144)).toString('utf8');
  }
  const agentPath=(id:string)=>{if(!/^agent_[A-Za-z0-9]+$/.test(id))throw Error('AGENT_REQUIRED');return '/v1/convai/agents/'+id;};
@@ -29,15 +29,16 @@ export function createRecordedReceptionProviders(env:RecordingEnv,fetcher:typeof
    }
    return object(JSON.parse((await boundedBytes(response,32768)).toString('utf8')));
   },
-  agent:async(c:RecordedReceptionConfig)=>object(JSON.parse(await eleven(agentPath(c.agent_id)+'?branch_id='+encodeURIComponent(c.branch_id)))),
+  agent:async(c:RecordedReceptionConfig,readSignal?:AbortSignal)=>object(JSON.parse(await eleven(agentPath(c.agent_id)+'?branch_id='+encodeURIComponent(c.branch_id),undefined,readSignal))),
   branches:async(c:RecordedReceptionConfig)=>object(JSON.parse(await eleven(agentPath(c.agent_id)+'/branches?include_archived=true&limit=100'))),
   workspace:async()=>object(JSON.parse(await eleven('/v1/convai/settings'))),
   tool:async(id:string)=>{if(!/^tool_[A-Za-z0-9]+$/.test(id))throw Error('TOOL_REQUIRED');return object(JSON.parse(await eleven('/v1/convai/tools/'+id)));},
   conversations:async(r:RecordedReceptionRow)=>object(JSON.parse(await eleven('/v1/convai/conversations?'+new URLSearchParams({agent_id:r.agent_id,user_id:'icash-recorded-reception:'+r.id,page_size:'2'})))),
   conversation:async(id:string)=>{if(!/^conv_[A-Za-z0-9]+$/.test(id))throw Error('CONVERSATION_REQUIRED');return object(JSON.parse(await eleven('/v1/convai/conversations/'+id)));},
-  register:async(r:RecordedReceptionRow,remaining:number,propertyContext:unknown=null)=>{
+  register:async(r:RecordedReceptionRow,remaining:number,propertyContext:unknown=null,voiceId:string|null=null)=>{
    if(!Number.isInteger(remaining)||remaining<1||remaining>r.max_total_seconds||!r.recording_sid||!recordingAuthorized(r))throw Error('CONSENT_AND_BOUND_REQUIRED');
-   const raw=await eleven('/v1/convai/twilio/register-call',{agent_id:r.agent_id,from_number:r.from_phone,to_number:r.to_phone,direction:'inbound',conversation_initiation_client_data:{branch_id:r.branch_id,user_id:'icash-recorded-reception:'+r.id,conversation_config_override:{conversation:{max_duration_seconds:remaining}},dynamic_variables:{...(propertyReceptionEnabled(r.configuration)?receptionContextVariables(r.configuration,propertyContext):{}),...(sellerAgreementReceptionEnabled(r.configuration)?{secret__icash_call_token:receptionStopToken(r,env)}:{}),icash_reception_recording_id:r.id,secret__icash_reception_stop_token:receptionStopToken(r,env)}}});
+   if(voiceId!==null&&!/^[A-Za-z0-9_-]{5,100}$/.test(voiceId))throw Error('VOICE_ID_REQUIRED');
+   const raw=await eleven('/v1/convai/twilio/register-call',{agent_id:r.agent_id,from_number:r.from_phone,to_number:r.to_phone,direction:'inbound',conversation_initiation_client_data:{branch_id:r.branch_id,user_id:'icash-recorded-reception:'+r.id,conversation_config_override:{...(voiceId?{tts:{voice_id:voiceId}}:{}),conversation:{max_duration_seconds:remaining}},dynamic_variables:{...(propertyReceptionEnabled(r.configuration)?receptionContextVariables(r.configuration,propertyContext):{}),...(sellerAgreementReceptionEnabled(r.configuration)?{secret__icash_call_token:receptionStopToken(r,env)}:{}),icash_reception_recording_id:r.id,secret__icash_reception_stop_token:receptionStopToken(r,env)}}});
    const text=raw.trim().startsWith('"')?JSON.parse(raw):raw;
    if(typeof text!=='string'||text.length>64000||/<!/.test(text)||!/^\s*(?:<\?xml[^>]*>\s*)?<Response(?:\s|>)/.test(text)||!text.includes('<Connect')||!text.includes('<Stream'))throw Error('REGISTRATION_NOT_CONFIRMED');
    const tags=[...text.matchAll(/<\/?([A-Za-z][A-Za-z0-9]*)\b/g)].map(m=>m[1]);

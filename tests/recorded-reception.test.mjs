@@ -10,6 +10,7 @@ import {sha, affirmativeUtterances} from '../lib/required-call-recording.ts';
 import {recordedReceptionPolicy, recordedReceptionUrl, recordedReceptionStopInstruction, validRecordedReceptionConfig, inspectRecordedReceptionAgent, recordedReceptionToolMatches, receptionCallerHash, receptionStopToken, receptionConsentTwiml, receptionConversationMatches, receptionAudioAvailable, receptionRecordingCosts} from '../lib/recorded-reception.ts';
 import {recordedReceptionService} from '../lib/recorded-reception-service.ts';
 import {createRecordedReceptionProviders} from '../lib/recorded-reception-provider.ts';
+import {selectedRecordedReceptionVoice} from '../lib/recorded-reception-voice.ts';
 
 const now = Date.parse('2026-10-03T06:00:00.000Z'), iso = new Date(now).toISOString();
 const accountSid = 'AC' + 'a'.repeat(32), callSid = 'CA' + 'b'.repeat(32), recordingSid = 'RE' + 'c'.repeat(32);
@@ -86,13 +87,13 @@ function fixture(options={}) {
     tool:async()=>{events.push({provider:'tool'});return clone(cfg.tool);},
     boundCall:async r=>{events.push({provider:'boundCall',seconds:r.max_total_seconds});assert(row.setup_claimed_at);assert.equal(canonicalCall.status,'in-progress','carrier cannot update a ringing call');if(options.boundThrows)throw Error('synthetic-write-unknown');return clone({...canonicalCall,...options.boundReceipt});},
     start:async(sid,callback)=>{events.push({provider:'start',callback});assert.equal(sid,callSid);assert(row.bounded_at);assert(recordingAuthorized(row));assert(row.start_claimed_at);assert.equal(row.register_claimed_at,null);if(options.startThrows)throw Error('synthetic-write-unknown');if(options.startCallback){const response=await service.status(signed('status?id='+id,{RecordingSid:recordingSid,RecordingStatus:'in-progress'}));assert.equal(response.status,204);}return {sid:recordingSid,call_sid:callSid,account_sid:accountSid,status:'in-progress',start_time:iso,...options.startReceipt};},
-    register:async(r,seconds,context)=>{events.push({provider:'register',seconds,context});assert(recordingAuthorized(r));assert(r.start_claimed_at);assert(r.recording_sid);assert(r.register_claimed_at);assert.equal(r.state,'recording');if(options.registerThrows)throw Error('synthetic-write-unknown');return streamXml;},
+    register:async(r,seconds,context,voiceId)=>{events.push({provider:'register',seconds,context,voiceId});assert(recordingAuthorized(r));assert(r.start_claimed_at);assert(r.recording_sid);assert(r.register_claimed_at);assert.equal(r.state,'recording');if(options.registerThrows)throw Error('synthetic-write-unknown');return streamXml;},
     end:async sid=>{events.push({provider:'end'});assert.equal(sid,callSid);if(options.endThrows)throw Error('synthetic-write-unknown');canonicalCall.status='completed';return {sid:callSid,account_sid:accountSid,status:'completed',...options.endReceipt};},
     stop:async(sid,re)=>{events.push({provider:'stop'});assert.equal(sid,callSid);assert.equal(re,recordingSid);if(options.stopThrows)throw Error('synthetic-write-unknown');return {sid:recordingSid,call_sid:callSid,account_sid:accountSid,status:'stopped',...options.stopReceipt};},
     getRecording:async sid=>{events.push({provider:'getRecording'});assert.equal(sid,recordingSid);return {sid:recordingSid,call_sid:callSid,account_sid:accountSid,status:'in-progress',start_time:iso,...options.recordingReceipt};},
     media:async sid=>{events.push({provider:'media'});assert.equal(sid,recordingSid);if(options.expireDuringMedia)clock=Date.parse(row.audio_expires_at);return Buffer.from('synthetic-audio');},
   };
-  service=recordedReceptionService({...env,...options.env},{rpc,provider:p,now:()=>clock});
+  service=recordedReceptionService({...env,...options.env},{rpc,provider:p,selectVoice:options.selectVoice,now:()=>clock});
   const f={...cfg, events, rpc, provider:p, service, get row(){return row;}, get nonce(){return nonce;}, setNow:ms=>{clock=ms;}, setCall:values=>Object.assign(canonicalCall,values),
     async answer(request=inboundRequest()){const response=await service.inbound(request);const text=await response.text();const match=/nonce=([a-f0-9]{64})/.exec(text);if(match)nonce=match[1];return {response,text};},
     setup(fields={CallStatus:'in-progress'},options={}){return service.setup(signed('setup?id='+id+'&nonce='+nonce,fields,options));},
@@ -451,4 +452,73 @@ for(const bad of [false,true])test('direct inbound keeps audio and skips spoken 
  assert.equal(f.events.filter(e=>e.provider==='register').length,bad?0:1);
  await f.service.setup(signed('setup'+new URL(target).search,{CallStatus:'in-progress'}));
  assert.equal(f.events.filter(e=>e.provider==='start').length,1);
+});
+
+// Custom voice checks are read-only fixtures: never synthesize audio or place calls.
+test('inbound custom voice requires the receiving account and unchanged approved provider branch',async()=>{
+ const cfg=configuration(),voice='voice_custom_fixture',calls=[];
+ cfg.agent.platform_settings.overrides.conversation_config_override.tts={voice_id:true};
+ cfg.c.config_hash=inspectRecordedReceptionAgent(cfg.c,cfg.agent,cfg.branch,true).hash;
+ const deps={selectVoice:async(account,signal)=>{calls.push('voice');assert.equal(account,cfg.c.account_id);assert(signal instanceof AbortSignal);return voice;},agent:async(c,signal)=>{calls.push('agent');assert.equal(c.id,cfg.c.id);assert(signal instanceof AbortSignal);return clone(cfg.agent);}};
+ assert.equal(await selectedRecordedReceptionVoice(cfg.c.account_id,cfg.c,deps),voice);
+ assert.deepEqual(calls,['voice','agent']);calls.length=0;
+ assert.equal(await selectedRecordedReceptionVoice(foreignAccount,cfg.c,deps),null);
+ assert.deepEqual(calls,[],'A foreign account cannot select or read a voice');
+ for(const selected of [null,'', '../foreign-voice']){
+  assert.equal(await selectedRecordedReceptionVoice(cfg.c.account_id,cfg.c,{...deps,selectVoice:async()=>selected,agent:async()=>{throw Error('should not read agent');}}),null);
+ }
+ for(const mutate of [a=>a.version_id='agtvrsn_changed',a=>a.branch_id='agtbrch_other',a=>a.conversation_config.agent.first_message='Unreviewed greeting',a=>a.platform_settings.overrides.conversation_config_override.tts.voice_id=false]){
+  const changed=clone(cfg.agent);mutate(changed);
+  assert.equal(await selectedRecordedReceptionVoice(cfg.c.account_id,cfg.c,{...deps,agent:async()=>changed}),null);
+ }
+ const noPermission=clone(cfg.agent);noPermission.platform_settings.overrides.conversation_config_override.tts.voice_id=false;
+ const reviewedNoPermission={...cfg.c,config_hash:inspectRecordedReceptionAgent(cfg.c,noPermission,cfg.branch,true).hash};
+ assert.equal(await selectedRecordedReceptionVoice(cfg.c.account_id,reviewedNoPermission,{...deps,agent:async()=>noPermission}),null);
+ assert.equal(await selectedRecordedReceptionVoice(cfg.c.account_id,cfg.c,{...deps,selectVoice:async()=>{throw Error('provider unavailable');}}),null);
+ assert.equal(await selectedRecordedReceptionVoice(cfg.c.account_id,cfg.c,deps,AbortSignal.abort()),null);
+});
+for(const direct of [false,true])test('inbound '+(direct?'direct':'consent')+' calls register the account voice and ignore caller-selected voices',async()=>{
+ const selections=[];
+ const f=fixture({direct,selectVoice:async(account,config)=>{selections.push({account,config:config.id});return 'voice_custom_fixture';}});
+ await f.admit();
+ const response=direct?await f.service.connect(signed('connect?id='+id+'&nonce='+f.nonce,{CallStatus:'in-progress',VoiceId:'foreign_voice',AccountId:foreignAccount})):await f.consent({SpeechResult:'yes',Confidence:'.99',VoiceId:'foreign_voice',AccountId:foreignAccount});
+ assert.match(await response.text(),/<Connect>/);
+ assert.deepEqual(selections,[{account:receptionTarget.accountId,config:configId}]);
+ const registration=f.events.find(e=>e.provider==='register');assert.equal(registration.voiceId,'voice_custom_fixture');assert(registration.seconds<=600);
+});
+test('unavailable or disabled custom voice preserves inbound standard reception',async()=>{
+ for(const selectVoice of [async()=>null,async()=>{throw Error('lookup unavailable');}]){
+  const f=await fixture({selectVoice}).ready();assert.match(await (await f.consent()).text(),/<Connect>/);
+  assert.equal(f.events.find(e=>e.provider==='register').voiceId,null);
+ }
+});
+test('inbound transport applies only the selected voice while preserving branch, recording token and duration',async()=>{
+ const f=await fixture().ready();await f.consent();const requests=[];
+ const provider=createRecordedReceptionProviders(env,async(url,init)=>{requests.push({url,body:JSON.parse(init.body)});return new Response(streamXml);});
+ await provider.register(f.row,580,{voiceId:'caller_injected_voice'},'voice_custom_fixture');
+ const body=requests[0].body,data=body.conversation_initiation_client_data;
+ assert.equal(body.direction,'inbound');assert.equal(data.branch_id,f.row.branch_id);
+ assert.deepEqual(data.conversation_config_override,{tts:{voice_id:'voice_custom_fixture'},conversation:{max_duration_seconds:580}});
+ assert.equal(data.dynamic_variables.secret__icash_reception_stop_token,receptionStopToken(f.row,env));
+ await provider.register(f.row,580,{voiceId:'caller_injected_voice'},null);
+ assert.equal(requests[1].body.conversation_initiation_client_data.conversation_config_override.tts,undefined);
+ await assert.rejects(provider.register(f.row,580,null,'../foreign-voice'),/VOICE_ID_REQUIRED/);
+ assert.equal(requests.length,2,'Invalid voice never reaches provider');
+});
+
+test('production reception server wires the bounded account voice resolver',async()=>{
+ const cfg=configuration();cfg.agent.platform_settings.overrides.conversation_config_override.tts={voice_id:true};
+ cfg.c.config_hash=inspectRecordedReceptionAgent(cfg.c,cfg.agent,cfg.branch,true).hash;
+ const calls=[],parent=new AbortController();let requestSignal;
+ const loaded=await loadService('lib/recorded-reception-server.ts',{
+  db:async()=>{throw Error('Unexpected database call');},
+  recordedReceptionService:(_env,deps)=>deps,
+  createRecordedReceptionProviders:(_env,_fetch,signal)=>{requestSignal=signal;return {agent:async(config,voiceSignal)=>{assert.equal(config.id,cfg.c.id);assert(voiceSignal instanceof AbortSignal);calls.push('agent');return cfg.agent;}};},
+  selectedCustomCallVoice:async(account,signal)=>{assert.equal(account,cfg.c.account_id);assert(signal instanceof AbortSignal);calls.push('voice');return 'voice_custom_fixture';},
+  selectedRecordedReceptionVoice,
+ });
+ const server=loaded.recordedReceptionServer(parent.signal);
+ assert.equal(await server.selectVoice(cfg.c.account_id,cfg.c),'voice_custom_fixture');assert.deepEqual(calls,['voice','agent']);
+ parent.abort();assert.equal(requestSignal.aborted,true);calls.length=0;
+ assert.equal(await server.selectVoice(cfg.c.account_id,cfg.c),null);assert.deepEqual(calls,[]);
 });

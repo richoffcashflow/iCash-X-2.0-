@@ -47,7 +47,7 @@ export async function endRecordedReception(rpc:RecordedReceptionRpc,provider:Rec
  if(!row.call_ended_at){const next=await transitionRecordedReception(rpc,row,'call_ended',boundEndReceipt(row,actual)).catch(()=>null);if(next)row=next;}
  return {ended:!!row.call_ended_at,row};
 }
-export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:RecordedReceptionRpc;provider:RecordedReceptionProviders;now?:()=>number}){
+export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:RecordedReceptionRpc;provider:RecordedReceptionProviders;selectVoice?:(accountId:string,config:RecordedReceptionConfig)=>Promise<string|null>;now?:()=>number}){
  const {rpc,provider}=deps,now=deps.now??Date.now;
  const transition=(r:RecordedReceptionRow,a:string,p:Record<string,unknown>={})=>transitionRecordedReception(rpc,r,a,p);
  async function currentConfig(called:string){if(env.ICASH_RECORDED_RECEPTION_READY!=='true')return null;const c=await rpc<RecordedReceptionConfig|null>('icash_get_recorded_reception_config',{p_called_number:called});return validRecordedReceptionConfig(c,now())&&c.provider_account_sid===env.TWILIO_ACCOUNT_SID?c:null;}
@@ -67,16 +67,20 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
   return {row,f,nonce};
  }
  async function recordAndConnect(row:RecordedReceptionRow,c:RecordedReceptionConfig){
+    if(row.account_id!==c.account_id||row.config_id!==c.id)throw Error('RECEPTION_ACCOUNT_BINDING_REQUIRED');
     let next=await transition(row,'claim_start');if(!next)throw Error('START_ALREADY_CLAIMED');Object.assign(row,next);
     const recording=await provider.start(row.call_sid,recordedReceptionUrl+'/status?id='+row.id);
     if(!receptionRecordingMatches(row,recording)||recording.status!=='in-progress'||!Number.isFinite(Date.parse(String(recording.start_time))))throw Error('START_UNCONFIRMED');
     next=await transition(row,'started',{recordingSid:recording.sid,providerStartedAt:new Date(String(recording.start_time)).toISOString()});
     if(next)Object.assign(row,next);else{const fresh=await getRecordedReception(rpc,row.id,row.account_id);if(!fresh||fresh.recording_sid!==recording.sid||fresh.state!=='recording'||fresh.end_requested_at||Date.parse(fresh.provider_started_at??'')!==Date.parse(String(recording.start_time)))throw Error('RECORDING_NOT_SAVED');Object.assign(row,fresh);}
-    let context:unknown=null;
-    if(propertyReceptionEnabled(c))try{context=await rpc('icash_recorded_reception_property_context',{p_id:row.id,p_nonce_hash:row.nonce_hash});}catch{/* Only ask caller for address; never infer tenant. */}
+    const [context,voiceId]=await Promise.all([
+     propertyReceptionEnabled(c)?rpc('icash_recorded_reception_property_context',{p_id:row.id,p_nonce_hash:row.nonce_hash}).catch(()=>null):Promise.resolve(null),
+     deps.selectVoice?deps.selectVoice(row.account_id,c).catch(()=>null):Promise.resolve(null),
+    ]);
     next=await transition(row,'claim_register');if(!next)throw Error('REGISTER_ALREADY_CLAIMED');Object.assign(row,next);
     const remaining=Math.floor((Date.parse(row.call_deadline_at)-now())/1000);if(remaining<1||remaining>row.max_total_seconds)throw Error('CALL_CAP_EXHAUSTED');
-    return xml(await provider.register(row,remaining,context));
+    console.info('recorded_reception_voice_selected',{sessionId:row.id,voice:voiceId?'custom':'standard'});
+    return xml(await provider.register(row,remaining,context,voiceId));
  }
 
  return {
