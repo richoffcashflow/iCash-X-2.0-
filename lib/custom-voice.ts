@@ -4,7 +4,7 @@ import {elevenRequest} from './elevenlabs.ts';
 import {type CustomVoice,type ProviderCustomVoice,providerVoiceName,providerVoiceMatches,providerVoiceReady,sampleFormat,ownVoiceConsentVersion,publicCustomVoice} from './custom-voice-policy.ts';
 
 const path=(accountId:string)=>`icash_custom_voices?account_id=eq.${accountId}`;
-async function load(accountId:string){return (await db<CustomVoice[]>(path(accountId)+'&select=*'))[0]??null;}
+async function load(accountId:string,signal?:AbortSignal){return (await db<CustomVoice[]>(path(accountId)+'&select=*','GET',undefined,signal))[0]??null;}
 async function save(row:CustomVoice,changes:Partial<CustomVoice>){
  const [saved]=await db<CustomVoice[]>(path(row.account_id)+`&id=eq.${row.id}`,'PATCH',{...changes,updated_at:new Date().toISOString()});
  if(!saved)throw Error('Voice setup changed. Refresh and try again.');return saved;
@@ -48,12 +48,12 @@ export async function createCustomVoice(accountId:string,userId:string,bytes:Uin
  return customVoiceStatus(accountId);
 }
 /** The account's normal identity stays unchanged; expired VIP falls back automatically. */
-export async function selectedCustomCallVoice(accountId:string){
- const id=await db<string|null>('rpc/icash_vip_call_voice','POST',{p_account:accountId});if(!id)return null;
- const row=await load(accountId);if(!row||row.voice_id!==id)return null;
- try{const canonical=await elevenRequest<ProviderCustomVoice>('/v1/voices/'+encodeURIComponent(id));
+export async function selectedCustomCallVoice(accountId:string,signal?:AbortSignal){
+ const id=await db<string|null>('rpc/icash_vip_call_voice','POST',{p_account:accountId},signal);if(!id)return null;
+ const row=await load(accountId,signal);if(!row||row.voice_id!==id)return null;
+ try{const canonical=await elevenRequest<ProviderCustomVoice>('/v1/voices/'+encodeURIComponent(id),undefined,fetch,signal);
   if(!providerVoiceMatches(canonical,row)||canonical.voice_verification?.requires_verification===true&&canonical.voice_verification.is_verified!==true)return null;
   // Recheck after provider I/O so switching to the standard voice wins a race.
-  return await db<string|null>('rpc/icash_vip_call_voice','POST',{p_account:accountId})===id?id:null;
+  return await db<string|null>('rpc/icash_vip_call_voice','POST',{p_account:accountId},signal)===id?id:null;
  }catch{return null;}
 }

@@ -20,7 +20,7 @@ export function VipCustomVoice(){
   }catch(e){setError(e instanceof Error?e.message:'Could not confirm. Refresh before trying again.');}finally{lock.current=false;setBusy(false);}
  }
  const uploading=voice&&['creating','unknown'].includes(voice.state),canUpload=voice?.vip&&['empty','failed'].includes(voice.state);
- return <section className={`vip-custom-voice ${styles.voice}`} aria-label="Custom AI voice"><div className={styles.heading}><strong>Custom voice</strong><span>{voice?.enabled?'Active':voice?.state==='ready'?'Standard voice active':'Included with VIP'}</span></div><p>Upload a clear recording of yourself. Your bot uses your voice when calling sellers.</p>
+ return <section className={`vip-custom-voice ${styles.voice}`} aria-label="Custom AI voice"><div className={styles.heading}><strong>Custom voice</strong><span>{voice?.enabled?'Active':voice?.state==='ready'?'Standard voice active':'Included with VIP'}</span></div><p>Upload a clear recording of yourself. Your bot uses your voice for seller calls and incoming calls connected to your workspace.</p>
  {!voice&&!error&&<p role="status">Loading voice settings…</p>}
  {voice&&!voice.vip&&<p role="status">Switch your account to VIP to use your custom voice.</p>}
  {canUpload&&<form className={styles.form} onSubmit={e=>{e.preventDefault();void act('upload');}}>
