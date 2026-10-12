@@ -16,7 +16,7 @@ globalThis.location={search:'?ad_id=55555&fbclid=retained&r=signed-token',hash:'
 const replaced=[];globalThis.history={replaceState:(_state,_title,url)=>replaced.push(url)};
 globalThis.localStorage=globalThis.sessionStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)};
 Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true});
-const components=Object.fromEntries(['WebinarPlayer','WebinarPanelBoundary','WebinarAudience','WebinarPurchaseNotifications','WebinarTimers'].map(n=>[n,n]));
+const components=Object.fromEntries(['WebinarPlayer','WebinarPanelBoundary','WebinarAudience','WebinarPurchaseNotifications','WebinarTimers','WebinarOfferMoment'].map(n=>[n,n]));
 const icons=Object.fromEntries(['MessageCircle','Send','X','ChevronDown','ShieldCheck','Maximize','Pause','Play','Volume2','VolumeX'].map(n=>[n,n]));
 const w={...policy.newWebinar('00000000-0000-4000-8000-000000000123'),videoUrl:'https://example.test/day.mp4',status:'published',publicCode:'129340'};
 const sessionId='00000000-0000-4000-8000-000000000456';let requestLog=[],remembered='',rememberedEmail='',completionGate=null,chatGate=null,failChat=false;const redirects=[];location.assign=path=>redirects.push(path);
