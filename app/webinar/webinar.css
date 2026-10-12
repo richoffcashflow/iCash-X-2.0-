@@ -135,3 +135,10 @@
 .wb-room .wb-last-chance{background:#111;color:#fff;box-shadow:0 8px 28px #0002}.wb-room .wb-last-chance>.wb-primary{background:#fff;color:#111}.wb-room .wb-stage.wb-selling{grid-template-columns:minmax(0,1fr) minmax(360px,460px)}.wb-room .wb-selling .wb-offer{border:2px solid #111;box-shadow:0 12px 32px #00000012}
 @media(max-width:900px){.wb-room .wb-offer-moment{flex-wrap:wrap;gap:18px;margin:12px 10px;padding:20px}.wb-offer-moment>div:first-child{flex-basis:100%}.wb-offer-moment>.wb-primary{flex:1;max-width:none}.wb-room .wb-stage.wb-selling{grid-template-columns:1fr}.wb-moment-clock>strong{font-size:42px}}
 @media(max-width:360px){.wb-offer-moment>.wb-primary{flex-basis:100%}.wb-moment-clock{justify-items:start}}
+
+/* Purchase activity lives in the conversation, never over the video. */
+.wb-chat-purchase{display:flex;align-items:flex-start;gap:10px;margin:10px 0;padding:12px;border:1px solid #dedede;border-radius:12px;background:#f7f7f7;color:#161616;animation:wb-chat-purchase-in .25s ease-out;min-width:0}
+.wb-chat-purchase>div{min-width:0;flex:1}.wb-chat-purchase strong{display:block;font-size:13px;line-height:1.5;overflow-wrap:anywhere}.wb-chat-purchase small,.wb-chat-purchase-location{display:block;font-size:11px;line-height:1.5;color:#666;margin-top:3px}
+.wb-chat-activity-region:empty{display:none}.wb-chat-activity-region .wb-activity{position:static;width:auto;max-width:100%;box-shadow:none;transform:none}
+@keyframes wb-chat-purchase-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.wb-chat-purchase{animation:none}}

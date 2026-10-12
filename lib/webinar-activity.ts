@@ -8,7 +8,7 @@ export function activityMessage(event:WebinarActivity){
  const subject=event.region?`A viewer in ${event.region}`:'A viewer';
  const amount=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:event.amountCents%100?2:0,maximumFractionDigits:2}).format(event.amountCents/100);
  if(event.kind==='daily')return `${subject} started a ${amount}/day bot budget`;
- if(event.kind==='membership')return `${subject} got software access`;
+ if(event.kind==='membership')return `${subject} joined iCash X · ${amount}/month`;
  return `${subject} added ${amount} to their bot`;
 }
 export function activityAge(occurredAt:string,now:number){const seconds=Math.max(0,Math.floor((now-Date.parse(occurredAt))/1000));return seconds<60?'Less than a minute ago':`${Math.floor(seconds/60)} min ago`;}

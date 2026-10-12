@@ -62,7 +62,7 @@ test('purchase wording distinguishes credits, daily budgets and software access'
  const event={id:'a'.repeat(32),kind:'funding',amountCents:1000,occurredAt:'2026-10-04T12:00:00Z',region:'Texas'};
  assert.equal(activityMessage(event),'A viewer in Texas added $10 to their bot');
  assert.equal(activityMessage({...event,kind:'daily'}),'A viewer in Texas started a $10/day bot budget');
- assert.equal(activityMessage({...event,kind:'membership',region:null}),'A viewer got software access');
+ assert.equal(activityMessage({...event,kind:'membership',amountCents:5000,region:null}),'A viewer joined iCash X · $50/month');
  assert.equal(activityMessage({...event,amountCents:1050,region:null}),'A viewer added $10.50 to their bot');
  assert.equal(activityAge(event.occurredAt,Date.parse('2026-10-04T12:03:30Z')),'3 min ago');
  assert.equal(activityAge(event.occurredAt,Date.parse('2026-10-04T12:00:30Z')),'Less than a minute ago');
@@ -72,4 +72,9 @@ test('activity expires instead of becoming a recycled just-now event',()=>{
  const now=Date.parse('2026-10-04T12:20:00Z'),base={id:'a'.repeat(32),kind:'daily',amountCents:1000,region:null};
  const events=[-16,-15,-10,-1,1].map(minutes=>({...base,occurredAt:new Date(now+minutes*60000).toISOString()}));
  assert.deepEqual(recentActivity(events,now).map(e=>e.occurredAt),['2026-10-04T12:19:00.000Z','2026-10-04T12:10:00.000Z']);
+});
+
+test('timed replay purchases keep exact names, timing and optional locations',()=>{
+ const webinar=w();webinar.chat=[{id:'paid-david',at:120,name:'David',text:'Joined',kind:'purchase',location:'Dallas, TX'}];
+ const parsed=webinarSchema.parse(webinar);assert.equal(parsed.chat[0].kind,'purchase');assert.equal(parsed.chat[0].at,120);assert.equal(parsed.chat[0].location,'Dallas, TX');
 });

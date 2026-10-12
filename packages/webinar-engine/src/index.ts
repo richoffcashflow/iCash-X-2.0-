@@ -5,7 +5,7 @@ export type WatchHistory={webinar_id:string;revision:number;progress_seconds:num
 export type OptimizerSettings={enabled:boolean;explorationPercent:number;minVisitors:number};
 export type RoutingSettings={nightStartsAt:number;nightEndsAt:number};
 export type ViewerLocation={latitude:number;longitude:number};
-export type TimelineMessage={id:string;at:number;name:string;text:string;kind:'host'|'replay'|'ai';variations?:string[]};
+export type TimelineMessage={id:string;at:number;name:string;text:string;kind:'host'|'replay'|'ai'|'purchase';location?:string;variations?:string[]};
 export function localHour(timezone:string,now=new Date()){try{return Number(new Intl.DateTimeFormat('en-US',{timeZone:timezone,hour:'numeric',hourCycle:'h23'}).format(now));}catch{return now.getUTCHours();}}
 export function visitorTimezone(ipTimezone:string|null,browserTimezone:string){for(const zone of [ipTimezone,browserTimezone,'America/Chicago']){if(!zone)continue;try{new Intl.DateTimeFormat('en-US',{timeZone:zone});return zone;}catch{/* Try the browser, then the default. */}}return 'America/Chicago';}
 export function sameLocalDay(value:string,timezone:string,now=new Date()){try{const f=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'});return f.format(new Date(value))===f.format(now);}catch{return false;}}
@@ -106,7 +106,7 @@ function choice(seed:string,length:number){let hash=2166136261;for(const char of
 /** Persist the result as a session snapshot; never recompute it on a resume. */
 export function freezeTimeline(chat:TimelineMessage[],sessionId:string,enabled:boolean,assistantName:string):TimelineMessage[]{
  return chat.map(({variations,...cue})=>{
-  if(!enabled||cue.kind==='replay'||!variations?.length)return cue;
+  if(!enabled||cue.kind==='replay'||cue.kind==='purchase'||!variations?.length)return cue;
   return {...cue,text:variations[choice(sessionId+':'+cue.id,variations.length)],name:assistantName,kind:'ai'};
  });
 }
