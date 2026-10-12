@@ -55,7 +55,7 @@ export function WebinarPlayer(props:Props){
    onWaiting={()=>setBuffering(true)} onStalled={()=>setBuffering(true)}
    onError={()=>{playback(false);setBuffering(false);setError('Your video connection was interrupted.');checkpoint();}}
    onEnded={()=>{setBuffering(false);setSlow(false);tick();playback(false);callbacks.current.onEnded();}}/>
-  <div className="wb-stream-status"><span className="wb-live">● LIVE</span>{props.preview&&<span>Owner preview</span>}</div>
+  <div className="wb-stream-status"><span className="wb-live"><span className="wb-live-dot" aria-hidden="true"/>LIVE</span>{props.preview&&<span>Owner preview</span>}</div>
   {(!playing||muted)&&!error&&!slow&&<button type="button" className="wb-unmute" onClick={()=>void attemptPlay(true)}><VolumeX aria-hidden="true"/><strong>{playing?'Tap to unmute':position.current>0?'Continue watching':'Tap to play'}</strong></button>}
   {(error||slow)&&<div className="wb-player-recovery" role="status"><p>{offline?'You’re offline. Reconnect to continue.':error||'The video is taking longer to load.'}</p><button type="button" onClick={reload}>Resume video</button><a href="/support">Get help</a></div>}
   <div className="wb-player-actions"><button type="button" aria-label={playing?'Pause video':'Play video'} onClick={()=>playing?video.current?.pause():void attemptPlay(true)}>{playing?<Pause/>:<Play/>}</button><button type="button" aria-label={muted?'Unmute video':'Mute video'} onClick={()=>{if(video.current){video.current.muted=!video.current.muted;setMuted(video.current.muted);}}}>{muted?<VolumeX/>:<Volume2/>}</button><button type="button" aria-label="Full screen" onClick={()=>void fullscreen()}><Maximize/></button></div>
