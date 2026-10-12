@@ -3,6 +3,7 @@ import {z} from 'zod';
 import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
 import {attachTaskRecovery} from '@/lib/task-completion-service';
+import {workspaceAttentionQuery} from '@/lib/workspace-attention-query';
 import type {SmsRouteReview} from '@/components/sms-route-review';
 export const dynamic='force-dynamic';
 const pageSize=6;
@@ -72,18 +73,18 @@ export async function GET(req:Request){
   const journeys=ids?await db('rpc/icash_journey_progress','POST',{p_account:accountId,p_screenings:visible.map(p=>p.id)}):[];
   const dealIds=deals.map(d=>d.id).join(',');
   const proceeds=dealIds?await db<{deal_id:string}[]>(`icash_proceeds_receipts?account_id=eq.${accountId}&deal_id=in.(${dealIds})&select=deal_id&limit=${pageSize}`):[];
-  const queuePage=`&limit=${pageSize+1}&offset=${attentionPage*pageSize}`;
+  const queuePage={limit:pageSize+1,offset:attentionPage*pageSize};
   const [closingTaskRows,textRows,callRows,handoffRows,signing,signatureRows,routeRows,viewingRows,recoveryRows,closingRows]=await Promise.all([
    db<Attention[]>('rpc/icash_closing_task_attention','POST',{p_account:accountId,p_offset:attentionPage*pageSize,p_limit:pageSize+1}),
-   db<Attention[]>(`icash_text_attention?account_id=eq.${accountId}&state=eq.open&select=id,message_id,screening_id,deal_id,kind,party,quote,timezone&order=created_at,id${queuePage}`),
-   db<Attention[]>(`icash_sms_call_requests?account_id=eq.${accountId}&state=eq.needs_review&select=id,screening_id,requested_at,state&order=requested_at,id${queuePage}`),
-   db<Attention[]>(`icash_handoffs?account_id=eq.${accountId}&state=neq.resolved&portal_journey_id=is.null&select=id,screening_id,party,reason,summary,next_action,state,assigned_to,due_at,resolution&order=created_at,id${queuePage}`),
+   db<Attention[]>(workspaceAttentionQuery('icash_text_attention',accountId,{...queuePage,select:'id,message_id,screening_id,deal_id,kind,party,quote,timezone',order:'created_at,id'})),
+   db<Attention[]>(workspaceAttentionQuery('icash_sms_call_requests',accountId,{...queuePage,select:'id,screening_id,requested_at,state',order:'requested_at,id'})),
+   db<Attention[]>(workspaceAttentionQuery('icash_handoffs',accountId,{...queuePage,select:'id,screening_id,party,reason,summary,next_action,state,assigned_to,due_at,resolution',order:'created_at,id'})),
    dealIds?db<unknown[]>(`icash_signing_envelopes?account_id=eq.${accountId}&deal_id=in.(${dealIds})&select=id,deal_id,kind,state,test_mode,provider_status,updated_at`):Promise.resolve([]),
-   db<Attention[]>(`icash_signing_envelopes?account_id=eq.${accountId}&state=eq.customer_signature_needed&select=id,deal_id,kind,test_mode&order=created_at,id${queuePage}`),
+   db<Attention[]>(workspaceAttentionQuery('icash_signing_envelopes',accountId,{...queuePage,select:'id,deal_id,kind,test_mode',order:'created_at,id'})),
    db<SmsRouteReview[]>('rpc/icash_sms_route_review_items','POST',{p_account:accountId,p_offset:attentionPage*pageSize,p_limit:pageSize+1}),
-   db<Attention[]>(`icash_buyer_viewing_requests?account_id=eq.${accountId}&state=eq.needs_confirmation&select=id,screening_id,deal_id,kind,quote,title_quote,viewing_quote,coordination_quote,timezone,created_at,acknowledged_at&order=created_at,id${queuePage}`),
-   db<Attention[]>(`icash_seller_gaps?account_id=eq.${accountId}&state=eq.needs_review&select=id,screening_id,deal_id,reason,quote,updated_at&order=updated_at,id${queuePage}`),
-   db<Attention[]>(`icash_closing_setup?account_id=eq.${accountId}&state=eq.needs_review&select=id,screening_id,deal_id,review_reason,state,updated_at&order=created_at,id${queuePage}`)
+   db<Attention[]>(workspaceAttentionQuery('icash_buyer_viewing_requests',accountId,{...queuePage,select:'id,screening_id,deal_id,kind,quote,title_quote,viewing_quote,coordination_quote,timezone,created_at,acknowledged_at',order:'created_at,id'})),
+   db<Attention[]>(workspaceAttentionQuery('icash_seller_gaps',accountId,{...queuePage,select:'id,screening_id,deal_id,reason,quote,updated_at',order:'updated_at,id'})),
+   db<Attention[]>(workspaceAttentionQuery('icash_closing_setup',accountId,{...queuePage,select:'id,screening_id,deal_id,review_reason,state,updated_at',order:'created_at,id'}))
   ]);
   const closingTasks=await attachTaskRecovery(accountId,closingTaskRows.slice(0,pageSize));
   const closingReview=closingRows.slice(0,pageSize),viewingRequests=viewingRows.slice(0,pageSize),sellerRecovery=recoveryRows.slice(0,pageSize);
@@ -94,7 +95,7 @@ export async function GET(req:Request){
   for(const item of signatureActions)item.screening_id=linkedDeals.find(d=>d.id===item.deal_id)?.screening_id??null;
   const allAttention=[...closingTasks,...closingReview,...sellerRecovery,...viewingRequests,...textAttention,...callRequests,...handoffs,...signatureActions];
   const missingIds=[...new Set(allAttention.map(a=>a.screening_id).filter((id):id is string=>!!id&&!visible.some(p=>p.id===id)))];
-  const context=missingIds.length?await db<{id:string;result:{address:string}|null}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=in.(${missingIds.join(',')})&select=id,result:result->property`):[];
+  const context=missingIds.length?await db<{id:string;result:{address:string}|null}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=in.(${missingIds.join(',')})&state=eq.complete&select=id,result:result->property`):[];
   // JSON projection above returns property directly; keep existing property results unchanged.
   const addressById=new Map(visible.map(p=>[p.id,p.result.property.address]));
   for(const p of context)addressById.set(p.id,p.result?.address??'');
