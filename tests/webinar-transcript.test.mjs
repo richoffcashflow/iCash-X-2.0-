@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {newWebinar,webinarSchema,publicWebinar} from '../lib/webinar-policy.ts';
+import {patchRecording,editingRecording,createNightRecording} from '../lib/webinar-recordings.ts';
+const original=newWebinar('00000000-0000-4000-8000-000000000001');
+let w=patchRecording(original,'day',{transcript:'Day transcript'});w={...w,nightVersion:createNightRecording(w)};
+w=patchRecording(w,'night',{transcript:'Night transcript '+ 'a'.repeat(28500)});
+const saved=webinarSchema.parse(JSON.parse(JSON.stringify(w)));
+assert.equal(editingRecording(saved,'day').transcript,'Day transcript');assert.ok(editingRecording(saved,'night').transcript.startsWith('Night transcript'));
+assert.equal('transcript' in publicWebinar(editingRecording(saved,'night')),false);
+const legacy={...original};delete legacy.transcript;assert.equal(webinarSchema.parse(legacy).transcript,'');
+assert.equal(webinarSchema.safeParse({...w,transcript:'a'.repeat(100001)}).success,false);
+console.log('PASS transcript persists across serialization, day/night remain separate, old webinars load, and transcript stays private.');
