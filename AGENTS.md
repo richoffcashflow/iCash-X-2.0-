@@ -36,6 +36,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - The owner provides the feature goal; identify and handle connected paths before calling it shipped. For voice changes, check inbound and outbound behavior for each permitted party and plan. For account cleanup, check lead lists, attention queues, bot context, notifications and queued work together.
 - Keep archived properties out of active workspace reminders before pagination, while preserving agreement/payment history. Test the empty workspace and active properties on later pages; do not hide real work just because the current page or search is empty.
 - A clean-slate demo must allow the same property to be submitted again. Check both address/phone deduplication and provider-property deduplication through actual assignment. Active retries must remain idempotent, and private demos must never absorb real seller requests or another account's demo.
+- Voice agreement scenarios must replay provider tool-result receipts as well as spoken turns. A successful acceptance receipt or reread of the same quote must not erase the seller's acceptance; a changed quote or later withdrawal still requires fresh confirmation.
 - Use a small set of focused local scenarios for the affected flows. Report what was actually verified and any remaining dependency clearly.
 
 # Development test spending

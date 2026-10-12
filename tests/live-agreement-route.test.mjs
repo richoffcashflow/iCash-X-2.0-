@@ -40,13 +40,17 @@ const early=await post({action:'get_offer'});assert.equal(early.quoteAllowed,fal
 qualificationEntries=qualifiedSellerTurns;entries=[];
 const quoted=await post({action:'get_offer'});assert.equal(quoted.priceCents,15200000);
 entries=[{role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',result_value:JSON.stringify(quoted)}]},{role:'agent',message:'Our cash offer is one hundred fifty-two thousand dollars. Does that work?'},{role:'user',message:'Yes, it works.'},{role:'agent',message:'What is your legal name?'},{role:'user',message:'Jane Seller.'}];
-assert.equal((await post({action:'accept_offer',priceCents:15200000,quoteRevision:quoted.quoteRevision})).status,'verbally_accepted');
+const accepted=await post({action:'accept_offer',priceCents:15200000,quoteRevision:quoted.quoteRevision});
+assert.equal(accepted.status,'verbally_accepted');
+entries.splice(3,0,{role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',result_value:JSON.stringify(accepted)}]});
 const confirmation={sellerLegalName:'Jane Seller',agreedPriceCents:15200000,closingDate:new Date(now+30*86400000).toISOString().slice(0,10),soleOwner:true,allDecisionMakersAgree:true,inspectionAccess:'yes',priceAndDateConfirmed:true,termsConfirmed:true,sendTextRequested:true,materialFactsChanged:false};
 entries.push({role:'agent',message:'The price is $152,000, closing '+confirmation.closingDate+' with the prepared ten-day inspection period. Do those terms work, and shall I text it now?'},{role:'user',message:'Yes, please text the agreement.'});
 entries.push({role:'agent',message:'Let me prepare it.'},{role:'user',message:'Wait, I need my spouse to agree first.'});
 assert.equal((await post({action:'confirm_and_send',confirmation},409)).reason,'acceptance_confirmation_required');
 assert.equal(sends,0);assert.equal(texts,0,'late hesitation must block actual provider preparation, not just a parser check');
 entries.splice(-2);
+const reread=await post({action:'get_offer'});
+entries.push({role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',result_value:JSON.stringify(reread)}]});
 assert.equal((await post({action:'confirm_and_send',confirmation})).sent,true);
 assert.equal((await post({action:'confirm_and_send',confirmation})).sent,true);
 assert.equal(sends,1,'retries reuse the existing signing request');assert.equal(texts,2,'SMS service receives the same idempotent envelope key');

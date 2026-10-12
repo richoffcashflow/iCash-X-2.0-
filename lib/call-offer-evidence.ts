@@ -57,7 +57,12 @@ export function callOfferEvidence(value:unknown,input:Record<string,unknown>){
    const r=object(result);if(r.tool_name!=='icash_offer_and_contract'||r.is_error===true||typeof r.result_value!=='string')continue;
    let quote:Record<string,unknown>;try{quote=object(JSON.parse(r.result_value));}catch{continue;}
    if(quote.quoteAllowed===true&&typeof quote.quoteRevision==='string'){
-    if(quote.quoteRevision!==input.quoteRevision||quote.priceCents!==input.priceCents)lastQuote=-2;else lastQuote=n;
+    if(quote.quoteRevision!==input.quoteRevision||quote.priceCents!==input.priceCents)lastQuote=-2;
+    // The acceptance action and later reads echo the same quote. Keep the
+    // original boundary so those receipts cannot erase the seller's answer.
+    // A different revision still invalidates it; returning to this revision
+    // starts a new boundary and requires fresh acceptance.
+    else if(lastQuote<0)lastQuote=n;
    }
   }
   if(lastQuote===-2)return false;if(lastQuote>=0)applicable=rows.slice(lastQuote+1);

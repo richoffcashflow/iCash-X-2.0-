@@ -9,6 +9,16 @@ const history=entries=>liveToolHistory(JSON.stringify({'x-elevenlabs-history':tr
 // Replays the observed interruption, acceptance, and subsequent closing answers.
 const entries=[quoted,a('Our cash offer is forty-eight thousand one hundred twenty-eight dollars. Does that work?'),u('Could you do fifty thousand?'),a('Our current cash offer is forty-eight thousand one hundred twenty-eight dollars. Are you ready to proceed?'),a('Are you still there?'),u("Yes, let’s do it. Yes."),a('What closing date works?'),u('November 11th, 2026.'),a('Are you the only owner?'),u("I'm the only owner."),a('Your legal name?'),u('Jane Seller.')];
 assert(callOfferEvidence(history(entries),input),'later legal-name answer must not erase actual price acceptance');
+const acceptedReceipt={role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',result_value:JSON.stringify({quoteAllowed:true,contractAllowed:true,priceCents:input.priceCents,quoteRevision:revision,status:'verbally_accepted'})}]};
+const acknowledged=[...entries.slice(0,6),acceptedReceipt,...entries.slice(6)];
+assert(callOfferEvidence(history(acknowledged),input),'saving acceptance must not make its own receipt erase the seller answer');
+assert(callOfferEvidence(history([...acknowledged,quoted,a('What closing date works?'),u('Thirty days from now.')]),input),'rereading the same quote preserves acceptance');
+assert(!callOfferEvidence(history([quoted,acceptedReceipt,u('Jane Seller.')]),input),'a tool receipt without a seller acceptance is not consent');
+for(const withdrawal of ['I changed my mind.','Do not text the agreement.','Yes, but I need $50,000.']){
+ assert(!callOfferEvidence(history([...acknowledged,u(withdrawal)]),input),'receipt does not hide a later withdrawal: '+withdrawal);
+}
+const changedReceipt={role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',result_value:JSON.stringify({quoteAllowed:true,priceCents:4900000,quoteRevision:'b'.repeat(64)})}]};
+assert(!callOfferEvidence(history([...acknowledged,changedReceipt,quoted,u('Jane Seller.')]),input),'returning to an old quote after a different revision requires new acceptance');
 assert(!callOfferEvidence(history([quoted,a('Our cash offer is $48,128. Does that work?'),u('Yes, $50,000.')]),input),'a different amount is not acceptance');
 assert(!callOfferEvidence(history(entries.slice(0,5).concat(u('Yes.'))),input),'presence check alone does not accept an offer');
 for(const withdrawal of ['I changed my mind.','I do not accept.','Yes, but I need $50,000.','Only if you close tomorrow.']){
