@@ -5,9 +5,9 @@ import type {ChatCue,Webinar} from './webinar-policy.ts';
 
 const bankSchema=z.array(z.object({id:z.string(),variations:z.array(z.string().trim().min(1).max(1500)).min(2).max(3)}).strict()).max(40);
 export function applyChatVariations(chat:ChatCue[],raw:unknown):ChatCue[]{
- const bank=bankSchema.parse(raw),eligible=chat.filter(c=>c.kind!=='replay');
+ const bank=bankSchema.parse(raw),eligible=chat.filter(c=>c.kind!=='replay'&&c.kind!=='purchase');
  if(bank.length!==eligible.length||new Set(bank.map(c=>c.id)).size!==bank.length||bank.some(c=>!eligible.some(e=>e.id===c.id)))throw Error('AI changed the cue list. Retry without changing your saved script.');
- return chat.map(c=>c.kind==='replay'?c:{...c,variations:bank.find(b=>b.id===c.id)!.variations});
+ return chat.map(c=>(c.kind==='replay'||c.kind==='purchase')?c:{...c,variations:bank.find(b=>b.id===c.id)!.variations});
 }
 /** The shared engine freezes alternatives; this adapter supplies the company identity. */
 export function snapshotChat(w:Webinar,sessionId:string):Webinar{return {...w,chat:freezeTimeline(w.chat,sessionId,w.variationEnabled,webinarSite.assistantName)};}

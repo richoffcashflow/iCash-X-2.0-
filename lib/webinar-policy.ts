@@ -11,7 +11,7 @@ export const webinarSmsConsentVersion='webinar-sms-ongoing-2026-10-09';
 export const webinarConsent=`Email me sessions, follow-up lessons and ${webinarSite.brandName} offers (up to 2 emails per day initially, then weekly until I buy or unsubscribe). After purchase, send property updates and low-credit reminders. I can unsubscribe at any time.`;
 const httpsUrl=z.string().max(2000).refine(v=>{try{const u=new URL(v);return u.protocol==='https:'&&!u.username&&!u.password;}catch{return v==='';}},'Use a direct HTTPS video URL.');
 export const defaultChatStyle='Short, conversational CashFlowKey energy. Welcome the viewer, use brief ready/check-in prompts at the right video moments, invite questions during the demo, and point to the current offer at the pitch. Keep it clear and natural, with occasional emphasis. Speak as the session assistant; never invent attendees, payments, results, or limited spots.';
-export const chatCueSchema=z.object({id:z.string().min(1).max(80),at:z.number().int().min(0).max(14400),name:z.string().trim().min(1).max(60),text:z.string().trim().min(1).max(1500),kind:z.enum(['host','replay','ai']),variations:z.array(z.string().trim().min(1).max(1500)).max(5).optional()}).strict();
+export const chatCueSchema=z.object({id:z.string().min(1).max(80),at:z.number().int().min(0).max(14400),name:z.string().trim().min(1).max(60),text:z.string().trim().min(1).max(1500),kind:z.enum(['host','replay','ai','purchase']),location:z.string().trim().max(80).optional(),variations:z.array(z.string().trim().min(1).max(1500)).max(5).optional()}).strict();
 export function validOfferUrl(value:string){
  if(!value||/[\s\\\u0000-\u001f]/.test(value))return false;
  if(value.startsWith('/'))return !value.startsWith('//');
