@@ -1,0 +1,16 @@
+.voice{display:grid;gap:14px;min-width:0;text-align:left}
+.heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.heading strong{font-size:16px;line-height:1.5;color:#111}
+.heading span{padding:4px 8px;border:1px solid #decda8;border-radius:6px;background:#fffbf1;color:#6d5421;font-size:11px;line-height:1.5}
+.voice p{margin:0;font-size:13px;line-height:1.6;color:#555}
+.voice .form{display:grid;gap:12px;min-width:0}
+.voice .fileInput{position:absolute;width:1px;height:1px;min-height:0;padding:0;border:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.voice .choose,.voice .create{display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;margin:0;padding:12px 16px;border:1px solid #171717;border-radius:10px;background:#171717;color:#fff;font:inherit;font-size:14px;font-weight:600;cursor:pointer;line-height:1.5}
+.voice .choose:disabled,.voice .create:disabled{opacity:.5;cursor:wait}
+.voice .choose:focus-visible,.voice .create:focus-visible,.voice .consent input:focus-visible{outline:2px solid #171717;outline-offset:3px}
+.voice small{font-size:12px;line-height:1.6;color:#666}
+.voice .filename{font-size:13px;font-weight:600;overflow-wrap:anywhere;color:#222}
+.voice audio{width:100%;max-width:100%}
+.voice .consent{display:flex;align-items:flex-start;gap:12px;min-height:48px;padding:12px;border:1px solid #d8d8d8;border-radius:10px;color:#333;font-size:13px;font-weight:400;line-height:1.6;cursor:pointer}
+.voice .consent input{flex:none;width:20px;height:20px;min-height:20px;margin:1px 0 0;padding:0;accent-color:#171717;cursor:pointer}
+.voice .error{padding:12px;border:1px solid #aaa;border-radius:8px;color:#222;background:#fafafa}
