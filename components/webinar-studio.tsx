@@ -54,7 +54,7 @@ export function WebinarStudio(){
  const editing=['session','offers','timers','chat','review'].includes(tab);
  const steps=[{id:'session',label:'Video & details',icon:Video},{id:'offers',label:'Offers',icon:MessageSquare},{id:'timers',label:'Timers',icon:Clock},{id:'chat',label:'Chat',icon:MessageSquare},{id:'review',label:'Review & publish',icon:Check}] as const;
  const stepIndex=steps.findIndex(t=>t.id===tab);
- const titles={dashboard:'My webinars',session:draft?.title||'Create a webinar',offers:draft?.title||'Offers',timers:draft?.title||'Timers',chat:draft?.title||'Chat & AI',review:draft?.title||'Review & publish',growth:'Settings',analytics:'Daily results'};
+ const titles={dashboard:'My webinars',session:draft?.title||'Create a webinar',offers:draft?.title||'Offers',timers:draft?.title||'Timers',chat:draft?.title||'Chat',review:draft?.title||'Review & publish',growth:'Settings',analytics:'Daily results'};
 
  return <div className="ws-shell">
   <header className="ws-header"><a href="/" className="wb-wordmark">{webinarSite.brandName}<small>WEBINAR STUDIO</small></a><a className="ws-workspace-link" href="/">Back to workspace</a></header>
