@@ -9,5 +9,5 @@ export async function POST(req:Request){try{
  const response=await fetch(`${base}/storage/v1/object/upload/sign/icash-webinars/${path}`,{method:'POST',headers:{apikey:process.env.SUPABASE_SECRET_KEY!,Authorization:`Bearer ${process.env.SUPABASE_SECRET_KEY}`,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});
  if(!response.ok)throw new WebinarError(503,'Could not prepare the upload. Confirm webinar storage is installed.');
  const data=await response.json();const signed=new URL(data.url,`${base}/storage/v1/`);const token=signed.searchParams.get('token');if(!token)throw Error('Upload signature missing');
- return Response.json({path,token,endpoint:`${base.replace('.supabase.co','.storage.supabase.co')}/storage/v1/upload/resumable`,publicUrl:`${base}/storage/v1/object/public/icash-webinars/${path}`},{headers:webinarHeaders});
+ return Response.json({path,token,endpoint:`${base.replace('.supabase.co','.storage.supabase.co')}/storage/v1/upload/resumable/sign`,publicUrl:`${base}/storage/v1/object/public/icash-webinars/${path}`},{headers:webinarHeaders});
  }catch(e){return webinarError(e);}}
