@@ -9,6 +9,7 @@ import {webinarSite} from '@/lib/webinar-site';
 import {webinarBrowserReady,webinarBrowserEvent} from '@/lib/webinar-browser-events';
 import {MessageCircle,Send,X,ChevronDown,ShieldCheck} from 'lucide-react';
 import {WebinarTimers, useWebinarTimers} from '@/components/webinar-timers';
+import {WebinarOfferMoment} from '@/components/webinar-offer-moment';
 import {WebinarPlayer} from '@/components/webinar-player';
 import {WebinarPanelBoundary} from '@/components/webinar-panel-boundary';
 import {webinarPost as post,webinarBeacon} from '@/lib/webinar-client';
@@ -107,6 +108,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
     </form>;
  return <div className={`wb-room${currentOffer?' wb-with-offer':''}${inputActive?' wb-input-active':''}`} onFocusCapture={e=>{setInputActive(e.target.matches('input:not([type=checkbox]):not([type=radio]),textarea'));}} onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget))setInputActive(false);}}>
   {login&&<div className="wb-login"><button className="wb-icon" aria-label="Close sign in" onClick={()=>setLogin(false)}><X/></button><h2>Welcome back</h2><p>Use your existing account to open your workspace.</p><WebinarPanelBoundary label="Sign in"><AccountAccess onSignedIn={()=>location.assign(webinarSite.workspacePath)}/></WebinarPanelBoundary></div>}
+  <WebinarOfferMoment offer={currentOffer} now={now} timers={w?.timers??[]} seconds={time} timerNow={timerState.now} deadlines={timerState.deadlines} onOpen={openFunding} checkoutEngaged={checkoutEngaged}/>
   {!session?<main className="wb-empty"><span className="wb-eyebrow">{webinarSite.hostName} · {webinarSite.brandName}</span><h1>{unavailable?'Your next session is coming.':error?'Let’s get you connected.':'Opening your session…'}</h1><p>{unavailable||error||'Finding your place and preparing the video.'}</p>{error&&<button className="wb-primary" onClick={()=>void load()}>Try again</button>}{unavailable&&<a className="wb-primary" href="/">Open iCash X</a>}</main>:<main className={`wb-stage ${funding&&currentOffer?'wb-selling':''}`}>
    <section className="wb-watch">
     <h1 className="wb-sr">{w!.title}</h1>
