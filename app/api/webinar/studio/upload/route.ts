@@ -9,5 +9,11 @@ export async function POST(req:Request){try{
  const response=await fetch(`${base}/storage/v1/object/upload/sign/icash-webinars/${path}`,{method:'POST',headers:{apikey:process.env.SUPABASE_SECRET_KEY!,Authorization:`Bearer ${process.env.SUPABASE_SECRET_KEY}`,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});
  if(!response.ok)throw new WebinarError(503,'Could not prepare the upload. Confirm webinar storage is installed.');
  const data=await response.json();const signed=new URL(data.url,`${base}/storage/v1/`);const token=signed.searchParams.get('token');if(!token)throw Error('Upload signature missing');
- return Response.json({path,token,endpoint:`${base.replace('.supabase.co','.storage.supabase.co')}/storage/v1/upload/resumable/sign`,publicUrl:`${base}/storage/v1/object/public/icash-webinars/${path}`},{headers:webinarHeaders});
+ const endpoint=`${base.replace('.supabase.co','.storage.supabase.co')}/storage/v1/upload/resumable/sign`;
+ const metadata=Object.entries({bucketName:'icash-webinars',objectName:path,contentType:i.type,cacheControl:'3600'}).map(([key,value])=>`${key} ${Buffer.from(value).toString('base64')}`).join(',');
+ const started=await fetch(endpoint,{method:'POST',headers:{'Tus-Resumable':'1.0.0','x-signature':token,'Upload-Length':String(i.size),'Upload-Metadata':metadata},signal:AbortSignal.timeout(30000)});
+ if(!started.ok){console.error('webinar_upload_start',{status:started.status,requestId:started.headers.get('sb-request-id')});throw new WebinarError(502,`Video storage could not start the upload (HTTP ${started.status}). Please retry.`);}
+ const location=started.headers.get('Location');if(!location)throw new WebinarError(502,'Video storage did not return an upload destination.');
+ const uploadUrl=new URL(location,endpoint);if(uploadUrl.origin!==new URL(endpoint).origin)throw new WebinarError(502,'Video storage returned an unexpected upload destination.');
+ return Response.json({path,token,endpoint,uploadUrl:uploadUrl.href,publicUrl:`${base}/storage/v1/object/public/icash-webinars/${path}`},{headers:webinarHeaders});
  }catch(e){return webinarError(e);}}
