@@ -1,7 +1,7 @@
 import {webinarRecordingSchema,webinarPitchAt,type Webinar,type WebinarRecording} from './webinar-policy.ts';
 import {isNight,type ViewerLocation} from '../packages/webinar-engine/src/index.ts';
 export type RecordingVersion='day'|'night';
-export function createNightRecording(webinar:Webinar):WebinarRecording{return {...webinarRecordingSchema.parse(webinar),videoUrl:'',posterUrl:''};}
+export function createNightRecording(webinar:Webinar):WebinarRecording{return {...webinarRecordingSchema.parse(webinar),videoUrl:'',posterUrl:'',transcript:''};}
 export function editingRecording(webinar:Webinar,version:RecordingVersion):Webinar{return version==='night'&&webinar.nightVersion?{...webinar,...webinar.nightVersion,recordingVersion:'night'}:{...webinar,recordingVersion:'day'};}
 // Keep identity, URL and audience settings shared; each recording has its own timeline.
 export function patchRecording(webinar:Webinar,version:RecordingVersion,patch:Partial<Webinar>):Webinar{
