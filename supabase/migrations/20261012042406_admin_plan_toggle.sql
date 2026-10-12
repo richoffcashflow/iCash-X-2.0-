@@ -24,7 +24,6 @@ begin
  end if;
  insert into public.icash_admin_plans(account_id,user_id,plan) values(p_account,p_user,p_plan)
  on conflict(account_id) do update set user_id=excluded.user_id,plan=excluded.plan,updated_at=now();
- delete from public.icash_workspace_previews where account_id=p_account;
 end $$;
 
 create function public.icash_admin_plan_mode(p_account uuid)
@@ -63,7 +62,8 @@ begin
  perform public.icash_owner_overview(p_user,1,false,'',1);
  if not exists(select 1 from public.icash_accounts where id=p_account and owner_user_id=p_user) then raise exception 'Account required';end if;
  if p_mode is not null then raise exception 'Refresh to use the admin account plan switch';end if;
- delete from public.icash_workspace_previews where account_id=p_account and user_id=p_user;
+ -- Legacy cleanup is a no-op; the new plan is intentionally durable.
+ return;
 end $$;
 create or replace function public.icash_workspace_preview_mode(p_account uuid)
 returns text language sql stable security invoker set search_path='' as $$select null::text$$;

@@ -56,7 +56,7 @@ try{
  console.log('PASS preview SQL: admin/account boundary, expiry, membership lock, real voice gates, Standard names and unchanged pricing/credits.');
 
  // Apply the next migration: the owner's request supersedes temporary previews.
- await pg.exec(read('supabase/migrations/20261012040641_admin_plan_toggle.sql'));
+ await pg.exec(read('supabase/migrations/20261012042406_admin_plan_toggle.sql'));
  const plan=(user,account,value)=>q('select icash_set_admin_plan($1,$2,$3)',[id(account),id(user),value]);
  const adminBefore=await fingerprint();
  await assert.rejects(plan(2,12,'vip'));await assert.rejects(plan(1,12,'vip'));await assert.rejects(plan(1,11,null));await assert.rejects(plan(1,11,'gold'));
