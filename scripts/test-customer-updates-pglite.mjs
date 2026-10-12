@@ -97,5 +97,48 @@ try {
    assert.equal(await scalar('select has_table_privilege($1,$2,$3)',[role,'public.icash_customer_update_preferences','SELECT']),false);
    assert.equal(await scalar('select has_function_privilege($1,$2,$3)',[role,'public.icash_claim_customer_update(uuid,boolean,boolean)','EXECUTE']),false);
   }
-  console.log('PASS isolated customer updates: migration, private access, tenant scope, opt-in, history exclusion, single authorization, duplicate/hourly/daily limits, STOP/unsubscribe/ownership races, bounce suppression and scheduler preservation. No external sends.');
+  // Load the real source expansion used in production, then exercise cleanup
+  // through the same source, claim and authorization functions as delivery.
+  await pg.exec(`
+    alter table public.icash_screening_jobs add column snapshot jsonb default '{}';
+    create table public.icash_seller_matches(lead_id uuid,account_id uuid,screening_id uuid,assigned_at timestamptz default now());
+    create table public.icash_seller_responses(lead_id uuid,account_id uuid,screening_id uuid,state text,created_at timestamptz default now());
+    create table public.icash_live_conversations(id uuid,account_id uuid,screening_id uuid,state text,operation_key text,completed_at timestamptz);
+    create table public.icash_showing_requests(id uuid,deal_id uuid,state text,seller_confirmed_at timestamptz,buyer_confirmed_at timestamptz,created_at timestamptz);
+    create table public.icash_title_replies(id uuid,account_id uuid,deal_id uuid,received_at timestamptz,sender_verified boolean);
+    create table public.icash_deal_emails(id uuid,account_id uuid,deal_id uuid,direction text,state text,provider_id text,contact_key text,subject text,updated_at timestamptz);
+  `);
+  const sourceExpansion=read('supabase/migrations/20261005124045_seller_response_handoff_and_activity.sql');
+  await pg.exec(sourceExpansion.slice(sourceExpansion.indexOf('alter function public.icash_customer_update_sources(uuid)'),sourceExpansion.indexOf('create function public.icash_seller_call_request(')));
+  await pg.exec(`
+    alter function public.icash_customer_update_sources(uuid) rename to icash_customer_update_sources_before_credit_reminders;
+    create function public.icash_customer_update_sources(p_account uuid)
+    returns table(source_key text,kind text,screening_id uuid,event_at timestamptz,priority integer)
+    language sql stable security invoker set search_path='' as $$ select * from public.icash_customer_update_sources_before_credit_reminders(p_account) $$;
+  `);
+  // More archived events than either LIMIT must not crowd out a live property.
+  for(let i=0;i<60;i++){
+    await pg.query("insert into public.icash_screening_jobs(id,account_id,state) values($1,$2,'archived')",[uuid(1000+i),a]);
+    await pg.query("insert into public.icash_deal_files(id,account_id,screening_id,stage) values($1,$2,$3,'draft')",[uuid(2000+i),a,uuid(1000+i)]);
+    await pg.query("insert into public.icash_text_threads values($1,$2,$3,'seller')",[uuid(3000+i),a,uuid(2000+i)]);
+    await pg.query("insert into public.icash_text_messages(id,account_id,thread_id,direction,state) values($1,$2,$3,'incoming','received')",[uuid(4000+i),a,uuid(3000+i)]);
+    await pg.query('insert into public.icash_seller_matches(lead_id,account_id,screening_id) values($1,$2,$3)',[uuid(5000+i),a,uuid(1000+i)]);
+  }
+  assert.equal(await scalar('select count(*)::int from public.icash_customer_update_sources($1) where screening_id=$2',[a,p]),0,'Reproduce archived rows hiding an active property');
+  await pg.exec(read('config/archived-customer-updates.sql'));
+  await pg.exec(read('config/archived-customer-updates.sql'));
+  assert((await scalar("select count(*)::int from public.icash_customer_update_sources($1) where screening_id=$2 and kind='seller_reply'",[a,p]))>0,'Live replies remain visible before both limits');
+  assert.equal(await scalar('select count(*)::int from public.icash_customer_update_sources($1) where screening_id<>$2',[a,p]),0,'Archived events and other accounts stay out');
+  await clear();await save();await pg.exec("update public.icash_customer_update_preferences set consented_at=now()-interval '1 day'");
+  id=await claim();assert(id);
+  await pg.query("update public.icash_screening_jobs set state='archived' where id=$1",[p]);
+  assert.equal(await scalar('select count(*)::int from public.icash_customer_update_sources($1)',[a]),0,'Clean slate has no property updates');
+  assert.equal(await authorize(id),null,'Archiving after a claim prevents notification delivery');
+  assert.equal(await scalar('select state from public.icash_customer_update_deliveries where id=$1',[id]),'canceled');
+  await clear();assert.equal(await claim(),null,'No new notification can be claimed from archived history');
+  assert.equal(await scalar('select state from public.icash_signing_envelopes where id=$1',[uuid(45)]),'customer_signature_needed','Agreement history is retained');
+  assert.equal((await prefs()).emailEnabled,true,'Cleanup preserves future notification preferences');
+  await pg.query("update public.icash_screening_jobs set state='complete' where id=$1",[p]);
+  assert(await claim(),'Active work can still notify after the cleanup');
+  console.log('PASS isolated customer updates: migration, private access, tenant scope, opt-in, history exclusion, single authorization, duplicate/hourly/daily limits, STOP/unsubscribe/ownership races, bounce suppression, scheduler preservation and archive → empty inbox → delivery cancellation without hiding later active rows. No external sends.');
 } finally {await pg.close();}
