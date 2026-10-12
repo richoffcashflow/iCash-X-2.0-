@@ -7,7 +7,7 @@ export const dynamic='force-dynamic';
 const headers={'Cache-Control':'private, no-store'};
 export async function GET(req:Request){
  try{const {accountId}=await workAccount();
-  if(!await db<boolean>('rpc/icash_vip_active','POST',{p_account:accountId}))throw Error('VIP_REQUIRED');
+  if(!await db<boolean>('rpc/icash_vip_features_active','POST',{p_account:accountId}))throw Error('VIP_REQUIRED');
   const dealId=z.string().uuid().nullable().parse(new URL(req.url).searchParams.get('dealId'));
   if(dealId){const [deal]=await db<{id:string}[]>(`icash_deal_files?id=eq.${dealId}&account_id=eq.${accountId}&select=id`);if(!deal)return NextResponse.json({error:'Deal not found.'},{status:404,headers});}
   return NextResponse.json(await db('rpc/icash_network_workspace','POST',{p_account:accountId,p_deal:dealId}),{headers});

@@ -11,7 +11,7 @@ assert.throws(()=>policy.sampleFormat(new Uint8Array(4000001)));
 let row,vip,uploads,result,fail,canonical;
 function reset(){row=null;vip=true;uploads=0;fail=false;result={voice_id:'voice_fixture',requires_verification:false};canonical={voice_id:'voice_fixture',name:policy.providerVoiceName(id),category:'cloned',is_owner:true,voice_verification:{requires_verification:false}};}
 const db=async(path,method,body)=>{
- if(path==='rpc/icash_vip_active')return vip;
+ if(path==='rpc/icash_vip_features_active')return vip;
  if(path==='rpc/icash_vip_call_voice')return vip&&row?.enabled&&row.state==='ready'?row.voice_id:null;
  if(path==='rpc/icash_begin_custom_voice'){assert.equal(body.p_consent,policy.ownVoiceConsentVersion);if(!vip)throw Error('VIP required');if(row)return {started:false,voice:{...row}};row={id,account_id:'account',state:'creating',voice_id:null,enabled:true,created_at:new Date().toISOString()};return {started:true,voice:{...row}};}
  if(path.startsWith('icash_custom_voices')){if(method==='PATCH')Object.assign(row,body);return row?[{...row}]:[];}

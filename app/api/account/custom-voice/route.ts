@@ -13,7 +13,7 @@ export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
  try{
   const {accountId,userId}=await workAccount();
-  if(await db<boolean>('rpc/icash_vip_active','POST',{p_account:accountId})!==true)return NextResponse.json({error:'Custom voice is included with VIP.'},{status:403,headers});
+  if(await db<boolean>('rpc/icash_vip_features_active','POST',{p_account:accountId})!==true)return NextResponse.json({error:'Custom voice is included with VIP.'},{status:403,headers});
   await limitRequest(req,'custom-voice-upload',accountId,5,86400);
   // Bound the body before parsing multipart, including requests without Content-Length.
   if(!req.body)throw Error('Choose an audio recording.');const reader=req.body.getReader(),parts:Uint8Array[]=[];let size=0;

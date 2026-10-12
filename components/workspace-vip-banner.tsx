@@ -10,13 +10,13 @@ export function WorkspaceVipBanner({disabled=false,onUpgrade}:{disabled?:boolean
 }
 
 export type WorkspacePreviewMode='standard'|'vip';
-export function AdminWorkspacePreview({mode,onChange,onExit}:{mode:WorkspacePreviewMode;onChange:(mode:WorkspacePreviewMode)=>void;onExit:()=>void}){
+export function AdminWorkspacePreview({mode,busy=false,onChange,onExit}:{mode:WorkspacePreviewMode;busy?:boolean;onChange:(mode:WorkspacePreviewMode)=>void;onExit:()=>void}){
  return <section className="workspace-preview-bar" aria-label="Admin workspace preview">
-  <div className="workspace-preview-copy"><strong>Admin preview</strong><span>Appearance only · Your plan is unchanged.</span></div>
-  <div className="workspace-preview-options" role="group" aria-label="Workspace appearance">
-   <button type="button" aria-pressed={mode==='standard'} onClick={()=>onChange('standard')}>Standard</button>
-   <button type="button" aria-pressed={mode==='vip'} onClick={()=>onChange('vip')}><Crown size={14} aria-hidden="true"/> VIP</button>
+  <div className="workspace-preview-copy"><strong>{busy?'Updating preview…':'Admin preview'}</strong><span>{mode==='vip'?'VIP features enabled · Normal usage charges apply.':'Standard features · Bot name included.'}</span></div>
+  <div className="workspace-preview-options" role="group" aria-label="Workspace plan preview">
+   <button type="button" disabled={busy} aria-pressed={mode==='standard'} onClick={()=>onChange('standard')}>Standard</button>
+   <button type="button" disabled={busy} aria-pressed={mode==='vip'} onClick={()=>onChange('vip')}><Crown size={14} aria-hidden="true"/> VIP</button>
   </div>
-  <button type="button" className="workspace-preview-exit" onClick={onExit}><X size={15} aria-hidden="true"/> Exit preview</button>
+  <button type="button" disabled={busy} className="workspace-preview-exit" onClick={onExit}><X size={15} aria-hidden="true"/> Exit preview</button>
  </section>;
 }
