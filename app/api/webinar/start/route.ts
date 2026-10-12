@@ -63,8 +63,15 @@ export async function POST(req:Request){try{
  const resumeId=journey.kind==='resume'||target.parentWebinarId&&journey.kind==='checkout'?journey.sessionId:null;
  const unfinished=history.find(h=>h.id===resumeId);
  const webinar=unfinished?.config??target;
+ // Pair a new VIP session with the recording this visitor actually watched.
+ // Never re-evaluate their main recording just because sunset passed meanwhile.
+ let pairedVersion:'day'|'night'|undefined;
+ if(!i.preview&&target.parentWebinarId&&!unfinished){
+  const [source]=await db<WebinarSession[]>(`icash_webinar_sessions?visitor_id=eq.${visitor.id}&webinar_id=eq.${target.parentWebinarId}&is_preview=eq.false&select=config&order=created_at.desc&limit=1`);
+  if(source)pairedVersion=source.config.recordingVersion==='night'?'night':'day';
+ }
  const sessionId=randomUUID();
- const snapshot=snapshotChat((unfinished&&!i.preview)||target.id!==current.id?webinarSchema.parse(webinar):selectRecording(webinarSchema.parse(webinar),timezone,new Date(),settings.routing,i.preview?i.variant??'day':undefined,location),sessionId);
+ const snapshot=snapshotChat((unfinished&&!i.preview)||target.id!==current.id?webinarSchema.parse(webinar):selectRecording(webinarSchema.parse(webinar),timezone,new Date(),settings.routing,i.preview?i.variant??'day':pairedVersion,location),sessionId);
  const session=await db<WebinarSession>('rpc/icash_webinar_begin','POST',{p_visitor:visitor.id,p_id:sessionId,p_config:snapshot,p_advance_from:!i.preview&&journey.kind==='advance'?journey.sessionId:null,p_preview:!!i.preview});
  const messages=await db<{id:string;role:'user'|'assistant';text:string}[]>(`icash_webinar_messages?session_id=eq.${session.id}&select=id,role,text&order=created_at.asc&limit=60`).catch(()=>[]);
  return Response.json({webinar:publicWebinar(webinarSchema.parse(session.config)),...(session.config.id!==current.id?{canonicalPath:webinarLink(session.config)}:{}),sessionId:session.id,progress:session.completed_at?0:session.progress_seconds,name:visitor.name??'',email:visitor.email??'',phone:visitor.phone??'',contactSaved:!!visitor.email&&!!visitor.phone,messages,preview:!!i.preview,serverNow:Date.now()},{headers:webinarHeaders});

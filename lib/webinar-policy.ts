@@ -49,7 +49,7 @@ export type WebinarRecording=z.infer<typeof webinarRecordingSchema>;
 export const webinarSchema=webinarBaseSchema.extend({nightVersion:webinarRecordingSchema.nullable().default(null),nightEnabled:z.boolean().default(false),recordingVersion:z.enum(['day','night']).default('day')}).superRefine((w,c)=>{
  validateRecording(w,c);
  if(w.nightEnabled&&!w.nightVersion)c.addIssue({code:z.ZodIssueCode.custom,path:['nightVersion'],message:'Add a night recording first.'});
- if(w.nightVersion)validateRecording({...w,...w.nightVersion,status:w.nightEnabled?w.status:'draft'}, {...c,path:[...c.path,'nightVersion'],addIssue:issue=>c.addIssue({...issue,path:['nightVersion',...(issue.path??[])]})});
+ if(w.nightVersion)validateRecording({...w,...w.nightVersion,status:w.nightEnabled&&w.nightVersion.videoUrl?w.status:'draft'}, {...c,path:[...c.path,'nightVersion'],addIssue:issue=>c.addIssue({...issue,path:['nightVersion',...(issue.path??[])]})});
 });
 export type Webinar=z.infer<typeof webinarSchema>;
 export type ChatCue=z.infer<typeof chatCueSchema>;
