@@ -31,6 +31,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - Cancellation is the last item in the workspace account menu. Offer ongoing VIP at $50/month only after explicit customer acceptance, with no extra charge today and no change to the renewal date. Keep a clear decline-and-cancel path. The VIP savings counter uses settled usage and lead prices, not projected income.
 
+# Complete feature flows
+
+- The owner provides the feature goal; identify and handle connected paths before calling it shipped. For voice changes, check inbound and outbound behavior for each permitted party and plan. For account cleanup, check lead lists, attention queues, bot context, notifications and queued work together.
+- Keep archived properties out of active workspace reminders before pagination, while preserving agreement/payment history. Test the empty workspace and active properties on later pages; do not hide real work just because the current page or search is empty.
+- Use a small set of focused local scenarios for the affected flows. Report what was actually verified and any remaining dependency clearly.
+
 # Development test spending
 
 - The owner stopped paid provider simulations after test runs exhausted ElevenLabs credits. Keep paid development simulations disabled, including direct CLI commands, deployment hooks and retries.
