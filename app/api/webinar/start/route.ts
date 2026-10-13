@@ -16,12 +16,16 @@ import {approximateRegion} from '@/lib/webinar-activity';
 import {adReturnWebinar,webinarReturnJourney} from '@/lib/webinar-ad-returns';
 import {webinarLink} from '@/lib/webinar-links';
 import {webinarVipAccess} from '@/lib/webinar-vip';
-import {webinarBody,webinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarOwner,webinarVisitor,webinarPaid,type WebinarSession} from '@/lib/webinar-server';
+import {webinarBody,webinarError,WebinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarOwner,webinarVisitor,webinarPaid,type WebinarSession} from '@/lib/webinar-server';
 export const dynamic='force-dynamic';
 export async function POST(req:Request){try{
  webinarOrigin(req);const i=z.object({timezone:z.string().max(80),code:z.string().regex(/^\d{6,12}$/).optional(),variant:z.enum(['day','night']).optional(),resume:z.string().max(600).optional(),returnToWebinar:z.boolean().optional(),preview:z.string().uuid().optional(),attribution:z.record(z.string().max(250)).optional()}).strict().parse(await webinarBody(req,3000));
  await webinarLimit(req,'entry','entry',120,60);
- if(i.preview)await webinarOwner();
+ if(i.preview){try{await webinarOwner();}catch(e){
+  if(!(e instanceof WebinarError)||![401,403].includes(e.status))throw e;
+  const [published]=await db<{public_code:number|null}[]>(`icash_webinars?id=eq.${i.preview}&config->>status=eq.published&select=public_code&limit=1`);
+  return Response.json({previewLocked:true,publicPath:published?.public_code?webinarLink({publicCode:String(published.public_code)}):null},{headers:webinarHeaders});
+ }}
  const rows=await db<WebinarRow[]>(`icash_webinars?${i.preview?'id=eq.'+i.preview+'&':i.code?'public_code=eq.'+i.code+'&':'parent_webinar_id=is.null&config->>status=eq.published&'}select=config,public_code,parent_webinar_id&order=public_code.asc&limit=1`);
  const current=rows[0]?webinarFromRow(rows[0]):null;
  if(!current||!i.preview&&(current.status!=='published'||!hasWebinarVideo(current)))return Response.json({unavailable:true,message:'This webinar is not available yet.'},{headers:webinarHeaders});
@@ -74,6 +78,6 @@ export async function POST(req:Request){try{
  const sessionId=randomUUID();
  const snapshot=snapshotChat((unfinished&&!i.preview)||target.id!==current.id?webinarSchema.parse(webinar):selectRecording(webinarSchema.parse(webinar),timezone,new Date(),settings.routing,i.preview?i.variant:pairedVersion,location),sessionId);
  const session=await db<WebinarSession>('rpc/icash_webinar_begin','POST',{p_visitor:visitor.id,p_id:sessionId,p_config:snapshot,p_advance_from:!i.preview&&journey.kind==='advance'?journey.sessionId:null,p_preview:!!i.preview});
- const messages=await db<{id:string;role:'user'|'assistant';text:string;playback_seconds:number|null}[]>(`icash_webinar_messages?session_id=eq.${session.id}&select=id,role,text,playback_seconds&order=created_at.asc&limit=60`).catch(()=>[]);
+ const messages=await db<{id:string;role:'user'|'assistant';text:string;playback_seconds:number|null}[]>(`icash_webinar_messages?session_id=eq.${session.id}&role=eq.user&select=id,role,text,playback_seconds,display_name,public_status&order=created_at.desc&limit=60`).then(rows=>rows.reverse()).catch(()=>[]);
  return Response.json({webinar:publicWebinar(webinarSchema.parse(session.config)),...(session.config.id!==current.id?{canonicalPath:webinarLink(session.config)}:{}),sessionId:session.id,progress:session.completed_at?0:session.progress_seconds,name:visitor.name??'',email:visitor.email??'',phone:visitor.phone??'',contactSaved:!!visitor.email&&!!visitor.phone,messages,preview:!!i.preview,serverNow:Date.now()},{headers:webinarHeaders});
  }catch(e){if(e instanceof z.ZodError)return Response.json({error:'The webinar link could not be read.'},{status:400,headers:webinarHeaders});return webinarError(e);}}
