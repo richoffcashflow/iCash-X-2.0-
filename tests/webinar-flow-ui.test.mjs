@@ -80,4 +80,52 @@ video.props.onError();pt=ph.render('WebinarPlayer',vp);all(pt).find(n=>n.type===
 document.hidden=true;listeners.get('visibilitychange')();assert.equal(media.paused,true);document.hidden=false;listeners.get('visibilitychange')();await flush();assert.equal(media.paused,false);
 ph.close();
 const draftPlayer=await harness('components/webinar-player.tsx',{...icons,...playback});const draftTree=draftPlayer.render('WebinarPlayer',{...vp,videoUrl:'',preview:true});assert.equal(find(draftTree,'video'),undefined);assert.ok(all(draftTree).some(n=>n.props?.children==='Your video goes here'));assert.equal(all(draftTree).some(n=>n.props?.className==='wb-player-recovery'),false,'An empty owner draft is not a connection failure');draftPlayer.close();
+// Sound-first autoplay, policy fallback, and explicit viewer choices use the real
+// handlers. These fixtures never load media or contact a provider.
+async function audioPlayer(play){
+ const h=await harness('components/webinar-player.tsx',{...icons,...playback}),calls=[];
+ const render=()=>h.render('WebinarPlayer',vp);
+ const media={currentTime:0,duration:1800,paused:true,muted:find(render(),'video').props.muted,ended:false,error:null,
+  play(){calls.push(this.muted);return play(this,calls.length).then(()=>{this.paused=false;find(render(),'video').props.onPlaying();});},
+  pause(){this.paused=true;find(render(),'video').props.onPause();},load(){this.paused=true;this.currentTime=0;}};
+ find(render(),'video').props.ref.current=media;
+ return {media,calls,render,close:()=>h.close(),start(){find(render(),'video').props.onLoadedMetadata();},
+  click(label){all(render()).find(n=>n.props?.['aria-label']===label).props.onClick();},
+  overlay(){return all(render()).find(n=>n.props?.className==='wb-unmute');}};
+}
+const denied=()=>new DOMException('Autoplay requires a gesture','NotAllowedError');
+{
+ const p=await audioPlayer(async()=>{});p.start();await flush();
+ assert.deepEqual(p.calls,[false],'Allowed autoplay starts with sound');assert.equal(p.overlay(),undefined);p.close();
+}
+{
+ const p=await audioPlayer(async(_media,call)=>{if(call===1)throw denied();});p.start();await flush();
+ assert.deepEqual(p.calls,[false,true],'Sound denial tries muted playback once');assert.equal(p.media.currentTime,40);
+ assert.ok(all(p.overlay()).some(n=>n.props?.children==='Tap to listen'));
+ p.overlay().props.onClick();assert.equal(p.media.muted,false,'The tap enables audio before awaiting playback');await flush();
+ assert.deepEqual(p.calls,[false,true,false]);assert.equal(p.overlay(),undefined);
+ p.click('Mute video');assert.equal(sessionStorage.getItem('icash-webinar-muted'),'true');
+ p.click('Pause video');p.click('Play video');await flush();assert.equal(p.calls.at(-1),true,'Play respects a deliberate mute');
+ document.hidden=true;listeners.get('visibilitychange')();document.hidden=false;listeners.get('visibilitychange')();await flush();
+ assert.equal(p.calls.at(-1),true,'Returning to the tab respects mute');
+ find(p.render(),'video').props.onError();all(p.render()).find(n=>n.props?.children==='Resume video').props.onClick();
+ p.start();await flush();assert.equal(p.calls.at(-1),true,'Reconnecting respects mute');p.close();
+ const next=await audioPlayer(async()=>{});next.start();await flush();assert.deepEqual(next.calls,[true],'A fresh player in the same tab remembers mute');
+ next.click('Unmute video');await flush();assert.equal(next.media.muted,false);assert.equal(sessionStorage.getItem('icash-webinar-muted'),null);next.close();
+}
+{
+ const p=await audioPlayer(async()=>{throw denied();});p.start();await flush();
+ assert.deepEqual(p.calls,[false,true],'If all autoplay is blocked there is no retry loop');assert.ok(p.overlay());
+ p.overlay().props.onClick();await flush();assert.deepEqual(p.calls,[false,true,false],'A tap requests sound directly without silent fallback');p.close();
+}
+{
+ let reject;const p=await audioPlayer(async(_media,call)=>{if(call===1)await new Promise((_resolve,no)=>{reject=no;});});
+ p.start();p.overlay().props.onClick();await flush();reject(denied());await flush();
+ assert.deepEqual(p.calls,[false,false],'An older denied autoplay cannot mute a newer successful tap');assert.equal(p.media.muted,false);assert.equal(p.overlay(),undefined);p.close();
+}
+for(const name of ['AbortError','NotSupportedError']){
+ const p=await audioPlayer(async()=>{throw new DOMException('Playback interrupted',name);});p.start();await flush();
+ assert.deepEqual(p.calls,[false],name+' does not cause muted retries');assert.ok(p.overlay());p.close();
+}
 console.log('PASS webinar flows: compact optional contact, remembered details, immediate chat echo, draft and scroll preservation, deferred timed offers, direct checkout focus, payment continuity, player recovery and empty draft guidance.');
+console.log('PASS webinar audio: audible autoplay, one muted policy fallback, tap to listen, persistent mute, blocked playback recovery, stale rejection protection, and no retry on media errors.');
