@@ -2,13 +2,12 @@
 import {useEffect, useRef, useState} from 'react';
 import {Clock, Volume2, VolumeX} from 'lucide-react';
 import {formatWatchTime} from '@/lib/webinar-policy';
-import {timerDisplay, type TimerDeadlines, type WebinarTimer} from '@/lib/webinar-timers';
+
 
 type Offer = {id: string; title: string; ctaLabel: string; expiresAt?: string | null};
 
-export function WebinarOfferMoment({offer, now, timers, seconds, timerNow, deadlines, onOpen, checkoutEngaged}: {
-  offer?: Offer | null; now: number; timers: WebinarTimer[]; seconds: number;
-  timerNow: number; deadlines: TimerDeadlines; onOpen: () => void; checkoutEngaged: boolean;
+export function WebinarOfferMoment({offer, now, onOpen, checkoutEngaged}: {
+  offer?: Offer | null; now: number; onOpen: () => void; checkoutEngaged: boolean;
 }) {
   const [sound, setSound] = useState(true);
   const [audioReady, setAudioReady] = useState(false);
@@ -35,8 +34,7 @@ export function WebinarOfferMoment({offer, now, timers, seconds, timerNow, deadl
   }, []);
   const deadline = Date.parse(offer?.expiresAt ?? '');
   const offerRemaining = Number.isFinite(deadline) ? Math.max(0, Math.ceil((deadline - now) / 1000)) : null;
-  const timer = timers.filter(t => t.placement === 'offer').map(t => timerDisplay(t, seconds, timerNow, deadlines)).find(t => t && !t.expired);
-  const remaining = offerRemaining ?? timer?.remaining ?? null;
+  const remaining = offerRemaining;
   const lastChance = !!offer && offerRemaining !== null && offerRemaining > 0 && offerRemaining <= 300;
   const ticking = !!offer && !checkoutEngaged && remaining !== null && remaining > 0 && remaining <= 60;
   const fast = remaining !== null && remaining <= 10;
@@ -63,7 +61,7 @@ export function WebinarOfferMoment({offer, now, timers, seconds, timerNow, deadl
       <h2>{lastChance ? 'Make your move before time runs out.' : offer.title}</h2>
       <p>{lastChance ? 'Review your offer and complete checkout before the deadline.' : 'Your next step is ready. Open the offer while you keep watching.'}</p>
     </div>
-    {remaining !== null && remaining > 0 && <div className="wb-moment-clock"><span><Clock size={16}/>{offerRemaining !== null ? 'Offer closes in' : timer?.label}</span><strong role="timer" aria-label={`${offerRemaining !== null ? 'Offer closes in' : timer?.label}: ${formatWatchTime(remaining)}`}>{formatWatchTime(remaining)}</strong>
+    {remaining !== null && remaining > 0 && <div className="wb-moment-clock"><span><Clock size={16}/>Offer closes in</span><strong role="timer" aria-label={`$Offer closes in: ${formatWatchTime(remaining)}`}>{formatWatchTime(remaining)}</strong>
       <button type="button" aria-pressed={sound} onClick={() => setSound(value => !value)}>{sound ? <Volume2 size={16}/> : <VolumeX size={16}/>}Clock sound {sound ? 'on' : 'off'}</button>
     </div>}
     <button type="button" className="wb-primary" aria-controls="webinar-offer" onClick={onOpen}>{offer.ctaLabel}</button>

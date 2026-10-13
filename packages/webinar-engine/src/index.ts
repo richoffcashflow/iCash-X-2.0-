@@ -111,7 +111,7 @@ export function freezeTimeline(chat:TimelineMessage[],sessionId:string,enabled:b
  });
 }
 
-export type TimedOffer={id:string;at:number;expiresAt:string|null};
+export type TimedOffer={id:string;at:number;expiresAt:string|null;durationSeconds?:number|null};
 /** Previously revealed offers stay available until their actual deadline. */
 export function availableOffers<T extends TimedOffer>(offers:T[],seconds:number,now=Date.now()):T[]{
  return offers.filter(o=>o.at<=seconds&&(!o.expiresAt||Date.parse(o.expiresAt)>now)).sort((a,b)=>a.at-b.at);
