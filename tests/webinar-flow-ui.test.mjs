@@ -23,7 +23,7 @@ const components=Object.fromEntries(['WebinarPlayer','WebinarPanelBoundary','Web
 const icons=Object.fromEntries(['MessageCircle','Send','X','ChevronDown','ShieldCheck','Maximize','Pause','Play','Volume2','VolumeX','Info'].map(n=>[n,n]));
 const w={...policy.newWebinar('00000000-0000-4000-8000-000000000123'),videoUrl:'https://example.test/day.mp4',status:'published',publicCode:'129340',chat:[{id:'before',at:499,name:'Sam',text:'Before submission',kind:'replay'},{id:'after',at:501,name:'Pat',text:'After submission',kind:'replay'}]};
 const sessionId='00000000-0000-4000-8000-000000000456';let emptyChat=false;let requestLog=[],remembered='',rememberedEmail='',completionGate=null,chatGate=null,failChat=false,failContact=false;const redirects=[];location.assign=path=>redirects.push(path);
-async function post(url,body){requestLog.push({url,body});if(url.endsWith('/start'))return {canonicalPath:'/live/129340',sessionId,webinar:policy.publicWebinar(w),progress:0,name:remembered,email:rememberedEmail,contactSaved:false,messages:[],preview:false,serverNow:Date.now()};if(url.endsWith('/event')&&body.kind==='completed'){if(completionGate)await completionGate;return {saved:true,redirect:'/webinar/checkout'};}if(url.endsWith('/contact')){if(failContact)throw Error('Name could not be saved.');remembered=body.name;if(!body.onlyName)rememberedEmail=body.email;return {name:remembered,contactSaved:!!body.email&&!!body.phone};}if(url.endsWith('/chat')){if(chatGate)await chatGate;if(failChat)throw Error('Connection lost.');return {messages:emptyChat?[]:[{id:'m'+requestLog.length,role:'user',text:body.text,playback_seconds:body.seconds}]};}return {saved:true};}
+async function post(url,body){requestLog.push({url,body});if(url.endsWith('/start'))return {canonicalPath:'/live/129340',sessionId,webinar:policy.publicWebinar(w),progress:0,name:remembered,email:rememberedEmail,contactSaved:false,messages:[],preview:false,serverNow:Date.now()};if(url.endsWith('/event')&&body.kind==='completed'){if(completionGate)await completionGate;return {saved:true,redirect:'/webinar/checkout'};}if(url.endsWith('/contact')){if(failContact)throw Error('Name could not be saved.');remembered=body.name;if(!body.onlyName)rememberedEmail=body.email;return {name:remembered,contactSaved:!!body.email&&!!body.phone};}if(url.endsWith('/chat')){if(chatGate)await chatGate;if(failChat)throw Error('Connection lost.');return {messages:emptyChat?[]:[{id:'m'+requestLog.length,role:'user',text:body.text,playback_seconds:body.seconds,public_status:'pending'}]};}return {saved:true};}
 const roomDeps={useWebinarSharedChat:()=>({messages:[],statuses:[]}),webinarChatStream,withOfferDeadlines,replayOfferSpots,useMemo:fn=>fn(),webinarRequest:async()=>({postPurchaseUrl:'/live/123457'}),dynamic:loader=>loader.toString().includes('WebinarCheckout')?'WebinarCheckout':'AccountAccess',useWebinarTimers:()=>({deadlines:{},offerDeadlines:{},offset:0,now:Date.now()}),...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}};
 const h=await harness('components/webinar-room.tsx',roomDeps);
 const render=()=>h.render('WebinarRoom',{webinarCode:'129339'});let tree=render();await flush();tree=render();
@@ -39,13 +39,28 @@ failContact=true;prompt.props.onSubmit({preventDefault(){}});await flush();tree=
 failContact=false;prompt=all(tree).find(n=>n.type==='form'&&n.props.className?.startsWith('wb-prompt '));prompt.props.onSubmit({preventDefault(){}});await flush();tree=render();assert.ok(all(tree).some(n=>n.props?.id==='wb-question'),'Saving the name opens chat');
 assert.equal(all(tree).some(n=>n.props?.className?.startsWith('wb-prompt ')),false,'Contact does not stack immediately on the name prompt');
 player=find(tree,'WebinarPlayer');player.props.onProgress(60);tree=render();prompt=all(tree).find(n=>n.type==='form'&&n.props.className?.startsWith('wb-prompt '));
-fields=all(prompt).filter(n=>n.type==='input');assert.deepEqual(fields.map(n=>n.props.type),['email','tel']);assert.ok(!fields.some(n=>n.props.autoComplete==='given-name'));
+fields=all(prompt).filter(n=>n.type==='input');assert.deepEqual(fields.map(n=>n.props.type),['email']);assert.ok(!fields.some(n=>n.props.autoComplete==='given-name'));
 fields[0].props.onChange({target:{value:'casey@example.invalid'}});tree=render();prompt=all(tree).find(n=>n.type==='form'&&n.props.className?.startsWith('wb-prompt '));
 assert.equal(all(prompt).filter(n=>n.type==='input'&&n.props.type==='checkbox').length,1,'Only the entered channel asks for optional consent');
 assert.equal(all(prompt).find(n=>n.props?.type==='checkbox').props.checked,false,'Follow-up consent is never selected automatically');
 assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).length,2);assert.equal(requestLog.find(r=>r.url.endsWith('/contact')).body.onlyName,true);
-// Saving just an email is enough: a deliberately optional phone is not requested again.
-prompt.props.onSubmit({preventDefault(){}});await flush();tree=render();assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).at(-1).body.smsConsent,false);assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).at(-1).body.consent,false);
+// Email saves before the full-width phone step. A failed save keeps the draft.
+failContact=true;prompt.props.onSubmit({preventDefault(){}});await flush();tree=render();
+prompt=all(tree).find(n=>n.props?.className==='wb-prompt wb-contact-prompt');
+assert.equal(all(prompt).find(n=>n.type==='input').props.type,'email');
+assert.equal(all(prompt).find(n=>n.type==='input').props.value,'casey@example.invalid');
+failContact=false;prompt.props.onSubmit({preventDefault(){}});await flush();tree=render();
+prompt=all(tree).find(n=>n.props?.className==='wb-prompt wb-contact-prompt');
+assert.deepEqual(all(prompt).filter(n=>n.type==='input').map(n=>n.props.type),['tel'],'Only phone appears after email is saved');
+assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).at(-1).body.smsConsent,false);
+assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).at(-1).body.consent,false);
+all(prompt).find(n=>n.type==='input').props.onChange({target:{value:'2145550100'}});tree=render();
+prompt=all(tree).find(n=>n.props?.className==='wb-prompt wb-contact-prompt');
+assert.equal(all(prompt).find(n=>n.props?.type==='checkbox').props.checked,false,'SMS consent is independent and optional');
+prompt.props.onSubmit({preventDefault(){}});await flush();tree=render();
+const details=requestLog.filter(r=>r.url.endsWith('/contact')).at(-1).body;
+assert.equal(details.email,'casey@example.invalid','Phone save preserves the email');assert.equal(details.phone,'2145550100');
+assert.equal(details.consent,false);assert.equal(details.smsConsent,false);
 find(tree,'WebinarPlayer').props.onProgress(500);tree=render();assert.equal(all(tree).some(n=>n.props?.className?.startsWith('wb-prompt ')),false);
 // An outgoing question appears immediately, duplicate submits are blocked, and
 // the eventual reply cannot delete a second draft or scroll away from old notes.
@@ -60,6 +75,8 @@ assert.deepEqual(streamTexts(),['Before submission','How does setup work?','Afte
 input().props.onChange({target:{value:'What happens next?'}});tree=render();
 let log=all(tree).find(n=>n.props?.className==='wb-chat-log'),scroll={scrollHeight:1200,scrollTop:100,clientHeight:200};log.props.ref.current=scroll;log.props.onScroll({currentTarget:scroll});
 reply();await pending;tree=render();tree=render();assert.equal(input().props.value,'What happens next?');assert.equal(scroll.scrollTop,100,'Incoming reply does not move a reader');assert.deepEqual(streamTexts(),['Before submission','How does setup work?','After submission'],'Saved submission stays in place without a duplicate');
+assert.equal(all(tree).some(n=>['Awaiting review','Only visible to you','Messages are reviewed before being shared.'].includes(n.props?.children)),false,'Saved viewer messages have no review labels');
+assert.ok(all(tree).filter(n=>n.type==='article').every(n=>n.props.className==='wb-message'),'All chat messages use the same bubble');
 all(tree).find(n=>n.props?.className==='wb-new-messages').props.onClick();assert.equal(scroll.scrollTop,1200,'New messages button scrolls only the chat container');
 // A timed offer remains available without closing chat while a draft is present.
 find(tree,'WebinarPlayer').props.onProgress(w.durationSeconds-1);tree=render();tree=render();assert.equal(all(tree).find(n=>n.props?.className==='wb-chat-heading').type,'div');assert.ok(all(tree).some(n=>n.props?.className==='wb-chat-log'),'Chat stays open when an offer appears');
@@ -81,6 +98,16 @@ tree=render();find(tree,'WebinarCheckout').props.onPurchased('standard');await f
 h.close();
 store.delete('icash-webinar-prompts:'+sessionId);
 const returningRoom=await harness('components/webinar-room.tsx',roomDeps);returningRoom.render('WebinarRoom',{webinarCode:'129339'});await flush();let returningTree=returningRoom.render('WebinarRoom',{webinarCode:'129339'});find(returningTree,'WebinarPlayer').props.onProgress(65);returningTree=returningRoom.render('WebinarRoom',{webinarCode:'129339'});assert.equal(all(returningTree).some(n=>n.props?.className?.startsWith('wb-prompt ')),false,'A remembered email avoids another contact request in a fresh session');returningRoom.close();
+// Both optional steps can be skipped without saving blank contact data.
+rememberedEmail='';store.delete('icash-webinar-prompts:'+sessionId);
+const skipRoom=await harness('components/webinar-room.tsx',roomDeps);const renderSkip=()=>skipRoom.render('WebinarRoom',{webinarCode:'129339'});
+renderSkip();await flush();let st=renderSkip();find(st,'WebinarPlayer').props.onProgress(65);st=renderSkip();
+const contactCalls=requestLog.filter(r=>r.url.endsWith('/contact')).length;
+all(st).find(n=>n.props?.className==='wb-contact-skip').props.onClick();st=renderSkip();
+assert.equal(all(st).find(n=>n.props?.name==='tel').props.type,'tel');
+all(st).find(n=>n.props?.className==='wb-contact-skip').props.onClick();st=renderSkip();find(st,'WebinarPlayer').props.onProgress(600);st=renderSkip();
+assert.equal(all(st).some(n=>n.props?.className==='wb-prompt wb-contact-prompt'),false);
+assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).length,contactCalls);skipRoom.close();
 // Real player handlers: failed autoplay is recoverable, and reloading restores
 // the newest position rather than the position at initial entry.
 let rejectPlay=true,loads=0,ticks=[];const ph=await harness('components/webinar-player.tsx',{...icons,...playback});
@@ -94,10 +121,10 @@ ph.close();
 const draftPlayer=await harness('components/webinar-player.tsx',{...icons,...playback});const draftTree=draftPlayer.render('WebinarPlayer',{...vp,videoUrl:'',preview:true});assert.equal(find(draftTree,'video'),undefined);assert.ok(all(draftTree).some(n=>n.props?.children==='Your video goes here'));assert.equal(all(draftTree).some(n=>n.props?.className==='wb-player-recovery'),false,'An empty owner draft is not a connection failure');draftPlayer.close();
 // Sound-first autoplay, policy fallback, and explicit viewer choices use the real
 // handlers. These fixtures never load media or contact a provider.
-async function audioPlayer(play){
- const h=await harness('components/webinar-player.tsx',{...icons,...playback}),calls=[];
+async function audioPlayer(play,extra={}){
+ const h=await harness('components/webinar-player.tsx',{...icons,...playback,...extra}),calls=[];
  const render=()=>h.render('WebinarPlayer',vp);
- const media={currentTime:0,duration:1800,paused:true,muted:find(render(),'video').props.muted,ended:false,error:null,
+ const media={currentTime:0,duration:1800,paused:true,muted:find(render(),'video').props.muted,ended:false,error:null,readyState:4,
   play(){calls.push(this.muted);return play(this,calls.length).then(()=>{this.paused=false;find(render(),'video').props.onPlaying();});},
   pause(){this.paused=true;find(render(),'video').props.onPause();},load(){this.paused=true;this.currentTime=0;}};
  find(render(),'video').props.ref.current=media;
@@ -140,6 +167,19 @@ const denied=()=>new DOMException('Autoplay requires a gesture','NotAllowedError
 for(const name of ['AbortError','NotSupportedError']){
  const p=await audioPlayer(async()=>{throw new DOMException('Playback interrupted',name);});p.start();await flush();
  assert.deepEqual(p.calls,[false],name+' does not cause muted retries');assert.ok(p.overlay());p.close();
+}
+// A download stall is not a playback failure. Recovery disappears on progress.
+{
+ let timeout=null;const p=await audioPlayer(async()=>{}, {setTimeout:fn=>{timeout=fn;return 1;},clearTimeout:()=>{timeout=null;}});
+ p.start();await flush();p.render();
+ find(p.render(),'video').props.onStalled();p.render();assert.equal(timeout,null,'Buffered playback does not start a slow warning');
+ p.media.readyState=2;find(p.render(),'video').props.onWaiting();p.render();assert.ok(timeout);timeout();
+ assert.ok(all(p.render()).some(n=>n.props?.className==='wb-player-recovery'),'A real stalled playback offers recovery');
+ p.media.currentTime=42;find(p.render(),'video').props.onTimeUpdate();
+ assert.equal(all(p.render()).some(n=>n.props?.className==='wb-player-recovery'),false,'Advancing video clears a stale warning without needing another playing event');
+ find(p.render(),'video').props.onWaiting();p.render();const pendingSlow=timeout;
+ document.hidden=true;pendingSlow();assert.equal(all(p.render()).some(n=>n.props?.className==='wb-player-recovery'),false,'Hidden tabs cannot create a slow warning');document.hidden=false;
+ p.media.pause();p.render();assert.equal(timeout,null,'Pausing clears the buffering timer');p.close();
 }
 console.log('PASS webinar flows: compact optional contact, remembered details, immediate chat echo, draft and scroll preservation, deferred timed offers, direct checkout focus, payment continuity, player recovery and empty draft guidance.');
 console.log('PASS webinar audio: audible autoplay, one muted policy fallback, tap to listen, persistent mute, blocked playback recovery, stale rejection protection, and no retry on media errors.');

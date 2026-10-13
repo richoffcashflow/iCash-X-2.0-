@@ -41,9 +41,11 @@ export function WebinarPlayer(props:Props){
   document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',checkpoint);window.addEventListener('online',online);window.addEventListener('offline',disconnected);
   return()=>{alive.current=false;++playAttempt.current;document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',checkpoint);window.removeEventListener('online',online);window.removeEventListener('offline',disconnected);};
  },[attemptPlay,checkpoint,reload]);
- useEffect(()=>{if(!buffering)return;const timer=setTimeout(()=>setSlow(true),12000);return()=>clearTimeout(timer);},[buffering]);
+ useEffect(()=>{if(!buffering)return;const timer=setTimeout(()=>{const v=video.current;if(v&&!document.hidden&&!v.paused&&!v.ended&&v.readyState<3)setSlow(true);},12000);return()=>clearTimeout(timer);},[buffering]);
  function tick(){
   const v=video.current;if(!v||!loaded.current||!Number.isFinite(v.currentTime))return;
+  // Some mobile browsers emit stalled while already buffered video keeps playing.
+  if(v.currentTime>position.current&&!v.paused&&!v.ended){setBuffering(false);setSlow(false);setError('');}
   position.current=v.currentTime;callbacks.current.onProgress(Math.floor(v.currentTime));
   const bucket=Math.floor(v.currentTime/5);
   if(!props.preview&&lastLocalSave.current!==bucket){lastLocalSave.current=bucket;savePosition(props.sessionId,v.currentTime);}
@@ -60,13 +62,13 @@ export function WebinarPlayer(props:Props){
    onLoadedMetadata={metadata} onCanPlay={()=>{metadata();setBuffering(false);setSlow(false);}}
    onPlay={()=>{playback(true);callbacks.current.onStarted();}}
    onPlaying={()=>{playback(true);setError('');setBuffering(false);setSlow(false);}}
-   onPause={()=>{playback(false);checkpoint();}}
+   onPause={()=>{playback(false);setBuffering(false);setSlow(false);checkpoint();}}
    onTimeUpdate={tick} onVolumeChange={()=>setMuted(video.current?.muted??true)}
-   onWaiting={()=>setBuffering(true)} onStalled={()=>setBuffering(true)}
+   onWaiting={()=>{if(!video.current?.paused)setBuffering(true);}} onStalled={()=>{const v=video.current;if(v&&!v.paused&&v.readyState<3)setBuffering(true);}}
    onError={()=>{++playAttempt.current;playback(false);setBuffering(false);setError('Your video connection was interrupted.');checkpoint();}}
    onEnded={()=>{++playAttempt.current;setBuffering(false);setSlow(false);tick();playback(false);callbacks.current.onEnded();}}/>
   <div className="wb-stream-status"><span className="wb-live"><span className="wb-live-dot" aria-hidden="true"/>LIVE</span>{props.preview&&<span>Owner preview</span>}</div>
   {(!playing||muted)&&!error&&!slow&&<button type="button" className="wb-unmute" onClick={playing?listen:play}><VolumeX aria-hidden="true"/><strong>{playing?'Tap to listen':position.current>0?'Continue watching':'Tap to play'}</strong></button>}
-  {(error||slow)&&<div className="wb-player-recovery" role="status"><p>{offline?'You’re offline. Reconnect to continue.':error||'The video is taking longer to load.'}</p><button type="button" onClick={reload}>Resume video</button><a href="/support">Get help</a></div>}
+  {(error||slow)&&<div className="wb-player-recovery" role="status"><p>{offline?'You’re offline. Reconnect to continue.':error||'Video paused. Tap to resume.'}</p><button type="button" onClick={reload}>Resume video</button><a href="/support">Get help</a></div>}
  </div>;
 }
