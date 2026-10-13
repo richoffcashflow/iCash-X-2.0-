@@ -139,14 +139,19 @@ export function simulatedAudience(config:AudienceDisplay,sessionId:string,second
   const elapsed=time>=duration?duration:Math.floor(time/cadence)*cadence,progress=elapsed/duration;
   const seeded=(key:string)=>choice(sessionId+':target-audience:'+key,10001)/10000;
   const smooth=(value:number)=>{const n=Math.max(0,Math.min(1,value));return n*n*(3-2*n);};
-  // Start full, then lose roughly 19% across the recording (800 -> about 650).
-  const finish=.8125,trend=1-(1-finish)*Math.pow(progress,.85);
-  // Small arrivals and departures interrupt the overall decline. Session-seeded
-  // waves follow playback, so pausing or resuming never resets the audience.
-  const position=elapsed/Math.min(60,duration/32),step=Math.floor(position);
-  const from=seeded('wave:'+step)*2-1,to=seeded('wave:'+(step+1))*2-1;
-  const variation=(from+(to-from)*smooth(position-step))*.015*smooth(progress/.04);
-  return Math.min(target,bounded(Math.round(target*trend*(1+variation))));
+  // A short arrival burst precedes the gradual churn: about 750 -> 800 -> 650.
+  const start=.93+seeded('start')*.015,peak=1.005+seeded('peak')*.008;
+  const peakAt=.035+seeded('ramp')*.02,finish=.8125;
+  const trend=progress<peakAt?start+(peak-start)*smooth(progress/peakAt):peak-(peak-finish)*Math.pow((progress-peakAt)/(1-peakAt),.9);
+  // Mix slower arrival/departure waves with small, quicker peaks. Both follow
+  // playback and the session seed, so returning viewers keep the same pattern.
+  const wave=(period:number,key:string)=>{
+   const position=elapsed/period,step=Math.floor(position);
+   const from=seeded(key+step)*2-1,to=seeded(key+(step+1))*2-1;
+   return from+(to-from)*smooth(position-step);
+  };
+  const variation=(wave(Math.min(60,duration/32),'wave:')*.015+wave(Math.min(24,duration/80),'ripple:')*.004)*smooth(progress/.02);
+  return bounded(Math.round(target*trend*(1+variation)));
  }
  const low=bounded(config.minimum),high=Math.max(low,bounded(config.maximum));
  const position=Math.floor(Math.max(0,Number.isFinite(seconds)?seconds:0)/10)*10/120,step=Math.floor(position),fraction=position-step;

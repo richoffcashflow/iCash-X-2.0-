@@ -22,13 +22,16 @@ test('simulated counts are bounded and stable across resume, while actual counts
  assert.equal(simulatedAudience({...config,mode:'actual'},id,300),null);
  assert.equal(simulatedAudience({...config,minimum:40,maximum:40},id,300),40);
 });
-test('a saved starting audience gradually churns with small arrivals and departures',()=>{
+test('a saved target starts below an early peak then churns with uneven rises and dips',()=>{
  const config={mode:'fixed',fixedCount:800,minimum:80,maximum:160};
  for(const duration of [60,600,1800,14400])for(const session of [id,'another session','returning viewer']){
   const count=seconds=>simulatedAudience(config,session,seconds,duration);
   const middle=Array.from({length:41},(_,n)=>count(duration*(.3+n*.01)));
-  assert.equal(count(0),800,'The largest audience is at the beginning');
-  assert.ok(middle.every(n=>n>=670&&n<=760),'The audience gradually declines through the middle');
+  assert.ok(count(0)>=744&&count(0)<=756,'An 800-viewer target begins around 750');
+  const early=Array.from({length:21},(_,n)=>count(duration*n*.005));
+  assert.ok(Math.max(...early)>=790&&Math.max(...early)<=825,'The opening arrival burst peaks near 800');
+  assert.ok(Math.max(...early)>count(0)+30,'The audience rises before it churns');
+  assert.ok(middle.every(n=>n>=675&&n<=780),'The audience gradually declines through the middle');
   assert.ok(middle.some((n,i)=>i>0&&n>middle[i-1]),'Arrivals continue in the middle');
   assert.ok(middle.some((n,i)=>i>0&&n<middle[i-1]),'Departures continue in the middle');
   assert.ok(count(duration)>=635&&count(duration)<=665,'An 800-viewer recording finishes near 650');

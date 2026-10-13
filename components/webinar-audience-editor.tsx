@@ -10,12 +10,12 @@ export function WebinarAudienceEditor({webinar,onChange}:{webinar:Webinar;onChan
   {webinar.showAudienceCount&&<>
    <label className="wb-label">Audience display<select value={display.mode} onChange={e=>edit({mode:e.target.value as typeof display.mode})}>
     <option value="actual">Actual viewers · updates automatically</option>
-    <option value="fixed">Simulated audience · starting number</option>
+    <option value="fixed">Simulated audience · peak number</option>
     <option value="simulated">Simulated audience · custom range</option>
    </select></label>
    {display.mode==='fixed'&&<>
-    <label className="wb-label">Starting viewers<input type="number" inputMode="numeric" min={0} max={100000} value={display.fixedCount} onChange={e=>edit({fixedCount:number(e.target.value)})}/></label>
-    <p className="ws-hint">Starts at this number and gradually tapers, with small increases and decreases along the way. For example, 800 starts around 800 and finishes around 650. Timing follows your video length.</p>
+    <label className="wb-label">Peak viewers<input type="number" inputMode="numeric" min={0} max={100000} value={display.fixedCount} onChange={e=>edit({fixedCount:number(e.target.value)})}/></label>
+    <p className="ws-hint">Starts slightly below this number, rises to an early peak, then gradually tapers with small rises and dips. For example, 800 starts around 750, peaks near 800, and finishes around 650. Timing follows your video length.</p>
    </>}
    {display.mode==='simulated'&&<div className="ws-fields">
     <label className="wb-label">Minimum<input type="number" min={0} max={100000} value={display.minimum} onChange={e=>{const minimum=number(e.target.value);edit({minimum,maximum:Math.max(minimum,display.maximum)});}}/></label>
