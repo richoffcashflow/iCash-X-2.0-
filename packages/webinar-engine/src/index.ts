@@ -139,14 +139,14 @@ export function simulatedAudience(config:AudienceDisplay,sessionId:string,second
   const elapsed=time>=duration?duration:Math.floor(time/cadence)*cadence,progress=elapsed/duration;
   const seeded=(key:string)=>choice(sessionId+':target-audience:'+key,10001)/10000;
   const smooth=(value:number)=>{const n=Math.max(0,Math.min(1,value));return n*n*(3-2*n);};
-  const start=.5+seeded('start')*.12,rampUntil=.18+seeded('ramp')*.08;
-  const taperAt=.72+seeded('taper')*.08,finish=.72+seeded('finish')*.1;
-  const trend=start+(1-start)*smooth(progress/rampUntil)-(1-finish)*smooth((progress-taperAt)/(1-taperAt));
-  // Gentle arrivals and departures continue around the target between the ramp and taper.
-  const position=elapsed/Math.min(90,duration/16),step=Math.floor(position);
+  // Start full, then lose roughly 19% across the recording (800 -> about 650).
+  const finish=.8125,trend=1-(1-finish)*Math.pow(progress,.85);
+  // Small arrivals and departures interrupt the overall decline. Session-seeded
+  // waves follow playback, so pausing or resuming never resets the audience.
+  const position=elapsed/Math.min(60,duration/32),step=Math.floor(position);
   const from=seeded('wave:'+step)*2-1,to=seeded('wave:'+(step+1))*2-1;
-  const variation=(from+(to-from)*smooth(position-step))*.04;
-  return bounded(Math.round(target*trend*(1+variation)));
+  const variation=(from+(to-from)*smooth(position-step))*.015*smooth(progress/.04);
+  return Math.min(target,bounded(Math.round(target*trend*(1+variation))));
  }
  const low=bounded(config.minimum),high=Math.max(low,bounded(config.maximum));
  const position=Math.floor(Math.max(0,Number.isFinite(seconds)?seconds:0)/10)*10/120,step=Math.floor(position),fraction=position-step;
