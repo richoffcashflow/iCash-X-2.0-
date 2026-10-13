@@ -24,5 +24,5 @@ export function WebinarAudience({sessionId,enabled,preview,playing,display,secon
  const simulated=simulatedAudience(display,sessionId,seconds,durationSeconds);
  if(enabled&&simulated!==null)return <div className="wb-audience"><Users size={14} aria-hidden="true"/><b>{simulated.toLocaleString()}</b><span>viewers</span><details className="wb-audience-info"><summary aria-label="About the viewer count"><Info size={15} aria-hidden="true"/></summary><p>This audience display is generated from a number set by the host. It is not a count of people currently watching.</p></details></div>;
  if(!enabled||preview||count===null||count===0)return null;
- return <span className="wb-audience" title="Active viewers of this recording. Updated every 30 seconds; inactive connections expire within 75 seconds."><Users size={14}/><b>{count.toLocaleString()}</b> live attendees</span>;
+ return <div className="wb-audience" title="Active viewers of this recording. Updated every 30 seconds; inactive connections expire within 75 seconds."><Users size={14} aria-hidden="true"/><b>{count.toLocaleString()}</b><span>watching</span></div>;
 }

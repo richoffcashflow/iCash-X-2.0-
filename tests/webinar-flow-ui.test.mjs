@@ -19,25 +19,30 @@ const replaced=[];globalThis.history={replaceState:(_state,_title,url)=>replaced
 globalThis.localStorage=globalThis.sessionStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)};
 Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true});
 const components=Object.fromEntries(['WebinarPlayer','WebinarPanelBoundary','WebinarAudience','WebinarPurchaseNotifications','WebinarOfferMoment','WebinarOfferImage','WebinarOfferSpots'].map(n=>[n,n]));
-const icons=Object.fromEntries(['MessageCircle','Send','X','ChevronDown','ShieldCheck','Maximize','Pause','Play','Volume2','VolumeX'].map(n=>[n,n]));
+const icons=Object.fromEntries(['MessageCircle','Send','X','ChevronDown','ShieldCheck','Maximize','Pause','Play','Volume2','VolumeX','Info'].map(n=>[n,n]));
 const w={...policy.newWebinar('00000000-0000-4000-8000-000000000123'),videoUrl:'https://example.test/day.mp4',status:'published',publicCode:'129340'};
-const sessionId='00000000-0000-4000-8000-000000000456';let requestLog=[],remembered='',rememberedEmail='',completionGate=null,chatGate=null,failChat=false;const redirects=[];location.assign=path=>redirects.push(path);
-async function post(url,body){requestLog.push({url,body});if(url.endsWith('/start'))return {canonicalPath:'/live/129340',sessionId,webinar:policy.publicWebinar(w),progress:0,name:remembered,email:rememberedEmail,contactSaved:false,messages:[],preview:false,serverNow:Date.now()};if(url.endsWith('/event')&&body.kind==='completed'){if(completionGate)await completionGate;return {saved:true,redirect:'/webinar/checkout'};}if(url.endsWith('/contact')){remembered=body.name;if(!body.onlyName)rememberedEmail=body.email;return {name:remembered,contactSaved:!!body.email&&!!body.phone};}if(url.endsWith('/chat')){if(chatGate)await chatGate;if(failChat)throw Error('Connection lost.');return {messages:[{id:'m'+requestLog.length,role:'user',text:body.text}]};}return {saved:true};}
+const sessionId='00000000-0000-4000-8000-000000000456';let requestLog=[],remembered='',rememberedEmail='',completionGate=null,chatGate=null,failChat=false,failContact=false;const redirects=[];location.assign=path=>redirects.push(path);
+async function post(url,body){requestLog.push({url,body});if(url.endsWith('/start'))return {canonicalPath:'/live/129340',sessionId,webinar:policy.publicWebinar(w),progress:0,name:remembered,email:rememberedEmail,contactSaved:false,messages:[],preview:false,serverNow:Date.now()};if(url.endsWith('/event')&&body.kind==='completed'){if(completionGate)await completionGate;return {saved:true,redirect:'/webinar/checkout'};}if(url.endsWith('/contact')){if(failContact)throw Error('Name could not be saved.');remembered=body.name;if(!body.onlyName)rememberedEmail=body.email;return {name:remembered,contactSaved:!!body.email&&!!body.phone};}if(url.endsWith('/chat')){if(chatGate)await chatGate;if(failChat)throw Error('Connection lost.');return {messages:[{id:'m'+requestLog.length,role:'user',text:body.text}]};}return {saved:true};}
 const roomDeps={withOfferDeadlines,replayOfferSpots,useMemo:fn=>fn(),webinarRequest:async()=>({postPurchaseUrl:'/live/123457'}),dynamic:loader=>loader.toString().includes('WebinarCheckout')?'WebinarCheckout':'AccountAccess',useWebinarTimers:()=>({deadlines:{},offerDeadlines:{},offset:0,now:Date.now()}),...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}};
 const h=await harness('components/webinar-room.tsx',roomDeps);
 const render=()=>h.render('WebinarRoom',{webinarCode:'129339'});let tree=render();await flush();tree=render();
 assert.equal(requestLog[0].body.code,'129339');assert.equal(requestLog[0].body.attribution.fbclid,'retained');assert.equal(replaced[0],'/live/129340?ad_id=55555&fbclid=retained#room');assert.equal(all(tree).some(n=>n.props?.className==='wb-offer'),false,'No offer before its cue');assert.equal(all(tree).some(n=>n.type==='header'),false);
+assert.equal(all(tree).some(n=>n.props?.id==='wb-question'),false,'A new viewer must save a name before chatting');
+assert.equal(all(tree).some(n=>n.props?.['aria-label']==='Dismiss contact request'),false,'Required name entry cannot be dismissed');
+assert.equal(all(tree).some(n=>n.type==='footer'),false);
 let player=find(tree,'WebinarPlayer');player.props.onProgress(30);tree=render();
 let prompt=all(tree).find(n=>n.type==='form'&&n.props.className?.startsWith('wb-prompt '));assert.ok(prompt);
 let fields=all(prompt).filter(n=>n.type==='input');assert.equal(fields.length,1);assert.equal(fields[0].props.autoComplete,'given-name');fields[0].props.onChange({target:{value:'Casey'}});
-tree=render();prompt=all(tree).find(n=>n.type==='form'&&n.props.className?.startsWith('wb-prompt '));prompt.props.onSubmit({preventDefault(){}});await flush();tree=render();
+tree=render();prompt=all(tree).find(n=>n.type==='form'&&n.props.className?.startsWith('wb-prompt '));
+failContact=true;prompt.props.onSubmit({preventDefault(){}});await flush();tree=render();assert.equal(all(tree).some(n=>n.props?.id==='wb-question'),false,'A failed name save keeps the composer locked');assert.ok(all(tree).some(n=>n.props?.role==='alert'));
+failContact=false;prompt=all(tree).find(n=>n.type==='form'&&n.props.className?.startsWith('wb-prompt '));prompt.props.onSubmit({preventDefault(){}});await flush();tree=render();assert.ok(all(tree).some(n=>n.props?.id==='wb-question'),'Saving the name opens chat');
 assert.equal(all(tree).some(n=>n.props?.className?.startsWith('wb-prompt ')),false,'Contact does not stack immediately on the name prompt');
 player=find(tree,'WebinarPlayer');player.props.onProgress(60);tree=render();prompt=all(tree).find(n=>n.type==='form'&&n.props.className?.startsWith('wb-prompt '));
 fields=all(prompt).filter(n=>n.type==='input');assert.deepEqual(fields.map(n=>n.props.type),['email','tel']);assert.ok(!fields.some(n=>n.props.autoComplete==='given-name'));
 fields[0].props.onChange({target:{value:'casey@example.invalid'}});tree=render();prompt=all(tree).find(n=>n.type==='form'&&n.props.className?.startsWith('wb-prompt '));
 assert.equal(all(prompt).filter(n=>n.type==='input'&&n.props.type==='checkbox').length,1,'Only the entered channel asks for optional consent');
 assert.equal(all(prompt).find(n=>n.props?.type==='checkbox').props.checked,false,'Follow-up consent is never selected automatically');
-assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).length,1);assert.equal(requestLog.find(r=>r.url.endsWith('/contact')).body.onlyName,true);
+assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).length,2);assert.equal(requestLog.find(r=>r.url.endsWith('/contact')).body.onlyName,true);
 // Saving just an email is enough: a deliberately optional phone is not requested again.
 prompt.props.onSubmit({preventDefault(){}});await flush();tree=render();assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).at(-1).body.smsConsent,false);assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).at(-1).body.consent,false);
 find(tree,'WebinarPlayer').props.onProgress(500);tree=render();assert.equal(all(tree).some(n=>n.props?.className?.startsWith('wb-prompt ')),false);
@@ -52,9 +57,10 @@ let log=all(tree).find(n=>n.props?.className==='wb-chat-log'),scroll={scrollHeig
 reply();await pending;tree=render();tree=render();assert.equal(input().props.value,'What happens next?');assert.equal(scroll.scrollTop,100,'Incoming reply does not move a reader');
 all(tree).find(n=>n.props?.className==='wb-new-messages').props.onClick();assert.equal(scroll.scrollTop,1200,'New messages button scrolls only the chat container');
 // A timed offer remains available without closing chat while a draft is present.
-find(tree,'WebinarPlayer').props.onProgress(w.durationSeconds-1);tree=render();tree=render();assert.equal(all(tree).find(n=>n.props?.className==='wb-chat-heading').props['aria-expanded'],true);
+find(tree,'WebinarPlayer').props.onProgress(w.durationSeconds-1);tree=render();tree=render();assert.equal(all(tree).find(n=>n.props?.className==='wb-chat-heading').type,'div');assert.ok(all(tree).some(n=>n.props?.className==='wb-chat-log'),'Chat stays open when an offer appears');
 const panel=all(tree).find(n=>n.props?.id==='webinar-offer');assert.equal(panel.props.hidden,true);let focused=0,scrolled=0;panel.props.ref.current={focus:()=>focused++,scrollIntoView:()=>scrolled++};
 all(tree).find(n=>n.props?.['aria-controls']==='webinar-offer').props.onClick();tree=render();tree=render();assert.equal(all(tree).find(n=>n.props?.id==='webinar-offer').props.hidden,false);assert.equal(focused,1);assert.equal(scrolled,1);
+assert.ok(all(tree).some(n=>n.props?.id==='wb-question'),'Opening checkout keeps chat available');
 // Minimize/reopen preserves both the draft and the same mounted checkout.
 all(tree).find(n=>n.props?.['aria-label']==='Minimize offer').props.onClick();tree=render();assert.equal(input().props.value,'What happens next?');
 input().props.onChange({target:{value:''}});tree=render();tree=render();
@@ -104,14 +110,16 @@ const denied=()=>new DOMException('Autoplay requires a gesture','NotAllowedError
  assert.ok(all(p.overlay()).some(n=>n.props?.children==='Tap to listen'));
  p.overlay().props.onClick();assert.equal(p.media.muted,false,'The tap enables audio before awaiting playback');await flush();
  assert.deepEqual(p.calls,[false,true,false]);assert.equal(p.overlay(),undefined);
- p.click('Mute video');assert.equal(sessionStorage.getItem('icash-webinar-muted'),'true');
- p.click('Pause video');p.click('Play video');await flush();assert.equal(p.calls.at(-1),true,'Play respects a deliberate mute');
+ assert.equal(all(p.render()).some(n=>n.props?.className==='wb-player-actions'),false,'No persistent player controls');p.close();
+ // Respect mute remembered by an earlier player, while still offering one tap to listen.
+ sessionStorage.setItem('icash-webinar-muted','true');
+ const next=await audioPlayer(async()=>{});next.start();await flush();assert.deepEqual(next.calls,[true]);
+ next.media.pause();next.overlay().props.onClick();await flush();assert.equal(next.calls.at(-1),true,'Resume respects a remembered mute');
  document.hidden=true;listeners.get('visibilitychange')();document.hidden=false;listeners.get('visibilitychange')();await flush();
- assert.equal(p.calls.at(-1),true,'Returning to the tab respects mute');
- find(p.render(),'video').props.onError();all(p.render()).find(n=>n.props?.children==='Resume video').props.onClick();
- p.start();await flush();assert.equal(p.calls.at(-1),true,'Reconnecting respects mute');p.close();
- const next=await audioPlayer(async()=>{});next.start();await flush();assert.deepEqual(next.calls,[true],'A fresh player in the same tab remembers mute');
- next.click('Unmute video');await flush();assert.equal(next.media.muted,false);assert.equal(sessionStorage.getItem('icash-webinar-muted'),null);next.close();
+ assert.equal(next.calls.at(-1),true,'Returning to the tab respects mute');
+ find(next.render(),'video').props.onError();all(next.render()).find(n=>n.props?.children==='Resume video').props.onClick();
+ next.start();await flush();assert.equal(next.calls.at(-1),true,'Reconnecting respects mute');
+ next.overlay().props.onClick();await flush();assert.equal(next.media.muted,false);assert.equal(sessionStorage.getItem('icash-webinar-muted'),null);next.close();
 }
 {
  const p=await audioPlayer(async()=>{throw denied();});p.start();await flush();
