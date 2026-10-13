@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {canSkipBuild,ignoreBuild} from '../scripts/ignore-vercel-build.mjs';
+import {maintenanceBatch} from '../lib/maintenance-batch.ts';
+import {automationChanged} from '../lib/automation-outcome.ts';
+assert(canSkipBuild(['docs/a.md','tests/a.test.mjs','worker/index.mjs']));
+for(const paths of [[],['lib/a.ts'],['app/page.tsx'],['package.json'],['vercel.json'],['scripts/x.mjs'],['supabase/migrations/a.sql'],['docs/a.md','public/a.png']])assert.equal(canSkipBuild(paths),false);
+const env={VERCEL_GIT_PREVIOUS_SHA:'a'.repeat(40),VERCEL_GIT_COMMIT_SHA:'b'.repeat(40)};
+assert.equal(ignoreBuild({},()=>{throw Error('must not call');}),false);
+assert.equal(ignoreBuild(env,()=>{throw Error('missing git history');}),false);
+assert.equal(ignoreBuild(env,(...args)=>args[0]==='diff'?'docs/a.md\0':''),true);
+assert.equal(ignoreBuild(env,(...args)=>args[0]==='diff'?'docs/a.md\0app/page.tsx\0':''),false);
+let called=[];const result=await maintenanceBatch({a:async()=>{called.push('a');throw Error('provider failed');},b:async()=>{called.push('b');return new Response(null,{status:200});},c:async()=>{called.push('c');return new Response(null,{status:503});}});
+assert.deepEqual(called,['a','b','c']);assert.equal(result.ok,false);assert.deepEqual(result.lanes,{a:{ok:false,status:503},b:{ok:true,status:200},c:{ok:false,status:503}});
+assert.equal((await maintenanceBatch({a:async()=>new Response(null,{status:200})})).ok,true);
+assert.equal(automationChanged('awaiting_counterparty'),false);assert.equal(automationChanged('updates_idle'),false);assert.equal(automationChanged('completed'),true);assert.equal(automationChanged('contacts_saved'),true);
+const config=JSON.parse(readFileSync(new URL('../vercel.json',import.meta.url)));assert.equal(config.crons.find(x=>x.path==='/api/internal/maintenance').schedule,'* * * * *');
+assert.equal(config.crons.reduce((n,c)=>n+(c.schedule.startsWith('*/5')?288:1440),0),5184);
+console.log('Cost efficiency: safe build skipping, independent maintenance failure and unchanged minute cadence passed.');
+
+const {createPollCadence}=await import('../lib/poll-cadence.ts');
+const cadence=createPollCadence();assert.equal(cadence.observe({id:1}),5000);assert.equal(cadence.observe({id:1}),10000);assert.equal(cadence.observe({id:1}),20000);assert.equal(cadence.observe({id:1}),30000);assert.equal(cadence.observe({id:1}),30000);assert.equal(cadence.observe({id:1},true),5000);assert.equal(cadence.observe({id:2}),5000);

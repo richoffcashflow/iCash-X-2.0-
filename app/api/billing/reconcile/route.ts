@@ -38,4 +38,6 @@ export async function GET(req:Request){const expected=`Bearer ${process.env.CRON
  }catch{failed++;}finally{await db(`icash_daily_plans?id=eq.${p.id}`,'PATCH',{reconciled_at:new Date().toISOString()});}}
 
  const autoRecharge=await reconcileAutoRecharge(deadline);
- return NextResponse.json({memberships,autoRecharge,checked,failed,historyPending,deferred:plans.length-checked,cancellationChecked,cancellationFailed,cancellationDeferred:cancellations.length-cancellationChecked},{status:failed||memberships.failed||cancellationFailed||autoRecharge.failed?503:200});}
+ // Monitoring is independent of settlement and cannot overwrite its outcome.
+ const costHealth=await db('rpc/icash_refresh_cost_health','POST',{}).catch(()=>null);
+ return NextResponse.json({memberships,autoRecharge,costHealth,checked,failed,historyPending,deferred:plans.length-checked,cancellationChecked,cancellationFailed,cancellationDeferred:cancellations.length-cancellationChecked},{status:failed||memberships.failed||cancellationFailed||autoRecharge.failed?503:200});}

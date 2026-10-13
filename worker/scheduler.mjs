@@ -2,7 +2,7 @@
  * Retries claim fresh DB work; consumed provider capabilities are never replayed.
  */
 export function createScheduler({screening,automation,now=Date.now,onFailure=()=>{}}){
- const lanes={screening:{failures:0,nextAt:0},automation:{failures:0,nextAt:0}};
+ const lanes={screening:{failures:0,idle:0,nextAt:0},automation:{failures:0,idle:0,nextAt:0}};
  let running=false;
  return {
   health(active=true){
@@ -21,7 +21,8 @@ export function createScheduler({screening,automation,now=Date.now,onFailure=()=
      let delay;
      try{
       const worked=await work();lane.failures=0;
-      delay=name==='screening'&&worked?250:15000;
+      lane.idle=worked?0:Math.min(lane.idle+1,3);
+      delay=worked?(name==='screening'?250:15000):Math.min(60000,15000*2**(lane.idle-1));
      }catch{
       lane.failures=Math.min(lane.failures+1,6);
       delay=name==='screening'?Math.min(60000,1000*2**lane.failures):Math.min(300000,15000*2**lane.failures);

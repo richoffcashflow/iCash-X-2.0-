@@ -7,7 +7,7 @@ export function ManualCallOptions({screeningId,onTakeover}:{screeningId:string;o
  const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[refresh,setRefresh]=useState(0),[checked,setChecked]=useState(0),[busy,setBusy]=useState(false);
  const lock=useRef(false),requestKey=useRef<string|null>(null);
  const [callbackPhone,setCallbackPhone]=useState(''),[callId,setCallId]=useState(''),[callStatus,setCallStatus]=useState('');
- useEffect(()=>{if(!callId)return;let stopped=false;async function check(){try{const r=await fetch('/api/work/business-call?id='+callId,{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(!stopped){setCallStatus(d.status);setNotice(d.status==='completed'?'Call completed.':d.status==='failed'?'Call ended without connecting.':d.status==='connecting'?'Connecting you to the seller…':d.status==='ringing'?'Answer your phone, then press 1 to connect.':'Checking the call. Do not start another call yet.');}}catch{}}void check();const timer=setInterval(check,10000);return()=>{stopped=true;clearInterval(timer);};},[callId]);
+ useEffect(()=>{if(!callId||['completed','failed'].includes(callStatus))return;let stopped=false,inFlight=false;async function check(){if(document.hidden||inFlight)return;inFlight=true;try{const r=await fetch('/api/work/business-call?id='+callId,{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(!stopped){setCallStatus(d.status);setNotice(d.status==='completed'?'Call completed.':d.status==='failed'?'Call ended without connecting.':d.status==='connecting'?'Connecting you to the seller…':d.status==='ringing'?'Answer your phone, then press 1 to connect.':'Checking the call. Do not start another call yet.');}}catch{}finally{inFlight=false;}}void check();const timer=setInterval(check,10000);return()=>{stopped=true;clearInterval(timer);};},[callId,callStatus]);
  async function call(phone:string){
   if(lock.current||callId&&!['completed','failed'].includes(callStatus))return;
   const digits=callbackPhone.replace(/\D/g,'');const callback=digits.length===10?'+1'+digits:'+'+digits;
@@ -24,7 +24,7 @@ export function ManualCallOptions({screeningId,onTakeover}:{screeningId:string;o
  useEffect(()=>{
   const controller=new AbortController();setError('');
   void fetch(`/api/work/manual-call?screeningId=${encodeURIComponent(screeningId)}`,{cache:'no-store',signal:controller.signal}).then(async r=>{if(!r.ok)throw Error();const next=await r.json() as Data;if(!controller.signal.aborted){setData(next);setChecked(Date.now());const prior=next.personalCalls?.[0];if(prior){setCallbackPhone(value=>value||prior.callback_phone);if(!prior.ended_at){setCallId(prior.id);setCallStatus(prior.state);requestKey.current=prior.id;}}}}).catch(()=>{if(!controller.signal.aborted)setError('Could not load contacts.');});
-  const timer=setInterval(()=>setRefresh(v=>v+1),30000);return()=>{controller.abort();clearInterval(timer);};
+  const timer=setInterval(()=>{if(!document.hidden)setRefresh(v=>v+1);},30000);return()=>{controller.abort();clearInterval(timer);};
  },[screeningId,refresh]);
  return <section className="manual-call-options" aria-label="Call using your business number">
   <div className="contact-section-title"><span className="contact-section-icon"><Phone size={20}/></span><div><h5>Call the seller</h5><p>Talk to the seller from {data?.businessNumber?displayContactPhone(data.businessNumber):'your business number'}.</p></div></div>

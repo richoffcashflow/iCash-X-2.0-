@@ -1,3 +1,4 @@
+import {automationChanged} from '../lib/automation-outcome.ts';
 import assert from 'node:assert/strict';
 import {z} from 'zod';
 import {loadService} from './helpers/simulated-journey-services.mjs';
@@ -56,7 +57,7 @@ for(const campaign of [null,{...releasedCampaign,released:false},{...releasedCam
 }
 assert.equal(workspaceNextAction(a,releasedCampaign).label,'Start contact lookup');
 let kind='contacts',dispatches=0;const token='00000000-0000-0000-0000-000000000000'.repeat(2);
-const automation=await loadService('app/api/internal/automation/route.ts',{...admission,deferUnstartedAutomation:async()=>({status:'live_work_not_ready'}),NextResponse:response,db:async path=>path==='rpc/icash_consume_automation'?{id:'ticket',accountId:'account',kind,screeningId:screen}:[],enrichForAccount:async(a,s)=>{assert.equal(a,'account');assert.equal(s,screen);dispatches++;return {status:'contacts_saved'};},readVoiceUsagePolicies:()=>[],settlePendingVoiceUsage:async()=>({}),reconcileLiveConversation:async()=>{}});
+const automation=await loadService('app/api/internal/automation/route.ts',{automationChanged,...admission,deferUnstartedAutomation:async()=>({status:'live_work_not_ready'}),NextResponse:response,db:async path=>path==='rpc/icash_consume_automation'?{id:'ticket',accountId:'account',kind,screeningId:screen}:[],enrichForAccount:async(a,s)=>{assert.equal(a,'account');assert.equal(s,screen);dispatches++;return {status:'contacts_saved'};},readVoiceUsagePolicies:()=>[],settlePendingVoiceUsage:async()=>({}),reconcileLiveConversation:async()=>{}});
 const automatic=()=>automation.POST(new Request('https://example.invalid/api/internal/automation',{method:'POST',headers:{authorization:'Bearer '+token}}));
 assert.equal((await automatic()).body.status,'contacts_saved');assert.equal(dispatches,1);
 for(kind of newLiveWorkKinds){if(kind!=='contacts')assert.equal((await automatic()).body.status,'live_work_not_ready',kind);}assert.equal(dispatches,1);

@@ -7,11 +7,16 @@ export type OwnerOverview=OverviewFilters & {
  leadCount:number;reviewCount:number;matchedCount:number;leads:OverviewLead[];
  funnel?:FunnelStep[];
  closing?:ClosingOperations;
+ costHealth?:{pendingCount:number;agedCount:number;oldestAt:string|null;unreconciledObservations:number;checkedAt:string}|null;
  usage:{completedCount:number;missingChargeCount:number;chargedCents:number|null;coveredCents:number;knownCostMicros:number;costMicros:number|null;marginMicros:number|null;missingCostCount:number;estimatedCount:number;pendingCount:number};
 };
 const record=(v:unknown):Record<string,unknown>=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const count=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 const date=(v:unknown):v is string=>typeof v==='string'&&Number.isFinite(Date.parse(v));
+export function validCostHealth(value:unknown):value is NonNullable<OwnerOverview['costHealth']>{
+ const v=record(value);
+ return ['pendingCount','agedCount','unreconciledObservations'].every(k=>count(v[k]))&&(v.agedCount as number)<=(v.pendingCount as number)&&(v.oldestAt===null||date(v.oldestAt))&&date(v.checkedAt);
+}
 export function validOwnerOverview(value:unknown,filters:OverviewFilters):value is OwnerOverview{
  const v=record(value),u=record(v.usage);
  if(v.days!==filters.days||v.includeOwner!==filters.includeOwner||v.query!==filters.query||v.page!==filters.page||v.pageSize!==25||v.timezone!=='America/Chicago'||!date(v.startAt)||!date(v.endAt)||Date.parse(v.endAt)<Date.parse(v.startAt))return false;
@@ -22,6 +27,7 @@ export function validOwnerOverview(value:unknown,filters:OverviewFilters):value 
  if(u.chargedCents!==null&&u.costMicros!==null){if(u.marginMicros!==(u.chargedCents as number)*10000-(u.costMicros as number))return false;}else if(u.marginMicros!==null)return false;
  if(!Array.isArray(v.leads)||v.leads.length!==Math.min(25,Math.max(0,(v.matchedCount as number)-(filters.page-1)*25))||(v.matchedCount as number)>(v.leadCount as number)||(v.reviewCount as number)>(v.leadCount as number))return false;
  if(v.funnel!==undefined&&(!validFunnelSteps(v.funnel,sellerFunnelStages)||v.funnel[0].count!==v.leadCount))return false;
+ if(v.costHealth!=null&&!validCostHealth(v.costHealth))return false;
  if(v.closing!==undefined&&!closingOperationsSchema.safeParse(v.closing).success)return false;
  return v.leads.every(lead=>{const l=record(lead);return ['id','name','address','phone','state','source'].every(k=>typeof l[k]==='string')&&['email','campaign','assignedTo'].every(k=>l[k]===null||typeof l[k]==='string')&&date(l.createdAt);});
 }

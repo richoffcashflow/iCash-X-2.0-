@@ -1,0 +1,13 @@
+// Every application build verifies critical behavior without contacting providers.
+// Provider configuration/readback is a separate, explicit release operation.
+import {spawnSync} from 'node:child_process';
+const suites = [
+ 'paid-provider-tests-disabled', 'buyer-package-photos', 'buyer-package-email',
+ 'deal-documents', 'signing-service-validation', 'assignment-contract-policy',
+ 'buyer-scenarios', 'buyer-privacy-release-source', 'worker-recovery',
+ 'cost-efficiency', 'property-photo-route', 'property-photo', 'persistent-property-photo',
+];
+for (const suite of suites) {
+ const result=spawnSync(process.execPath,['--experimental-strip-types',`tests/${suite}.test.mjs`],{stdio:'inherit',timeout:60000});
+ if(result.error||result.status!==0)process.exit(result.status||1);
+}
