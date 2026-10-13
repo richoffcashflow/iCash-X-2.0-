@@ -30,7 +30,7 @@ export function BotDemo(){
   e.preventDefault();if(lock.current||!consent||access!=='ready')return;
   lock.current=true;setBusy(true);setError('');request.current||=crypto.randomUUID();
   try{const r=await fetch('/api/demo/intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId:request.current,name,address,phone,consented:consent,consentVersion:botDemoConsentVersion,contactTimezone:Intl.DateTimeFormat().resolvedOptions().timeZone,honeypot:trap}),signal:AbortSignal.timeout(20000)});
-   const d=await r.json();if(!r.ok)throw Error(d.error||'Please try again.');setProgress(sellerSubmissionStatus('received'));setStep('saved');requestAnimationFrame(()=>success.current?.focus());
+   const d=await r.json();if(!r.ok)throw Error(d.error||'Please try again.');setProgress(d.progress??sellerSubmissionStatus('received'));setStep('saved');requestAnimationFrame(()=>success.current?.focus());
   }catch(e){setError(e instanceof Error?e.message:'Please try again.');}finally{lock.current=false;setBusy(false);}
  }
  return <main className="bot-demo">
@@ -41,6 +41,7 @@ export function BotDemo(){
     <span className="demo-success-mark"><Check size={26}/></span><div role="status" aria-live="polite"><h1 ref={success} tabIndex={-1}>{progress?.title??'Your property is in.'}</h1><p className="demo-intro">{progress?.message??'Your request is saved.'}</p></div>
     <div className="demo-property"><House size={20}/><span>{address}</span></div>
     <a className="demo-submit" href="/">Watch in your workspace <ArrowUpRight size={18}/></a>
+    {progress?.phase==='archived_demo'&&<button className="demo-secondary" onClick={()=>{changed();setConsent(false);setProgress(null);setStep('contact');requestAnimationFrame(()=>nameInput.current?.focus());}}>Start a new demo</button>}
     {progress?.phase==='address_review'?<button className="demo-secondary" onClick={()=>{setStep('address');setProgress(null);changed();}}>Update address</button>:!polling&&!progress?.terminal?<button className="demo-secondary" onClick={()=>setRound(v=>v+1)}>Check progress</button>:null}
    </div>:<>
     <h1>{step==='address'?<>One property.<br/><span>See what your bot can do.</span></>:<>Let’s start<br/><span>the conversation.</span></>}</h1>

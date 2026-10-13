@@ -12,6 +12,7 @@ import {processSellerIntake} from '@/lib/seller-pipeline';
 import {processSellerResponses} from '@/lib/seller-response-service';
 import {dispatchTextMessage} from '@/lib/text-message-service';
 import {dispatchLiveVoice} from '@/lib/live-dispatch-service';
+import {sellerSubmissionStatus} from '@/lib/seller-submission-status';
 export const dynamic='force-dynamic';
 export const maxDuration=60;
 const headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer'};
@@ -39,6 +40,8 @@ export async function POST(req:Request){
    p_duplicate:createHash('sha256').update('icash-x-demo:'+ownerInboundTarget.accountId+':'+sellerDuplicateKeyInput(i.address,i.phone)).digest('hex'),
    p_timezone:i.contactTimezone??'America/Chicago',p_agent_hash:guestHash(req.headers.get('user-agent')||'unknown'),
   });
+  const [receipt]=await db<{state:string}[]>(`icash_seller_intakes?id=eq.${leadId}&select=state&limit=1`);
+  if(receipt?.state==='duplicate')return Response.json({received:true,progress:sellerSubmissionStatus('duplicate_demo')},{headers});
   // Only a presenter-submitted opt-in enters the ordinary durable pipeline.
   // Loading, building and verifying this page never start provider work.
   after(async()=>{try{
@@ -46,6 +49,6 @@ export async function POST(req:Request){
    await db('rpc/icash_assign_seller_lead_for','POST',{p_lead:leadId});
    await processSellerResponses(db,dispatchTextMessage,dispatchLiveVoice,leadId);
   }catch{console.error('iCash X demo processing deferred to queue');}});
-  return Response.json({received:true},{headers});
+  return Response.json({received:true,progress:sellerSubmissionStatus('received')},{headers});
  }catch{return Response.json({error:'Could not confirm your submission. Retry with the same details.'},{status:503,headers});}
 }
