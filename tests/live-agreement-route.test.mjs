@@ -14,7 +14,7 @@ const address='45 Fixture Lane',now=Date.now();
 const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:0,raw:{data:{dm_property_id:'prop_123',full_address:address,legal_description:'Lot 1 block 2',estimated_value:280000,estimated_repair_cost:48185,is_free_and_clear:'Yes',total_estimated_loan_balance:0,estimated_equity_percentage:100}}};
 const context={party:'seller',address,offerState:{},offerVersion:0,snapshot},scope={callKey:'fixture',accountId:'account',ownerUserId:'owner',ownerEmail:'owner@example.test',dealId:'deal',screeningId:'screen',phone:'+12125550199'};
 let rejectAcceptance=false;const savedActions=[];
-let terms={address,buyer:'Fixture buyer',state:'TX'},claim,envelopes=[],sends=0,texts=0;
+let terms={address,buyer:'Fixture buyer',state:'TX'},claim,envelopes=[],sends=0,texts=0,expectedPrice=15200000;
 const db=async(path,method,b)=>{
  if(path==='rpc/icash_call_offer_context')return structuredClone(context);
  if(path==='rpc/icash_save_call_offer'){if(rejectAcceptance&&b.p_action==='accept_offer')return false;savedActions.push(b.p_action);assert.equal(b.p_expected_version,context.offerVersion);context.offerState=b.p_state;context.offerVersion++;return true;}
@@ -31,7 +31,7 @@ const route=await loadService('app/api/internal/voice/cash-offer/route.ts',{
  liveToolHistory,boundSellerQualification,NextResponse:{json:Response.json},process:{env:{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',DOCUSEAL_MODE:'live'}},db,
  bindSellerAgreementCall:async()=>{},createRecordedReceptionProviders:()=>({conversation:async()=>assert.fail('The live tool history must work even when a provider GET is stale')}),
  callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence,sellerPayoffEvidence,sellerListingEvidence,automaticCallOffer,blockedOffer,buyerAgreementHandoff,sellerAgreementInput,object,sha,sellerAgreementFailure,sellerAgreementAction,
- sendForSignatures:async i=>{sends++;assert.equal(i.signers[0].phone,scope.phone);assert.equal(terms.priceCents,15200000);assert.equal(terms.earnestCents,null);envelopes=[{id:'envelope',state:'awaiting_counterparty',test_mode:false,terms,recipients:[i.signers[0],{name:'Fixture buyer'}]}];return {id:'envelope',testMode:false};},
+ sendForSignatures:async i=>{sends++;assert.equal(i.signers[0].phone,scope.phone);assert.equal(terms.priceCents,expectedPrice);assert.equal(terms.earnestCents,null);envelopes=[{id:'envelope',state:'awaiting_counterparty',test_mode:false,terms,recipients:[i.signers[0],{name:'Fixture buyer'}]}];return {id:'envelope',testMode:false};},
  textPendingContract:async(account,id,phone)=>{texts++;assert.deepEqual([account,id,phone],['account','envelope',scope.phone]);return {sent:true,status:'accepted'};},refreshSigning:async()=>({status:'awaiting_counterparty'}),
 });
 let entries=qualifiedSellerTurns.slice(0,2),qualificationEntries=[];
@@ -43,6 +43,7 @@ entries=[{role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',result
 const accepted=await post({action:'accept_offer',priceCents:15200000,quoteRevision:quoted.quoteRevision});
 assert.equal(accepted.status,'verbally_accepted');
 entries.splice(3,0,{role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',result_value:JSON.stringify(accepted)}]});
+entries.push({role:'agent',message:'Are you the only owner and person who needs to agree to sell?'},{role:'user',message:'Yes, I am the only owner and decision maker.'});
 const confirmation={sellerLegalName:'Jane Seller',agreedPriceCents:15200000,closingDate:new Date(now+30*86400000).toISOString().slice(0,10),soleOwner:true,allDecisionMakersAgree:true,inspectionAccess:'yes',priceAndDateConfirmed:true,termsConfirmed:true,sendTextRequested:true,materialFactsChanged:false};
 // Observed failure: closing timing was answered, but no terms readback or text request occurred.
 entries.push({role:'agent',message:'What closing date works?'},{role:'user',message:'Thirty days from now.'});
@@ -72,6 +73,7 @@ const replay=[{role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',r
  {role:'agent',message:'Our cash offer is one hundred fifty-two thousand dollars. Does that fit?'},
  {role:'user',message:"Um, yeah, that fits. I want the closing date to be in 30 days from now. What's the next step?"},
  {role:'agent',message:'Your legal name?'},{role:'user',message:'Jane Seller.'},
+ {role:'agent',message:'Are you the only owner and person who needs to agree to sell?'},{role:'user',message:'Yes, I am the only owner and decision maker.'},
  {role:'agent',message:'The purchase price is $152,000 cash, closing '+confirmation.closingDate+' with a ten-day inspection period. May I text the agreement now?'},
  {role:'user',message:'Yes.'},{role:'user',message:'Text the agreement.'}];
 for(const [extra,reason] of [["Wait, I need my spouse to approve first.",'acceptance_confirmation_required'],['No, do not send the agreement.','acceptance_confirmation_required'],['Yes, but I need $160,000.','acceptance_confirmation_required']]){
@@ -87,3 +89,31 @@ assert.equal((await post({action:'confirm_and_send',confirmation})).sent,true);a
 envelopes[0].state='needs_review';
 assert.equal((await post({action:'confirm_and_send',confirmation})).sent,false);assert.equal(sends,1,'uncertain existing agreement cannot be replaced');
 console.log('PASS interrupted acceptance recovery, withdrawal, counteroffer, failed save, exact price and duplicate agreement guards; no provider traffic.');
+
+// Replay the observed $74,000 same-price readback and direct text request. The
+// missing real identity/ownership answers are added explicitly before delivery.
+context.offerState={};context.offerVersion=0;claim=undefined;envelopes=[];sends=0;texts=0;
+terms={address,buyer:'Fixture buyer',state:'TX'};savedActions.length=0;expectedPrice=7400000;
+snapshot.raw.data.estimated_value=140000;snapshot.raw.data.estimated_repair_cost=20000;
+const observedQuote=await post({action:'get_offer'});assert.equal(observedQuote.priceCents,7400000);
+const observedReceipt=result=>({role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',result_value:JSON.stringify(result)}]});
+entries=[observedReceipt(observedQuote),{role:'agent',message:'We can offer seventy-four thousand dollars cash. Does that price work?'},{role:'user',message:'Yeah, that price works for me.'}];
+const observedAccepted=await post({action:'accept_offer',priceCents:7400000,quoteRevision:observedQuote.quoteRevision});
+assert.equal(observedAccepted.status,'verbally_accepted');entries.push(observedReceipt(observedAccepted));
+const observedConfirmation={...confirmation,sellerLegalName:'Hank Hill',agreedPriceCents:7400000,closingDate:new Date(now+13*86400000).toISOString().slice(0,10)};
+const dateParts=new Date(observedConfirmation.closingDate+'T12:00:00Z');
+const spokenClosing=`${dateParts.getUTCDate()}th of ${new Intl.DateTimeFormat('en-US',{month:'long',timeZone:'UTC'}).format(dateParts)}`;
+const observedReadback=`The agreed price is seventy-four thousand dollars cash. The closing date we have is ${spokenClosing}, ten-day inspection period, and the legal name on the contract will be yours alone. Does that all look right, and should I text the agreement now?`;
+entries.push({role:'agent',message:observedReadback},{role:'user',message:'That looks... Text the agreement.'});
+entries.push(observedReceipt(await post({action:'get_offer'})));
+assert.equal((await post({action:'confirm_and_send',confirmation:observedConfirmation})).reason,'seller_legal_name_required');
+assert.equal(sends,0);assert.equal(texts,0,'agent claims cannot supply seller identity or ownership');
+entries.push({role:'agent',message:'What is your full legal name for the agreement?'},{role:'user',message:'Hank Hill.'});
+assert.equal((await post({action:'confirm_and_send',confirmation:observedConfirmation})).reason,'sole_owner_confirmation_required');
+assert.equal(sends,0);assert.equal(texts,0);
+entries.push({role:'agent',message:'Are you the only owner and decision maker, or does anyone else need to agree?'},{role:'user',message:'Yes, just me.'});
+assert.equal((await post({action:'confirm_and_send',confirmation:observedConfirmation})).sent,true);
+assert.equal((await post({action:'confirm_and_send',confirmation:observedConfirmation})).sent,true);
+assert.equal(sends,1);assert.equal(texts,2);assert.equal(context.offerState.acceptedPriceCents,7400000);
+assert.equal(terms.seller,'Hank Hill');assert.equal(terms.priceCents,7400000);assert.equal(terms.closingDate,observedConfirmation.closingDate);
+console.log('PASS observed natural date and text request through real route, unchanged accepted quote receipts, actual name/ownership answers and one agreement; no provider traffic.');
