@@ -3,7 +3,7 @@ import {useCallback,useEffect,useState,useRef,type CSSProperties} from 'react';
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import dynamic from 'next/dynamic';
 import {workspaceNextAction,workspaceActionDisabled} from '@/lib/workspace-status';
-import {BookOpen,Menu,SlidersHorizontal,X} from 'lucide-react';
+import {BookOpen,Menu,X} from 'lucide-react';
 import styles from './workspace-easy.module.css';
 import './icash-brand.css';
 import {WorkspaceConversion} from '@/components/workspace-conversion';
@@ -30,7 +30,7 @@ import type {AssistantRequest} from '@/components/workspace-assistant';
 const WorkspaceAssistant=dynamic(()=>import('@/components/workspace-assistant').then(m=>m.WorkspaceAssistant),{ssr:false});
 import type {AssistantAction} from '@/lib/workspace-assistant-policy';
 import {BotRunBar} from '@/components/bot-run-bar';
-import {WorkspaceVipBanner,AdminPlanToggle,type AccountPlan} from '@/components/workspace-vip-banner';
+import {AdminPlanToggle,type AccountPlan} from '@/components/workspace-vip-banner';
 import {PlatformBuyerNetwork} from '@/components/platform-buyer-network';
 import {BotCustomization} from '@/components/bot-customization';
 import {setupThemes,type BotProfile} from '@/lib/bot-setup';
@@ -56,6 +56,7 @@ export default function Home(){
  const controlInFlight=useRef(false);
  const [activationAvailability,setActivationAvailability]=useState<{key:string;available:boolean}|null>(null);
  const [customizeOpen,setCustomizeOpen]=useState(false);
+ const [attentionPending,setAttentionPending]=useState(true);
  const activationKey=`${account?.email}:${account?.balanceCents}:${account?.dailyLimitCents}:${account?.paused}`;
  const updateActivationAvailability=useCallback((available:boolean)=>setActivationAvailability(current=>current?.key===activationKey&&current.available===available?current:{key:activationKey,available}),[activationKey]);
  const spendingActivationAvailable=account?.signedIn===true&&account.mode==='live'&&activationAvailability?.key===activationKey&&activationAvailability.available===true;
@@ -109,7 +110,7 @@ export default function Home(){
  const funding=nextWorkFunding(account??{},accountError);
  const suggestedAction=workspaceNextAction({...account,spendingActivationAvailable},campaign);
  const nextAction=funding.needsFunding&&suggestedAction.kind==='resume'?{kind:'funding' as const,label:'Review funding',reason:'There are not enough available credits for the next eligible task. Your saved progress stays here.'}:suggestedAction;
- function showDetails(id:string){if(id==='notification-settings'){setPreferencesOpen(true);return;}setSettingsOpen(true);requestAnimationFrame(()=>document.getElementById(id)?.scrollIntoView({block:'start'}));}
+ function showDetails(id:string){if(id==='notification-settings'){setPreferencesOpen(true);return;}setSettingsOpen(true);requestAnimationFrame(()=>{const section=document.getElementById(id);if(section instanceof HTMLDetailsElement)section.open=true;section?.scrollIntoView({block:'start'});});}
  function doNextAction(){if(nextAction.kind==='membership')openFunding();else if(nextAction.kind==='identity')showDetails('account-details');else if(nextAction.kind==='campaign')showDetails('outreach-campaign-details');else if(nextAction.kind==='activation'){const review=document.getElementById('spending-activation-review');review?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'});review?.focus();}else if(nextAction.kind==='funding')openFunding();else if(nextAction.kind==='resume')void toggleBot('resume');else if(nextAction.kind==='pause')void toggleBot('pause');else if(nextAction.kind==='work')document.getElementById('workspace-properties')?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});}
  function openAssistant(request?:AssistantRequest){
   if(accountError)return;
@@ -149,6 +150,7 @@ export default function Home(){
       <SupportLauncher key={account.email??'account'} onMembershipChanged={membershipChanged} onOpen={()=>closeAccountMenu(true)} onClose={()=>accountMenu.current?.querySelector('summary')?.focus()}/>
       {account.isBillingOwner&&<a href="/admin" onClick={()=>closeAccountMenu()}>Admin</a>}
       {canSwitchPlan&&<button type="button" disabled={controlBusy} onClick={()=>{closeAccountMenu(true);setReviewVip(true);}}>Switch account plan</button>}
+      {!workspaceLocked&&!displayVip&&!canSwitchPlan&&account.billingModel==='membership_credits'&&<button type="button" className="workspace-vip-menu" aria-haspopup="dialog" disabled={controlBusy||accountError} onClick={()=>{closeAccountMenu(true);setReviewVip(true);}}>Explore VIP</button>}
       {!workspaceLocked&&<button type="button" onClick={()=>{closeAccountMenu(true);setCustomizeOpen(true);}}>Customize bot</button>}
       {!workspaceLocked&&<button type="button" aria-expanded={settingsOpen} onClick={()=>{closeAccountMenu(true);setSettingsOpen(v=>!v);}}>Settings</button>}
       <button type="button" onClick={()=>{closeAccountMenu(true);void signOut();}}>Sign out</button>
@@ -165,18 +167,14 @@ export default function Home(){
    {!account?<section className="account-loading" role="status"><h1 className="sr-only">iCash X workspace</h1><p>{accountError?'Your account could not load. Retry above to continue.':'Opening your workspace…'}</p></section>:<>
     {!workspaceLocked&&<h1 className="sr-only" id="workspace-title">iCash X workspace</h1>}
     {workspaceLocked?<section className="subscription-lock" aria-label="Restore access"><h1>Renew subscription</h1><p>Your workspace is locked. Your unused credits are saved.</p><MembershipSettings locked onChanged={membershipChanged}/><button className="workspace-quiet" onClick={()=>void refreshAccount()}>Check payment</button></section>:<>
-    {canSwitchPlan&&<AdminPlanToggle plan={displayVip?'vip':'standard'} busy={controlBusy} onChange={plan=>void changePlan(plan)}/>}
     {controlError&&<p role="alert">{controlError}</p>}
-    {!displayVip&&(account.billingModel==='membership_credits'||canSwitchPlan)&&<WorkspaceVipBanner disabled={controlBusy||accountError} onUpgrade={()=>setReviewVip(true)}/>}
     <BotRunBar botName={profile?.displayName||account.assistantName} vip={displayVip} onVip={displayVip&&!canSwitchPlan&&account.billingModel==='membership_credits'?()=>setReviewVip(true):undefined} running={botRunning} paymentRequired={account.billingModel==='membership_credits'&&!account.membershipActive} stopped={account.paused===true&&(account.balanceCents??0)>0} busy={controlBusy} stale={accountError} balanceCents={guest?undefined:account.balanceCents} hasCreditHistory={account.hasCreditHistory} canPause={account.paused===false&&((account.balanceCents??0)>0||account.billingActive===true)} principalKey={account.email} onBudget={()=>openFunding()} onPause={()=>void toggleBot('pause')} onResume={()=>void toggleBot('resume')}/>
-    <button type="button" className="workspace-customize-button" aria-haspopup="dialog" disabled={accountError||controlBusy} onClick={()=>setCustomizeOpen(true)}><SlidersHorizontal size={15} aria-hidden="true"/>Customize bot</button>
     <div className={styles.activity}><BudgetSummary key={`${account.email}:${displayVip}`} vip={displayVip}/></div>
-    {!guest&&featureVip&&<PlatformBuyerNetwork key={`${account.email}:${displayVip}`}/>}
-    <WorkspaceConversion key={account.email??'account'} principal={account.email??''} balanceCents={account.balanceCents} paused={account.paused} stale={accountError||!!account.billingReview} hidden={customizeOpen||canSwitchPlan||fundingOpen||settingsOpen||reviewVip||needsIdentity||needsBotName||new URLSearchParams(typeof window==='undefined'?'':window.location.search).get('payment')==='funded'} busy={controlBusy} onFunding={(amountCents,reason)=>openFunding('',{amountCents,reason})} onResume={()=>void toggleBot('resume')} onVip={()=>setReviewVip(true)}/>
+    <WorkspaceConversion key={account.email??'account'} principal={account.email??''} balanceCents={account.balanceCents} paused={account.paused} stale={accountError||!!account.billingReview} hidden={attentionPending||customizeOpen||canSwitchPlan||fundingOpen||settingsOpen||preferencesOpen||courseOpen||cancellationOpen||reviewVip||needsIdentity||needsBotName||new URLSearchParams(typeof window==='undefined'?'':window.location.search).get('payment')==='funded'} busy={controlBusy} onFunding={(amountCents,reason)=>openFunding('',{amountCents,reason})} onResume={()=>void toggleBot('resume')} onVip={()=>setReviewVip(true)}/>
     {fundingOpen&&<FundingDialog title={guest||account.billingModel==='membership_credits'&&!account.membershipActive?'iCash X 2.0':returningWithoutCredits?'Out of credits':creditsExhausted?'Start your bot':'Add money'} onClose={closeFunding}>{guest||account.billingModel==='membership_credits'&&!account.membershipActive?<MembershipCheckout onSignedIn={()=>{closeFunding();void refreshAccount(true);}}/>:<FundingCheckout initialAmountCents={fundingSuggestion?.amountCents} reason={fundingSuggestion?.reason} outOfCredits={returningWithoutCredits} initialCode={fundingCode||undefined} onSignedIn={()=>{closeFunding();void refreshAccount(true);}}/>}</FundingDialog>}
     {reviewVip&&<FundingDialog title={account.isBillingOwner?'Your account plan':account.vip?'Your VIP membership':'Switch to VIP'} onClose={()=>setReviewVip(false)}><div className={styles.vipPanel}>{account.isBillingOwner?<><AdminPlanToggle plan={account.vip?'vip':'standard'} busy={controlBusy||accountError} onChange={plan=>void changePlan(plan)}/>{controlError&&<p role="alert">{controlError}</p>}</>:<MembershipSettings key={account.email} planOnly onChanged={membershipChanged}/>}</div></FundingDialog>}
     {!guest&&customizeOpen&&<FundingDialog title="Customize bot" onClose={()=>setCustomizeOpen(false)}><BotCustomization key={`${account.email}:${featureVip}`} name={profile?.displayName||account.assistantName||''} vip={featureVip} onSaved={()=>refreshAccount(true)} onUpgrade={()=>{setCustomizeOpen(false);setReviewVip(true);}}/></FundingDialog>}
-    {!guest&&settingsOpen&&<FundingDialog title="Account details" onClose={()=>{setSettingsOpen(false);setReviewVip(false);}}><div className="simple-account-settings" aria-label="Workspace settings"><section id="account-details"><CustomerIdentity identity={account.identity??null} contact={{email:account.email??'',phone:account.phone??'',pendingEmail:account.pendingEmail}} onSaved={()=>void refreshAccount()}/></section><section id="membership-settings"><MembershipSettings onChanged={membershipChanged}/></section></div></FundingDialog>}
+    {!guest&&settingsOpen&&<FundingDialog title="Account details" onClose={()=>{setSettingsOpen(false);setReviewVip(false);}}><div className="simple-account-settings" aria-label="Workspace settings"><section id="account-details"><CustomerIdentity identity={account.identity??null} contact={{email:account.email??'',phone:account.phone??'',pendingEmail:account.pendingEmail}} onSaved={()=>void refreshAccount()}/></section><details id="membership-settings" className="workspace-membership-details"><summary>Subscription & billing</summary><MembershipSettings onChanged={membershipChanged}/></details></div></FundingDialog>}
     {!guest&&preferencesOpen&&<FundingDialog title="Email & text updates" onClose={()=>setPreferencesOpen(false)}><BotUpdatePreferences phone={account.phone}/></FundingDialog>}
     {!guest&&<OutreachCampaignAcknowledgment statusOnly onStatus={setCampaign}/>}
     <section className="operation-panel" aria-label="Your AI real estate bot">
@@ -190,10 +188,11 @@ export default function Home(){
      {account.mode==='live'&&account.billingModel==='legacy'&&<SpendActivationReview key={activationKey} onAvailabilityChange={updateActivationAvailability} onSaved={()=>void refreshAccount()}/>}
      <CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}>
      <SpendingAllowance/>
-     <LiveWorkspace assistantVipLocked={!featureVip} onOpenAssistant={()=>openAssistant()} propertyRequest={propertyRequest} onAsk={(screeningId,address)=>openAssistant({screeningId,address,nonce:Date.now()})} principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/>
+     <LiveWorkspace onAttentionChange={setAttentionPending} assistantVipLocked={!featureVip} onOpenAssistant={()=>openAssistant()} propertyRequest={propertyRequest} onAsk={(screeningId,address)=>openAssistant({screeningId,address,nonce:Date.now()})} principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/>
      </CreditActionGate>
      </>}
     </section>
+    {!guest&&featureVip&&<PlatformBuyerNetwork key={`${account.email}:${displayVip}`}/>}
     {!guest&&featureVip&&<CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}><WorkspaceAssistant key={account.email} openRequest={assistantOpenRequest} request={assistantRequest} stale={accountError} onAction={assistantAction} onVipRequired={()=>{setReviewVip(true);void refreshAccount();}}/></CreditActionGate>}
     </>}
    </>}
