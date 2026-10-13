@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {createHmac} from 'node:crypto';
+import {browserPhoneIdentity,browserPhoneToken,sealBrowserPhoneSecret,openBrowserPhoneSecret} from '../lib/browser-phone-credentials.ts';
+import {prepareBrowserCalling} from '../scripts/prepare-browser-calling.mjs';
+const env={TWILIO_ACCOUNT_SID:'AC'+'a'.repeat(32),TWILIO_AUTH_TOKEN:'fixture-carrier-auth-token'},secret='fixture-browser-secret';
+const config={provider_account_sid:env.TWILIO_ACCOUNT_SID,api_key_sid:'SK'+'b'.repeat(32),secret_ciphertext:sealBrowserPhoneSecret(secret,env.TWILIO_AUTH_TOKEN),state:'ready'};
+assert.equal(openBrowserPhoneSecret(config.secret_ciphertext,env.TWILIO_AUTH_TOKEN),secret);assert.throws(()=>openBrowserPhoneSecret(config.secret_ciphertext,'wrong-secret-for-decryption'));
+const identity=browserPhoneIdentity('account','actor','attempt');assert.notEqual(identity,browserPhoneIdentity('other','actor','attempt'));assert.notEqual(identity,browserPhoneIdentity('account','other','attempt'));
+const [h,p,s]=browserPhoneToken(config,identity,env,1000).split('.'),payload=JSON.parse(Buffer.from(p,'base64url'));
+assert.equal(s,createHmac('sha256',secret).update(h+'.'+p).digest('base64url'));assert.equal(payload.exp,1900);assert.equal(payload.grants.identity,identity);assert.equal(payload.grants.voice.incoming.allow,true);assert.equal(payload.grants.voice.outgoing,undefined,'Browser tokens cannot dial arbitrary numbers');assert.throws(()=>browserPhoneToken({...config,provider_account_sid:'AC'+'c'.repeat(32)},identity,env));
+let requests=[],saved;
+const deployment={...env,VERCEL_ENV:'production',SUPABASE_URL:'https://fixture.supabase.co',SUPABASE_SECRET_KEY:'fixture-db'};
+const fetcher=async(url,o)=>{requests.push([url,o]);if(url.includes('Keys.json'))return Response.json({sid:config.api_key_sid,secret});if(o.method==='PATCH'){saved=JSON.parse(o.body);return Response.json([saved]);}return Response.json([]);};
+assert.equal((await prepareBrowserCalling({...deployment,VERCEL_ENV:'preview'},fetcher)).status,'not_requested');assert.equal(requests.length,0);
+assert.equal((await prepareBrowserCalling(deployment,fetcher)).status,'ready');assert.equal(requests.filter(([u])=>u.includes('Keys.json')).length,1);assert(!JSON.stringify(saved).includes(secret));assert.equal(openBrowserPhoneSecret(saved.secret_ciphertext,env.TWILIO_AUTH_TOKEN),secret);assert(requests.every(([u])=>!u.includes('/Calls')&&!u.includes('IncomingPhoneNumbers')));
+requests=[];assert.equal((await prepareBrowserCalling(deployment,async()=>{requests.push('read');return Response.json([config]);})).status,'ready');assert.equal(requests.length,1,'Existing key is reused');
+await assert.rejects(()=>prepareBrowserCalling(deployment,async()=>Response.json([{state:'preparing'}])),/UNCONFIRMED/);
+console.log('PASS browser credentials: short-lived receive-only token, tenant/attempt identity, encrypted storage, production-only idempotent setup and no phone-number changes.');

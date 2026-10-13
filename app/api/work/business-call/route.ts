@@ -22,5 +22,5 @@ export async function GET(req:Request){try{
   return new Response(new Uint8Array(await p.recordings.media(row.recording_sid!)),{headers:{...headers,'Content-Type':'audio/mpeg','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'}});
  }
  const latest=await reconcileCustomerPhoneCall(row).catch(()=>row);
- return Response.json({id:latest.id,status:latest.state,ended:!!latest.ended_at,costPending:!!latest.ended_at&&!latest.settled_at,audioAvailable:customerPhoneAudioAvailable(latest)},{headers});
+ return Response.json({id:latest.id,status:latest.state,parentSid:latest.parent_sid,connected:!!latest.recipient_answered_at,ended:!!latest.ended_at,costPending:!!latest.ended_at&&!latest.settled_at,audioAvailable:customerPhoneAudioAvailable(latest)},{headers});
  }catch{return new Response(null,{status:503,headers});}}

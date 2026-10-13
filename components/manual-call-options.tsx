@@ -1,15 +1,18 @@
 'use client';
 import {useEffect,useState,useRef} from 'react';
+import {BrowserCallControls} from '@/components/browser-call-controls';
 import {Phone,Copy} from 'lucide-react';
-type Data={businessNumber?:string|null;personalCalls?:{id:string;state:string;callback_phone:string;ended_at:string|null;audioAvailable?:boolean}[];attempts?:{id:string;createdAt:string;status:string;costPending:boolean}[];contacts:{phone:string;name?:string;available:boolean;reason:string}[];reason?:string};
+type Data={businessNumber?:string|null;personalCalls?:{id:string;state:string;callback_phone:string;connection_type?:string;ended_at:string|null;audioAvailable?:boolean}[];attempts?:{id:string;createdAt:string;status:string;costPending:boolean}[];contacts:{phone:string;name?:string;available:boolean;reason:string}[];reason?:string};
 export function displayContactPhone(phone:string){return phone.replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3');}
 export function ManualCallOptions({screeningId,onTakeover}:{screeningId:string;onTakeover?:()=>void}){
  const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[refresh,setRefresh]=useState(0),[checked,setChecked]=useState(0),[busy,setBusy]=useState(false);
+ const [browserReady,setBrowserReady]=useState(false),[browserBusy,setBrowserBusy]=useState(false);
+ useEffect(()=>{let stopped=false;void fetch('/api/work/browser-call',{cache:'no-store'}).then(r=>r.json()).then(d=>{if(!stopped)setBrowserReady(d.ready===true);}).catch(()=>{});return()=>{stopped=true;};},[]);
  const lock=useRef(false),requestKey=useRef<string|null>(null);
  const [callbackPhone,setCallbackPhone]=useState(''),[callId,setCallId]=useState(''),[callStatus,setCallStatus]=useState('');
  useEffect(()=>{if(!callId||['completed','failed'].includes(callStatus))return;let stopped=false,inFlight=false;async function check(){if(document.hidden||inFlight)return;inFlight=true;try{const r=await fetch('/api/work/business-call?id='+callId,{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(!stopped){setCallStatus(d.status);setNotice(d.status==='completed'?'Call completed.':d.status==='failed'?'Call ended without connecting.':d.status==='connecting'?'Connecting you to the seller…':d.status==='ringing'?'Answer your phone, then press 1 to connect.':'Checking the call. Do not start another call yet.');}}catch{}finally{inFlight=false;}}void check();const timer=setInterval(check,10000);return()=>{stopped=true;clearInterval(timer);};},[callId,callStatus]);
  async function call(phone:string){
-  if(lock.current||callId&&!['completed','failed'].includes(callStatus))return;
+  if(browserBusy||lock.current||callId&&!['completed','failed'].includes(callStatus))return;
   const digits=callbackPhone.replace(/\D/g,'');const callback=digits.length===10?'+1'+digits:'+'+digits;
   if(!/^\+1[2-9]\d{9}$/.test(callback)||callback===phone){setError('Enter your own phone number, different from the seller’s number.');return;}
   if(Date.now()-checked>30000){setRefresh(v=>v+1);setError('Refreshing this contact. Try again once it loads.');return;}
@@ -23,11 +26,13 @@ export function ManualCallOptions({screeningId,onTakeover}:{screeningId:string;o
  async function copy(phone:string){try{await navigator.clipboard.writeText(phone);setNotice('Number copied.');}catch{setNotice(`Copy this number: ${displayContactPhone(phone)}`);}}
  useEffect(()=>{
   const controller=new AbortController();setError('');
-  void fetch(`/api/work/manual-call?screeningId=${encodeURIComponent(screeningId)}`,{cache:'no-store',signal:controller.signal}).then(async r=>{if(!r.ok)throw Error();const next=await r.json() as Data;if(!controller.signal.aborted){setData(next);setChecked(Date.now());const prior=next.personalCalls?.[0];if(prior){setCallbackPhone(value=>value||prior.callback_phone);if(!prior.ended_at){setCallId(prior.id);setCallStatus(prior.state);requestKey.current=prior.id;}}}}).catch(()=>{if(!controller.signal.aborted)setError('Could not load contacts.');});
+  void fetch(`/api/work/manual-call?screeningId=${encodeURIComponent(screeningId)}`,{cache:'no-store',signal:controller.signal}).then(async r=>{if(!r.ok)throw Error();const next=await r.json() as Data;if(!controller.signal.aborted){setData(next);setChecked(Date.now());const prior=next.personalCalls?.[0];if(prior&&prior.connection_type!=='browser'){setCallbackPhone(value=>value||prior.callback_phone);if(!prior.ended_at){setCallId(prior.id);setCallStatus(prior.state);requestKey.current=prior.id;}}}}).catch(()=>{if(!controller.signal.aborted)setError('Could not load contacts.');});
   const timer=setInterval(()=>{if(!document.hidden)setRefresh(v=>v+1);},30000);return()=>{controller.abort();clearInterval(timer);};
  },[screeningId,refresh]);
  return <section className="manual-call-options" aria-label="Call using your business number">
   <div className="contact-section-title"><span className="contact-section-icon"><Phone size={20}/></span><div><h5>Call the seller</h5><p>Talk to the seller from {data?.businessNumber?displayContactPhone(data.businessNumber):'your business number'}.</p></div></div>
+  {browserReady&&data&&<BrowserCallControls screeningId={screeningId} contacts={data.contacts} activeCall={data.personalCalls?.[0]} onStarted={onTakeover} onBusyChange={setBrowserBusy} onFinished={()=>setRefresh(v=>v+1)}/>}
+  <details className="browser-phone-fallback" open={!browserReady}><summary>{browserReady?'Use my phone instead':'Call through my phone'}</summary>
   <p className="contact-help">Answer your phone and press 1 to connect.</p>
   <label className="message-search">Your phone number<input type="tel" autoComplete="tel" value={callbackPhone} onChange={e=>{setCallbackPhone(e.target.value);if(!callId)requestKey.current=null;}} placeholder="(214) 555-0123" disabled={busy||!!callId&&!(['completed','failed'].includes(callStatus))}/></label>
   {callId&&['completed','failed'].includes(callStatus)&&<button type="button" className="contact-secondary" onClick={()=>{setCallId('');setCallStatus('');requestKey.current=null;setRefresh(v=>v+1);}}>New call</button>}
@@ -37,8 +42,10 @@ export function ManualCallOptions({screeningId,onTakeover}:{screeningId:string;o
   {data&&!data.contacts.length&&<p className="contact-feedback">{data.reason??'No phone number available.'}</p>}
   {data?.contacts.filter(c=>c.available).map(c=><div className="seller-contact-card" key={c.phone}>
    <div className="seller-contact-identity"><span className="seller-contact-avatar">{(c.name||'S').slice(0,1).toUpperCase()}</span><div><strong>{c.name||'Saved contact'}</strong><span>{displayContactPhone(c.phone)}</span></div></div>
-   <div className="seller-contact-actions"><button type="button" className="contact-primary" data-credit-action disabled={busy||!!callId||!callbackPhone.trim()} onClick={()=>void call(c.phone)}><Phone size={16}/>{busy?'Connecting…':'Call seller'}</button><button type="button" className="contact-secondary" onClick={()=>void copy(c.phone)}><Copy size={16}/>Copy number</button></div>
+   <div className="seller-contact-actions"><button type="button" className="contact-primary" data-credit-action disabled={browserBusy||busy||!!callId||!!data?.personalCalls?.some(c=>c.connection_type==='browser'&&!c.ended_at)||!callbackPhone.trim()} onClick={()=>void call(c.phone)}><Phone size={16}/>{busy?'Connecting…':'Call seller'}</button><button type="button" className="contact-secondary" onClick={()=>void copy(c.phone)}><Copy size={16}/>Copy number</button></div>
   </div>)}
+  </details>
+  {browserReady&&data&&!data.contacts.length&&<p className="contact-feedback">{data.reason??'No phone number available.'}</p>}
   {data?.personalCalls?.filter(c=>c.audioAvailable).map(c=><div className="contact-feedback" key={c.id}><strong>Listen to your call</strong><audio controls preload="none" aria-label="Play seller call" style={{width:'100%'}} src={'/api/work/business-call?id='+c.id+'&audio=1'}/></div>)}
   {data?.attempts?.map(a=><div className="contact-feedback" key={a.id}><strong>{a.status}</strong><p>{new Date(a.createdAt).toLocaleString('en-US',{hour12:true})}{a.costPending?' · Final call cost pending':''}</p></div>)}
   {!!data?.contacts.some(c=>!c.available)&&<details className="contact-unavailable" open={!data.contacts.some(c=>c.available)}><summary>Unavailable numbers</summary>{data.contacts.filter(c=>!c.available).map(c=><div className="seller-contact-card" key={c.phone}><strong>{c.name||'Saved contact'}</strong><span>{displayContactPhone(c.phone)}</span><p>{c.reason}</p></div>)}</details>}
