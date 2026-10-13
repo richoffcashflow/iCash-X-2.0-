@@ -43,7 +43,7 @@ export function propertyNextAction(property: WorkspaceProperty, work: Context):{
  if(callback) return action('Check the saved callback time below before the next conversation.');
  if(deal && ['closing','under_contract','buyer_selected','assigned','buyer_matched','purchase_signed','assignment_signed','title_open'].includes(deal.stage)) return action('Open buyer and closing progress to see what needs your attention and what is waiting on title.','Open buyers & closing','fulfillment');
  if(property.result.financialCheck.status !== 'eligible') return action('Review the property numbers before discussing an offer.');
- return action('Check the seller conversation for their interest, price and repair needs. Requests needing your decision appear in Needs your review.');
+ return action('Open Texts or Calls to see what the seller said. We’ll show you when a decision needs your attention.');
 }
 export function propertyNextMove(property:WorkspaceProperty,work:Context){return propertyNextAction(property,work).detail;}
 

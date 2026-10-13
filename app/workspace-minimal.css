@@ -192,3 +192,10 @@
  .minimal-workspace .property-contact-dialog .property-call-list{padding-bottom:calc(20px + env(safe-area-inset-bottom))}
  .minimal-workspace .property-contact-dialog .contact-alert{align-items:flex-start;flex-wrap:wrap}
 }
+
+/* A quiet heartbeat: green for confirmed availability, red otherwise. */
+.bot-live-status{display:inline-flex;align-items:center;justify-content:center;width:16px;height:20px;flex:none}
+.bot-live-status i{display:block;width:8px;height:8px;border-radius:50%;background:#f87171;box-shadow:0 0 0 3px #f8717118;animation:bot-live-pulse 2.4s ease-in-out infinite}
+.bot-live-status[data-live=true] i{background:#4ade80;box-shadow:0 0 0 3px #4ade8018}
+@keyframes bot-live-pulse{50%{opacity:.55;transform:scale(.85)}}
+@media(prefers-reduced-motion:reduce){.bot-live-status i{animation:none}}
