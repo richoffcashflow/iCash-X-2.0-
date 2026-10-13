@@ -1,4 +1,4 @@
-import {workAccount} from '@/lib/work-account';
+import {dashboardWorkAccount as workAccount} from '@/lib/dashboard-password';
 import {receptionTarget} from '@/lib/general-reception';
 import {privateHeaders} from '@/lib/required-call-recording';
 import {readRecordedReceptionReadiness} from '@/lib/recorded-reception-readiness';

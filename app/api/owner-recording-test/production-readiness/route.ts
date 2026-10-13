@@ -1,4 +1,4 @@
-import {workAccount} from '@/lib/work-account';
+import {dashboardWorkAccount as workAccount} from '@/lib/dashboard-password';
 import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {privateHeaders} from '@/lib/required-call-recording';
 import {readRecordedOutboundReadiness} from '@/lib/recorded-outbound-readiness';

@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {workAccount} from '@/lib/work-account';
+import {dashboardWorkAccount as workAccount} from '@/lib/dashboard-password';
 import {ownerVoiceConfirmation} from '@/lib/owner-voice-acceptance';
 import {ownerVoiceStatus,startOwnerVoiceAcceptance} from '@/lib/owner-voice-acceptance-service';
 export const runtime='nodejs';

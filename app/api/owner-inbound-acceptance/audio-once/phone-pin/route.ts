@@ -1,7 +1,7 @@
 import {db} from '@/lib/stripe-test';
 import {savedAudioPhonePinReview,saveAudioPhonePinReview} from '@/lib/owner-audio-phone-pin-store';
 import {NextResponse} from 'next/server';
-import {workAccount} from '@/lib/work-account';
+import {dashboardWorkAccount as workAccount} from '@/lib/dashboard-password';
 import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {prepareOwnerAudioPhonePin,applyOwnerAudioPhonePin,restoreOwnerAudioPhonePin,inspectOwnerAudioPhonePin,assertPinReviewCurrent} from '@/lib/owner-audio-phone-pin';
 export const runtime='nodejs';

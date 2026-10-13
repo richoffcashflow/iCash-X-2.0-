@@ -1,12 +1,13 @@
 /** Replace this file when installing the webinar app in a different company's product. */
 import {currentUser} from '@/lib/account-auth';
+import {dashboardCurrentUser} from '@/lib/dashboard-password';
 import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {db} from '@/lib/stripe-test';
 import {webinarSite} from '@/lib/webinar-site';
 
 export async function webinarOwnerIdentity(){
  const ownerId=process.env.WEBINAR_OWNER_USER_ID||(webinarSite.companyKey==='icash-x'?ownerInboundTarget.ownerUserId:null);
- const user=await currentUser(true);return ownerId&&user?.id===ownerId?user:null;
+ const user=await dashboardCurrentUser(true);return ownerId&&user?.id===ownerId?user:null;
 }
 export async function webinarCustomerAccount(){
  const user=await currentUser(true);if(!user)return null;

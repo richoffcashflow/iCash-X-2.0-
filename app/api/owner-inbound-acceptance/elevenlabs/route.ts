@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {workAccount} from '@/lib/work-account';
+import {dashboardWorkAccount as workAccount} from '@/lib/dashboard-password';
 import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {readOwnerElevenLabsReadiness,OwnerElevenLabsReadinessError} from '@/lib/owner-elevenlabs-readiness';
 export const runtime='nodejs';

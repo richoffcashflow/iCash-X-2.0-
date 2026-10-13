@@ -1,7 +1,9 @@
 import {createHash} from 'node:crypto';
 import {db} from '@/lib/stripe-test';
+import {dashboardCurrentUser} from '@/lib/dashboard-password';
 export const voiceHeaders={'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer'};
 export async function voiceTestAccess(req:Request){
+ if(!await dashboardCurrentUser(true))throw new Error('VOICE_TEST_ACCESS_DENIED');
  const token=req.headers.get('authorization')?.replace(/^Bearer /,'')??'';
  if(!/^[a-f0-9]{64}$/.test(token))throw new Error('VOICE_TEST_ACCESS_DENIED');
  const hash=createHash('sha256').update(token).digest('hex');

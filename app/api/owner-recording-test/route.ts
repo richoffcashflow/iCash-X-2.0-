@@ -1,4 +1,4 @@
-import {workAccount} from '@/lib/work-account';
+import {dashboardWorkAccount as workAccount} from '@/lib/dashboard-password';
 import {ownerRecordingServer} from '@/lib/owner-recording-test-server';
 import {ownerRecordingConfirmation} from '@/lib/owner-recording-test';
 import {privateHeaders} from '@/lib/required-call-recording';

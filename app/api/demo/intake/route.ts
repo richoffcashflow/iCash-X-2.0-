@@ -1,7 +1,7 @@
 import {after} from 'next/server';
 import {cookies} from 'next/headers';
 import {createHash,randomBytes} from 'node:crypto';
-import {currentUser} from '@/lib/account-auth';
+import {dashboardCurrentUser as currentUser} from '@/lib/dashboard-password';
 import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {db,guestHash} from '@/lib/stripe-test';
 import {allowedOrigin} from '@/lib/funding-policy';

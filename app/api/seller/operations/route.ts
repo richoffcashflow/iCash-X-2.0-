@@ -1,7 +1,7 @@
 import {sellerOptinReport} from '@/lib/seller-optin-server';
 import {z} from 'zod';
 import {sellerDemandPlan,type SellerDemandStats} from '@/lib/seller-demand';
-import {currentUser} from '@/lib/account-auth';
+import {dashboardCurrentUser as currentUser} from '@/lib/dashboard-password';
 import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {db} from '@/lib/stripe-test';
 import {allowedOrigin} from '@/lib/funding-policy';

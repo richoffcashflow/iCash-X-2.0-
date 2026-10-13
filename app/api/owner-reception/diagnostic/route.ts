@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {workAccount} from '@/lib/work-account';
+import {dashboardWorkAccount as workAccount} from '@/lib/dashboard-password';
 import {db} from '@/lib/stripe-test';
 import {receptionTarget} from '@/lib/general-reception';
 import {readReceptionSetupAnalytics} from '@/lib/reception-setup-analytics';
