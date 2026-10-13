@@ -1,3 +1,4 @@
+import {automationChanged} from '@/lib/automation-outcome';
 import {dispatchCustomerUpdate} from '@/lib/customer-updates-service';
 import {automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '@/lib/live-work-admission';
 import {dispatchAttentionNotification} from '@/lib/attention-notifications-service';
@@ -34,10 +35,10 @@ export async function POST(request:Request){
   try{billing=await settlePendingVoiceUsage(db,ticket.accountId,readVoiceUsagePolicies(process.env.VOICE_USAGE_POLICIES_JSON,process.env.VOICE_USAGE_POLICY_ACTIVATIONS_JSON),reconcileLiveConversation,billingDeadline);}
   catch{billing={status:'review_required'};} // Billing failure never rewrites a successful primary action.
   // Optional alerts get only the remaining deadline and cannot change primary work.
-  if(ticket.kind!=='customer_updates'&&!billingDeadline.aborted){
+  if(automationChanged(result.status)&&ticket.kind!=='customer_updates'&&!billingDeadline.aborted){
    try{await dispatchCustomerUpdate(ticket.accountId,{db,signal:billingDeadline});}catch{/* Optional updates never change completed work or repeat a provider attempt. */}
   }
-  if(ticket.kind!=='customer_attention'&&process.env.ICASH_ATTENTION_EMAIL_ENABLED==='true'&&!billingDeadline.aborted){
+  if(automationChanged(result.status)&&ticket.kind!=='customer_attention'&&process.env.ICASH_ATTENTION_EMAIL_ENABLED==='true'&&!billingDeadline.aborted){
    try{await dispatchAttentionNotification(ticket.accountId,{db,signal:billingDeadline});}catch{/* Durable claims remain held for review; never repeat the primary action. */}
   }
   return NextResponse.json({status:result.status,billing},{headers});

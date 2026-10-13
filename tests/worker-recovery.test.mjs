@@ -18,7 +18,7 @@ time=210000;autoFails=false;await scheduler.run();assert.equal(scheduler.health(
 assert.equal(scheduler.health().body.automation,'available');
 // A long provider attempt starts its backoff only after completion, not before.
 let slowTime=0;const slow=createScheduler({now:()=>slowTime,screening:async()=>false,automation:async()=>{slowTime+=55000;throw Error('timeout');}});
-assert.equal(await slow.run(),0);assert.equal(await slow.run(),15000);
+assert.equal(await slow.run(),0);assert.equal(await slow.run(),30000);
 // Automation backoff grows to, and stays at, five minutes while screening continues.
 let capTime=0;const autoTimes=[];
 const capped=createScheduler({now:()=>capTime,screening:async()=>false,automation:async()=>{autoTimes.push(capTime);throw Error('still unavailable');}});
@@ -37,3 +37,11 @@ let release;const pending=new Promise(resolve=>{release=resolve;});
 const concurrent=createScheduler({screening:()=>pending,automation:async()=>false});const running=concurrent.run();
 await assert.rejects(concurrent.run(),/WORKER_LOOP_ALREADY_RUNNING/);release(false);await running;
 console.log('Worker recovery: independent lanes, backoff, health, fresh tickets and overlap guard passed');
+
+// Empty queues back off to one minute; finding work immediately restores normal cadence.
+let idleTime=0,hasWork=false;const idleCalls=[];
+const idle=createScheduler({now:()=>idleTime,screening:async()=>{idleCalls.push(idleTime);return hasWork;},automation:async()=>false});
+assert.equal(await idle.run(),15000);idleTime=15000;assert.equal(await idle.run(),30000);
+idleTime=45000;assert.equal(await idle.run(),60000);idleTime=105000;assert.equal(await idle.run(),60000);
+hasWork=true;idleTime=165000;assert.equal(await idle.run(),250);
+assert.deepEqual(idleCalls,[0,15000,45000,105000,165000]);

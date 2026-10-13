@@ -5,7 +5,7 @@ import {z} from 'zod';
 import {dealMachinePhoto} from '../lib/property-photo.ts';
 const id='00000000-0000-4000-8000-000000000001',url='https://img.dealmachine.com/sv/1,2.jpg';
 let authorized=true,rows=[],paths=[],lookups=[],cache=[];
-const dependencies={NextResponse:{json:(body,opts)=>({body,...opts})},z,workAccount:async()=>{if(!authorized)throw Error();return {accountId:'account-a'};},db:async path=>{paths.push(path);return rows;},dealMachinePhoto,loadPropertyPhoto:async propertyId=>{lookups.push(propertyId);return dealMachinePhoto({street_view:url});},cachedPropertyPhoto:async(account,screening,load)=>{cache.push({account,screening});return load();}};
+const dependencies={persistentPropertyPhoto:async(_db,_account,_screening,load)=>load(),NextResponse:{json:(body,opts)=>({body,...opts})},z,workAccount:async()=>{if(!authorized)throw Error();return {accountId:'account-a'};},db:async path=>{paths.push(path);return rows;},dealMachinePhoto,loadPropertyPhoto:async propertyId=>{lookups.push(propertyId);return dealMachinePhoto({street_view:url});},cachedPropertyPhoto:async(account,screening,load)=>{cache.push({account,screening});return load();}};
 const source=readFileSync(new URL('../app/api/work/property-photo/route.ts',import.meta.url),'utf8');
 const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 const mod={exports:{}};new Function('require','module','exports',compiled)(()=>dependencies,mod,mod.exports);

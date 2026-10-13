@@ -1,3 +1,4 @@
+import {automationChanged} from '../lib/automation-outcome.ts';
 import assert from 'node:assert/strict';
 import {z} from 'zod';
 import {loadService} from './helpers/simulated-journey-services.mjs';
@@ -47,7 +48,7 @@ assert.equal(workspaceStatus({...a,paused:false}).label,'DISCOVERY READY');
 assert.equal(workspaceNextAction({...a,smsWorkReady:true},{...campaign,released:true}).label,'Start discovery & SMS');
 // The actual route admits only discovery and retains existing receipt/settlement paths.
 let kind='discovery',dispatches=0;const token='00000000-0000-0000-0000-000000000000'.repeat(2);
-const automation=await loadService('app/api/internal/automation/route.ts',{automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation:async()=>({status:'live_work_not_ready'}),NextResponse:response,db:async path=>path==='rpc/icash_consume_automation'?{id:'ticket',accountId:'account',kind,screeningId:'screen'}:[],discoverForAccount:async()=>{dispatches++;return {status:'screening_queued'};},readVoiceUsagePolicies:()=>[],settlePendingVoiceUsage:async()=>({}),reconcileLiveConversation:async()=>{},dispatchAttentionNotification:async()=>{}});
+const automation=await loadService('app/api/internal/automation/route.ts',{automationChanged,automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation:async()=>({status:'live_work_not_ready'}),NextResponse:response,db:async path=>path==='rpc/icash_consume_automation'?{id:'ticket',accountId:'account',kind,screeningId:'screen'}:[],discoverForAccount:async()=>{dispatches++;return {status:'screening_queued'};},readVoiceUsagePolicies:()=>[],settlePendingVoiceUsage:async()=>({}),reconcileLiveConversation:async()=>{},dispatchAttentionNotification:async()=>{}});
 const automatic=()=>automation.POST(new Request('https://example.invalid/api/internal/automation',{method:'POST',headers:{authorization:'Bearer '+token}}));
 assert.equal((await automatic()).body.status,'screening_queued');assert.equal(dispatches,1);
 for(kind of newLiveWorkKinds){if(kind!=='discovery')assert.equal((await automatic()).body.status,'live_work_not_ready',kind);}assert.equal(dispatches,1);

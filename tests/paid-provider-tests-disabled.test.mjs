@@ -61,6 +61,8 @@ test('deployments cannot invoke paid simulation, search or owner-delivery test c
  for(const name of [...scripts,'run-corporate-buyer-search-20261009.mjs','run-owner-buyer-delivery-test.mjs']){
   assert(!pkg.scripts['build:verified'].includes(name),name);
  }
- assert(pkg.scripts['build:verified'].includes('verify-buyer-privacy-release.mjs'));
+ assert(pkg.scripts['providers:configure'].includes('verify-buyer-privacy-release.mjs'));
+ assert(pkg.scripts['build:verified'].includes('verify-release-local.mjs'));
+ assert(!pkg.scripts['build:verified'].includes('providers:configure'));
  assert(pkg.scripts['build:verified'].endsWith('pnpm build'));
 });

@@ -5,6 +5,7 @@ import {smsLength} from '@/lib/sms-length';
 import {reconcileTextAttempt,textStateLabel,type SendAttempt,type TextReceipt} from '@/lib/text-send-state';
 import {CallConversation} from './call-conversation';
 import {conversationTimeline,type ConversationCall} from '@/lib/conversation-timeline';
+import {createPollCadence} from '@/lib/poll-cadence';
 import {messageSpeaker,safeLocalTime} from './workspace-view';
 type Thread={id:string;recipient:string;paused:boolean;manualReply?:boolean;sendReason?:string|null;name?:string;party?:string};
 type Message={id:string;thread_id:string;direction:string;body:string;state:string;created_at:string;retryKey?:string|null;attachments?:{url:string;filename?:string}[]};
@@ -17,17 +18,21 @@ export function DealMessages({dealId,initialThreadId='',contactNames={},active=t
  const scope=JSON.stringify([dealId,threadId,afterThread,page]);
  useEffect(()=>{if(!Object.values(drafts).some(d=>d.trim()))return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[drafts]);
  useEffect(()=>{
-  if(!active)return;const controller=new AbortController();let inFlight=false;
+  if(!active)return;const controller=new AbortController(),cadence=createPollCadence();let inFlight=false,timer:ReturnType<typeof setTimeout>|undefined,delay=5000;
   async function load(){if(document.hidden||inFlight)return;inFlight=true;try{
    const pending=attempts.current[threadId||selectedThread.current];
    const q=new URLSearchParams({dealId,...(afterThread?{afterThread}:{}),...(threadId?{threadId}:{}),...(pending?{requestKey:pending.key}:{}),...page});const response=await fetch(`/api/work/messages?${q}`,{signal:controller.signal,cache:'no-store'});if(!response.ok)throw Error();const next=await response.json() as Data;if(!controller.signal.aborted){
     selectedThread.current=next.threadId??'';
     const attempt=next.threadId?attempts.current[next.threadId]:undefined;
     if(attempt&&reconcileTextAttempt(attempt,next.receipt))setDrafts(d=>d[next.threadId!]?.trim()===attempt.body?{...d,[next.threadId!]:''}:d);
+    const recent=next.messages.some(message=>Date.now()-Date.parse(message.created_at)<60000);
+    delay=cadence.observe(next,!!pending?.busy||!!pending?.held||recent);
     setData({...next,scope});setError('');
    }
-  }catch{if(!controller.signal.aborted)setError('Messages could not refresh. Your draft is still here.');}finally{inFlight=false;}}
-  void load();const timer=setInterval(load,5000);document.addEventListener('visibilitychange',load);return()=>{controller.abort();clearInterval(timer);document.removeEventListener('visibilitychange',load);};
+  }catch{delay=cadence.failed();if(!controller.signal.aborted)setError('Messages could not refresh. Your draft is still here.');}finally{inFlight=false;}}
+  const poll=async()=>{await load();if(!controller.signal.aborted)timer=setTimeout(poll,delay);};
+  const visible=()=>{if(!document.hidden&&!inFlight){clearTimeout(timer);delay=5000;void poll();}};
+  void poll();document.addEventListener('visibilitychange',visible);return()=>{controller.abort();clearTimeout(timer);document.removeEventListener('visibilitychange',visible);};
  },[active,dealId,threadId,page,afterThread,refresh,scope]);
  const current=data?.scope===scope?data.threads.find(t=>t.id===data.threadId):undefined;
  function choose(id:string){setThreadId(id);setPage(null);setError('');}

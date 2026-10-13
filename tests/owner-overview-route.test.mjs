@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
-import {validOwnerOverview,overviewMoney,overviewTime,overviewLeadStatus} from '../lib/owner-overview.ts';
+import {validOwnerOverview,validCostHealth,overviewMoney,overviewTime,overviewLeadStatus} from '../lib/owner-overview.ts';
 import {closingOperationsSchema} from '../lib/deal-completion.ts';
 import {sellerFunnelStages} from '../lib/conversion-funnel.ts';
 const owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7';
 let user={id:owner},queries=[],bad=false,authFails=false;
 const fixture=filters=>({...filters,pageSize:25,timezone:'America/Chicago',startAt:'2026-10-01T05:00:00Z',endAt:'2026-10-10T05:00:00Z',funnel:sellerFunnelStages.map(s=>({key:s.key,count:0})),leadCount:0,reviewCount:0,matchedCount:0,leads:[],usage:{completedCount:0,missingChargeCount:0,chargedCents:0,coveredCents:0,knownCostMicros:0,costMicros:0,marginMicros:0,missingCostCount:0,estimatedCount:0,pendingCount:0}});
-const mocks={closingOperationsSchema,currentUser:async verify=>{assert.equal(verify,true);if(authFails)throw Error('Provider unavailable');return user;},ownerInboundTarget:{ownerUserId:owner},validOwnerOverview,db:async(path,method,body,signal)=>{queries.push({path,method,body,signal});if(path==='rpc/icash_closing_operations')return {signedContracts:0,closedDeals:0,deposits:0,receivedCents:0,receivedDeals:0,stages:[],issues:[],issueCount:0};return bad?null:fixture({days:body.p_days,includeOwner:body.p_include_owner,query:body.p_query,page:body.p_page});}};
+const mocks={validCostHealth,closingOperationsSchema,currentUser:async verify=>{assert.equal(verify,true);if(authFails)throw Error('Provider unavailable');return user;},ownerInboundTarget:{ownerUserId:owner},validOwnerOverview,db:async(path,method,body,signal)=>{queries.push({path,method,body,signal});if(path==='rpc/icash_closing_operations')return {signedContracts:0,closedDeals:0,deposits:0,receivedCents:0,receivedDeals:0,stages:[],issues:[],issueCount:0};return bad?null:fixture({days:body.p_days,includeOwner:body.p_include_owner,query:body.p_query,page:body.p_page});}};
 globalThis.__ownerOverview=mocks;
 const code=ts.transpileModule(readFileSync(new URL('../app/api/admin/overview/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
 const {GET}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(mocks).join(',')+'}=globalThis.__ownerOverview;\n'+code).toString('base64'));
@@ -19,6 +19,9 @@ for(const query of ['days=2','days=30x','includeOwner=1','page=0','page=1.5','pa
 let response=await get('days=7&includeOwner=true&q=%25_&page=2&actor=another-user');assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'private, no-store');assert.equal(response.headers.get('vary'),'Cookie');
 assert.equal(queries[0].path,'rpc/icash_owner_overview_with_funnel');
 assert.deepEqual(queries[0].body,{p_actor:owner,p_days:7,p_include_owner:true,p_query:'%_',p_page:2});assert(queries[0].signal instanceof AbortSignal);
+assert.equal((await response.json()).report.costHealth,null);
+assert(validCostHealth({pendingCount:2,agedCount:1,oldestAt:'2026-10-01T00:00:00Z',unreconciledObservations:3,checkedAt:'2026-10-13T00:00:00Z'}));
+assert.equal(validCostHealth({pendingCount:0,agedCount:1,oldestAt:null,unreconciledObservations:0,checkedAt:'bad'}),false);
 bad=true;response=await get('');assert.equal(response.status,503);assert.deepEqual(await response.json(),{error:'The overview could not load. Try refreshing in a moment.'});
 const filters={days:30,includeOwner:false,query:'',page:1},valid=fixture(filters);
 assert(validOwnerOverview(valid,filters));
