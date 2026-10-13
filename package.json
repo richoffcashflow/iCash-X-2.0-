@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/prepare-reception-prompts.mjs && next build",
+    "build": "node scripts/prepare-reception-prompts.mjs && node --experimental-strip-types scripts/prepare-browser-calling.mjs && next build",
     "start": "next start",
     "test": "node scripts/test-all.mjs",
     "dealmachine:preflight": "node --experimental-strip-types scripts/dealmachine-preflight.mjs",
@@ -44,7 +44,8 @@
     "stripe": "22.6.2",
     "tailwind-merge": "3.6.0",
     "vaul": "^1.1.2",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "@twilio/voice-sdk": "2.18.5"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",

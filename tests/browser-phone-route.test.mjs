@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {z} from 'zod';
+import {loadService} from './helpers/simulated-journey-services.mjs';
+let authorized=true,origin=true,reason=null,ready=true;const events=[];
+const account='11111111-1111-4111-8111-111111111111',actor='22222222-2222-4222-8222-222222222222',screen='33333333-3333-4333-8333-333333333333',id='44444444-4444-4444-8444-444444444444';
+const route=await loadService('app/api/work/browser-call/route.ts',{z,allowedOrigin:()=>origin,workAccount:async options=>{if(!authorized)throw Error('SIGN_IN_REQUIRED');events.push(['auth',options]);return {accountId:account,userId:actor};},db:async(path,method,args)=>{if(path.startsWith('icash_browser_phone_config'))return ready?[{state:'ready'}]:[];assert.equal(path,'rpc/icash_manual_contact_reason');assert.equal(args.p_account,account);assert.equal(args.p_screening,screen);return reason;},browserPhoneIdentity:(a,u,key)=>{assert.equal(a,account);assert.equal(u,actor);assert.equal(key,id);return 'icash_fixture';},browserPhoneToken:()=> 'receive-only-fixture',startCustomerPhoneCall:async args=>{events.push(['start',args]);return {id,parentSid:'CAfixture'};},endCustomerBrowserCall:async(key,a)=>{events.push(['end',key,a]);return {id:key,ended:true};}});
+const request=(patch={})=>route.POST(new Request('https://www.geticashx.com/api/work/browser-call',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'prepare',screeningId:screen,phone:'+12025550101',requestKey:id,...patch})}));
+let r=await request();assert.equal(r.status,200);assert.equal((await r.json()).token,'receive-only-fixture');assert(!events.some(e=>e[0]==='start'),'Preparation does not dial');
+reason='Do not contact.';r=await request();assert.equal(r.status,409);reason=null;
+r=await request({action:'start'});assert.equal(r.status,200);const start=events.find(e=>e[0]==='start')[1];assert.equal(start.browser,true);assert.equal(start.callbackPhone,'client:icash_fixture');assert.equal(start.accountId,account);
+for(const patch of [{callbackPhone:'+12025550199'},{phone:'+442071838750'},{screeningId:'invalid'},{action:'dial',to:'+12025550199'}])assert.equal((await request(patch)).status,409);
+const count=events.length;origin=false;assert.equal((await request({action:'start'})).status,403);assert.equal(events.length,count);origin=true;
+authorized=false;assert.equal((await request()).status,401);authorized=true;ready=false;assert.equal((await request({action:'start'})).status,409);ready=true;
+r=await route.POST(new Request('https://www.geticashx.com/api/work/browser-call',{method:'POST',body:JSON.stringify({action:'end',id})}));assert.equal(r.status,200);assert.deepEqual(events.at(-1),['end',id,account]);assert.equal(events.at(-2)[1].allowInactiveMembership,true,'Ending a call never requires renewal');
+console.log('PASS browser API: auth/origin, saved contact permission, receive-only preparation, server-selected identity, no arbitrary destinations, configuration failure and own-account hangup.');

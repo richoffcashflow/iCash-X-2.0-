@@ -1,0 +1,13 @@
+# Browser calling
+
+Customers open a lead’s Call panel and choose Call seller. Microphone permission comes before any carrier work. The Twilio JavaScript SDK registers a receive-only identity bound to the signed-in account, user and call attempt. The server calls that browser identity, then bridges to the authorized saved seller using the existing business number. Mute and End call stay available during the call. Phone callback remains behind Use my phone instead.
+
+Standard and VIP both keep the existing subscription, contact permissions and credit admission checks. AI buyer outreach and inbound business-number routing are unchanged. No arbitrary dial pad, outgoing SDK grant, or browser-accessible provider credentials are introduced.
+
+The existing recorded-call service keeps its 600-second cap, canonical carrier cost receipts, dual-channel recording, private playback and 30-day retention. Browser calls skip the phone press-1 step. The service plays a short recording notice. The browser leg is quoted at Twilio’s published $0.004/minute, verified October 13, 2026; settlement still uses the carrier’s completed call receipt. Existing telephone callback rates are unchanged.
+
+Apply `20261013053914_browser_customer_calls.sql` before deploying the application. The production-only `prepare-browser-calling.mjs` build step creates one dedicated Standard Twilio API key using the existing server credentials. The key secret is AES-GCM encrypted with a key derived from the existing Twilio Auth Token and stored in a service-role-only, RLS-enabled configuration table. Neither the secret nor credentials appear in logs. Ready configuration is reused. A preparing marker prevents duplicate key creation after an interrupted setup; inspect that result before retrying. Auth Token rotation requires resealing the stored key secret or replacing the dedicated key deliberately.
+
+SDK tokens last 15 minutes and can only receive a call on that attempt’s identity. The browser accepts only the canonical parent Call SID returned by its authenticated API. Duplicate requests reuse the call; closing the panel destroys the device and requests server hangup. A lost dispatch response is reconciled by the unique client identity and signed provider callbacks. Unknown carrier outcomes stay under review instead of redialing automatically or inventing zero cost. Only one unresolved call per account is admitted.
+
+Validation uses local provider fixtures, lifecycle tests, route authorization tests and a local PostgreSQL-compatible migration/settlement scenario. Preview deployments cannot initiate this browser flow. No paid live-call tests were run; a real microphone-to-seller conversation requires an explicitly authorized production call.
