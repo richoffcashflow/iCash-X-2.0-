@@ -196,3 +196,5 @@
  .wb-room .wb-chat-log{height:clamp(220px,40dvh,440px)}
  .wb-room .wb-offer{margin:12px}
 }
+
+.ws-preview-links{display:flex;align-items:center;flex-wrap:wrap;gap:12px 20px;margin:0 0 22px}.ws-preview-links .wb-eyebrow{margin:0}.ws-preview-links a,.ws-preview-links button{display:inline-flex;align-items:center;gap:7px;font:inherit;font-size:13px;color:#333;background:transparent;border:0;padding:6px 0;text-decoration:none;cursor:pointer}.ws-preview-links a:hover,.ws-preview-links button:hover{text-decoration:underline}
