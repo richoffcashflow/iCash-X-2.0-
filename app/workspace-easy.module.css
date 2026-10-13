@@ -388,3 +388,22 @@
  .workspace.workspace.workspace :global(.leads-heading){align-items:center;gap:10px;flex-wrap:wrap}
  .workspace.workspace.workspace :global(.open-workspace-assistant){display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:9px 10px;font-size:12px;white-space:nowrap}
 }
+
+/* Keep navigation readable at narrow widths; details stay in their own panels. */
+.workspace.workspace.workspace :global(.property-library .workspace-filters){display:flex;flex-wrap:wrap;gap:8px}
+.workspace.workspace.workspace :global(.property-library .workspace-filters button){flex:0 1 auto;flex-direction:row;gap:7px;min-height:44px;padding:10px 14px;font-size:13px;white-space:normal;line-height:1.4}
+.workspace.workspace.workspace :global(.property-library .workspace-filters button span){margin:0;flex:none}
+.workspace.workspace.workspace :global(.workspace-account-options){width:216px}
+.workspace.workspace.workspace :global(.workspace-account-options .workspace-vip-menu){color:#74541d;background:#faf0d6}
+.workspace.workspace.workspace :global(.workspace-membership-details){border-top:1px solid #e5e5e5;padding-top:8px}
+.workspace.workspace.workspace :global(.workspace-membership-details>summary){cursor:pointer;min-height:48px;align-content:center;font-size:14px;font-weight:600}
+.workspace.workspace.workspace :global(.attention-single .attention-primary){padding-top:0}
+.workspace.workspace.workspace :global(.attention-more){min-height:44px;white-space:normal;text-align:left}
+.workspace.workspace.workspace :global(.property-details details>summary){min-height:44px;align-content:center;overflow-wrap:anywhere}
+@media(max-width:480px){
+ .workspace.workspace.workspace :global(.property-details){padding:16px}
+ .workspace.workspace.workspace :global(.property-library .workspace-filters button){padding:9px 11px;font-size:12px}
+ .workspace.workspace.workspace :global(.attention-heading){flex-wrap:wrap}
+ .workspace.workspace.workspace :global(.attention-heading-copy){flex:1 1 180px}
+ .workspace.workspace.workspace :global(.property-milestones){flex-wrap:wrap;gap:8px 12px}
+}
