@@ -21,4 +21,10 @@ configured={...base,status:'draft'};data=await(await post({code:'129339'})).json
 configured={...base,nightEnabled:true,nightVersion:{...createNightRecording(base),videoUrl:'https://example.test/night.mp4',faq:'PRIVATE NIGHT'}};owner=false;assert.equal((await post({preview:id,variant:'night'})).status,403);owner=true;
 failChat=true;data=await(await post({preview:id,variant:'night'})).json();assert.equal(data.webinar.videoUrl,configured.nightVersion.videoUrl);assert.equal(data.webinar.recordingVersion,'night');assert.deepEqual(data.messages,[]);assert.ok(!JSON.stringify(data).includes('PRIVATE NIGHT'));
 assert.equal((await post({code:'../../evil'})).status,400);
+configured={...configured,videoUrl:'',nightEnabled:false};failChat=false;
+for(const body of [{code:'129339'},{},{preview:id},{preview:id,variant:'day'}]){
+ const response=await post(body),data=await response.json();
+ assert.equal(response.status,200);assert.equal(data.webinar.videoUrl,configured.nightVersion.videoUrl);
+ assert.equal(data.webinar.recordingVersion,'night');assert.ok(!JSON.stringify(data).includes('PRIVATE NIGHT'));
+}
 console.log('PASS entry route: exact permanent link, scoped history, remembered details, draft/missing links, owner-only Night preview, private sources and video entry through chat outage.');

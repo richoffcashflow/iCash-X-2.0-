@@ -6,7 +6,7 @@ import {validGuest} from '@/lib/funding';
 import {webinarCustomerAccount,webinarCustomerPaid} from '@/lib/webinar-account-adapter';
 import {webinarSite} from '@/lib/webinar-site';
 import {db} from '@/lib/stripe-test';
-import {publicWebinar,settingsSchema,webinarSchema,visitorTimezone,webinarFromRow,offerDestination,type WebinarSettings,type WebinarRow} from '@/lib/webinar-policy';
+import {publicWebinar,settingsSchema,webinarSchema,visitorTimezone,webinarFromRow,offerDestination,hasWebinarVideo,type WebinarSettings,type WebinarRow} from '@/lib/webinar-policy';
 import {sessionWebinarOffers} from '@/lib/webinar-offer-server';
 import {selectOffer} from '@/packages/webinar-engine/src/index';
 import {selectRecording} from '@/lib/webinar-recordings';
@@ -24,7 +24,7 @@ export async function POST(req:Request){try{
  if(i.preview)await webinarOwner();
  const rows=await db<WebinarRow[]>(`icash_webinars?${i.preview?'id=eq.'+i.preview+'&':i.code?'public_code=eq.'+i.code+'&':'parent_webinar_id=is.null&config->>status=eq.published&'}select=config,public_code,parent_webinar_id&order=public_code.asc&limit=1`);
  const current=rows[0]?webinarFromRow(rows[0]):null;
- if(!current||!i.preview&&(current.status!=='published'||!current.videoUrl))return Response.json({unavailable:true,message:'This webinar is not available yet.'},{headers:webinarHeaders});
+ if(!current||!i.preview&&(current.status!=='published'||!hasWebinarVideo(current)))return Response.json({unavailable:true,message:'This webinar is not available yet.'},{headers:webinarHeaders});
  const account=!i.preview?await webinarCustomerAccount():null;
  if(!i.preview&&current.parentWebinarId){
   if(!await webinarVipAccess(account?.id))return Response.json({redirect:webinarSite.checkoutPath},{headers:webinarHeaders});
@@ -72,7 +72,7 @@ export async function POST(req:Request){try{
   if(source)pairedVersion=source.config.recordingVersion==='night'?'night':'day';
  }
  const sessionId=randomUUID();
- const snapshot=snapshotChat((unfinished&&!i.preview)||target.id!==current.id?webinarSchema.parse(webinar):selectRecording(webinarSchema.parse(webinar),timezone,new Date(),settings.routing,i.preview?i.variant??'day':pairedVersion,location),sessionId);
+ const snapshot=snapshotChat((unfinished&&!i.preview)||target.id!==current.id?webinarSchema.parse(webinar):selectRecording(webinarSchema.parse(webinar),timezone,new Date(),settings.routing,i.preview?i.variant:pairedVersion,location),sessionId);
  const session=await db<WebinarSession>('rpc/icash_webinar_begin','POST',{p_visitor:visitor.id,p_id:sessionId,p_config:snapshot,p_advance_from:!i.preview&&journey.kind==='advance'?journey.sessionId:null,p_preview:!!i.preview});
  const messages=await db<{id:string;role:'user'|'assistant';text:string}[]>(`icash_webinar_messages?session_id=eq.${session.id}&select=id,role,text&order=created_at.asc&limit=60`).catch(()=>[]);
  return Response.json({webinar:publicWebinar(webinarSchema.parse(session.config)),...(session.config.id!==current.id?{canonicalPath:webinarLink(session.config)}:{}),sessionId:session.id,progress:session.completed_at?0:session.progress_seconds,name:visitor.name??'',email:visitor.email??'',phone:visitor.phone??'',contactSaved:!!visitor.email&&!!visitor.phone,messages,preview:!!i.preview,serverNow:Date.now()},{headers:webinarHeaders});

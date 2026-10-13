@@ -1,10 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {newWebinar,webinarSchema,publicWebinar} from '../lib/webinar-policy.ts';
+import {newWebinar,webinarSchema,publicWebinar,chooseWebinar,playableWebinarRecordings} from '../lib/webinar-policy.ts';
 import {createNightRecording,editingRecording,patchRecording,selectRecording} from '../lib/webinar-recordings.ts';
 import {webinarLink} from '../lib/webinar-links.ts';
 const day={...newWebinar('00000000-0000-4000-8000-000000000123'),publicCode:'129339',status:'published',videoUrl:'https://example.test/day.mp4'};
 const night={...day,nightEnabled:true,nightVersion:{...createNightRecording(day),videoUrl:'https://example.test/night.mp4',faq:'PRIVATE NIGHT FAQ',chatStyle:'PRIVATE NIGHT STYLE',nameAt:45}};
+test('Nighttime alone publishes and covers every hour, preview and paired VIP fallback',()=>{
+ for(const nightEnabled of [true,false]){
+  const onlyNight={...night,videoUrl:'',nightEnabled};
+  assert.equal(webinarSchema.safeParse(onlyNight).success,true);
+  assert.equal(chooseWebinar([onlyNight]).id,onlyNight.id);
+  assert.deepEqual(playableWebinarRecordings(onlyNight).map(r=>r.version),['night']);
+  for(const time of ['2026-10-06T17:00:00Z','2026-10-07T03:00:00Z'])for(const variant of [undefined,'day','night']){
+   const selected=selectRecording(onlyNight,'America/Chicago',new Date(time),undefined,variant);
+   assert.equal(selected.videoUrl,night.nightVersion.videoUrl);
+   assert.equal(selected.recordingVersion,'night');assert.equal(selected.nameAt,45);
+   assert.equal(selected.nightVersion,null);assert.equal(webinarSchema.safeParse(selected).success,true);
+  }
+ }
+ assert.deepEqual(playableWebinarRecordings({...night,nightEnabled:false}).map(r=>r.version),['day']);
+});
 test('one link stays on Day until its Night recording is ready',()=>{
  assert.equal(webinarLink(day),'/live/129339');
  for(const time of ['2026-10-06T17:00:00Z','2026-10-07T03:00:00Z'])assert.equal(selectRecording(day,'America/Chicago',new Date(time)).videoUrl,day.videoUrl);

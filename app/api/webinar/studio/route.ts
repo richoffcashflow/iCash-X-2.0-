@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import {db} from '@/lib/stripe-test';
-import {webinarSchema,settingsSchema,webinarFromRow,newVipWebinar,webinarOffers,webinarPitchAt,type WebinarRow,type WebinarSettings} from '@/lib/webinar-policy';
+import {webinarSchema,settingsSchema,webinarFromRow,newVipWebinar,playableWebinarRecordings,webinarEndOffer,webinarPitchAt,type WebinarRow,type WebinarSettings} from '@/lib/webinar-policy';
 import {webinarBody,webinarError,webinarHeaders,webinarOrigin,webinarOwner,WebinarError} from '@/lib/webinar-server';
 import {checkoutPublishableKey} from '@/lib/embedded-checkout-policy';
 import {fundingMode} from '@/lib/funding-policy';
@@ -30,8 +30,9 @@ export async function POST(req:Request){try{
  const input=z.object({action:z.literal('save'),webinar:webinarSchema,isNew:z.boolean()}).strict().parse(body);
  const {publicCode:ignoredCode,parentWebinarId:ignoredParent,adEntryWebinarId:ignoredEntry,...details}=input.webinar;void ignoredCode;void ignoredParent;void ignoredEntry;
  const config={...details,intelligenceEnabled:false,pitchAt:webinarPitchAt(input.webinar),revision:input.isNew?1:input.webinar.revision+1,nightVersion:input.webinar.nightVersion?{...input.webinar.nightVersion,pitchAt:webinarPitchAt(input.webinar.nightVersion)}:null};
- if(config.status==='published'&&webinarOffers(config).every(o=>o.expiresAt&&Date.parse(o.expiresAt)<=Date.now()))throw new WebinarError(400,'Every offer has expired. Update a deadline or add an evergreen offer before publishing.');
- if(config.status==='published'&&config.nightEnabled&&config.nightVersion?.videoUrl&&webinarOffers(config.nightVersion).every(o=>o.expiresAt&&Date.parse(o.expiresAt)<=Date.now()))throw new WebinarError(400,'The night recording needs an available offer.');
+ if(config.status==='published')for(const {version,recording} of playableWebinarRecordings({...input.webinar,...config})){
+  if(!webinarEndOffer(recording))throw new WebinarError(400,`The ${version==='night'?'Nighttime':'Daytime'} recording needs an available offer before publishing.`);
+ }
  const rows=input.isNew?await db<WebinarRow[]>('rpc/icash_webinar_create_pair','POST',{p_main:config,p_vip:newVipWebinar(randomUUID(),input.webinar)}):await db<WebinarRow[]>(`icash_webinars?id=eq.${config.id}&revision=eq.${input.webinar.revision}`,'PATCH',{revision:config.revision,config,updated_at:new Date().toISOString()});
  if(!input.isNew&&!rows.length)throw new WebinarError(409,'This session changed in another tab. Reload before saving.');
  return Response.json({webinar:webinarFromRow(rows.find(r=>r.config.id===config.id)!),webinars:rows.map(webinarFromRow)},{headers:webinarHeaders});

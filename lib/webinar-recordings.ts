@@ -12,7 +12,7 @@ export function patchRecording(webinar:Webinar,version:RecordingVersion,patch:Pa
  return {...webinar,...shared,nightVersion:{...(webinar.nightVersion??createNightRecording(webinar)),...recording},recordingVersion:'day'};
 }
 export function selectRecording(webinar:Webinar,timezone:string,now=new Date(),routing={nightStartsAt:18,nightEndsAt:6},preview?:RecordingVersion,location?:ViewerLocation|null):Webinar{
- const night=!!webinar.nightVersion?.videoUrl&&(preview?preview==='night':webinar.nightEnabled&&isNight(timezone,now,routing,location));
+ const night=!!webinar.nightVersion?.videoUrl&&(!webinar.videoUrl||(preview?preview==='night':webinar.nightEnabled&&isNight(timezone,now,routing,location)));
  const selected=editingRecording(webinar,night?'night':'day');
  return {...selected,pitchAt:webinarPitchAt(selected),nightVersion:null,nightEnabled:false,recordingVersion:night?'night':'day'};
 }

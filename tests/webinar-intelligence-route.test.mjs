@@ -6,6 +6,8 @@ import ts from 'typescript';
 import {z} from 'zod';
 import * as policy from '../lib/webinar-policy.ts';
 import {returnVisit,selectOffer,paidAdArrival,confirmedWatch,bestConvertingWebinar,stableWebinarOrder} from '../packages/webinar-engine/src/index.ts';
+import {withOfferDeadlines} from '../packages/webinar-engine/src/offer-deadlines.ts';
+import {timerResponseSchema} from '../lib/webinar-timers.ts';
 import {selectRecording,createNightRecording} from '../lib/webinar-recordings.ts';
 import {webinarLink} from '../lib/webinar-links.ts';
 import {snapshotChat} from '../lib/webinar-variants.ts';
@@ -32,7 +34,8 @@ const db=async(path,method,body)=>{
 async function load(path,deps,key){globalThis[key]=deps;const source=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');return import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.'+key+';\n'+source).toString('base64'));}
 const common={webinarViewerLocation,...policy,z,db,Date:Clock,webinarHeaders:{'Cache-Control':'private, no-store'},WebinarError,webinarBody:req=>req.json(),webinarOrigin:()=>{},webinarLimit:async()=>{},webinarOwner:async()=>{if(!owner)throw new WebinarError(403,'Owner only');},webinarError:e=>Response.json({error:e.message},{status:e.status||503})};
 const returns=await load('../lib/webinar-ad-returns.ts',{...common,returnVisit,paidAdArrival,confirmedWatch,bestConvertingWebinar,stableWebinarOrder,selectRecording,availableWebinarRows:rows=>rows.map(policy.webinarFromRow),webinarConversionRecordings:async()=>stats},'__adReturns');
-const {POST}=await load('../app/api/webinar/start/route.ts',{...common,...returns,webinarLink,randomUUID,randomBytes,selectRecording:(w,t,_now,...rest)=>selectRecording(w,t,new Date(now),...rest),selectOffer,snapshotChat,returnVisit,approximateRegion:()=>null,webinarSite:{workspacePath:'/',checkoutPath:'/webinar/checkout'},webinarVipAccess:async()=>vipPaid,webinarVisitor:async()=>visitor,webinarCustomerAccount:async()=>account,webinarPaid:async()=>false,webinarCustomerPaid:async()=>paid,validGuest:()=>true,guestHash:()=> 'guest',cookies:async()=>({get:()=>({value:'guest'}),set:()=>{}})},'__fixedRoute');
+const offerServer=await load('../lib/webinar-offer-server.ts',{...common,timerResponseSchema,withOfferDeadlines},'__returnOffers');
+const {POST}=await load('../app/api/webinar/start/route.ts',{...common,...returns,...offerServer,webinarLink,randomUUID,randomBytes,selectRecording:(w,t,_now,...rest)=>selectRecording(w,t,new Date(now),...rest),selectOffer,snapshotChat,returnVisit,approximateRegion:()=>null,webinarSite:{workspacePath:'/',checkoutPath:'/webinar/checkout'},webinarVipAccess:async()=>vipPaid,webinarVisitor:async()=>visitor,webinarCustomerAccount:async()=>account,webinarPaid:async()=>false,webinarCustomerPaid:async()=>paid,validGuest:()=>true,guestHash:()=> 'guest',cookies:async()=>({get:()=>({value:'guest'}),set:()=>{}})},'__fixedRoute');
 const post=(body,headers={})=>POST(new Request('https://example.test/api/webinar/start',{method:'POST',headers,body:JSON.stringify({timezone:'America/Chicago',...body})}));
 let data=await(await post({attribution:{ad_id:'55555',email:'ignored@example.invalid'}})).json();
 assert.equal(data.webinar.id,one.id);assert.ok(calls.some(c=>c.path==='rpc/icash_webinar_begin'));assert.ok(!calls.some(c=>c.path.includes('intelligence')),'Legacy enabled settings never assign experiments');assert.equal(calls.find(c=>c.method==='PATCH').body.attribution.email,undefined);
@@ -100,3 +103,5 @@ data=await(await post({code:'123457'})).json();assert.equal(data.webinar.recordi
 const savedNight=vip.nightVersion;vip.nightVersion={...savedNight,videoUrl:''};
 data=await(await post({code:'123457'})).json();assert.equal(data.webinar.recordingVersion,'day');assert.equal(data.webinar.videoUrl,vip.videoUrl);vip.nightVersion=savedNight;
 console.log('PASS matching VIP follows watched Day/Night through clock changes, with empty Night VIP fallback.');
+vip.videoUrl='';history[0].config.recordingVersion='day';
+data=await(await post({code:'123457'})).json();assert.equal(data.webinar.recordingVersion,'night');assert.equal(data.webinar.videoUrl,vip.nightVersion.videoUrl,'Nighttime-only VIP also covers a Daytime buyer');

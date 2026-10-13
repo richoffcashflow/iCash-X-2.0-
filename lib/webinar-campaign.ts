@@ -1,6 +1,6 @@
 import {confirmedWatch,bestConvertingWebinar,stableWebinarOrder,type ConversionRecording} from '../packages/webinar-engine/src/index.ts';
 import {selectRecording} from './webinar-recordings.ts';
-import {webinarOffers,type Webinar,type WebinarSettings} from './webinar-policy.ts';
+import {webinarOffers,hasWebinarVideo,type Webinar,type WebinarSettings} from './webinar-policy.ts';
 import {webinarLink} from './webinar-links.ts';
 import type {WebinarSession} from './webinar-server';
 export type CampaignDestination='smart'|'webinar'|'checkout';
@@ -11,7 +11,7 @@ export function campaignTarget(destination:CampaignDestination,sourceId:string,h
  if(destination==='checkout')return checkout;
  const completion=Date.parse(latest?.completed_at??'');
  if(destination==='smart'&&Number.isFinite(completion)&&completion<=now.getTime()&&now.getTime()-completion<routing.checkoutWindowHours*3600000)return checkout;
- const available=webinars.filter(w=>!w.parentWebinarId&&w.status==='published'&&w.videoUrl).map(w=>selectRecording(w,timezone,now,routing)).filter(w=>webinarOffers(w).some(o=>!o.expiresAt||Date.parse(o.expiresAt)>now.getTime()));
+ const available=webinars.filter(w=>!w.parentWebinarId&&w.status==='published'&&hasWebinarVideo(w)).map(w=>selectRecording(w,timezone,now,routing)).filter(w=>webinarOffers(w).some(o=>!o.expiresAt||Date.parse(o.expiresAt)>now.getTime()));
  const source=available.find(w=>w.id===(latest?.webinar_id??sourceId));
  if(latest&&!latest.completed_at&&source)return {path:webinarLink(source),phase:'resume' as const,title:source.title,sessionId:latest.id};
  const seen=new Set(history.filter(s=>confirmedWatch(s,now)).map(s=>s.webinar_id));

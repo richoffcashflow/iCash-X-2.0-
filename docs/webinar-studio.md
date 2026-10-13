@@ -94,7 +94,7 @@ The owner can write everything manually, draft from a transcript, or generate tw
 
 ## Permanent links and verified value
 
-Create and Duplicate each allocate a fresh numeric code in PostgreSQL. Changing a title, recording, offer or night schedule never changes that code. Session creation and resume are scoped to that webinar, so opening a second link cannot replace an unfinished session on the first. Day is the fallback until a usable, enabled Night recording exists. No CBO/traffic allocation control is shown or enabled.
+Create and Duplicate each allocate a fresh numeric code in PostgreSQL. Changing a title, recording, offer or night schedule never changes that code. Session creation and resume are scoped to that webinar, so opening a second link cannot replace an unfinished session on the first. Either Daytime or Nighttime can be the first published video and cover all hours with its own offers and chat. With both videos present, enabled automatic switching chooses the local recording; otherwise Daytime is used. Preview, paid VIP destinations and follow-up links support either first recording. No CBO/traffic allocation control is shown or enabled.
 
 
 A verified live funding order or settled membership invoice contributes the actual paid amount (including recorded funding tax). Each payment is attributed once to the last started session within seven days, using the server-issued guest binding or authenticated account binding. Self-entered email is not proof of payment. Test/pending payments and billing-review/refund/dispute records are excluded. This measures paid value rather than net profit, LTV or ad-spend ROAS.
