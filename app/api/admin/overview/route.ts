@@ -1,4 +1,4 @@
-import {currentUser} from '@/lib/account-auth';
+import {dashboardCurrentUser as currentUser} from '@/lib/dashboard-password';
 import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {db} from '@/lib/stripe-test';
 import {validOwnerOverview,validCostHealth,type OverviewFilters} from '@/lib/owner-overview';

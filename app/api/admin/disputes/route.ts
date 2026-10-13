@@ -1,4 +1,4 @@
-import {currentUser} from '@/lib/account-auth';
+import {dashboardCurrentUser as currentUser} from '@/lib/dashboard-password';
 import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {disputeIdPattern} from '@/lib/disputes';
 import {listDisputes,prepareDisputeEvidence} from '@/lib/dispute-service';

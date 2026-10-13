@@ -1,4 +1,4 @@
-import {currentUser} from '@/lib/account-auth';
+import {dashboardCurrentUser as currentUser} from '@/lib/dashboard-password';
 import {db} from '@/lib/stripe-test';
 
 /** Membership is separately provisioned. Customer metadata and email never grant access. */

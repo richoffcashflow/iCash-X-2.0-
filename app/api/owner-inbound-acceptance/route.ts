@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
-import {workAccount} from '@/lib/work-account';
+import {dashboardWorkAccount as workAccount} from '@/lib/dashboard-password';
 import {ownerInboundConfirmation} from '@/lib/owner-inbound-acceptance';
 import {ownerInboundStatus,armOwnerInbound,cancelOwnerInbound,reconcileOwnerInboundRun} from '@/lib/owner-inbound-acceptance-service';
 export const runtime='nodejs';

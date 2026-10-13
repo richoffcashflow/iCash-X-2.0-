@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
-import {workAccount} from '@/lib/work-account';
+import {dashboardWorkAccount as workAccount} from '@/lib/dashboard-password';
 import {isAudioOwner,ownerAudioOnceConfirmation} from '@/lib/owner-audio-once';
 import {audioOnceStatus,armAudioOnce,cancelAudioOnce,reconcileAudioOnceRun} from '@/lib/owner-audio-once-service';
 export const runtime='nodejs';

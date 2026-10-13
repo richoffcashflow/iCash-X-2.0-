@@ -1,4 +1,4 @@
-import {workAccount} from '@/lib/work-account';
+import {dashboardWorkAccount as workAccount} from '@/lib/dashboard-password';
 import {ownerCallReplyInspectorServer} from '@/lib/owner-call-reply-inspector-server';
 import {privateHeaders,uuid} from '@/lib/required-call-recording';
 export const runtime='nodejs';export const dynamic='force-dynamic';export const maxDuration=30;

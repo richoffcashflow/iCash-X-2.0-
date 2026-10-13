@@ -17,7 +17,7 @@ export async function saveSession(s:AuthSession) {
  jar.set("icash_access",s.access_token,{...options,maxAge:Math.min(s.expires_in,3600)});
  jar.set("icash_refresh",s.refresh_token,{...options,maxAge:60*60*24*30});
 }
-export async function clearSession(){const jar=await cookies();jar.delete("icash_access");jar.delete("icash_refresh");}
+export async function clearSession(){const jar=await cookies();jar.delete("icash_access");jar.delete("icash_refresh");jar.set("__Host-icash_dashboard",'',{httpOnly:true,secure:true,sameSite:'strict',path:'/',maxAge:0});}
 export async function currentUser(refresh=false):Promise<AuthUser|null> {
  const jar=await cookies();const access=jar.get("icash_access")?.value;
  if(access) {try{const u=await authRequest<AuthUser>("user",undefined,access);if(u.email_confirmed_at)return u;}catch(e){if(!(e instanceof AuthRequestError)||![400,401,403].includes(e.status))throw e;}}

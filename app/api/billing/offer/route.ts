@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
-import {currentUser} from '@/lib/account-auth';
+import {dashboardCurrentUser as currentUser} from '@/lib/dashboard-password';
 import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {db} from '@/lib/stripe-test';
 import {allowedOrigin,fundingMode} from '@/lib/funding-policy';

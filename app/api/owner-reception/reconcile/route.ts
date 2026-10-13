@@ -1,4 +1,4 @@
-import {workAccount} from '@/lib/work-account';
+import {dashboardWorkAccount as workAccount} from '@/lib/dashboard-password';
 import {db} from '@/lib/stripe-test';
 import {receptionTarget} from '@/lib/general-reception';
 import {reconcileReception} from '@/lib/general-reception-reconcile';

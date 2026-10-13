@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {workAccount} from '@/lib/work-account';
+import {dashboardWorkAccount as workAccount} from '@/lib/dashboard-password';
 import {db} from '@/lib/stripe-test';
 import {receptionTarget,boundedBody} from '@/lib/general-reception';
 import {applyReceptionSetup,reviewReceptionSetup,ownerQuickTestCallerRestriction,type SetupAction} from '@/lib/reception-setup';

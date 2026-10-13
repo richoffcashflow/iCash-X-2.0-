@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {currentUser} from '@/lib/account-auth';
+import {dashboardCurrentUser as currentUser} from '@/lib/dashboard-password';
 import {db} from '@/lib/stripe-test';
 import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {readOutboundReadiness,validOutboundTemplate,type OutboundTemplate} from '@/lib/owner-outbound-readiness';
