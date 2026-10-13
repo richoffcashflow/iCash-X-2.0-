@@ -8,33 +8,47 @@ import {dashboardCookie,dashboardLifetime,dashboardRememberLifetime,issueDashboa
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer'};
-async function principal(){
- const u=await currentUser(true);if(!u)return null;
+async function principalFor(u:Awaited<ReturnType<typeof currentUser>>){
+ if(!u)return null;
  if(u.id===ownerInboundTarget.ownerUserId||u.id===process.env.WEBINAR_OWNER_USER_ID)return u;
  const [op]=await db<{expires_at:string;revoked_at:string|null;scopes:string[]}[]>(`icash_trusted_operators?user_id=eq.${u.id}&select=expires_at,revoked_at,scopes&limit=1`);
  return op&&!op.revoked_at&&Date.parse(op.expires_at)>Date.now()&&op.scopes.some(s=>['support','authority_review'].includes(s))?u:null;
 }
+async function principal(){return principalFor(await currentUser(true));}
 export async function GET(){try{
  const u=await principal();if(!u)return Response.json({allowed:false,unlocked:false},{status:403,headers});
  const jar=await cookies();return Response.json({allowed:true,unlocked:validDashboardProof(jar.get(dashboardCookie)?.value,jar.get('icash_access')?.value,process.env.SUPABASE_SECRET_KEY,u.id)},{headers});
  }catch{return Response.json({error:'Dashboard access is temporarily unavailable.'},{status:503,headers});}}
 export async function POST(req:Request){
  if(!allowedOrigin(req))return new Response(null,{status:403,headers});
+ let temporaryAccess:string|undefined;
  try{
-  const u=await principal();if(!u?.email)return Response.json({error:'Sign in with your dashboard account first.'},{status:403,headers});
-  await limitRequest(req,'dashboard-password',u.id,5,900);
+  const signedIn=await currentUser(true);
+  let u=await principalFor(signedIn);
+  if(signedIn&&!u)throw Error();
+  await limitRequest(req,'dashboard-password',u?.id??ownerInboundTarget.ownerUserId,5,900);
   const raw=await req.text();if(raw.length>2048)throw Error();const body=JSON.parse(raw);
   if(!body||Object.keys(body).some(k=>!['password','remember'].includes(k))||typeof body.password!=='string'||!body.password||body.password.length>512||(body.remember!==undefined&&typeof body.remember!=='boolean'))throw Error();
-  const verified=await authRequest<{access_token:string;user:{id:string;email_confirmed_at?:string}}>('token?grant_type=password',{email:u.email,password:body.password});
-  // The password grant is verification only: revoke its refresh session and retain the original login.
-  await authRequest('logout?scope=local',{},verified.access_token);
-  if(verified.user.id!==u.id||!verified.user.email_confirmed_at)throw Error();
   const jar=await cookies(),key=process.env.SUPABASE_SECRET_KEY;
-  if(!key)throw Error();
+  if(!key||key.length<32)throw Error();
+  if(!u){
+   // Resolve only the fixed platform owner on the server, never a client-selected account.
+   const record=await authRequest<{id:string;email?:string;email_confirmed_at?:string}>(`admin/users/${ownerInboundTarget.ownerUserId}`);
+   if(record.id!==ownerInboundTarget.ownerUserId||!record.email_confirmed_at)throw Error();
+   u=record;
+  }
+  if(!u.email)throw Error();
+  const verified=await authRequest<{access_token:string;refresh_token:string;expires_in:number;user:{id:string;email_confirmed_at?:string}}>('token?grant_type=password',{email:u.email,password:body.password});
+  temporaryAccess=verified.access_token;
+  if(verified.user.id!==u.id||!verified.user.email_confirmed_at)throw Error();
   const lifetime=body.remember===true?dashboardRememberLifetime:dashboardLifetime;
-  jar.set(dashboardCookie,issueDashboardProof(jar.get('icash_access')?.value??'',u.id,key,Date.now(),lifetime),{httpOnly:true,secure:true,sameSite:'strict',path:'/',maxAge:lifetime});
+  const proof=issueDashboardProof(signedIn?jar.get('icash_access')?.value??'':verified.access_token,u.id,key,Date.now(),lifetime);
+  if(signedIn){await authRequest('logout?scope=local',{},verified.access_token);temporaryAccess=undefined;}
+  else{await saveSession(verified);temporaryAccess=undefined;}
+  jar.set(dashboardCookie,proof,{httpOnly:true,secure:true,sameSite:'strict',path:'/',maxAge:lifetime});
   return Response.json({unlocked:true},{headers});
  }catch{return Response.json({error:'Could not unlock. Check your account password, or wait 15 minutes if you have tried several times.'},{status:403,headers});}
+ finally{if(temporaryAccess)try{await authRequest('logout?scope=local',{},temporaryAccess);}catch{/* Failed grants are never saved to browser cookies. */}}
 }
 export async function DELETE(req:Request){if(!allowedOrigin(req))return new Response(null,{status:403,headers});(await cookies()).set(dashboardCookie,'',{httpOnly:true,secure:true,sameSite:'strict',path:'/',maxAge:0});return Response.json({unlocked:false},{headers});}
 
