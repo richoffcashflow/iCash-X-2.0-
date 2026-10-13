@@ -9,6 +9,24 @@ const early=sellerOfferQualification({transcript:ownerOnly});
 assert.equal(early.ready,false);assert.match(early.nextQuestion,/good time/);
 assert(early.missing.includes('situation'));assert(early.missing.includes('condition'));
 assert.equal(sellerOfferQualification({transcript:qualifiedSellerTurns}).ready,true);
+// The October 13 call repeated this answer until the caller finally said "vacant".
+for(const [question,answer] of [
+ ['Does anyone currently live in the property?','No one lives in the property.'],
+ ['Is anyone living in the property right now?','No.'],
+ ['Who lives there?','My brother.'],
+ ['Is anybody living there?','I do not know.'],
+ ['Anything else about the property?','Nobody lives there.'],
+ ['Anything else about the property?','No one is living in the house.'],
+ ['Anything else about the property?','My tenants live there.'],
+]){
+ const result=sellerOfferQualification({transcript:[a(question),u(answer)]});
+ assert.equal(result.ready,false,'occupancy alone cannot authorize an offer');
+ assert(!result.missing.includes('occupancy'),answer);
+}
+for(const answer of ['Pardon?','I did not understand.']){
+ const result=sellerOfferQualification({transcript:[a('Does anyone currently live there?'),u(answer)]});
+ assert(result.missing.includes('occupancy'),'a request to repeat is not an occupancy answer');
+}
 for(const [question,answer] of [['Is this the owner of 45 Fixture Lane?','No, wrong person.'],['Are you looking to sell?','No, not interested.'],['Is now a good time?','No, I am busy.'],['Is it listed with an agent?','Yes.']]){
  const result=sellerOfferQualification({transcript:[...qualifiedSellerTurns,a(question),u(answer)]});assert.equal(result.ready,false);assert.equal(result.stop,true,answer);
 }

@@ -100,6 +100,36 @@ try{
  });
  await isolated(async()=>{const stale=(await one("insert into icash_operation_rates(operation,version,charge_cents,costs_micros,buffer_bps,evidence_ref,verified_at,expires_at,enabled,voice_max_duration_seconds) select operation,'required-audio-30d-speech-v1:stale',charge_cents,costs_micros,buffer_bps,evidence_ref,now()-interval '2 days',now()-interval '1 day',true,voice_max_duration_seconds from icash_operation_rates where id=$1 returning id",[rate])).id;assert.equal(await rpc('icash_reserve_flexible_voice',{p_account:account,p_job:job.id,p_rate:stale,p_permission_until:p.permission_until}),null,'stale quote cannot fund call');});
  await isolated(async()=>{await q("update icash_operating_budget set require_company_reserve=false");await q('insert into icash_spend_activations(account_id,enabled,customer_cap_cents) values($1,true,101)',[account]);assert.equal(await reserve(),null,'does not increase activation cap to fund a call');});
+ // Replay today's positive-balance / two-minute failure against the current
+ // usage policy and the production duration fix, without a provider request.
+ await isolated(async()=>{
+  const fn=(file,name)=>{const text=read(file),start=text.search(new RegExp('create(?: or replace)? function public\\.'+name+'\\s*\\(','i'));assert(start>=0,name);const tail=text.slice(start),tag=tail.match(/\$(?:function)?\$/)[0],first=tail.indexOf(tag),last=tail.indexOf(tag,first+tag.length);return tail.slice(0,tail.indexOf(';',last)+1);};
+  const usage='supabase/migrations/20261008182808_available_credit_usage.sql';
+  await pg.exec('create or replace function icash_reception_credit_bound(uuid,text,uuid) returns jsonb language sql as $$select null::jsonb$$;');
+  for(const name of ['icash_daily_allowance','icash_reserve_credit','icash_reserve_before_membership','icash_reserve_before_fractional','icash_reserve_paced_voice','icash_call_credit_available'])await pg.exec(fn(usage,name));
+  await pg.exec(fn(usage,'icash_reserve_flexible_voice'));
+  await pg.exec(read('supabase/migrations/20261013184500_preserve_active_call_duration.sql').match(/do \$outbound\$[\s\S]*?end \$outbound\$;/)[0]);
+  const normal=()=>rpc('icash_reserve_flexible_voice',{p_account:account,p_job:job.id,p_rate:rate,p_permission_until:p.permission_until,p_financial_checked_at:new Date(Date.now()-1000).toISOString(),p_financial_eligible:true});
+  for(const cents of [1,110]){
+   await q('savepoint duration_case');
+   try{
+    await q("update icash_screening_jobs set result=jsonb_set(result,'{financialCheck,status}','\"eligible\"') where id=$1",[screening]);
+    await q('update icash_wallets set balance_cents=$1,reserved_cents=0 where account_id=$2',[cents,account]);
+    const result=await normal();assert.equal(result.maxSeconds,600,'positive credits do not shorten a qualified seller call');
+    assert.equal((await normal()).maxSeconds,600,'retry preserves the original call authorization');
+    const wallet=await one('select balance_cents,reserved_cents from icash_wallets where account_id=$1',[account]);
+    assert.equal(wallet.balance_cents,cents);assert.equal(wallet.reserved_cents,0);
+    assert.equal((await one('select count(*)::int n from icash_operation_spend where operation_key=$1',['voice:'+job.id])).n,1);
+    await q("update icash_operation_spend set state='dispatched' where operation_key=$1",['voice:'+job.id]);
+    assert.equal(await rpc('icash_call_credit_available',{p_account:account,p_operation:'voice:'+job.id}),true);
+    await q('update icash_wallets set balance_cents=0 where account_id=$1',[account]);
+    assert.equal(await rpc('icash_call_credit_available',{p_account:account,p_operation:'voice:'+job.id}),false,'actual exhaustion still stops usage');
+   }finally{await q('rollback to savepoint duration_case');await q('release savepoint duration_case');}
+  }
+  await q('update icash_wallets set balance_cents=0 where account_id=$1',[account]);assert.equal(await reserve(),null,'empty wallet still blocks admission');
+  await q('update icash_wallets set balance_cents=110 where account_id=$1',[account]);assert.equal((await reserve()).maxSeconds,120,'financially limited intake keeps its separate hard limit');
+  console.log('PASS positive-credit seller calls keep 600 seconds; retries, actual-zero stop, no wallet hold, and limited intake preserved.');
+ });
  const funded=await reserve();assert(funded,'short call starts below full quote');assert.equal(funded.maxSeconds,120,'limited contact stays brief');
  const spend=await one("select charge_cap_cents from icash_operation_spend where operation_key=$1",['voice:'+job.id]);assert(spend.charge_cap_cents<=226,'fits current 50% daily allowance');
  const before=(await one('select reserved_cents from icash_wallets where account_id=$1',[account])).reserved_cents;
