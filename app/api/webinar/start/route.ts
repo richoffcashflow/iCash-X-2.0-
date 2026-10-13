@@ -6,7 +6,8 @@ import {validGuest} from '@/lib/funding';
 import {webinarCustomerAccount,webinarCustomerPaid} from '@/lib/webinar-account-adapter';
 import {webinarSite} from '@/lib/webinar-site';
 import {db} from '@/lib/stripe-test';
-import {publicWebinar,settingsSchema,webinarSchema,visitorTimezone,webinarFromRow,webinarOffers,offerDestination,type WebinarSettings,type WebinarRow} from '@/lib/webinar-policy';
+import {publicWebinar,settingsSchema,webinarSchema,visitorTimezone,webinarFromRow,offerDestination,type WebinarSettings,type WebinarRow} from '@/lib/webinar-policy';
+import {sessionWebinarOffers} from '@/lib/webinar-offer-server';
 import {selectOffer} from '@/packages/webinar-engine/src/index';
 import {selectRecording} from '@/lib/webinar-recordings';
 import {webinarViewerLocation} from '@/lib/webinar-viewer-location';
@@ -50,7 +51,7 @@ export async function POST(req:Request){try{
   const priorSessionId=journey.sessionId;
   const previous=history.find(h=>h.id===priorSessionId)!;
   const lastOpened=offers.find(o=>o.session_id===previous.id&&o.kind==='checkout_opened'&&o.event_key.startsWith('offer:'))?.event_key.slice(6);
-  const offer=selectOffer(webinarOffers(previous.config),previous.max_seconds,Date.now(),lastOpened);
+  const offer=selectOffer(await sessionWebinarOffers(previous,previous.max_seconds),previous.max_seconds,Date.now(),lastOpened);
   if(offer)return Response.json({redirect:offer.action==='checkout'?`${offerDestination(offer)}?webinar_session=${previous.id}`:offerDestination(offer)},{headers:webinarHeaders});
   journey={kind:'advance',sessionId:previous.id};
  }

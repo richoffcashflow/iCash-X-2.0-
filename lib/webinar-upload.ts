@@ -11,7 +11,7 @@ export async function uploadWebinarFile(file:File,onProgress:(n:number)=>void,si
   try{
    const end=Math.min(offset+6*1024*1024,file.size);
    const res=await fetch(url,{method:'PATCH',headers:{...headers,'Content-Type':'application/offset+octet-stream','Upload-Offset':String(offset)},body:file.slice(offset,end),signal});
-   if(!res.ok)throw Error(`Video upload interrupted (HTTP ${res.status}). Please retry.`);const next=Number(res.headers.get('Upload-Offset'));if(!Number.isFinite(next)||next<=offset||next>file.size)throw Error('Invalid upload progress');offset=next;attempts=0;onProgress(Math.round(100*offset/file.size));
+   if(!res.ok)throw Error(`Upload interrupted (HTTP ${res.status}). Please retry.`);const next=Number(res.headers.get('Upload-Offset'));if(!Number.isFinite(next)||next<=offset||next>file.size)throw Error('Invalid upload progress');offset=next;attempts=0;onProgress(Math.round(100*offset/file.size));
   }catch(e){
    if(signal?.aborted||++attempts>3)throw e;
    await new Promise(r=>setTimeout(r,Math.min(1000*2**attempts,8000)));

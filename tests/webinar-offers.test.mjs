@@ -12,3 +12,19 @@ test('offer URLs reject executable, credentialed and disguised cross-site paths'
 test('ambiguous or out-of-range offers cannot publish',()=>{for(const patch of [{offers:[offer('a',5),offer('a',10)]},{offers:[offer('a',14401)]},{offers:[offer('a',1801)]},{offers:[offer('a',10)],endOfferId:'missing'},{offers:Array.from({length:13},(_,i)=>offer('a'+i,10))}])assert.equal(webinarSchema.safeParse({...w(),...patch}).success,false);});
 test('hours, minutes and seconds round-trip and clamp each field',()=>{assert.deepEqual(splitDuration(3661),{hours:1,minutes:1,seconds:1});assert.equal(changeDurationUnit(61,'hours',2),7261);assert.equal(changeDurationUnit(3600,'minutes',2),3720);assert.equal(changeDurationUnit(3600,'seconds',5),3605);assert.equal(changeDurationUnit(0,'minutes',100),3540);assert.equal(changeDurationUnit(0,'hours',20),14400);assert.equal(changeDurationUnit(100,'hours',-1),100);assert.equal(formatWatchTime(3661),'1:01:01');assert.equal(formatWatchTime(61),'1:01');});
 test('permanent webinar links do not enable traffic optimization',()=>{const result=settingsSchema.parse({enabled:false,fromEmail:'',postalAddress:'',subjects:['a','b','c'],messages:['a','b','c'],optimizer:{enabled:false,explorationPercent:20,minVisitors:100}});assert.equal(result.optimizer.enabled,false);});
+
+import {withOfferDeadlines} from '../packages/webinar-engine/src/offer-deadlines.ts';
+import {webinarOfferImage,defaultWebinarOfferImage} from '../lib/webinar-policy.ts';
+test('relative offers require a saved deadline and close at the earlier fixed or viewer deadline',()=>{
+ const now=Date.parse('2026-10-13T01:00:00Z'),a=offer('first',10,{durationSeconds:120}),b=offer('next',50,{durationSeconds:120});
+ assert.equal(selectOffer(withOfferDeadlines([a],{}),10,now),null,'No unsaved or invented browser deadline');
+ const saved={first:new Date(now+120000).toISOString(),next:new Date(now+240000).toISOString()};
+ assert.equal(selectOffer(withOfferDeadlines([a,b],saved),20,now).id,'first');
+ assert.equal(selectOffer(withOfferDeadlines([a,b],saved),60,now+120000,'first').id,'next');
+ assert.equal(selectOffer(withOfferDeadlines([a],saved),20,now+120000),null,'Deadline is exclusive');
+ assert.equal(selectOffer(withOfferDeadlines([{...a,expiresAt:new Date(now-1).toISOString()}],saved),20,now),null);
+ assert.equal(withOfferDeadlines([{...a,expiresAt:new Date(now+999000).toISOString()}],saved)[0].expiresAt,saved.first);
+ assert.equal(webinarOfferImage(a),defaultWebinarOfferImage);
+ assert.equal(webinarOfferImage({...a,imageUrl:'/custom.png'}),'/custom.png');
+ for(const patch of [{durationSeconds:0},{durationSeconds:604801},{durationSeconds:1.5},{imageUrl:'javascript:alert(1)'},{imageUrl:'//evil.test/image'}])assert.equal(webinarSchema.safeParse({...w(),offers:[{...a,...patch}]}).success,false);
+});

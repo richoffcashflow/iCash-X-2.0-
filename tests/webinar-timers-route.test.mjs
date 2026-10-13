@@ -34,6 +34,6 @@ superseded = true; assert.deepEqual((await (await post()).json()).deadlines, {})
 assert.equal(calls.length, 0);
 const response = await post(), data = await response.json();
 assert.equal(response.status, 200); assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
-assert.deepEqual(Object.keys(data).sort(), ['deadlines', 'serverNow']);
+assert.deepEqual(Object.keys(data).sort(), ['deadlines', 'offerDeadlines', 'serverNow']);
 assert.deepEqual(calls[0], {path: 'rpc/icash_webinar_timers', method: 'POST', body: {p_visitor: id(1), p_session: id(2), p_seconds: 30}});
 console.log('Webinar timers API passed: ownership, origin, immutable server deadlines, preview isolation and safe responses.');

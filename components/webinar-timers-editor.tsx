@@ -26,6 +26,6 @@ export function WebinarTimersEditor({webinar, onChange}: {webinar: Webinar; onCh
       <details className="ws-advanced"><summary>When the timer ends</summary><label className="wb-label">At zero<select value={timer.onExpire} onChange={event => edit(timer.id, {onExpire: event.target.value as WebinarTimer['onExpire']})}><option value="hide">Hide the timer</option><option value="message">Show a message</option></select></label>{timer.onExpire === 'message' && <label className="wb-label">Finished message<input value={timer.expiredMessage} maxLength={150} onChange={event => edit(timer.id, {expiredMessage: event.target.value})}/></label>}</details>
       <div className="wb-timer ws-timer-preview" aria-label="Timer appearance preview"><Clock size={18}/><span>{timer.label || 'Time remaining'}</span><strong>{timer.mode === 'duration' ? formatWatchTime(timer.durationSeconds) : '09:42'}</strong></div>
     </section>)}
-    <p className="ws-hint">Timers change the room display. To close an offer, set its actual closing date in Offers. Day and Night have their own timers.</p>
+    <p className="ws-hint">Timers change the room display. To close an offer, enable its countdown or set a fixed closing date in Offers. Day and Night have their own timers.</p>
   </div>;
 }

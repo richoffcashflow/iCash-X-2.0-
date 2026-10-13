@@ -6,6 +6,7 @@ import {verifyWebinarLifecycle} from './test-webinar-lifecycle-db.mjs';
 import {verifyWebinarCampaign} from './test-webinar-campaign-db.mjs';
 import {verifyWebinarVip} from './test-webinar-vip-db.mjs';
 import {verifyWebinarFollowups} from './test-webinar-followups-db.mjs';
+import {verifyWebinarOfferDeadlines} from './test-webinar-offer-deadlines-db.mjs';
 import {verifyWebinarTimers} from './test-webinar-timers-db.mjs';
 import {verifyWebinarIntelligence} from './test-webinar-intelligence-db.mjs';
 import {readFileSync} from 'node:fs';
@@ -215,7 +216,9 @@ try{
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261007022412_webinar_intelligence_stops.sql',import.meta.url),'utf8'));
  await verifyWebinarIntelligence(q,config,webinar,secondWebinar);
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261007013308_webinar_timers.sql',import.meta.url),'utf8'));
+ await pg.exec(readFileSync(new URL('../supabase/migrations/20261013033628_webinar_offer_deadlines.sql',import.meta.url),'utf8'));
  await verifyWebinarTimers(q,config);
+ await verifyWebinarOfferDeadlines(q,config);
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261007185116_webinar_smart_followups.sql',import.meta.url),'utf8'));
  await verifyWebinarFollowups(q,config);
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261007203314_webinar_fixed_links_vip.sql',import.meta.url),'utf8'));
