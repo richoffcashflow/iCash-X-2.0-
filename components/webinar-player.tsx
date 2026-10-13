@@ -1,6 +1,6 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {Maximize,Pause,Play,Volume2,VolumeX} from 'lucide-react';
+import {Play,VolumeX} from 'lucide-react';
 import {savePosition,seekToPosition} from '@/lib/webinar-playback';
 
 type Props={sessionId:string;videoUrl:string;posterUrl:string;title:string;progress:number;preview:boolean;onProgress:(seconds:number)=>void;onStarted:()=>void;onCheckpoint:()=>void;onPlayingChange:(playing:boolean)=>void;onEnded:()=>void};
@@ -29,8 +29,6 @@ export function WebinarPlayer(props:Props){
  function rememberMute(value:boolean){mutedByViewer.current=value;try{if(value)sessionStorage.setItem('icash-webinar-muted','true');else sessionStorage.removeItem('icash-webinar-muted');}catch{/* Sound controls work without browser storage. */}}
  function listen(){rememberMute(false);void attemptPlay(true);}
  function play(){void attemptPlay(!mutedByViewer.current);}
- function pause(){++playAttempt.current;video.current?.pause();}
- function toggleMute(){const v=video.current;if(!v)return;if(v.muted){listen();return;}++playAttempt.current;rememberMute(true);v.muted=true;setMuted(true);}
  useEffect(()=>{
   alive.current=true;setOffline(!navigator.onLine);
   const hidden=()=>{
@@ -56,10 +54,6 @@ export function WebinarPlayer(props:Props){
   try{if(sessionStorage.getItem('icash-webinar-muted')==='true'){mutedByViewer.current=true;v.muted=true;setMuted(true);}}catch{/* Muting does not require storage. */}
   loaded.current=true;void attemptPlay();
  }
- async function fullscreen(){
-  const v=video.current as (HTMLVideoElement&{webkitEnterFullscreen?:()=>void})|null;
-  try{if(v?.requestFullscreen)await v.requestFullscreen();else v?.webkitEnterFullscreen?.();}catch{/* Fullscreen is optional in embedded browsers. */}
- }
  if(props.preview&&!props.videoUrl)return <div className="wb-player"><div className="wb-stream-status"><span>Owner preview</span></div><div className="wb-video-placeholder" role="status"><Play size={32} aria-hidden="true"/><strong>Your video goes here</strong><p>Upload your recording in the studio to preview playback.</p></div></div>;
  return <div className="wb-player">
   <video ref={video} src={props.videoUrl||undefined} poster={props.posterUrl||undefined} playsInline muted={muted} preload="auto" aria-label={props.title}
@@ -74,6 +68,5 @@ export function WebinarPlayer(props:Props){
   <div className="wb-stream-status"><span className="wb-live"><span className="wb-live-dot" aria-hidden="true"/>LIVE</span>{props.preview&&<span>Owner preview</span>}</div>
   {(!playing||muted)&&!error&&!slow&&<button type="button" className="wb-unmute" onClick={playing?listen:play}><VolumeX aria-hidden="true"/><strong>{playing?'Tap to listen':position.current>0?'Continue watching':'Tap to play'}</strong></button>}
   {(error||slow)&&<div className="wb-player-recovery" role="status"><p>{offline?'You’re offline. Reconnect to continue.':error||'The video is taking longer to load.'}</p><button type="button" onClick={reload}>Resume video</button><a href="/support">Get help</a></div>}
-  <div className="wb-player-actions"><button type="button" aria-label={playing?'Pause video':'Play video'} onClick={playing?pause:play}>{playing?<Pause/>:<Play/>}</button><button type="button" aria-label={muted?'Unmute video':'Mute video'} onClick={toggleMute}>{muted?<VolumeX/>:<Volume2/>}</button><button type="button" aria-label="Full screen" onClick={()=>void fullscreen()}><Maximize/></button></div>
  </div>;
 }
