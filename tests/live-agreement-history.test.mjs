@@ -18,6 +18,16 @@ for(const withdrawal of ['I changed my mind.','Do not text the agreement.','Yes,
  assert(!callOfferEvidence(history([...acknowledged,u(withdrawal)]),input),'receipt does not hide a later withdrawal: '+withdrawal);
 }
 const changedReceipt={role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',result_value:JSON.stringify({quoteAllowed:true,priceCents:4900000,quoteRevision:'b'.repeat(64)})}]};
+const combinedReceipt={...acceptedReceipt,role:'agent',message:'One moment.'};
+assert.deepEqual(history([combinedReceipt]).transcript[0].tool_results,acceptedReceipt.tool_results,'spoken provider entries preserve their tool-result receipts');
+assert(callOfferEvidence(history([...acknowledged,combinedReceipt]),input),'unchanged receipt with spoken message preserves acceptance');
+assert(!callOfferEvidence(history([...acknowledged,{...changedReceipt,role:'agent',message:'One moment.'}]),input),'changed quote in a spoken provider entry must invalidate old acceptance');
+assert(callOfferEvidence(history([{...quoted,role:'agent',message:'Our cash offer is $48,128. Does that work?'},u('Yes.')]),input),'initial same-entry receipt and spoken price retain the question for actual acceptance');
+const nextInput={...input,priceCents:4900000,quoteRevision:'b'.repeat(64)};
+const nextSpokenQuote={...changedReceipt,role:'agent',message:'Our current cash offer is $49,000. Does that work?'};
+assert(!callOfferEvidence(history([...acknowledged,nextSpokenQuote]),nextInput),'a new same-entry quote still needs a fresh real answer');
+assert(callOfferEvidence(history([...acknowledged,nextSpokenQuote,u('Yes.')]),nextInput),'fresh acceptance after the new same-entry quote approves only its revision');
+assert(!callOfferEvidence(history([{...quoted,role:'agent',message:'One moment.'},u('Yes.')]),input),'receipt and an unrelated agent message cannot supply a price confirmation');
 assert(!callOfferEvidence(history([...acknowledged,changedReceipt,quoted,u('Jane Seller.')]),input),'returning to an old quote after a different revision requires new acceptance');
 assert(!callOfferEvidence(history([quoted,a('Our cash offer is $48,128. Does that work?'),u('Yes, $50,000.')]),input),'a different amount is not acceptance');
 assert(!callOfferEvidence(history(entries.slice(0,5).concat(u('Yes.'))),input),'presence check alone does not accept an offer');
@@ -32,4 +42,11 @@ assert(sellerAgreementToolMatches({id:'tool_old',tool_config:legacyAutomaticOffe
 assert(!sellerAgreementToolMatches({id:'tool_old',tool_config:legacyAutomaticOfferToolConfig},undefined,'automatic_offer_v9'));
 const tampered=structuredClone(automaticOfferToolConfig);delete tampered.api_schema.request_body_schema.properties.conversationHistory.dynamic_variable;
 assert(!sellerAgreementToolMatches({id:'tool_new',tool_config:tampered},undefined,'automatic_offer_v9'),'model-authored history must not pass provider configuration review');
+const observedInput={action:'accept_offer',priceCents:7400000,quoteRevision:'0d6de2ad2caa0687c559ece38852664d4063c6d3d98cb76651f45c62f18b2d2e'};
+const receipt=status=>({role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',result_value:JSON.stringify({quoteAllowed:true,contractAllowed:true,priceCents:observedInput.priceCents,quoteRevision:observedInput.quoteRevision,status})}]});
+const observed=[receipt('calculated_proposal'),a('We can offer seventy-four thousand dollars cash. Does that price work?'),u('Yeah, that price works for me.'),receipt('verbally_accepted'),a('The agreed price is seventy-four thousand dollars cash. The closing date we have is twenty-sixth of October, ten-day inspection period, and the legal name on the contract will be yours alone. Does that all look right, and should I text the agreement now?'),u('That looks... Text the agreement.'),receipt('verbally_accepted')];
+assert(callOfferEvidence(history(observed),observedInput),'observed contract text request after same-price readback preserves saved acceptance');
+for(const request of ['That looks good. Please text the agreement.','Yes, you can text the agreement.'])assert(callOfferEvidence(history([...observed.slice(0,-2),u(request)]),observedInput));
+for(const refusal of ['That looks... Do not text the agreement.','That looks... Text the agreement if my wife agrees.','That looks... Text the agreement tomorrow.'])assert(!callOfferEvidence(history([...observed.slice(0,-2),u(refusal)]),observedInput));
+assert(!callOfferEvidence(history([receipt('calculated_proposal'),observed[4],observed[5]]),observedInput),'a delivery request alone does not invent price acceptance');
 console.log('PASS live acceptance history, withdrawal, revision, presence check and provider-reserved history source.');

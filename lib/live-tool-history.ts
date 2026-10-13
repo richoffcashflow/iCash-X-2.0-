@@ -12,7 +12,7 @@ export function liveToolHistory(raw:unknown){
   if(!['agent','user','tool'].includes(String(turn.role)))return [];
   if(typeof turn.message==='string'){
    if(turn.message.length>12000)throw Error('invalid_call_history');
-   return [{role:turn.role,message:turn.message}];
+   return [{role:turn.role,message:turn.message,...(Array.isArray(turn.tool_results)?{tool_results:turn.tool_results}:{})}];
   }
   // Tool results locate the last exact quote revision; they never set prices.
   if(Array.isArray(turn.tool_results))return [{role:turn.role,message:null,tool_results:turn.tool_results}];

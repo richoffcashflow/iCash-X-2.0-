@@ -5,6 +5,7 @@ import {dealTermsSchema} from './deal-documents.ts';
 import {signingReadiness} from './signing-policy.ts';
 import {sha} from './required-call-recording.ts';
 import {sellerAgreementEvidence,sellerAgreementConfirmationHold} from './seller-agreement-evidence.ts';
+import {sellerAgreementIdentityEvidence,sellerAgreementIdentityHold} from './seller-agreement-identity.ts';
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 export type SellerAgreementScope={callKey:string;accountId:string;ownerUserId:string;ownerEmail:string;dealId:string;screeningId:string;phone:string};
 type Envelope={id:string;state:string;test_mode:boolean;terms:unknown;recipients:{name:string;phone?:string}[]};
@@ -45,6 +46,9 @@ export async function sellerAgreementAction(token:string,input:unknown,d:Depende
  const acceptedCallOffer=callOffer?.quoteAllowed&&'contractAllowed' in callOffer&&callOffer.contractAllowed===true&&'status' in callOffer&&['verbally_accepted','pending_agreement'].includes(callOffer.status)&&callOffer.priceCents===i.confirmation.agreedPriceCents;
  if(((!result.offerAuthorized||result.financialCheck.status!=='eligible')&&!acceptedCallOffer)||!result.preliminarySellerCeilingCents)throw Error('updated_property_review_required');
  const current=dealTermsSchema.parse(deal.terms);
+ const history=await d.history(i.conversationId);
+ const identityHold=sellerAgreementIdentityHold(sellerAgreementIdentityEvidence(history,i.confirmation.sellerLegalName));
+ if(identityHold)return identityHold;
  const terms=confirmedSellerTerms(current,i.confirmation,{address:result.property.address,principal:identity.principal,legalDescription:result.property.legalDescription??'',ceilingCents:result.preliminarySellerCeilingCents,now:(d.now??Date.now)()});
  const signers=[{name:terms.seller,phone:scope.phone}];
  signingReadiness('purchase',terms,signers,identity.principal,'draft',(d.now??Date.now)());
@@ -52,7 +56,7 @@ export async function sellerAgreementAction(token:string,input:unknown,d:Depende
   const prepared=dealTermsSchema.parse(existing.terms);
   if(existing.state!=='awaiting_counterparty'||JSON.stringify(prepared)!==JSON.stringify(current)||prepared.priceCents!==terms.priceCents||prepared.closingDate!==terms.closingDate||prepared.seller!==terms.seller||existing.recipients.length!==2||existing.recipients[0].phone!==scope.phone)throw Error('agreement_changed');
  }
- if(!sellerAgreementEvidence(await d.history(i.conversationId),terms))return sellerAgreementConfirmationHold(terms);
+ if(!sellerAgreementEvidence(history,terms,(d.now??Date.now)()))return sellerAgreementConfirmationHold(terms);
  const claim=await d.db<{id:string;claimed:boolean;envelopeId:string|null}|null>('rpc/icash_claim_seller_agreement','POST',{p_hash:hash,p_conversation:i.conversationId,p_confirmation:i.confirmation,p_expected_terms:deal.terms,p_terms:existing?deal.terms:terms});
  if(!claim)throw Error('agreement_in_progress');
  let envelopeId=claim.envelopeId;

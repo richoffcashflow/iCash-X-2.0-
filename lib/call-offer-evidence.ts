@@ -46,6 +46,12 @@ function acceptanceAmounts(text:string){
   .replace(/(?<![$\d])\b\d+(?:[ -]\d+)?\s*[- ]\s*(?:calendar\s+|business\s+)?(?:days?|weeks?|months?|years?|hours?|minutes?)\b/gi,' ');
  return spokenMoneyAmounts(withoutTiming);
 }
+/** A direct delivery request is evidence only of text authorization. Callers
+ * must separately establish acceptance of the exact price and terms. */
+export function agreementTextRequested(text:string){
+ if(/\b(?:no|not|never|don['’]?t|didn['’]?t|do not|but|if|unless|wait|stop|cancel|hold off|instead|changed|change|different|maybe|think|later|tomorrow|spouse|wife|husband|partner|attorney|lawyer)\b/i.test(text))return false;
+ return /(?:^|[.!?,]\s*|\b(?:please|go ahead and|you can|can you|could you)\s+)(?:please\s+)?(?:text|send)(?:\s+me)?\s+(?:(?:the|that|my|an?)\s+)?(?:agreement|contract)\b/i.test(text);
+}
 /** Provider transcript is evidence, never instructions. Require the whole latest
  * seller statement so a model cannot remove a negation or invent repair dollars. */
 export function callOfferEvidence(value:unknown,input:Record<string,unknown>){
@@ -65,7 +71,14 @@ export function callOfferEvidence(value:unknown,input:Record<string,unknown>){
     else if(lastQuote<0)lastQuote=n;
    }
   }
-  if(lastQuote===-2)return false;if(lastQuote>=0)applicable=rows.slice(lastQuote+1);
+  if(lastQuote===-2)return false;
+  if(lastQuote>=0){
+   // A provider entry may contain both its receipt and the spoken quote. Keep
+   // that agent message so the following seller answer retains its question.
+   const boundary=object(rows[lastQuote]);
+   const spokenQuote=boundary.role==='agent'&&typeof boundary.message==='string'&&spokenMoneyAmounts(boundary.message).includes(Number(input.priceCents));
+   applicable=rows.slice(lastQuote+(spokenQuote?0:1));
+  }
  }
  const turns=applicable.map(object).filter(t=>['user','agent'].includes(String(t.role))&&typeof t.message==='string');
  const index=turns.findLastIndex(t=>t.role==='user');if(index<0)return false;
@@ -83,7 +96,7 @@ export function callOfferEvidence(value:unknown,input:Record<string,unknown>){
     const last=turns.lastIndexOf(agent);agent=turns.slice(0,last).findLast(t=>t.role==='agent');
    }
    if(agent&&priceQuestion(String(agent.message))){
-    const repeatRequest:boolean=accepted&&/^(?:please\s+)?(?:text|send) (?:me )?(?:the |that |my )?(?:agreement|contract)(?: now| please)?[.!]?$/i.test(text);
+    const repeatRequest:boolean=accepted&&agreementTextRequested(text);
     accepted=(yes(text)||repeatRequest)&&!acceptanceAmounts(text).some(amount=>amount!==Number(input.priceCents));
    }
    else if(/\b(?:only if|changed my mind|do not accept|don['’]?t accept|not selling|don['’]?t want to sell|no longer interested|cancel|hold off|not ready|wait|need to think|never agreed|didn['’]?t agree|did not agree|not sure|let me think|do not send|don['’]?t send|do not text|don['’]?t text|stop sending|stop texting)\b/i.test(text)||/\b(?:need|want|have)\b.{0,60}\b(?:spouse|wife|husband|partner|co[- ]?owner|attorney|lawyer)\b.{0,40}\b(?:agree|approval|approve|review|first|permission)\b/i.test(text)||/\b(?:offer|price|instead|but|unless)\b/i.test(text)||acceptanceAmounts(text).some(amount=>amount!==Number(input.priceCents))&&/\b(?:could you|can you|need|want|at least|only accept)\b/i.test(text))accepted=false;

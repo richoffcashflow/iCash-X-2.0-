@@ -32,7 +32,7 @@ for(const change of [t=>t.tool_config.api_schema.url='https://example.com',t=>t.
 const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:0,raw:{data:{dm_property_id:'prop_123',full_address:terms.address,legal_description:terms.legalDescription,estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:20000,estimated_equity_percentage:90}}};
 const scope={accountId:'account',ownerUserId:'owner',ownerEmail:'owner@example.test',dealId:'deal',screeningId:'screen',phone:'+12125550199',callKey:'inbound:fixture'};
 let envelopes=[],savedTerms=terms,providerSends=0,texts=0,status='awaiting_counterparty',claim=null;
-const d={now:()=>now,history:async()=>({transcript:[{role:'agent',message:'The purchase price is $90000 cash, closing '+confirmation.closingDate+' with a ten-day inspection period. May I text the agreement now?'},{role:'user',message:'Yes, please.'}]}),bind:async()=>{},db:async(path,method,body)=>{
+const d={now:()=>now,history:async()=>({transcript:[{role:'agent',message:'What is your full legal name for the agreement?'},{role:'user',message:'Jane Seller.'},{role:'agent',message:'Are you the only owner and decision maker?'},{role:'user',message:'Yes, just me.'},{role:'agent',message:'The purchase price is $90000 cash, closing '+confirmation.closingDate+' with a ten-day inspection period. May I text the agreement now?'},{role:'user',message:'Yes, please.'}]}),bind:async()=>{},db:async(path,method,body)=>{
  if(path==='rpc/icash_seller_agreement_call_context')return scope;
  if(path==='rpc/icash_call_offer_context')return null;
  if(path.startsWith('icash_signing_envelopes?'))return envelopes;
