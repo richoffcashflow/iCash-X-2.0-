@@ -26,11 +26,13 @@ for(const path of ['/','/sell','/buyers','/webinar','/support','/api/webhooks/st
 for(const path of ['https://evil.invalid','//evil.invalid','/\\evil.invalid','/api/internal/seller','/admin/../../sell'])assert.equal(dashboardReturnPath(path),'/admin');
 assert.equal(dashboardReturnPath('/admin/disputes?page=2'),'/admin/disputes?page=2');
 
-let user={id:userId,email:'owner@example.invalid',email_confirmed_at:'2026-10-01'},limited=false,correct=true,mismatch=false,authCalls=[],jar=new Map([['icash_access',access()]]),cookieOptions;
+let user={id:userId,email:'owner@example.invalid',email_confirmed_at:'2026-10-01'},limited=false,correct=true,mismatch=false,authCalls=[],jar=new Map([['icash_access',access()]]),cookieOptions,changeRejected=false,savedSessions=0;
+const freshAccess=access(userId,'22222222-2222-2222-2222-222222222222');
 const mocks={dashboardCookie,dashboardLifetime,dashboardRememberLifetime,issueDashboardProof,validDashboardProof,ownerInboundTarget:{ownerUserId:userId},
  cookies:async()=>({get:n=>jar.has(n)?{value:jar.get(n)}:undefined,set:(n,v,o)=>{if(o.maxAge===0)jar.delete(n);else jar.set(n,v);cookieOptions=o;},delete:n=>jar.delete(n)}),
+ saveSession:async s=>{savedSessions++;jar.set('icash_access',s.access_token);},
  currentUser:async()=>user,allowedOrigin:r=>r.headers.get('origin')==='https://app.invalid',limitRequest:async()=>{if(limited)throw Error('rate limited');},db:async()=>[],
- authRequest:async(path,body,token)=>{authCalls.push(path);if(path.startsWith('token')){if(!correct)throw Error('invalid password');return {access_token:'temporary-grant',user:{id:mismatch?'11111111-1111-1111-1111-111111111111':userId,email_confirmed_at:'yes'}};}assert.equal(token,'temporary-grant');},
+ authRequest:async(path,body,token,method)=>{authCalls.push(path);if(path==='otp'){assert.equal(body.email,user.email);assert.equal(body.create_user,false);return {};}if(path==='verify'){assert.equal(body.email,user.email);if(!correct)throw Error('invalid code');return {access_token:freshAccess,refresh_token:'fixture-refresh',expires_in:3600,user:{id:mismatch?'11111111-1111-1111-1111-111111111111':userId,email_confirmed_at:'yes'}};}if(path==='user'){assert.equal(method,'PUT');assert.equal(token,freshAccess);if(changeRejected)throw Error('weak password');return {id:userId};}if(path.startsWith('token')){if(!correct)throw Error('invalid password');return {access_token:'temporary-grant',user:{id:mismatch?'11111111-1111-1111-1111-111111111111':userId,email_confirmed_at:'yes'}};}assert(['temporary-grant',freshAccess].includes(token));},
 };
 globalThis.__dashboardTest=mocks;
 function load(path){const source=readFileSync(new URL(path,import.meta.url),'utf8');const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');return import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(mocks).join(',')+'}=globalThis.__dashboardTest;\n'+code).toString('base64'));}
@@ -55,5 +57,20 @@ assert.equal((await route.POST(request('https://app.invalid',false))).status,200
 await route.DELETE(request());
 assert.equal((await route.POST(request('https://app.invalid','true'))).status,403);assert(!jar.has(dashboardCookie));
 assert(authCalls.includes('logout?scope=local'));
+const changeRequest=(body={password:'test-new-fixture-only',code:'12345678',remember:true},origin='https://app.invalid')=>new Request('https://app.invalid/api/auth/dashboard-password',{method:'PATCH',headers:{origin,'Content-Type':'application/json'},body:JSON.stringify(body)});
+assert.equal((await route.PUT(request('https://evil.invalid'))).status,403);
+assert.equal((await route.PATCH(changeRequest(undefined,'https://evil.invalid'))).status,403);
+user=null;assert.equal((await route.PUT(request())).status,403);assert.equal((await route.PATCH(changeRequest())).status,403);
+user={id:userId,email:'owner@example.invalid'};
+limited=true;assert.equal((await route.PUT(request())).status,403);assert.equal((await route.PATCH(changeRequest())).status,403);limited=false;
+assert.equal((await route.PUT(request())).status,200);
+assert.equal((await route.PATCH(changeRequest({password:'short',code:'12345678'}))).status,403);
+assert.equal((await route.PATCH(changeRequest({password:'test-new-fixture-only',code:'12345678',email:'attacker@example.invalid'}))).status,403);
+correct=false;assert.equal((await route.PATCH(changeRequest())).status,403);correct=true;assert.equal(savedSessions,0);
+mismatch=true;assert.equal((await route.PATCH(changeRequest())).status,403);mismatch=false;assert.equal(savedSessions,0);
+changeRejected=true;assert.equal((await route.PATCH(changeRequest())).status,403);changeRejected=false;assert.equal(savedSessions,0);assert(!jar.has(dashboardCookie));
+assert.equal((await route.PATCH(changeRequest())).status,200);assert.equal(savedSessions,1);assert.equal(cookieOptions.maxAge,dashboardRememberLifetime);
+assert(validDashboardProof(jar.get(dashboardCookie),freshAccess,key,userId));assert(!validDashboardProof(jar.get(dashboardCookie),access(),key,userId));
+await route.DELETE(request());assert(!jar.has(dashboardCookie));
 delete globalThis.__dashboardTest;delete process.env.SUPABASE_SECRET_KEY;
 console.log('PASS dashboard password: user/session binding, tampering, expiry, redirect safety, origin, owner-only grants, rate limit, password failure, temporary-session revocation, secure cookies and lock.');

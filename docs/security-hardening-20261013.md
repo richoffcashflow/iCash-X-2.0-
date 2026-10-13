@@ -15,3 +15,5 @@ Validation includes password failure/rate limits, origin checks, cross-user/sess
 Supabase leaked-password protection is a separate hosted Auth setting. It must be enabled and verified in the authenticated Supabase dashboard; application code and SQL migrations do not substitute for that setting. Do not mark it enabled until the live advisor confirms it.
 
 On October 13, 2026 leaked-password protection was enabled in the production Supabase Email provider. The live security advisor no longer reports the disabled-protection warning.
+
+Set or change password uses a fresh email OTP sent only to the authenticated principal's canonical email. The verified OTP session must belong to that principal before updating through Supabase Auth; leaked-password checks stay enforced. Failed verification sessions are revoked, and successful changes save the fresh session and bind the unlock to it. Password and code values are not logged or stored by the application.
