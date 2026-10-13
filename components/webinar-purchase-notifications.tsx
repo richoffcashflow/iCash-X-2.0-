@@ -2,11 +2,11 @@
 import {useEffect,useRef,useState} from 'react';
 import {webinarRequest} from '@/lib/webinar-client';
 import {Check,X} from 'lucide-react';
-import {activityAge,activityMessage,recentActivity,type WebinarActivity} from '@/lib/webinar-activity';
+import {activityMessage,recentActivity,type WebinarActivity} from '@/lib/webinar-activity';
 import {webinarSite} from '@/lib/webinar-site';
 
 export function WebinarPurchaseNotifications({sessionId,enabled,preview,intervalSeconds,onActivity}:{onActivity?:()=>void;sessionId:string;enabled:boolean;preview:boolean;intervalSeconds:number}){
- const [active,setActive]=useState<WebinarActivity|null>(null),[muted,setMuted]=useState(false),[now,setNow]=useState(Date.now());
+ const [active,setActive]=useState<WebinarActivity|null>(null),[muted,setMuted]=useState(false);
  const notify=useRef(onActivity);notify.current=onActivity;
  useEffect(()=>{if(active)notify.current?.();},[active]);
  const seen=useRef(new Set<string>()),nextAt=useRef(0);
@@ -24,7 +24,7 @@ export function WebinarPurchaseNotifications({sessionId,enabled,preview,interval
    try{
     const data=await webinarRequest<{events:WebinarActivity[];serverNow:number}>('/api/webinar/activity',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId}),signal:controller.signal},10000);
     if(disposed)return;
-    const events=recentActivity(data.events,data.serverNow);setNow(data.serverNow);
+    const events=recentActivity(data.events,data.serverNow);
     if(currentId&&!events.some(event=>event.id===currentId)){setActive(null);currentId='';}
     if(currentId||Date.now()<nextAt.current)return;
     const event=events.find(event=>!seen.current.has(event.id));if(!event)return;
@@ -40,5 +40,5 @@ export function WebinarPurchaseNotifications({sessionId,enabled,preview,interval
   return()=>{disposed=true;controller.abort();clearInterval(timer);if(hide)clearTimeout(hide);document.removeEventListener('visibilitychange',visibility);setActive(null);};
  },[sessionId,enabled,preview,muted,intervalSeconds,storageKey]);
  function dismiss(){setMuted(true);setActive(null);try{sessionStorage.setItem(storageKey,JSON.stringify({seen:[...seen.current],muted:true}));}catch{/* Optional preference storage. */}}
- return <div className="wb-chat-activity-region" role="status" aria-live="polite" aria-atomic="true">{enabled&&!muted&&active&&<div className="wb-activity wb-chat-purchase"><span className="wb-activity-check"><Check size={19}/></span><div><strong>{activityMessage(active)}</strong><small>Recent {webinarSite.brandName} activity · {activityAge(active.occurredAt,now)}</small>{active.region&&<small className="wb-activity-location">Approximate location</small>}</div><button className="wb-icon" aria-label="Hide purchase updates for this session" onClick={dismiss}><X size={16}/></button></div>}</div>;
+ return <div className="wb-chat-activity-region" role="status" aria-live="polite" aria-atomic="true">{enabled&&!muted&&active&&<div className="wb-activity wb-chat-purchase"><span className="wb-activity-check"><Check size={19}/></span><div><strong>{activityMessage(active)}</strong><small>Recent {webinarSite.brandName} activity</small>{active.region&&<small className="wb-activity-location">Approximate location</small>}</div><button className="wb-icon" aria-label="Hide purchase updates for this session" onClick={dismiss}><X size={16}/></button></div>}</div>;
 }
