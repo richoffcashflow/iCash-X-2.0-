@@ -7,7 +7,6 @@ import {importWebinarChat} from '@/lib/webinar-import';
 import {uploadWebinarFile} from '@/lib/webinar-upload';
 import {webinarSite} from '@/lib/webinar-site';
 import {WebinarTimeInput} from '@/components/webinar-time-input';
-import {WebinarTimersEditor} from '@/components/webinar-timers-editor';
 import {WebinarOffersEditor} from '@/components/webinar-offers-editor';
 import {WebinarAudienceEditor} from '@/components/webinar-audience-editor';
 import {WebinarDashboard,WebinarResults,WebinarReview} from '@/components/webinar-dashboard';
@@ -15,7 +14,7 @@ import {WebinarGrowthSettings} from '@/components/webinar-growth-settings';
 import {webinarLink} from '@/lib/webinar-links';
 import {createNightRecording,editingRecording,patchRecording,type RecordingVersion} from '@/lib/webinar-recordings';
 import {webinarRequest} from '@/lib/webinar-client';
-type Tab='dashboard'|'session'|'offers'|'timers'|'chat'|'review'|'analytics'|'growth';
+type Tab='dashboard'|'session'|'offers'|'chat'|'review'|'analytics'|'growth';
 async function request(path:string,body?:unknown){return webinarRequest<any>(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});}
 export function WebinarStudio(){
  const [webinars,setWebinars]=useState<Webinar[]>([]),[storedDraft,setDraft]=useState<Webinar|null>(null),[isNew,setIsNew]=useState(false),[dirty,setDirty]=useState(false),[settingsDirty,setSettingsDirty]=useState(false),[settings,setSettings]=useState<WebinarSettings|null>(null),[tab,setTab]=useState<Tab>('dashboard'),[loading,setLoading]=useState(true),[denied,setDenied]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[upload,setUpload]=useState<number|null>(null),[embeddedCheckoutReady,setEmbeddedCheckoutReady]=useState(false),[metaReady,setMetaReady]=useState(false),[metaHealth,setMetaHealth]=useState({sent:0,pending:0,failed:0}),[version,setVersion]=useState<RecordingVersion>('day');
@@ -68,10 +67,10 @@ export function WebinarStudio(){
   if(nextVersion==='night'&&!target.nightVersion){target={...target,nightVersion:createNightRecording(target),nightEnabled:true};setDirty(true);}else setDirty(false);
   setDraft(target);setVersion(nextVersion);setIsNew(false);setTab('session');setError('');setNotice('');
  }
- const editing=['session','offers','timers','chat','review'].includes(tab);
- const steps=[{id:'session',label:'Video & details',icon:Video},{id:'offers',label:'Offers',icon:MessageSquare},{id:'timers',label:'Timers',icon:Clock},{id:'chat',label:'Chat',icon:MessageSquare},{id:'review',label:'Review & publish',icon:Check}] as const;
+ const editing=['session','offers','chat','review'].includes(tab);
+ const steps=[{id:'session',label:'Video & details',icon:Video},{id:'offers',label:'Offers',icon:MessageSquare},{id:'chat',label:'Chat',icon:MessageSquare},{id:'review',label:'Review & publish',icon:Check}] as const;
  const stepIndex=steps.findIndex(t=>t.id===tab);
- const titles={dashboard:'My webinars',session:draft?.title||'Create a webinar',offers:draft?.title||'Offers',timers:draft?.title||'Timers',chat:draft?.title||'Chat',review:draft?.title||'Review & publish',growth:'Settings',analytics:'Daily results'};
+ const titles={dashboard:'My webinars',session:draft?.title||'Create a webinar',offers:draft?.title||'Offers',chat:draft?.title||'Chat',review:draft?.title||'Review & publish',growth:'Settings',analytics:'Daily results'};
 
  return <div className="ws-shell">
   <header className="ws-header"><a href="/" className="wb-wordmark">{webinarSite.brandName}<small>WEBINAR STUDIO</small></a><a className="ws-workspace-link" href="/">Back to workspace</a></header>
@@ -91,7 +90,6 @@ export function WebinarStudio(){
     {loading&&!settings?<p role="status">Loading your studio…</p>:<section id={`ws-${tab}`} aria-label={titles[tab]}>
      {tab==='dashboard'&&<WebinarDashboard webinars={webinars.filter(w=>!w.parentWebinarId)} onCreate={create} onEdit={select} onSettings={()=>setTab('growth')}/>}
      {tab==='offers'&&draft&&<>{!embeddedCheckoutReady&&<p className="ws-alert">Connect the matching Stripe publishable key to enable card payments inside the room. Until then, visitors continue to your secure Stripe checkout and return to name their bot.</p>}<WebinarOffersEditor webinar={draft} onChange={update} onUploadImage={(file,id)=>void uploadOfferImage(file,id)} uploadingImageId={uploadingImageId} uploadProgress={upload} onCancelUpload={()=>abortUpload.current?.abort()} disabled={busy||upload!==null}/></>}
-     {tab==='timers'&&draft&&<WebinarTimersEditor webinar={draft} onChange={update}/>}
      {tab==='review'&&draft&&<WebinarReview webinar={storedDraft!} busy={busy||upload!==null} isNew={isNew} onPublish={()=>void save('published')}/>}
      {tab==='session'&&(draft?<div className="ws-editor-grid"><div className="ws-editor-main">
       <section className="ws-card ws-video-card"><div className="ws-card-heading"><div><h2>Your video</h2><p>The presentation visitors will watch.</p></div><span className="ws-status">{draft.status}</span></div>
