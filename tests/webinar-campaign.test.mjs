@@ -15,6 +15,7 @@ test('campaign links preserve checkout window, resume, unseen webinar choice and
  const night={...b,nightEnabled:true,nightVersion:{...b,videoUrl:'https://example.test/night.mp4'}};
  const stats=[{webinarId:b.id,version:'night',viewers:30,cohortBuyers:15},{webinarId:c.id,version:'day',viewers:30,cohortBuyers:10}];
  assert.equal(target('webinar',[session],[a,night,c],stats).path,'/live/222222');
+ assert.equal(target('webinar',[session],[a,{...night,videoUrl:'',nightEnabled:false}]).path,'/live/222222','Nighttime-only videos remain eligible follow-up destinations');
  assert.equal(target('webinar',[session,{...session,webinar_id:b.id,config:b}], [a,b,c],stats).path,'/live/333333');
  assert.equal(target('webinar',[session],[a]).path,'/live/111111','Completed viewers can replay when no other webinar exists');
  assert.equal(target('webinar',[session],[a,{...b,parentWebinarId:a.id}]).path,'/live/111111','VIP never used to acquire prospects');

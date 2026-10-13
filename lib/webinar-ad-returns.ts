@@ -1,5 +1,5 @@
 import {db} from '@/lib/stripe-test';
-import {webinarPitchAt,webinarOffers,type Webinar,type WebinarRow,type WebinarSettings} from '@/lib/webinar-policy';
+import {webinarPitchAt,webinarOffers,hasWebinarVideo,type Webinar,type WebinarRow,type WebinarSettings} from '@/lib/webinar-policy';
 import {selectRecording} from '@/lib/webinar-recordings';
 import {availableWebinarRows,webinarConversionRecordings} from '@/lib/webinar-selection';
 import {returnVisit,paidAdArrival,confirmedWatch,bestConvertingWebinar,stableWebinarOrder,type ViewerLocation} from '@/packages/webinar-engine/src/index';
@@ -18,7 +18,7 @@ export async function adReturnWebinar(current:Webinar,history:WebinarSession[],v
    db<WebinarSession[]>(`icash_webinar_sessions?visitor_id=eq.${visitorId}&is_preview=eq.false&select=*&order=created_at.desc&limit=1000`,'GET',undefined,AbortSignal.timeout(1800)),
   ]);
   if(allHistory.length>=1000)return null; // Incomplete history cannot establish an unwatched destination.
-  const pool=availableWebinarRows(rows).filter(w=>w.id!==current.id&&!w.parentWebinarId&&w.status==='published'&&w.videoUrl).map(w=>selectRecording(w,timezone,now,settings.routing,undefined,location));
+  const pool=availableWebinarRows(rows).filter(w=>w.id!==current.id&&!w.parentWebinarId&&w.status==='published'&&hasWebinarVideo(w)).map(w=>selectRecording(w,timezone,now,settings.routing,undefined,location));
   // A previously chosen alternative keeps its saved playback or checkout window.
   const linked=allHistory.filter(h=>h.config.adEntryWebinarId===current.id);
   const prior=webinarReturnJourney(linked,offers,timezone,settings.routing.checkoutWindowHours,now);

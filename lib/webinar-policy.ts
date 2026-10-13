@@ -34,8 +34,8 @@ const webinarBaseSchema=z.object({
  timers:z.array(webinarTimerSchema).max(8).default([]),offers:z.array(webinarOfferSchema).max(12).default([]),endOfferId:z.string().max(80).nullable().default(null),showAudienceCount:z.boolean().default(true),
  audienceDisplay:audienceDisplaySchema.default({}),purchaseNotifications:purchaseNotificationsSchema.default({}),
 }).strict();
+export function hasWebinarVideo(w:{videoUrl?:string;nightVersion?:{videoUrl?:string}|null}){return !!(w.videoUrl||w.nightVersion?.videoUrl);}
 function validateRecording(w:z.infer<typeof webinarBaseSchema>,c:z.RefinementCtx){
- if(w.status==='published'&&!w.videoUrl)c.addIssue({code:z.ZodIssueCode.custom,path:['videoUrl'],message:'Add a video before publishing.'});
  for(const k of ['nameAt','contactAt','pitchAt'] as const)if(w[k]>w.durationSeconds)c.addIssue({code:z.ZodIssueCode.custom,path:[k],message:'Must be within the video duration.'});
  if(w.timers.some(t=>t.at>w.durationSeconds))c.addIssue({code:z.ZodIssueCode.custom,path:['timers'],message:'Timer times must be within the video.'});
  if(new Set(w.timers.map(t=>t.id)).size!==w.timers.length)c.addIssue({code:z.ZodIssueCode.custom,path:['timers'],message:'Timer IDs must be unique.'});
@@ -49,17 +49,25 @@ function validateRecording(w:z.infer<typeof webinarBaseSchema>,c:z.RefinementCtx
 export const webinarRecordingSchema=webinarBaseSchema.pick({videoUrl:true,posterUrl:true,durationSeconds:true,nameAt:true,contactAt:true,pitchAt:true,offerTitle:true,ctaLabel:true,offerEndsAt:true,checkoutMode:true,redirectAtEnd:true,chat:true,transcript:true,faq:true,aiEnabled:true,variationEnabled:true,chatStyle:true,offers:true,endOfferId:true,timers:true}).strip();
 export type WebinarRecording=z.infer<typeof webinarRecordingSchema>;
 export const webinarSchema=webinarBaseSchema.extend({nightVersion:webinarRecordingSchema.nullable().default(null),nightEnabled:z.boolean().default(false),recordingVersion:z.enum(['day','night']).default('day')}).superRefine((w,c)=>{
+ if(w.status==='published'&&!hasWebinarVideo(w))c.addIssue({code:z.ZodIssueCode.custom,path:['videoUrl'],message:'Add a Daytime or Nighttime video before publishing.'});
  validateRecording(w,c);
  if(w.nightEnabled&&!w.nightVersion)c.addIssue({code:z.ZodIssueCode.custom,path:['nightVersion'],message:'Add a night recording first.'});
  if(w.nightVersion)validateRecording({...w,...w.nightVersion,status:w.nightEnabled&&w.nightVersion.videoUrl?w.status:'draft'}, {...c,path:[...c.path,'nightVersion'],addIssue:issue=>c.addIssue({...issue,path:['nightVersion',...(issue.path??[])]})});
 });
 export type Webinar=z.infer<typeof webinarSchema>;
+/** A single recording covers all hours; the switch applies when both videos exist. */
+export function playableWebinarRecordings(w:Webinar):{version:'day'|'night';recording:WebinarRecording}[]{
+ const recordings:{version:'day'|'night';recording:WebinarRecording}[]=[];
+ if(w.videoUrl)recordings.push({version:'day',recording:w});
+ if(w.nightVersion?.videoUrl&&(!w.videoUrl||w.nightEnabled))recordings.push({version:'night',recording:w.nightVersion});
+ return recordings;
+}
 export type ChatCue=z.infer<typeof chatCueSchema>;
 export type WatchHistory={webinar_id:string;revision:number;progress_seconds:number;completed_at:string|null;updated_at:string};
 export function newWebinar(id:string):Webinar{return {intelligenceEnabled:false,parentWebinarId:null,publicCode:null,nightVersion:null,nightEnabled:false,recordingVersion:'day',id,revision:1,title:`Your ${webinarSite.brandName} session`,description:`A walkthrough with ${webinarSite.hostName}.`,status:'draft',audience:'all',priority:0,videoUrl:'',posterUrl:'',durationSeconds:1800,nameAt:30,contactAt:30,pitchAt:1200,offerTitle:'Put your AI bot to work',ctaLabel:'See my options',offerEndsAt:null,checkoutMode:'membership',redirectAtEnd:true,timers:[],offers:[],endOfferId:null,showAudienceCount:true,audienceDisplay:audienceDisplaySchema.parse({}),purchaseNotifications:purchaseNotificationsSchema.parse({}),chat:[{id:'welcome',at:5,name:webinarSite.brandName,text:'Welcome! Follow along and share your thoughts in the chat.',kind:'host'}],faq:'iCash X is an AI real estate workspace. Paid activity uses a budget. Results, deals and earnings are not guaranteed. Current prices and terms are shown in checkout.',transcript:'',aiEnabled:false,variationEnabled:false,chatStyle:defaultChatStyle};}
 /** Stable default for the legacy /webinar URL. History and ad performance never choose a webinar. */
 export function chooseWebinar(webinars:Webinar[],_history:WatchHistory[]=[],_timezone='UTC',_now=new Date(),_routing={nightStartsAt:18,nightEndsAt:6}):Webinar|null{
- return [...webinars].filter(w=>!w.parentWebinarId&&w.status==='published'&&w.videoUrl).sort((a,b)=>Number(a.publicCode??Number.MAX_SAFE_INTEGER)-Number(b.publicCode??Number.MAX_SAFE_INTEGER)||a.id.localeCompare(b.id))[0]??null;
+ return [...webinars].filter(w=>!w.parentWebinarId&&w.status==='published'&&hasWebinarVideo(w)).sort((a,b)=>Number(a.publicCode??Number.MAX_SAFE_INTEGER)-Number(b.publicCode??Number.MAX_SAFE_INTEGER)||a.id.localeCompare(b.id))[0]??null;
 }
 export type WebinarRow={config:Webinar;public_code:number;parent_webinar_id?:string|null};
 export function webinarFromRow(row:WebinarRow):Webinar{return webinarSchema.parse({...row.config,adEntryWebinarId:undefined,publicCode:String(row.public_code),parentWebinarId:row.parent_webinar_id??null,intelligenceEnabled:false});}
