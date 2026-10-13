@@ -1,11 +1,13 @@
+import {webinarLink} from '../lib/webinar-links.ts';
 import {webinarViewerLocation} from '../lib/webinar-viewer-location.ts';
 import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import ts from 'typescript';import {z} from 'zod';import {randomUUID,randomBytes} from 'node:crypto';
 import * as policy from '../lib/webinar-policy.ts';import {selectRecording,createNightRecording} from '../lib/webinar-recordings.ts';import {selectOffer} from '../packages/webinar-engine/src/index.ts';import {snapshotChat} from '../lib/webinar-variants.ts';import {returnVisit} from '../lib/webinar-optimizer.ts';
 const id=randomUUID(),visitor={id:randomUUID(),name:'Casey',email:'casey@example.invalid',phone:'+12125550100'},base={...policy.newWebinar(id),status:'published',publicCode:'129339',videoUrl:'https://example.test/day.mp4'},settings=policy.settingsSchema.parse({enabled:false,fromEmail:'',postalAddress:'',subjects:['a','b','c'],messages:['a','b','c']});
 let configured={...base},calls=[],owner=true,failChat=false,rowsPresent=true;
 class WebinarError extends Error{constructor(status,message){super(message);this.status=status;}}
-const deps={webinarViewerLocation,...policy,adReturnWebinar:async()=>{throw Error('New, preview and unavailable entries must not select alternatives');},webinarReturnJourney:(history,events,zone,hours)=>returnVisit(history,zone,hours),z,randomUUID,randomBytes,selectRecording,selectOffer,snapshotChat,returnVisit,approximateRegion:()=>null,webinarSite:{workspacePath:'/'},webinarHeaders:{'Cache-Control':'private, no-store'},WebinarError,webinarBody:req=>req.json(),webinarOrigin:()=>{},webinarLimit:async()=>{},webinarOwner:async()=>{if(!owner)throw new WebinarError(403,'Owner only');},webinarVisitor:async()=>visitor,webinarCustomerAccount:async()=>null,webinarPaid:async()=>false,webinarCustomerPaid:async()=>false,validGuest:()=>true,guestHash:()=> 'bound-guest',cookies:async()=>({get:()=>({value:'guest'}),set:()=>{}}),webinarError:e=>Response.json({error:e.message},{status:e.status||503}),db:async(path,method,body)=>{
+const deps={webinarLink,webinarViewerLocation,...policy,adReturnWebinar:async()=>{throw Error('New, preview and unavailable entries must not select alternatives');},webinarReturnJourney:(history,events,zone,hours)=>returnVisit(history,zone,hours),z,randomUUID,randomBytes,selectRecording,selectOffer,snapshotChat,returnVisit,approximateRegion:()=>null,webinarSite:{workspacePath:'/'},webinarHeaders:{'Cache-Control':'private, no-store'},WebinarError,webinarBody:req=>req.json(),webinarOrigin:()=>{},webinarLimit:async()=>{},webinarOwner:async()=>{if(!owner)throw new WebinarError(403,'Owner only');},webinarVisitor:async()=>visitor,webinarCustomerAccount:async()=>null,webinarPaid:async()=>false,webinarCustomerPaid:async()=>false,validGuest:()=>true,guestHash:()=> 'bound-guest',cookies:async()=>({get:()=>({value:'guest'}),set:()=>{}}),webinarError:e=>Response.json({error:e.message},{status:e.status||503}),db:async(path,method,body)=>{
  calls.push({path,method,body});
+ if(path.includes('select=public_code&'))return configured.status==='published'?[{public_code:129339}]:[];
  if(path.startsWith('icash_webinars?'))return rowsPresent?[{config:configured,public_code:129339}]:[];
  if(path.startsWith('icash_webinar_sessions?')||path.startsWith('icash_webinar_events?'))return [];
  if(path.startsWith('icash_webinar_settings?'))return [{config:settings}];
@@ -18,7 +20,7 @@ const post=body=>POST(new Request('https://example.test/api/webinar/start',{meth
 let response=await post({code:'129339'}),data=await response.json();assert.equal(response.status,200);assert.equal(data.name,'Casey');assert.equal(data.email,visitor.email);assert.equal(data.phone,visitor.phone);assert.equal(data.contactSaved,true);assert.ok(calls.some(c=>c.path.startsWith('icash_webinars?public_code=eq.129339&')));assert.ok(calls.some(c=>c.path.includes('webinar_id=eq.'+id)));assert.equal(data.webinar.recordingVersion,'day');
 rowsPresent=false;data=await(await post({code:'999999'})).json();assert.equal(data.unavailable,true);rowsPresent=true;
 configured={...base,status:'draft'};data=await(await post({code:'129339'})).json();assert.equal(data.unavailable,true);
-configured={...base,nightEnabled:true,nightVersion:{...createNightRecording(base),videoUrl:'https://example.test/night.mp4',faq:'PRIVATE NIGHT'}};owner=false;assert.equal((await post({preview:id,variant:'night'})).status,403);owner=true;
+configured={...base,nightEnabled:true,nightVersion:{...createNightRecording(base),videoUrl:'https://example.test/night.mp4',faq:'PRIVATE NIGHT'}};owner=false;let locked=await(await post({preview:id,variant:'night'})).json();assert.equal(locked.previewLocked,true);assert.equal(locked.publicPath,'/live/129339');assert.equal(locked.webinar,undefined);owner=true;
 failChat=true;data=await(await post({preview:id,variant:'night'})).json();assert.equal(data.webinar.videoUrl,configured.nightVersion.videoUrl);assert.equal(data.webinar.recordingVersion,'night');assert.deepEqual(data.messages,[]);assert.ok(!JSON.stringify(data).includes('PRIVATE NIGHT'));
 assert.equal((await post({code:'../../evil'})).status,400);
 configured={...configured,videoUrl:'',nightEnabled:false};failChat=false;
@@ -28,3 +30,6 @@ for(const body of [{code:'129339'},{},{preview:id},{preview:id,variant:'day'}]){
  assert.equal(data.webinar.recordingVersion,'night');assert.ok(!JSON.stringify(data).includes('PRIVATE NIGHT'));
 }
 console.log('PASS entry route: exact permanent link, scoped history, remembered details, draft/missing links, owner-only Night preview, private sources and video entry through chat outage.');
+
+owner=false;configured={...base,status:'draft'};locked=await(await post({preview:id})).json();assert.equal(locked.previewLocked,true);assert.equal(locked.publicPath,null);assert.equal(locked.webinar,undefined);
+console.log('PASS signed-out preview offers only a published public link and never exposes draft content.');

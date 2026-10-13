@@ -1,6 +1,7 @@
+import type {ChatModeration} from './webinar-shared-chat';
 import type {ChatCue} from './webinar-policy';
 
-export type WebinarMessage={id:string;role:'user'|'assistant';text:string;playback_seconds?:number|null};
+export type WebinarMessage={id:string;role:'user'|'assistant';text:string;playback_seconds?:number|null;display_name?:string|null;public_status?:ChatModeration;shared?:boolean};
 export type PendingWebinarMessage={text:string;playback_seconds:number};
 type StreamEntry=
  | {key:string;at:number;kind:'cue';cue:ChatCue}

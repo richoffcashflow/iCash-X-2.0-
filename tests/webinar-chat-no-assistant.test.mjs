@@ -4,7 +4,7 @@ import ts from 'typescript';
 import {z} from 'zod';
 let saved,name='Casey';
 class WebinarError extends Error{constructor(status,message){super(message);this.status=status;}}
-const deps={z,WebinarError,db:async(table,method,rows)=>{assert.equal(table,'icash_webinar_messages');assert.equal(method,'POST');saved=rows;return rows.map((r,i)=>({...r,id:String(i)}));},webinarOrigin(){},webinarBody:r=>r.json(),webinarSession:async()=>({v:{id:'visitor',name},s:{id:'owned-session',progress_seconds:12,config:{aiEnabled:true,durationSeconds:1800}}}),webinarLimit:async()=>{},webinarHeaders:{'Cache-Control':'private, no-store'},webinarError:e=>Response.json({error:e.message},{status:e.status||500})};
+const deps={z,WebinarError,db:async(table,method,rows)=>{assert.equal(table,'icash_webinar_messages');assert.equal(method,'POST');saved=rows;return rows.map((r,i)=>({...r,id:String(i)}));},webinarOrigin(){},webinarBody:r=>r.json(),webinarSession:async()=>({v:{id:'visitor',name},s:{id:'owned-session',webinar_id:'webinar-id',revision:7,is_preview:true,progress_seconds:12,config:{aiEnabled:true,durationSeconds:1800,recordingVersion:'night'}}}),webinarLimit:async()=>{},webinarHeaders:{'Cache-Control':'private, no-store'},webinarError:e=>Response.json({error:e.message},{status:e.status||500})};
 globalThis.noAssistantDeps=deps;
 const source=readFileSync(new URL('../app/api/webinar/chat/route.ts',import.meta.url),'utf8');assert.ok(!source.includes('webinarAI'));
 const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .*;\s*$/gm,'');
@@ -27,3 +27,7 @@ for(const seconds of [-1,0.5,14401,'12']){
  saved=null;await POST(new Request('https://app.test/api/webinar/chat',{method:'POST',body:JSON.stringify({sessionId:'00000000-0000-4000-8000-000000000123',text:'Invalid position',seconds})}));assert.equal(saved,null);
 }
 console.log('PASS chat positions persist, clamp to the recording, and reject invalid input.');
+
+const sharedResponse=await POST(new Request('https://app.test/api/webinar/chat',{method:'POST',body:JSON.stringify({sessionId:'00000000-0000-4000-8000-000000000123',text:'Review me',seconds:14,share:true})}));
+assert.equal(sharedResponse.status,200);assert.equal(saved[0].public_status,'pending');assert.equal(saved[0].display_name,'Casey');assert.equal(saved[0].webinar_id,'webinar-id');assert.equal(saved[0].recording_version,'night');assert.equal(saved[0].webinar_revision,7);assert.equal(saved[0].is_preview,true);
+console.log('PASS only explicit shared submissions enter review with server-bound name, webinar, recording, revision and preview scope.');
