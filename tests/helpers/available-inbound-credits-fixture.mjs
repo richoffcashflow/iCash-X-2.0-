@@ -26,6 +26,17 @@ export async function testAvailableInboundCredits(f){
   const a=await reserve();assert(a.allowed,JSON.stringify(a));assert.equal(a.session.max_total_seconds,120);
   assert.equal(await val('select reserved_cents from public.icash_wallets where account_id=$1',[account]),0);
  });
+ const durationMigration=read('supabase/migrations/20261013184500_preserve_active_call_duration.sql');
+ await db.exec(durationMigration.match(/do \$inbound\$[\s\S]*?end \$inbound\$;/)[0]);
+ for(const cents of [1,110])await scenario('normal incoming call keeps ten minutes with '+cents+' cents',async()=>{
+  await q('update public.icash_wallets set balance_cents=$1',[cents]);
+  const a=await reserve();assert(a.allowed,JSON.stringify(a));assert.equal(a.session.max_total_seconds,600);
+  assert.equal(await val('select reserved_cents from public.icash_wallets where account_id=$1',[account]),0);
+  assert.equal(await val('select balance_cents from public.icash_wallets where account_id=$1',[account]),cents);
+  await f.trans('claim_setup');await f.trans('bounded',f.boundPayload(a.session));
+  await f.trans('bind_call_start',f.startPayload(a.session));
+  const bound=await f.serviceGet();assert.equal(Date.parse(bound.call_deadline_at)-Date.parse(bound.call_started_at),600000);
+ });
  for(const [label,sql] of [['empty wallet','update public.icash_wallets set balance_cents=0'],['disabled permission','update public.icash_spend_activations set enabled=false'],['unpaid credits',"update public.icash_funding_orders set state='pending'"]])await scenario(label+' still stops unfunded or unauthorized work',async()=>{
   await q(sql);assert.equal((await reserve()).allowed,false);assert.equal(await val('select count(*) from public.icash_operation_spend'),0);
  });

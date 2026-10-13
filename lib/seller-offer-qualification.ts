@@ -15,7 +15,7 @@ type Fact=keyof typeof questions;
 export type SellerQualification={ready:true}|{ready:false;nextQuestion:string;missing:Fact[];stop?:boolean};
 const yes=/^(?:(?:um|uh|well)[, .]+)*(?:yes|yeah|yep|sure|correct|absolutely|i am|it is|that's right|that is right)\b/i;
 const no=/^(?:(?:um|uh|well)[, .]+)*(?:no|nope|not really|not interested)\b/i;
-const answerable=(s:string)=>/[a-z0-9]/i.test(s)&&! /^(?:um|uh|hmm|hello|what|sorry|pardon)[.!? ]*$/i.test(s)&&! /\b(?:repeat (?:that|the question)|what do you mean|didn['’]?t (?:hear|understand))\b/i.test(s);
+const answerable=(s:string)=>/[a-z0-9]/i.test(s)&&! /^(?:um|uh|hmm|hello|what|sorry|pardon)[.!? ]*$/i.test(s)&&! /\b(?:repeat (?:that|the question)|what do you mean|(?:didn['’]?t|did not) (?:hear|understand))\b/i.test(s);
 
 /** The caller's actual answers, never research, an opener, or an LLM summary.
  * Historical conversations must already be bound to this account/deal/contact.
@@ -49,8 +49,8 @@ export function sellerOfferQualification(current:unknown,history:unknown[]=[]):S
    if(/\b(?:moving|relocat\w*|inherited|inheritance|tired of|downsizing|too much (?:work|upkeep)|can['’]?t (?:afford|maintain)|rather not (?:say|discuss))\b/i.test(text))facts.situation=true;
    if(/\b(?:condition|repairs?|updates?|work.*need|need.*work|shape.*(?:house|property))\b/i.test(question))facts.condition=true;
    if(/\b(?:needs? (?:a |an |some |new |major |minor )?(?:roof|work|repairs?|updat\w*|ac|paint)|gutted|good (?:shape|condition)|bad condition|fixer|recently (?:renovated|remodeled))\b/i.test(text))facts.condition=true;
-   if(/\b(?:anyone.*liv|who.*liv|occup(?:ied|ancy)|vacant|tenant)\b/i.test(question))facts.occupancy=true;
-   if(/\b(?:vacant|no one.*liv|nobody.*liv|tenant.*liv|i live|we live|rented out|unoccupied)\b/i.test(text))facts.occupancy=true;
+   if(/\b(?:(?:anyone|anybody|someone|who).*\bliv(?:e|es|ing)|occup(?:ied|ancy)|vacant|tenants?)\b/i.test(question))facts.occupancy=true;
+   if(/\b(?:vacant|(?:no one|nobody|tenants?).*\bliv(?:e|es|ing)|i live|we live|rented out|unoccupied)\b/i.test(text))facts.occupancy=true;
    if(/\b(?:when.*(?:sell|clos|mov)|(?:selling|closing) (?:timeline|timeframe)|how (?:soon|quickly)|ideal.*(?:time|date))\b/i.test(question))facts.timing=true;
    if(/\b(?:next \w+ (?:days?|weeks?|months?)|as soon as possible|asap|no (?:rush|deadline)|(?:sell|close|move) (?:in|by|before|after|within))\b/i.test(text))facts.timing=true;
    const listing=sellerListingEvidence({transcript:rows.slice(0,index+1)},{action:'report_change',sellerStatement:text});
