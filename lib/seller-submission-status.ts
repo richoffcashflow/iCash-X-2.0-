@@ -1,5 +1,5 @@
 export type SellerSubmissionStatus = {
- phase: 'checking'|'matching'|'contacting'|'contact_started'|'address_review'|'review'|'scheduled';
+ phase: 'checking'|'matching'|'contacting'|'contact_started'|'address_review'|'review'|'scheduled'|'duplicate_demo'|'archived_demo';
  title: string;
  message: string;
  terminal: boolean;
@@ -7,6 +7,8 @@ export type SellerSubmissionStatus = {
 
 /** Public progress only. Never disclose internal receipts, contact data or prices. */
 export function sellerSubmissionStatus(state:string,responseState?:string,voiceOutcome?:string):SellerSubmissionStatus {
+ if(state==='duplicate_demo')return {phase:'duplicate_demo',title:'This property already has a demo.',message:'This submission did not queue a new call. Open your workspace to review the existing test.',terminal:true};
+ if(state==='archived_demo')return {phase:'archived_demo',title:'This test has been cleared.',message:'Start a new demo below to use this property again.',terminal:true};
  if(state==='unmatched')return {phase:'address_review',title:'We couldn’t match your address.',message:'Your request is saved, but contact hasn’t started. Check the street, city and ZIP code below.',terminal:true};
  if(responseState==='contact_started')return {phase:'contact_started',title:'Your buyer is reaching out.',message:'A text has been sent and a call has been started. Keep your phone nearby.',terminal:true};
  if(state==='assigned'&&voiceOutcome==='outside_contact_hours')return {phase:'scheduled',title:'Your call is queued.',message:'Your request arrived outside calling hours. Your buyer will call during the next contact window.',terminal:true};

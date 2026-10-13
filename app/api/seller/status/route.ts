@@ -4,7 +4,8 @@ import {validGuest,limitRequest} from '@/lib/funding';
 import {sellerSubmissionStatus} from '@/lib/seller-submission-status';
 export const dynamic='force-dynamic';
 const headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer'};
-type Intake={id:string;state:string;canonical_id:string|null};
+type Intake={id:string;state:string;canonical_id:string|null;contact_consent_scope:string|null;screening_id:string|null};
+const intakeFields='id,state,canonical_id,contact_consent_scope,screening_id';
 export async function GET(req:Request){
  const request=new URL(req.url).searchParams.get('request');
  if(!request||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(request))return Response.json({error:'Valid request required.'},{status:400,headers});
@@ -12,13 +13,22 @@ export async function GET(req:Request){
   const token=(await cookies()).get('keypath_seller')?.value;
   if(!validGuest(token))return Response.json({error:'Request not found.'},{status:404,headers});
   await limitRequest(req,'seller-status',token,90,300);
-  let [lead]=await db<Intake[]>(`icash_seller_intakes?request_id=eq.${request}&guest_hash=eq.${guestHash(token)}&select=id,state,canonical_id&limit=1`);
+  let [lead]=await db<Intake[]>(`icash_seller_intakes?request_id=eq.${request}&guest_hash=eq.${guestHash(token)}&select=${intakeFields}&limit=1`);
   if(!lead)return Response.json({error:'Request not found.'},{status:404,headers});
+  const demo=lead.contact_consent_scope==='icash_x_demo',duplicate=lead.state==='duplicate';
   // A duplicate submission keeps its own private receipt. Only generic progress
   // from its canonical request is returned, never the earlier seller's details.
   if(lead.state==='duplicate'&&lead.canonical_id){
-   const [canonical]=await db<Intake[]>(`icash_seller_intakes?id=eq.${lead.canonical_id}&select=id,state,canonical_id&limit=1`);
+   const [canonical]=await db<Intake[]>(`icash_seller_intakes?id=eq.${lead.canonical_id}&select=${intakeFields}&limit=1`);
    if(canonical)lead=canonical;
+  }
+  if(demo){
+   if(lead.screening_id){
+    const [screening]=await db<{state:string}[]>(`icash_screening_jobs?id=eq.${lead.screening_id}&select=state&limit=1`);
+    if(screening?.state==='archived')return Response.json(sellerSubmissionStatus('archived_demo'),{headers});
+   }
+   // An earlier test's successful call is not a new call for this receipt.
+   if(duplicate)return Response.json(sellerSubmissionStatus('duplicate_demo'),{headers});
   }
   let responseState:string|undefined,voiceOutcome:string|undefined;
   if(lead.state==='assigned'){

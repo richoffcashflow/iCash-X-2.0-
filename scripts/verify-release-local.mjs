@@ -3,6 +3,7 @@
 import {spawnSync} from 'node:child_process';
 const suites = [
  'dashboard-password', 'dashboard-boundaries',
+ 'seller-submission-status',
  'paid-provider-tests-disabled', 'buyer-package-photos', 'buyer-package-email',
  'deal-documents', 'signing-service-validation', 'assignment-contract-policy',
  'buyer-scenarios', 'buyer-privacy-release-source', 'worker-recovery',
