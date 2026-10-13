@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {webinarChatStream} from '../lib/webinar-chat-stream.ts';
+import {webinarPreviewLink} from '../lib/webinar-links.ts';
+const cues=[{id:'same-id',at:10,kind:'replay',name:'Sam',text:'Before'},{id:'next',at:20,kind:'replay',name:'Pat',text:'After'},{id:'hidden',at:30,kind:'host',name:'Host',text:'Hidden'}];
+const messages=[{id:'same-id',role:'user',text:'My message',playback_seconds:15},{id:'old-ai',role:'assistant',text:'Old reply',playback_seconds:16}];
+const keys=(seconds,rows=messages,pending=null)=>webinarChatStream(cues,rows,seconds,pending).map(e=>e.key);
+assert.deepEqual(keys(15,[],{text:'My message',playback_seconds:15}),['cue:same-id','sending']);
+assert.deepEqual(keys(25),['cue:same-id','message:same-id','cue:next']);
+assert.deepEqual(keys(25,JSON.parse(JSON.stringify(messages))),keys(25),'Reloaded messages retain the same position');
+assert.deepEqual(keys(0),['message:same-id'],'Seeking back does not hide your saved submission');
+assert.deepEqual(keys(35),keys(25),'Old assistant rows and host cues remain hidden');
+assert.equal(webinarChatStream([], [{id:'legacy',role:'user',text:'Older message',playback_seconds:null}],10)[0].at,0);
+const w={id:'saved-id',videoUrl:'',nightVersion:{videoUrl:'https://example.test/night.mp4'}};
+assert.equal(webinarPreviewLink(w),'/webinar?preview=saved-id&variant=night');
+assert.equal(webinarPreviewLink({...w,videoUrl:'https://example.test/day.mp4'}),'/webinar?preview=saved-id&variant=day');
+assert.equal(webinarPreviewLink({...w,videoUrl:'https://example.test/day.mp4'},'night'),'/webinar?preview=saved-id&variant=night');
+console.log('PASS unified chat ordering, pending messages, reloads, seeking, legacy rows, and preview recording fallback.');
