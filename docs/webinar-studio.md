@@ -148,13 +148,15 @@ At expiry, an unpaid viewer receives the next eligible unseen recording, even th
 Focused checks cover separate recording edits and selection, numeric links, prompt sequencing, bounded network requests, media reload recovery, checkout ownership, API validation and private analytics. The isolated Postgres run checks numeric code allocation, cross-link resume, playback accumulation excluding pauses, Day/Night report aggregation, verified purchase attribution and existing RLS/grants. Tests use synthetic data; no payment or email is sent. No production webinar recording existed when this update was verified. A full real-device playback/upload and live checkout test still needs the owner’s recording and account.
 
 
-## Timers
+## Offer countdowns and replay spots
 
-Each Day/Night recording has a **Timers** step with **Add timer**. Add up to eight countdowns, each with a video reveal time, label, duration or fixed closing date, placement above the offer or below the video, and an at-zero action (hide or show a message). Times use Hours / Minutes / Seconds.
+Studio setup has four steps: Video & details, Offers, Chat, Review & publish. Countdown controls live inside each offer; the separate Timers step and standalone viewer timers have been retired. Legacy timer data remains readable, but those display timers no longer appear in the room.
 
-Duration timers start the first time the viewer reaches their cue. The server stores the deadline by visitor, webinar, recording version and timer ID. Refreshes, multiple tabs, pauses, later sessions and edited revisions cannot extend it. To create a genuinely new countdown, add a new timer. Fixed deadlines use an absolute timestamp. Timers use server time; a missing timer response hides an unconfirmed countdown and retries without interrupting playback or checkout. Owner previews demonstrate countdowns against the video timeline without creating saved deadlines.
+Each offer can have an image, video reveal time, countdown duration and optional fixed closing date. The earlier deadline closes the offer. The server stores the first countdown deadline per visitor, webinar, Day/Night recording and offer ID, so pausing, refreshing or returning never extends it. Owner preview follows the video timeline without creating deadline records. Checkout already in progress is preserved.
 
-Timers control display, not payment terms. An actual offer closing date is configured in Offers. No timer creates purchases, scarcity counts or Meta events. Existing sessions keep their saved webinar configuration; newly saved timer settings apply to new sessions.
+**Show a replay spots bar** adds a starting count (10 by default) beside the offer countdown and in the offer card. Purchase labels in the recording’s CSV reduce that count after the offer appears and before the next offer starts. A repeated buyer counts once within an offer; ordinary messages, including “I’m in,” do not decrement it. The calculation follows playback, survives refresh through saved playback position, stays independent for Day/Night recordings, and never goes below zero. A new offer starts its own count.
+
+The bar is explicitly labeled **Replay · simulated spots**. It does not represent real inventory, record payments, emit purchase events, or close checkout at zero. The offer’s deadline still controls its availability. Disabling the bar hides it; clearing the recording’s CSV removes its simulated purchase cues. New settings apply to new sessions; existing sessions retain their saved configuration.
 
 ## Retired Intelligence view
 

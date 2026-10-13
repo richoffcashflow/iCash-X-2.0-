@@ -21,7 +21,7 @@ class Audio {
 }
 globalThis.AudioContext = Audio;
 globalThis.window = {AudioContext: Audio, addEventListener: (n,f)=>listeners.set(n,f), removeEventListener: n=>listeners.delete(n), setInterval: (f,ms)=>{intervals.set(ms,f);return ms;}, clearInterval: id=>intervals.delete(id)};
-const h = await harness('components/webinar-offer-moment.tsx', {Clock:'clock', Volume2:'volume', VolumeX:'muted',formatWatchTime,timerDisplay});
+const h = await harness('components/webinar-offer-moment.tsx', {Clock:'clock', Volume2:'volume', VolumeX:'muted',WebinarOfferSpots:'offer-spots',formatWatchTime,timerDisplay});
 const now = Date.parse('2026-10-12T12:00:00Z');
 const base = {now,timerNow:now,seconds:0,timers:[],deadlines:{},checkoutEngaged:false,onOpen(){}};
 const offer = {id:'one',title:'Start your workspace',ctaLabel:'Get access',expiresAt:new Date(now+600000).toISOString()};
@@ -38,5 +38,7 @@ render({now:now+590000}); assert.equal(intervals.size,0);
 assert.equal(render({now:now+600000}),null);
 assert.equal(render({checkoutEngaged:true}),null);
 tree=render({offer:{...offer,expiresAt:null}});assert.ok(!tree.props.className.includes('wb-last-chance'));assert.ok(!all(tree).some(n=>n.props?.role==='timer'));
+tree=render({spots:{total:10,remaining:9}});assert.deepEqual(find(tree,'offer-spots').props.spots,{total:10,remaining:9});
+tree=render({spots:{total:10,remaining:0}});assert.ok(find(tree,'button'),'A simulated zero does not close the actual offer');
 h.close();assert.equal(closed,1);assert.equal(listeners.size,0);
 console.log('Offer reveal, real expiration, last chance, ticking cadence, mute, background silence, checkout and audio cleanup passed.');

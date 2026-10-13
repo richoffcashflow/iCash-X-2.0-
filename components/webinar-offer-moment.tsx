@@ -2,12 +2,14 @@
 import {useEffect, useRef, useState} from 'react';
 import {Clock, Volume2, VolumeX} from 'lucide-react';
 import {formatWatchTime} from '@/lib/webinar-policy';
+import {WebinarOfferSpots} from '@/components/webinar-offer-spots';
+import type {ReplayOfferSpots} from '@/packages/webinar-engine/src/replay-offer-spots';
 
 
 type Offer = {id: string; title: string; ctaLabel: string; expiresAt?: string | null};
 
-export function WebinarOfferMoment({offer, now, onOpen, checkoutEngaged}: {
-  offer?: Offer | null; now: number; onOpen: () => void; checkoutEngaged: boolean;
+export function WebinarOfferMoment({offer, now, onOpen, checkoutEngaged, spots=null}: {
+  offer?: Offer | null; now: number; onOpen: () => void; checkoutEngaged: boolean; spots?:ReplayOfferSpots|null;
 }) {
   const [sound, setSound] = useState(true);
   const [audioReady, setAudioReady] = useState(false);
@@ -61,9 +63,9 @@ export function WebinarOfferMoment({offer, now, onOpen, checkoutEngaged}: {
       <h2>{lastChance ? 'Make your move before time runs out.' : offer.title}</h2>
       <p>{lastChance ? 'Review your offer and complete checkout before the deadline.' : 'Your next step is ready. Open the offer while you keep watching.'}</p>
     </div>
-    {remaining !== null && remaining > 0 && <div className="wb-moment-clock"><span><Clock size={16}/>Offer closes in</span><strong role="timer" aria-label={`$Offer closes in: ${formatWatchTime(remaining)}`}>{formatWatchTime(remaining)}</strong>
+    {(remaining !== null || spots) && <div className="wb-moment-availability">{remaining !== null && remaining > 0 && <div className="wb-moment-clock"><span><Clock size={16}/>Offer closes in</span><strong role="timer" aria-label={`Offer closes in: ${formatWatchTime(remaining)}`}>{formatWatchTime(remaining)}</strong>
       <button type="button" aria-pressed={sound} onClick={() => setSound(value => !value)}>{sound ? <Volume2 size={16}/> : <VolumeX size={16}/>}Clock sound {sound ? 'on' : 'off'}</button>
-    </div>}
+    </div>}<WebinarOfferSpots spots={spots} compact/></div>}
     <button type="button" className="wb-primary" aria-controls="webinar-offer" onClick={onOpen}>{offer.ctaLabel}</button>
   </section>;
 }
