@@ -12,6 +12,9 @@ export async function testBuyerIntentContext({q,one,rpc,a,d,t,session}){
   // 1. No seller slots: retain the actual request, including an unavailable day.
   const reschedule="I can't do Friday. Can I view the property on Saturday?";
   assert.equal(await viewing([user(reschedule)]),reschedule);
+  const shortRequest='I cannot do Friday. Can I view Saturday?';
+  assert.equal(await viewing([user(shortRequest)]),shortRequest);
+  assert.equal(await viewing([user('I cannot view Saturday.')]),null);
   assert.equal(await viewing([user('Do not send the contract yet. Can I view the property first?')]),'Do not send the contract yet. Can I view the property first?');
   const rescheduleId=await insert(reschedule);
   assert.equal((await one('select kind,quote from icash_buyer_viewing_requests where source_id=$1',[rescheduleId])).quote,reschedule);
