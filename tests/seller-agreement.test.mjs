@@ -36,14 +36,19 @@ const d={now:()=>now,history:async()=>({transcript:[{role:'agent',message:'What 
  if(path==='rpc/icash_seller_agreement_call_context')return scope;
  if(path==='rpc/icash_call_offer_context')return null;
  if(path.startsWith('icash_signing_envelopes?'))return envelopes;
+ if(path.startsWith('icash_contract_text_deliveries?'))return [{message_id:'text'}];
+ if(path.startsWith('icash_text_messages?'))return [{state:'accepted',provider_id:'provider-text'}];
  if(path.startsWith('icash_deal_files?'))return [{terms:savedTerms,stage:'draft'}];
  if(path.startsWith('icash_screening_jobs?'))return [{snapshot}];
  if(path.startsWith('icash_customer_identities?'))return [{principal:terms.buyer}];
+ if(path.startsWith('icash_text_threads?'))return [{id:'thread'}];
+ if(path.startsWith('icash_text_suppressions?'))return [];
+ if(path==='rpc/icash_sms_thread_review_current')return true;
  if(path==='rpc/icash_claim_seller_agreement'){if(claim)return {...claim,claimed:false};savedTerms=body.p_terms;claim={id:'claim',claimed:true,envelopeId:null};return claim;}
  if(path==='rpc/icash_finish_seller_agreement'){claim.envelopeId=body.p_envelope;return true;}
  if(path==='rpc/icash_fail_seller_agreement')return null;
  throw Error(path);
- },send:async i=>{providerSends++;assert.equal(i.phoneLinkOnly,true);assert.equal(i.signers[0].phone,scope.phone);envelopes=[{id:'envelope',state:'awaiting_counterparty',test_mode:false,terms:savedTerms,recipients:[{name:confirmation.sellerLegalName,phone:scope.phone},{name:terms.buyer}]}];return {id:'envelope',testMode:false};},text:async()=>{texts++;return {sent:true,status:'accepted',instruction:'Accepted, not yet delivered.'};},refresh:async()=>({status})};
+ },send:async i=>{providerSends++;assert.equal(i.phoneLinkOnly,true);assert.equal(i.signers[0].phone,scope.phone);envelopes=[{id:'envelope',state:'awaiting_counterparty',test_mode:false,terms:savedTerms,recipients:[{id:'1',name:confirmation.sellerLegalName,phone:scope.phone},{id:'2',name:terms.buyer}]}];return {id:'envelope',testMode:false};},text:async()=>{texts++;return {sent:true,status:'accepted',instruction:'Accepted, not yet delivered.'};},refresh:async()=>({status})};
 const send={action:'confirm_and_send',conversationId:'conv_fixture',confirmation},token='a'.repeat(64);
 assert.equal((await sellerAgreementAction(token,send,d)).sent,true);assert.equal(providerSends,1);assert.equal(savedTerms.priceCents,9000000);assert.equal(savedTerms.closingDate,date);
 assert.equal((await sellerAgreementAction(token,send,d)).sent,true);assert.equal(providerSends,1,'retry must reuse the exact envelope');

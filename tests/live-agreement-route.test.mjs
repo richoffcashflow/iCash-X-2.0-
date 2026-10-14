@@ -23,6 +23,9 @@ const db=async(path,method,b)=>{
  if(path.startsWith('icash_deal_files?'))return [{terms,stage:'draft'}];
  if(path.startsWith('icash_screening_jobs?'))return [{snapshot}];
  if(path.startsWith('icash_customer_identities?'))return [{principal:'Fixture buyer'}];
+ if(path.startsWith('icash_text_threads?'))return [{id:'thread'}];
+ if(path.startsWith('icash_text_suppressions?'))return [];
+ if(path==='rpc/icash_sms_thread_review_current')return true;
  if(path==='rpc/icash_claim_seller_agreement'){if(claim)return {...claim,claimed:false};terms=b.p_terms;claim={id:'claim',claimed:true,envelopeId:null};return claim;}
  if(path==='rpc/icash_finish_seller_agreement'){claim.envelopeId=b.p_envelope;return true;}
  throw Error(path);

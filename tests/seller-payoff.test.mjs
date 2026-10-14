@@ -73,6 +73,9 @@ const signing={now:()=>now,history:async()=>({transcript:[{role:'agent',message:
  if(path.startsWith('icash_deal_files?'))return [{terms,stage:'draft'}];
  if(path.startsWith('icash_screening_jobs?'))return [{snapshot}];
  if(path.startsWith('icash_customer_identities?'))return [{principal:'Fixture Buyer'}];
+ if(path.startsWith('icash_text_threads?'))return [{id:'thread'}];
+ if(path.startsWith('icash_text_suppressions?'))return [];
+ if(path==='rpc/icash_sms_thread_review_current')return true;
  if(path==='rpc/icash_claim_seller_agreement'){claimedTerms=body.p_terms;return {id:'claim',claimed:true,envelopeId:null};}
  if(path==='rpc/icash_finish_seller_agreement')return true;
  throw Error(path);
