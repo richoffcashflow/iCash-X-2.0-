@@ -16,7 +16,7 @@ const vip={...policy.newVipWebinar(randomUUID(),one),status:'published',videoUrl
 const settings=policy.settingsSchema.parse({enabled:false,fromEmail:'',postalAddress:'',subjects:['a','b','c'],messages:['a','b','c'],optimizer:{enabled:true,explorationPercent:20,minVisitors:100}});
 const two={...one,id:randomUUID(),publicCode:'123458',title:'Second'},three={...one,id:randomUUID(),publicCode:'123459',title:'Third',nightEnabled:true};three.nightVersion={...createNightRecording(three),videoUrl:'https://example.test/third-night.mp4'};
 let pool=[one,vip,two,three],stats=[],failRouting=false;
-let now=Date.parse('2026-10-07T18:00:00Z'),history=[],events=[],calls=[],owner=true,account=null,paid=false,vipPaid=false;
+let now=Date.parse('2026-10-07T18:00:00Z'),history=[],events=[],calls=[],owner=true,ownerLocked=false,account=null,paid=false,vipPaid=false;
 class Clock extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
 class WebinarError extends Error{constructor(status,message){super(message);this.status=status;}}
 const visitor={id:randomUUID(),attribution:{ad_id:'77777'}};
@@ -32,7 +32,7 @@ const db=async(path,method,body)=>{
  return {};
 };
 async function load(path,deps,key){globalThis[key]=deps;const source=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');return import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.'+key+';\n'+source).toString('base64'));}
-const common={webinarViewerLocation,...policy,z,db,Date:Clock,webinarHeaders:{'Cache-Control':'private, no-store'},WebinarError,webinarBody:req=>req.json(),webinarOrigin:()=>{},webinarLimit:async()=>{},webinarOwner:async()=>{if(!owner)throw new WebinarError(403,'Owner only');},webinarError:e=>Response.json({error:e.message},{status:e.status||503})};
+const common={webinarViewerLocation,...policy,z,db,Date:Clock,webinarHeaders:{'Cache-Control':'private, no-store'},WebinarError,webinarBody:req=>req.json(),webinarOrigin:()=>{},webinarLimit:async()=>{},webinarOwner:async()=>{if(ownerLocked)throw Error('DASHBOARD_PASSWORD_REQUIRED');if(!owner)throw new WebinarError(403,'Owner only');},webinarError:e=>Response.json({error:e.message},{status:e.status||503})};
 const returns=await load('../lib/webinar-ad-returns.ts',{...common,returnVisit,paidAdArrival,confirmedWatch,bestConvertingWebinar,stableWebinarOrder,selectRecording,availableWebinarRows:rows=>rows.map(policy.webinarFromRow),webinarConversionRecordings:async()=>stats},'__adReturns');
 const offerServer=await load('../lib/webinar-offer-server.ts',{...common,timerResponseSchema,withOfferDeadlines},'__returnOffers');
 const {POST}=await load('../app/api/webinar/start/route.ts',{...common,...returns,...offerServer,webinarLink,randomUUID,randomBytes,selectRecording:(w,t,_now,...rest)=>selectRecording(w,t,new Date(now),...rest),selectOffer,snapshotChat,returnVisit,approximateRegion:()=>null,webinarSite:{workspacePath:'/',checkoutPath:'/webinar/checkout'},webinarVipAccess:async()=>vipPaid,webinarVisitor:async()=>visitor,webinarCustomerAccount:async()=>account,webinarPaid:async()=>false,webinarCustomerPaid:async()=>paid,validGuest:()=>true,guestHash:()=> 'guest',cookies:async()=>({get:()=>({value:'guest'}),set:()=>{}})},'__fixedRoute');
@@ -112,3 +112,8 @@ data=await(await post({preview:one.id,variant:'night'})).json();
 assert.equal(data.preview,true);assert.equal(data.webinar.recordingVersion,'night');
 assert.ok(!calls.some(c=>c.path.startsWith('icash_webinar_events?')));
 console.log('PASS fast entry: owner authorization retained and preview skips unused offer history.');
+
+ownerLocked=true;calls=[];data=await(await post({preview:one.id})).json();
+assert.equal(data.previewLocked,true);assert.equal(data.webinar,undefined);assert.ok(!calls.some(c=>c.path==='rpc/icash_webinar_begin'));
+ownerLocked=false;
+console.log('PASS expired owner proof returns a locked preview without creating a session.');
