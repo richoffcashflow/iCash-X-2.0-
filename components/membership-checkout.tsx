@@ -1,5 +1,4 @@
 'use client';
-import {finalSalePolicy} from '@/lib/final-sale-policy';
 import {webinarRequest} from '@/lib/webinar-client';
 import {webinarBrowserEvent} from '@/lib/webinar-browser-events';
 import {useEffect,useRef,useState} from 'react';
@@ -37,11 +36,9 @@ export function MembershipCheckout({preview=false,onSignedIn,embedded=false,pres
   <p className="membership-description">{presentation==='plan'?'AI automation for your wholesale real estate business.':'Your AI workspace. Your contacts, conversations, and deal tools in one place.'}</p>
   {presentation==='plan'&&<p className="membership-plan-included">Your plan includes</p>}
   <ul className="membership-includes">{(presentation==='plan'?['Your personalized wholesale AI bot','AI property research & cash offer estimates','Automated seller calls, texts & follow-ups','Contract preparation & buyer matching','Deal progress & saved activity']:['Your personalized AI bot','Property research & cash offer estimates','Call & text conversation history','Buyer matching & contract tools','Deal progress & saved activity']).map(label=><li key={label}><Check size={15} aria-hidden="true"/>{label}</li>)}</ul>
-  {presentation!=='plan'&&<div className="membership-credits-note"><strong>Work credits are separate</strong><p>Start with a $0 work balance. Add $10, $25, $50, or a custom amount inside your workspace. Credits fund eligible AI activity. No daily billing or automatic credit refill.</p></div>}
   {data?.mode==='test'&&<p className="membership-note">Test checkout · No live work.</p>}
-  <p className="membership-renewal" id="membership-terms">{data?priceLabel(data.offer.priceCents):'The displayed price'} billed monthly until cancelled. {presentation==='plan'?'Cancel from the account menu.':'Cancel future renewals from the account menu. No work credits are included. Live work requires setup and available services; no deal or income is guaranteed.'}</p>
-  {presentation!=='plan'&&<p className="membership-renewal">{finalSalePolicy} <a href="/costs-and-disclosures#refunds" target="_blank" rel="noopener noreferrer">Billing policy</a></p>}
-  <label className="membership-consent"><input type="checkbox" checked={accepted} disabled={busy||!data?.ready} onChange={e=>setAccepted(e.target.checked)} aria-describedby="membership-terms"/><span>I authorize the monthly subscription and accept {presentation==='plan'?<a href="/costs-and-disclosures#refunds" target="_blank" rel="noopener noreferrer">the final-sale policy</a>:'the final-sale policy above'}.</span></label>
+  <p className="membership-renewal" id="membership-terms">{data?priceLabel(data.offer.priceCents):'The displayed price'} billed monthly until cancelled. Cancel from the account menu.</p>
+  <label className="membership-consent"><input type="checkbox" checked={accepted} disabled={busy||!data?.ready} onChange={e=>setAccepted(e.target.checked)} aria-describedby="membership-terms"/><span>I agree to monthly billing and the <a href="/costs-and-disclosures#refunds" target="_blank" rel="noopener noreferrer">billing policy</a>.</span></label>
   <button className="setup-primary" disabled={busy||!accepted||!data?.ready} onClick={()=>void checkout()}>{busy?'Opening secure checkout…':data?presentation==='plan'?'Get my AI bot':`Get software access — ${priceLabel(data.offer.priceCents)}/month`:'Checking checkout…'}<ArrowRight size={17}/></button>
   <p className="membership-secure"><ShieldCheck size={14} aria-hidden="true"/>{embedded&&data?.embeddedReady?'Secure payment here through Stripe':'Continues to secure Stripe checkout'}</p>
   {preview&&<p className="membership-note" role="status">{previewNotice?'This button opens secure Stripe payment for customers. Payments are disabled in owner preview.':'Owner preview · Payments disabled'}</p>}

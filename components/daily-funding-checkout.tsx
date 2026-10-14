@@ -1,11 +1,10 @@
 'use client';
-import {finalSalePolicy} from '@/lib/final-sale-policy';
 import {useEffect,useId,useRef,useState} from 'react';
 import {ArrowRight,Check} from 'lucide-react';
 import {AccountAccess} from './account-access';
 import {validDailyBudget} from '@/lib/daily-budget';
-import {dailyConsent,dailyConsentVersion} from '@/lib/daily-consent';
-import {earlyAccessTermsVersion,earlyAccessDailyDisclosure} from '@/lib/funding-consent';
+import {dailyConsentVersion} from '@/lib/daily-consent';
+import {earlyAccessTermsVersion} from '@/lib/funding-consent';
 type Pack={code:string;price_cents:number;credit_cents:number;enabled:boolean};
 type Funding={mode:'test'|'live'|null;earlyAccess?:boolean;packs?:Pack[];paidCents?:number;needsClaim?:boolean;email?:string};
 type Daily={ready:boolean;billingModel?:string;plan:{state:string;budgetCents:number|null;nextCharge:number|null}|null};
@@ -44,10 +43,9 @@ export function DailyFundingCheckout({onSignedIn,initialCode,startBot=false,onBe
   <div className="daily-slider-labels"><span>$10</span><span>{dollars(packs.at(-1)?.price_cents??100000)}</span></div>
   <p className="daily-renewal" id={id+'-terms'}>{changing?'From your next renewal. ':''}<strong>{dollars(amount)} every 24 hours until you stop.</strong></p>
   {early&&<p className="daily-availability" id={id+'-availability'}>Early access. Daily billing continues while work is waiting.</p>}
-  <label className="membership-consent"><input type="checkbox" checked={accepted} disabled={busy||!daily.ready} onChange={e=>setAccepted(e.target.checked)}/><span>I authorize the daily charge and accept the final-sale policy below.</span></label>
+  <label className="membership-consent"><input type="checkbox" checked={accepted} disabled={busy||!daily.ready} onChange={e=>setAccepted(e.target.checked)}/><span>I agree to daily billing and the <a href="/costs-and-disclosures#refunds" target="_blank" rel="noopener noreferrer">billing policy</a>.</span></label>
   <button type="button" className="setup-primary daily-checkout-button" disabled={!accepted||busy||!daily.ready||!selected} aria-describedby={`${id}-terms${early?` ${id}-availability`:''}`} onClick={()=>void checkout()}>{busy?'One moment…':changing?`Save ${dollars(amount)}/day`:`Run bot · ${dollars(amount)}/day`}<ArrowRight size={18}/></button>
   {daily.billingModel==='membership_credits'&&<small className="daily-membership-note">Your $50/month software subscription is separate.</small>}
-  <p className="credit-purchase-terms">{finalSalePolicy}</p><details className="boost-terms"><summary>Billing details</summary><p>{dailyConsent}</p><p>Eligible work must fit your available credits and daily limit. Work that doesn’t fit waits for a later funded day; tomorrow’s money is never spent early. Increasing your budget doesn’t guarantee a lead or deal.</p>{early&&<p>{earlyAccessDailyDisclosure}</p>}<a href="/costs-and-disclosures#daily-billing" target="_blank" rel="noopener noreferrer">All costs and terms ↗</a></details>
   {daily.plan?.nextCharge&&<p className="daily-next-renewal">Next renewal: {new Date(daily.plan.nextCharge*1000).toLocaleString('en-US',{hour12:true})}.</p>}
   {daily.plan&&daily.plan.state!=='stopped'&&<button className="boost-refresh" disabled={busy} onClick={()=>void stop()}>Stop daily billing</button>}
   {!daily.ready&&<p role="status">Could not start daily funding. <button type="button" onClick={()=>void refresh()}>Try again</button> <a href="/support">Get help</a></p>}{notice&&<p role="status">{notice}</p>}{error&&<p role="alert">{error} <button onClick={()=>void refresh()}>Refresh</button></p>}
