@@ -6,13 +6,14 @@ import {PropertyFocus} from '@/components/property-focus';
 import {WorkspacePanel} from '@/components/workspace-panel';
 import {BuyerOverview,type BuyerNetworkProgress,type BuyerSelection} from '@/components/buyer-overview';
 import {PropertyAnalysisSummary} from '@/components/property-analysis-summary';
+import {PropertyDebtSummary} from '@/components/property-debt-summary';
 import {agreementWorkspace} from '@/lib/agreement-workspace';
 import {dealCardSummary} from '@/lib/deal-card-summary';
 import {revealWorkspaceSection} from '@/lib/workspace-navigation';
 import styles from '../../workspace-easy.module.css';
 import '../../icash-brand.css';
 
-const property={id:'sample-property',completed_at:'2026-10-14T15:00:00Z',result:{property:{propertyId:'sample',address:'128 Sample Lane, Dallas, TX 75201',bedrooms:3,bathrooms:2,livingAreaSqft:1420,yearBuilt:1982,arvEstimate:{cents:19000000},repairs:{baselineCents:4500000}},financialCheck:{status:'eligible',reason:'Sample property'},preliminarySellerCeilingCents:9000000}};
+const property={id:'sample-property',completed_at:'2026-10-14T15:00:00Z',result:{property:{propertyId:'sample',address:'128 Sample Lane, Dallas, TX 75201',bedrooms:3,bathrooms:2,livingAreaSqft:1420,yearBuilt:1982,arvEstimate:{cents:19000000},repairs:{baselineCents:4500000},fetchedAt:'2026-10-14T15:00:00Z',financialScreening:{estimatedLoanBalanceCents:4500000,equityCents:14500000,activeLien:false,hoaLien:false,taxDelinquent:false,status:'payoff_verification_needed'}},financialCheck:{status:'eligible',reason:'Sample property'},preliminarySellerCeilingCents:9000000}};
 const buyers=[{buyer_id:'sample-buyer-1',name:'Cedar Ridge Homes',rank:1,ready:true}];
 const network:BuyerNetworkProgress={matches:8,emailed:6,responses:2,buyers:[{id:'sample-response-1',name:'Avery Morgan',state:'replied',reply:'I’m interested. Is the property available to view this Thursday afternoon?'},{id:'sample-response-2',name:'Jordan Ellis',state:'interested',reply:null}]};
 const scenarios=[['lead','New lead'],['waiting','Waiting for seller'],['buyers','Buyers interested'],['closing','Closing']] as const;
@@ -45,7 +46,7 @@ export function WorkspacePreview(){
       {scenario==='closing'&&<PropertyFocus title="Closing in progress" detail="Example Title has opened the file. Target closing: October 30, 2026. Payment has not been received."><button type="button" className="demo-button" onClick={()=>panel('closing')}>Review closing</button></PropertyFocus>}
       {scenario==='buyers'&&<section className="buyer-workspace" aria-label="Buyers"><BuyerOverview buyers={buyers} network={network} buyerPackage={{askingPriceCents:10000000,url:'#sample-package'}} onOpenPackage={()=>show('package')} onBuyer={openBuyer}/></section>}
       <div className="property-secondary-actions">
-       <WorkspacePanel title="Property details" label="Property details"><h4>Price & repair estimates</h4><PropertyAnalysisSummary result={property.result}/><h4>Property & owner</h4><p>3 beds · 2 baths · 1,420 sq. ft.</p><p>Taylor Parker · fictional seller</p><h4>Bot controls</h4><p>In your workspace you can pause or resume the bot for this lead here.</p></WorkspacePanel>
+       <WorkspacePanel title="Property details" label="Property details"><PropertyAnalysisSummary result={property.result}/><PropertyDebtSummary result={property.result}/><section><h4>Property & owner</h4><p>3 beds · 2 baths · 1,420 sq. ft.</p><p>Taylor Parker · fictional seller</p></section></WorkspacePanel>
        {scenario!=='lead'&&<WorkspacePanel id="sample-agreements" title="Agreements" label="Documents"><h4>Purchase agreement</h4><p>{contracted?'All signatures verified.':'Waiting for the seller’s signature.'}</p>{scenario==='closing'&&<><h4>Buyer agreement</h4><p>All signatures verified.</p></>}<dl className="home-facts"><div><dt>Seller</dt><dd>Taylor Parker</dd></div><div><dt>Purchase price</dt><dd>$90,000</dd></div></dl>{contracted&&<div className="panel-shortcuts"><button type="button" className="workspace-quiet" onClick={()=>panel('closing')}>Closing office & payment</button><button type="button" className="workspace-quiet" onClick={()=>panel('visits')}>Visits & buyer deposit</button></div>}<p>Sample agreement history. Your workspace also keeps manual document tools here.</p></WorkspacePanel>}
       </div>
       <WorkspacePanel id="sample-buyer" title={selected?.buyer.name??'Buyer'}>
@@ -54,7 +55,7 @@ export function WorkspacePreview(){
       </WorkspacePanel>
       <WorkspacePanel id="sample-funds" title="Buyer funds & signing authority"><p>Cedar Ridge Homes has reviewed funds and signing authority in this example. Avery Morgan and Jordan Ellis still need review.</p><p>In your workspace, you can submit dated buyer evidence for a qualified reviewer here.</p></WorkspacePanel>
       <WorkspacePanel id="sample-visits" title="Visits & buyer deposit"><h4>Seller availability</h4><p>Thursday, October 15 · 2:00 PM – 4:00 PM Central.</p><p>Avery asked to visit. A specific appointment still needs confirmation from the seller and buyer.</p>{scenario==='closing'&&<><h4>Buyer deposit</h4><p>Sample deposit: $2,000 received and cleared.</p></>}</WorkspacePanel>
-      <WorkspacePanel id="sample-closing" title="Closing"><h4>{scenario==='closing'?'Closing in progress':'Choose your closing office'}</h4><p>{scenario==='closing'?'Example Title has opened the file. Target closing: October 30, 2026. Funds have not been received.':'When you’re ready, choose a title company and save how you want to receive your proceeds.'}</p><p>This is sample closing information.</p></WorkspacePanel>
+      <WorkspacePanel id="sample-closing" title="Closing"><h4>{scenario==='closing'?'Closing in progress':'Choose your closing office'}</h4><p>{scenario==='closing'?'Example Title has opened the file. Target closing: October 30, 2026. Funds have not been received.':'When you’re ready, choose a title company and save how you want to receive your proceeds.'}</p><PropertyDebtSummary result={property.result} closing/><p>This is sample closing information.</p></WorkspacePanel>
      </div>
     </div></article></div>
    </div></section>

@@ -4,6 +4,7 @@ import {spawnSync} from 'node:child_process';
 const suites = [
  'dashboard-password', 'dashboard-boundaries',
  'workspace-simplification', 'workspace-stage-summary', 'buyer-network-workspace', 'fulfillment-guidance', 'workspace-next-actions', 'deal-tools-disclosure',
+ 'property-analysis-summary', 'property-debt-summary',
  'seller-submission-status',
  'seller-agreement-identity', 'seller-agreement-evidence', 'live-agreement-history', 'live-agreement-route',
  'seller-agreement-delivery-status', 'seller-agreement-delivery-preflight',

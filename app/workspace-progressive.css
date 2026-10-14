@@ -50,11 +50,14 @@
 
 /* The property itself is the workspace. Only the current task and buyers stay on it. */
 .personalized-workspace .workspace-panel{display:contents}
-.personalized-workspace .property-focus{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 0;text-align:left}
+.personalized-workspace .property-focus{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px;padding:20px 0;border:0;border-radius:0;overflow:visible;text-align:left}
+.personalized-workspace .property-focus>div:first-child{flex:1 1 260px;min-width:0;overflow-wrap:anywhere}
 .personalized-workspace .property-focus h3{font-size:17px;line-height:1.4;margin:0 0 6px;text-align:left;letter-spacing:-.3px}
 .personalized-workspace .property-focus p{font-size:13px;line-height:1.65;color:#666;margin:0;text-align:left}
-.personalized-workspace .property-focus-action{flex-shrink:0}
+.personalized-workspace .property-focus-action{flex:0 1 auto;max-width:100%;min-width:0}
 .personalized-workspace .property-focus-action button{min-height:44px}
+.icash-brand-workspace.icash-brand-workspace .property-focus-action .demo-button{min-width:0;min-height:44px;padding:12px 16px;border:1px solid #171717;border-radius:10px;background:#171717;color:#fff;font-size:14px;font-weight:600;line-height:1.4;white-space:normal}
+.icash-brand-workspace.icash-brand-workspace .property-focus-action .demo-button:hover{background:#333;border-color:#333}
 .personalized-workspace .property-resources{margin:0}
 .personalized-workspace .buyer-workspace{margin:16px 0 0}
 .personalized-workspace .buyer-overview{border:0;padding:0;border-radius:0}
@@ -69,6 +72,14 @@
 .personalized-workspace .workspace-panel-body{padding:20px;text-align:left;font-size:13px;line-height:1.65}
 .personalized-workspace .workspace-panel-body :is(p,h4){text-align:left}
 .personalized-workspace .workspace-panel-body>section+section{border-top:1px solid #eee;margin-top:24px;padding-top:20px}
+.personalized-workspace .property-debt-summary{margin:20px 0;text-align:left}
+.personalized-workspace .property-debt-summary h4{font-size:14px;line-height:1.5;margin:0 0 12px}
+.personalized-workspace .property-debt-summary dl{margin:0}
+.personalized-workspace .property-debt-summary dl>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:9px 0;border-bottom:1px solid #eee;font-size:12px;line-height:1.6}
+.personalized-workspace .property-debt-summary dt{color:#666}
+.personalized-workspace .property-debt-summary dd{margin:0;text-align:right;font-weight:600;color:#222;font-variant-numeric:tabular-nums}
+.personalized-workspace .property-debt-summary p{font-size:12px;line-height:1.6;margin:12px 0 0;color:#444}
+.personalized-workspace .property-debt-summary small{display:block;font-size:11px;line-height:1.6;color:#666;margin-top:12px}
 .personalized-workspace .workspace-detail-dialog{width:min(620px,calc(100vw - 24px));max-height:90dvh;overflow:auto;margin:auto}
 .personalized-workspace .workspace-detail-dialog .contact-dialog-heading{position:sticky;top:0;z-index:2;background:white;align-items:center;border-bottom:1px solid #eee}
 .personalized-workspace .workspace-detail-dialog h3{font-size:18px;letter-spacing:-.3px;margin:0;text-align:left}
@@ -80,7 +91,7 @@
 .workspace-preview-stage{display:grid;gap:5px;flex-shrink:0;font-size:11px;text-align:left;color:#666}
 .workspace-preview-stage select{min-height:44px;border:1px solid #ddd;border-radius:8px;background:white;padding:8px 28px 8px 10px;color:#222;font-size:12px}
 .personalized-workspace #platform-buyer-network .workspace-panel-trigger{margin-bottom:16px;font-size:12px;min-height:44px}
-@media(max-width:560px){.personalized-workspace .property-focus{align-items:flex-start;flex-direction:column;gap:12px;padding:16px 0}.personalized-workspace .property-focus-action{width:100%}.personalized-workspace .property-focus-action>button{width:100%}.personalized-workspace .buyer-overview{padding:0}.workspace-preview-banner{align-items:stretch;flex-direction:column;gap:14px}.workspace-preview-stage{grid-template-columns:auto 1fr;align-items:center;gap:12px}.workspace-preview-stage select{min-width:0;width:100%}.personalized-workspace .workspace-panel-body{padding:16px}}
+@media(max-width:560px){.personalized-workspace .property-focus{align-items:flex-start;flex-direction:column;gap:12px;padding:16px 0}.personalized-workspace .property-focus>div:first-child{flex-basis:auto}.personalized-workspace .property-focus-action{width:100%}.personalized-workspace .property-focus-action>button{width:100%}.personalized-workspace .buyer-overview{padding:0}.workspace-preview-banner{align-items:stretch;flex-direction:column;gap:14px}.workspace-preview-stage{grid-template-columns:auto 1fr;align-items:center;gap:12px}.workspace-preview-stage select{min-width:0;width:100%}.personalized-workspace .workspace-panel-body{padding:16px}}
 
 .personalized-workspace #platform-buyer-network .workspace-panel-trigger{display:inline-flex;align-items:center;gap:8px;padding:8px 0!important}
 

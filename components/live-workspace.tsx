@@ -16,6 +16,7 @@ import {openDealSection} from '@/lib/workspace-navigation';
 import {journeyNextAction} from '@/lib/deal-journey-progress';
 import {ManualCallOptions} from '@/components/manual-call-options';
 import {PropertyAnalysisSummary} from '@/components/property-analysis-summary';
+import {PropertyDebtSummary} from '@/components/property-debt-summary';
 import {PropertyThumbnail} from '@/components/property-thumbnail';
 import {PropertyCardHeader} from '@/components/property-card-header';
 import {WorkspacePanel} from '@/components/workspace-panel';
@@ -123,9 +124,8 @@ function PropertyCard({onAsk,assistantVipLocked=false,property:p,work,principal,
  const sellerSummary=conversationDisplaySummary(calls.find(c=>c.party==='seller'&&c.summary)?.summary,'seller');
  async function control(){if(controlBusy)return;setControlBusy(true);setControlMessage('');try{await post('/api/work/control',{action:manual?'return_to_bot':'takeover',screeningId:p.id});setManual(!manual);setControlMessage(manual?'Bot control restored. Setup, credits and contact permissions still apply.':'You have control. New automatic work is paused for this property. Already-started work may finish.');onRefresh();}catch{setControlMessage('Could not confirm the control change. Refresh and check before continuing.');}finally{setControlBusy(false);}}
  const propertyDetails=<WorkspacePanel title="Property details" label="Property details" section="property">
-    <section><h4>{dealSummary?.contractSigned?'Original price & repair estimates':'Price & repair estimates'}</h4><PropertyAnalysisSummary result={p.result}/></section>
-    <section><h4>Bot controls</h4><div className="property-control"><span><b className={`property-bot-status tone-${bot.tone}`}><span className="ai-status-dot" aria-hidden="true"/>{bot.label}</b><small>{bot.detail}</small></span><button className="takeover-button" title={manual?'Let the bot manage new work for this property':'Pause new automated work for this property and handle it yourself'} disabled={controlBusy||['cancellation_pending','cancelled'].includes(deal?.stage??'')} onClick={()=>void control()}>{controlBusy?'Saving…':manual?'Resume bot for this lead':'Pause bot for this lead'}</button></div>
-    {controlMessage&&<p className="control-result" role="status">{controlMessage}</p>}</section>
+    <PropertyAnalysisSummary result={p.result}/>
+    <PropertyDebtSummary result={p.result}/>
     <section><h4>Property & owner details</h4><PropertyFacts property={p} lookups={lookups}/></section>
 {onAsk&&<button type="button" className="workspace-quiet property-ask-bot" aria-haspopup="dialog" disabled={stale} data-credit-action={assistantVipLocked?undefined:true} onClick={()=>onAsk(p.id,p.result.property.address)}><Sparkles size={15} aria-hidden="true"/><span className="property-ask-label">Ask AI Bot about this property</span>{assistantVipLocked&&<span className="assistant-vip-label"><Crown size={12} aria-hidden="true"/>VIP</span>}</button>}
    </WorkspacePanel>;
@@ -170,7 +170,7 @@ function PropertyNextStep({property,work,stale,onRefresh}:{property:Property;wor
  if(next.target==='signature'&&agreement.signatureId)return <div data-deal-section="signature"><PropertyFocus title={agreement.title} detail={agreement.detail}><SigningLinkButton envelopeId={agreement.signatureId}/></PropertyFocus></div>;
  const journey=work.journeys?.find(j=>j.screening_id===property.id&&j.state!=='closed');
  const journeyStep=journey?journeyNextAction(journey):null;
- if(journeyStep&&journeyStep.label===next.label&&journeyStep.target===next.target&&journeyStep.waitingOn!=='You')return <PropertyFocus title={journeyStep.waitingOn==='Bot'?'Preparing the buyer’s next step':journeyStep.waitingOn==='Title'?'Waiting for the closing office':journeyStep.waitingOn==='Seller'?'Waiting for the seller':journeyStep.waitingOn==='Buyer & seller'?'Waiting for visit confirmation':'Waiting for the buyer'} detail={next.detail}/>;
+ if(journeyStep&&journeyStep.label===next.label&&journeyStep.target===next.target&&journeyStep.waitingOn!=='You')return <PropertyFocus title={journeyStep.waitingOn==='Bot'?'Preparing the buyer’s next step':journeyStep.waitingOn==='Title'?'Closing in progress':journeyStep.waitingOn==='Seller'?'Waiting for the seller':journeyStep.waitingOn==='Buyer & seller'?'Waiting for visit confirmation':'Waiting for the buyer'} detail={next.detail}>{next.target==='closing'&&<button type="button" className="demo-button" onClick={e=>openDealSection(e.currentTarget,'closing')}>Review closing</button>}</PropertyFocus>;
  if(next.label==='View buyers'){
   if(agreement.title==='Agreement needs attention')return <PropertyFocus title={agreement.title}><button type="button" className="demo-button" onClick={e=>openDealSection(e.currentTarget,'contracts')}>Review signing request</button></PropertyFocus>;
   if(['Waiting for buyer signatures','Preparing the agreement'].includes(agreement.title))return <PropertyFocus title={agreement.title} detail={agreement.detail}/>;
@@ -238,7 +238,7 @@ function DealTools({property,principal,initial,manual,onManual,signing,signingCo
  async function handleMyself(){setBusy(true);setMessage('');try{await post('/api/work/control',{action:'takeover',screeningId:property.id});onManual();for(const e of signing.filter(e=>e.deal_id===dealId&&!['completed','test_completed'].includes(e.state))){await post('/api/work/signing',{action:'revoke_auto',id:e.id});}setMessage('You have control. Property automation is paused and pending auto-sign authorizations are off. Already-started work may finish. Existing contracts are unchanged.');}catch{setMessage('Could not confirm every control. Check pending auto-sign authorizations below before continuing.');}finally{setBusy(false);}}
  const amount=(key:'priceCents'|'assignmentFeeCents'|'assignmentDepositCents',label:string,help?:string)=><label>{label}<input inputMode="decimal" type="number" min="0" step="0.01" value={terms[key]===null?'':terms[key]!/100} onChange={e=>update(key,e.target.value===''?null:Math.round(Number(e.target.value)*100))}/>{help&&<small>{help}</small>}</label>;
  return <div className="deal-tools" data-unsaved-draft={dirty?'true':undefined}>
-  {dealId&&tools.buyers&&<FulfillmentDetails dealId={dealId} buyerReviewAvailable={tools.buyerReview} coordination={tools.coordination?<BuyerDealCoordination dealId={dealId} embedded/>:undefined}/>}
+  {dealId&&tools.buyers&&<FulfillmentDetails dealId={dealId} propertyResult={property.result} buyerReviewAvailable={tools.buyerReview} coordination={tools.coordination?<BuyerDealCoordination dealId={dealId} embedded/>:undefined}/>}
   {dealId&&tools.coordination&&!tools.buyers&&<WorkspacePanel title="Visits & buyer deposit" section="coordination"><BuyerDealCoordination dealId={dealId} embedded/></WorkspacePanel>}
   {cancellationReview&&nextSection!=='cancellation'&&<p className="workspace-review-notice" role="status">Cancellation needs your review. <button type="button" className="workspace-quiet" onClick={e=>openDealSection(e.currentTarget,'cancellation')}>Review cancellation</button></p>}
   <div className="property-secondary-actions">{secondary}

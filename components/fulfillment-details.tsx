@@ -12,8 +12,9 @@ import {revealWorkspaceSection} from '@/lib/workspace-navigation';
 import {WorkspacePanel} from './workspace-panel';
 import {BuyerResponseDetails} from './buyer-response-details';
 import {BuyerQualificationPanel} from './buyer-qualification-panel';
+import {PropertyDebtSummary} from './property-debt-summary';
 type Progress={proceedsReceipt?:ProceedsReceipt|null;dealStage?:string;buyerPricingReview?:string|null;buyerOutreachHeld?:boolean;closingSetup?:ClosingSetupView;buyerPackage?:{url:string;askingPriceCents:number;purchasePriceCents:number;assignmentFeeCents:number}|null;closingUpdates?:ClosingUpdate[];titleTasks?:TitleTask[];titleReplies?:{id:string;sender:string;subject:string;body_text:string;received_at:string;needs_review:boolean}[];title?:string|null;titleReady?:boolean;candidates?:{id:string;name:string}[];job?:{state:string;updated_at:string;result?:{buyerStatus:string;buyerCount:number;buyerDiscovery?:{status:string;canContinue:boolean};buyerTexts?:{status:string;accepted:number;held?:number};buyerEmail?:{status:string;accepted:number}}};documents:{id:string;kind:string}[];buyers:{buyer_id:string;name:string;rank:number;ready:boolean}[]};
-export function FulfillmentDetails({dealId,buyerReviewAvailable=false,coordination}:{dealId:string;buyerReviewAvailable?:boolean;coordination?:ReactNode}){
+export function FulfillmentDetails({dealId,buyerReviewAvailable=false,coordination,propertyResult}:{dealId:string;buyerReviewAvailable?:boolean;coordination?:ReactNode;propertyResult?:unknown}){
  const [refresh,setRefresh]=useState(0),[selected,setSelected]=useState<BuyerSelection|null>(null);
  const [data,setData]=useState<(Progress&{buyerNetwork?:BuyerNetworkProgress|null})|null>(null),[error,setError]=useState(''),[sending,setSending]=useState(false),[titleMessage,setTitleMessage]=useState('');
  useEffect(()=>{const abort=new AbortController();let inFlight=false;
@@ -47,6 +48,7 @@ export function FulfillmentDetails({dealId,buyerReviewAvailable=false,coordinati
   {buyerReviewAvailable&&<WorkspacePanel id={`buyer-review-${dealId}`} title="Buyer funds & signing authority"><BuyerQualificationPanel dealId={dealId} embedded/></WorkspacePanel>}
   {coordination&&<WorkspacePanel id={`buyer-visits-${dealId}`} title="Visits & buyer deposit" section="coordination">{coordination}</WorkspacePanel>}
   <WorkspacePanel title="Closing" section="closing">
+  {!!propertyResult&&data&&!['closed','cancelled','canceled'].includes(data.dealStage??'')&&<PropertyDebtSummary result={propertyResult} closing/>}
   {!data&&!error&&<p role="status">Loading closing details…</p>}
   {data&&<>
    {data.titleTasks?.some(t=>t.state==='needs_review')&&<div className="closing-owner-task"><strong>Closing tasks need your review</strong><p>Confirm requested dates and review any title delivery issues.</p><button type="button" className="demo-button" onClick={()=>revealWorkspaceSection(document.getElementById(`closing-tasks-${dealId}`)?.querySelector('details')??null)}>Review closing tasks</button></div>}

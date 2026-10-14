@@ -7,11 +7,13 @@ export async function verifyWorkspace(browser,base,options,name){
  page.setDefaultTimeout(12000);page.setDefaultNavigationTimeout(20000);page.on('dialog',dialog=>void dialog.accept());
  let scenario='lead',preview=true,emptySearch=false;
  const network={vip:true,hasActiveDeal:true,enrolledBuyers:20,settings:{enabled:true,mailingAddress:'Example Company, 100 Sample Lane, Demo City, TX 75001'},matches:8,emailed:6,interested:1,responses:2,buyers:[{id:'sample-response',dealId:'sample-deal',name:'Avery Morgan',email:'avery@example.invalid',address:'100 Example Street',respondedAt:'2026-10-14T15:00:00Z',state:'replied',reply:'Can I visit Thursday afternoon?'}]};
- const signed=()=>['buyers','closing','cancelled','cancellation_pending'].includes(scenario);
+ const signed=()=>['buyers','closing','closing_waiting','cancelled','cancellation_pending'].includes(scenario);
  function work(url){
   const data=makeWorkspaceFixture({count:1});
   Object.assign(data,{textAttention:[],propertyAttentionIds:[],contacts:[],conversations:[],journeys:[],signingConfigured:true});
-  const deal=data.deals[0];deal.stage=scenario==='closing'?'closing':scenario==='cancelled'?'cancelled':scenario==='cancellation_pending'?'cancellation_pending':signed()?'under_contract':'draft';
+  const deal=data.deals[0];deal.stage=scenario.startsWith('closing')?'closing':scenario==='cancelled'?'cancelled':scenario==='cancellation_pending'?'cancellation_pending':signed()?'under_contract':'draft';
+  Object.assign(data.properties[0].result.property,{financialScreening:{estimatedLoanBalanceCents:4500000,equityCents:14500000,activeLien:true,lienAmountCents:4500000,status:'title_review_needed'}});
+  if(scenario==='closing_waiting')data.journeys=[{id:'sample-journey',deal_id:deal.id,screening_id:deal.screening_id,state:'reserved',wants_assignment:true,wants_viewing:false,review_reason:null,deposit_due_at:null,last_progress_at:new Date().toISOString(),envelopeState:'completed',messageReview:false,hasSlots:true,showingState:'confirmed',titleState:'sent',titleSelected:true,closingKind:'title_opened'}];
   deal.terms={...deal.terms,seller:'Example Seller',priceSource:scenario==='lead'?'proposed':'seller_reported',priceCents:9000000,assignmentFeeCents:1000000,assignmentDepositCents:200000};
   if(scenario!=='lead')data.signing=[{id:'sample-purchase',deal_id:deal.id,kind:'purchase',state:scenario==='signature'?'customer_signature_needed':signed()?'completed':'awaiting_counterparty',test_mode:false}];
   if(url.searchParams.get('query')){emptySearch=true;data.properties=[];data.deals=[];data.signing=[];}
@@ -33,7 +35,7 @@ export async function verifyWorkspace(browser,base,options,name){
   if(p==='/api/work/allowance')return route.fulfill({json:{day:'2026-10-14',limitCents:10000,spentCents:0,reservedCents:0,remainingCents:10000,availableCents:10000,extraCents:0,resetsAt:'2026-10-15T05:00:00Z'}});
   if(p==='/api/work/next-action')return route.fulfill({json:{offer:null,balanceCents:12500,paused:true,checkedAt:new Date().toISOString()}});
   if(p==='/api/work/cancellations')return route.fulfill({json:{requests:scenario==='cancelled'?[{id:'sample-cancel',state:'completed',kind:'purchase',late_activity:true,created_at:'2026-10-14T15:00:00Z',reason:'Fixture'}]:[],stage:scenario==='cancellation_pending'?'cancellation_pending':signed()?'under_contract':'draft',blocked:false,hasAssignment:false,revision:'fixture'}});
-  if(p==='/api/work/fulfillment')return route.fulfill({json:{dealStage:scenario==='closing'?'closing':'under_contract',documents:[],buyers:[{buyer_id:'sample-buyer',name:'Cedar Ridge Homes',rank:1,ready:true}],buyerNetwork:network,buyerPackage:{url:base+'/preview/workspace?preview=1',askingPriceCents:10000000,purchasePriceCents:9000000,assignmentFeeCents:1000000},closingUpdates:[],titleReplies:[],titleTasks:[]}});
+  if(p==='/api/work/fulfillment')return route.fulfill({json:{dealStage:scenario.startsWith('closing')?'closing':'under_contract',documents:[],buyers:[{buyer_id:'sample-buyer',name:'Cedar Ridge Homes',rank:1,ready:true}],buyerNetwork:network,buyerPackage:{url:base+'/preview/workspace?preview=1',askingPriceCents:10000000,purchasePriceCents:9000000,assignmentFeeCents:1000000},closingUpdates:[],titleReplies:[],titleTasks:[]}});
   if(p==='/api/work/text-contact')return route.fulfill({json:{contacts:[]}});
   if(p==='/api/work/manual-call')return route.fulfill({json:{contacts:[],personalCalls:[]}});
   if(p==='/api/work/browser-call')return route.fulfill({json:{ready:false}});
@@ -45,6 +47,12 @@ export async function verifyWorkspace(browser,base,options,name){
   return route.fulfill({status:401,json:{error:'Fixture only'}});
  });
  page.on('pageerror',error=>errors.push(error.message));
+ async function checkClosingButton(card){
+  const button=card.getByRole('button',{name:'Review closing',exact:true});await button.scrollIntoViewIfNeeded();
+  assert(await button.isVisible(),'closing remains accessible while waiting for title');
+  assert(await button.evaluate(node=>{const b=node.getBoundingClientRect(),card=node.closest('.live-property').getBoundingClientRect();return b.width>0&&b.height>=44&&b.left>=Math.max(0,card.left)&&b.right<=Math.min(innerWidth,card.right)+1;}),'closing action fits inside its card and viewport');
+  return button;
+ }
  try{
   await page.goto(base+'/preview/workspace?preview=1');
   await page.getByRole('heading',{name:'One property. One clear next step.'}).waitFor();
@@ -65,9 +73,22 @@ export async function verifyWorkspace(browser,base,options,name){
   await page.keyboard.press('Escape');assert(await buyerButton.evaluate(node=>document.activeElement===node),'closing buyer panel returns keyboard focus');
   await page.getByRole('heading',{name:'Your leads',exact:true}).click();
   await page.screenshot({path:`/tmp/icash-workspace-preview-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
+  await page.getByRole('button',{name:'Property details',exact:true}).click();
+  const details=page.getByRole('dialog',{name:'Property details',exact:true});await details.waitFor();
+  assert.match(await details.innerText(),/Estimated mortgage balance.*\$45,000.*Owner’s estimated equity.*\$145,000.*Not confirmed/s);
+  assert.doesNotMatch(await details.innerText(),/Bot controls|About these estimates|Nearby home sales/);
+  await page.screenshot({path:`/tmp/icash-property-details-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
+  await page.keyboard.press('Escape');
+  await page.getByLabel('Preview a stage').selectOption('closing');
+  const closingButton=await checkClosingButton(page.locator('.live-property'));
+  await page.screenshot({path:`/tmp/icash-closing-preview-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
+  await closingButton.click();
+  const closingDialog=page.getByRole('dialog',{name:'Closing',exact:true});await closingDialog.waitFor();
+  assert.match(await closingDialog.innerText(),/Mortgage & title.*\$45,000.*Not confirmed/s);assert.doesNotMatch(await closingDialog.innerText(),/Owner’s estimated equity/);
+  await page.keyboard.press('Escape');
   assert.deepEqual(writes,[],'sample preview never calls account/work APIs');
   preview=false;
-  for(const state of ['lead','waiting','signature','buyers','closing','cancelled','cancellation_pending']){
+  for(const state of ['lead','waiting','signature','buyers','closing','closing_waiting','cancelled','cancellation_pending']){
    scenario=state;await page.goto(base+'/');
    const card=page.locator('.live-property').first();await card.waitFor();
    await card.locator('.property-summary').click();
@@ -77,6 +98,11 @@ export async function verifyWorkspace(browser,base,options,name){
    if(state==='lead'){
     assert.equal(await card.locator('.deal-tools').count(),0);
     assert.equal(await page.locator('#platform-buyer-network').count(),0);
+    await card.getByRole('button',{name:'Property details',exact:true}).click();
+    const details=page.getByRole('dialog',{name:'Property details',exact:true});await details.waitFor();
+    assert.match(await details.innerText(),/Estimated mortgage balance.*\$45,000.*Owner’s estimated equity.*\$145,000.*Reported/s);
+    assert.doesNotMatch(await details.innerText(),/Bot controls|About these estimates|Nearby home sales/);
+    await page.keyboard.press('Escape');
     await card.getByRole('button',{name:/Text conversation for/}).click();
     const dialog=page.getByRole('dialog');await dialog.waitFor();
     await dialog.getByRole('button',{name:'Texts',exact:true}).waitFor();
@@ -104,14 +130,16 @@ export async function verifyWorkspace(browser,base,options,name){
     await card.locator('.property-focus').getByRole('button',{name:'Review & sign',exact:true}).waitFor();
     assert.equal(await card.getByRole('dialog',{name:'Agreements',exact:true}).isVisible(),false,'required signature is visible without opening forms');
    }
-   if(state==='buyers'||state==='closing'){
+   if(state==='buyers'||state.startsWith('closing')){
     const net=page.locator('#platform-buyer-network');await net.locator('.workspace-panel-trigger').waitFor();
     assert(await net.evaluate(node=>!!(node.compareDocumentPosition(document.querySelector('#workspace-properties'))&Node.DOCUMENT_POSITION_FOLLOWING)),'network is above the lead list');
     assert.equal(await card.getByRole('dialog',{name:'Closing',exact:true}).isVisible(),false);
-    if(state==='closing'){
+    if(state.startsWith('closing')){
      assert.equal(await card.getByRole('region',{name:'Buyer activity',exact:true}).isVisible(),false,'closing replaces the buyer hunt');
-     await card.getByRole('button',{name:'Review closing',exact:true}).click();
-     await card.getByRole('dialog',{name:'Closing',exact:true}).waitFor();
+     if(state==='closing_waiting')await card.getByRole('heading',{name:'Closing in progress',exact:true}).waitFor();
+     await (await checkClosingButton(card)).click();
+     const closing=card.getByRole('dialog',{name:'Closing',exact:true});await closing.waitFor();
+     assert.match(await closing.innerText(),/Mortgage & title.*\$45,000.*Reported/s);assert.doesNotMatch(await closing.innerText(),/Owner’s estimated equity/);
      await page.keyboard.press('Escape');
     }else{
      await card.getByText('Avery Morgan',{exact:true}).waitFor();
