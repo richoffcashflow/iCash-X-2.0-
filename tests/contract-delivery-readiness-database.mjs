@@ -125,5 +125,33 @@ try{
   for(const role of ['anon','authenticated'])assert.equal(await one('select has_function_privilege($1,$2,$3)',[role,'public.'+fn,'execute']),false);
   assert.equal(await one('select has_function_privilege($1,$2,$3)',['service_role','public.'+fn,'execute']),true);
  }
- console.log('PASS PostgreSQL contract recovery: exact autoqueue, idempotency, fee-only refreshes, permission/archive/withdrawal gates, no ambiguous replay, fast-sign reconciliation and truthful receipt state.');
+ // A terminated worker can leave its claim behind after the SMS receipt is
+ // already durable. Reconcile that receipt without any provider work.
+ await db.exec(`create table public.icash_contract_text_deliveries(envelope_id uuid,signer_id text,account_id uuid,thread_id uuid,message_id uuid);
+ create table public.icash_text_messages(id uuid,account_id uuid,thread_id uuid,direction text,state text,provider_id text);`);
+ const reconciliation=source('config/agreement-delivery-receipt-reconciliation.sql');
+ assert.equal(reconciliation,source('supabase/migrations/20261014194930_agreement_delivery_receipt_reconciliation.sql'));
+ await db.exec(reconciliation);
+ await reset();queued=await defer();await addThread();await claim();await addEnvelope(confirmed);
+ await db.query('insert into public.icash_contract_text_deliveries values($1,$2,$3,$4,$5)',[envelope,'1',account,thread,id(50)]);
+ await db.query("insert into public.icash_text_messages values($1,$2,$3,'outgoing','delivered','provider-receipt')",[id(50),account,thread]);
+ const reconcile=()=>one('select public.icash_reconcile_agreement_delivery_receipts()');
+ assert.equal(await reconcile(),0,'Do not race a healthy active worker');
+ await db.exec("update icash_seller_agreement_private.delivery_recovery set claimed_at=now()-interval '2 minutes'");
+ for(const [block,restore] of [
+  ["update public.icash_text_messages set state='ready'","update public.icash_text_messages set state='delivered'"],
+  ["update public.icash_text_messages set provider_id=null","update public.icash_text_messages set provider_id='provider-receipt'"],
+  [`update public.icash_text_messages set account_id='${id(99)}'`,`update public.icash_text_messages set account_id='${account}'`],
+  ["update public.icash_contract_text_deliveries set signer_id='2'","update public.icash_contract_text_deliveries set signer_id='1'"],
+  ["update public.icash_text_threads set recipient='+12125550999'",`update public.icash_text_threads set recipient='${phone}'`],
+  ["update public.icash_signing_envelopes set state='needs_review'","update public.icash_signing_envelopes set state='completed'"],
+ ]){await db.exec(block);assert.equal(await reconcile(),0,'Only the bound provider receipt can finalize recovery');await db.exec(restore);}
+ await db.query('update public.icash_signing_envelopes set terms=$1',[{...confirmed,priceCents:9100000}]);assert.equal(await reconcile(),0,'A receipt cannot authorize changed agreement terms');
+ await db.query('update public.icash_signing_envelopes set terms=$1',[confirmed]);
+ assert.equal(await reconcile(),1);assert.equal(await reconcile(),0,'Repeated maintenance cannot repeat delivery');
+ assert.equal(await one('select state from icash_seller_agreement_private.confirmations'),'ready');
+ assert.deepEqual(await one('select result from icash_seller_agreement_private.delivery_recovery'),{sent:true,status:'delivered'});
+ assert.equal(await count('public.icash_signing_envelopes'),1);assert.equal(await count('public.icash_text_messages'),1);
+ for(const role of ['anon','authenticated'])assert.equal(await one("select has_function_privilege($1,'public.icash_reconcile_agreement_delivery_receipts()','execute')",[role]),false);
+ console.log('PASS PostgreSQL contract recovery: exact autoqueue, idempotency, fee-only refreshes, permission/archive/withdrawal gates, no ambiguous replay, fast-sign reconciliation, and recovery after a receipt-save interruption.');
 }finally{await db.close();}

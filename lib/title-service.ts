@@ -1,7 +1,6 @@
 import {closingPayoutNote} from './closing-setup';
 import {titleConfirmationInstructions} from './title-confirmation-instructions';
 import {db} from '@/lib/stripe-test';
-import {reserveOperation} from '@/lib/operating-costs';
 import {completedSigningPdf} from '@/lib/signing-service';
 type TitleJob={id:string;account_id:string;deal_id:string;purchase_envelope_id:string;recipient:string;rate_id:string;verified_until:string;state:string;property_address:string};
 /** Requests opening only. Provider email acceptance never establishes title opened or closing. */
@@ -23,8 +22,9 @@ export async function dispatchTitleRequest(accountId:string,jobId:string){
  const [setup]=await db<{payout:unknown}[]>(`icash_closing_setup?account_id=eq.${accountId}&deal_id=eq.${j.deal_id}&select=payout&limit=1`);
  const payoutNote=closingPayoutNote(setup?.payout);
  const deliveredPayout=payoutNote&&setup?.payout&&typeof setup.payout==='object'?Object.fromEntries(Object.entries(setup.payout).filter(([key])=>key!=='detailsSharedWithTitle')):null;
- await reserveOperation({accountId,operationKey:`title:${j.id}`,rateId:j.rate_id,permissionUntil:j.verified_until});
- if(!await db<boolean>('rpc/icash_claim_title_request','POST',{p_id:j.id}))return {status:'title_request_held'};
+ // Compare the exact loaded delivery snapshot and reserve/claim in one transaction.
+ // A closer correction during PDF loading must not authorize the stale recipient.
+ if(!await db<boolean>('rpc/icash_claim_title_request_snapshot','POST',{p_id:j.id,p_expected:{accountId,dealId:j.deal_id,purchaseEnvelopeId:j.purchase_envelope_id,recipient:j.recipient,propertyAddress:j.property_address,rateId:j.rate_id,verifiedUntil:j.verified_until}}))return {status:'title_request_held'};
  try{
   const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,'Content-Type':'application/json','Idempotency-Key':`title-${j.id}`},body:JSON.stringify({from:process.env.ICASH_TITLE_FROM_EMAIL,reply_to:process.env.ICASH_TITLE_REPLY_EMAIL,to:[j.recipient],subject:`[ICX-T:${j.id}] Title opening request: ${j.property_address.replace(/[\r\n]/g,' ').slice(0,180)}`,text:`Please review the attached executed purchase agreement for ${j.property_address} and confirm whether your office can handle this transaction. Please reply with your file reference, assigned closer, required documents and next steps. Please itemize title-company, escrow/settlement and other closing charges and allocate them according to the attached executed agreements. Our requested structure is buyer-paid closing costs, including legally allocable title-company fees; this email does not amend the signed agreements or shift seller liens/payoffs. Please confirm buyer deposit requirements and due dates through your secure process. Please provide your secure intake process for the customer’s legal payee, check pickup or delivery arrangements, or verified proceeds wire details, and list any ID, tax forms, company documents and signing authority you need. ${payoutNote} This email requests opening only and does not confirm acceptance, deposit receipt or closing. Reference: ${j.id}.\n\n${titleConfirmationInstructions}\n\n Please do not rely on emailed changes to wire instructions without independent verification.`,attachments }),redirect:'error',signal:AbortSignal.timeout(15000)});
   if(!response.ok)throw Error('Provider response needs review');

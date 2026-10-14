@@ -15,7 +15,17 @@ type Fact=keyof typeof questions;
 export type SellerQualification={ready:true}|{ready:false;nextQuestion:string;missing:Fact[];stop?:boolean};
 const yes=/^(?:(?:um|uh|well)[, .]+)*(?:yes|yeah|yep|sure|correct|absolutely|i am|it is|that's right|that is right)\b/i;
 const no=/^(?:(?:um|uh|well)[, .]+)*(?:no|nope|not really|not interested)\b/i;
-const answerable=(s:string)=>/[a-z0-9]/i.test(s)&&! /^(?:um|uh|hmm|hello|what|sorry|pardon)[.!? ]*$/i.test(s)&&! /\b(?:repeat (?:that|the question)|what do you mean|(?:didn['’]?t|did not) (?:hear|understand))\b/i.test(s);
+const answerable=(s:string)=>/[a-z0-9]/i.test(s)&&! /^(?:um|uh|hmm|hello|what|sorry|pardon)[.!? ]*$/i.test(s)&&! /\b(?:repeat (?:that|the question)|what do you mean|(?:didn['’]?t|did not) (?:hear|understand|catch)|(?:can|could|would) you (?:please )?(?:repeat|rephrase|say|ask|explain)|(?:say|ask) (?:that |it |the question )?again|what was (?:that|the question))\b/i.test(s);
+
+/** An acknowledgement of an earlier answer is not the current question. In
+ * particular, "you are the owner. Is anyone living there?" + "no" must not
+ * revoke ownership or treat that occupancy answer as a refusal to sell. */
+function latestQualificationQuestion(message:string):string{
+ const sentences=message.match(/[^.!?;\n]+[.!?;]?/g)??[];
+ const sentence=sentences.findLast(part=>part.trim().endsWith('?'))??sentences.at(-1)??'';
+ const clauses=sentence.split(/,\s*(?=(?:is|are|do|does|did|have|has|can|could|would|will|what|when|where|why|who|how|tell me)\b)|\b(?:and|also)\s+(?=(?:is|are|do|does|did|can|could|would|will)\s+(?:you|it|anyone|anybody|the|your|this|that)\b)/i);
+ return clauses.at(-1)?.trim()??'';
+}
 
 /** The caller's actual answers, never research, an opener, or an LLM summary.
  * Historical conversations must already be bound to this account/deal/contact.
@@ -31,7 +41,7 @@ export function sellerOfferQualification(current:unknown,history:unknown[]=[]):S
   for(let index=0;index<rows.length;index++){
    const row=object(rows[index]);if(typeof row.message!=='string')continue;
    const text=row.message.trim();
-   if(row.role==='agent'){question=text;continue;}
+   if(row.role==='agent'){question=latestQualificationQuestion(text);continue;}
    if(row.role!=='user'||!answerable(text))continue;
    const ownerQuestion=/\b(?:owner|do you own|is (?:this|that|it|.+?) your property)\b/i.test(question)&&/\?/.test(question);
    const availabilityQuestion=/\b(?:good time|time to (?:talk|chat)|(?:have|got) (?:a (?:quick )?minute|a (?:couple|few) (?:of )?minutes))\b/i.test(question);
