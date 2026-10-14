@@ -230,3 +230,6 @@
 .wb-preview-player-controls button:last-child{margin-left:auto}
 .wb-preview-player-controls span{font-size:12px;font-variant-numeric:tabular-nums}
 .wb-preview-player-controls :focus-visible{outline:2px solid #fff;outline-offset:2px}
+
+.wb-entry-chat{min-height:300px}
+@media(max-width:900px){.wb-entry-chat{min-height:180px}}

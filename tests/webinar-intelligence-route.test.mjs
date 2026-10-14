@@ -69,7 +69,7 @@ now=Date.parse('2026-10-08T03:00:00Z');data=await(await post({code:'123457'})).j
 vip.nightVersion.videoUrl='';vip.nightEnabled=false;data=await(await post({code:'123457'})).json();assert.equal(data.webinar.videoUrl,vip.videoUrl,'Day safely covers nighttime without a published Night');
 const vipSaved={...vip,title:'Saved VIP day',nightVersion:null,nightEnabled:false,recordingVersion:'day'};
 history=[{id:randomUUID(),webinar_id:vip.id,revision:1,progress_seconds:1550,max_seconds:1550,completed_at:null,superseded_at:null,is_preview:false,config:vipSaved,created_at:new Date(now-60000).toISOString(),updated_at:new Date(now-60000).toISOString()}];events=[{session_id:history[0].id,kind:'pitch_shown',event_key:'once',created_at:new Date(now-30000).toISOString()}];data=await(await post({code:'123457'})).json();assert.equal(data.webinar.title,'Saved VIP day','VIP never routes back to checkout at its offer');
-account=null;vipPaid=false;owner=false;assert.equal((await post({preview:vip.id})).status,403);
+account=null;vipPaid=false;owner=false;calls=[];const locked=await(await post({preview:vip.id})).json();assert.equal(locked.previewLocked,true);assert.equal(locked.webinar,undefined);assert.ok(!calls.some(c=>c.path==='rpc/icash_webinar_begin'),'Locked previews never start a session');
 const admin=await load('../app/api/webinar/intelligence/route.ts',common,'__retiredAdmin');assert.equal((await admin.GET()).status,403);owner=true;assert.deepEqual(await(await admin.GET()).json(),{enabled:false,retired:true});assert.equal((await admin.POST(new Request('https://example.test/api/webinar/intelligence',{method:'POST',body:'{"enabled":true}'}))).status,410);
 // Use the real location adapter through the live entry and ad-return handlers.
 const originalVercel=process.env.VERCEL;process.env.VERCEL='1';
@@ -105,3 +105,10 @@ data=await(await post({code:'123457'})).json();assert.equal(data.webinar.recordi
 console.log('PASS matching VIP follows watched Day/Night through clock changes, with empty Night VIP fallback.');
 vip.videoUrl='';history[0].config.recordingVersion='day';
 data=await(await post({code:'123457'})).json();assert.equal(data.webinar.recordingVersion,'night');assert.equal(data.webinar.videoUrl,vip.nightVersion.videoUrl,'Nighttime-only VIP also covers a Daytime buyer');
+
+// Owner preview has no ad/checkout return journey and does not read offer history.
+owner=true;history=[];calls=[];
+data=await(await post({preview:one.id,variant:'night'})).json();
+assert.equal(data.preview,true);assert.equal(data.webinar.recordingVersion,'night');
+assert.ok(!calls.some(c=>c.path.startsWith('icash_webinar_events?')));
+console.log('PASS fast entry: owner authorization retained and preview skips unused offer history.');
