@@ -78,3 +78,23 @@ assert.equal(previewCalls.length,1,'Clicking preview purchase never creates a pa
 assert.equal(find(previewTree,'StripeEmbeddedCheckout'),undefined);
 previewCheckout.close();
 console.log('PASS owner checkout preview: current price, real layout, paid URL flags ignored, no payment or conversion side effects.');
+
+// Compact webinar offers open payment on one click, with no duplicate checkbox.
+for(const isPreview of [false,true]){
+ const events=[];window.location.search='';
+ const h=await harness('components/membership-checkout.tsx',{...common,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserEvent:()=>{},webinarRequest:async(url,init={})=>{
+  events.push({url,init});
+  if(init.method==='POST')return {clientSecret:'fixture',publishableKey:'pk_test_fixture',sessionId:'cs_fixture'};
+  return {offer:{revision:9,priceCents:5000},ready:true,mode:'test',embeddedReady:true,membership:null};
+ }});
+ const props={preview:isPreview,presentation:'webinar',embedded:true,onSignedIn:()=>{}};
+ h.render('MembershipCheckout',props);await flush();let tree=h.render('MembershipCheckout',props);
+ assert.equal(find(tree,'input'),undefined);assert.equal(button(tree,'Buy now').props.disabled,false);
+ assert.match(text(tree),/monthly billing until cancelled/);
+ const click=button(tree,'Buy now').props.onClick;await Promise.all([click(),click()]);await flush();tree=h.render('MembershipCheckout',props);
+ const writes=events.filter(e=>e.init.method==='POST');assert.equal(writes.length,isPreview?0:1);
+ if(!isPreview){const body=JSON.parse(writes[0].init.body);assert.equal(body.accepted,true);assert.equal(body.revision,9);assert.equal(body.totalCents,5000);assert.ok(find(tree,'StripeEmbeddedCheckout'));}
+ else assert.match(text(tree),/Payments are disabled/);
+ h.close();
+}
+console.log('PASS compact offer: single-click checkout, current price and terms, duplicate-click protection, and no preview purchases.');
