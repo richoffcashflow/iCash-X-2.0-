@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import {workspaceExperienceSchema} from '../lib/workspace-experience.ts';
+import {recordWorkspaceExperience} from '../lib/workspace-experience-client.ts';
+import {loadService} from './helpers/simulated-journey-services.mjs';
+assert(!workspaceExperienceSchema.safeParse({event:'panel_error',stage:'closing',error:'private message'}).success);
+assert(!workspaceExperienceSchema.safeParse({event:'panel_error',stage:'private address'}).success);
+let authorized=true,calls=0,identity={accountId:'server-account',userId:'server-user'},saved;
+const route=await loadService('app/api/work/experience/route.ts',{process:{env:{VERCEL_ENV:'production'}},workspaceExperienceSchema,allowedOrigin:()=>authorized,workAccount:async()=>{if(!identity)throw Error('SIGN_IN_REQUIRED');return identity;},db:async(path,method,body)=>{calls++;saved={path,method,body};}});
+const request=(value)=>new Request('https://www.geticashx.com/api/work/experience',{method:'POST',body:JSON.stringify(value)});
+assert.equal((await route.POST(request({event:'panel_error',stage:'closing'}))).status,204);
+assert.deepEqual(saved.body,{p_account:'server-account',p_user:'server-user',p_event:'panel_error',p_stage:'closing'});
+assert.equal((await route.POST(request({event:'panel_error',stage:'closing',accountId:'other'}))).status,400);
+assert.equal((await route.POST(request({event:'panel_error',stage:'closing',error:'private'}))).status,400);
+let cancelled=false;
+const oversized=new Request('https://www.geticashx.com/api/work/experience',{method:'POST',duplex:'half',body:new ReadableStream({pull(controller){controller.enqueue(new Uint8Array(257));},cancel(){cancelled=true;}})});
+assert.equal((await route.POST(oversized)).status,413);assert(cancelled,'Chunked oversize body is cancelled before read to completion');assert.equal(calls,1);
+authorized=false;assert.equal((await route.POST(request({event:'panel_error',stage:'closing'}))).status,403);assert.equal(calls,1);
+authorized=true;identity=null;assert.equal((await route.POST(request({event:'panel_error',stage:'closing'}))).status,401);assert.equal(calls,1);
+const originalFetch=globalThis.fetch,originalWindow=globalThis.window;let requests=[];
+try{
+ globalThis.window={location:{pathname:'/preview/workspace'}};
+ globalThis.fetch=async(path,options)=>{requests.push({path,options});throw Error('fixture outage');};
+ recordWorkspaceExperience({event:'panel_error',stage:'closing'});assert.equal(requests.length,0);
+ globalThis.window.location.pathname='/';
+ recordWorkspaceExperience({event:'panel_error',stage:'closing'});recordWorkspaceExperience({event:'panel_error',stage:'closing'});
+ recordWorkspaceExperience({event:'panel_retry',stage:'closing',error:'must never transmit'});
+ await new Promise(resolve=>setTimeout(resolve,0));assert.equal(requests.length,2);
+ assert.deepEqual(JSON.parse(requests[0].options.body),{event:'panel_error',stage:'closing'});
+ assert(!requests[1].options.body.includes('must never'));assert.equal(requests[0].options.credentials,'same-origin');
+ console.log('PASS private bounded experience endpoint, origin/auth binding, unknown-field rejection, preview exclusion and nonblocking client deduplication.');
+}finally{globalThis.fetch=originalFetch;globalThis.window=originalWindow;}

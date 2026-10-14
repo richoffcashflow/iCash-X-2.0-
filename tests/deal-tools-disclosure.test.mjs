@@ -30,7 +30,7 @@ const all=node=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMa
 const text=node=>typeof node==='string'?node:Array.isArray(node)?node.map(text).join(' '):node&&typeof node==='object'?text(node.props?.children):'';
 function render(file,name,props,values=[]){
  let index=0;
- const hooks={useState:initial=>[index<values.length?values[index++]:(typeof initial==='function'?initial():initial),()=>{}],useEffect(){},useRef:value=>({current:value})};
+ const hooks={useState:initial=>[index<values.length?values[index++]:(typeof initial==='function'?initial():initial),()=>{}],useEffect(){},useRef:value=>({current:value}),useCallback:callback=>callback};
  const source=readFileSync(new URL('../'+file,import.meta.url),'utf8');
  const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
  const mod={exports:{}};

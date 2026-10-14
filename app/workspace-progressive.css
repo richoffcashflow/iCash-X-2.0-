@@ -102,3 +102,25 @@
 .personalized-workspace .buyer-row>svg{flex:none;color:#777}
 .personalized-workspace .buyer-row:focus-visible{outline:2px solid #444;outline-offset:-2px}
 .icash-brand-workspace.icash-brand-workspace .property-secondary-actions .workspace-panel-trigger,.icash-brand-workspace.icash-brand-workspace .buyer-price-row button{border:0;box-shadow:none;background:transparent;border-radius:0;font-weight:500;color:#666}
+
+/* Replies and connection recovery stay inside the panel the customer is using. */
+.personalized-workspace .workspace-load-notice{padding:14px;border:1px solid #ddd;border-radius:10px;background:#fafafa;margin:0 0 16px;text-align:left}
+.personalized-workspace .workspace-load-notice p{font-size:13px;line-height:1.6;margin:0}
+.personalized-workspace .workspace-load-notice small{display:block;color:#666;margin-top:4px;font-size:11px}
+.personalized-workspace .workspace-load-notice button{min-height:44px;margin-top:4px}
+.personalized-workspace .workspace-load-pending{font-size:12px;color:#666;margin:0 0 12px}
+.personalized-workspace .workspace-confirmed-controls{min-width:0;padding:0;margin:0;border:0}
+.personalized-workspace .workspace-confirmed-controls:disabled button{opacity:.55}
+.personalized-workspace .title-company-messages{margin:0 0 24px;padding-bottom:20px;border-bottom:1px solid #eee;text-align:left;min-width:0}
+.personalized-workspace .title-company-messages h4{font-size:14px;line-height:1.5;margin:0 0 12px}
+.personalized-workspace .title-company-messages article{display:block;min-width:0;overflow-wrap:anywhere}
+.personalized-workspace .title-company-messages article>small{display:block;color:#666;font-size:11px;line-height:1.6}
+.personalized-workspace .title-company-messages article>strong{display:block;font-size:13px;margin:7px 0 0;line-height:1.5}
+.personalized-workspace .title-company-messages p{font-size:13px;line-height:1.65;margin:8px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.personalized-workspace .title-message-preview{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.personalized-workspace .title-message-review{display:inline-block;font-size:11px;font-weight:600;border:1px solid #ddd;border-radius:5px;padding:3px 7px;margin-top:10px}
+.personalized-workspace .title-message-history{margin:8px 0 0;border:0;padding:0;background:none}
+.personalized-workspace .title-message-history>summary{min-height:44px;padding:10px 0;align-content:center;font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:4px}
+.personalized-workspace .title-message-history>article{padding:16px 0;border-top:1px solid #eee}
+.personalized-workspace .title-message-history>small{font-size:11px;color:#666;line-height:1.6;display:block}
+.personalized-workspace .title-message-history>summary:focus-visible{outline:2px solid #444;outline-offset:3px}

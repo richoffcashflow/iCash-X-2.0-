@@ -1,5 +1,5 @@
 'use client';
-import {useRef,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {House,MessageCircle,Phone,X} from 'lucide-react';
 import {PropertyCardHeader} from '@/components/property-card-header';
 import {PropertyFocus} from '@/components/property-focus';
@@ -7,6 +7,8 @@ import {WorkspacePanel} from '@/components/workspace-panel';
 import {BuyerOverview,type BuyerNetworkProgress,type BuyerSelection} from '@/components/buyer-overview';
 import {PropertyAnalysisSummary} from '@/components/property-analysis-summary';
 import {PropertyDebtSummary} from '@/components/property-debt-summary';
+import {TitleCompanyMessages,type TitleCompanyReply} from '@/components/title-company-messages';
+import {WorkspaceRecoveryPreview} from '@/components/workspace-recovery-preview';
 import {agreementWorkspace} from '@/lib/agreement-workspace';
 import {dealCardSummary} from '@/lib/deal-card-summary';
 import {revealWorkspaceSection} from '@/lib/workspace-navigation';
@@ -16,11 +18,14 @@ import '../../icash-brand.css';
 const property={id:'sample-property',completed_at:'2026-10-14T15:00:00Z',result:{property:{propertyId:'sample',address:'128 Sample Lane, Dallas, TX 75201',bedrooms:3,bathrooms:2,livingAreaSqft:1420,yearBuilt:1982,arvEstimate:{cents:19000000},repairs:{baselineCents:4500000},fetchedAt:'2026-10-14T15:00:00Z',financialScreening:{estimatedLoanBalanceCents:4500000,equityCents:14500000,activeLien:false,hoaLien:false,taxDelinquent:false,status:'payoff_verification_needed'}},financialCheck:{status:'eligible',reason:'Sample property'},preliminarySellerCeilingCents:9000000}};
 const buyers=[{buyer_id:'sample-buyer-1',name:'Cedar Ridge Homes',rank:1,ready:true}];
 const network:BuyerNetworkProgress={matches:8,emailed:6,responses:2,buyers:[{id:'sample-response-1',name:'Avery Morgan',state:'replied',reply:'I’m interested. Is the property available to view this Thursday afternoon?'},{id:'sample-response-2',name:'Jordan Ellis',state:'interested',reply:null}]};
+const titleReplies:TitleCompanyReply[]=[{id:'sample-title-opened',sender:'Alex at Example Title',subject:'Closing file opened',body_text:'We opened the file for 128 Sample Lane. We are checking ownership and requesting the seller’s mortgage payoff. We will confirm the closing date when the required documents are ready.',received_at:'2026-10-14T15:00:00Z',needs_review:false},{id:'sample-title-documents',sender:'Alex at Example Title',subject:'Documents needed',body_text:'Please send the signed buyer assignment so we can complete the closing file. October 30 is the target date; it is not confirmed yet. We will update you after reviewing the documents and payoff information.',received_at:'2026-10-14T20:15:00Z',needs_review:true}];
 const scenarios=[['lead','New lead'],['waiting','Waiting for seller'],['buyers','Buyers interested'],['closing','Closing']] as const;
 type Scenario=typeof scenarios[number][0];
 
 /** Fixture-only presentation. Uses the production cards without account or work APIs. */
 export function WorkspacePreview(){
+ const [recoveryExample,setRecoveryExample]=useState(false);
+ useEffect(()=>{setRecoveryExample(new URLSearchParams(window.location.search).get('recovery')==='1');},[]);
  const [scenario,setScenario]=useState<Scenario>('buyers'),[active,setActive]=useState(true),[contact,setContact]=useState<'texts'|'calls'|'package'|null>(null);
  const dialog=useRef<HTMLDialogElement>(null);
  const [selected,setSelected]=useState<BuyerSelection|null>(null);
@@ -35,6 +40,7 @@ export function WorkspacePreview(){
  return <div className={`console-shell personalized-workspace minimal-workspace assistant-workspace icash-brand-workspace workspace-preview ${styles.workspace}`}>
   <header className="console-header"><span className="preview-brand">iCash X</span><span className="workspace-preview-label">Workspace preview</span></header>
   <main className="console-main">
+   {recoveryExample&&<WorkspaceRecoveryPreview/>}
    <section className="workspace-preview-banner" aria-label="Preview controls"><div><span className="workspace-preview-label">Interactive preview · Sample data</span><h1>One property. One clear next step.</h1><p>Fictional people and property. No messages, signatures or payments are sent.</p></div><label className="workspace-preview-stage">Preview a stage<select value={scenario} onChange={e=>{setScenario(e.target.value as Scenario);setActive(true);}}>{scenarios.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label></section>
    {contracted&&<WorkspacePanel id="platform-buyer-network" title="Buyer network" label="Buyer network · 2 replies"><BuyerOverview buyers={[]} network={network} onBuyer={openBuyer}/><p>Sample VIP network. You can open each buyer from their property.</p></WorkspacePanel>}
    <section className="operation-panel" aria-label="Sample workspace"><div className="live-work"><div className="workspace-section-heading leads-heading"><h3>Your leads</h3><small>1 sample lead</small></div>
@@ -55,7 +61,7 @@ export function WorkspacePreview(){
       </WorkspacePanel>
       <WorkspacePanel id="sample-funds" title="Buyer funds & signing authority"><p>Cedar Ridge Homes has reviewed funds and signing authority in this example. Avery Morgan and Jordan Ellis still need review.</p><p>In your workspace, you can submit dated buyer evidence for a qualified reviewer here.</p></WorkspacePanel>
       <WorkspacePanel id="sample-visits" title="Visits & buyer deposit"><h4>Seller availability</h4><p>Thursday, October 15 · 2:00 PM – 4:00 PM Central.</p><p>Avery asked to visit. A specific appointment still needs confirmation from the seller and buyer.</p>{scenario==='closing'&&<><h4>Buyer deposit</h4><p>Sample deposit: $2,000 received and cleared.</p></>}</WorkspacePanel>
-      <WorkspacePanel id="sample-closing" title="Closing"><h4>{scenario==='closing'?'Closing in progress':'Choose your closing office'}</h4><p>{scenario==='closing'?'Example Title has opened the file. Target closing: October 30, 2026. Funds have not been received.':'When you’re ready, choose a title company and save how you want to receive your proceeds.'}</p><PropertyDebtSummary result={property.result} closing/><p>This is sample closing information.</p></WorkspacePanel>
+      <WorkspacePanel id="sample-closing" title="Closing"><TitleCompanyMessages replies={scenario==='closing'?titleReplies:[]}/><h4>{scenario==='closing'?'Closing in progress':'Choose your closing office'}</h4><p>{scenario==='closing'?'Example Title has opened the file. Target closing: October 30, 2026. Funds have not been received.':'When you’re ready, choose a title company and save how you want to receive your proceeds.'}</p><PropertyDebtSummary result={property.result} closing/><p>This is sample closing information.</p></WorkspacePanel>
      </div>
     </div></article></div>
    </div></section>

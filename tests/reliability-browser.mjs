@@ -29,6 +29,7 @@ const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','
 let serverLog='';server.stdout.on('data',d=>{serverLog+=d});server.stderr.on('data',d=>{serverLog+=d});
 const now=new Date().toISOString(),part={status:'ok',checkedAt:now};
 const reliability={status:'degraded',fresh:true,components:{worker:part,maintenance:part},snapshot:{checkedAt:now,issueCount:1,issues:[{kind:'contract_delivery',resourceId:'00000000-0000-4000-8000-000000000003',accountId:'00000000-0000-4000-8000-000000000002',since:now}],texts:{accepted:1,delivered:0,review:0},contracts:{created:1,completed:0,review:0}}};
+const experienceFixture={experience:{days:7,lastObservedAt:now,counts:[{event:'panel_open',stage:'closing',count:12,accounts:3},{event:'panel_error',stage:'closing',count:2,accounts:1},{event:'panel_retry',stage:'closing',count:1,accounts:1}]},alerts:{configuration:'ready',checkedAt:now,active:{id:'00000000-0000-4000-8000-000000000004',openedAt:now,issueCount:1,reasons:['workflows']},notifications:{pending:0,accepted:1,needsReview:0},lastNotificationAt:now}};
 function fixture(url){const p=new URL(url).searchParams;return {report:{days:Number(p.get('days')),includeOwner:p.get('includeOwner')==='true',query:p.get('q'),page:Number(p.get('page')),pageSize:25,timezone:'America/Chicago',startAt:now,endAt:now,leadCount:0,matchedCount:0,reviewCount:0,leads:[],funnel:sellerFunnelStages.map(s=>({key:s.key,count:0})),reliability,usage:{completedCount:0,missingChargeCount:0,chargedCents:0,coveredCents:0,knownCostMicros:0,costMicros:0,marginMicros:0,missingCostCount:0,estimatedCount:0,pendingCount:0}}};}
 try{
  let ready=false;
@@ -39,11 +40,12 @@ try{
   if(process.env.BROWSER_ENGINES==='chromium'&&engine!==chromium)continue;
   const browser=await engine.launch({headless:true});
   try{
-   const context=await browser.newContext({...options,ignoreHTTPSErrors:true});let failure=false,denied=false,external=0;const errors=[];
+   const context=await browser.newContext({...options,ignoreHTTPSErrors:true});let failure=false,denied=false,experienceFailure=false,experienceDenied=false,external=0;const errors=[];
    await context.route('**/*',async route=>{
     const url=new URL(route.request().url());
     if(url.origin!==base){external++;return route.abort();}
     if(url.pathname==='/api/admin/overview')return route.fulfill({status:denied?403:failure?503:200,contentType:'application/json',body:JSON.stringify(denied?{error:'Owner required'}:failure?{error:'Fixture outage'}:fixture(url))});
+    if(url.pathname==='/api/admin/experience')return route.fulfill({status:experienceDenied?403:experienceFailure?503:200,contentType:'application/json',body:JSON.stringify(experienceDenied?{error:'Owner required'}:experienceFailure?{error:'Fixture outage'}:experienceFixture)});
     if(url.pathname.startsWith('/api/'))return route.fulfill({status:401,contentType:'application/json',body:'{"error":"Fixture only"}'});
     if(url.pathname==='/admin')return route.fulfill({response:await route.fetch({headers:{...route.request().headers(),cookie:fixtureCookies},maxRedirects:0})});
     return route.continue();
@@ -58,6 +60,20 @@ try{
    await panel.getByText('Contract text awaiting delivery',{exact:true}).waitFor();
    assert.match(await panel.innerText(),/1 texts accepted, 0 delivery confirmations/);
    assert.match(await panel.innerText(),/AM|PM/);
+   const experience=page.locator('section[aria-label="Workspace experience"]');
+   await experience.getByText('12 panel opens · 2 panel errors · 1 retries',{exact:true}).waitFor();
+   await experience.getByText('Review experience and alerts',{exact:true}).click();
+   assert.match(await experience.innerText(),/accepted by the email provider/);
+   assert.match(await experience.innerText(),/Provider acceptance does not confirm delivery/);
+   assert.match(await experience.innerText(),/AM|PM/);
+   experienceFailure=true;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+   await experience.getByText('Refresh failed. Showing the last saved checks.',{exact:true}).waitFor();
+   assert.match(await experience.innerText(),/12 panel opens/);
+   experienceFailure=false;await experience.getByRole('button',{name:'Try again',exact:true}).click();
+   await experience.getByText('Refresh failed. Showing the last saved checks.',{exact:true}).waitFor({state:'hidden'});
+   experienceDenied=true;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+   await experience.getByText('Sign in with the owner account to view these checks.',{exact:true}).waitFor();
+   assert(!/12 panel opens|Configured|accepted by the email provider/.test(await experience.innerText()));
    failure=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();
    await page.getByText('Refresh failed. Showing the last saved view.').waitFor();
    failure=false;await page.getByRole('button',{name:'Try again',exact:true}).click();
@@ -65,7 +81,7 @@ try{
    denied=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();
    await page.getByRole('heading',{name:'Owner access only'}).waitFor();assert.equal(await panel.count(),0);
    assert.deepEqual(errors,[]);assert.equal(external,0,'No external requests during the fixture');
-   console.log(`PASS ${name}: production UI → report → incident detail → refresh failure → recovery → private data cleared on denied access.`);
+   console.log(`PASS ${name}: owner reports and aggregate experience → incident detail → refresh failure → recovery → private data cleared on denied access.`);
    await context.close();
    await verifyWorkspace(browser,base,options,name);
   }finally{await browser.close();}
