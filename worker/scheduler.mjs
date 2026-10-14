@@ -3,13 +3,14 @@
  */
 export function createScheduler({screening,automation,now=Date.now,onFailure=()=>{}}){
  const lanes={screening:{failures:0,idle:0,nextAt:0},automation:{failures:0,idle:0,nextAt:0}};
- let running=false;
+ let running=false,lastLoopAt=now();
  return {
   health(active=true){
-   const degraded=Object.values(lanes).some(lane=>lane.failures>0);
-   return {code:active&&Object.values(lanes).some(lane=>lane.failures>=3)?503:200,
+   const stalled=now()-lastLoopAt>180000;
+   const degraded=stalled||Object.values(lanes).some(lane=>lane.failures>0);
+   return {code:active&&(stalled||Object.values(lanes).some(lane=>lane.failures>=3))?503:200,
     body:{status:active?(degraded?'degraded':'screening'):'standby',outreachEnabled:false,
-     automation:active?(lanes.automation.failures?'held':'available'):'standby'}};
+     automation:active?(stalled||lanes.automation.failures?'held':'available'):'standby'}};
   },
   async run(){
    if(running)throw Error('WORKER_LOOP_ALREADY_RUNNING');
@@ -31,7 +32,7 @@ export function createScheduler({screening,automation,now=Date.now,onFailure=()=
      lane.nextAt=now()+delay;
     }
     return Math.max(0,Math.min(...Object.values(lanes).map(lane=>lane.nextAt))-now());
-   }finally{running=false;}
+   }finally{running=false;lastLoopAt=now();}
   },
  };
 }

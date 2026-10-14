@@ -1,0 +1,69 @@
+// Built application + intercepted API responses. No credentials or live providers.
+import assert from 'node:assert/strict';
+import {spawn,execFileSync} from 'node:child_process';
+import {once} from 'node:events';
+import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import http from 'node:http';
+import https from 'node:https';
+import {chromium,webkit,devices} from 'playwright';
+import {sellerFunnelStages} from '../lib/conversion-funnel.ts';
+import {dashboardCookie,issueDashboardProof} from '../lib/dashboard-password-policy.ts';
+const port=3015,upstream=`http://127.0.0.1:${port}`,base=`https://127.0.0.1:${port+1}`;
+// Keep the production HTTPS policy intact, including Safari's upgrade behavior.
+const tlsDir=mkdtempSync(join(tmpdir(),'icash-browser-'));
+execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(tlsDir,'key.pem'),'-out',join(tlsDir,'cert.pem'),'-days','1','-subj','/CN=127.0.0.1','-addext','subjectAltName=IP:127.0.0.1'],{stdio:'ignore'});
+const proxy=https.createServer({key:readFileSync(join(tlsDir,'key.pem')),cert:readFileSync(join(tlsDir,'cert.pem'))},(request,response)=>{
+ const forwarded=http.request(new URL(request.url,upstream),{method:request.method,headers:request.headers},incoming=>{response.writeHead(incoming.statusCode,incoming.headers);incoming.pipe(response);});
+ forwarded.on('error',()=>{response.writeHead(502);response.end();});request.pipe(forwarded);
+});
+// Navigation proof for this isolated server only. It cannot authenticate with
+// Supabase; all browser API responses are intercepted, and no live key is loaded.
+const fixtureKey='local-browser-fixture-key-never-use-in-production';
+const fixtureUser='00000000-0000-4000-8000-000000000001';
+const access='fixture.'+Buffer.from(JSON.stringify({sub:fixtureUser,session_id:fixtureUser})).toString('base64url')+'.fixture';
+const fixtureCookies=`icash_access=${access}; ${dashboardCookie}=${issueDashboardProof(access,fixtureUser,fixtureKey)}`;
+const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port',String(port)],{env:{PATH:process.env.PATH,NODE_ENV:'production',NEXT_TELEMETRY_DISABLED:'1',SUPABASE_SECRET_KEY:fixtureKey},stdio:['ignore','pipe','pipe']});
+let serverLog='';server.stdout.on('data',d=>{serverLog+=d});server.stderr.on('data',d=>{serverLog+=d});
+const now=new Date().toISOString(),part={status:'ok',checkedAt:now};
+const reliability={status:'degraded',fresh:true,components:{worker:part,maintenance:part},snapshot:{checkedAt:now,issueCount:1,issues:[{kind:'contract_delivery',resourceId:'00000000-0000-4000-8000-000000000003',accountId:'00000000-0000-4000-8000-000000000002',since:now}],texts:{accepted:1,delivered:0,review:0},contracts:{created:1,completed:0,review:0}}};
+function fixture(url){const p=new URL(url).searchParams;return {report:{days:Number(p.get('days')),includeOwner:p.get('includeOwner')==='true',query:p.get('q'),page:Number(p.get('page')),pageSize:25,timezone:'America/Chicago',startAt:now,endAt:now,leadCount:0,matchedCount:0,reviewCount:0,leads:[],funnel:sellerFunnelStages.map(s=>({key:s.key,count:0})),reliability,usage:{completedCount:0,missingChargeCount:0,chargedCents:0,coveredCents:0,knownCostMicros:0,costMicros:0,marginMicros:0,missingCostCount:0,estimatedCount:0,pendingCount:0}}};}
+try{
+ let ready=false;
+ for(let i=0;i<60;i++){if(server.exitCode!==null)throw Error(serverLog);try{const r=await fetch(upstream+'/admin');if(r.ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}
+ assert(ready,'Local production server failed to start');
+ proxy.listen(port+1,'127.0.0.1');await once(proxy,'listening');
+ for(const [name,engine,options] of [['desktop Chromium',chromium,{viewport:{width:1280,height:900}}],['mobile WebKit',webkit,{...devices['iPhone 13']}]]){
+  const browser=await engine.launch({headless:true});
+  try{
+   const context=await browser.newContext({...options,ignoreHTTPSErrors:true});let failure=false,denied=false,external=0;const errors=[];
+   await context.route('**/*',async route=>{
+    const url=new URL(route.request().url());
+    if(url.origin!==base){external++;return route.abort();}
+    if(url.pathname==='/api/admin/overview')return route.fulfill({status:denied?403:failure?503:200,contentType:'application/json',body:JSON.stringify(denied?{error:'Owner required'}:failure?{error:'Fixture outage'}:fixture(url))});
+    if(url.pathname.startsWith('/api/'))return route.fulfill({status:401,contentType:'application/json',body:'{"error":"Fixture only"}'});
+    if(url.pathname==='/admin')return route.fulfill({response:await route.fetch({headers:{...route.request().headers(),cookie:fixtureCookies},maxRedirects:0})});
+    return route.continue();
+   });
+   const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+   const failures=[];page.on('requestfailed',r=>failures.push({url:r.url(),error:r.failure()?.errorText}));
+   await page.goto(base+'/admin');
+   const panel=page.locator('section[aria-label="Workflow reliability"]');
+   try{await panel.getByText('Workflow reliability · Needs attention').waitFor();}
+   catch(error){console.error({engine:name,url:page.url(),errors,failures,body:await page.locator('body').innerText()});throw error;}
+   await panel.getByText('Review stalled work').click();
+   await panel.getByText('Contract text awaiting delivery',{exact:true}).waitFor();
+   assert.match(await panel.innerText(),/1 texts accepted, 0 delivery confirmations/);
+   assert.match(await panel.innerText(),/AM|PM/);
+   failure=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();
+   await page.getByText('Refresh failed. Showing the last saved view.').waitFor();
+   failure=false;await page.getByRole('button',{name:'Try again',exact:true}).click();
+   await page.getByText('Refresh failed. Showing the last saved view.').waitFor({state:'hidden'});
+   denied=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();
+   await page.getByRole('heading',{name:'Owner access only'}).waitFor();assert.equal(await panel.count(),0);
+   assert.deepEqual(errors,[]);assert.equal(external,0,'No external requests during the fixture');
+   console.log(`PASS ${name}: production UI → report → incident detail → refresh failure → recovery → private data cleared on denied access.`);
+  }finally{await browser.close();}
+ }
+}finally{proxy.closeAllConnections();proxy.close();server.kill('SIGTERM');if(server.exitCode===null)await once(server,'exit');rmSync(tlsDir,{recursive:true,force:true});}

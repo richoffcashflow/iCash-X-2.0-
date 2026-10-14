@@ -1,5 +1,7 @@
 import {authorizeOutboundBilling} from '@/lib/outbound-billing-service';
 import {maintenanceBatch} from '@/lib/maintenance-batch';
+import {refreshReliability} from '@/lib/reliability-monitor';
+import {db} from '@/lib/stripe-test';
 import {GET as outbound} from '@/app/api/billing/outbound/route';
 import {GET as recording} from '@/app/api/internal/voice/recording/maintenance/route';
 import {GET as ownerRecording} from '@/app/api/internal/voice/owner-recording-test/maintenance/route';
@@ -11,5 +13,6 @@ export async function GET(request:Request){
  const headers={'Cache-Control':'private, no-store'};
  if(!authorizeOutboundBilling(request,process.env.CRON_SECRET))return Response.json({error:'Unauthorized'},{status:401,headers});
  const result=await maintenanceBatch({outbound:()=>outbound(request),recording:()=>recording(request),ownerRecording:()=>ownerRecording(request),reception:()=>reception(request)});
- return Response.json(result,{status:result.ok?200:503,headers});
+ const monitored=await refreshReliability(db,result.ok);
+ return Response.json({...result,monitored},{status:result.ok&&monitored?200:503,headers});
 }

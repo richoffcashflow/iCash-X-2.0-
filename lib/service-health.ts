@@ -1,5 +1,6 @@
-type Check = 'ok' | 'unavailable';
-export type ServiceHealth = {status:'ok'|'degraded';checkedAt:string;checks:{database:Check;authentication:Check}};
+import {reliabilitySchema} from './reliability.ts';
+type Check = 'ok' | 'unavailable' | 'degraded';
+export type ServiceHealth = {status:'ok'|'degraded';checkedAt:string;checks:{database:Check;authentication:Check;workflows:Check}};
 let cached:{expiresAt:number;value:ServiceHealth}|undefined;
 let pending:Promise<ServiceHealth>|undefined;
 
@@ -18,8 +19,17 @@ export async function serviceHealth():Promise<ServiceHealth>{
     await response.body?.cancel();return 'ok';
    }catch{return 'unavailable';}
   };
-  const [database,authentication]=await Promise.all([probe('/rest/v1/icash_membership_offer?id=eq.1&select=id&limit=1',true),probe('/auth/v1/health')]);
-  const value:ServiceHealth={status:database==='ok'&&authentication==='ok'?'ok':'degraded',checkedAt:new Date().toISOString(),checks:{database,authentication}};
+  const workflowProbe=async():Promise<Check>=>{
+   if(!url||!key)return 'unavailable';
+   try{
+    const response=await fetch(`${url}/rest/v1/rpc/icash_reliability_status`,{method:'POST',headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:'{}',cache:'no-store',signal:AbortSignal.timeout(5000)});
+    if(!response.ok){await response.body?.cancel();return 'unavailable';}
+    const report=reliabilitySchema.parse(await response.json());
+    return report.fresh&&report.status==='ok'?'ok':'degraded';
+   }catch{return 'unavailable';}
+  };
+  const [database,authentication,workflows]=await Promise.all([probe('/rest/v1/icash_membership_offer?id=eq.1&select=id&limit=1',true),probe('/auth/v1/health'),workflowProbe()]);
+  const value:ServiceHealth={status:[database,authentication,workflows].every(v=>v==='ok')?'ok':'degraded',checkedAt:new Date().toISOString(),checks:{database,authentication,workflows}};
   cached={value,expiresAt:Date.now()+(value.status==='ok'?10000:5000)};
   return value;
  })();

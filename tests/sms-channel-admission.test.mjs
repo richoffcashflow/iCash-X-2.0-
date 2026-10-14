@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {saveTextReceipt} from '../lib/text-receipt.ts';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {z} from 'zod';
@@ -31,8 +32,8 @@ canRun=true;assert.equal((await control.POST(req('resume'))).status,200);assert.
 writes=[];assert.equal((await control.POST(req('return_to_bot'))).status,503);assert.equal(writes.length,0);
 assert.equal((await control.POST(req('pause'))).status,200);assert.equal(writes[0].path,'rpc/icash_pause_work_and_billing');
 let invitation=false,claim=true,provider=0,claims=0,accepted=0;
-const text=await load('lib/text-message-service.ts',{liveWorkReady,discoveryWorkEnabled,contactWorkEnabled,smsWorkEnabled,sameBusinessNumber:(a,b)=>a===b,textPayload:()=>{},elevenRequest:async()=>{throw Error('Voice must remain unused');},sendContiguityText:async job=>{provider++;assert.equal(job.id,'claimed');return {messageId:'receipt'};},db:async(path,method,body)=>{
- if(path.startsWith('icash_text_messages?'))return [{body:'Synthetic allowed SMS',attachments:[],thread_id:'thread'}];
+const text=await load('lib/text-message-service.ts',{saveTextReceipt,liveWorkReady,discoveryWorkEnabled,contactWorkEnabled,smsWorkEnabled,sameBusinessNumber:(a,b)=>a===b,textPayload:()=>{},elevenRequest:async()=>{throw Error('Voice must remain unused');},sendContiguityText:async job=>{provider++;assert.equal(job.id,'claimed');return {messageId:'receipt'};},db:async(path,method,body)=>{
+ if(path.startsWith('icash_text_messages?'))return path.includes('select=state,provider_id')?[{state:'accepted',provider_id:'receipt'}]:[{body:'Synthetic allowed SMS',attachments:[],thread_id:'thread'}];
  if(path.startsWith('icash_sms_inbound_invitations?')){assert(path.includes('account_id=eq.account')&&path.includes('message_id=eq.message'));return invitation?[{id:'invite',reply_id:'received-reply'}]:[];}
  if(path==='rpc/icash_review_sms_campaign_reply'){assert.deepEqual(body,{p_account:'account',p_message:'received-reply'});return 'attention';}
  if(path.startsWith('icash_text_threads?'))return [{sender:process.env.CONTIGUITY_FROM,recipient:'+12125550124'}];
