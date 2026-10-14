@@ -12,15 +12,16 @@ import '@/app/plan-homepage.css';
 import '@/app/icash-brand.css';
 import '@/app/launch-homepage.css';
 
-type Props={checkingAccount?:boolean;accountError?:boolean;signInReady?:boolean;onRetry?:()=>void;onSignedIn?:()=>void};
+type Props={preview?:boolean;previewBackHref?:string;checkingAccount?:boolean;accountError?:boolean;signInReady?:boolean;onRetry?:()=>void;onSignedIn?:()=>void};
 
-export function WebinarExpressCheckout({checkingAccount=false,accountError=false,signInReady=true,onRetry,onSignedIn}:Props={}){
+export function WebinarExpressCheckout({preview=false,previewBackHref='/webinar-studio',checkingAccount=false,accountError=false,signInReady=true,onRetry,onSignedIn}:Props={}){
  const [webinarSessionId,setWebinarSessionId]=useState<string>();
  useEffect(()=>{const id=new URLSearchParams(window.location.search).get('webinar_session');if(id&&/^[0-9a-f-]{36}$/i.test(id))setWebinarSessionId(id);},[]);
  const [signInOpen,setSignInOpen]=useState(false);
  const [checkoutEngaged,setCheckoutEngaged]=useState(false);
  function openWorkspace(){setSignInOpen(false);if(onSignedIn)onSignedIn();else window.location.assign(webinarSite.workspacePath);}
  return <div className="wb-express-page wb-plan-home icash-launch-home">
+  {preview&&<nav className="wb-preview-tools" aria-label="Owner preview"><span>After webinar · Didn’t buy · Payments disabled</span><a href={previewBackHref}>Back to webinar</a></nav>}
   <header className="wb-express-header">
    <a className="wb-express-brand" href="/" aria-label="iCash X home"><IcashMark/></a>
    <button type="button" className="wb-express-sign-in" aria-haspopup="dialog" onClick={()=>setSignInOpen(true)}>Sign in</button>
@@ -38,7 +39,7 @@ export function WebinarExpressCheckout({checkingAccount=false,accountError=false
      </section>
     </div>
     <div className="wb-express-card wb-plan-card" id="your-plan" tabIndex={-1}>
-     <MembershipCheckout redirectToVip embedded webinarSessionId={webinarSessionId} presentation="plan" onEngaged={()=>setCheckoutEngaged(true)} onSignedIn={openWorkspace}/>
+     <MembershipCheckout preview={preview} redirectToVip embedded webinarSessionId={webinarSessionId} presentation="plan" onEngaged={()=>setCheckoutEngaged(true)} onSignedIn={openWorkspace}/>
      <a className="wb-text" href={webinarSite.supportPath}>Have a question? We’re here.</a>
     </div>
     <div className="launch-product-preview">

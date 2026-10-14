@@ -14,7 +14,7 @@ import {webinarChatStream,type WebinarMessage,type PendingWebinarMessage} from '
 import {webinarSite} from '@/lib/webinar-site';
 import {webinarBrowserReady,webinarBrowserEvent} from '@/lib/webinar-browser-events';
 import {MessageCircle,Send,X,ChevronDown,ShieldCheck,Check} from 'lucide-react';
-import {useWebinarTimers} from '@/components/webinar-timers';
+import {WebinarTimers,useWebinarTimers} from '@/components/webinar-timers';
 import {WebinarOfferMoment} from '@/components/webinar-offer-moment';
 import {WebinarPlayer} from '@/components/webinar-player';
 import {WebinarPanelBoundary} from '@/components/webinar-panel-boundary';
@@ -35,6 +35,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  const [selectedOfferId,setSelectedOfferId]=useState(''),[checkoutEngaged,setCheckoutEngaged]=useState(false);
  const [now,setNow]=useState(Date.now()),[endCountdown,setEndCountdown]=useState<number|null>(null),[saved,setSaved]=useState(true);
  const [ended,setEnded]=useState(false);
+ const [chatExpanded,setChatExpanded]=useState<boolean|null>(null);
  const endedRef=useRef(false),purchasedRef=useRef<WebinarPurchaseState>(null),upgradeActiveRef=useRef(false),purchaseRedirected=useRef(false);
  const starting=useRef(false),syncing=useRef(false),completed=useRef(false),sessionRef=useRef<Session|null>(null);
  const [editingName,setEditingName]=useState(false),[promptHistory,setPromptHistory]=useState({...emptyPromptHistory});
@@ -50,11 +51,14 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  const sharedIds=sharedChat.messages.map(m=>m.id).join(',');
  const w=session?.webinar;
  const rawOffers=useMemo(()=>w?webinarOffers(w):[],[w]);
- const timerState=useWebinarTimers({sessionId:session?.sessionId??'',timers:[],offers:rawOffers,seconds:time,preview:session?.preview??true,now});
+ const timerState=useWebinarTimers({sessionId:session?.sessionId??'',timers:w?.timers??[],offers:rawOffers,seconds:time,preview:session?.preview??true,now});
  const offers=useMemo(()=>withOfferDeadlines(rawOffers,timerState.offerDeadlines),[rawOffers,timerState.offerDeadlines]);
  const offerState=useRef({offers,offset:timerState.offset});
  offerState.current={offers,offset:timerState.offset};
  const available=availableOffers(offers,time,timerState.now),currentOffer=checkoutEngaged?rawOffers.find(o=>o.id===selectedOfferId):selectOffer(offers,time,timerState.now,selectedOfferId);
+ const chatCollapsed=chatExpanded===null?!!(funding&&currentOffer):!chatExpanded;
+ const checkoutPreviewHref=w?`/webinar/checkout/preview?webinar=${encodeURIComponent(w.id)}&variant=${w.recordingVersion}`:'/webinar/checkout/preview';
+ const checkoutHref=session?.preview?checkoutPreviewHref:`${webinarSite.checkoutPath}?webinar_session=${session?.sessionId}`;
  const spots=useMemo(()=>currentOffer?replayOfferSpots(currentOffer,rawOffers,w?.chat??[],time):null,[currentOffer,rawOffers,w?.chat,time]);
  const allOffersEnded=!checkoutEngaged&&rawOffers.length>0&&rawOffers.every(o=>{
   const fixed=Date.parse(o.expiresAt??'');
@@ -98,7 +102,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  function previewSeek(n:number){
   if(!session?.preview)return;
   endedRef.current=false;setEnded(false);setEndCountdown(null);
-  shownOffers.current.clear();setSelectedOfferId('');setFunding(false);
+  shownOffers.current.clear();setSelectedOfferId('');setFunding(false);setChatExpanded(null);
   followChat.current=true;setUnread(false);tick(n);
  }
  // A timed pitch waits while a viewer is typing or saving. The offer button is
@@ -120,7 +124,9 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
   }
  }
  function finishWebinar(){
-  endedRef.current=true;setEnded(true);const done=track('completed');continuePurchase();
+  endedRef.current=true;setEnded(true);
+  if(session?.preview&&w?.redirectAtEnd){const next=selectOffer(offers,w.durationSeconds,Date.now()+timerState.offset,w.endOfferId);if(next?.action==='checkout'){location.assign(checkoutPreviewHref);return;}}
+  const done=track('completed');continuePurchase();
   if(checkoutEngagedRef.current)return;
   const offer=w?selectOffer(offers,w.durationSeconds,Date.now()+timerState.offset,w.endOfferId):null;if(offer)setSelectedOfferId(offer.id);setFunding(!!offer);
   void done?.then(result=>{continuePurchase();if(alive.current&&!purchaseRedirected.current&&webinarPurchaseDestination(purchasedRef.current,checkoutEngagedRef.current,upgradeActiveRef.current)==='checkout'&&result?.redirect)location.assign(result.redirect);});
@@ -152,19 +158,22 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
      {formError&&<p role="alert">{formError}</p>}
     </form>;
  return <div className={`wb-room${currentOffer?' wb-with-offer':''}${inputActive?' wb-input-active':''}`} onFocusCapture={e=>{setInputActive(e.target.matches('input:not([type=checkbox]):not([type=radio]),textarea'));}} onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget))setInputActive(false);}}>
-  <WebinarOfferMoment offer={currentOffer} now={timerState.now} onOpen={openFunding} checkoutEngaged={checkoutEngaged} spots={spots}/>
+  {session?.preview&&<nav className="wb-preview-tools" aria-label="Owner preview"><span>Owner preview</span><a href={checkoutPreviewHref} target="_blank" rel="noopener noreferrer">After webinar · Didn’t buy ↗</a></nav>}
   {!session?<main className="wb-empty"><span className="wb-eyebrow">{webinarSite.hostName} · {webinarSite.brandName}</span><h1>{unavailable?'Your next session is coming.':previewLocked?'Open the webinar.':error?'Let’s get you connected.':'Opening your session…'}</h1><p>{unavailable||error||'Finding your place and preparing the video.'}</p>{previewLocked?<div className="ws-row-actions">{previewPublicPath&&<a className="wb-primary" href={previewPublicPath}>Watch webinar</a>}<a className="ws-secondary" href={`/dashboard-unlock?next=${encodeURIComponent(typeof location!=='undefined'?location.pathname+location.search:'/webinar-studio')}`}>Owner sign in</a></div>:error&&<button className="wb-primary" onClick={()=>void load()}>Try again</button>}{unavailable&&<a className="wb-primary" href="/">Open iCash X</a>}</main>:<main className={`wb-stage ${funding&&currentOffer?'wb-selling':''}`}>
    <section className="wb-watch">
     <h1 className="wb-sr">{w!.title}</h1>
     <WebinarPlayer key={session.sessionId} sessionId={session.sessionId} videoUrl={w!.videoUrl} posterUrl={w!.posterUrl} title={w!.title} progress={session.progress} preview={session.preview} onPreviewSeek={previewSeek} onProgress={tick} onPlayingChange={setPlaying} onCheckpoint={()=>track(completionPending.current?'completed':'progress',true)} onStarted={()=>{if(!startSeen.current){startSeen.current=true;track('started');}}} onEnded={finishWebinar}/>
+    <WebinarTimers timers={w!.timers} placement="video" seconds={time} now={timerState.now} deadlines={timerState.deadlines}/>
+    {!funding&&<WebinarOfferMoment offer={currentOffer} now={timerState.now} onOpen={openFunding} checkoutEngaged={checkoutEngaged} spots={spots}/>}
     {!saved&&<span className="wb-sr" role="status">Your progress will sync when the connection returns.</span>}
     {endCountdown!==null&&<div className="wb-prompt"><strong>Opening your next step in {endCountdown} seconds</strong><button className="wb-text" onClick={()=>setEndCountdown(null)}>Stay here</button></div>}
    </section>
    <aside className="wb-side"><WebinarPanelBoundary label="Chat and offers">
-    {currentOffer&&<section className="wb-offer" id="webinar-offer" ref={offerPanel} tabIndex={-1} aria-label="Your next step" hidden={!funding}><div className="wb-panel-heading"><span className="wb-eyebrow">YOUR NEXT STEP</span><button className="wb-icon" aria-label="Minimize offer" onClick={()=>{setFunding(false);}}><ChevronDown size={20}/></button></div>{available.length>1&&<div className="wb-offer-options" aria-label="Available offers">{available.map(offer=><button key={offer.id} disabled={checkoutEngaged} aria-pressed={currentOffer.id===offer.id} onClick={()=>{setSelectedOfferId(offer.id);track('pitch_shown',false,'offer:'+offer.id);}}>{offer.title}</button>)}</div>}<WebinarOfferImage offer={currentOffer} className="wb-offer-image"/><h2>{currentOffer.title}</h2>{currentOffer.description&&<p className="wb-offer-description">{currentOffer.description}</p>}{currentOffer.expiresAt&&!checkoutEngaged&&<p className="wb-deadline wb-timer"><span>Offer closes in</span><strong role="timer">{formatWatchTime(Math.ceil((Date.parse(currentOffer.expiresAt)-timerState.now)/1000))}</strong></p>}{!checkoutEngaged&&<WebinarOfferSpots spots={spots}/>}{currentOffer.action==='checkout'?<div className="wb-embedded-checkout"><WebinarPanelBoundary label="Checkout" fallbackHref={`${webinarSite.checkoutPath}?webinar_session=${session.sessionId}`}><WebinarCheckout sessionId={session.sessionId} preview={session.preview} phase={ended?'ended':'watching'} onPurchased={state=>{purchasedRef.current=state;continuePurchase();}} onUpgradeActive={active=>{upgradeActiveRef.current=active;if(!active)continuePurchase();}} onEngaged={()=>{checkoutEngagedRef.current=true;setCheckoutEngaged(true);setSelectedOfferId(currentOffer.id);setEndCountdown(null);track('add_to_cart');track('checkout_opened');track('checkout_opened',false,'offer:'+currentOffer.id);}}/></WebinarPanelBoundary></div>:<a className="wb-primary wb-offer-link" href={offerDestination(currentOffer)} onClick={event=>{if(!availableOffers(offers,position.current,Date.now()+timerState.offset).some(o=>o.id===currentOffer.id)){event.preventDefault();return;}track('add_to_cart',true);track('checkout_opened',true);track('checkout_opened',true,'offer:'+currentOffer.id);track('progress',true);}}>{currentOffer.ctaLabel}</a>}<p className="wb-secure"><ShieldCheck size={14}/>Your video keeps playing while you review.</p></section>}
+    {currentOffer&&<section className="wb-offer" id="webinar-offer" ref={offerPanel} tabIndex={-1} aria-label="Your next step" hidden={!funding}><div className="wb-panel-heading"><span className="wb-eyebrow">YOUR NEXT STEP</span><button className="wb-icon" aria-label="Minimize offer" onClick={()=>{setFunding(false);}}><ChevronDown size={20}/></button></div>{available.length>1&&<div className="wb-offer-options" aria-label="Available offers">{available.map(offer=><button key={offer.id} disabled={checkoutEngaged} aria-pressed={currentOffer.id===offer.id} onClick={()=>{setSelectedOfferId(offer.id);track('pitch_shown',false,'offer:'+offer.id);}}>{offer.title}</button>)}</div>}<h2>{currentOffer.title}</h2>{currentOffer.description&&<p className="wb-offer-description">{currentOffer.description}</p>}<WebinarTimers timers={w!.timers} placement="offer" seconds={time} now={timerState.now} deadlines={timerState.deadlines}/>{currentOffer.expiresAt&&!checkoutEngaged&&<p className="wb-deadline wb-timer"><span>Offer closes in</span><strong role="timer">{formatWatchTime(Math.ceil((Date.parse(currentOffer.expiresAt)-timerState.now)/1000))}</strong></p>}{!checkoutEngaged&&<WebinarOfferSpots spots={spots}/>}{currentOffer.action==='checkout'&&<a className="wb-primary wb-offer-link" href={checkoutHref} target="_blank" rel="noopener noreferrer" onClick={()=>{track('add_to_cart',true);track('checkout_opened',true);track('progress',true);}}>{currentOffer.ctaLabel}</a>}<WebinarOfferImage offer={currentOffer} className="wb-offer-image"/>{currentOffer.action==='checkout'?<div className="wb-embedded-checkout"><WebinarPanelBoundary label="Checkout" fallbackHref={checkoutHref}><WebinarCheckout sessionId={session.sessionId} preview={session.preview} phase={ended?'ended':'watching'} onPurchased={state=>{purchasedRef.current=state;continuePurchase();}} onUpgradeActive={active=>{upgradeActiveRef.current=active;if(!active)continuePurchase();}} onEngaged={()=>{checkoutEngagedRef.current=true;setCheckoutEngaged(true);setSelectedOfferId(currentOffer.id);setEndCountdown(null);track('add_to_cart');track('checkout_opened');track('checkout_opened',false,'offer:'+currentOffer.id);}}/></WebinarPanelBoundary></div>:<a className="wb-primary wb-offer-link" href={offerDestination(currentOffer)} onClick={event=>{if(!availableOffers(offers,position.current,Date.now()+timerState.offset).some(o=>o.id===currentOffer.id)){event.preventDefault();return;}track('add_to_cart',true);track('checkout_opened',true);track('checkout_opened',true,'offer:'+currentOffer.id);track('progress',true);}}>{currentOffer.ctaLabel}</a>}<p className="wb-secure"><ShieldCheck size={14}/>Your video keeps playing while you review.</p></section>}
     {allOffersEnded&&time>=webinarPitchAt(w!)&&<section className="wb-offer"><h2>This session’s offers have ended.</h2><p>You can keep watching and use the chat.</p></section>}
-    <section className="wb-chat" aria-labelledby="wb-chat-title" onFocusCapture={()=>setChatFocused(true)} onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget))setChatFocused(false);}}>
-     <div className="wb-chat-heading"><span><MessageCircle size={18}/><h2 id="wb-chat-title" title="This chat includes prerecorded discussion and approved viewer messages. New messages are reviewed before being shared with other viewers.">Chat</h2></span><WebinarPanelBoundary quiet><WebinarAudience sessionId={session.sessionId} enabled={w!.showAudienceCount} preview={session.preview} playing={playing} display={w!.audienceDisplay} seconds={time} durationSeconds={w!.durationSeconds}/></WebinarPanelBoundary></div>
+    <section className={`wb-chat${chatCollapsed?' wb-chat-collapsed':''}`} aria-labelledby="wb-chat-title" onFocusCapture={()=>setChatFocused(true)} onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget))setChatFocused(false);}}>
+     <div className="wb-chat-heading"><span><MessageCircle size={18}/><h2 id="wb-chat-title" title="This chat includes prerecorded discussion and approved viewer messages. New messages are reviewed before being shared with other viewers.">Chat</h2></span><div className="wb-chat-heading-actions"><WebinarPanelBoundary quiet><WebinarAudience sessionId={session.sessionId} enabled={w!.showAudienceCount} preview={session.preview} playing={playing} display={w!.audienceDisplay} seconds={time} durationSeconds={w!.durationSeconds}/></WebinarPanelBoundary><button type="button" className="wb-icon" aria-label={chatCollapsed?'Expand chat':'Minimize chat'} aria-expanded={!chatCollapsed} aria-controls="wb-chat-body" onClick={()=>{setChatExpanded(chatCollapsed);setChatFocused(false);}}><ChevronDown size={18} style={{transform:chatCollapsed?'rotate(180deg)':undefined}}/></button></div></div>
+     <div id="wb-chat-body" hidden={chatCollapsed}>
      <div className="wb-chat-log" ref={chatLog} role="log" aria-label="Session messages" tabIndex={0} onScroll={e=>{const log=e.currentTarget;followChat.current=log.scrollHeight-log.scrollTop-log.clientHeight<80;if(followChat.current)setUnread(false);}}>
       {stream.map(entry=>{
        if(entry.kind==='message'){const m=entry.message;return <article className="wb-message" key={entry.key} aria-label={entry.pending?'Sending your message':undefined}><div><b>{m.display_name||(m.shared?'Viewer':name||'You')}</b>{entry.pending&&<span className="wb-sr">Sending…</span>}<p>{m.text}</p></div></article>;}
@@ -178,10 +187,11 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
      {!namePrompt&&<><div className="wb-chat-identity"><b>{name}</b><button type="button" onClick={()=>{setDraftName(name);setEditingName(true);setFormError('');}}>Edit name</button></div><form className="wb-chat-input" onSubmit={send}><label className="wb-sr" htmlFor="wb-question">Send a message</label><input ref={messageInput} id="wb-question" name="message" autoComplete="off" enterKeyHint="send" value={question} maxLength={1200} onChange={e=>setQuestion(e.target.value)} placeholder="Send a message…"/><button disabled={chatBusy||formBusy||!question.trim()} aria-label="Send message"><Send size={18}/></button></form></>}
      {contactNotice&&<p className="wb-sr" role="status">{contactNotice}</p>}
      {chatError&&<p className="wb-chat-note" role="alert">{chatError}</p>}
+     </div>
     </section>
    </WebinarPanelBoundary></aside>
   </main>}
 
-  {session&&currentOffer&&<div className="wb-bottom"><span>{name&&<b>{name}</b>}</span><button className="wb-primary" aria-controls="webinar-offer" onClick={openFunding}>{checkoutEngaged?'Continue checkout':currentOffer.ctaLabel}</button></div>}
+  {session&&currentOffer&&<div className="wb-bottom"><div className="wb-bottom-summary"><WebinarTimers timers={w!.timers} placement="offer" seconds={time} now={timerState.now} deadlines={timerState.deadlines}/>{currentOffer.expiresAt&&!checkoutEngaged&&<span className="wb-bottom-deadline">Offer closes in <strong role="timer">{formatWatchTime(Math.max(0,Math.ceil((Date.parse(currentOffer.expiresAt)-timerState.now)/1000)))}</strong></span>}</div><button className="wb-primary" aria-controls="webinar-offer" onClick={openFunding}>{checkoutEngaged?'Continue checkout':currentOffer.ctaLabel}</button></div>}
  </div>;
 }

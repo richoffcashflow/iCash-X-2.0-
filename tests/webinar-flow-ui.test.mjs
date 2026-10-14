@@ -19,12 +19,13 @@ globalThis.location={search:'?ad_id=55555&fbclid=retained&r=signed-token',hash:'
 const replaced=[];globalThis.history={replaceState:(_state,_title,url)=>replaced.push(url)};
 globalThis.localStorage=globalThis.sessionStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)};
 Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true});
-const components=Object.fromEntries(['WebinarPlayer','WebinarPanelBoundary','WebinarAudience','WebinarPurchaseNotifications','WebinarOfferMoment','WebinarOfferImage','WebinarOfferSpots'].map(n=>[n,n]));
+const components=Object.fromEntries(['WebinarTimers','WebinarPlayer','WebinarPanelBoundary','WebinarAudience','WebinarPurchaseNotifications','WebinarOfferMoment','WebinarOfferImage','WebinarOfferSpots'].map(n=>[n,n]));
 const icons=Object.fromEntries(['MessageCircle','Send','X','ChevronDown','ShieldCheck','Maximize','Pause','Play','Volume2','VolumeX','Info'].map(n=>[n,n]));
 const w={...policy.newWebinar('00000000-0000-4000-8000-000000000123'),videoUrl:'https://example.test/day.mp4',status:'published',publicCode:'129340',chat:[{id:'before',at:499,name:'Sam',text:'Before submission',kind:'replay'},{id:'after',at:501,name:'Pat',text:'After submission',kind:'replay'}]};
 const sessionId='00000000-0000-4000-8000-000000000456';let emptyChat=false;let requestLog=[],remembered='',rememberedEmail='',completionGate=null,chatGate=null,failChat=false,failContact=false;const redirects=[];location.assign=path=>redirects.push(path);
 async function post(url,body){requestLog.push({url,body});if(url.endsWith('/start'))return {canonicalPath:'/live/129340',sessionId,webinar:policy.publicWebinar(w),progress:0,name:remembered,email:rememberedEmail,contactSaved:false,messages:[],preview:false,serverNow:Date.now()};if(url.endsWith('/event')&&body.kind==='completed'){if(completionGate)await completionGate;return {saved:true,redirect:'/webinar/checkout'};}if(url.endsWith('/contact')){if(failContact)throw Error('Name could not be saved.');remembered=body.name;if(!body.onlyName)rememberedEmail=body.email;return {name:remembered,contactSaved:!!body.email&&!!body.phone};}if(url.endsWith('/chat')){if(chatGate)await chatGate;if(failChat)throw Error('Connection lost.');return {messages:emptyChat?[]:[{id:'m'+requestLog.length,role:'user',text:body.text,playback_seconds:body.seconds,public_status:'pending'}]};}return {saved:true};}
-const roomDeps={useWebinarSharedChat:()=>({messages:[],statuses:[]}),webinarChatStream,withOfferDeadlines,replayOfferSpots,useMemo:fn=>fn(),webinarRequest:async()=>({postPurchaseUrl:'/live/123457'}),dynamic:loader=>loader.toString().includes('WebinarCheckout')?'WebinarCheckout':'AccountAccess',useWebinarTimers:()=>({deadlines:{},offerDeadlines:{},offset:0,now:Date.now()}),...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}};
+let timerInput;
+const roomDeps={useWebinarSharedChat:()=>({messages:[],statuses:[]}),webinarChatStream,withOfferDeadlines,replayOfferSpots,useMemo:fn=>fn(),webinarRequest:async()=>({postPurchaseUrl:'/live/123457'}),dynamic:loader=>loader.toString().includes('WebinarCheckout')?'WebinarCheckout':'AccountAccess',useWebinarTimers:input=>{timerInput=input;return {deadlines:{},offerDeadlines:{},offset:0,now:Date.now()};},...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}};
 const h=await harness('components/webinar-room.tsx',roomDeps);
 const render=()=>h.render('WebinarRoom',{webinarCode:'129339'});let tree=render();await flush();tree=render();
 assert.equal(requestLog[0].body.code,'129339');assert.equal(requestLog[0].body.attribution.fbclid,'retained');assert.equal(replaced[0],'/live/129340?ad_id=55555&fbclid=retained#room');assert.equal(all(tree).some(n=>n.props?.className==='wb-offer'),false,'No offer before its cue');assert.equal(all(tree).some(n=>n.type==='header'),false);
@@ -82,7 +83,11 @@ all(tree).find(n=>n.props?.className==='wb-new-messages').props.onClick();assert
 find(tree,'WebinarPlayer').props.onProgress(w.durationSeconds-1);tree=render();tree=render();assert.equal(all(tree).find(n=>n.props?.className==='wb-chat-heading').type,'div');assert.ok(all(tree).some(n=>n.props?.className==='wb-chat-log'),'Chat stays open when an offer appears');
 const panel=all(tree).find(n=>n.props?.id==='webinar-offer');assert.equal(panel.props.hidden,true);let focused=0,scrolled=0;panel.props.ref.current={focus:()=>focused++,scrollIntoView:()=>scrolled++};
 all(tree).find(n=>n.props?.['aria-controls']==='webinar-offer').props.onClick();tree=render();tree=render();assert.equal(all(tree).find(n=>n.props?.id==='webinar-offer').props.hidden,false);assert.equal(focused,1);assert.equal(scrolled,1);
-assert.ok(all(tree).some(n=>n.props?.id==='wb-question'),'Opening checkout keeps chat available');
+assert.ok(all(tree).some(n=>n.props?.id==='wb-question'),'Opening checkout keeps chat mounted');
+assert.equal(all(tree).find(n=>n.props?.id==='wb-chat-body').props.hidden,true,'Offer automatically minimizes chat');
+all(tree).find(n=>n.props?.['aria-label']==='Expand chat').props.onClick();tree=render();
+assert.equal(all(tree).find(n=>n.props?.id==='wb-chat-body').props.hidden,false,'Viewer can reopen chat');
+assert.equal(input().props.value,'What happens next?','Collapsing chat preserves the draft');
 // Minimize/reopen preserves both the draft and the same mounted checkout.
 all(tree).find(n=>n.props?.['aria-label']==='Minimize offer').props.onClick();tree=render();assert.equal(input().props.value,'What happens next?');
 input().props.onChange({target:{value:''}});tree=render();tree=render();
@@ -98,6 +103,22 @@ tree=render();find(tree,'WebinarCheckout').props.onPurchased('standard');await f
 h.close();
 store.delete('icash-webinar-prompts:'+sessionId);
 const returningRoom=await harness('components/webinar-room.tsx',roomDeps);returningRoom.render('WebinarRoom',{webinarCode:'129339'});await flush();let returningTree=returningRoom.render('WebinarRoom',{webinarCode:'129339'});find(returningTree,'WebinarPlayer').props.onProgress(65);returningTree=returningRoom.render('WebinarRoom',{webinarCode:'129339'});assert.equal(all(returningTree).some(n=>n.props?.className?.startsWith('wb-prompt ')),false,'A remembered email avoids another contact request in a fresh session');returningRoom.close();
+
+// Owner preview uses the configured timers and can inspect the unpaid end page.
+const timerFixture={id:'offer-timer',label:'Time remaining',at:1355,mode:'duration',durationSeconds:121,endsAt:null,placement:'offer',onExpire:'hide',expiredMessage:'Ended'};
+const previewRoom=await harness('components/webinar-room.tsx',{...roomDeps,post:async()=>({sessionId,webinar:policy.publicWebinar({...w,timers:[timerFixture]}),progress:1385,name:'Owner',messages:[],preview:true,serverNow:Date.now()})});
+const renderPreview=()=>previewRoom.render('WebinarRoom',{});
+renderPreview();await flush();let previewTree=renderPreview();previewTree=renderPreview();
+assert.deepEqual(timerInput.timers,[timerFixture],'Room passes saved timers into deadline synchronization');
+assert.ok(all(previewTree).some(n=>n.type==='WebinarTimers'&&n.props.placement==='offer'&&n.props.timers[0].id==='offer-timer'),'Offer countdown is rendered');
+const previewLink=all(previewTree).find(n=>n.type==='a'&&n.props.href?.startsWith('/webinar/checkout/preview'));
+assert.ok(previewLink,'Owner can open the unpaid checkout preview at any time');
+const countBeforePreview=requestLog.length;
+find(previewTree,'WebinarPlayer').props.onEnded();
+assert.equal(redirects.at(-1),previewLink.props.href,'Preview completion opens the unpaid customer page');
+assert.equal(requestLog.length,countBeforePreview,'Preview completion does not write conversion events');
+previewRoom.close();
+
 // Both optional steps can be skipped without saving blank contact data.
 rememberedEmail='';store.delete('icash-webinar-prompts:'+sessionId);
 const skipRoom=await harness('components/webinar-room.tsx',roomDeps);const renderSkip=()=>skipRoom.render('WebinarRoom',{webinarCode:'129339'});

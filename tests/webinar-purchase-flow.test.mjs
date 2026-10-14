@@ -63,3 +63,18 @@ for(const scenario of [
  instance.close();
 }
 console.log('PASS pending payment, explicit setup, existing VIP, and unsafe destination guards.');
+
+// Preview uses the real checkout presentation with read-only pricing and no billing call.
+const previewCalls=[];
+const previewCheckout=await harness('components/membership-checkout.tsx',{...common,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserEvent:()=>{throw Error('Preview must not track checkout');},webinarRequest:async(url,init={})=>{previewCalls.push({url,init});assert.equal(url,'/api/webinar/checkout-preview');assert.notEqual(init.method,'POST');return {offer:{revision:4,priceCents:5000,enabled:true,interval:'month'},ready:true,mode:'live',embeddedReady:true,membership:null};}});
+window.location.search='?membership=paid&setup=1&session_id=cs_live_fixture';
+const previewProps={preview:true,onSignedIn:()=>{},onEngaged:()=>{throw Error('Preview must not engage paid checkout');}};
+previewCheckout.render('MembershipCheckout',previewProps);await flush();let previewTree=previewCheckout.render('MembershipCheckout',previewProps);
+assert.match(text(previewTree),/\$50/);assert.match(text(previewTree),/Payments disabled/);
+find(previewTree,'input').props.onChange({target:{checked:true}});previewTree=previewCheckout.render('MembershipCheckout',previewProps);
+await button(previewTree,'Get software access').props.onClick();previewTree=previewCheckout.render('MembershipCheckout',previewProps);
+assert.match(text(previewTree),/This button opens secure Stripe payment for customers/);
+assert.equal(previewCalls.length,1,'Clicking preview purchase never creates a payment or fetches owner billing');
+assert.equal(find(previewTree,'StripeEmbeddedCheckout'),undefined);
+previewCheckout.close();
+console.log('PASS owner checkout preview: current price, real layout, paid URL flags ignored, no payment or conversion side effects.');
