@@ -1,11 +1,23 @@
 // Built application + intercepted API responses. No credentials or live providers.
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
+import {spawn,execFileSync} from 'node:child_process';
 import {once} from 'node:events';
+import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import http from 'node:http';
+import https from 'node:https';
 import {chromium,webkit,devices} from 'playwright';
 import {sellerFunnelStages} from '../lib/conversion-funnel.ts';
 import {dashboardCookie,issueDashboardProof} from '../lib/dashboard-password-policy.ts';
-const port=3015,base=`http://127.0.0.1:${port}`;
+const port=3015,upstream=`http://127.0.0.1:${port}`,base=`https://127.0.0.1:${port+1}`;
+// Keep the production HTTPS policy intact, including Safari's upgrade behavior.
+const tlsDir=mkdtempSync(join(tmpdir(),'icash-browser-'));
+execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(tlsDir,'key.pem'),'-out',join(tlsDir,'cert.pem'),'-days','1','-subj','/CN=127.0.0.1','-addext','subjectAltName=IP:127.0.0.1'],{stdio:'ignore'});
+const proxy=https.createServer({key:readFileSync(join(tlsDir,'key.pem')),cert:readFileSync(join(tlsDir,'cert.pem'))},(request,response)=>{
+ const forwarded=http.request(new URL(request.url,upstream),{method:request.method,headers:request.headers},incoming=>{response.writeHead(incoming.statusCode,incoming.headers);incoming.pipe(response);});
+ forwarded.on('error',()=>{response.writeHead(502);response.end();});request.pipe(forwarded);
+});
 // Navigation proof for this isolated server only. It cannot authenticate with
 // Supabase; all browser API responses are intercepted, and no live key is loaded.
 const fixtureKey='local-browser-fixture-key-never-use-in-production';
@@ -19,12 +31,13 @@ const reliability={status:'degraded',fresh:true,components:{worker:part,maintena
 function fixture(url){const p=new URL(url).searchParams;return {report:{days:Number(p.get('days')),includeOwner:p.get('includeOwner')==='true',query:p.get('q'),page:Number(p.get('page')),pageSize:25,timezone:'America/Chicago',startAt:now,endAt:now,leadCount:0,matchedCount:0,reviewCount:0,leads:[],funnel:sellerFunnelStages.map(s=>({key:s.key,count:0})),reliability,usage:{completedCount:0,missingChargeCount:0,chargedCents:0,coveredCents:0,knownCostMicros:0,costMicros:0,marginMicros:0,missingCostCount:0,estimatedCount:0,pendingCount:0}}};}
 try{
  let ready=false;
- for(let i=0;i<60;i++){if(server.exitCode!==null)throw Error(serverLog);try{const r=await fetch(base+'/admin');if(r.ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}
+ for(let i=0;i<60;i++){if(server.exitCode!==null)throw Error(serverLog);try{const r=await fetch(upstream+'/admin');if(r.ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}
  assert(ready,'Local production server failed to start');
+ proxy.listen(port+1,'127.0.0.1');await once(proxy,'listening');
  for(const [name,engine,options] of [['desktop Chromium',chromium,{viewport:{width:1280,height:900}}],['mobile WebKit',webkit,{...devices['iPhone 13']}]]){
   const browser=await engine.launch({headless:true});
   try{
-   const context=await browser.newContext(options);let failure=false,denied=false,external=0;const errors=[];
+   const context=await browser.newContext({...options,ignoreHTTPSErrors:true});let failure=false,denied=false,external=0;const errors=[];
    await context.route('**/*',async route=>{
     const url=new URL(route.request().url());
     if(url.origin!==base){external++;return route.abort();}
@@ -34,9 +47,11 @@ try{
     return route.continue();
    });
    const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+   const failures=[];page.on('requestfailed',r=>failures.push({url:r.url(),error:r.failure()?.errorText}));
    await page.goto(base+'/admin');
    const panel=page.locator('section[aria-label="Workflow reliability"]');
-   await panel.getByText('Workflow reliability · Needs attention').waitFor();
+   try{await panel.getByText('Workflow reliability · Needs attention').waitFor();}
+   catch(error){console.error({engine:name,url:page.url(),errors,failures,body:await page.locator('body').innerText()});throw error;}
    await panel.getByText('Review stalled work').click();
    await panel.getByText('Contract text awaiting delivery',{exact:true}).waitFor();
    assert.match(await panel.innerText(),/1 texts accepted, 0 delivery confirmations/);
@@ -51,4 +66,4 @@ try{
    console.log(`PASS ${name}: production UI → report → incident detail → refresh failure → recovery → private data cleared on denied access.`);
   }finally{await browser.close();}
  }
-}finally{server.kill('SIGTERM');if(server.exitCode===null)await once(server,'exit');}
+}finally{proxy.closeAllConnections();proxy.close();server.kill('SIGTERM');if(server.exitCode===null)await once(server,'exit');rmSync(tlsDir,{recursive:true,force:true});}
