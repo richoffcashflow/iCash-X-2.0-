@@ -101,6 +101,7 @@ alter table icash_text_messages add last_delivery_at timestamptz;
  await pg.exec(readFileSync('config/buyer-price-privacy.sql','utf8'));
  await (await import('./test-buyer-price-privacy-fixtures.mjs')).testBuyerPricePrivacy({q,one,rpc,a,d,t});
  await pg.exec(readFileSync('config/buyer-intent-context.sql','utf8'));
+ await pg.exec(readFileSync('config/buyer-viewing-short-time-request.sql','utf8'));
  await (await import('./test-buyer-intent-context-fixtures.mjs')).testBuyerIntentContext({q,one,rpc,a,d,t,session});
  // A buyer can wait for seller options without inventing or choosing a time.
  const availabilityQuestion='What times are available?';
