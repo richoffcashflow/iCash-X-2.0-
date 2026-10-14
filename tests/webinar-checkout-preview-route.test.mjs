@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+let allowed=false,pricingReads=0;
+const offer={revision:3,priceCents:5000,interval:'month',enabled:true};
+const key='checkoutPreviewRoute';
+globalThis[key]={membershipOffer:async()=>{pricingReads++;return offer;},webinarOwner:async()=>{if(!allowed)throw Error('owner required');},webinarError:()=>Response.json({error:'Owner required'},{status:403}),webinarHeaders:{'Cache-Control':'private, no-store'}};
+const source=ts.transpileModule(readFileSync(new URL('../app/api/webinar/checkout-preview/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .*;\s*$/gm,'');
+const {GET}=await import('data:text/javascript;base64,'+Buffer.from('const {membershipOffer,webinarOwner,webinarError,webinarHeaders}=globalThis.'+key+';\n'+source).toString('base64'));
+assert.equal((await GET()).status,403);assert.equal(pricingReads,0,'Unauthorized requests cannot load preview data');
+allowed=true;const response=await GET(),data=await response.json();
+assert.equal(response.headers.get('Cache-Control'),'private, no-store');assert.deepEqual(data.offer,offer);assert.equal(data.membership,null);assert.equal(data.email,null);assert.equal(data.customerName,'');assert.equal(data.postPurchaseUrl,null);assert.equal(pricingReads,1);
+console.log('PASS checkout preview route: owner authorization precedes pricing; no customer or payment data; private no-store response.');
