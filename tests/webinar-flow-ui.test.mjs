@@ -149,6 +149,25 @@ video.props.onError();pt=ph.render('WebinarPlayer',vp);all(pt).find(n=>n.type===
 document.hidden=true;listeners.get('visibilitychange')();assert.equal(media.paused,true);document.hidden=false;listeners.get('visibilitychange')();await flush();assert.equal(media.paused,false);
 ph.close();
 const draftPlayer=await harness('components/webinar-player.tsx',{...icons,...playback});const draftTree=draftPlayer.render('WebinarPlayer',{...vp,videoUrl:'',preview:true});assert.equal(find(draftTree,'video'),undefined);assert.ok(all(draftTree).some(n=>n.props?.children==='Your video goes here'));assert.equal(all(draftTree).some(n=>n.props?.className==='wb-player-recovery'),false,'An empty owner draft is not a connection failure');draftPlayer.close();
+// The owner's timeline is persistent, drives real seeks, and never appears publicly.
+{
+ const h=await harness('components/webinar-player.tsx',{...icons,...playback,...policy}),seeks=[];
+ const props={...vp,preview:true,onPreviewSeek:n=>seeks.push(n)};
+ const render=()=>h.render('WebinarPlayer',props);
+ const m={...media,currentTime:0,paused:true,duration:1800,async play(){this.paused=false;},pause(){this.paused=true;}};
+ let tree=render();find(tree,'video').props.ref.current=m;
+ assert.equal(find(tree,'input').props.disabled,true);
+ find(tree,'video').props.onLoadedMetadata();await flush();tree=render();
+ let slider=find(tree,'input');assert.equal(slider.props.max,1800);assert.equal(slider.props.disabled,false);
+ slider.props.onChange({target:{value:'1394'}});assert.equal(m.currentTime,1394);assert.equal(seeks.at(-1),1394);
+ tree=render();assert.equal(find(tree,'input').props.value,1394);
+ slider.props.onChange({target:{value:'120'}});assert.equal(seeks.at(-1),120,'Backward seeks reset the room cues');
+ find(render(),'video').props.onPlaying();tree=render();assert.ok(find(tree,'input'),'Timeline stays present while playing');
+ all(tree).find(n=>n.props?.['aria-label']==='Pause preview').props.onClick();assert.equal(m.paused,true);
+ all(render()).find(n=>/mute preview/i.test(n.props?.['aria-label']??'')).props.onClick();
+ assert.equal(all(h.render('WebinarPlayer',vp)).some(n=>n.props?.['aria-label']==='Preview video timeline'),false);
+ h.close();sessionStorage.removeItem('icash-webinar-muted');
+}
 // Sound-first autoplay, policy fallback, and explicit viewer choices use the real
 // handlers. These fixtures never load media or contact a provider.
 async function audioPlayer(play,extra={}){

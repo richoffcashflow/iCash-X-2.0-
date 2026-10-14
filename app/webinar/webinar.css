@@ -221,3 +221,12 @@
 .wb-room.wb-has-countdown .wb-offer{scroll-margin-top:88px}
 .wb-room .wb-paid .wb-chat{order:-1}
 @media(max-width:900px){.wb-countdown-banner{padding:8px 12px;gap:16px;justify-content:center}.wb-countdown-banner>div{gap:8px}.wb-countdown-banner span{font-size:12px}.wb-countdown-banner strong{font-size:27px}.wb-room.wb-has-countdown .wb-watch{top:64px}}
+
+/* Owner controls stay visible even when mobile browsers hide native controls. */
+.wb-preview-player-controls{position:relative;z-index:6;background:#111;color:#fff;padding:0 12px 4px}
+.wb-preview-player-controls>input{display:block;width:100%;height:32px;margin:0;accent-color:#fff;cursor:pointer;touch-action:pan-y}
+.wb-preview-player-controls>div{display:flex;align-items:center;gap:8px;min-height:40px}
+.wb-preview-player-controls button{display:grid;place-items:center;width:44px;height:40px;border:0;border-radius:6px;background:transparent;color:inherit}
+.wb-preview-player-controls button:last-child{margin-left:auto}
+.wb-preview-player-controls span{font-size:12px;font-variant-numeric:tabular-nums}
+.wb-preview-player-controls :focus-visible{outline:2px solid #fff;outline-offset:2px}
