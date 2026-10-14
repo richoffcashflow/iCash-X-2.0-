@@ -83,3 +83,7 @@ assert.equal(authCalls.filter(p=>p==='otp').length,otpBefore);
 const unlockUi=readFileSync(new URL('../components/dashboard-unlock.tsx',import.meta.url),'utf8');assert(!unlockUi.includes('AccountAccess'));assert(unlockUi.includes('current-password'));
 delete globalThis.__dashboardTest;delete process.env.SUPABASE_SECRET_KEY;
 console.log('PASS dashboard password: user/session binding, tampering, expiry, redirect safety, origin, owner-only grants, rate limit, password failure, temporary-session revocation, secure cookies and lock.');
+
+const previewId='127876ff-4954-4282-9f03-1ebe7850b80f';
+for(const path of ['/webinar?preview='+previewId+'&variant=night','/webinar/checkout/preview?webinar='+previewId+'&variant=night'])assert.equal(dashboardReturnPath(path),path);
+for(const path of ['/webinar','/webinar?preview=bad','/webinar/checkout','/webinar/checkout/preview?webinar=bad','//evil.invalid/webinar?preview='+previewId])assert.equal(dashboardReturnPath(path),'/admin');

@@ -232,3 +232,12 @@ for(const name of ['AbortError','NotSupportedError']){
 }
 console.log('PASS webinar flows: compact optional contact, remembered details, immediate chat echo, draft and scroll preservation, automatic offers, countdown chat gating, payment continuity, player recovery and empty draft guidance.');
 console.log('PASS webinar audio: audible autoplay, one muted policy fallback, tap to listen, persistent mute, blocked playback recovery, stale rejection protection, and no retry on media errors.');
+
+// A locked mobile preview returns through password unlock, never customer sign-in.
+{
+ const priorSearch=location.search,priorPath=location.pathname,priorReplace=location.replace;let unlockPath='';location.replace=path=>{unlockPath=path;};location.search='?preview='+w.id+'&variant=night';location.pathname='/webinar';
+ const h=await harness('components/webinar-room.tsx',{...roomDeps,post:async()=>({previewLocked:true,publicPath:'/live/129340'})});
+ h.render('WebinarRoom',{});await flush();
+ assert.equal(unlockPath,'/dashboard-unlock?next='+encodeURIComponent('/webinar?preview='+w.id+'&variant=night'));
+ h.close();location.search=priorSearch;location.pathname=priorPath;location.replace=priorReplace;
+}
