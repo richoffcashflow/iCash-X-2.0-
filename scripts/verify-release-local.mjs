@@ -9,6 +9,9 @@ const suites = [
  'deal-documents', 'signing-service-validation', 'assignment-contract-policy',
  'buyer-scenarios', 'buyer-privacy-release-source', 'worker-recovery',
  'cost-efficiency', 'property-photo-route', 'property-photo', 'persistent-property-photo',
+ 'reliability-database', 'text-receipt-recovery', 'worker-heartbeat', 'reliability-monitor', 'service-health',
+ 'text-sender-routing', 'sms-channel-admission', 'contract-text', 'contract-text-resend',
+ 'owner-overview-route', 'owner-overview-ui', 'workspace-request-recovery', 'durable-work-billing-stop',
 ];
 for (const suite of suites) {
  const result=spawnSync(process.execPath,['--experimental-strip-types',`tests/${suite}.test.mjs`],{stdio:'inherit',timeout:60000});

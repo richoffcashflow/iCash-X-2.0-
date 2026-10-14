@@ -3,6 +3,7 @@ import {sameBusinessNumber} from './number-continuity.ts';
 import {elevenRequest} from './elevenlabs.ts';
 import {db} from './stripe-test.ts';
 import {sendContiguityText,textPayload} from './contiguity.ts';
+import {saveTextReceipt} from './text-receipt.ts';
 export async function dispatchTextMessage(accountId:string,messageId:string,manual=false){
  if(!smsWorkEnabled())return {status:'live_work_not_ready'};
  const key=process.env.CONTIGUITY_API_KEY;
@@ -31,8 +32,7 @@ export async function dispatchTextMessage(accountId:string,messageId:string,manu
  const job=await db<unknown>(manual?'rpc/icash_claim_customer_text':'rpc/icash_claim_text','POST',{p_account:accountId,p_message:messageId,p_sender:from});if(!job)return {status:'message_held'};
  try{
  const result=await sendContiguityText(job,key);
- await db('rpc/icash_accept_text','POST',{p_account:accountId,p_message:messageId,p_provider:result.messageId});
- return {status:'message_accepted'};
+ return await saveTextReceipt(db,accountId,messageId,result.messageId);
  }catch{
  await db(`icash_text_messages?id=eq.${messageId}&account_id=eq.${accountId}&state=eq.dispatching`,'PATCH',{state:'needs_review',updated_at:new Date().toISOString()});
  return {status:'message_delivery_needs_review'};

@@ -1,0 +1,66 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {PGlite} from '@electric-sql/pglite';
+import {reliabilitySchema} from '../lib/reliability.ts';
+const pg=await PGlite.create();
+const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+try{
+ await pg.exec(`create role anon;create role authenticated;create role service_role bypassrls;
+ create table public.icash_text_threads(id uuid primary key,account_id uuid,sender text,recipient text,deal_id uuid,retired_at timestamptz);
+ create table public.icash_text_messages(id uuid primary key,account_id uuid,thread_id uuid,direction text,state text,provider_id text,last_delivery_at timestamptz,created_at timestamptz default now(),updated_at timestamptz default now());
+ create table public.icash_text_events(id text primary key,type text,payload jsonb);
+ create table public.icash_signing_envelopes(id uuid primary key,account_id uuid,deal_id uuid,state text,provider_id text,test_mode boolean,created_at timestamptz default now(),updated_at timestamptz default now());
+ create table public.icash_deal_files(id uuid primary key,account_id uuid,screening_id uuid,stage text);
+ create table public.icash_contract_text_deliveries(envelope_id uuid,message_id uuid,account_id uuid);
+ create table public.icash_screening_jobs(id uuid primary key,account_id uuid,state text,lease_until timestamptz);
+ create table public.icash_voice_jobs(id uuid primary key,account_id uuid,state text,updated_at timestamptz default now());
+ grant all on all tables in schema public to service_role;`);
+ const sql=readFileSync(new URL('../config/reliability-monitor-and-receipts.sql',import.meta.url),'utf8');
+ const migration=readFileSync(new URL('../supabase/migrations/20261014061124_reliability_monitor_and_receipts.sql',import.meta.url),'utf8');
+ assert.equal(sql,migration);await pg.exec(sql);
+ const one=async(sql,args=[])=>Object.values((await pg.query(sql,args)).rows[0])[0];
+ const status=async()=>reliabilitySchema.parse(await one('select public.icash_reliability_status()'));
+ assert.equal((await status()).status,'degraded');assert.equal((await status()).fresh,false,'Absent telemetry cannot pass');
+ await pg.exec(`set role service_role;select public.icash_record_service_heartbeat('worker','ok');select public.icash_record_service_heartbeat('maintenance','ok');select public.icash_refresh_reliability_snapshot();reset role;`);
+ assert.equal((await status()).status,'ok');assert.equal((await status()).snapshot.texts.accepted,0);
+ await pg.query('insert into public.icash_text_threads(id,account_id,sender,recipient,deal_id) values($1,$2,$3,$4,$5)',[id(1),id(2),'+12025550100','+12025550101',id(7)]);
+ await pg.query("insert into public.icash_deal_files values($1,$2,$3,'draft')",[id(7),id(2),id(5)]);
+ await pg.query("insert into public.icash_text_messages(id,account_id,thread_id,direction,state) values($1,$2,$3,'outgoing','dispatching')",[id(3),id(2),id(1)]);
+ const accept=(account=id(2),provider='provider-one')=>pg.query('select public.icash_accept_text($1,$2,$3)',[account,id(3),provider]);
+ await accept();await accept();assert.equal(await one('select state from public.icash_text_messages'),'accepted');
+ await assert.rejects(accept(id(99)));await assert.rejects(accept(id(2),'different-provider'));
+ await pg.exec("update public.icash_text_messages set state='delivered'");await accept();assert.equal(await one('select state from public.icash_text_messages'),'delivered');
+ await pg.exec("update public.icash_text_messages set state='needs_review'");await accept();assert.equal(await one('select state from public.icash_text_messages'),'needs_review','Receipt replay must preserve delivery failure');
+ // A webhook can arrive before the HTTP send response. Reconciliation replays it.
+ await pg.exec("update public.icash_text_messages set state='dispatching',provider_id=null");
+ const event={type:'text.delivery.confirmed',timestamp:Date.now()/1000,data:{message_id:'provider-one',from:'+12025550100',to:'+12025550101'}};
+ await pg.query('insert into public.icash_text_events values($1,$2,$3)', ['early',event.type,event]);
+ await accept();assert.equal(await one('select state from public.icash_text_messages'),'delivered');
+ await pg.exec("update public.icash_text_messages set state='needs_review',last_delivery_at=null");await accept();assert.equal(await one('select state from public.icash_text_messages'),'delivered','Known fallback receipts reconcile an early delivery callback');
+ await pg.exec("update public.icash_text_messages set state='dispatching',provider_id=null,updated_at=now()-interval '6 minutes'");
+ await pg.query("insert into public.icash_signing_envelopes(id,account_id,deal_id,state,test_mode) values($1,$2,$3,'creating',false)",[id(4),id(2),id(7)]);
+ await pg.exec("update public.icash_signing_envelopes set updated_at=now()-interval '6 minutes'");
+ await pg.query("insert into public.icash_screening_jobs values($1,$2,'running',now()-interval '3 minutes')",[id(5),id(2)]);
+ await pg.query("insert into public.icash_voice_jobs values($1,$2,'dispatching',now()-interval '6 minutes')",[id(6),id(2)]);
+ const refresh=async()=>{await pg.exec("update icash_reliability_private.snapshots set checked_at=now()-interval '1 minute';select public.icash_refresh_reliability_snapshot()");return status();};
+ let report=await refresh();assert.equal(report.snapshot.issueCount,4);assert.equal(report.status,'degraded');
+ assert.deepEqual(report.snapshot.issues.map(x=>x.kind).sort(),['call_receipt','contract_preparation','screening_lease','text_receipt']);
+ assert(!JSON.stringify(report).includes('+1202'));assert(!JSON.stringify(report).includes('provider-one'));
+ const prior=report.snapshot.checkedAt;await pg.exec('select public.icash_refresh_reliability_snapshot()');assert.equal((await status()).snapshot.checkedAt,prior,'Overlapping monitors share one snapshot');
+ await pg.exec("update public.icash_screening_jobs set state='archived';update public.icash_text_threads set retired_at=now()");
+ assert.equal((await refresh()).snapshot.issueCount,1,'Archived properties and retired threads leave active alerts; an unknown call dispatch still requires reconciliation');
+ await pg.exec("update public.icash_text_messages set state='delivered';update public.icash_signing_envelopes set state='completed';update public.icash_screening_jobs set state='complete';update public.icash_voice_jobs set state='dispatched'");
+ assert.equal((await refresh()).status,'ok','Resolved work clears on next observation');
+ await pg.exec("update icash_reliability_private.heartbeats set checked_at=now()-interval '4 minutes' where component='worker'");
+ assert.equal((await status()).components.worker.status,'unavailable');assert.equal((await status()).status,'degraded');
+ await pg.exec("select public.icash_record_service_heartbeat('worker','ok');update icash_reliability_private.snapshots set checked_at=now()-interval '4 minutes'");
+ assert.equal((await status()).fresh,false);assert.equal((await status()).status,'degraded');
+ for(const role of ['anon','authenticated']){
+  await pg.exec(`set role ${role}`);
+  await assert.rejects(pg.query('select public.icash_reliability_status()'),/permission denied/);
+  await assert.rejects(pg.query("select public.icash_record_service_heartbeat('worker','ok')"),/permission denied/);
+  await assert.rejects(pg.query('select * from icash_reliability_private.snapshots'),/permission denied/);
+  await pg.exec('reset role');
+ }
+ console.log('PASS PostgreSQL: idempotent receipts, early delivery, tenant mismatch, terminal status, stalled work, stale monitoring, recovery and service-only permissions.');
+}finally{await pg.close();}

@@ -7,6 +7,7 @@ import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {overviewLeadStatus,overviewMoney,overviewTime,validOwnerOverview,type OwnerOverview,type OverviewFilters} from '@/lib/owner-overview';
 import styles from './overview.module.css';
 import {ClosingOperationsView} from './closing-operations';
+import {reliabilityIssueLabels} from '@/lib/reliability';
 
 export function OwnerOverviewView(){
  const [filters,setFilters]=useState<OverviewFilters>({days:30,includeOwner:false,query:'',page:1});
@@ -48,6 +49,18 @@ export function OwnerOverviewView(){
   <nav className={styles.nav} aria-label="Admin navigation"><a href="/">← Workspace</a><a href="/admin/disputes">Disputes ↗</a><span>iCash X <b>Owner</b></span></nav>
   <header className={styles.heading}><div><h1>Overview</h1><p>Your leads and usage earnings, in one place.</p></div>{!denied&&<button className={styles.button} onClick={reload} disabled={busy}>{busy?'Refreshing…':'Refresh'}</button>}</header>
   {denied?<section className={styles.empty}><h2>{denied===401?'Sign in to your owner account':'Owner access only'}</h2><p>{denied===401?'This overview is private.':'Your signed-in account does not have access to this overview.'}</p>{denied===401&&<AccountAccess onSignedIn={()=>{setDenied(null);reload();}}/>}</section>:<>
+   {report&&<section className={styles.notice} aria-label="Workflow reliability" role="status">
+    <strong>Workflow reliability · {report.reliability?.status==='ok'?'Checks passing':report.reliability?'Needs attention':'Unavailable'}</strong>
+    {report.reliability?<>
+     <span>Background worker: {report.reliability.components.worker.status} · Maintenance: {report.reliability.components.maintenance.status}</span>
+     {!report.reliability.fresh&&<span>Monitoring is overdue. The saved results do not confirm current health.</span>}
+     {report.reliability.snapshot&&<>
+      <span>{report.reliability.snapshot.issueCount} items need review · Checked {overviewTime(report.reliability.snapshot.checkedAt)} CT</span>
+      <span>Past 24 hours: {report.reliability.snapshot.texts.accepted} texts accepted, {report.reliability.snapshot.texts.delivered} delivery confirmations · {report.reliability.snapshot.contracts.created} contracts created, {report.reliability.snapshot.contracts.completed} signed.</span>
+      {report.reliability.snapshot.issues.length>0&&<details><summary>Review stalled work</summary><ul>{report.reliability.snapshot.issues.map(issue=><li key={`${issue.kind}:${issue.resourceId}`}><strong>{reliabilityIssueLabels[issue.kind]}</strong> · {overviewTime(issue.since)} CT · Reference {issue.resourceId}<br/>Check the saved provider receipt before repeating any action.</li>)}</ul>{report.reliability.snapshot.issueCount>25&&<p>Showing the 25 oldest items.</p>}</details>}
+     </>}
+    </>:<span>Monitoring could not be loaded. Refresh to try again.</span>}
+   </section>}
    {report&&<div className={styles.notice} role="status">{report.costHealth?<><strong>Platform cost reconciliation</strong><span>{report.costHealth.pendingCount} operations awaiting final costs · {report.costHealth.agedCount} older than 24 hours · {report.costHealth.unreconciledObservations} provider observations awaiting reconciliation.</span>{report.costHealth.oldestAt&&<span>Oldest pending: {overviewTime(report.costHealth.oldestAt)}</span>}</>:<span>Cost reconciliation status is unavailable. Pending costs are not confirmed profit.</span>}</div>}
    <div className={styles.toolbar}>
     <div className={styles.periods} role="group" aria-label="Reporting period">{([1,7,30] as const).map(period=><button key={period} aria-pressed={days===period} onClick={()=>update({days:period})}>{period===1?'Today':`${period} days`}</button>)}</div>
