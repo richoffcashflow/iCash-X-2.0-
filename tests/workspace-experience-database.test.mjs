@@ -15,7 +15,7 @@ try{
  await pg.query('insert into public.icash_accounts values($1,$2),($3,$4)',[id(1),id(2),id(3),id(4)]);
  await pg.query('insert into public.fixture_monitor values($1)',[report(2)]);
  const config=readFileSync(new URL('../config/workspace-experience-and-incidents.sql',import.meta.url),'utf8');
- assert.equal(config,readFileSync(new URL('../supabase/migrations/20261014232314_workspace_experience_and_incidents.sql',import.meta.url),'utf8'));
+ assert.equal(config,readFileSync(new URL('../supabase/migrations/20261014234103_workspace_experience_and_incidents.sql',import.meta.url),'utf8'));
  await pg.exec(config);
  const record=(event='panel_error',stage='closing',account=id(1),user=id(2))=>one('select public.icash_record_workspace_experience($1,$2,$3,$4)',[account,user,event,stage]);
  await pg.exec('set role service_role');
