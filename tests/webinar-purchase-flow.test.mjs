@@ -23,7 +23,7 @@ const flush=async()=>{for(let n=0;n<16;n++)await Promise.resolve();};
 const redirects=[],calls=[],active=[];let verified=false,purchase=null;
 globalThis.window={location:{search:'',assign:url=>redirects.push(url),replace:url=>redirects.push(url)}};globalThis.document={hidden:false};
 const request=async(url,init={})=>{calls.push({url,init});if(url==='/api/billing/membership')return purchase;if(url==='/api/account?view=core')return {signedIn:true};if(init.method==='POST')return {clientSecret:'secret_fixture',publishableKey:'pk_live_fixture'};return {membership:{accessible:true,vip:verified}};};
-const common={...vip,safeVipSession,priceLabel,webinarRequest:request,AccountAccess:'AccountAccess',PostPurchaseSetup:'PostPurchaseSetup',StripeEmbeddedCheckout:'StripeEmbeddedCheckout'};
+const common={...vip,safeVipSession,priceLabel,webinarRequest:request,AccountAccess:'AccountAccess',PostPurchaseSetup:'PostPurchaseSetup',StripeEmbeddedCheckout:'StripeEmbeddedCheckout',WebinarPaymentPreview:'WebinarPaymentPreview'};
 const props={phase:'watching',email:'casey@example.invalid',customerName:'Casey',needsClaim:true,paidThrough:new Date(Date.now()+86400000).toISOString(),vipSessionUrl:'/live/123456',onRefresh:async()=>({membership:{accessible:true,vip:verified},needsClaim:false}),onWorkspace:()=>redirects.push('/'),onActive:v=>active.push(v)};
 const h=await harness('components/webinar-vip-upsell.tsx',common);let current={...props};const render=()=>h.render('WebinarVipUpsell',current);
 let tree=render();assert.equal(button(tree,'Upgrade to VIP').props.disabled,true);assert.equal(calls.length,0,'Guest offer never starts payment or email automatically');
@@ -70,10 +70,10 @@ const previewCheckout=await harness('components/membership-checkout.tsx',{...com
 window.location.search='?membership=paid&setup=1&session_id=cs_live_fixture';
 const previewProps={preview:true,onSignedIn:()=>{},onEngaged:()=>{throw Error('Preview must not engage paid checkout');}};
 previewCheckout.render('MembershipCheckout',previewProps);await flush();let previewTree=previewCheckout.render('MembershipCheckout',previewProps);
-assert.match(text(previewTree),/\$50/);assert.match(text(previewTree),/Payments disabled/);
+assert.match(text(previewTree),/\$50/);assert.match(text(previewTree),/Try checkout without a charge/);
 find(previewTree,'input').props.onChange({target:{checked:true}});previewTree=previewCheckout.render('MembershipCheckout',previewProps);
 await button(previewTree,'Get software access').props.onClick();previewTree=previewCheckout.render('MembershipCheckout',previewProps);
-assert.match(text(previewTree),/This button opens secure Stripe payment for customers/);
+assert.ok(find(previewTree,'WebinarPaymentPreview'));assert.equal(find(previewTree,'WebinarPaymentPreview').props.priceCents,5000);
 assert.equal(previewCalls.length,1,'Clicking preview purchase never creates a payment or fetches owner billing');
 assert.equal(find(previewTree,'StripeEmbeddedCheckout'),undefined);
 previewCheckout.close();
@@ -94,7 +94,21 @@ for(const isPreview of [false,true]){
  const click=button(tree,'Buy now').props.onClick;await Promise.all([click(),click()]);await flush();tree=h.render('MembershipCheckout',props);
  const writes=events.filter(e=>e.init.method==='POST');assert.equal(writes.length,isPreview?0:1);
  if(!isPreview){const body=JSON.parse(writes[0].init.body);assert.equal(body.accepted,true);assert.equal(body.revision,9);assert.equal(body.totalCents,5000);assert.ok(find(tree,'StripeEmbeddedCheckout'));}
- else assert.match(text(tree),/Payments are disabled/);
+ else assert.ok(find(tree,'WebinarPaymentPreview'));
  h.close();
 }
 console.log('PASS compact offer: single-click checkout, current price and terms, duplicate-click protection, and no preview purchases.');
+
+// Owner walkthrough shows only fixed sample fields and never accepts payment data.
+{
+ let completed=0,back=0;
+ const h=await harness('components/webinar-payment-preview.tsx',{priceLabel,ArrowLeft:'ArrowLeft',LockKeyhole:'LockKeyhole'});
+ const props={priceCents:5000,onBack:()=>back++,onComplete:()=>completed++};
+ let tree=h.render('WebinarPaymentPreview',props);
+ assert.equal(all(tree).filter(n=>n.type==='input').length,7);
+ assert.ok(all(tree).filter(n=>n.type==='input').every(n=>n.props.readOnly));
+ assert.match(text(tree),/Sample details/);button(tree,'Preview payment').props.onClick();
+ tree=h.render('WebinarPaymentPreview',props);assert.equal(completed,1);assert.match(text(tree),/No payment was taken/);
+ button(tree,'Back to offer').props.onClick();assert.equal(back,1);h.close();
+}
+console.log('PASS owner payment walkthrough: sample-only fields, local completion and return to offer.');
