@@ -1,9 +1,10 @@
 'use client';
 import {useEffect,useRef,useState,type FormEvent} from 'react';
-import {ArrowUpRight,Network} from 'lucide-react';
+import {ArrowUpRight} from 'lucide-react';
 import {webinarRequest,webinarPost} from '@/lib/webinar-client';
 import type {NetworkWorkspace} from '@/lib/buyer-network';
 import styles from './buyer-network.module.css';
+import {BuyerNetworkSummary} from './buyer-network-summary';
 import {BuyerDemandPanel} from './buyer-demand';
 
 export function PlatformBuyerNetwork(){
@@ -15,8 +16,9 @@ export function PlatformBuyerNetwork(){
  function edit(){setAddress(data?.settings?.mailingAddress??'');setEnabled(data?.settings?.enabled??true);setEditing(v=>!v);}
  async function save(e:FormEvent){e.preventDefault();if(locked.current)return;locked.current=true;setBusy(true);setError('');try{await webinarPost('/api/work/buyer-network',{enabled,mailingAddress:address});await refresh();setEditing(false);setNotice(enabled?'Saved. Your bot will email eligible matching buyers when it runs.':'Network delivery paused.');}catch(e){setError(e instanceof Error?e.message:'Could not save.');}finally{locked.current=false;setBusy(false);}}
  async function handled(matchId:string){if(locked.current)return;locked.current=true;setBusy(true);setError('');try{await webinarRequest('/api/work/buyer-network',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({matchId})});await refresh();setNotice('Response marked handled. A new reply will appear for review.');}catch(e){setError(e instanceof Error?e.message:'Could not save.');}finally{locked.current=false;setBusy(false);}}
+ if(!data?.hasActiveDeal&&!data?.responses&&!error)return null;
  return <details id="platform-buyer-network" className={styles.workspace} onToggle={e=>{if(e.target===e.currentTarget)setNetworkOpen(e.currentTarget.open);}}>
-  <summary><span className={styles.networkIcon}><Network size={20} aria-hidden="true"/></span><span>Platform Buyer Network<small>{error?'Network unavailable — open to review':!data?'Opening network…':data.responses?`${data.responses} buyer ${data.responses===1?'response':'responses'} to review`:!data.settings?'Set up package emails':data.matches?`${data.matches} matches · ${data.emailed} packages sent`:'Reach buyers beyond your own list'}</small></span><span className={styles.vipLabel}>VIP</span></summary>
+  <BuyerNetworkSummary subtitle={error?'Network unavailable — open to review':!data?'Opening network…':data.responses?`${data.responses} buyer ${data.responses===1?'response':'responses'} to review`:!data.settings?'Set up package emails':data.matches?`${data.matches} matches · ${data.emailed} packages sent`:'Reach buyers beyond your own list'}/>
   <div className={styles.workspaceBody}>
    <>
     {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}

@@ -21,27 +21,29 @@ export function propertyBotStatus(input: {manual: boolean; paused: boolean; avai
  return {label: 'AI active', tone: 'green', detail: 'Bot-managed. Each next action follows your current setup and budget.'};
 }
 
-export type DealSection='contracts'|'fulfillment'|'coordination'|'cancellation'|'attention';
+export type DealSection='contracts'|'signature'|'fulfillment'|'coordination'|'cancellation'|'attention'|'closing';
 export function propertyNextAction(property: WorkspaceProperty, work: Context):{detail:string;label:string|null;target:DealSection|null} {
  const deal = work.deals.find(item => item.screening_id === property.id);
  const action=(detail:string,label:string|null=null,target:DealSection|null=null)=>({detail,label,target});
  if(deal?.stage === 'cancellation_pending') return action('Complete the cancellation review. Automatic work is paused.','Review cancellation','cancellation');
- if(deal?.stage === 'closed') return action(work.proceedsReceivedDealIds?.includes(deal.id)?'Your closing and payment receipt are saved.':'Review the closing record and confirm your payment arrived.','Review closing record','fulfillment');
+ if(deal?.stage === 'closed') return action(work.proceedsReceivedDealIds?.includes(deal.id)?'Your closing and payment receipt are saved.':'Review the closing record and confirm your payment arrived.','Review closing record','closing');
  if(['canceled','cancelled'].includes(deal?.stage??'')) return action('This deal is stopped. Review its saved agreements and any remaining obligations.','Review agreements','contracts');
- if(work.signing.some(s=>s.deal_id===deal?.id&&s.state==='customer_signature_needed'))return action('The other party signed. Read the agreement and complete your signature.','Review & sign','contracts');
+ if(work.signing.some(s=>s.deal_id===deal?.id&&s.state==='customer_signature_needed'))return action('The other party signed. Read the agreement and complete your signature.','Review & sign','signature');
  if(work.handoffs.some(h=>h.screening_id===property.id&&h.state!=='resolved'))return action('A seller or buyer asked for a person. Read the request and follow up.','Review request','attention');
  const closing=work.closingReview?.find(c=>c.screening_id===property.id);
- if(closing?.review_reason&&closing.review_reason!=='setup')return action('Resolve the closing issue with the title office. Property automation is paused.','Review closing issue','fulfillment');
+ if(closing?.review_reason&&closing.review_reason!=='setup')return action('Resolve the closing issue with the title office. Property automation is paused.','Review closing issue','closing');
  if(work.textAttention?.some(t=>t.screening_id===property.id))return action('Read the message that needs your response before the next automated step.','Review message','attention');
  const journey=work.journeys?.find(j=>j.screening_id===property.id&&j.state!=='closed');
  if(journey){const next=journeyNextAction(journey);return action(next.detail,next.label,next.target);}
  if(work.viewingRequests?.some(v=>v.screening_id===property.id))return action('A buyer needs a response. Review their request, follow up and record the outcome.','Review buyer request','attention');
- if(work.closingTasks?.some(t=>t.screening_id===property.id))return action('Review the closing tasks. Confirm dates from the signed agreement or respond to the title office.','Review closing tasks','fulfillment');
- if(closing)return action('Choose your title company and save how you want to receive your proceeds.','Set up closing','fulfillment');
+ if(work.closingTasks?.some(t=>t.screening_id===property.id))return action('Review the closing tasks. Confirm dates from the signed agreement or respond to the title office.','Review closing tasks','closing');
+ if(closing)return action('Choose your title company and save how you want to receive your proceeds.','Set up closing','closing');
  if(needsAttention(property.id, work)) return action('Read the saved request and complete the action it asks for.','Review request','attention');
  const callback = work.callbacks.find(item => item.screening_id === property.id && ['pending','scheduled','ready','held_for_human'].includes(item.state));
  if(callback) return action('Check the saved callback time below before the next conversation.');
- if(deal && ['closing','under_contract','buyer_selected','assigned','buyer_matched','purchase_signed','assignment_signed','title_open'].includes(deal.stage)) return action('Open buyer and closing progress to see what needs your attention and what is waiting on title.','Open buyers & closing','fulfillment');
+ if(deal&&['closing','title_open'].includes(deal.stage))return action('Check the closing office’s updates and any outstanding steps.','Review closing','closing');
+ if(deal&&(['under_contract','buyer_selected','assigned','buyer_matched','purchase_signed','assignment_signed'].includes(deal.stage)||work.signing.some(s=>s.deal_id===deal.id&&s.state==='completed'&&!s.test_mode)))return action('Review buyer activity below. We’ll show you when a buyer needs your response.','View buyers','fulfillment');
+ if(deal&&work.signing.some(s=>s.deal_id===deal.id&&['creating','awaiting_counterparty'].includes(s.state)&&!s.test_mode))return action('Waiting for seller signatures. We’ll show you here when it’s your turn.');
  if(property.result.financialCheck.status !== 'eligible') return action('Review the property numbers before discussing an offer.');
  return action('Open Texts or Calls to see what the seller said. We’ll show you when a decision needs your attention.');
 }

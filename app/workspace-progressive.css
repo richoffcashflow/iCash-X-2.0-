@@ -1,0 +1,49 @@
+/* Keep the workspace's existing cards; reveal forms only when requested. */
+.personalized-workspace .agreement-status{display:flex;align-items:flex-start;gap:12px;border:1px solid #e7e7e7;border-radius:12px;padding:16px;margin:0 0 18px;background:#fafafa;text-align:left}
+.personalized-workspace .agreement-status>svg{flex:none;margin-top:2px;color:#555}
+.personalized-workspace .agreement-status strong{font-size:14px;line-height:1.4}
+.personalized-workspace .agreement-status p{font-size:12px;line-height:1.6;color:#666;margin:5px 0 0;text-align:left}
+.personalized-workspace .agreement-status button{margin-top:12px}
+.personalized-workspace .property-resources{margin:16px 0}
+.personalized-workspace .buyer-workspace{margin:20px 0 8px;text-align:left;min-width:0}
+.personalized-workspace .buyer-workspace>h3{font-size:17px;letter-spacing:-.3px;margin:0 0 14px;text-align:left}
+.personalized-workspace .buyer-overview{border:1px solid #e3e3e3;border-radius:12px;padding:18px;background:white}
+.personalized-workspace .buyer-overview-heading{display:flex;align-items:flex-start;gap:12px}
+.personalized-workspace .buyer-overview-icon{display:grid;place-items:center;background:#f5f5f5;border-radius:10px;width:38px;height:38px;flex:none}
+.personalized-workspace .buyer-overview h4{font-size:15px;margin:0 0 5px;line-height:1.4;text-align:left}
+.personalized-workspace .buyer-overview p{font-size:12px;color:#666;line-height:1.6;text-align:left;margin:0}
+.personalized-workspace .buyer-price-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:16px 0;margin-top:14px;border-top:1px solid #eee}
+.personalized-workspace .buyer-price-row small{display:block;font-size:11px;color:#666}
+.personalized-workspace .buyer-price-row strong{display:block;font-size:24px;letter-spacing:-.6px;line-height:1.5}
+.personalized-workspace .buyer-price-row :is(a,button){display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#333;min-height:44px;text-underline-offset:4px}
+.personalized-workspace .buyer-activity-totals{font-size:11px!important;padding-bottom:12px}
+.personalized-workspace .buyer-activity-totals span{padding:0 5px}
+.personalized-workspace .buyer-response-list{display:grid;gap:0}
+.personalized-workspace .buyer-person{display:flex;align-items:flex-start;gap:12px;padding:15px 0;border-top:1px solid #eee;min-width:0}
+.personalized-workspace .buyer-person>div{min-width:0;flex:1;overflow-wrap:anywhere}
+.personalized-workspace .buyer-avatar{display:grid;place-items:center;flex:none;width:34px;height:34px;background:#f4f4f4;border-radius:50%;font-size:12px;font-weight:700;color:#555}
+.personalized-workspace .buyer-person strong{font-size:13px;display:block;line-height:1.5}
+.personalized-workspace .buyer-person small{font-size:10px;color:#777;display:block;line-height:1.6;margin:3px 0}
+.personalized-workspace .buyer-person p{margin-top:7px;color:#444;white-space:pre-wrap;overflow-wrap:anywhere}
+.personalized-workspace :is(.buyer-matches,.closing-details,.agreement-management,.property-extra-details){border:0;border-top:1px solid #e7e7e7;background:transparent;border-radius:0;margin:12px 0 0;padding:0;text-align:left}
+.personalized-workspace :is(.buyer-matches,.closing-details,.agreement-management,.property-extra-details)>summary{cursor:pointer;font-size:13px;font-weight:600;min-height:48px;align-content:center;padding:12px 0;color:#444}
+.personalized-workspace .agreement-editor{margin-top:12px}
+.personalized-workspace .property-extra-details{margin-top:18px}
+.personalized-workspace .agreement-management .contract-review-guide h3{font-size:18px}
+.personalized-workspace .property-quick-actions button{min-height:44px}
+.personalized-workspace :is(.buyer-overview,.agreement-status,.workspace-preview-controls) :is(a,button,summary):focus-visible{outline:2px solid #444;outline-offset:3px}
+.workspace-preview-banner{border:1px solid #ddd;background:#fafafa;border-radius:12px;padding:20px;margin-bottom:20px}
+.workspace-preview-banner h1{font-size:22px;text-align:left;margin:5px 0 8px;letter-spacing:-.5px}
+.workspace-preview-banner p{font-size:12px!important;text-align:left!important;line-height:1.6;color:#666;margin:0}
+.workspace-preview-label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#666}
+.workspace-preview-controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.workspace-preview-controls button{border:1px solid #ddd;border-radius:8px;padding:10px 12px;min-height:44px;background:white;color:#555;font:inherit;font-size:12px;cursor:pointer}
+.workspace-preview-controls button[aria-pressed=true]{background:#181818;border-color:#181818;color:white}
+.workspace-preview .console-main{width:calc(100% - 48px);margin-inline:auto}
+.workspace-preview .preview-brand{font-size:20px;font-weight:900;letter-spacing:-1px}
+.workspace-preview .preview-dialog-body{padding:20px;font-size:13px;line-height:1.6}
+.workspace-preview .preview-dialog-body :is(h4,p){text-align:left}
+.workspace-preview .preview-dialog-body h4{font-size:18px;margin:0 0 12px}
+.personalized-workspace .property-milestones li{white-space:nowrap;min-width:0}
+@media(max-width:560px){.personalized-workspace .property-milestones{gap:5px}.personalized-workspace .property-milestones li{font-size:10px;padding:9px 2px}}
+@media(max-width:560px){.personalized-workspace .buyer-overview{padding:14px}.personalized-workspace .buyer-overview-heading{gap:10px}.workspace-preview .console-main{width:calc(100% - 24px)}.workspace-preview-banner{padding:16px}.workspace-preview-controls{gap:6px}.workspace-preview-controls button{flex:1 1 44%;padding:9px 8px;font-size:11px}.personalized-workspace .agreement-status{padding:14px}.personalized-workspace .buyer-price-row{gap:4px}}

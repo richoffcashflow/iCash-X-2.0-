@@ -7,7 +7,7 @@ const fixture=makeWorkspaceFixture(),property=fixture.properties[1],deal={...fix
 const work={...fixture,deals:[deal],signing:[],handoffs:[],callbacks:[],textAttention:[],callRequests:[],propertyAttentionIds:[],closingTasks:[],closingReview:[],viewingRequests:[]};
 const next=patch=>propertyNextAction(property,{...work,...patch});
 assert.equal(next({}).target,'fulfillment');
-assert.equal(next({signing:[{deal_id:deal.id,state:'customer_signature_needed',test_mode:false}],closingTasks:[{screening_id:property.id}]}).target,'contracts','a completed purchase stage must not hide a pending owner signature');
+assert.equal(next({signing:[{deal_id:deal.id,state:'customer_signature_needed',test_mode:false}],closingTasks:[{screening_id:property.id}]}).target,'signature','a completed purchase stage must not hide a pending owner signature');
 assert.equal(next({handoffs:[{screening_id:property.id,state:'open'}],closingReview:[{screening_id:property.id,review_reason:'setup'}]}).target,'attention','a person request wins over routine setup');
 assert.equal(next({viewingRequests:[{screening_id:property.id}],closingReview:[{screening_id:property.id,review_reason:'setup'}]}).target,'attention');
 assert.match(next({closingTasks:[{screening_id:property.id}],closingReview:[{screening_id:property.id,review_reason:'setup'}]}).detail,/signed agreement/,'deadline review is not obscured by setup');

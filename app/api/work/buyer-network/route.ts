@@ -2,7 +2,8 @@ import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
-import {networkError} from '@/lib/buyer-network';
+import {networkError,type NetworkWorkspace} from '@/lib/buyer-network';
+import {buyerNetworkDealQuery} from '@/lib/buyer-network-workspace';
 export const dynamic='force-dynamic';
 const headers={'Cache-Control':'private, no-store'};
 export async function GET(req:Request){
@@ -10,7 +11,8 @@ export async function GET(req:Request){
   if(!await db<boolean>('rpc/icash_vip_features_active','POST',{p_account:accountId}))throw Error('VIP_REQUIRED');
   const dealId=z.string().uuid().nullable().parse(new URL(req.url).searchParams.get('dealId'));
   if(dealId){const [deal]=await db<{id:string}[]>(`icash_deal_files?id=eq.${dealId}&account_id=eq.${accountId}&select=id`);if(!deal)return NextResponse.json({error:'Deal not found.'},{status:404,headers});}
-  return NextResponse.json(await db('rpc/icash_network_workspace','POST',{p_account:accountId,p_deal:dealId}),{headers});
+  const [network,activeDeals]=await Promise.all([db<NetworkWorkspace>('rpc/icash_network_workspace','POST',{p_account:accountId,p_deal:dealId}),db<{id:string}[]>(buyerNetworkDealQuery(accountId,dealId))]);
+  return NextResponse.json({...network,hasActiveDeal:activeDeals.length>0},{headers});
  }catch(error){const e=networkError(error);return NextResponse.json({error:e.error},{status:e.status,headers});}
 }
 export async function POST(req:Request){

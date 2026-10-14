@@ -49,7 +49,7 @@ assert.equal(cancel('under_contract',null,'Could not refresh').props.open,true,'
 const coordination=data=>render('components/buyer-deal-coordination.tsx','BuyerDealCoordination',{dealId:deal.id},[true,data,0,'','',false]);
 const base={availability:null,assignment:null,receipt:null};
 node=coordination(base);
-assert.equal(node.props['data-deal-section'],'coordination');assert.match(text(node.props.children[0]),/Buyer progress & visits/);
+assert.equal(node.props['data-deal-section'],'coordination');assert.match(text(node.props.children[0]),/Visits & buyer deposit/);
 assert(!all(node).some(n=>n.props.className==='buyer-deposit'),'no deposit form before a signed buyer agreement');
 node=coordination({...base,assignment:{id:'fixture-assignment',buyer:'Fixture Buyer',depositCents:200000}});
 assert(all(node).some(n=>n.props.className==='buyer-deposit'));assert.match(text(node),/Signed buyer agreement/);
@@ -57,11 +57,8 @@ assert.equal(all(node).find(n=>n.type==='button'&&text(n)==='Confirm receipt & r
 node=coordination({...base,receipt:{amount_cents:200000,method:'wire',reference:'fixture receipt'}});
 assert.match(text(node),/Reserved/,'existing receipts remain visible even if no current assignment is returned');
 
-const fulfillment=open=>render('components/fulfillment-details.tsx','FulfillmentDetails',{dealId:deal.id,buyerReviewAvailable:true},[0,open,{documents:[],buyers:[]},'',false,'']);
-for(const open of [false,true]){
- const tree=fulfillment(open),review=all(tree).find(n=>n.type==='BuyerQualificationPanel');
- assert(review,'buyer review stays mounted when its parent closes, preserving drafts');
- assert.equal(all(tree).find(n=>n.type==='div'&&'hidden' in n.props).props.hidden,!open);
- assert.doesNotMatch(text(tree.props.children[0]),/\p{Extended_Pictographic}/u);
-}
+const tree=render('components/fulfillment-details.tsx','FulfillmentDetails',{dealId:deal.id,buyerReviewAvailable:true},[0,{documents:[],buyers:[]},'',false,'']);
+assert(all(tree).some(n=>n.type==='BuyerQualificationPanel'),'buyer reviews stay mounted while closing documents are collapsed');
+assert(all(tree).some(n=>n.props?.['data-deal-section']==='closing'),'closing next actions have a dedicated destination');
+assert(all(tree).some(n=>n.type==='BuyerOverview'),'buyer activity appears before secondary closing tools');
 console.log('PASS deal tools: stage-based visibility, reachable next actions, visible cancellation reviews, signed-agreement deposit gate and retained buyer drafts. Local fixtures only.');

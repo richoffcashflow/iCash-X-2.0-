@@ -8,6 +8,7 @@ import {join} from 'node:path';
 import http from 'node:http';
 import https from 'node:https';
 import {chromium,webkit,devices} from 'playwright';
+import {verifyWorkspace} from './workspace-browser-scenarios.mjs';
 import {sellerFunnelStages} from '../lib/conversion-funnel.ts';
 import {dashboardCookie,issueDashboardProof} from '../lib/dashboard-password-policy.ts';
 const port=3015,upstream=`http://127.0.0.1:${port}`,base=`https://127.0.0.1:${port+1}`;
@@ -24,7 +25,7 @@ const fixtureKey='local-browser-fixture-key-never-use-in-production';
 const fixtureUser='00000000-0000-4000-8000-000000000001';
 const access='fixture.'+Buffer.from(JSON.stringify({sub:fixtureUser,session_id:fixtureUser})).toString('base64url')+'.fixture';
 const fixtureCookies=`icash_access=${access}; ${dashboardCookie}=${issueDashboardProof(access,fixtureUser,fixtureKey)}`;
-const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port',String(port)],{env:{PATH:process.env.PATH,NODE_ENV:'production',NEXT_TELEMETRY_DISABLED:'1',SUPABASE_SECRET_KEY:fixtureKey},stdio:['ignore','pipe','pipe']});
+const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port',String(port)],{env:{PATH:process.env.PATH,NODE_ENV:'production',VERCEL_ENV:'preview',NEXT_TELEMETRY_DISABLED:'1',SUPABASE_SECRET_KEY:fixtureKey},stdio:['ignore','pipe','pipe']});
 let serverLog='';server.stdout.on('data',d=>{serverLog+=d});server.stderr.on('data',d=>{serverLog+=d});
 const now=new Date().toISOString(),part={status:'ok',checkedAt:now};
 const reliability={status:'degraded',fresh:true,components:{worker:part,maintenance:part},snapshot:{checkedAt:now,issueCount:1,issues:[{kind:'contract_delivery',resourceId:'00000000-0000-4000-8000-000000000003',accountId:'00000000-0000-4000-8000-000000000002',since:now}],texts:{accepted:1,delivered:0,review:0},contracts:{created:1,completed:0,review:0}}};
@@ -34,7 +35,8 @@ try{
  for(let i=0;i<60;i++){if(server.exitCode!==null)throw Error(serverLog);try{const r=await fetch(upstream+'/admin');if(r.ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}
  assert(ready,'Local production server failed to start');
  proxy.listen(port+1,'127.0.0.1');await once(proxy,'listening');
- for(const [name,engine,options] of [['desktop Chromium',chromium,{viewport:{width:1280,height:900}}],['mobile WebKit',webkit,{...devices['iPhone 13']}]]){
+ for(const [name,engine,options] of [['desktop Chromium',chromium,{viewport:{width:1280,height:900}}],[process.env.BROWSER_ENGINES==='chromium'?'mobile Chromium':'mobile WebKit',process.env.BROWSER_ENGINES==='chromium'?chromium:webkit,{...devices['iPhone 13']}]]){
+  if(process.env.BROWSER_ENGINES==='chromium'&&engine!==chromium)continue;
   const browser=await engine.launch({headless:true});
   try{
    const context=await browser.newContext({...options,ignoreHTTPSErrors:true});let failure=false,denied=false,external=0;const errors=[];
@@ -64,6 +66,8 @@ try{
    await page.getByRole('heading',{name:'Owner access only'}).waitFor();assert.equal(await panel.count(),0);
    assert.deepEqual(errors,[]);assert.equal(external,0,'No external requests during the fixture');
    console.log(`PASS ${name}: production UI → report → incident detail → refresh failure → recovery → private data cleared on denied access.`);
+   await context.close();
+   await verifyWorkspace(browser,base,options,name);
   }finally{await browser.close();}
  }
 }finally{proxy.closeAllConnections();proxy.close();server.kill('SIGTERM');if(server.exitCode===null)await once(server,'exit');rmSync(tlsDir,{recursive:true,force:true});}
