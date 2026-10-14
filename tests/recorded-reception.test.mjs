@@ -129,6 +129,11 @@ test('invalid signature, duplicate keys, method/content type, target/account/dir
 test('authenticated canonical incoming call must match every binding and be fresh',async()=>{
   for(const call of [{sid:'CA'+'d'.repeat(32)},{account_sid:'AC'+'d'.repeat(32)},{from:'+12125550999'},{to:'+12125550999'},{direction:'outbound-api'},{status:'completed'},{date_created:new Date(now-120001).toISOString()},{date_created:new Date(now+1).toISOString()},{date_created:'invalid'}]){const f=fixture({call});assert.equal((await f.admit()).text,rejectTwiml);assert.equal(providerWrites(f).length,0);assert(!f.events.some(e=>e.rpc==='icash_reserve_flexible_reception'));}
 });
+test('standing normal inbound approval survives the former renewal window and can still be disabled',()=>{
+  const {c}=configuration(); c.reviewed_until='9999-12-31T23:59:59Z';
+  assert(validRecordedReceptionConfig(c,Date.parse('2050-01-01T00:00:00Z')));
+  assert.equal(validRecordedReceptionConfig({...c,enabled:false},now),false);
+});
 test('review/config failures cannot reserve or write provider state',async()=>{
   const changes=[c=>c.enabled=false,c=>c.account_id=foreignAccount,c=>c.owner_user_id=foreignAccount,c=>c.called_number='+12125550999',c=>c.agent_id='agent_foreignfixture',c=>c.provider_account_sid='AC'+'d'.repeat(32),c=>c.approved_at=new Date(now+1).toISOString(),c=>c.reviewed_until=new Date(now+1000).toISOString(),c=>c.policy_version='unknown',c=>c.max_duration_seconds=60,c=>c.funding_mode='business'];
   for(const change of changes){const f=fixture({mutate:({c})=>change(c)});assert.equal((await f.admit()).text,rejectTwiml);assert.equal(providerWrites(f).length,0);assert(!f.events.some(e=>e.rpc==='icash_reserve_flexible_reception'));}

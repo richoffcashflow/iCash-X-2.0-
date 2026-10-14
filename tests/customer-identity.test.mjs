@@ -18,5 +18,6 @@ assert.throws(()=>chooseAccountVoice('account-a',pool,[]));
 assert.throws(()=>chooseAccountVoice('account-a',pool,['not-reviewed-catalog']));
 const now=Date.now(),review={enabled:true,reviewed_at:new Date(now-1000).toISOString(),reviewed_until:new Date(now+1000).toISOString(),approved_voice_ids:['b']};
 assert.deepEqual(await readReviewedAccountVoices(async()=>[review],now),['b']);
+assert.deepEqual(await readReviewedAccountVoices(async()=>[{...review,reviewed_until:'9999-12-31T23:59:59Z'}],Date.parse('2050-01-01T00:00:00Z')),['b']);
 for(const patch of [{enabled:false},{reviewed_until:new Date(now).toISOString()},{reviewed_at:new Date(now+1).toISOString()},{approved_voice_ids:[]},{approved_voice_ids:['bad id']}])assert.deepEqual(await readReviewedAccountVoices(async()=>[{...review,...patch}],now),[]);
 console.log('New voice assignment uses only current reviewed IDs; disabled, expired, future or malformed reviews fail closed.');

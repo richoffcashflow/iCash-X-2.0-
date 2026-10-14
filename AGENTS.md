@@ -34,6 +34,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Complete feature flows
 
+- On October 14, 2026 the owner authorized automatic standing production calling approval for all current and future accounts. Production template, enabled account voice configurations, normal inbound configuration/cost policy, their rate versions, and RECORDED_OUTBOUND_REVIEW_JSON use `9999-12-31T23:59:59Z` as the finite no-routine-expiration sentinel. Preserve it during provider configuration updates. Keep manual disable/Run-Pause, paid access, positive credits, consent, suppression, provider identity/hash validation and paid-development-test restrictions. Do not extend quick-test approval or enable outbound buyer calls. Version immutable rates and inbound snapshots instead of changing historical evidence; see config/standing-calling-approval.sql.
+
 - The owner provides the feature goal; identify and handle connected paths before calling it shipped. For voice changes, check inbound and outbound behavior for each permitted party and plan. For account cleanup, check lead lists, attention queues, bot context, notifications and queued work together.
 - Keep archived properties out of active workspace reminders before pagination, while preserving agreement/payment history. Test the empty workspace and active properties on later pages; do not hide real work just because the current page or search is empty.
 - A clean-slate demo must allow the same property to be submitted again. Check both address/phone deduplication and provider-property deduplication through actual assignment. Active retries must remain idempotent, and private demos must never absorb real seller requests or another account's demo.

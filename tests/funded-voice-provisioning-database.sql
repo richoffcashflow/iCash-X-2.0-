@@ -26,6 +26,7 @@ declare
  discovery_before jsonb;buyer_before jsonb;inventory_before jsonb;
  permission_before bigint;authority_before bigint;jobs_before bigint;session_id uuid;
  bounded_until timestamptz;rejected boolean;role_name text;privilege text;
+ standing_seller uuid;standing_buyer uuid;
 begin
  -- Empty template is the deployment default; isolate fixtures from any test data.
  delete from public.icash_voice_production_template;
@@ -162,6 +163,22 @@ begin
  if result->'voice'->>'status' is distinct from 'existing_configuration_preserved'
  or (select to_jsonb(c) from public.icash_voice_configs c where account_id=a) is distinct from config_before
  or (select count(*) from public.icash_voice_configs where account_id=a)<>1 then raise exception 'Retry changed configuration';end if;
+
+ -- A newly provisioned account inherits standing approval automatically. Keep
+ -- immutable rate evidence and the funding gate; no periodic renewal is needed.
+ delete from public.icash_voice_configs where account_id=a;
+ insert into public.icash_operation_rates(operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled,voice_max_duration_seconds)
+ select operation,version||':standing',charge_cents,costs_micros,evidence_ref,verified_at,'9999-12-31T23:59:59Z',enabled,voice_max_duration_seconds
+ from public.icash_operation_rates where id=seller returning id into standing_seller;
+ insert into public.icash_operation_rates(operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled,voice_max_duration_seconds)
+ select operation,version||':standing',charge_cents,costs_micros,evidence_ref,verified_at,'9999-12-31T23:59:59Z',enabled,voice_max_duration_seconds
+ from public.icash_operation_rates where id=buyer returning id into standing_buyer;
+ update public.icash_voice_production_template set seller_rate_id=standing_seller,buyer_rate_id=standing_buyer,reviewed_until='9999-12-31T23:59:59Z';
+ result:=public.icash_provision_funded_account(a);
+ if result->'voice'->>'status' is distinct from 'configured' or not exists(
+  select 1 from public.icash_voice_configs where account_id=a and enabled and reviewed_until='9999-12-31T23:59:59Z'
+  and seller_rate_id=standing_seller and buyer_rate_id=standing_buyer
+ ) then raise exception 'Standing calling approval was not inherited: %',result;end if;
 
  -- Manual disable/expiry survives template changes, missing review and refreshes.
  update public.icash_voice_configs set enabled=false,reviewed_until=now()-interval '1 minute',phone_number_id='manual_fixture' where account_id=a;
