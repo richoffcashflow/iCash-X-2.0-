@@ -13,8 +13,8 @@ function windowText(start:string,end:string,timezone:keyof typeof zones){
  const a=parse(start),b=end?parse(end):null;if(b&&b.date!==a.date)throw Error('Use a start and end on the same day.');
  return `${a.date} ${a.time}${b?' to '+b.time:''} ${zones[timezone]}`;
 }
-export function BuyerDealCoordination({dealId}:{dealId:string}){
- const [open,setOpen]=useState(false);
+export function BuyerDealCoordination({dealId,embedded=false}:{dealId:string;embedded?:boolean}){
+ const [open,setOpen]=useState(embedded);
  const [data,setData]=useState<Data|null>(null),[refresh,setRefresh]=useState(0),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
  const [statement,setStatement]=useState(''),[timezone,setTimezone]=useState<keyof typeof zones>('America/Chicago'),[windows,setWindows]=useState([{start:'',end:''}]),[sellerConfirmed,setSellerConfirmed]=useState(false);
  const [method,setMethod]=useState<typeof buyerDepositMethods[number]>('wire'),[reference,setReference]=useState(''),[cleared,setCleared]=useState(false);
@@ -27,7 +27,8 @@ export function BuyerDealCoordination({dealId}:{dealId:string}){
   catch(e){setError(e instanceof Error?e.message:'Could not save.');}finally{setBusy(false);}
  }
  const slots=sellerViewingSlots(data?.availability?.slots),deposit=data?.assignment?.depositCents;
- return <details className="deal-contract-tools" data-deal-section="coordination" onToggle={e=>{if(e.target===e.currentTarget)setOpen(e.currentTarget.open);}}><summary>Visits & buyer deposit</summary>
+ const Container=embedded?'section':'details';
+ return <Container className="deal-contract-tools" data-deal-section="coordination" onToggle={e=>{if(e.target===e.currentTarget)setOpen((e.currentTarget as HTMLDetailsElement).open);}}>{!embedded&&<summary>Visits & buyer deposit</summary>}
   {error&&<p role="alert">{error}</p>}{message&&<p role="status">{message}</p>}{!data&&!error&&<p>Loading…</p>}
   {data&&<><DealJourneyStatus dealId={dealId}/><button type="button" disabled={busy} onClick={()=>setRefresh(v=>v+1)}>Refresh buyer progress</button><h4>When buyers can visit</h4>{data.availability?<><blockquote>{data.availability.quote}</blockquote><small>{safeLocalTime(data.availability.stated_at,data.availability.timezone)}</small>{slots.length?<ul>{slots.map(s=><li key={s.startsAt}>{viewingSlotLabel(s)}</li>)}</ul>:<p>{data.availability.state==='withdrawn'?'The previous viewing times were withdrawn.':'Exact future times need confirmation with the seller.'}</p>}</>:<p>No seller times are saved yet. Ask for two or three dates, start/end times and the timezone.</p>}
    <p><strong>Your part:</strong> Confirm access with the seller and save the times below. New buyer requests receive a private next-step link. The bot requests seller availability, relays options and asks both parties to confirm the specific visit. Review any blocked delivery below.</p><p>Viewing is optional. A requested visit still needs seller and buyer confirmation.</p>
@@ -40,5 +41,5 @@ export function BuyerDealCoordination({dealId}:{dealId:string}){
    </details>
    <BuyerShowings dealId={dealId}/>{(data.receipt||data.assignment)&&<section className="buyer-deposit"><h4>Buyer deposit</h4>{data.receipt?<><p><strong>Reserved · {analysisMoney(data.receipt.amount_cents)} confirmed</strong></p><p>{buyerDepositMethodLabels[data.receipt.method as keyof typeof buyerDepositMethodLabels]??'Verified closing contact'} · {data.receipt.reference}</p></>:<><p>Payment choices: check, wire, Cash App or Zelle. Provide receiving details through your verified deal contact. A buyer’s payment claim does not confirm receipt.</p>{data.assignment&&typeof deposit==='number'&&deposit>0&&deposit<=500000?<><p>Signed buyer agreement for {data.assignment.buyer}: {analysisMoney(deposit)} deposit.</p><label>Received by<select value={method} onChange={e=>setMethod(e.target.value as typeof method)}>{buyerDepositMethods.map(m=><option value={m} key={m}>{buyerDepositMethodLabels[m]}</option>)}</select></label><label>Receipt or transaction reference<input value={reference} maxLength={120} onChange={e=>setReference(e.target.value)}/><small>Use a reference only; do not enter account numbers or credentials.</small></label><label><input type="checkbox" checked={cleared} onChange={e=>setCleared(e.target.checked)}/>I verified that {analysisMoney(deposit)} was received and cleared, including any check clearing.</label><button type="button" disabled={busy||!cleared||reference.trim().length<3} onClick={()=>void save({action:'deposit',envelopeId:data.assignment!.id,amountCents:deposit,method,reference,cleared:true})}>Confirm receipt & reserve property</button></>:<p>A current signed buyer assignment with its deposit amount is required before confirming funds.</p>}</>}</section>}
   </>}
- </details>;
+ </Container>;
 }

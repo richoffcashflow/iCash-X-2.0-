@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {journeyNextAction} from '../lib/deal-journey-progress.ts';
 import {propertyNextAction} from '../lib/workspace-guidance.ts';
 import {closingSetupNext} from '../lib/closing-setup.ts';
 import {openDealSection,revealWorkspaceSection} from '../lib/workspace-navigation.ts';
@@ -32,12 +33,18 @@ const waiting=closingSetupNext({...verified,setup:{...setup,payout:{...payout,de
 assert.equal(waiting.action,null);assert.match(waiting.text,/Title still needs to approve/,'saved preferences do not imply payment or a completed closing');
 assert.equal(closingSetupNext({...verified,setup:{...setup,review_reason:'payment_change'}}).code,'human_review');
 
+for(const patch of [{titleSelected:false},{titleSelected:true,titleState:'needs_review'},{titleSelected:true,closingKind:'funds_disbursed'},{titleSelected:true}]){
+ assert.equal(journeyNextAction({state:'reserved',last_progress_at:new Date().toISOString(),...patch}).target,'closing','reserved-deal actions open closing directly');
+}
+assert.equal(journeyNextAction({state:'signing',envelopeState:'customer_signature_needed'}).target,'signature');
+
 // Navigation reveals existing controls, preserves sibling disclosures and moves focus.
 function node(tagName,parentElement=null){return {tagName,parentElement,open:false,scrollIntoView(){this.scrolled=true;},focus(){this.focused=true;}};}
 const outer=node('DETAILS'),target=node('DETAILS',node('DIV',outer)),sibling=node('DETAILS');
 const origin={closest(selector){assert.equal(selector,'.live-property');return {querySelector(selector){assert.equal(selector,'[data-deal-section="contracts"]');return target;}};}};
 assert(openDealSection(origin,'contracts'));assert(target.open&&outer.open&&target.focused&&target.scrolled);assert.equal(target.tabIndex,-1);assert.equal(sibling.open,false);
 assert.equal(revealWorkspaceSection(null),false);
+let panelOpened=false;assert(revealWorkspaceSection({closest:()=>({dispatchEvent(event){panelOpened=event.type==='workspace:open';}})}));assert(panelOpened,'optional controls open in place without losing other drafts');
 const priorDocument=globalThis.document,attention=node('DETAILS');
 try{globalThis.document={getElementById(id){assert.equal(id,'workspace-attention');return attention;}};assert(openDealSection(origin,'attention'));assert(attention.open&&attention.focused);}finally{globalThis.document=priorDocument;}
 console.log('Workspace next actions: signatures, human requests, deadlines, cancellation, title/payment handoffs and disclosure focus passed. No provider calls.');

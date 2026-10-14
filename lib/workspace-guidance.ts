@@ -21,7 +21,7 @@ export function propertyBotStatus(input: {manual: boolean; paused: boolean; avai
  return {label: 'AI active', tone: 'green', detail: 'Bot-managed. Each next action follows your current setup and budget.'};
 }
 
-export type DealSection='contracts'|'signature'|'fulfillment'|'coordination'|'cancellation'|'attention'|'closing';
+export type DealSection='contracts'|'signature'|'fulfillment'|'coordination'|'cancellation'|'attention'|'closing'|'property';
 export function propertyNextAction(property: WorkspaceProperty, work: Context):{detail:string;label:string|null;target:DealSection|null} {
  const deal = work.deals.find(item => item.screening_id === property.id);
  const action=(detail:string,label:string|null=null,target:DealSection|null=null)=>({detail,label,target});

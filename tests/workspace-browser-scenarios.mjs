@@ -37,6 +37,7 @@ export async function verifyWorkspace(browser,base,options,name){
   if(p==='/api/work/text-contact')return route.fulfill({json:{contacts:[]}});
   if(p==='/api/work/manual-call')return route.fulfill({json:{contacts:[],personalCalls:[]}});
   if(p==='/api/work/browser-call')return route.fulfill({json:{ready:false}});
+  if(p==='/api/buyer-qualifications')return route.fulfill({json:{requests:[],candidates:[],hasMore:false,notice:'Fixture'}});
   if(p==='/api/work/buyer-coordination')return route.fulfill({json:{availability:null,receipt:null,assignment:null}});
   if(p==='/api/work/journeys')return route.fulfill({json:{journeys:[],messages:[]}});
   if(p==='/api/work/showings')return route.fulfill({json:{showings:[]}});
@@ -46,17 +47,23 @@ export async function verifyWorkspace(browser,base,options,name){
  page.on('pageerror',error=>errors.push(error.message));
  try{
   await page.goto(base+'/preview/workspace?preview=1');
-  await page.getByRole('heading',{name:'A clearer path from lead to buyer.'}).waitFor();
+  await page.getByRole('heading',{name:'One property. One clear next step.'}).waitFor();
   await page.getByRole('region',{name:'Buyer activity',exact:true}).getByText('Avery Morgan',{exact:true}).first().waitFor();
   await page.getByRole('button',{name:'View buyer package',exact:true}).click();
   await page.getByRole('dialog').waitFor();assert.match(await page.getByRole('dialog').innerText(),/\$100,000/);assert.doesNotMatch(await page.getByRole('dialog').innerText(),/\$90,000|assignment fee/i);
   await page.getByRole('button',{name:'Close preview panel'}).click();
-  await page.getByRole('button',{name:'Waiting for seller',exact:true}).click();
+  await page.getByLabel('Preview a stage').selectOption('waiting');
   assert.equal(await page.getByRole('region',{name:'Buyers',exact:true}).count(),0);
   await page.getByText('Waiting for seller signatures',{exact:true}).waitFor();
-  await page.getByRole('button',{name:'New lead',exact:true}).click();
-  assert.equal(await page.getByText('Manage agreement',{exact:true}).count(),0);
-  await page.getByRole('button',{name:'Buyers interested',exact:true}).click();
+  await page.getByLabel('Preview a stage').selectOption('lead');
+  assert.equal(await page.getByRole('button',{name:'Documents',exact:true}).count(),0);
+  await page.getByLabel('Preview a stage').selectOption('buyers');
+  assert.equal(await page.locator('.property-milestones').count(),0);
+  assert.equal(await page.locator('.property-details summary:visible').count(),0,'buyer view has no accordion menu');
+  const buyerButton=page.getByRole('button',{name:'View buyer Avery Morgan',exact:true});await buyerButton.focus();await page.keyboard.press('Enter');
+  await page.getByRole('dialog',{name:'Avery Morgan',exact:true}).waitFor();
+  await page.keyboard.press('Escape');assert(await buyerButton.evaluate(node=>document.activeElement===node),'closing buyer panel returns keyboard focus');
+  await page.getByRole('heading',{name:'Your leads',exact:true}).click();
   await page.screenshot({path:`/tmp/icash-workspace-preview-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
   assert.deepEqual(writes,[],'sample preview never calls account/work APIs');
   preview=false;
@@ -81,38 +88,61 @@ export async function verifyWorkspace(browser,base,options,name){
     await card.getByText('Waiting for seller signatures',{exact:true}).waitFor();
     assert.equal(await card.getByRole('heading',{name:'Review your seller agreement'}).isVisible(),false);
     assert.equal(await card.getByRole('region',{name:'Buyers',exact:true}).count(),0);
-    await card.getByText('Manage agreement',{exact:true}).click();
+    await card.getByRole('button',{name:'Documents',exact:true}).click();
+    await page.getByRole('dialog',{name:'Agreements',exact:true}).waitFor();
     await card.getByText('Prepare or edit seller agreement',{exact:true}).click();
     const seller=card.getByLabel('Seller’s full legal name(s)');await seller.fill('Unsent draft owner');
     assert.equal(await card.getByRole('button',{name:'Download assignment draft'}).count(),0);
+    await page.getByRole('button',{name:'Close Agreements',exact:true}).click();
     await card.locator('.property-summary').click();await card.locator('.property-summary').click();
-    assert.equal(await seller.inputValue(),'Unsent draft owner','closing a lead preserves edits');
+    await card.getByRole('button',{name:'Documents',exact:true}).click();
+    assert.equal(await seller.inputValue(),'Unsent draft owner','closing a panel or lead preserves edits');
+    await page.keyboard.press('Escape');
    }
    if(state==='signature'){
     await card.getByText('Your signature is next',{exact:true}).waitFor();
-    await card.locator('.property-next').getByRole('button',{name:'Review & sign'}).click();
-    assert.equal(await card.locator('.agreement-management').evaluate(node=>node.open),false,'reviewing the required signature does not expose every form');
-    await card.locator('.agreement-status').getByRole('button',{name:/Review.*sign/i}).waitFor();
+    await card.locator('.property-focus').getByRole('button',{name:'Review & sign',exact:true}).waitFor();
+    assert.equal(await card.getByRole('dialog',{name:'Agreements',exact:true}).isVisible(),false,'required signature is visible without opening forms');
    }
    if(state==='buyers'||state==='closing'){
-    await card.getByText('Avery Morgan',{exact:true}).waitFor();
-    const net=page.locator('#platform-buyer-network');await net.waitFor();
+    const net=page.locator('#platform-buyer-network');await net.locator('.workspace-panel-trigger').waitFor();
     assert(await net.evaluate(node=>!!(node.compareDocumentPosition(document.querySelector('#workspace-properties'))&Node.DOCUMENT_POSITION_FOLLOWING)),'network is above the lead list');
-    assert.equal(await card.locator('[data-deal-section="closing"]').evaluate(node=>node.open),false);
+    assert.equal(await card.getByRole('dialog',{name:'Closing',exact:true}).isVisible(),false);
     if(state==='closing'){
+     assert.equal(await card.getByRole('region',{name:'Buyer activity',exact:true}).isVisible(),false,'closing replaces the buyer hunt');
      await card.getByRole('button',{name:'Review closing',exact:true}).click();
-     assert.equal(await card.locator('[data-deal-section="closing"]').evaluate(node=>node.open),true);
+     await card.getByRole('dialog',{name:'Closing',exact:true}).waitFor();
+     await page.keyboard.press('Escape');
     }else{
+     await card.getByText('Avery Morgan',{exact:true}).waitFor();
+     assert.equal(await card.locator('summary:visible').count(),0,'no accordion menu in the main property view');
+     assert.equal(await card.getByRole('button',{name:'View buyers',exact:true}).count(),0,'buyers are already visible');
+     assert.equal(await card.locator('.property-milestones').count(),0,'progress boxes do not look like tabs');
+     await card.getByRole('button',{name:'View buyer Avery Morgan',exact:true}).click();
+     const buyer=page.getByRole('dialog',{name:'Avery Morgan',exact:true});await buyer.waitFor();
+     await buyer.getByRole('link',{name:'Email Avery Morgan',exact:true}).waitFor();
+     assert.match(await buyer.innerText(),/Can I visit Thursday afternoon/);
+     await buyer.getByRole('button',{name:'Viewing times & deposit',exact:true}).click();
+     await page.getByRole('dialog',{name:'Visits & buyer deposit',exact:true}).waitFor();
+     await page.getByText('No seller times are saved yet.',{exact:false}).waitFor();
+     assert.equal(await page.getByRole('dialog',{name:'Visits & buyer deposit',exact:true}).getByRole('button',{name:'Confirm receipt & reserve property',exact:true}).count(),0,'no deposit form before a signed assignment');
+     await page.keyboard.press('Escape');assert(await buyer.isVisible(),'closing a visit panel returns to its buyer');
+     await buyer.getByRole('button',{name:'Review buyer funds',exact:true}).click();
+     await page.getByRole('dialog',{name:'Buyer funds & signing authority',exact:true}).getByText('No buyer review requests yet.',{exact:true}).waitFor();
+     await page.keyboard.press('Escape');
+     await page.keyboard.press('Escape');
      await card.locator('.property-summary').click();
      await page.getByRole('searchbox').fill('no matching lead');
      await page.getByText('No matching properties in this view',{exact:true}).waitFor();
-     assert(emptySearch);assert(await net.isVisible(),'account-wide buyer activity survives an empty property search');
+     assert(emptySearch);assert(await net.locator('.workspace-panel-trigger').isVisible(),'account-wide buyer activity survives an empty property search');
     }
    }
    if(state==='cancelled'||state==='cancellation_pending'){
-    await card.getByText('Cancellation needs your review',{exact:true}).waitFor();
-    assert(await card.locator('.agreement-management').evaluate(node=>node.open),'urgent cancellation review opens its parent');
+    await card.getByRole('button',{name:'Review cancellation',exact:true}).click();
+    const agreement=page.getByRole('dialog',{name:'Agreements',exact:true});await agreement.waitFor();
+    await agreement.getByText('Cancellation needs your review',{exact:true}).waitFor();
     assert.equal(await card.getByRole('region',{name:'Buyers',exact:true}).count(),0);
+    await page.keyboard.press('Escape');
    }
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'workspace fits the viewport');
   }

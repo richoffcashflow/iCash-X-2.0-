@@ -57,8 +57,8 @@ assert.equal(all(node).find(n=>n.type==='button'&&text(n)==='Confirm receipt & r
 node=coordination({...base,receipt:{amount_cents:200000,method:'wire',reference:'fixture receipt'}});
 assert.match(text(node),/Reserved/,'existing receipts remain visible even if no current assignment is returned');
 
-const tree=render('components/fulfillment-details.tsx','FulfillmentDetails',{dealId:deal.id,buyerReviewAvailable:true},[0,{documents:[],buyers:[]},'',false,'']);
+const tree=render('components/fulfillment-details.tsx','FulfillmentDetails',{dealId:deal.id,buyerReviewAvailable:true},[0,null,{documents:[],buyers:[]},'',false,'']);
 assert(all(tree).some(n=>n.type==='BuyerQualificationPanel'),'buyer reviews stay mounted while closing documents are collapsed');
-assert(all(tree).some(n=>n.props?.['data-deal-section']==='closing'),'closing next actions have a dedicated destination');
+assert(all(tree).some(n=>n.type==='WorkspacePanel'&&n.props?.section==='closing'),'closing next actions have a dedicated destination');
 assert(all(tree).some(n=>n.type==='BuyerOverview'),'buyer activity appears before secondary closing tools');
 console.log('PASS deal tools: stage-based visibility, reachable next actions, visible cancellation reviews, signed-agreement deposit gate and retained buyer drafts. Local fixtures only.');

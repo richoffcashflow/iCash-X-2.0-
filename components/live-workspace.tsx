@@ -13,11 +13,13 @@ import {Phone,MessageCircle,Sparkles,Crown,X,ChevronDown} from 'lucide-react';
 import {analysisMoney} from '@/lib/property-analysis-view';
 import {mostPromisingProperty,propertyBotStatus,propertyNextAction,propertyNextMove} from '@/lib/workspace-guidance';
 import {openDealSection} from '@/lib/workspace-navigation';
+import {journeyNextAction} from '@/lib/deal-journey-progress';
 import {ManualCallOptions} from '@/components/manual-call-options';
 import {PropertyAnalysisSummary} from '@/components/property-analysis-summary';
 import {PropertyThumbnail} from '@/components/property-thumbnail';
 import {PropertyCardHeader} from '@/components/property-card-header';
-import {AgreementStatus} from '@/components/agreement-status';
+import {WorkspacePanel} from '@/components/workspace-panel';
+import {PropertyFocus} from '@/components/property-focus';
 import {agreementWorkspace} from '@/lib/agreement-workspace';
 import {SigningLinkButton} from '@/components/signing-link-button';
 import {showPropertyContract,dealToolVisibility} from '@/lib/property-contract-visibility';
@@ -33,7 +35,7 @@ import {FulfillmentDetails} from '@/components/fulfillment-details';
 import {SigningControls,SigningAttention,type SigningEnvelope} from '@/components/signing-controls';
 import {AgreementCancellationControls} from '@/components/agreement-cancellation-controls';
 import {dealTermsSchema,type DealTerms,type DocumentKind} from '@/lib/deal-documents';
-import {filterProperties,needsAttention,propertyAddressLines,propertyGroup,safeLocalTime,safeCalendarDate,type WorkspaceFilter,type WorkspaceProperty} from './workspace-view';
+import {filterProperties,needsAttention,propertyAddressLines,propertyGroup,safeLocalTime,type WorkspaceFilter,type WorkspaceProperty} from './workspace-view';
 type Property=WorkspaceProperty;
 type Deal={id:string;screening_id:string;terms:DealTerms;stage:string};
 type Conversation={source?:'outbound'|'reception';id:string;screening_id:string;party:string;summary?:string;completed_at?:string;durationSeconds?:number;nextAction?:string;interested?:boolean;optedOut?:boolean;humanRequested?:boolean};
@@ -120,21 +122,22 @@ function PropertyCard({onAsk,assistantVipLocked=false,property:p,work,principal,
  const owner=lookups.flatMap(l=>l.contacts??[]).find(c=>c.name)?.name;
  const sellerSummary=conversationDisplaySummary(calls.find(c=>c.party==='seller'&&c.summary)?.summary,'seller');
  async function control(){if(controlBusy)return;setControlBusy(true);setControlMessage('');try{await post('/api/work/control',{action:manual?'return_to_bot':'takeover',screeningId:p.id});setManual(!manual);setControlMessage(manual?'Bot control restored. Setup, credits and contact permissions still apply.':'You have control. New automatic work is paused for this property. Already-started work may finish.');onRefresh();}catch{setControlMessage('Could not confirm the control change. Refresh and check before continuing.');}finally{setControlBusy(false);}}
+ const propertyDetails=<WorkspacePanel title="Property details" label="Property details" section="property">
+    <section><h4>{dealSummary?.contractSigned?'Original price & repair estimates':'Price & repair estimates'}</h4><PropertyAnalysisSummary result={p.result}/></section>
+    <section><h4>Bot controls</h4><div className="property-control"><span><b className={`property-bot-status tone-${bot.tone}`}><span className="ai-status-dot" aria-hidden="true"/>{bot.label}</b><small>{bot.detail}</small></span><button className="takeover-button" title={manual?'Let the bot manage new work for this property':'Pause new automated work for this property and handle it yourself'} disabled={controlBusy||['cancellation_pending','cancelled'].includes(deal?.stage??'')} onClick={()=>void control()}>{controlBusy?'Saving…':manual?'Resume bot for this lead':'Pause bot for this lead'}</button></div>
+    {controlMessage&&<p className="control-result" role="status">{controlMessage}</p>}</section>
+    <section><h4>Property & owner details</h4><PropertyFacts property={p} lookups={lookups}/></section>
+{onAsk&&<button type="button" className="workspace-quiet property-ask-bot" aria-haspopup="dialog" disabled={stale} data-credit-action={assistantVipLocked?undefined:true} onClick={()=>onAsk(p.id,p.result.property.address)}><Sparkles size={15} aria-hidden="true"/><span className="property-ask-label">Ask AI Bot about this property</span>{assistantVipLocked&&<span className="assistant-vip-label"><Crown size={12} aria-hidden="true"/>VIP</span>}</button>}
+   </WorkspacePanel>;
  return <article hidden={hidden} className="live-property" id={`property-${p.id}`} aria-labelledby={`property-address-${p.id}`} data-needs-attention={needsAttention(p.id,work)} data-expanded={active} data-promising={promising}>
   <div className="property-disclosure">
    <PropertyCardHeader property={p} owner={owner} bot={bot} dealSummary={dealSummary} phase={phase} practice={practice} active={active} sellerSummary={sellerSummary} thumbnail={<PropertyThumbnail key={photoRefresh} screeningId={p.id} address={p.result.property.address} images={p.result.property.images}/>} onToggle={()=>onToggle(!active)} onContact={openContact}/>
    {visited&&<Activity mode={active&&!hidden?'visible':'hidden'}><div className="property-details" id={`property-content-${p.id}`}>
     <PropertyNextStep property={p} work={work} stale={stale} onRefresh={onRefresh}/>
     <section className="property-resources" aria-label="Agreement tools">
-    {manual&&!contractReady&&!preparingContract&&<button className="workspace-quiet" onClick={()=>setPreparingContract(true)}>Seller is ready for an agreement</button>}
-    {(preparingContract||contractReady)&&<DealTools nextSection={nextStep.target} hasBuyerActivity={!!work.journeys?.some(j=>j.screening_id===p.id)||!!work.viewingRequests?.some(v=>v.screening_id===p.id)} signing={work.signing} signingConfigured={work.signingConfigured} property={p} principal={principal} initial={deal} manual={manual} onManual={()=>{setManual(true);onRefresh();}}/>}</section>
-    {onAsk&&<button type="button" className="workspace-quiet property-ask-bot" aria-haspopup="dialog" disabled={stale} data-credit-action={assistantVipLocked?undefined:true} onClick={()=>onAsk(p.id,p.result.property.address)}><Sparkles size={15} aria-hidden="true"/><span className="property-ask-label">Ask AI Bot about this property</span>{assistantVipLocked&&<span className="assistant-vip-label"><Crown size={12} aria-hidden="true"/>VIP</span>}</button>}
-    <details className="property-extra-details"><summary>Property details & controls</summary>
-    <details className="property-number-details"><summary>{dealSummary?.contractSigned?'Original price & repair estimates':'Price & repair estimates'}</summary><PropertyAnalysisSummary result={p.result}/></details>
-    <details className="property-bot-controls"><summary>Bot controls</summary><div className="property-control"><span><b className={`property-bot-status tone-${bot.tone}`}><span className="ai-status-dot" aria-hidden="true"/>{bot.label}</b><small>{bot.detail}</small></span><button className="takeover-button" title={manual?'Let the bot manage new work for this property':'Pause new automated work for this property and handle it yourself'} disabled={controlBusy||['cancellation_pending','cancelled'].includes(deal?.stage??'')} onClick={()=>void control()}>{controlBusy?'Saving…':manual?'Resume bot for this lead':'Pause bot for this lead'}</button></div>
-    {controlMessage&&<p className="control-result" role="status">{controlMessage}</p>}</details>
-    <details className="property-owner-details"><summary>Property & owner details</summary><PropertyFacts property={p} lookups={lookups}/></details>
-    </details>
+    {manual&&!contractReady&&!preparingContract&&<button className="workspace-quiet" onClick={e=>{const card=e.currentTarget.closest('.live-property');setPreparingContract(true);requestAnimationFrame(()=>{const section=card?.querySelector<HTMLElement>('[data-deal-section="contracts"]');if(section)openDealSection(section,'contracts');});}}>Seller is ready for an agreement</button>}
+    {(preparingContract||contractReady)&&<DealTools nextSection={nextStep.target} hasBuyerActivity={!!work.journeys?.some(j=>j.screening_id===p.id)||!!work.viewingRequests?.some(v=>v.screening_id===p.id)} signing={work.signing} signingConfigured={work.signingConfigured} property={p} principal={principal} initial={deal} manual={manual} secondary={propertyDetails} onManual={()=>{setManual(true);onRefresh();}}/>}</section>
+    {!preparingContract&&!contractReady&&<div className="property-secondary-actions">{propertyDetails}</div>}
     {work.handoffs.filter(h=>h.screening_id===p.id).map(h=><HandoffCard key={h.id} handoff={h}/>)}
     {work.callRequests?.filter(c=>c.screening_id===p.id).map(c=><CallRequest key={c.id} id={c.id}/>)}
     {work.callbacks.filter(c=>c.screening_id===p.id).map(c=><p key={c.id}>Requested callback: {safeLocalTime(c.due_at,c.timezone)} ({c.timezone}). {c.state==='held_for_human'?'Waiting for you.':c.state==='canceled'?'Canceled.':c.state==='missed'?'Time passed; needs review.':c.state==='dispatched'?'Call dispatched.':'Saved; automatic dialing is not confirmed.'}</p>)}
@@ -161,8 +164,23 @@ function PropertyFacts({property:p,lookups}:{property:Property;lookups:Purchased
  </section>;
 }
 function PropertyNextStep({property,work,stale,onRefresh}:{property:Property;work:Work;stale:boolean;onRefresh:()=>void}){
- const deal=work.deals.find(d=>d.screening_id===property.id),summary=dealCardSummary(deal,work.signing),next=propertyNextAction(property,work);
- return <div className="property-next"><p><span>{stale?'Check current status':'What happens next'}</span>{stale?'Refresh this property before acting on its saved status.':next.detail}</p>{stale?<button type="button" className="demo-button" onClick={onRefresh}>Refresh status</button>:next.target&&next.label?<button type="button" className="demo-button" onClick={e=>openDealSection(e.currentTarget,next.target!)}>{next.label}</button>:null}{summary?.contractSigned&&<><ol className="property-milestones" aria-label="Deal progress">{summary.steps.map(step=><li key={step.label} className={step.done?'complete':step.current?'current':''} aria-current={step.current?'step':undefined}><span aria-hidden="true">{step.done?'✓':'○'}</span>{step.label}<span className="sr-only">{step.done?' complete':step.current?' current':' upcoming'}</span></li>)}</ol>{deal?.terms.closingDate&&<small>Target closing · <time dateTime={deal.terms.closingDate}>{safeCalendarDate(deal.terms.closingDate)}</time></small>}</>}</div>;
+ const deal=work.deals.find(d=>d.screening_id===property.id),next=propertyNextAction(property,work);
+ const agreement=agreementWorkspace(deal?.stage??'draft',work.signing.filter(e=>e.deal_id===deal?.id));
+ if(stale)return <PropertyFocus title="Check current status" detail="Refresh before acting on this saved status."><button type="button" className="demo-button" onClick={onRefresh}>Refresh status</button></PropertyFocus>;
+ if(next.target==='signature'&&agreement.signatureId)return <div data-deal-section="signature"><PropertyFocus title={agreement.title} detail={agreement.detail}><SigningLinkButton envelopeId={agreement.signatureId}/></PropertyFocus></div>;
+ const journey=work.journeys?.find(j=>j.screening_id===property.id&&j.state!=='closed');
+ const journeyStep=journey?journeyNextAction(journey):null;
+ if(journeyStep&&journeyStep.label===next.label&&journeyStep.target===next.target&&journeyStep.waitingOn!=='You')return <PropertyFocus title={journeyStep.waitingOn==='Bot'?'Preparing the buyer’s next step':journeyStep.waitingOn==='Title'?'Waiting for the closing office':journeyStep.waitingOn==='Seller'?'Waiting for the seller':journeyStep.waitingOn==='Buyer & seller'?'Waiting for visit confirmation':'Waiting for the buyer'} detail={next.detail}/>;
+ if(next.label==='View buyers'){
+  if(agreement.title==='Agreement needs attention')return <PropertyFocus title={agreement.title}><button type="button" className="demo-button" onClick={e=>openDealSection(e.currentTarget,'contracts')}>Review signing request</button></PropertyFocus>;
+  if(['Waiting for buyer signatures','Preparing the agreement'].includes(agreement.title))return <PropertyFocus title={agreement.title} detail={agreement.detail}/>;
+  return null;
+ }
+ if(next.target&&next.label)return <PropertyFocus title={['closing','title_open'].includes(deal?.stage??'')?'Closing in progress':deal?.stage==='closed'?'Closing recorded':deal?.stage==='cancellation_pending'?'Cancellation needs review':['cancelled','canceled'].includes(deal?.stage??'')?'Deal stopped':'Needs your attention'} detail={next.detail}><button type="button" className="demo-button" onClick={e=>openDealSection(e.currentTarget,next.target!)}>{next.label}</button></PropertyFocus>;
+ if(showPropertyContract(deal,work.signing))return <PropertyFocus title={agreement.title} detail={agreement.detail}/>;
+ if(property.result.financialCheck.status!=='eligible')return <PropertyFocus title="Review the property estimate" detail={next.detail}><button type="button" className="demo-button" onClick={e=>openDealSection(e.currentTarget,'property')}>Review property details</button></PropertyFocus>;
+ const latest=conversationDisplaySummary(work.conversations.find(c=>c.screening_id===property.id&&c.party==='seller'&&c.summary)?.summary,'seller');
+ return <PropertyFocus title={latest?'Latest from the seller':'Waiting for seller activity'} detail={latest??'Seller conversations and any decisions that need you will appear here.'}/>;
 }
 function WorkspaceAttention({work,page,onPage,onOpen,onRefresh}:{work:Work;page:number;onPage:(page:number)=>void;onOpen:(id:string)=>void;onRefresh:()=>void}){
  const [handled,setHandled]=useState<string[]>([]),[expanded,setExpanded]=useState(false);
@@ -199,9 +217,9 @@ function TextAttentionCard({item,onHandled}:{item:TextAttention;onHandled:()=>vo
  const view=copy[item.kind]??{title:'Message needs review',next:'Open the property messages.'};
  return <article><strong>{view.title}</strong><blockquote className="reply-quote">{item.quote}</blockquote><p>{view.next}</p><button disabled={busy} onClick={async()=>{setBusy(true);try{await post('/api/work/text-attention',{id:item.id,messageId:item.message_id});onHandled();}catch(e){setError(e instanceof Error?e.message:'Could not save. Please refresh.');setBusy(false);}}}>I’ll handle this</button><small>{item.kind==='campaign_reply'?'Marking this seen does not send a message or change work controls.':'Marking this seen keeps automatic work paused.'}</small>{error&&<p role="alert">{error}</p>}</article>;
 }
-function DealTools({property,principal,initial,manual,onManual,signing,signingConfigured,nextSection=null,hasBuyerActivity=false}:{nextSection?:string|null;hasBuyerActivity?:boolean;property:Property;principal:string;initial?:Deal;manual:boolean;onManual:()=>void;signing:SigningEnvelope[];signingConfigured:boolean}){
- const management=useRef<HTMLDetailsElement>(null);
- const showCancellationReview=useCallback(()=>{if(management.current)management.current.open=true;},[]);
+function DealTools({property,principal,initial,manual,onManual,signing,signingConfigured,nextSection=null,hasBuyerActivity=false,secondary}:{secondary?:ReactNode;nextSection?:string|null;hasBuyerActivity?:boolean;property:Property;principal:string;initial?:Deal;manual:boolean;onManual:()=>void;signing:SigningEnvelope[];signingConfigured:boolean}){
+ const [cancellationReview,setCancellationReview]=useState(false);
+ const showCancellationReview=useCallback((needed:boolean)=>setCancellationReview(needed),[]);
  const [terms,setTerms]=useState<DealTerms>(()=>initial?.terms??dealTermsSchema.parse({address:property.result.property.address,buyer:principal,legalDescription:property.result.property.legalDescription??'',assignmentFeeCents:1000000,assignmentDepositCents:200000}));
  const [dealId,setDealId]=useState(initial?.id??''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false);
  const edited=useRef(false);
@@ -220,10 +238,12 @@ function DealTools({property,principal,initial,manual,onManual,signing,signingCo
  async function handleMyself(){setBusy(true);setMessage('');try{await post('/api/work/control',{action:'takeover',screeningId:property.id});onManual();for(const e of signing.filter(e=>e.deal_id===dealId&&!['completed','test_completed'].includes(e.state))){await post('/api/work/signing',{action:'revoke_auto',id:e.id});}setMessage('You have control. Property automation is paused and pending auto-sign authorizations are off. Already-started work may finish. Existing contracts are unchanged.');}catch{setMessage('Could not confirm every control. Check pending auto-sign authorizations below before continuing.');}finally{setBusy(false);}}
  const amount=(key:'priceCents'|'assignmentFeeCents'|'assignmentDepositCents',label:string,help?:string)=><label>{label}<input inputMode="decimal" type="number" min="0" step="0.01" value={terms[key]===null?'':terms[key]!/100} onChange={e=>update(key,e.target.value===''?null:Math.round(Number(e.target.value)*100))}/>{help&&<small>{help}</small>}</label>;
  return <div className="deal-tools" data-unsaved-draft={dirty?'true':undefined}>
-  <div data-deal-section="signature"><AgreementStatus status={agreement}>{agreement.signatureId&&<SigningLinkButton envelopeId={agreement.signatureId}/>}</AgreementStatus></div>
-  {dealId&&tools.buyers&&<FulfillmentDetails dealId={dealId} buyerReviewAvailable={tools.buyerReview} coordination={tools.coordination?<BuyerDealCoordination dealId={dealId}/>:undefined}/>}
-  {dealId&&tools.coordination&&!tools.buyers&&<BuyerDealCoordination dealId={dealId}/>}
-  <details ref={management} className="deal-contract-tools agreement-management" data-deal-section="contracts"><summary>Manage agreement</summary>
+  {dealId&&tools.buyers&&<FulfillmentDetails dealId={dealId} buyerReviewAvailable={tools.buyerReview} coordination={tools.coordination?<BuyerDealCoordination dealId={dealId} embedded/>:undefined}/>}
+  {dealId&&tools.coordination&&!tools.buyers&&<WorkspacePanel title="Visits & buyer deposit" section="coordination"><BuyerDealCoordination dealId={dealId} embedded/></WorkspacePanel>}
+  {cancellationReview&&nextSection!=='cancellation'&&<p className="workspace-review-notice" role="status">Cancellation needs your review. <button type="button" className="workspace-quiet" onClick={e=>openDealSection(e.currentTarget,'cancellation')}>Review cancellation</button></p>}
+  <div className="property-secondary-actions">{secondary}
+  <WorkspacePanel title="Agreements" label="Documents" section="contracts" aliases={['cancellation','signature']} keepActive>
+   {dealId&&tools.buyers&&<div className="panel-shortcuts"><button type="button" className="workspace-quiet" onClick={e=>openDealSection(e.currentTarget,'closing')}>Closing office & payment</button><button type="button" className="workspace-quiet" onClick={e=>openDealSection(e.currentTarget,'coordination')}>Visits & buyer deposit</button><button type="button" className="workspace-quiet" onClick={e=>openDealSection(e.currentTarget,'fulfillment')}>Buyer details</button></div>}
    <SigningControls dealId={dealId} save={save} envelopes={envelopes} configured={signingConfigured} reviewVersion={JSON.stringify(terms)} stage={initial?.stage??'draft'} kind={kind}/>
    <details className="agreement-editor"><summary>{agreement.purchaseSigned?'Prepare buyer agreement & documents':'Prepare or edit seller agreement'}</summary>
     <ContractReviewGuide terms={terms} kind={kind} manual={manual} busy={busy} onManual={()=>void handleMyself()} onDraft={()=>void document(kind)}/>
@@ -247,8 +267,9 @@ function DealTools({property,principal,initial,manual,onManual,signing,signingCo
     <small>Documents are unsigned drafts. Required addenda may add pages. Nothing is sent automatically. Signed agreements remain in signature history.</small>
    </details>
    {dealId&&<AgreementCancellationControls dealId={dealId} stage={initial?.stage??'draft'} signingVersion={envelopes.map(e=>e.id+e.state).join(',')} onUpdated={onManual} onNeedsReview={showCancellationReview}/>}
-  </details>
-  {message&&<p role="status">{message}</p>}
+   {message&&<p role="status">{message}</p>}
+  </WorkspacePanel>
+  </div>
  </div>;
 }
 

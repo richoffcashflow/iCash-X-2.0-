@@ -1,7 +1,7 @@
 'use client';
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {useEffect,useState,type ReactNode} from 'react';
-import {BuyerOverview,type BuyerNetworkProgress} from './buyer-overview';
+import {BuyerOverview,type BuyerNetworkProgress,type BuyerSelection} from './buyer-overview';
 import {ClosingSetup} from './closing-setup';
 import type {ClosingSetupView} from '@/lib/closing-setup';
 import {ClosingProgress} from './closing-progress';
@@ -9,28 +9,44 @@ import type {ProceedsReceipt} from '@/lib/deal-completion';
 import type {ClosingUpdate} from '@/lib/closing-progress';
 import {TitleTasks,type TitleTask} from './title-tasks';
 import {revealWorkspaceSection} from '@/lib/workspace-navigation';
+import {WorkspacePanel} from './workspace-panel';
+import {BuyerResponseDetails} from './buyer-response-details';
 import {BuyerQualificationPanel} from './buyer-qualification-panel';
 type Progress={proceedsReceipt?:ProceedsReceipt|null;dealStage?:string;buyerPricingReview?:string|null;buyerOutreachHeld?:boolean;closingSetup?:ClosingSetupView;buyerPackage?:{url:string;askingPriceCents:number;purchasePriceCents:number;assignmentFeeCents:number}|null;closingUpdates?:ClosingUpdate[];titleTasks?:TitleTask[];titleReplies?:{id:string;sender:string;subject:string;body_text:string;received_at:string;needs_review:boolean}[];title?:string|null;titleReady?:boolean;candidates?:{id:string;name:string}[];job?:{state:string;updated_at:string;result?:{buyerStatus:string;buyerCount:number;buyerDiscovery?:{status:string;canContinue:boolean};buyerTexts?:{status:string;accepted:number;held?:number};buyerEmail?:{status:string;accepted:number}}};documents:{id:string;kind:string}[];buyers:{buyer_id:string;name:string;rank:number;ready:boolean}[]};
 export function FulfillmentDetails({dealId,buyerReviewAvailable=false,coordination}:{dealId:string;buyerReviewAvailable?:boolean;coordination?:ReactNode}){
- const [refresh,setRefresh]=useState(0);
+ const [refresh,setRefresh]=useState(0),[selected,setSelected]=useState<BuyerSelection|null>(null);
  const [data,setData]=useState<(Progress&{buyerNetwork?:BuyerNetworkProgress|null})|null>(null),[error,setError]=useState(''),[sending,setSending]=useState(false),[titleMessage,setTitleMessage]=useState('');
  useEffect(()=>{const abort=new AbortController();let inFlight=false;
  async function load(){if(document.hidden||inFlight)return;inFlight=true;try{const next=await workspaceRequest<Progress>(`/api/work/fulfillment?dealId=${dealId}`,{signal:abort.signal,cache:'no-store'});if(!abort.signal.aborted){setData(next);setError('');}}catch{if(!abort.signal.aborted)setError('Could not refresh progress. Your saved work is unchanged.');}finally{inFlight=false;}}
  void load();const timer=setInterval(load,30000);document.addEventListener('visibilitychange',load);return()=>{abort.abort();clearInterval(timer);document.removeEventListener('visibilitychange',load);};},[dealId,refresh]);
  async function download(doc:Progress['documents'][number]){try{const file=await workspaceRequest<{html:string;filename:string}>(`/api/work/documents?id=${doc.id}`,{cache:'no-store'});const url=URL.createObjectURL(new Blob([file.html],{type:'text/html'}));const a=document.createElement('a');a.href=url;a.download=file.filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch{setError('Could not open the document. Please retry.');}}
 
- return <section className="buyer-workspace" data-deal-section="fulfillment" aria-label="Buyers"><h3>Buyers</h3>
+ function openBuyer(buyer:BuyerSelection|null){setSelected(buyer);revealWorkspaceSection(document.getElementById(`buyer-details-${dealId}`));}
+ function openPanel(id:string){revealWorkspaceSection(document.getElementById(`${id}-${dealId}`));}
+ const closing=['title_open','closing','closed'].includes(data?.dealStage??'');
+ const count=(data?.buyers.length??0)+(data?.buyerNetwork?.buyers?.length??0);
+ return <section className="buyer-workspace" aria-label="Buyers">
   {error&&<p role="alert">{error} <button type="button" onClick={()=>setRefresh(v=>v+1)}>Try again</button></p>}
   {!data&&!error&&<p role="status">Loading buyer activity…</p>}
-  {data&&<>
-   <BuyerOverview buyers={data.buyers} network={data.buyerNetwork} buyerPackage={data.buyerPackage} pricingReview={data.buyerPricingReview} held={data.buyerOutreachHeld} researchContinuing={data.job?.result?.buyerDiscovery?.canContinue} onResponses={()=>revealWorkspaceSection(document.getElementById('platform-buyer-network'))}/>
+  {data&&!closing&&<>
+   <BuyerOverview buyers={data.buyers} network={data.buyerNetwork} buyerPackage={data.buyerPackage} pricingReview={data.buyerPricingReview} held={data.buyerOutreachHeld} researchContinuing={data.job?.result?.buyerDiscovery?.canContinue} onBuyer={openBuyer} onAllBuyers={count>3?()=>openBuyer(null):undefined}/>
    {!data.buyerPackage&&data.documents.filter(doc=>doc.kind==='buyer_package').map(doc=><button key={doc.id} type="button" onClick={()=>void download(doc)}>View prepared buyer package</button>)}
    {!!data.job?.result?.buyerTexts?.held&&<p>Some buyer texts are waiting for current contact eligibility or the calling window.</p>}
-   {buyerReviewAvailable&&<BuyerQualificationPanel dealId={dealId}/>}
-   {!!data.candidates?.length&&<details><summary>Buyer research ({data.candidates.length})</summary><p>These potential buyers have not confirmed interest, funds or contact permission.</p><ul>{data.candidates.map(c=><li key={c.id}>{c.name}</li>)}</ul></details>}
   </>}
-  {coordination}
-  <details className="closing-details" data-deal-section="closing"><summary>Closing & documents{data?.titleTasks?.some(t=>t.state==='needs_review')?' · Needs you':''}</summary>
+  <WorkspacePanel id={`buyer-details-${dealId}`} title={selected?.buyer.name??'Buyers'} section="fulfillment">
+   {data&&<>
+    {selected?<>
+     <p>{selected.kind==='response'?(selected.buyer.state==='interested'?'Interested buyer':'Buyer reply'):(selected.buyer.ready?'Funds & signing authority verified at last check.':'Funds & signing authority need review.')}</p>
+     {selected.kind==='response'&&<><blockquote className="reply-quote">{selected.buyer.reply??'This buyer marked the property as interesting.'}</blockquote><BuyerResponseDetails key={selected.buyer.id} dealId={dealId} matchId={selected.buyer.id} onHandled={()=>setRefresh(v=>v+1)}/><p>Interest does not reserve the property. Funds and signing authority still need review.</p></>}
+     {count>1&&<button type="button" className="workspace-quiet" onClick={()=>setSelected(null)}>All buyers</button>}
+    </>:<BuyerOverview buyers={data.buyers} network={data.buyerNetwork} buyerPackage={data.buyerPackage} onBuyer={setSelected} showAll/>}
+    <div className="panel-shortcuts">{buyerReviewAvailable&&<button type="button" className="workspace-quiet" onClick={()=>openPanel('buyer-review')}>Review buyer funds</button>}{coordination&&<button type="button" className="workspace-quiet" onClick={()=>openPanel('buyer-visits')}>Viewing times & deposit</button>}</div>
+    {!selected&&!!data.candidates?.length&&<details><summary>Other buyers being researched ({data.candidates.length})</summary><p>These buyers have not confirmed interest, funds or contact permission.</p><ul>{data.candidates.map(c=><li key={c.id}>{c.name}</li>)}</ul></details>}
+   </>}
+  </WorkspacePanel>
+  {buyerReviewAvailable&&<WorkspacePanel id={`buyer-review-${dealId}`} title="Buyer funds & signing authority"><BuyerQualificationPanel dealId={dealId} embedded/></WorkspacePanel>}
+  {coordination&&<WorkspacePanel id={`buyer-visits-${dealId}`} title="Visits & buyer deposit" section="coordination">{coordination}</WorkspacePanel>}
+  <WorkspacePanel title="Closing" section="closing">
   {!data&&!error&&<p role="status">Loading closing details…</p>}
   {data&&<>
    {data.titleTasks?.some(t=>t.state==='needs_review')&&<div className="closing-owner-task"><strong>Closing tasks need your review</strong><p>Confirm requested dates and review any title delivery issues.</p><button type="button" className="demo-button" onClick={()=>revealWorkspaceSection(document.getElementById(`closing-tasks-${dealId}`)?.querySelector('details')??null)}>Review closing tasks</button></div>}
@@ -46,6 +62,6 @@ export function FulfillmentDetails({dealId,buyerReviewAvailable=false,coordinati
    {data.documents.length>0&&<small>Downloaded packages are drafts. Closing and deposit status require confirmation from the closing office.</small>}
   </>}
   {titleMessage&&<p role="status">{titleMessage}</p>}
-  </details>
+  </WorkspacePanel>
  </section>;
 }

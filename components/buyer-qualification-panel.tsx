@@ -20,8 +20,9 @@ const money=(cents:number)=>new Intl.NumberFormat('en-US',{style:'currency',curr
 const status=(state:string)=>({submitted:'Waiting for review',needs_information:'More information needed',approved:'Reviewed',declined:'Not approved',revoked:'Withdrawn',expired:'Expired'}[state]??state.replaceAll('_',' '));
 function Evidence({payload:p}:{payload:BuyerQualificationPayload}){return <dl><dt>Areas</dt><dd>{p.markets.join('; ')}</dd><dt>Property types</dt><dd>{p.propertyTypes.join(', ')}</dd><dt>Maximum price</dt><dd>{money(p.maxPriceCents)}</dd><dt>Maximum repairs</dt><dd>{money(p.maxRepairCents)}</dd><dt>Source</dt><dd>{p.sourceName}: {p.sourceReference}</dd><dt>Recorded</dt><dd>{new Date(p.criteriaObservedAt).toLocaleString('en-US',{hour12:true})}</dd><dt>Buyer’s statement</dt><dd>{p.buyerStatement}</dd></dl>;}
 
-export function BuyerQualificationPanel({dealId}:{dealId:string}){
+export function BuyerQualificationPanel({dealId,embedded=false}:{dealId:string;embedded?:boolean}){
  const [open,setOpen]=useState(false),[visited,setVisited]=useState(false);
+ if(embedded)return <CustomerBuyerReview key={dealId} dealId={dealId}/>;
  return <details className={styles.panel} onToggle={e=>{setOpen(e.currentTarget.open);if(e.currentTarget.open)setVisited(true);}}><summary>Review buyer funds & details</summary>{visited&&<div hidden={!open}><CustomerBuyerReview key={dealId} dealId={dealId}/></div>}</details>;
 }
 function CustomerBuyerReview({dealId}:{dealId:string}){

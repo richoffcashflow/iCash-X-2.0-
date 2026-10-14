@@ -3,7 +3,7 @@ import {useEffect,useRef,useState} from 'react';
 import type {CancellationView} from '@/lib/agreement-cancellation-policy';
 import {safeLocalTime} from './workspace-view';
 
-export function AgreementCancellationControls({dealId,stage,signingVersion,onUpdated,onNeedsReview}:{dealId:string;stage:string;signingVersion:string;onUpdated:()=>void;onNeedsReview?:()=>void}) {
+export function AgreementCancellationControls({dealId,stage,signingVersion,onUpdated,onNeedsReview}:{dealId:string;stage:string;signingVersion:string;onUpdated:()=>void;onNeedsReview?:(needed:boolean)=>void}) {
  const [view,setView]=useState<CancellationView|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  const [kind,setKind]=useState<'purchase'|'assignment'>('purchase'),[reason,setReason]=useState(''),[confirmed,setConfirmed]=useState(false);
  const [release,setRelease]=useState(''),[resolution,setResolution]=useState(''),[released,setReleased]=useState(false);
@@ -41,7 +41,7 @@ export function AgreementCancellationControls({dealId,stage,signingVersion,onUpd
  const needsRelease=!!pending&&(pending.requires_release||pending.has_deposit||pending.has_title);
  const history=view?.requests.filter(c=>c.state==='completed')??[];
  const needsReview=!!pending||stage==='cancellation_pending'||history.some(c=>c.late_activity)||!!error;
- useEffect(()=>{if(needsReview)onNeedsReview?.();},[needsReview,onNeedsReview]);
+ useEffect(()=>{onNeedsReview?.(needsReview);},[needsReview,onNeedsReview]);
  return <details className="agreement-cancellation" data-deal-section="cancellation" open={needsReview}>
   <summary>{needsReview?'Cancellation needs your review':'Contract cancellation'}</summary>
   {pending?<div className="cancellation-pending" role="status">

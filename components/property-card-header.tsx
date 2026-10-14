@@ -20,8 +20,7 @@ export function PropertyCardHeader({property:p,owner,bot,dealSummary,phase,pract
     <span className="property-card-estimates"><span><small>Value after repairs</small><strong>{analysisMoney(analysis.arvCents)}</strong></span><span><small>Estimated repairs</small><strong>{analysisMoney(analysis.repairs.baselineCents)}</strong></span></span>
     <span className="property-open-control"><span>{active?'Close lead':'Open lead'}</span><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
    </button>
-   {sellerSummary&&<p className="property-latest-update"><span>Latest update</span>{sellerSummary.length>150?sellerSummary.slice(0,147)+'…':sellerSummary}</p>}
-   {dealSummary?.contractSigned&&!active&&<ol className="property-progress-compact" aria-label="Deal progress">{dealSummary.steps.map(step=><li key={step.label} className={step.done?'done':step.current?'current':''} aria-current={step.current?'step':undefined}>{step.label}</li>)}</ol>}
+   {sellerSummary&&!active&&<p className="property-latest-update"><span>Latest update</span>{sellerSummary.length>150?sellerSummary.slice(0,147)+'…':sellerSummary}</p>}
    <div className="property-quick-actions"><button type="button" data-credit-action onClick={()=>onContact('calls')} aria-label={`Call ${address.street}`}><Phone size={16}/>Calls</button><button type="button" data-credit-action onClick={()=>onContact('texts')} aria-label={`Text conversation for ${address.street}`}><MessageCircle size={16}/>Texts</button></div>
  </>;
 }
