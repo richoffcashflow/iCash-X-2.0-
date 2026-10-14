@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {webinarOfferFocus} from '../lib/webinar-offer-focus.ts';
+const now=Date.parse('2026-10-14T00:00:00Z');
+const timer={id:'pitch',at:1355,label:'Time remaining',mode:'duration',durationSeconds:121,endsAt:null,placement:'offer',onExpire:'hide',expiredMessage:'Ended'};
+const props={offer:{id:'primary',at:1355},timers:[timer],deadlines:{pitch:new Date(now+91000).toISOString()},seconds:1385,now,duration:1657,paid:false,ended:false};
+assert.deepEqual(webinarOfferFocus(props),{locked:true,countdown:{label:'Time remaining',remaining:91}});
+assert.equal(webinarOfferFocus({...props,now:now+91000}).locked,false,'Expired hidden timer restores chat');
+assert.equal(webinarOfferFocus({...props,paid:true}).locked,false);
+assert.equal(webinarOfferFocus({...props,ended:true}).locked,false);
+assert.equal(webinarOfferFocus({...props,offer:null}).locked,false,'Chat works before the offer');
+assert.deepEqual(webinarOfferFocus({...props,deadlines:{}}),{locked:true,countdown:null},'Pending receipt never invents a new timer');
+assert.equal(webinarOfferFocus({...props,offer:{...props.offer,expiresAt:new Date(now+30000).toISOString()}}).countdown.remaining,30,'Earlier actual offer deadline wins');
+assert.equal(webinarOfferFocus({...props,timers:[]}).countdown.label,'Session ends in');
+assert.equal(webinarOfferFocus({...props,timers:[],seconds:1657}).locked,false);
+assert.equal(webinarOfferFocus({...props,timers:[{...timer,mode:'deadline',endsAt:new Date(now+30000).toISOString()}],deadlines:{}}).countdown.remaining,30);
+console.log('PASS offer focus: scheduled countdown, receipt loading, expiry, payment, completion, fixed deadlines and no-timer fallback.');

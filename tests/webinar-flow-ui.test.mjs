@@ -1,3 +1,4 @@
+import {webinarOfferFocus} from '../lib/webinar-offer-focus.ts';
 import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import ts from 'typescript';
 import * as policy from '../lib/webinar-policy.ts';import * as prompts from '../lib/webinar-prompts.ts';import * as playback from '../lib/webinar-playback.ts';
 import {webinarChatStream} from '../lib/webinar-chat-stream.ts';
@@ -19,13 +20,13 @@ globalThis.location={search:'?ad_id=55555&fbclid=retained&r=signed-token',hash:'
 const replaced=[];globalThis.history={replaceState:(_state,_title,url)=>replaced.push(url)};
 globalThis.localStorage=globalThis.sessionStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)};
 Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true});
-const components=Object.fromEntries(['WebinarTimers','WebinarPlayer','WebinarPanelBoundary','WebinarAudience','WebinarPurchaseNotifications','WebinarOfferMoment','WebinarOfferImage','WebinarOfferSpots'].map(n=>[n,n]));
+const components=Object.fromEntries(['WebinarTimers','WebinarPlayer','WebinarPanelBoundary','WebinarAudience','WebinarPurchaseNotifications','WebinarCountdownBanner','WebinarOfferImage','WebinarOfferSpots'].map(n=>[n,n]));
 const icons=Object.fromEntries(['MessageCircle','Send','X','ChevronDown','ShieldCheck','Maximize','Pause','Play','Volume2','VolumeX','Info'].map(n=>[n,n]));
 const w={...policy.newWebinar('00000000-0000-4000-8000-000000000123'),videoUrl:'https://example.test/day.mp4',status:'published',publicCode:'129340',chat:[{id:'before',at:499,name:'Sam',text:'Before submission',kind:'replay'},{id:'after',at:501,name:'Pat',text:'After submission',kind:'replay'}]};
 const sessionId='00000000-0000-4000-8000-000000000456';let emptyChat=false;let requestLog=[],remembered='',rememberedEmail='',completionGate=null,chatGate=null,failChat=false,failContact=false;const redirects=[];location.assign=path=>redirects.push(path);
 async function post(url,body){requestLog.push({url,body});if(url.endsWith('/start'))return {canonicalPath:'/live/129340',sessionId,webinar:policy.publicWebinar(w),progress:0,name:remembered,email:rememberedEmail,contactSaved:false,messages:[],preview:false,serverNow:Date.now()};if(url.endsWith('/event')&&body.kind==='completed'){if(completionGate)await completionGate;return {saved:true,redirect:'/webinar/checkout'};}if(url.endsWith('/contact')){if(failContact)throw Error('Name could not be saved.');remembered=body.name;if(!body.onlyName)rememberedEmail=body.email;return {name:remembered,contactSaved:!!body.email&&!!body.phone};}if(url.endsWith('/chat')){if(chatGate)await chatGate;if(failChat)throw Error('Connection lost.');return {messages:emptyChat?[]:[{id:'m'+requestLog.length,role:'user',text:body.text,playback_seconds:body.seconds,public_status:'pending'}]};}return {saved:true};}
 let timerInput;
-const roomDeps={useWebinarSharedChat:()=>({messages:[],statuses:[]}),webinarChatStream,withOfferDeadlines,replayOfferSpots,useMemo:fn=>fn(),webinarRequest:async()=>({postPurchaseUrl:'/live/123457'}),dynamic:loader=>loader.toString().includes('WebinarCheckout')?'WebinarCheckout':'AccountAccess',useWebinarTimers:input=>{timerInput=input;return {deadlines:{},offerDeadlines:{},offset:0,now:Date.now()};},...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}};
+const roomDeps={webinarOfferFocus,useWebinarSharedChat:()=>({messages:[],statuses:[]}),webinarChatStream,withOfferDeadlines,replayOfferSpots,useMemo:fn=>fn(),webinarRequest:async()=>({postPurchaseUrl:'/live/123457'}),dynamic:loader=>loader.toString().includes('WebinarCheckout')?'WebinarCheckout':'AccountAccess',useWebinarTimers:input=>{timerInput=input;return {deadlines:{},offerDeadlines:{},offset:0,now:Date.now()};},...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}};
 const h=await harness('components/webinar-room.tsx',roomDeps);
 const render=()=>h.render('WebinarRoom',{webinarCode:'129339'});let tree=render();await flush();tree=render();
 assert.equal(requestLog[0].body.code,'129339');assert.equal(requestLog[0].body.attribution.fbclid,'retained');assert.equal(replaced[0],'/live/129340?ad_id=55555&fbclid=retained#room');assert.equal(all(tree).some(n=>n.props?.className==='wb-offer'),false,'No offer before its cue');assert.equal(all(tree).some(n=>n.type==='header'),false);
@@ -79,17 +80,19 @@ reply();await pending;tree=render();tree=render();assert.equal(input().props.val
 assert.equal(all(tree).some(n=>['Awaiting review','Only visible to you','Messages are reviewed before being shared.'].includes(n.props?.children)),false,'Saved viewer messages have no review labels');
 assert.ok(all(tree).filter(n=>n.type==='article').every(n=>n.props.className==='wb-message'),'All chat messages use the same bubble');
 all(tree).find(n=>n.props?.className==='wb-new-messages').props.onClick();assert.equal(scroll.scrollTop,1200,'New messages button scrolls only the chat container');
-// A timed offer remains available without closing chat while a draft is present.
-find(tree,'WebinarPlayer').props.onProgress(w.durationSeconds-1);tree=render();tree=render();assert.equal(all(tree).find(n=>n.props?.className==='wb-chat-heading').type,'div');assert.ok(all(tree).some(n=>n.props?.className==='wb-chat-log'),'Chat stays open when an offer appears');
-const panel=all(tree).find(n=>n.props?.id==='webinar-offer');assert.equal(panel.props.hidden,true);let focused=0,scrolled=0;panel.props.ref.current={focus:()=>focused++,scrollIntoView:()=>scrolled++};
-all(tree).find(n=>n.props?.['aria-controls']==='webinar-offer').props.onClick();tree=render();tree=render();assert.equal(all(tree).find(n=>n.props?.id==='webinar-offer').props.hidden,false);assert.equal(focused,1);assert.equal(scrolled,1);
-assert.ok(all(tree).some(n=>n.props?.id==='wb-question'),'Opening checkout keeps chat mounted');
-assert.equal(all(tree).find(n=>n.props?.id==='wb-chat-body').props.hidden,true,'Offer automatically minimizes chat');
-all(tree).find(n=>n.props?.['aria-label']==='Expand chat').props.onClick();tree=render();
-assert.equal(all(tree).find(n=>n.props?.id==='wb-chat-body').props.hidden,false,'Viewer can reopen chat');
-assert.equal(input().props.value,'What happens next?','Collapsing chat preserves the draft');
-// Minimize/reopen preserves both the draft and the same mounted checkout.
-all(tree).find(n=>n.props?.['aria-label']==='Minimize offer').props.onClick();tree=render();assert.equal(input().props.value,'What happens next?');
+// Offers open automatically, even with a draft. Chat waits until the countdown ends.
+find(tree,'WebinarPlayer').props.onProgress(w.durationSeconds-1);tree=render();tree=render();
+const chatSection=()=>all(tree).find(n=>n.props?.['aria-labelledby']==='wb-chat-title');
+assert.equal(all(tree).find(n=>n.props?.id==='webinar-offer').props.hidden,undefined,'Checkout is open at the cue');
+assert.equal(chatSection().props.hidden,true,'Chat is hidden during the offer');
+assert.equal(input().props.value,'What happens next?','Offer retains the chat draft');
+assert.equal(all(tree).some(n=>n.props?.['aria-label']==='Minimize offer'),false);
+assert.equal(all(tree).some(n=>n.props?.className==='wb-bottom'),false,'No extra Sign Up footer');
+const beforeLockedSend=requestLog.filter(r=>r.url.endsWith('/chat')).length;
+await all(tree).find(n=>n.props?.className==='wb-chat-input').props.onSubmit({preventDefault(){}});
+assert.equal(requestLog.filter(r=>r.url.endsWith('/chat')).length,beforeLockedSend,'Hidden chat cannot submit during countdown');
+find(tree,'WebinarPlayer').props.onProgress(w.durationSeconds);tree=render();
+assert.equal(chatSection().props.hidden,false,'Chat returns after countdown');
 input().props.onChange({target:{value:''}});tree=render();tree=render();
 // Failed sends retain the unsent message and do not overwrite a newer draft.
 chatGate=null;failChat=true;input().props.onChange({target:{value:'Can I continue later?'}});tree=render();await all(tree).find(n=>n.props?.className==='wb-chat-input').props.onSubmit({preventDefault(){}});tree=render();assert.equal(input().props.value,'Can I continue later?');assert.ok(all(tree).some(n=>n.props?.role==='alert'));failChat=false;
@@ -110,9 +113,15 @@ const previewRoom=await harness('components/webinar-room.tsx',{...roomDeps,post:
 const renderPreview=()=>previewRoom.render('WebinarRoom',{});
 renderPreview();await flush();let previewTree=renderPreview();previewTree=renderPreview();
 assert.deepEqual(timerInput.timers,[timerFixture],'Room passes saved timers into deadline synchronization');
-assert.ok(all(previewTree).some(n=>n.type==='WebinarTimers'&&n.props.placement==='offer'&&n.props.timers[0].id==='offer-timer'),'Offer countdown is rendered');
+assert.ok(find(previewTree,'WebinarCountdownBanner'),'A single top countdown banner is mounted');
 const previewLink=all(previewTree).find(n=>n.type==='a'&&n.props.href?.startsWith('/webinar/checkout/preview'));
 assert.ok(previewLink,'Owner can open the unpaid checkout preview at any time');
+assert.equal(all(previewTree).find(n=>n.props?.['aria-labelledby']==='wb-chat-title').props.hidden,true);
+const redirectsBeforePayment=redirects.length;
+find(previewTree,'WebinarCheckout').props.onPurchased('vip');previewTree=renderPreview();
+assert.equal(all(previewTree).find(n=>n.props?.['aria-labelledby']==='wb-chat-title').props.hidden,false,'Confirmed payment immediately restores chat');
+assert.equal(find(previewTree,'WebinarCountdownBanner').props.countdown,null,'Paid viewers stop hearing the countdown');
+assert.equal(redirects.length,redirectsBeforePayment,'Paying while watching leaves time to comment');
 const countBeforePreview=requestLog.length;
 find(previewTree,'WebinarPlayer').props.onEnded();
 assert.equal(redirects.at(-1),previewLink.props.href,'Preview completion opens the unpaid customer page');
@@ -202,5 +211,5 @@ for(const name of ['AbortError','NotSupportedError']){
  document.hidden=true;pendingSlow();assert.equal(all(p.render()).some(n=>n.props?.className==='wb-player-recovery'),false,'Hidden tabs cannot create a slow warning');document.hidden=false;
  p.media.pause();p.render();assert.equal(timeout,null,'Pausing clears the buffering timer');p.close();
 }
-console.log('PASS webinar flows: compact optional contact, remembered details, immediate chat echo, draft and scroll preservation, deferred timed offers, direct checkout focus, payment continuity, player recovery and empty draft guidance.');
+console.log('PASS webinar flows: compact optional contact, remembered details, immediate chat echo, draft and scroll preservation, automatic offers, countdown chat gating, payment continuity, player recovery and empty draft guidance.');
 console.log('PASS webinar audio: audible autoplay, one muted policy fallback, tap to listen, persistent mute, blocked playback recovery, stale rejection protection, and no retry on media errors.');
