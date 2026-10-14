@@ -210,3 +210,14 @@
 .wb-bottom-deadline strong{font-size:24px;font-variant-numeric:tabular-nums}
 @media(min-width:901px){.wb-room .wb-stage.wb-selling{grid-template-columns:minmax(0,1fr) minmax(360px,430px)}.wb-room .wb-selling .wb-watch{position:sticky;top:24px}.wb-room .wb-selling .wb-side{position:static}}
 @media(max-width:900px){.wb-preview-tools{padding:8px 12px;flex-wrap:wrap;gap:0 12px}.wb-bottom-summary .wb-timer>svg{display:none}.wb-bottom-summary .wb-timer{font-size:11px}.wb-bottom-summary .wb-timer>strong{font-size:22px}.wb-room .wb-bottom>.wb-primary{flex:0 1 50%;min-width:120px}.wb-room .wb-watch>.wb-offer-moment{margin:12px}.wb-room .wb-selling .wb-side{padding-top:12px}.wb-room .wb-offer>.wb-offer-image{max-height:100px}}
+
+/* The offer stays open while one countdown leads the page. */
+.wb-countdown-banner{position:sticky;top:0;z-index:40;min-height:64px;padding:10px 24px;display:flex;align-items:center;justify-content:center;gap:28px;background:#111;color:#fff;box-shadow:0 2px 12px #0001}
+.wb-countdown-banner>div{display:flex;align-items:center;gap:12px}
+.wb-countdown-banner strong{font-size:30px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-1px}
+.wb-countdown-banner span{font-size:14px}
+.wb-room .wb-chat[hidden]{display:none}
+.wb-room.wb-has-countdown .wb-watch{top:80px}
+.wb-room.wb-has-countdown .wb-offer{scroll-margin-top:88px}
+.wb-room .wb-paid .wb-chat{order:-1}
+@media(max-width:900px){.wb-countdown-banner{padding:8px 12px;gap:16px;justify-content:center}.wb-countdown-banner>div{gap:8px}.wb-countdown-banner span{font-size:12px}.wb-countdown-banner strong{font-size:27px}.wb-room.wb-has-countdown .wb-watch{top:64px}}
