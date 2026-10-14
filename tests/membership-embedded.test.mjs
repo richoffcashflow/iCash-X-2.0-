@@ -38,3 +38,10 @@ try{
  assert.ok(!JSON.stringify(calls.filter(c=>c.body||c.create||c.customer)).includes('32.7767'),'Location is not stored or sent to Stripe');
 }finally{if(originalVercel===undefined)delete process.env.VERCEL;else process.env.VERCEL=originalVercel;}
 console.log('PASS embedded checkout: matched keys, explicit consent, saved customer details, inline parameters, same-session retry, completed-payment guard, ownership, and refund gating. Fake Stripe only.');
+
+// Automatic preparation has no acceptance receipt and cannot create hosted checkout.
+prior=null;session=null;user=null;calls=[];
+const prepare={action:'prepare',version:policy.membershipTermsVersion,revision:1,totalCents:5000,embedded:true};
+r=await api.POST(req(prepare));assert.equal(r.status,200);assert.ok(r.body.clientSecret);assert.equal(calls.some(c=>c.acceptance),false);assert.equal(calls.find(c=>c.create).create.mode,'subscription');
+for(const change of [{embedded:false},{accepted:true},{totalCents:6000},{revision:2}]){calls=[];r=await api.POST(req({...prepare,...change}));assert.ok(r.status>=400);assert.equal(calls.some(c=>c.create||c.acceptance),false);}
+console.log('PASS automatic preparation: embedded only, price validated, no purchase acceptance recorded.');
