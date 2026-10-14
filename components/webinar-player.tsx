@@ -3,7 +3,7 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {Play,VolumeX} from 'lucide-react';
 import {savePosition,seekToPosition} from '@/lib/webinar-playback';
 
-type Props={sessionId:string;videoUrl:string;posterUrl:string;title:string;progress:number;preview:boolean;onProgress:(seconds:number)=>void;onStarted:()=>void;onCheckpoint:()=>void;onPlayingChange:(playing:boolean)=>void;onEnded:()=>void};
+type Props={sessionId:string;videoUrl:string;posterUrl:string;title:string;progress:number;preview:boolean;onPreviewSeek:(seconds:number)=>void;onProgress:(seconds:number)=>void;onStarted:()=>void;onCheckpoint:()=>void;onPlayingChange:(playing:boolean)=>void;onEnded:()=>void};
 export function WebinarPlayer(props:Props){
  const video=useRef<HTMLVideoElement>(null),position=useRef(props.progress),loaded=useRef(false),lastLocalSave=useRef(-1),resumeOnVisible=useRef(false),alive=useRef(true),playAttempt=useRef(0),mutedByViewer=useRef(false);
  const callbacks=useRef(props);callbacks.current=props;
@@ -50,6 +50,10 @@ export function WebinarPlayer(props:Props){
   const bucket=Math.floor(v.currentTime/5);
   if(!props.preview&&lastLocalSave.current!==bucket){lastLocalSave.current=bucket;savePosition(props.sessionId,v.currentTime);}
  }
+ function previewSeek(){
+  const v=video.current;if(!props.preview||!v||!loaded.current||!Number.isFinite(v.currentTime))return;
+  position.current=v.currentTime;setSlow(false);callbacks.current.onPreviewSeek(Math.floor(v.currentTime));
+ }
  function metadata(){
   const v=video.current;if(!v||loaded.current)return;
   if(!seekToPosition(v,position.current)){setError('Your video is ready to reconnect.');return;}
@@ -58,17 +62,17 @@ export function WebinarPlayer(props:Props){
  }
  if(props.preview&&!props.videoUrl)return <div className="wb-player"><div className="wb-stream-status"><span>Owner preview</span></div><div className="wb-video-placeholder" role="status"><Play size={32} aria-hidden="true"/><strong>Your video goes here</strong><p>Upload your recording in the studio to preview playback.</p></div></div>;
  return <div className="wb-player">
-  <video ref={video} src={props.videoUrl||undefined} poster={props.posterUrl||undefined} playsInline muted={muted} preload="auto" aria-label={props.title}
+  <video ref={video} src={props.videoUrl||undefined} poster={props.posterUrl||undefined} playsInline controls={props.preview} muted={muted} preload="auto" aria-label={props.title}
    onLoadedMetadata={metadata} onCanPlay={()=>{metadata();setBuffering(false);setSlow(false);}}
    onPlay={()=>{playback(true);callbacks.current.onStarted();}}
    onPlaying={()=>{playback(true);setError('');setBuffering(false);setSlow(false);}}
    onPause={()=>{playback(false);setBuffering(false);setSlow(false);checkpoint();}}
-   onTimeUpdate={tick} onVolumeChange={()=>setMuted(video.current?.muted??true)}
+   onTimeUpdate={tick} onSeeking={previewSeek} onSeeked={tick} onVolumeChange={()=>setMuted(video.current?.muted??true)}
    onWaiting={()=>{if(!video.current?.paused)setBuffering(true);}} onStalled={()=>{const v=video.current;if(v&&!v.paused&&v.readyState<3)setBuffering(true);}}
    onError={()=>{++playAttempt.current;playback(false);setBuffering(false);setError('Your video connection was interrupted.');checkpoint();}}
    onEnded={()=>{++playAttempt.current;setBuffering(false);setSlow(false);tick();playback(false);callbacks.current.onEnded();}}/>
   <div className="wb-stream-status"><span className="wb-live"><span className="wb-live-dot" aria-hidden="true"/>LIVE</span>{props.preview&&<span>Owner preview</span>}</div>
-  {(!playing||muted)&&!error&&!slow&&<button type="button" className="wb-unmute" onClick={playing?listen:play}><VolumeX aria-hidden="true"/><strong>{playing?'Tap to listen':position.current>0?'Continue watching':'Tap to play'}</strong></button>}
+  {!props.preview&&(!playing||muted)&&!error&&!slow&&<button type="button" className="wb-unmute" onClick={playing?listen:play}><VolumeX aria-hidden="true"/><strong>{playing?'Tap to listen':position.current>0?'Continue watching':'Tap to play'}</strong></button>}
   {(error||slow)&&<div className="wb-player-recovery" role="status"><p>{offline?'You’re offline. Reconnect to continue.':error||'Video paused. Tap to resume.'}</p><button type="button" onClick={reload}>Resume video</button><a href="/support">Get help</a></div>}
  </div>;
 }

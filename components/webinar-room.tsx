@@ -95,6 +95,12 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  function tick(n:number){if(!session)return;position.current=n;setTime(n);
   if(Date.now()-lastSync.current>15000){lastSync.current=Date.now();track('progress');}
  }
+ function previewSeek(n:number){
+  if(!session?.preview)return;
+  endedRef.current=false;setEnded(false);setEndCountdown(null);
+  shownOffers.current.clear();setSelectedOfferId('');setFunding(false);
+  followChat.current=true;setUnread(false);tick(n);
+ }
  // A timed pitch waits while a viewer is typing or saving. The offer button is
  // still available at its configured cue, and clicking it opens checkout now.
  useEffect(()=>{
@@ -150,7 +156,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
   {!session?<main className="wb-empty"><span className="wb-eyebrow">{webinarSite.hostName} · {webinarSite.brandName}</span><h1>{unavailable?'Your next session is coming.':previewLocked?'Open the webinar.':error?'Let’s get you connected.':'Opening your session…'}</h1><p>{unavailable||error||'Finding your place and preparing the video.'}</p>{previewLocked?<div className="ws-row-actions">{previewPublicPath&&<a className="wb-primary" href={previewPublicPath}>Watch webinar</a>}<a className="ws-secondary" href={`/dashboard-unlock?next=${encodeURIComponent(typeof location!=='undefined'?location.pathname+location.search:'/webinar-studio')}`}>Owner sign in</a></div>:error&&<button className="wb-primary" onClick={()=>void load()}>Try again</button>}{unavailable&&<a className="wb-primary" href="/">Open iCash X</a>}</main>:<main className={`wb-stage ${funding&&currentOffer?'wb-selling':''}`}>
    <section className="wb-watch">
     <h1 className="wb-sr">{w!.title}</h1>
-    <WebinarPlayer key={session.sessionId} sessionId={session.sessionId} videoUrl={w!.videoUrl} posterUrl={w!.posterUrl} title={w!.title} progress={session.progress} preview={session.preview} onProgress={tick} onPlayingChange={setPlaying} onCheckpoint={()=>track(completionPending.current?'completed':'progress',true)} onStarted={()=>{if(!startSeen.current){startSeen.current=true;track('started');}}} onEnded={finishWebinar}/>
+    <WebinarPlayer key={session.sessionId} sessionId={session.sessionId} videoUrl={w!.videoUrl} posterUrl={w!.posterUrl} title={w!.title} progress={session.progress} preview={session.preview} onPreviewSeek={previewSeek} onProgress={tick} onPlayingChange={setPlaying} onCheckpoint={()=>track(completionPending.current?'completed':'progress',true)} onStarted={()=>{if(!startSeen.current){startSeen.current=true;track('started');}}} onEnded={finishWebinar}/>
     {!saved&&<span className="wb-sr" role="status">Your progress will sync when the connection returns.</span>}
     {endCountdown!==null&&<div className="wb-prompt"><strong>Opening your next step in {endCountdown} seconds</strong><button className="wb-text" onClick={()=>setEndCountdown(null)}>Stay here</button></div>}
    </section>
