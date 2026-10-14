@@ -8,6 +8,7 @@ import {overviewLeadStatus,overviewMoney,overviewTime,validOwnerOverview,type Ow
 import styles from './overview.module.css';
 import {ClosingOperationsView} from './closing-operations';
 import {reliabilityIssueLabels} from '@/lib/reliability';
+import {ExperienceHealth} from './experience-health';
 
 export function OwnerOverviewView(){
  const [filters,setFilters]=useState<OverviewFilters>({days:30,includeOwner:false,query:'',page:1});
@@ -62,6 +63,7 @@ export function OwnerOverviewView(){
     </>:<span>Monitoring could not be loaded. Refresh to try again.</span>}
    </section>}
    {report&&<div className={styles.notice} role="status">{report.costHealth?<><strong>Platform cost reconciliation</strong><span>{report.costHealth.pendingCount} operations awaiting final costs · {report.costHealth.agedCount} older than 24 hours · {report.costHealth.unreconciledObservations} provider observations awaiting reconciliation.</span>{report.costHealth.oldestAt&&<span>Oldest pending: {overviewTime(report.costHealth.oldestAt)}</span>}</>:<span>Cost reconciliation status is unavailable. Pending costs are not confirmed profit.</span>}</div>}
+   {report&&<ExperienceHealth/>}
    <div className={styles.toolbar}>
     <div className={styles.periods} role="group" aria-label="Reporting period">{([1,7,30] as const).map(period=><button key={period} aria-pressed={days===period} onClick={()=>update({days:period})}>{period===1?'Today':`${period} days`}</button>)}</div>
     <label className={styles.checkbox}><input type="checkbox" checked={includeOwner} onChange={e=>update({includeOwner:e.target.checked})}/>Include my account in usage</label>

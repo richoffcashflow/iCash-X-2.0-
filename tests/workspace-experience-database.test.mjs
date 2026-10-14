@@ -1,0 +1,80 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {PGlite} from '@electric-sql/pglite';
+import {workspaceExperienceSummarySchema} from '../lib/workspace-experience.ts';
+import {reliabilityAlertStatusSchema} from '../lib/reliability-alerts.ts';
+const pg=await PGlite.create(),owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7';
+const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+const one=async(sql,args=[])=>Object.values((await pg.query(sql,args)).rows[0])[0];
+const report=(count=0)=>({status:count?'degraded':'ok',fresh:true,components:{worker:{status:'ok'},maintenance:{status:'ok'}},snapshot:{issueCount:count}});
+try{
+ await pg.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema icash_reliability_private;grant usage on schema icash_reliability_private to service_role;
+ create table public.icash_accounts(id uuid primary key,owner_user_id uuid);grant select on public.icash_accounts to service_role;
+ create table public.fixture_monitor(report jsonb);grant select on public.fixture_monitor to service_role;
+ create function public.icash_reliability_status() returns jsonb language sql as $$select report from public.fixture_monitor limit 1$$;`);
+ await pg.query('insert into public.icash_accounts values($1,$2),($3,$4)',[id(1),id(2),id(3),id(4)]);
+ await pg.query('insert into public.fixture_monitor values($1)',[report(2)]);
+ const config=readFileSync(new URL('../config/workspace-experience-and-incidents.sql',import.meta.url),'utf8');
+ assert.equal(config,readFileSync(new URL('../supabase/migrations/20261014234103_workspace_experience_and_incidents.sql',import.meta.url),'utf8'));
+ await pg.exec(config);
+ const record=(event='panel_error',stage='closing',account=id(1),user=id(2))=>one('select public.icash_record_workspace_experience($1,$2,$3,$4)',[account,user,event,stage]);
+ await pg.exec('set role service_role');
+ assert.equal(await record(),true);assert.equal(await record(),false,'Repeated report is deduplicated across callers');
+ await assert.rejects(record('panel_error','closing',id(1),id(4)),/Account required/);
+ await assert.rejects(record('secret message','closing'),/Invalid diagnostic/);
+ await assert.rejects(record('panel_error','https://private.example'),/Invalid diagnostic/);
+ assert.equal(await record('panel_retry'),true);assert.equal(await record('panel_open'),true);
+ await assert.rejects(one('select public.icash_workspace_experience_summary($1)',[id(2)]),/Owner required/);
+ const experience=workspaceExperienceSummarySchema.parse(await one('select public.icash_workspace_experience_summary($1)',[owner]));
+ assert.equal(experience.counts.length,3);assert.equal(experience.counts[0].accounts,1);assert(!JSON.stringify(experience).includes(id(1)));
+ for(const event of ['panel_error','panel_retry','panel_open','action_complete'])for(const stage of ['workspace','property','buyers','buyer_details','documents','closing','messages','account'])await record(event,stage);
+ assert.equal(await one('select sum(observations) from icash_reliability_private.workspace_experience'),20,'20 accepted observations per account/minute maximum');
+ await pg.exec('reset role');
+ await pg.exec("update icash_reliability_private.experience_admission set window_started=now()-interval '2 minutes';update icash_reliability_private.workspace_experience set last_observed_at=now()-interval '2 minutes'");
+ assert.equal(await record(),true,'Safe reads can resume after the window');
+ await pg.exec('set role service_role');
+ const refresh=config=>one('select public.icash_refresh_reliability_incident($1)',[config]);
+ const status=async()=>reliabilityAlertStatusSchema.parse(await one('select public.icash_reliability_alert_status($1)',[owner]));
+ const claim=()=>one('select public.icash_claim_reliability_notification()');
+ const finish=(claim,provider=id(10))=>one('select public.icash_finish_reliability_notification($1,$2)',[claim.id,provider]);
+ assert.equal((await status()).configuration,'disabled');
+ await refresh('ready');const first=(await status()).active;assert.equal(first.issueCount,2);
+ await pg.exec('reset role');await pg.query('update public.fixture_monitor set report=$1',[report(5)]);await pg.exec('set role service_role');
+ await refresh('ready');assert.equal((await status()).active.id,first.id);assert.equal((await status()).active.issueCount,5,'Second degraded refresh updates the incident without duplicate alerts');
+ const detected=await claim();assert.equal(detected.event,'detected');assert.equal(detected.issueCount,5);assert.equal(await claim(),null);
+ await finish(detected);await finish(detected);await assert.rejects(finish(detected,id(11)),/Receipt needs review/);
+ await pg.exec('reset role');await pg.query('update public.fixture_monitor set report=$1',[{}]);await pg.exec('set role service_role');
+ await assert.rejects(refresh('ready'),/Monitor unavailable/);assert.equal((await status()).active.id,first.id,'Missing monitor data cannot mark an incident recovered');
+ for(const partial of [{...report(),fresh:false},{...report(),components:{}},{...report(),snapshot:null},{...report(),snapshot:{issueCount:-1}},{...report(),snapshot:{issueCount:1}}]){
+  await pg.exec('reset role');await pg.query('update public.fixture_monitor set report=$1',[partial]);await pg.exec('set role service_role');
+  await assert.rejects(refresh('ready'),/Monitor unavailable/);assert.equal((await status()).active.id,first.id,'Partial healthy assertions cannot clear incidents');
+ }
+ const workerFailure=report(5);workerFailure.components.worker.status='unavailable';
+ await pg.exec('reset role');await pg.query('update public.fixture_monitor set report=$1',[workerFailure]);await pg.exec('set role service_role');
+ await refresh('ready');const escalation=await claim();assert.equal(escalation.event,'detected');assert.equal(escalation.incidentId,first.id);assert(escalation.reasons.includes('worker'));await finish(escalation,id(14));
+ await refresh('ready');assert.equal(await claim(),null,'Same ongoing failure does not spam the owner');
+ await pg.exec('reset role');await pg.query('update public.fixture_monitor set report=$1',[report()]);await pg.exec('set role service_role');
+ await refresh('ready');assert.equal((await status()).active,null);
+ const recovered=await claim();assert.equal(recovered.event,'recovered');await finish(recovered,id(12));
+ await refresh('ready');assert.equal(await claim(),null);assert.equal((await status()).notifications.accepted,3);
+ await pg.exec('reset role');await pg.query('update public.fixture_monitor set report=$1',[report(1)]);await pg.exec('set role service_role');
+ await refresh('disabled');assert.equal(await claim(),null);assert.equal((await status()).configuration,'disabled');
+ await refresh('recipient_unverified');assert.equal(await claim(),null);
+ await pg.exec('reset role');await pg.query('update public.fixture_monitor set report=$1',[report()]);await pg.exec('set role service_role');
+ await refresh('ready');assert.equal(await claim(),null,'An incident never notified does not produce a confusing recovery email');
+ await pg.exec('reset role');await pg.query('update public.fixture_monitor set report=$1',[report(2)]);await pg.exec('set role service_role');
+ await refresh('ready');const uncertain=await claim();await finish(uncertain,null);assert.equal(await claim(),null,'Ambiguous sends are never automatically replayed');assert.equal((await status()).notifications.needsReview,1);
+ // A known provider receipt may be reconciled after a lost database response.
+ await finish(uncertain,id(13));assert.equal((await status()).notifications.needsReview,0);
+ await pg.exec('reset role');
+ await pg.exec("update icash_reliability_private.workspace_experience set observed_day=current_date-35;update icash_reliability_private.experience_admission set updated_at=now()-interval '35 days'");
+ await refresh('ready');assert.equal(await one('select count(*) from icash_reliability_private.workspace_experience'),0);assert.equal(await one('select count(*) from icash_reliability_private.experience_admission'),0);
+ for(const role of ['anon','authenticated']){
+  await pg.exec(`set role ${role}`);
+  await assert.rejects(record(),/permission denied/);await assert.rejects(status(),/permission denied/);await assert.rejects(claim(),/permission denied/);
+  await assert.rejects(pg.query('select * from icash_reliability_private.workspace_experience'),/permission denied/);
+  await pg.exec('reset role');
+ }
+ for(const name of ['icash_record_workspace_experience','icash_workspace_experience_summary','icash_refresh_reliability_incident','icash_claim_reliability_notification','icash_finish_reliability_notification','icash_reliability_alert_status'])assert.equal(await one('select prosecdef from pg_proc where proname=$1',[name]),false);
+ console.log('PASS private diagnostic ownership, enum validation, dedup/rate limit/retention; durable detected/recovered incidents, safe receipt replay, disabled configuration and role isolation.');
+}finally{await pg.close();}

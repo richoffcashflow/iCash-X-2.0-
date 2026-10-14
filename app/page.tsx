@@ -179,6 +179,7 @@ export default function Home(){
     {!guest&&settingsOpen&&<FundingDialog title="Account details" onClose={()=>{setSettingsOpen(false);setReviewVip(false);}}><div className="simple-account-settings" aria-label="Workspace settings"><section id="account-details"><CustomerIdentity identity={account.identity??null} contact={{email:account.email??'',phone:account.phone??'',pendingEmail:account.pendingEmail}} onSaved={()=>void refreshAccount()}/></section><details id="membership-settings" className="workspace-membership-details"><summary>Subscription & billing</summary><MembershipSettings onChanged={membershipChanged}/></details></div></FundingDialog>}
     {!guest&&preferencesOpen&&<FundingDialog title="Email & text updates" onClose={()=>setPreferencesOpen(false)}><BotUpdatePreferences phone={account.phone}/></FundingDialog>}
     {!guest&&<OutreachCampaignAcknowledgment statusOnly onStatus={setCampaign}/>}
+    {!guest&&featureVip&&<PlatformBuyerNetwork key={`${account.email}:${displayVip}`}/>}
     <section className="operation-panel" aria-label="Your AI real estate bot">
      {guest?<div className="workspace-first-visit"><h2>Your properties</h2><p>Join for $50/month, then add money to start your bot.</p></div>:<>
      {needsIdentity&&<section className="identity-onboarding"><CustomerIdentity identity={null} onboarding onSaved={()=>void refreshAccount()}/></section>}
@@ -194,7 +195,6 @@ export default function Home(){
      </CreditActionGate>
      </>}
     </section>
-    {!guest&&featureVip&&<PlatformBuyerNetwork key={`${account.email}:${displayVip}`}/>}
     {!guest&&featureVip&&<CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}><WorkspaceAssistant key={account.email} openRequest={assistantOpenRequest} request={assistantRequest} stale={accountError} onAction={assistantAction} onVipRequired={()=>{setReviewVip(true);void refreshAccount();}}/></CreditActionGate>}
     </>}
    </>}

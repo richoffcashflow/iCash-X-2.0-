@@ -45,7 +45,7 @@ tree=budget(null,1,'Could not refresh activity.');assert.doesNotMatch(text(tree)
 tree=page({...account,balanceCents:0,smsWorkReady:true},{...campaign,released:true});assert.equal(all(tree).find(n=>n.type===component('BotRunBar')).props.running,false,'zero-balance budget entry stays visible without implying the bot is running');
 const source=readFileSync(new URL('../components/live-workspace.tsx',import.meta.url),'utf8');
 assert(source.indexOf('<PropertyNextStep property={p}')>source.indexOf('<div className="property-details"'),'detailed next steps moved inside property disclosure');
-assert(source.indexOf('className="property-control"')>source.indexOf('<div className="property-details"'),'property controls remain inside opened details');
+assert(source.includes('<WorkspacePanel title="Property details" label="Property details"'),'property controls are reached in a deliberate panel');
 assert.match(propertyBotStatus({manual:true,paused:false,available:true,stale:false,attention:false,practice:false}).detail,/automatic work is paused for this property/);assert(source.includes('Owner & contact'));
 console.log('PASS simplified workspace: visible credit action, open spending, account recovery, stale status, saved properties and post-payment naming');
 

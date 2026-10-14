@@ -51,16 +51,13 @@ let rendered=text(mod.exports.PropertyAnalysisSummary({result:{...result,calcula
 assert.match(rendered,/Maximum cash offer.*\$90,000/);
 assert.match(rendered,/Estimated repairs.*\$40,000/);
 assert.match(rendered,/Value after repairs.*\$200,000/);
-assert.match(rendered,/estimate of the purchase limit/);
-assert.match(rendered,/estimates are not an inspection/);
-assert.match(rendered,/has not been verified/);
-assert.doesNotMatch(rendered,/DealMachine/i);assert.match(rendered,/Oct 1, 2026/);
-assert.match(rendered,/No verified nearby sales are saved/);
+assert.match(rendered,/Estimates only/);
+assert.doesNotMatch(rendered,/About these estimates|Nearby home sales|No verified nearby sales|DealMachine/i);
 rendered=text(mod.exports.PropertyAnalysisSummary({result:null}));
 assert.doesNotMatch(rendered,/\$0/,'missing estimates are never fabricated zeroes');
 assert.match(rendered,/Not available/);
 assert.doesNotMatch(source,/\bfetch\s*\(/,'presentation must never initiate a paid lookup');
-console.log('Property analysis summary: saved cash ceiling, repairs, ARV provenance, invalid/missing values and honest unavailable comps passed.');
+console.log('Property analysis summary: saved cash ceiling, repairs, ARV, invalid/missing values and concise estimate labels passed.');
 
 assert.equal(analysis.propertyAnalysisView({property:{repairs:{rangeCents:{low:100,high:900}}}}).repairs.baselineCents,null,'a range never supplies a missing scalar');
 assert.equal(analysis.propertyAnalysisView({property:{repairs:{baselineCents:0}}}).repairs.baselineCents,0);
@@ -78,7 +75,7 @@ for(const calculationVersion of [undefined,null,'legacy_range_v0','provider_repa
  assert.equal(analysis.propertyAnalysisView(saved).offerNeedsUpdate,true,'presentation keeps the calculation-version guard');
 }
 assert.equal(JSON.stringify(result),original,'display must not overwrite saved research');
-assert.match(text(mod.exports.PropertyAnalysisSummary({result})),/earlier saved offer estimate.*No new offer has been calculated or approved/);
+assert.match(text(mod.exports.PropertyAnalysisSummary({result})),/Maximum cash offer · Needs update.*Unapproved/);
 assert.equal(analysis.propertyAnalysisView({...result,calculationVersion:'net_after_repairs_70_v2'}).offerNeedsUpdate,false);
 const current=text(offerMetric({...result,calculationVersion:'net_after_repairs_70_v2'}));
 assert.match(current,/Maximum cash offer.*\$90,000/);assert.doesNotMatch(current,/Needs update/,'current-version presentation stays distinct without claiming fresh research');

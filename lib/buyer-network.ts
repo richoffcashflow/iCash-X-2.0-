@@ -13,7 +13,7 @@ export const networkProfileSchema=z.object({
 }).strict();
 export type NetworkProfile={name:string;email:string;zips:string[];propertyTypes:('house'|'land')[];maxPriceCents:number;maxRepairsCents:number;dailyEmails:number;paused:boolean;expiresAt:string};
 export type NetworkMatch={id:string;state:'matched'|'interested'|'replied';address:string;askingPriceCents:number;url:string;createdAt:string};
-export type NetworkWorkspace={vip:boolean;enrolledBuyers:number;settings:{enabled:boolean;mailingAddress:string}|null;matches:number;emailed:number;interested:number;responses:number;buyers:{id:string;dealId:string;name:string;email:string;address:string;respondedAt:string;state:'interested'|'replied';reply:string|null}[]};
+export type NetworkWorkspace={vip:boolean;hasActiveDeal?:boolean;enrolledBuyers:number;settings:{enabled:boolean;mailingAddress:string}|null;matches:number;emailed:number;interested:number;responses:number;buyers:{id:string;dealId:string;name:string;email:string;address:string;respondedAt:string;state:'interested'|'replied';reply:string|null}[]};
 export function networkError(error:unknown){
  if(error instanceof z.ZodError||error instanceof SyntaxError)return {status:400,error:'Check the ZIP codes, budget and required fields.'};
  if(error instanceof Error&&error.message==='SIGN_IN_REQUIRED')return {status:401,error:'Verify your email to continue.'};

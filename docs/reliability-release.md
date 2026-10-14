@@ -22,7 +22,11 @@ Worker health also detects an event loop that stopped completing iterations for 
 
 `pnpm run test:browser` exercises the built owner's dashboard in desktop Chromium and mobile WebKit using intercepted fixture API responses. It covers incident visibility, refresh failure/recovery and loss of authorization; it does not prove live provider delivery. It starts its local server without production credentials and blocks nonlocal browser requests.
 
-The GitHub workflow runs these checks on pull requests and main. Vercel's existing build command still blocks a release on the focused regression suite. GitHub workflow checks are not branch protection or automatic canary promotion; these require platform configuration. Railway builds its existing worker Dockerfile from main. Before merging, run the tests, check the exact head, apply the additive database migration, then verify both deployed commit and worker heartbeat.
+The GitHub workflow runs these checks, an isolated bounded-concurrency regression, and desktop Chromium/mobile WebKit scenarios on pull requests and main. Production releases additionally wait for the exact main commit's successful `Reliability checks` workflow: Vercel runs the gate before building and Railway runs it before starting the new worker. Missing, failed, cancelled, or timed-out checks block the release. See `production-release-gate.md` for configuration and failure handling. This is deployment enforcement; repository branch protection is not configured by this release.
+
+The bounded concurrency test verifies duplicate dispatch/receipt/settlement handling across two synthetic accounts and coalescing of health probes. PGlite uses one database connection, and providers are stubs. Its timings do not establish production capacity. See `bounded-concurrency-smoke.md` for the tested bounds.
+
+Apply the additive workspace-experience/incident migration before releasing the application. Private, bounded interface counters record only event/stage enums bound to the authenticated account. The owner overview displays these signals separately from deal completion or churn. A production-only incident dispatcher uses the verified owner's email and a verified sender, persists deduplicated detection/recovery notifications, and leaves uncertain provider outcomes for review. Provider acceptance is not delivery. A separate scheduled GitHub health probe detects outages even if application maintenance stops; notification delivery follows the repository's existing Actions notification settings.
 
 ## Operational response
 

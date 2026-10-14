@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import {checkProductionHealth, healthyProductionResponse, PRODUCTION_HEALTH_URL} from '../scripts/check-production-health.mjs';
+const now = Date.parse('2026-10-14T23:00:00Z');
+const health = {status: 'ok', checkedAt: new Date(now).toISOString(), checks: {database: 'ok', authentication: 'ok', workflows: 'ok'}};
+assert.equal(healthyProductionResponse(200, health, now), true);
+for (const value of [null, {}, {...health, status: 'degraded'}, {...health, checkedAt: 'invalid'}, {...health, checkedAt: new Date(now - 60_001).toISOString()}, {...health, checkedAt: new Date(now + 30_001).toISOString()}, {...health, checks: {database: 'ok', authentication: 'ok'}}, ...['database', 'authentication', 'workflows'].map(key => ({...health, checks: {...health.checks, [key]: 'degraded'}}))]) assert.equal(healthyProductionResponse(200, value, now), false);
+assert.equal(healthyProductionResponse(503, health, now), false);
+let calls = 0;
+const sleeps = [];
+const options = {now: () => now, log: () => {}, sleep: async ms => {sleeps.push(ms);}, fetchImpl: async (url, request) => {
+  assert.equal(url, PRODUCTION_HEALTH_URL);
+  assert.equal(request.method, 'GET');
+  assert.equal(request.redirect, 'error');
+  assert.equal(request.headers.Authorization, undefined);
+  assert.ok(request.signal instanceof AbortSignal);
+  calls++;
+  if (calls === 1) throw new Error('network');
+  return {status: 200, json: async () => health};
+}};
+await checkProductionHealth(options);
+assert.equal(calls, 2);
+assert.deepEqual(sleeps, [10_000]);
+calls = 0;
+sleeps.length = 0;
+await assert.rejects(checkProductionHealth({...options, fetchImpl: async () => {calls++; return {status: 503, json: async () => ({status: 'degraded'})};}}), /three bounded/);
+assert.equal(calls, 3);
+assert.deepEqual(sleeps, [10_000, 10_000]);
+console.log('production-health: schema, stale/degraded responses, fixed read-only target and bounded retries passed');

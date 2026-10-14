@@ -1,0 +1,126 @@
+/* Keep the workspace's existing cards; reveal forms only when requested. */
+.personalized-workspace .agreement-status{display:flex;align-items:flex-start;gap:12px;border:1px solid #e7e7e7;border-radius:12px;padding:16px;margin:0 0 18px;background:#fafafa;text-align:left}
+.personalized-workspace .agreement-status>svg{flex:none;margin-top:2px;color:#555}
+.personalized-workspace .agreement-status strong{font-size:14px;line-height:1.4}
+.personalized-workspace .agreement-status p{font-size:12px;line-height:1.6;color:#666;margin:5px 0 0;text-align:left}
+.personalized-workspace .agreement-status button{margin-top:12px}
+.personalized-workspace .property-resources{margin:16px 0}
+.personalized-workspace .buyer-workspace{margin:20px 0 8px;text-align:left;min-width:0}
+.personalized-workspace .buyer-workspace>h3{font-size:17px;letter-spacing:-.3px;margin:0 0 14px;text-align:left}
+.personalized-workspace .buyer-overview{border:1px solid #e3e3e3;border-radius:12px;padding:18px;background:white}
+.personalized-workspace .buyer-overview-heading{display:flex;align-items:flex-start;gap:12px}
+.personalized-workspace .buyer-overview-icon{display:grid;place-items:center;background:#f5f5f5;border-radius:10px;width:38px;height:38px;flex:none}
+.personalized-workspace .buyer-overview h4{font-size:15px;margin:0 0 5px;line-height:1.4;text-align:left}
+.personalized-workspace .buyer-overview p{font-size:12px;color:#666;line-height:1.6;text-align:left;margin:0}
+.personalized-workspace .buyer-price-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:16px 0;margin-top:14px;border-top:1px solid #eee}
+.personalized-workspace .buyer-price-row small{display:block;font-size:11px;color:#666}
+.personalized-workspace .buyer-price-row strong{display:block;font-size:24px;letter-spacing:-.6px;line-height:1.5}
+.personalized-workspace .buyer-price-row :is(a,button){display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#333;min-height:44px;text-underline-offset:4px}
+.personalized-workspace .buyer-activity-totals{font-size:11px!important;padding-bottom:12px}
+.personalized-workspace .buyer-activity-totals span{padding:0 5px}
+.personalized-workspace .buyer-response-list{display:grid;gap:0}
+.personalized-workspace .buyer-person{display:flex;align-items:flex-start;gap:12px;padding:15px 0;border-top:1px solid #eee;min-width:0}
+.personalized-workspace .buyer-person>div{min-width:0;flex:1;overflow-wrap:anywhere}
+.personalized-workspace .buyer-avatar{display:grid;place-items:center;flex:none;width:34px;height:34px;background:#f4f4f4;border-radius:50%;font-size:12px;font-weight:700;color:#555}
+.personalized-workspace .buyer-person strong{font-size:13px;display:block;line-height:1.5}
+.personalized-workspace .buyer-person small{font-size:10px;color:#777;display:block;line-height:1.6;margin:3px 0}
+.personalized-workspace .buyer-person p{margin-top:7px;color:#444;white-space:pre-wrap;overflow-wrap:anywhere}
+.personalized-workspace :is(.buyer-matches,.closing-details,.agreement-management,.property-extra-details){border:0;border-top:1px solid #e7e7e7;background:transparent;border-radius:0;margin:12px 0 0;padding:0;text-align:left}
+.personalized-workspace :is(.buyer-matches,.closing-details,.agreement-management,.property-extra-details)>summary{cursor:pointer;font-size:13px;font-weight:600;min-height:48px;align-content:center;padding:12px 0;color:#444}
+.personalized-workspace .agreement-editor{margin-top:12px}
+.personalized-workspace .property-extra-details{margin-top:18px}
+.personalized-workspace .agreement-management .contract-review-guide h3{font-size:18px}
+.personalized-workspace .property-quick-actions button{min-height:44px}
+.personalized-workspace :is(.buyer-overview,.agreement-status,.workspace-preview-controls) :is(a,button,summary):focus-visible{outline:2px solid #444;outline-offset:3px}
+.workspace-preview-banner{border:1px solid #ddd;background:#fafafa;border-radius:12px;padding:20px;margin-bottom:20px}
+.workspace-preview-banner h1{font-size:22px;text-align:left;margin:5px 0 8px;letter-spacing:-.5px}
+.workspace-preview-banner p{font-size:12px!important;text-align:left!important;line-height:1.6;color:#666;margin:0}
+.workspace-preview-label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#666}
+.workspace-preview-controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.workspace-preview-controls button{border:1px solid #ddd;border-radius:8px;padding:10px 12px;min-height:44px;background:white;color:#555;font:inherit;font-size:12px;cursor:pointer}
+.workspace-preview-controls button[aria-pressed=true]{background:#181818;border-color:#181818;color:white}
+.workspace-preview .console-main{width:calc(100% - 48px);margin-inline:auto}
+.workspace-preview .preview-brand{font-size:20px;font-weight:900;letter-spacing:-1px}
+.workspace-preview .preview-dialog-body{padding:20px;font-size:13px;line-height:1.6}
+.workspace-preview .preview-dialog-body :is(h4,p){text-align:left}
+.workspace-preview .preview-dialog-body h4{font-size:18px;margin:0 0 12px}
+.personalized-workspace .property-milestones li{white-space:nowrap;min-width:0}
+@media(max-width:560px){.personalized-workspace .property-milestones{gap:5px}.personalized-workspace .property-milestones li{font-size:10px;padding:9px 2px}}
+@media(max-width:560px){.personalized-workspace .buyer-overview{padding:14px}.personalized-workspace .buyer-overview-heading{gap:10px}.workspace-preview .console-main{width:calc(100% - 24px)}.workspace-preview-banner{padding:16px}.workspace-preview-controls{gap:6px}.workspace-preview-controls button{flex:1 1 44%;padding:9px 8px;font-size:11px}.personalized-workspace .agreement-status{padding:14px}.personalized-workspace .buyer-price-row{gap:4px}}
+
+/* The property itself is the workspace. Only the current task and buyers stay on it. */
+.personalized-workspace .workspace-panel{display:contents}
+.personalized-workspace .property-focus{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px;padding:20px 0;border:0;border-radius:0;overflow:visible;text-align:left}
+.personalized-workspace .property-focus>div:first-child{flex:1 1 260px;min-width:0;overflow-wrap:anywhere}
+.personalized-workspace .property-focus h3{font-size:17px;line-height:1.4;margin:0 0 6px;text-align:left;letter-spacing:-.3px}
+.personalized-workspace .property-focus p{font-size:13px;line-height:1.65;color:#666;margin:0;text-align:left}
+.personalized-workspace .property-focus-action{flex:0 1 auto;max-width:100%;min-width:0}
+.personalized-workspace .property-focus-action button{min-height:44px}
+.icash-brand-workspace.icash-brand-workspace .property-focus-action .demo-button{min-width:0;min-height:44px;padding:12px 16px;border:1px solid #171717;border-radius:10px;background:#171717;color:#fff;font-size:14px;font-weight:600;line-height:1.4;white-space:normal}
+.icash-brand-workspace.icash-brand-workspace .property-focus-action .demo-button:hover{background:#333;border-color:#333}
+.personalized-workspace .property-resources{margin:0}
+.personalized-workspace .buyer-workspace{margin:16px 0 0}
+.personalized-workspace .buyer-overview{border:0;padding:0;border-radius:0}
+.personalized-workspace .buyer-overview h3{font-size:18px;line-height:1.4;margin:0 0 4px;letter-spacing:-.4px;text-align:left}
+.personalized-workspace .buyer-price-row{margin-top:12px;padding:12px 0}
+.personalized-workspace .buyer-price-row strong{font-size:21px}
+.personalized-workspace .buyer-person{padding:14px 0}
+.personalized-workspace .buyer-reply-preview{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.personalized-workspace .buyer-open{display:inline-flex;align-items:center;gap:3px;min-height:44px;padding:6px 0!important;font-size:12px!important;font-weight:600;margin-top:2px}
+.personalized-workspace .property-secondary-actions{display:flex;align-items:center;gap:24px;flex-wrap:wrap;border-top:1px solid #eee;padding:10px 0 0;margin:4px 0 0}
+.personalized-workspace .property-secondary-actions>.workspace-panel>.workspace-panel-trigger{font-size:12px;color:#666;min-height:44px;padding:6px 0!important}
+.personalized-workspace .workspace-panel-body{padding:20px;text-align:left;font-size:13px;line-height:1.65}
+.personalized-workspace .workspace-panel-body :is(p,h4){text-align:left}
+.personalized-workspace .workspace-panel-body>section+section{border-top:1px solid #eee;margin-top:24px;padding-top:20px}
+.personalized-workspace .property-debt-summary{margin:20px 0;text-align:left}
+.personalized-workspace .property-debt-summary h4{font-size:14px;line-height:1.5;margin:0 0 12px}
+.personalized-workspace .property-debt-summary dl{margin:0}
+.personalized-workspace .property-debt-summary dl>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:9px 0;border-bottom:1px solid #eee;font-size:12px;line-height:1.6}
+.personalized-workspace .property-debt-summary dt{color:#666}
+.personalized-workspace .property-debt-summary dd{margin:0;text-align:right;font-weight:600;color:#222;font-variant-numeric:tabular-nums}
+.personalized-workspace .property-debt-summary p{font-size:12px;line-height:1.6;margin:12px 0 0;color:#444}
+.personalized-workspace .property-debt-summary small{display:block;font-size:11px;line-height:1.6;color:#666;margin-top:12px}
+.personalized-workspace .workspace-detail-dialog{width:min(620px,calc(100vw - 24px));max-height:90dvh;overflow:auto;margin:auto}
+.personalized-workspace .workspace-detail-dialog .contact-dialog-heading{position:sticky;top:0;z-index:2;background:white;align-items:center;border-bottom:1px solid #eee}
+.personalized-workspace .workspace-detail-dialog h3{font-size:18px;letter-spacing:-.3px;margin:0;text-align:left}
+.personalized-workspace .panel-shortcuts,.personalized-workspace .buyer-response-actions{display:flex;gap:8px 20px;align-items:center;flex-wrap:wrap;margin:16px 0}
+.personalized-workspace .panel-shortcuts button,.personalized-workspace .buyer-response-actions :is(a,button){min-height:44px;align-content:center;font-size:12px}
+.personalized-workspace .workspace-review-notice{font-size:13px;text-align:left}
+.personalized-workspace :is(.workspace-panel-trigger,.buyer-open,.buyer-all):focus-visible{outline:2px solid #444;outline-offset:3px}
+.workspace-preview-banner{display:flex;justify-content:space-between;align-items:center;gap:20px}
+.workspace-preview-stage{display:grid;gap:5px;flex-shrink:0;font-size:11px;text-align:left;color:#666}
+.workspace-preview-stage select{min-height:44px;border:1px solid #ddd;border-radius:8px;background:white;padding:8px 28px 8px 10px;color:#222;font-size:12px}
+.personalized-workspace #platform-buyer-network .workspace-panel-trigger{margin-bottom:16px;font-size:12px;min-height:44px}
+@media(max-width:560px){.personalized-workspace .property-focus{align-items:flex-start;flex-direction:column;gap:12px;padding:16px 0}.personalized-workspace .property-focus>div:first-child{flex-basis:auto}.personalized-workspace .property-focus-action{width:100%}.personalized-workspace .property-focus-action>button{width:100%}.personalized-workspace .buyer-overview{padding:0}.workspace-preview-banner{align-items:stretch;flex-direction:column;gap:14px}.workspace-preview-stage{grid-template-columns:auto 1fr;align-items:center;gap:12px}.workspace-preview-stage select{min-width:0;width:100%}.personalized-workspace .workspace-panel-body{padding:16px}}
+
+.personalized-workspace #platform-buyer-network .workspace-panel-trigger{display:inline-flex;align-items:center;gap:8px;padding:8px 0!important}
+
+.icash-brand-workspace.icash-brand-workspace .buyer-overview .buyer-person.buyer-row{display:flex;align-items:center;gap:12px;text-align:left;width:100%;min-height:76px;padding:16px 0!important;border:0;border-top:1px solid #e7e7e7;border-radius:0;background:transparent;box-shadow:none;font:inherit;color:#222;cursor:pointer;margin:0}
+.icash-brand-workspace.icash-brand-workspace .buyer-overview .buyer-person.buyer-row:hover{background:#f4f4f4}
+.personalized-workspace .buyer-person-info{display:block;flex:1;min-width:0;overflow-wrap:anywhere}
+.personalized-workspace .buyer-person-info .buyer-reply-preview{font-size:12px;line-height:1.65;color:#555;margin-top:5px;white-space:pre-wrap}
+.personalized-workspace .buyer-row>svg{flex:none;color:#777}
+.personalized-workspace .buyer-row:focus-visible{outline:2px solid #444;outline-offset:-2px}
+.icash-brand-workspace.icash-brand-workspace .property-secondary-actions .workspace-panel-trigger,.icash-brand-workspace.icash-brand-workspace .buyer-price-row button{border:0;box-shadow:none;background:transparent;border-radius:0;font-weight:500;color:#666}
+
+/* Replies and connection recovery stay inside the panel the customer is using. */
+.personalized-workspace .workspace-load-notice{padding:14px;border:1px solid #ddd;border-radius:10px;background:#fafafa;margin:0 0 16px;text-align:left}
+.personalized-workspace .workspace-load-notice p{font-size:13px;line-height:1.6;margin:0}
+.personalized-workspace .workspace-load-notice small{display:block;color:#666;margin-top:4px;font-size:11px}
+.personalized-workspace .workspace-load-notice button{min-height:44px;margin-top:4px}
+.personalized-workspace .workspace-load-pending{font-size:12px;color:#666;margin:0 0 12px}
+.personalized-workspace .workspace-confirmed-controls{min-width:0;padding:0;margin:0;border:0}
+.personalized-workspace .workspace-confirmed-controls:disabled button{opacity:.55}
+.personalized-workspace .title-company-messages{margin:0 0 24px;padding-bottom:20px;border-bottom:1px solid #eee;text-align:left;min-width:0}
+.personalized-workspace .title-company-messages h4{font-size:14px;line-height:1.5;margin:0 0 12px}
+.personalized-workspace .title-company-messages article{display:block;min-width:0;overflow-wrap:anywhere}
+.personalized-workspace .title-company-messages article>small{display:block;color:#666;font-size:11px;line-height:1.6}
+.personalized-workspace .title-company-messages article>strong{display:block;font-size:13px;margin:7px 0 0;line-height:1.5}
+.personalized-workspace .title-company-messages p{font-size:13px;line-height:1.65;margin:8px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.personalized-workspace .title-message-preview{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.personalized-workspace .title-message-review{display:inline-block;font-size:11px;font-weight:600;border:1px solid #ddd;border-radius:5px;padding:3px 7px;margin-top:10px}
+.personalized-workspace .title-message-history{margin:8px 0 0;border:0;padding:0;background:none}
+.personalized-workspace .title-message-history>summary{min-height:44px;padding:10px 0;align-content:center;font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:4px}
+.personalized-workspace .title-message-history>article{padding:16px 0;border-top:1px solid #eee}
+.personalized-workspace .title-message-history>small{font-size:11px;color:#666;line-height:1.6;display:block}
+.personalized-workspace .title-message-history>summary:focus-visible{outline:2px solid #444;outline-offset:3px}

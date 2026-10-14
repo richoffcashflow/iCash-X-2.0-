@@ -1,0 +1,21 @@
+name: Production health
+on:
+  schedule:
+    - cron: '2-57/5 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: production-health
+  cancel-in-progress: true
+jobs:
+  health:
+    if: github.ref == 'refs/heads/main' && github.repository == 'richoffcashflow/iCash-X-2.0-'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check production without changing customer work
+        run: node scripts/check-production-health.mjs

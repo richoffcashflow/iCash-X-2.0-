@@ -13,7 +13,7 @@ export function dealToolVisibility(deal:{id:string;stage:string}|undefined,envel
  const savedProgress=['under_contract','buyer_selected','assigned','buyer_matched','purchase_signed','assignment_signed','title_open','closing','closed'].includes(deal.stage);
  const stopped=['cancellation_pending','canceled','cancelled'].includes(deal.stage);
  return {
-  buyers:nextSection==='fulfillment'||(!stopped&&(purchaseSigned||savedProgress||hasBuyerActivity)),
+  buyers:['fulfillment','closing'].includes(nextSection??'')||(!stopped&&(purchaseSigned||savedProgress||hasBuyerActivity)),
   coordination:nextSection==='coordination'||(!stopped&&(purchaseSigned||savedProgress||hasBuyerActivity)),
   buyerReview:purchaseSigned&&!stopped
  };

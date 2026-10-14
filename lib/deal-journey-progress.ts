@@ -6,13 +6,13 @@ export function journeyNextAction(j:JourneyProgress,now=Date.now()):{waitingOn:s
  if(j.messageReview)return step('You','A deal message was not confirmed. Review delivery before sending again.','Review messages','coordination');
  if(j.blocker){const next=blockerNext[j.blocker.kind];return step(j.blocker.kind==='access'?'Seller':'You',next.detail,next.title,'coordination');}
  if(j.state==='needs_review')return step('You',j.review_reason??'Review this buyer request to keep the deal moving.','Review buyer progress','coordination');
- if(j.envelopeState==='customer_signature_needed')return step('You','The buyer signed. Review and sign the assignment.','Review & sign','contracts');
+ if(j.envelopeState==='customer_signature_needed')return step('You','The buyer signed. Review and sign the assignment.','Review & sign','signature');
  if(j.state==='deposit_due')return step('Buyer',`The assignment is signed. ${j.deposit_due_at&&Date.parse(j.deposit_due_at)<now?'The deposit is due. ':''}Give the buyer verified receiving instructions and confirm cleared receipt.`,'Confirm deposit receipt','coordination');
  if(j.state==='reserved'){
-  if(j.closingKind==='funds_disbursed')return step('You','Title reported proceeds sent. Confirm the money arrived.','Review payment','fulfillment');
-  if(!j.titleSelected)return step('You','The buyer’s deposit is verified. Choose and verify the closing office.','Set up title','fulfillment');
-  if(j.titleState==='needs_review')return step('You','The title opening request needs delivery review.','Review title request','fulfillment');
-  return step('Title',j.closingKind==='closed'?'Closing is recorded. Waiting for title to confirm disbursement.':j.closingKind==='closing_scheduled'?'Title confirmed the closing date. Check for any documents still needed.':'The property is reserved. Follow title’s file, document and closing updates.','Open closing progress','fulfillment');
+  if(j.closingKind==='funds_disbursed')return step('You','Title reported proceeds sent. Confirm the money arrived.','Review payment','closing');
+  if(!j.titleSelected)return step('You','The buyer’s deposit is verified. Choose and verify the closing office.','Set up title','closing');
+  if(j.titleState==='needs_review')return step('You','The title opening request needs delivery review.','Review title request','closing');
+  return step('Title',j.closingKind==='closed'?'Closing is recorded. Waiting for title to confirm disbursement.':j.closingKind==='closing_scheduled'?'Title confirmed the closing date. Check for any documents still needed.':'The property is reserved. Follow title’s file, document and closing updates.','Open closing progress','closing');
  }
  if(j.state==='signing')return step('Buyer','The assignment is prepared. Waiting for the buyer’s verified signature.','View assignment','contracts');
  if(['ready','sending'].includes(j.state))return step('Bot','Buyer details are saved. The assignment is being prepared from the agreed terms.','View buyer progress','coordination');
