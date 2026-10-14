@@ -13,10 +13,15 @@ export const maxDuration=120;
 export async function GET(req:Request){
  const headers={'Cache-Control':'no-store'};
  if(!authorizeOutboundBilling(req,process.env.CRON_SECRET))return Response.json({error:'Unauthorized'},{status:401,headers});
+ // Recovery is independent of new seller intake. A failed or slow receipt
+ // lookup must not delay a newly submitted property's first response.
+ const agreementRecovery=recoverAgreementDelivery({db,send:sendForSignatures,text:textPendingContract},process.env).catch(()=>{
+   console.warn('seller_agreement_recovery_unavailable');
+   return {status:'agreement_recovery_unavailable'};
+ });
  try{
-  const agreementRecovery=await recoverAgreementDelivery({db,send:sendForSignatures,text:textPendingContract},process.env);
   const [controls]=await db<{enabled:boolean}[]>('icash_seller_controls?id=eq.1&select=enabled');
-  if(!controls?.enabled)return Response.json({status:'seller_setup_required'},{headers});
+  if(!controls?.enabled)return Response.json({status:'seller_setup_required',agreementRecovery:await agreementRecovery},{headers});
   await db('rpc/icash_collect_seller_milestones','POST',{});
   const lookup=await processSellerIntake(db,process.env.DEALMACHINE_API_KEY);
   const allocation=await db<{status:string;leadId?:string}|null>('rpc/icash_assign_seller_lead','POST',{});
@@ -24,6 +29,6 @@ export async function GET(req:Request){
   // Older setup retries must not take the newly assigned lead's response slot.
   const responses=await processSellerResponses(db,dispatchTextMessage,dispatchLiveVoice,allocation?.status==='assigned'?allocation.leadId:undefined);
   const measurement=await deliverSellerEvent(db,process.env);
-  return Response.json({lookup,allocation,responses,measurement,agreementRecovery},{headers});
- }catch{return Response.json({status:'seller_processing_requires_review'},{status:503,headers});}
+  return Response.json({lookup,allocation,responses,measurement,agreementRecovery:await agreementRecovery},{headers});
+ }catch{await agreementRecovery;return Response.json({status:'seller_processing_requires_review'},{status:503,headers});}
 }

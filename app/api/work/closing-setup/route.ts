@@ -15,5 +15,5 @@ export async function POST(req:Request){
    ?await db('rpc/icash_select_saved_closer','POST',{p_account:accountId,p_actor:userId,p_deal:b.dealId,p_source:b.data.sourceDealId})
    :await db('rpc/icash_save_closing_setup','POST',{p_account:accountId,p_actor:userId,p_deal:b.dealId,p_action:b.action,p_data:b.data});
   return NextResponse.json({saved:true,result},{headers});
- }catch{return NextResponse.json({error:'Could not save. Refresh the deal. Selecting a closer requires a signed purchase, complete contact details, current delivery setup and agreement with the existing title choice. A different closer on a sent file needs human review.'},{status:409,headers});}
+ }catch{return NextResponse.json({error:'Could not save. Refresh the deal and check the signed purchase, complete closer details and existing title choice. If title delivery has already been reserved or attempted, choose “I’ll handle this property” below to review it before changing the closer.'},{status:409,headers});}
 }
