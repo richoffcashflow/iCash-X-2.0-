@@ -1,15 +1,14 @@
 'use client';
-import {finalSalePolicy} from '@/lib/final-sale-policy';
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {fundingReasonAtAmount} from '@/lib/credit-refill-recommendation';
 import {useEffect,useRef,useState} from 'react';
 import {ArrowRight,ShieldCheck,RefreshCw} from 'lucide-react';
-import {autoRechargeVersion,autoRechargeSummary,autoRechargeTerms} from '@/lib/auto-recharge-policy';
+import {autoRechargeVersion,autoRechargeSummary} from '@/lib/auto-recharge-policy';
 import {customFundingCode,fundingAmountCents} from '@/lib/funding-amount';
 import {StripeEmbeddedCheckout} from './stripe-embedded-checkout';
 import {AccountAccess} from './account-access';
-import {earlyAccessTermsVersion,earlyAccessDisclosure} from '@/lib/funding-consent';
-import {workCreditTerms,workCreditTermsVersion,priceLabel} from '@/lib/membership-policy';
+import {earlyAccessTermsVersion} from '@/lib/funding-consent';
+import {workCreditTermsVersion,priceLabel} from '@/lib/membership-policy';
 type Pack={code:string;price_cents:number;credit_cents:number;enabled:boolean};
 type Funding={embeddedReady?:boolean;recommendedCents?:number;autoRecharge?:{enabled:boolean;amount_cents?:number;issue?:string|null};earlyAccess?:boolean;mode:'test'|'live'|null;enabled:boolean;packs?:Pack[];custom?:{enabled:boolean;minCents:number;maxCents:number};paidCents?:number;needsClaim?:boolean;email?:string};
 export function FundingCheckout({onSignedIn,initialCode,initialAmountCents,reason,outOfCredits=false}:{onSignedIn:()=>void;initialCode?:string;initialAmountCents?:number;reason?:string;outOfCredits?:boolean}){
@@ -47,9 +46,7 @@ export function FundingCheckout({onSignedIn,initialCode,initialAmountCents,reaso
    {status.autoRecharge?.issue&&<p role="status" className="credit-recharge-issue">{status.autoRecharge.issue}</p>}
   </div>}
   <p className="credit-purchase-terms" id="credit-purchase-terms">Your bot starts eligible work after payment.</p>
-  <details className="credit-full-terms"><summary>Full purchase terms</summary>{status?.earlyAccess&&<p>{earlyAccessDisclosure}</p>}<p>{workCreditTerms}{autoRecharge&&amount!==null?' '+autoRechargeTerms(amount):''}</p><a href="/costs-and-disclosures#one-time" target="_blank" rel="noopener noreferrer">All costs &amp; terms</a></details>
-  <p className="credit-purchase-terms">{finalSalePolicy} <a href="/costs-and-disclosures#refunds" target="_blank" rel="noopener noreferrer">Billing policy</a></p>
-  <label className="membership-consent"><input id="credit-final-sale" type="checkbox" checked={accepted} disabled={busy||!canPay} onChange={e=>setAccepted(e.target.checked)}/><span>I accept the purchase terms and final-sale policy above.</span></label>
+  <label className="membership-consent"><input id="credit-final-sale" type="checkbox" checked={accepted} disabled={busy||!canPay} onChange={e=>setAccepted(e.target.checked)}/><span>I agree to the <a href="/costs-and-disclosures#refunds" target="_blank" rel="noopener noreferrer">billing policy</a>.</span></label>
   <button className="fund-button full" disabled={busy||!canPay||!accepted} aria-describedby="credit-purchase-terms" onClick={()=>void checkout()}>{busy?'Opening secure checkout…':amount!==null?`Add ${priceLabel(amount)} & continue`:'Enter an amount'}<ArrowRight size={17}/></button>
   <p className="credit-purchase-safe"><ShieldCheck size={14}/>{autoRecharge||status?.autoRecharge?.enabled?'You control auto recharge.':'One-time payment · Add more whenever you want.'}</p>
   {status&&!status.enabled&&<p role="status">Credit purchases are currently unavailable. <button onClick={()=>void refresh()}>Check again</button></p>}
