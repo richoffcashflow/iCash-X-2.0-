@@ -2,13 +2,15 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {creditRefillRecommendation} from '../lib/credit-refill-recommendation.ts';
-let paths=[],failHistory=false,failUsage=false;
+let paths=[],failHistory=false,failUsage=false,malformed=false;
 const db=async path=>{
  paths.push(path);assert(path.includes('account_id=eq.account'));
  if(path.startsWith('icash_funding_orders')){
-  assert(path.includes('state=eq.paid')&&path.includes('auto_recharge=is.false')&&path.includes('credited_at=gt.')&&path.includes('limit=5'));
+  assert(path.includes('state=eq.paid')&&!path.includes('auto_recharge=is.false')&&path.includes('credited_at=gt.')&&path.includes('limit=100'));
+  assert(path.includes('icash_auto_recharge_attempts_order_id_fkey'));
   if(failHistory)throw Error('history unavailable');
-  return [{price_cents:7500,credited_at:new Date(Date.now()-1000).toISOString(),auto_recharge:false}];
+  return [{price_cents:7800,credit_cents:7500,credited_at:new Date(Date.now()-1000).toISOString(),auto_recharge:true,automatic:malformed?undefined:null},
+   ...[1,2].map(i=>({price_cents:1000,credit_cents:1000,credited_at:new Date(Date.now()-i*100).toISOString(),auto_recharge:false,automatic:{order_id:'auto'}}))];
  }
  assert(path.startsWith('icash_credit_ledger')&&path.includes('kind=eq.usage')&&path.includes('limit=1001'));
  if(failUsage)throw Error('usage unavailable');
@@ -19,10 +21,13 @@ let source=ts.transpileModule(readFileSync(new URL('../lib/credit-refill-context
 source='const {db,creditRefillRecommendation}=globalThis.__refillContext;\n'+source;
 const {creditRefillContext}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 assert.equal((await creditRefillContext('account','live',0)).amountCents,7500);
+assert.equal((await creditRefillContext('account','live',0)).available,true);paths=paths.slice(0,2);
 assert(paths.some(p=>p.includes('mode=eq.live'))&&paths.length===2);
 paths=[];await creditRefillContext('account','test',0);
 assert.equal(paths.length,1);assert(paths[0].includes('mode=eq.test'));
+malformed=true;assert.equal((await creditRefillContext('account','live',0)).available,false);malformed=false;
 failUsage=true;assert.equal((await creditRefillContext('account','live',0)).amountCents,7500);
+assert.equal((await creditRefillContext('account','live',0)).available,false,'Unavailable context cannot authorize a proactive refill suggestion');
 failHistory=true;assert.equal((await creditRefillContext('account','live',0)).amountCents,1000);
 delete globalThis.__refillContext;
 console.log('PASS refill context: paid manual history, tenant and mode boundaries, bounded usage, and independent lookup fallback.');

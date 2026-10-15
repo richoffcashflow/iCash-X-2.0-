@@ -26,9 +26,9 @@ assert(button(tree,'Explore VIP'),'Non-VIP members can review VIP from the menu 
 assert(!props(tree,'PlatformBuyerNetwork'),'Standard accounts do not fetch VIP network data');
 assert(!props(tree,'WorkspaceAssistant'),'Standard accounts never mount the paid assistant');
 assert.equal(props(tree,'LiveWorkspace').assistantVipLocked,true);
-assert.equal(props(tree,'WorkspaceConversion').hidden,true,'Wait for attention data before suggesting a refill');
-props(tree,'LiveWorkspace').onAttentionChange(false);tree=regular.render();assert.equal(props(tree,'WorkspaceConversion').hidden,false);
-props(tree,'LiveWorkspace').onAttentionChange(true);tree=regular.render();assert.equal(props(tree,'WorkspaceConversion').hidden,true,'Deal decisions take priority over funding recommendations');
+assert.equal(props(tree,'WorkspaceConversion').attentionPending,true,'Wait for attention data before suggesting a refill');
+props(tree,'LiveWorkspace').onAttentionChange(false);tree=regular.render();assert.equal(props(tree,'WorkspaceConversion').attentionPending,false);
+props(tree,'LiveWorkspace').onAttentionChange(true);tree=regular.render();assert.equal(props(tree,'WorkspaceConversion').attentionPending,true,'Deal decisions take priority over funding recommendations');
 props(tree,'LiveWorkspace').onOpenAssistant();tree=regular.render();assert.equal(props(tree,'FundingDialog').title,'Switch to VIP','Opening the locked assistant offers VIP even with no credits');
 props(tree,'FundingDialog').onClose();tree=regular.render();
 props(tree,'LiveWorkspace').onAsk('fixture-property','123 Fixture Lane');tree=regular.render();assert.equal(props(tree,'FundingDialog').title,'Switch to VIP');assert(!props(tree,'WorkspaceAssistant'));
@@ -49,7 +49,7 @@ assert.match(tree.props.className,/test-vip/);assert.equal(props(tree,'BotRunBar
 button(tree,'Switch account plan').props.onClick();tree=owner.render();assert.equal(props(tree,'AdminPlanToggle').plan,'vip');props(tree,'FundingDialog').onClose();tree=owner.render();
 assert(props(tree,'PlatformBuyerNetwork'),'Admin VIP mounts the real network');
 assert(props(tree,'WorkspaceAssistant'),'Admin VIP can use the assistant');assert.equal(props(tree,'LiveWorkspace').assistantVipLocked,false);
-assert.equal(props(tree,'WorkspaceVipBanner'),undefined);assert.equal(props(tree,'BudgetSummary').vip,true,'Actual VIP shows the settled savings counter');assert.equal(props(tree,'BotRunBar').balanceCents,0,'Switching does not alter credits');assert.equal(props(tree,'WorkspaceConversion').hidden,true);
+assert.equal(props(tree,'WorkspaceVipBanner'),undefined);assert.equal(props(tree,'BudgetSummary').vip,true,'Actual VIP shows the settled savings counter');assert.equal(props(tree,'BotRunBar').balanceCents,0,'Switching does not alter credits');assert.equal(props(tree,'WorkspaceConversion').hidden,false,'Admin can see useful next-step cards');
 all(tree).find(n=>n.type==='button'&&text(n).includes('Customize bot')).props.onClick();tree=owner.render();assert.equal(props(tree,'BotCustomization').vip,true,'Actual VIP exposes voice settings');
 props(tree,'FundingDialog').onClose();
 owner.account({...ownerAccount,adminPlan:'standard',vip:false,vipFeatures:false});tree=owner.render();assert.doesNotMatch(tree.props.className,/test-vip/);assert(!props(tree,'WorkspaceVipBanner'));assert(!props(tree,'WorkspaceAssistant'));assert(!props(tree,'AdminPlanToggle'));

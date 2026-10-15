@@ -23,6 +23,9 @@ const suites = [
  'workspace-panel-content', 'production-release-gate', 'production-health',
  'workspace-experience', 'workspace-experience-database', 'reliability-alerts',
  'workspace-request-recovery', 'durable-work-billing-stop',
+ 'usage-loop-policy', 'usage-loop-route', 'usage-loop-context-database',
+ 'usage-loop-tracking', 'usage-loop-tracking-routes', 'workspace-conversion-ui',
+ 'credit-refill-context', 'credit-refill-recommendation',
 ];
 for (const suite of suites) {
  const result=spawnSync(process.execPath,['--experimental-strip-types',`tests/${suite}.test.mjs`],{stdio:'inherit',timeout:60000});
