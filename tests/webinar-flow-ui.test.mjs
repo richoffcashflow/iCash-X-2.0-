@@ -213,7 +213,20 @@ let previewNow=Date.now();const previewDeadline=new Date(previewNow+90000).toISO
 const previewRoom=await harness('components/webinar-room.tsx',{...roomDeps,useWebinarTimers:input=>{timerInput=input;return {deadlines:{'offer-timer':previewDeadline},offerDeadlines:{},offset:0,now:previewNow};},post:async()=>({sessionId,webinar:policy.publicWebinar({...w,timers:[timerFixture]}),progress:1385,name:'Owner',messages:[],preview:true,serverNow:previewNow})});
 const renderPreview=()=>previewRoom.render('WebinarRoom',{});
 renderPreview();await flush();let previewTree=renderPreview();previewTree=renderPreview();
-assert.equal(listeners.has('beforeunload'),false,'Owner preview never installs an exit reminder');assert.equal(find(previewTree,'dialog'),undefined);
+assert.equal(listeners.has('beforeunload'),false,'Owner preview never installs an exit reminder');
+const previewExit=find(previewTree,'dialog'),previewExitButton=all(previewTree).find(n=>n.type==='button'&&n.props.children==='Preview exit pop-up');
+assert.ok(previewExit&&previewExitButton);
+const exitPreviewState={open:false,shown:0,showModal(){this.open=true;this.shown++;},close(){this.open=false;}};
+previewExit.props.ref.current=exitPreviewState;
+const previewExitNavigationCount=redirects.length,previewExitRequestCount=requestLog.length,exitSeenBefore=store.get('icash.webinar.vip-exit-reminder.v1');
+for(const label of ['Keep watching','Leave webinar']){
+ previewExitButton.props.onClick();assert.equal(exitPreviewState.open,true);
+ all(previewExit).find(n=>n.type==='button'&&n.props.children===label).props.onClick();assert.equal(exitPreviewState.open,false);
+}
+assert.equal(exitPreviewState.shown,2,'Owner can reopen the actual pop-up for review');
+assert.equal(redirects.length,previewExitNavigationCount,'Preview choices never navigate away');assert.equal(requestLog.length,previewExitRequestCount);
+assert.equal(store.get('icash.webinar.vip-exit-reminder.v1'),exitSeenBefore,'Preview never consumes or resets a viewer reminder');
+assert.equal(listeners.has('beforeunload'),false);
 assert.deepEqual(timerInput.timers,[timerFixture],'Room passes saved timers into deadline synchronization');
 assert.ok(find(previewTree,'WebinarCountdownBanner'),'A single top countdown banner is mounted');
 const previewLink=all(previewTree).find(n=>n.type==='a'&&n.props.href?.startsWith('/webinar/checkout/preview'));
