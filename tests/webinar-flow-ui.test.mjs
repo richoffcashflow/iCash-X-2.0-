@@ -21,7 +21,7 @@ globalThis.location={search:'?ad_id=55555&fbclid=retained&r=signed-token',hash:'
 const replaced=[];globalThis.history={replaceState:(_state,_title,url)=>replaced.push(url)};
 globalThis.localStorage=globalThis.sessionStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)};
 Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true});
-const components=Object.fromEntries(['WebinarTimers','WebinarPlayer','WebinarPanelBoundary','WebinarAudience','WebinarPurchaseNotifications','WebinarCountdownBanner','WebinarOfferImage','WebinarOfferSpots'].map(n=>[n,n]));
+const components=Object.fromEntries(['WebinarVipWelcome','WebinarTimers','WebinarPlayer','WebinarPanelBoundary','WebinarAudience','WebinarPurchaseNotifications','WebinarCountdownBanner','WebinarOfferImage','WebinarOfferSpots'].map(n=>[n,n]));
 const icons=Object.fromEntries(['MessageCircle','Send','X','ChevronDown','ShieldCheck','Maximize','Pause','Play','Volume2','VolumeX','Info'].map(n=>[n,n]));
 const w={...policy.newWebinar('00000000-0000-4000-8000-000000000123'),videoUrl:'https://example.test/day.mp4',status:'published',publicCode:'129340',chat:[{id:'before',at:499,name:'Sam',text:'Before submission',kind:'replay'},{id:'after',at:501,name:'Pat',text:'After submission',kind:'replay'}]};
 const sessionId='00000000-0000-4000-8000-000000000456';let emptyChat=false;let requestLog=[],remembered='',rememberedEmail='',completionGate=null,chatGate=null,failChat=false,failContact=false;const redirects=[];location.assign=path=>redirects.push(path);
@@ -393,4 +393,14 @@ console.log('PASS webinar audio: audible autoplay, one muted policy fallback, ta
   document.hidden=true;listeners.get('visibilitychange')();now+=3600000;document.hidden=false;listeners.get('pageshow')();assert.equal(reloads,0);h.close();
  }finally{Date.now=realNow;document.hidden=false;}
  console.log('PASS one-hour browser return: short absence resumes, expired restored pages reload before checkpoints, owner previews and active checkout remain intact.');
+}
+
+{
+ const instance=await harness('components/webinar-room.tsx',roomDeps),render=()=>instance.render('WebinarRoom',{webinarCode:'129339'});
+ render();await flush();let tree=render();find(tree,'WebinarPlayer').props.onProgress(1500);tree=render();
+ const before=redirects.length;find(tree,'WebinarCheckout').props.onPurchased('standard','/live/123457');tree=render();
+ assert.equal(find(tree,'WebinarVipWelcome').props.href,'/live/123457');assert.equal(find(tree,'WebinarVipWelcome').props.fullScreen,true);
+ assert.equal(find(tree,'WebinarPlayer'),undefined,'The main video stops when the purchase handoff is shown');assert.equal(find(tree,'WebinarCheckout'),undefined,'No second payment offer competes with the VIP video handoff');
+ assert.equal(redirects.length,before,'The welcome owns navigation after its visible countdown');instance.close();
+ console.log('PASS main purchase: the verified VIP destination replaces the room immediately and stops main playback before the next video.');
 }

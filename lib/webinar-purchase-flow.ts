@@ -1,4 +1,5 @@
 export type WebinarPurchaseState = 'standard' | 'vip' | null;
+export type WebinarPurchaseListener=(state:WebinarPurchaseState,vipSessionUrl?:string|null)=>void;
 
 /** Purchase state comes from the billing API, never a return URL or local storage. */
 export function webinarPurchaseDestination(purchased:WebinarPurchaseState,checkoutEngaged:boolean,upgradeActive:boolean,vipWebinar=false){

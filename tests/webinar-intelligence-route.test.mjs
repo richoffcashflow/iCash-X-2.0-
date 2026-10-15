@@ -26,7 +26,7 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_webinar_sessions?'))return path.includes('&webinar_id=eq.')?history.filter(h=>path.includes('webinar_id=eq.'+h.webinar_id+'&')):history;
  if(path.startsWith('icash_webinar_events?'))return events;
  if(path.startsWith('icash_webinar_settings?'))return [{config:settings}];
- if(path==='rpc/icash_webinar_begin'){const prior=history.find(h=>h.webinar_id===body.p_config.id&&!h.completed_at&&!h.superseded_at&&h.is_preview===body.p_preview&&h.id!==body.p_advance_from&&now-Date.parse(h.updated_at)>=0&&now-Date.parse(h.updated_at)<3600000);return prior??{id:body.p_id,config:body.p_config,completed_at:null,progress_seconds:0};}
+ if(path==='rpc/icash_webinar_begin'){const prior=history.find(h=>h.webinar_id===body.p_config.id&&!h.completed_at&&!h.superseded_at&&h.is_preview===body.p_preview&&h.id!==body.p_advance_from&&now-Date.parse(h.updated_at)>=0&&now-Date.parse(h.updated_at)<3600000);const expired=history.find(h=>h.id===body.p_advance_from&&now-Date.parse(h.updated_at)>=3600000);const {_returnStartSeconds,...config}=body.p_config;return prior??{id:body.p_id,config,completed_at:null,progress_seconds:expired&&!body.p_preview&&!config.parentWebinarId?_returnStartSeconds??0:0};}
  if(path.startsWith('icash_webinar_messages?'))return [];
  if(path.includes('intelligence'))throw Error('Retired routing was called');
  return {};
@@ -47,10 +47,10 @@ assert.equal(data.progress,100);assert.equal(data.sessionId,prior.id);
 prior.progress_seconds=1550;prior.max_seconds=1550;events=[{session_id:prior.id,kind:'pitch_shown',event_key:'once',created_at:new Date(now-1800000).toISOString()}];prior.updated_at=new Date(now-3599999).toISOString();
 data=await(await post({code:'123456',attribution:{ad_id:'55555'}})).json();assert.equal(data.sessionId,prior.id);assert.equal(data.progress,1550,'An offer already shown does not skip the rest of the video');
 prior.updated_at=new Date(now-3600000).toISOString();calls=[];
-data=await(await post({code:'123456',attribution:{ad_id:'55555'}})).json();assert.equal(data.webinar.id,one.id);assert.equal(data.progress,0);assert.notEqual(data.sessionId,prior.id);assert.equal(calls.find(c=>c.path==='rpc/icash_webinar_begin').body.p_advance_from,prior.id);
+data=await(await post({code:'123456',attribution:{ad_id:'55555'}})).json();assert.equal(data.webinar.id,one.id);assert.equal(data.progress,policy.webinarReturnPosition(one));assert.notEqual(data.sessionId,prior.id);assert.equal(calls.find(c=>c.path==='rpc/icash_webinar_begin').body.p_advance_from,prior.id);
 prior.completed_at=new Date(now-9*3600000).toISOString();prior.watched_seconds=1700;prior.updated_at=prior.completed_at;
 stats=[{webinarId:three.id,version:'day',viewers:100,cohortBuyers:40}];
-data=await(await post({code:'123456',attribution:{ad_id:'55555'}})).json();assert.equal(data.webinar.id,one.id,'Even a tagged ad replays the same webinar after one hour');assert.equal(data.progress,0);
+data=await(await post({code:'123456',attribution:{ad_id:'55555'}})).json();assert.equal(data.webinar.id,one.id,'Even a tagged ad replays the same webinar after one hour');assert.equal(data.progress,policy.webinarReturnPosition(one));assert.equal(data.webinar._returnStartSeconds,undefined);
 prior.completed_at=new Date(now-1800000).toISOString();prior.updated_at=prior.completed_at;prior.max_seconds=1800;
 data=await(await post({code:'123456'})).json();assert.equal(data.redirect,`/webinar/checkout?webinar_session=${prior.id}`,'Recent completion retains the next step');
 calls=[];data=await(await post({code:'123456',returnToWebinar:true})).json();assert.equal(data.webinar.id,one.id);assert.equal(data.progress,0);
@@ -81,7 +81,7 @@ try{
  const dallasHeaders={'x-vercel-ip-latitude':'32.7767','x-vercel-ip-longitude':'-96.797','x-vercel-ip-timezone':'America/Chicago'};
  const nyHeaders={'x-vercel-ip-latitude':'40.7128','x-vercel-ip-longitude':'-74.006','x-vercel-ip-timezone':'America/New_York'};
  now=Date.parse('2026-10-08T23:30:00Z');history=[];events=[];account=null;paid=false;vipPaid=false;
- one.nightEnabled=true;one.nightVersion={...createNightRecording(one),videoUrl:'https://example.test/main-night.mp4'};
+ one.nightEnabled=true;one.nightVersion={...createNightRecording(one),videoUrl:'https://example.test/main-night.mp4',offers:policy.webinarOffers(one).map(o=>({...o,at:o.at+120}))};
  data=await(await post({code:'123456'},dallasHeaders)).json();assert.equal(data.webinar.recordingVersion,'day');
  calls=[];data=await(await post({code:'123456'},nyHeaders)).json();assert.equal(data.webinar.recordingVersion,'night');
  assert.ok(!JSON.stringify(calls).includes('40.7128'),'Coordinates are not saved in sessions or visitor records');
@@ -91,7 +91,7 @@ try{
  history=[{...prior,completed_at:new Date(now-9*3600000).toISOString(),watched_seconds:1700}];
  stats=[{webinarId:three.id,version:'day',viewers:100,cohortBuyers:30},{webinarId:three.id,version:'night',viewers:100,cohortBuyers:30}];
  data=await(await post({code:'123456',attribution:{ad_id:'55555'}},dallasHeaders)).json();assert.equal(data.webinar.id,one.id);assert.equal(data.webinar.recordingVersion,'day','A restarted main uses the viewer daylight context');
- data=await(await post({code:'123456',attribution:{ad_id:'55555'}},nyHeaders)).json();assert.equal(data.webinar.id,one.id);assert.equal(data.webinar.recordingVersion,'night');
+ data=await(await post({code:'123456',attribution:{ad_id:'55555'}},nyHeaders)).json();assert.equal(data.webinar.id,one.id);assert.equal(data.webinar.recordingVersion,'night');assert.equal(data.progress,policy.webinarReturnPosition(selectRecording(one,'America/New_York',new Date(now),settings.routing)));assert.equal(data.progress,policy.webinarReturnPosition(one)+120,'Return offset follows the selected Night offer timing');
  history=[];vipPaid=true;vip.nightEnabled=true;vip.nightVersion.videoUrl='https://example.test/vip-night.mp4';
  data=await(await post({code:'123457'},dallasHeaders)).json();assert.equal(data.webinar.recordingVersion,'day');
  data=await(await post({code:'123457'},nyHeaders)).json();assert.equal(data.webinar.recordingVersion,'night','Paid VIP playback uses local daylight');

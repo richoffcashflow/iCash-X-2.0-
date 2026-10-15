@@ -6,7 +6,7 @@ import {validGuest} from '@/lib/funding';
 import {webinarCustomerAccount,webinarCustomerPaid} from '@/lib/webinar-account-adapter';
 import {webinarSite} from '@/lib/webinar-site';
 import {db} from '@/lib/stripe-test';
-import {publicWebinar,settingsSchema,webinarSchema,visitorTimezone,webinarFromRow,offerDestination,hasWebinarVideo,type WebinarSettings,type WebinarRow} from '@/lib/webinar-policy';
+import {publicWebinar,settingsSchema,webinarSchema,visitorTimezone,webinarFromRow,offerDestination,hasWebinarVideo,webinarReturnPosition,type WebinarSettings,type WebinarRow} from '@/lib/webinar-policy';
 import {sessionWebinarOffers} from '@/lib/webinar-offer-server';
 import {selectOffer} from '@/packages/webinar-engine/src/index';
 import {selectRecording} from '@/lib/webinar-recordings';
@@ -83,7 +83,8 @@ export async function POST(req:Request){try{
  }
  const sessionId=randomUUID();
  const snapshot=snapshotChat(unfinished&&!i.preview?webinarSchema.parse(webinar):selectRecording(webinarSchema.parse(webinar),timezone,new Date(),settings.routing,i.preview?i.variant:pairedVersion,location),sessionId);
- const session=await db<WebinarSession>('rpc/icash_webinar_begin','POST',{p_visitor:visitor.id,p_id:sessionId,p_config:snapshot,p_advance_from:!i.preview&&journey.kind==='advance'?journey.sessionId:null,p_preview:!!i.preview});
+ const returnStart=!i.preview&&!target.parentWebinarId&&journey.kind==='advance'?webinarReturnPosition(snapshot):0;
+ const session=await db<WebinarSession>('rpc/icash_webinar_begin','POST',{p_visitor:visitor.id,p_id:sessionId,p_config:returnStart?{...snapshot,_returnStartSeconds:returnStart}:snapshot,p_advance_from:!i.preview&&journey.kind==='advance'?journey.sessionId:null,p_preview:!!i.preview});
  const messages=await db<{id:string;role:'user'|'assistant';text:string;playback_seconds:number|null}[]>(`icash_webinar_messages?session_id=eq.${session.id}&role=eq.user&select=id,role,text,playback_seconds,display_name,public_status&order=created_at.desc&limit=60`).then(rows=>rows.reverse()).catch(()=>[]);
  return Response.json({webinar:publicWebinar(webinarSchema.parse(session.config)),...(session.config.id!==current.id?{canonicalPath:webinarLink(session.config)}:{}),sessionId:session.id,progress:session.completed_at?0:session.progress_seconds,name:visitor.name??'',email:visitor.email??'',phone:visitor.phone??'',contactSaved:!!visitor.email&&!!visitor.phone,messages,preview:!!i.preview,serverNow:Date.now()},{headers:webinarHeaders});
  }catch(e){if(e instanceof z.ZodError)return Response.json({error:'The webinar link could not be read.'},{status:400,headers:webinarHeaders});return webinarError(e);}}
