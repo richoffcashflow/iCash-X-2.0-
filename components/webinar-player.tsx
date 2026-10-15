@@ -4,7 +4,7 @@ import {Play,Pause,Volume2,VolumeX} from 'lucide-react';
 import {formatWatchTime} from '@/lib/webinar-policy';
 import {savePosition,seekToPosition} from '@/lib/webinar-playback';
 
-type Props={sessionId:string;videoUrl:string;posterUrl:string;title:string;progress:number;preview:boolean;onPreviewSeek:(seconds:number)=>void;onProgress:(seconds:number)=>void;onStarted:()=>void;onCheckpoint:()=>void;onPlayingChange:(playing:boolean)=>void;onEnded:()=>void};
+type Props={sessionId:string;videoUrl:string;posterUrl:string;title:string;progress:number;preview:boolean;overlay?:React.ReactNode;onPreviewSeek:(seconds:number)=>void;onProgress:(seconds:number)=>void;onStarted:()=>void;onCheckpoint:()=>void;onPlayingChange:(playing:boolean)=>void;onEnded:()=>void};
 export function WebinarPlayer(props:Props){
  const video=useRef<HTMLVideoElement>(null),position=useRef(props.progress),loaded=useRef(false),lastLocalSave=useRef(-1),resumeOnVisible=useRef(false),alive=useRef(true),playAttempt=useRef(0),mutedByViewer=useRef(false);
  const callbacks=useRef(props);callbacks.current=props;
@@ -82,6 +82,7 @@ export function WebinarPlayer(props:Props){
   <div className="wb-stream-status"><span className="wb-live"><span className="wb-live-dot" aria-hidden="true"/>LIVE</span>{props.preview&&<span>Owner preview</span>}</div>
   {!props.preview&&(!playing||muted)&&!error&&!slow&&<button type="button" className="wb-unmute" onClick={playing?listen:play}><VolumeX aria-hidden="true"/><strong>{playing?'Tap to listen':position.current>0?'Continue watching':'Tap to play'}</strong></button>}
   {(error||slow)&&<div className="wb-player-recovery" role="status"><p>{offline?'You’re offline. Reconnect to continue.':error||'Video paused. Tap to resume.'}</p><button type="button" onClick={reload}>Resume video</button><a href="/support">Get help</a></div>}
+  {props.overlay}
  </div>
  {props.preview&&<div className="wb-preview-player-controls" role="group" aria-label="Preview playback controls">
   <input type="range" aria-label="Preview video timeline" aria-valuetext={`${formatWatchTime(previewTime)} of ${formatWatchTime(duration)}`} min={0} max={duration||1} step={1} value={Math.min(previewTime,duration||0)} disabled={!duration} onChange={e=>seekPreview(Number(e.target.value))}/>

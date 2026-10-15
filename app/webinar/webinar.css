@@ -294,3 +294,19 @@
 
 /* Owners can inspect chat without unmounting checkout or stopping its timer. */
 .wb-preview-tools button{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:5px 12px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#111;font:inherit;font-weight:600;cursor:pointer}.wb-preview-tools button:focus-visible{outline:2px solid #111;outline-offset:3px}.wb-room .wb-offer[hidden]{display:none}
+
+/* Purchase updates remain visible with chat hidden and never cover payment inputs. */
+.wb-player .wb-purchase-toast-region{position:absolute;bottom:12px;left:12px;right:12px;z-index:7;pointer-events:none}
+.wb-purchase-toast-region:empty{display:none}
+.wb-player .wb-purchase-toast-region .wb-activity{box-sizing:border-box;width:min(365px,100%);max-width:100%;margin:0;padding:11px 10px 11px 12px;gap:9px;border-color:#d4d4d4;box-shadow:0 5px 24px #0003;color:#171717;background:#fff}
+.wb-player .wb-purchase-toast-region .wb-icon{width:32px;height:36px;flex:none}
+.wb-player .wb-purchase-toast-region small{margin-top:2px}
+.wb-player .wb-purchase-toast-region[data-vip=true] .wb-activity{border-color:#c7a458;background:#fffdf7}
+.wb-player .wb-purchase-toast-region[data-vip=true] .wb-activity-check{background:#f3e1ad;color:#72551b}
+.wb-purchase-summary{padding:10px 14px;border:1px solid #e3e3e3;border-radius:0 0 10px 10px;background:#fff}
+.wb-purchase-summary .wb-offer-spots{margin:0;padding:0;border:0;background:transparent}
+.wb-purchase-summary .wb-spots-heading{margin-bottom:6px}
+.wb-purchase-summary .wb-spots-heading>strong{font-size:16px}
+.wb-purchase-summary-vip{border-color:#e2d0a4;background:#fffdf7;color:#72551b}
+.wb-purchase-summary-vip .wb-spots-bar>span{background:#b08b3c}
+@media(max-width:900px){.wb-purchase-summary{padding:8px 12px;border-radius:0;border-inline:0}.wb-purchase-summary .wb-spots-heading>strong{font-size:15px}.wb-player .wb-purchase-toast-region{bottom:10px;left:10px;right:10px}.wb-player .wb-purchase-toast-region .wb-activity{padding:8px 8px 8px 10px}.wb-player .wb-purchase-toast-region strong{font-size:12px;line-height:1.4}}

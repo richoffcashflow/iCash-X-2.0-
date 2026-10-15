@@ -46,10 +46,11 @@ export function WebinarVipUpsell({phase,email,customerName,needsClaim,paidThroug
  function skip(){if(busy||confirming||form)return;setClaim(false);setDeclined(true);active.current?.(false);if(phase==='ended'){const destination=safeVipSession(vipSessionUrl);if(destination)window.location.assign(destination);}}
  if(declined&&phase==='ended'&&!safeVipSession(vipSessionUrl))return <PostPurchaseSetup email={email} customerName={customerName} needsClaim={needsClaim} onWorkspace={onWorkspace}/>;
  if(declined)return <section className="membership-success"><p className="purchase-receipt"><Check size={16}/>Software payment confirmed</p><h2>{phase==='watching'?'You’re in. Keep watching.':'Your VIP session is ready.'}</h2>{phase==='watching'?<p>Your next step will open when this webinar ends.</p>:<a className="setup-primary" href={safeVipSession(vipSessionUrl)!}>Open my VIP session<ArrowRight size={17}/></a>}</section>;
- return <section className="webinar-vip-upsell" aria-label="VIP upgrade">
+ return <section className="webinar-vip-upsell vip-checkout" aria-label="VIP upgrade">
+  <div className="vip-checkout-brand"><span>VIP</span><strong>iCash X upgrade</strong></div>
   <p className="purchase-receipt"><Check size={16}/>Your software access is paid</p>
   {confirming?<div role="status"><h2>Confirming your VIP upgrade</h2><p>Your payment is being checked. Please don’t pay again.</p><button className="workspace-quiet" onClick={()=>void check()}>Check upgrade</button></div>:form?<><h2>Complete your VIP upgrade</h2><StripeEmbeddedCheckout {...form} onComplete={()=>{setForm(null);setConfirming(true);active.current?.(true);void check();}}/><button className="membership-embedded-back" onClick={()=>{setForm(null);void check();}}>Back to upgrade</button></>:claim?<><h2>Keep VIP with your purchase.</h2><p>Confirm your saved payment email once to connect the upgrade to your account.</p><AccountAccess initialEmail={email} onSignedIn={()=>void claimed()}/><button className="membership-embedded-back" disabled={busy} onClick={()=>setClaim(false)}>Back to upgrade</button></>:<>
-   <span className="membership-caption">YOUR VIP UPGRADE</span><h2>{customerName?`${customerName}, take the VIP route.`:'Take the VIP route.'}</h2>
+   <h2>{customerName?`${customerName}, take the VIP route.`:'Take the VIP route.'}</h2>
    <div className="membership-price">{priceLabel(vipUpgradeCents)}<small>today</small></div>
    <p className="membership-description">Upgrade your access and go straight to setting up your bot.</p>
    <ul className="membership-includes">{vipBenefits.map(benefit=><li key={benefit}><Check size={15} aria-hidden="true"/>{benefit}</li>)}</ul>

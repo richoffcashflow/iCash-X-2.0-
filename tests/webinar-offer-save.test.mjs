@@ -80,10 +80,12 @@ test('new and legacy VIP defaults open upgrade checkout without changing custom 
  assert.equal(policy.webinarOffers(vip)[0].action,'checkout');
  const legacy={...offer('workspace',800,'Open your workspace'),action:'link',url:'/join?setup=1'};
  const custom={...offer('custom',1100),action:'link',url:'https://example.test/custom'};
- vip.offers=[legacy,custom];
+ const copied={...legacy,id:'last-chance',title:'Last Chance: Only 1 VIP Spot Left',at:1200};
+ vip.offers=[legacy,custom,copied];
  const resolved=policy.webinarOffers(vip);
  assert.equal(resolved[0].action,'checkout');assert.equal(resolved[0].at,800);assert.equal(resolved[0].durationSeconds,59);
  assert.deepEqual(resolved[1],custom);assert.equal(vip.offers[0].action,'link','Reading does not mutate saved configuration');
+ assert.equal(resolved[2].action,'checkout');assert.equal(resolved[2].title,copied.title,'Copied VIP setup links become upgrade offers without losing saved headlines');
  assert.equal(policy.webinarOffers({...vip,parentWebinarId:null})[0].action,'link','Main webinar links retain their configured behavior');
 });
 test('dashboard Edit and title actions retain the Daytime or Nighttime row selection',async()=>{

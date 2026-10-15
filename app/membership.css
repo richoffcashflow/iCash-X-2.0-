@@ -71,3 +71,19 @@
 .conversation-call-player p{font-size:13px;line-height:1.5}
 .conversation-call-player button{min-height:40px;border:1px solid #d4d4d4;border-radius:10px;background:#fff;color:#202020;padding:8px 12px}
 .conversation-body .call-summary-card{max-width:100%;margin:12px 0}
+
+/* VIP stays identifiable through review, authentication and secure payment. */
+.vip-checkout-brand{display:flex;align-items:center;gap:10px;padding:12px 14px;margin:0 0 16px;border:1px solid #e2d0a4;border-radius:10px;background:linear-gradient(125deg,#fcf8ee,#f4e8ca);color:#72551b}
+.vip-checkout-brand>span{display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:4px 9px;border:1px solid #c7a458;border-radius:6px;background:linear-gradient(125deg,#f3e1ad,#c7a458);color:#292312;font-size:12px;font-weight:800;letter-spacing:1.2px;flex:none}
+.vip-checkout-brand>strong{font-size:13px;font-weight:650;line-height:1.4;letter-spacing:.02em}
+.vip-checkout.vip-checkout .setup-primary{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:48px;padding:12px 14px;border:1px solid #c6a45d;border-radius:10px;background:linear-gradient(125deg,#f1dca3,#d1ae63);color:#211c10;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.vip-checkout.vip-checkout .setup-primary:hover:not(:disabled){background:#f3e1ad}
+.vip-checkout.vip-checkout .setup-primary:disabled{opacity:.55;cursor:not-allowed}
+.vip-checkout .setup-primary:focus-visible{outline:2px solid #82601b;outline-offset:3px}
+.vip-checkout .membership-consent input{accent-color:#82601b}
+.vip-checkout .membership-price,.vip-checkout .wb-preview-payment-total strong{color:#72551b}
+.vip-checkout .membership-includes svg,.vip-checkout.wb-payment-preview-done>svg{color:#82601b}
+.vip-checkout .membership-embedded{padding:8px;border:1px solid #e2d0a4;border-radius:12px;background:#fffdf7}
+.webinar-upgrade-card:has(.vip-checkout){border-color:#d7bf88;border-top:4px solid #c7a458;box-shadow:0 18px 60px #72551b0c}
+.wb-room .wb-selling .wb-offer:has(.vip-checkout){border-color:#c7a458;box-shadow:0 8px 28px #72551b14}
+@media(max-width:600px){.vip-checkout-brand{padding:9px 10px;margin-bottom:12px}.vip-checkout .membership-embedded{padding:3px}}
