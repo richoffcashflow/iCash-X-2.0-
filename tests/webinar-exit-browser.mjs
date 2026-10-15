@@ -32,7 +32,9 @@ export async function verifyRegularWebinarRoom(browser,base,options={}){
    // A normal departing link exercises actual pointer navigation through the room.
    await page.evaluate(()=>{const a=document.createElement('a');a.href='/fixture-away';a.id='fixture-exit';a.textContent='Return to site';document.body.prepend(a);});
    const dialog=page.getByRole('dialog');assert.equal(await dialog.isVisible(),false);
-   await page.mouse.move(0,0);await page.mouse.wheel(0,100);assert.equal(await dialog.isVisible(),false);
+   if(options.isMobile)await page.evaluate(()=>window.scrollTo(0,100));
+   else {await page.mouse.move(0,0);await page.mouse.wheel(0,100);}
+   assert.equal(await dialog.isVisible(),false);
    await page.locator('#fixture-exit').click();await dialog.waitFor({state:'visible'});
    assert.match(await dialog.innerText(),/find leads, follow up with sellers, and move deals forward/);
    assert.equal(await page.evaluate(()=>document.activeElement?.textContent),'Keep watching');
