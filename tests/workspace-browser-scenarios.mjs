@@ -238,9 +238,12 @@ export async function verifyWorkspace(browser,base,options,name){
      assert.equal(await page.getByRole('dialog',{name:'Visits & buyer deposit',exact:true}).getByRole('button',{name:'Confirm receipt & reserve property',exact:true}).count(),0,'no deposit form before a signed assignment');
      await page.keyboard.press('Escape');assert(await buyer.isVisible(),'closing a visit panel returns to its buyer');
      await buyer.getByRole('button',{name:'Review buyer funds',exact:true}).click();
-     await page.getByRole('dialog',{name:'Buyer funds & signing authority',exact:true}).getByText('No buyer review requests yet.',{exact:true}).waitFor();
-     await page.keyboard.press('Escape');
-     await page.keyboard.press('Escape');
+     const funds=page.getByRole('dialog',{name:'Buyer funds & signing authority',exact:true});
+     await funds.getByText('No buyer review requests yet.',{exact:true}).waitFor();
+     // WebKit dispatches native dialog cancellation asynchronously. Wait for
+     // each layer to close before Escape targets the parent or the page.
+     await page.keyboard.press('Escape');await funds.waitFor({state:'hidden'});
+     await page.keyboard.press('Escape');await buyer.waitFor({state:'hidden'});
      await card.locator('.property-summary').click();
      await page.getByRole('searchbox').fill('no matching lead');
      await page.getByText('No matching properties in this view',{exact:true}).waitFor();
@@ -295,7 +298,8 @@ export async function verifyWorkspace(browser,base,options,name){
   await retryInside(recoveringBuyer);
   await recoveringBuyer.getByText('Friday afternoon works for my viewing instead.',{exact:true}).waitFor();
   assert.doesNotMatch(await recoveringBuyer.innerText(),/Can I visit Thursday afternoon/,'recovered selection uses the fresh reply rather than its old object');
-  await page.keyboard.press('Escape');await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');await recoveringBuyer.waitFor({state:'hidden'});
+  await page.keyboard.press('Escape');await recoveringBuyers.waitFor({state:'hidden'});
   assert(diagnostics.some(item=>item.event==='panel_error'&&item.stage==='closing'),'closing load failures produce content-free diagnostics');
   assert(diagnostics.some(item=>item.event==='panel_retry'&&item.stage==='buyer_details'),'in-panel retries are observable');
   assert.deepEqual(errors,[]);assert.deepEqual(writes,[],'navigation never signs, sends, charges or changes controls');assert.deepEqual(external,[]);
