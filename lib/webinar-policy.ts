@@ -46,13 +46,14 @@ function validateRecording(w:z.infer<typeof webinarBaseSchema>,c:z.RefinementCtx
  if(w.endOfferId&&!w.offers.some(o=>o.id===w.endOfferId))c.addIssue({code:z.ZodIssueCode.custom,path:['endOfferId'],message:'Choose an existing offer for the ending.'});
  if(w.purchaseNotifications.startAt!==null&&w.purchaseNotifications.startAt>w.durationSeconds)c.addIssue({code:z.ZodIssueCode.custom,path:['purchaseNotifications','startAt'],message:'Must be within the video duration.'});
 }
-export const webinarRecordingSchema=webinarBaseSchema.pick({videoUrl:true,posterUrl:true,durationSeconds:true,nameAt:true,contactAt:true,pitchAt:true,offerTitle:true,ctaLabel:true,offerEndsAt:true,checkoutMode:true,redirectAtEnd:true,chat:true,transcript:true,faq:true,aiEnabled:true,variationEnabled:true,chatStyle:true,offers:true,endOfferId:true,timers:true}).strip();
+// Older Nighttime recordings inherit the existing activity settings until saved.
+export const webinarRecordingSchema=webinarBaseSchema.pick({videoUrl:true,posterUrl:true,durationSeconds:true,nameAt:true,contactAt:true,pitchAt:true,offerTitle:true,ctaLabel:true,offerEndsAt:true,checkoutMode:true,redirectAtEnd:true,chat:true,transcript:true,faq:true,aiEnabled:true,variationEnabled:true,chatStyle:true,offers:true,endOfferId:true,timers:true}).extend({purchaseNotifications:purchaseNotificationsSchema.optional()}).strip();
 export type WebinarRecording=z.infer<typeof webinarRecordingSchema>;
 export const webinarSchema=webinarBaseSchema.extend({nightVersion:webinarRecordingSchema.nullable().default(null),nightEnabled:z.boolean().default(false),recordingVersion:z.enum(['day','night']).default('day')}).superRefine((w,c)=>{
  if(w.status==='published'&&!hasWebinarVideo(w))c.addIssue({code:z.ZodIssueCode.custom,path:['videoUrl'],message:'Add a Daytime or Nighttime video before publishing.'});
  validateRecording(w,c);
  if(w.nightEnabled&&!w.nightVersion)c.addIssue({code:z.ZodIssueCode.custom,path:['nightVersion'],message:'Add a night recording first.'});
- if(w.nightVersion)validateRecording({...w,...w.nightVersion,status:w.nightEnabled&&w.nightVersion.videoUrl?w.status:'draft'}, {...c,path:[...c.path,'nightVersion'],addIssue:issue=>c.addIssue({...issue,path:['nightVersion',...(issue.path??[])]})});
+ if(w.nightVersion)validateRecording({...w,...w.nightVersion,purchaseNotifications:w.nightVersion.purchaseNotifications??w.purchaseNotifications,status:w.nightEnabled&&w.nightVersion.videoUrl?w.status:'draft'}, {...c,path:[...c.path,'nightVersion'],addIssue:issue=>c.addIssue({...issue,path:['nightVersion',...(issue.path??[])]})});
 });
 export type Webinar=z.infer<typeof webinarSchema>;
 /** A single recording covers all hours; the switch applies when both videos exist. */
