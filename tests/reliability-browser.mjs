@@ -9,6 +9,7 @@ import http from 'node:http';
 import https from 'node:https';
 import {chromium,webkit,devices} from 'playwright';
 import {verifyWorkspace} from './workspace-browser-scenarios.mjs';
+import {verifyWebinarExit} from './webinar-exit-browser.mjs';
 import {sellerFunnelStages} from '../lib/conversion-funnel.ts';
 import {dashboardCookie,issueDashboardProof} from '../lib/dashboard-password-policy.ts';
 const port=3015,upstream=`http://127.0.0.1:${port}`,base=`https://127.0.0.1:${port+1}`;
@@ -40,6 +41,7 @@ try{
   if(process.env.BROWSER_ENGINES==='chromium'&&engine!==chromium)continue;
   const browser=await engine.launch({headless:true});
   try{
+   if(name==='desktop Chromium')await verifyWebinarExit(browser);
    const context=await browser.newContext({...options,ignoreHTTPSErrors:true});let failure=false,denied=false,experienceFailure=false,experienceDenied=false,external=0;const errors=[];
    await context.route('**/*',async route=>{
     const url=new URL(route.request().url());
