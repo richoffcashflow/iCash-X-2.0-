@@ -9,6 +9,7 @@ import {dealTermsSchema} from '../lib/deal-documents.ts';
 import {signingReadiness,signingDocumentReadiness,signingTermsHash,signingFields,verifiedSigningStatus} from '../lib/signing-policy.ts';
 
 // Exercise actual server send/auto-sign entry points with only in-memory database and provider fixtures.
+let manualConsent=true;
 let formProfile='legacy',payload=null,tamperPrice=false;
 let now=Date.parse('2026-09-30T12:00:00Z'),advanceBeforeSend=false,advanceAfterAutoClaim=false,records=[],providerWrites=0,autoClaims=0;
 let terms=dealTermsSchema.parse({seller:'Fixture seller',buyer:'Fixture principal',address:'Fixture only',legalDescription:'Fixture lot',state:'TX',priceCents:100000,priceSource:'seller_reported',earnestCents:0,closingDate:'2026-10-02'});
@@ -17,6 +18,10 @@ const envelope=()=>({id:'envelope',account_id:'account',deal_id:'deal',terms,kin
 const template=()=>({form_profile:formProfile,id:'template',provider:'docuseal',provider_template_id:'123',placeholder_names:['Seller','Customer'],field_map:Object.fromEntries(Object.keys(signingFields(terms,'purchase',false,formProfile)).map(k=>[k,k])),test_mode:true,rate_id:null,reviewed_until:'2027-01-01T00:00:00Z',max_legal_description_chars:2000,automated_signing_reviewed:true,customer_signature_field:'signature',customer_consent_field:'consent'});
 const db=async(path,method,body)=>{
  records.push({path,method,body});
+ if(path.startsWith('icash_text_threads'))return [{id:'fixture-thread'}];
+ if(path.startsWith('icash_text_suppressions'))return [];
+ if(path==='rpc/icash_manual_signing_sms_current'){assert.equal(body.p_actor,'user');return manualConsent;}
+ if(path==='rpc/icash_sms_thread_review_current')return false;
  if(path.startsWith('icash_deal_files'))return [{terms,stage:'draft'}];
  if(path.startsWith('icash_customer_identities'))return [{principal:'Fixture principal'}];
  if(path.startsWith('icash_signing_templates'))return [template()];
@@ -43,6 +48,11 @@ globalThis.fetch=fixtureFetch;Date.now=()=>now;process.env.DOCUSEAL_TEST_API_KEY
 const input={accountId:'account',userId:'user',customerEmail:'customer@example.invalid',dealId:'deal',kind:'purchase',signers:[{name:'Fixture seller',email:'seller@example.invalid'}],autoSignature:'Fixture signature'};
 try{
  await sendForSignatures(input);assert.equal(providerWrites,1);
+ const phoneInput={...input,autoSignature:undefined,manualSend:true,signers:[{name:'Fixture seller',phone:'+12125550123',email:'seller@example.invalid'}]};
+ providerWrites=0;await sendForSignatures(phoneInput);assert.equal(providerWrites,1,'manual send uses owner-bound consent while property automation is paused');
+ assert.equal(payload.submitters[0].email,'seller@example.invalid');
+ providerWrites=0;manualConsent=false;await assert.rejects(()=>sendForSignatures(phoneInput),/current text conversation/);assert.equal(providerWrites,0);manualConsent=true;
+ await assert.rejects(()=>sendForSignatures({...phoneInput,manualSend:false}),/current text conversation/);assert.equal(providerWrites,0,'automatic sending does not inherit manual authorization');
  records=[];providerWrites=0;terms={...terms,earnestCents:null};
  await sendForSignatures(input);assert.equal(providerWrites,1,'missing seller EMD does not block signing');
  records=[];providerWrites=0;terms={...terms,legalDescription:''};

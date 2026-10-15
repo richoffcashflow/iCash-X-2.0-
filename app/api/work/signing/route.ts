@@ -15,7 +15,7 @@ export async function POST(req:Request){
  try{const {accountId,userId}=await workAccount();const raw=await req.text();if(raw.length>6000)throw new Error('Request too large');const i=input.parse(JSON.parse(raw));
   const user=await currentUser();if(!user?.email)throw new Error('Verified customer email required.');
   if(i.action==='revoke_auto'){const changed=await db<unknown[]>(`icash_signature_authorizations?envelope_id=eq.${i.id}&account_id=eq.${accountId}&state=eq.authorized`,'PATCH',{state:'revoked'});return NextResponse.json({message:changed.length?'Auto-sign turned off for this agreement.':'No pending authorization changed. A signature already in progress cannot be recalled here.'});}
-  const result=i.action==='send'?await sendForSignatures({...i,accountId,userId,customerEmail:user.email}):i.action==='link'?await customerSigningLink(accountId,i.id,user.email):await refreshSigning(accountId,i.id);
+  const result=i.action==='send'?await sendForSignatures({...i,accountId,userId,customerEmail:user.email,manualSend:true}):i.action==='link'?await customerSigningLink(accountId,i.id,user.email):await refreshSigning(accountId,i.id);
   return NextResponse.json(result,{headers:{'Cache-Control':'private, no-store'}});
  }catch(e){const message=e instanceof Error?e.message:'';return NextResponse.json({error:message.startsWith('[')||message==='Database request failed'?'Could not prepare signing. An existing request may need review before another can be sent.':message||'Signing unavailable.'},{status:409});}
 }

@@ -1,5 +1,6 @@
 import {normalizeDocuseal, type Submission} from './docuseal-policy.ts';
 import {verifiedSigningStatus} from './signing-policy.ts';
+import type {CancellationNotice} from './cancellation-notice-policy.ts';
 
 export type CancellationEnvelope = {
  id:string; account_id:string; deal_id:string; kind:'purchase'|'assignment';
@@ -28,4 +29,5 @@ export type CancellationRecord = {
 export type CancellationView = {
  revision:string;stage:string;hasAssignment:boolean;blocked:boolean;
  requests:CancellationRecord[];
+ notices?:CancellationNotice[];
 };

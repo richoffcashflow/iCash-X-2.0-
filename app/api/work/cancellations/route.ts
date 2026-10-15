@@ -10,6 +10,7 @@ export const maxDuration=120;
 const headers={'Cache-Control':'private, no-store'};
 const uuid=z.string().uuid();
 const input=z.discriminatedUnion('action',[
+ z.object({action:z.literal('notice_email'),id:uuid,email:z.string().trim().email().max(254),confirmed:z.literal(true)}).strict(),
  z.object({action:z.literal('request'),dealId:uuid,kind:z.enum(['purchase','assignment']),reason:z.string().trim().min(3).max(1000),key:uuid,revision:z.string().regex(/^[a-f0-9]{32}$/),confirmed:z.literal(true)}).strict(),
  z.object({action:z.literal('check'),id:uuid}).strict(),
  z.object({action:z.literal('complete'),id:uuid,confirmed:z.literal(true),releaseReference:z.string().trim().min(8).max(1000),resolutionReference:z.string().trim().max(1000)}).strict()
@@ -24,11 +25,16 @@ export async function GET(req:Request){
 
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
- let held=false;
+ let held=false,noticeEmail=false;
  try{
   const {accountId,userId}=await workAccount({allowInactiveMembership:true,allowUnacknowledged:true});
   const raw=await req.text();if(raw.length>6000)throw Error('Request too large');
   const body=input.parse(JSON.parse(raw));
+  if(body.action==='notice_email'){
+   noticeEmail=true;
+   const dealId=await db<string>('rpc/icash_cancellation_notice_email','POST',{p_account:accountId,p_actor:userId,p_notice:body.id,p_email:body.email});
+   return NextResponse.json(await cancellationView(accountId,userId,dealId),{headers});
+  }
   const id=body.action==='request'?await db<string>('rpc/icash_request_cancellation','POST',{
    p_account:accountId,p_actor:userId,p_deal:body.dealId,p_kind:body.kind,p_reason:body.reason,p_key:body.key,p_revision:body.revision
   }):body.id;
@@ -39,5 +45,5 @@ export async function POST(req:Request){
    p_release:body.action==='complete'?body.releaseReference:'',p_resolution:body.action==='complete'?body.resolutionReference:''
   });
   return NextResponse.json(await cancellationView(accountId,userId,dealId),{headers});
- }catch{return NextResponse.json({error:held?'The cancellation may still need review. Refresh to see the saved hold before taking another action.':'Could not start cancellation. Refresh to check whether the agreement changed or a cancellation is already open.'},{status:409,headers});}
+ }catch{return NextResponse.json({error:noticeEmail?'Could not save this email. Refresh the notice and check the signer’s address.':held?'The cancellation may still need review. Refresh to see the saved hold before taking another action.':'Could not start cancellation. Refresh to check whether the agreement changed or a cancellation is already open.'},{status:409,headers});}
 }
