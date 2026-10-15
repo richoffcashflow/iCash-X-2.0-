@@ -11,6 +11,7 @@ import {db} from '@/lib/stripe-test';
 import {accountMode} from '@/lib/account-mode';
 import {membershipAccessible} from '@/lib/membership-policy';
 import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
+import {workspaceAcknowledgmentCurrent,type WorkspaceAcknowledgmentRecord} from '@/lib/workspace-acknowledgment';
 export const dynamic='force-dynamic';
 export const maxDuration=60;
 type Snapshot={accountId:string;account:{billingModel:string;membership:{state:string;paid_through:string|null}|null;balanceCents:number;billingReview:boolean;[key:string]:unknown}};
@@ -24,12 +25,16 @@ export async function GET(req:Request){
   if(!snapshot?.accountId||!snapshot.account||!Number.isSafeInteger(snapshot.account.balanceCents))throw Error('Invalid account snapshot');
   const {membership,...account}=snapshot.account;
   const membershipActive=membershipAccessible(membership);
-  const access=await db<{vip:boolean;vipFeatures:boolean;adminPlan:'standard'|'vip'|null}>('rpc/icash_workspace_vip_access','POST',{p_account:snapshot.accountId});
-  const base={...account,...access,signedIn:true,mode,email:user.email,pendingEmail:user.new_email&&user.new_email!==user.email?user.new_email:null,membershipActive,isBillingOwner:user.id===ownerInboundTarget.ownerUserId};
-  const canCheck=mode==='live'&&account.balanceCents>0&&!account.billingReview&&(account.billingModel!=='membership_credits'||membershipActive);
+  const [access,acknowledgments]=await Promise.all([
+   db<{vip:boolean;vipFeatures:boolean;adminPlan:'standard'|'vip'|null}>('rpc/icash_workspace_vip_access','POST',{p_account:snapshot.accountId}),
+   db<WorkspaceAcknowledgmentRecord[]>(`icash_accounts?id=eq.${snapshot.accountId}&owner_user_id=eq.${user.id}&select=workspace_ack_version,workspace_ack_user_id,workspace_ack_hash&limit=1`)
+  ]);
+  const workspaceAcknowledged=!!acknowledgments[0]&&workspaceAcknowledgmentCurrent(acknowledgments[0],user.id);
+  const base={...account,...access,workspaceAcknowledged,signedIn:true,mode,email:user.email,pendingEmail:user.new_email&&user.new_email!==user.email?user.new_email:null,membershipActive,isBillingOwner:user.id===ownerInboundTarget.ownerUserId};
+  const canCheck=workspaceAcknowledged&&mode==='live'&&account.balanceCents>0&&!account.billingReview&&(account.billingModel!=='membership_credits'||membershipActive);
   const core=req&&new URL(req.url).searchParams.get('view')==='core';
   const held={workReady:false,smsWorkReady:false,discoveryWorkReady:false,contactWorkReady:false,discoveryQuote:null,contactQuote:null,discoveryBlocker:account.balanceCents<=0?'available_credits_required':null};
-  if(core&&mode==='live'&&membershipActive)after(()=>recordSoftwareAccess(req,snapshot.accountId,user.id));
+  if(core&&workspaceAcknowledged&&mode==='live'&&membershipActive)after(()=>recordSoftwareAccess(req,snapshot.accountId,user.id));
   // The page paints its verified account first. Provider/setup checks are a later request.
   if(core||!canCheck)return NextResponse.json({...base,...held,readinessPending:!!core&&canCheck},{headers});
   stage='work_readiness';

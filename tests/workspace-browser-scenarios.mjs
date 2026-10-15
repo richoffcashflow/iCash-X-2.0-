@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import {makeWorkspaceFixture,fixtureAccount} from './fixtures/workspace-volume.mjs';
+import {workspaceAcknowledgmentVersion} from '../lib/workspace-acknowledgment-policy.ts';
 import {workspaceExperienceEvents,workspaceExperienceStages} from '../lib/workspace-experience-events.ts';
 
 export async function verifyWorkspace(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
  const page=await context.newPage(),errors=[],writes=[],external=[],diagnostics=[];
  page.setDefaultTimeout(12000);page.setDefaultNavigationTimeout(20000);page.on('dialog',dialog=>void dialog.accept());
+ let acknowledged=true,ackFail=false,manual=false,controlFail=false;const acceptedWrites=[],controlWrites=[],apiReads=[];
  let scenario='lead',preview=true,emptySearch=false,fulfillmentMode='ok',intentionalCrash=false,callMode='unavailable';
  await context.addInitScript(()=>{Object.defineProperty(navigator,'mediaDevices',{value:{getUserMedia:async()=>{window.fixtureMicrophoneRequests=(window.fixtureMicrophoneRequests||0)+1;throw new DOMException('Fixture microphone denied','NotAllowedError');}},configurable:true});});
  const fulfillmentHolds=new Set();
@@ -27,7 +29,7 @@ export async function verifyWorkspace(browser,base,options,name){
  ];
  const signed=()=>scenario.startsWith('closing')||Object.hasOwn(waitingStages,scenario)||['buyers','cancelled','cancellation_pending'].includes(scenario);
  function work(url){
-  const data=makeWorkspaceFixture({count:1});
+  const data=makeWorkspaceFixture({count:1,manualIds:manual?['00000000-0000-4000-8000-000000000001']:[]});
   Object.assign(data,{textAttention:[],propertyAttentionIds:[],contacts:[],conversations:[],journeys:[],signingConfigured:true});
   const deal=data.deals[0];deal.stage=scenario.startsWith('closing')?'closing':scenario==='cancelled'?'cancelled':scenario==='cancellation_pending'?'cancellation_pending':signed()?'under_contract':'draft';
   Object.assign(data.properties[0].result.property,{financialScreening:{estimatedLoanBalanceCents:4500000,equityCents:14500000,activeLien:true,lienAmountCents:4500000,status:'title_review_needed'}});
@@ -43,14 +45,16 @@ export async function verifyWorkspace(browser,base,options,name){
   if(url.origin!==base){external.push(url.origin);return route.abort();}
   if(!url.pathname.startsWith('/api/'))return route.continue();
   if(preview){writes.push(`Preview requested ${url.pathname}`);return route.fulfill({status:403,json:{error:'Preview has no APIs'}});}
+  if(url.pathname==='/api/account/workspace-acknowledgment'&&request.method()==='POST'){const body=request.postDataJSON();assert.deepEqual(body,{version:workspaceAcknowledgmentVersion,accepted:true});acceptedWrites.push(body);if(ackFail)return route.fulfill({status:503,json:{error:'Fixture save failed. Please try again.'}});acknowledged=true;return route.fulfill({json:{accepted:true,version:workspaceAcknowledgmentVersion,acceptedAt:new Date().toISOString()}});}
+  if(url.pathname==='/api/work/control'&&request.method()==='POST'){assert(acknowledged);const body=request.postDataJSON();assert.equal(body.screeningId,'00000000-0000-4000-8000-000000000001');assert(['takeover','return_to_bot'].includes(body.action));controlWrites.push(body);if(controlFail)return route.fulfill({status:503,json:{error:'Fixture unavailable'}});manual=body.action==='takeover';return route.fulfill({json:{saved:true}});}
   if(url.pathname==='/api/work/experience'&&request.method()==='POST'){
    const diagnostic=request.postDataJSON();assert.deepEqual(Object.keys(diagnostic).sort(),['event','stage']);
    assert(workspaceExperienceEvents.includes(diagnostic.event));assert(workspaceExperienceStages.includes(diagnostic.stage));diagnostics.push(diagnostic);
    return route.fulfill({json:{recorded:true}});
   }
   if(request.method()!=='GET'){writes.push(url.pathname);return route.fulfill({status:403,json:{error:'Read-only fixture'}});}
-  const p=url.pathname;
-  if(p==='/api/account')return route.fulfill({json:{...fixtureAccount,mode:'live',vip:true,vipFeatures:true,billingModel:'membership_credits',membershipActive:true}});
+  const p=url.pathname;apiReads.push(p);
+  if(p==='/api/account')return route.fulfill({json:{...fixtureAccount,workspaceAcknowledged:acknowledged,mode:'live',vip:true,vipFeatures:true,billingModel:'membership_credits',membershipActive:true}});
   if(p==='/api/work/activity')return route.fulfill({json:work(url)});
   if(p==='/api/work/buyer-network')return route.fulfill({json:{...network,hasActiveDeal:signed()&&scenario!=='cancelled'&&scenario!=='cancellation_pending',responses:signed()?2:0,buyers:signed()?network.buyers:[]}});
   if(p==='/api/work/property-photo')return route.fulfill({json:{photo:null}});
@@ -113,6 +117,23 @@ export async function verifyWorkspace(browser,base,options,name){
  try{
   await page.goto(base+'/preview/workspace?preview=1');
   await page.getByRole('heading',{name:'One property. One clear next step.'}).waitFor();
+  await page.getByRole('region',{name:'Course walkthrough'}).waitFor();
+  for(const kind of ['purchase','assignment']){
+   await page.getByRole('button',{name:`Preview ${kind} contract`,exact:true}).click();
+   const contract=page.getByRole('dialog',{name:`Sample ${kind} contract`,exact:true});await contract.waitFor();
+   const frame=contract.frameLocator('iframe');await frame.getByText('FICTIONAL COURSE EXAMPLE · NOT FOR SIGNATURE',{exact:true}).waitFor();
+   assert.match(await frame.locator('body').innerText(),kind==='purchase'?/90000.00/:/10000.00/);
+   assert.equal(await frame.locator('input,button,form').count(),0);
+   assert(await contract.evaluate(node=>node.getBoundingClientRect().right<=innerWidth&&node.getBoundingClientRect().left>=0),'contract dialog fits the viewport');
+   await page.screenshot({path:`/tmp/icash-${kind}-contract-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
+   await page.getByRole('button',{name:'Close contract preview'}).click();
+  }
+  await page.getByRole('button',{name:/^Take over ·/}).click();await page.getByRole('button',{name:/^Return to bot ·/}).waitFor();
+  await page.getByRole('button',{name:/^Return to bot ·/}).click();
+  await page.getByRole('button',{name:'Preview first-entry acknowledgment'}).click();
+  const agree=page.getByRole('button',{name:'I agree & open workspace',exact:true});assert(await agree.isDisabled());
+  await page.getByRole('checkbox').check();await agree.click();await page.getByRole('heading',{name:'One property. One clear next step.'}).waitFor();
+
   await page.getByRole('region',{name:'Buyer activity',exact:true}).getByText('Avery Morgan',{exact:true}).first().waitFor();
   await page.getByRole('button',{name:'View buyer package',exact:true}).click();
   await page.getByRole('dialog').waitFor();assert.match(await page.getByRole('dialog').innerText(),/\$100,000/);assert.doesNotMatch(await page.getByRole('dialog').innerText(),/\$90,000|assignment fee/i);
@@ -179,6 +200,24 @@ export async function verifyWorkspace(browser,base,options,name){
   await page.keyboard.press('Escape');intentionalCrash=false;
   assert.deepEqual(writes,[],'preview recovery never calls APIs');
   preview=false;
+  acknowledged=false;ackFail=true;apiReads.length=0;await page.goto(base+'/');
+  await page.getByRole('heading',{name:'Before you use iCash X'}).waitFor();
+  assert.equal(await page.locator('.live-property').count(),0);assert.equal(await page.getByRole('button',{name:'Run bot',exact:true}).count(),0);
+  assert(!apiReads.includes('/api/work/activity')&&!apiReads.includes('/api/work/next-action'),'workspace data and activation remain unmounted before acceptance');
+  const accept=page.getByRole('button',{name:'I agree & open workspace',exact:true});assert(await accept.isDisabled());
+  await page.screenshot({path:`/tmp/icash-acknowledgment-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
+  await page.getByRole('checkbox').check();await accept.click();await page.getByRole('alert').getByText('Fixture save failed. Please try again.',{exact:true}).waitFor();
+  assert.equal(await page.locator('.live-property').count(),0);assert.equal(acceptedWrites.length,1);
+  ackFail=false;await accept.click();await page.locator('.live-property').first().waitFor();assert.equal(acceptedWrites.length,2);
+  await page.reload();await page.locator('.live-property').first().waitFor();assert.equal(await page.getByRole('heading',{name:'Before you use iCash X'}).count(),0);
+  const collapsed=page.locator('.live-property').first();assert.equal(await collapsed.locator('.property-summary').getAttribute('aria-expanded'),'false');
+  controlFail=true;await collapsed.getByRole('button',{name:/^Take over ·/}).click();await collapsed.getByRole('status').getByText('Could not confirm the control change.',{exact:false}).waitFor();
+  assert.equal(await collapsed.getByRole('button',{name:/^Return to bot ·/}).count(),0);
+  controlFail=false;await collapsed.getByRole('button',{name:/^Take over ·/}).click();await collapsed.getByRole('button',{name:/^Return to bot ·/}).waitFor();
+  await collapsed.getByRole('status').getByText('New automatic work is paused for this property.',{exact:false}).waitFor();
+  await collapsed.getByRole('button',{name:/^Return to bot ·/}).click();await collapsed.getByRole('button',{name:/^Take over ·/}).waitFor();
+  assert.deepEqual(controlWrites.map(write=>write.action),['takeover','takeover','return_to_bot']);
+
   for(const state of ['lead','waiting','signature','buyers',...Object.keys(waitingStages),'closing','closing_waiting','cancelled','cancellation_pending']){
    const card=await openProperty(state);
    assert.equal(await card.getByRole('button',{name:/View deal/}).count(),0);
@@ -344,7 +383,7 @@ export async function verifyWorkspace(browser,base,options,name){
   assert(diagnostics.some(item=>item.event==='panel_error'&&item.stage==='closing'),'closing load failures produce content-free diagnostics');
   assert(diagnostics.some(item=>item.event==='panel_retry'&&item.stage==='buyer_details'),'in-panel retries are observable');
   assert.deepEqual(errors,[]);assert.deepEqual(writes,[],'navigation never signs, sends, charges or changes controls');assert.deepEqual(external,[]);
-  console.log(`PASS ${name}: staged access, title messages, in-panel loading/failure/recovery, preserved drafts, crash containment, cancellation and search; zero work writes.`);
+  console.log(`PASS ${name}: staged access, title messages, in-panel loading/failure/recovery, preserved drafts, crash containment, cancellation and search; required acknowledgment, takeover recovery and inert contract previews. No live work or provider requests.`);
  }catch(error){console.error({name,scenario,errors,writes,body:(await page.locator('body').innerText()).slice(-7000)});throw error;}
  finally{releaseFulfillment();await context.close();}
 }

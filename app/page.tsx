@@ -6,6 +6,9 @@ import {workspaceNextAction,workspaceActionDisabled} from '@/lib/workspace-statu
 import {BookOpen,Menu,X} from 'lucide-react';
 import styles from './workspace-easy.module.css';
 import './icash-brand.css';
+import './workspace-course.css';
+import {WorkspaceAcknowledgment} from '@/components/workspace-acknowledgment';
+import {WorkspaceGuide} from '@/components/workspace-guide';
 import {WorkspaceConversion} from '@/components/workspace-conversion';
 import {FundingCheckout} from '@/components/funding-checkout';
 import {FundingDialog} from '@/components/funding-dialog';
@@ -34,7 +37,7 @@ import {AdminPlanToggle,type AccountPlan} from '@/components/workspace-vip-banne
 import {PlatformBuyerNetwork} from '@/components/platform-buyer-network';
 import {BotCustomization} from '@/components/bot-customization';
 import {setupThemes,type BotProfile} from '@/lib/bot-setup';
-type Account={vip?:boolean;vipFeatures?:boolean;adminPlan?:AccountPlan|null;readinessPending?:boolean;billingModel?:string;membershipActive?:boolean;isBillingOwner?:boolean;identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;pendingEmail?:string|null;phone?:string;hasCreditHistory?:boolean;balanceCents?:number;reservedCents?:number;dailyLimitCents?:number;assistantName?:string;paused?:boolean;billingActive?:boolean;billingReview?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;activeWork?:boolean};
+type Account={workspaceAcknowledged?:boolean;vip?:boolean;vipFeatures?:boolean;adminPlan?:AccountPlan|null;readinessPending?:boolean;billingModel?:string;membershipActive?:boolean;isBillingOwner?:boolean;identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;pendingEmail?:string|null;phone?:string;hasCreditHistory?:boolean;balanceCents?:number;reservedCents?:number;dailyLimitCents?:number;assistantName?:string;paused?:boolean;billingActive?:boolean;billingReview?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;activeWork?:boolean};
 export default function Home(){
  const [account,setAccount]=useState<Account|null>(null),[accountError,setAccountError]=useState(false),[signInOpen,setSignInOpen]=useState(false),[fundingOpen,setFundingOpen]=useState(false),[fundingCode,setFundingCode]=useState(''),[controlBusy,setControlBusy]=useState(false),[controlError,setControlError]=useState(''),[draftBrand,setDraftBrand]=useState<BotProfile|null>(null);
  const [reviewVip,setReviewVip]=useState(false);
@@ -63,7 +66,7 @@ export default function Home(){
  const updateActivationAvailability=useCallback((available:boolean)=>setActivationAvailability(current=>current?.key===activationKey&&current.available===available?current:{key:activationKey,available}),[activationKey]);
  const spendingActivationAvailable=account?.signedIn===true&&account.mode==='live'&&activationAvailability?.key===activationKey&&activationAvailability.available===true;
  const updateBrand=useCallback((profile:BotProfile)=>setDraftBrand(profile),[]);
- async function refreshAccount(force=false){
+ async function refreshAccount(force=false,requireAcknowledged=false){
   if(refreshInFlight.current&&!force)return false;accountRequest.current?.abort();refreshInFlight.current=true;const generation=++accountGeneration.current;readinessRequest.current?.abort();const coreController=new AbortController();accountRequest.current=coreController;
   try{
    const next=await workspaceRequest<Account>('/api/account?view=core',{cache:'no-store',signal:coreController.signal});
@@ -75,7 +78,7 @@ export default function Home(){
      if(generation===accountGeneration.current&&!controller.signal.aborted&&details.signedIn&&details.email===next.email)setAccount(details);
     }).catch(()=>{/* Optional checks never erase a successfully loaded account. Work APIs still authorize every action. */});
    }
-   return true;
+   return !requireAcknowledged||next.workspaceAcknowledged===true;
   }catch{if(generation===accountGeneration.current)setAccountError(true);return false;}finally{if(generation===accountGeneration.current)refreshInFlight.current=false;}
  }
  useEffect(()=>()=>{accountGeneration.current++;accountRequest.current?.abort();readinessRequest.current?.abort();refreshInFlight.current=false;},[]);
@@ -148,6 +151,7 @@ export default function Home(){
  // profile. Missing branding is not evidence that their bot needs creating.
  const needsBotName=account?.signedIn===true&&!account.readinessPending&&!accountError&&!botRunning&&!account.activeWork&&((account.balanceCents??0)>0||account.billingModel==='prepaid'||account.membershipActive===true)&&!account.assistantName?.trim()&&!account.botSetup?.profile.displayName?.trim();
  if(guest)return <WebinarExpressCheckout checkingAccount={!account} accountError={accountError} signInReady={account?.signInReady??true} onRetry={()=>void refreshAccount()} onSignedIn={()=>void refreshAccount(true)}/>;
+ if(account.workspaceAcknowledged!==true)return <main className="workspace-ack-shell"><span className="workspace-ack-brand">iCash X</span><WorkspaceAcknowledgment key={account.email} onAccepted={()=>refreshAccount(true,true)}/>{accountError&&<p role="alert">Your account could not refresh. <button onClick={()=>void refreshAccount(true)}>Retry</button></p>}<div className="workspace-ack-actions"><SupportLauncher onMembershipChanged={membershipChanged}/>{account.paused===false&&<button type="button" disabled={controlBusy} onClick={()=>void toggleBot('pause')}>{controlBusy?'Pausing…':'Pause bot'}</button>}<button type="button" onClick={()=>void signOut()}>Sign out</button>{account.billingModel==='membership_credits'&&<button type="button" onClick={()=>setCancellationOpen(true)}>Cancel subscription</button>}</div>{controlError&&<p role="alert">{controlError}</p>}{cancellationOpen&&<MembershipSettings cancellationOnly onClosed={()=>setCancellationOpen(false)} onChanged={membershipChanged}/>}</main>;
  return <div className={`console-shell personalized-workspace minimal-workspace assistant-workspace icash-brand-workspace ${styles.workspace}${displayVip&&!workspaceLocked?' '+styles.vip:''}`} style={{'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties}>
   <header className="console-header">
    <button type="button" className="workspace-course-launcher" aria-haspopup="dialog" aria-expanded={courseOpen} onClick={()=>setCourseOpen(true)}><BookOpen size={17} aria-hidden="true"/>Course</button>
@@ -162,13 +166,14 @@ export default function Home(){
       {!workspaceLocked&&!displayVip&&!canSwitchPlan&&account.billingModel==='membership_credits'&&<button type="button" className="workspace-vip-menu" aria-haspopup="dialog" disabled={controlBusy||accountError} onClick={()=>{closeAccountMenu(true);setReviewVip(true);}}>Explore VIP</button>}
       {!workspaceLocked&&<button type="button" onClick={()=>{closeAccountMenu(true);setCustomizeOpen(true);}}>Customize bot</button>}
       {!workspaceLocked&&<button type="button" aria-expanded={settingsOpen} onClick={()=>{closeAccountMenu(true);setSettingsOpen(v=>!v);}}>Settings</button>}
+      <a href="/api/account/workspace-acknowledgment" download>My workspace acknowledgment</a>
       <button type="button" onClick={()=>{closeAccountMenu(true);void signOut();}}>Sign out</button>
       {account.billingModel==='membership_credits'&&<button type="button" className="workspace-cancel-subscription" onClick={()=>{closeAccountMenu(true);setCancellationOpen(true);}}>Cancel subscription</button>}
      </div>
     </details>
    </div>
   </header>
-  {courseOpen&&<FundingDialog title="Course" onClose={()=>setCourseOpen(false)}><div className="workspace-course-empty"><BookOpen size={28} aria-hidden="true"/><p>Lessons are coming soon.</p></div></FundingDialog>}
+  {courseOpen&&<FundingDialog title="Course" onClose={()=>setCourseOpen(false)}><WorkspaceGuide expanded/>{account.isBillingOwner&&<a className="workspace-quiet" href="/preview/workspace?stage=lead" target="_blank" rel="noopener noreferrer">Open course workspace preview</a>}</FundingDialog>}
   {cancellationOpen&&<MembershipSettings cancellationOnly onClosed={()=>{setCancellationOpen(false);accountMenu.current?.querySelector('summary')?.focus();}} onChanged={membershipChanged}/>}
   <main className="console-main">
    {accountError&&<p role="alert">Could not load your account. <button onClick={()=>void refreshAccount()}>Retry</button></p>}
@@ -180,6 +185,7 @@ export default function Home(){
     <BotRunBar hasLeads={leadPresence?.email===account.email?leadPresence?.hasLeads:undefined} botName={profile?.displayName||account.assistantName} vip={displayVip} onVip={displayVip&&!canSwitchPlan&&account.billingModel==='membership_credits'?()=>setReviewVip(true):undefined} running={botRunning} paymentRequired={account.billingModel==='membership_credits'&&!account.membershipActive} stopped={account.paused===true&&(account.balanceCents??0)>0} busy={controlBusy} stale={accountError} balanceCents={guest?undefined:account.balanceCents} hasCreditHistory={account.hasCreditHistory} canPause={account.paused===false&&((account.balanceCents??0)>0||account.billingActive===true)} principalKey={account.email} onBudget={()=>openFunding()} onPause={()=>void toggleBot('pause')} onResume={()=>void toggleBot('resume')}/>
     <WorkspaceConversion key={account.email??'account'} principal={account.email??''} balanceCents={account.balanceCents} paused={account.paused} stale={accountError||!!account.billingReview} attentionPending={attentionPending} hidden={customizeOpen||fundingOpen||settingsOpen||preferencesOpen||courseOpen||cancellationOpen||reviewVip||needsIdentity||needsBotName||new URLSearchParams(typeof window==='undefined'?'':window.location.search).get('payment')==='funded'} busy={controlBusy} onFunding={(amountCents,reason)=>openFunding('',{amountCents,reason})} onResume={()=>void toggleBot('resume')} onVip={()=>setReviewVip(true)} onWork={openNextWork}/>
     <div className={styles.activity}><BudgetSummary key={`${account.email}:${displayVip}`} vip={displayVip}/></div>
+    <WorkspaceGuide/>
     {fundingOpen&&<FundingDialog title={guest||account.billingModel==='membership_credits'&&!account.membershipActive?'iCash X 2.0':returningWithoutCredits?'Out of credits':creditsExhausted?'Start your bot':'Add money'} onClose={closeFunding}>{guest||account.billingModel==='membership_credits'&&!account.membershipActive?<MembershipCheckout onSignedIn={()=>{closeFunding();void refreshAccount(true);}}/>:<FundingCheckout initialAmountCents={fundingSuggestion?.amountCents} reason={fundingSuggestion?.reason} outOfCredits={returningWithoutCredits} initialCode={fundingCode||undefined} onSignedIn={()=>{closeFunding();void refreshAccount(true);}}/>}</FundingDialog>}
     {reviewVip&&<FundingDialog title={account.isBillingOwner?'Your account plan':account.vip?'Your VIP membership':'Switch to VIP'} onClose={()=>setReviewVip(false)}><div className={styles.vipPanel}>{account.isBillingOwner?<><AdminPlanToggle plan={account.vip?'vip':'standard'} busy={controlBusy||accountError} onChange={plan=>void changePlan(plan)}/>{controlError&&<p role="alert">{controlError}</p>}</>:<MembershipSettings key={account.email} planOnly onChanged={membershipChanged}/>}</div></FundingDialog>}
     {!guest&&customizeOpen&&<FundingDialog title="Customize bot" onClose={()=>setCustomizeOpen(false)}><BotCustomization key={`${account.email}:${featureVip}`} name={profile?.displayName||account.assistantName||''} vip={featureVip} onSaved={()=>refreshAccount(true)} onUpgrade={()=>{setCustomizeOpen(false);setReviewVip(true);}}/></FundingDialog>}

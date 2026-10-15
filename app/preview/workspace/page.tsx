@@ -3,6 +3,7 @@ import type {Metadata} from 'next';
 import {WorkspacePreview} from './workspace-preview';
 import {dashboardCurrentUser} from '@/lib/dashboard-password';
 import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
+import {coursePreviewContracts} from '@/lib/course-preview-contracts';
 
 export const dynamic='force-dynamic';
 export const metadata:Metadata={title:'iCash X workspace preview',robots:{index:false,follow:false}};
@@ -16,5 +17,5 @@ export default async function Page(){
   if(!user)redirect('/dashboard-unlock?next=%2Fpreview%2Fworkspace');
   if(user.id!==ownerInboundTarget.ownerUserId)notFound();
  }
- return <WorkspacePreview/>;
+ return <WorkspacePreview contracts={coursePreviewContracts()}/>;
 }

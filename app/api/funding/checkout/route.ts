@@ -1,4 +1,5 @@
 import {recordPurchaseAcceptance} from '@/lib/purchase-acceptance';
+import {workspaceAcknowledgmentCurrent,type WorkspaceAcknowledgmentRecord} from '@/lib/workspace-acknowledgment';
 import {finalSaleSummary} from '@/lib/final-sale-policy';
 import {checkoutPublishableKey,checkoutMatchesPresentation,fundingCheckoutPresentation} from '@/lib/embedded-checkout-policy';
 import {autoRechargeVersion,autoRechargeTerms,autoRechargeSummary} from '@/lib/auto-recharge-policy';
@@ -50,9 +51,10 @@ export async function POST(req:Request){
  try{
  await limitRequest(req,"checkout",token,10,600);
  const user=await currentUser();
- const accounts=user?await db<{id:string}[]>(`icash_accounts?owner_user_id=eq.${user.id}&select=id&limit=1`):[];
+ const accounts=user?await db<({id:string}&WorkspaceAcknowledgmentRecord)[]>(`icash_accounts?owner_user_id=eq.${user.id}&select=id,workspace_ack_version,workspace_ack_user_id,workspace_ack_hash&limit=1`):[];
  const accountId=accounts[0]?.id??null;const hash=guestHash(token);
  if(!privateCheck&&(!prepaid||!accountId||runDays!==1))return NextResponse.json({error:'Open your software account first, then add one-time work credits from your workspace.'},{status:401});
+ if(!privateCheck&&user&&!workspaceAcknowledgmentCurrent(accounts[0],user.id))return NextResponse.json({error:'Accept the workspace acknowledgment before adding work credits.'},{status:403});
  if(prepaid&&accountId){const [legacy]=await db<{id:string}[]>(`icash_daily_plans?account_id=eq.${accountId}&mode=eq.${mode}&state=neq.stopped&select=id&limit=1`);if(legacy)return NextResponse.json({error:'Stop the existing daily plan before switching to prepaid credits.'},{status:409});if(mode==='live'&&!await db<boolean>('rpc/icash_membership_work_allowed','POST',{p_account:accountId}))return NextResponse.json({error:'Your software subscription needs attention. Manage it before adding credits.'},{status:409});}
  const membership=prepaid&&accountId?await accountMembership(accountId):null;
  const billingCustomer=membership?.mode===mode&&membership.account_id===accountId&&/^cus_[A-Za-z0-9]+$/.test(membership.stripe_customer_id??'')?membership.stripe_customer_id:null;

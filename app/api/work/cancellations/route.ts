@@ -17,7 +17,7 @@ const input=z.discriminatedUnion('action',[
 
 export async function GET(req:Request){
  try{
-  const {accountId,userId}=await workAccount({allowInactiveMembership:true});
+  const {accountId,userId}=await workAccount({allowInactiveMembership:true,allowUnacknowledged:true});
   return NextResponse.json(await cancellationView(accountId,userId,uuid.parse(new URL(req.url).searchParams.get('dealId'))),{headers});
  }catch{return NextResponse.json({error:'Could not load cancellation controls. Refresh and try again.'},{status:503,headers});}
 }
@@ -26,7 +26,7 @@ export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
  let held=false;
  try{
-  const {accountId,userId}=await workAccount({allowInactiveMembership:true});
+  const {accountId,userId}=await workAccount({allowInactiveMembership:true,allowUnacknowledged:true});
   const raw=await req.text();if(raw.length>6000)throw Error('Request too large');
   const body=input.parse(JSON.parse(raw));
   const id=body.action==='request'?await db<string>('rpc/icash_request_cancellation','POST',{

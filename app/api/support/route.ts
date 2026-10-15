@@ -11,7 +11,7 @@ export const dynamic='force-dynamic';
 const headers={'Cache-Control':'private, no-store'};
 export async function GET(req:Request){
  try{
-  const {accountId}=await workAccount({allowInactiveMembership:true});const raw=new URL(req.url).searchParams.get('threadId');const threadId=raw?supportId.parse(raw):null;
+  const {accountId}=await workAccount({allowInactiveMembership:true,allowUnacknowledged:true});const raw=new URL(req.url).searchParams.get('threadId');const threadId=raw?supportId.parse(raw):null;
   const threads=await db<{id:string;subject:string;status:string;updated_at:string}[]>(`icash_support_threads?account_id=eq.${accountId}&select=id,subject,status,updated_at&order=updated_at.desc&limit=30`);
   const chosen=threadId??threads[0]?.id;
   if(threadId&&!threads.some(t=>t.id===threadId))return NextResponse.json({error:'Conversation not found.'},{status:404,headers});
@@ -26,7 +26,7 @@ export async function GET(req:Request){
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
  try{
-  const {accountId,userId}=await workAccount({allowInactiveMembership:true});const raw=await req.text();if(raw.length>5000)return NextResponse.json({error:'Message too long.'},{status:413,headers});
+  const {accountId,userId}=await workAccount({allowInactiveMembership:true,allowUnacknowledged:true});const raw=await req.text();if(raw.length>5000)return NextResponse.json({error:'Message too long.'},{status:413,headers});
   const value=JSON.parse(raw);
   if(value.action==='escalate'){
    const i=z.object({action:z.literal('escalate'),threadId:supportId}).strict().parse(value);

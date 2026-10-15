@@ -105,7 +105,7 @@ export function LiveWorkspace({onLeadPresenceChange,onAttentionChange,principal,
 function PropertyCard({onAsk,assistantVipLocked=false,property:p,work,principal,active,visited,onToggle,onRefresh,hidden,photoRefresh=0,botPaused=false,botAvailable=false,stale=false,promising=false}:{assistantVipLocked?:boolean;onAsk?:(id:string,address:string)=>void;botPaused?:boolean;botAvailable?:boolean;stale?:boolean;promising?:boolean;photoRefresh?:number;property:Property;work:Work;principal:string;hidden:boolean;active:boolean;visited:boolean;onToggle:(open:boolean)=>void;onRefresh:()=>void}){
  const initialManual=work.controls.some(c=>c.property_id===p.result.property.propertyId);
  const [manual,setManual]=useState(initialManual),[controlBusy,setControlBusy]=useState(false),[controlMessage,setControlMessage]=useState(''),[preparingContract,setPreparingContract]=useState(false),[contactView,setContactView]=useState<'texts'|'calls'|null>(null),[contactVisited,setContactVisited]=useState(false),[callRequested,setCallRequested]=useState(false);
- const contactDialog=useRef<HTMLDialogElement>(null);
+ const contactDialog=useRef<HTMLDialogElement>(null),controlInFlight=useRef(false);
  useEffect(()=>{const dialog=contactDialog.current;if(!dialog)return;if(contactView&&!hidden){if(!dialog.open)dialog.showModal();}else if(dialog.open)dialog.close();},[contactView,hidden]);
  useEffect(()=>setManual(initialManual),[initialManual]);
  const deal=work.deals.find(d=>d.screening_id===p.id),calls=work.conversations.filter(c=>c.screening_id===p.id);
@@ -122,7 +122,8 @@ function PropertyCard({onAsk,assistantVipLocked=false,property:p,work,principal,
  const phase=milestone(p,work).replace(/^[^A-Za-z]+/,'');
  const owner=lookups.flatMap(l=>l.contacts??[]).find(c=>c.name)?.name;
  const sellerSummary=conversationDisplaySummary(calls.find(c=>c.party==='seller'&&c.summary)?.summary,'seller');
- async function control(){if(controlBusy)return;setControlBusy(true);setControlMessage('');try{await post('/api/work/control',{action:manual?'return_to_bot':'takeover',screeningId:p.id});setManual(!manual);setControlMessage(manual?'Bot control restored. Setup, credits and contact permissions still apply.':'You have control. New automatic work is paused for this property. Already-started work may finish.');onRefresh();}catch{setControlMessage('Could not confirm the control change. Refresh and check before continuing.');}finally{setControlBusy(false);}}
+ const controlDisabled=stale||practice||['closed','cancellation_pending','cancelled'].includes(deal?.stage??'');
+ async function control(){if(controlInFlight.current||controlDisabled)return;controlInFlight.current=true;setControlBusy(true);setControlMessage('');try{await post('/api/work/control',{action:manual?'return_to_bot':'takeover',screeningId:p.id});setManual(!manual);setControlMessage(manual?'Bot control restored. Setup, credits and contact permissions still apply.':'You have control. New automatic work is paused for this property. Already-started work may finish.');onRefresh();}catch{setControlMessage('Could not confirm the control change. Refresh and check before continuing.');}finally{controlInFlight.current=false;setControlBusy(false);}}
  const propertyDetails=<WorkspacePanel title="Property details" label="Property details" section="property">
     <PropertyAnalysisSummary result={p.result}/>
     <PropertyDebtSummary result={p.result}/>
@@ -131,7 +132,8 @@ function PropertyCard({onAsk,assistantVipLocked=false,property:p,work,principal,
    </WorkspacePanel>;
  return <article hidden={hidden} className="live-property" id={`property-${p.id}`} aria-labelledby={`property-address-${p.id}`} data-needs-attention={needsAttention(p.id,work)} data-expanded={active} data-promising={promising}>
   <div className="property-disclosure">
-   <PropertyCardHeader property={p} owner={owner} bot={bot} dealSummary={dealSummary} phase={phase} practice={practice} active={active} sellerSummary={sellerSummary} thumbnail={<PropertyThumbnail key={photoRefresh} screeningId={p.id} address={p.result.property.address} images={p.result.property.images}/>} onToggle={()=>onToggle(!active)} onContact={openContact}/>
+   <PropertyCardHeader property={p} owner={owner} bot={bot} dealSummary={dealSummary} phase={phase} practice={practice} active={active} sellerSummary={sellerSummary} thumbnail={<PropertyThumbnail key={photoRefresh} screeningId={p.id} address={p.result.property.address} images={p.result.property.images}/>} onToggle={()=>onToggle(!active)} onContact={openContact} onControl={()=>void control()} manual={manual} controlBusy={controlBusy} controlDisabled={controlDisabled}/>
+   {controlMessage&&<p className="property-control-result" role="status">{controlMessage}</p>}
    {visited&&<Activity mode={active&&!hidden?'visible':'hidden'}><div className="property-details" id={`property-content-${p.id}`}>
     <PropertyNextStep property={p} work={work} stale={stale} onRefresh={onRefresh}/>
     <section className="property-resources" aria-label="Agreement tools">

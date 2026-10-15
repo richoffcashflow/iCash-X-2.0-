@@ -10,7 +10,7 @@ import {z} from 'zod';
 const input=z.object({action:z.enum(['pause','resume','takeover','return_to_bot']),screeningId:z.string().uuid().optional()}).strict();
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403});
- try{const {accountId,userId}=await workAccount();const raw=await req.text();if(raw.length>512)throw new Error();const i=input.parse(JSON.parse(raw));
+ try{const raw=await req.text();if(raw.length>512)throw new Error();const i=input.parse(JSON.parse(raw));const {accountId,userId}=await workAccount({allowInactiveMembership:i.action==='pause',allowUnacknowledged:i.action==='pause'});
  if(['resume','return_to_bot'].includes(i.action)&&process.env.ICASH_LIVE_WORK_READY!=='true'&&!(i.action==='resume'&&(await smsAccountReady(accountId,userId)||(await discoveryAccountReadiness(accountId,userId)).ready||(await contactAccountReadiness(accountId,userId)).ready)))return NextResponse.json({error:'Live work is not ready. Funding does not start or unlock it.'},{status:503});
  if(i.action==='pause'){
   const mode=fundingMode();

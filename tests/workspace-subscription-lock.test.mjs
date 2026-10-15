@@ -7,7 +7,7 @@ import * as client from '../lib/webinar-client.ts';
 import {renderToStaticMarkup} from 'react-dom/server';
 const require=createRequire(import.meta.url);
 let stateIndex=0;
-const account={signedIn:true,billingModel:'membership_credits',membershipActive:false,balanceCents:99999,paused:false,identity:{principal:'Fixture'},botSetup:{profile:{displayName:'Fixture Bot'}}};
+const account={workspaceAcknowledged:true,signedIn:true,billingModel:'membership_credits',membershipActive:false,balanceCents:99999,paused:false,identity:{principal:'Fixture'},botSetup:{profile:{displayName:'Fixture Bot'}}};
 const component=name=>props=>React.createElement('div',{'data-component':name},props.children);
 const mocks={
  '@/lib/webinar-client':client,
