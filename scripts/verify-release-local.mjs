@@ -27,6 +27,9 @@ const suites = [
  'usage-loop-policy', 'usage-loop-route', 'usage-loop-context-database',
  'usage-loop-tracking', 'usage-loop-tracking-routes', 'workspace-conversion-ui',
  'credit-refill-context', 'credit-refill-recommendation',
+ 'voice-live-metering', 'live-voice-metering-database', 'voice-metering-worker', 'voice-metering-route',
+ 'required-call-recording', 'recorded-reception', 'voice-metering-draft-deployment',
+ 'provisional-voice-usage-disclosure', 'provisional-voice-usage-disclosure-database',
 ];
 for (const suite of suites) {
  const result=spawnSync(process.execPath,['--experimental-strip-types',`tests/${suite}.test.mjs`],{stdio:'inherit',timeout:60000});

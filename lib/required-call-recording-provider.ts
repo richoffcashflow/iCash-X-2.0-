@@ -26,6 +26,7 @@ export function createRecordingProviders(env:RecordingEnv,fetcher:typeof fetch=f
  const recordPath=(id:string)=>{if(!sid(id,'RE'))throw Error('RECORDING_ID_REQUIRED');return `/Recordings/${id}`;};
  return {
   getCall:(id:string)=>json(callPath(id)+'.json'),
+  limit:(id:string,seconds:number)=>{if(!Number.isSafeInteger(seconds)||seconds<60||seconds>600)throw Error('CALL_CAP_REQUIRED');return json(callPath(id)+'.json','POST',new URLSearchParams({TimeLimit:String(seconds)}));},
   // Read-only call diagnostics. Reconstruct the fixed resource path; never fetch a provider pagination URL.
   getCallEventsPage:(id:string,page=0,pageToken?:string)=>{
    if(!Number.isSafeInteger(page)||page<0||page>2||pageToken!==undefined&&!/^[A-Za-z0-9._~-]{1,512}$/.test(pageToken))throw Error('CALL_EVENT_PAGE_INVALID');

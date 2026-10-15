@@ -1,0 +1,51 @@
+import assert from 'node:assert/strict';
+import {createVoiceMetering,processVoiceMeterTicket,validVoiceMeter} from '../lib/voice-live-metering.ts';
+import {createRecordingProviders} from '../lib/required-call-recording-provider.ts';
+const uuid='11111111-1111-4111-8111-111111111111',sid='CA'+'1'.repeat(32),account='AC'+'2'.repeat(32);
+const meter={accountId:uuid,operationKey:'voice:'+uuid,sessionId:uuid,sessionKind:'outbound',providerAccountSid:account,callSid:sid,fromPhone:'+14243940000',toPhone:'+14243940001',direction:'outbound-api',maxSeconds:600,authorizedSeconds:180,confirmedSeconds:120,version:2,provisionalCents:20,state:'active'};
+const call={sid,account_sid:account,from:meter.fromPhone,to:meter.toPhone,direction:'outbound-api',status:'in-progress',start_time:'2026-10-15T00:00:00Z'};
+let events=[],response,confirm=true,updateError=false,stopError=false,consumed=false;
+const rpc=async(name,args)=>{
+ events.push({name,args});
+ if(name==='icash_prepare_voice_meter'||name==='icash_cancel_unstarted_voice_meter')return response;
+ if(name==='icash_advance_voice_meter')return response;
+ if(name==='icash_confirm_voice_meter_limit')return confirm;
+ if(name==='icash_consume_voice_metering'){if(consumed)return null;consumed=true;return {meter};}
+ throw Error('unexpected RPC');
+};
+const provider={getCall:async id=>{events.push({get:id});return call;},limit:async(id,seconds)=>{events.push({limit:id,seconds});if(updateError)throw Error('unknown write');return call;},end:async id=>{events.push({end:id});if(stopError)throw Error('unknown stop');return {...call,status:'completed'};}};
+const runtime=createVoiceMetering(rpc,provider);
+assert(validVoiceMeter(meter));assert(!validVoiceMeter({...meter,authorizedSeconds:601}));assert(!validVoiceMeter({...meter,callSid:'not-a-call'}));
+response={status:'disabled'};assert.deepEqual(await runtime.prepare(uuid,meter.operationKey,'outbound',uuid),{status:'disabled'});
+assert.deepEqual(await runtime.enforce(meter.operationKey,call),{allowed:true,status:'legacy'});
+response={status:'held',reason:'reviewed_upper_bound_required'};assert.equal((await runtime.prepare(uuid,meter.operationKey,'outbound',uuid)).status,'held');
+response={status:'ready',meter:{...meter,accountId:'22222222-2222-4222-8222-222222222222'}};await assert.rejects(runtime.prepare(uuid,meter.operationKey,'outbound',uuid),/MISMATCH/);
+response={status:'ready',meter};assert.equal((await runtime.prepare(uuid,meter.operationKey,'outbound',uuid)).meter.operationKey,meter.operationKey);
+events=[];response={status:'ready',meter:{...meter,confirmedSeconds:0},terminate:false};
+assert.deepEqual(await runtime.enforce(meter.operationKey,call),{allowed:false,status:'initial_cap_unconfirmed'});assert.equal(events.length,1,'GET and ready accounting must not substitute for provider command acknowledgement');
+events=[];response={status:'ready',meter,desiredTimeLimit:180,terminate:false};
+assert.deepEqual(await runtime.enforce(meter.operationKey,call),{allowed:true,status:'funded'});
+assert.deepEqual(events.map(e=>e.name??(e.limit?'provider-limit':'unexpected')),['icash_advance_voice_meter','provider-limit','icash_confirm_voice_meter_limit']);
+assert.equal(events[1].seconds,180);assert.equal(events[2].args.p_version,2);assert(!('time_limit' in events[2].args.p_call),'no fabricated provider readback field');
+events=[];response={status:'ready',meter,desiredTimeLimit:240,terminate:false};await assert.rejects(runtime.enforce(meter.operationKey,call),/UNFUNDED_LIMIT/);assert.equal(events.length,1);
+events=[];response={status:'ready',meter,desiredTimeLimit:180,terminate:false};updateError=true;stopError=true;
+await assert.rejects(runtime.enforce(meter.operationKey,call),/LIMIT_UNCONFIRMED/);
+assert.equal(events.filter(e=>e.limit).length,1);assert.equal(events.filter(e=>e.end).length,1);assert(!events.some(e=>/release|refund|reserve/.test(e.name??'')));
+updateError=false;stopError=false;confirm=false;events=[];await assert.rejects(runtime.enforce(meter.operationKey,call),/LIMIT_UNCONFIRMED/);assert.equal(events.filter(e=>e.end).length,1);confirm=true;
+events=[];response={status:'ready',meter,terminate:true};assert.equal((await runtime.enforce(meter.operationKey,call)).allowed,false);assert.equal(events.filter(e=>e.end).length,1);assert.equal(events.filter(e=>e.limit).length,0);
+events=[];response={status:'ready',meter,terminate:false};await assert.rejects(runtime.enforce(meter.operationKey,{...call,to:'+14243949999'}),/BINDING/);assert.equal(events.filter(e=>e.limit||e.end).length,0);
+assert.equal((await runtime.enforce(meter.operationKey,{...call,status:'completed'})).allowed,false);
+const token=(uuid+uuid);events=[];consumed=false;
+assert.equal((await processVoiceMeterTicket('invalid',rpc,provider)).httpStatus,401);assert.equal(events.length,0);
+assert.equal((await processVoiceMeterTicket(token,rpc,provider)).status,'funded');assert.equal(events.filter(e=>e.get).length,1);
+assert.equal((await processVoiceMeterTicket(token,rpc,provider)).httpStatus,401);assert.equal(events.filter(e=>e.get).length,1,'consumed ticket never repeats provider read/write');
+// Transport test uses fixture secrets and an in-memory fetch only. No network.
+let request;
+const adapter=createRecordingProviders({TWILIO_ACCOUNT_SID:account,TWILIO_AUTH_TOKEN:'fixture-not-a-real-credential'},async(url,options)=>{request={url,options};return new Response(JSON.stringify(call),{status:200});});
+await adapter.limit(sid,180);assert.equal(request.url,`https://api.twilio.com/2010-04-01/Accounts/${account}/Calls/${sid}.json`);assert.equal(request.options.method,'POST');assert.equal(request.options.body,'TimeLimit=180');assert.equal(request.options.redirect,'error');
+await assert.rejects(async()=>adapter.limit(sid,59),/CALL_CAP/);await assert.rejects(async()=>adapter.limit('https://evil.example',180),/CALL_ID/);
+console.log('PASS provisional voice metering: bound sessions, legacy gate, funded-before-extension ordering, exact acknowledged cap, uncertainty retention, termination, no ticket replay and canonical transport; mocked only.');
+
+response={status:'cancelled',cancelled:true};events=[];assert.equal(await runtime.cancelUnstarted(uuid,meter.operationKey,uuid),true);assert.deepEqual(events[0],{name:'icash_cancel_unstarted_voice_meter',args:{p_account:uuid,p_operation:meter.operationKey,p_session:uuid}});
+response={status:'held',cancelled:false};assert.equal(await runtime.cancelUnstarted(uuid,meter.operationKey,uuid),false);
+console.log('PASS proven-unstarted cancellation client delegates exact identity only, never pricing or claimed-state evidence.');

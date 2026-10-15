@@ -1,4 +1,5 @@
 import {recordingAuthorized,directCallTwiml} from './direct-call-entry.ts';
+import type {VoiceMetering} from './voice-live-metering.ts';
 import {sellerAgreementReceptionEnabled} from './seller-agreement-reception.ts';
 import {randomBytes} from 'node:crypto';
 import {affirmativeSpeech,recordingGateOptOut,object,privateHeaders,sha,sid,uuid,verifiedTwilioForm} from './required-call-recording.ts';
@@ -47,8 +48,8 @@ export async function endRecordedReception(rpc:RecordedReceptionRpc,provider:Rec
  if(!row.call_ended_at){const next=await transitionRecordedReception(rpc,row,'call_ended',boundEndReceipt(row,actual)).catch(()=>null);if(next)row=next;}
  return {ended:!!row.call_ended_at,row};
 }
-export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:RecordedReceptionRpc;provider:RecordedReceptionProviders;selectVoice?:(accountId:string,config:RecordedReceptionConfig)=>Promise<string|null>;now?:()=>number}){
- const {rpc,provider}=deps,now=deps.now??Date.now;
+export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:RecordedReceptionRpc;provider:RecordedReceptionProviders;meter?:VoiceMetering;selectVoice?:(accountId:string,config:RecordedReceptionConfig)=>Promise<string|null>;now?:()=>number}){
+ const {rpc,provider,meter}=deps,now=deps.now??Date.now;
  const transition=(r:RecordedReceptionRow,a:string,p:Record<string,unknown>={})=>transitionRecordedReception(rpc,r,a,p);
  async function currentConfig(called:string){if(env.ICASH_RECORDED_RECEPTION_READY!=='true')return null;const c=await rpc<RecordedReceptionConfig|null>('icash_get_recorded_reception_config',{p_called_number:called});return validRecordedReceptionConfig(c,now())&&c.provider_account_sid===env.TWILIO_ACCOUNT_SID?c:null;}
  async function checkAgent(c:RecordedReceptionConfig){
@@ -68,6 +69,7 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
  }
  async function recordAndConnect(row:RecordedReceptionRow,c:RecordedReceptionConfig){
     if(row.account_id!==c.account_id||row.config_id!==c.id)throw Error('RECEPTION_ACCOUNT_BINDING_REQUIRED');
+    if(meter&&!(await meter.enforce(row.operation_key,await provider.getCall(row.call_sid))).allowed)throw Error('CALL_FUNDED_TIME_EXHAUSTED');
     let next=await transition(row,'claim_start');if(!next)throw Error('START_ALREADY_CLAIMED');Object.assign(row,next);
     const recording=await provider.start(row.call_sid,recordedReceptionUrl+'/status?id='+row.id);
     if(!receptionRecordingMatches(row,recording)||recording.status!=='in-progress'||!Number.isFinite(Date.parse(String(recording.start_time))))throw Error('START_UNCONFIRMED');
@@ -110,6 +112,7 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
     const admission=await rpc<{allowed:boolean;reason?:string;session:RecordedReceptionRow}>(c.entry_policy==='direct_recorded_v1'?'icash_reserve_direct_reception':'icash_reserve_flexible_reception',{p_config_id:c.id,p_call_sid:call.sid,p_provider_account_sid:c.provider_account_sid,p_from_phone:from,p_to_phone:c.called_number,p_direction:'inbound',p_caller_hash:callerHash,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(token),p_config_hash:c.config_hash,p_version_id:c.reviewed_version_id});
     if(admission?.allowed!==true||!admission.session)return deny(typeof admission?.reason==='string'&&/^[a-z_]{1,60}$/.test(admission.reason)?admission.reason:'reservation_denied');row=admission.session;
     if(row.operation_key!==op||row.account_id!==c.account_id||row.config_id!==c.id||c.entry_policy==='direct_recorded_v1'&&row.entry_policy!==c.entry_policy||row.call_sid!==call.sid||row.provider_account_sid!==c.provider_account_sid||row.from_phone!==from||row.to_phone!==c.called_number||!validReceptionCreditBound(c,row)||row.rate_id!==c.rate_id||row.nonce_hash!==sha(nonce)||row.stop_token_hash!==sha(token))throw Error('RESERVATION_BINDING_REQUIRED');
+    if(meter&&(await meter.prepare(row.account_id,row.operation_key,'inbound',row.id)).status==='held')throw Error('CALL_LIVE_FUNDING_REQUIRED');
     return xml(c.entry_policy==='direct_recorded_v1'?directCallTwiml(recordedReceptionUrl+'/setup',row.id,nonce):receptionAnswerTwiml(row.id,nonce));
    }catch(error){console.error('recorded_reception_admission_failed',{stage,sessionId:row?.id,code:error instanceof Error&&/^[A-Z0-9_:]{1,100}$/.test(error.message)?error.message:'ADMISSION_FAILED'});if(row)await endRecordedReception(rpc,provider,row,'admission_failed');return hangup();}
   },
@@ -121,12 +124,16 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
     stage='read_answered_call';
     const call=await provider.getCall(row.call_sid);
     if(auth.f.get('CallStatus')!=='in-progress'||!incomingCallMatches(row,call,now(),true,true))throw Error('ANSWERED_CALL_REQUIRED');
+    const funding=meter?await meter.prepare(row.account_id,row.operation_key,'inbound',row.id):{status:'disabled' as const};
+    if(funding.status==='held')throw Error('CALL_LIVE_FUNDING_REQUIRED');
     stage='claim_setup';
     const claimed=await transition(row,'claim_setup');if(!claimed)return hangup();row=claimed;
     stage='bound_call';
-    const bounded=await provider.boundCall(row);if(!incomingCallMatches(row,bounded,now(),true))throw Error('PROVIDER_BOUND_UNCONFIRMED');
+    const limit=funding.status==='ready'?funding.meter.authorizedSeconds:row.max_total_seconds;
+    const bounded=await provider.boundCall(row,limit);if(!incomingCallMatches(row,bounded,now(),true))throw Error('PROVIDER_BOUND_UNCONFIRMED');
+    if(funding.status==='ready'&&!await meter!.confirm(funding.meter,limit,bounded))throw Error('PROVIDER_FUNDED_BOUND_UNCONFIRMED');
     stage='save_bound';
-    const saved=await transition(row,'bounded',{callSid:row.call_sid,providerAccountSid:row.provider_account_sid,fromPhone:row.from_phone,toPhone:row.to_phone,direction:'inbound',timeLimitSeconds:row.max_total_seconds});if(!saved)throw Error('PROVIDER_BOUND_NOT_SAVED');
+    const saved=await transition(row,'bounded',{callSid:row.call_sid,providerAccountSid:row.provider_account_sid,fromPhone:row.from_phone,toPhone:row.to_phone,direction:'inbound',timeLimitSeconds:limit});if(!saved)throw Error('PROVIDER_BOUND_NOT_SAVED');
     row=saved;stage='bind_answer_time';row=await bindRecordedReceptionCallStart(rpc,row,bounded);
     if(row.entry_policy==='direct_recorded_v1')return xml(`<Response><Redirect method="POST">${recordedReceptionUrl}/connect?id=${row.id}&amp;nonce=${auth.nonce}</Redirect></Response>`);
     return xml(receptionConsentTwiml(row.id,auth.nonce!,false));

@@ -127,3 +127,32 @@ assert.equal(gateWrites.at(-1).body.p_components.elevenlabs.amountMicros,0);
 console.log('PASS canonical unanswered outbound calls reconcile without an invented AI or speech charge.');
 
 await wire.dial(row.from_phone,row.to_phone,'<Response/>','https://www.geticashx.com/fixture',120);assert.equal(new URLSearchParams(network.at(-1).init.body).get('TimeLimit'),'120','carrier enforces funded call duration');const priorNetwork=network.length;assert.throws(()=>wire.dial(row.from_phone,row.to_phone,'<Response/>','https://www.geticashx.com/fixture',119));assert.equal(network.length,priorNetwork,'invalid bound never dials');
+
+// A canonical callback can arrive before the dial's funded-cap acknowledgement.
+// Exercise the real injected meter in the recording service, not only a stub.
+const {createVoiceMetering}=await import('../lib/voice-live-metering.ts');
+for(const confirmedSeconds of [0,120]){
+ reset();
+ const m={accountId:account,operationKey:op,sessionKind:'outbound',sessionId:id,providerAccountSid:ac,callSid:ca,fromPhone:row.from_phone,toPhone:row.to_phone,direction:'outbound-api',maxSeconds:600,authorizedSeconds:120,confirmedSeconds,version:1,provisionalCents:0,state:'active'};
+ const injected=createVoiceMetering(async(name)=>{assert.equal(name,'icash_advance_voice_meter');return {status:'ready',meter:m,terminate:false};},provider);
+ const metered=recordingService(env,{db,provider,now:()=>now,meter:injected});
+ const response=await metered.consent(request());
+ assert.equal((await response.text()).includes('<Connect'),confirmedSeconds>0);
+ assert.equal(calls.some(x=>x.provider==='start'),confirmedSeconds>0);
+ assert.equal(calls.some(x=>x.provider==='register'),confirmedSeconds>0);
+ if(!confirmedSeconds)assert(calls.some(x=>x.provider==='end'));
+}
+console.log('PASS metered outbound service: unacknowledged carrier cap cannot start recording or AI; confirmed funded cap preserves connection.');
+
+// A pause racing admission but preceding the durable dial claim can release
+// only the new, database-proven unstarted commitment. No provider call follows.
+reset();let releaseChecks=0,cancellations=0,dials=0;
+const noDialDb=async(path,method,body)=>{
+ if(path==='rpc/icash_create_direct_recorded_call')return {...row,call_sid:null};
+ throw Error('No provider claim should follow a paused admission');
+};
+const pausedMeter={prepare:async()=>({status:'ready',meter:{authorizedSeconds:120}}),cancelUnstarted:async(a,o,s)=>{assert.deepEqual([a,o,s],[account,op,id]);cancellations++;return true;}};
+const pauseBeforeDial=recordingService(env,{db:noDialDb,provider:{...provider,dial:async()=>{dials++;throw Error('No dial permitted');}},meter:pausedMeter,now:()=>now,dispatchAllowed:()=>++releaseChecks<3});
+assert.equal((await pauseBeforeDial.dispatch({accountId:account,operationKey:op,principal:'Fixture',assistantName:'Alex',firstMessage:'Hi',prompt:'Fixture prompt',strategyKey:'cash_interest'})).status,'recording_release_required');
+assert.equal(cancellations,1);assert.equal(dials,0);
+console.log('PASS outbound pause before claim cancels only through exact unstarted-proof RPC and never dials.');
