@@ -15,7 +15,10 @@ export async function verifyRegularWebinarRoom(browser,base,options={}){
   const url=new URL(route.request().url());
   if(url.origin!==base)return route.abort();
   const json=body=>route.fulfill({contentType:'application/json',body:JSON.stringify(body)});
-  if(url.pathname==='/api/webinar/start')return json({sessionId:'00000000-0000-4000-8000-000000000456',webinar,progress:0,name:'Viewer',contactSaved:true,messages:[],preview:false,serverNow:Date.now()});
+  if(url.pathname==='/api/webinar/start'){
+   const input=route.request().postDataJSON();
+   return json({sessionId:'00000000-0000-4000-8000-000000000456',webinar:{...webinar,recordingVersion:input.variant==='night'?'night':'day'},progress:0,name:'Viewer',contactSaved:true,messages:[],preview:input.preview===webinar.id,serverNow:Date.now()});
+  }
   if(url.pathname==='/api/webinar/chat/feed')return json({messages:[],statuses:[]});
   if(url.pathname==='/api/webinar/event')return json({saved:true});
   if(url.pathname==='/api/webinar/timers')return json({deadlines:{},offerDeadlines:{},serverNow:Date.now()});
@@ -25,10 +28,27 @@ export async function verifyRegularWebinarRoom(browser,base,options={}){
   return route.continue();
  });
  try{
+  for(const variant of ['day','night']){
+   const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));let nativePrompts=0;page.on('dialog',async d=>{nativePrompts++;await d.dismiss();});
+   await page.addInitScript(()=>sessionStorage.setItem('icash.webinar.vip-exit-reminder.v1','1'));
+   const href=base+'/live/123456?preview='+webinar.id+'&variant='+variant;
+   await page.goto(href);
+   const preview=page.getByRole('button',{name:'Preview exit pop-up',exact:true}),dialog=page.getByRole('dialog');
+   await preview.waitFor({state:'visible'});assert.equal(await dialog.isVisible(),false);
+   for(const choice of ['Keep watching','Leave webinar','Escape']){
+    await preview.click();await dialog.waitFor({state:'visible'});
+    assert.match(await dialog.innerText(),/how to get your own AI bot/);
+    if(choice==='Escape')await page.keyboard.press('Escape');else await dialog.getByRole('button',{name:choice,exact:true}).click();
+    await dialog.waitFor({state:'hidden'});assert.equal(page.url(),href,'Both preview choices remain in the owner preview');
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('icash.webinar.vip-exit-reminder.v1')),'1','Preview leaves the live dismissal flag intact');
+   }
+   await page.close({runBeforeUnload:true});assert.equal(nativePrompts,0,'Owner preview never enables native exit warnings');
+  }
   for(const choice of ['Keep watching','Leave webinar']){
    const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));let nativePrompts=0;page.on('dialog',async d=>{nativePrompts++;await d.dismiss();});
    await page.goto(base+'/live/123456');
    try{await page.getByRole('heading',{name:webinar.title}).waitFor({state:'attached'});}catch(error){throw Error(`${error.message}\n${page.url()}\n${await page.locator('body').innerText()}\n${errors.join('\n')}`);}
+   assert.equal(await page.getByRole('button',{name:'Preview exit pop-up',exact:true}).count(),0,'Public viewers never receive owner preview controls');
    // A normal departing link exercises actual pointer navigation through the room.
    await page.evaluate(()=>{const a=document.createElement('a');a.href='/fixture-away';a.id='fixture-exit';a.textContent='Return to site';document.body.prepend(a);});
    const dialog=page.getByRole('dialog');assert.equal(await dialog.isVisible(),false);
@@ -49,7 +69,7 @@ export async function verifyRegularWebinarRoom(browser,base,options={}){
    }
    await page.waitForURL(base+'/fixture-away');assert.equal(nativePrompts,0,'Custom and native confirmations never stack');await page.close();
   }
-  assert.deepEqual(errors,[]);console.log('PASS regular webinar benefit: actual room, accessible dialog, Stay/Leave, reload persistence, viewport fit, and no stacked native warning.');
+  assert.deepEqual(errors,[]);console.log('PASS regular webinar benefit: repeatable Day/Night owner preview, actual room, accessible dialog, Stay/Leave/Escape, reload persistence, viewport fit, and no stacked native warning.');
  }finally{await context.close();}
 }
 
