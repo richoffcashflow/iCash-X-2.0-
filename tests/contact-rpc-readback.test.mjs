@@ -12,7 +12,8 @@ const fetcher=async(url,options)=>{
   if(path!=='rpc/icash_manual_text_reason')assert.equal(body.p_screening,screen);
   if(path==='rpc/icash_manual_contacts')return new Response(JSON.stringify(failed?{code:'25006',message:'private details'}:[{phone,blocked:false}]),{status:failed?405:200});
   if(path==='rpc/icash_customer_call_sender')return new Response(JSON.stringify('+12025550199'));
-  if(['rpc/icash_manual_contact_reason','rpc/icash_manual_text_reason'].includes(path))return new Response('null');
+  if(path==='rpc/icash_manual_contact_reason')return new Response('null');
+  if(path==='rpc/icash_manual_text_reason')return new Response(null,{status:204});
   throw Error('Unexpected RPC or mutation '+path);
  }
  assert.equal(options.method,'GET');

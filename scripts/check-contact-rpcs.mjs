@@ -10,7 +10,8 @@ export async function checkContactRpcs({env=process.env,fetcher=fetch}={}){
  async function read(path,body){
   const response=await fetcher(env.SUPABASE_URL+'/rest/v1/'+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
   if(!response.ok)throw Error('Contact API verification failed: '+path.split('?')[0]+' HTTP '+response.status);
-  return response.json();
+  const payload=await response.text();
+  return payload?JSON.parse(payload):null;
  }
  const screens=await read('icash_screening_jobs?'+new URLSearchParams({state:'eq.complete','snapshot->sellerRequest->>id':'not.is.null',select:'id,account_id',order:'created_at.desc',limit:'3'}));
  const checked=[];
@@ -39,5 +40,5 @@ export async function checkContactRpcs({env=process.env,fetcher=fetch}={}){
  return {status:checked.length?'passed':'no_active_contacts',checked};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
- checkContactRpcs().then(result=>console.log('Contact API verification:',JSON.stringify(result))).catch(error=>{console.error(error.message);process.exitCode=1;});
+ checkContactRpcs().then(result=>console.log('Contact API verification:',JSON.stringify(result))).catch(()=>{console.error('Contact API verification failed; no calls or messages were started.');process.exitCode=1;});
 }
