@@ -5,7 +5,7 @@ import type {RecordingVersion} from '@/lib/webinar-recordings';
 import type {WebinarPerformance} from '@/lib/webinar-optimizer';
 import {WebinarDailyDashboard} from '@/components/webinar-daily-dashboard';
 export const closeRate=(row?:WebinarPerformance)=>row?.viewers?`${((row.buyers??0)/row.viewers*100).toFixed(1)}%`:'—';
-export function WebinarDashboard({webinars,onCreate,onEdit,onSettings}:{webinars:Webinar[];onCreate:()=>void;onEdit:(webinar:Webinar)=>void;onSettings:()=>void}){return <WebinarDailyDashboard webinars={webinars} onCreate={onCreate} onEdit={onEdit} onSettings={onSettings}/>;}
+export function WebinarDashboard({webinars,onCreate,onEdit,onSettings}:{webinars:Webinar[];onCreate:()=>void;onEdit:(webinar:Webinar,version:'day'|'night')=>void;onSettings:()=>void}){return <WebinarDailyDashboard webinars={webinars} onCreate={onCreate} onEdit={onEdit} onSettings={onSettings}/>;}
 export function WebinarResults({webinars}:{webinars:Webinar[]}){return <WebinarDailyDashboard webinars={webinars} expanded/>;}
 export function WebinarReview({webinar,version='day',isNew,busy,onPublish}:{webinar:Webinar;version?:RecordingVersion;isNew:boolean;busy:boolean;onPublish:()=>void}){
  const checked=webinarSchema.safeParse({...webinar,status:'published'}),recordings=playableWebinarRecordings(webinar);

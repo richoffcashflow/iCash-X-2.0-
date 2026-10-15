@@ -2,10 +2,10 @@ import {webinarRecordingSchema,webinarPitchAt,type Webinar,type WebinarRecording
 import {isNight,type ViewerLocation} from '../packages/webinar-engine/src/index.ts';
 export type RecordingVersion='day'|'night';
 export function createNightRecording(webinar:Webinar):WebinarRecording{return {...webinarRecordingSchema.parse(webinar),videoUrl:'',posterUrl:'',transcript:''};}
-export function editingRecording(webinar:Webinar,version:RecordingVersion):Webinar{return version==='night'&&webinar.nightVersion?{...webinar,...webinar.nightVersion,recordingVersion:'night'}:{...webinar,recordingVersion:'day'};}
+export function editingRecording(webinar:Webinar,version:RecordingVersion):Webinar{return version==='night'&&webinar.nightVersion?{...webinar,...webinar.nightVersion,purchaseNotifications:webinar.nightVersion.purchaseNotifications??webinar.purchaseNotifications,recordingVersion:'night'}:{...webinar,recordingVersion:'day'};}
 // Keep identity, URL and audience settings shared; each recording has its own timeline.
 export function patchRecording(webinar:Webinar,version:RecordingVersion,patch:Partial<Webinar>):Webinar{
- if(version==='day')return {...webinar,...patch,recordingVersion:'day'};
+ if(version==='day')return {...webinar,...patch,...(patch.purchaseNotifications&&webinar.nightVersion&&!webinar.nightVersion.purchaseNotifications?{nightVersion:{...webinar.nightVersion,purchaseNotifications:webinar.purchaseNotifications}}:{}),recordingVersion:'day'};
  const fields=new Set(Object.keys(webinarRecordingSchema.shape));
  const shared=Object.fromEntries(Object.entries(patch).filter(([key])=>!fields.has(key)));
  const recording=Object.fromEntries(Object.entries(patch).filter(([key])=>fields.has(key)));
