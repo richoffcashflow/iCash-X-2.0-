@@ -7,6 +7,7 @@ import {AccountAccess} from '@/components/account-access';
 import {FundingDialog} from '@/components/funding-dialog';
 import {MembershipCheckout} from '@/components/membership-checkout';
 import {webinarSite} from '@/lib/webinar-site';
+import {allowWebinarNavigation} from '@/lib/webinar-exit-reminder';
 import '@/app/webinar/webinar.css';
 import '@/app/plan-homepage.css';
 import '@/app/icash-brand.css';
@@ -19,7 +20,7 @@ export function WebinarExpressCheckout({preview=false,previewBackHref='/webinar-
  useEffect(()=>{const id=new URLSearchParams(window.location.search).get('webinar_session');if(id&&/^[0-9a-f-]{36}$/i.test(id))setWebinarSessionId(id);},[]);
  const [signInOpen,setSignInOpen]=useState(false);
  const [checkoutEngaged,setCheckoutEngaged]=useState(false);
- function openWorkspace(){setSignInOpen(false);if(onSignedIn)onSignedIn();else window.location.assign(webinarSite.workspacePath);}
+ function openWorkspace(){allowWebinarNavigation();setSignInOpen(false);if(onSignedIn)onSignedIn();else window.location.assign(webinarSite.workspacePath);}
  return <div className="wb-express-page wb-plan-home icash-launch-home">
   {preview&&<nav className="wb-preview-tools" aria-label="Owner preview"><span>After webinar · Didn’t buy · Payments disabled</span><a href={previewBackHref}>Back to webinar</a></nav>}
   <header className="wb-express-header">

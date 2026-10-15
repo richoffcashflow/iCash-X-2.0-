@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';imp
 import * as policy from '../lib/webinar-policy.ts';import * as prompts from '../lib/webinar-prompts.ts';import * as playback from '../lib/webinar-playback.ts';
 import {webinarChatStream} from '../lib/webinar-chat-stream.ts';
 import * as purchaseFlow from '../lib/webinar-purchase-flow.ts';
+import * as exitReminder from '../lib/webinar-exit-reminder.ts';
 import {withOfferDeadlines} from '../packages/webinar-engine/src/offer-deadlines.ts';
 import {replayOfferActivity} from '../packages/webinar-engine/src/replay-offer-spots.ts';
 import {recordedPurchaseMessage,activityMessage,recentActivity} from '../lib/webinar-activity.ts';
@@ -18,6 +19,7 @@ const listeners=new Map(),store=new Map();
 globalThis.window={addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n)};
 globalThis.document={hidden:false,addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n)};
 globalThis.location={search:'?ad_id=55555&fbclid=retained&r=signed-token',hash:'#room',pathname:'/live/129339',assign:()=>{},replace:()=>{}};
+window.location=location;
 const replaced=[];globalThis.history={replaceState:(_state,_title,url)=>replaced.push(url)};
 globalThis.localStorage=globalThis.sessionStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)};
 Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true});
@@ -27,7 +29,7 @@ const w={...policy.newWebinar('00000000-0000-4000-8000-000000000123'),videoUrl:'
 const sessionId='00000000-0000-4000-8000-000000000456';let emptyChat=false;let requestLog=[],remembered='',rememberedEmail='',completionGate=null,chatGate=null,failChat=false,failContact=false;const redirects=[];location.assign=path=>redirects.push(path);
 async function post(url,body){requestLog.push({url,body});if(url.endsWith('/start'))return {canonicalPath:'/live/129340',sessionId,webinar:policy.publicWebinar(w),progress:0,name:remembered,email:rememberedEmail,contactSaved:false,messages:[],preview:false,serverNow:Date.now()};if(url.endsWith('/event')&&body.kind==='completed'){if(completionGate)await completionGate;return {saved:true,redirect:'/webinar/checkout'};}if(url.endsWith('/contact')){if(failContact)throw Error('Name could not be saved.');remembered=body.name;if(!body.onlyName)rememberedEmail=body.email;return {name:remembered,contactSaved:!!body.email&&!!body.phone};}if(url.endsWith('/chat')){if(chatGate)await chatGate;if(failChat)throw Error('Connection lost.');return {messages:emptyChat?[]:[{id:'m'+requestLog.length,role:'user',text:body.text,playback_seconds:body.seconds,public_status:'pending'}]};}return {saved:true};}
 let timerInput;
-const roomDeps={webinarOfferFocus,useWebinarSharedChat:()=>({messages:[],statuses:[]}),webinarChatStream,withOfferDeadlines,replayOfferActivity,recordedPurchaseMessage,useMemo:fn=>fn(),webinarRequest:async()=>({postPurchaseUrl:'/live/123457'}),dynamic:loader=>loader.toString().includes('WebinarCheckout')?'WebinarCheckout':'AccountAccess',useWebinarTimers:input=>{timerInput=input;return {deadlines:{},offerDeadlines:{},offset:0,now:Date.now()};},...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}};
+const roomDeps={...exitReminder,webinarOfferFocus,useWebinarSharedChat:()=>({messages:[],statuses:[]}),webinarChatStream,withOfferDeadlines,replayOfferActivity,recordedPurchaseMessage,useMemo:fn=>fn(),webinarRequest:async()=>({postPurchaseUrl:'/live/123457'}),dynamic:loader=>loader.toString().includes('WebinarCheckout')?'WebinarCheckout':'AccountAccess',useWebinarTimers:input=>{timerInput=input;return {deadlines:{},offerDeadlines:{},offset:0,now:Date.now()};},...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}};
 const h=await harness('components/webinar-room.tsx',roomDeps);
 const render=()=>h.render('WebinarRoom',{webinarCode:'129339'});let tree=render();await flush();tree=render();
 assert.equal(requestLog[0].body.code,'129339');assert.equal(requestLog[0].body.attribution.fbclid,'retained');assert.equal(replaced[0],'/live/129340?ad_id=55555&fbclid=retained#room');assert.equal(all(tree).some(n=>n.props?.className==='wb-offer'),false,'No offer before its cue');assert.equal(all(tree).some(n=>n.type==='header'),false);
@@ -131,6 +133,7 @@ for(const [scenario,[version,preview,outcome]] of [['day',false,'unpaid'],['nigh
   return {saved:true,redirect:'/webinar/upgrade'};
  }});
  const renderVip=()=>vh.render('WebinarRoom',{});renderVip();await flush();let vt=renderVip();
+ assert.equal(listeners.has('beforeunload'),!preview,'Only verified live VIP viewers receive an exit reminder');
  for(const seconds of [0,65,600]){
   find(vt,'WebinarPlayer').props.onProgress(seconds);vt=renderVip();
   assert.equal(all(vt).find(n=>n.props?.id==='wb-question')?.props.name,'message',version+' VIP immediately allows chat');
@@ -147,11 +150,15 @@ for(const [scenario,[version,preview,outcome]] of [['day',false,'unpaid'],['nigh
  assert.equal(find(vt,'WebinarOfferSpots').props.spots.remaining,2);
  assert.equal(find(find(vt,'WebinarPlayer').props.overlay,'WebinarPurchaseNotifications').props.replayPurchase.name,'Taylor');
  assert.equal(find(all(vt).find(n=>n.props?.id==='webinar-chat'),'WebinarPurchaseNotifications'),undefined,'Pop-ups are outside the hidden chat');
- find(vt,'WebinarCheckout').props.onUpgradeActive(true);vt=renderVip();
+ const priorExit=listeners.get('beforeunload');
+ find(vt,'WebinarCheckout').props.onUpgradeActive(true);
+ priorExit?.({isTrusted:true,preventDefault(){throw Error('Active payment must not show an exit prompt');}});
+ vt=renderVip();assert.equal(listeners.has('beforeunload'),false,'Checkout disarms the reminder');
  find(vt,'WebinarPlayer').props.onProgress(810);vt=renderVip();
  assert.equal(find(vt,'WebinarOfferSpots').props.spots.remaining,1,'The counter keeps updating during payment');
  assert.equal(find(find(vt,'WebinarPlayer').props.overlay,'WebinarPurchaseNotifications').props.replayPurchase.name,'Emilio');
  find(vt,'WebinarCheckout').props.onUpgradeActive(false);vt=renderVip();
+ assert.equal(listeners.has('beforeunload'),!preview,'Watching can resume without consuming the one reminder');
  find(vt,'WebinarPlayer').props.onProgress(1200);vt=renderVip();vt=renderVip();
  assert.ok(all(vt).some(n=>n.type==='h2'&&n.props.children==='VIP last chance'),'Later VIP offers still open');
  if(outcome==='pending'){
@@ -169,6 +176,7 @@ for(const [scenario,[version,preview,outcome]] of [['day',false,'unpaid'],['nigh
   else assert.equal(redirects.at(-1),'/webinar/upgrade','Unupgraded viewers go to the VIP offer at the end');
  }
  vh.close();
+ assert.equal(listeners.has('beforeunload'),false,'Completed, purchased and unmounted rooms release the exit listener');
 }
 console.log('PASS VIP room: no repeated contact, timed offers, unpaid ending, protected in-progress payment, paid workspace routing and isolated previews.');
 

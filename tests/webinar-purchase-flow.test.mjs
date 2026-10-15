@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {webinarPurchaseDestination,safeVipSession} from '../lib/webinar-purchase-flow.ts';
+import * as exitReminder from '../lib/webinar-exit-reminder.ts';
 import * as vip from '../lib/vip-policy.ts';
 import {priceLabel,membershipTermsVersion} from '../lib/membership-policy.ts';
 
@@ -162,16 +163,22 @@ console.log('PASS final VIP offer: verified upgrades open the workspace; Standar
 // The welcome gives five visible seconds, allows immediate continuation, and never charges.
 {
  let tick,cleared=0;
- const h=await harness('components/webinar-vip-welcome.tsx',{safeVipSession,setInterval:fn=>{tick=fn;return 1;},clearInterval:()=>cleared++});
+ const exitHandlers=new Set(),exitStorage=new Map();
+ window.addEventListener=(name,fn)=>{assert.equal(name,'beforeunload');exitHandlers.add(fn);};window.removeEventListener=(_name,fn)=>exitHandlers.delete(fn);
+ globalThis.sessionStorage={getItem:key=>exitStorage.get(key)??null,setItem:(key,value)=>exitStorage.set(key,value)};
+ const h=await harness('components/webinar-vip-welcome.tsx',{...exitReminder,safeVipSession,setInterval:fn=>{tick=fn;return 1;},clearInterval:()=>cleared++});
  const props={href:'/live/123456',fullScreen:true},before=redirects.length;
  let tree=h.render('WebinarVipWelcome',props);assert.match(text(tree),/Don’t leave yet/);assert.match(text(tree),/Stay here to watch your VIP webinar/);
+ assert.equal(exitHandlers.size,1,'Payment confirmation arms one real-exit reminder');
  assert.equal(button(tree,'Watch VIP now').props.disabled,undefined);
  document.hidden=true;for(let i=0;i<10;i++)tick();assert.equal(redirects.length,before);document.hidden=false;
  for(let i=0;i<4;i++)tick();assert.equal(redirects.length,before);tick();assert.equal(redirects.length,before+1);assert.equal(redirects.at(-1),props.href);
+ assert.equal(exitHandlers.size,0,'Automatic VIP continuation never prompts');assert.equal(exitStorage.size,0);
  button(tree,'Watch VIP now').props.onClick();tick();assert.equal(redirects.length,before+1,'Only one navigation per handoff');h.close();assert.ok(cleared>0);
- const direct=await harness('components/webinar-vip-welcome.tsx',{safeVipSession,setInterval:fn=>{tick=fn;return 1;},clearInterval:()=>{}});
+ const direct=await harness('components/webinar-vip-welcome.tsx',{...exitReminder,safeVipSession,setInterval:fn=>{tick=fn;return 1;},clearInterval:()=>{}});
  tree=direct.render('WebinarVipWelcome',props);button(tree,'Watch VIP now').props.onClick();assert.equal(redirects.length,before+2);direct.close();
- const unsafe=await harness('components/webinar-vip-welcome.tsx',{safeVipSession,setInterval:()=>{throw Error('Unsafe destinations must not start timers');},clearInterval:()=>{}});
+ assert.equal(exitHandlers.size,0,'Watch VIP now also bypasses the reminder');
+ const unsafe=await harness('components/webinar-vip-welcome.tsx',{...exitReminder,safeVipSession,setInterval:()=>{throw Error('Unsafe destinations must not start timers');},clearInterval:()=>{}});
  assert.equal(unsafe.render('WebinarVipWelcome',{href:'https://other.test/live/123456'}),null);unsafe.close();
 }
 console.log('PASS VIP welcome: clear stay message, immediate button, five visible seconds, cleanup, no duplicate navigation or unsafe URLs.');
