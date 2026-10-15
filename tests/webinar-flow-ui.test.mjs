@@ -117,6 +117,51 @@ h.close();
 store.delete('icash-webinar-prompts:'+sessionId);
 const returningRoom=await harness('components/webinar-room.tsx',roomDeps);returningRoom.render('WebinarRoom',{webinarCode:'129339'});await flush();let returningTree=returningRoom.render('WebinarRoom',{webinarCode:'129339'});find(returningTree,'WebinarPlayer').props.onProgress(65);returningTree=returningRoom.render('WebinarRoom',{webinarCode:'129339'});assert.equal(all(returningTree).some(n=>n.props?.className?.startsWith('wb-prompt ')),false,'A remembered email avoids another contact request in a fresh session');returningRoom.close();
 
+// VIP viewers already bought Standard: no contact prompts, independent upgrade state.
+for(const [scenario,[version,preview,outcome]] of [['day',false,'unpaid'],['night',false,'paid'],['day',true,'unpaid'],['night',true,'paid'],['night',false,'pending']].entries()){
+ const events=[],navigated=redirects.length;
+ const vipSessionId='00000000-0000-4000-8000-00000000070'+scenario;
+ const vip={...w,parentWebinarId:'00000000-0000-4000-8000-000000000999',recordingVersion:version,redirectAtEnd:false,offers:[{id:'vip',at:800,title:'VIP offer',description:'',ctaLabel:'Upgrade',action:'checkout',url:'',expiresAt:null},{id:'vip-last',at:1200,title:'VIP last chance',description:'',ctaLabel:'Upgrade',action:'checkout',url:'',expiresAt:null}]};
+ const vh=await harness('components/webinar-room.tsx',{...roomDeps,post:async(url,body)=>{
+  events.push({url,body});
+  if(url.endsWith('/start'))return {sessionId:vipSessionId,webinar:policy.publicWebinar(vip),progress:0,name:version==='day'?'Casey':'',email:'',phone:'',contactSaved:false,messages:[],preview,serverNow:Date.now()};
+  if(url.endsWith('/chat'))return {messages:[{id:'vip-message',role:'user',text:body.text,playback_seconds:body.seconds}]};
+  if(url.endsWith('/contact'))throw Error('VIP must never collect contact details');
+  return {saved:true,redirect:'/webinar/upgrade'};
+ }});
+ const renderVip=()=>vh.render('WebinarRoom',{});renderVip();await flush();let vt=renderVip();
+ for(const seconds of [0,65,600]){
+  find(vt,'WebinarPlayer').props.onProgress(seconds);vt=renderVip();
+  assert.equal(all(vt).find(n=>n.props?.id==='wb-question')?.props.name,'message',version+' VIP immediately allows chat');
+  assert.ok(!all(vt).some(n=>n.props?.className?.startsWith('wb-prompt ')||n.props?.id==='wb-contact-label'||n.props?.className==='wb-chat-identity'));
+ }
+ all(vt).find(n=>n.props?.id==='wb-question').props.onChange({target:{value:"I'm in"}});vt=renderVip();await all(vt).find(n=>n.props?.className==='wb-chat-composer').props.onSubmit({preventDefault(){}});await flush();vt=renderVip();
+ assert.equal(events.filter(e=>e.url.endsWith('/chat')).length,1);assert.equal(events.filter(e=>e.url.endsWith('/contact')).length,0);
+ find(vt,'WebinarPlayer').props.onProgress(800);vt=renderVip();vt=renderVip();
+ assert.equal(find(vt,'WebinarCheckout').props.vipWebinar,true,'The scheduled VIP offer opens upgrade checkout');
+ find(vt,'WebinarCheckout').props.onPurchased('standard');vt=renderVip();
+ assert.equal(all(vt).find(n=>n.props?.id==='webinar-chat').props.hidden,true,'Standard access does not complete the VIP offer');
+ assert.equal(redirects.length,navigated);
+ find(vt,'WebinarPlayer').props.onProgress(1200);vt=renderVip();vt=renderVip();
+ assert.ok(all(vt).some(n=>n.type==='h2'&&n.props.children==='VIP last chance'),'Later VIP offers still open');
+ if(outcome==='pending'){
+  find(vt,'WebinarCheckout').props.onUpgradeActive(true);vt=renderVip();find(vt,'WebinarPlayer').props.onEnded();await flush();vt=renderVip();
+  assert.equal(redirects.length,navigated,'Finishing cannot interrupt an upgrade in progress');
+ }
+ if(outcome!=='unpaid'){
+  find(vt,'WebinarCheckout').props.onPurchased('vip');vt=renderVip();
+  assert.equal(redirects.length,preview?navigated:navigated+1);
+  if(!preview)assert.equal(redirects.at(-1),'/','Verified VIP opens the workspace immediately');
+ }else{
+  find(vt,'WebinarPlayer').props.onEnded();await flush();
+  assert.equal(redirects.length,navigated+1);
+  if(preview)assert.ok(redirects.at(-1).startsWith('/webinar/checkout/preview?')&&redirects.at(-1).includes('vip=1'));
+  else assert.equal(redirects.at(-1),'/webinar/upgrade','Unupgraded viewers go to the VIP offer at the end');
+ }
+ vh.close();
+}
+console.log('PASS VIP room: no repeated contact, timed offers, unpaid ending, protected in-progress payment, paid workspace routing and isolated previews.');
+
 // Owner preview uses the configured timers and can inspect the unpaid end page.
 const timerFixture={id:'offer-timer',label:'Time remaining',at:1355,mode:'duration',durationSeconds:121,endsAt:null,placement:'offer',onExpire:'hide',expiredMessage:'Ended'};
 let previewNow=Date.now();const previewDeadline=new Date(previewNow+90000).toISOString();

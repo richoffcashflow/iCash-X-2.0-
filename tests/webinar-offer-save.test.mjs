@@ -75,6 +75,17 @@ test('adding an offer starts with a valid destination for main and VIP sessions'
   assert.equal(changed.offers.at(-1).url,policy.webinarOffers(initial).at(-1).url);
  }
 });
+test('new and legacy VIP defaults open upgrade checkout without changing custom links or saved cues',()=>{
+ const vip=policy.newVipWebinar('00000000-0000-4000-8000-000000000456',fixture());
+ assert.equal(policy.webinarOffers(vip)[0].action,'checkout');
+ const legacy={...offer('workspace',800,'Open your workspace'),action:'link',url:'/join?setup=1'};
+ const custom={...offer('custom',1100),action:'link',url:'https://example.test/custom'};
+ vip.offers=[legacy,custom];
+ const resolved=policy.webinarOffers(vip);
+ assert.equal(resolved[0].action,'checkout');assert.equal(resolved[0].at,800);assert.equal(resolved[0].durationSeconds,59);
+ assert.deepEqual(resolved[1],custom);assert.equal(vip.offers[0].action,'link','Reading does not mutate saved configuration');
+ assert.equal(policy.webinarOffers({...vip,parentWebinarId:null})[0].action,'link','Main webinar links retain their configured behavior');
+});
 test('dashboard Edit and title actions retain the Daytime or Nighttime row selection',async()=>{
  const {WebinarDailyDashboard}=await moduleFor('components/webinar-daily-dashboard.tsx',{...jsx,...icons,...components,...policy,...reporting,...links,webinarSite:{brandName:'iCash X'},webinarFunnelStages:[],useState:initial=>[initial,()=>{}],useEffect:()=>{}});
  const selected=[],w=fixture(),tree=WebinarDailyDashboard({webinars:[w],onEdit:(webinar,version)=>selected.push([webinar.id,version])});
