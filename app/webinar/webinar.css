@@ -310,3 +310,5 @@
 .wb-purchase-summary-vip{border-color:#e2d0a4;background:#fffdf7;color:#72551b}
 .wb-purchase-summary-vip .wb-spots-bar>span{background:#b08b3c}
 @media(max-width:900px){.wb-purchase-summary{padding:8px 12px;border-radius:0;border-inline:0}.wb-purchase-summary .wb-spots-heading>strong{font-size:15px}.wb-player .wb-purchase-toast-region{bottom:10px;left:10px;right:10px}.wb-player .wb-purchase-toast-region .wb-activity{padding:8px 8px 8px 10px}.wb-player .wb-purchase-toast-region strong{font-size:12px;line-height:1.4}}
+
+.wb-exit-dialog{width:min(480px,calc(100% - 32px));max-height:calc(100dvh - 32px);margin:auto;padding:28px;border:1px solid #dedede;border-radius:18px;background:#fff;color:#161616;box-shadow:0 24px 90px #0003;overflow:auto;font:inherit}.wb-exit-dialog::backdrop{background:#1119}.wb-room .wb-exit-dialog h2{font-size:28px;line-height:1.15;letter-spacing:-.7px;margin:0 0 14px}.wb-room .wb-exit-dialog p{color:#555;margin:0 0 24px}.wb-exit-actions{display:flex;flex-direction:column;gap:6px}.wb-exit-actions>.wb-primary{width:100%;min-height:48px}.wb-exit-actions>.wb-text{min-height:44px}

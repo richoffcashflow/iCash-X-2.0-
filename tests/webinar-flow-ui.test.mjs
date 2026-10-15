@@ -31,7 +31,11 @@ async function post(url,body){requestLog.push({url,body});if(url.endsWith('/star
 let timerInput;
 const roomDeps={...exitReminder,webinarOfferFocus,useWebinarSharedChat:()=>({messages:[],statuses:[]}),webinarChatStream,withOfferDeadlines,replayOfferActivity,recordedPurchaseMessage,useMemo:fn=>fn(),webinarRequest:async()=>({postPurchaseUrl:'/live/123457'}),dynamic:loader=>loader.toString().includes('WebinarCheckout')?'WebinarCheckout':'AccountAccess',useWebinarTimers:input=>{timerInput=input;return {deadlines:{},offerDeadlines:{},offset:0,now:Date.now()};},...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}};
 const h=await harness('components/webinar-room.tsx',roomDeps);
-const render=()=>h.render('WebinarRoom',{webinarCode:'129339'});let tree=render();await flush();tree=render();
+const render=()=>h.render('WebinarRoom',{webinarCode:'129339'});let tree=render();assert.equal(listeners.has('beforeunload'),false,'Loading never installs a reminder');await flush();tree=render();
+assert.equal(listeners.has('beforeunload'),true,'Regular viewers receive the one-time exit reminder');
+const exitDialog=find(tree,'dialog');assert.equal(exitDialog.props['aria-describedby'],'wb-exit-benefit');
+assert.ok(all(exitDialog).some(n=>n.type==='button'&&n.props.children==='Keep watching'));
+assert.ok(all(exitDialog).some(n=>n.type==='button'&&n.props.children==='Leave webinar'));
 assert.equal(requestLog[0].body.code,'129339');assert.equal(requestLog[0].body.attribution.fbclid,'retained');assert.equal(replaced[0],'/live/129340?ad_id=55555&fbclid=retained#room');assert.equal(all(tree).some(n=>n.props?.className==='wb-offer'),false,'No offer before its cue');assert.equal(all(tree).some(n=>n.type==='header'),false);
 assert.equal(all(tree).some(n=>n.props?.id==='wb-question'),false,'A new viewer must save a name before chatting');
 assert.equal(all(tree).some(n=>n.props?.['aria-label']==='Dismiss contact request'),false,'Required name entry cannot be dismissed');
@@ -209,6 +213,7 @@ let previewNow=Date.now();const previewDeadline=new Date(previewNow+90000).toISO
 const previewRoom=await harness('components/webinar-room.tsx',{...roomDeps,useWebinarTimers:input=>{timerInput=input;return {deadlines:{'offer-timer':previewDeadline},offerDeadlines:{},offset:0,now:previewNow};},post:async()=>({sessionId,webinar:policy.publicWebinar({...w,timers:[timerFixture]}),progress:1385,name:'Owner',messages:[],preview:true,serverNow:previewNow})});
 const renderPreview=()=>previewRoom.render('WebinarRoom',{});
 renderPreview();await flush();let previewTree=renderPreview();previewTree=renderPreview();
+assert.equal(listeners.has('beforeunload'),false,'Owner preview never installs an exit reminder');assert.equal(find(previewTree,'dialog'),undefined);
 assert.deepEqual(timerInput.timers,[timerFixture],'Room passes saved timers into deadline synchronization');
 assert.ok(find(previewTree,'WebinarCountdownBanner'),'A single top countdown banner is mounted');
 const previewLink=all(previewTree).find(n=>n.type==='a'&&n.props.href?.startsWith('/webinar/checkout/preview'));
@@ -397,7 +402,9 @@ console.log('PASS webinar audio: audible autoplay, one muted policy fallback, ta
   }
   // Leaving an active checkout open must not erase payment fields on return.
   const h=await harness('components/webinar-room.tsx',{...roomDeps,post:async(url)=>url.endsWith('/start')?{sessionId,webinar:policy.publicWebinar(w),progress:1500,name:'Buyer',messages:[],preview:false,serverNow:now}:{saved:true}});
-  const render=()=>h.render('WebinarRoom',{});render();await flush();let tree=render();find(tree,'WebinarCheckout').props.onEngaged();tree=render();
+  const render=()=>h.render('WebinarRoom',{});render();await flush();let tree=render();const exitBeforeCheckout=listeners.get('beforeunload');assert.ok(exitBeforeCheckout);find(tree,'WebinarCheckout').props.onEngaged();
+  exitBeforeCheckout({isTrusted:true,preventDefault(){throw Error('Checkout must suppress the reminder before React rerenders');}});
+  tree=render();assert.equal(listeners.has('beforeunload'),false);
   document.hidden=true;listeners.get('visibilitychange')();now+=3600000;document.hidden=false;listeners.get('pageshow')();assert.equal(reloads,0);h.close();
  }finally{Date.now=realNow;document.hidden=false;}
  console.log('PASS one-hour browser return: short absence resumes, expired restored pages reload before checkpoints, owner previews and active checkout remain intact.');
@@ -406,7 +413,8 @@ console.log('PASS webinar audio: audible autoplay, one muted policy fallback, ta
 {
  const instance=await harness('components/webinar-room.tsx',roomDeps),render=()=>instance.render('WebinarRoom',{webinarCode:'129339'});
  render();await flush();let tree=render();find(tree,'WebinarPlayer').props.onProgress(1500);tree=render();
- const before=redirects.length;find(tree,'WebinarCheckout').props.onPurchased('standard','/live/123457');tree=render();
+ const before=redirects.length,exitBeforePurchase=listeners.get('beforeunload');find(tree,'WebinarCheckout').props.onPurchased('standard','/live/123457');
+ exitBeforePurchase({isTrusted:true,preventDefault(){throw Error('Verified Standard purchase must suppress the old room immediately');}});tree=render();
  assert.equal(find(tree,'WebinarVipWelcome').props.href,'/live/123457');assert.equal(find(tree,'WebinarVipWelcome').props.fullScreen,true);
  assert.equal(find(tree,'WebinarPlayer'),undefined,'The main video stops when the purchase handoff is shown');assert.equal(find(tree,'WebinarCheckout'),undefined,'No second payment offer competes with the VIP video handoff');
  assert.equal(redirects.length,before,'The welcome owns navigation after its visible countdown');instance.close();

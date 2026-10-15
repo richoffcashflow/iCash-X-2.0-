@@ -24,7 +24,7 @@ const flush=async()=>{for(let n=0;n<16;n++)await Promise.resolve();};
 const redirects=[],calls=[],active=[];let verified=false,purchase=null;
 globalThis.window={location:{search:'',assign:url=>redirects.push(url),replace:url=>redirects.push(url)}};globalThis.document={hidden:false};
 const request=async(url,init={})=>{calls.push({url,init});if(url==='/api/billing/membership')return purchase;if(url==='/api/account?view=core')return {signedIn:true};if(init.method==='POST')return {clientSecret:'secret_fixture',publishableKey:'pk_live_fixture'};return {membership:{accessible:true,vip:verified}};};
-const common={WebinarVipWelcome:'WebinarVipWelcome',...vip,safeVipSession,priceLabel,webinarRequest:request,AccountAccess:'AccountAccess',PostPurchaseSetup:'PostPurchaseSetup',StripeEmbeddedCheckout:'StripeEmbeddedCheckout',WebinarPaymentPreview:'WebinarPaymentPreview'};
+const common={...exitReminder,WebinarVipWelcome:'WebinarVipWelcome',...vip,safeVipSession,priceLabel,webinarRequest:request,AccountAccess:'AccountAccess',PostPurchaseSetup:'PostPurchaseSetup',StripeEmbeddedCheckout:'StripeEmbeddedCheckout',WebinarPaymentPreview:'WebinarPaymentPreview'};
 const props={phase:'watching',email:'casey@example.invalid',customerName:'Casey',needsClaim:true,paidThrough:new Date(Date.now()+86400000).toISOString(),vipSessionUrl:'/live/123456',onRefresh:async()=>({membership:{accessible:true,vip:verified},needsClaim:false}),onWorkspace:()=>redirects.push('/'),onActive:v=>active.push(v)};
 const h=await harness('components/webinar-vip-upsell.tsx',common);let current={...props};const render=()=>h.render('WebinarVipUpsell',current);
 let tree=render();assert.equal(button(tree,'Upgrade to VIP').props.disabled,true);assert.equal(calls.length,0,'Guest offer never starts payment or email automatically');
@@ -178,6 +178,14 @@ console.log('PASS final VIP offer: verified upgrades open the workspace; Standar
  const direct=await harness('components/webinar-vip-welcome.tsx',{...exitReminder,safeVipSession,setInterval:fn=>{tick=fn;return 1;},clearInterval:()=>{}});
  tree=direct.render('WebinarVipWelcome',props);button(tree,'Watch VIP now').props.onClick();assert.equal(redirects.length,before+2);direct.close();
  assert.equal(exitHandlers.size,0,'Watch VIP now also bypasses the reminder');
+ // An automatically prepared embedded checkout can fall back to hosted Stripe.
+ // This intended navigation must bypass the regular-room guard as well.
+ window.location.search='';
+ const hosted=await harness('components/membership-checkout.tsx',{...common,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserEvent:()=>{},webinarRequest:async(_url,init={})=>init.method==='POST'?{url:'https://checkout.stripe.com/fixture'}:{offer:{revision:1,priceCents:5000},ready:true,mode:'test',embeddedReady:true,membership:null}});
+ exitReminder.installWebinarExitReminder();assert.equal(exitHandlers.size,1);
+ const hostedProps={presentation:'webinar',embedded:true,onSignedIn:()=>{},onEngaged:()=>{throw Error('Preparation is not payment engagement');}};
+ hosted.render('MembershipCheckout',hostedProps);await flush();hosted.render('MembershipCheckout',hostedProps);await flush();hosted.render('MembershipCheckout',hostedProps);
+ assert.equal(redirects.at(-1),'https://checkout.stripe.com/fixture');assert.equal(exitHandlers.size,0);assert.equal(exitStorage.size,0);hosted.close();
  const unsafe=await harness('components/webinar-vip-welcome.tsx',{...exitReminder,safeVipSession,setInterval:()=>{throw Error('Unsafe destinations must not start timers');},clearInterval:()=>{}});
  assert.equal(unsafe.render('WebinarVipWelcome',{href:'https://other.test/live/123456'}),null);unsafe.close();
 }
