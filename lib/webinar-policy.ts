@@ -82,6 +82,8 @@ export function webinarOffers(w:OfferConfig):WebinarOffer[]{
  return w.parentWebinarId?offers.map(offer=>offer.action==='link'&&offer.url==='/join?setup=1'?{...offer,ctaLabel:'Upgrade to VIP',action:'checkout',url:''}:offer):offers;
 }
 export function webinarPitchAt(w:OfferConfig){return Math.min(...webinarOffers(w).map(o=>o.at));}
+/** Re-enter the selected recording three minutes ahead of its first offer. */
+export function webinarReturnPosition(w:OfferConfig){return Math.max(0,Math.min(webinarPitchAt(w)-180,Math.max(0,(w.durationSeconds??14400)-1)));}
 export function offerDestination(o:WebinarOffer){return o.action==='link'&&validOfferUrl(o.url)?o.url:webinarSite.checkoutPath;}
 export function webinarEndOffer(w:OfferConfig,now=Date.now()){return selectOffer(webinarOffers(w),w.durationSeconds??14400,now,w.endOfferId);}
 export function publicWebinar(w:Webinar){const {transcript,faq,chatStyle,nightVersion,nightEnabled,adEntryWebinarId,...rest}=w;void transcript;void faq;void chatStyle;void nightVersion;void nightEnabled;void adEntryWebinarId;return {...rest,chat:w.chat.map(({variations,...cue})=>{void variations;return cue;})};}

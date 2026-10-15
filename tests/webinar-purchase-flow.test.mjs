@@ -23,7 +23,7 @@ const flush=async()=>{for(let n=0;n<16;n++)await Promise.resolve();};
 const redirects=[],calls=[],active=[];let verified=false,purchase=null;
 globalThis.window={location:{search:'',assign:url=>redirects.push(url),replace:url=>redirects.push(url)}};globalThis.document={hidden:false};
 const request=async(url,init={})=>{calls.push({url,init});if(url==='/api/billing/membership')return purchase;if(url==='/api/account?view=core')return {signedIn:true};if(init.method==='POST')return {clientSecret:'secret_fixture',publishableKey:'pk_live_fixture'};return {membership:{accessible:true,vip:verified}};};
-const common={...vip,safeVipSession,priceLabel,webinarRequest:request,AccountAccess:'AccountAccess',PostPurchaseSetup:'PostPurchaseSetup',StripeEmbeddedCheckout:'StripeEmbeddedCheckout',WebinarPaymentPreview:'WebinarPaymentPreview'};
+const common={WebinarVipWelcome:'WebinarVipWelcome',...vip,safeVipSession,priceLabel,webinarRequest:request,AccountAccess:'AccountAccess',PostPurchaseSetup:'PostPurchaseSetup',StripeEmbeddedCheckout:'StripeEmbeddedCheckout',WebinarPaymentPreview:'WebinarPaymentPreview'};
 const props={phase:'watching',email:'casey@example.invalid',customerName:'Casey',needsClaim:true,paidThrough:new Date(Date.now()+86400000).toISOString(),vipSessionUrl:'/live/123456',onRefresh:async()=>({membership:{accessible:true,vip:verified},needsClaim:false}),onWorkspace:()=>redirects.push('/'),onActive:v=>active.push(v)};
 const h=await harness('components/webinar-vip-upsell.tsx',common);let current={...props};const render=()=>h.render('WebinarVipUpsell',current);
 let tree=render();assert.equal(button(tree,'Upgrade to VIP').props.disabled,true);assert.equal(calls.length,0,'Guest offer never starts payment or email automatically');
@@ -41,10 +41,12 @@ console.log('PASS purchase flow: unpaid checkout, two upgrade opportunities, gue
 
 const redirectMember=await harness('components/membership-checkout.tsx',{...common,safeVipSession,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserEvent:()=>{}});
 purchase.membership.vip=false;purchase.postPurchaseUrl='/live/123456';
-const redirectProps={...mp,redirectToVip:true,webinarPhase:'watching'};
-redirectMember.render('MembershipCheckout',redirectProps);await flush();let beforeRedirect=redirects.length;redirectMember.render('MembershipCheckout',redirectProps);assert.equal(redirects.length,beforeRedirect,'A paid viewer keeps watching until the end');
-redirectMember.render('MembershipCheckout',{...redirectProps,webinarPhase:'ended'});assert.equal(redirects.at(-1),'/live/123456','Verified checkout opens VIP automatically once the main webinar has ended');redirectMember.close();
-console.log('PASS paid checkout handoff to VIP and watch-until-end behavior.');
+const purchaseStates=[],redirectProps={...mp,redirectToVip:true,webinarPhase:'watching',onPurchased:(state,url)=>purchaseStates.push([state,url])};
+redirectMember.render('MembershipCheckout',redirectProps);await flush();const beforeRedirect=redirects.length;
+let welcomeTree=redirectMember.render('MembershipCheckout',redirectProps);assert.equal(find(welcomeTree,'WebinarVipWelcome').props.href,'/live/123456');assert.equal(find(welcomeTree,'WebinarVipUpsell'),undefined,'The next video is the immediate next step');
+assert.deepEqual(purchaseStates,[['standard','/live/123456']]);assert.equal(redirects.length,beforeRedirect,'The confirmation remains visible before the countdown handoff');
+welcomeTree=redirectMember.render('MembershipCheckout',{...redirectProps,webinarPhase:'ended'});assert.ok(find(welcomeTree,'WebinarVipWelcome'));redirectMember.close();
+console.log('PASS paid handoff: verified Standard access shows the VIP welcome immediately, including before the main video ends.');
 
 for(const scenario of [
  {name:'Pending payment',accessible:false,vip:false,search:'?membership=paid',url:'/live/123456'},
@@ -156,3 +158,20 @@ for(const preview of [false,true]){
  instance.close();
 }
 console.log('PASS final VIP offer: verified upgrades open the workspace; Standard and preview states stay in the offer.');
+
+// The welcome gives five visible seconds, allows immediate continuation, and never charges.
+{
+ let tick,cleared=0;
+ const h=await harness('components/webinar-vip-welcome.tsx',{safeVipSession,setInterval:fn=>{tick=fn;return 1;},clearInterval:()=>cleared++});
+ const props={href:'/live/123456',fullScreen:true},before=redirects.length;
+ let tree=h.render('WebinarVipWelcome',props);assert.match(text(tree),/Don’t leave yet/);assert.match(text(tree),/Stay here to watch your VIP webinar/);
+ assert.equal(button(tree,'Watch VIP now').props.disabled,undefined);
+ document.hidden=true;for(let i=0;i<10;i++)tick();assert.equal(redirects.length,before);document.hidden=false;
+ for(let i=0;i<4;i++)tick();assert.equal(redirects.length,before);tick();assert.equal(redirects.length,before+1);assert.equal(redirects.at(-1),props.href);
+ button(tree,'Watch VIP now').props.onClick();tick();assert.equal(redirects.length,before+1,'Only one navigation per handoff');h.close();assert.ok(cleared>0);
+ const direct=await harness('components/webinar-vip-welcome.tsx',{safeVipSession,setInterval:fn=>{tick=fn;return 1;},clearInterval:()=>{}});
+ tree=direct.render('WebinarVipWelcome',props);button(tree,'Watch VIP now').props.onClick();assert.equal(redirects.length,before+2);direct.close();
+ const unsafe=await harness('components/webinar-vip-welcome.tsx',{safeVipSession,setInterval:()=>{throw Error('Unsafe destinations must not start timers');},clearInterval:()=>{}});
+ assert.equal(unsafe.render('WebinarVipWelcome',{href:'https://other.test/live/123456'}),null);unsafe.close();
+}
+console.log('PASS VIP welcome: clear stay message, immediate button, five visible seconds, cleanup, no duplicate navigation or unsafe URLs.');

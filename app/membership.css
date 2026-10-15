@@ -87,3 +87,18 @@
 .webinar-upgrade-card:has(.vip-checkout){border-color:#d7bf88;border-top:4px solid #c7a458;box-shadow:0 18px 60px #72551b0c}
 .wb-room .wb-selling .wb-offer:has(.vip-checkout){border-color:#c7a458;box-shadow:0 8px 28px #72551b14}
 @media(max-width:600px){.vip-checkout-brand{padding:9px 10px;margin-bottom:12px}.vip-checkout .membership-embedded{padding:3px}}
+
+/* Confirm payment and make the next video unmistakable on desktop and mobile. */
+.webinar-vip-welcome{width:100%;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;font-size:16px;text-align:center;padding:clamp(24px,5vw,48px) 18px;border-radius:20px;box-sizing:border-box}
+.webinar-vip-welcome *{box-sizing:border-box}
+.webinar-vip-welcome-full{min-height:100svh;display:grid;place-items:center;padding:32px 20px;border-radius:0}
+.webinar-vip-welcome-content{width:100%;max-width:520px;margin:auto}
+.webinar-vip-welcome .purchase-receipt{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 0 28px;color:#333}
+.webinar-vip-welcome-label{display:block;font-size:11px;letter-spacing:.16em;font-weight:700;margin-bottom:16px;color:#666}
+.webinar-vip-welcome h2{font-size:clamp(34px,7vw,52px);line-height:1.08;letter-spacing:-.045em;margin:0 0 20px;color:#111;outline:none}
+.webinar-vip-welcome p{line-height:1.55;color:#555}
+.webinar-vip-welcome .webinar-vip-welcome-message{font-size:clamp(20px,4.8vw,26px);line-height:1.25;font-weight:650;color:#111;margin:0 0 14px}
+.webinar-vip-welcome .webinar-vip-welcome-content .setup-primary{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:56px;padding:14px 18px;margin-top:24px;border:0;border-radius:11px;font:inherit;font-size:17px;font-weight:700;background:#111;color:#fff;cursor:pointer}
+.webinar-vip-welcome .setup-primary:focus-visible{outline:3px solid #777;outline-offset:3px}
+.webinar-vip-welcome .webinar-vip-welcome-countdown{font-size:13px;margin:14px 0 0;color:#666}
+@media(max-height:600px){.webinar-vip-welcome-full{padding:20px}.webinar-vip-welcome .purchase-receipt{margin-bottom:16px}.webinar-vip-welcome .webinar-vip-welcome-content .setup-primary{margin-top:16px}}

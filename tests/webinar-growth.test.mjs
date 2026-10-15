@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {newWebinar,publicWebinar,visitorTimezone,sameLocalDay,isNight,settingsSchema} from '../lib/webinar-policy.ts';
+import {newWebinar,publicWebinar,visitorTimezone,sameLocalDay,isNight,settingsSchema,webinarReturnPosition} from '../lib/webinar-policy.ts';
 import {applyChatVariations,snapshotChat,presetChat} from '../lib/webinar-variants.ts';
 import {allocation,eligibleVariants,optimizedWebinar,returnVisit} from '../lib/webinar-optimizer.ts';
 import {metaPurchasePayload,browserPurchase} from '../lib/webinar-meta-policy.ts';
@@ -119,4 +119,11 @@ test('an expired older session never skips the new video or uses preview activit
 test('legacy routing gains an eight-hour window, without changing existing night hours',()=>{
  const s=settingsSchema.parse({enabled:false,fromEmail:'',postalAddress:'',subjects:['a','b','c'],messages:['a','b','c'],routing:{nightStartsAt:20,nightEndsAt:5}});
  assert.equal(s.routing.checkoutWindowHours,8);assert.equal(s.routing.nightStartsAt,20);
+});
+
+test('return position is three minutes before the earliest offer of the selected recording',()=>{
+ const w=webinar();assert.equal(webinarReturnPosition({...w,offers:[{at:1500},{at:1200}]}),1020);
+ assert.equal(webinarReturnPosition({...w,offers:[],pitchAt:900}),720);
+ assert.equal(webinarReturnPosition({...w,offers:[{at:90}]}),0);
+ assert.equal(webinarReturnPosition({...w,offers:[{at:5000}],durationSeconds:1800}),1799);
 });

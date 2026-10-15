@@ -9,7 +9,7 @@ export function WebinarPaymentPreview({priceCents,vipUpgrade=false,onBack,onComp
  const branding=vipUpgrade?<div className="vip-checkout-brand"><span>VIP</span><strong>iCash X upgrade</strong></div>:null;
  if(complete)return <section className={`wb-payment-preview wb-payment-preview-done${vipUpgrade?' vip-checkout':''}`} aria-label="Preview purchase complete">
   {branding}
-  <Check size={30} aria-hidden="true"/><h2>You’re in.</h2><p>Preview purchase complete. No payment was taken.</p><button type="button" className="setup-primary" onClick={onBack??(()=>setComplete(false))}>{onBack?'Back to offer':'Preview again'}</button>
+  <Check size={30} aria-hidden="true"/><h2>{vipUpgrade?"You’re in.":"Don’t leave yet."}</h2>{!vipUpgrade&&<p><strong>Stay here to watch your VIP webinar.</strong><br/>After a confirmed purchase, your next video opens automatically.</p>}<p>Preview purchase complete. No payment was taken.</p><button type="button" className="setup-primary" onClick={onBack??(()=>setComplete(false))}>{onBack?'Back to offer':'Preview again'}</button>
  </section>;
  return <section className={`wb-payment-preview${vipUpgrade?' vip-checkout':''}`} aria-label="Payment preview">
   {branding}
