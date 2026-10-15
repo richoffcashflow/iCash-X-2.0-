@@ -94,6 +94,37 @@ try{
  const freshScreen=await one('select screening_id from icash_seller_matches where lead_id=$1',[fresh.id]);assert.notEqual(freshScreen.screening_id,screening_id);
  assert.equal((await one('select state from icash_screening_jobs where id=$1',[screening_id])).state,'archived','old run remains history');
  assert.equal(Number((await one('select count(*) n from icash_seller_matches where lead_id=$1',[id])).n),oldMatchCount);
+ // Real consent predicate + the manual contact migration: archived revocations
+ // must not block a new verified opt-in, while actual opt-outs still do.
+ await pg.exec(`create schema extensions;
+ create function extensions.digest(text,text) returns bytea language sql as $$select sha256(convert_to($1,'UTF8'))$$;
+ create table icash_owner_contacts(account_id uuid,screening_id uuid,result jsonb);
+ create table icash_text_threads(account_id uuid,deal_id uuid,recipient text);
+ create table icash_contact_permissions(account_id uuid,screening_id uuid,phone text,revoked_at timestamptz);`);
+ await pg.exec(read('supabase/migrations/20261015210959_consented_browser_calling.sql').split('-- Resolve the business caller ID')[0]);
+ const currentScreen=freshScreen.screening_id,phone=args[6];
+ await q('insert into icash_owner_contacts values($1,$2,$3)',[account,currentScreen,{contacts:[{name:'Demo Seller',phones:[{number:'(214) 555-0123',type:'mobile',doNotCall:true}]}]}]);
+ await q('insert into icash_contact_permissions values($1,$2,$3,now())',[account,screening_id,phone]);
+ const contact=()=>one('select * from icash_manual_contacts($1,$2)',[account,currentScreen]);
+ assert.equal((await contact()).blocked,false,'current verified consent overrides source DNC and archived demo revocation');
+ assert.equal((await contact()).phone,phone,'formatted source numbers normalize and deduplicate');
+ assert.equal((await q('select * from icash_manual_contacts($1,$2)',[other,currentScreen])).rows.length,0,'no cross-account contact access');
+ assert.equal((await q('select * from icash_manual_contacts($1,$2)',[account,screening_id])).rows.length,0,'archived property stays unavailable');
+ const held=[
+  ["insert into icash_text_suppressions values($1)",[phone],'SMS STOP'],
+  ["insert into icash_contact_suppressions values($1,encode(sha256(convert_to($2,'UTF8')),'hex'))",[account,phone],'voice opt-out'],
+  ["insert into icash_contact_permissions values($1,$2,$3,now())",[account,currentScreen,phone],'current property revocation'],
+  ["update icash_screening_jobs set state='complete' where id=$1",[screening_id],'revocation on another active property'],
+  ["update icash_seller_intakes set ai_consented=false where id=$1",[fresh.id],'consent withdrawn'],
+  ["update icash_seller_intakes set consent_text='mismatch' where id=$1",[fresh.id],'consent statement mismatch'],
+  ["update icash_seller_intakes set data_rights_until=now()-interval '1 minute' where id=$1",[fresh.id],'expired consent'],
+  ["update icash_seller_intakes set attribution='{}' where id=$1",[fresh.id],'wrong account binding']
+ ];
+ for(const [sql,params,label] of held){await q('begin');try{await q(sql,params);assert.equal((await contact()).blocked,true,label);}finally{await q('rollback');}}
+ assert.equal((await one('select count(*)::int n from icash_contact_permissions where revoked_at is not null')).n,1,'archived history remains revoked');
+ assert.equal((await one("select result->'contacts'->0->'phones'->0->>'doNotCall' flag from icash_owner_contacts")).flag,'true','source evidence is never rewritten');
+ for(const role of ['anon','authenticated'])assert.equal((await one("select has_function_privilege($1,'public.icash_manual_contacts(uuid,uuid)','execute') allowed",[role])).allowed,false);
+ console.log('PASS: consent-aware manual calling, source DNC, archived revocations, STOP, current revocation, expiry and exact account binding.');
  const again=await submit(args.map((v,i)=>i===2?randomUUID():v));assert.equal((await one('select canonical_id from icash_seller_intakes where id=$1',[again.id])).canonical_id,fresh.id);
  const otherOwner=(await one('select owner_user_id from icash_accounts where id=$1',[other])).owner_user_id;
  const otherDemo=await submit(args.map((v,i)=>i===0?otherOwner:i===1?other:i===2?randomUUID():v));

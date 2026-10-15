@@ -22,6 +22,9 @@ try{
  create function public.icash_claim_operation(text) returns boolean language sql as $$select true$$;
  create function public.icash_settle_complete_costs(k text,c bigint,p jsonb,e text) returns void language sql as $$insert into public.settlements values(k,c,p)$$;`);
  for(const name of ['20261007013855_customer_business_phone_calls.sql','20261008173746_customer_phone_recordings.sql','20261013053914_browser_customer_calls.sql'])await db.exec(readFileSync(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'));
+ await db.exec(`create function public.icash_manual_contacts(a uuid,s uuid) returns table(phone text,blocked boolean) language sql as $$select '+12025550103',false where exists(select 1 from public.icash_deal_files where account_id=a and screening_id=s)$$;`);
+ const senderMigration=readFileSync(new URL('../supabase/migrations/20261015210959_consented_browser_calling.sql',import.meta.url),'utf8');
+ await db.exec(senderMigration.slice(senderMigration.indexOf('-- Resolve the business caller ID')));
  const account='11111111-1111-4111-8111-111111111111',actor='22222222-2222-4222-8222-222222222222',screen='33333333-3333-4333-8333-333333333333',rate='44444444-4444-4444-8444-444444444444',call='55555555-5555-4555-8555-555555555555',ac='AC'+'a'.repeat(32),parent='CA'+'b'.repeat(32),recording='RE'+'c'.repeat(32);
  await db.query('insert into public.icash_accounts values($1,$2);',[account,actor]);await db.query('insert into public.icash_screening_jobs values($1)',[screen]);
  await db.exec(`insert into public.icash_operating_budget values(1,true,3,3);insert into public.icash_text_senders values('+12025550101',true);`);
@@ -45,9 +48,15 @@ try{
  await assert.rejects(()=>startBrowser({callbackMicrosPerMinute:14000}),/rate required/);
  await assert.rejects(()=>startBrowser({recordingPolicy:null}),/recording/);
  await assert.rejects(()=>startBrowser({},browserId,'77777777-7777-4777-8777-777777777777'),/owner/);
+ // Calling also works before a text conversation exists, including voice-only contacts.
+ await db.exec('delete from public.icash_text_threads');
+ const resolved=await db.query('select icash_customer_call_sender($1,$2,$3) sender',[account,screen,quote.recipient]);assert.equal(resolved.rows[0].sender,quote.from);
+ assert.equal((await db.query('select icash_customer_call_sender($1,$2,$3) sender',[actor,screen,quote.recipient])).rows[0].sender,null,'another account cannot select a caller ID');
+ await db.exec('update public.icash_text_senders set enabled=false');assert.match((await startBrowser()).rows[0].result.error,/calling number is unavailable/);
+ await db.exec('update public.icash_text_senders set enabled=true');
  const browser=(await startBrowser()).rows[0].result;assert.equal(browser.created,true);assert.equal(browser.call.connection_type,'browser');assert.equal(browser.call.callback_phone,callback);assert.equal(browser.call.recording_required,true);assert(browser.holdCents<result.holdCents,'Browser quote replaces the telephone leg, not an added fee');
  assert.equal((await startBrowser()).rows[0].result.created,false,'Same click is idempotent');
  assert.match((await startBrowser({},'77777777-7777-4777-8777-777777777777')).rows[0].result.error,/still active/);
- for(const role of ['anon','authenticated']){const {rows:[r]}=await db.query("select has_table_privilege($1,'public.icash_browser_phone_config','SELECT,INSERT,UPDATE,DELETE') as allowed",[role]);assert.equal(r.allowed,false,'Browser credentials are server-only');}
+ for(const role of ['anon','authenticated']){assert.equal((await db.query("select has_function_privilege($1,'public.icash_customer_call_sender(uuid,uuid,text)','execute') allowed",[role])).rows[0].allowed,false);const {rows:[r]}=await db.query("select has_table_privilege($1,'public.icash_browser_phone_config','SELECT,INSERT,UPDATE,DELETE') as allowed",[role]);assert.equal(r.allowed,false,'Browser credentials are server-only');}
  console.log('PASS browser database: legacy recording settlement, browser destination, fixed SDK rate, recording required, ownership, idempotency, one active call and private credentials.');
 }finally{await db.close();}

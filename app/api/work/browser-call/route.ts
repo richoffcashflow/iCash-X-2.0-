@@ -32,7 +32,7 @@ export async function POST(req:Request){
   return Response.json(result,{status:'error' in result?409:200,headers});
  }catch(e){
   const key=e instanceof Error?e.message:'';
-  const message=key==='BROWSER_PHONE_SETUP_REQUIRED'?'Browser calling is unavailable. Use your phone instead.':key==='PHONE_SENDER_UNAVAILABLE'?'Open Text first to connect this contact to your business number.':key==='PHONE_CONTACT_UNAVAILABLE'?'This contact cannot be called.':key==='PHONE_PRICE_UNAVAILABLE'?'Calling prices could not be checked. Please try again.':'Could not connect the call. Please try again.';
+  const message=key==='BROWSER_PHONE_SETUP_REQUIRED'?'Calling is temporarily unavailable. Please try again.':key==='PHONE_SENDER_UNAVAILABLE'?'Your business calling number is unavailable. Please try again.':key==='PHONE_CONTACT_UNAVAILABLE'?'This contact cannot be called.':key==='PHONE_PRICE_UNAVAILABLE'?'Calling prices could not be checked. Please try again.':'Could not connect the call. Please try again.';
   return Response.json({error:message},{status:key==='SIGN_IN_REQUIRED'?401:409,headers});
  }
 }

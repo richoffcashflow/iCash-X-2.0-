@@ -13,3 +13,10 @@ const count=events.length;origin=false;assert.equal((await request({action:'star
 authorized=false;assert.equal((await request()).status,401);authorized=true;ready=false;assert.equal((await request({action:'start'})).status,409);ready=true;
 r=await route.POST(new Request('https://www.geticashx.com/api/work/browser-call',{method:'POST',body:JSON.stringify({action:'end',id})}));assert.equal(r.status,200);assert.deepEqual(events.at(-1),['end',id,account]);assert.equal(events.at(-2)[1].allowInactiveMembership,true,'Ending a call never requires renewal');
 console.log('PASS browser API: auth/origin, saved contact permission, receive-only preparation, server-selected identity, no arbitrary destinations, configuration failure and own-account hangup.');
+
+// Old callback clients cannot start phone-to-phone bridges; history remains on GET.
+const callback=await loadService('app/api/work/business-call/route.ts',{allowedOrigin:()=>origin,workAccount:async()=>{if(!authorized)throw Error();return {accountId:account,userId:actor};}});
+const legacy=()=>callback.POST(new Request('https://www.geticashx.com/api/work/business-call',{method:'POST',body:JSON.stringify({screeningId:screen,phone:'+12025550101',callbackPhone:'+12025550199',requestKey:id})}));
+assert.equal((await legacy()).status,410);
+origin=false;assert.equal((await legacy()).status,403);origin=true;
+authorized=false;assert.equal((await legacy()).status,401);authorized=true;

@@ -15,15 +15,14 @@ export async function GET(req:Request){
   const attempts=await db<{id:string;state:string;created_at:string;consent_at:string|null;last_error:string|null}[]>(`icash_call_recordings?account_id=eq.${accountId}&screening_id=eq.${screeningId}&call_sid=not.is.null&conversation_id=is.null&select=id,state,created_at,consent_at,last_error&order=created_at.desc&limit=3`);
   const [personalCalls,deals]=await Promise.all([db<CustomerPhoneCall[]>(`icash_customer_phone_calls?account_id=eq.${accountId}&screening_id=eq.${screeningId}&select=id,state,connection_type,callback_phone,ended_at,recording_required,recording_state,recording_sid,recording_expires_at,recording_deleted_at&order=created_at.desc&limit=1`),db<{id:string}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${screeningId}&select=id&limit=1`)]);
   const [thread]=deals[0]?await db<{sender:string}[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${deals[0].id}&retired_at=is.null&select=sender&limit=1`):[];
-  return NextResponse.json({personalCalls:personalCalls.map(c=>({id:c.id,state:c.state,connection_type:c.connection_type,callback_phone:c.callback_phone,ended_at:c.ended_at,audioAvailable:customerPhoneAudioAvailable(c)})),businessNumber:thread?.sender??null,attempts:attempts.map(a=>({id:a.id,createdAt:a.created_at,status:['failed','declined','absent'].includes(a.state)?'Call ended before the AI conversation':'Call connecting',costPending:a.last_error==='terminal_carrier_reconciliation_required'})),contacts:choices,reason:choices.length?undefined:'No phone number has been saved for this property yet.'},{headers});
+  const firstAvailable=choices.find(c=>c.available);
+  const businessNumber=thread?.sender??(firstAvailable?await db<string|null>('rpc/icash_customer_call_sender','POST',{p_account:accountId,p_screening:screeningId,p_recipient:firstAvailable.phone}):null);
+  return NextResponse.json({personalCalls:personalCalls.map(c=>({id:c.id,state:c.state,connection_type:c.connection_type,callback_phone:c.callback_phone,ended_at:c.ended_at,audioAvailable:customerPhoneAudioAvailable(c)})),businessNumber,attempts:attempts.map(a=>({id:a.id,createdAt:a.created_at,status:['failed','declined','absent'].includes(a.state)?'Call ended before the AI conversation':'Call connecting',costPending:a.last_error==='terminal_carrier_reconciliation_required'})),contacts:choices,reason:choices.length?undefined:'No phone number has been saved for this property yet.'},{headers});
  }catch{return NextResponse.json({error:'Could not load contacts. Try again.'},{status:503,headers});}
 }
+// External dialer launches are retired; calls stay inside the authenticated browser flow.
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
- try{
-  const {accountId,userId}=await workAccount();const raw=await req.text();if(raw.length>512)throw Error();
-  const {screeningId,phone}=z.object({screeningId:z.string().uuid(),phone:z.string().regex(/^\+1[2-9][0-9]{9}$/)}).strict().parse(JSON.parse(raw));
-  const result=await db<{manual?:boolean;dialUrl?:string;error?:string}>('rpc/icash_start_manual_call','POST',{p_actor:userId,p_account:accountId,p_screening:screeningId,p_phone:phone});
-  return NextResponse.json(result,{status:result.error?409:200,headers});
- }catch{return NextResponse.json({error:'Could not start the call. Please retry.'},{status:409,headers});}
+ try{await workAccount();return NextResponse.json({error:'Use the Call button in iCash X.'},{status:410,headers});}
+ catch{return NextResponse.json({error:'Sign in to call.'},{status:401,headers});}
 }
