@@ -16,11 +16,12 @@ export function createRecordedReceptionProviders(env:RecordingEnv,fetcher:typeof
  }
  const agentPath=(id:string)=>{if(!/^agent_[A-Za-z0-9]+$/.test(id))throw Error('AGENT_REQUIRED');return '/v1/convai/agents/'+id;};
  return {
-  getCall:core.getCall,start:core.start,stop:core.stop,end:core.end,getRecording:core.getRecording,listRecordings:core.listRecordings,deleteRecording:core.deleteRecording,media:core.media,
-  async boundCall(r:RecordedReceptionRow){
+  getCall:core.getCall,limit:core.limit,start:core.start,stop:core.stop,end:core.end,getRecording:core.getRecording,listRecordings:core.listRecordings,deleteRecording:core.deleteRecording,media:core.media,
+  async boundCall(r:RecordedReceptionRow,fundedSeconds=r.max_total_seconds){
    if(!sid(r.call_sid,'CA')||r.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!Number.isInteger(r.max_total_seconds)||r.max_total_seconds<60||r.max_total_seconds>600||r.max_total_seconds%60!==0)throw Error('CALL_BINDING_REQUIRED');
+   if(!Number.isSafeInteger(fundedSeconds)||fundedSeconds<60||fundedSeconds>r.max_total_seconds)throw Error('CALL_FUNDED_CAP_REQUIRED');
    const url=`https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Calls/${r.call_sid}.json`;
-   const response=await fetcher(url,{method:'POST',headers:{Authorization:'Basic '+Buffer.from(env.TWILIO_ACCOUNT_SID+':'+env.TWILIO_AUTH_TOKEN).toString('base64'),'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({TimeLimit:String(r.max_total_seconds),StatusCallback:recordedReceptionUrl+'/terminal?id='+r.id,StatusCallbackMethod:'POST'}),redirect:'error',cache:'no-store',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000)});
+   const response=await fetcher(url,{method:'POST',headers:{Authorization:'Basic '+Buffer.from(env.TWILIO_ACCOUNT_SID+':'+env.TWILIO_AUTH_TOKEN).toString('base64'),'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({TimeLimit:String(fundedSeconds),StatusCallback:recordedReceptionUrl+'/terminal?id='+r.id,StatusCallbackMethod:'POST'}),redirect:'error',cache:'no-store',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000)});
    if(response.redirected||response.url&&response.url!==url)throw Error('CALL_BOUND_UNCONFIRMED');
    if(!response.ok){
     // Only numeric carrier diagnostics. Never log credentials, phones, or raw bodies.

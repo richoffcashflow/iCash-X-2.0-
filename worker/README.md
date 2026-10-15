@@ -1,5 +1,33 @@
 # Railway screening worker
 
+The live-voice-metering candidate adds a separate ten-second lane with one
+eight-second deadline shared by a bounded batch of DB claims and fixed Vercel
+endpoint requests. Each pass claims at most 20 fresh tickets and runs at most
+four endpoint requests concurrently; claims remain serial. An empty/disabled
+queue costs one claim and no endpoint request. A null claim or any failure stops
+new claims, and already-started requests settle or abort before the next pass.
+It uses fresh one-use capabilities and never retries an uncertain consumed
+ticket. It does not dial calls or hold provider keys. Existing screening and
+automation waits cannot starve this lane. Startup health remains degraded until
+the first successful metering claim; the persisted minute heartbeat can take a
+minute to reflect readiness. Install the disabled DB ticket scaffold before
+deploying this worker. See `docs/live-voice-metering.md`: live activation remains
+blocked on a verified, enforced short-interval cost envelope.
+
+These bounds are not a guaranteed call capacity or renewal latency. At most 20
+tickets can be attempted per ten-second pass, and slow DB/provider responses can
+complete far fewer before the shared eight-second deadline. If all 20 slots are
+used without observing an empty queue, metering health is held (not available)
+until a later successful pass observes one; three consecutive held passes return
+503. Endpoint failures/timeouts also hold health. Never infer that a fresh claim
+heartbeat alone proves every active call was serviced. Before live activation,
+measure the maximum concurrent-call workload, oldest-due age and actual end-to-end
+latency against renewal headroom, including outages and multiple worker replicas.
+The per-process limits do not impose a global provider concurrency limit across
+replicas. Admission/capacity policy must leave headroom; the existing funded
+carrier deadline remains the outage/overload backstop. This disabled candidate
+does not establish those production capacity limits or waive the pricing block.
+
 Build from repository root `/`, Dockerfile `/worker/Dockerfile`, start `node --experimental-strip-types worker/index.mjs`. No dependency installation is needed. Image includes deterministic underwriting modules from `lib`.
 
 Set server-only `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `SCREENING_WORKER_ENABLED=true`. Without these, health reports standby. Never put secrets in the repo. `/health` returns 503 after three consecutive failures in either screening or automation, and recovers when that lane succeeds. Screening and automation have independent bounded exponential backoff (up to one minute and five minutes respectively); a screening failure does not suppress automation. A successful empty claim resets that lane. Automation failure only schedules a fresh database ticket claim, never a replay of the consumed ticket or an ambiguous provider operation. No property data or keys are logged.

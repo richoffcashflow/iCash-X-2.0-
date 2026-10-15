@@ -63,7 +63,7 @@ function fixture(options={}) {
     if(body.p_expected_version!==row.row_version || options.rejectTransition===body.p_action) return null;
     const payload=body.p_payload, action=body.p_action;
     if (action==='claim_setup') {if(row.setup_claimed_at) return null; row.setup_claimed_at=iso;row.state='setup_pending';}
-    else if (action==='bounded') {assert(row.setup_claimed_at);assert.equal(payload.timeLimitSeconds,row.max_total_seconds);row.bounded_at=iso;row.setup_confirmed_at=iso;row.state='consent_pending';}
+    else if (action==='bounded') {assert(row.setup_claimed_at);assert.equal(payload.timeLimitSeconds,options.meterSeconds??row.max_total_seconds);row.bounded_at=iso;row.setup_confirmed_at=iso;row.state='consent_pending';}
     else if (action==='bind_call_start') {if(row.call_started_at)return null;row.call_started_at=payload.callStartedAt;row.call_deadline_at=new Date(Date.parse(payload.callStartedAt)+row.max_total_seconds*1000).toISOString();row.consent_deadline_at=new Date(Date.parse(payload.callStartedAt)+45000).toISOString();}
     else if (action==='authorize_recording'){if(row.recording_authorized_at||row.entry_policy!=='direct_recorded_v1')return null;assert.equal(payload.nonceHash,row.nonce_hash);row.recording_authorized_at=iso;}
     else if (action==='consent') {if(row.consent_at||row.state!=='consent_pending') return null;assert.equal(payload.nonceHash,row.nonce_hash);row.consent_at=iso;row.consent_evidence=clone(payload);}
@@ -85,7 +85,7 @@ function fixture(options={}) {
     branches:async()=>{events.push({provider:'branches'});return options.branches??{results:[clone(cfg.branch)],meta:{total:1}};},
     workspace:async()=>{events.push({provider:'workspace'});return options.workspace??{webhooks:{post_call_webhook_id:null}};},
     tool:async()=>{events.push({provider:'tool'});return clone(cfg.tool);},
-    boundCall:async r=>{events.push({provider:'boundCall',seconds:r.max_total_seconds});assert(row.setup_claimed_at);assert.equal(canonicalCall.status,'in-progress','carrier cannot update a ringing call');if(options.boundThrows)throw Error('synthetic-write-unknown');return clone({...canonicalCall,...options.boundReceipt});},
+    boundCall:async (r,seconds=r.max_total_seconds)=>{events.push({provider:'boundCall',seconds});assert(row.setup_claimed_at);assert.equal(canonicalCall.status,'in-progress','carrier cannot update a ringing call');if(options.boundThrows)throw Error('synthetic-write-unknown');return clone({...canonicalCall,...options.boundReceipt});},
     start:async(sid,callback)=>{events.push({provider:'start',callback});assert.equal(sid,callSid);assert(row.bounded_at);assert(recordingAuthorized(row));assert(row.start_claimed_at);assert.equal(row.register_claimed_at,null);if(options.startThrows)throw Error('synthetic-write-unknown');if(options.startCallback){const response=await service.status(signed('status?id='+id,{RecordingSid:recordingSid,RecordingStatus:'in-progress'}));assert.equal(response.status,204);}return {sid:recordingSid,call_sid:callSid,account_sid:accountSid,status:'in-progress',start_time:iso,...options.startReceipt};},
     register:async(r,seconds,context,voiceId)=>{events.push({provider:'register',seconds,context,voiceId});assert(recordingAuthorized(r));assert(r.start_claimed_at);assert(r.recording_sid);assert(r.register_claimed_at);assert.equal(r.state,'recording');if(options.registerThrows)throw Error('synthetic-write-unknown');return streamXml;},
     end:async sid=>{events.push({provider:'end'});assert.equal(sid,callSid);if(options.endThrows)throw Error('synthetic-write-unknown');canonicalCall.status='completed';return {sid:callSid,account_sid:accountSid,status:'completed',...options.endReceipt};},
@@ -93,7 +93,7 @@ function fixture(options={}) {
     getRecording:async sid=>{events.push({provider:'getRecording'});assert.equal(sid,recordingSid);return {sid:recordingSid,call_sid:callSid,account_sid:accountSid,status:'in-progress',start_time:iso,...options.recordingReceipt};},
     media:async sid=>{events.push({provider:'media'});assert.equal(sid,recordingSid);if(options.expireDuringMedia)clock=Date.parse(row.audio_expires_at);return Buffer.from('synthetic-audio');},
   };
-  service=recordedReceptionService({...env,...options.env},{rpc,provider:p,selectVoice:options.selectVoice,now:()=>clock});
+  service=recordedReceptionService({...env,...options.env},{rpc,provider:p,selectVoice:options.selectVoice,now:()=>clock,meter:options.meter});
   const f={...cfg, events, rpc, provider:p, service, get row(){return row;}, get nonce(){return nonce;}, setNow:ms=>{clock=ms;}, setCall:values=>Object.assign(canonicalCall,values),
     async answer(request=inboundRequest()){const response=await service.inbound(request);const text=await response.text();const match=/nonce=([a-f0-9]{64})/.exec(text);if(match)nonce=match[1];return {response,text};},
     setup(fields={CallStatus:'in-progress'},options={}){return service.setup(signed('setup?id='+id+'&nonce='+nonce,fields,options));},
@@ -526,4 +526,24 @@ test('production reception server wires the bounded account voice resolver',asyn
  assert.equal(await server.selectVoice(cfg.c.account_id,cfg.c),'voice_custom_fixture');assert.deepEqual(calls,['voice','agent']);
  parent.abort();assert.equal(requestSignal.aborted,true);calls.length=0;
  assert.equal(await server.selectVoice(cfg.c.account_id,cfg.c),null);assert.deepEqual(calls,[]);
+});
+
+
+test('metered inbound setup acknowledges only the actual funded cap, and connection respects funding',async()=>{
+ for(const allowed of [true,false]){
+  const meterEvents=[];
+  const meter={prepare:async(...args)=>{meterEvents.push(['prepare',...args]);return {status:'ready',meter:{authorizedSeconds:120}};},confirm:async(m,seconds,call)=>{meterEvents.push(['confirm',seconds,call.sid]);return true;},enforce:async()=>({allowed,status:allowed?'funded':'initial_cap_unconfirmed'})};
+  const f=fixture({meter,meterSeconds:120});await f.ready();
+  assert.equal(f.events.find(e=>e.provider==='boundCall').seconds,120);
+  assert.equal(f.events.find(e=>e.body?.p_action==='bounded').body.p_payload.timeLimitSeconds,120);
+  assert.deepEqual(meterEvents.find(e=>e[0]==='confirm'),['confirm',120,callSid]);
+  const response=await f.consent();assert.equal((await response.text()).includes('<Connect'),allowed);
+  assert.equal(f.events.some(e=>e.provider==='register'),allowed);
+  assert.equal(f.events.some(e=>e.provider==='start'),allowed);
+ }
+});
+test('held live funding admits no inbound carrier extension or AI',async()=>{
+ const meter={prepare:async()=>({status:'held',reason:'reviewed_upper_bound_required'})};
+ const f=fixture({meter});const result=await f.admit();assert(!result.text.includes('<Connect'));
+ assert(!f.events.some(e=>['boundCall','start','register'].includes(e.provider)));
 });

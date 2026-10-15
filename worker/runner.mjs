@@ -11,9 +11,10 @@ export async function tick(rpc, screen=runScreeningJob){
 export function createRpc(url,key,transport=fetch){
  const base=new URL(url);
  if(base.protocol!=='https:'||!base.hostname.endsWith('.supabase.co')||!key)throw new Error('Invalid worker configuration');
- return async(name,args)=>{
-  if(!['icash_claim_screening','icash_finish_screening','icash_next_automation','icash_record_service_heartbeat'].includes(name))throw new Error('Unsupported worker operation');
-  const response=await transport(new URL('/rest/v1/rpc/'+name,base),{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify(args),redirect:'error',signal:AbortSignal.timeout(15000)});
+ return async(name,args,options={})=>{
+  if(!['icash_claim_screening','icash_finish_screening','icash_next_automation','icash_record_service_heartbeat','icash_next_voice_metering'].includes(name))throw new Error('Unsupported worker operation');
+  const signal=options.signal?AbortSignal.any([options.signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000);
+  const response=await transport(new URL('/rest/v1/rpc/'+name,base),{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify(args),redirect:'error',signal});
   if(!response.ok)throw new Error('SCREENING_DATABASE_UNAVAILABLE');
   const body=await response.text();return body?JSON.parse(body):null;
  };
