@@ -1,0 +1,13 @@
+import {BookOpen} from 'lucide-react';
+export const workspaceGuideSteps=[
+ {title:'1. Set up and start',text:'Save your name or company, add work credits, then select Run bot. Credits pay for completed service usage. Pause stops new automatic work; it does not cancel your subscription or a signed contract.'},
+ {title:'2. Understand a lead',text:'Open a property to see the seller, estimated value after repairs, repair estimate and cash offer. These are research estimates. Review condition, ownership, mortgages and liens; a title professional must confirm payoffs and clear title.'},
+ {title:'3. Talk to the seller',text:'Use Calls to review conversations or call from your business number. Use Texts for the message history and replies. Ask about condition, price and timing. Select Take over to pause new automatic work on this property. Already-started work may finish. Select Return to bot when you are ready for automation to resume.'},
+ {title:'4. Review the purchase agreement',text:'The purchase agreement is between the seller and your buying entity. Check every owner, the legal description, agreed price, dates, costs, assignment terms and required disclosures. Sign only after reviewing the actual document. A sent agreement is not a signed agreement, and a signature is not a completed closing.'},
+ {title:'5. Work with cash buyers',text:'A buyer’s offer is their proposed price and terms, not a payment. Confirm funds and signing authority before an assignment. The buyer receives your contract rights subject to the signed documents and applicable law. In the sample, a $2,000 deposit counts toward a $10,000 assignment fee, leaving $8,000 at closing. The signed agreement controls the deposit, recipient and refund conditions.'},
+ {title:'6. Close with the title company',text:'Save and verify your closing contact and payout details. Once the required documents and permissions are ready, the bot can send the closing package. Read title-company messages and complete requests. Title handles ownership, liens, payoffs and closing requirements. Confirm all payment instructions independently. Count proceeds only after verified disbursement—not when someone promises to pay.'},
+] as const;
+export function WorkspaceGuide({expanded=false}:{expanded?:boolean}){
+ const content=<ol className="workspace-guide-steps">{workspaceGuideSteps.map(step=><li key={step.title}><h3>{step.title}</h3><p>{step.text}</p></li>)}</ol>;
+ return expanded?<section className="workspace-guide" aria-label="Workspace instructions"><h2>How to use your workspace</h2>{content}</section>:<details className="workspace-guide"><summary><BookOpen size={17} aria-hidden="true"/>How to use your workspace</summary>{content}</details>;
+}

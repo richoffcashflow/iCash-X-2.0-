@@ -9,8 +9,8 @@ import * as policy from '../lib/membership-policy.ts';
 import * as consent from '../lib/funding-consent.ts';
 let user={id:'owner',email:'fixture@example.invalid'},active=true,orders=[],calls=[],sessions=new Map();
 const stripe={checkout:{sessions:{create:async(body,options)=>{calls.push({create:body,options});const s={id:'cs_live_'+(sessions.size+1),status:'open',payment_status:'unpaid',livemode:true,url:body.ui_mode==='embedded_page'?null:'https://checkout.stripe.com/fixture',ui_mode:body.ui_mode??'hosted_page',client_secret:body.ui_mode==='embedded_page'?'cs_live_secret_fixture':null,metadata:body.metadata};sessions.set(s.id,s);return s;},retrieve:async id=>sessions.get(id),expire:async id=>{sessions.get(id).status='expired';}}}};
-let acceptanceFails=false;
-const deps={...finalSale,recordPurchaseAcceptance:async(_req,receipt)=>{if(acceptanceFails)throw Error('Receipt unavailable');calls.push({acceptance:receipt});},...embeddedPolicy,...recharge,...amounts,...policy,...consent,NextResponse:{json:(body,o={})=>({body,status:o.status??200})},allowedOrigin:()=>true,privatePaymentCheckAllowed:async()=>false,customerFundingReady:async()=>true,earlyAccessFundingEnabled:()=>false,fundingMode:()=> 'live',cookies:async()=>({get:()=>({value:'a'.repeat(64)})}),validGuest:()=>true,guestHash:()=> 'hash',limitRequest:async()=>{},currentUser:async()=>user,accountMembership:async()=>({mode:'live',account_id:'account',stripe_customer_id:'cus_owned'}),fundingStripe:()=>stripe,processingFeeCents:()=>0,maximumFundingDays:()=>7,settleFunding:async()=>{throw Error('Unexpected payment');},db:async(path,method,body)=>{
+let acknowledged=true,acceptanceFails=false;
+const deps={workspaceAcknowledgmentCurrent:()=>acknowledged,...finalSale,recordPurchaseAcceptance:async(_req,receipt)=>{if(acceptanceFails)throw Error('Receipt unavailable');calls.push({acceptance:receipt});},...embeddedPolicy,...recharge,...amounts,...policy,...consent,NextResponse:{json:(body,o={})=>({body,status:o.status??200})},allowedOrigin:()=>true,privatePaymentCheckAllowed:async()=>false,customerFundingReady:async()=>true,earlyAccessFundingEnabled:()=>false,fundingMode:()=> 'live',cookies:async()=>({get:()=>({value:'a'.repeat(64)})}),validGuest:()=>true,guestHash:()=> 'hash',limitRequest:async()=>{},currentUser:async()=>user,accountMembership:async()=>({mode:'live',account_id:'account',stripe_customer_id:'cus_owned'}),fundingStripe:()=>stripe,processingFeeCents:()=>0,maximumFundingDays:()=>7,settleFunding:async()=>{throw Error('Unexpected payment');},db:async(path,method,body)=>{
  calls.push({path,method,body});
  if(path.startsWith('icash_accounts'))return [{id:'account'}];
  if(path.startsWith('icash_daily_plans'))return [];
@@ -27,6 +27,7 @@ const source=ts.transpileModule(readFileSync(new URL('../app/api/funding/checkou
 const {POST}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__manualFunding;\n'+source).toString('base64'));
 const purchase={accepted:true,version:policy.workCreditTermsVersion,packCode:'budget_ten',days:1,totalCents:1000};
 const request=body=>new Request('https://www.geticashx.com/api/funding/checkout',{method:'POST',headers:{origin:'https://www.geticashx.com'},body:JSON.stringify(body)});
+acknowledged=false;assert.equal((await POST(request(purchase))).status,403);assert.equal(sessions.size,0);assert.equal(orders.length,0);acknowledged=true;
 const custom=cents=>({...purchase,packCode:amounts.customFundingCode,customAmountCents:cents,totalCents:cents});
 for(const cents of [999,100001,1000.1,Infinity,-1000,'1000',null]){assert.equal((await POST(request(custom(cents)))).status,400);}
 assert.equal((await POST(request({...purchase,totalCents:1}))).status,400);

@@ -19,7 +19,7 @@ function page(account,campaign,error=false){
  return mod.exports.default();
 }
 const campaign={policy:{version:'v1'},acknowledgment:{version:'v1'},configured:true,released:false,liveWorkReady:false,smsChannelEnabled:true};
-const account={signedIn:true,mode:'live',balanceCents:850,assistantName:'Synthetic bot',paused:true,billingActive:false,identity:{principal:'Synthetic company'},smsWorkReady:false,workReady:false};
+const account={workspaceAcknowledged:true,signedIn:true,mode:'live',balanceCents:850,assistantName:'Synthetic bot',paused:true,billingActive:false,identity:{principal:'Synthetic company'},smsWorkReady:false,workReady:false};
 let tree=page(account,campaign),nodes=all(tree);
 assert.equal(nodes.find(n=>n.type===component('BotRunBar')).props.running,false);assert.equal(nodes.find(n=>n.type===component('BotRunBar')).props.balanceCents,850);assert.doesNotMatch(text(tree),/Your account records/);
 assert.equal(nodes.filter(n=>n.type==='button'&&n.props.className==='fund-button').length,0,'setup-status actions stay out of the workspace');

@@ -17,7 +17,7 @@ export async function POST(req:Request){
    z.object({action:z.literal('end'),id:z.string().uuid()}).strict(),
    z.object({action:z.enum(['prepare','start']),screeningId:z.string().uuid(),phone:z.string().regex(/^\+1[2-9][0-9]{9}$/),requestKey:z.string().uuid()}).strict(),
   ]).parse(JSON.parse(raw));
-  const owner=await workAccount({allowInactiveMembership:body.action==='end'});
+  const owner=await workAccount({allowInactiveMembership:body.action==='end',allowUnacknowledged:body.action==='end'});
   if(body.action==='end')return Response.json(await endCustomerBrowserCall(body.id,owner.accountId),{headers});
   const c=await config();if(!c)throw Error('BROWSER_PHONE_SETUP_REQUIRED');
   const identity=browserPhoneIdentity(owner.accountId,owner.userId,body.requestKey);

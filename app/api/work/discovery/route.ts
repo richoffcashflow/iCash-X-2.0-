@@ -3,6 +3,7 @@ import {currentUser} from '@/lib/account-auth';
 import {fundingMode} from '@/lib/funding-policy';
 import {db} from '@/lib/stripe-test';
 import {discoverForAccount} from '@/lib/discovery-service';
+import {workspaceAcknowledgmentCurrent,type WorkspaceAcknowledgmentRecord} from '@/lib/workspace-acknowledgment';
 export const dynamic='force-dynamic';
 export const maxDuration=60;
 export async function POST(request:Request){
@@ -12,8 +13,9 @@ export async function POST(request:Request){
   const user=await currentUser(true);
   if(!user)return NextResponse.json({error:'Sign in required'},{status:401,headers});
   if(fundingMode()!=='live')return NextResponse.json({status:'not_ready'},{headers});
-  const accounts=await db<{id:string}[]>(`icash_accounts?owner_user_id=eq.${user.id}&select=id&limit=2`);
+  const accounts=await db<({id:string}&WorkspaceAcknowledgmentRecord)[]>(`icash_accounts?owner_user_id=eq.${user.id}&select=id,workspace_ack_version,workspace_ack_user_id,workspace_ack_hash&limit=2`);
   if(accounts.length!==1)return NextResponse.json({status:'not_ready'},{headers});
+  if(!workspaceAcknowledgmentCurrent(accounts[0],user.id))return NextResponse.json({error:'Accept the workspace acknowledgment before starting work.'},{status:403,headers});
   return NextResponse.json(await discoverForAccount(accounts[0].id),{headers});
  }catch{return NextResponse.json({status:'held',message:'Discovery is held. Any pending spend will be reconciled before retrying.'},{status:503,headers});}
 }

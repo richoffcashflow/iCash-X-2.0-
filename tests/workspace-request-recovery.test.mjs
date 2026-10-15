@@ -32,7 +32,7 @@ function harness(file,props={}){
   dispose(){slots.forEach(slot=>slot?.cleanup?.());}
  };
 }
-const fixture={signedIn:true,email:'fixture@example.invalid',mode:'live',billingModel:'prepaid',identity:{principal:'Fixture'},assistantName:'Fixture',balanceCents:1000,paused:false,workReady:true};
+const fixture={workspaceAcknowledged:true,signedIn:true,email:'fixture@example.invalid',mode:'live',billingModel:'prepaid',identity:{principal:'Fixture'},assistantName:'Fixture',balanceCents:1000,paused:false,workReady:true};
 function browserFixture(){
  const listeners=new Map();
  globalThis.window={location:{search:'',hash:'',pathname:'/'},history:{replaceState(){}},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:(name,fn)=>{if(listeners.get(name)===fn)listeners.delete(name);}};

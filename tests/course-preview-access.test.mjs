@@ -9,7 +9,7 @@ const deps={
  dashboardCurrentUser:async()=>{reads++;if(error)throw error;return user;},
  ownerInboundTarget:{ownerUserId:'owner'},
  redirect:path=>{throw Error('REDIRECT:'+path);},notFound:()=>{throw Error('NOT_FOUND');},
- WorkspacePreview:()=>null,_jsx:(type,props)=>({type,props}),
+ coursePreviewContracts:()=>({purchase:"fixture",assignment:"fixture"}),WorkspacePreview:()=>null,_jsx:(type,props)=>({type,props}),
 };
 globalThis.__coursePreviewAccess=deps;
 const source=ts.transpileModule(readFileSync(new URL('../app/preview/workspace/page.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText.replace(/^import .* from .*;$/gm,'');

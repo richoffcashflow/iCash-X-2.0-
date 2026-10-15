@@ -18,7 +18,7 @@ function mount(account){
  return {render(){cursor=0;return mod.exports.default();},account(next){slots[0]=next;},stale(value){slots[1]=value;}};
 }
 const props=(tree,name)=>all(tree).find(n=>n.type===component(name))?.props;
-const account={signedIn:true,email:'admin-fixture@example.com',mode:'live',balanceCents:0,assistantName:'Fixture bot',identity:{principal:'Fixture company'},paused:true,billingModel:'membership_credits',membershipActive:true,vip:false,isBillingOwner:false};
+const account={workspaceAcknowledged:true,signedIn:true,email:'admin-fixture@example.com',mode:'live',balanceCents:0,assistantName:'Fixture bot',identity:{principal:'Fixture company'},paused:true,billingModel:'membership_credits',membershipActive:true,vip:false,isBillingOwner:false};
 const regular=mount(account);let tree=regular.render();
 assert(!props(tree,'WorkspaceVipBanner'),'Workspace starts with bot controls');
 const button=(root,label)=>all(root).find(n=>n.type==='button'&&text(n)===label);
