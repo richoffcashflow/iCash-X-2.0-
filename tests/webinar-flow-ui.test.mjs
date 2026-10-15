@@ -83,8 +83,9 @@ all(tree).find(n=>n.props?.className==='wb-new-messages').props.onClick();assert
 // Offers open automatically, even with a draft. Chat waits until the countdown ends.
 find(tree,'WebinarPlayer').props.onProgress(w.durationSeconds-1);tree=render();tree=render();
 const chatSection=()=>all(tree).find(n=>n.props?.['aria-labelledby']==='wb-chat-title');
-assert.equal(all(tree).find(n=>n.props?.id==='webinar-offer').props.hidden,undefined,'Checkout is open at the cue');
+assert.equal(all(tree).find(n=>n.props?.id==='webinar-offer').props.hidden,false,'Checkout is open at the cue');
 assert.equal(chatSection().props.hidden,true,'Chat is hidden during the offer');
+assert.equal(all(tree).some(n=>n.type==='button'&&n.props.children==='Show chat'),false,'Public viewers never receive the owner preview override');
 assert.equal(input().props.value,'What happens next?','Offer retains the chat draft');
 assert.equal(all(tree).some(n=>n.props?.['aria-label']==='Minimize offer'),false);
 assert.equal(all(tree).some(n=>n.props?.className==='wb-bottom'),false,'No extra Sign Up footer');
@@ -109,7 +110,8 @@ const returningRoom=await harness('components/webinar-room.tsx',roomDeps);return
 
 // Owner preview uses the configured timers and can inspect the unpaid end page.
 const timerFixture={id:'offer-timer',label:'Time remaining',at:1355,mode:'duration',durationSeconds:121,endsAt:null,placement:'offer',onExpire:'hide',expiredMessage:'Ended'};
-const previewRoom=await harness('components/webinar-room.tsx',{...roomDeps,post:async()=>({sessionId,webinar:policy.publicWebinar({...w,timers:[timerFixture]}),progress:1385,name:'Owner',messages:[],preview:true,serverNow:Date.now()})});
+let previewNow=Date.now();const previewDeadline=new Date(previewNow+90000).toISOString();
+const previewRoom=await harness('components/webinar-room.tsx',{...roomDeps,useWebinarTimers:input=>{timerInput=input;return {deadlines:{'offer-timer':previewDeadline},offerDeadlines:{},offset:0,now:previewNow};},post:async()=>({sessionId,webinar:policy.publicWebinar({...w,timers:[timerFixture]}),progress:1385,name:'Owner',messages:[],preview:true,serverNow:previewNow})});
 const renderPreview=()=>previewRoom.render('WebinarRoom',{});
 renderPreview();await flush();let previewTree=renderPreview();previewTree=renderPreview();
 assert.deepEqual(timerInput.timers,[timerFixture],'Room passes saved timers into deadline synchronization');
@@ -117,6 +119,30 @@ assert.ok(find(previewTree,'WebinarCountdownBanner'),'A single top countdown ban
 const previewLink=all(previewTree).find(n=>n.type==='a'&&n.props.href?.startsWith('/webinar/checkout/preview'));
 assert.ok(previewLink,'Owner can open the unpaid checkout preview at any time');
 assert.equal(all(previewTree).find(n=>n.props?.['aria-labelledby']==='wb-chat-title').props.hidden,true);
+const previewChat=()=>all(previewTree).find(n=>n.props?.['aria-labelledby']==='wb-chat-title');
+const previewOffer=()=>all(previewTree).find(n=>n.props?.id==='webinar-offer');
+const previewToggle=label=>all(previewTree).find(n=>n.type==='button'&&n.props.children===label);
+find(previewTree,'WebinarCheckout').props.onEngaged();previewTree=renderPreview();
+all(previewTree).find(n=>n.props?.id==='wb-question').props.onChange({target:{value:'Owner preview draft'}});previewTree=renderPreview();
+assert.equal(find(previewTree,'WebinarCountdownBanner').props.countdown.remaining,90);
+previewToggle('Show chat').props.onClick();previewTree=renderPreview();
+assert.equal(previewChat().props.hidden,false,'Owner can inspect chat during an active offer');
+assert.equal(previewOffer().props.hidden,true,'The offer is minimized while the owner inspects chat');
+assert.ok(find(previewOffer(),'WebinarCheckout'),'Checkout stays mounted and keeps its form state');
+assert.equal(all(previewTree).find(n=>n.props?.id==='wb-question').props.value,'Owner preview draft');
+all(previewTree).find(n=>n.props?.['aria-label']==='Minimize chat').props.onClick();previewTree=renderPreview();
+assert.equal(all(previewTree).find(n=>n.props?.id==='wb-chat-body').props.hidden,true);
+all(previewTree).find(n=>n.props?.['aria-label']==='Expand chat').props.onClick();previewTree=renderPreview();
+assert.equal(all(previewTree).find(n=>n.props?.id==='wb-chat-body').props.hidden,false);
+previewNow+=1000;previewTree=renderPreview();
+assert.equal(find(previewTree,'WebinarCountdownBanner').props.countdown.remaining,89,'Countdown continues while chat is visible');
+previewToggle('Show offer').props.onClick();previewTree=renderPreview();
+assert.equal(previewOffer().props.hidden,false);assert.equal(previewChat().props.hidden,true);
+assert.equal(find(previewTree,'WebinarCountdownBanner').props.countdown.remaining,89,'Returning to the offer does not restart its timer');
+previewToggle('Show chat').props.onClick();previewTree=renderPreview();
+find(previewTree,'WebinarPlayer').props.onPreviewSeek(1385);previewTree=renderPreview();
+assert.equal(previewOffer().props.hidden,false,'Seeking resets the preview to the normal offer view');
+assert.equal(previewChat().props.hidden,true);
 const redirectsBeforePayment=redirects.length;
 find(previewTree,'WebinarCheckout').props.onPurchased('vip');previewTree=renderPreview();
 assert.equal(all(previewTree).find(n=>n.props?.['aria-labelledby']==='wb-chat-title').props.hidden,false,'Confirmed payment immediately restores chat');
