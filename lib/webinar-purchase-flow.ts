@@ -1,7 +1,11 @@
 export type WebinarPurchaseState = 'standard' | 'vip' | null;
 
 /** Purchase state comes from the billing API, never a return URL or local storage. */
-export function webinarPurchaseDestination(purchased:WebinarPurchaseState,checkoutEngaged:boolean,upgradeActive:boolean){
+export function webinarPurchaseDestination(purchased:WebinarPurchaseState,checkoutEngaged:boolean,upgradeActive:boolean,vipWebinar=false){
+ if(vipWebinar){
+  if(purchased==='vip')return '/';
+  return upgradeActive?null:'/webinar/upgrade';
+ }
  if(purchased==='vip')return '/join?setup=1';
  if(upgradeActive)return null;
  if(purchased==='standard')return '/webinar/upgrade';

@@ -72,11 +72,15 @@ export function chooseWebinar(webinars:Webinar[],_history:WatchHistory[]=[],_tim
 }
 export type WebinarRow={config:Webinar;public_code:number;parent_webinar_id?:string|null};
 export function webinarFromRow(row:WebinarRow):Webinar{return webinarSchema.parse({...row.config,adEntryWebinarId:undefined,publicCode:String(row.public_code),parentWebinarId:row.parent_webinar_id??null,intelligenceEnabled:false});}
-export function newVipWebinar(id:string,parent:Webinar):Webinar{return {...newWebinar(id),offers:[{id:'workspace',title:'Make it yours',description:'Create your bot and open your workspace.',ctaLabel:'Set up my bot',at:1500,expiresAt:null,action:'link',url:'/join?setup=1'}],title:`${parent.title.slice(0,136)} · VIP`,description:'Your follow-up session.',parentWebinarId:parent.id};}
+export function newVipWebinar(id:string,parent:Webinar):Webinar{return {...newWebinar(id),offers:[{id:'vip',title:'Upgrade to iCash X VIP',description:'Get VIP access for $50 more today.',ctaLabel:'Upgrade to VIP',at:1500,expiresAt:null,action:'checkout',url:''}],title:`${parent.title.slice(0,136)} · VIP`,description:'Your follow-up session.',parentWebinarId:parent.id};}
 
 export function formatWatchTime(seconds:number){const p=splitDuration(seconds);return p.hours?`${p.hours}:${String(p.minutes).padStart(2,'0')}:${String(p.seconds).padStart(2,'0')}`:`${p.minutes}:${String(p.seconds).padStart(2,'0')}`;}
-type OfferConfig=Pick<Webinar,'pitchAt'|'offerTitle'|'ctaLabel'|'offerEndsAt'>&Partial<Pick<Webinar,'offers'|'endOfferId'|'durationSeconds'>>;
-export function webinarOffers(w:OfferConfig):WebinarOffer[]{return w.offers?.length?w.offers:[{id:'primary',title:w.offerTitle,description:'',ctaLabel:w.ctaLabel,at:w.pitchAt,expiresAt:w.offerEndsAt,action:'checkout',url:''}];}
+type OfferConfig=Pick<Webinar,'pitchAt'|'offerTitle'|'ctaLabel'|'offerEndsAt'>&Partial<Pick<Webinar,'offers'|'endOfferId'|'durationSeconds'|'parentWebinarId'>>;
+export function webinarOffers(w:OfferConfig):WebinarOffer[]{
+ const offers:WebinarOffer[]=w.offers?.length?w.offers:[{id:'primary',title:w.offerTitle,description:'',ctaLabel:w.ctaLabel,at:w.pitchAt,expiresAt:w.offerEndsAt,action:'checkout',url:''}];
+ // Older VIP drafts used the workspace link as their default offer.
+ return w.parentWebinarId?offers.map(offer=>offer.id==='workspace'&&offer.action==='link'&&offer.url==='/join?setup=1'?{...offer,title:'Upgrade to iCash X VIP',description:'Get VIP access for $50 more today.',ctaLabel:'Upgrade to VIP',action:'checkout',url:''}:offer):offers;
+}
 export function webinarPitchAt(w:OfferConfig){return Math.min(...webinarOffers(w).map(o=>o.at));}
 export function offerDestination(o:WebinarOffer){return o.action==='link'&&validOfferUrl(o.url)?o.url:webinarSite.checkoutPath;}
 export function webinarEndOffer(w:OfferConfig,now=Date.now()){return selectOffer(webinarOffers(w),w.durationSeconds??14400,now,w.endOfferId);}

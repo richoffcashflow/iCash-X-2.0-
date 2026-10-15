@@ -52,6 +52,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  const sharedChat=useWebinarSharedChat(session?.sessionId,position);
  const sharedIds=sharedChat.messages.map(m=>m.id).join(',');
  const w=session?.webinar;
+ const isVip=!!w?.parentWebinarId;
  const rawOffers=useMemo(()=>w?webinarOffers(w):[],[w]);
  const timerState=useWebinarTimers({sessionId:session?.sessionId??'',timers:w?.timers??[],offers:rawOffers,seconds:time,preview:session?.preview??true,now});
  const offers=useMemo(()=>withOfferDeadlines(rawOffers,timerState.offerDeadlines),[rawOffers,timerState.offerDeadlines]);
@@ -62,8 +63,8 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  const previewChatVisible=!!session?.preview&&!!currentOffer&&previewChatOfferId===currentOffer.id;
  const chatLocked=focus.locked&&!previewChatVisible;
  const chatCollapsed=chatExpanded===false;
- const checkoutPreviewHref=w?`/webinar/checkout/preview?webinar=${encodeURIComponent(w.id)}&variant=${w.recordingVersion}`:'/webinar/checkout/preview';
- const checkoutHref=session?.preview?checkoutPreviewHref:`${webinarSite.checkoutPath}?webinar_session=${session?.sessionId}`;
+ const checkoutPreviewHref=w?`/webinar/checkout/preview?webinar=${encodeURIComponent(w.id)}&variant=${w.recordingVersion}${isVip?'&vip=1':''}`:'/webinar/checkout/preview';
+ const checkoutHref=session?.preview?checkoutPreviewHref:isVip?'/webinar/upgrade':`${webinarSite.checkoutPath}?webinar_session=${session?.sessionId}`;
  const spots=useMemo(()=>currentOffer?replayOfferSpots(currentOffer,rawOffers,w?.chat??[],time):null,[currentOffer,rawOffers,w?.chat,time]);
  const allOffersEnded=!checkoutEngaged&&rawOffers.length>0&&rawOffers.every(o=>{
   const fixed=Date.parse(o.expiresAt??'');
@@ -119,8 +120,8 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  function continuePurchase(){
   if(session?.preview)return;
   if(!alive.current||purchaseRedirected.current)return;
-  const next=webinarPurchaseDestination(purchasedRef.current,checkoutEngagedRef.current,upgradeActiveRef.current);
-  if(next&&next!=='checkout'&&endedRef.current){
+  const next=webinarPurchaseDestination(purchasedRef.current,checkoutEngagedRef.current,upgradeActiveRef.current,isVip);
+  if(next&&next!=='checkout'&&(endedRef.current||isVip&&purchasedRef.current==='vip')){
    purchaseRedirected.current=true;
    if(purchasedRef.current==='standard'&&!sessionRef.current?.webinar.parentWebinarId){
     void webinarRequest<{postPurchaseUrl?:string|null}>('/api/billing/membership',{cache:'no-store'},10000).then(data=>location.assign(safeVipSession(data?.postPurchaseUrl)??next)).catch(()=>location.assign(next));
@@ -129,11 +130,11 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  }
  function finishWebinar(){
   endedRef.current=true;setEnded(true);
-  if(session?.preview&&w?.redirectAtEnd){const next=selectOffer(offers,w.durationSeconds,Date.now()+timerState.offset,w.endOfferId);if(next?.action==='checkout'){location.assign(checkoutPreviewHref);return;}}
+  if(session?.preview&&(w?.redirectAtEnd||isVip)&&(!isVip||purchasedRef.current!=='vip')){const next=selectOffer(offers,w.durationSeconds,Date.now()+timerState.offset,w.endOfferId);if(isVip||next?.action==='checkout'){location.assign(checkoutPreviewHref);return;}}
   const done=track('completed');continuePurchase();
   if(checkoutEngagedRef.current)return;
   const offer=w?selectOffer(offers,w.durationSeconds,Date.now()+timerState.offset,w.endOfferId):null;if(offer)setSelectedOfferId(offer.id);setFunding(!!offer);
-  void done?.then(result=>{continuePurchase();if(alive.current&&!purchaseRedirected.current&&webinarPurchaseDestination(purchasedRef.current,checkoutEngagedRef.current,upgradeActiveRef.current)==='checkout'&&result?.redirect)location.assign(result.redirect);});
+  void done?.then(result=>{continuePurchase();if(alive.current&&!purchaseRedirected.current&&webinarPurchaseDestination(purchasedRef.current,checkoutEngagedRef.current,upgradeActiveRef.current,isVip)==='checkout'&&result?.redirect)location.assign(result.redirect);});
  }
  function finishContact(){setFormError('');setContactEditing(false);setContactSaved(true);setPromptHistory(h=>({...h,contactDismissedAt:time,contactAttempts:2}));focusChat.current=true;}
  function nextContact(){setFormError('');setContactStep('phone');setContactEditing(true);focusChat.current=true;}
@@ -145,13 +146,13 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
   else {setContactNotice('Details saved.');finishContact();}
   track(onlyName?'name_saved':'contact_saved');
  }catch(e){setFormError(e instanceof Error?e.message:'Could not save.');}finally{contactOperation.current=false;setFormBusy(false);}}
- async function send(e:React.FormEvent){e.preventDefault();if(chatLocked||!question.trim()||chatOperation.current||!session)return;if(!name.trim()){setEditingName(true);setChatError('Add your name before sending a message.');return;}chatOperation.current=true;setChatBusy(true);setChatError('');const text=question.trim();setSendingMessage({text,playback_seconds:Math.floor(position.current)});setQuestion('');followChat.current=true;try{const d=await post<{messages:Message[]}>('/api/webinar/chat',{sessionId:session.sessionId,text,seconds:Math.floor(position.current),share:true});if(!Array.isArray(d.messages)||!d.messages.length||d.messages.some(m=>!m||typeof m.id!=='string'||typeof m.text!=='string'||!['user','assistant'].includes(m.role)))throw Error('Your message could not be saved. Your video is still playing.');setMessages(m=>[...m,...d.messages]);}catch(e){setQuestion(draft=>draft||text);setChatError((e instanceof Error?e.message:'Message was not sent.')+' Your message: '+text);}finally{chatOperation.current=false;setSendingMessage(null);setChatBusy(false);}}
+ async function send(e:React.FormEvent){e.preventDefault();if(chatLocked||!question.trim()||chatOperation.current||!session)return;if(!isVip&&!name.trim()){setEditingName(true);setChatError('Add your name before sending a message.');return;}chatOperation.current=true;setChatBusy(true);setChatError('');const text=question.trim();setSendingMessage({text,playback_seconds:Math.floor(position.current)});setQuestion('');followChat.current=true;try{const d=await post<{messages:Message[]}>('/api/webinar/chat',{sessionId:session.sessionId,text,seconds:Math.floor(position.current),share:true});if(!Array.isArray(d.messages)||!d.messages.length||d.messages.some(m=>!m||typeof m.id!=='string'||typeof m.text!=='string'||!['user','assistant'].includes(m.role)))throw Error('Your message could not be saved. Your video is still playing.');setMessages(m=>[...m,...d.messages]);}catch(e){setQuestion(draft=>draft||text);setChatError((e instanceof Error?e.message:'Message was not sent.')+' Your message: '+text);}finally{chatOperation.current=false;setSendingMessage(null);setChatBusy(false);}}
  const stream=useMemo(()=>{const statuses=new Map(sharedChat.statuses.map(s=>[s.id,s.public_status]));return webinarChatStream(w?.chat??[],[...messages.map(m=>({...m,public_status:statuses.get(m.id)??m.public_status})),...sharedChat.messages.filter(m=>!messages.some(own=>own.id===m.id))],time,sendingMessage);},[w?.chat,messages,sharedChat,time,sendingMessage]);
  useEffect(()=>{if(followChat.current)latestMessages();else setUnread(true);},[messages,stream.length,sendingMessage,sharedIds]);
- const automaticPrompt=w&&!paid&&!question.trim()&&!chatBusy&&!checkoutEngaged?webinarPrompt({name,contactSaved,seconds:time,nameAt:w.nameAt,contactAt:w.contactAt,history:promptHistory}):null;
- const needsChatName=!name.trim();
- const namePrompt=!!w&&(needsChatName||editingName);
- const contactPrompt=!!w&&!namePrompt&&(contactEditing||automaticPrompt==='contact');
+ const automaticPrompt=w&&!isVip&&!paid&&!question.trim()&&!chatBusy&&!checkoutEngaged?webinarPrompt({name,contactSaved,seconds:time,nameAt:w.nameAt,contactAt:w.contactAt,history:promptHistory}):null;
+ const needsChatName=!isVip&&!name.trim();
+ const namePrompt=!!w&&!isVip&&(needsChatName||editingName);
+ const contactPrompt=!!w&&!isVip&&!namePrompt&&(contactEditing||automaticPrompt==='contact');
  useEffect(()=>{if(name&&!editingName&&focusChat.current){focusChat.current=false;messageInput.current?.focus({preventScroll:true});}},[name,editingName,contactPrompt,contactStep]);
  function dismissPrompt(){setFormError('');setContactEditing(false);if(namePrompt){setPromptHistory(h=>({...h,nameDismissedAt:time,nameAttempts:Math.min(2,h.nameAttempts+1)}));setEditingName(false);setDraftName(name);}else setPromptHistory(h=>({...h,contactDismissedAt:time,contactAttempts:Math.min(2,h.contactAttempts+1)}));}
  const nameForm=namePrompt&&<form className="wb-prompt wb-name-prompt" onSubmit={e=>{e.preventDefault();void saveContact(true);}}>
@@ -172,7 +173,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
     {endCountdown!==null&&<div className="wb-prompt"><strong>Opening your next step in {endCountdown} seconds</strong><button className="wb-text" onClick={()=>setEndCountdown(null)}>Stay here</button></div>}
    </section>
    <aside className={`wb-side${paid?' wb-paid':''}`}><WebinarPanelBoundary label="Chat and offers">
-    {currentOffer&&<section className="wb-offer" id="webinar-offer" hidden={previewChatVisible} tabIndex={-1} aria-label="Your next step"><div className="wb-panel-heading"><span className="wb-eyebrow">YOUR NEXT STEP</span></div>{available.length>1&&<div className="wb-offer-options" aria-label="Available offers">{available.map(offer=><button key={offer.id} disabled={checkoutEngaged} aria-pressed={currentOffer.id===offer.id} onClick={()=>{setSelectedOfferId(offer.id);track('pitch_shown',false,'offer:'+offer.id);}}>{offer.title}</button>)}</div>}<h2>{currentOffer.title}</h2>{currentOffer.description&&<p className="wb-offer-description">{currentOffer.description}</p>}{!checkoutEngaged&&<WebinarOfferSpots spots={spots}/>}<WebinarOfferImage offer={currentOffer} className="wb-offer-image"/>{currentOffer.action==='checkout'?<div className="wb-embedded-checkout"><WebinarPanelBoundary label="Checkout" fallbackHref={checkoutHref}><WebinarCheckout sessionId={session.sessionId} preview={session.preview} phase={ended?'ended':'watching'} onPurchased={state=>{purchasedRef.current=state;setPaid(!!state);if(state){setChatExpanded(true);setContactEditing(false);}if(!session.preview)continuePurchase();}} onUpgradeActive={active=>{upgradeActiveRef.current=active;if(!active)continuePurchase();}} onEngaged={()=>{checkoutEngagedRef.current=true;setCheckoutEngaged(true);setSelectedOfferId(currentOffer.id);setEndCountdown(null);track('add_to_cart');track('checkout_opened');track('checkout_opened',false,'offer:'+currentOffer.id);}}/></WebinarPanelBoundary></div>:<a className="wb-primary wb-offer-link" href={offerDestination(currentOffer)} onClick={event=>{if(!availableOffers(offers,position.current,Date.now()+timerState.offset).some(o=>o.id===currentOffer.id)){event.preventDefault();return;}track('add_to_cart',true);track('checkout_opened',true);track('checkout_opened',true,'offer:'+currentOffer.id);track('progress',true);}}>{currentOffer.ctaLabel}</a>}<p className="wb-secure"><ShieldCheck size={14}/>Your video keeps playing while you review.</p></section>}
+    {currentOffer&&<section className="wb-offer" id="webinar-offer" hidden={previewChatVisible} tabIndex={-1} aria-label="Your next step"><div className="wb-panel-heading"><span className="wb-eyebrow">YOUR NEXT STEP</span></div>{available.length>1&&<div className="wb-offer-options" aria-label="Available offers">{available.map(offer=><button key={offer.id} disabled={checkoutEngaged} aria-pressed={currentOffer.id===offer.id} onClick={()=>{setSelectedOfferId(offer.id);track('pitch_shown',false,'offer:'+offer.id);}}>{offer.title}</button>)}</div>}<h2>{currentOffer.title}</h2>{currentOffer.description&&<p className="wb-offer-description">{currentOffer.description}</p>}{!checkoutEngaged&&<WebinarOfferSpots spots={spots}/>}<WebinarOfferImage offer={currentOffer} className="wb-offer-image"/>{currentOffer.action==='checkout'?<div className="wb-embedded-checkout"><WebinarPanelBoundary label="Checkout" fallbackHref={checkoutHref}><WebinarCheckout sessionId={session.sessionId} preview={session.preview} vipWebinar={isVip} phase={ended?'ended':'watching'} onPurchased={state=>{purchasedRef.current=state;setPaid(isVip?state==='vip':!!state);if(state&&(!isVip||state==='vip')){setChatExpanded(true);setContactEditing(false);}if(!session.preview)continuePurchase();}} onUpgradeActive={active=>{upgradeActiveRef.current=active;if(isVip){checkoutEngagedRef.current=active;setCheckoutEngaged(active);}if(!active)continuePurchase();}} onEngaged={()=>{checkoutEngagedRef.current=true;setCheckoutEngaged(true);setSelectedOfferId(currentOffer.id);setEndCountdown(null);track('add_to_cart');track('checkout_opened');track('checkout_opened',false,'offer:'+currentOffer.id);}}/></WebinarPanelBoundary></div>:<a className="wb-primary wb-offer-link" href={offerDestination(currentOffer)} onClick={event=>{if(!availableOffers(offers,position.current,Date.now()+timerState.offset).some(o=>o.id===currentOffer.id)){event.preventDefault();return;}track('add_to_cart',true);track('checkout_opened',true);track('checkout_opened',true,'offer:'+currentOffer.id);track('progress',true);}}>{currentOffer.ctaLabel}</a>}<p className="wb-secure"><ShieldCheck size={14}/>Your video keeps playing while you review.</p></section>}
     {allOffersEnded&&time>=webinarPitchAt(w!)&&<section className="wb-offer"><h2>This session’s offers have ended.</h2><p>You can keep watching and use the chat.</p></section>}
     <section className={`wb-chat${chatCollapsed?' wb-chat-collapsed':''}`} id="webinar-chat" hidden={chatLocked} aria-labelledby="wb-chat-title" onFocusCapture={()=>setChatFocused(true)} onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget))setChatFocused(false);}}>
      <div className="wb-chat-heading"><span><MessageCircle size={18}/><h2 id="wb-chat-title" title="This chat includes prerecorded discussion and approved viewer messages. New messages are reviewed before being shared with other viewers.">Chat</h2></span><div className="wb-chat-heading-actions"><WebinarPanelBoundary quiet><WebinarAudience sessionId={session.sessionId} enabled={w!.showAudienceCount} preview={session.preview} playing={playing} display={w!.audienceDisplay} seconds={time} durationSeconds={w!.durationSeconds}/></WebinarPanelBoundary><button type="button" className="wb-icon" aria-label={chatCollapsed?'Expand chat':'Minimize chat'} aria-expanded={!chatCollapsed} aria-controls="wb-chat-body" onClick={()=>{setChatExpanded(chatCollapsed);setChatFocused(false);}}><ChevronDown size={18} style={{transform:chatCollapsed?'rotate(180deg)':undefined}}/></button></div></div>
@@ -187,7 +188,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
      </div>
      {unread&&<button type="button" className="wb-new-messages" onClick={latestMessages}>New messages <ChevronDown size={14}/></button>}
      {nameForm}
-     {!namePrompt&&<><div className="wb-chat-identity"><b>{name}</b><button type="button" disabled={formBusy} onClick={()=>{setDraftName(name);setEditingName(true);setFormError('');}}>Edit name</button></div>
+     {!namePrompt&&<>{!isVip&&<div className="wb-chat-identity"><b>{name}</b><button type="button" disabled={formBusy} onClick={()=>{setDraftName(name);setEditingName(true);setFormError('');}}>Edit name</button></div>}
       <form className="wb-chat-composer" onFocusCapture={()=>{if(contactPrompt)setContactEditing(true);}} onSubmit={e=>{if(contactPrompt){e.preventDefault();if(!chatLocked)return saveContact(false);}else return send(e);}}>
        {contactPrompt&&<div className="wb-chat-contact-heading"><span id="wb-contact-label">{contactStep==='email'?'Add your email (optional)':'Add your phone (optional)'}</span><button type="button" className="wb-contact-skip" disabled={formBusy} onClick={skipContact}>Skip</button></div>}
        <div className="wb-chat-input">

@@ -111,3 +111,48 @@ console.log('PASS direct checkout: opens once, no intermediate buy button, no fa
  button(tree,'Back to offer').props.onClick();assert.equal(back,1);h.close();
 }
 console.log('PASS owner payment walkthrough: sample-only fields, local completion and return to offer.');
+
+// VIP checkout never treats Standard access as a completed upgrade or loops to the video.
+for(const state of [null,'standard','vip'])for(const active of [false,true]){
+ assert.equal(webinarPurchaseDestination(state,true,active,true),state==='vip'?'/':active?null:'/webinar/upgrade');
+}
+for(const accessible of [false,true]){
+ const events=[],paidStates=[],engagement=[];window.location.search='?setup=1&upgrade=paid';
+ let verifiedVip=false;
+ const instance=await harness('components/membership-checkout.tsx',{...common,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserEvent:()=>{},webinarRequest:async(url,init={})=>{
+  events.push({url,init});assert.notEqual(init.method,'POST','A VIP viewer never starts another base subscription');
+  return {offer:{revision:1,priceCents:5000},ready:true,mode:'live',needsClaim:false,email:'saved@example.invalid',customerName:'Casey',postPurchaseUrl:'/live/123456',membership:{accessible,vip:verifiedVip}};
+ }});
+ const props={vipWebinar:true,redirectToVip:true,presentation:'webinar',webinarPhase:'ended',onSignedIn:()=>{},onPurchased:state=>paidStates.push(state),onEngaged:()=>engagement.push(true)};
+ const before=redirects.length;instance.render('MembershipCheckout',props);await flush();let tree=instance.render('MembershipCheckout',props);
+ assert.equal(redirects.length,before,'Upgrade offer never redirects back into the VIP video');
+ if(accessible){
+  assert.ok(find(tree,'WebinarVipUpsell'));assert.equal(find(tree,'WebinarVipUpsell').props.email,'saved@example.invalid');assert.equal(find(tree,'WebinarVipUpsell').props.vipSessionUrl,null);
+  assert.deepEqual(paidStates,['standard']);assert.equal(engagement.length,0,'Reading Standard access is not upgrade engagement');
+  verifiedVip=true;await find(tree,'WebinarVipUpsell').props.onRefresh();tree=instance.render('MembershipCheckout',props);
+  assert.equal(paidStates.at(-1),'vip');assert.match(text(tree),/VIP upgrade confirmed/);assert.equal(find(tree,'PostPurchaseSetup'),undefined);
+ }else{assert.match(text(tree),/Restore your existing subscription/);assert.equal(find(tree,'StripeEmbeddedCheckout'),undefined);}
+ instance.close();
+}
+{
+ const states=[],instance=await harness('components/membership-checkout.tsx',{...common,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserEvent:()=>{},webinarRequest:async(url,init={})=>{
+  assert.equal(url,'/api/webinar/checkout-preview');assert.notEqual(init.method,'POST');return {offer:{revision:1,priceCents:5000},ready:true,membership:null};
+ }});
+ const props={preview:true,vipWebinar:true,presentation:'webinar',onSignedIn:()=>{},onPurchased:state=>states.push(state)};
+ instance.render('MembershipCheckout',props);await flush();const tree=instance.render('MembershipCheckout',props),payment=find(tree,'WebinarPaymentPreview');
+ assert.equal(payment.props.vipUpgrade,true);assert.equal(payment.props.priceCents,vip.vipUpgradeCents);payment.props.onComplete();assert.deepEqual(states,['vip']);instance.close();
+}
+console.log('PASS VIP offer: saved buyer details, verified upgrade state, no repeat subscription, no video loop, safe preview pricing.');
+
+// The final offer page receives verified states from checkout and routes only VIP buyers.
+for(const preview of [false,true]){
+ const instance=await harness('components/webinar-upgrade-page.tsx',{IcashMark:'IcashMark',MembershipCheckout:'MembershipCheckout'});
+ const before=redirects.length,tree=instance.render('WebinarUpgradePage',{preview});
+ const checkout=find(tree,'MembershipCheckout');
+ assert.equal(checkout.props.vipWebinar,true);assert.equal(checkout.props.preview,preview);
+ checkout.props.onPurchased('standard');assert.equal(redirects.length,before);
+ checkout.props.onPurchased('vip');assert.equal(redirects.length,preview?before:before+1);
+ if(!preview)assert.equal(redirects.at(-1),'/');
+ instance.close();
+}
+console.log('PASS final VIP offer: verified upgrades open the workspace; Standard and preview states stay in the offer.');
