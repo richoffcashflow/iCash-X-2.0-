@@ -200,4 +200,4 @@
 @keyframes bot-live-pulse{50%{opacity:.55;transform:scale(.85)}}
 @media(prefers-reduced-motion:reduce){.bot-live-status i{animation:none}}
 
-.browser-phone-fallback{margin:16px 0;border-top:1px solid #e8e8e8;padding-top:12px}.browser-phone-fallback>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-size:13px;color:#555}.browser-call-active{display:grid;gap:16px;padding:16px;border:1px solid #ddd;border-radius:12px}.browser-call-controls .contact-primary,.browser-call-controls .contact-secondary{min-height:44px}.browser-call-controls .seller-contact-card{gap:12px;flex-wrap:wrap}
+.browser-call-active{display:grid;gap:16px;padding:16px;border:1px solid #ddd;border-radius:12px}.browser-call-controls .contact-primary,.browser-call-controls .contact-secondary{min-height:44px}.browser-call-controls .seller-contact-card{gap:12px;flex-wrap:wrap}

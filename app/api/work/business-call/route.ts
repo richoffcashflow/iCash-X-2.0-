@@ -1,13 +1,14 @@
 import {workAccount} from '@/lib/work-account';
 import {allowedOrigin} from '@/lib/funding-policy';
-import {startCustomerPhoneCall,reconcileCustomerPhoneCall,getCustomerPhoneCall,customerPhoneReadiness,customerPhoneAudioAvailable,customerPhoneProvider,customerPhoneRecordingReceipt} from '@/lib/customer-phone';
+import {reconcileCustomerPhoneCall,getCustomerPhoneCall,customerPhoneReadiness,customerPhoneAudioAvailable,customerPhoneProvider,customerPhoneRecordingReceipt} from '@/lib/customer-phone';
 import {z} from 'zod';
 export const runtime='nodejs';export const dynamic='force-dynamic';export const maxDuration=60;
 const headers={'Cache-Control':'private, no-store'};
+// Preserve historical receipts and audio below; new calls use browser-call only.
 export async function POST(req:Request){
  if(!allowedOrigin(req))return new Response(null,{status:403,headers});
- try{const owner=await workAccount();const raw=await req.text();if(raw.length>1024)throw Error();const body=z.object({screeningId:z.string().uuid(),phone:z.string().regex(/^\+1[2-9][0-9]{9}$/),callbackPhone:z.string().regex(/^\+1[2-9][0-9]{9}$/),requestKey:z.string().uuid()}).strict().parse(JSON.parse(raw));const result=await startCustomerPhoneCall({...owner,...body});return Response.json(result,{status:result.error?409:200,headers});}
- catch(e){const errors:Record<string,string>={PHONE_DIFFERENT_NUMBER_REQUIRED:'Use your own phone number, different from the seller’s number.',PHONE_CONTACT_UNAVAILABLE:'This contact cannot be called.',PHONE_SENDER_UNAVAILABLE:'Open the text conversation first to connect the business number.',PHONE_PRICE_UNAVAILABLE:'Current calling prices could not be verified. No call was started.',PHONE_PROVIDER_UNAVAILABLE:'The calling provider could not be reached. No call was started.',PHONE_SETUP_REQUIRED:'Business calling setup is unavailable.'};return Response.json({error:errors[e instanceof Error?e.message:'']??'The call could not start. Your credits, budget or contact status may need attention.'},{status:409,headers});}
+ try{await workAccount();return Response.json({error:'Use the Call button in iCash X.'},{status:410,headers});}
+ catch{return Response.json({error:'Sign in to call.'},{status:401,headers});}
 }
 export async function GET(req:Request){try{
  const owner=await workAccount(),params=new URL(req.url).searchParams;

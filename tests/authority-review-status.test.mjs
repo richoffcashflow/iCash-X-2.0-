@@ -28,3 +28,8 @@ assert.equal(item({...base,automaticOffer:{priceCents:3893700,fetchedAt:new Date
 assert.match(item({...base,automaticOffer:{priceCents:3893700,fetchedAt:new Date(now).toISOString()}},'offer_authority').detail,/without a separate price approval/);
 assert.equal(item({...base,automaticOffer:null,offer:{max_offer_cents:100000,expires_at:future}},'offer_authority').status,'review_required');
 assert.equal(item({...base,automaticOffer:{priceCents:3893700,fetchedAt:new Date(now-86400001).toISOString()}},'offer_authority').status,'review_required');
+
+const optedIn={...permission,dnc_clear:false,dnc_checked_at:null,sellerConsentVerified:true};
+assert.equal(item({...base,permissions:[optedIn]},'contact_permission').status,'recorded');
+assert.match(item({...base,permissions:[optedIn]},'contact_permission').detail,/seller opt-in is verified/);
+for(const change of [{sellerConsentVerified:false},{sellerConsentVerified:'true'},{revoked_at:past},{suppressed:true},{permission_until:past}])assert.equal(item({...base,permissions:[{...optedIn,...change}]},'contact_permission').status,'blocked');

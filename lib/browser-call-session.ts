@@ -31,11 +31,11 @@ export class BrowserCallSession {
    await this.deps.microphone();if(this.stopped)return;
    this.timeout=setTimeout(()=>{void this.stop();this.deps.onState('error','Could not connect browser audio. Please try again.');},60000);
    const prepared=await this.deps.request('prepare',this.id);if(this.stopped)return;
-   if(!prepared.token)throw Error(prepared.error||'Browser calling is unavailable. Use your phone instead.');
+   if(!prepared.token)throw Error(prepared.error||'Calling is temporarily unavailable. Please try again.');
    const device=await this.deps.createDevice(prepared.token);if(this.stopped){device.destroy();return;}this.device=device;
    device.audio?.incoming(false);
    device.on('incoming',(call:Call)=>{if(this.stopped||this.call||this.incoming){call.reject();return;}this.incoming=call;this.accept();});
-   device.on('error',()=>{if(this.stopped)return;void this.stop();this.deps.onState('error','Could not connect browser audio. Check your connection or use your phone instead.');});
+   device.on('error',()=>{if(this.stopped)return;void this.stop();this.deps.onState('error','Could not connect browser audio. Check your connection and try again.');});
    await device.register();if(this.stopped)return;
    this.dispatched=true;
    const result=await this.deps.request('start',this.id);
@@ -55,7 +55,7 @@ export class BrowserCallSession {
   }catch(error){
    await this.stop();
    const name=error instanceof Error?error.name:'';
-   this.deps.onState('error',name==='NotAllowedError'?'Allow microphone access to call from your browser. You can also use your phone.':name==='NotFoundError'?'Connect a microphone, or use your phone instead.':error instanceof Error?error.message:'Could not connect the call.');
+   this.deps.onState('error',name==='NotAllowedError'?'Allow microphone access in your browser, then try again.':name==='NotFoundError'?'Connect a microphone, then try again.':error instanceof Error?error.message:'Could not connect the call.');
   }
  }
  mute(value:boolean){this.call?.mute(value);}

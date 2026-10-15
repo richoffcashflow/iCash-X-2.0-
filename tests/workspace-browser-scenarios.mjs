@@ -6,7 +6,8 @@ export async function verifyWorkspace(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
  const page=await context.newPage(),errors=[],writes=[],external=[],diagnostics=[];
  page.setDefaultTimeout(12000);page.setDefaultNavigationTimeout(20000);page.on('dialog',dialog=>void dialog.accept());
- let scenario='lead',preview=true,emptySearch=false,fulfillmentMode='ok',intentionalCrash=false;
+ let scenario='lead',preview=true,emptySearch=false,fulfillmentMode='ok',intentionalCrash=false,callMode='unavailable';
+ await context.addInitScript(()=>{Object.defineProperty(navigator,'mediaDevices',{value:{getUserMedia:async()=>{window.fixtureMicrophoneRequests=(window.fixtureMicrophoneRequests||0)+1;throw new DOMException('Fixture microphone denied','NotAllowedError');}},configurable:true});});
  const fulfillmentHolds=new Set();
  const releaseFulfillment=()=>{for(const release of fulfillmentHolds)release();fulfillmentHolds.clear();};
  const network={vip:true,hasActiveDeal:true,enrolledBuyers:20,settings:{enabled:true,mailingAddress:'Example Company, 100 Sample Lane, Demo City, TX 75001'},matches:8,emailed:6,interested:1,responses:2,buyers:[{id:'sample-response',dealId:'sample-deal',name:'Avery Morgan',email:'avery@example.invalid',address:'100 Example Street',respondedAt:'2026-10-14T15:00:00Z',state:'replied',reply:'Can I visit Thursday afternoon?'}]};
@@ -64,8 +65,8 @@ export async function verifyWorkspace(browser,base,options,name){
    return route.fulfill({json:{dealStage:scenario.startsWith('closing')?'closing':'under_contract',documents:[],buyers:[{buyer_id:'sample-buyer',name:'Cedar Ridge Homes',rank:1,ready:true}],buyerNetwork:network,buyerPackage:{url:base+'/preview/workspace?preview=1',askingPriceCents:10000000,purchasePriceCents:9000000,assignmentFeeCents:1000000},closingUpdates:[],titleReplies:['closing_waiting','closing_recovery'].includes(scenario)?titleReplies:[],titleTasks:[],...(scenario==='closing_recovery'?{closingSetup:{setup:null,verifiedContact:null,directory:[],buyerSuggestions:[],titleEmailInAgreement:null}}:{})}});
   }
   if(p==='/api/work/text-contact')return route.fulfill({json:{contacts:[]}});
-  if(p==='/api/work/manual-call')return route.fulfill({json:{contacts:[],personalCalls:[]}});
-  if(p==='/api/work/browser-call')return route.fulfill({json:{ready:false}});
+  if(p==='/api/work/manual-call')return route.fulfill({json:{businessNumber:'+12025550199',contacts:[{phone:'+12025550101',name:'Example Seller',available:callMode!=='blocked',reason:callMode==='blocked'?'This contact asked not to be called.':''},...(callMode==='multiple'?[{phone:'+12025550102',name:'Other Seller',available:true}]:[])],personalCalls:[]}});
+  if(p==='/api/work/browser-call')return route.fulfill({json:{ready:callMode!=='unavailable'}});
   if(p==='/api/buyer-qualifications')return route.fulfill({json:{requests:[],candidates:[],hasMore:false,notice:'Fixture'}});
   if(p==='/api/work/buyer-coordination')return route.fulfill({json:{availability:null,receipt:null,assignment:scenario==='deposit_due'?{id:'signed-buyer-assignment',buyer:'Cedar Ridge Homes',depositCents:200000}:null}});
   if(p==='/api/work/journeys')return route.fulfill({json:{journeys:[],messages:[]}});
@@ -196,6 +197,30 @@ export async function verifyWorkspace(browser,base,options,name){
     await dialog.getByRole('button',{name:'Calls',exact:true}).click();
     await dialog.getByRole('heading',{name:'Call history'}).waitFor();
     await dialog.getByRole('button',{name:'Close conversation'}).click();
+    callMode='single';await card.getByRole('button',{name:/^Call /}).click();
+    await dialog.getByText('Allow microphone access in your browser, then try again.',{exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>window.fixtureMicrophoneRequests),1,'one phone-icon click starts browser audio once');
+    assert.equal(await dialog.locator('input[type="tel"],a[href^="tel:"]').count(),0);
+    assert.doesNotMatch(await dialog.innerText(),/Use my phone|Call through my phone|press 1/i);
+    await dialog.getByRole('button',{name:'Call seller',exact:true}).click();
+    assert.equal(await page.evaluate(()=>window.fixtureMicrophoneRequests),2,'explicit retry starts once');
+    await dialog.getByRole('button',{name:'Close conversation'}).click();
+    callMode='blocked';await card.getByRole('button',{name:/^Call /}).click();
+    await dialog.getByText('This contact asked not to be called.',{exact:true}).waitFor();
+    assert.equal(await dialog.getByRole('button',{name:'Call seller',exact:true}).count(),0);
+    assert.equal(await page.evaluate(()=>window.fixtureMicrophoneRequests),2,'actual opt-out never opens audio');
+    await dialog.getByRole('button',{name:'Close conversation'}).click();
+    callMode='unavailable';await card.getByRole('button',{name:/^Call /}).click();
+    await dialog.getByText('Calling is temporarily unavailable.',{exact:true}).waitFor();
+    callMode='single';await dialog.getByRole('button',{name:'Retry',exact:true}).click();
+    await dialog.getByRole('button',{name:'Call seller',exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>window.fixtureMicrophoneRequests),2,'readiness recovery cannot revive an earlier call click');
+    await dialog.getByRole('button',{name:'Close conversation'}).click();
+    callMode='multiple';await card.getByRole('button',{name:/^Call /}).click();
+    await dialog.getByText('Other Seller',{exact:true}).waitFor();
+    assert.equal(await dialog.getByRole('button',{name:'Call seller',exact:true}).count(),2);
+    assert.equal(await page.evaluate(()=>window.fixtureMicrophoneRequests),2,'multiple numbers require choosing a recipient');
+    await dialog.getByRole('button',{name:'Close conversation'}).click();callMode='unavailable';
    }
    if(state==='waiting'){
     await card.getByText('Waiting for seller signatures',{exact:true}).waitFor();

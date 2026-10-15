@@ -21,7 +21,7 @@ try{
   if(path.startsWith('icash_customer_phone_calls?')){if(method==='PATCH'){Object.assign(row,body);return [row];}return path.includes('account_id=eq.other')?[]:row?[row]:[];}
   if(path==='rpc/icash_manual_contacts')return [{phone:recipient,blocked:false}];
   if(path==='rpc/icash_manual_contact_reason')return null;
-  if(path.startsWith('icash_deal_files?'))return [{id:'deal'}];if(path.startsWith('icash_text_threads?'))return [{sender:business}];
+  if(path==='rpc/icash_customer_call_sender'){assert.deepEqual(body,{p_account:account,p_screening:screen,p_recipient:recipient});return business;}
   if(path==='rpc/icash_begin_customer_phone_call'){assert.equal(body.p_quote.connectionType,'browser');assert.equal(body.p_quote.callbackMicrosPerMinute,4000);row={id,account_id:account,actor_id:actor,screening_id:screen,callback_phone:callback,recipient_phone:recipient,business_phone:business,provider_account_sid:ac,nonce_hash:body.p_nonce_hash,connection_type:'browser',recording_required:true,max_seconds:600,created_at:created,state:'dispatching',parent_sid:null,ended_at:null,connected_at:null};return {created:true,call:{...row}};}
   if(path==='rpc/icash_connect_customer_phone_call'){claims++;if(row.connected_at)return false;row.connected_at=created;row.state='connecting';return true;}
   throw Error('Unexpected fixture database call '+path);
