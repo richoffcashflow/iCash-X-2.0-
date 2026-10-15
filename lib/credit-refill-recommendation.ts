@@ -1,12 +1,12 @@
-export type RefillHistory = {price_cents:number;credited_at:string|null;auto_recharge?:boolean|null};
+export type RefillHistory = {price_cents:number;credit_cents?:number;credited_at:string|null;auto_recharge?:boolean|null};
 export type RefillUsage = {delta_cents:number;created_at:string};
 const minimum=1000,maximum=100000;
 const validCents=(n:unknown):n is number=>typeof n==='number'&&Number.isSafeInteger(n)&&n>=minimum&&n<=maximum;
 /** A suggestion, never a charge or a promise to complete a task. */
 export function creditRefillRecommendation(balanceCents:number,history:RefillHistory[],usage:RefillUsage[],now=Date.now()){
  const available=Number.isSafeInteger(balanceCents)&&balanceCents>=0?balanceCents:0;
- const recent=history.filter(p=>p.auto_recharge!==true&&validCents(p.price_cents)&&p.credited_at&&Date.parse(p.credited_at)<=now&&Date.parse(p.credited_at)>now-30*86400000)
-  .sort((a,b)=>Date.parse(b.credited_at!)-Date.parse(a.credited_at!)).slice(0,5).map(p=>p.price_cents).sort((a,b)=>a-b);
+ const recent=history.filter(p=>p.auto_recharge!==true&&validCents(p.credit_cents??p.price_cents)&&p.credited_at&&Date.parse(p.credited_at)<=now&&Date.parse(p.credited_at)>now-30*86400000)
+  .sort((a,b)=>Date.parse(b.credited_at!)-Date.parse(a.credited_at!)).slice(0,5).map(p=>p.credit_cents??p.price_cents).sort((a,b)=>a-b);
  // Use a typical amount the customer actually chose; one unusual deposit cannot dominate.
  const usualCents=recent.length?recent[Math.floor((recent.length-1)/2)]:minimum;
  const settled=usage.length<=1000?usage.filter(u=>Number.isSafeInteger(u.delta_cents)&&u.delta_cents<0&&Date.parse(u.created_at)<=now&&Date.parse(u.created_at)>now-7*86400000):[];

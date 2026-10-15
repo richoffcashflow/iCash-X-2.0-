@@ -9,6 +9,7 @@ import styles from './overview.module.css';
 import {ClosingOperationsView} from './closing-operations';
 import {reliabilityIssueLabels} from '@/lib/reliability';
 import {ExperienceHealth} from './experience-health';
+import {UsageLoopReport} from '@/components/usage-loop-report';
 
 export function OwnerOverviewView(){
  const [filters,setFilters]=useState<OverviewFilters>({days:30,includeOwner:false,query:'',page:1});
@@ -79,6 +80,7 @@ export function OwnerOverviewView(){
    {usage&&usage.pendingCount>0&&<p className={styles.pending}>{usage.pendingCount} operations started in this period are still awaiting settlement. They are not included in these totals.</p>}
    {usage&&usage.completedCount===0&&!includeOwner&&<p className={styles.pending}>No customer usage in this period. Turn on “Include my account” to see your own usage.</p>}
    {report?.closing&&<ClosingOperationsView data={report.closing} chargedCents={report.usage.chargedCents}/>}
+   {report&&<UsageLoopReport includeOwner={includeOwner} refresh={refresh}/>}
    <ConversionFunnel title="Lead to close" description="Leads received in this period, followed through the latest update." stages={sellerFunnelStages} steps={report?.funnel} unavailable={!!error&&!report}/>
    <section className={styles.leads} aria-labelledby="inbound-leads-title">
     <div className={styles.leadHeading}><div><h2 id="inbound-leads-title">Inbound seller leads</h2><p>Newest first. Select a property for contact details.</p></div>
