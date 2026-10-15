@@ -2,7 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
- 'consented-browser-calling-database', 'manual-call-options', 'browser-phone-route', 'browser-phone-service', 'browser-call-session', 'authority-review-status', 'sms-review-status-route',
+ 'consented-browser-calling-database', 'contact-rpc-readback', 'manual-call-options', 'browser-phone-route', 'browser-phone-service', 'browser-call-session', 'authority-review-status', 'sms-review-status-route',
  'dashboard-password', 'dashboard-boundaries', 'webinar-offer-save', 'webinar-flow-ui',
  'webinar-entry-route', 'webinar-intelligence-route', 'webinar-vip', 'webinar-growth', 'webinar-recovery', 'webinar-return-database',
  'webinar-purchase-flow', 'webinar-exit-reminder', 'webinar-chat-no-assistant', 'webinar-followup-routes', 'webinar-replay-spots',

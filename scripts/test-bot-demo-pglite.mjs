@@ -106,6 +106,56 @@ try{
  await q('insert into icash_owner_contacts values($1,$2,$3)',[account,currentScreen,{contacts:[{name:'Demo Seller',phones:[{number:'(214) 555-0123',type:'mobile',doNotCall:true}]}]}]);
  await q('insert into icash_contact_permissions values($1,$2,$3,now())',[account,screening_id,phone]);
  const contact=()=>one('select * from icash_manual_contacts($1,$2)',[account,currentScreen]);
+ // Exercise the real consent row locks under PostgREST's POST transaction rule:
+ // STABLE/IMMUTABLE => READ ONLY; VOLATILE => READ WRITE.
+ // https://docs.postgrest.org/en/stable/references/transactions.html#access-mode-on-functions
+ await pg.exec(`alter table icash_text_threads add column id uuid,add column sender text,add column retired_at timestamptz,add column sms_rate_id uuid;
+ create table icash_text_senders(phone text,enabled boolean);
+ create table icash_text_messages(id uuid,thread_id uuid,account_id uuid,direction text,state text,created_at timestamptz);
+ create table icash_manual_call_attempts(phone text,created_at timestamptz);
+ create table icash_communication_prices(operation text,customer_micros bigint);
+ alter table icash_wallets add column reserved_cents bigint default 0;
+ create function icash_membership_work_allowed(uuid) returns boolean language sql as $$select true$$;`);
+ const contactSource=read('supabase/migrations/20261006001029_manual_property_contacts_and_texting.sql');
+ await pg.exec(contactSource.slice(contactSource.indexOf('create or replace function public.icash_manual_contact_reason'),contactSource.indexOf('create or replace function public.icash_start_manual_call')));
+ const senderSource=read('supabase/migrations/20261015210959_consented_browser_calling.sql');
+ await pg.exec(senderSource.slice(senderSource.indexOf('-- Resolve the business caller ID'),senderSource.indexOf('-- Preserve the current pricing')));
+ const textSource=read('supabase/migrations/20261008182808_available_credit_usage.sql');
+ await pg.exec(textSource.slice(textSource.indexOf('CREATE OR REPLACE FUNCTION public.icash_manual_text_reason'),textSource.indexOf('CREATE OR REPLACE FUNCTION public.icash_next_work')));
+ const thread=randomUUID(),rate=randomUUID(),sender='+12145550999';
+ await q('insert into icash_deal_files values($1,$2,$3)',[thread,account,currentScreen]);
+ await q('insert into icash_text_threads(account_id,deal_id,recipient,id,sender,sms_rate_id) values($1,$2,$3,$2,$4,$5)',[account,thread,phone,sender,rate]);
+ await q('insert into icash_text_senders values($1,true)',[sender]);
+ await q("insert into icash_operation_rates(id,operation,charge_cents,enabled,expires_at) values($1,'sms_send',1,true,now()+interval '1 day')",[rate]);
+ await pg.exec("insert into icash_communication_prices values('sms_segment',10000)");
+ const rpcCases=[
+  {signature:'icash_manual_contacts(uuid,uuid)',sql:'select * from icash_manual_contacts($1,$2)',params:[account,currentScreen]},
+  {signature:'icash_manual_contact_reason(uuid,uuid,text,text,uuid)',sql:"select icash_manual_contact_reason($1,$2,$3,'voice') result",params:[account,currentScreen,phone]},
+  {signature:'icash_customer_call_sender(uuid,uuid,text)',sql:'select icash_customer_call_sender($1,$2,$3) result',params:[account,currentScreen,phone]},
+  {signature:'icash_manual_text_reason(uuid,uuid,uuid)',sql:'select icash_manual_text_reason($1,$2) result',params:[account,thread]}
+ ];
+ for(const {signature} of rpcCases)await pg.exec(`revoke all on function ${signature} from public,anon,authenticated;grant execute on function ${signature} to service_role;`);
+ const rpc=async({signature,sql,params})=>{
+  const {provolatile}=await one('select provolatile from pg_proc where oid=$1::regprocedure',[signature]);
+  await q(provolatile==='v'?'begin read write':'begin read only');
+  try{return await q(sql,params);}finally{await q('rollback');}
+ };
+ for(const item of rpcCases)await assert.rejects(()=>rpc(item),e=>e.code==='25006'&&/SELECT FOR SHARE/.test(e.message),item.signature+' reproduces the live API failure');
+ const before=new Map();
+ for(const {signature} of rpcCases)before.set(signature,await one('select prosrc,proacl,prosecdef,proconfig from pg_proc where oid=$1::regprocedure',[signature]));
+ const transactionFix=read('supabase/migrations/20261015214113_contact_rpc_transaction_mode.sql');
+ await pg.exec(transactionFix);await pg.exec(transactionFix);
+ for(const {signature} of rpcCases){
+  assert.deepEqual(await one('select prosrc,proacl,prosecdef,proconfig from pg_proc where oid=$1::regprocedure',[signature]),before.get(signature),'function logic and access unchanged: '+signature);
+  for(const role of ['anon','authenticated'])assert.equal((await one('select has_function_privilege($1,$2,\'execute\') allowed',[role,signature])).allowed,false);
+ }
+ assert.equal((await rpc(rpcCases[0])).rows[0].blocked,false);
+ assert.equal((await rpc(rpcCases[1])).rows[0].result,null);
+ assert.equal((await rpc(rpcCases[2])).rows[0].result,sender);
+ assert.equal((await rpc(rpcCases[3])).rows[0].result,null);
+ assert.equal((await one('select count(*)::int n from icash_manual_call_attempts')).n,0,'contact reads never create calls');
+ assert.equal((await one('select count(*)::int n from icash_text_messages')).n,0,'contact reads never send texts');
+ console.log('PASS: reproduced SQLSTATE 25006 for all four RPCs; POST transaction mode now permits unchanged consent locks and private call/text reads.');
  assert.equal((await contact()).blocked,false,'current verified consent overrides source DNC and archived demo revocation');
  assert.equal((await contact()).phone,phone,'formatted source numbers normalize and deduplicate');
  assert.equal((await q('select * from icash_manual_contacts($1,$2)',[other,currentScreen])).rows.length,0,'no cross-account contact access');
