@@ -2,6 +2,7 @@ import {z} from 'zod';
 
 export const activitySchema=z.object({id:z.string().regex(/^[a-f0-9]{32}$/),kind:z.enum(['funding','daily','membership']),amountCents:z.number().int().positive().max(1000000000),occurredAt:z.string().datetime({offset:true}),region:z.string().max(80).nullable()});
 export type WebinarActivity=z.infer<typeof activitySchema>;
+export function recordedPurchaseMessage(name:string,vip=false){return vip?`${name} upgraded to iCash X VIP · $50 today`:`${name} joined iCash X · $50/month`;}
 export const activityWindowMs=15*60*1000;
 export function recentActivity(events:WebinarActivity[],now:number){return events.filter(e=>{const age=now-Date.parse(e.occurredAt);return age>=0&&age<activityWindowMs;}).sort((a,b)=>Date.parse(b.occurredAt)-Date.parse(a.occurredAt));}
 export function activityMessage(event:WebinarActivity){

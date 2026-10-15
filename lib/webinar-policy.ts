@@ -78,8 +78,8 @@ export function formatWatchTime(seconds:number){const p=splitDuration(seconds);r
 type OfferConfig=Pick<Webinar,'pitchAt'|'offerTitle'|'ctaLabel'|'offerEndsAt'>&Partial<Pick<Webinar,'offers'|'endOfferId'|'durationSeconds'|'parentWebinarId'>>;
 export function webinarOffers(w:OfferConfig):WebinarOffer[]{
  const offers:WebinarOffer[]=w.offers?.length?w.offers:[{id:'primary',title:w.offerTitle,description:'',ctaLabel:w.ctaLabel,at:w.pitchAt,expiresAt:w.offerEndsAt,action:'checkout',url:''}];
- // Older VIP drafts used the workspace link as their default offer.
- return w.parentWebinarId?offers.map(offer=>offer.id==='workspace'&&offer.action==='link'&&offer.url==='/join?setup=1'?{...offer,title:'Upgrade to iCash X VIP',description:'Get VIP access for $50 more today.',ctaLabel:'Upgrade to VIP',action:'checkout',url:''}:offer):offers;
+ // Earlier VIP offers, including copied last-chance offers, used this setup link.
+ return w.parentWebinarId?offers.map(offer=>offer.action==='link'&&offer.url==='/join?setup=1'?{...offer,ctaLabel:'Upgrade to VIP',action:'checkout',url:''}:offer):offers;
 }
 export function webinarPitchAt(w:OfferConfig){return Math.min(...webinarOffers(w).map(o=>o.at));}
 export function offerDestination(o:WebinarOffer){return o.action==='link'&&validOfferUrl(o.url)?o.url:webinarSite.checkoutPath;}

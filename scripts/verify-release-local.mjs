@@ -3,7 +3,7 @@
 import {spawnSync} from 'node:child_process';
 const suites = [
  'dashboard-password', 'dashboard-boundaries', 'webinar-offer-save', 'webinar-flow-ui',
- 'webinar-purchase-flow', 'webinar-chat-no-assistant', 'webinar-followup-routes',
+ 'webinar-purchase-flow', 'webinar-chat-no-assistant', 'webinar-followup-routes', 'webinar-replay-spots',
  'workspace-simplification', 'workspace-stage-summary', 'buyer-network-workspace', 'fulfillment-guidance', 'workspace-next-actions', 'deal-tools-disclosure',
  'property-analysis-summary', 'property-debt-summary',
  'seller-submission-status',
