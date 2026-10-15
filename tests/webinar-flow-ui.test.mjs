@@ -371,3 +371,26 @@ console.log('PASS webinar audio: audible autoplay, one muted policy fallback, ta
  assert.equal(unlockPath,'/dashboard-unlock?next='+encodeURIComponent('/webinar?preview='+w.id+'&variant=night'));
  h.close();location.search=priorSearch;location.pathname=priorPath;location.replace=priorReplace;
 }
+
+// Restoring a hidden tab or BFCache page must not revive an expired session.
+{
+ const realNow=Date.now;let now=realNow(),reloads=0;Date.now=()=>now;location.reload=()=>reloads++;
+ try{
+  for(const preview of [false,true]){
+   let writes=0;
+   const h=await harness('components/webinar-room.tsx',{...roomDeps,post:async(url)=>{if(url.endsWith('/start'))return {sessionId,webinar:policy.publicWebinar(w),progress:100,name:'Viewer',messages:[],preview,serverNow:now};writes++;return {saved:true};}});
+   const render=()=>h.render('WebinarRoom',{});render();await flush();let tree=render();
+   document.hidden=true;listeners.get('visibilitychange')();now+=3599999;document.hidden=false;listeners.get('visibilitychange')();assert.equal(reloads,0);
+   document.hidden=true;listeners.get('visibilitychange')();now+=3600000;
+   const before=writes;document.hidden=false;listeners.get('pageshow')();
+   assert.equal(reloads,preview?0:1,'Expired live restores reload; owner previews stay open');
+   find(tree,'WebinarPlayer').props.onCheckpoint();await flush();assert.equal(writes,before,'Expired playback cannot refresh the server checkpoint');
+   h.close();reloads=0;
+  }
+  // Leaving an active checkout open must not erase payment fields on return.
+  const h=await harness('components/webinar-room.tsx',{...roomDeps,post:async(url)=>url.endsWith('/start')?{sessionId,webinar:policy.publicWebinar(w),progress:1500,name:'Buyer',messages:[],preview:false,serverNow:now}:{saved:true}});
+  const render=()=>h.render('WebinarRoom',{});render();await flush();let tree=render();find(tree,'WebinarCheckout').props.onEngaged();tree=render();
+  document.hidden=true;listeners.get('visibilitychange')();now+=3600000;document.hidden=false;listeners.get('pageshow')();assert.equal(reloads,0);h.close();
+ }finally{Date.now=realNow;document.hidden=false;}
+ console.log('PASS one-hour browser return: short absence resumes, expired restored pages reload before checkpoints, owner previews and active checkout remain intact.');
+}

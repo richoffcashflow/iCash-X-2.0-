@@ -27,7 +27,7 @@ test('public sessions expose no AI source material or alternative banks',()=>{
  const w=webinar();w.chat[0].variations=['A','B'];const visible=publicWebinar(w);assert.ok(!('faq' in visible));assert.ok(!('chatStyle' in visible));assert.ok(!('variations' in visible.chat[0]));
 });
 test('spreadsheet imports understand the supplied username/message/minutes/seconds columns',()=>{
- const [cue]=importWebinarChat('username,message,minutes,seconds\nGuest 11,"Ready, let’s go",2,5');assert.equal(cue.at,125);assert.equal(cue.kind,'ai');assert.equal(cue.text,'Ready, let’s go');
+ const [cue]=importWebinarChat('username,message,minutes,seconds\nGuest 11,"Ready, let’s go",2,5');assert.equal(cue.at,125);assert.equal(cue.kind,'replay');assert.equal(cue.text,'Ready, let’s go');
 });
 test('new variants get equal learning traffic; zero value cannot create a false winner',()=>{
  const a=webinar(),b=webinar();for(const stats of [[],[metric(a,50000),metric(b,0,20)],[metric(a,0),metric(b,0)]])assert.deepEqual(allocation([a,b],stats,optimizer).map(r=>r.share),[.5,.5]);
@@ -94,28 +94,27 @@ test('legacy settings gain safe defaults and invalid day/night boundaries are re
 });
 
 const returnSession=(patch={})=>({id:randomUUID(),webinar_id:randomUUID(),revision:1,created_at:'2026-10-04T15:00:00Z',updated_at:'2026-10-04T16:10:00Z',progress_seconds:1200,max_seconds:1200,completed_at:null,superseded_at:null,is_preview:false,config:{pitchAt:1200},offer_seen_at:'2026-10-04T16:00:00Z',...patch});
-test('a warm return goes to checkout for the fixed three-hour window',()=>{
- const s=returnSession();const result=returnVisit([s],'America/Chicago',3,new Date('2026-10-04T18:59:59Z'));
- assert.equal(result.kind,'checkout');assert.equal(result.until,'2026-10-04T19:00:00.000Z');
- assert.equal(returnVisit([{...s,updated_at:'2026-10-04T18:59:00Z'}],'America/Chicago',3,new Date('2026-10-04T18:59:59Z')).until,result.until,'refresh does not extend the offer window');
+test('unfinished playback resumes for less than one hour, including after the offer',()=>{
+ const s=returnSession();
+ for(const hours of [0,3,8,72])assert.deepEqual(returnVisit([s],'America/Chicago',hours,new Date('2026-10-04T17:09:59.999Z')),{kind:'resume',sessionId:s.id});
+ assert.deepEqual(returnVisit([s],'America/Chicago',8,new Date('2026-10-04T17:10:00Z')),{kind:'advance',sessionId:s.id});
+ assert.equal(returnVisit([s],'America/Chicago',8,new Date('2026-10-04T16:09:59Z')).kind,'advance','Future activity is invalid');
+ assert.equal(returnVisit([{...s,updated_at:'invalid'}],'UTC',8,new Date()).kind,'advance');
 });
-test('expiry advances to another webinar even on the same day',()=>{
- const s=returnSession();assert.deepEqual(returnVisit([s],'America/Chicago',3,new Date('2026-10-04T19:00:00Z')),{kind:'advance',sessionId:s.id});
- assert.equal(returnVisit([s],'America/Chicago',0,new Date('2026-10-04T16:00:00Z')).kind,'advance');
+test('elapsed time crosses local midnight and DST without an early reset',()=>{
+ for(const [updated_at,now] of [['2026-10-05T04:45:00Z','2026-10-05T05:15:00Z'],['2026-11-01T06:45:00Z','2026-11-01T07:15:00Z'],['2026-03-08T07:45:00Z','2026-03-08T08:15:00Z']]){
+  assert.equal(returnVisit([returnSession({updated_at})],'America/Chicago',8,new Date(now)).kind,'resume');
+ }
 });
-test('viewers leaving before the pitch still resume that day and advance another day',()=>{
- const s=returnSession({offer_seen_at:null,progress_seconds:300,max_seconds:300});
- assert.equal(returnVisit([s],'America/Chicago',3,new Date('2026-10-04T19:00:00Z')).kind,'resume');
- assert.equal(returnVisit([s],'America/Chicago',3,new Date('2026-10-05T19:00:00Z')).kind,'advance');
-});
-test('a completed recording starts the window even when no pitch event was received',()=>{
- const s=returnSession({offer_seen_at:null,completed_at:'2026-10-04T16:30:00Z'});
- assert.equal(returnVisit([s],'America/Chicago',3,new Date('2026-10-04T19:00:00Z')).until,'2026-10-04T19:30:00.000Z');
+test('completed viewers keep their next step within the hour and can replay after it',()=>{
+ const s=returnSession({completed_at:'2026-10-04T16:10:00Z'});
+ assert.equal(returnVisit([s],'UTC',8,new Date('2026-10-04T16:30:00Z')).until,'2026-10-04T17:10:00.000Z');
+ assert.equal(returnVisit([s],'UTC',8,new Date('2026-10-04T17:10:00Z')).kind,'advance');
 });
 test('an expired older session never skips the new video or uses preview activity',()=>{
  const old=returnSession({superseded_at:'2026-10-04T20:00:00Z',updated_at:'2026-10-04T22:00:00Z'}),fresh=returnSession({created_at:'2026-10-04T20:00:00Z',updated_at:'2026-10-04T20:10:00Z',offer_seen_at:null,progress_seconds:120,max_seconds:120});
  const preview=returnSession({is_preview:true,created_at:'2026-10-04T21:00:00Z',offer_seen_at:'2026-10-04T21:00:00Z'});
- assert.deepEqual(returnVisit([old,fresh,preview],'America/Chicago',3,new Date('2026-10-04T22:00:00Z')),{kind:'resume',sessionId:fresh.id});
+ assert.deepEqual(returnVisit([old,fresh,preview],'America/Chicago',3,new Date('2026-10-04T20:59:00Z')),{kind:'resume',sessionId:fresh.id});
 });
 test('legacy routing gains an eight-hour window, without changing existing night hours',()=>{
  const s=settingsSchema.parse({enabled:false,fromEmail:'',postalAddress:'',subjects:['a','b','c'],messages:['a','b','c'],routing:{nightStartsAt:20,nightEndsAt:5}});

@@ -31,19 +31,20 @@ export function isNight(timezone:string,now=new Date(),routing:RoutingSettings={
 }
 export type ReturnSession=WatchHistory&{id:string;created_at:string;superseded_at:string|null;is_preview:boolean;max_seconds:number;offer_seen_at:string|null;config:{pitchAt:number}};
 export type ReturnVisit={kind:'new'}|{kind:'resume'|'advance';sessionId:string}|{kind:'checkout';sessionId:string;until:string};
-/** A fixed offer window never extends when someone refreshes or opens another tab. */
-export function returnVisit(history:ReturnSession[],timezone:string,checkoutWindowHours=8,now=new Date()):ReturnVisit{
+export const webinarResumeWindowMs=60*60*1000;
+export function withinWebinarResumeWindow(lastActivity:number,now=Date.now()){
+ const elapsed=now-lastActivity;
+ return Number.isFinite(elapsed)&&elapsed>=0&&elapsed<webinarResumeWindowMs;
+}
+/** Returns follow elapsed time away, including across midnight and clock changes. */
+export function returnVisit(history:ReturnSession[],_timezone:string,_legacyCheckoutWindowHours=8,now=new Date()):ReturnVisit{
  const latest=[...history].filter(s=>!s.is_preview&&!s.superseded_at).sort((a,b)=>b.created_at.localeCompare(a.created_at)||b.updated_at.localeCompare(a.updated_at))[0];
  if(!latest)return {kind:'new'};
- // Completion starts its own full window, even when the offer appeared earlier.
- const completion=latest.completed_at?Date.parse(latest.completed_at):NaN;
- const timestamps=Number.isFinite(completion)&&completion<=now.getTime()?[completion]:(latest.max_seconds>=latest.config.pitchAt&&latest.offer_seen_at?[Date.parse(latest.offer_seen_at)]:[]).filter(t=>Number.isFinite(t)&&t<=now.getTime());
- if(timestamps.length){
-  const started=Math.min(...timestamps),hours=Number.isFinite(checkoutWindowHours)?Math.min(72,Math.max(0,checkoutWindowHours)):8,until=started+hours*3600000;
-  if(now.getTime()<until)return {kind:'checkout',sessionId:latest.id,until:new Date(until).toISOString()};
-  return {kind:'advance',sessionId:latest.id};
- }
- return {kind:!latest.completed_at&&sameLocalDay(latest.updated_at,timezone,now)?'resume':'advance',sessionId:latest.id};
+ const lastActivity=Date.parse(latest.updated_at);
+ if(!withinWebinarResumeWindow(lastActivity,now.getTime()))return {kind:'advance',sessionId:latest.id};
+ // An unfinished video resumes even if its offer has already appeared.
+ if(!latest.completed_at)return {kind:'resume',sessionId:latest.id};
+ return {kind:'checkout',sessionId:latest.id,until:new Date(lastActivity+webinarResumeWindowMs).toISOString()};
 }
 /** Only this arrival's explicit paid-ad tags qualify; saved attribution is not an arrival. */
 export function paidAdArrival(attribution:Record<string,string>={}){

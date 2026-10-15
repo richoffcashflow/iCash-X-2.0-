@@ -21,7 +21,7 @@ test('a skipped form reminds once after five more minutes of playback',()=>{
 test('saved positions and prompts survive refresh, expire and tolerate blocked storage',()=>{
  const data=new Map();const storage={getItem:key=>data.get(key)??null,setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)};
  globalThis.localStorage=storage;globalThis.sessionStorage=storage;
- savePosition('one',235);assert.equal(restoredPosition('one',200,1800),235);assert.equal(restoredPosition('other',20,1800),20);
+ const now=Date.now();savePosition('one',235,now);assert.equal(restoredPosition('one',200,1800,now+3599999),235);assert.equal(restoredPosition('one',200,1800,now+3600000),200);assert.equal(restoredPosition('one',200,1800),235);assert.equal(restoredPosition('other',20,1800),20);
  assert.equal(restoredPosition('one',200,1800,Date.now()+86401000),200);
  clearPosition('one');assert.equal(restoredPosition('one',200,1800),200);
  const h={...base.history,nameSavedAt:35};savePromptHistory('one',h);assert.deepEqual(readPromptHistory('one'),h);
