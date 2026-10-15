@@ -65,34 +65,6 @@ test('editing Daytime preserves inherited Nighttime activity and independent vie
 const iconNames=['Plus','Upload','Play','Save','Trash2','Video','MessageSquare','Mail','BarChart3','LayoutDashboard','ArrowRight','ArrowLeft','Clock','Sun','Moon','Users','Check','Copy','ExternalLink','ShoppingBag','ArrowUpRight','CheckCircle2','ChevronRight','Eye','RefreshCw','ShoppingCart','CreditCard','Settings2','Sparkles'];
 const icons=Object.fromEntries(iconNames.map(n=>[n,n]));
 const components=Object.fromEntries(['AccountAccess','WebinarTimeInput','WebinarOffersEditor','WebinarChatModeration','WebinarAudienceEditor','WebinarDashboard','WebinarResults','WebinarReview','WebinarGrowthSettings','WebinarActivityEditor','WebinarOfferImage','WebinarOfferSpots','DateTimeInput','ConversionFunnel'].map(n=>[n,n]));
-test('each webinar previews its own four saved recordings, including draft and paused VIP sessions',async()=>{
- const {WebinarPreviews,WebinarDashboard}=await moduleFor('components/webinar-dashboard.tsx',{...jsx,...icons,...policy,...links,WebinarDailyDashboard:'WebinarDailyDashboard'});
- const first=fixture(),second={...fixture(),id:'00000000-0000-4000-8000-000000000124',title:'Second webinar'};
- const makeVip=(id,parent)=>({...fixture(),...policy.newVipWebinar(id,parent),videoUrl:'https://example.test/vip-day.mp4',nightVersion:fixture().nightVersion,nightEnabled:false,status:'draft'});
- const firstVip=makeVip('00000000-0000-4000-8000-000000000125',first),secondVip=makeVip('00000000-0000-4000-8000-000000000126',second);
- const webinars=[secondVip,first,firstVip,second];
- const groups=all(WebinarPreviews({webinars})).filter(n=>n.type==='article');
- assert.equal(groups.length,2);
- for(const [index,main,vip] of [[0,first,firstVip],[1,second,secondVip]]){
-  const previews=all(groups[index]).filter(n=>n.type==='a');
-  assert.deepEqual(previews.map(n=>n.props.href),[
-   `/webinar?preview=${main.id}&variant=day`,`/webinar?preview=${vip.id}&variant=day`,
-   `/webinar?preview=${main.id}&variant=night`,`/webinar?preview=${vip.id}&variant=night`,
-  ]);
-  for(const [i,label] of ['Daytime','Daytime VIP','Nighttime','Nighttime VIP'].entries()){
-   assert.ok(previews[i].props['aria-label'].includes(`${main.title} — ${label}`));
-   assert.equal(previews[i].props.target,'_blank');assert.equal(previews[i].props.rel,'noopener noreferrer');
-  }
- }
- const dashboard=WebinarDashboard({webinars,onCreate:()=>{},onEdit:()=>{},onSettings:()=>{}});
- assert.deepEqual(all(dashboard).find(n=>n.type===WebinarPreviews).props.webinars,webinars,'All VIP records reach the preview picker');
- assert.deepEqual(all(dashboard).find(n=>n.type==='WebinarDailyDashboard').props.webinars,[first,second],'Existing main webinar reporting stays scoped to main sessions');
- const nightOnly={...first,videoUrl:''};
- const partial=WebinarPreviews({webinars:[nightOnly]});
- assert.deepEqual(all(partial).filter(n=>n.type==='a').map(n=>n.props.href),[`/webinar?preview=${first.id}&variant=night`],'Empty slots never link to a different recording');
- assert.equal(all(partial).filter(n=>n.props?.className==='ws-preview-slot ws-preview-slot-empty').length,3);
- assert.equal(WebinarPreviews({webinars:[]}),null);
-});
 test('adding an offer starts with a valid destination for main and VIP sessions',async()=>{
  const {WebinarOffersEditor}=await moduleFor('components/webinar-offers-editor.tsx',{...jsx,...icons,...components,...policy});
  for(const initial of [fixture(),policy.newVipWebinar('00000000-0000-4000-8000-000000000456',fixture())]){
@@ -124,7 +96,7 @@ test('studio saves Nighttime offers through the API and keeps the same offers af
  const settle=()=>new Promise(resolve=>setImmediate(resolve));
  let tree=render();await settle();tree=render();
  const dashboard=all(tree).find(n=>n.type==='WebinarDashboard');
- assert.ok(dashboard.props.webinars.some(w=>w.id===vip.id),'Studio includes paired VIP sessions in dashboard previews');
+ assert.ok(dashboard.props.webinars.some(w=>w.id===vip.id),'Studio keeps paired VIP sessions available for editing');
  dashboard.props.onEdit(vip,'night');tree=render();
  assert.equal(all(tree).find(n=>n.type==='a'&&text(n)==='Preview saved Nighttime VIP')?.props.href,`/webinar?preview=${vip.id}&variant=night`);
  dashboard.props.onEdit(fixture(),'night');tree=render();

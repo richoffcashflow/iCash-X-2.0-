@@ -292,22 +292,5 @@
 /* Keep offer save results visible below long recording forms. */
 .ws-save-feedback{position:sticky;top:12px;z-index:20;box-shadow:0 3px 16px #00000012}.ws-offer-fields{border:0;padding:0;margin:0;min-width:0}.ws-save-offers{margin-top:22px}
 
-/* Every saved recording has a direct owner preview, visible without table scrolling. */
-.ws-webinar-previews{margin-bottom:28px}
-.ws-preview-groups{display:grid;gap:20px}
-.ws-preview-group+.ws-preview-group{border-top:1px solid #e5e5e5;padding-top:20px}
-.ws-preview-group h3{margin:0 0 12px;font-size:15px;overflow-wrap:anywhere}
-.ws-preview-slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.ws-preview-slot{display:flex;align-items:center;gap:10px;min-height:70px;padding:14px;border:1px solid #d4d4d4;border-radius:10px;background:#fff;color:#111;text-decoration:none}
-.ws-preview-slot>svg{flex-shrink:0}
-.ws-preview-slot>span{display:grid;gap:5px;min-width:0;overflow-wrap:anywhere}
-.ws-preview-slot b{font-size:13px;line-height:1.4}
-.ws-preview-slot small{font-size:12px;color:#555}
-a.ws-preview-slot:hover{border-color:#111;background:#f5f5f5}
-a.ws-preview-slot:focus-visible{outline:2px solid #111;outline-offset:3px}
-.ws-preview-slot-empty{border-style:dashed;background:#fafafa;color:#666}
-@media(max-width:1100px){.ws-preview-slots{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:420px){.ws-preview-slot{padding:12px;gap:7px}}
-
 /* Owners can inspect chat without unmounting checkout or stopping its timer. */
 .wb-preview-tools button{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:5px 12px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#111;font:inherit;font-weight:600;cursor:pointer}.wb-preview-tools button:focus-visible{outline:2px solid #111;outline-offset:3px}.wb-room .wb-offer[hidden]{display:none}
