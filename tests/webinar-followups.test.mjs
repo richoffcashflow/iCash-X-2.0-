@@ -10,13 +10,12 @@ import {returnVisit} from '../packages/webinar-engine/src/index.ts';
 import {followupCopy,followupPhase} from '../lib/webinar-followup-policy.ts';
 const now=new Date('2026-10-07T16:00:00Z'),base=policy.newWebinar('00000000-0000-4000-8000-000000000123');
 const history=[{id:'session',webinar_id:base.id,created_at:'2026-10-07T07:00:00Z',updated_at:'2026-10-07T09:00:00Z',completed_at:'2026-10-07T08:00:01Z',is_preview:false,superseded_at:null,max_seconds:1800,progress_seconds:1800,config:base,offer_seen_at:'2026-10-07T07:20:00Z'}];
-test('completion has a full eight-hour window independent of the earlier pitch and refresh',()=>{
- const s=history[0];assert.equal(returnVisit([s],'UTC',undefined,now).kind,'checkout');
- assert.equal(returnVisit([{...s,updated_at:now.toISOString()}],'UTC',8,now).until,'2026-10-07T16:00:01.000Z');
- assert.equal(returnVisit([s],'UTC',8,new Date('2026-10-07T16:00:01Z')).kind,'advance');
- assert.equal(followupPhase(history,'UTC',8,now),'checkout');
- assert.equal(followupPhase(history,'UTC',8,new Date('2026-10-07T16:00:01Z')),'next');
- assert.equal(followupPhase([{...s,completed_at:null,offer_seen_at:null,max_seconds:90}],'UTC',8,now),'resume');
+test('followups use the same one-hour return rule as playback',()=>{
+ const s={...history[0],updated_at:'2026-10-07T15:00:01Z'};
+ assert.equal(returnVisit([s],'UTC',8,now).kind,'checkout');
+ assert.equal(followupPhase([s],'UTC',8,new Date('2026-10-07T16:00:01Z')),'next');
+ assert.equal(followupPhase([{...s,completed_at:null}],'UTC',8,now),'resume');
+ assert.equal(followupPhase(history,'UTC',8,now),'next');
 });
 test('personal copy uses real progress and sanitizes headers without inventing a deadline',()=>{
  const args={name:'Casey\r\nBcc: nope',title:'The walkthrough',seconds:185,phase:'resume',step:0,brand:'Brand',host:'Host'};

@@ -3,10 +3,11 @@ import {randomUUID} from 'node:crypto';
 import * as engine from '../packages/webinar-engine/src/index.ts';
 import * as webinarPolicy from '../lib/webinar-policy.ts';
 import {selectRecording,createNightRecording} from '../lib/webinar-recordings.ts';
+import {vipActive} from '../lib/vip-policy.ts';
 import {membershipAccessible} from '../lib/membership-policy.ts';import {webinarLink} from '../lib/webinar-links.ts';
 let calls=[],source={webinar_id:'main',is_preview:false,config:{}},rows=[],settings={},token='guest',pool=[],stats=[],failStats=false;
 class WebinarError extends Error{constructor(status,message){super(message);this.status=status;}}
-const deps={...engine,...webinarPolicy,selectRecording,availableWebinarRows:rows=>rows.map(webinarPolicy.webinarFromRow),webinarConversionRecordings:async()=>{if(failStats)throw Error('report unavailable');return stats;},membershipAccessible,webinarLink,WebinarError,cookies:async()=>({get:()=>token?{value:token}:undefined}),validGuest:token=>token==='guest',guestHash:()=> 'owned-hash',webinarSession:async id=>{assert.equal(id,'owned-session');return {s:source};},db:async(path)=>{calls.push(path);if(path.startsWith('icash_webinar_settings'))return [{config:settings}];if(path.includes('limit=1000'))return pool.map(w=>({config:w,public_code:Number(w.publicCode),parent_webinar_id:w.parentWebinarId}));return rows;}};
+const deps={vipActive,...engine,...webinarPolicy,selectRecording,availableWebinarRows:rows=>rows.map(webinarPolicy.webinarFromRow),webinarConversionRecordings:async()=>{if(failStats)throw Error('report unavailable');return stats;},membershipAccessible,webinarLink,WebinarError,cookies:async()=>({get:()=>token?{value:token}:undefined}),validGuest:token=>token==='guest',guestHash:()=> 'owned-hash',webinarSession:async id=>{assert.equal(id,'owned-session');return {s:source};},db:async(path)=>{calls.push(path);if(path.startsWith('icash_webinar_settings'))return [{config:settings}];if(path.includes('limit=1000'))return pool.map(w=>({config:w,public_code:Number(w.publicCode),parent_webinar_id:w.parentWebinarId}));return rows;}};
 globalThis.__vip=deps;const src=ts.transpileModule(readFileSync(new URL('../lib/webinar-vip.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');const api=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__vip;\n'+src).toString('base64'));
 rows=[{id:'vip'}];assert.equal(await api.checkoutVipSession('owned-session'),'vip');assert.match(calls.at(-1),/parent_webinar_id=eq.main/);
 source.is_preview=true;await assert.rejects(()=>api.checkoutVipSession('owned-session'));source.is_preview=false;source.config.parentWebinarId='main';await assert.rejects(()=>api.checkoutVipSession('owned-session'));source.config={};
@@ -35,3 +36,12 @@ for(const patch of [{mode:'test'},{state:'pending'},{state:'needs_review'},{stat
 rows[0].config.status='draft';assert.equal(await api.paidVipDestination(paid),null,'Draft VIP safely falls back to setup');
 rows=[paid];assert.equal(await api.webinarVipAccess(),true);assert.match(calls.at(-1),/guest_hash=eq.owned-hash&account_id=is.null/);token=null;assert.equal(await api.webinarVipAccess(),false);assert.equal(await api.webinarVipAccess('owned-account'),true);assert.match(calls.at(-1),/account_id=eq.owned-account/);rows=[{...paid,paid_through:'2020-01-01'}];assert.equal(await api.webinarVipAccess('owned-account'),false);
 console.log('PASS VIP destination: verified purchase only, owned main session, explicit homepage selection, stable default, draft fallback, live mode and account/guest scoping.');
+
+rows=[{...paid,vip_until:null},{...paid,vip_until:new Date(Date.now()+86400000).toISOString()}];
+assert.ok(vipActive(await api.webinarViewerMembership('owned-account')),'An active VIP entitlement wins over another Standard row');
+for(const patch of [{mode:'test'},{state:'cancelled'},{state:'pending'},{paid_through:null}]){rows=[{...paid,...patch}];assert.equal(await api.webinarViewerMembership('owned-account'),null);}
+rows=[{config:vipA,public_code:123452,parent_webinar_id:mainA.id}];calls=[];
+assert.equal((await api.returningBuyerVip(paid,mainA.id)).id,vipA.id);assert.match(calls[0],/id=eq.vip&parent_webinar_id=not.is.null/);
+calls=[];assert.equal((await api.returningBuyerVip({...paid,post_purchase_webinar_id:null},mainA.id)).id,vipA.id);assert.match(calls[0],new RegExp('parent_webinar_id=eq.'+mainA.id));
+rows=[{config:{...vipA,status:'draft'},public_code:123452,parent_webinar_id:mainA.id}];assert.equal(await api.returningBuyerVip(paid,mainA.id),null);
+console.log('PASS paid re-entry: trusted account/guest ownership, active VIP preference and published purchase-paired VIP only.');

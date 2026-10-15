@@ -21,7 +21,7 @@ import {webinarOfferFocus} from '@/lib/webinar-offer-focus';
 import {WebinarPlayer} from '@/components/webinar-player';
 import {WebinarPanelBoundary} from '@/components/webinar-panel-boundary';
 import {webinarPost as post,webinarBeacon,webinarRequest} from '@/lib/webinar-client';
-import {restoredPosition,savePosition,clearPosition} from '@/lib/webinar-playback';
+import {restoredPosition,savePosition,clearPosition,withinWebinarResumeWindow} from '@/lib/webinar-playback';
 import {webinarPrompt,readPromptHistory,savePromptHistory,emptyPromptHistory} from '@/lib/webinar-prompts';
 import {publicWebinar,webinarSchema,formatWatchTime,webinarOffers,webinarPitchAt,offerDestination,webinarConsent,webinarConsentVersion,webinarSmsConsent,webinarSmsConsentVersion,type Webinar,type WebinarEvent} from '@/lib/webinar-policy';
 const WebinarCheckout=dynamic(()=>import('@/components/webinar-checkout-adapter').then(m=>m.WebinarCheckout),{loading:()=> <p role="status">Getting checkout ready…</p>});
@@ -50,6 +50,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  const chatLog=useRef<HTMLDivElement>(null),followChat=useRef(true),chatOperation=useRef(false);
  const checkoutEngagedRef=useRef(false),completionPending=useRef(false);
  const lastSync=useRef(0),pitchSeen=useRef(false),startSeen=useRef(false),alive=useRef(true),offset=useRef(0),position=useRef(0),shownOffers=useRef(new Set<string>());
+ const awaySince=useRef<number|null>(null),returnExpired=useRef(false);
  const sharedChat=useWebinarSharedChat(session?.sessionId,position);
  const sharedIds=sharedChat.messages.map(m=>m.id).join(',');
  const w=session?.webinar;
@@ -89,19 +90,37 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  }catch(e){if(alive.current)setError(e instanceof Error?e.message:'Could not open the session.');}finally{starting.current=false;}},[webinarCode]);
  useEffect(()=>{alive.current=true;void load();return()=>{alive.current=false;};},[load]);
  const track=useCallback((kind:WebinarEvent,beacon=false,key='once')=>{
-  if(!session||session.preview)return;const body={sessionId:session.sessionId,seconds:Math.floor(position.current),kind,key};
+  if(!session||session.preview||returnExpired.current||awaySince.current!==null&&!withinWebinarResumeWindow(awaySince.current)&&!checkoutEngagedRef.current)return;const body={sessionId:session.sessionId,seconds:Math.floor(position.current),kind,key};
   if(kind==='completed')completionPending.current=true;
   else if(!completed.current)savePosition(session.sessionId,position.current);
   if(beacon){webinarBeacon('/api/webinar/event',body);if(key==='once'&&kind==='add_to_cart')webinarBrowserEvent('add_to_cart',session.sessionId);return;}
   if(kind==='progress'&&syncing.current)return;if(kind==='progress')syncing.current=true;
   return post<{saved:boolean;redirect?:string}>('/api/webinar/event',body,10000).then(result=>{if(kind==='completed'){completed.current=true;completionPending.current=false;clearPosition(session.sessionId);}if(alive.current)setSaved(true);if(key==='once'&&['started','contact_saved','add_to_cart','checkout_opened'].includes(kind))webinarBrowserEvent(kind as 'started'|'contact_saved'|'add_to_cart'|'checkout_opened',session.sessionId);return result;}).catch(()=>{if(alive.current)setSaved(false);return null;}).finally(()=>{if(kind==='progress')syncing.current=false;});
  },[session]);
+ // Revalidate a restored page before playback checkpoints can revive an old session.
+ // Capture phase runs before the player's visibility/pagehide handlers.
+ useEffect(()=>{
+  const leave=()=>{if(awaySince.current===null)awaySince.current=Date.now();};
+  const resume=()=>{
+   if(document.hidden||awaySince.current===null||!sessionRef.current||purchaseRedirected.current)return;
+   if(!sessionRef.current.preview&&!withinWebinarResumeWindow(awaySince.current)){
+    if(checkoutEngagedRef.current)return; // Preserve an active payment form.
+    if(!returnExpired.current){returnExpired.current=true;location.reload();}
+    return;
+   }
+   awaySince.current=null;
+  };
+  const visibility=()=>{if(document.hidden)leave();else resume();};
+  document.addEventListener('visibilitychange',visibility,true);window.addEventListener('pagehide',leave,true);window.addEventListener('pageshow',resume,true);
+  resume();
+  return()=>{document.removeEventListener('visibilitychange',visibility,true);window.removeEventListener('pagehide',leave,true);window.removeEventListener('pageshow',resume,true);};
+ },[checkoutEngaged]);
  useEffect(()=>{if(session)savePromptHistory(session.sessionId,promptHistory);},[session,promptHistory]);
- useEffect(()=>{const online=()=>{if(sessionRef.current)track(completionPending.current?'completed':'progress');else void load();};window.addEventListener('online',online);return()=>window.removeEventListener('online',online);},[load,track]);
+ useEffect(()=>{const online=()=>{if(sessionRef.current){if(!document.hidden)track(completionPending.current?'completed':'progress');}else void load();};window.addEventListener('online',online);return()=>window.removeEventListener('online',online);},[load,track]);
  useEffect(()=>{const id=setInterval(()=>setNow(Date.now()+offset.current),1000);return()=>clearInterval(id);},[]);
  useEffect(()=>{if(endCountdown===null||!session||checkoutEngaged)return;if(endCountdown===0){const offer=selectOffer(offerState.current.offers,session.webinar.durationSeconds,Date.now()+offerState.current.offset,session.webinar.endOfferId);if(offer?.action==='checkout'){setSelectedOfferId(offer.id);setFunding(true);setEndCountdown(null);}else if(offer)location.assign(offerDestination(offer));else setEndCountdown(null);return;}const id=setTimeout(()=>setEndCountdown(n=>n===null?null:n-1),1000);return()=>clearTimeout(id);},[endCountdown,session,checkoutEngaged]);
  function latestMessages(){const log=chatLog.current;if(log)log.scrollTop=log.scrollHeight;followChat.current=true;setUnread(false);}
- function tick(n:number){if(!session)return;position.current=n;setTime(n);
+ function tick(n:number){if(!session||returnExpired.current)return;position.current=n;setTime(n);
   if(Date.now()-lastSync.current>15000){lastSync.current=Date.now();track('progress');}
  }
  function previewSeek(n:number){

@@ -229,6 +229,27 @@ try{
  await verifyIndependentMessaging(pg,q);
  await verifyOngoingSalesFollowups(pg,q,config);
  await verifyWebinarReturnMessaging(pg,q,config);
+ // Production entry must agree with the browser/server one-hour policy.
+ await pg.exec(readFileSync(new URL('../supabase/migrations/20261015083217_webinar_one_hour_return.sql',import.meta.url),'utf8'));
+ const returnVisitor=randomUUID(),returnSession=randomUUID();
+ await q("insert into icash_webinar_visitors(id,timezone) values($1,'America/Chicago')",[returnVisitor]);
+ await q('select icash_webinar_begin($1,$2,$3,false)',[returnVisitor,returnSession,config]);
+ await q("update icash_webinar_sessions set progress_seconds=60,max_seconds=60,updated_at=now()-interval '59 minutes 59 seconds' where id=$1",[returnSession]);
+ let returned=(await q('select (icash_webinar_begin($1,$2,$3,false)).*',[returnVisitor,randomUUID(),config])).rows[0];
+ assert.equal(returned.id,returnSession);assert.equal(returned.progress_seconds,60);
+ await q("update icash_webinar_sessions set updated_at=now()-interval '1 hour' where id=$1",[returnSession]);
+ const restarted=randomUUID();returned=(await q('select (icash_webinar_begin($1,$2,$3,false)).*',[returnVisitor,restarted,config])).rows[0];
+ assert.equal(returned.id,restarted);assert.equal(returned.progress_seconds,0);assert.equal(returned.watched_seconds,'0.000');
+ assert.ok((await q('select superseded_at from icash_webinar_sessions where id=$1',[returnSession])).rows[0].superseded_at);
+ // Forced VIP re-entry and a concurrent retry must share the same new session.
+ const restartAgain=randomUUID();
+ assert.equal((await q('select (icash_webinar_begin($1,$2,$3,false,$4)).id as id',[returnVisitor,restartAgain,config,restarted])).rows[0].id,restartAgain);
+ assert.equal((await q('select (icash_webinar_begin($1,$2,$3,false,$4)).id as id',[returnVisitor,randomUUID(),config,restarted])).rows[0].id,restartAgain);
+ // Future activity cannot extend recovery indefinitely; another visitor is isolated.
+ await q("update icash_webinar_sessions set updated_at=now()+interval '1 minute' where id=$1",[restartAgain]);
+ assert.notEqual((await q('select (icash_webinar_begin($1,$2,$3,false)).id as id',[returnVisitor,randomUUID(),config])).rows[0].id,restartAgain);
+ for(const role of ['anon','authenticated'])assert.equal((await q("select has_function_privilege($1,'icash_webinar_begin(uuid,uuid,jsonb,boolean,uuid)','execute') as ok",[role])).rows[0].ok,false);
+ console.log('PASS one-hour database return: 59:59 resumes, 60:00 restarts, saved analytics preserved, forced restart retries reuse the new session, future activity rejected and grants remain private.');
  const grants=(await q("select has_table_privilege('anon','icash_webinar_visitors','select') as read,has_function_privilege('authenticated','icash_webinar_contact(uuid,text,text,text,boolean)','execute') as write")).rows[0];assert.equal(grants.read,false);assert.equal(grants.write,false);
  const rls=await q("select relname,relrowsecurity from pg_class where relname like 'icash_webinar%' and relkind='r'");assert.ok(rls.rows.every(r=>r.relrowsecurity));
  console.log('Webinar database checks passed: sessions, attribution, audience, activity, verified checkout triggers, daily funnel, local midnight, DST, earlier-day buyers, preserved revisions, renewals, test/refund exclusion and RLS.');

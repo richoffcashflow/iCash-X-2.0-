@@ -1,11 +1,12 @@
 import {cookies} from 'next/headers';
 import {db,guestHash} from '@/lib/stripe-test';
 import {validGuest} from '@/lib/funding';
+import {vipActive} from '@/lib/vip-policy';
 import {membershipAccessible} from '@/lib/membership-policy';
 import {webinarSession,WebinarError} from '@/lib/webinar-server';
 import {webinarLink} from '@/lib/webinar-links';
 import {visitorTimezone,isNight,bestConvertingWebinar,type ViewerLocation} from '@/packages/webinar-engine/src/index';
-import {routingSchema,hasWebinarVideo,type WebinarSettings,type WebinarRow} from '@/lib/webinar-policy';
+import {routingSchema,hasWebinarVideo,webinarFromRow,type WebinarSettings,type WebinarRow} from '@/lib/webinar-policy';
 import {selectRecording} from '@/lib/webinar-recordings';
 import {availableWebinarRows,webinarConversionRecordings} from '@/lib/webinar-selection';
 import type {Membership} from '@/lib/membership';
@@ -41,11 +42,25 @@ export async function paidVipDestination(m:Membership|null):Promise<string|null>
  return row?.config.status==='published'&&hasWebinarVideo(row.config)?webinarLink({publicCode:String(row.public_code)}):null;
 }
 
-/** VIP access requires a paid account or this browser's verified paid checkout. */
-export async function webinarVipAccess(accountId?:string):Promise<boolean>{
+type ViewerMembership=Pick<Membership,'mode'|'state'|'paid_through'|'vip_until'|'post_purchase_webinar_id'>;
+/** Only verified account ownership or an unclaimed checkout in this browser counts. */
+export async function webinarViewerMembership(accountId?:string):Promise<ViewerMembership|null>{
  const token=(await cookies()).get('icash_funding_guest')?.value;
  const scope=accountId?`account_id=eq.${accountId}`:validGuest(token)?`guest_hash=eq.${guestHash(token!)}&account_id=is.null`:null;
- if(!scope)return false;
- const rows=await db<{state:string;paid_through:string|null}[]>(`icash_memberships?${scope}&mode=eq.live&state=eq.active&select=state,paid_through&limit=10`);
- return rows.some(m=>membershipAccessible(m));
+ if(!scope)return null;
+ const rows=await db<ViewerMembership[]>(`icash_memberships?${scope}&mode=eq.live&state=eq.active&select=mode,state,paid_through,vip_until,post_purchase_webinar_id&order=created_at.desc&limit=10`);
+ const paid=rows.filter(m=>m.mode==='live'&&membershipAccessible(m));
+ return paid.find(m=>vipActive(m))??paid[0]??null;
+}
+export async function webinarVipAccess(accountId?:string):Promise<boolean>{return !!await webinarViewerMembership(accountId);}
+
+/** A returning Standard buyer keeps the VIP paired with their purchase. */
+export async function returningBuyerVip(m:ViewerMembership,mainId:string){
+ if(m.mode!=='live'||!membershipAccessible(m))return null;
+ const selectors=[...(m.post_purchase_webinar_id?[`id=eq.${m.post_purchase_webinar_id}&parent_webinar_id=not.is.null`]:[]),`parent_webinar_id=eq.${mainId}`];
+ for(const selector of selectors){
+  const [row]=await db<WebinarRow[]>(`icash_webinars?${selector}&config->>status=eq.published&select=config,public_code,parent_webinar_id&order=public_code.asc&limit=1`);
+  if(row){const w=webinarFromRow(row);if(w.parentWebinarId&&w.status==='published'&&hasWebinarVideo(w))return w;}
+ }
+ return null;
 }
