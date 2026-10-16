@@ -30,8 +30,11 @@ export async function POST(req:Request){try{
  const [rows,account]=await Promise.all([db<WebinarRow[]>(`icash_webinars?${i.preview?'id=eq.'+i.preview+'&':i.code?'public_code=eq.'+i.code+'&':'parent_webinar_id=is.null&config->>status=eq.published&'}select=config,public_code,parent_webinar_id&order=public_code.asc&limit=1`),i.preview?Promise.resolve(null):webinarCustomerAccount()]);
  const current=rows[0]?webinarFromRow(rows[0]):null;
  if(!current||!i.preview&&(current.status!=='published'||!hasWebinarVideo(current)))return Response.json({unavailable:true,message:'This webinar is not available yet.'},{headers:webinarHeaders});
+ // The authenticated owner can test the published funnel with measurement on.
+ // Draft previews retain their separate dashboard authorization and isolation.
+ const ownerWatching=!i.preview&&account?.isOwner===true;
  let target=current,paidAdReturn=false;
- if(!i.preview){
+ if(!i.preview&&!ownerWatching){
   const membership=await webinarViewerMembership(account?.id);
   if(vipActive(membership))return Response.json({redirect:webinarSite.workspacePath},{headers:webinarHeaders});
   if(current.parentWebinarId){
@@ -52,7 +55,7 @@ export async function POST(req:Request){try{
  // Independent entry reads run together; every access check still finishes before returning a session.
  const [initialHistory,settingsRows,offers,,paid]=await Promise.all([db<WebinarSession[]>(`icash_webinar_sessions?visitor_id=eq.${visitor.id}&webinar_id=eq.${target.id}&is_preview=eq.${!!i.preview}&select=*&order=created_at.desc&limit=100`),db<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config'),i.preview?Promise.resolve([]):db<{session_id:string;created_at:string;kind:string;event_key:string}[]>(`icash_webinar_events?visitor_id=eq.${visitor.id}&kind=in.(pitch_shown,checkout_opened)&select=session_id,created_at,kind,event_key&order=created_at.desc&limit=1000`),
   db(`icash_webinar_visitors?id=eq.${visitor.id}`,'PATCH',{timezone,activity_region:activityRegion,funding_guest_hash:guestHash(fundingGuest),last_seen_at:new Date().toISOString(),...(account?{account_id:account.id}:{}),...(Object.keys(attribution).length?{attribution}:{})}),
-  !i.preview&&!target.parentWebinarId?Promise.all([webinarCustomerPaid(guestHash(fundingGuest)),webinarPaid(visitor)]).then(results=>results.some(Boolean)):Promise.resolve(false)
+  !i.preview&&!ownerWatching&&!target.parentWebinarId?Promise.all([webinarCustomerPaid(guestHash(fundingGuest)),webinarPaid(visitor)]).then(results=>results.some(Boolean)):Promise.resolve(false)
  ]);
  if(paid)return Response.json({redirect:webinarSite.workspacePath},{headers:webinarHeaders});
  const settings=settingsSchema.parse(settingsRows[0].config);
@@ -61,7 +64,7 @@ export async function POST(req:Request){try{
  // Paid main/ad entry always starts VIP at zero. Canonicalizing to VIP makes
  // refreshes ordinary returns; racing requests reuse the newly created session.
  if(paidAdReturn&&journey.kind!=='new')journey={kind:'advance',sessionId:journey.sessionId};
- if(i.returnToWebinar&&journey.kind==='checkout')journey={kind:'advance',sessionId:journey.sessionId};
+ if((i.returnToWebinar||ownerWatching)&&journey.kind==='checkout')journey={kind:'advance',sessionId:journey.sessionId};
  if(!i.preview&&journey.kind==='checkout'){
   if(target.parentWebinarId)return Response.json({redirect:'/webinar/upgrade'},{headers:webinarHeaders});
   const priorSessionId=journey.sessionId;
@@ -83,8 +86,8 @@ export async function POST(req:Request){try{
  }
  const sessionId=randomUUID();
  const snapshot=snapshotChat(unfinished&&!i.preview?webinarSchema.parse(webinar):selectRecording(webinarSchema.parse(webinar),timezone,new Date(),settings.routing,i.preview?i.variant:pairedVersion,location),sessionId);
- const returnStart=!i.preview&&!target.parentWebinarId&&journey.kind==='advance'?webinarReturnPosition(snapshot):0;
+ const returnStart=!i.preview&&!ownerWatching&&!target.parentWebinarId&&journey.kind==='advance'?webinarReturnPosition(snapshot):0;
  const session=await db<WebinarSession>('rpc/icash_webinar_begin','POST',{p_visitor:visitor.id,p_id:sessionId,p_config:returnStart?{...snapshot,_returnStartSeconds:returnStart}:snapshot,p_advance_from:!i.preview&&journey.kind==='advance'?journey.sessionId:null,p_preview:!!i.preview});
  const messages=await db<{id:string;role:'user'|'assistant';text:string;playback_seconds:number|null}[]>(`icash_webinar_messages?session_id=eq.${session.id}&role=eq.user&select=id,role,text,playback_seconds,display_name,public_status&order=created_at.desc&limit=60`).then(rows=>rows.reverse()).catch(()=>[]);
- return Response.json({webinar:publicWebinar(webinarSchema.parse(session.config)),...(session.config.id!==current.id?{canonicalPath:webinarLink(session.config)}:{}),sessionId:session.id,progress:session.completed_at?0:session.progress_seconds,name:visitor.name??'',email:visitor.email??'',phone:visitor.phone??'',contactSaved:!!visitor.email&&!!visitor.phone,messages,preview:!!i.preview,serverNow:Date.now()},{headers:webinarHeaders});
+ return Response.json({webinar:publicWebinar(webinarSchema.parse(session.config)),...(session.config.id!==current.id?{canonicalPath:webinarLink(session.config)}:{}),sessionId:session.id,progress:session.completed_at?0:session.progress_seconds,name:visitor.name??'',email:visitor.email??'',phone:visitor.phone??'',contactSaved:!!visitor.email&&!!visitor.phone,messages,preview:!!i.preview,ownerWatching,serverNow:Date.now()},{headers:webinarHeaders});
  }catch(e){if(e instanceof z.ZodError)return Response.json({error:'The webinar link could not be read.'},{status:400,headers:webinarHeaders});return webinarError(e);}}

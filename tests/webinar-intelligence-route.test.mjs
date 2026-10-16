@@ -110,6 +110,27 @@ console.log('PASS matching VIP follows watched Day/Night through clock changes, 
 vip.videoUrl='';history[0].config.recordingVersion='day';
 data=await(await post({code:'123457'})).json();assert.equal(data.webinar.recordingVersion,'night');assert.equal(data.webinar.videoUrl,vip.nightVersion.videoUrl,'Nighttime-only VIP also covers a Daytime buyer');
 
+// Only the authenticated owner can stay in the published funnel while already paid.
+const savedOwnerVideo=one.videoUrl;vip.videoUrl='https://example.test/vip-day.mp4';
+account={id:randomUUID(),destination:'/',needsBudget:false,isOwner:true};paid=true;vipPaid=true;hasVip=true;history=[];calls=[];
+for(const [code,expected] of [['123456',one],['123457',vip]]){
+ data=await(await post({code})).json();
+ assert.equal(data.webinar.id,expected.id);assert.equal(data.ownerWatching,true);assert.equal(data.preview,false);assert.equal(data.redirect,undefined);assert.equal(data.canonicalPath,undefined);
+ assert.equal(calls.filter(c=>c.path==='rpc/icash_webinar_begin').at(-1).body.p_preview,false,'Owner public visits remain eligible for consented pixel measurement');
+}
+history=[{...prior,webinar_id:one.id,config:one,completed_at:new Date(now-1000).toISOString(),updated_at:new Date(now-1000).toISOString()}];
+data=await(await post({code:'123456'})).json();assert.equal(data.progress,0);assert.equal(data.redirect,undefined,'A finished owner visit restarts instead of opening checkout');
+history[0].updated_at=new Date(now-2*3600000).toISOString();
+data=await(await post({code:'123456'})).json();assert.equal(data.progress,0,'Expired owner visits restart from the beginning');
+history[0].completed_at=null;history[0].progress_seconds=500;history[0].updated_at=new Date(now-1000).toISOString();
+data=await(await post({code:'123456'})).json();assert.equal(data.progress,500,'Recent unfinished owner sessions still resume');
+one.status='draft';data=await(await post({code:'123456'})).json();assert.equal(data.unavailable,true,'Public owner watching cannot expose drafts');one.status='published';
+account.isOwner=false;history=[];
+data=await(await post({code:'123456'})).json();assert.equal(data.redirect,'/','A normal VIP member keeps the workspace destination');
+assert.equal((await post({code:'123456',ownerWatching:true})).status,400,'Request fields cannot claim owner status');
+account=null;paid=false;vipPaid=false;hasVip=false;one.videoUrl=savedOwnerVideo;
+console.log('PASS owner public replay: signed identity, pixel-eligible sessions, main/VIP entry, completion/expiry replay, draft protection and unchanged customer routing.');
+
 // Owner preview has no ad/checkout return journey and does not read offer history.
 owner=true;history=[];calls=[];
 data=await(await post({preview:one.id,variant:'night'})).json();

@@ -184,6 +184,27 @@ for(const [scenario,[version,preview,outcome]] of [['day',false,'unpaid'],['nigh
 }
 console.log('PASS VIP room: no repeated contact, timed offers, unpaid ending, protected in-progress payment, paid workspace routing and isolated previews.');
 
+// Public owner sessions keep the real player and measurement through paid callbacks and completion.
+for(const vipRoom of [false,true])for(const paidState of ['standard','vip']){
+ const before=redirects.length,ready=[],events=[];
+ const config={...w,...(vipRoom?{parentWebinarId:'00000000-0000-4000-8000-000000000999'}:{})};
+ const ownerRoom=await harness('components/webinar-room.tsx',{...roomDeps,webinarBrowserReady:(...args)=>ready.push(args),post:async(url,body)=>{
+  events.push({url,body});
+  if(url.endsWith('/start'))return {sessionId,webinar:policy.publicWebinar(config),progress:w.durationSeconds-1,name:'Owner',messages:[],preview:false,ownerWatching:true,serverNow:Date.now()};
+  return {saved:true,redirect:'/'};
+ }});
+ const renderOwner=()=>ownerRoom.render('WebinarRoom',{});renderOwner();await flush();let ownerTree=renderOwner();ownerTree=renderOwner();
+ assert.deepEqual(ready,[[sessionId,false]],'Owner enters the live measurement path');
+ assert.equal(find(ownerTree,'WebinarCheckout').props.stayOnWebinar,true);
+ find(ownerTree,'WebinarCheckout').props.onPurchased(paidState,'/live/123457');ownerTree=renderOwner();
+ assert.ok(find(ownerTree,'WebinarPlayer'));assert.equal(find(ownerTree,'WebinarVipWelcome'),undefined);
+ find(ownerTree,'WebinarPlayer').props.onEnded();await flush();ownerTree=renderOwner();
+ assert.ok(events.some(e=>e.body?.kind==='completed'),'Completion still records normally');
+ assert.equal(redirects.length,before,'Neither paid membership nor video completion removes the owner from the webinar');
+ ownerRoom.close();
+}
+console.log('PASS owner public viewing retains player, live measurement and completion without workspace or VIP handoff.');
+
 // Recorded purchases are visible in preview; live updates never call billing in preview.
 for(const vip of [false,true]){
  let calls=0;

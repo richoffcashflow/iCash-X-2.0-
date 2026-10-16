@@ -22,10 +22,18 @@ for(const file of ['webinar-account-adapter.ts','trusted-operator.ts','voice-tes
 assert.match(contentSecurityPolicy,/frame-ancestors 'none'/);assert.match(contentSecurityPolicy,/object-src 'none'/);assert.match(contentSecurityPolicy,/base-uri 'self'/);assert(!contentSecurityPolicy.includes('unsafe-eval'));assert.match(contentSecurityPolicy,/wss:\/\/\*\.twilio\.com/);assert.match(contentSecurityPolicy,/https:\/\/js\.stripe\.com/);
 const headers=Object.fromEntries(securityHeaders.map(h=>[h.key,h.value]));assert.equal(headers['X-Frame-Options'],'DENY');assert.equal(headers['X-Content-Type-Options'],'nosniff');assert.match(headers['Permissions-Policy'],/microphone=\(self\)/);
 // The shared webinar adapter also serves ordinary customers: only its owner branch is gated.
-const adapterMocks={currentUser:async()=>({id:'customer'}),dashboardCurrentUser:async()=>{throw Error('DASHBOARD_PASSWORD_REQUIRED');},ownerInboundTarget:{ownerUserId:id},webinarSite:{companyKey:'icash-x',workspacePath:'/'},db:async()=>[{id:'customer-account',bot_paused:false,daily_limit_cents:1000}]};
+let viewerUserId='customer';
+const adapterMocks={currentUser:async()=>({id:viewerUserId}),dashboardCurrentUser:async()=>{throw Error('DASHBOARD_PASSWORD_REQUIRED');},ownerInboundTarget:{ownerUserId:id},webinarSite:{companyKey:'icash-x',workspacePath:'/'},db:async()=>[{id:'customer-account',bot_paused:false,daily_limit_cents:1000}]};
 globalThis.__dashboardAdapter=adapterMocks;
 const adapterCode=ts.transpileModule(readFileSync(new URL('../lib/webinar-account-adapter.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
 const adapter=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(adapterMocks).join(',')+'}=globalThis.__dashboardAdapter;\n'+adapterCode).toString('base64'));
-assert.equal((await adapter.webinarCustomerAccount()).id,'customer-account');await assert.rejects(adapter.webinarOwnerIdentity(),/DASHBOARD_PASSWORD_REQUIRED/);delete globalThis.__dashboardAdapter;
+assert.equal((await adapter.webinarCustomerAccount()).id,'customer-account');
+assert.equal((await adapter.webinarCustomerAccount()).isOwner,false);
+viewerUserId=id;assert.equal((await adapter.webinarCustomerAccount()).isOwner,true,'Signed-in owner may watch published webinars without dashboard unlock');
+await assert.rejects(adapter.webinarOwnerIdentity(),/DASHBOARD_PASSWORD_REQUIRED/);
+process.env.WEBINAR_OWNER_USER_ID='configured-owner';
+assert.equal((await adapter.webinarCustomerAccount()).isOwner,false,'A configured owner replaces the product fallback');
+viewerUserId='configured-owner';assert.equal((await adapter.webinarCustomerAccount()).isOwner,true);
+delete process.env.WEBINAR_OWNER_USER_ID;delete globalThis.__dashboardAdapter;
 delete globalThis.__dashboardBoundaries;delete process.env.SUPABASE_SECRET_KEY;
 console.log('PASS dashboard API guards reject bypasses; all owner entry points covered; customer/public routes separate; headers preserve calling and checkout.');
