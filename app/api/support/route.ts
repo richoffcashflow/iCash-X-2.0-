@@ -3,7 +3,7 @@ import {z} from 'zod';
 import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
 import {allowedOrigin,fundingMode} from '@/lib/funding-policy';
-import {supportId,supportMessageInput,supportAnswer,redactSupportQuestion} from '@/lib/support-policy';
+import {supportId,supportMessageInput,supportAnswer,supportTopic,redactSupportQuestion} from '@/lib/support-policy';
 import {collectSupportDiagnostics} from '@/lib/support-diagnostics';
 import {classifySupportQuestion} from '@/lib/support-ai';
 export const runtime='nodejs';
@@ -39,8 +39,11 @@ export async function POST(req:Request){
   const question=redactSupportQuestion(i.message);
   const started=await db<{threadId:string;replay?:boolean;response?:unknown;rateLimited?:boolean}>('rpc/icash_support_begin_message','POST',{p_account:accountId,p_user:userId,p_thread:i.threadId??null,p_request:i.requestId,p_message:question});
   if(started.rateLimited)return NextResponse.json({error:'Please wait a minute before sending more messages. The daily limit is 60 messages.'},{status:429,headers});
-  if(started.replay)return NextResponse.json({threadId:started.threadId,replay:true,pending:!started.response},{status:started.response?200:202,headers});
-  const evidence=await collectSupportDiagnostics(accountId);const selected=await classifySupportQuestion(question,evidence);
+  if(started.replay&&started.response)return NextResponse.json({threadId:started.threadId,replay:true},{headers});
+  // A lost/failed reply must not leave a saved question pending forever. The
+  // begin RPC checks the original account, text and thread; finish is one-use.
+  // Recovery uses local classification, never a second paid model request.
+  const evidence=await collectSupportDiagnostics(accountId);const selected=started.replay?{topic:supportTopic(question),ai:false}:await classifySupportQuestion(question,evidence);
   const answer=supportAnswer(selected.topic,evidence,selected.ai);
   await db('rpc/icash_support_finish_message','POST',{p_account:accountId,p_user:userId,p_thread:started.threadId,p_request:i.requestId,p_message:answer,p_evidence:evidence});
   return NextResponse.json({threadId:started.threadId,ai:selected.ai},{headers});

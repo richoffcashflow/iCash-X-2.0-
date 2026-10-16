@@ -24,7 +24,7 @@ export function redactSupportQuestion(text:string){
  .replace(/\b\d[\d\s().+\-]{5,}\d\b/g,'[number removed]');
 }
 export function supportAnswer(topic:SupportTopic,evidence:SupportEvidence[],ai:boolean){
- if(topic==='general')return 'Hi! How can we help with your bot, billing, or a property?';
+ if(topic==='general')return 'Hey, I’m James, your iCash X AI support assistant. What can I help you with—your bot, billing, or a property?';
  if(topic==='cancel')return 'Open Chat options (•••), then Manage cancellation to review and confirm. Chat messages alone do not cancel anything. Ask the team for refunds or account deletion.';
  if(topic==='human')return 'Choose “Ask the team” below to send them this conversation. Their reply will appear here.';
  const wanted=topic==='billing'?['billing','payments','credits']:topic==='setup'?['readiness','work']:['work','credits','readiness','screening','voice'];
