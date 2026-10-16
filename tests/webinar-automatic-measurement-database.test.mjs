@@ -28,13 +28,15 @@ try{
  await pg.query("insert into fixture_payments values('pi_after',5000,now(),$1,$1,'vip_upgrade')",[id]);
  await pg.exec('select icash_webinar_sync_purchases();select icash_webinar_sync_purchases();');
  const events=(await pg.query('select * from icash_webinar_meta_events')).rows;assert.equal(events.length,1);assert.equal(events[0].payment_id,'pi_after','Eligibility cannot backdate a historical purchase');
- assert.equal(metaPurchasePayload({...events[0],value_cents:5000},identity,'https://www.geticashx.com').event_name,'Purchase');
+ // PGlite returns Date objects; the production Data API supplies ISO strings.
+ const receipt={...events[0],value_cents:5000,occurred_at:events[0].occurred_at.toISOString()};
+ assert.equal(metaPurchasePayload(receipt,identity,'https://www.geticashx.com').event_name,'Purchase');
  assert.equal((await pg.query('select * from icash_webinar_claim_meta()')).rows.length,1,'Automatically eligible verified purchases can be claimed');
  identity=await access('deny');assert.equal(measurementSince(identity),null);assert.equal(identity.marketing_consent_at,null);assert.equal(identity.measurement.fbp,undefined);
  assert.equal((await pg.query('select state from icash_webinar_meta_events')).rows[0].state,'canceled');
  assert.equal(measurementSince(await access('automatic')),null,'A delayed automatic request cannot undo opt-out');
  assert.equal((await pg.query('select * from icash_webinar_claim_meta()')).rows.length,0);
- assert.throws(()=>metaPurchasePayload({...events[0],value_cents:5000},identity,'https://www.geticashx.com'));
+ assert.throws(()=>metaPurchasePayload(receipt,identity,'https://www.geticashx.com'));
  identity=await access('allow',false);assert(identity.marketing_consent_at);assert(measurementSince(identity),'An explicit privacy-page choice works outside automatic regions');
  identity=await access('allow',true,true);assert.equal(measurementSince(identity),null,'GPC beats explicit allow');
  await pg.query("update icash_webinar_visitors set measurement='{}',marketing_consent_at=null where id=$1",[id]);
