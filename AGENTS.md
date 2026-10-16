@@ -36,6 +36,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Complete feature flows
 
+- The course lives at `/course`: owner-uploaded video, PDF download, then a client practice workspace link, with a gold VIP upgrade banner. Course files are private and membership-authorized; only the platform owner with dashboard proof can publish replacements. `/preview/workspace` is public, fictional practice with no live work or acknowledgment acceptance. Keep its instructions learner-facing.
+
 - On October 15, 2026 the owner required fresh seller and demo opt-ins to call immediately, including outside normal calling hours. Both forms explicitly request a call now; preserve the separate, short-lived request receipt through dispatch and final database admission. Do not apply cold-outreach scheduling to a valid immediate request, fabricate an SMS request, rewrite historical consent, or retry an uncertain provider attempt. Keep opt-outs, source/account/phone binding, membership, credits and Run/Pause checks.
 
 - On October 15, 2026 the owner required a short first-entry workspace acknowledgment. Keep explicit, unchecked consent, account/user/version-bound acceptance receipts, and server admission checks for new workspace work. Never pre-accept for a user. Preserve support, cancellation, Pause, ending calls and access to completed signed documents before acceptance. Prior purchases retain their accepted terms and mandatory legal rights are not waived. Owner course previews use fictional data and must never accept terms, sign contracts, send messages or create paid work.

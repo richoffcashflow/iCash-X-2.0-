@@ -9,6 +9,7 @@ import http from 'node:http';
 import https from 'node:https';
 import {chromium,webkit,devices} from 'playwright';
 import {verifyWorkspace} from './workspace-browser-scenarios.mjs';
+import {verifyCourse} from './course-browser.mjs';
 import {verifyWebinarExit,verifyRegularWebinarRoom} from './webinar-exit-browser.mjs';
 import {sellerFunnelStages} from '../lib/conversion-funnel.ts';
 import {dashboardCookie,issueDashboardProof} from '../lib/dashboard-password-policy.ts';
@@ -41,6 +42,7 @@ try{
   if(process.env.BROWSER_ENGINES==='chromium'&&engine!==chromium)continue;
   const browser=await engine.launch({headless:true});
   try{
+   if(process.env.BROWSER_SCENARIOS==='course'){await verifyCourse(browser,base,options,name);continue;}
    if(name==='desktop Chromium')await verifyWebinarExit(browser);
    await verifyRegularWebinarRoom(browser,base,options);
    const context=await browser.newContext({...options,ignoreHTTPSErrors:true});let failure=false,denied=false,experienceFailure=false,experienceDenied=false,external=0;const errors=[];
@@ -87,6 +89,7 @@ try{
    console.log(`PASS ${name}: owner reports and aggregate experience → incident detail → refresh failure → recovery → private data cleared on denied access.`);
    await context.close();
    await verifyWorkspace(browser,base,options,name);
+   await verifyCourse(browser,base,options,name);
   }finally{await browser.close();}
  }
 }finally{proxy.closeAllConnections();proxy.close();server.kill('SIGTERM');if(server.exitCode===null)await once(server,'exit');rmSync(tlsDir,{recursive:true,force:true});}
