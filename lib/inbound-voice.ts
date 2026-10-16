@@ -1,4 +1,4 @@
-import {conversationStreet,conversationAddressInstructions} from './conversation-address.ts';
+import {spokenStreet,conversationAddressInstructions} from './conversation-address.ts';
 import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
 import {z} from 'zod';
 import {safeInboundPropertyContext} from './seller-call-context.ts';
@@ -26,7 +26,7 @@ export function inboundCapability(call:InboundCall,secret:string){
 export function inboundInitiation(maxSeconds:number,token:string,propertyContext:unknown=null){
  if(!Number.isInteger(maxSeconds)||maxSeconds<60||maxSeconds>900)throw new Error('Invalid call cap');
  const context=safeInboundPropertyContext(propertyContext);
- const greeting=context?.status==='matched'?`${context.returningName?'Hi '+context.returningName+'.':'Hi,'} I'm the AI property assistant. Is this the owner of ${conversationStreet(context.address)}?`:"Hi, I'm the AI property assistant. Which property are you calling about?";
+ const greeting=context?.status==='matched'?`${context.returningName?'Hi '+context.returningName+'.':'Hi,'} I'm the AI property assistant. Is this the owner of ${spokenStreet(context.address)}?`:"Hi, I'm the AI property assistant. Which property are you calling about?";
  return {type:'conversation_initiation_client_data',dynamic_variables:{
   principal:'the property buying business',assistant_name:'Alex',property_address:'Ask the caller',
   approved_offer_ceiling:'NOT AUTHORIZED',secret__icash_call_token:token,

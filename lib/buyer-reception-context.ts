@@ -1,5 +1,5 @@
 import {boundedVoiceSmsContext} from './voice-sms-context.ts';
-import {conversationStreet} from './conversation-address.ts';
+import {spokenStreet} from './conversation-address.ts';
 import {callFirstName} from './call-contact-name.ts';
 import {createHash} from 'node:crypto';
 import {safeInboundPropertyContext,ownershipAlreadyConfirmed} from './seller-call-context.ts';
@@ -21,10 +21,10 @@ export function buyerReceptionVariables(value:unknown){
  if(v?.status==='buyer'&&typeof v.address==='string'&&v.address.trim().length>0&&v.address.length<=300&&!/[<>\x00-\x1f]/.test(v.address)&&priceValid&&breakdownValid){
   const closingDate=typeof v.closingDate==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v.closingDate)?v.closingDate:null;
   const context={status:'buyer',address:v.address,askingPriceCents:v.askingPriceCents,buyerPaysClosingCosts:true,...(closingDate?{closingDate}:{}),...(firstName?{returningName:firstName}:{})};
-  return {icash_property_greeting:`${greeting}Are you calling about buying ${conversationStreet(v.address)}?`,icash_property_context:JSON.stringify(context)};
+  return {icash_property_greeting:`${greeting}Are you calling about buying ${spokenStreet(v.address)}?`,icash_property_context:JSON.stringify(context)};
  }
  const context=safeInboundPropertyContext(value);
  const confirmed=context?.status==='matched'&&ownershipAlreadyConfirmed(boundedVoiceSmsContext(v?.smsContext),context.address);
  const safeContext=context?.status==='matched'?{...context,ownershipAlreadyConfirmed:confirmed}:context;
- return {icash_property_greeting:context?.status==='matched'?greeting+(confirmed?`About ${conversationStreet(context.address)}—are you considering a cash sale?`:`Is this the owner of ${conversationStreet(context.address)}?`):"Which property are you calling about?",icash_property_context:JSON.stringify(safeContext)};
+ return {icash_property_greeting:context?.status==='matched'?greeting+(confirmed?`About ${spokenStreet(context.address)}—are you considering a cash sale?`:`Is this the owner of ${spokenStreet(context.address)}?`):"Which property are you calling about?",icash_property_context:JSON.stringify(safeContext)};
 }
