@@ -2,7 +2,7 @@ import {sellerFunnelStages,validFunnelSteps,type FunnelStep} from './conversion-
 import {closingOperationsSchema,type ClosingOperations} from './deal-completion.ts';
 import {reliabilitySchema,type ReliabilityReport} from './reliability.ts';
 export type OverviewFilters={days:1|7|30;includeOwner:boolean;query:string;page:number};
-export type OverviewLead={id:string;name:string;address:string;phone:string;email:string|null;state:string;source:string;campaign:string|null;assignedTo:string|null;createdAt:string};
+export type OverviewLead={id:string;name:string|null;address:string;phone:string;email:string|null;state:string;source:string;campaign:string|null;assignedTo:string|null;createdAt:string};
 export type OwnerOverview=OverviewFilters & {
  pageSize:25;timezone:'America/Chicago';startAt:string;endAt:string;
  leadCount:number;reviewCount:number;matchedCount:number;leads:OverviewLead[];
@@ -32,7 +32,7 @@ export function validOwnerOverview(value:unknown,filters:OverviewFilters):value 
  if(v.costHealth!=null&&!validCostHealth(v.costHealth))return false;
  if(v.reliability!=null&&!reliabilitySchema.safeParse(v.reliability).success)return false;
  if(v.closing!==undefined&&!closingOperationsSchema.safeParse(v.closing).success)return false;
- return v.leads.every(lead=>{const l=record(lead);return ['id','name','address','phone','state','source'].every(k=>typeof l[k]==='string')&&['email','campaign','assignedTo'].every(k=>l[k]===null||typeof l[k]==='string')&&date(l.createdAt);});
+ return v.leads.every(lead=>{const l=record(lead);return ['id','address','phone','state','source'].every(k=>typeof l[k]==='string')&&['name','email','campaign','assignedTo'].every(k=>l[k]===null||typeof l[k]==='string')&&date(l.createdAt);});
 }
 export function overviewMoney(amount:number|null,unit:'cents'|'micros'='micros'){
  return amount===null?'—':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:2}).format(amount/(unit==='cents'?100:1000000));

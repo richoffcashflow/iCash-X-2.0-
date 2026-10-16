@@ -56,7 +56,7 @@ export async function GET(req:Request){
    propertyIds?db<unknown[]>(`icash_property_controls?account_id=eq.${accountId}&property_id=in.(${propertyIds})&manual=eq.true&select=property_id`):Promise.resolve([]),
    db<unknown[]>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=in.(${ids})&state=eq.complete&select=id,screening_id,party,completed_at,summary:result->>summary,durationSeconds:result->durationSeconds,nextAction:result->>nextAction,interested:result->interested,optedOut:result->optedOut,humanRequested:result->humanRequested&order=completed_at.desc,id.desc&limit=24`),
    db<unknown[]>(`icash_live_callbacks?account_id=eq.${accountId}&screening_id=in.(${ids})&select=id,screening_id,due_at,timezone,state&order=due_at,id&limit=24`),
-   db<{account_id:string;screening_id:string;lead:{name:string;phone:string}|null}[]>(`icash_seller_matches?account_id=eq.${accountId}&screening_id=in.(${ids})&select=account_id,screening_id,lead:icash_seller_intakes(name,phone)&limit=${pageSize}`),
+   db<{account_id:string;screening_id:string;lead:{name:string|null;phone:string}|null}[]>(`icash_seller_matches?account_id=eq.${accountId}&screening_id=in.(${ids})&select=account_id,screening_id,lead:icash_seller_intakes(name,phone)&limit=${pageSize}`),
    db<unknown[]>('rpc/icash_buyer_reception_calls','POST',{p_account:accountId,p_screenings:visible.map(p=>p.id)})
   ]):[[],[],[],[],[],[],[]];
   conversations.push(...buyerCalls);

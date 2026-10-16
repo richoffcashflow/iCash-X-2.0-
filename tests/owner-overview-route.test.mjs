@@ -26,6 +26,9 @@ assert.equal(validCostHealth({pendingCount:0,agedCount:1,oldestAt:null,unreconci
 bad=true;response=await get('');assert.equal(response.status,503);assert.deepEqual(await response.json(),{error:'The overview could not load. Try refreshing in a moment.'});
 const filters={days:30,includeOwner:false,query:'',page:1},valid=fixture(filters);
 assert(validOwnerOverview(valid,filters));
+const namelessReport={...valid,leadCount:1,matchedCount:1,leads:[{id:'fixture',name:null,address:'123 Example St',phone:'+12145550123',email:null,state:'received',source:'direct',campaign:null,assignedTo:null,createdAt:valid.endAt}]};delete namelessReport.funnel;
+assert(validOwnerOverview(namelessReport,filters),'Nameless leads must remain visible in owner reports');
+assert.equal(validOwnerOverview({...namelessReport,leads:[{...namelessReport.leads[0],name:42}]},filters),false);
 for(const patch of [{leadCount:NaN},{leads:null},{days:7},{includeOwner:true},{startAt:'bad'},{matchedCount:1},{funnel:[{key:'inbound',count:0}]},{funnel:sellerFunnelStages.map(s=>({key:s.key,count:1}))}])assert.equal(validOwnerOverview({...valid,...patch},filters),false);
 for(const patch of [{costMicros:null},{marginMicros:1},{chargedCents:null},{missingCostCount:1},{chargedCents:Infinity}])assert.equal(validOwnerOverview({...valid,usage:{...valid.usage,...patch}},filters),false);
 assert.equal(overviewMoney(null),'—');assert.equal(overviewMoney(-10003000),'-$10.00');assert.equal(overviewMoney(250,'cents'),'$2.50');assert.match(overviewTime('2026-11-01T07:30:00Z'),/1:30 AM/);assert.equal(overviewLeadStatus('unmatched'),'Check address');

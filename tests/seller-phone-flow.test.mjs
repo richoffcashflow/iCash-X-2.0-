@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {sellerPhoneFlowInstructions} from '../lib/seller-phone-flow.ts';
-import {sellerCallPrompt,sellerFirstMessage} from '../lib/seller-call-context.ts';
+import {sellerCallPrompt,sellerFirstMessage,sellerCallContext} from '../lib/seller-call-context.ts';
+import {sellerAgreementDeliveryPrompt} from '../lib/seller-agreement-delivery-prompt.ts';
 const context={address:'45 Oak Road',principal:'Fixture Homes',assistantName:'Robin',history:null};
 const company=sellerPhoneFlowInstructions({hasBoundRequest:true,buyerKind:'company',hasPendingAgreement:true});
 const steps=['1. SELLER AND PROPERTY','2. BUYER AND INQUIRY','3. TIME TO TALK','4. SHORT QUALIFICATION','5. PRESENT THE CASH OFFER','6. NEGOTIATION','7. AGREEMENT AND PROCESS','8. NEXT STEP'];
@@ -36,6 +37,15 @@ assert(noRequest.includes('"priceCents":15000000'));
 const submitted={...context,buyerKind:'individual',principal:'Fixture Investor',request:{name:'Jane Seller',submittedAt:new Date(Date.now()-1000).toISOString()}};
 assert(sellerCallPrompt(submitted,15000000).includes('briefly referencing their submitted property form'));
 assert(sellerCallPrompt({...submitted,request:{...submitted.request,submittedAt:new Date(Date.now()+86400000).toISOString()}},15000000).includes('No bound submitted-form record is supplied'));
+for(const name of [undefined,null,'<invalid>']){
+ const nameless={...submitted,request:{...submitted.request,name}};
+ assert.deepEqual(sellerCallContext(nameless).request,{submittedAt:submitted.request.submittedAt});
+ assert.equal(sellerFirstMessage(nameless),'Is this the owner of 45 Oak Road?');
+ assert(sellerCallPrompt(nameless).includes('briefly referencing their submitted property form'));
+}
+for(const prompt of [company,sellerAgreementDeliveryPrompt('Fixture automatic seller call')]){
+ assert(prompt.includes('What is your name?'));assert(prompt.includes('full legal name'));
+}
 const terms={priceCents:14000000,earnestCents:50000,inspectionDays:7,closingDate:'2026-11-12',effectiveDate:'2026-10-15',escrowAgent:'Fixture Title',dealNotes:'Inspection/access terms require review.'};
 const prepared=sellerCallPrompt(submitted,15000000,terms,true,15000000);
 assert(prepared.includes('"priceCents":14000000'));assert(prepared.includes('"inspectionDays":7'));assert(prepared.includes('"escrowAgent":"Fixture Title"'));

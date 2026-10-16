@@ -67,6 +67,7 @@ const db=async(path,method,body)=>{
  if(path==='rpc/icash_property_voice_threads'){assert.equal(body.p_account,'account');assert.equal(body.p_screening,'screening');assert.equal(body.p_phone,permission.phone);return textThreads;}
  if(path.startsWith('icash_business_voice_numbers'))return [{outbound_enabled:secondEnabled}];
  if(path==='rpc/icash_voice_sms_context')return null;
+ if(path==='rpc/icash_seller_call_request'){assert.equal(body.p_account,'account');assert.equal(body.p_screening,'screening');assert.equal(body.p_phone,permission.phone);return {name:null,submittedAt:new Date(now-1000).toISOString()};}
  if(path==='rpc/icash_seller_sms_call_ack')return 'ack-message';
  if(path==='rpc/icash_seller_voice_permission_current')return sellerConsentCurrent;
  if(path==='rpc/icash_requested_optin_call_current'){assert.equal(body.p_account,'account');assert.equal(body.p_job,'job');return optinRequestCurrent;}
@@ -114,6 +115,11 @@ reset();providerAgent.platform_settings.guardrails=automaticOfferGuardrails();pr
 const automaticReview={...review,offerPolicy:'automatic_offer_v6',contractToolId:'tool_automatic',toolIds:[...providerAgent.conversation_config.agent.prompt.tool_ids],configHash:sha(JSON.stringify(canonical({conversation_config:providerAgent.conversation_config,platform_settings:providerAgent.platform_settings,workflow:providerAgent.workflow,procedures:providerAgent.procedures})))};
 c.agent_config_hash=automaticReview.configHash;c.required_tool_ids=automaticReview.toolIds;process.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify(automaticReview);
 assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.match(outboundBody.prompt,/icash_offer_and_contract get_offer/);assert.match(outboundBody.prompt,/retry that exact action once/);assert(!outboundBody.prompt.includes('DELIVERY FAILURE RESPONSE:'));assert.match(outboundBody.prompt,/Fixture only/);assert(!outboundBody.prompt.includes('PRIVATE SERVER NEGOTIATION AUTHORITY'));assert(!outboundBody.prompt.includes('10200000'),'the runtime prompt does not leak a cached price around the offer tool');
+// A submitted phone and address can dial without a name; ownership still comes first.
+jobState='issued';snapshot.sellerRequest={id:'fixture-lead',phone:permission.phone,ownerName:null};
+assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');
+assert.equal(outboundBody.firstMessage,'Is this the owner of Fixture only?');assert.match(outboundBody.prompt,/What is your name/);assert.match(outboundBody.prompt, /"request":\{"submittedAt"/);
+delete snapshot.sellerRequest;
 // The current v9 seller prompt plus long saved answers stays within the provider limit.
 jobState='issued';priorSellerCalls=[{completed_at:new Date(now-60000).toISOString(),result:{transcript:Array.from({length:35},(_,i)=>[{role:'agent',message:'What repairs does the property need?'},{role:'user',message:'The roof needs work. '+('Original seller detail '+i+' ').repeat(20)}]).flat()}}];
 process.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify({...automaticReview,offerPolicy:'automatic_offer_v9'});
