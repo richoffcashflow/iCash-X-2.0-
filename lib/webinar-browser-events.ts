@@ -4,7 +4,17 @@ export function webinarBrowserReady(sessionId:string,preview:boolean){
  try{sessionStorage.setItem('icash-webinar-session',sessionId);}catch{/* Playback works without browser storage. */}
  window.dispatchEvent(new CustomEvent('icash-webinar-ready',{detail:{sessionId}}));
 }
-export function webinarBrowserEvent(kind:'started'|'contact_saved'|'add_to_cart'|'checkout_opened'|'checkout_started',sessionId?:string){
+export type WebinarCommerce={product:'membership'|'vip_upgrade';checkoutId?:string;valueCents?:number};
+export function webinarBrowserEvent(kind:'started'|'contact_saved'|'add_to_cart'|'checkout_opened'|'checkout_started',sessionId?:string,commerce?:WebinarCommerce){
  try{sessionId=sessionId||sessionStorage.getItem('icash-webinar-session')||undefined;}catch{/* Optional measurement. */}
- if(sessionId)window.dispatchEvent(new CustomEvent('icash-webinar-track',{detail:{sessionId,kind}}));
+ if(sessionId)window.dispatchEvent(new CustomEvent('icash-webinar-track',{detail:{sessionId,kind,commerce}}));
+}
+/** Give the receipt lookup a bounded chance to queue conversions before navigation.
+ * No listener, ad blocking, or a measurement failure can hold up paid access. */
+export async function webinarBrowserPurchaseReady(){
+ const pending:Promise<unknown>[]=[];
+ window.dispatchEvent(new CustomEvent('icash-webinar-payment-confirmed',{detail:{waitUntil:(promise:Promise<unknown>)=>pending.push(promise)}}));
+ if(!pending.length)return;
+ let timer:ReturnType<typeof setTimeout>|undefined;
+ try{await Promise.race([Promise.allSettled(pending),new Promise<void>(resolve=>{timer=setTimeout(resolve,2000);})]);}finally{clearTimeout(timer);}
 }

@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {webinarBrowserPurchaseReady} from '../lib/webinar-browser-events.ts';
+globalThis.window=new EventTarget();
+await webinarBrowserPurchaseReady();
+let release;
+const gate=new Promise(resolve=>{release=resolve;});
+const listener=event=>event.detail.waitUntil(gate);
+window.addEventListener('icash-webinar-payment-confirmed',listener);
+let done=false;const pending=webinarBrowserPurchaseReady().then(()=>{done=true;});
+await Promise.resolve();assert.equal(done,false);release();await pending;assert.equal(done,true);
+window.removeEventListener('icash-webinar-payment-confirmed',listener);
+const failure=event=>event.detail.waitUntil(Promise.reject(Error('Measurement unavailable')));
+window.addEventListener('icash-webinar-payment-confirmed',failure);await webinarBrowserPurchaseReady();window.removeEventListener('icash-webinar-payment-confirmed',failure);
+const hung=event=>event.detail.waitUntil(new Promise(()=>{}));window.addEventListener('icash-webinar-payment-confirmed',hung);
+const start=Date.now();await webinarBrowserPurchaseReady();assert(Date.now()-start<2500,'Measurement can never indefinitely block paid access');
+console.log('PASS paid handoff: no tracker, successful receipt queue, rejected request, and hung request all preserve access.');

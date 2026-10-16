@@ -56,7 +56,7 @@ export async function POST(req:Request){
  if(i.revision!==offer.revision||i.totalCents!==offer.priceCents)return NextResponse.json({error:'The software price changed. Refresh and review it before paying.'},{status:409,headers});
  const publishableKey=checkoutPublishableKey(mode),embedded=i.embedded===true;
  if(embedded&&!publishableKey)return NextResponse.json({error:'Payment inside the room is not connected yet. Use secure checkout to continue.'},{status:503,headers});
- const checkoutResult=(s:import('stripe').default.Checkout.Session)=>embedded?{clientSecret:s.client_secret,sessionId:s.id,publishableKey}:{url:s.url};
+ const checkoutResult=(s:import('stripe').default.Checkout.Session)=>embedded?{clientSecret:s.client_secret,sessionId:s.id,publishableKey}:{url:s.url,sessionId:s.id};
  const filter=account?`account_id=eq.${account.id}`:`guest_hash=eq.${hash}`;const [prior]=await db<Membership[]>(`icash_memberships?${filter}&mode=eq.${mode}&state=neq.cancelled&select=*&limit=1`);
  if(prior){
   if(prior.account_id!==(account?.id??null))return NextResponse.json({error:'This browser has another account’s checkout. Sign in to that account to continue.'},{status:409,headers});

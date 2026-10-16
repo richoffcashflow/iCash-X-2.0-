@@ -89,7 +89,7 @@ export async function changeVipPlan(m:Membership,action:PlanChange['action'],ori
  }
  if(action!=='upgrade'){await applyChange(c);return {saved:true,message:action==='downgrade'?'Downgrade saved. VIP continues through your paid period.':'VIP renewal restored. No charge today.'};}
  const publishableKey=checkoutPublishableKey(m.mode),embedded=options.embedded===true&&!!publishableKey;
- const response=(session:Stripe.Checkout.Session)=>session.ui_mode==='embedded_page'?{clientSecret:session.client_secret,publishableKey,sessionId:session.id}:{url:session.url};
+ const response=(session:Stripe.Checkout.Session)=>session.ui_mode==='embedded_page'?{clientSecret:session.client_secret,publishableKey,sessionId:session.id}:{url:session.url,sessionId:session.id};
  if(!options.request)throw Error('Review the current VIP terms before payment');
  if(c.session_id){const old=await stripe.checkout.sessions.retrieve(c.session_id);if(old.metadata?.icash_vip_change!==c.id||old.livemode!==(m.mode==='live')||ref(old.customer)!==m.stripe_customer_id)throw Error('Upgrade checkout binding changed');if(old.status==='open'){if(checkoutMatchesPresentation(old,embedded)&&old.metadata?.icash_terms_version===vipTermsVersion)return response(old);await stripe.checkout.sessions.expire(old.id);}if(old.status==='complete')throw Error('Your upgrade payment is being confirmed. Do not pay again.');}
  await recordPurchaseAcceptance(options.request,{kind:'vip',reference:c.id,mode:m.mode,accountId:m.account_id,guestHash:m.guest_hash,version:vipTermsVersion,terms:vipPurchaseTerms,amountCents:vipUpgradeCents});
