@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import {newWebinar,publicWebinar} from '../lib/webinar-policy.ts';
 export async function verifyWebinarMeasurement(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
- let consent=false,scriptLoads=0,reads=0,upgraded=false,checkoutFixture=false;
+ let consent=false,scriptLoads=0,reads=0,upgraded=false,checkoutFixture=false,ownerFixture=false;
  const errors=[],pixelId='1104248230721457';
  try{
   await context.addInitScript(()=>{if(window.top!==window)return;sessionStorage.setItem('icash-webinar-session','fixture-webinar');window.__pixelCalls=[];});
@@ -18,6 +19,17 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
     if(checkoutFixture)await new Promise(resolve=>setTimeout(resolve,600));
     const events=['pi_fixture',...(upgraded?['pi_vip']:[])].flatMap(id=>[{eventName:'AddPaymentInfo',eventId:'webinar:payment-info:'+id,data:{value:50,currency:'USD'}},{eventName:'Purchase',eventId:'webinar:purchase:'+id,data:{value:50,currency:'USD'}}]);
     return route.fulfill({json:{enabled:true,pixelId,consent,events:consent?events:[]}});
+   }
+   if(ownerFixture){
+    if(url.pathname==='/api/webinar/start')return route.fulfill({json:{sessionId:'00000000-0000-4000-8000-000000000456',webinar:publicWebinar({...newWebinar('00000000-0000-4000-8000-000000000123'),title:'Owner public webinar',status:'published',publicCode:'123456',videoUrl:base+'/fixture-owner.mp4',showAudienceCount:false,offers:[{id:'primary',at:0,title:'Join iCash X',description:'',ctaLabel:'Continue',action:'checkout',url:'',expiresAt:null}]}),progress:0,name:'Owner',contactSaved:true,messages:[],preview:false,ownerWatching:true,serverNow:Date.now()}});
+    if(url.pathname==='/api/billing/membership'){
+     assert.equal(route.request().method(),'GET','Paid owner must not create another checkout');
+     return route.fulfill({json:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',needsClaim:false,postPurchaseUrl:'/live/123457',membership:{accessible:true,vip:false}}});
+    }
+    if(url.pathname==='/api/webinar/event')return route.fulfill({json:{saved:true,redirect:'/'}});
+    if(url.pathname==='/api/webinar/chat/feed')return route.fulfill({json:{messages:[],statuses:[]}});
+    if(url.pathname==='/api/webinar/timers')return route.fulfill({json:{deadlines:{},offerDeadlines:{},serverNow:Date.now()}});
+    if(url.pathname==='/fixture-owner.mp4')return route.abort();
    }
    if(url.pathname.startsWith('/api/'))return route.fulfill({status:401,json:{error:'Local fixture only'}});
    return route.continue();
@@ -66,6 +78,20 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
    await page.goto(base+path);await page.waitForLoadState('networkidle');assert.deepEqual(await calls(),[]);
   }
   assert.equal(reads,before,'Previews and non-webinar pages never request tracking configuration');assert.deepEqual(errors,[]);
+  ownerFixture=true;
+  await page.goto(base+'/live/123456');
+  await page.getByRole('heading',{name:'Your membership is active.',exact:true}).waitFor();
+  await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView')&&window.__pixelCalls.some(c=>c[2]==='ViewContent'));
+  assert.equal(page.url(),base+'/live/123456');assert.equal(await page.locator('video').count(),1);
+  assert.equal((await tracks('AddToCart')).length,0,'Owner membership lookup does not fabricate cart engagement');
+  assert.equal((await tracks('Purchase')).length,0,'Watching again does not create another purchase');
+  await Promise.all([
+   page.waitForResponse(r=>r.url().endsWith('/api/webinar/event')&&r.request().postDataJSON()?.kind==='completed'),
+   page.locator('video').evaluate(video=>video.dispatchEvent(new Event('ended'))),
+  ]);
+  await page.getByText('You can keep watching this webinar.',{exact:true}).waitFor();
+  assert.equal(page.url(),base+'/live/123456','Owner remains on the public webinar after completion');
+  ownerFixture=false;
   checkoutFixture=true;
   await page.goto(base+'/webinar/checkout');
   const field=page.frameLocator('iframe[title="Fixture payment"]').getByPlaceholder('Fixture payment field');await field.waitFor();
@@ -76,6 +102,6 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   await field.click();await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='AddToCart'));
   assert.equal((await tracks('AddToCart')).length,1,'Real cross-origin iframe interaction reaches AddToCart');
   assert.equal((await tracks('Purchase')).length,0,'Entering the form never fabricates a purchase');assert.deepEqual(errors,[]);
-  console.log(`PASS ${name}: supplied Meta pixel, PageView, Standard/VIP cart and checkout, completion refresh, deduplicated payment/purchase, consent/revocation and preview exclusions. All Meta traffic intercepted.`);
+  console.log(`PASS ${name}: supplied Meta pixel, PageView, Standard/VIP cart and checkout, completion refresh, deduplicated payment/purchase, consent/revocation, owner public viewing through completion and preview exclusions. All Meta traffic intercepted.`);
  }finally{await context.close();}
 }

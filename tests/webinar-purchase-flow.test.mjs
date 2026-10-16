@@ -41,6 +41,22 @@ window.location.search='?membership=paid&upgrade=paid';purchase={offer:{revision
 const mp={onSignedIn:()=>{},onPurchased:()=>{}};member.render('MembershipCheckout',mp);await flush();tree=member.render('MembershipCheckout',mp);assert.ok(find(tree,'WebinarVipUpsell'));assert.equal(redirects.length,1,'Verified base purchase shows upsell instead of redirecting to video');purchase.membership.vip=true;await find(tree,'WebinarVipUpsell').props.onRefresh();tree=member.render('MembershipCheckout',mp);assert.ok(find(tree,'PostPurchaseSetup'),'Only verified VIP skips the VIP session');member.close();
 console.log('PASS purchase flow: unpaid checkout, two upgrade opportunities, guest continuity, verified VIP setup, draft fallback, payment protection, and no query-string access bypass.');
 
+// A paid owner remains in the public webinar without a second checkout or automatic welcome.
+for(const vipWebinar of [false,true])for(const alreadyVip of [false,true]){
+ const reads=[],cart=[],states=[];let opened=0;
+ window.location.search='';
+ const ownerCheckout=await harness('components/membership-checkout.tsx',{...common,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserEvent:(...args)=>cart.push(args),webinarRequest:async(url,init={})=>{
+  reads.push({url,init});return {offer:{revision:1,priceCents:5000},ready:true,mode:'live',needsClaim:false,postPurchaseUrl:'/live/123456',membership:{accessible:true,vip:alreadyVip}};
+ }});
+ const ownerProps={presentation:'webinar',stayOnWebinar:true,vipWebinar,onEngaged:()=>cart.push('engaged'),onSignedIn:()=>opened++,onPurchased:state=>states.push(state)};
+ ownerCheckout.render('MembershipCheckout',ownerProps);await flush();const ownerTree=ownerCheckout.render('MembershipCheckout',ownerProps);
+ assert.match(text(ownerTree),/You can keep watching/);assert.equal(find(ownerTree,'WebinarVipWelcome'),undefined);assert.equal(find(ownerTree,'WebinarVipUpsell'),undefined);
+ assert.equal(find(ownerTree,'StripeEmbeddedCheckout'),undefined);assert.ok(reads.every(r=>!r.init.method),'Existing membership cannot create another payment');
+ assert.deepEqual(cart,[],'Reading a paid membership is not cart engagement');assert.deepEqual(states,[alreadyVip?'vip':'standard']);assert.equal(opened,0);
+ button(ownerTree,'Open workspace').props.onClick();assert.equal(opened,1,'The explicit workspace button still works');ownerCheckout.close();
+}
+console.log('PASS owner paid checkout stays in the webinar with an explicit workspace action and no fabricated cart or charge.');
+
 const redirectMember=await harness('components/membership-checkout.tsx',{...common,safeVipSession,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserEvent:()=>{}});
 purchase.membership.vip=false;purchase.postPurchaseUrl='/live/123456';
 const purchaseStates=[],redirectProps={...mp,redirectToVip:true,webinarPhase:'watching',onPurchased:(state,url)=>purchaseStates.push([state,url])};
