@@ -18,10 +18,10 @@ export function serveCourseUpload(request,response){
 }
 export async function verifyCourse(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});const page=await context.newPage(),errors=[],writes=[];
- let signedIn=true,owner=false,vip=false,ready=true;
+ let signedIn=true,owner=false,unlocked=false,vip=false,ready=true;
  await context.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url());if(url.origin!==base)throw Error('Unexpected external request: '+url.origin);
-  if(url.pathname==='/api/course')return route.fulfill({status:signedIn?200:401,json:signedIn?{owner,canUpload:owner,vip,assets:{video:{ready,name:ready?'Course.webm':null,revision:ready?1:0},pdf:{ready,name:ready?'Course.pdf':null,revision:ready?1:0}}}:{error:'Sign in to watch your course.'}});
+  if(url.pathname==='/api/course')return route.fulfill({status:signedIn?200:401,json:signedIn?{owner,canUpload:owner&&unlocked,vip,assets:{video:{ready,name:ready?'Course.webm':null,revision:ready?1:0},pdf:{ready,name:ready?'Course.pdf':null,revision:ready?1:0}}}:{error:'Sign in to watch your course.'}});
   if(url.pathname==='/api/course/assets/video'){
    const range=req.headers().range;
    if(range){const match=/bytes=(\d+)-(\d*)/.exec(range),start=Number(match?.[1]??0),end=Math.min(Number(match?.[2]||courseVideo.length-1),courseVideo.length-1);return route.fulfill({status:206,headers:{'Content-Type':'video/webm','Accept-Ranges':'bytes','Content-Range':`bytes ${start}-${end}/${courseVideo.length}`},body:courseVideo.subarray(start,end+1)});}
@@ -52,12 +52,20 @@ export async function verifyCourse(browser,base,options,name){
   await practice.click();await page.getByRole('heading',{name:'One property. One clear next step.'}).waitFor();assert.equal(await page.getByLabel('Explore a step').inputValue(),'lead');
   await page.getByRole('link',{name:'Back to course',exact:true}).click();await page.getByRole('link',{name:'Download PDF',exact:true}).waitFor();assert.equal(writes.length,0);
   vip=true;await page.reload();await page.getByText('Included in your plan',{exact:true}).waitFor();assert.equal(await page.getByRole('link',{name:'Upgrade to VIP',exact:true}).count(),0);
-  vip=false;owner=true;ready=false;await page.reload();await page.getByText('Manage course files',{exact:true}).click();
+  vip=false;owner=true;ready=false;await page.reload();
+  const uploadPanel=page.getByRole('region',{name:'Manage course files',exact:true});
+  await uploadPanel.getByRole('link',{name:'Unlock owner uploads',exact:true}).waitFor();
+  assert.equal(await uploadPanel.getByRole('link',{name:'Unlock owner uploads',exact:true}).getAttribute('href'),'/dashboard-unlock?next=%2Fcourse');
+  assert.equal(await uploadPanel.locator('input[type=file]').count(),0,'Locked owner must unlock before selecting files');
+  unlocked=true;await page.reload();
+  await page.getByLabel('Choose video',{exact:true}).waitFor({state:'visible'});
+  assert((await uploadPanel.boundingBox()).y<(await page.locator('video').count()?await video.boundingBox():await page.getByRole('heading',{name:'Your iCash X walkthrough',exact:true}).boundingBox()).y,'Owner upload controls are above the course video');
+  assert.equal(await uploadPanel.locator('details').count(),0,'Upload controls are not hidden in a collapsed section');
   await page.getByLabel('Choose video',{exact:true}).setInputFiles({name:'Course.webm',mimeType:'video/webm',buffer:courseVideo});
   await page.getByRole('button',{name:'Upload & publish',exact:true}).first().click();await page.getByText('Published. Customers can now open this file.',{exact:true}).waitFor();assert.equal(writes[0].kind,'video');assert(courseUploadReceipts.some(r=>r.id.includes(encodeURIComponent(name+'-video'))&&r.body.equals(courseVideo)));assert(writes.some(w=>w.ticket==='fixture-ticket'));
   await page.getByLabel('Choose PDF',{exact:true}).setInputFiles({name:'Course.pdf',mimeType:'application/pdf',buffer:coursePdf});await page.getByRole('button',{name:'Upload & publish',exact:true}).nth(1).click();await page.waitForFunction(()=>[...document.querySelectorAll('[role="status"]')].filter(n=>n.textContent.includes('Published.')).length===2);
   assert(courseUploadReceipts.some(r=>r.id.includes(encodeURIComponent(name+'-pdf'))&&r.body.equals(coursePdf)));
   signedIn=false;await page.reload();await page.getByRole('heading',{name:'Welcome to your course'}).waitFor();assert.equal(await page.locator('video').count(),0);assert.equal(await page.getByText('Manage course files',{exact:true}).count(),0);
-  assert.deepEqual(errors,[]);console.log(`PASS ${name}: course playback, PDF download, ordered practice link, VIP entitlement, owner video/PDF uploads and signed-out privacy.`);
+  assert.deepEqual(errors,[]);console.log(`PASS ${name}: course playback, PDF download, ordered practice link, VIP entitlement, visible owner controls, locked upload entry, video/PDF uploads and signed-out privacy.`);
  }finally{await context.close();}
 }
