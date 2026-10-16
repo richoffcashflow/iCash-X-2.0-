@@ -28,13 +28,14 @@ export async function verifySupport(browser,base,options,name){
   await page.goto(base+'/preview/support');
   await page.getByRole('heading',{name:'How can we help?',exact:true}).waitFor();
   const chat=page.getByRole('region',{name:'Support conversation',exact:true});
-  assert.match(await chat.innerText(),/Automated support/);
+  assert.match(await chat.innerText(),/iCash Support/);
+  assert.doesNotMatch(await chat.innerText(),/Automated support|AI support|James/);
   const started=Date.now();await chat.getByRole('button',{name:'Send message',exact:true}).click();
   await chat.getByText('iCash Support is typing…',{exact:true}).waitFor();
   assert.equal(await chat.locator('.support-message-assistant').count(),0,'Fast replies wait briefly while typing is visible');
   await chat.locator('.support-message-assistant').waitFor();assert(Date.now()-started>=1600);
   assert.equal(await chat.locator('.support-message-user').count(),1);assert.equal(await chat.locator('.support-working').count(),0);
-  assert.match(await chat.innerText(),/The pause flag alone does not tell us why/);
+  assert.match(await chat.innerText(),/If you didn’t pause it/);
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Preview fits the viewport');
   await page.screenshot({path:`/tmp/icash-james-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
   await chat.getByRole('button',{name:'Close support',exact:true}).click();
@@ -45,7 +46,7 @@ export async function verifySupport(browser,base,options,name){
   await chat.getByText('iCash Support is typing…',{exact:true}).waitFor();
   await chat.getByRole('button',{name:'Close support',exact:true}).click();
   await page.getByRole('button',{name:'Open chat',exact:true}).click();
-  await chat.locator('.support-message-assistant').waitFor();assert.match(await chat.innerText(),/Do not make another payment/);
+  await chat.locator('.support-message-assistant').waitFor();assert.match(await chat.innerText(),/Please don’t pay again/);
   await chat.getByRole('button',{name:'Ask the team',exact:true}).click();
   await chat.getByText(/No real request has been sent/).waitFor();
   await page.getByRole('button',{name:'Interrupted connection',exact:true}).click();

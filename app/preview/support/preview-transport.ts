@@ -1,4 +1,5 @@
 import type {SupportTransport} from '@/lib/support-client';
+import {supportGreeting,supportCancellationReply,supportTeamReply,supportEvidenceReply} from '../../../lib/support-copy.ts';
 
 export const supportScenarios=[
  {id:'bot',label:'Bot paused',draft:'Why is my bot paused?'},
@@ -26,11 +27,12 @@ export function createSupportPreview(scenario:SupportScenario):SupportTransport{
   if(typeof input.message!=='string')return Response.json({error:'Write a message first.'},{status:400});
   add('user',input.message);receipts.set(input.requestId,input.message);
   const question=input.message.toLowerCase();
-  if(/human|person|team/.test(question))add('assistant','Choose “Ask the team” below to send them this conversation. Their reply will appear here.');
-  else if(/cancel|refund/.test(question))add('assistant','Open Chat options (•••), then Manage cancellation to review and confirm. Chat messages alone do not cancel anything. Ask the team for refunds or account deletion.');
-  else if(/pay|credit|charg/.test(question))add('assistant','A recorded paid payment has not yet been marked as credited. Ask the team to reconcile this recorded payment. Do not make another payment to replace missing credit.');
-  else if(/bot|pause|work/.test(question))add('assistant','Your bot is paused. New automated work is stopped; previously authorized work may still finish. The pause flag alone does not tell us why it was paused.\n\nOpen your workspace to review the pause. Resume only when you want new authorized work to run. If you did not pause it, ask the team before resuming.');
-  else add('assistant','Hi! How can we help with your bot, billing, or a property?');
+  const sample=(key:string,code:string)=>supportEvidenceReply({key,code,status:'attention',source:'preview',detail:'',observedAt:new Date().toISOString()});
+  if(/human|person|team/.test(question))add('assistant',supportTeamReply);
+  else if(/cancel|refund/.test(question))add('assistant',supportCancellationReply);
+  else if(/pay|credit|charg/.test(question))add('assistant',sample('payments','payment_uncredited'));
+  else if(/bot|pause|work/.test(question))add('assistant',sample('work','paused'));
+  else add('assistant',supportGreeting);
   if(scenario==='recovery'&&!interrupted){interrupted=true;throw Error('The connection was interrupted. Your draft is still here. Refresh status or retry the same message.');}
   return Response.json({threadId});
  };

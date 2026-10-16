@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
-import {supportNextStep} from './support-self-service.ts';
+import {supportGreeting,supportCancellationReply,supportTeamReply,supportUnavailableReply,supportEvidenceReply} from './support-copy.ts';
 export const supportId = z.string().uuid();
 export const supportTopics = ['work','billing','setup','cancel','human','general'] as const;
 export type SupportTopic = typeof supportTopics[number];
@@ -24,14 +24,14 @@ export function redactSupportQuestion(text:string){
  .replace(/\b\d[\d\s().+\-]{5,}\d\b/g,'[number removed]');
 }
 export function supportAnswer(topic:SupportTopic,evidence:SupportEvidence[],ai:boolean){
- if(topic==='general')return 'Hi! How can we help with your bot, billing, or a property?';
- if(topic==='cancel')return 'Open Chat options (•••), then Manage cancellation to review and confirm. Chat messages alone do not cancel anything. Ask the team for refunds or account deletion.';
- if(topic==='human')return 'Choose “Ask the team” below to send them this conversation. Their reply will appear here.';
- const wanted=topic==='billing'?['billing','payments','credits']:topic==='setup'?['readiness','work']:['work','credits','readiness','screening','voice'];
- const relevant=evidence.filter(e=>wanted.includes(e.key));
+ if(topic==='general')return supportGreeting;
+ if(topic==='cancel')return supportCancellationReply;
+ if(topic==='human')return supportTeamReply;
+ const wanted=topic==='billing'?['payments','subscription','credits','billing']:topic==='setup'?['readiness','work']:['work','readiness','credits','screening','voice'];
+ const relevant=wanted.flatMap(key=>evidence.filter(e=>e.key===key));
  const attention=relevant.filter(e=>e.status!=='ok');
- const details=(attention.length?attention:relevant).slice(0,2).map(e=>{const next=supportNextStep(e);return e.detail+(next?' '+next.text:'');}).join('\n\n');
- return details||'I couldn’t verify your account details just now. Try again, or choose “Ask the team” below.';
+ const details=[...new Set((attention.length?attention:relevant).slice(0,2).map(supportEvidenceReply))].join('\n\n');
+ return details||supportUnavailableReply;
 }
 export function hashCancelNonce(nonce:string){return createHash('sha256').update(nonce).digest('hex');}
 const cancelNonce=z.string().regex(/^[a-f0-9]{64}$/);

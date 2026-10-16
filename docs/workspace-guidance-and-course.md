@@ -21,3 +21,5 @@ The practice workspace is public, unindexed and entirely fictional. It starts wi
 Use local fixtures for next-action priorities, title/payment states, navigation focus and authenticated fulfillment reads. No paid provider simulations, calls, messages or signature requests are authorized for development testing.
 
 Course regressions cover member and owner access, scoped uploads, incomplete files, stale revisions, idempotent publication, storage grants and inert practice fixtures. Browser fixtures exercise playback, PDF downloads, owner uploads, course navigation and explicit VIP upgrade consent on desktop and phone layouts.
+
+Course upload controls are visible above the video for the verified platform owner on desktop and mobile. Locked owner sessions show Unlock owner uploads in the same place; customers do not see publishing controls. The video and PDF are still published only after the complete-file check.
