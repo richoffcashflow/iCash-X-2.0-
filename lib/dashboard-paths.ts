@@ -6,6 +6,6 @@ export function dashboardReturnPath(value:unknown){
   const u=new URL(value,'https://dashboard.invalid');
   const previewId=u.searchParams.get(u.pathname==='/webinar'?'preview':'webinar');
   const preview=(u.pathname==='/webinar'||u.pathname==='/webinar/checkout/preview')&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(previewId??'');
-  return u.origin==='https://dashboard.invalid'&&(dashboardPath(u.pathname)||preview||u.pathname==='/preview/workspace')?u.pathname+u.search:'/admin';
+  return u.origin==='https://dashboard.invalid'&&(dashboardPath(u.pathname)||preview||u.pathname==='/preview/workspace'||u.pathname==='/course')?u.pathname+u.search:'/admin';
  }catch{return '/admin';}
 }

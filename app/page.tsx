@@ -46,7 +46,7 @@ export default function Home(){
  const [fundingSuggestion,setFundingSuggestion]=useState<{amountCents:number;reason:string}|null>(null);
  const [assistantRequest,setAssistantRequest]=useState<AssistantRequest|null>(null),[propertyRequest,setPropertyRequest]=useState<{id:string;nonce:number}|null>(null);
  const [settingsOpen,setSettingsOpen]=useState(false),[preferencesOpen,setPreferencesOpen]=useState(false);
- const [courseOpen,setCourseOpen]=useState(false),[cancellationOpen,setCancellationOpen]=useState(false);
+ const [cancellationOpen,setCancellationOpen]=useState(false);
  const accountMenu=useRef<HTMLDetailsElement>(null);
  function closeAccountMenu(restoreFocus=false){const menu=accountMenu.current;if(!menu)return;menu.open=false;if(restoreFocus)menu.querySelector('summary')?.focus();}
  useEffect(()=>{
@@ -55,6 +55,7 @@ export default function Home(){
   document.addEventListener('pointerdown',dismiss);document.addEventListener('keydown',escape);
   return()=>{document.removeEventListener('pointerdown',dismiss);document.removeEventListener('keydown',escape);};
  },[]);
+ useEffect(()=>{if(!account?.signedIn||!account.workspaceAcknowledged||new URLSearchParams(window.location.search).get('upgrade')!=='vip')return;const url=new URL(window.location.href);if(url.searchParams.get('upgrade')==='vip'){setReviewVip(true);url.searchParams.delete('upgrade');window.history.replaceState(window.history.state,'',url.pathname+url.search+url.hash);}},[account?.signedIn,account?.workspaceAcknowledged]);
  const [campaign,setCampaign]=useState<OutreachCampaignStatus|null>(null);
  const refreshInFlight=useRef(false),accountGeneration=useRef(0),accountRequest=useRef<AbortController|null>(null),readinessRequest=useRef<AbortController|null>(null);
  const controlInFlight=useRef(false);
@@ -157,7 +158,7 @@ export default function Home(){
  if(account.workspaceAcknowledged!==true)return <main className="workspace-ack-shell"><span className="workspace-ack-brand">iCash X</span><WorkspaceAcknowledgment key={account.email} onAccepted={()=>refreshAccount(true,true)}/>{accountError&&<p role="alert">Your account could not refresh. <button onClick={()=>void refreshAccount(true)}>Retry</button></p>}<div className="workspace-ack-actions"><SupportLauncher onMembershipChanged={membershipChanged}/>{account.paused===false&&<button type="button" disabled={controlBusy} onClick={()=>void toggleBot('pause')}>{controlBusy?'Pausing…':'Pause bot'}</button>}<button type="button" onClick={()=>void signOut()}>Sign out</button>{account.billingModel==='membership_credits'&&<button type="button" onClick={()=>setCancellationOpen(true)}>Cancel subscription</button>}</div>{controlError&&<p role="alert">{controlError}</p>}{cancellationOpen&&<MembershipSettings cancellationOnly onClosed={()=>setCancellationOpen(false)} onChanged={membershipChanged}/>}</main>;
  return <div className={`console-shell personalized-workspace minimal-workspace assistant-workspace icash-brand-workspace ${styles.workspace}${displayVip&&!workspaceLocked?' '+styles.vip:''}`} style={{'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties}>
   <header className="console-header">
-   <button type="button" className="workspace-course-launcher" aria-haspopup="dialog" aria-expanded={courseOpen} onClick={()=>setCourseOpen(true)}><BookOpen size={17} aria-hidden="true"/>Course</button>
+   <a href="/course" className="workspace-course-launcher"><BookOpen size={17} aria-hidden="true"/>Course</a>
    <div className="workspace-header-links">
     {!workspaceLocked&&<WorkspaceUpdates onPreferences={()=>showDetails('notification-settings')} onBudget={()=>openFunding()}/>}
     <details ref={accountMenu} className="workspace-account-menu" onBlur={event=>{if(event.relatedTarget instanceof Node&&!event.currentTarget.contains(event.relatedTarget))closeAccountMenu();}}>
@@ -176,7 +177,6 @@ export default function Home(){
     </details>
    </div>
   </header>
-  {courseOpen&&<FundingDialog title="Course" onClose={()=>setCourseOpen(false)}><WorkspaceGuide expanded/>{account.isBillingOwner&&<a className="workspace-quiet" href="/preview/workspace?stage=lead" target="_blank" rel="noopener noreferrer">Open course workspace preview</a>}</FundingDialog>}
   {cancellationOpen&&<MembershipSettings cancellationOnly onClosed={()=>{setCancellationOpen(false);accountMenu.current?.querySelector('summary')?.focus();}} onChanged={membershipChanged}/>}
   <main className="console-main">
    {accountError&&<p role="alert">Could not load your account. <button onClick={()=>void refreshAccount()}>Retry</button></p>}
@@ -186,7 +186,7 @@ export default function Home(){
     {workspaceLocked?<section className="subscription-lock" aria-label="Restore access"><h1>Renew subscription</h1><p>Your workspace is locked. Your unused credits are saved.</p><MembershipSettings locked onChanged={membershipChanged}/><button className="workspace-quiet" onClick={()=>void refreshAccount()}>Check payment</button></section>:<>
     {controlError&&<p role="alert">{controlError}</p>}
     <BotRunBar hasLeads={leadPresence?.email===account.email?leadPresence?.hasLeads:undefined} botName={profile?.displayName||account.assistantName} vip={displayVip} onVip={displayVip&&!canSwitchPlan&&account.billingModel==='membership_credits'?()=>setReviewVip(true):undefined} running={botRunning} paymentRequired={account.billingModel==='membership_credits'&&!account.membershipActive} stopped={account.paused===true&&(account.balanceCents??0)>0} busy={controlBusy} stale={accountError} balanceCents={guest?undefined:account.balanceCents} hasCreditHistory={account.hasCreditHistory} canPause={account.paused===false&&((account.balanceCents??0)>0||account.billingActive===true)} principalKey={account.email} onBudget={()=>openFunding()} onPause={()=>void toggleBot('pause')} onResume={()=>void toggleBot('resume')}/>
-    <WorkspaceConversion key={account.email??'account'} principal={account.email??''} balanceCents={account.balanceCents} paused={account.paused} stale={accountError||!!account.billingReview} attentionPending={attentionPending} hidden={customizeOpen||fundingOpen||settingsOpen||preferencesOpen||courseOpen||cancellationOpen||reviewVip||needsIdentity||needsBotName||new URLSearchParams(typeof window==='undefined'?'':window.location.search).get('payment')==='funded'} busy={controlBusy} onFunding={(amountCents,reason)=>openFunding('',{amountCents,reason})} onResume={()=>void toggleBot('resume')} onVip={()=>setReviewVip(true)} onWork={openNextWork}/>
+    <WorkspaceConversion key={account.email??'account'} principal={account.email??''} balanceCents={account.balanceCents} paused={account.paused} stale={accountError||!!account.billingReview} attentionPending={attentionPending} hidden={customizeOpen||fundingOpen||settingsOpen||preferencesOpen||cancellationOpen||reviewVip||needsIdentity||needsBotName||new URLSearchParams(typeof window==='undefined'?'':window.location.search).get('payment')==='funded'} busy={controlBusy} onFunding={(amountCents,reason)=>openFunding('',{amountCents,reason})} onResume={()=>void toggleBot('resume')} onVip={()=>setReviewVip(true)} onWork={openNextWork}/>
     <div className={styles.activity}><BudgetSummary key={`${account.email}:${displayVip}`} vip={displayVip}/></div>
     <WorkspaceGuide/>
     {fundingOpen&&<FundingDialog title={guest||account.billingModel==='membership_credits'&&!account.membershipActive?'iCash X 2.0':returningWithoutCredits?'Out of credits':creditsExhausted?'Start your bot':'Add money'} onClose={closeFunding}>{guest||account.billingModel==='membership_credits'&&!account.membershipActive?<MembershipCheckout onSignedIn={()=>{closeFunding();void refreshAccount(true);}}/>:<FundingCheckout initialAmountCents={fundingSuggestion?.amountCents} reason={fundingSuggestion?.reason} outOfCredits={returningWithoutCredits} initialCode={fundingCode||undefined} onSignedIn={()=>{closeFunding();void refreshAccount(true);}}/>}</FundingDialog>}
