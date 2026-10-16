@@ -1,6 +1,7 @@
 import {db} from '@/lib/stripe-test';
 import {settingsSchema,type WebinarSettings} from '@/lib/webinar-policy';
 import {metaPurchasePayload,type MetaIdentity,type MetaPurchase} from '@/lib/webinar-meta-policy';
+import {measurementSince} from '@/lib/webinar-measurement-policy';
 export function metaReady(){return !!process.env.ICASH_META_ACCESS_TOKEN&&/^v\d+\.\d+$/.test(process.env.ICASH_META_GRAPH_VERSION||'')&&!!process.env.ICASH_APP_ORIGIN;}
 export async function webinarSettings(){const [row]=await db<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config');return settingsSchema.parse(row.config);}
 export async function processWebinarMeta(){
@@ -13,7 +14,8 @@ export async function processWebinarMeta(){
   const filter=`icash_webinar_meta_events?event_id=eq.${encodeURIComponent(job.event_id)}`;
   try{
    const [[v],latest,[current],reviews]=await Promise.all([db<MetaIdentity[]>(`icash_webinar_visitors?id=eq.${job.visitor_id}&select=email,marketing_consent_at,measurement`),webinarSettings(),db<{state:string}[]>(`${filter}&select=state`),db<unknown[]>(`icash_billing_reviews?payment_id=eq.${encodeURIComponent(job.payment_id)}&select=payment_id&limit=1`)]);
-   if(!v?.marketing_consent_at||!latest.meta.enabled||current?.state!=='sending'||reviews.length){
+   const since=v?measurementSince(v):null;
+   if(!since||Date.parse(since)>Date.parse(job.occurred_at)||!latest.meta.enabled||current?.state!=='sending'||reviews.length){
     await db(filter,'PATCH',{state:'canceled',payload:null});continue;
    }
    const payload=job.payload??metaPurchasePayload(job,v,process.env.ICASH_APP_ORIGIN!);

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {newWebinar,publicWebinar} from '../lib/webinar-policy.ts';
 export async function verifyWebinarMeasurement(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
- let consent=false,scriptLoads=0,reads=0,upgraded=false,checkoutFixture=false,ownerFixture=false;
+ let explicit=false,optedOut=false,regionAllowed=true,scriptLoads=0,reads=0,upgraded=false,checkoutFixture=false,ownerFixture=false;
  const errors=[],pixelId='1104248230721457';
  try{
   await context.addInitScript(()=>{if(window.top!==window)return;sessionStorage.setItem('icash-webinar-session','fixture-webinar');window.__pixelCalls=[];});
@@ -15,10 +15,16 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
    if(url.origin!==base)return route.abort();
    if(checkoutFixture&&url.pathname==='/api/billing/membership')return route.fulfill({json:route.request().method()==='POST'?{clientSecret:'fixture-secret',publishableKey:'pk_live_fixture',sessionId:'cs_live_browser'}:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',embeddedReady:true,needsClaim:false,membership:null}});
    if(url.pathname==='/api/webinar/measurement'){
-    reads++;if(route.request().method()==='POST'){consent=route.request().postDataJSON().allow;return route.fulfill({json:{consent}});}
+    reads++;
+    if(route.request().method()==='POST'){
+     const body=route.request().postDataJSON();
+     if(body.action==='automatic'){if(body.optedOut)optedOut=true;}
+     else if(body.allow!==undefined){explicit=body.allow;optedOut=!body.allow;}
+    }
+    const trackingAllowed=!optedOut&&(regionAllowed||explicit);
     if(checkoutFixture)await new Promise(resolve=>setTimeout(resolve,600));
     const events=['pi_fixture',...(upgraded?['pi_vip']:[])].flatMap(id=>[{eventName:'AddPaymentInfo',eventId:'webinar:payment-info:'+id,data:{value:50,currency:'USD'}},{eventName:'Purchase',eventId:'webinar:purchase:'+id,data:{value:50,currency:'USD'}}]);
-    return route.fulfill({json:{enabled:true,pixelId,consent,events:consent?events:[]}});
+    return route.fulfill({json:{enabled:true,pixelId,trackingAllowed,consent:explicit&&!optedOut,events:trackingAllowed?events:[]}});
    }
    if(ownerFixture){
     if(url.pathname==='/api/webinar/start')return route.fulfill({json:{sessionId:'00000000-0000-4000-8000-000000000456',webinar:publicWebinar({...newWebinar('00000000-0000-4000-8000-000000000123'),title:'Owner public webinar',status:'published',publicCode:'123456',videoUrl:base+'/fixture-owner.mp4',showAudienceCount:false,offers:[{id:'primary',at:0,title:'Join iCash X',description:'',ctaLabel:'Continue',action:'checkout',url:'',expiresAt:null}]}),progress:0,name:'Owner',contactSaved:true,messages:[],preview:false,ownerWatching:true,serverNow:Date.now()}});
@@ -38,10 +44,10 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   const calls=()=>page.evaluate(()=>window.__pixelCalls);
   const tracks=async event=>(await calls()).filter(c=>c[0]==='trackSingle'&&c[2]===event);
   await page.goto(base+'/live/123456');
-  await page.getByRole('button',{name:'Allow measurement',exact:true}).waitFor();
-  assert.equal(scriptLoads,0,'No Meta script before consent');
-  await page.getByRole('button',{name:'Allow measurement',exact:true}).click();
   await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView'));
+  assert.equal(await page.getByRole('region',{name:'Ad measurement preference'}).count(),0,'No automatic permission pop-up');
+  assert.equal(await page.getByRole('button',{name:'Allow measurement',exact:true}).count(),0);
+  assert.equal(await page.evaluate(()=>localStorage.getItem('wb-meta-choice')),null,'Automatic tracking never invents a saved permission');
   assert.equal(scriptLoads,1);assert.equal((await calls()).filter(c=>c[0]==='init'&&c[1]===pixelId).length,1);
   assert.equal((await tracks('PageView')).length,1);assert.equal((await tracks('ViewContent')).length,1);assert.equal((await tracks('Purchase')).length,1);
   assert.equal((await tracks('AddPaymentInfo')).length,1);
@@ -58,23 +64,29 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   assert.equal((await tracks('AddPaymentInfo')).length,2);
   const firstView=(await tracks('PageView'))[0][4].eventID;
   for(let n=0;n<3;n++)await page.evaluate(()=>window.dispatchEvent(new CustomEvent('icash-webinar-ready',{detail:{sessionId:'fixture-webinar'}})));
-  await page.waitForFunction(()=>window.fbq!==undefined);await page.getByRole('button',{name:'Ad privacy',exact:true}).click();
+  await page.waitForFunction(()=>window.fbq!==undefined);
   assert.equal((await tracks('PageView')).length,1,'Repeated session refresh does not duplicate a page view');
   assert.equal((await tracks('Purchase')).length,2,'Purchase IDs remain deduplicated');
-  await page.getByRole('button',{name:'No thanks',exact:true}).click();
+  const privacy=await context.newPage();privacy.on('pageerror',e=>errors.push(e.message));
+  await privacy.goto(base+'/webinar/privacy#advertising');
+  await privacy.getByRole('button',{name:'Turn off ad measurement',exact:true}).click();
+  await privacy.getByText('Ad measurement is off. Your webinar access stays the same.',{exact:true}).waitFor();
   await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[0]==='consent'&&c[1]==='revoke'));
+  assert.deepEqual(await privacy.evaluate(()=>window.__pixelCalls),[],'Opening privacy settings never sends ad events');
   const beforeOptOut=(await tracks('AddToCart')).length;
   await page.evaluate(()=>window.dispatchEvent(new CustomEvent('icash-webinar-track',{detail:{sessionId:'another',kind:'add_to_cart',commerce:{product:'membership'}}})));
   assert.equal((await tracks('AddToCart')).length,beforeOptOut,'Opt-out suppresses checkout stages too');
-  await page.reload();await page.getByRole('button',{name:'Ad privacy',exact:true}).waitFor();
+  await page.reload();await page.getByRole('link',{name:'Ad privacy',exact:true}).waitFor();
   assert.deepEqual(await calls(),[],'Declined measurement stays off on reload');assert.equal(scriptLoads,1);
-  await page.getByRole('button',{name:'Ad privacy',exact:true}).click();await page.getByRole('button',{name:'Allow measurement',exact:true}).click();
+  await privacy.getByRole('button',{name:'Allow ad measurement',exact:true}).click();
+  await privacy.getByText('Ad measurement is on.',{exact:true}).waitFor();
   await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView'));
   assert.notEqual((await tracks('PageView'))[0][4].eventID,firstView,'A real reload has a new PageView');assert.equal((await tracks('Purchase')).length,0,'Reload cannot resend a settled purchase');
+  await privacy.close();
   await page.goto(base+'/live/123457');await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView'));
   assert.equal((await tracks('PageView')).length,1,'VIP uses the shared pixel integration');
   const before=reads;
-  for(const path of ['/webinar?preview=00000000-0000-4000-8000-000000000123','/webinar/privacy','/preview/workspace']){
+  for(const path of ['/webinar?preview=00000000-0000-4000-8000-000000000123','/preview/workspace']){
    await page.goto(base+path);await page.waitForLoadState('networkidle');assert.deepEqual(await calls(),[]);
   }
   assert.equal(reads,before,'Previews and non-webinar pages never request tracking configuration');assert.deepEqual(errors,[]);
@@ -102,6 +114,17 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   await field.click();await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='AddToCart'));
   assert.equal((await tracks('AddToCart')).length,1,'Real cross-origin iframe interaction reaches AddToCart');
   assert.equal((await tracks('Purchase')).length,0,'Entering the form never fabricates a purchase');assert.deepEqual(errors,[]);
-  console.log(`PASS ${name}: supplied Meta pixel, PageView, Standard/VIP cart and checkout, completion refresh, deduplicated payment/purchase, consent/revocation, owner public viewing through completion and preview exclusions. All Meta traffic intercepted.`);
+  checkoutFixture=false;regionAllowed=false;explicit=false;optedOut=false;
+  await page.evaluate(()=>localStorage.removeItem('wb-meta-choice'));
+  const beforeRestricted=scriptLoads;
+  await page.goto(base+'/live/123456');await page.getByRole('link',{name:'Ad privacy',exact:true}).waitFor();
+  assert.deepEqual(await calls(),[]);assert.equal(scriptLoads,beforeRestricted,'Non-US or unknown geography stays untracked without a prompt');
+  assert.equal(await page.getByRole('button',{name:'Allow measurement',exact:true}).count(),0);
+  regionAllowed=true;
+  await page.addInitScript(()=>Object.defineProperty(navigator,'globalPrivacyControl',{get:()=>true,configurable:true}));
+  await page.reload();await page.getByRole('link',{name:'Ad privacy',exact:true}).waitFor();
+  assert.deepEqual(await calls(),[]);assert.equal(scriptLoads,beforeRestricted,'GPC blocks automatic pixel loading');
+  assert.equal(optedOut,true,'Browser GPC is sent to the server to cancel queued measurement');
+  console.log(`PASS ${name}: supplied Meta pixel, PageView, Standard/VIP cart and checkout, completion refresh, deduplicated payment/purchase, automatic U.S. entry without a prompt, cross-tab opt-out, GPC/geography, owner public viewing through completion and preview exclusions. All Meta traffic intercepted.`);
  }finally{await context.close();}
 }
