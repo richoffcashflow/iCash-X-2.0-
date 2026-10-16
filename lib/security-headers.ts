@@ -23,3 +23,8 @@ export const securityHeaders=[
  {key:'Referrer-Policy',value:'strict-origin-when-cross-origin'},
  {key:'Permissions-Policy',value:'camera=(), microphone=(self), geolocation=(), payment=(self "https://js.stripe.com" "https://checkout.stripe.com" "https://hooks.stripe.com")'},
 ];
+// Meta's event setup tool boots through this exact script URL. Keep the
+// allowance on public webinar pages; workspace and owner protections stay on.
+export const webinarSecurityHeaders=securityHeaders.map(header=>header.key==='Content-Security-Policy'?{
+ ...header,value:header.value.replace("script-src 'self'", "script-src 'self' https://www.facebook.com/signals/iwl.js")
+}:header);

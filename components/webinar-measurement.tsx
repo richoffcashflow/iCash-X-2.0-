@@ -1,54 +1,63 @@
 'use client';
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useRef} from 'react';
 import {usePathname} from 'next/navigation';
 import {dashboardPath} from '@/lib/dashboard-paths';
 import type {WebinarCommerce} from '@/lib/webinar-browser-events';
 import {measurementPolicyVersion} from '@/lib/webinar-measurement-policy';
+import type {WebinarPixelRuntime} from '@/lib/webinar-pixel';
 type Pixel=((...args:unknown[])=>void)&{queue:unknown[][];callMethod?:(...args:unknown[])=>void;loaded:boolean;version:string;push?:Pixel};
-type PixelWindow=Window&{fbq?:Pixel;_fbq?:Pixel};
+type PixelWindow=Window&{fbq?:Pixel;_fbq?:Pixel;icashWebinarPixel?:WebinarPixelRuntime};
 type MetaEvent={eventName:string;eventId:string;data:Record<string,unknown>};
 type Measurement={enabled:boolean;pixelId?:string;trackingAllowed?:boolean;consent?:boolean;events?:MetaEvent[]};
 const webinarPage=(path:string)=>path==='/webinar'||/^\/live\/\d{6,12}\/?$/.test(path)||path==='/webinar/checkout'||path==='/webinar/upgrade';
 const measurementPage=()=>webinarPage(location.pathname)&&!new URLSearchParams(location.search).has('preview');
 function pixel(id:string){
  const w=window as PixelWindow;
+ if(w.icashWebinarPixel?.pixelId===id&&w.fbq)return w.fbq;
  if(!w.fbq){const f=((...args:unknown[])=>{if(f.callMethod)f.callMethod(...args);else f.queue.push(args);}) as Pixel;f.queue=[];f.loaded=true;f.version='2.0';f.push=f;w.fbq=f;w._fbq=f;
   const script=document.createElement('script');script.async=true;script.src='https://connect.facebook.net/en_US/fbevents.js';document.head.appendChild(script);
  }
- w.fbq('set','autoConfig',false,id);w.fbq('init',id);return w.fbq;
+ w.fbq('set','autoConfig',false,id);w.fbq('init',id);if(w.icashWebinarPixel)w.icashWebinarPixel.pixelId=id;return w.fbq;
 }
 const storage={get(key:string){try{return localStorage.getItem(key);}catch{return null;}},set(key:string,value:string){try{localStorage.setItem(key,value);}catch{/* Optional measurement. */}}};
 export function WebinarMeasurement(){
  const pathname=usePathname(),privatePage=dashboardPath(pathname)||pathname==='/dashboard-unlock'||!webinarPage(pathname);
- const [config,setConfig]=useState<Measurement|null>(null);
  const current=useRef<Measurement|null>(null),session=useRef(''),initialized=useRef(''),sent=useRef(new Set<string>()),refreshVersion=useRef(0),pageView=useRef({path:'',id:''});
  const pendingStages=useRef<MetaEvent[]>([]);
  const gpc=()=>!!(navigator as Navigator&{globalPrivacyControl?:boolean}).globalPrivacyControl;
  function emit(event:MetaEvent){
   if(!measurementPage())return;
-  const c=current.current;if(!c?.enabled||!c.trackingAllowed||!c.pixelId||gpc()||sent.current.has(event.eventId)||storage.get('wb-meta:'+event.eventId))return;
+  const c=current.current;if(!c?.enabled||!c.trackingAllowed||!c.pixelId||gpc()||storage.get('wb-meta-choice')==='deny'||sent.current.has(event.eventId)||storage.get('wb-meta:'+event.eventId))return;
+  if(event.eventName==='PageView'&&(window as PixelWindow).icashWebinarPixel?.sentPageView===event.eventId)return;
   if(initialized.current!==c.pixelId){pixel(c.pixelId);initialized.current=c.pixelId;}
   const f=(window as PixelWindow).fbq;if(!f)return;f('consent','grant');
   f(event.eventName==='WebinarOfferOpened'?'trackSingleCustom':'trackSingle',c.pixelId,event.eventName,event.data,{eventID:event.eventId});sent.current.add(event.eventId);storage.set('wb-meta:'+event.eventId,'1');
+  if(event.eventName==='PageView'){const boot=(window as PixelWindow).icashWebinarPixel;if(boot)boot.sentPageView=event.eventId;}
  }
- async function refresh(timeoutMs=8000){
+ async function refresh(timeoutMs=8000,forcePage=false){
   if(!measurementPage())return;
-  if(!session.current)return;
   const version=++refreshVersion.current;
   const optedOut=storage.get('wb-meta-choice')==='deny'||gpc();
   if(optedOut){if(current.current)current.current={...current.current,trackingAllowed:false};(window as PixelWindow).fbq?.('consent','revoke');pendingStages.current=[];}
   const cookie=(key:string)=>document.cookie.split('; ').find(c=>c.startsWith(key+'='))?.slice(key.length+1);
   const identifiers=current.current?.trackingAllowed?{fbp:cookie('_fbp'),fbc:cookie('_fbc')}:{};
-  try{const res=await fetch('/api/webinar/measurement',{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',signal:AbortSignal.timeout(timeoutMs),body:JSON.stringify({action:'automatic',version:measurementPolicyVersion,optedOut,...identifiers,fbclid:new URLSearchParams(location.search).get('fbclid')||undefined})});if(!res.ok)return;const next=await res.json() as Measurement;if(version!==refreshVersion.current)return;current.current=next;setConfig(next);
-   if(next.trackingAllowed){emit({eventName:'PageView',eventId:pageView.current.id,data:{}});emit({eventName:'ViewContent',eventId:`webinar:${session.current}:view`,data:{content_type:'product',content_ids:['icash-webinar']}});}
+  try{
+   let next:Measurement|null;
+   if(!session.current){next=await (window as PixelWindow).icashWebinarPixel?.start(forcePage)??null;}
+   else{const res=await fetch('/api/webinar/measurement',{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',signal:AbortSignal.timeout(timeoutMs),body:JSON.stringify({action:'automatic',version:measurementPolicyVersion,optedOut,...identifiers,fbclid:new URLSearchParams(location.search).get('fbclid')||undefined})});if(!res.ok)return;next=await res.json() as Measurement;}
+   if(version!==refreshVersion.current||!next)return;current.current=next;
+   if(next.trackingAllowed){emit({eventName:'PageView',eventId:pageView.current.id,data:{}});if(session.current)emit({eventName:'ViewContent',eventId:`webinar:${session.current}:view`,data:{content_type:'product',content_ids:['icash-webinar']}});}
+   else (window as PixelWindow).fbq?.('consent','revoke');
    for(const event of next.events??[])emit(event);
    for(const event of pendingStages.current.splice(0))emit(event);
   }catch{/* Playback is independent of measurement. */}
  }
  useEffect(()=>{
-  refreshVersion.current++;current.current=null;pendingStages.current=[];setConfig(null);
+  refreshVersion.current++;current.current=null;pendingStages.current=[];session.current='';
   if(pageView.current.path!==pathname)pageView.current={path:pathname,id:privatePage?'':`webinar:page:${crypto.randomUUID()}`};
   if(privatePage||!measurementPage())return;
+  const boot=(window as PixelWindow).icashWebinarPixel;void boot?.start();
+  if(boot?.path===pathname)pageView.current={path:pathname,id:boot.pageViewId};
   try{session.current=sessionStorage.getItem('icash-webinar-session')||'';}catch{/* Optional measurement. */}
   const ready=(event:Event)=>{session.current=(event as CustomEvent<{sessionId:string}>).detail.sessionId;void refresh();};
   const track=(event:Event)=>{
@@ -63,7 +72,7 @@ export function WebinarMeasurement(){
    emit(stage);
   };
   const paid=(event:Event)=>{if(!gpc())(event as CustomEvent<{waitUntil:(promise:Promise<void>)=>void}>).detail.waitUntil(refresh(1800));};
-  const privacy=(event:StorageEvent)=>{if(event.key==='wb-meta-choice')void refresh();};
+  const privacy=(event:StorageEvent)=>{if(event.key==='wb-meta-choice')void refresh(8000,true);};
   window.addEventListener('storage',privacy);
   window.addEventListener('icash-webinar-ready',ready);window.addEventListener('icash-webinar-track',track);window.addEventListener('icash-webinar-payment-confirmed',paid);void refresh();
   const returned=new URLSearchParams(location.search).has('session_id');let tries=0;
@@ -72,6 +81,5 @@ export function WebinarMeasurement(){
  // The listeners read current configuration through refs, including consent changes.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[privatePage,pathname]);
- if(privatePage||!config?.enabled||!measurementPage())return null;
- return <a href="/webinar/privacy#advertising" target="_blank" rel="noopener noreferrer" className="webinar-measurement" style={{position:'fixed',left:12,bottom:12,zIndex:60,borderRadius:12,padding:'6px 9px',background:'#fff',border:'1px solid #e0e0e0',fontFamily:'Arial,sans-serif',fontSize:11,color:'#262626'}}>Ad privacy</a>;
+ return null;
 }

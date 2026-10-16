@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
-import {securityHeaders} from './lib/security-headers';
+import {securityHeaders,webinarSecurityHeaders} from './lib/security-headers';
 const nextConfig: NextConfig = {
-  async headers(){return [{source:'/:path*',headers:securityHeaders},{source:'/next/:path*',headers:[{key:'Referrer-Policy',value:'no-referrer'},{key:'X-Robots-Tag',value:'noindex, nofollow'},{key:'Cache-Control',value:'private, no-store'}]},{source:'/dashboard-unlock',headers:[{key:'Cache-Control',value:'private, no-store'},{key:'Referrer-Policy',value:'no-referrer'},{key:'X-Robots-Tag',value:'noindex, nofollow'}]}];},
+  async headers(){return [{source:'/:path*',headers:securityHeaders},...['/live/:webinarCode','/webinar','/webinar/checkout','/webinar/upgrade'].map(source=>({source,headers:webinarSecurityHeaders})),{source:'/next/:path*',headers:[{key:'Referrer-Policy',value:'no-referrer'},{key:'X-Robots-Tag',value:'noindex, nofollow'},{key:'Cache-Control',value:'private, no-store'}]},{source:'/dashboard-unlock',headers:[{key:'Cache-Control',value:'private, no-store'},{key:'Referrer-Policy',value:'no-referrer'},{key:'X-Robots-Tag',value:'noindex, nofollow'}]}];},
   async rewrites() {
     return {
       beforeFiles: [{

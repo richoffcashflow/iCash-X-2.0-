@@ -13,3 +13,9 @@ export function automaticMeasurementEligible(headers:Headers){
  // Vercel overwrites its geolocation headers. Request parameters cannot opt in.
  return process.env.VERCEL==='1'&&headers.get('x-vercel-ip-country')==='US';
 }
+/** A page visit can load the pixel before a webinar session exists. */
+export function pageMeasurementAllowed(identity:MeasurementIdentity|null,headers:Headers){
+ if(headers.get('sec-gpc')==='1'||identity?.measurement?.opt_out_at)return false;
+ const consent=identity?.marketing_consent_at;
+ return !!consent&&Number.isFinite(Date.parse(consent))||automaticMeasurementEligible(headers);
+}

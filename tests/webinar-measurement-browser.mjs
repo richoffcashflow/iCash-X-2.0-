@@ -5,14 +5,16 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
  let explicit=false,optedOut=false,regionAllowed=true,scriptLoads=0,reads=0,upgraded=false,checkoutFixture=false,ownerFixture=false;
  const errors=[],pixelId='1104248230721457';
  try{
-  await context.addInitScript(()=>{if(window.top!==window)return;sessionStorage.setItem('icash-webinar-session','fixture-webinar');window.__pixelCalls=[];});
+  await context.addInitScript(()=>{if(window.top!==window)return;window.__pixelCalls=[];});
   await context.route('**/*',async route=>{
    const url=new URL(route.request().url());
    if(url.href==='https://connect.facebook.net/en_US/fbevents.js'){
     scriptLoads++;return route.fulfill({contentType:'application/javascript',body:'window.__pixelCalls.push(...window.fbq.queue);window.fbq.callMethod=(...args)=>window.__pixelCalls.push(args);'});
    }
+   if(url.origin==='https://www.facebook.com'&&url.pathname==='/signals/iwl.js')return route.fulfill({contentType:'application/javascript',body:'window.__metaSetupLoaded=true;'});
    if(checkoutFixture&&url.href==='https://js.stripe.com/endive/stripe.js')return route.fulfill({contentType:'application/javascript',body:`window.Stripe=()=>({createEmbeddedCheckoutPage:async options=>({mount:node=>{const frame=document.createElement('iframe');frame.title='Fixture payment';frame.sandbox='allow-scripts';frame.srcdoc='<input placeholder="Fixture payment field">';node.appendChild(frame);window.__completeCheckout=options.onComplete;},destroy:()=>{}})});`});
    if(url.origin!==base)return route.abort();
+   if(url.pathname==='/api/webinar/pixel')return route.fulfill({json:{enabled:true,pixelId,trackingAllowed:!optedOut&&(regionAllowed||explicit)}});
    if(checkoutFixture&&url.pathname==='/api/billing/membership')return route.fulfill({json:route.request().method()==='POST'?{clientSecret:'fixture-secret',publishableKey:'pk_live_fixture',sessionId:'cs_live_browser'}:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',embeddedReady:true,needsClaim:false,membership:null}});
    if(url.pathname==='/api/webinar/measurement'){
     reads++;
@@ -45,6 +47,16 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   const tracks=async event=>(await calls()).filter(c=>c[0]==='trackSingle'&&c[2]===event);
   await page.goto(base+'/live/123456');
   await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView'));
+  assert.equal(await page.locator('head script#icash-webinar-pixel').count(),1,'Base pixel is installed in the page head');
+  assert.equal(await page.getByRole('link',{name:'Ad privacy',exact:true}).count(),0,'No floating privacy button');
+  assert.equal(await page.evaluate(()=>sessionStorage.getItem('icash-webinar-session')),null);
+  assert.equal(reads,0,'Page pixel does not wait for a webinar session or purchase lookup');
+  assert.equal((await tracks('ViewContent')).length,0,'Loading the page alone does not invent a webinar session');
+  assert.equal((await tracks('Purchase')).length,0);
+  await page.evaluate(()=>new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='https://www.facebook.com/signals/iwl.js?pixel_id=1104248230721457';script.onload=resolve;script.onerror=reject;document.head.appendChild(script);}));
+  assert.equal(await page.evaluate(()=>window.__metaSetupLoaded),true,'CSP permits Meta’s event setup bootstrap');
+  await page.evaluate(()=>{sessionStorage.setItem('icash-webinar-session','fixture-webinar');window.dispatchEvent(new CustomEvent('icash-webinar-ready',{detail:{sessionId:'fixture-webinar'}}));});
+  await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='Purchase'));
   assert.equal(await page.getByRole('region',{name:'Ad measurement preference'}).count(),0,'No automatic permission pop-up');
   assert.equal(await page.getByRole('button',{name:'Allow measurement',exact:true}).count(),0);
   assert.equal(await page.evaluate(()=>localStorage.getItem('wb-meta-choice')),null,'Automatic tracking never invents a saved permission');
@@ -76,7 +88,7 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   const beforeOptOut=(await tracks('AddToCart')).length;
   await page.evaluate(()=>window.dispatchEvent(new CustomEvent('icash-webinar-track',{detail:{sessionId:'another',kind:'add_to_cart',commerce:{product:'membership'}}})));
   assert.equal((await tracks('AddToCart')).length,beforeOptOut,'Opt-out suppresses checkout stages too');
-  await page.reload();await page.getByRole('link',{name:'Ad privacy',exact:true}).waitFor();
+  await page.reload();await page.waitForLoadState('networkidle');
   assert.deepEqual(await calls(),[],'Declined measurement stays off on reload');assert.equal(scriptLoads,1);
   await privacy.getByRole('button',{name:'Allow ad measurement',exact:true}).click();
   await privacy.getByText('Ad measurement is on.',{exact:true}).waitFor();
@@ -117,14 +129,14 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   checkoutFixture=false;regionAllowed=false;explicit=false;optedOut=false;
   await page.evaluate(()=>localStorage.removeItem('wb-meta-choice'));
   const beforeRestricted=scriptLoads;
-  await page.goto(base+'/live/123456');await page.getByRole('link',{name:'Ad privacy',exact:true}).waitFor();
+  await page.goto(base+'/live/123456');await page.waitForLoadState('networkidle');
   assert.deepEqual(await calls(),[]);assert.equal(scriptLoads,beforeRestricted,'Non-US or unknown geography stays untracked without a prompt');
   assert.equal(await page.getByRole('button',{name:'Allow measurement',exact:true}).count(),0);
   regionAllowed=true;
   await page.addInitScript(()=>Object.defineProperty(navigator,'globalPrivacyControl',{get:()=>true,configurable:true}));
-  await page.reload();await page.getByRole('link',{name:'Ad privacy',exact:true}).waitFor();
+  await page.reload();await page.waitForLoadState('networkidle');
   assert.deepEqual(await calls(),[]);assert.equal(scriptLoads,beforeRestricted,'GPC blocks automatic pixel loading');
   assert.equal(optedOut,true,'Browser GPC is sent to the server to cancel queued measurement');
-  console.log(`PASS ${name}: supplied Meta pixel, PageView, Standard/VIP cart and checkout, completion refresh, deduplicated payment/purchase, automatic U.S. entry without a prompt, cross-tab opt-out, GPC/geography, owner public viewing through completion and preview exclusions. All Meta traffic intercepted.`);
+  console.log(`PASS ${name}: page-head Meta pixel before session startup, setup-tool script allowed, no floating button, PageView deduplication, Standard/VIP cart and checkout, verified receipt refresh, opt-outs/GPC/geography, owner viewing and private/preview exclusions. All Meta traffic intercepted.`);
  }finally{await context.close();}
 }
