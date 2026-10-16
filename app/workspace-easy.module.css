@@ -365,6 +365,12 @@
 .workspace.workspace.workspace :global(.assistant-vip-label){display:inline-flex;align-items:center;gap:4px;flex:none;padding:4px 6px;border:1px solid #dec48b;border-radius:6px;background:#faf0d6;color:#74541d;font-size:10px;line-height:1;font-weight:700}
 .workspace.workspace.workspace :global(.property-ask-bot){width:100%;min-width:0;flex-wrap:nowrap;justify-content:flex-start;text-align:left;line-height:1.4}
 .workspace.workspace.workspace :global(.property-ask-label){flex:1;min-width:0;overflow-wrap:anywhere}
+.workspace.workspace.workspace :global(.property-assistant-action){margin:0 16px 15px}
+.workspace.workspace.workspace :global(.property-assistant-action .property-ask-bot){margin:0;padding:10px 13px;border:1px solid #d8d8d8;border-radius:9px;background:#fff;color:#171717;font-size:13px;font-weight:600}
+.workspace.workspace.workspace :global(.property-assistant-action .property-ask-bot[data-vip=true]){border-color:#d8bd80;background:#fcf5e4;color:#574018}
+.workspace.workspace.workspace :global(.property-assistant-action .property-ask-bot:hover:not(:disabled)){background:#f4f4f4}
+.workspace.workspace.workspace :global(.property-assistant-action .property-ask-bot[data-vip=true]:hover:not(:disabled)){background:#f6e8c6}
+.workspace.workspace.workspace :global(.property-assistant-action .property-ask-bot:focus-visible){outline:2px solid #74541d;outline-offset:3px}
 .workspace.workspace.workspace :global(.property-quick-actions button){min-width:0;flex:1 1 0;line-height:1.35;white-space:normal}
 .workspace.workspace.workspace :global(.seller-summary p){white-space:pre-wrap;overflow-wrap:anywhere}
 .workspace.workspace.workspace :global(.workspace-customize-button){display:flex;align-items:center;justify-content:center;gap:7px;min-height:44px;margin:-10px auto 18px;padding:9px 15px;border:1px solid #e6e6e6;border-radius:999px;background:#fff;color:#555;font-size:12px;font-weight:600}

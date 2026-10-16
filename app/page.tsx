@@ -42,6 +42,7 @@ export default function Home(){
  const [account,setAccount]=useState<Account|null>(null),[accountError,setAccountError]=useState(false),[signInOpen,setSignInOpen]=useState(false),[fundingOpen,setFundingOpen]=useState(false),[fundingCode,setFundingCode]=useState(''),[controlBusy,setControlBusy]=useState(false),[controlError,setControlError]=useState(''),[draftBrand,setDraftBrand]=useState<BotProfile|null>(null);
  const [reviewVip,setReviewVip]=useState(false);
  const [assistantOpenRequest,setAssistantOpenRequest]=useState(0);
+ const [assistantAccount,setAssistantAccount]=useState<string|null>(null);
  const [fundingSuggestion,setFundingSuggestion]=useState<{amountCents:number;reason:string}|null>(null);
  const [assistantRequest,setAssistantRequest]=useState<AssistantRequest|null>(null),[propertyRequest,setPropertyRequest]=useState<{id:string;nonce:number}|null>(null);
  const [settingsOpen,setSettingsOpen]=useState(false),[preferencesOpen,setPreferencesOpen]=useState(false);
@@ -127,6 +128,7 @@ export default function Home(){
  function openAssistant(request?:AssistantRequest){
   if(accountError)return;
   if(!featureVip){setReviewVip(true);return;}
+  setAssistantAccount(account?.email??null);
   if(request)setAssistantRequest(request);else setAssistantOpenRequest(v=>v+1);
  }
  async function assistantAction(action:AssistantAction){
@@ -141,6 +143,7 @@ export default function Home(){
  const workspaceLocked=account?.signedIn===true&&account.billingModel==='membership_credits'&&account.membershipActive!==true;
  const canSwitchPlan=account?.signedIn===true&&account.isBillingOwner===true&&!workspaceLocked&&!accountError;
  const featureVip=!workspaceLocked&&!accountError&&(account?.vipFeatures??account?.vip)===true;
+ useEffect(()=>{setAssistantRequest(null);setAssistantOpenRequest(0);setAssistantAccount(null);},[featureVip,account?.email]);
  const displayVip=!workspaceLocked&&!accountError&&account?.vip===true;
  // The account API already returns spendable credits, net of reservations.
  const creditsExhausted=account?.signedIn===true&&!workspaceLocked&&!accountError&&typeof account.balanceCents==='number'&&account.balanceCents<=0;
@@ -204,11 +207,11 @@ export default function Home(){
      {account.mode==='live'&&account.billingModel==='legacy'&&<SpendActivationReview key={activationKey} onAvailabilityChange={updateActivationAvailability} onSaved={()=>void refreshAccount()}/>}
      <CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}>
      <SpendingAllowance/>
-     <LiveWorkspace key={account.email} onLeadPresenceChange={updateLeadPresence} onAttentionChange={setAttentionPending} assistantVipLocked={!featureVip} onOpenAssistant={()=>openAssistant()} propertyRequest={propertyRequest} onAsk={(screeningId,address)=>openAssistant({screeningId,address,nonce:Date.now()})} principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/>
+     <LiveWorkspace key={account.email} onLeadPresenceChange={updateLeadPresence} onAttentionChange={setAttentionPending} assistantVipLocked={!featureVip} onOpenAssistant={()=>openAssistant()} propertyRequest={propertyRequest} onAsk={(screeningId,address)=>openAssistant({screeningId,address,nonce:Date.now(),mode:'compose'})} principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/>
      </CreditActionGate>
      </>}
     </section>
-    {!guest&&featureVip&&<CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}><WorkspaceAssistant key={account.email} openRequest={assistantOpenRequest} request={assistantRequest} stale={accountError} onAction={assistantAction} onVipRequired={()=>{setReviewVip(true);void refreshAccount();}}/></CreditActionGate>}
+    {!guest&&featureVip&&<CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}><WorkspaceAssistant key={account.email} openRequest={assistantAccount===account.email?assistantOpenRequest:0} request={assistantAccount===account.email?assistantRequest:null} stale={accountError} onAction={assistantAction} onVipRequired={()=>{setReviewVip(true);void refreshAccount();}}/></CreditActionGate>}
     </>}
    </>}
   </main>
