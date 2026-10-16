@@ -112,7 +112,8 @@ try{
  await q('update icash_operation_rates set enabled=false where id=$1',[researchRate]);assert.equal((await context()).work,null);await q('update fixture_gates set enrichment=null');
  pass('Buyer reservations/holds suppress outreach; actual research candidates never price free screening');
 
- await q(`update icash_deal_files set stage='closed'`);const reply=randomUUID();await q('insert into icash_title_replies values($1,$2,$3,false)',[reply,account,deal]);await q(`insert into icash_closing_updates(id,account_id,deal_id,reply_id,kind,confirmed_by,effective_date) values($1,$2,$3,$4,'closed',$5,current_date)`,[randomUUID(),account,deal,reply,user]);
+ // The business date is Central time; UTC may already be the following day.
+ await q(`update icash_deal_files set stage='closed'`);const reply=randomUUID();await q('insert into icash_title_replies values($1,$2,$3,false)',[reply,account,deal]);await q(`insert into icash_closing_updates(id,account_id,deal_id,reply_id,kind,confirmed_by,effective_date) values($1,$2,$3,$4,'closed',$5,(now() at time zone 'America/Chicago')::date)`,[randomUUID(),account,deal,reply,user]);
  assert.notEqual((await context()).progress.kind,'closed');await q('update icash_title_replies set sender_verified=true');assert.equal((await context()).progress.kind,'closed');
  const before=(await one('select count(*)::int n from icash_text_messages')).n;await context();await context();assert.equal((await one('select count(*)::int n from icash_text_messages')).n,before);assert.equal((await one('select count(*)::int n from icash_operation_spend')).n,0);
  for(const role of ['anon','authenticated'])assert.equal((await one(`select has_function_privilege($1,'icash_usage_loop_context(uuid,uuid)','EXECUTE') ok`,[role])).ok,false);
