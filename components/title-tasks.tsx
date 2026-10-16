@@ -15,7 +15,7 @@ export function TitleTasks({initialTasks,onChanged,expanded=false,embedded=false
   if(busy)return;
   setBusy(task.id);setError('');
   try{
-   const r=await fetch('/api/work/title-tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({taskId:task.id,action,dueDate})});
+   const r=await fetch('/api/work/title-tasks',{method:'POST',signal:AbortSignal.timeout(25000),headers:{'Content-Type':'application/json'},body:JSON.stringify({taskId:task.id,action,dueDate})});
    const body=await r.json();if(!r.ok)throw Error(body.error||'Could not save. Please try again.');
    setTasks(items=>action==='confirm'?items.map(t=>t.id===task.id?{...t,state:'scheduled',due_date:dueDate!}:t):items.filter(t=>t.id!==task.id));
    onChanged?.();

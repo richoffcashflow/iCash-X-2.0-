@@ -51,7 +51,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  const [contactEditing,setContactEditing]=useState(false),[chatFocused,setChatFocused]=useState(false),[inputActive,setInputActive]=useState(false),[unread,setUnread]=useState(false),[sendingMessage,setSendingMessage]=useState<PendingWebinarMessage|null>(null),[contactNotice,setContactNotice]=useState('');
  const messageInput=useRef<HTMLInputElement>(null),focusChat=useRef(false);
  const chatLog=useRef<HTMLDivElement>(null),followChat=useRef(true),chatOperation=useRef(false);
- const checkoutEngagedRef=useRef(false),completionPending=useRef(false);
+ const checkoutEngagedRef=useRef(false),completionPending=useRef(false),completionSyncing=useRef(false),completionRedirected=useRef(false);
  const lastSync=useRef(0),pitchSeen=useRef(false),startSeen=useRef(false),alive=useRef(true),offset=useRef(0),position=useRef(0),shownOffers=useRef(new Set<string>());
  const awaySince=useRef<number|null>(null),returnExpired=useRef(false);
  const exitDialog=useRef<HTMLDialogElement>(null),exitNavigation=useRef<(()=>void)|null>(null);
@@ -90,7 +90,8 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
   const params=new URLSearchParams(location.search),attribution=Object.fromEntries(['utm_source','utm_medium','utm_campaign','utm_content','utm_term','ad_id','adset_id','campaign_id','fbclid'].flatMap(k=>params.has(k)?[[k,params.get(k)!]]:[]));
   const d=await post<Session&{previewLocked?:boolean;publicPath?:string|null;redirect?:string;unavailable?:boolean;message?:string}>('/api/webinar/start',{...(webinarCode?{code:webinarCode}:{}),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Chicago',...(params.get('r')?{resume:params.get('r')}:{}),...(params.get('watch')==='1'?{returnToWebinar:true}:{}),...(params.get('preview')?{preview:params.get('preview'),variant:params.get('variant')==='night'?'night':'day'}:{}),attribution});
   if(d.previewLocked){const preview=params.get('preview');if(preview){const next='/webinar?preview='+encodeURIComponent(preview)+'&variant='+(params.get('variant')==='night'?'night':'day');navigateWebinar('/dashboard-unlock?next='+encodeURIComponent(next),true);return;}setPreviewLocked(true);setPreviewPublicPath(d.publicPath&&/^\/live\/\d{6,12}$/.test(d.publicPath)?d.publicPath:null);setError('This preview is for your owner account. Use the public webinar link for Instagram and other visitors.');return;}
-  if(d.redirect){navigateWebinar(d.redirect,true);return;}if(d.unavailable){setUnavailable(d.message||'The next session is being prepared.');return;}if(!alive.current)return;
+  if(!alive.current)return;
+  if(d.redirect){navigateWebinar(d.redirect,true);return;}if(d.unavailable){setUnavailable(d.message||'The next session is being prepared.');return;}
   if(typeof d.sessionId!=='string'||!Number.isFinite(d.progress)||!Number.isFinite(d.serverNow))throw Error('The session could not load. Please try again.');
   d.webinar=publicWebinar(webinarSchema.parse({...d.webinar,faq:'',chatStyle:''}));
   const canonical=d.canonicalPath&&/^\/live\/\d{6,12}$/.test(d.canonicalPath)?d.canonicalPath:location.pathname;
@@ -107,7 +108,18 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
   else if(!completed.current)savePosition(session.sessionId,position.current);
   if(beacon){webinarBeacon('/api/webinar/event',body);if(key==='once'&&kind==='add_to_cart')webinarBrowserEvent('add_to_cart',session.sessionId);return;}
   if(kind==='progress'&&syncing.current)return;if(kind==='progress')syncing.current=true;
-  return post<{saved:boolean;redirect?:string}>('/api/webinar/event',body,10000).then(result=>{if(kind==='completed'){completed.current=true;completionPending.current=false;clearPosition(session.sessionId);}if(alive.current)setSaved(true);if(key==='once'&&['started','contact_saved','add_to_cart','checkout_opened'].includes(kind))webinarBrowserEvent(kind as 'started'|'contact_saved'|'add_to_cart'|'checkout_opened',session.sessionId);return result;}).catch(()=>{if(alive.current)setSaved(false);return null;}).finally(()=>{if(kind==='progress')syncing.current=false;});
+  if(kind==='completed'&&completionSyncing.current)return;
+  if(kind==='completed')completionSyncing.current=true;
+  return post<{saved:boolean;redirect?:string}>('/api/webinar/event',body,10000).then(result=>{
+   if(result.saved!==true)throw Error('Session progress was not confirmed.');
+   if(kind==='completed'){
+    completed.current=true;completionPending.current=false;clearPosition(session.sessionId);
+    // Reconnects and bounded retries must finish the same end-of-video journey.
+    const destination=webinarPurchaseDestination(purchasedRef.current,checkoutEngagedRef.current,upgradeActiveRef.current,!!session.webinar.parentWebinarId);
+    if(alive.current&&endedRef.current&&!purchaseRedirected.current&&!completionRedirected.current&&destination==='checkout'&&result.redirect){completionRedirected.current=true;navigateWebinar(result.redirect);}
+   }
+   if(alive.current)setSaved(true);if(key==='once'&&['started','contact_saved','add_to_cart','checkout_opened'].includes(kind))webinarBrowserEvent(kind as 'started'|'contact_saved'|'add_to_cart'|'checkout_opened',session.sessionId);return result;
+  }).catch(()=>{if(alive.current)setSaved(false);return null;}).finally(()=>{if(kind==='progress')syncing.current=false;if(kind==='completed')completionSyncing.current=false;});
  },[session]);
  // Revalidate a restored page before playback checkpoints can revive an old session.
  // Capture phase runs before the player's visibility/pagehide handlers.
@@ -129,6 +141,16 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  },[checkoutEngaged]);
  useEffect(()=>{if(session)savePromptHistory(session.sessionId,promptHistory);},[session,promptHistory]);
  useEffect(()=>{const online=()=>{if(sessionRef.current){if(!document.hidden)track(completionPending.current?'completed':'progress');}else void load();};window.addEventListener('online',online);return()=>window.removeEventListener('online',online);},[load,track]);
+ useEffect(()=>{
+  if(!ended||!session||session.preview)return;
+  let stopped=false,attempt=0;const delays=[3000,10000,30000];let timer:ReturnType<typeof setTimeout>;
+  const retry=async()=>{
+   if(stopped||completed.current||!completionPending.current)return;
+   if(!document.hidden&&navigator.onLine)await track('completed');
+   if(!stopped&&completionPending.current&&++attempt<delays.length)timer=setTimeout(()=>void retry(),delays[attempt]);
+  };
+  timer=setTimeout(()=>void retry(),delays[0]);return()=>{stopped=true;clearTimeout(timer);};
+ },[ended,session,track]);
  useEffect(()=>{const id=setInterval(()=>setNow(Date.now()+offset.current),1000);return()=>clearInterval(id);},[]);
  useEffect(()=>{if(endCountdown===null||!session||checkoutEngaged)return;if(endCountdown===0){const offer=selectOffer(offerState.current.offers,session.webinar.durationSeconds,Date.now()+offerState.current.offset,session.webinar.endOfferId);if(offer?.action==='checkout'){setSelectedOfferId(offer.id);setFunding(true);setEndCountdown(null);}else if(offer)navigateWebinar(offerDestination(offer));else setEndCountdown(null);return;}const id=setTimeout(()=>setEndCountdown(n=>n===null?null:n-1),1000);return()=>clearTimeout(id);},[endCountdown,session,checkoutEngaged]);
  function latestMessages(){const log=chatLog.current;if(log)log.scrollTop=log.scrollHeight;followChat.current=true;setUnread(false);}
@@ -166,7 +188,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
   const done=track('completed');continuePurchase();
   if(checkoutEngagedRef.current)return;
   const offer=w?selectOffer(offers,w.durationSeconds,Date.now()+timerState.offset,w.endOfferId):null;if(offer)setSelectedOfferId(offer.id);setFunding(!!offer);
-  void done?.then(result=>{continuePurchase();if(alive.current&&!purchaseRedirected.current&&webinarPurchaseDestination(purchasedRef.current,checkoutEngagedRef.current,upgradeActiveRef.current,isVip)==='checkout'&&result?.redirect)navigateWebinar(result.redirect);});
+  void done?.then(()=>continuePurchase());
  }
  function finishContact(){setFormError('');setContactEditing(false);setContactSaved(true);setPromptHistory(h=>({...h,contactDismissedAt:time,contactAttempts:2}));focusChat.current=true;}
  function nextContact(){setFormError('');setContactStep('phone');setContactEditing(true);focusChat.current=true;}

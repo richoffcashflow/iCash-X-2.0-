@@ -156,7 +156,7 @@ test('expired access with valid refresh session is authenticated and cookies sav
    return Response.json({access_token:'REFRESHED_SYNTHETIC_ACCESS',refresh_token:'ROTATED_SYNTHETIC_REFRESH',expires_in:3600,user:{id:receptionTarget.ownerUserId,email_confirmed_at:'2026-01-01T00:00:00Z'}});
   },
  });
- const account=await loadService('lib/work-account.ts',{currentUser:auth.currentUser,db:async path=>{assert.equal(path,'icash_accounts?owner_user_id=eq.'+receptionTarget.ownerUserId+'&select=id,billing_model&limit=2');return [{id:receptionTarget.accountId}];}});
+ const account=await loadService('lib/work-account.ts',{currentUser:auth.currentUser,workspaceAcknowledgmentCurrent:()=>true,db:async path=>{assert.equal(path,'icash_accounts?owner_user_id=eq.'+receptionTarget.ownerUserId+'&select=id,billing_model,workspace_ack_version,workspace_ack_user_id,workspace_ack_hash&limit=2');return [{id:receptionTarget.accountId}];}});
  const route=await loadService('app/api/owner-reception/recorded-readiness/route.ts',{workAccount:account.workAccount,receptionTarget,privateHeaders,process:{env},readRecordedReceptionReadiness:async()=>{providerReads++;assert.equal(writes.length,2);assert.equal(jar.get('icash_access'),'REFRESHED_SYNTHETIC_ACCESS');return (await inspect()).result;}});
  const request=()=>new Request('https://www.geticashx.com/api/owner-reception/recorded-readiness',{headers:{host:'www.geticashx.com','sec-fetch-site':'same-origin'}});
  const response=await route.GET(request());assert.equal(response.status,200);assert.equal(providerReads,1);assert.equal(authCalls.length,2);assert(writes.every(w=>w.options.httpOnly&&w.options.secure));

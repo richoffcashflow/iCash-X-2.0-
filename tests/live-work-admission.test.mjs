@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {automationChanged} from '../lib/automation-outcome.ts';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {z} from 'zod';
@@ -32,7 +33,7 @@ for(const action of ['resume','return_to_bot']){assert.equal((await control.POST
 assert.equal((await control.POST(request({action:'pause'}))).status,200);assert.equal(stops,1);assert.equal((await control.POST(request({action:'takeover'}))).status,200);
 // Actual automation route skips every new-work kind, but still settles previous usage.
 let kind='discovery',dispatches=0,reconciles=0,settles=0;
-const mocks={liveWorkReady,discoveryWorkEnabled,contactWorkEnabled,smsWorkEnabled,automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation,NextResponse:response,readVoiceUsagePolicies:()=>[],settlePendingVoiceUsage:async()=>{settles++;return {status:'settled'};},db:async(path,method,body)=>path==='rpc/icash_consume_automation'?{...base,kind,liveCallId:'call',signingId:'sign',voiceJobId:'voice',fulfillmentJobId:'fulfill',titleTaskId:'title',textAiJobId:'text',marketResearchJobId:'market',openerMessageId:'opener'}:db(path,method,body),reconcileLiveConversation:async()=>{reconciles++;return {status:'conversation_saved'};},refreshSigning:async()=>{reconciles++;return {status:'completed'};},dispatchAttentionNotification:async()=>({status:'attention_idle'})};
+const mocks={automationChanged,liveWorkReady,discoveryWorkEnabled,contactWorkEnabled,smsWorkEnabled,automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation,NextResponse:response,readVoiceUsagePolicies:()=>[],settlePendingVoiceUsage:async()=>{settles++;return {status:'settled'};},db:async(path,method,body)=>path==='rpc/icash_consume_automation'?{...base,kind,liveCallId:'call',signingId:'sign',voiceJobId:'voice',fulfillmentJobId:'fulfill',titleTaskId:'title',textAiJobId:'text',marketResearchJobId:'market',openerMessageId:'opener'}:db(path,method,body),reconcileLiveConversation:async()=>{reconciles++;return {status:'conversation_saved'};},refreshSigning:async()=>{reconciles++;return {status:'completed'};},dispatchAttentionNotification:async()=>({status:'attention_idle'})};
 for(const fn of ['dispatchTextMessage','expandMarket','processTextAi','dispatchTitleFollowup','prepareFulfillment','dispatchLiveVoice','discoverForAccount','enrichForAccount'])mocks[fn]=async()=>{dispatches++;return {status:'unexpected'};};
 const automation=await load('app/api/internal/automation/route.ts',mocks),automationRequest=()=>new Request('https://example.invalid/api/internal/automation',{method:'POST',headers:{authorization:'Bearer '+token}});
 process.env.ICASH_ATTENTION_EMAIL_ENABLED='false';

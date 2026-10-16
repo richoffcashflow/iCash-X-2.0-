@@ -24,10 +24,10 @@ assert.equal((await readiness.discoveryAccountReadiness('account','wrong-owner')
 for(const [table,key,value] of [
  ['icash_discovery_configs','enabled',false],['icash_discovery_configs','auto_enabled',false],['icash_discovery_configs','per_page',6],['icash_discovery_configs','data_rights_until','invalid'],['icash_discovery_configs','data_rights_until',past],
  ['icash_operation_rates','expires_at',past],['icash_operation_rates','verified_at',future],['icash_operation_rates','operation','owner_enrichment'],['icash_operation_rates','charge_cents',1],
- ['icash_wallets','balance_cents',83],['icash_wallets','reserved_cents',217],['icash_accounts','daily_limit_cents',83],['icash_spend_activations','customer_cap_cents',83],['icash_spend_activations','enabled',false],['icash_operating_budget','enabled',false],
+ ['icash_wallets','balance_cents',83],['icash_spend_activations','enabled',false],['icash_operating_budget','enabled',false],
  ]){const old=rows[table][0][key];rows[table][0][key]=value;assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,false,`${table}.${key}`);rows[table][0][key]=old;}
-rows.icash_credit_ledger=[{delta_cents:-217}];assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,false);rows.icash_credit_ledger=[];
-rows.icash_operation_spend=[{state:'settled',charged_cents:217}];assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,false);rows.icash_operation_spend=[];
+rows.icash_credit_ledger=[{delta_cents:-217}];assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,true,'Historical charges are already reflected in the wallet');rows.icash_credit_ledger=[];
+rows.icash_operation_spend=[{state:'settled',charged_cents:217}];assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,true,'No obsolete lifetime cap');rows.icash_operation_spend=[];
 knownMarket=false;assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,false);knownMarket=true;
 // Property research is ready without a contract in either release mode.
 process.env.ICASH_LIVE_WORK_READY='true';assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,true);knownMarket=false;assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,false);knownMarket=true;process.env.ICASH_LIVE_WORK_READY='false';
@@ -55,4 +55,4 @@ for(kind of newLiveWorkKinds){if(kind!=='discovery')assert.equal((await automati
 for(const [file,fn] of Object.entries({'owner-enrichment-service':'enrichForAccount','live-dispatch-service':'dispatchLiveVoice','text-ai-service':'processTextAi','fulfillment-service':'prepareFulfillment','title-service':'dispatchTitleRequest'})){
  const service=await loadService('lib/'+file+'.ts',{z,contactWorkEnabled,db:async()=>{throw Error('Sibling work must stay held');}});assert.equal((await service[fn]('account','job')).status,'live_work_not_ready');
 }
-console.log('Property-only admission: actual readiness/Run/automation boundaries, scoped owner/quote/day/lifetime checks, five-record bound, unreleased campaign separation, and held sibling services passed.');
+console.log('Property-only admission: actual readiness/Run/automation boundaries, scoped owner/quote/available-credit checks, five-record bound, unreleased campaign separation, and held sibling services passed.');

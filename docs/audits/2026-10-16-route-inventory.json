@@ -1,0 +1,1200 @@
+{
+  "baseline": "180519aa4a48abe0e986e1e88f7632c29593dbdd",
+  "source": {
+    "routes": [
+      {
+        "file": "app/admin/disputes/page.tsx",
+        "path": "/admin/disputes"
+      },
+      {
+        "file": "app/admin/page.tsx",
+        "path": "/admin"
+      },
+      {
+        "file": "app/api/account/admin-plan/route.ts",
+        "path": "/api/account/admin-plan"
+      },
+      {
+        "file": "app/api/account/bot-name/route.ts",
+        "path": "/api/account/bot-name"
+      },
+      {
+        "file": "app/api/account/custom-voice/route.ts",
+        "path": "/api/account/custom-voice"
+      },
+      {
+        "file": "app/api/account/email/route.ts",
+        "path": "/api/account/email"
+      },
+      {
+        "file": "app/api/account/identity/route.ts",
+        "path": "/api/account/identity"
+      },
+      {
+        "file": "app/api/account/route.ts",
+        "path": "/api/account"
+      },
+      {
+        "file": "app/api/account/workspace-acknowledgment/route.ts",
+        "path": "/api/account/workspace-acknowledgment"
+      },
+      {
+        "file": "app/api/account/workspace-preview/route.ts",
+        "path": "/api/account/workspace-preview"
+      },
+      {
+        "file": "app/api/admin/disputes/route.ts",
+        "path": "/api/admin/disputes"
+      },
+      {
+        "file": "app/api/admin/experience/route.ts",
+        "path": "/api/admin/experience"
+      },
+      {
+        "file": "app/api/admin/overview/route.ts",
+        "path": "/api/admin/overview"
+      },
+      {
+        "file": "app/api/admin/usage-loop/route.ts",
+        "path": "/api/admin/usage-loop"
+      },
+      {
+        "file": "app/api/auth/dashboard-password/route.ts",
+        "path": "/api/auth/dashboard-password"
+      },
+      {
+        "file": "app/api/auth/email/route.ts",
+        "path": "/api/auth/email"
+      },
+      {
+        "file": "app/api/auth/logout/route.ts",
+        "path": "/api/auth/logout"
+      },
+      {
+        "file": "app/api/auth/verify/route.ts",
+        "path": "/api/auth/verify"
+      },
+      {
+        "file": "app/api/authority-reviews/admin/route.ts",
+        "path": "/api/authority-reviews/admin"
+      },
+      {
+        "file": "app/api/authority-reviews/options/route.ts",
+        "path": "/api/authority-reviews/options"
+      },
+      {
+        "file": "app/api/authority-reviews/route.ts",
+        "path": "/api/authority-reviews"
+      },
+      {
+        "file": "app/api/billing/daily/route.ts",
+        "path": "/api/billing/daily"
+      },
+      {
+        "file": "app/api/billing/membership/route.ts",
+        "path": "/api/billing/membership"
+      },
+      {
+        "file": "app/api/billing/offer/route.ts",
+        "path": "/api/billing/offer"
+      },
+      {
+        "file": "app/api/billing/outbound/route.ts",
+        "path": "/api/billing/outbound"
+      },
+      {
+        "file": "app/api/billing/reconcile/route.ts",
+        "path": "/api/billing/reconcile"
+      },
+      {
+        "file": "app/api/billing/vip/route.ts",
+        "path": "/api/billing/vip"
+      },
+      {
+        "file": "app/api/buyer-network/auth/route.ts",
+        "path": "/api/buyer-network/auth"
+      },
+      {
+        "file": "app/api/buyer-network/route.ts",
+        "path": "/api/buyer-network"
+      },
+      {
+        "file": "app/api/buyer-qualifications/admin/route.ts",
+        "path": "/api/buyer-qualifications/admin"
+      },
+      {
+        "file": "app/api/buyer-qualifications/route.ts",
+        "path": "/api/buyer-qualifications"
+      },
+      {
+        "file": "app/api/course/assets/[kind]/route.ts",
+        "path": "/api/course/assets/[kind]"
+      },
+      {
+        "file": "app/api/course/route.ts",
+        "path": "/api/course"
+      },
+      {
+        "file": "app/api/course/upload/route.ts",
+        "path": "/api/course/upload"
+      },
+      {
+        "file": "app/api/customer-phone/[part]/route.ts",
+        "path": "/api/customer-phone/[part]"
+      },
+      {
+        "file": "app/api/demo/intake/route.ts",
+        "path": "/api/demo/intake"
+      },
+      {
+        "file": "app/api/funding/auto-recharge/route.ts",
+        "path": "/api/funding/auto-recharge"
+      },
+      {
+        "file": "app/api/funding/checkout/route.ts",
+        "path": "/api/funding/checkout"
+      },
+      {
+        "file": "app/api/funding/status/route.ts",
+        "path": "/api/funding/status"
+      },
+      {
+        "file": "app/api/health/route.ts",
+        "path": "/api/health"
+      },
+      {
+        "file": "app/api/internal/automation/route.ts",
+        "path": "/api/internal/automation"
+      },
+      {
+        "file": "app/api/internal/contract-text-resend/route.ts",
+        "path": "/api/internal/contract-text-resend"
+      },
+      {
+        "file": "app/api/internal/journeys/route.ts",
+        "path": "/api/internal/journeys"
+      },
+      {
+        "file": "app/api/internal/maintenance/route.ts",
+        "path": "/api/internal/maintenance"
+      },
+      {
+        "file": "app/api/internal/messaging/route.ts",
+        "path": "/api/internal/messaging"
+      },
+      {
+        "file": "app/api/internal/property-check/route.ts",
+        "path": "/api/internal/property-check"
+      },
+      {
+        "file": "app/api/internal/seller/route.ts",
+        "path": "/api/internal/seller"
+      },
+      {
+        "file": "app/api/internal/text-check/route.ts",
+        "path": "/api/internal/text-check"
+      },
+      {
+        "file": "app/api/internal/voice/callback/route.ts",
+        "path": "/api/internal/voice/callback"
+      },
+      {
+        "file": "app/api/internal/voice/cash-offer/route.ts",
+        "path": "/api/internal/voice/cash-offer"
+      },
+      {
+        "file": "app/api/internal/voice/contract-text/route.ts",
+        "path": "/api/internal/voice/contract-text"
+      },
+      {
+        "file": "app/api/internal/voice/handoff/route.ts",
+        "path": "/api/internal/voice/handoff"
+      },
+      {
+        "file": "app/api/internal/voice/inbound/route.ts",
+        "path": "/api/internal/voice/inbound"
+      },
+      {
+        "file": "app/api/internal/voice/owner-recording-test/consent/route.ts",
+        "path": "/api/internal/voice/owner-recording-test/consent"
+      },
+      {
+        "file": "app/api/internal/voice/owner-recording-test/maintenance/route.ts",
+        "path": "/api/internal/voice/owner-recording-test/maintenance"
+      },
+      {
+        "file": "app/api/internal/voice/owner-recording-test/status/route.ts",
+        "path": "/api/internal/voice/owner-recording-test/status"
+      },
+      {
+        "file": "app/api/internal/voice/owner-recording-test/terminal/route.ts",
+        "path": "/api/internal/voice/owner-recording-test/terminal"
+      },
+      {
+        "file": "app/api/internal/voice/recording/connect/route.ts",
+        "path": "/api/internal/voice/recording/connect"
+      },
+      {
+        "file": "app/api/internal/voice/recording/consent/route.ts",
+        "path": "/api/internal/voice/recording/consent"
+      },
+      {
+        "file": "app/api/internal/voice/recording/maintenance/route.ts",
+        "path": "/api/internal/voice/recording/maintenance"
+      },
+      {
+        "file": "app/api/internal/voice/recording/notice/route.ts",
+        "path": "/api/internal/voice/recording/notice"
+      },
+      {
+        "file": "app/api/internal/voice/recording/status/route.ts",
+        "path": "/api/internal/voice/recording/status"
+      },
+      {
+        "file": "app/api/internal/voice/recording/stop/route.ts",
+        "path": "/api/internal/voice/recording/stop"
+      },
+      {
+        "file": "app/api/internal/voice/recording/terminal/route.ts",
+        "path": "/api/internal/voice/recording/terminal"
+      },
+      {
+        "file": "app/api/internal/voice/seller-agreement/route.ts",
+        "path": "/api/internal/voice/seller-agreement"
+      },
+      {
+        "file": "app/api/messaging/admin/calls/route.ts",
+        "path": "/api/messaging/admin/calls"
+      },
+      {
+        "file": "app/api/messaging/admin/replies/route.ts",
+        "path": "/api/messaging/admin/replies"
+      },
+      {
+        "file": "app/api/messaging/admin/route.ts",
+        "path": "/api/messaging/admin"
+      },
+      {
+        "file": "app/api/messaging/admin/senders/route.ts",
+        "path": "/api/messaging/admin/senders"
+      },
+      {
+        "file": "app/api/messaging/admin/sequence/route.ts",
+        "path": "/api/messaging/admin/sequence"
+      },
+      {
+        "file": "app/api/next/[token]/route.ts",
+        "path": "/api/next/[token]"
+      },
+      {
+        "file": "app/api/notifications/events/route.ts",
+        "path": "/api/notifications/events"
+      },
+      {
+        "file": "app/api/notifications/preferences/route.ts",
+        "path": "/api/notifications/preferences"
+      },
+      {
+        "file": "app/api/notifications/unsubscribe/route.ts",
+        "path": "/api/notifications/unsubscribe"
+      },
+      {
+        "file": "app/api/notifications/updates/route.ts",
+        "path": "/api/notifications/updates"
+      },
+      {
+        "file": "app/api/notifications/updates/unsubscribe/route.ts",
+        "path": "/api/notifications/updates/unsubscribe"
+      },
+      {
+        "file": "app/api/owner-inbound-acceptance/audio-once/phone-pin/route.ts",
+        "path": "/api/owner-inbound-acceptance/audio-once/phone-pin"
+      },
+      {
+        "file": "app/api/owner-inbound-acceptance/audio-once/route.ts",
+        "path": "/api/owner-inbound-acceptance/audio-once"
+      },
+      {
+        "file": "app/api/owner-inbound-acceptance/elevenlabs/authorization/route.ts",
+        "path": "/api/owner-inbound-acceptance/elevenlabs/authorization"
+      },
+      {
+        "file": "app/api/owner-inbound-acceptance/elevenlabs/route.ts",
+        "path": "/api/owner-inbound-acceptance/elevenlabs"
+      },
+      {
+        "file": "app/api/owner-inbound-acceptance/forwarding/route.ts",
+        "path": "/api/owner-inbound-acceptance/forwarding"
+      },
+      {
+        "file": "app/api/owner-inbound-acceptance/route.ts",
+        "path": "/api/owner-inbound-acceptance"
+      },
+      {
+        "file": "app/api/owner-outbound-readiness/route.ts",
+        "path": "/api/owner-outbound-readiness"
+      },
+      {
+        "file": "app/api/owner-reception/carrier/route.ts",
+        "path": "/api/owner-reception/carrier"
+      },
+      {
+        "file": "app/api/owner-reception/diagnostic/route.ts",
+        "path": "/api/owner-reception/diagnostic"
+      },
+      {
+        "file": "app/api/owner-reception/forwarding/route.ts",
+        "path": "/api/owner-reception/forwarding"
+      },
+      {
+        "file": "app/api/owner-reception/reconcile/route.ts",
+        "path": "/api/owner-reception/reconcile"
+      },
+      {
+        "file": "app/api/owner-reception/recorded-readiness/route.ts",
+        "path": "/api/owner-reception/recorded-readiness"
+      },
+      {
+        "file": "app/api/owner-reception/setup/route.ts",
+        "path": "/api/owner-reception/setup"
+      },
+      {
+        "file": "app/api/owner-recording-test/audio/route.ts",
+        "path": "/api/owner-recording-test/audio"
+      },
+      {
+        "file": "app/api/owner-recording-test/production-readiness/route.ts",
+        "path": "/api/owner-recording-test/production-readiness"
+      },
+      {
+        "file": "app/api/owner-recording-test/reply/route.ts",
+        "path": "/api/owner-recording-test/reply"
+      },
+      {
+        "file": "app/api/owner-recording-test/route.ts",
+        "path": "/api/owner-recording-test"
+      },
+      {
+        "file": "app/api/owner-voice-acceptance/route.ts",
+        "path": "/api/owner-voice-acceptance"
+      },
+      {
+        "file": "app/api/payments/checkout/route.ts",
+        "path": "/api/payments/checkout"
+      },
+      {
+        "file": "app/api/payments/status/route.ts",
+        "path": "/api/payments/status"
+      },
+      {
+        "file": "app/api/reception/fallback/route.ts",
+        "path": "/api/reception/fallback"
+      },
+      {
+        "file": "app/api/reception/inbound/route.ts",
+        "path": "/api/reception/inbound"
+      },
+      {
+        "file": "app/api/reception/postcall/route.ts",
+        "path": "/api/reception/postcall"
+      },
+      {
+        "file": "app/api/reception/recorded/connect/route.ts",
+        "path": "/api/reception/recorded/connect"
+      },
+      {
+        "file": "app/api/reception/recorded/consent/route.ts",
+        "path": "/api/reception/recorded/consent"
+      },
+      {
+        "file": "app/api/reception/recorded/inbound/route.ts",
+        "path": "/api/reception/recorded/inbound"
+      },
+      {
+        "file": "app/api/reception/recorded/maintenance/route.ts",
+        "path": "/api/reception/recorded/maintenance"
+      },
+      {
+        "file": "app/api/reception/recorded/setup/route.ts",
+        "path": "/api/reception/recorded/setup"
+      },
+      {
+        "file": "app/api/reception/recorded/status/route.ts",
+        "path": "/api/reception/recorded/status"
+      },
+      {
+        "file": "app/api/reception/recorded/stop/route.ts",
+        "path": "/api/reception/recorded/stop"
+      },
+      {
+        "file": "app/api/reception/recorded/terminal/route.ts",
+        "path": "/api/reception/recorded/terminal"
+      },
+      {
+        "file": "app/api/seller/experiment/route.ts",
+        "path": "/api/seller/experiment"
+      },
+      {
+        "file": "app/api/seller/intake/route.ts",
+        "path": "/api/seller/intake"
+      },
+      {
+        "file": "app/api/seller/lookup-status/route.ts",
+        "path": "/api/seller/lookup-status"
+      },
+      {
+        "file": "app/api/seller/operations/route.ts",
+        "path": "/api/seller/operations"
+      },
+      {
+        "file": "app/api/seller/status/route.ts",
+        "path": "/api/seller/status"
+      },
+      {
+        "file": "app/api/setup/documents/route.ts",
+        "path": "/api/setup/documents"
+      },
+      {
+        "file": "app/api/setup/event/route.ts",
+        "path": "/api/setup/event"
+      },
+      {
+        "file": "app/api/setup/logo/route.ts",
+        "path": "/api/setup/logo"
+      },
+      {
+        "file": "app/api/setup/route.ts",
+        "path": "/api/setup"
+      },
+      {
+        "file": "app/api/setup/voices/route.ts",
+        "path": "/api/setup/voices"
+      },
+      {
+        "file": "app/api/support/admin/operations/route.ts",
+        "path": "/api/support/admin/operations"
+      },
+      {
+        "file": "app/api/support/admin/route.ts",
+        "path": "/api/support/admin"
+      },
+      {
+        "file": "app/api/support/cancel/route.ts",
+        "path": "/api/support/cancel"
+      },
+      {
+        "file": "app/api/support/route.ts",
+        "path": "/api/support"
+      },
+      {
+        "file": "app/api/voice-test/import/route.ts",
+        "path": "/api/voice-test/import"
+      },
+      {
+        "file": "app/api/voice-test/result/route.ts",
+        "path": "/api/voice-test/result"
+      },
+      {
+        "file": "app/api/voice-test/session/route.ts",
+        "path": "/api/voice-test/session"
+      },
+      {
+        "file": "app/api/webhooks/contiguity/route.ts",
+        "path": "/api/webhooks/contiguity"
+      },
+      {
+        "file": "app/api/webhooks/stripe/route.ts",
+        "path": "/api/webhooks/stripe"
+      },
+      {
+        "file": "app/api/webhooks/support-email/route.ts",
+        "path": "/api/webhooks/support-email"
+      },
+      {
+        "file": "app/api/webhooks/title-email/route.ts",
+        "path": "/api/webhooks/title-email"
+      },
+      {
+        "file": "app/api/webinar/activity/route.ts",
+        "path": "/api/webinar/activity"
+      },
+      {
+        "file": "app/api/webinar/audience/route.ts",
+        "path": "/api/webinar/audience"
+      },
+      {
+        "file": "app/api/webinar/chat/feed/route.ts",
+        "path": "/api/webinar/chat/feed"
+      },
+      {
+        "file": "app/api/webinar/chat/moderation/route.ts",
+        "path": "/api/webinar/chat/moderation"
+      },
+      {
+        "file": "app/api/webinar/chat/route.ts",
+        "path": "/api/webinar/chat"
+      },
+      {
+        "file": "app/api/webinar/checkout-preview/route.ts",
+        "path": "/api/webinar/checkout-preview"
+      },
+      {
+        "file": "app/api/webinar/contact/route.ts",
+        "path": "/api/webinar/contact"
+      },
+      {
+        "file": "app/api/webinar/conversions/route.ts",
+        "path": "/api/webinar/conversions"
+      },
+      {
+        "file": "app/api/webinar/email-events/route.ts",
+        "path": "/api/webinar/email-events"
+      },
+      {
+        "file": "app/api/webinar/event/route.ts",
+        "path": "/api/webinar/event"
+      },
+      {
+        "file": "app/api/webinar/followups/route.ts",
+        "path": "/api/webinar/followups"
+      },
+      {
+        "file": "app/api/webinar/intelligence/route.ts",
+        "path": "/api/webinar/intelligence"
+      },
+      {
+        "file": "app/api/webinar/measurement/route.ts",
+        "path": "/api/webinar/measurement"
+      },
+      {
+        "file": "app/api/webinar/reports/route.ts",
+        "path": "/api/webinar/reports"
+      },
+      {
+        "file": "app/api/webinar/start/route.ts",
+        "path": "/api/webinar/start"
+      },
+      {
+        "file": "app/api/webinar/studio/draft/route.ts",
+        "path": "/api/webinar/studio/draft"
+      },
+      {
+        "file": "app/api/webinar/studio/replies/route.ts",
+        "path": "/api/webinar/studio/replies"
+      },
+      {
+        "file": "app/api/webinar/studio/route.ts",
+        "path": "/api/webinar/studio"
+      },
+      {
+        "file": "app/api/webinar/studio/senders/route.ts",
+        "path": "/api/webinar/studio/senders"
+      },
+      {
+        "file": "app/api/webinar/studio/upload/route.ts",
+        "path": "/api/webinar/studio/upload"
+      },
+      {
+        "file": "app/api/webinar/studio/variations/route.ts",
+        "path": "/api/webinar/studio/variations"
+      },
+      {
+        "file": "app/api/webinar/timers/route.ts",
+        "path": "/api/webinar/timers"
+      },
+      {
+        "file": "app/api/webinar/unsubscribe/route.ts",
+        "path": "/api/webinar/unsubscribe"
+      },
+      {
+        "file": "app/api/work/activation/route.ts",
+        "path": "/api/work/activation"
+      },
+      {
+        "file": "app/api/work/activity/route.ts",
+        "path": "/api/work/activity"
+      },
+      {
+        "file": "app/api/work/allowance/route.ts",
+        "path": "/api/work/allowance"
+      },
+      {
+        "file": "app/api/work/assistant/route.ts",
+        "path": "/api/work/assistant"
+      },
+      {
+        "file": "app/api/work/bot-status/route.ts",
+        "path": "/api/work/bot-status"
+      },
+      {
+        "file": "app/api/work/browser-call/route.ts",
+        "path": "/api/work/browser-call"
+      },
+      {
+        "file": "app/api/work/business-call/route.ts",
+        "path": "/api/work/business-call"
+      },
+      {
+        "file": "app/api/work/buyer-coordination/route.ts",
+        "path": "/api/work/buyer-coordination"
+      },
+      {
+        "file": "app/api/work/buyer-demand/route.ts",
+        "path": "/api/work/buyer-demand"
+      },
+      {
+        "file": "app/api/work/buyer-network/route.ts",
+        "path": "/api/work/buyer-network"
+      },
+      {
+        "file": "app/api/work/buyer-viewing-requests/route.ts",
+        "path": "/api/work/buyer-viewing-requests"
+      },
+      {
+        "file": "app/api/work/call-history/route.ts",
+        "path": "/api/work/call-history"
+      },
+      {
+        "file": "app/api/work/call-requests/route.ts",
+        "path": "/api/work/call-requests"
+      },
+      {
+        "file": "app/api/work/cancellations/route.ts",
+        "path": "/api/work/cancellations"
+      },
+      {
+        "file": "app/api/work/closing/route.ts",
+        "path": "/api/work/closing"
+      },
+      {
+        "file": "app/api/work/closing-setup/route.ts",
+        "path": "/api/work/closing-setup"
+      },
+      {
+        "file": "app/api/work/control/route.ts",
+        "path": "/api/work/control"
+      },
+      {
+        "file": "app/api/work/conversation/route.ts",
+        "path": "/api/work/conversation"
+      },
+      {
+        "file": "app/api/work/deals/route.ts",
+        "path": "/api/work/deals"
+      },
+      {
+        "file": "app/api/work/discovery/route.ts",
+        "path": "/api/work/discovery"
+      },
+      {
+        "file": "app/api/work/documents/route.ts",
+        "path": "/api/work/documents"
+      },
+      {
+        "file": "app/api/work/emails/route.ts",
+        "path": "/api/work/emails"
+      },
+      {
+        "file": "app/api/work/experience/route.ts",
+        "path": "/api/work/experience"
+      },
+      {
+        "file": "app/api/work/fulfillment/route.ts",
+        "path": "/api/work/fulfillment"
+      },
+      {
+        "file": "app/api/work/handoffs/route.ts",
+        "path": "/api/work/handoffs"
+      },
+      {
+        "file": "app/api/work/journey-recovery/route.ts",
+        "path": "/api/work/journey-recovery"
+      },
+      {
+        "file": "app/api/work/journeys/route.ts",
+        "path": "/api/work/journeys"
+      },
+      {
+        "file": "app/api/work/learning/route.ts",
+        "path": "/api/work/learning"
+      },
+      {
+        "file": "app/api/work/manual-call/route.ts",
+        "path": "/api/work/manual-call"
+      },
+      {
+        "file": "app/api/work/messages/route.ts",
+        "path": "/api/work/messages"
+      },
+      {
+        "file": "app/api/work/next-action/route.ts",
+        "path": "/api/work/next-action"
+      },
+      {
+        "file": "app/api/work/outreach-campaign/route.ts",
+        "path": "/api/work/outreach-campaign"
+      },
+      {
+        "file": "app/api/work/preparation/route.ts",
+        "path": "/api/work/preparation"
+      },
+      {
+        "file": "app/api/work/proceeds/route.ts",
+        "path": "/api/work/proceeds"
+      },
+      {
+        "file": "app/api/work/property-photo/route.ts",
+        "path": "/api/work/property-photo"
+      },
+      {
+        "file": "app/api/work/readiness/route.ts",
+        "path": "/api/work/readiness"
+      },
+      {
+        "file": "app/api/work/reception-recording/audio/route.ts",
+        "path": "/api/work/reception-recording/audio"
+      },
+      {
+        "file": "app/api/work/reception-recording/route.ts",
+        "path": "/api/work/reception-recording"
+      },
+      {
+        "file": "app/api/work/recording/audio/route.ts",
+        "path": "/api/work/recording/audio"
+      },
+      {
+        "file": "app/api/work/recording/route.ts",
+        "path": "/api/work/recording"
+      },
+      {
+        "file": "app/api/work/report/route.ts",
+        "path": "/api/work/report"
+      },
+      {
+        "file": "app/api/work/review-status/route.ts",
+        "path": "/api/work/review-status"
+      },
+      {
+        "file": "app/api/work/seller-recovery/route.ts",
+        "path": "/api/work/seller-recovery"
+      },
+      {
+        "file": "app/api/work/showings/route.ts",
+        "path": "/api/work/showings"
+      },
+      {
+        "file": "app/api/work/signing/route.ts",
+        "path": "/api/work/signing"
+      },
+      {
+        "file": "app/api/work/sms-route-review/route.ts",
+        "path": "/api/work/sms-route-review"
+      },
+      {
+        "file": "app/api/work/summary/route.ts",
+        "path": "/api/work/summary"
+      },
+      {
+        "file": "app/api/work/text-attention/route.ts",
+        "path": "/api/work/text-attention"
+      },
+      {
+        "file": "app/api/work/text-contact/route.ts",
+        "path": "/api/work/text-contact"
+      },
+      {
+        "file": "app/api/work/title/route.ts",
+        "path": "/api/work/title"
+      },
+      {
+        "file": "app/api/work/title-tasks/route.ts",
+        "path": "/api/work/title-tasks"
+      },
+      {
+        "file": "app/api/work/usage-loop-event/route.ts",
+        "path": "/api/work/usage-loop-event"
+      },
+      {
+        "file": "app/buyers/page.tsx",
+        "path": "/buyers"
+      },
+      {
+        "file": "app/buyers/privacy/page.tsx",
+        "path": "/buyers/privacy"
+      },
+      {
+        "file": "app/buyers/unsubscribe/[token]/route.ts",
+        "path": "/buyers/unsubscribe/[token]"
+      },
+      {
+        "file": "app/costs-and-disclosures/page.tsx",
+        "path": "/costs-and-disclosures"
+      },
+      {
+        "file": "app/course/page.tsx",
+        "path": "/course"
+      },
+      {
+        "file": "app/d/[token]/route.ts",
+        "path": "/d/[token]"
+      },
+      {
+        "file": "app/dashboard-unlock/page.tsx",
+        "path": "/dashboard-unlock"
+      },
+      {
+        "file": "app/join/page.tsx",
+        "path": "/join"
+      },
+      {
+        "file": "app/live/[webinarCode]/page.tsx",
+        "path": "/live/[webinarCode]"
+      },
+      {
+        "file": "app/messagingadmin/calls/page.tsx",
+        "path": "/messagingadmin/calls"
+      },
+      {
+        "file": "app/messagingadmin/page.tsx",
+        "path": "/messagingadmin"
+      },
+      {
+        "file": "app/next/[token]/page.tsx",
+        "path": "/next/[token]"
+      },
+      {
+        "file": "app/owner-inbound-acceptance/page.tsx",
+        "path": "/owner-inbound-acceptance"
+      },
+      {
+        "file": "app/owner-pricing/page.tsx",
+        "path": "/owner-pricing"
+      },
+      {
+        "file": "app/owner-reception/page.tsx",
+        "path": "/owner-reception"
+      },
+      {
+        "file": "app/owner-reception/recorded-readiness/page.tsx",
+        "path": "/owner-reception/recorded-readiness"
+      },
+      {
+        "file": "app/owner-recording-test/page.tsx",
+        "path": "/owner-recording-test"
+      },
+      {
+        "file": "app/owner-voice-acceptance/page.tsx",
+        "path": "/owner-voice-acceptance"
+      },
+      {
+        "file": "app/page.tsx",
+        "path": "/"
+      },
+      {
+        "file": "app/preview/workspace/page.tsx",
+        "path": "/preview/workspace"
+      },
+      {
+        "file": "app/reception-recordings/page.tsx",
+        "path": "/reception-recordings"
+      },
+      {
+        "file": "app/sell/page.tsx",
+        "path": "/sell"
+      },
+      {
+        "file": "app/sell/privacy/page.tsx",
+        "path": "/sell/privacy"
+      },
+      {
+        "file": "app/seller-operations/page.tsx",
+        "path": "/seller-operations"
+      },
+      {
+        "file": "app/support/admin/page.tsx",
+        "path": "/support/admin"
+      },
+      {
+        "file": "app/support/buyer-reviews/page.tsx",
+        "path": "/support/buyer-reviews"
+      },
+      {
+        "file": "app/support/page.tsx",
+        "path": "/support"
+      },
+      {
+        "file": "app/test-bot/page.tsx",
+        "path": "/test-bot"
+      },
+      {
+        "file": "app/test-bot/privacy/page.tsx",
+        "path": "/test-bot/privacy"
+      },
+      {
+        "file": "app/voice-test/page.tsx",
+        "path": "/voice-test"
+      },
+      {
+        "file": "app/w/[token]/route.ts",
+        "path": "/w/[token]"
+      },
+      {
+        "file": "app/webinar/checkout/page.tsx",
+        "path": "/webinar/checkout"
+      },
+      {
+        "file": "app/webinar/checkout/preview/page.tsx",
+        "path": "/webinar/checkout/preview"
+      },
+      {
+        "file": "app/webinar/page.tsx",
+        "path": "/webinar"
+      },
+      {
+        "file": "app/webinar/privacy/page.tsx",
+        "path": "/webinar/privacy"
+      },
+      {
+        "file": "app/webinar/upgrade/page.tsx",
+        "path": "/webinar/upgrade"
+      },
+      {
+        "file": "app/webinar-studio/page.tsx",
+        "path": "/webinar-studio"
+      },
+      {
+        "file": "app/webinaradmin/page.tsx",
+        "path": "/webinaradmin"
+      },
+      {
+        "file": "app/workspace-terms.txt/route.ts",
+        "path": "/workspace-terms.txt"
+      }
+    ],
+    "checked": 95,
+    "missing": []
+  },
+  "controls": {
+    "buttons": 533,
+    "apiCallsChecked": 151,
+    "missing": [],
+    "suspicious": []
+  },
+  "builtPageProbes": [
+    {
+      "path": "/",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/admin",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fadmin"
+    },
+    {
+      "path": "/admin/disputes",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fadmin%2Fdisputes"
+    },
+    {
+      "path": "/buyers",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/buyers/privacy",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/costs-and-disclosures",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/course",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/dashboard-unlock",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/join",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/live/123456",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/messagingadmin",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fmessagingadmin"
+    },
+    {
+      "path": "/messagingadmin/calls",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fmessagingadmin%2Fcalls"
+    },
+    {
+      "path": "/next/audit-invalid-token",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/owner-inbound-acceptance",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fowner-inbound-acceptance"
+    },
+    {
+      "path": "/owner-pricing",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fowner-pricing"
+    },
+    {
+      "path": "/owner-reception",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fowner-reception"
+    },
+    {
+      "path": "/owner-reception/recorded-readiness",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fowner-reception%2Frecorded-readiness"
+    },
+    {
+      "path": "/owner-recording-test",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fowner-recording-test"
+    },
+    {
+      "path": "/owner-voice-acceptance",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fowner-voice-acceptance"
+    },
+    {
+      "path": "/preview/workspace",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/reception-recordings",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/sell",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/sell/privacy",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/seller-operations",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fseller-operations"
+    },
+    {
+      "path": "/support",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/support/admin",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fsupport%2Fadmin"
+    },
+    {
+      "path": "/support/buyer-reviews",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fsupport%2Fbuyer-reviews"
+    },
+    {
+      "path": "/test-bot",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Ftest-bot"
+    },
+    {
+      "path": "/test-bot/privacy",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Ftest-bot%2Fprivacy"
+    },
+    {
+      "path": "/voice-test",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fvoice-test"
+    },
+    {
+      "path": "/webinar",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/webinar-studio",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fwebinar-studio"
+    },
+    {
+      "path": "/webinar/checkout",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/webinar/checkout/preview",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fwebinar%2Fcheckout%2Fpreview"
+    },
+    {
+      "path": "/webinar/privacy",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/webinar/upgrade",
+      "status": 200,
+      "location": null
+    },
+    {
+      "path": "/webinaradmin",
+      "status": 307,
+      "location": "/dashboard-unlock?next=%2Fwebinaradmin"
+    }
+  ],
+  "publishedMedia": [
+    {
+      "recording": "standard_day",
+      "status": 200,
+      "type": "video/mp4",
+      "bytes": "202976860",
+      "range": "bytes"
+    },
+    {
+      "recording": "standard_night",
+      "status": 200,
+      "type": "video/mp4",
+      "bytes": "259737057",
+      "range": "bytes"
+    },
+    {
+      "recording": "vip_day",
+      "status": 200,
+      "type": "video/mp4",
+      "bytes": "108461594",
+      "range": "bytes"
+    },
+    {
+      "recording": "vip_night",
+      "status": 200,
+      "type": "video/mp4",
+      "bytes": "111057534",
+      "range": "bytes"
+    }
+  ]
+}

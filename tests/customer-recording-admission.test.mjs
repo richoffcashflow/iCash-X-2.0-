@@ -12,12 +12,12 @@ async function fixture(changeAt,change=env=>env.ICASH_RECORDED_OUTBOUND_READY='f
  const row={id,account_id:accountId,operation_key:operationKey,provider_account_sid:ac,call_sid:null,state:'consent_pending',to_phone:'+12125550102',from_phone:review.fromPhone};
  const event=name=>{events.push(name);if(changeAt===name)change(env);};
  const db=async(path,method,body)=>{
-  if(path==='rpc/icash_create_call_recording'){event('create');return structuredClone(row);}
+  if(path==='rpc/icash_create_direct_recorded_call'){event('create');return structuredClone(row);}
   assert.equal(path,'rpc/icash_transition_call_recording');event(body.p_action);
   if(body.p_action==='bind_call')row.call_sid=ca;
   return structuredClone(row);
  };
- const provider={agent:async()=>{event('agent');return agent;},tool:async()=>{event('tool');return invalidTool?{...tool,id:'tool_wrong'}:tool;},dial:async(_from,_to,twiml)=>{event('dial');assert(!twiml.includes('<Record'));assert(twiml.indexOf('</Say>')<twiml.indexOf('<Gather'));return {sid:ca,account_sid:ac,from:row.from_phone,to:row.to_phone,direction:'outbound-api',date_created:iso};},start:async()=>{throw Error('Never capture before affirmative consent');},register:async()=>{throw Error('Never connect the AI before affirmative consent');}};
+ const provider={agent:async()=>{event('agent');return agent;},tool:async()=>{event('tool');return invalidTool?{...tool,id:'tool_wrong'}:tool;},dial:async(_from,_to,twiml)=>{event('dial');assert(!twiml.includes('<Record'));assert(twiml.includes('<Redirect method="POST">'));assert(twiml.includes('/recording/connect?id='));assert(!twiml.includes('<Gather'));return {sid:ca,account_sid:ac,from:row.from_phone,to:row.to_phone,direction:'outbound-api',date_created:iso};},start:async()=>{throw Error('Never capture before affirmative consent');},register:async()=>{throw Error('Never connect the AI before affirmative consent');}};
  const {recordingServer}=await loadService('lib/required-call-recording-server.ts',{db,createRecordingProviders:()=>provider,readRecordingReview,recordingService,process:{env}});
  if(changeAt==='before')change(env);
  const result=await recordingServer().dispatch({accountId,operationKey,principal:'Synthetic Principal',assistantName:'Alex',firstMessage:'Synthetic greeting',prompt:'Synthetic prompt',strategyKey:'cash_interest'});
@@ -29,7 +29,7 @@ for(const stage of ['before','agent','tool','create','claim_dial'])for(const cha
 const changed=await fixture('tool',env=>env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify({...review,versionId:'agtvrsn_changed'}));assert.equal(changed.result.status,'recording_release_required');assert(!changed.events.includes('create'));
 const invalid=await fixture(null,undefined,true);assert.equal(invalid.result.status,'recording_review_required');assert(!invalid.events.includes('create'));assert(!invalid.events.includes('dial'));
 const ready=await fixture(null);assert.equal(ready.result.status,'recording_consent_pending');assert.deepEqual(ready.events,['agent','tool','create','claim_dial','dial','bind_call']);
-console.log('PASS actual server/service: final live/capture/receipts/review races stop before carrier dial, stop-tool review fails closed, ready path dials once with disclosure before listening and no recording/AI before consent');
+console.log('PASS actual server/service: final live/capture/receipts/review races stop before carrier dial, stop-tool review fails closed, ready direct-entry path dials once and leaves recording authorization to its bound callback');
 // Admission-only guards must not disable receipt settlement for past calls.
 const {settleReviewedReception}=await import('../lib/general-reception-settlement.ts');
 const {receptionProfiles}=await import('../lib/general-reception.ts');

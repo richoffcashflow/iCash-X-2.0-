@@ -21,7 +21,7 @@ export function DealMessages({dealId,initialThreadId='',contactNames={},active=t
   if(!active)return;const controller=new AbortController(),cadence=createPollCadence();let inFlight=false,timer:ReturnType<typeof setTimeout>|undefined,delay=5000;
   async function load(){if(document.hidden||inFlight)return;inFlight=true;try{
    const pending=attempts.current[threadId||selectedThread.current];
-   const q=new URLSearchParams({dealId,...(afterThread?{afterThread}:{}),...(threadId?{threadId}:{}),...(pending?{requestKey:pending.key}:{}),...page});const response=await fetch(`/api/work/messages?${q}`,{signal:controller.signal,cache:'no-store'});if(!response.ok)throw Error();const next=await response.json() as Data;if(!controller.signal.aborted){
+   const q=new URLSearchParams({dealId,...(afterThread?{afterThread}:{}),...(threadId?{threadId}:{}),...(pending?{requestKey:pending.key}:{}),...page});const response=await fetch(`/api/work/messages?${q}`,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(20000)]),cache:'no-store'});if(!response.ok)throw Error();const next=await response.json() as Data;if(!controller.signal.aborted){
     selectedThread.current=next.threadId??'';
     const attempt=next.threadId?attempts.current[next.threadId]:undefined;
     if(attempt&&reconcileTextAttempt(attempt,next.receipt))setDrafts(d=>d[next.threadId!]?.trim()===attempt.body?{...d,[next.threadId!]:''}:d);
@@ -78,7 +78,7 @@ function TextComposer({onTakeover,thread,message,setMessage,onSent,attempts,stal
   const prior=attempts[thread.id];
   const request:SendAttempt={key:prior?.retryable&&prior.body===body?prior.key:crypto.randomUUID(),body,busy:true,held:false,status:''};attempts[thread.id]=request;update(n=>n+1);
   try{
-   const response=await fetch('/api/work/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:thread.id,requestKey:request.key,message:body})});const result=await response.json();
+   const response=await fetch('/api/work/messages',{method:'POST',signal:AbortSignal.timeout(45000),headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:thread.id,requestKey:request.key,message:body})});const result=await response.json();
    if(result.manual===true)onTakeover?.();
    if(result.notSent){request.status=result.error||'Text not sent. Your draft is saved.';request.retryable=result.state==='ready';return;}
    if(!response.ok)throw Error();

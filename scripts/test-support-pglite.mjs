@@ -26,6 +26,8 @@ try{
  await assert.rejects(begin(id(11),id(1),id(30),'Changed request'));
  await assert.rejects(begin(id(12),id(2),id(31),'Steal',thread));
  await pg.query('select icash_support_finish_message($1,$2,$3,$4,$5,$6)',[id(11),id(1),thread,id(30),'Direct check: paused','[]']);
+ await Promise.all(['Duplicate recovery','Concurrent original reply'].map(content=>pg.query('select icash_support_finish_message($1,$2,$3,$4,$5,$6)',[id(11),id(1),thread,id(30),content,'[]'])));
+ await assert.rejects(pg.query('select icash_support_finish_message($1,$2,$3,$4,$5,$6)',[id(12),id(2),thread,id(30),'Wrong account','[]']));
  assert.equal((await begin(id(11),id(1),id(30))).result.response.content,'Direct check: paused');
  assert.equal((await scalar("select count(*)::int as n from icash_support_messages")).n,2);
  for(let i=31;i<36;i++)await begin(id(11),id(1),id(i));
