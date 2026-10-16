@@ -3,6 +3,7 @@ import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {Check,MapPin,Phone,ShieldCheck,House,ArrowLeft,X,BadgeDollarSign} from 'lucide-react';
 import {SellerAddressInput} from '@/components/seller-address-input';
 import {sellerBrand,sellerConsentVersion,sellerConsentText,sellerSharingText} from '@/lib/seller-leads';
+import {optinCallNowText,optinCallNowVersion} from '@/lib/optin-call-now';
 import {sellerOptinCopy,sellerOptinSource,sellerOptinCampaign} from '@/lib/seller-optin';
 import {sellerSubmissionStatus,type SellerSubmissionStatus} from '@/lib/seller-submission-status';
 
@@ -64,7 +65,7 @@ export function SellerIntake(){
    const q=new URLSearchParams(window.location.search),source=sellerOptinSource(q.get('utm_source'));
    const campaign=sellerOptinCampaign(q.get('campaign')||q.get('utm_campaign')),clickId=(q.get('fbclid')||q.get('gclid')||q.get('ttclid')||'').replace(/[^a-zA-Z0-9_.:-]/g,'').slice(0,300);
    await Promise.race([eventQueue.current,new Promise(resolve=>setTimeout(resolve,800))]);
-   const r=await fetch('/api/seller/intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,address,phone,consented,consentVersion:sellerConsentVersion,contactTimezone:Intl.DateTimeFormat().resolvedOptions().timeZone,requestId:request.current,campaign,source,clickId,honeypot:trap})});
+   const r=await fetch('/api/seller/intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,address,phone,consented,consentVersion:sellerConsentVersion,callNowVersion:optinCallNowVersion,contactTimezone:Intl.DateTimeFormat().resolvedOptions().timeZone,requestId:request.current,campaign,source,clickId,honeypot:trap})});
    const d=await r.json();if(!r.ok)throw Error(d.error||'Please retry.');setProgress(sellerSubmissionStatus('received'));setDone(true);requestAnimationFrame(()=>success.current?.focus());
   }catch(e){setError(e instanceof Error?e.message:'Please retry.');}finally{lock.current=false;setBusy(false);}
  }
@@ -97,7 +98,7 @@ export function SellerIntake(){
         <div className="seller-contact-field"><label htmlFor="seller-name">Your name</label><input ref={nameInput} id="seller-name" name="name" autoComplete="name" required maxLength={100} value={name} onChange={e=>{setName(e.target.value);request.current='';}} placeholder="First and last name" disabled={busy}/></div>
         <div className="seller-contact-field"><label htmlFor="seller-phone">Phone number</label><input id="seller-phone" name="tel" type="tel" autoComplete="tel" inputMode="tel" required maxLength={30} value={phone} onChange={e=>{setPhone(e.target.value);request.current='';}} placeholder="(555) 123-4567" disabled={busy}/></div>
         <div className="seller-trap" aria-hidden="true"><label>Leave this empty<input tabIndex={-1} autoComplete="off" value={trap} onChange={e=>setTrap(e.target.value)}/></label></div>
-        <label className="seller-choice seller-ai-consent"><input type="checkbox" required checked={consented} onChange={e=>{setConsented(e.target.checked);request.current='';}} disabled={busy}/><span>{sellerConsentText}</span></label>
+        <label className="seller-choice seller-ai-consent"><input type="checkbox" required checked={consented} onChange={e=>{setConsented(e.target.checked);request.current='';}} disabled={busy}/><span>{optinCallNowText} {sellerConsentText}</span></label>
         <button className="seller-submit" disabled={busy||!consented}>{busy?'Saving your request…':'Get My Cash Offer'}</button>
         {error&&<p role="alert" className="seller-error">{error}</p>}
         <p className="seller-privacy-note">By submitting, you acknowledge our <a href="/sell/privacy">Privacy & sharing notice</a>.</p>

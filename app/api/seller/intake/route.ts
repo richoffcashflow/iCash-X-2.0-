@@ -4,7 +4,7 @@ import {randomBytes,createHash} from 'node:crypto';
 import {db,guestHash} from '@/lib/stripe-test';
 import {allowedOrigin} from '@/lib/funding-policy';
 import {limitRequest,validGuest} from '@/lib/funding';
-import {sellerSubmission,sellerConsentText,sellerSharingText,sellerDuplicateKeyInput} from '@/lib/seller-leads';
+import {immediateSellerSubmission,sellerConsentText,sellerSharingText,sellerDuplicateKeyInput} from '@/lib/seller-leads';
 import {processSellerIntake} from '@/lib/seller-pipeline';
 import {processSellerResponses} from '@/lib/seller-response-service';
 import {dispatchTextMessage} from '@/lib/text-message-service';
@@ -15,7 +15,7 @@ const headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referre
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Open the property form directly and try again.'},{status:403,headers});
  try{
-  const body=await req.text();if(body.length>3000)throw Error();const p=sellerSubmission.safeParse(JSON.parse(body));if(!p.success)return NextResponse.json({error:'Check your contact details and accept the contact agreement.'},{status:400,headers});const i=p.data;
+  const body=await req.text();if(body.length>3000)throw Error();const p=immediateSellerSubmission.safeParse(JSON.parse(body));if(!p.success)return NextResponse.json({error:'Check your contact details and accept the contact agreement.'},{status:400,headers});const i=p.data;
   if(i.honeypot)return NextResponse.json({received:true,message:'Your request has been received.'},{headers});
   const jar=await cookies();let token=jar.get('keypath_seller')?.value;if(!validGuest(token)){token=randomBytes(32).toString('hex');jar.set('keypath_seller',token,{httpOnly:true,secure:true,sameSite:'lax',path:'/',maxAge:86400*30});}
   await limitRequest(req,'seller-intake',token,5,3600);
@@ -23,6 +23,10 @@ export async function POST(req:Request){
   const optin=jar.get('homeoffer_optin')?.value;
   const optinGuest=validGuest(optin)&&req.headers.get('sec-gpc')!=='1'?guestHash(optin):null;
   const leadId=await db<string>('rpc/icash_submit_seller_contact_intake','POST',{p_request:i.requestId,p_guest:guestHash(token),p_name:i.name,p_address:i.address,p_phone:i.phone,p_email:i.email,p_duplicate:hash(sellerDuplicateKeyInput(i.address,i.phone)),p_consented:i.consented,p_consent_version:i.consentVersion,p_consent_text:sellerConsentText,p_sharing_text:sellerSharingText,p_attribution:{...(i.contactTimezone?{contactTimezone:i.contactTimezone,contactTimezoneSource:'seller_browser'}:{}),source:i.source,campaign:i.campaign,clickId:i.clickId,measurementOptOut:req.headers.get('sec-gpc')==='1',...(optinGuest?{optinGuest}:{})},p_agent_hash:guestHash(req.headers.get('user-agent')||'unknown')});
+  if(i.callNowVersion){
+   const [receipt]=await db<{state:string}[]>(`icash_seller_intakes?id=eq.${leadId}&select=state&limit=1`);
+   if(receipt&&['received','checking','qualified','assigned'].includes(receipt.state))await db('rpc/icash_request_optin_call_now','POST',{p_lead:leadId,p_request:i.requestId,p_source:'seller_form',p_reference:i.callNowVersion});
+  }
   // Persist first; one-use claims prevent duplicate paid lookups on retries.
   // Cron remains the durable fallback if this bounded callback cannot complete.
   after(async()=>{
