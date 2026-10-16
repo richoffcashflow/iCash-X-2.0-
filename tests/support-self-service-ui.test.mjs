@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import ts from 'typescript';
 import * as guidance from '../lib/support-self-service.ts';
+import * as client from '../lib/support-client.ts';
 const require=createRequire(import.meta.url),id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const evidence=[{key:'work',code:'paused',source:'icash_accounts',status:'attention',detail:'Your bot is paused. Previously authorized work may still finish.',observedAt:'2026-10-02T00:00:00Z'},{key:'billing',code:'renewal_active',source:'icash_daily_plans',status:'ok',detail:'A live daily renewal plan is recorded as active.',observedAt:'2026-10-02T00:00:00Z'}];
 evidence.push({key:'payments',code:'payment_uncredited',source:'icash_funding_orders',status:'attention',detail:'A recorded paid payment is not yet marked credited.',observedAt:'2026-10-02T00:00:00Z'});
@@ -13,7 +14,7 @@ const hooks={
  useCallback(fn,deps){const i=cursor++,previous=slots[i];if(!previous||deps.some((v,j)=>!Object.is(v,previous.deps[j])))slots[i]={deps,fn};return slots[i].fn;},
  useEffect(fn,deps){const i=cursor++,previous=slots[i];if(!previous||deps.some((v,j)=>!Object.is(v,previous.deps[j]))){slots[i]={deps,cleanup:previous?.cleanup};pending.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}},
 };
-function module(file){const code=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;const mod={exports:{}};new Function('require','module','exports',code)(name=>name==='react'?hooks:name==='@/lib/support-self-service'?guidance:name==='@/components/membership-settings'?{MembershipSettings:'MembershipSettings'}:name==='@/components/account-access'?{AccountAccess:'AccountAccess'}:name==='@/components/support-account-checks'?checks:name.endsWith('.css')?{}:require(name),mod,mod.exports);return mod.exports;}
+function module(file){const code=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;const mod={exports:{}};new Function('require','module','exports',code)(name=>name==='react'?hooks:name==='@/lib/support-client'?{...client,supportReplyWaitMs:()=>0}:name==='@/lib/support-self-service'?guidance:name==='@/components/membership-settings'?{MembershipSettings:'MembershipSettings'}:name==='@/components/account-access'?{AccountAccess:'AccountAccess'}:name==='@/components/support-account-checks'?checks:name.endsWith('.css')?{}:require(name),mod,mod.exports);return mod.exports;}
 globalThis.document={hidden:false,addEventListener(){},removeEventListener(){}};
 globalThis.window={matchMedia:()=>({matches:true})};
 const checks=module('components/support-account-checks.tsx'),{SupportChat}=module('components/support-chat.tsx');

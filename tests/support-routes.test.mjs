@@ -3,14 +3,14 @@ import {readFileSync} from 'node:fs';
 import {randomBytes} from 'node:crypto';
 import ts from 'typescript';
 import {z} from 'zod';
-import {supportId,supportMessageInput,supportAnswer,redactSupportQuestion,supportStatusInput,hashCancelNonce,createCancelToken,parseCancelToken} from '../lib/support-policy.ts';
+import {supportId,supportMessageInput,supportAnswer,supportTopic,redactSupportQuestion,supportStatusInput,hashCancelNonce,createCancelToken,parseCancelToken} from '../lib/support-policy.ts';
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,accountId=id(1),userId=id(2),threadId=id(3);
 async function load(file,mocks,key){globalThis[key]=mocks;let source=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;source=source.replace(/^import .*;\s*$/gm,'');return import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(mocks).join(',')+'}=globalThis.'+key+';\n'+source).toString('base64'));}
-const NextResponse={json:(body,o={})=>({body,status:o.status??200,headers:o.headers})};let authorized=true,origin=true,paths=[],replay=false,rateLimited=false,diagnostics=0;
+const NextResponse={json:(body,o={})=>({body,status:o.status??200,headers:o.headers})};let authorized=true,origin=true,paths=[],replay=false,rateLimited=false,diagnostics=0,replayPending=false,classifications=0,finishFailure=false;
 let activeMode='live',activeAccount=accountId,activeUser=userId;const fundingMode=()=>activeMode;
 const workAccount=async()=>{if(!authorized)throw Error('SIGN_IN_REQUIRED');return {accountId:activeAccount,userId:activeUser};};
 const request=(path,body)=>new Request('https://www.geticashx.com'+path,{method:'POST',headers:{origin:'https://www.geticashx.com','Content-Type':'application/json'},body:JSON.stringify(body)});
-const route=await load('app/api/support/route.ts',{NextResponse,z,workAccount,db:async(path,method,body)=>{paths.push({path,method,body});if(path.startsWith('rpc/')){assert.equal(body.p_account,accountId);assert.equal(body.p_user,userId);if(path.endsWith('begin_message'))return {threadId,replay,rateLimited,response:replay?{content:'saved'}:null};if(path.endsWith('escalate'))return body.p_thread===threadId;return null;}assert(path.includes(`account_id=eq.${accountId}`),'Tenant filter on every read');if(path.startsWith('icash_support_threads'))return [{id:threadId,subject:'Help',status:'open'}];return [];},allowedOrigin:()=>origin,fundingMode,supportId,supportMessageInput,supportAnswer,redactSupportQuestion,collectSupportDiagnostics:async id=>{assert.equal(id,accountId);diagnostics++;return [];},classifySupportQuestion:async()=>({topic:'general',ai:false})},'__supportRoute');
+const route=await load('app/api/support/route.ts',{NextResponse,z,workAccount,db:async(path,method,body)=>{paths.push({path,method,body});if(path.startsWith('rpc/')){assert.equal(body.p_account,accountId);assert.equal(body.p_user,userId);if(path.endsWith('begin_message'))return {threadId,replay,rateLimited,response:replay&&!replayPending?{content:'saved'}:null};if(path.endsWith('finish_message')&&finishFailure)throw Error('Receipt unavailable');if(path.endsWith('escalate'))return body.p_thread===threadId;return null;}assert(path.includes(`account_id=eq.${accountId}`),'Tenant filter on every read');if(path.startsWith('icash_support_threads'))return [{id:threadId,subject:'Help',status:'open'}];return [];},allowedOrigin:()=>origin,fundingMode,supportId,supportMessageInput,supportAnswer,supportTopic,redactSupportQuestion,collectSupportDiagnostics:async id=>{assert.equal(id,accountId);diagnostics++;return [];},classifySupportQuestion:async()=>{classifications++;return {topic:'general',ai:false};}},'__supportRoute');
 authorized=false;let r=await route.GET(new Request('https://example.com/api/support'));assert.equal(r.status,401);assert.equal(paths.length,0);
 authorized=true;r=await route.GET(new Request('https://example.com/api/support?threadId='+id(99)));assert.equal(r.status,404);
 paths=[];origin=false;r=await route.POST(request('/api/support',{requestId:id(4),message:'help'}));assert.equal(r.status,403);assert.equal(paths.length,0);origin=true;
@@ -21,6 +21,11 @@ replay=false;rateLimited=true;r=await route.POST(request('/api/support',{request
 r=await route.POST(request('/api/support',{action:'escalate',threadId:id(99)}));assert.equal(r.status,404);
 r=await route.POST(request('/api/support',{action:'escalate',threadId}));assert.equal(r.body.escalated,true);
 r=await route.GET(new Request('https://example.com/api/support'));assert.equal(r.status,200);assert.equal(r.body.evidence,undefined);assert.equal(r.headers['Cache-Control'],'private, no-store');assert.equal(diagnostics,1,'history polling does not rerun account diagnostics');
+// A saved question with no reply is recoverable under the same request receipt.
+replay=true;replayPending=true;paths=[];const priorClassifications=classifications;
+r=await route.POST(request('/api/support',{requestId:id(4),message:'Why paused?'}));assert.equal(r.status,200);assert(paths.some(x=>x.path.endsWith('finish_message')));assert.equal(classifications,priorClassifications,'Recovery does not repeat a paid AI classification');
+finishFailure=true;r=await route.POST(request('/api/support',{requestId:id(4),message:'Why paused?'}));assert.equal(r.status,503,'A failed reply receipt is never presented as saved');
+finishFailure=false;replayPending=false;replay=false;
 let stopFailure=false,stops=0,prepared=null;paths=[];delete process.env.ICASH_SUPPORT_CANCEL_SECRET;
 const cancel=await load('app/api/support/cancel/route.ts',{accountMembership:async()=>null,stopMembership:async()=>{throw Error('No membership in legacy fixture');},NextResponse,randomBytes,z,workAccount,db:async(path,method,body)=>{
  paths.push({path,method,body});
