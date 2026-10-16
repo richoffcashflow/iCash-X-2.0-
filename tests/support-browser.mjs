@@ -26,11 +26,11 @@ export async function verifySupport(browser,base,options,name){
  page.on('pageerror',error=>errors.push(error.message));
  try{
   await page.goto(base+'/preview/support');
-  await page.getByRole('heading',{name:'Hey, I’m James.',exact:true}).waitFor();
+  await page.getByRole('heading',{name:'How can we help?',exact:true}).waitFor();
   const chat=page.getByRole('region',{name:'Support conversation',exact:true});
-  assert.match(await chat.innerText(),/AI Support/);
+  assert.match(await chat.innerText(),/Automated support/);
   const started=Date.now();await chat.getByRole('button',{name:'Send message',exact:true}).click();
-  await chat.getByText('James is typing…',{exact:true}).waitFor();
+  await chat.getByText('iCash Support is typing…',{exact:true}).waitFor();
   assert.equal(await chat.locator('.support-message-assistant').count(),0,'Fast replies wait briefly while typing is visible');
   await chat.locator('.support-message-assistant').waitFor();assert(Date.now()-started>=1600);
   assert.equal(await chat.locator('.support-message-user').count(),1);assert.equal(await chat.locator('.support-working').count(),0);
@@ -42,7 +42,7 @@ export async function verifySupport(browser,base,options,name){
   await chat.locator('.support-message-assistant').waitFor();assert.equal(await chat.locator('.support-message-user').count(),1,'Close/reopen preserves the conversation');
   await page.getByRole('button',{name:'Payment question',exact:true}).click();
   await chat.getByRole('button',{name:'Send message',exact:true}).click();
-  await chat.getByText('James is typing…',{exact:true}).waitFor();
+  await chat.getByText('iCash Support is typing…',{exact:true}).waitFor();
   await chat.getByRole('button',{name:'Close support',exact:true}).click();
   await page.getByRole('button',{name:'Open chat',exact:true}).click();
   await chat.locator('.support-message-assistant').waitFor();assert.match(await chat.innerText(),/Do not make another payment/);
@@ -59,7 +59,7 @@ export async function verifySupport(browser,base,options,name){
   assert.equal(await chat.locator('.support-message').count(),0);
 
   live=true;failWrite=true;await page.goto(base+'/support');
-  await page.getByRole('heading',{name:'Hey, I’m James.',exact:true}).waitFor();
+  await page.getByRole('heading',{name:'How can we help?',exact:true}).waitFor();
   const draft=chat.getByRole('textbox',{name:'Your message'});await draft.fill('Why is my bot paused?');
   await chat.locator('form').evaluate(form=>{form.requestSubmit();form.requestSubmit();});
   await chat.getByRole('alert').waitFor();assert.equal(requests.length,1,'Rapid submit is locked');
@@ -70,6 +70,6 @@ export async function verifySupport(browser,base,options,name){
   signedIn=false;await chat.getByLabel('Chat options',{exact:true}).click();await chat.getByRole('button',{name:'Refresh conversation',exact:true}).click();
   await page.getByRole('heading',{name:'Let’s get you some help',exact:true}).waitFor();assert.equal(await page.locator('.support-message').count(),0,'Sign-out removes account history');
   assert.deepEqual(errors,[]);
-  console.log(`PASS ${name}: James pacing, mobile fit, close/reopen, team handoff, isolated preview, failed delivery/retry idempotency and signed-out privacy.`);
+  console.log(`PASS ${name}: iCash Support pacing, mobile fit, close/reopen, team handoff, isolated preview, failed delivery/retry idempotency and signed-out privacy.`);
  }finally{await context.close();}
 }

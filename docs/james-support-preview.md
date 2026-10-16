@@ -1,8 +1,8 @@
-# James support preview
+# iCash Support preview
 
 `/preview/support` runs the same support conversation component with a per-browser, in-memory transport. The preview never falls back to a live request. Its bot, payment and interrupted-connection examples are fictional; cancellation is unavailable and team requests stay in the sample conversation.
 
-James is explicitly identified as AI Support. Real operator messages retain the Support team label. Short replies have a reading/typing pace of 1.8–3.6 seconds from submission. Slow network requests do not receive another full artificial delay. After eight seconds, the indicator says the account is still being checked. Errors and confirmed team/cancellation actions have no artificial delay. Reduced-motion settings stop the typing animation.
+The chat is branded iCash Support. A small Automated support note identifies the automated replies. Real operator messages retain the Support team label. Short replies have a reading/typing pace of 1.8–3.6 seconds from submission. Slow network requests do not receive another full artificial delay. After eight seconds, the indicator says the account is still being checked. Errors and confirmed team/cancellation actions have no artificial delay. Reduced-motion settings stop the typing animation.
 
 Support reads are bounded at 15 seconds. Writes, including reading their response bodies, are bounded at 45 seconds and are never automatically repeated. A failed message preserves its draft and original request ID. The server checks that a replay matches the original account, thread and message. If its reply was never saved, recovery uses local classification and the existing atomic finish receipt, avoiding another paid classifier request or duplicate reply. Finished replays do not run diagnostics again.
 

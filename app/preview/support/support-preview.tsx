@@ -15,10 +15,10 @@ export function SupportPreview(){
   <div className="james-preview-layout">
    <section className="james-preview-intro" aria-labelledby="preview-title">
     <div className="james-preview-eyebrow"><MessageCircle size={16}/>A little help, right here.</div>
-    <h1 id="preview-title">Meet James.</h1>
+    <h1 id="preview-title">iCash Support.</h1>
     <p className="james-preview-lead">A familiar name.<br/>A clear next step.</p>
-    <p className="james-preview-description">Your iCash X AI support assistant, with brief reading and typing pauses that keep the conversation comfortable.</p>
-    <div className="james-preview-scenarios"><h2>Try a conversation</h2><div>{supportScenarios.map(item=><button key={item.id} type="button" aria-pressed={demo.scenario===item.id} onClick={()=>select(item.id)}>{item.label}</button>)}</div><p>{demo.scenario==='recovery'?'Send once to see a connection interruption. Your draft stays ready; retry it to recover the saved reply.':'A sample question is ready. Press the send arrow to see James reply.'}</p></div>
+    <p className="james-preview-description">A simple support chat, with brief reading and typing pauses that keep the conversation comfortable.</p>
+    <div className="james-preview-scenarios"><h2>Try a conversation</h2><div>{supportScenarios.map(item=><button key={item.id} type="button" aria-pressed={demo.scenario===item.id} onClick={()=>select(item.id)}>{item.label}</button>)}</div><p>{demo.scenario==='recovery'?'Send once to see a connection interruption. Your draft stays ready; retry it to recover the saved reply.':'A sample question is ready. Press the send arrow to see the reply.'}</p></div>
     <button className="james-preview-reset" type="button" onClick={()=>select(demo.scenario)}><RotateCcw size={14}/>Restart preview</button>
     <p className="james-preview-sample"><ShieldCheck size={16}/>Sample conversations only. No customer accounts, payments, calls or support tickets are changed.</p>
    </section>

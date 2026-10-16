@@ -30,7 +30,7 @@ export function createSupportPreview(scenario:SupportScenario):SupportTransport{
   else if(/cancel|refund/.test(question))add('assistant','Open Chat options (•••), then Manage cancellation to review and confirm. Chat messages alone do not cancel anything. Ask the team for refunds or account deletion.');
   else if(/pay|credit|charg/.test(question))add('assistant','A recorded paid payment has not yet been marked as credited. Ask the team to reconcile this recorded payment. Do not make another payment to replace missing credit.');
   else if(/bot|pause|work/.test(question))add('assistant','Your bot is paused. New automated work is stopped; previously authorized work may still finish. The pause flag alone does not tell us why it was paused.\n\nOpen your workspace to review the pause. Resume only when you want new authorized work to run. If you did not pause it, ask the team before resuming.');
-  else add('assistant','Hey, I’m James, your iCash X AI support assistant. What can I help you with—your bot, billing, or a property?');
+  else add('assistant','Hi! How can we help with your bot, billing, or a property?');
   if(scenario==='recovery'&&!interrupted){interrupted=true;throw Error('The connection was interrupted. Your draft is still here. Refresh status or retry the same message.');}
   return Response.json({threadId});
  };
