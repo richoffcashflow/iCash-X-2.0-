@@ -3,17 +3,18 @@ import {useEffect,useRef,useState} from 'react';
 import {ArrowUp,MessageCircle,X} from 'lucide-react';
 import {FundingDialog} from '@/components/funding-dialog';
 import type {AssistantAction,AssistantAnswer} from '@/lib/workspace-assistant-policy';
-export type AssistantRequest={screeningId:string;address:string;nonce:number};
+export type AssistantRequest={screeningId:string;address:string;nonce:number;mode?:'compose'|'explain_offer'};
 type Reply={id:string;question:string;answer:AssistantAnswer|null;state:string;created_at:string};
 type Props={onVipRequired?:()=>void;request:AssistantRequest|null;openRequest?:number;stale:boolean;onAction:(action:AssistantAction)=>Promise<void>|void};
 const suggestions=['What happened today?','What needs me?','What is my bot doing?'];
+const propertySuggestions=['What is the next step for this deal?','Explain this offer','Review this property'];
 export function WorkspaceAssistant({request,openRequest=0,stale,onAction,onVipRequired}:Props){
  const [open,setOpen]=useState(false),[question,setQuestion]=useState(''),[items,setItems]=useState<Reply[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[loading,setLoading]=useState(false),[context,setContext]=useState<AssistantRequest|null>(null),[actionBusy,setActionBusy]=useState(false);
  const inFlight=useRef(false),loaded=useRef(false),alive=useRef(true),handled=useRef<number|null>(null),end=useRef<HTMLDivElement>(null),controller=useRef<AbortController|null>(null);
  const pending=useRef<{requestId:string;question:string;screeningId?:string}|null>(null);
  useEffect(()=>{alive.current=true;const selected=new URLSearchParams(window.location.search).get('assistant');if(selected)setOpen(true);return()=>{alive.current=false;controller.current?.abort();};},[]);
  useEffect(()=>{if(openRequest)setOpen(true);},[openRequest]);
- async function history(){setLoading(true);try{const id=new URLSearchParams(window.location.search).get('assistant');const r=await fetch('/api/work/assistant'+(id?'?id='+encodeURIComponent(id):''),{cache:'no-store'});const value=await r.json();if(!r.ok){if(r.status===403&&value.code==='VIP_REQUIRED')onVipRequired?.();throw Error(value.error);}if(alive.current){setItems(previous=>{const merged=new Map(previous.map(item=>[item.id,item]));for(const item of value.items as Reply[]){if(!merged.get(item.id)?.answer||item.answer)merged.set(item.id,item);}return [...merged.values()].sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at));});loaded.current=true;setError('');}}catch(e){if(alive.current)setError(e instanceof Error?e.message:'Could not load replies.');}finally{if(alive.current)setLoading(false);}}
+ async function history(){setLoading(true);try{const id=new URLSearchParams(window.location.search).get('assistant');const r=await fetch('/api/work/assistant'+(id?'?id='+encodeURIComponent(id):''),{cache:'no-store'});const value=await r.json();if(!alive.current)return;if(!r.ok){if(r.status===403&&value.code==='VIP_REQUIRED')onVipRequired?.();throw Error(value.error);}if(alive.current){setItems(previous=>{const merged=new Map(previous.map(item=>[item.id,item]));for(const item of value.items as Reply[]){if(!merged.get(item.id)?.answer||item.answer)merged.set(item.id,item);}return [...merged.values()].sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at));});loaded.current=true;setError('');}}catch(e){if(alive.current)setError(e instanceof Error?e.message:'Could not load replies.');}finally{if(alive.current)setLoading(false);}}
  useEffect(()=>{if(open&&!loaded.current)void history();},[open]);
  useEffect(()=>{if(open)end.current?.scrollIntoView({block:'nearest'});},[items,busy,open]);
  async function ask(value=question,selected=context){
@@ -32,7 +33,7 @@ export function WorkspaceAssistant({request,openRequest=0,stale,onAction,onVipRe
   }catch(e){if(alive.current)setError(e instanceof Error&&e.name!=='AbortError'?e.message:'This reply is taking longer than expected. Check replies before trying again.');}
   finally{clearTimeout(timer);inFlight.current=false;if(alive.current)setBusy(false);}
  }
- useEffect(()=>{if(!request||handled.current===request.nonce)return;handled.current=request.nonce;setContext(request);setOpen(true);setQuestion('Explain this offer');if(!inFlight.current)void ask('Explain this offer',request);},[request]);
+ useEffect(()=>{if(!request||handled.current===request.nonce)return;handled.current=request.nonce;setContext(request);setOpen(true);const initialQuestion=request.mode==='compose'?'':'Explain this offer';setQuestion(initialQuestion);if(initialQuestion&&!inFlight.current)void ask(initialQuestion,request);},[request]);
  async function act(action:AssistantAction){if(actionBusy||stale)return;setActionBusy(true);setError('');try{await onAction(action);if(['property','attention','funding'].includes(action.kind))setOpen(false);}catch(e){setError(e instanceof Error?e.message:'Could not complete that action.');}finally{setActionBusy(false);}}
  const propertyContext=context&&<div className="assistant-property-context"><span>{context.address}</span><button type="button" aria-label="Clear property context" onClick={()=>setContext(null)}><X size={14}/></button></div>;
  const composer=(dock:boolean)=><form className="assistant-composer" data-credit-action onSubmit={event=>{event.preventDefault();void ask();}}>
@@ -51,7 +52,7 @@ export function WorkspaceAssistant({request,openRequest=0,stale,onAction,onVipRe
     {busy&&<p className="assistant-checking" role="status"><span className="assistant-loading-dots" aria-hidden="true"><i/><i/><i/></span>Checking your workspace…</p>}
     <div ref={end}/>
    </div>
-   <div className="assistant-suggestions" data-credit-action>{suggestions.map(value=><button key={value} type="button" disabled={busy||stale} onClick={()=>{setContext(null);void ask(value,null);}}>{value}</button>)}</div>
+   <div className="assistant-suggestions" data-credit-action>{(context?propertySuggestions:suggestions).map(value=><button key={value} type="button" disabled={busy||stale} onClick={()=>void ask(value,context)}>{value}</button>)}</div>
    {error&&<p className="assistant-error" role="alert">{error} <button type="button" disabled={loading} onClick={()=>void history()}>Check replies</button></p>}
   </div>
   {propertyContext}{composer(false)}

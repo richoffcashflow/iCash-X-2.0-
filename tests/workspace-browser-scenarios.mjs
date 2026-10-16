@@ -3,12 +3,15 @@ import {makeWorkspaceFixture,fixtureAccount} from './fixtures/workspace-volume.m
 import {workspaceAcknowledgmentVersion} from '../lib/workspace-acknowledgment-policy.ts';
 import {workspaceExperienceEvents,workspaceExperienceStages} from '../lib/workspace-experience-events.ts';
 
+// A local one-second WAV proves browser playback without calling a provider.
+const fixtureAudio=Buffer.alloc(44+16000);fixtureAudio.write('RIFF');fixtureAudio.writeUInt32LE(fixtureAudio.length-8,4);fixtureAudio.write('WAVEfmt ',8);fixtureAudio.writeUInt32LE(16,16);fixtureAudio.writeUInt16LE(1,20);fixtureAudio.writeUInt16LE(1,22);fixtureAudio.writeUInt32LE(8000,24);fixtureAudio.writeUInt32LE(16000,28);fixtureAudio.writeUInt16LE(2,32);fixtureAudio.writeUInt16LE(16,34);fixtureAudio.write('data',36);fixtureAudio.writeUInt32LE(16000,40);
+
 export async function verifyWorkspace(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
  const page=await context.newPage(),errors=[],writes=[],external=[],diagnostics=[];
  page.setDefaultTimeout(12000);page.setDefaultNavigationTimeout(20000);page.on('dialog',dialog=>void dialog.accept());
  let contractFlow=false;const contractWrites=[];
- let acknowledged=true,ackFail=false,manual=false,controlFail=false;const acceptedWrites=[],controlWrites=[],apiReads=[];
+ let acknowledged=true,ackFail=false,manual=false,controlFail=false,vip=true;const acceptedWrites=[],controlWrites=[],assistantWrites=[],apiReads=[];
  let scenario='lead',preview=true,emptySearch=false,fulfillmentMode='ok',intentionalCrash=false,callMode='unavailable';
  await context.addInitScript(()=>{Object.defineProperty(navigator,'mediaDevices',{value:{getUserMedia:async()=>{window.fixtureMicrophoneRequests=(window.fixtureMicrophoneRequests||0)+1;throw new DOMException('Fixture microphone denied','NotAllowedError');}},configurable:true});});
  const fulfillmentHolds=new Set();
@@ -58,9 +61,15 @@ export async function verifyWorkspace(browser,base,options,name){
    if(url.pathname==='/api/work/deals')return route.fulfill({json:{id:makeWorkspaceFixture({count:1}).deals[0].id,terms:body.terms,stage:'draft'}});
    assert.equal(body.action,'send');assert.equal(body.confirmed,true);assert.equal(body.signers[0].email,'seller@example.invalid');return route.fulfill({json:{message:'Fixture signing request created.',status:'awaiting_counterparty'}});
   }
+  if(url.pathname==='/api/work/assistant'&&request.method()==='POST'){
+   assert(vip,'Only verified VIP can submit an assistant question');const body=request.postDataJSON();assistantWrites.push(body);
+   return route.fulfill({json:{id:`fixture-reply-${assistantWrites.length}`,question:body.question,state:'completed',created_at:new Date().toISOString(),answer:{text:'Fixture reply for this property.',actions:[],checkedAt:new Date().toISOString()}}});
+  }
   if(request.method()!=='GET'){writes.push(url.pathname);return route.fulfill({status:403,json:{error:'Read-only fixture'}});}
   const p=url.pathname;apiReads.push(p);
-  if(p==='/api/account')return route.fulfill({json:{...fixtureAccount,workspaceAcknowledged:acknowledged,mode:'live',vip:true,vipFeatures:true,billingModel:'membership_credits',membershipActive:true}});
+  if(p==='/api/account')return route.fulfill({json:{...fixtureAccount,workspaceAcknowledged:acknowledged,mode:'live',vip,vipFeatures:vip,billingModel:'membership_credits',membershipActive:true}});
+  if(p==='/api/work/assistant')return route.fulfill({json:{items:[]}});
+  if(p==='/api/billing/membership')return route.fulfill({json:{membership:{state:'active',accessible:true,vip,priceCents:vip?10000:5000,paidThrough:'2026-11-16T05:00:00Z',cancelAtPeriodEnd:false}}});
   if(p==='/api/work/activity')return route.fulfill({json:work(url)});
   if(p==='/api/work/buyer-network')return route.fulfill({json:{...network,hasActiveDeal:signed()&&scenario!=='cancelled'&&scenario!=='cancellation_pending',responses:signed()?2:0,buyers:signed()?network.buyers:[]}});
   if(p==='/api/work/property-photo')return route.fulfill({json:{photo:null}});
@@ -77,6 +86,8 @@ export async function verifyWorkspace(browser,base,options,name){
   if(p==='/api/work/text-contact')return route.fulfill({json:{contacts:[]}});
   if(p==='/api/work/manual-call')return route.fulfill({json:{businessNumber:'+12025550199',contacts:[{phone:'+12025550101',name:'Example Seller',available:callMode!=='blocked',reason:callMode==='blocked'?'This contact asked not to be called.':''},...(callMode==='multiple'?[{phone:'+12025550102',name:'Other Seller',available:true}]:[])],personalCalls:[]}});
   if(p==='/api/work/browser-call')return route.fulfill({json:{ready:callMode!=='unavailable'}});
+  if(p==='/api/work/call-history')return route.fulfill({json:{recordings:[{id:'33333333-3333-4333-8333-333333333333',status:'available',createdAt:'2026-10-16T05:00:00Z',durationSeconds:62,audioAvailable:true,audioExpiresAt:'2027-01-01T05:00:00Z',source:'outbound',party:'seller',conversationId:null}],next:null}});
+  if(p==='/api/work/recording/audio')return route.fulfill({contentType:'audio/wav',body:fixtureAudio});
   if(p==='/api/buyer-qualifications')return route.fulfill({json:{requests:[],candidates:[],hasMore:false,notice:'Fixture'}});
   if(p==='/api/work/buyer-coordination')return route.fulfill({json:{availability:null,receipt:null,assignment:scenario==='deposit_due'?{id:'signed-buyer-assignment',buyer:'Cedar Ridge Homes',depositCents:200000}:null}});
   if(p==='/api/work/journeys')return route.fulfill({json:{journeys:[],messages:[]}});
@@ -226,6 +237,24 @@ export async function verifyWorkspace(browser,base,options,name){
   ackFail=false;await accept.click();await page.locator('.live-property').first().waitFor();assert.equal(acceptedWrites.length,2);
   await page.reload();await page.locator('.live-property').first().waitFor();assert.equal(await page.getByRole('heading',{name:'Before you use iCash X'}).count(),0);
   const collapsed=page.locator('.live-property').first();assert.equal(await collapsed.locator('.property-summary').getAttribute('aria-expanded'),'false');
+  const ask=collapsed.getByRole('button',{name:/^Ask AI about /});await ask.waitFor();assert.equal(await ask.getAttribute('data-vip'),'true');
+  assert(await ask.evaluate(node=>{const b=node.getBoundingClientRect(),card=node.closest('.live-property').getBoundingClientRect();return b.height>=44&&b.left>=card.left&&b.right<=Math.min(innerWidth,card.right)+1;}),'Ask AI is visible and fits the collapsed card');
+  await ask.click();const assistant=page.getByRole('dialog',{name:'Ask AI Bot',exact:true});await assistant.waitFor();
+  await assistant.getByText('What would you like to know?',{exact:true}).waitFor();
+  assert.equal(assistantWrites.length,0,'Opening Ask AI does not send a paid question');
+  assert.match(await assistant.locator('.assistant-property-context').innerText(),/Example/,'The selected deal stays attached');
+  await assistant.getByRole('textbox',{name:'Ask AI Bot',exact:true}).fill('What is the next step for this deal?');await assistant.getByRole('button',{name:'Send question',exact:true}).click();
+  await assistant.getByText('Fixture reply for this property.',{exact:true}).waitFor();assert.equal(assistantWrites[0].screeningId,'00000000-0000-4000-8000-000000000001');
+  await assistant.getByRole('button',{name:'Explain this offer',exact:true}).click();await assistant.locator('.assistant-answer').nth(1).waitFor();assert.equal(assistantWrites[1].screeningId,assistantWrites[0].screeningId,'Suggested questions keep the deal context');
+  await assistant.getByRole('button',{name:'Close',exact:true}).click();assert.equal(await collapsed.locator('.property-summary').getAttribute('aria-expanded'),'false','Asking AI does not expand or change the deal');
+  vip=false;await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await collapsed.locator('.property-ask-bot[data-vip="false"]').waitFor();
+  const beforeLockedReads=apiReads.filter(path=>path==='/api/work/assistant').length;await ask.click();const vipReview=page.getByRole('dialog',{name:'Switch to VIP',exact:true});await vipReview.waitFor();
+  assert.equal(await page.getByRole('dialog',{name:'Ask AI Bot',exact:true}).count(),0);assert.equal(apiReads.filter(path=>path==='/api/work/assistant').length,beforeLockedReads,'Standard review never fetches saved assistant replies');
+  await vipReview.getByRole('button',{name:'Close',exact:true}).click();
+  vip=true;await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await collapsed.locator('.property-ask-bot[data-vip="true"]').waitFor();
+  assert.equal(await page.getByRole('dialog',{name:'Ask AI Bot',exact:true}).count(),0,'A new VIP entitlement does not reopen a prior property conversation');
+  await ask.click();await assistant.waitFor();assert.equal(assistantWrites.length,2,'Upgraded account opens the deal assistant without an automatic charge');await assistant.getByRole('button',{name:'Close',exact:true}).click();
+  await page.screenshot({path:`/tmp/icash-deal-ask-ai-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
   controlFail=true;await collapsed.getByRole('button',{name:/^Take over ·/}).click();await collapsed.getByRole('status').getByText('Could not confirm the control change.',{exact:false}).waitFor();
   assert.equal(await collapsed.getByRole('button',{name:/^Return to bot ·/}).count(),0);
   controlFail=false;await collapsed.getByRole('button',{name:/^Take over ·/}).click();await collapsed.getByRole('button',{name:/^Return to bot ·/}).waitFor();
@@ -263,7 +292,12 @@ export async function verifyWorkspace(browser,base,options,name){
     const dialog=page.getByRole('dialog');await dialog.waitFor();
     await dialog.getByRole('button',{name:'Texts',exact:true}).waitFor();
     await dialog.getByRole('button',{name:'Calls',exact:true}).click();
-    await dialog.getByRole('heading',{name:'Call history'}).waitFor();
+    await dialog.getByRole('heading',{name:'Call recordings',exact:true}).waitFor();
+    const audio=dialog.locator('audio[aria-label="Call recording"]');await audio.waitFor();assert.equal(await audio.getAttribute('preload'),'none');
+    assert.equal(await dialog.getByRole('button',{name:/transcript/i}).count(),0,'Audio is available before any transcript exists');
+    await audio.evaluate(async node=>{await node.play();});await page.waitForFunction(()=>{const node=document.querySelector('audio[aria-label="Call recording"]');return node&&node.readyState>=2&&node.currentTime>0;});
+    await audio.evaluate(node=>node.pause());assert(apiReads.includes('/api/work/recording/audio'),'The browser fetched actual audio bytes');
+    assert(!apiReads.includes('/api/work/conversation'),'Playing audio never fetches a transcript');
     await dialog.getByRole('button',{name:'Close conversation'}).click();
     callMode='single';await card.getByRole('button',{name:/^Call /}).click();
     await dialog.getByText('Allow microphone access in your browser, then try again.',{exact:true}).waitFor();

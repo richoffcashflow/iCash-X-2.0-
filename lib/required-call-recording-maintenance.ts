@@ -22,6 +22,7 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
   }catch{await finish(row,'delete','retry',{reason:'provider_deletion_unconfirmed'});result.held++;}
  }
  for(let row of await db<RecordingRow[]>('rpc/icash_claim_call_recording_work','POST',{p_kind:'reconcile',p_limit:3,p_lease_seconds:120})){
+  let stage='binding';
   try{
    if(row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!sid(row.call_sid,'CA'))throw Error('CALL_BINDING_REVIEW_REQUIRED');
    if(!row.call_ended_at&&!row.end_requested_at&&await db<boolean>('rpc/icash_call_credit_available','POST',{p_account:row.account_id,p_operation:row.operation_key})===false){
@@ -33,22 +34,28 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
     if(call.sid!==row.call_sid||call.account_sid!==row.provider_account_sid||!['completed','failed','busy','no-answer','canceled'].includes(String(call.status)))throw Error('CALL_TERMINATION_UNCONFIRMED');
     const ended=await recordingTransition(db,row,'call_ended',{callSid:row.call_sid,providerAccountSid:row.provider_account_sid,status:call.status});if(!ended)throw Error('CALL_TERMINATION_SAVE_REQUIRED');row=ended;
    }
-   // Recover provider conversation identity only from exact provider user/branch/version and Call SID evidence.
-   if(row.start_claimed_at&&row.recording_sid&&!row.conversation_id&&['recording','processing','available','expired','absent','failed'].includes(row.state)){
+   // A missing AI identity must not block independently verified call audio.
+   // Keep identity discovery scheduled, with its exact provider bindings intact.
+   stage='conversation';
+   try{if(row.start_claimed_at&&row.recording_sid&&!row.conversation_id&&['recording','processing','available','expired','absent','failed'].includes(row.state)){
     const list=await provider.conversations(row),rows=list.conversations;
     if(list.has_more!==false||!Array.isArray(rows)||rows.length>1)throw Error('CONVERSATION_BINDING_REVIEW_REQUIRED');
     if(rows.length===0)throw Error('CONVERSATION_BINDING_NOT_YET_AVAILABLE');
     if(rows.length===1){const candidate=object(rows[0]);const c=await provider.conversation(String(candidate.conversation_id));
      const phone=object(object(c.metadata).phone_call),init=object(c.conversation_initiation_client_data);
      if(c.conversation_id!==candidate.conversation_id||c.agent_id!==row.agent_id||c.branch_id!==row.branch_id||c.version_id!==row.version_id||c.user_id!=='icash-recorded:'+row.id||phone.call_sid!==row.call_sid||phone.direction!=='outbound'||phone.external_number!==row.to_phone||phone.agent_number!==row.from_phone||init.user_id!==c.user_id)throw Error('CONVERSATION_BINDING_REVIEW_REQUIRED');
-     await recordingTransition(db,row,'bind_conversation',{conversationId:c.conversation_id,toolTokenHash:sha(recordingStopToken(row.operation_key,env))});
+     const bound=await recordingTransition(db,row,'bind_conversation',{conversationId:c.conversation_id,toolTokenHash:sha(recordingStopToken(row.operation_key,env))});
+     if(!bound)throw Error('CONVERSATION_BINDING_NOT_SAVED');row=bound;
     }
    }
+   }catch{console.warn('recording_reconcile_diagnostic',{stage:'conversation',recordingId:row.id,reason:'conversation_binding_pending'});}
+   stage='carrier';
    if(!row.start_claimed_at){
     let terminal=row;const call=await provider.getCall(row.call_sid!);
     if(row.state==='consent_pending'&&['completed','busy','failed','no-answer','canceled'].includes(String(call.status))){const failed=await recordingTransition(db,row,'fail',{reason:'call_ended_before_recording'});if(failed)terminal=failed;}
     const settled=object(await settleRecordingGateOnly(db,provider,terminal));if(settled.settled===true)result.reconciled++;else{await finish(terminal,'reconcile','retry',{reason:'terminal_carrier_reconciliation_required'});result.held++;}continue;
    }
+   stage='recording_receipt';
    let receipt:Record<string,unknown>;
    if(row.recording_sid)receipt=await provider.getRecording(row.recording_sid);
    else{
@@ -65,8 +72,21 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
    }
    else if(receipt.status==='absent'){const ended=await provider.end(row.call_sid!);if(ended.sid!==row.call_sid||ended.account_sid!==row.provider_account_sid||ended.status!=='completed')throw Error('REQUIRED_RECORDING_END_UNCONFIRMED');outcome='absent';payload={};}
    else{outcome='processing';payload={recordingSid:receipt.sid,providerStartedAt:new Date(String(receipt.start_time)).toISOString()};}
-   if(await finish(row,'reconcile',outcome,payload))result.reconciled++;else result.held++;
-  }catch{await finish(row,'reconcile','retry',{reason:'provider_recording_reconciliation_required'});result.held++;}
+   stage='receipt_commit';
+   if(await finish(row,'reconcile',outcome,payload))result.reconciled++;
+   else{
+    // Rejected receipts previously retained their old due time and lease until
+    // expiration. Those rows repeatedly occupied the small batch ahead of new calls.
+    console.warn('recording_reconcile_diagnostic',{stage,recordingId:row.id,reason:'recording_receipt_not_saved',state:row.state,providerStatus:typeof receipt.status==='string'?receipt.status:'missing',startMatches:row.provider_started_at===null||Date.parse(row.provider_started_at)===Date.parse(String(receipt.start_time)),durationType:typeof receipt.duration,leasePresent:typeof row.reconcile_lease_token==='string'});
+    throw Error('RECORDING_RECEIPT_NOT_SAVED');
+   }
+  }catch(error){
+   const reason=error instanceof Error&&error.message==='RECORDING_RECEIPT_NOT_SAVED'?'recording_receipt_not_saved':'provider_recording_reconciliation_required';
+   console.warn('recording_reconcile_diagnostic',{stage,recordingId:row.id,reason,...(error instanceof RecordingProviderError?{providerStatus:error.status}:{})});
+   try{if(!await finish(row,'reconcile','retry',{reason}))console.warn('recording_reconcile_diagnostic',{stage:'retry_commit',recordingId:row.id,reason:'recording_retry_not_saved'});}
+   catch{console.warn('recording_reconcile_diagnostic',{stage:'retry_commit',recordingId:row.id,reason:'recording_retry_failed'});}
+   result.held++;
+  }
  }
  return result;
 }

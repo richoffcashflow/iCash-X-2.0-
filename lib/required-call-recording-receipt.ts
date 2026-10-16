@@ -5,6 +5,17 @@ type CostItem={label:string;basis:'observed'|'estimated'|'not_applicable'|'pendi
 const eq=encodeURIComponent;
 export {recordingAddonCosts} from './required-call-recording-cost.ts';
 import {recordingAddonCosts} from './required-call-recording-cost.ts';
+/** Only playback metadata leaves the server. A transcript is not an audio receipt. */
+export function recordingAudioPresentation(row:RecordingRow,now=Date.now()){
+ const available=audioAvailable(row,now),expired=!!row.audio_expires_at&&Date.parse(row.audio_expires_at)<=now;
+ const status=row.state==='deleted'?'deleted':row.state==='deletion_pending'?'deletion_pending':expired?'expired':row.state==='available'&&!available?'processing':row.state;
+ return {id:row.id,status,createdAt:row.created_at,durationSeconds:row.duration_seconds,audioAvailable:available,audioExpiresAt:row.audio_expires_at};
+}
+export async function recordingPresentationById(db:RecordingDb,accountId:string,id:string,now=Date.now()){
+ const rows=await db<RecordingRow[]>(`icash_call_recordings?id=eq.${eq(id)}&account_id=eq.${eq(accountId)}&select=*`);
+ if(rows.length!==1||rows[0].id!==id||rows[0].account_id!==accountId)return null;
+ return recordingAudioPresentation(rows[0],now);
+}
 export async function recordingPresentation(db:RecordingDb,accountId:string,conversationId:string,now=Date.now()){
  const calls=await db<{conversation_id:string;operation_key:string}[]>(`icash_live_conversations?id=eq.${eq(conversationId)}&account_id=eq.${eq(accountId)}&select=conversation_id,operation_key`);
  if(calls.length!==1)return null;
@@ -22,7 +33,5 @@ export async function recordingPresentation(db:RecordingDb,accountId:string,conv
  else items.push({label:'Twilio audio recording',basis:'pending',amountMicros:null},{label:'30-day audio storage allocation',basis:'pending',amountMicros:null});
  const manifests=await db<{components:unknown}[]>(`icash_cost_manifests?operation_key=eq.${eq(row.operation_key)}&select=components`);
  if(manifests.length===1){const c=object(manifests[0].components),carrier=object(c.twilio);if(Number.isSafeInteger(carrier.amountMicros)&&Number(carrier.amountMicros)>=0)items[1]={label:'Carrier and streaming',basis:carrier.basis==='verified'?'observed':'estimated',amountMicros:Number(carrier.amountMicros)};}
- const expired=!!row.audio_expires_at&&Date.parse(row.audio_expires_at)<=now;
- const status=row.state==='deleted'?'deleted':row.state==='deletion_pending'?'deletion_pending':expired?'expired':row.state;
- return {id:row.id,status,durationSeconds:row.duration_seconds,audioExpiresAt:row.audio_expires_at,providerReceipt:sid(row.recording_sid,'RE')?{provider:'Twilio',recordingSid:row.recording_sid,startAt:row.provider_started_at,endAt:row.ended_at}:null,costs:{status:items.some(x=>x.basis==='pending')?'pending':items.some(x=>x.basis==='estimated')?'estimated':'verified',holdCents:row.charge_cap_cents,customerChargeCents:spend?.state==='settled'?spend.charged_cents:null,items}};
+ return {...recordingAudioPresentation(row,now),providerReceipt:sid(row.recording_sid,'RE')?{provider:'Twilio',recordingSid:row.recording_sid,startAt:row.provider_started_at,endAt:row.ended_at}:null,costs:{status:items.some(x=>x.basis==='pending')?'pending':items.some(x=>x.basis==='estimated')?'estimated':'verified',holdCents:row.charge_cap_cents,customerChargeCents:spend?.state==='settled'?spend.charged_cents:null,items}};
 }

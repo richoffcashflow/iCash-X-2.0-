@@ -63,7 +63,8 @@ const member=mount({...account,vip:true});tree=member.render();assert(!props(tre
 assert(props(tree,'PlatformBuyerNetwork'),'Verified VIP members get the live network card');
 assert(props(tree,'WorkspaceAssistant'),'Verified VIP members can use the assistant');assert.equal(props(tree,'LiveWorkspace').assistantVipLocked,false);
 props(tree,'LiveWorkspace').onOpenAssistant();tree=member.render();assert.equal(props(tree,'WorkspaceAssistant').openRequest,1);
-props(tree,'LiveWorkspace').onAsk('fixture-property','123 Fixture Lane');tree=member.render();assert.equal(props(tree,'WorkspaceAssistant').request.screeningId,'fixture-property');
+props(tree,'LiveWorkspace').onAsk('fixture-property','123 Fixture Lane');tree=member.render();assert.equal(props(tree,'WorkspaceAssistant').request.screeningId,'fixture-property');assert.equal(props(tree,'WorkspaceAssistant').request.mode,'compose','Deal card opens a composer without a paid automatic question');
+member.account({...account,email:'other-vip@example.com',vip:true});tree=member.render();assert.equal(props(tree,'WorkspaceAssistant').request,null,'Property context cannot cross account identities before effect cleanup');assert.equal(props(tree,'WorkspaceAssistant').openRequest,0);
 member.account({...account,vip:false});tree=member.render();assert(!props(tree,'WorkspaceAssistant'),'Assistant unmounts when VIP entitlement is lost');
 const bannerModule={exports:{}};new Function('require','module','exports',code('components/workspace-vip-banner.tsx'))(require,bannerModule,bannerModule.exports);
 let reviewed=0;tree=bannerModule.exports.WorkspaceVipBanner({onUpgrade(){reviewed++;}});const upgrade=all(tree).find(n=>n.type==='button');assert.equal(upgrade.props.type,'button');assert.equal(upgrade.props['aria-haspopup'],'dialog');upgrade.props.onClick();assert.equal(reviewed,1);assert.match(text(tree),/20%/);

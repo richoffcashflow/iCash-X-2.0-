@@ -28,7 +28,7 @@ import {ContractReviewGuide} from '@/components/contract-review-guide';
 import {fillEmptyTerms} from '@/lib/contract-preparation';
 import {dealCardSummary} from '@/lib/deal-card-summary';
 import {workMilestone} from '@/lib/work-milestone';
-import {CallConversation} from '@/components/call-conversation';
+import {PropertyCallHistory} from '@/components/property-call-history';
 import {conversationDisplaySummary} from '@/lib/conversation-display';
 import {SmsRouteReviewCard,type SmsRouteReview} from '@/components/sms-route-review';
 import {PropertyMessages} from '@/components/property-messages';
@@ -128,11 +128,11 @@ function PropertyCard({onAsk,assistantVipLocked=false,property:p,work,principal,
     <PropertyAnalysisSummary result={p.result}/>
     <PropertyDebtSummary result={p.result}/>
     <section><h4>Property & owner details</h4><PropertyFacts property={p} lookups={lookups}/></section>
-{onAsk&&<button type="button" className="workspace-quiet property-ask-bot" aria-haspopup="dialog" disabled={stale} data-credit-action={assistantVipLocked?undefined:true} onClick={()=>onAsk(p.id,p.result.property.address)}><Sparkles size={15} aria-hidden="true"/><span className="property-ask-label">Ask AI Bot about this property</span>{assistantVipLocked&&<span className="assistant-vip-label"><Crown size={12} aria-hidden="true"/>VIP</span>}</button>}
    </WorkspacePanel>;
  return <article hidden={hidden} className="live-property" id={`property-${p.id}`} aria-labelledby={`property-address-${p.id}`} data-needs-attention={needsAttention(p.id,work)} data-expanded={active} data-promising={promising}>
   <div className="property-disclosure">
    <PropertyCardHeader property={p} owner={owner} bot={bot} dealSummary={dealSummary} phase={phase} practice={practice} active={active} sellerSummary={sellerSummary} thumbnail={<PropertyThumbnail key={photoRefresh} screeningId={p.id} address={p.result.property.address} images={p.result.property.images}/>} onToggle={()=>onToggle(!active)} onContact={openContact} onControl={()=>void control()} manual={manual} controlBusy={controlBusy} controlDisabled={controlDisabled}/>
+   {onAsk&&<div className="property-assistant-action"><button type="button" className="workspace-quiet property-ask-bot" aria-label={`Ask AI about ${address.street}`} aria-haspopup="dialog" disabled={stale} data-vip={!assistantVipLocked} onClick={()=>onAsk(p.id,p.result.property.address)}><Sparkles size={17} aria-hidden="true"/><span className="property-ask-label">Ask AI</span><span className="assistant-vip-label"><Crown size={12} aria-hidden="true"/>VIP</span></button></div>}
    {controlMessage&&<p className="property-control-result" role="status">{controlMessage}</p>}
    {visited&&<Activity mode={active&&!hidden?'visible':'hidden'}><div className="property-details" id={`property-content-${p.id}`}>
     <PropertyNextStep property={p} work={work} stale={stale} onRefresh={onRefresh}/>
@@ -150,7 +150,7 @@ function PropertyCard({onAsk,assistantVipLocked=false,property:p,work,principal,
    <div className="contact-dialog-heading"><div><h3 id={`contact-heading-${p.id}`}>{address.street}</h3><small>{owner?`${owner} · `:''}{address.location}</small></div><button className="contact-dialog-close" aria-label="Close conversation" onClick={()=>{setContactView(null);setCallRequested(false);}}><X size={20}/></button></div>
    {contactVisited&&<Activity mode={contactView&&!hidden?'visible':'hidden'}>    <section className="property-conversations" id={`conversation-${p.id}`} aria-label="Property conversations"><div className="workspace-section-heading"><div className="conversation-switch"><button aria-pressed={contactView==='texts'} onClick={()=>{setContactView('texts');setCallRequested(false);}}><MessageCircle size={16}/>Texts</button><button aria-pressed={contactView==='calls'} onClick={()=>setContactView('calls')}><Phone size={16}/>Calls{calls.length?` (${calls.length})`:''}</button></div></div><div className="conversation-control"><span>{manual?'You’re handling this lead':'Bot manages this lead'}</span>{manual&&<button className="workspace-quiet" disabled={controlBusy||['cancellation_pending','cancelled'].includes(deal?.stage??'')} onClick={()=>void control()}>{controlBusy?'Saving…':'Return to bot'}</button>}</div>{controlMessage&&<p className="control-result" role="status">{controlMessage}</p>}
     <div className="contact-text-view" hidden={contactView!=='texts'}><PropertyMessages screeningId={p.id} active={contactView==='texts'&&!hidden} onTakeover={tookOver}/></div>
-    {contactView==='calls'&&<div className="property-call-list"><ManualCallOptions screeningId={p.id} onTakeover={tookOver} autoStart={callRequested} onAutoStartHandled={()=>setCallRequested(false)}/><h4 className="call-history-title">Call history</h4>{calls.length?calls.map(c=><CallConversation key={c.id} id={c.id} source={c.source} party={c.party} summary={c.summary} completedAt={c.completed_at} durationSeconds={c.durationSeconds} nextAction={c.nextAction} interested={c.interested} optedOut={c.optedOut} humanRequested={c.humanRequested}/>):<div className="conversation-empty"><Phone size={24}/><strong>No completed AI conversations yet</strong><p>Completed conversations, transcripts, and available recordings will appear here.</p></div>}</div>}
+    {contactView==='calls'&&<div className="property-call-list"><ManualCallOptions screeningId={p.id} onTakeover={tookOver} autoStart={callRequested} onAutoStartHandled={()=>setCallRequested(false)}/><PropertyCallHistory screeningId={p.id} conversations={calls}/></div>}
     </section>
 </Activity>}
   </dialog>

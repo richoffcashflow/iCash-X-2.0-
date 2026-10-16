@@ -14,7 +14,7 @@ function load(source, dependencies = {}) {
   new Function('require', 'module', 'exports', code)(name => dependencies[name] ?? (name==='@/lib/conversation-display'?conversationDisplay:require(name)), module, module.exports);
   return module.exports;
 }
-const {ReceiptDetails, readReceipt, recordingStates} = load(recordingSource + '\nexport {ReceiptDetails, readReceipt, recordingStates};');
+const {ReceiptDetails, readReceipt, recordingStates} = load(recordingSource + '\nexport {ReceiptDetails, recordingStates};');
 const conversationId = '11111111-1111-4111-8111-111111111111';
 const otherConversationId = '22222222-2222-4222-8222-222222222222';
 const recordingId = '33333333-3333-4333-8333-333333333333';
@@ -204,4 +204,31 @@ calls=queuedFetch();view=harness(recordingSource,'CallRecording',{conversationId
 await view.flush();assert.equal(calls[0].url,`/api/work/reception-recording?id=${conversationId}`);
 calls[0].resolve(Response.json({...fixture,audioAvailable:true}));await view.flush();assert.match(view.markup(),/reception-recording\/audio/);
 view.props({conversationId,source:'outbound'});assert.doesNotMatch(view.markup(),/<audio/,'source switches hide stale audio');await view.flush();view.unmount();
+// An available recording is playable without any completed conversation or transcript lookup.
+calls=queuedFetch();let receiptRefreshes=0;
+view=harness(recordingSource,'CallRecording',{recordingId,receipt:readReceipt(fixture),onRefresh:()=>receiptRefreshes++});
+await view.flush();assert.equal(calls.length,0,'listing receipts need no transcript or duplicate metadata request');
+assert.match(view.markup(),/<audio/);assert.match(view.markup(),/Listen to call recording/);
+const detailsNode=elements(view.tree).find(node=>node.type?.name==='ReceiptDetails');
+const audioNode=elements(detailsNode.type(detailsNode.props)).find(node=>node.type==='audio');
+audioNode.props.onError();await view.flush();assert.match(view.markup(),/Audio could not play/);
+view.button('Retry playback').props.onClick();await view.flush();
+assert.equal(receiptRefreshes,1);assert.doesNotMatch(view.markup(),/Audio could not play/);
+assert.equal(elements(view.tree).find(node=>node.type?.name==='ReceiptDetails').props.playbackAttempt,1);
+view.unmount();
+calls=queuedFetch();view=harness(recordingSource,'CallRecording',{recordingId});await view.flush();
+assert.equal(calls[0].url,`/api/work/recording?id=${recordingId}`);
+calls[0].resolve(Response.json(fixture));await view.flush();assert.match(view.markup(),/<audio/);view.unmount();
+
+calls=queuedFetch();view=harness(conversationSource,'CallConversation',{id:recordingId,recordingId,recordingReceipt:readReceipt(fixture),party:'seller',transcriptAvailable:false},dependencies);
+await view.flush();assert.equal(calls.length,0);
+assert(elements(view.tree).some(node=>node.type===recordingStub),'recording shown before a transcript exists');
+assert(!elements(view.tree).some(node=>node.type==='details'),'no transcript placeholder blocks recording-only calls');
+view.props({id:conversationId,recordingId,recordingReceipt:readReceipt(fixture),party:'seller',transcriptAvailable:true});await view.flush();
+assert.equal(elements(view.tree).find(node=>node.type===recordingStub).key,`outbound:${recordingId}`,'late transcript keeps the same audio player');
+assert.equal(calls.length,0);toggle(true);await view.flush();assert.equal(calls.length,1);
+calls[0].resolve(Response.json({transcript:[{role:'agent',message:'Outbound only'}],next:null}));await view.flush();
+view.props({id:conversationId,source:'reception',party:'seller'});assert.doesNotMatch(text(view.tree),/Outbound only/,'source switches never show the old transcript');
+await view.flush();view.unmount();
+
 console.log('Call player/transcript: authenticated playback, lazy audio, sanitized states, inbound/outbound routes, contact-switch races, retries and transcript pagination passed.');
