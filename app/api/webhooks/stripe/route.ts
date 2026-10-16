@@ -28,7 +28,13 @@ export async function POST(req:Request) {
   }
  }else if(event.type==="payment_intent.succeeded"&&event.data.object.metadata?.icash_auto_recharge_attempt){await settleAutoRecharge(event.data.object);
  }else if(event.type==="invoice.paid"){if(!await settleMembershipInvoice(event.data.object.id))await settleDailyInvoice(event.data.object.id);
- }else if(event.type==="invoice.payment_failed"||event.type==="invoice.payment_action_required"){const sid=event.data.object.parent?.subscription_details?.subscription;const id=typeof sid==='string'?sid:sid?.id;if(id){const sub=await stripe.subscriptions.retrieve(id);if(!await syncMembershipSubscription(sub))await syncDailySubscription(sub);}
+ }else if(event.type==="invoice.payment_failed"||event.type==="invoice.payment_action_required"){
+  // Live endpoints can deliver older invoice shapes. Read with the SDK's API
+  // version, then synchronize current state rather than an out-of-order payload.
+  const invoice=await stripe.invoices.retrieve(event.data.object.id);
+  if(invoice.id!==event.data.object.id||invoice.livemode!==event.livemode)throw Error('Invoice mode mismatch');
+  const sid=invoice.parent?.subscription_details?.subscription,id=typeof sid==='string'?sid:sid?.id;
+  if(id){const sub=await stripe.subscriptions.retrieve(id);if(!await syncMembershipSubscription(sub))await syncDailySubscription(sub);}
  }else if(event.type==="customer.subscription.updated"||event.type==="customer.subscription.deleted"){const sub=await stripe.subscriptions.retrieve(event.data.object.id);if(!await syncMembershipSubscription(sub))await syncDailySubscription(sub);
  }else if(event.type==="charge.refunded"||event.type==="charge.dispute.created"){
   const obj=event.data.object;const payment=typeof obj.payment_intent==="string"?obj.payment_intent:obj.payment_intent?.id;

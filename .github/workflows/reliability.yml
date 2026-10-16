@@ -9,6 +9,18 @@ concurrency:
   group: reliability-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: npm install --global pnpm@11.25.0
+      - run: pnpm audit --prod --audit-level=high
   all-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20

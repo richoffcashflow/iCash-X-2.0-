@@ -2,6 +2,8 @@ import Stripe from 'stripe';
 import {pathToFileURL} from 'node:url';
 import {summarizeDispute} from '../lib/disputes.ts';
 export const disputeEvents=['charge.dispute.created','charge.dispute.updated','charge.dispute.closed','charge.dispute.funds_withdrawn','charge.dispute.funds_reinstated'];
+// Auto-recharge reconciliation remains the fallback if event delivery is delayed.
+export const requiredWebhookEvents=[...disputeEvents,'payment_intent.succeeded'];
 export async function prepareDisputeWebhooks(env=process.env,createStripe=key=>new Stripe(key,{maxNetworkRetries:1,timeout:10000})){
  const production=env.VERCEL_ENV==='production'&&(!env.VERCEL_TARGET_ENV||env.VERCEL_TARGET_ENV==='production')&&env.VERCEL_GIT_COMMIT_REF==='main';
  if(!production)return {status:'skipped'};
@@ -11,10 +13,10 @@ export async function prepareDisputeWebhooks(env=process.env,createStripe=key=>n
  const matches=listed.data.filter(e=>e.livemode&&e.status==='enabled'&&['https://www.geticashx.com/api/webhooks/stripe','https://geticashx.com/api/webhooks/stripe'].includes(e.url));
  if(!matches.length)throw Error('ICASH_WEBHOOK_NOT_FOUND');
  for(const endpoint of matches){
-  if(endpoint.enabled_events.includes('*')||disputeEvents.every(e=>endpoint.enabled_events.includes(e)))continue;
-  await stripe.webhookEndpoints.update(endpoint.id,{enabled_events:[...new Set([...endpoint.enabled_events,...disputeEvents])]});
+  if(endpoint.enabled_events.includes('*')||requiredWebhookEvents.every(e=>endpoint.enabled_events.includes(e)))continue;
+  await stripe.webhookEndpoints.update(endpoint.id,{enabled_events:[...new Set([...endpoint.enabled_events,...requiredWebhookEvents])]});
   const confirmed=await stripe.webhookEndpoints.retrieve(endpoint.id);
-  if(confirmed.url!==endpoint.url||!confirmed.livemode||confirmed.status!=='enabled'||!disputeEvents.every(e=>confirmed.enabled_events.includes(e)))throw Error('DISPUTE_WEBHOOK_NOT_CONFIRMED');
+  if(confirmed.url!==endpoint.url||!confirmed.livemode||confirmed.status!=='enabled'||!requiredWebhookEvents.every(e=>confirmed.enabled_events.includes(e)))throw Error('DISPUTE_WEBHOOK_NOT_CONFIRMED');
  }
  // Read actual response shapes without logging payment or customer records.
  const disputes=await stripe.disputes.list({limit:50});
