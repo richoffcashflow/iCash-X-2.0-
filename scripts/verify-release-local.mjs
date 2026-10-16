@@ -9,7 +9,7 @@ const suites = [
  'webinar-entry-route', 'webinar-intelligence-route', 'webinar-vip', 'webinar-growth', 'webinar-recovery', 'webinar-return-database',
  'webinar-purchase-flow', 'webinar-exit-reminder', 'webinar-chat-no-assistant', 'webinar-followup-routes', 'webinar-replay-spots',
  'workspace-simplification', 'workspace-stage-summary', 'buyer-network-workspace', 'fulfillment-guidance', 'workspace-next-actions', 'deal-tools-disclosure',
- 'workspace-vip-ui', 'property-call-history', 'call-recording-ui', 'property-call-history-ui', 'recording-maintenance-retry',
+ 'workspace-vip-ui', 'property-call-history', 'call-recording-ui', 'property-call-history-ui', 'recording-maintenance-retry', 'outbound-recording-final-clock',
  'property-analysis-summary', 'property-debt-summary',
  'seller-submission-status',
  'optin-call-now-route', 'optin-call-now-database',
