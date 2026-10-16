@@ -124,7 +124,12 @@ export async function verifyWebinarExit(browser){
   await regular.waitForFunction(()=>window.exitEvent||window.nativeFallback);
   const supported=await regular.evaluate(()=>!!window.exitEvent?.cancelable&&!!window.exitEvent?.userInitiated);
   if(supported){await regular.getByRole('dialog').waitFor({state:'visible'});assert.equal(fallback,0);await regular.getByRole('button',{name:'Leave webinar'}).click();}
-  else {assert.equal(fallback,1);await regular.goBack();}
+  else {
+   // The navigate event precedes beforeunload. Wait for the native Stay action
+   // to finish before initiating a second Back, or the two attempts can race.
+   await regular.waitForFunction(()=>window.nativeFallback===true);
+   assert.equal(fallback,1);await regular.goBack();
+  }
   await regular.waitForURL(origin+'/away');const after=await regularTab.send('Page.getNavigationHistory');assert.equal(after.entries.length,entries.entries.length,'Leaving preserves real history without extra entries');await regularTab.detach();await regular.close();
 
   // The intended next video has no prompt; its first real exit remains eligible.
