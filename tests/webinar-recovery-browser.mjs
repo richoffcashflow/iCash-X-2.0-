@@ -14,7 +14,7 @@ export async function verifyWebinarRecovery(browser,base,options,name){
   if(url.pathname==='/api/webinar/chat/feed')return json({messages:[],statuses:[]});
   if(url.pathname==='/api/webinar/timers')return json({deadlines:{},offerDeadlines:{},serverNow:Date.now()});
   if(url.pathname==='/api/webinar/event'){
-   if(route.request().postDataJSON().kind==='completed'&&route.request().resourceType()==='fetch'){
+   if(route.request().resourceType()==='fetch'&&route.request().postDataJSON()?.kind==='completed'){
     completionAttempts++;
     if(failCompletion)return route.fulfill({status:503,json:{error:'Fixture interruption'}});
     return json({saved:true,redirect:'/fixture-checkout'});
@@ -36,7 +36,9 @@ export async function verifyWebinarRecovery(browser,base,options,name){
   await page.waitForFunction(()=>!!document.querySelector('video'));
   await page.clock.fastForward(13000);
   const resume=page.getByRole('button',{name:'Resume video',exact:true});await resume.waitFor({state:'visible'});
-  const before=videoRequests;await resume.click();await page.waitForFunction(()=>document.querySelector('video')?.networkState===2);
+  const before=videoRequests;
+  await Promise.all([page.waitForRequest(r=>new URL(r.url()).pathname==='/fixture-stalled.mp4'),resume.click()]);
+  await page.waitForFunction(()=>document.querySelector('video')?.networkState===2);
   assert(videoRequests>before,'Resume reloads a video whose initial metadata never arrived');
   await page.close();
   for(const reconnect of [false,true]){
@@ -44,8 +46,10 @@ export async function verifyWebinarRecovery(browser,base,options,name){
    const end=await context.newPage();end.on('pageerror',e=>errors.push(e.message));await end.clock.install();
    await end.goto(base+'/live/123456',{waitUntil:'domcontentloaded'});
    await end.getByRole('heading',{name:'Recovery fixture'}).waitFor({state:'attached'});
-   await end.locator('video').evaluate(video=>video.dispatchEvent(new Event('ended')));
-   await end.waitForResponse(r=>r.url().endsWith('/api/webinar/event')&&r.request().postDataJSON().kind==='completed');
+   await Promise.all([
+    end.waitForResponse(r=>r.url().endsWith('/api/webinar/event')&&r.request().resourceType()==='fetch'&&r.request().postDataJSON()?.kind==='completed'),
+    end.locator('video').evaluate(video=>video.dispatchEvent(new Event('ended'))),
+   ]);
    assert.equal(completionAttempts,1);
    failCompletion=false;
    if(reconnect)await end.evaluate(()=>window.dispatchEvent(new Event('online')));
