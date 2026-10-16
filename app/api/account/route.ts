@@ -39,10 +39,22 @@ export async function GET(req:Request){
   if(core||!canCheck)return NextResponse.json({...base,...held,readinessPending:!!core&&canCheck},{headers});
   stage='work_readiness';
   await resolveRequestedPropertyMarket(snapshot.accountId,user.id);
-  const [readiness,smsReady,discovery,contacts]=await Promise.all([
+  const readChecks=()=>Promise.all([
    launchReadiness(snapshot.accountId),smsAccountReady(snapshot.accountId,user.id),
    discoveryAccountReadiness(snapshot.accountId,user.id),contactAccountReadiness(snapshot.accountId,user.id)
   ]);
+  let [readiness,smsReady,discovery,contacts]=await readChecks();
+  // Funding is retained if its setup trigger fails. Retry missing setup once on
+  // the authenticated readiness request, including nationwide/inbound accounts.
+  // Existing disabled/expired configurations are operator decisions, not gaps.
+  try{
+   const missingDiscovery=discovery.reason==='discovery_configuration_required';
+   const missingVoice=!missingDiscovery&&readiness.blockers?.includes('voice')&&!(await db<{account_id:string}[]>(`icash_voice_configs?account_id=eq.${snapshot.accountId}&select=account_id&limit=1`)).length;
+   if(missingDiscovery||missingVoice){
+    await db('rpc/icash_provision_funded_account','POST',{p_account:snapshot.accountId});
+    [readiness,smsReady,discovery,contacts]=await readChecks();
+   }
+  }catch{console.warn('[account-setup-recovery]',{status:'pending'});}
   return NextResponse.json({...base,readinessPending:false,workReady:liveWorkReady()&&readiness.ready,smsWorkReady:smsReady,discoveryWorkReady:discovery.ready,contactWorkReady:contacts.ready,discoveryQuote:discovery.quote,contactQuote:contacts.quote,discoveryBlocker:discovery.ready?null:discovery.reason??'readiness_unavailable'},{headers});
  }catch(error){
   console.error('[account-load]',{stage,elapsedMs:Date.now()-started,error:error instanceof Error?error.name:'UnknownError'});
