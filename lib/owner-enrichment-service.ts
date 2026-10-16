@@ -11,6 +11,9 @@ export async function enrichForAccount(accountId:string,screeningId:string){
  const jobPath=`icash_screening_jobs?id=eq.${screeningId}&account_id=eq.${accountId}&select=snapshot,state`;
  const [job]=await db<{snapshot:unknown;state:string}[]>(jobPath);
  if(job?.state!=='complete')return {status:'financial_hold'};
+ // First-party inquiries already supply the phone. Never buy owner identities
+ // or extra contacts for these leads, even through a direct/manual invocation.
+ if(job.snapshot&&typeof job.snapshot==='object'&&'sellerRequest' in job.snapshot)return {status:'seller_contact_supplied'};
  const propertyId=(job.snapshot as {propertyId?:string})?.propertyId;
  if(!propertyId||!/^prop_\d{1,20}$/.test(propertyId))return {status:'financial_hold'};
  const controlPath=`icash_property_controls?account_id=eq.${accountId}&property_id=eq.${propertyId}&select=manual`;

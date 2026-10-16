@@ -7,6 +7,8 @@ import {runScreeningJob} from '../lib/screening-job.ts';
 import {dailyBudgetTier,validDailyBudget} from '../lib/daily-budget.ts';
 const now=Date.now();
 const input={name:'Sample Seller',address:'Synthetic address, Dallas, TX 75217',phone:'214-555-0123',consented:true,consentVersion:sellerConsentVersion,requestId:'12345678-1234-4234-8234-123456789abc'};
+for(const name of [undefined,null])assert.equal(sellerSubmission.parse({...input,name}).name,null,'Address and supplied phone are enough; never invent a seller name');
+for(const name of ['',123,'<name>', 'a'.repeat(101)])assert.equal(sellerSubmission.safeParse({...input,name}).success,false,'Supplied legacy names still require valid input');
 assert.equal(sellerSubmission.parse(input).phone,'+12145550123');assert.equal(sellerSubmission.parse(input).consented,true,'Only explicit affirmative consent is accepted');
 for(const bad of [{...input,phone:'invalid'},{...input,consented:false},{...input,consented:undefined},{...input,ownerConfirmed:true},{...input,consentVersion:'old'},{...input,qualified:true},{...input,email:'invalid'},{...input,email:'x@example.com\nBcc: other@example.com'}])assert.equal(sellerSubmission.safeParse(bad).success,false);
 assert.equal(sellerSubmission.parse({...input,email:' Seller@Example.com '}).email,'seller@example.com');assert.equal(sellerSubmission.parse(input).email,null);assert.equal(sellerSubmission.parse({...input,email:''}).email,null);

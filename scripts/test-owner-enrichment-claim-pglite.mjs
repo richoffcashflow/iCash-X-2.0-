@@ -14,6 +14,7 @@ const read=file=>readFileSync(new URL('../'+file,import.meta.url),'utf8');
 const previous={key:process.env.DEALMACHINE_API_KEY,ready:process.env.ICASH_LIVE_WORK_READY,fetch:globalThis.fetch};
 try{
  for(const name of ['text-ai','market-expansion','seller-opener-experiments','seller-opener-delivery-order','sms-inbound-campaign','sms-contact-intake','owner-enrichment-claim'])await pg.exec(read('config/'+name+'.sql'));
+ await pg.exec(read('supabase/migrations/20261016200100_seller_skip_owner_enrichment.sql'));
  console.log('SIMULATION owner-contact claim schema loaded');
  const user=randomUUID(),account=randomUUID(),otherUser=randomUUID(),other=randomUUID();
  await q('insert into auth.users(id,email) values($1,$2),($3,$4)',[user,'owners@example.invalid',otherUser,'other@example.invalid']);
@@ -29,7 +30,7 @@ try{
  const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date().toISOString(),sellerCostReserveCents:100000,raw:{data:{dm_property_id:'prop_123',full_address:'SIMULATION property',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}}};
  const screening=(await one("insert into icash_screening_jobs(account_id,event_key,snapshot,state,result,completed_at) values($1,'SIMULATION contact claim',$2,'complete',$3,now()) returning id",[account,snapshot,runScreeningJob(snapshot)])).id;
  const operation=`owners:${account}:${screening}`;
- await q("insert into icash_discovery_configs(account_id,zip,rate_id,contact_rate_id,contact_credit_cap,property_credit_micros,data_rights_until,seller_cost_reserve_cents,enabled,contacts_enabled) values($1,'75201',$2,$3,25,10000,$4,100000,true,true)",[account,searchRate,rate.id,rights]);
+ await q("insert into icash_discovery_configs(account_id,zip,rate_id,contact_rate_id,contact_credit_cap,property_credit_micros,data_rights_until,seller_cost_reserve_cents,enabled,contacts_enabled) values($1,'75201',$2,$3,25,10000,$4,100000,true,true) on conflict(account_id) do update set rate_id=excluded.rate_id,contact_rate_id=excluded.contact_rate_id,contact_credit_cap=excluded.contact_credit_cap,property_credit_micros=excluded.property_credit_micros,data_rights_until=excluded.data_rights_until,seller_cost_reserve_cents=excluded.seller_cost_reserve_cents,enabled=true,contacts_enabled=true",[account,searchRate,rate.id,rights]);
  const args={p_account:account,p_screening:screening,p_operation:operation,p_snapshot:snapshot,p_rate:rate.id,p_credit_cap:25,p_unit_cost_micros:10000,p_quoted_data_cost_micros:250000,p_rights_until:rights};
  const reserve=()=>rpc('icash_reserve_operation',{p_account:account,p_operation:operation,p_rate:rate.id,p_permission_until:rights});
  const claim=(patch={})=>rpc('icash_claim_owner_enrichment',{...args,...patch});
@@ -68,6 +69,11 @@ try{
  });
  for(const fetchedAt of ['invalid',new Date(Date.now()-90000000).toISOString(),new Date(Date.now()+60000).toISOString()])await caseInTransaction(async()=>{
   await reserve();const changed={...snapshot,fetchedAt};await q('update icash_screening_jobs set snapshot=$1 where id=$2',[changed,screening]);assert.equal(await claim({p_snapshot:changed}),false);
+ });
+ for(const sellerRequest of [{phone:'+12145550123',ownerName:null},null])await caseInTransaction(async()=>{
+  await reserve();const changed={...snapshot,sellerRequest};await q('update icash_screening_jobs set snapshot=$1 where id=$2',[changed,screening]);
+  assert.equal(await claim({p_snapshot:changed}),false,'First-party seller phones never authorize paid owner enrichment');
+  assert.equal((await one('select state from icash_operation_spend where operation_key=$1',[operation])).state,'reserved');
  });
  for(const field of ['propertyType','raw'])await caseInTransaction(async()=>{
   await reserve();const changed={...snapshot,[field]:field==='propertyType'?'land':{data:{...snapshot.raw.data,dm_property_id:'prop_456'}}};await q('update icash_screening_jobs set snapshot=$1 where id=$2',[changed,screening]);assert.equal(await claim({p_snapshot:changed}),false);

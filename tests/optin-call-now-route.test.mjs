@@ -71,6 +71,12 @@ for(const [kind,route,consentVersion,source] of [['demo',demo,botDemoConsentVers
  assert.equal(sends().length,2,'A replay with no new durable claims cannot synthesize another send');
  assert(grants().every(e=>e.body.p_request===requestId),'Replay must keep the original request key');
 }
+reset();
+const nameless={...base,consentVersion:sellerConsentVersion,callNowVersion:optinCallNowVersion};delete nameless.name;
+assert.equal((await seller.POST(request('seller',nameless))).status,200);
+assert.equal(events.find(e=>e.kind==='rpc/icash_submit_seller_contact_intake').body.p_name,null);
+assert.equal(grants().length,1);await callbacks.shift()();assert.deepEqual(sends().map(e=>e.kind),['text','voice']);
+reset();assert.equal((await demo.POST(request('demo',{...nameless,consentVersion:botDemoConsentVersion}))).status,400,'Private demo validation remains unchanged');assert.equal(events.length,0);
 reset();user={id:'another-customer'};assert.equal((await demo.POST(request('demo',{...base,consentVersion:botDemoConsentVersion,callNowVersion:optinCallNowVersion}))).status,403);assert.equal(events.length,0);
 reset();duplicate=true;
 const duplicateResponse=await demo.POST(request('demo',{...base,consentVersion:botDemoConsentVersion,callNowVersion:optinCallNowVersion}));

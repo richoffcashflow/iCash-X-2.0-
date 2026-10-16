@@ -90,12 +90,13 @@ export function compactSellerProgress(progress:{history:VoiceSmsContext|null;pri
  const priorExchanges=bounded(progress.priorCalls.slice().reverse().flatMap(call=>exchanges(call.messages)),budget-smsBudget);
  return {recentSms,priorExchanges};
 }
-export type SellerRequestContext={name:string;submittedAt:string};
+export type SellerRequestContext={name?:string|null;submittedAt:string};
 function sellerRequest(value:SellerRequestContext|undefined){
  if(!value||!Number.isFinite(Date.parse(value.submittedAt))||Date.parse(value.submittedAt)>Date.now())return null;
- const firstName=value.name.trim().split(/\s+/)[0];
- if(!/^[\p{L}][\p{L}'’-]{0,30}$/u.test(firstName))return null;
- return {firstName,submittedAt:value.submittedAt};
+ const firstName=typeof value.name==='string'?value.name.trim().split(/\s+/)[0]:'';
+ // A first-party property inquiry remains bound when no name was collected.
+ // Invalid or absent names are never promoted into a greeting.
+ return {...(/^[\p{L}][\p{L}'’-]{0,30}$/u.test(firstName)?{firstName}:{}),submittedAt:value.submittedAt};
 }
 export type SellerCallContext={address:string;principal:string;assistantName:string;history:VoiceSmsContext|null;priorCalls?:unknown;buyerKind?:NetworkBuyerKind;request?:SellerRequestContext;callbackRequestedNow?:boolean};
 export function sellerCallContext(input:SellerCallContext){

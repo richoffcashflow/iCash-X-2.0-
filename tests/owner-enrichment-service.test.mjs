@@ -87,6 +87,10 @@ try{
  const {reserveOperation,dispatchReservedOperation}=await loadActual('../lib/operating-costs.ts',{db,...liveWorkAdmission},'__ownerCostsFixture');
  const {enrichForAccount}=await loadActual('../lib/owner-enrichment-service.ts',{db,enrichOwners,runScreeningJob,reserveOperation,...liveWorkAdmission},'__ownerServiceFixture');
  const run=()=>enrichForAccount(accountId,screeningId);
+ for(const sellerRequest of [{phone:'+12145550123',ownerName:null},null]){
+  reset();state.job.snapshot.sellerRequest=sellerRequest;assert.equal((await run()).status,'seller_contact_supplied');
+  assert.equal(state.previewCount,0);assert.equal(state.paidCount,0);assert.equal(state.reserveCount,0);
+ }
  reset();assert.equal((await run()).status,'contacts_saved');
  assert.equal(state.paidCount,1);assert.equal(state.previewCount,1);assert.equal(state.observations.length,4);
  const result=state.saved[0];assert.equal(result.propertyId,'prop_123');assert.equal(result.contacts.length,2);assert.equal(result.requestedPersonIds.length,25);
