@@ -3,11 +3,11 @@ import {useEffect,useRef,useState} from 'react';
 import {usePathname} from 'next/navigation';
 import {dashboardPath} from '@/lib/dashboard-paths';
 import type {WebinarCommerce} from '@/lib/webinar-browser-events';
-const consentVersion='webinar-meta-2026-10-04';
+import {measurementPolicyVersion} from '@/lib/webinar-measurement-policy';
 type Pixel=((...args:unknown[])=>void)&{queue:unknown[][];callMethod?:(...args:unknown[])=>void;loaded:boolean;version:string;push?:Pixel};
 type PixelWindow=Window&{fbq?:Pixel;_fbq?:Pixel};
 type MetaEvent={eventName:string;eventId:string;data:Record<string,unknown>};
-type Measurement={enabled:boolean;pixelId?:string;consent?:boolean;events?:MetaEvent[]};
+type Measurement={enabled:boolean;pixelId?:string;trackingAllowed?:boolean;consent?:boolean;events?:MetaEvent[]};
 const webinarPage=(path:string)=>path==='/webinar'||/^\/live\/\d{6,12}\/?$/.test(path)||path==='/webinar/checkout'||path==='/webinar/upgrade';
 const measurementPage=()=>webinarPage(location.pathname)&&!new URLSearchParams(location.search).has('preview');
 function pixel(id:string){
@@ -20,13 +20,13 @@ function pixel(id:string){
 const storage={get(key:string){try{return localStorage.getItem(key);}catch{return null;}},set(key:string,value:string){try{localStorage.setItem(key,value);}catch{/* Optional measurement. */}}};
 export function WebinarMeasurement(){
  const pathname=usePathname(),privatePage=dashboardPath(pathname)||pathname==='/dashboard-unlock'||!webinarPage(pathname);
- const [config,setConfig]=useState<Measurement|null>(null),[choice,setChoice]=useState<string|null>(null),[editing,setEditing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [config,setConfig]=useState<Measurement|null>(null);
  const current=useRef<Measurement|null>(null),session=useRef(''),initialized=useRef(''),sent=useRef(new Set<string>()),refreshVersion=useRef(0),pageView=useRef({path:'',id:''});
  const pendingStages=useRef<MetaEvent[]>([]);
  const gpc=()=>!!(navigator as Navigator&{globalPrivacyControl?:boolean}).globalPrivacyControl;
  function emit(event:MetaEvent){
   if(!measurementPage())return;
-  const c=current.current;if(!c?.enabled||!c.consent||!c.pixelId||gpc()||sent.current.has(event.eventId)||storage.get('wb-meta:'+event.eventId))return;
+  const c=current.current;if(!c?.enabled||!c.trackingAllowed||!c.pixelId||gpc()||sent.current.has(event.eventId)||storage.get('wb-meta:'+event.eventId))return;
   if(initialized.current!==c.pixelId){pixel(c.pixelId);initialized.current=c.pixelId;}
   const f=(window as PixelWindow).fbq;if(!f)return;f('consent','grant');
   f(event.eventName==='WebinarOfferOpened'?'trackSingleCustom':'trackSingle',c.pixelId,event.eventName,event.data,{eventID:event.eventId});sent.current.add(event.eventId);storage.set('wb-meta:'+event.eventId,'1');
@@ -35,8 +35,12 @@ export function WebinarMeasurement(){
   if(!measurementPage())return;
   if(!session.current)return;
   const version=++refreshVersion.current;
-  try{const res=await fetch('/api/webinar/measurement',{cache:'no-store',signal:AbortSignal.timeout(timeoutMs)});if(!res.ok)return;const next=await res.json() as Measurement;if(version!==refreshVersion.current)return;current.current=next;setConfig(next);
-   if(next.consent){setChoice('allow');storage.set('wb-meta-choice','allow');emit({eventName:'PageView',eventId:pageView.current.id,data:{}});emit({eventName:'ViewContent',eventId:`webinar:${session.current}:view`,data:{content_type:'product',content_ids:['icash-webinar']}});}
+  const optedOut=storage.get('wb-meta-choice')==='deny'||gpc();
+  if(optedOut){if(current.current)current.current={...current.current,trackingAllowed:false};(window as PixelWindow).fbq?.('consent','revoke');pendingStages.current=[];}
+  const cookie=(key:string)=>document.cookie.split('; ').find(c=>c.startsWith(key+'='))?.slice(key.length+1);
+  const identifiers=current.current?.trackingAllowed?{fbp:cookie('_fbp'),fbc:cookie('_fbc')}:{};
+  try{const res=await fetch('/api/webinar/measurement',{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',signal:AbortSignal.timeout(timeoutMs),body:JSON.stringify({action:'automatic',version:measurementPolicyVersion,optedOut,...identifiers,fbclid:new URLSearchParams(location.search).get('fbclid')||undefined})});if(!res.ok)return;const next=await res.json() as Measurement;if(version!==refreshVersion.current)return;current.current=next;setConfig(next);
+   if(next.trackingAllowed){emit({eventName:'PageView',eventId:pageView.current.id,data:{}});emit({eventName:'ViewContent',eventId:`webinar:${session.current}:view`,data:{content_type:'product',content_ids:['icash-webinar']}});}
    for(const event of next.events??[])emit(event);
    for(const event of pendingStages.current.splice(0))emit(event);
   }catch{/* Playback is independent of measurement. */}
@@ -45,7 +49,6 @@ export function WebinarMeasurement(){
   refreshVersion.current++;current.current=null;pendingStages.current=[];setConfig(null);
   if(pageView.current.path!==pathname)pageView.current={path:pathname,id:privatePage?'':`webinar:page:${crypto.randomUUID()}`};
   if(privatePage||!measurementPage())return;
-  setChoice(storage.get('wb-meta-choice'));
   try{session.current=sessionStorage.getItem('icash-webinar-session')||'';}catch{/* Optional measurement. */}
   const ready=(event:Event)=>{session.current=(event as CustomEvent<{sessionId:string}>).detail.sessionId;void refresh();};
   const track=(event:Event)=>{
@@ -54,35 +57,21 @@ export function WebinarMeasurement(){
    if(!names[d.kind])return;
    const c=d.commerce,scope=c?`${d.kind==='checkout_started'&&c.checkoutId?'checkout:'+c.checkoutId:d.sessionId}:${c.product}`:d.sessionId;
    const stage={eventName:names[d.kind],eventId:`webinar:${scope}:${d.kind==='started'?'view':d.kind}`,data:{content_type:'product',content_ids:[c?'icash-'+c.product:'icash-webinar'],...(c?{content_category:c.product,num_items:1}:{}),...(c?.valueCents!==undefined&&Number.isSafeInteger(c.valueCents)&&c.valueCents>0?{value:c.valueCents/100,currency:'USD'}:{})}};
-   // A returning consented viewer can reach checkout before configuration loads.
-   // Recheck server consent before emitting; never replay pre-consent activity.
-   if(!current.current&&storage.get('wb-meta-choice')==='allow'&&!gpc()){pendingStages.current.push(stage);if(pendingStages.current.length>20)pendingStages.current.shift();return;}
+   // Hold early stages only until server geography and privacy checks finish.
+   // A disabled response discards these; later permission cannot replay them.
+   if(!current.current&&storage.get('wb-meta-choice')!=='deny'&&!gpc()){pendingStages.current.push(stage);if(pendingStages.current.length>20)pendingStages.current.shift();return;}
    emit(stage);
   };
   const paid=(event:Event)=>{if(!gpc())(event as CustomEvent<{waitUntil:(promise:Promise<void>)=>void}>).detail.waitUntil(refresh(1800));};
+  const privacy=(event:StorageEvent)=>{if(event.key==='wb-meta-choice')void refresh();};
+  window.addEventListener('storage',privacy);
   window.addEventListener('icash-webinar-ready',ready);window.addEventListener('icash-webinar-track',track);window.addEventListener('icash-webinar-payment-confirmed',paid);void refresh();
   const returned=new URLSearchParams(location.search).has('session_id');let tries=0;
   const timer=returned?setInterval(()=>{if(!document.hidden&&++tries<=12)void refresh();},5000):undefined;
-  return()=>{refreshVersion.current++;window.removeEventListener('icash-webinar-ready',ready);window.removeEventListener('icash-webinar-track',track);window.removeEventListener('icash-webinar-payment-confirmed',paid);clearInterval(timer);};
+  return()=>{refreshVersion.current++;window.removeEventListener('storage',privacy);window.removeEventListener('icash-webinar-ready',ready);window.removeEventListener('icash-webinar-track',track);window.removeEventListener('icash-webinar-payment-confirmed',paid);clearInterval(timer);};
  // The listeners read current configuration through refs, including consent changes.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[privatePage,pathname]);
- async function choose(allow:boolean){
-  if(busy)return;setBusy(true);setError('');
-  refreshVersion.current++;pendingStages.current=[];
-  if(!allow||gpc()){if(current.current)current.current={...current.current,consent:false};(window as PixelWindow).fbq?.('consent','revoke');}
-  try{
-   const readCookie=(key:string)=>document.cookie.split('; ').find(c=>c.startsWith(key+'='))?.slice(key.length+1);
-   const res=await fetch('/api/webinar/measurement',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({allow:allow&&!gpc(),version:consentVersion,...(allow?{fbp:readCookie('_fbp'),fbc:readCookie('_fbc'),fbclid:new URLSearchParams(location.search).get('fbclid')||undefined}:{})})});
-   if(!res.ok)throw Error('Could not save your preference. Please retry.');const result=await res.json();
-   const value=result.consent?'allow':'deny';setChoice(value);storage.set('wb-meta-choice',value);setEditing(false);
-   if(!result.consent){if(current.current)current.current={...current.current,consent:false};(window as PixelWindow).fbq?.('consent','revoke');for(const key of ['_fbp','_fbc'])document.cookie=`${key}=; Max-Age=0; Path=/; SameSite=Lax`;}
-   await refresh();
-  }catch(e){setError(e instanceof Error?e.message:'Please retry.');}finally{setBusy(false);}
- }
- if(privatePage||!config?.enabled)return null;
- const show=editing||(!choice&&!config.consent);
- return <div className="webinar-measurement" style={{position:'fixed',left:12,bottom:84,zIndex:60,maxWidth:360,fontFamily:'Arial,sans-serif',fontSize:13,color:'#262626'}}>
-  {show?<section aria-label="Ad measurement preference" style={{padding:18,borderRadius:16,background:'#fff',boxShadow:'0 8px 32px #0003',border:'1px solid #e0e0e0'}}><strong>Help us improve our ads?</strong><p style={{lineHeight:1.5,margin:'8px 0'}}>Allow Meta to measure your visits and purchases. This is optional and separate from email updates.</p><div style={{display:'flex',gap:10}}><button disabled={busy} onClick={()=>void choose(false)}>No thanks</button><button disabled={busy||gpc()} onClick={()=>void choose(true)}>Allow measurement</button></div><a href="/webinar/privacy">Privacy details</a>{error&&<p role="alert">{error}</p>}</section>:<button onClick={()=>setEditing(true)} style={{borderRadius:12,padding:'6px 9px',background:'#fff',border:'1px solid #e0e0e0',fontSize:11}}>Ad privacy</button>}
- </div>;
+ if(privatePage||!config?.enabled||!measurementPage())return null;
+ return <a href="/webinar/privacy#advertising" target="_blank" rel="noopener noreferrer" className="webinar-measurement" style={{position:'fixed',left:12,bottom:12,zIndex:60,borderRadius:12,padding:'6px 9px',background:'#fff',border:'1px solid #e0e0e0',fontFamily:'Arial,sans-serif',fontSize:11,color:'#262626'}}>Ad privacy</a>;
 }
