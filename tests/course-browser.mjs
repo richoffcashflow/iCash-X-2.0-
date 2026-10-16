@@ -4,6 +4,18 @@ import {readFileSync} from 'node:fs';
 import {courseVideo} from './course-video-fixture.mjs';
 const pdf=await PDFDocument.create();pdf.addPage().drawText('Fictional course test PDF');
 export const coursePdf=Buffer.from(await pdf.save());
+export const courseUploadReceipts=[];
+const uploadOffsets=new Map();
+export function serveCourseUpload(request,response){
+ const id=request.url;
+ if(request.headers['x-signature']!=='fixture-only'){response.writeHead(403);response.end();return;}
+ if(request.method==='HEAD'){response.writeHead(200,{'Upload-Offset':String(uploadOffsets.get(id)??0)});response.end();return;}
+ if(request.method!=='PATCH'){response.writeHead(405);response.end();return;}
+ const offset=Number(request.headers['upload-offset']);assert.equal(offset,uploadOffsets.get(id)??0);
+ const chunks=[];let size=0;
+ request.on('data',chunk=>{size+=chunk.length;assert(size<=6*1024*1024,'Fixture upload is bounded');chunks.push(chunk);});
+ request.on('end',()=>{const body=Buffer.concat(chunks);courseUploadReceipts.push({id,body,offset});uploadOffsets.set(id,offset+size);response.writeHead(204,{'Upload-Offset':String(offset+size),'Tus-Resumable':'1.0.0'});response.end();});
+}
 export async function verifyCourse(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});const page=await context.newPage(),errors=[],writes=[];
  let signedIn=true,owner=false,vip=false,ready=true;
@@ -18,8 +30,9 @@ export async function verifyCourse(browser,base,options,name){
   // WebKit cannot reliably emit download events for route.fulfill PDF responses.
   // The isolated local HTTPS server serves real bytes; membership is tested at the API boundary.
   if(url.pathname==='/api/course/assets/pdf')return route.continue();
-  if(url.pathname==='/api/course/upload'){const body=req.postDataJSON();writes.push(body);if(body.ticket){ready=true;return route.fulfill({json:{published:true}});}return route.fulfill({json:{uploadUrl:base+'/api/fixture-course-upload',endpoint:base+'/api/fixture-course-upload',token:'fixture-only',ticket:'fixture-ticket'}});}
-  if(url.pathname==='/api/fixture-course-upload'){writes.push({chunk:req.postDataBuffer().length});return route.fulfill({status:204,headers:{'Upload-Offset':String(req.postDataBuffer().length)}});}
+  if(url.pathname==='/api/course/upload'){const body=req.postDataJSON();writes.push(body);if(body.ticket){ready=true;return route.fulfill({json:{published:true}});}return route.fulfill({json:{uploadUrl:base+'/api/fixture-course-upload?id='+encodeURIComponent(name+'-'+body.kind),endpoint:base+'/api/fixture-course-upload',token:'fixture-only',ticket:'fixture-ticket'}});}
+  // WebKit omits Blob request bodies from its interception API. Verify the wire bytes instead.
+  if(url.pathname==='/api/fixture-course-upload')return route.continue();
   if(url.pathname.startsWith('/api/'))throw Error('Practice/course attempted unexpected API: '+url.pathname);
   return route.continue();
  });
@@ -41,8 +54,9 @@ export async function verifyCourse(browser,base,options,name){
   vip=true;await page.reload();await page.getByText('Included in your plan',{exact:true}).waitFor();assert.equal(await page.getByRole('link',{name:'Upgrade to VIP',exact:true}).count(),0);
   vip=false;owner=true;ready=false;await page.reload();await page.getByText('Manage course files',{exact:true}).click();
   await page.getByLabel('Choose video',{exact:true}).setInputFiles({name:'Course.webm',mimeType:'video/webm',buffer:courseVideo});
-  await page.getByRole('button',{name:'Upload & publish',exact:true}).first().click();await page.getByText('Published. Customers can now open this file.',{exact:true}).waitFor();assert.equal(writes[0].kind,'video');assert(writes.some(w=>w.chunk===courseVideo.length));assert(writes.some(w=>w.ticket==='fixture-ticket'));
+  await page.getByRole('button',{name:'Upload & publish',exact:true}).first().click();await page.getByText('Published. Customers can now open this file.',{exact:true}).waitFor();assert.equal(writes[0].kind,'video');assert(courseUploadReceipts.some(r=>r.id.includes(encodeURIComponent(name+'-video'))&&r.body.equals(courseVideo)));assert(writes.some(w=>w.ticket==='fixture-ticket'));
   await page.getByLabel('Choose PDF',{exact:true}).setInputFiles({name:'Course.pdf',mimeType:'application/pdf',buffer:coursePdf});await page.getByRole('button',{name:'Upload & publish',exact:true}).nth(1).click();await page.waitForFunction(()=>[...document.querySelectorAll('[role="status"]')].filter(n=>n.textContent.includes('Published.')).length===2);
+  assert(courseUploadReceipts.some(r=>r.id.includes(encodeURIComponent(name+'-pdf'))&&r.body.equals(coursePdf)));
   signedIn=false;await page.reload();await page.getByRole('heading',{name:'Welcome to your course'}).waitFor();assert.equal(await page.locator('video').count(),0);assert.equal(await page.getByText('Manage course files',{exact:true}).count(),0);
   assert.deepEqual(errors,[]);console.log(`PASS ${name}: course playback, PDF download, ordered practice link, VIP entitlement, owner video/PDF uploads and signed-out privacy.`);
  }finally{await context.close();}
