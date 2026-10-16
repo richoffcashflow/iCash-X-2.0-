@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {primaryBusinessPhone,isAdditionalBusinessPhone} from './business-phone-policy.ts';
 import type {VoiceUsageDb} from './voice-usage-service.ts';
 import type {VoiceCostInput} from './voice-cost-settlement.ts';
 /** Exact destinations only: never treat +1 as one tariff. This server-owned snapshot
@@ -47,7 +48,7 @@ export async function outboundCarrierInput(db:VoiceUsageDb,accountId:string,b:Bi
  if(call.from!==r.from){
   // The immutable recording row carries the caller ID receipt captured at
   // admission. Later number retirement must not prevent actual usage settlement.
-  if(r.from!=='+14243948384'||call.from!=='+14244377030'||r.source.kind!=='twilio_pricing_api')fail();
+  if(r.from!==primaryBusinessPhone||!isAdditionalBusinessPhone(call.from)||r.source.kind!=='twilio_pricing_api')fail();
   const bindings=await db<{from_phone:string;provider_account_sid:string;caller_id_sid:string|null;call_sid:string;conversation_id:string}[]>(`icash_call_recordings?account_id=eq.${eq(accountId)}&operation_key=eq.${eq(b.operation_key)}&select=from_phone,provider_account_sid,caller_id_sid,call_sid,conversation_id`);
   const binding=bindings[0];
   if(bindings.length!==1||binding.from_phone!==call.from||binding.provider_account_sid!==r.twilioAccountSid||!sid(binding.caller_id_sid,'PN')||binding.call_sid!==call.sid||binding.conversation_id!==b.conversation_id)fail();
