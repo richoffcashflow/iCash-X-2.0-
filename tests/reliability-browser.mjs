@@ -12,6 +12,7 @@ import {verifyWorkspace} from './workspace-browser-scenarios.mjs';
 import {verifyCourse,coursePdf,serveCourseUpload} from './course-browser.mjs';
 import {verifyWebinarExit,verifyRegularWebinarRoom} from './webinar-exit-browser.mjs';
 import {verifySellerIntake} from './seller-intake-browser.mjs';
+import {verifyWebinarMeasurement} from './webinar-measurement-browser.mjs';
 import {verifyWebinarRecovery} from './webinar-recovery-browser.mjs';
 import {sellerFunnelStages} from '../lib/conversion-funnel.ts';
 import {dashboardCookie,issueDashboardProof} from '../lib/dashboard-password-policy.ts';
@@ -50,6 +51,8 @@ try{
    if(process.env.BROWSER_SCENARIOS==='course'){await verifyCourse(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-recovery'){await verifyWebinarRecovery(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='seller'){await verifySellerIntake(browser,base,options,name);continue;}
+   if(process.env.BROWSER_SCENARIOS==='webinar-measurement'){await verifyWebinarMeasurement(browser,base,options,name);continue;}
+   await verifyWebinarMeasurement(browser,base,options,name);
    await verifySellerIntake(browser,base,options,name);
    if(name==='desktop Chromium')await verifyWebinarExit(browser);
    await verifyRegularWebinarRoom(browser,base,options);

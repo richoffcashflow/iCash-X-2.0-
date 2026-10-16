@@ -27,7 +27,7 @@ export async function POST(req:Request){try{
  if(body.action==='settings'){
  const config=settingsSchema.parse(body.settings);config.optimizer.enabled=false;
  await Promise.all([...new Set([config.homepageVipId,config.homepageVipNightId].filter(Boolean))].map(async id=>{const [vip]=await db<WebinarRow[]>(`icash_webinars?id=eq.${id}&parent_webinar_id=not.is.null&select=config,public_code,parent_webinar_id&limit=1`);if(!vip)throw new WebinarError(400,'Choose a saved VIP session for homepage buyers.');}));
- if(config.meta.enabled&&(!config.meta.pixelId||!metaReady()))throw new WebinarError(400,'Add your Meta Pixel ID and server connection before enabling measurement.');
+ if(config.meta.enabled&&!config.meta.pixelId)throw new WebinarError(400,'Add your Meta Pixel ID before enabling measurement.');
  await db('icash_webinar_settings?id=eq.1','PATCH',{config,updated_at:new Date().toISOString()});return Response.json({saved:true,followupReadiness:webinarFollowupReadiness(config)},{headers:webinarHeaders});}
  if(body.action==='create_vip'){
   const input=z.object({action:z.literal('create_vip'),parentId:z.string().uuid()}).strict().parse(body);

@@ -7,6 +7,8 @@ type Pixel=((...args:unknown[])=>void)&{queue:unknown[][];callMethod?:(...args:u
 type PixelWindow=Window&{fbq?:Pixel;_fbq?:Pixel};
 type MetaEvent={eventName:string;eventId:string;data:Record<string,unknown>};
 type Measurement={enabled:boolean;pixelId?:string;consent?:boolean;events?:MetaEvent[]};
+const webinarPage=(path:string)=>path==='/webinar'||/^\/live\/\d{6,12}\/?$/.test(path)||path==='/webinar/checkout'||path==='/webinar/upgrade';
+const measurementPage=()=>webinarPage(location.pathname)&&!new URLSearchParams(location.search).has('preview');
 function pixel(id:string){
  const w=window as PixelWindow;
  if(!w.fbq){const f=((...args:unknown[])=>{if(f.callMethod)f.callMethod(...args);else f.queue.push(args);}) as Pixel;f.queue=[];f.loaded=true;f.version='2.0';f.push=f;w.fbq=f;w._fbq=f;
@@ -16,28 +18,30 @@ function pixel(id:string){
 }
 const storage={get(key:string){try{return localStorage.getItem(key);}catch{return null;}},set(key:string,value:string){try{localStorage.setItem(key,value);}catch{/* Optional measurement. */}}};
 export function WebinarMeasurement(){
- const pathname=usePathname(),privatePage=dashboardPath(pathname)||pathname==='/dashboard-unlock';
+ const pathname=usePathname(),privatePage=dashboardPath(pathname)||pathname==='/dashboard-unlock'||!webinarPage(pathname);
  const [config,setConfig]=useState<Measurement|null>(null),[choice,setChoice]=useState<string|null>(null),[editing,setEditing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
- const current=useRef<Measurement|null>(null),session=useRef(''),initialized=useRef(''),sent=useRef(new Set<string>()),refreshVersion=useRef(0);
+ const current=useRef<Measurement|null>(null),session=useRef(''),initialized=useRef(''),sent=useRef(new Set<string>()),refreshVersion=useRef(0),pageView=useRef({path:'',id:''});
  const gpc=()=>!!(navigator as Navigator&{globalPrivacyControl?:boolean}).globalPrivacyControl;
  function emit(event:MetaEvent){
-  if(dashboardPath(location.pathname)||location.pathname==='/dashboard-unlock')return;
+  if(!measurementPage())return;
   const c=current.current;if(!c?.enabled||!c.consent||!c.pixelId||gpc()||sent.current.has(event.eventId)||storage.get('wb-meta:'+event.eventId))return;
   if(initialized.current!==c.pixelId){pixel(c.pixelId);initialized.current=c.pixelId;}
   const f=(window as PixelWindow).fbq;if(!f)return;f('consent','grant');
   f(event.eventName==='WebinarOfferOpened'?'trackSingleCustom':'trackSingle',c.pixelId,event.eventName,event.data,{eventID:event.eventId});sent.current.add(event.eventId);storage.set('wb-meta:'+event.eventId,'1');
  }
  async function refresh(){
-  if(dashboardPath(location.pathname)||location.pathname==='/dashboard-unlock')return;
+  if(!measurementPage())return;
   if(!session.current)return;
   const version=++refreshVersion.current;
   try{const res=await fetch('/api/webinar/measurement',{cache:'no-store'});if(!res.ok)return;const next=await res.json() as Measurement;if(version!==refreshVersion.current)return;current.current=next;setConfig(next);
-   if(next.consent){setChoice('allow');storage.set('wb-meta-choice','allow');emit({eventName:'ViewContent',eventId:`webinar:${session.current}:view`,data:{content_type:'product',content_ids:['icash-webinar']}});}
+   if(next.consent){setChoice('allow');storage.set('wb-meta-choice','allow');emit({eventName:'PageView',eventId:pageView.current.id,data:{}});emit({eventName:'ViewContent',eventId:`webinar:${session.current}:view`,data:{content_type:'product',content_ids:['icash-webinar']}});}
    for(const event of next.events??[])emit(event);
   }catch{/* Playback is independent of measurement. */}
  }
  useEffect(()=>{
-  if(privatePage||location.pathname.startsWith('/next/')||['/admin','/webinar-studio','/webinaradmin'].includes(location.pathname)||new URLSearchParams(location.search).has('preview'))return;
+  refreshVersion.current++;current.current=null;setConfig(null);
+  if(pageView.current.path!==pathname)pageView.current={path:pathname,id:privatePage?'':`webinar:page:${crypto.randomUUID()}`};
+  if(privatePage||!measurementPage())return;
   setChoice(storage.get('wb-meta-choice'));
   try{session.current=sessionStorage.getItem('icash-webinar-session')||'';}catch{/* Optional measurement. */}
   const ready=(event:Event)=>{session.current=(event as CustomEvent<{sessionId:string}>).detail.sessionId;void refresh();};
@@ -45,10 +49,10 @@ export function WebinarMeasurement(){
   window.addEventListener('icash-webinar-ready',ready);window.addEventListener('icash-webinar-track',track);void refresh();
   const returned=new URLSearchParams(location.search).has('session_id');let tries=0;
   const timer=returned?setInterval(()=>{if(!document.hidden&&++tries<=12)void refresh();},5000):undefined;
-  return()=>{window.removeEventListener('icash-webinar-ready',ready);window.removeEventListener('icash-webinar-track',track);clearInterval(timer);};
+  return()=>{refreshVersion.current++;window.removeEventListener('icash-webinar-ready',ready);window.removeEventListener('icash-webinar-track',track);clearInterval(timer);};
  // The listeners read current configuration through refs, including consent changes.
  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[privatePage]);
+ },[privatePage,pathname]);
  async function choose(allow:boolean){
   if(busy)return;setBusy(true);setError('');
   refreshVersion.current++;
