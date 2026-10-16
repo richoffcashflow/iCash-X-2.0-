@@ -1,13 +1,13 @@
 import {z} from 'zod';
 import {isIP} from 'node:net';
 import {db} from '@/lib/stripe-test';
-import {metaReady,webinarSettings} from '@/lib/webinar-meta';
+import {webinarSettings} from '@/lib/webinar-meta';
 import {browserPurchase,marketingConsentVersion,type MetaIdentity,type MetaPurchase} from '@/lib/webinar-meta-policy';
 import {webinarBody,webinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarVisitor,WebinarError} from '@/lib/webinar-server';
 export const dynamic='force-dynamic';
 export async function GET(req:Request){try{
  const v=await webinarVisitor();await webinarLimit(req,v.id,'measurement-read',20,60);
- const settings=await webinarSettings(),enabled=process.env.VERCEL_ENV==='production'&&settings.meta.enabled&&metaReady();
+ const settings=await webinarSettings(),enabled=process.env.VERCEL_ENV==='production'&&settings.meta.enabled&&!!settings.meta.pixelId;
  const [identity]=await db<MetaIdentity[]>(`icash_webinar_visitors?id=eq.${v.id}&select=email,marketing_consent_at,measurement`);
  if(!enabled)return Response.json({enabled:false},{headers:webinarHeaders});
  if(req.headers.get('sec-gpc')==='1'){
@@ -23,7 +23,7 @@ export async function POST(req:Request){try{
  webinarOrigin(req);const v=await webinarVisitor();await webinarLimit(req,v.id,'measurement-consent',20,600);
  const i=z.object({allow:z.boolean(),version:z.literal(marketingConsentVersion),fbp:z.string().max(250).optional(),fbc:z.string().max(500).optional(),fbclid:z.string().max(400).optional()}).strict().parse(await webinarBody(req,2000));
  const allow=i.allow&&req.headers.get('sec-gpc')!=='1',settings=await webinarSettings();
- if(allow&&(!settings.meta.enabled||!metaReady()||process.env.VERCEL_ENV!=='production'))throw new WebinarError(409,'Ad measurement is not enabled.');
+ if(allow&&(!settings.meta.enabled||!settings.meta.pixelId||process.env.VERCEL_ENV!=='production'))throw new WebinarError(409,'Ad measurement is not enabled.');
  const [old]=await db<MetaIdentity[]>(`icash_webinar_visitors?id=eq.${v.id}&select=email,marketing_consent_at,measurement`);
  const measurement:Record<string,string>=allow?{...old.measurement,version:marketingConsentVersion,client_user_agent:(req.headers.get('user-agent')||'').slice(0,500)}:{};
  if(allow){
