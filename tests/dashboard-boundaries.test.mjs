@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
 import ts from 'typescript';
-import {contentSecurityPolicy,securityHeaders} from '../lib/security-headers.ts';
+import {contentSecurityPolicy,securityHeaders,webinarSecurityHeaders} from '../lib/security-headers.ts';
 import {dashboardCookie,issueDashboardProof,validDashboardProof} from '../lib/dashboard-password-policy.ts';
 const id='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7',sid='a34c37bf-f70e-4701-ac7d-9f8b28e15bc0',key='fixture-secret-'.repeat(4);
 const access='h.'+Buffer.from(JSON.stringify({sub:id,session_id:sid})).toString('base64url')+'.s';
@@ -21,6 +21,8 @@ for(const dir of ['admin','owner-reception','owner-inbound-acceptance','owner-re
 for(const file of ['webinar-account-adapter.ts','trusted-operator.ts','voice-test-server.ts'])assert.match(readFileSync(new URL('../lib/'+file,import.meta.url),'utf8'),/from '@\/lib\/dashboard-password'/);
 assert.match(contentSecurityPolicy,/frame-ancestors 'none'/);assert.match(contentSecurityPolicy,/object-src 'none'/);assert.match(contentSecurityPolicy,/base-uri 'self'/);assert(!contentSecurityPolicy.includes('unsafe-eval'));assert.match(contentSecurityPolicy,/wss:\/\/\*\.twilio\.com/);assert.match(contentSecurityPolicy,/https:\/\/js\.stripe\.com/);
 const headers=Object.fromEntries(securityHeaders.map(h=>[h.key,h.value]));assert.equal(headers['X-Frame-Options'],'DENY');assert.equal(headers['X-Content-Type-Options'],'nosniff');assert.match(headers['Permissions-Policy'],/microphone=\(self\)/);
+assert(!contentSecurityPolicy.includes('www.facebook.com/signals/iwl.js'),'Meta setup script stays outside private page CSP');
+const webinarHeaders=Object.fromEntries(webinarSecurityHeaders.map(h=>[h.key,h.value]));assert.match(webinarHeaders['Content-Security-Policy'],/https:\/\/www\.facebook\.com\/signals\/iwl\.js/);assert.match(webinarHeaders['Content-Security-Policy'],/frame-ancestors 'none'/);assert.equal(webinarHeaders['X-Frame-Options'],'DENY');
 // The shared webinar adapter also serves ordinary customers: only its owner branch is gated.
 let viewerUserId='customer';
 const adapterMocks={currentUser:async()=>({id:viewerUserId}),dashboardCurrentUser:async()=>{throw Error('DASHBOARD_PASSWORD_REQUIRED');},ownerInboundTarget:{ownerUserId:id},webinarSite:{companyKey:'icash-x',workspacePath:'/'},db:async()=>[{id:'customer-account',bot_paused:false,daily_limit_cents:1000}]};
