@@ -106,7 +106,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
   if(!session||session.preview||returnExpired.current||awaySince.current!==null&&!withinWebinarResumeWindow(awaySince.current)&&!checkoutEngagedRef.current)return;const body={sessionId:session.sessionId,seconds:Math.floor(position.current),kind,key};
   if(kind==='completed')completionPending.current=true;
   else if(!completed.current)savePosition(session.sessionId,position.current);
-  if(beacon){webinarBeacon('/api/webinar/event',body);if(key==='once'&&kind==='add_to_cart')webinarBrowserEvent('add_to_cart',session.sessionId);return;}
+  if(beacon){webinarBeacon('/api/webinar/event',body);if(key==='once'&&kind==='add_to_cart')webinarBrowserEvent('add_to_cart',session.sessionId,{product:isVip?'vip_upgrade':'membership'});return;}
   if(kind==='progress'&&syncing.current)return;if(kind==='progress')syncing.current=true;
   if(kind==='completed'&&completionSyncing.current)return;
   if(kind==='completed')completionSyncing.current=true;
@@ -118,7 +118,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
     const destination=webinarPurchaseDestination(purchasedRef.current,checkoutEngagedRef.current,upgradeActiveRef.current,!!session.webinar.parentWebinarId);
     if(alive.current&&endedRef.current&&!purchaseRedirected.current&&!completionRedirected.current&&destination==='checkout'&&result.redirect){completionRedirected.current=true;navigateWebinar(result.redirect);}
    }
-   if(alive.current)setSaved(true);if(key==='once'&&['started','contact_saved','add_to_cart','checkout_opened'].includes(kind))webinarBrowserEvent(kind as 'started'|'contact_saved'|'add_to_cart'|'checkout_opened',session.sessionId);return result;
+   if(alive.current)setSaved(true);if(key==='once'&&['started','contact_saved','checkout_opened'].includes(kind))webinarBrowserEvent(kind as 'started'|'contact_saved'|'add_to_cart'|'checkout_opened',session.sessionId);return result;
   }).catch(()=>{if(alive.current)setSaved(false);return null;}).finally(()=>{if(kind==='progress')syncing.current=false;if(kind==='completed')completionSyncing.current=false;});
  },[session]);
  // Revalidate a restored page before playback checkpoints can revive an old session.

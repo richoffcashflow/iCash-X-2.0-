@@ -2,7 +2,7 @@ import {z} from 'zod';
 import {isIP} from 'node:net';
 import {db} from '@/lib/stripe-test';
 import {webinarSettings} from '@/lib/webinar-meta';
-import {browserPurchase,marketingConsentVersion,type MetaIdentity,type MetaPurchase} from '@/lib/webinar-meta-policy';
+import {browserPaymentInfo,browserPurchase,marketingConsentVersion,type MetaIdentity,type MetaPurchase} from '@/lib/webinar-meta-policy';
 import {webinarBody,webinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarVisitor,WebinarError} from '@/lib/webinar-server';
 export const dynamic='force-dynamic';
 export async function GET(req:Request){try{
@@ -16,8 +16,9 @@ export async function GET(req:Request){try{
   return Response.json({enabled:true,consent:false,pixelId:settings.meta.pixelId,events:[]},{headers:webinarHeaders});
  }
  if(identity.marketing_consent_at)await db('rpc/icash_webinar_sync_purchases','POST',{p_visitor:v.id});
- const events=identity.marketing_consent_at?await db<MetaPurchase[]>(`icash_webinar_meta_events?visitor_id=eq.${v.id}&state=neq.canceled&occurred_at=gte.${encodeURIComponent(new Date(Date.now()-48*3600000).toISOString())}&select=event_id,payment_id,session_id,visitor_id,value_cents,occurred_at&order=occurred_at.desc&limit=20`):[];
- return Response.json({enabled:true,pixelId:settings.meta.pixelId,consent:!!identity.marketing_consent_at,events:events.map(browserPurchase)},{headers:webinarHeaders});
+ const since=new Date(Math.max(Date.now()-48*3600000,Date.parse(identity.marketing_consent_at??'')||0)).toISOString();
+ const events=identity.marketing_consent_at?await db<MetaPurchase[]>(`icash_webinar_meta_events?visitor_id=eq.${v.id}&state=neq.canceled&purchase_kind=in.(membership,vip_upgrade)&occurred_at=gte.${encodeURIComponent(since)}&select=event_id,payment_id,session_id,visitor_id,value_cents,occurred_at,purchase_kind&order=occurred_at.desc&limit=20`):[];
+ return Response.json({enabled:true,pixelId:settings.meta.pixelId,consent:!!identity.marketing_consent_at,events:events.flatMap(event=>[browserPaymentInfo(event),browserPurchase(event)])},{headers:webinarHeaders});
  }catch(e){return webinarError(e);}}
 export async function POST(req:Request){try{
  webinarOrigin(req);const v=await webinarVisitor();await webinarLimit(req,v.id,'measurement-consent',20,600);

@@ -23,9 +23,10 @@ const button=(tree,match)=>all(tree).find(n=>n.type==='button'&&text(n).includes
 const flush=async()=>{for(let n=0;n<16;n++)await Promise.resolve();};
 const redirects=[],calls=[],active=[];let verified=false,purchase=null;
 globalThis.window={location:{search:'',assign:url=>redirects.push(url),replace:url=>redirects.push(url)}};globalThis.document={hidden:false};
-const request=async(url,init={})=>{calls.push({url,init});if(url==='/api/billing/membership')return purchase;if(url==='/api/account?view=core')return {signedIn:true};if(init.method==='POST')return {clientSecret:'secret_fixture',publishableKey:'pk_live_fixture'};return {membership:{accessible:true,vip:verified}};};
-const common={...exitReminder,WebinarVipWelcome:'WebinarVipWelcome',...vip,safeVipSession,priceLabel,webinarRequest:request,AccountAccess:'AccountAccess',PostPurchaseSetup:'PostPurchaseSetup',StripeEmbeddedCheckout:'StripeEmbeddedCheckout',WebinarPaymentPreview:'WebinarPaymentPreview'};
-const props={phase:'watching',email:'casey@example.invalid',customerName:'Casey',needsClaim:true,paidThrough:new Date(Date.now()+86400000).toISOString(),vipSessionUrl:'/live/123456',onRefresh:async()=>({membership:{accessible:true,vip:verified},needsClaim:false}),onWorkspace:()=>redirects.push('/'),onActive:v=>active.push(v)};
+const request=async(url,init={})=>{calls.push({url,init});if(url==='/api/billing/membership')return purchase;if(url==='/api/account?view=core')return {signedIn:true};if(init.method==='POST')return {clientSecret:'secret_fixture',publishableKey:'pk_live_fixture',sessionId:'cs_live_fixture'};return {membership:{accessible:true,vip:verified}};};
+const commerceEvents=[];let receiptReads=0;
+const common={webinarBrowserEvent:(...args)=>commerceEvents.push(args),webinarBrowserPurchaseReady:async()=>{receiptReads++;},...exitReminder,WebinarVipWelcome:'WebinarVipWelcome',...vip,safeVipSession,priceLabel,webinarRequest:request,AccountAccess:'AccountAccess',PostPurchaseSetup:'PostPurchaseSetup',StripeEmbeddedCheckout:'StripeEmbeddedCheckout',WebinarPaymentPreview:'WebinarPaymentPreview'};
+const props={mode:'live',webinarSessionId:'webinar-fixture',phase:'watching',email:'casey@example.invalid',customerName:'Casey',needsClaim:true,paidThrough:new Date(Date.now()+86400000).toISOString(),vipSessionUrl:'/live/123456',onRefresh:async()=>({membership:{accessible:true,vip:verified},needsClaim:false}),onWorkspace:()=>redirects.push('/'),onActive:v=>active.push(v)};
 const h=await harness('components/webinar-vip-upsell.tsx',common);let current={...props};const render=()=>h.render('WebinarVipUpsell',current);
 let tree=render();assert.equal(button(tree,'Upgrade to VIP').props.disabled,true);assert.equal(calls.length,0,'Guest offer never starts payment or email automatically');
 button(tree,'Not now').props.onClick();tree=render();assert.match(text(tree),/Keep watching/);assert.equal(redirects.length,0);
@@ -190,3 +191,36 @@ console.log('PASS final VIP offer: verified upgrades open the workspace; Standar
  assert.equal(unsafe.render('WebinarVipWelcome',{href:'https://other.test/live/123456'}),null);unsafe.close();
 }
 console.log('PASS VIP welcome: clear stay message, immediate button, five visible seconds, cleanup, no duplicate navigation or unsafe URLs.');
+
+// Commerce events follow real checkout states, including the automatic embedded path.
+window.location.search='';
+for(const mode of ['live','test']){
+ const events=[];let settled=false,converted=0,releaseReceipt;
+ const receiptGate=new Promise(resolve=>{releaseReceipt=resolve;});
+ const status={offer:{revision:1,priceCents:5000},ready:true,mode,embeddedReady:true,needsClaim:false,membership:null};
+ const fixture=await harness('components/membership-checkout.tsx',{...common,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',
+  webinarBrowserEvent:(...args)=>events.push(args),webinarBrowserPurchaseReady:()=>receiptGate,
+  webinarRequest:async(_url,init={})=>init.method==='POST'?{clientSecret:'secret',publishableKey:'pk_'+mode+'_fixture',sessionId:'cs_'+mode+'_fixture'}:{...status,membership:settled?{accessible:true,vip:false}:null}
+ });
+ const input={autoOpen:true,embedded:true,webinarSessionId:'webinar-fixture',onSignedIn:()=>{},onPurchased:()=>{converted++;}};
+ fixture.render('MembershipCheckout',input);await flush();fixture.render('MembershipCheckout',input);await flush();
+ let current=fixture.render('MembershipCheckout',input);const embedded=find(current,'StripeEmbeddedCheckout');assert(embedded);
+ assert.equal(events.length,0,'Preparing a form does not fabricate a cart or mounted checkout');
+ embedded.props.onReady();current.props.onFocusCapture();current.props.onFocusCapture();
+ assert.deepEqual(events.map(e=>e[0]),mode==='live'?['checkout_started','add_to_cart']:[]);
+ if(mode==='live'){assert.equal(events[0][1],'webinar-fixture');assert.equal(events[0][2].checkoutId,'cs_live_fixture');assert.equal(events[0][2].valueCents,5000);}
+ embedded.props.onComplete();await flush();assert.equal(converted,0,'Completion alone is not verified paid access');
+ settled=true;current=fixture.render('MembershipCheckout',input);button(current,'Check payment').props.onClick();await flush();
+ if(mode==='live')assert.equal(converted,0,'Receipt measurement has a chance to queue before the paid redirect');
+ releaseReceipt();await flush();assert.equal(converted,1);fixture.close();
+}
+// VIP selection and mounted checkout use the additional $50, not the $100 renewal.
+{
+ const events=[],fixture=await harness('components/webinar-vip-upsell.tsx',{...common,webinarBrowserEvent:(...args)=>events.push(args)}),input={...props,needsClaim:false};
+ verified=false;let current=fixture.render('WebinarVipUpsell',input);await flush();
+ find(current,'input').props.onChange({target:{checked:true}});current=fixture.render('WebinarVipUpsell',input);
+ assert.equal(events.length,0);button(current,'Upgrade to VIP').props.onClick();await flush();current=fixture.render('WebinarVipUpsell',input);
+ find(current,'StripeEmbeddedCheckout').props.onReady();
+ assert.deepEqual(events.map(e=>e[0]),['add_to_cart','checkout_started']);assert(events.every(e=>e[2].product==='vip_upgrade'&&e[2].valueCents===5000));fixture.close();
+}
+console.log('PASS real commerce paths: Standard auto-embed, VIP selected/mounted, $50 amounts, live-only stages, no premature paid callback and receipt-before-navigation.');

@@ -4,16 +4,17 @@ import {ArrowRight,Check,ShieldCheck} from 'lucide-react';
 import {AccountAccess} from '@/components/account-access';
 import {PostPurchaseSetup} from '@/components/post-purchase-setup';
 import {StripeEmbeddedCheckout} from '@/components/stripe-embedded-checkout';
+import {webinarBrowserEvent} from '@/lib/webinar-browser-events';
 import {webinarRequest} from '@/lib/webinar-client';
 import {safeVipSession} from '@/lib/webinar-purchase-flow';
 import {vipBenefits,vipTermsVersion,vipMonthlyCents,vipUpgradeCents} from '@/lib/vip-policy';
 import {priceLabel} from '@/lib/membership-policy';
 
 type RefreshResult={membership:{accessible:boolean;vip?:boolean}|null;needsClaim:boolean};
-type Props={phase:'watching'|'ended';email:string;customerName:string;needsClaim:boolean;paidThrough:string|null;retentionEndsAt?:string|null;vipSessionUrl?:string|null;onRefresh:()=>Promise<RefreshResult|null|undefined>;onWorkspace:()=>void;onActive?:(active:boolean)=>void};
-export function WebinarVipUpsell({phase,email,customerName,needsClaim,paidThrough,retentionEndsAt,vipSessionUrl,onRefresh,onWorkspace,onActive}:Props){
+type Props={mode:'live'|'test';webinarSessionId?:string;phase:'watching'|'ended';email:string;customerName:string;needsClaim:boolean;paidThrough:string|null;retentionEndsAt?:string|null;vipSessionUrl?:string|null;onRefresh:()=>Promise<RefreshResult|null|undefined>;onWorkspace:()=>void;onActive?:(active:boolean)=>void};
+export function WebinarVipUpsell({mode,webinarSessionId,phase,email,customerName,needsClaim,paidThrough,retentionEndsAt,vipSessionUrl,onRefresh,onWorkspace,onActive}:Props){
  const [accepted,setAccepted]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[claim,setClaim]=useState(false),[declined,setDeclined]=useState(false),[confirming,setConfirming]=useState(false);
- const [form,setForm]=useState<{clientSecret:string;publishableKey:string}|null>(null);
+ const [form,setForm]=useState<{clientSecret:string;publishableKey:string;sessionId:string}|null>(null);
  const alive=useRef(true),checking=useRef(false),operation=useRef(false),refresh=useRef(onRefresh),active=useRef(onActive);
  refresh.current=onRefresh;active.current=onActive;
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
@@ -28,14 +29,16 @@ export function WebinarVipUpsell({phase,email,customerName,needsClaim,paidThroug
  }
  useEffect(()=>{if(needsClaim)return;const returned=new URLSearchParams(window.location.search).get('upgrade')==='paid';if(returned){setConfirming(true);active.current?.(true);}void check();},[needsClaim]);
  useEffect(()=>{if(!confirming)return;let tries=0;const id=setInterval(()=>{if(!document.hidden&&++tries<=12)void check();if(tries>=12)clearInterval(id);},5000);return()=>clearInterval(id);},[confirming]);
+ function track(kind:'add_to_cart'|'checkout_started',checkoutId?:string){if(mode==='live')webinarBrowserEvent(kind,webinarSessionId,{product:'vip_upgrade',checkoutId,valueCents:vipUpgradeCents});}
  async function upgrade(){
   if(operation.current||!accepted)return;
+  track('add_to_cart');
   if(needsClaim){setClaim(true);active.current?.(true);return;}
   operation.current=true;setBusy(true);active.current?.(true);setError('');
-  try{const out=await webinarRequest<{clientSecret?:string;publishableKey?:string;url?:string}>('/api/billing/vip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'upgrade',accepted:true,version:vipTermsVersion,webinar:true,embedded:true})},40000);
+  try{const out=await webinarRequest<{clientSecret?:string;publishableKey?:string;sessionId?:string;url?:string}>('/api/billing/vip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'upgrade',accepted:true,version:vipTermsVersion,webinar:true,embedded:true})},40000);
    if(!alive.current)return;
-   if(out.clientSecret&&out.publishableKey){setForm({clientSecret:out.clientSecret,publishableKey:out.publishableKey});return;}
-   if(out.url){const u=new URL(out.url);if(u.protocol==='https:'&&u.hostname==='checkout.stripe.com'){window.location.assign(u.href);return;}}
+   if(out.clientSecret&&out.publishableKey&&out.sessionId){setForm({clientSecret:out.clientSecret,publishableKey:out.publishableKey,sessionId:out.sessionId});return;}
+   if(out.url){const u=new URL(out.url);if(u.protocol==='https:'&&u.hostname==='checkout.stripe.com'){track('checkout_started',out.sessionId);window.location.assign(u.href);return;}}
    throw Error('The upgrade could not open. Your software purchase is saved.');
   }catch(e){if(alive.current)setError(e instanceof Error?e.message:'The upgrade could not open.');await check();}
   finally{operation.current=false;if(alive.current)setBusy(false);}
@@ -49,7 +52,7 @@ export function WebinarVipUpsell({phase,email,customerName,needsClaim,paidThroug
  return <section className="webinar-vip-upsell vip-checkout" aria-label="VIP upgrade">
   <div className="vip-checkout-brand"><span>VIP</span><strong>iCash X upgrade</strong></div>
   <p className="purchase-receipt"><Check size={16}/>Your software access is paid</p>
-  {confirming?<div role="status"><h2>Confirming your VIP upgrade</h2><p>Your payment is being checked. Please don’t pay again.</p><button className="workspace-quiet" onClick={()=>void check()}>Check upgrade</button></div>:form?<><h2>Complete your VIP upgrade</h2><StripeEmbeddedCheckout {...form} onComplete={()=>{setForm(null);setConfirming(true);active.current?.(true);void check();}}/><button className="membership-embedded-back" onClick={()=>{setForm(null);void check();}}>Back to upgrade</button></>:claim?<><h2>Keep VIP with your purchase.</h2><p>Confirm your saved payment email once to connect the upgrade to your account.</p><AccountAccess initialEmail={email} onSignedIn={()=>void claimed()}/><button className="membership-embedded-back" disabled={busy} onClick={()=>setClaim(false)}>Back to upgrade</button></>:<>
+  {confirming?<div role="status"><h2>Confirming your VIP upgrade</h2><p>Your payment is being checked. Please don’t pay again.</p><button className="workspace-quiet" onClick={()=>void check()}>Check upgrade</button></div>:form?<><h2>Complete your VIP upgrade</h2><StripeEmbeddedCheckout {...form} onReady={()=>track('checkout_started',form.sessionId)} onComplete={()=>{setForm(null);setConfirming(true);active.current?.(true);void check();}}/><button className="membership-embedded-back" onClick={()=>{setForm(null);void check();}}>Back to upgrade</button></>:claim?<><h2>Keep VIP with your purchase.</h2><p>Confirm your saved payment email once to connect the upgrade to your account.</p><AccountAccess initialEmail={email} onSignedIn={()=>void claimed()}/><button className="membership-embedded-back" disabled={busy} onClick={()=>setClaim(false)}>Back to upgrade</button></>:<>
    <h2>{customerName?`${customerName}, take the VIP route.`:'Take the VIP route.'}</h2>
    <div className="membership-price">{priceLabel(vipUpgradeCents)}<small>today</small></div>
    <p className="membership-description">Upgrade your access and go straight to setting up your bot.</p>

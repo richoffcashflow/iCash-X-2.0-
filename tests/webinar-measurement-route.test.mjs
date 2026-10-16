@@ -4,12 +4,12 @@ import {isIP} from 'node:net';
 import ts from 'typescript';
 import {z} from 'zod';
 import * as policy from '../lib/webinar-policy.ts';
-import {browserPurchase,marketingConsentVersion} from '../lib/webinar-meta-policy.ts';
+import {browserPaymentInfo,browserPurchase,marketingConsentVersion} from '../lib/webinar-meta-policy.ts';
 const pixelId='1104248230721457';
 let settings=policy.settingsSchema.parse({enabled:false,fromEmail:'',postalAddress:'',subjects:['a','b','c'],messages:['a','b','c'],meta:{enabled:true,pixelId}});
 let identity={email:null,marketing_consent_at:null,measurement:{}},writes=[];
 class WebinarError extends Error{constructor(status,message){super(message);this.status=status;}}
-const deps={...policy,z,isIP,browserPurchase,marketingConsentVersion,WebinarError,webinarHeaders:{},
+const deps={...policy,z,isIP,browserPaymentInfo,browserPurchase,marketingConsentVersion,WebinarError,webinarHeaders:{},
  webinarLimit:async()=>{},webinarOrigin:()=>{},webinarOwner:async()=>{},webinarVisitor:async()=>({id:'fixture-visitor'}),
  webinarSettings:async()=>settings,webinarBody:r=>r.json(),webinarError:e=>Response.json({error:e.message},{status:e.status??400}),
  metaReady:()=>false,webinarFollowupReadiness:()=>({email:false}),
@@ -29,7 +29,7 @@ try{
  process.env.VERCEL_ENV='production';
  let result=await(await get()).json();assert.equal(result.enabled,true);assert.equal(result.pixelId,pixelId);assert.equal(result.consent,false);assert.deepEqual(result.events,[]);
  assert.equal((await post(true)).status,200,'Browser consent does not require server API credentials');
- result=await(await get()).json();assert.equal(result.consent,true);assert.equal(result.events[0].eventName,'Purchase');assert.equal(result.events[0].data.value,50);
+ result=await(await get()).json();assert.equal(result.consent,true);assert.deepEqual(result.events.map(e=>e.eventName),['AddPaymentInfo','Purchase']);assert.equal(result.events[0].data.value,50);
  await post(false);assert.equal(identity.marketing_consent_at,null);assert(writes.some(w=>w.body.state==='canceled'));
  await post(true,{'sec-gpc':'1'});assert.equal(identity.marketing_consent_at,null,'GPC prevents consent');
  await post(true);result=await(await get({'sec-gpc':'1'})).json();assert.equal(result.consent,false);assert.deepEqual(result.events,[]);assert.deepEqual(identity.measurement,{});
