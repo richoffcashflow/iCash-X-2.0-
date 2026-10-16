@@ -9,7 +9,7 @@ import http from 'node:http';
 import https from 'node:https';
 import {chromium,webkit,devices} from 'playwright';
 import {verifyWorkspace} from './workspace-browser-scenarios.mjs';
-import {verifyCourse} from './course-browser.mjs';
+import {verifyCourse,coursePdf} from './course-browser.mjs';
 import {verifyWebinarExit,verifyRegularWebinarRoom} from './webinar-exit-browser.mjs';
 import {sellerFunnelStages} from '../lib/conversion-funnel.ts';
 import {dashboardCookie,issueDashboardProof} from '../lib/dashboard-password-policy.ts';
@@ -18,6 +18,8 @@ const port=3015,upstream=`http://127.0.0.1:${port}`,base=`https://127.0.0.1:${po
 const tlsDir=mkdtempSync(join(tmpdir(),'icash-browser-'));
 execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(tlsDir,'key.pem'),'-out',join(tlsDir,'cert.pem'),'-days','1','-subj','/CN=127.0.0.1','-addext','subjectAltName=IP:127.0.0.1'],{stdio:'ignore'});
 const proxy=https.createServer({key:readFileSync(join(tlsDir,'key.pem')),cert:readFileSync(join(tlsDir,'cert.pem'))},(request,response)=>{
+ // Serve the fixture through HTTP instead of WebKit's mocked-download transport.
+ if(new URL(request.url,upstream).pathname==='/api/course/assets/pdf'){response.writeHead(200,{'Content-Type':'application/pdf','Content-Length':String(coursePdf.length),'Content-Disposition':'attachment; filename="iCash-X-Course-Guide.pdf"','Cache-Control':'no-store'});response.end(coursePdf);return;}
  const forwarded=http.request(new URL(request.url,upstream),{method:request.method,headers:request.headers},incoming=>{response.writeHead(incoming.statusCode,incoming.headers);incoming.pipe(response);});
  forwarded.on('error',()=>{response.writeHead(502);response.end();});request.pipe(forwarded);
 });
