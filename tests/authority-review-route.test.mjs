@@ -7,7 +7,8 @@ import {authorityReviewStatus} from '../lib/authority-review-status.ts';
 const account='00000000-0000-4000-8000-000000000001',screening='00000000-0000-4000-8000-000000000002',deal='00000000-0000-4000-8000-000000000003',envelope='00000000-0000-4000-8000-000000000004';
 let paths=[],owner=true,found=true,suppressed=false;
 const tomorrow=new Date(Date.now()+86400000).toISOString(),yesterday=new Date(Date.now()-86400000).toISOString();
-const mocks={runScreeningJob:()=>({cashOfferPriceCents:100000,property:{fetchedAt:new Date().toISOString()}}),z,authorityReviewStatus,contractCapability,readContractCoverage:async()=>({scope:'configured_templates',states:[{state:'TX',signerCounts:[1]}]}),NextResponse:{json:(body,options={})=>({body,status:options.status??200})},workAccount:async()=>{if(!owner)throw Error();return {accountId:account};},db:async(path,method)=>{
+const mocks={runScreeningJob:()=>({cashOfferPriceCents:100000,property:{fetchedAt:new Date().toISOString()}}),z,authorityReviewStatus,contractCapability,readContractCoverage:async()=>({scope:'configured_templates',states:[{state:'TX',signerCounts:[1]}]}),NextResponse:{json:(body,options={})=>({body,status:options.status??200})},workAccount:async()=>{if(!owner)throw Error();return {accountId:account};},db:async(path,method,body)=>{
+ if(path==='rpc/icash_seller_voice_permission_current'){assert.equal(method,'POST');assert.deepEqual(body,{p_account:account,p_permission:envelope});return false;}
  assert(!method||method==='GET','Diagnostics must never write or dispatch');paths.push(path);
  const table=path.split('?')[0];
  if(!['icash_text_suppressions','icash_contact_suppressions'].includes(table))assert(path.includes(table==='icash_accounts'?`id=eq.${account}`:`account_id=eq.${account}`));
@@ -15,7 +16,7 @@ const mocks={runScreeningJob:()=>({cashOfferPriceCents:100000,property:{fetchedA
  if(table==='icash_customer_identities')return [{principal:'Fixture principal'}];
  if(table==='icash_accounts')return [{bot_paused:false}];
  if(table==='icash_wallets')return [{balance_cents:1000,reserved_cents:100}];
- if(table==='icash_voice_contact_targets')return [{phone:'+12125550100',contact_key:'a'.repeat(64),permission_until:tomorrow,dnc_checked_at:yesterday,dnc_clear:true,revoked_at:null}];
+ if(table==='icash_voice_contact_targets')return [{id:envelope,phone:'+12125550100',contact_key:'a'.repeat(64),permission_until:tomorrow,dnc_checked_at:yesterday,dnc_clear:true,revoked_at:null}];
  if(table==='icash_text_threads')return [];
  if(table==='icash_offer_authorities')return [{max_offer_cents:100000,expires_at:tomorrow}];
  if(table==='icash_deal_files')return [{id:deal,terms:{state:'TX',priceCents:100000,assignmentFeeCents:10000}}];

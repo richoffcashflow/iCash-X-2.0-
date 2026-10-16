@@ -1,4 +1,5 @@
 'use client';
+import {supportRequest} from '@/lib/support-client';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {ArrowDown,ArrowLeft,ArrowUp,LifeBuoy,MoreHorizontal,X} from 'lucide-react';
 import '@/app/membership.css';
@@ -23,7 +24,7 @@ export function SupportChat({onClose,active=true,onMembershipChanged}:{onClose?:
   if(background&&reading.current)return;reading.current=true;
   const sequence=++readSequence.current;if(!background)setLoading(true);
   try{
-   const r=await fetch('/api/support'+(id?'?threadId='+encodeURIComponent(id):''),{cache:'no-store',signal:AbortSignal.timeout(15000)});const d=await r.json();
+   const {data:d,...r}=await supportRequest<{error?:string;threads:Thread[];messages:Message[];threadId:string|null;cancellations:Cancellation[]}>('/api/support'+(id?'?threadId='+encodeURIComponent(id):''),{cache:'no-store'},undefined,15000);
    if(sequence!==readSequence.current)return;
    if(r.status===401){clearAccount();return 'signed_out';}
    if(!r.ok)throw Error(d.error||'Could not load support.');
@@ -47,11 +48,11 @@ export function SupportChat({onClose,active=true,onMembershipChanged}:{onClose?:
   const text=draft.trim();
   if(!request.current||request.current.text!==text)request.current={id:crypto.randomUUID(),text,threadId:thread};
   try{
-   const r=await fetch('/api/support',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId:request.current.id,...(request.current.threadId?{threadId:request.current.threadId}:{}),message:text})});const d=await r.json();
+   const {data:d,...r}=await supportRequest<{error?:string;threadId?:string;pending?:boolean}>('/api/support',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId:request.current.id,...(request.current.threadId?{threadId:request.current.threadId}:{}),message:text})});
    if(r.status===401){clearAccount();return;}
    if(!r.ok||!d.threadId)throw Error(d.error||'Could not confirm your message was saved. Your draft is still here.');
    setDraft('');request.current=null;setThread(d.threadId);nearLatest.current=true;
-   if(toTeam){const response=await fetch('/api/support',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'escalate',threadId:d.threadId})});const result=await response.json();if(response.status===401){clearAccount();return;}if(!response.ok||result.escalated!==true){await load(d.threadId);throw Error('Your message is saved. The team request was not confirmed. Choose Ask the team to retry.');}}
+   if(toTeam){const {data:result,...response}=await supportRequest<{escalated?:boolean}>('/api/support',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'escalate',threadId:d.threadId})});if(response.status===401){clearAccount();return;}if(!response.ok||result.escalated!==true){await load(d.threadId);throw Error('Your message is saved. The team request was not confirmed. Choose Ask the team to retry.');}}
    const refreshed=await load(d.threadId);
    if(toTeam&&refreshed!=='signed_out')setNotice('Sent to the team. Their reply will appear here.');
    if(d.pending&&!toTeam&&refreshed!=='signed_out')setNotice('Your message is saved. A reply is still pending.');
@@ -63,7 +64,7 @@ export function SupportChat({onClose,active=true,onMembershipChanged}:{onClose?:
   if(!thread){usePrompt('I need help with ');setNotice('Describe the issue, then choose “Send to team”.');return;}
   if(loading||!startOperation())return;
   try{
-   const r=await fetch('/api/support',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'escalate',threadId:thread})});const d=await r.json();
+   const {data:d,...r}=await supportRequest<{error?:string;escalated?:boolean}>('/api/support',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'escalate',threadId:thread})});
    if(r.status===401){clearAccount();return;}
    if(!r.ok||d.escalated!==true)throw Error(d.error||'Could not confirm the support request. Refresh its status before retrying.');
    if(await load(thread)==='signed_out')return;setNotice('Sent to the team. Their reply will appear here.');
@@ -73,12 +74,12 @@ export function SupportChat({onClose,active=true,onMembershipChanged}:{onClose?:
  async function cancel(action:'prepare'|'confirm',requestId?:string){
   if(loading||(action==='confirm'&&(!confirmation||!ack))||!startOperation())return;
   try{
-   const r=await fetch('/api/support/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(action==='prepare'?{action,...(requestId?{requestId}:{})}:{action,token:confirmation?.token,acknowledged:ack})});const d=await r.json();
+   const {data:d,...r}=await supportRequest<{error?:string;token?:string;summary?:string;confirmed?:boolean;message?:string}>('/api/support/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(action==='prepare'?{action,...(requestId?{requestId}:{})}:{action,token:confirmation?.token,acknowledged:ack})});
    if(r.status===401){clearAccount();return;}
    if(!r.ok)throw Error(d.error||'Could not confirm cancellation. Refresh its status before retrying.');
    if(action==='prepare'){
     if(typeof d.token!=='string'||typeof d.summary!=='string')throw Error('Could not prepare cancellation. Nothing was confirmed.');
-    setConfirmation(d);setAck(false);
+    setConfirmation({token:d.token,summary:d.summary});setAck(false);
    }else{
     if(typeof d.confirmed!=='boolean'||typeof d.message!=='string')throw Error('Cancellation outcome is unknown. Refresh its status before retrying.');
     setConfirmation(null);setAck(false);if(await load(thread??undefined)==='signed_out')return;setNotice(d.message);

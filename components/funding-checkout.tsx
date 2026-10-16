@@ -7,7 +7,7 @@ import {autoRechargeVersion,autoRechargeSummary} from '@/lib/auto-recharge-polic
 import {customFundingCode,fundingAmountCents} from '@/lib/funding-amount';
 import {StripeEmbeddedCheckout} from './stripe-embedded-checkout';
 import {AccountAccess} from './account-access';
-import {earlyAccessTermsVersion} from '@/lib/funding-consent';
+import {earlyAccessTermsVersion,earlyAccessDisclosure} from '@/lib/funding-consent';
 import {workCreditTermsVersion,priceLabel} from '@/lib/membership-policy';
 type Pack={code:string;price_cents:number;credit_cents:number;enabled:boolean};
 type Funding={embeddedReady?:boolean;recommendedCents?:number;autoRecharge?:{enabled:boolean;amount_cents?:number;issue?:string|null};earlyAccess?:boolean;mode:'test'|'live'|null;enabled:boolean;packs?:Pack[];custom?:{enabled:boolean;minCents:number;maxCents:number};paidCents?:number;needsClaim?:boolean;email?:string};
@@ -35,7 +35,7 @@ export function FundingCheckout({onSignedIn,initialCode,initialAmountCents,reaso
  if(paymentReturn&&!status?.paidCents&&!status?.needsClaim)return <div role="status"><h3>Confirming your credits</h3><p>Your balance updates after payment is confirmed. Please don’t pay again.</p><button className="workspace-quiet" onClick={()=>void refresh()}>Check payment</button>{error&&<p role="alert">{error}</p>}</div>;
  if(status?.needsClaim)return <div><h3>Your payment is confirmed</h3><p>Verify your payment email to open your workspace.</p><AccountAccess initialEmail={status.email??''} onSignedIn={onSignedIn}/></div>;
  return <section className="credit-checkout" aria-label="Add money">
-  <p className="credit-checkout-intro">{(reason?fundingReasonAtAmount(reason,amount):undefined)??(outOfCredits?'Add credits so I can continue property research, calls, texts, and eligible AI work.':(status?.recommendedCents??0)>=5000?'Add more credits for fewer interruptions.':'Choose an amount to start your bot.')}</p>
+  <p className="credit-checkout-intro">{status?.earlyAccess?'Choose your work credits.':(reason?fundingReasonAtAmount(reason,amount):undefined)??(outOfCredits?'Add credits so I can continue property research, calls, texts, and eligible AI work.':(status?.recommendedCents??0)>=5000?'Add more credits for fewer interruptions.':'Choose an amount to start your bot.')}</p>
   {!status&&<p role="status">Checking available credit amounts…</p>}
   {status?.mode==='test'&&<p className="membership-note">Test checkout · No live work.</p>}
   <div className="credit-pack-options" role="group" aria-label="Amount to add">{[1000,2500,5000,10000,25000].map(cents=>{const pack=packs.find(p=>p.price_cents===cents);return <button type="button" key={cents} aria-pressed={amount===cents} disabled={busy||(!pack&&!status?.custom?.enabled)} onClick={()=>chooseAmount(cents)}><strong>{priceLabel(cents)}</strong>{(initialAmountCents??status?.recommendedCents)===cents&&<span>Recommended</span>}</button>;})}<button type="button" aria-pressed={isCustom&&![1000,2500,5000,10000,25000].includes(amount??0)} disabled={busy||!status?.custom?.enabled} onClick={()=>{picked.current=true;setCode(customFundingCode);setCustomAmount('');}}><strong>Custom</strong></button></div>
@@ -45,7 +45,7 @@ export function FundingCheckout({onSignedIn,initialCode,initialAmountCents,reaso
    {status.autoRecharge?.enabled?<div className="credit-recharge-current"><div><strong><RefreshCw size={17}/>Auto recharge is on</strong><p>{autoRechargeSummary(status.autoRecharge.amount_cents??amount??1000)}</p></div><button type="button" disabled={turningOff||busy} onClick={()=>void turnOff()}>{turningOff?'Turning off…':'Turn off'}</button></div>:<label className="credit-auto-recharge" data-checked={autoRecharge}><input type="checkbox" checked={autoRecharge} disabled={busy||!canPay} onChange={e=>setAutoRecharge(e.target.checked)}/><span><strong><RefreshCw size={18}/>Keep my bot working</strong><b>Enable auto recharge</b><small>{amount!==null?autoRechargeSummary(amount):'Choose an amount for auto recharge.'}</small></span></label>}
    {status.autoRecharge?.issue&&<p role="status" className="credit-recharge-issue">{status.autoRecharge.issue}</p>}
   </div>}
-  <p className="credit-purchase-terms" id="credit-purchase-terms">Your bot starts eligible work after payment.</p>
+  <p className="credit-purchase-terms" id="credit-purchase-terms">{status?.earlyAccess?earlyAccessDisclosure:'Your bot starts eligible work after payment.'}</p>
   <label className="membership-consent"><input id="credit-final-sale" type="checkbox" checked={accepted} disabled={busy||!canPay} onChange={e=>setAccepted(e.target.checked)}/><span>I agree to the <a href="/costs-and-disclosures#refunds" target="_blank" rel="noopener noreferrer">billing policy</a>.</span></label>
   <button className="fund-button full" disabled={busy||!canPay||!accepted} aria-describedby="credit-purchase-terms" onClick={()=>void checkout()}>{busy?'Opening secure checkout…':amount!==null?`Add ${priceLabel(amount)} & continue`:'Enter an amount'}<ArrowRight size={17}/></button>
   <p className="credit-purchase-safe"><ShieldCheck size={14}/>{autoRecharge||status?.autoRecharge?.enabled?'You control auto recharge.':'One-time payment · Add more whenever you want.'}</p>

@@ -12,7 +12,7 @@ function mount(file,name,props){
  const mod={exports:{}};
  const source=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
  const fetch=async(url,options)=>{requests.push({url,...JSON.parse(options.body)});return {ok:!fail,json:async()=>fail?{error:'Could not save. Please try again.'}:{saved:true}};};
- new Function('require','module','exports','fetch','FormData',source)(id=>id==='react'?hooks:require(id),mod,mod.exports,fetch,class{constructor(form){this.form=form;}get(key){return this.form[key];}});
+ new Function('require','module','exports','fetch','FormData',source)(id=>id==='react'?hooks:id==='./journey-recovery'?{JourneyRecovery:'JourneyRecovery'}:require(id),mod,mod.exports,fetch,class{constructor(form){this.form=form;}get(key){return this.form[key];}});
  return {render(next=props){cursor=0;return mod.exports[name](next);},requests,setFail(value){fail=value;}};
 }
 const task={id:'fixture-deadline',kind:'deadline',label:'Confirm inspection deadline or mark not applicable',due_date:null,state:'needs_review',evidence:'Confirm this date with the closer.'};

@@ -45,7 +45,7 @@ assert.equal(makeWorkspaceFixture({count:0}).properties.length,0);
 const source=readFileSync(new URL('../components/live-workspace.tsx',import.meta.url),'utf8');
 assert.ok(!source.includes('focused.current'),'open forms must not stop metadata refresh');
 assert.ok(source.includes('attentionPage')&&source.includes('screeningId')&&source.includes('searchSupported'));
-assert.ok(source.includes('Pause bot for this lead')&&source.includes('Already-started work may finish'));
+const header=readFileSync(new URL('../components/property-card-header.tsx',import.meta.url),'utf8');assert.ok(header.includes('Take over')&&source.includes('Already-started work may finish'));
 const messages=readFileSync(new URL('../components/deal-messages.tsx',import.meta.url),'utf8');assert.ok(messages.includes('drafts[current.id]'));assert.ok(messages.includes('request.key'));assert.ok(!messages.includes('Check latest status')&&!messages.includes('Search texts')&&!messages.includes('AI conversation notes'));
 const review=readFileSync(new URL('../components/contract-review-guide.tsx',import.meta.url),'utf8');
 assert.ok(review.includes("!assignment&&!t.closingDate&&'Closing date'"),'the approved original purchase form needs an agreed closing date');

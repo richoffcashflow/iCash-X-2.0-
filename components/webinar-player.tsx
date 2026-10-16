@@ -38,12 +38,12 @@ export function WebinarPlayer(props:Props){
    if(document.hidden){++playAttempt.current;resumeOnVisible.current=!v.paused&&!v.ended;checkpoint();v.pause();}
    else if(resumeOnVisible.current){resumeOnVisible.current=false;void attemptPlay();}
   };
-  const online=()=>{setOffline(false);checkpoint();if(video.current?.error)reload();else if(video.current&&!video.current.paused)void attemptPlay();};
+  const online=()=>{setOffline(false);checkpoint();if(video.current?.error||!loaded.current)reload();else if(video.current&&!video.current.paused)void attemptPlay();};
   const disconnected=()=>{setOffline(true);checkpoint();};
   document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',checkpoint);window.addEventListener('online',online);window.addEventListener('offline',disconnected);
   return()=>{alive.current=false;++playAttempt.current;document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',checkpoint);window.removeEventListener('online',online);window.removeEventListener('offline',disconnected);};
  },[attemptPlay,checkpoint,reload]);
- useEffect(()=>{if(!buffering)return;const timer=setTimeout(()=>{const v=video.current;if(v&&!document.hidden&&!v.paused&&!v.ended&&v.readyState<3)setSlow(true);},12000);return()=>clearTimeout(timer);},[buffering]);
+ useEffect(()=>{if(!buffering)return;const timer=setTimeout(()=>{const v=video.current;if(v&&!document.hidden&&(!loaded.current||!v.paused)&&!v.ended&&v.readyState<3)setSlow(true);},12000);return()=>clearTimeout(timer);},[buffering]);
  function tick(){
   const v=video.current;if(!v||!loaded.current||!Number.isFinite(v.currentTime))return;
   // Some mobile browsers emit stalled while already buffered video keeps playing.
@@ -76,7 +76,7 @@ export function WebinarPlayer(props:Props){
    onPlaying={()=>{playback(true);setError('');setBuffering(false);setSlow(false);}}
    onPause={()=>{playback(false);setBuffering(false);setSlow(false);checkpoint();}}
    onTimeUpdate={tick} onSeeking={previewSeek} onSeeked={tick} onVolumeChange={()=>setMuted(video.current?.muted??true)}
-   onWaiting={()=>{if(!video.current?.paused)setBuffering(true);}} onStalled={()=>{const v=video.current;if(v&&!v.paused&&v.readyState<3)setBuffering(true);}}
+   onWaiting={()=>{if(!video.current?.paused)setBuffering(true);}} onStalled={()=>{const v=video.current;if(v&&(!loaded.current||!v.paused)&&v.readyState<3)setBuffering(true);}}
    onError={()=>{++playAttempt.current;playback(false);setBuffering(false);setError('Your video connection was interrupted.');checkpoint();}}
    onEnded={()=>{++playAttempt.current;setBuffering(false);setSlow(false);tick();playback(false);callbacks.current.onEnded();}}/>
   <div className="wb-stream-status"><span className="wb-live"><span className="wb-live-dot" aria-hidden="true"/>LIVE</span>{props.preview&&<span>Owner preview</span>}</div>

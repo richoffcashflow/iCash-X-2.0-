@@ -35,8 +35,9 @@ assert.equal((await readyModule.contactAccountReadiness('account','other')).read
 for(const [table,key,value] of [
  ['icash_discovery_configs','enabled',false],['icash_discovery_configs','auto_enabled',false],['icash_discovery_configs','contacts_enabled',false],['icash_discovery_configs','contact_credit_cap',26],['icash_discovery_configs','data_rights_until','bad'],
  ['icash_operation_rates','operation','property_search'],['icash_operation_rates','expires_at',past],['icash_operation_rates','verified_at',future],['icash_operation_rates','charge_cents',1],
- ['icash_wallets','balance_cents',173],['icash_accounts','daily_limit_cents',243],['icash_spend_activations','customer_cap_cents',243],['icash_operating_budget','enabled',false],
+ ['icash_wallets','balance_cents',173],['icash_spend_activations','enabled',false],['icash_operating_budget','enabled',false],
  ]){const old=rows[table][0][key];rows[table][0][key]=value;assert.equal((await ready()).ready,false,`${table}.${key}`);rows[table][0][key]=old;}
+for(const [table,key] of [['icash_accounts','daily_limit_cents'],['icash_spend_activations','customer_cap_cents']]){const before=rows[table][0][key];rows[table][0][key]=0;assert.equal((await ready()).ready,true,'Legacy daily/lifetime caps do not block funded work');rows[table][0][key]=before;}
 candidate=null;assert.equal((await ready()).ready,false);candidate=screen;prior=true;assert.equal((await ready()).ready,false);prior=false;
 rows.icash_screening_jobs[0].snapshot={...snapshot,fetchedAt:new Date(Date.now()-25*3600000).toISOString()};assert.equal((await ready()).ready,false);rows.icash_screening_jobs[0].snapshot=snapshot;
 const old=rows.icash_screening_jobs[0].snapshot.raw.data.total_estimated_loan_balance;rows.icash_screening_jobs[0].snapshot.raw.data.total_estimated_loan_balance=190000;assert.equal((await ready()).ready,false);rows.icash_screening_jobs[0].snapshot.raw.data.total_estimated_loan_balance=old;
@@ -61,4 +62,4 @@ const automation=await loadService('app/api/internal/automation/route.ts',{autom
 const automatic=()=>automation.POST(new Request('https://example.invalid/api/internal/automation',{method:'POST',headers:{authorization:'Bearer '+token}}));
 assert.equal((await automatic()).body.status,'contacts_saved');assert.equal(dispatches,1);
 for(kind of newLiveWorkKinds){if(kind!=='contacts')assert.equal((await automatic()).body.status,'live_work_not_ready',kind);}assert.equal(dispatches,1);
-console.log('Contact-only admission: current eligible candidate, $1.74 quote/$2.44 lifetime/$3 daily boundaries, owner/rights/rates and prior-operation holds, existing Run and exact ticket scope, no outreach or one-shot-stop promise passed.');
+console.log('Contact-only admission: current eligible candidate, $1.74 quote and actual available-credit boundary, owner/rights/rates and prior-operation holds, existing Run and exact ticket scope, no outreach or one-shot-stop promise passed.');

@@ -27,4 +27,4 @@ for(const draft of [null,{},[],{value:1,repairs:'0',fee:'0'},{value:'1'.repeat(2
 assert.match(component,/maximumFractionDigits:2/,'do not round a cent-valued offer cap up to whole dollars');
 const checkout=readFileSync(new URL('../components/funding-checkout.tsx',import.meta.url),'utf8');
 assert.match(checkout,/return\(\)=>\{alive.current=false;/,'closing funding invalidates pending responses');
-assert.match(checkout,/const d=await r.json\(\);if\(!alive.current\)return;/,'late checkout response cannot navigate after closing');
+assert.match(checkout,/const d=await workspaceRequest[\s\S]*?if\(!alive.current\)return;[\s\S]*?window.location.assign/,'late checkout response cannot navigate after closing');

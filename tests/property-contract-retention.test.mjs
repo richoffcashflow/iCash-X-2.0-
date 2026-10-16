@@ -1,3 +1,4 @@
+import * as agreements from '../lib/agreement-workspace.ts';
 import * as purchaseTerms from '../lib/buyer-purchase-terms.ts';
 import * as conversationDisplay from '../lib/conversation-display.ts';
 import * as dealSummary from '../lib/deal-card-summary.ts';
@@ -26,6 +27,7 @@ let current,changed=false,pending=[];
 const state=()=>({slots:[],cursor:0});
 const hooks={
  Activity:'Activity',
+ useCallback:fn=>fn,
  useState(initial){
   const owner=current,index=owner.cursor++;
   if(!(index in owner.slots))owner.slots[index]=typeof initial==='function'?initial():initial;
@@ -38,7 +40,7 @@ const hooks={
  }
 };
 const mod={exports:{}};
-new Function('require','module','exports',compiled)(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/conversation-display'?conversationDisplay:name==='./workspace-view'?view:name==='@/lib/work-milestone'?milestone:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/property-analysis-view'?analysis:name==='@/lib/deal-card-summary'?dealSummary:name==='@/lib/property-contract-visibility'?contracts:name==='@/lib/buyer-purchase-terms'?purchaseTerms:name==='@/lib/deal-documents'?documents:{},mod,mod.exports);
+new Function('require','module','exports',compiled)(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/conversation-display'?conversationDisplay:name==='./workspace-view'?view:name==='@/lib/work-milestone'?milestone:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/property-analysis-view'?analysis:name==='@/lib/deal-card-summary'?dealSummary:name==='@/lib/property-contract-visibility'?contracts:name==='@/lib/buyer-purchase-terms'?purchaseTerms:name==='@/lib/deal-documents'?documents:name==='@/lib/agreement-workspace'?agreements:{},mod,mod.exports);
 const fixture=makeWorkspaceFixture(),property=fixture.properties[0];
 const draft=fixture.deals[0],ready={...draft,terms:{...draft.terms,priceSource:'seller_reported'}};
 const workFor=(deal,controls=[])=>({...fixture,deals:[deal],signing:[],controls});
@@ -89,7 +91,7 @@ const manualRender=mount(),manualWork=workFor(draft,[{property_id:property.resul
 result=manualRender({work:manualWork});
 assert.equal(result.tools,null);
 const reveal=all(result.card).find(node=>node.type==='button'&&text(node)==='Seller is ready for an agreement');
-assert(reveal);reveal.props.onClick();
+assert(reveal);globalThis.requestAnimationFrame=fn=>fn();reveal.props.onClick({currentTarget:{closest:()=>null}});delete globalThis.requestAnimationFrame;
 assert(manualRender({work:manualWork}).tools,'explicit manual preparation reveals the editor');
 assert(manualRender({work:workFor(draft)}).tools,'returning property control retains the open editor');
 

@@ -12,7 +12,7 @@ export function BuyerViewingRequestCard({request,onReviewed,embedded=false}:{req
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[resolving,setResolving]=useState(false),[note,setNote]=useState('');
  async function review(action:'acknowledge'|'resolve'){
   if(busy)return;setBusy(true);setError('');
-  try{const result=await fetch('/api/work/buyer-viewing-requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:request.id,action,note:action==='resolve'?note:''})});if(!result.ok)throw Error();onReviewed();}
+  try{const result=await fetch('/api/work/buyer-viewing-requests',{method:'POST',signal:AbortSignal.timeout(25000),headers:{'Content-Type':'application/json'},body:JSON.stringify({id:request.id,action,note:action==='resolve'?note:''})});if(!result.ok)throw Error();onReviewed();}
   catch{setError('Could not save. Please try again.');}finally{setBusy(false);}
  }
  return <div className="buyer-request-card">
