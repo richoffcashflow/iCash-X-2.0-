@@ -7,6 +7,7 @@ export async function verifyWorkspace(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
  const page=await context.newPage(),errors=[],writes=[],external=[],diagnostics=[];
  page.setDefaultTimeout(12000);page.setDefaultNavigationTimeout(20000);page.on('dialog',dialog=>void dialog.accept());
+ let contractFlow=false;const contractWrites=[];
  let acknowledged=true,ackFail=false,manual=false,controlFail=false;const acceptedWrites=[],controlWrites=[],apiReads=[];
  let scenario='lead',preview=true,emptySearch=false,fulfillmentMode='ok',intentionalCrash=false,callMode='unavailable';
  await context.addInitScript(()=>{Object.defineProperty(navigator,'mediaDevices',{value:{getUserMedia:async()=>{window.fixtureMicrophoneRequests=(window.fixtureMicrophoneRequests||0)+1;throw new DOMException('Fixture microphone denied','NotAllowedError');}},configurable:true});});
@@ -51,6 +52,11 @@ export async function verifyWorkspace(browser,base,options,name){
    const diagnostic=request.postDataJSON();assert.deepEqual(Object.keys(diagnostic).sort(),['event','stage']);
    assert(workspaceExperienceEvents.includes(diagnostic.event));assert(workspaceExperienceStages.includes(diagnostic.stage));diagnostics.push(diagnostic);
    return route.fulfill({json:{recorded:true}});
+  }
+  if(contractFlow&&request.method()==='POST'&&['/api/work/deals','/api/work/signing'].includes(url.pathname)){
+   const body=request.postDataJSON();contractWrites.push({path:url.pathname,body});
+   if(url.pathname==='/api/work/deals')return route.fulfill({json:{id:makeWorkspaceFixture({count:1}).deals[0].id,terms:body.terms,stage:'draft'}});
+   assert.equal(body.action,'send');assert.equal(body.confirmed,true);assert.equal(body.signers[0].email,'seller@example.invalid');return route.fulfill({json:{message:'Fixture signing request created.',status:'awaiting_counterparty'}});
   }
   if(request.method()!=='GET'){writes.push(url.pathname);return route.fulfill({status:403,json:{error:'Read-only fixture'}});}
   const p=url.pathname;apiReads.push(p);
@@ -130,6 +136,15 @@ export async function verifyWorkspace(browser,base,options,name){
   }
   await page.getByRole('button',{name:/^Take over ·/}).click();await page.getByRole('button',{name:/^Return to bot ·/}).waitFor();
   await page.getByRole('button',{name:/^Return to bot ·/}).click();
+  await page.getByRole('button',{name:'Preview editing & cancellation',exact:true}).click();
+  const workflow=page.getByRole('region',{name:'Sample contract workflow'});await workflow.waitFor();
+  await workflow.getByLabel('Sample purchase price ($)',{exact:true}).fill('91000');await workflow.getByRole('button',{name:'Save sample draft'}).click();
+  await workflow.getByLabel('I reviewed this sample draft.').check();await workflow.getByRole('button',{name:'Text sample contract link'}).click();
+  await workflow.getByText('Sample only: awaiting seller signature. No text was sent.',{exact:true}).waitFor();
+  await workflow.getByRole('button',{name:'Cancel sample contract'}).click();await workflow.getByLabel('Internal cancellation reason').fill('Course example');await workflow.getByLabel('Pause the sample property and queue sample notices.').check();await workflow.getByRole('button',{name:'Confirm sample cancellation'}).click();
+  await workflow.getByText('Sample cancellation requested.',{exact:true}).waitFor();assert.deepEqual(writes,[],'edit/send/cancel demonstration has no APIs');
+  await page.screenshot({path:`/tmp/icash-contract-workflow-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
+  await page.getByRole('button',{name:'Hide contract walkthrough',exact:true}).click();
   await page.getByRole('button',{name:'Preview first-entry acknowledgment'}).click();
   const agree=page.getByRole('button',{name:'I agree & open workspace',exact:true});assert(await agree.isDisabled());
   await page.getByRole('checkbox').check();await agree.click();await page.getByRole('heading',{name:'One property. One clear next step.'}).waitFor();
@@ -217,6 +232,20 @@ export async function verifyWorkspace(browser,base,options,name){
   await collapsed.getByRole('status').getByText('New automatic work is paused for this property.',{exact:false}).waitFor();
   await collapsed.getByRole('button',{name:/^Return to bot ·/}).click();await collapsed.getByRole('button',{name:/^Take over ·/}).waitFor();
   assert.deepEqual(controlWrites.map(write=>write.action),['takeover','takeover','return_to_bot']);
+
+  contractFlow=true;manual=true;const manualCard=await openProperty('lead');
+  await manualCard.getByRole('button',{name:'Seller is ready for an agreement',exact:true}).click();
+  const manualAgreement=page.getByRole('dialog',{name:'Agreements',exact:true});await manualAgreement.waitFor();
+  await manualAgreement.getByRole('button',{name:'Edit agreement',exact:true}).click();
+  await manualAgreement.getByLabel('Seller’s full legal name(s)',{exact:true}).fill('Example Seller Updated');
+  await manualAgreement.getByRole('button',{name:'Save draft',exact:true}).click();await manualAgreement.getByText('Draft saved. Review the document, then open Send for signatures.',{exact:true}).waitFor();
+  await manualAgreement.getByRole('button',{name:'Send for signatures',exact:true}).click();
+  await manualAgreement.getByLabel('Seller 1 legal name',{exact:true}).fill('Example Seller Updated');await manualAgreement.getByLabel('Signing phone',{exact:true}).fill('2025550101');await manualAgreement.getByLabel('Email for agreement updates (optional)',{exact:true}).fill('seller@example.invalid');
+  await manualAgreement.getByRole('checkbox',{name:'I reviewed the agreed terms, legal description and all required signers. Send this agreement for signatures.',exact:true}).check();
+  await manualAgreement.getByRole('button',{name:'Text contract link',exact:true}).click();await manualAgreement.getByText('Fixture signing request created.',{exact:true}).waitFor();
+  assert.equal(contractWrites.filter(w=>w.path==='/api/work/signing').length,1);assert.equal(contractWrites.filter(w=>w.path==='/api/work/deals').length,2);
+  await page.screenshot({path:`/tmp/icash-manual-contract-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
+  await manualAgreement.getByRole('button',{name:'Close Agreements',exact:true}).click();contractFlow=false;manual=false;
 
   for(const state of ['lead','waiting','signature','buyers',...Object.keys(waitingStages),'closing','closing_waiting','cancelled','cancellation_pending']){
    const card=await openProperty(state);

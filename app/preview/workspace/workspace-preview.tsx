@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {House,MessageCircle,Phone,X} from 'lucide-react';
+import {ContractWorkflowPreview} from '@/components/contract-workflow-preview';
 import {PropertyCardHeader} from '@/components/property-card-header';
 import {PropertyFocus} from '@/components/property-focus';
 import {WorkspacePanel} from '@/components/workspace-panel';
@@ -38,6 +39,7 @@ const stageGuidance:Record<Scenario,{title:string;bot:string;you:string;explain:
 export function WorkspacePreview({contracts}:{contracts:Record<'purchase'|'assignment',string>}){
  const [recoveryExample,setRecoveryExample]=useState(false);
  const [contractFullSize,setContractFullSize]=useState(false);
+ const [workflowPreview,setWorkflowPreview]=useState(false);
  const [ackPreview,setAckPreview]=useState(false),[manual,setManual]=useState(false),[controlMessage,setControlMessage]=useState(''),[contract,setContract]=useState<'purchase'|'assignment'|null>(null);
  const contractDialog=useRef<HTMLDialogElement>(null);
  const [scenario,setScenario]=useState<Scenario>('buyers'),[active,setActive]=useState(true),[contact,setContact]=useState<'texts'|'calls'|'package'|null>(null);
@@ -59,7 +61,8 @@ export function WorkspacePreview({contracts}:{contracts:Record<'purchase'|'assig
   <header className="console-header"><span className="preview-brand">iCash X</span><span className="workspace-preview-label">Workspace preview</span></header>
   <main className="console-main">
    {recoveryExample&&<WorkspaceRecoveryPreview/>}
-   <section className="workspace-preview-banner" aria-label="Preview controls"><div><span className="workspace-preview-label">Interactive preview · Sample data</span><h1>One property. One clear next step.</h1><p>Fictional people and property. No messages, signatures or payments are sent.</p><div className="course-preview-actions"><button type="button" onClick={()=>setAckPreview(true)}>Preview first-entry acknowledgment</button></div></div><label className="workspace-preview-stage">Preview a stage<select value={scenario} onChange={e=>{setScenario(e.target.value as Scenario);setActive(true);setManual(false);setControlMessage('');}}>{scenarios.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label></section>
+   <section className="workspace-preview-banner" aria-label="Preview controls"><div><span className="workspace-preview-label">Interactive preview · Sample data</span><h1>One property. One clear next step.</h1><p>Fictional people and property. No messages, signatures or payments are sent.</p><div className="course-preview-actions"><button type="button" onClick={()=>setAckPreview(true)}>Preview first-entry acknowledgment</button><button type="button" onClick={()=>setWorkflowPreview(v=>!v)}>{workflowPreview?'Hide contract walkthrough':'Preview editing & cancellation'}</button></div></div><label className="workspace-preview-stage">Preview a stage<select value={scenario} onChange={e=>{setScenario(e.target.value as Scenario);setActive(true);setManual(false);setControlMessage('');}}>{scenarios.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label></section>
+   {workflowPreview&&<ContractWorkflowPreview onDocument={()=>showContract('purchase')}/>}
    <section className="course-stage-guide" aria-label="Course walkthrough"><h2>{lesson.title}</h2><p><strong>What the bot does: </strong>{lesson.bot}</p><p><strong>Your next step: </strong>{lesson.you}</p><p><strong>Explain in your course: </strong>{lesson.explain}</p><div className="course-preview-actions"><button type="button" onClick={()=>showContract('purchase')}>Preview purchase contract</button><button type="button" onClick={()=>showContract('assignment')}>Preview assignment contract</button></div></section>
    {contracted&&<WorkspacePanel id="platform-buyer-network" title="Buyer network" label="Buyer network · 2 replies"><BuyerOverview buyers={[]} network={network} onBuyer={openBuyer}/><p>Sample VIP network. You can open each buyer from their property.</p></WorkspacePanel>}
    <section className="operation-panel" aria-label="Sample workspace"><div className="live-work"><div className="workspace-section-heading leads-heading"><h3>Your leads</h3><small>1 sample lead</small></div>

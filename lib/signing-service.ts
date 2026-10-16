@@ -24,7 +24,7 @@ function buyerPricePrivacy(kind:SigningKind,template:Template){
  if(Object.hasOwn(template.field_map,'priceCents'))throw Error('This buyer agreement exposes private acquisition pricing. A reviewed buyer agreement is required before sending.');
  if(Object.hasOwn(template.field_map,'assignmentFeeCents')&&template.form_profile!==originalContractProfile)throw Error('Showing the assignment fee is approved only on the original assignment contract. Review this buyer agreement before sending.');
 }
-export async function sendForSignatures(i:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:SigningKind;signers:Signer[];autoSignature?:string;phoneLinkOnly?:boolean}){
+export async function sendForSignatures(i:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:SigningKind;signers:Signer[];autoSignature?:string;phoneLinkOnly?:boolean;manualSend?:boolean}){
  if(!process.env.DOCUSEAL_API_KEY&&!process.env.DOCUSEAL_TEST_API_KEY)throw new Error('Signing setup is not finished.');
  const [deal]=await db<{terms:unknown;stage:string}[]>(`icash_deal_files?id=eq.${i.dealId}&account_id=eq.${i.accountId}&select=terms,stage`);
  const [identity]=await db<{principal:string}[]>(`icash_customer_identities?account_id=eq.${i.accountId}&select=principal`);
@@ -33,7 +33,7 @@ export async function sendForSignatures(i:{accountId:string;userId:string;custom
  if(i.signers.some(s=>s.email?.toLowerCase()===i.customerEmail.toLowerCase()))throw new Error('Each party must use their own email.');
  for(const signer of i.signers.filter(s=>s.phone)){
   const threads=await db<{id:string}[]>(`icash_text_threads?account_id=eq.${i.accountId}&deal_id=eq.${i.dealId}&recipient=eq.${encodeURIComponent(signer.phone!)}&party=eq.${i.kind==='purchase'?'seller':'buyer'}&select=id&limit=2`);
-  if(threads.length!==1||!await db<boolean>('rpc/icash_sms_thread_review_current','POST',{p_account:i.accountId,p_thread:threads[0].id,p_check_hour:true}))throw Error('This signing number needs a current text conversation for this property.');
+  if(threads.length!==1||!await db<boolean>(i.manualSend?'rpc/icash_manual_signing_sms_current':'rpc/icash_sms_thread_review_current','POST',i.manualSend?{p_account:i.accountId,p_thread:threads[0].id,p_actor:i.userId}:{p_account:i.accountId,p_thread:threads[0].id,p_check_hour:true}))throw Error('This signing number needs a current text conversation for this property.');
   const blocked=await db<{phone:string}[]>(`icash_text_suppressions?phone=eq.${encodeURIComponent(signer.phone!)}&select=phone&limit=1`);
   if(blocked.length)throw Error('This contact has stopped text messages.');
  }
