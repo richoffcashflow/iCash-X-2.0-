@@ -14,7 +14,8 @@ import {recordingServer} from './required-call-recording-server.ts';
 import {object,readRecordingReview,recordingAgentMatches,recordingPolicy} from './required-call-recording.ts';
 import {createHash} from 'node:crypto';
 import {sameBusinessNumber,consistentTextSenders} from './number-continuity.ts';
-import {selectBusinessCaller,secondaryBusinessPhone,secondaryCallingReady} from './business-voice-numbers.ts';
+import {selectBusinessCaller,secondaryCallingReady} from './business-voice-numbers.ts';
+import {isAdditionalBusinessPhone} from './business-phone-policy.ts';
 import {boundedVoiceSmsContext} from './voice-sms-context.ts';
 import {db} from '@/lib/stripe-test';
 import {dispatchTextMessage} from './text-message-service';
@@ -90,13 +91,17 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const threads=await db<{sender:string;sender_pool_assigned?:boolean}[]>('rpc/icash_property_voice_threads','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone});
  let businessNumber:string;
  try{businessNumber=selectBusinessCaller(primaryNumber,threads);}catch{return hold('business_number_mismatch');}
- if(businessNumber===secondaryBusinessPhone){
-  const [secondary]=await db<{outbound_enabled:boolean}[]>(`icash_business_voice_numbers?phone=eq.${encodeURIComponent(secondaryBusinessPhone)}&select=outbound_enabled`);
+ if(!threads.length){
+  const [preferred]=await db<{phone:string}[]>('icash_webinar_text_senders?preferred=eq.true&enabled=eq.true&select=phone&limit=1');
+  if(isAdditionalBusinessPhone(preferred?.phone))businessNumber=preferred.phone;
+ }
+ if(isAdditionalBusinessPhone(businessNumber)){
+  const [secondary]=await db<{outbound_enabled:boolean}[]>(`icash_business_voice_numbers?phone=eq.${encodeURIComponent(businessNumber)}&select=outbound_enabled`);
   // Keep the existing caller until the owner finishes secondary activation.
   if(!secondary?.outbound_enabled)businessNumber=primaryNumber!;
-  else try{if(!await secondaryCallingReady(db,process.env))return hold('business_number_verification_required');}catch{return hold('business_number_verification_required');}
+  else try{if(!await secondaryCallingReady(db,process.env,fetch,businessNumber))return hold('business_number_verification_required');}catch{return hold('business_number_verification_required');}
  }
- if(businessNumber!==secondaryBusinessPhone){
+ if(!isAdditionalBusinessPhone(businessNumber)){
   if(!consistentTextSenders(businessNumber,threads.filter(t=>!t.sender_pool_assigned)))return hold('business_number_mismatch');
   let phone:{phone_number:string};
   try{phone=await elevenRequest<{phone_number:string}>(`/v1/convai/phone-numbers/${encodeURIComponent(c.phone_number_id)}`);}catch{return hold('business_number_verification_required');}

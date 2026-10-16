@@ -1,5 +1,6 @@
 import {recordingAuthorized,directCallTwiml} from './direct-call-entry.ts';
-import {secondaryBusinessPhone,primaryBusinessPhone,secondaryCallingReady} from './business-voice-numbers.ts';
+import {primaryBusinessPhone,secondaryCallingReady} from './business-voice-numbers.ts';
+import {isAdditionalBusinessPhone} from './business-phone-policy.ts';
 import {sellerContractToolMatches} from './seller-contract-tool.ts';
 import {recordingConfidence} from './recording-consent-evidence.ts';
 import {sellerContinuedSpeech,sellerNoticeTwiml,sellerNoticeEndTwiml} from './seller-call-notice.ts';
@@ -54,8 +55,8 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
    const review=await readReview();if(!review||!await checkAgent(review))return {status:'recording_review_required'};
    const fromPhone=input.fromPhone??review.fromPhone;
    if(fromPhone!==review.fromPhone){
-    if(review.fromPhone!==primaryBusinessPhone||fromPhone!==secondaryBusinessPhone)return {status:'business_number_verification_required'};
-    try{if(!await secondaryCallingReady(db,env))return {status:'business_number_verification_required'};}catch{return {status:'business_number_verification_required'};}
+    if(review.fromPhone!==primaryBusinessPhone||!isAdditionalBusinessPhone(fromPhone))return {status:'business_number_verification_required'};
+    try{if(!await secondaryCallingReady(db,env,fetch,fromPhone))return {status:'business_number_verification_required'};}catch{return {status:'business_number_verification_required'};}
    }
    if(!dispatchAllowed())return {status:'recording_release_required'};
    if(!uuid(input.accountId)||!/^voice:[0-9a-f-]{36}$/i.test(input.operationKey)||input.prompt.length>24000||input.firstMessage.length>2000)throw Error('RECORDING_CONTEXT_REQUIRED');
