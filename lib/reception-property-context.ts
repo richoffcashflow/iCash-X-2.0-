@@ -5,7 +5,7 @@ import {buyerConversationPolicy,selectedConversationRoleInstructions} from './bu
 import {buyerTurnPolicy,selectedTurnRoleInstructions} from './buyer-turn-policy.ts';
 import {buyerResponsePolicy,selectedResponseRoleInstructions} from './buyer-response-policy.ts';
 import {buyerScenarioPolicy,selectedScenarioRoleInstructions} from './buyer-scenario-policy.ts';
-import {conversationStreet,conversationAddressFields} from './conversation-address.ts';
+import {spokenStreet,conversationAddressFields} from './conversation-address.ts';
 import {buyerReceptionEnabled,buyerReceptionVariables,buyerReceptionPrompt} from './buyer-reception-context.ts';
 import {sellerOfferReceptionEnabled,sellerOfferReceptionPrompt,sellerOfferReceptionVariables} from './seller-offer-reception.ts';
 import {sellerAgreementReceptionEnabled,sellerAgreementPrompt,sellerAgreementReceptionVariables,automaticOfferReceptionPrompt} from './seller-agreement-reception.ts';
@@ -23,7 +23,7 @@ export function propertyReceptionEnabled(config:Record<string,unknown>){
 }
 export function propertyReceptionVariables(value:unknown){
  const context=safeInboundPropertyContext(value);
- return {icash_property_greeting:context?.status==='matched'?`${context.returningName?'Hi '+context.returningName+'.':'Hi,'} I'm the iCash X AI property assistant. Is this the owner of ${conversationStreet(context.address)}?`:"Hi, I'm the iCash X AI property assistant. Which property are you calling about?",icash_property_context:JSON.stringify(context)};
+ return {icash_property_greeting:context?.status==='matched'?`${context.returningName?'Hi '+context.returningName+'.':'Hi,'} I'm the iCash X AI property assistant. Is this the owner of ${spokenStreet(context.address)}?`:"Hi, I'm the iCash X AI property assistant. Which property are you calling about?",icash_property_context:JSON.stringify(context)};
 }
 
 export function receptionContextPrompt(config:Record<string,unknown>){return sellerAgreementReceptionEnabled(config)?sellerAgreementPrompt(config):sellerOfferReceptionEnabled(config)?sellerOfferReceptionPrompt:buyerReceptionEnabled(config)?buyerReceptionPrompt:propertyReceptionPrompt;}
