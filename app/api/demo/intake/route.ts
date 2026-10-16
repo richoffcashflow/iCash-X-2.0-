@@ -42,6 +42,7 @@ export async function POST(req:Request){
   });
   const [receipt]=await db<{state:string}[]>(`icash_seller_intakes?id=eq.${leadId}&select=state&limit=1`);
   if(receipt?.state==='duplicate')return Response.json({received:true,progress:sellerSubmissionStatus('duplicate_demo')},{headers});
+  if(i.callNowVersion&&receipt&&['received','checking','qualified','assigned'].includes(receipt.state))await db('rpc/icash_request_optin_call_now','POST',{p_lead:leadId,p_request:i.requestId,p_source:'demo_form',p_reference:i.callNowVersion,p_actor:user.id,p_account:ownerInboundTarget.accountId});
   // Only a presenter-submitted opt-in enters the ordinary durable pipeline.
   // Loading, building and verifying this page never start provider work.
   after(async()=>{try{

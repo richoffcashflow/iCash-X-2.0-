@@ -11,6 +11,7 @@ const suites = [
  'workspace-simplification', 'workspace-stage-summary', 'buyer-network-workspace', 'fulfillment-guidance', 'workspace-next-actions', 'deal-tools-disclosure',
  'property-analysis-summary', 'property-debt-summary',
  'seller-submission-status',
+ 'optin-call-now-route', 'optin-call-now-database',
  'seller-agreement-identity', 'seller-agreement-evidence', 'live-agreement-history', 'live-agreement-route',
  'seller-agreement-delivery-status', 'seller-agreement-delivery-preflight',
  'contract-delivery-readiness-database',
