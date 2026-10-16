@@ -89,7 +89,8 @@ try{
  await pg.exec(fn('config/fulfillment-completion.sql','icash_settle_complete_costs'));
  await pg.exec(read('config/required-call-recording.sql'));await pg.exec(read('config/recording-consent-evidence-v4.sql'));await pg.exec(read('config/required-call-recording-consent-v4.sql'));
  await pg.exec(read('tests/required-call-recording-database.sql'));
- if(process.env.RECORDING_DIRECT_ONLY==='1'){await (await import('../tests/helpers/direct-recorded-outbound-fixture.mjs')).testDirectRecordedOutbound({pg,q,rpc,read,scenario,trans,get,context,account,permission,operation,ac,call,rec,admin});}else{
+ if(process.env.RECORDING_FINAL_CLOCK_ONLY==='1'){await (await import('../tests/helpers/outbound-final-clock-fixture.mjs')).testOutboundFinalClock({pg,q,rpc,read,scenario,trans,get,context,account,operation,ac,call,rec,nonce,stop,policy,admin,claim,finish});}
+ else if(process.env.RECORDING_DIRECT_ONLY==='1'){await (await import('../tests/helpers/direct-recorded-outbound-fixture.mjs')).testDirectRecordedOutbound({pg,q,rpc,read,scenario,trans,get,context,account,permission,operation,ac,call,rec,admin});}else{
  await scenario('service-only ACL and actual anon/auth/public denials',async()=>{
   for(const role of ['anon','authenticated','untrusted_test_role']){
    await q(`set local role ${role}`);await denied(()=>create());await denied(()=>q('select * from public.icash_call_recordings'));
