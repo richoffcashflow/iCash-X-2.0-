@@ -6,6 +6,7 @@ import {sellerBrand,sellerConsentVersion,sellerConsentText,sellerSharingText} fr
 import {optinCallNowText,optinCallNowVersion} from '@/lib/optin-call-now';
 import {sellerOptinCopy,sellerOptinSource,sellerOptinCampaign} from '@/lib/seller-optin';
 import {sellerSubmissionStatus,type SellerSubmissionStatus} from '@/lib/seller-submission-status';
+import type {SellerPixelRuntime} from '@/lib/seller-pixel';
 
 export function SellerIntake(){
  const [step,setStep]=useState<'address'|'contact'>('address');
@@ -25,6 +26,7 @@ export function SellerIntake(){
  }
  useEffect(()=>{
   let active=true;
+  (window as Window&{homeOfferPixel?:SellerPixelRuntime}).homeOfferPixel?.start();
   const q=new URLSearchParams(window.location.search);
   void fetch('/api/seller/experiment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:'open',source:sellerOptinSource(q.get('utm_source')),campaign:sellerOptinCampaign(q.get('campaign')||q.get('utm_campaign'))})})
    .then(r=>r.ok?r.json():null).then(data=>{
@@ -62,11 +64,12 @@ export function SellerIntake(){
   e.preventDefault();if(!consented){setError('Please check the contact agreement to continue.');return;}if(lock.current)return;
   lock.current=true;setBusy(true);setError('');if(!request.current)request.current=crypto.randomUUID();
   try{
-   const q=new URLSearchParams(window.location.search),source=sellerOptinSource(q.get('utm_source'));
+   const q=new URLSearchParams(window.location.search),source=q.get('fbclid')?'meta':sellerOptinSource(q.get('utm_source'));
    const campaign=sellerOptinCampaign(q.get('campaign')||q.get('utm_campaign')),clickId=(q.get('fbclid')||q.get('gclid')||q.get('ttclid')||'').replace(/[^a-zA-Z0-9_.:-]/g,'').slice(0,300);
    await Promise.race([eventQueue.current,new Promise(resolve=>setTimeout(resolve,800))]);
    const r=await fetch('/api/seller/intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address,phone,consented,consentVersion:sellerConsentVersion,callNowVersion:optinCallNowVersion,contactTimezone:Intl.DateTimeFormat().resolvedOptions().timeZone,requestId:request.current,campaign,source,clickId,honeypot:trap})});
    const d=await r.json();if(!r.ok)throw Error(d.error||'Please retry.');setProgress(sellerSubmissionStatus('received'));setDone(true);requestAnimationFrame(()=>success.current?.focus());
+   try{if(d.registrationEventId)(window as Window&{homeOfferPixel?:SellerPixelRuntime}).homeOfferPixel?.registration(d.registrationEventId);}catch{/* A blocked pixel never changes a saved submission. */}
   }catch(e){setError(e instanceof Error?e.message:'Please retry.');}finally{lock.current=false;setBusy(false);}
  }
  return <main className={`seller-shell seller-step-${done?'done':step}`}>

@@ -8,6 +8,7 @@ import {botDemoSubmission,botDemoConsentVersion} from '../lib/bot-demo.ts';
 import {optinCallNowVersion} from '../lib/optin-call-now.ts';
 import {processSellerResponses} from '../lib/seller-response-service.ts';
 import {sellerSubmissionStatus} from '../lib/seller-submission-status.ts';
+import {sellerMeasurement,recordSellerMeasurement} from '../lib/seller-measurement.ts';
 
 // Run both actual handlers and their real validation/response service against
 // in-memory claims. No network, provider, production DB or paid work is used.
@@ -21,7 +22,7 @@ const deps={
  allowedOrigin:req=>allowedOrigin(req,{}),currentUser:async()=>user,
  cookies:async()=>({get:name=>name==='keypath_seller'?{value:'a'.repeat(64)}:undefined,set:()=>{throw Error('Unexpected cookie mutation');}}),
  validGuest:value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value),limitRequest:async()=>{},
- botDemoSubmission,immediateSellerSubmission,sellerConsentText,sellerSharingText,sellerDuplicateKeyInput,sellerSubmissionStatus,
+ botDemoSubmission,immediateSellerSubmission,sellerConsentText,sellerSharingText,sellerDuplicateKeyInput,sellerSubmissionStatus,sellerMeasurement,recordSellerMeasurement,
  after:callback=>{events.push({kind:'defer'});callbacks.push(callback);},
  processSellerIntake:async(_db,_key,_fetch,lead)=>{assert.equal(lead,'fixture-lead');events.push({kind:'lookup'});},
  processSellerResponses,
@@ -32,6 +33,7 @@ const deps={
   if(path==='rpc/icash_submit_bot_demo_intake'||path==='rpc/icash_submit_seller_contact_intake')return 'fixture-lead';
   if(path==='icash_seller_intakes?id=eq.fixture-lead&select=state&limit=1')return [{state:duplicate?'duplicate':'received'}];
   if(path==='rpc/icash_request_optin_call_now'){if(failRequest)throw Error('Cannot save explicit request');return true;}
+  if(path==='rpc/icash_record_seller_measurement')return duplicate?null:'keypath:12345678-1234-4234-8234-123456789abc';
   if(path==='rpc/icash_assign_seller_lead_for')return null;
   if(path==='rpc/icash_prepare_seller_responses'){
    if(claimed)return [];claimed=true;
