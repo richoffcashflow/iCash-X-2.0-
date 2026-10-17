@@ -1,5 +1,6 @@
 import {scheduleWebinarFollowups} from '@/lib/webinar-dispatch';
 export const maxDuration=120;
+import {schedulePurchaseAccessEmail} from '@/lib/purchase-access-dispatch';
 import {changeVipPlan,vipRetentionOffer} from '@/lib/vip-membership';
 import {vipRetentionVersion,vipRetentionCents} from '@/lib/vip-policy';
 import {recordPurchaseAcceptance} from '@/lib/purchase-acceptance';
@@ -31,6 +32,7 @@ export async function GET(req:Request){try{
   offer.enabled?customerFundingReady():false,vipRetentionOffer(m)
  ]);
  if(postPurchaseUrl&&mode==='live')scheduleWebinarFollowups();
+ if(m?.mode==='live'&&m.paid_through)schedulePurchaseAccessEmail(m.id);
  return NextResponse.json({postPurchaseUrl,offer,mode,embeddedReady:!!checkoutPublishableKey(mode),customerName:customer.name??'',ready,membership:publicMembership(m),retentionOffer,needsClaim:!!m?.paid_through&&!m.account_id,email:m?.paid_through&&!user?m.payer_email:user?.email??customer.email??null},{headers});
  }catch{return NextResponse.json({error:'Could not check software access. Please retry.'},{status:503,headers});}}
 const input=z.discriminatedUnion('action',[z.object({action:z.literal('prepare'),version:z.literal(membershipTermsVersion),revision:z.number().int().positive(),totalCents:z.number().int().positive(),embedded:z.literal(true),webinarSessionId:z.string().uuid().optional(),timezone:z.string().max(80).optional()}).strict(),z.object({action:z.literal('checkout'),accepted:z.literal(true),version:z.literal(membershipTermsVersion),revision:z.number().int().positive(),totalCents:z.number().int().positive(),embedded:z.boolean().optional(),webinarSessionId:z.string().uuid().optional(),timezone:z.string().max(80).optional()}).strict(),z.object({action:z.literal('cancel')}).strict(),z.object({action:z.literal('manage')}).strict(),z.object({action:z.literal('retain_vip'),accepted:z.literal(true),version:z.literal(vipRetentionVersion),priceCents:z.literal(vipRetentionCents)}).strict(),z.object({action:z.literal('retain'),accepted:z.literal(true),version:z.literal(retentionVersion),priceCents:z.number().int().positive(),months:z.literal(6)}).strict()]);
