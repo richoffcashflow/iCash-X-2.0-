@@ -19,5 +19,5 @@ import "./workspace-minimal.css";
 import "./workspace-assistant.css";
 import "./agreement-cancellation.css";
 import "./workspace-progressive.css";
-export const metadata: Metadata = { title: "iCash X | Your AI Bot for Wholesale Real Estate", description: "Automate wholesale real estate with your AI bot. Property research, seller calls, texts, follow-up and deal tools in one workspace. Software access is $50/month; work credits are separate.", icons: { icon: "/favicon.svg?v=chrome-x" } };
+export const metadata: Metadata = { title: "iCash X | Your AI Bot for Wholesale Real Estate", description: "Automate wholesale real estate with your AI bot. Property research, seller calls, texts, follow-up and deal tools in one workspace. Software access is $50/month.", icons: { icon: "/favicon.svg?v=chrome-x" } };
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="en"><head><script id="icash-webinar-pixel" dangerouslySetInnerHTML={{__html:webinarPixelBootstrap}}/><script id="homeoffer-meta-pixel" dangerouslySetInnerHTML={{__html:sellerPixelBootstrap}}/></head><body>{children}<DashboardLock/><WebinarMeasurement/></body></html>; }
