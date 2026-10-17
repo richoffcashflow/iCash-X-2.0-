@@ -1,0 +1,66 @@
+import type {SupportEvidence} from './support-policy.ts';
+
+/** Curated from the owner's October 17, 2026 course and the current workspace.
+ * Keep the private recording/transcript out of the repository and model input.
+ * Current controls and verified checks take precedence over course examples.
+ */
+export const supportProductGuide = `
+iCash X is real-estate deal automation. Customers are using their bot to find and work seller leads, pursue purchase agreements, find cash buyers, and coordinate closing. They are not asking how to market a freelance service. Interpret "get a client" or "get leads" in this iCash X context. Do not suggest networking, referrals, social media marketing, freelance platforms, or ask what service/product they sell as the normal way to get leads.
+
+Getting started: open Course in the workspace and watch the training. The course also has a PDF and a fictional practice workspace. In Settings, save contact email/phone and an individual name or company name for agreements. An LLC is not required to choose Individual. Customize bot includes the bot name. Complete any required workspace acknowledgment yourself. Check software access, work credits, and the bot status. Use Add money when credit is needed, and Run bot to resume an intentionally paused bot. Never claim that support has started it or funded it.
+
+Getting leads: with access, credits, required setup and checks ready, keep the bot running. iCash X automatically looks for eligible seller opportunities and works incoming/assigned leads; customers do not need to manually find clients or add a test property to start. New leads appear in Leads. "Looking for a deal" with no leads can mean the running bot is waiting for an eligible opportunity, not an error. Watch Leads and notifications while it runs. There is no fixed lead-arrival time, guaranteed lead count per credit amount, guaranteed deal, or guaranteed income. More credits allow more eligible usage; they do not guarantee an outcome. Never tell someone to just wait when verified checks show a pause, missing credit, access problem, or service blocker. Unknown checks are not proof everything is running. Missing purchased credit requires team review, not another payment.
+
+Monitoring: the workspace shows leads, calls, texts, contracts and notifications. Open a property for its latest update, call recordings/transcripts, and texts. Notifications flag items needing the customer's attention. Take over pauses new automatic work on that property so the customer can handle calls/texts themselves; already-started work may finish. Return to bot resumes eligible automation. The overall Pause bot control stops new work; it does not cancel a subscription or signed contract.
+
+Agreements: the bot can speak/text with eligible sellers and prepare agreements. After a seller signs, the customer reviews the conversation, numbers, owners and actual agreement, then signs if appropriate. Never say the AI guarantees that the numbers work or that review is unnecessary. Documents contains agreement review/signing and available document controls. Contract cancellation is a separate property-document flow, not subscription cancellation; do not give blanket promises of cancellation rights or legal/tax advice.
+
+Buyers and closing: after the required purchase signatures and checks, the bot can prepare a buyer package, find cash buyers and contact buyers by SMS and email. There are no outbound AI calls to buyers. Review buyer replies, viewing availability and the workspace's requested next steps. Follow document, deposit and title-company requests. An offer, signature or promised payment is not a completed closing or money received. Use verified closing/payment status. Do not repeat sample prices, dates, deposits or earnings as requirements or promises.
+
+Plans: Standard includes ordinary automated bot work and bot-name customization. VIP includes Ask AI Bot about the workspace/properties, buyer-network access, lead priority, custom voice and eligible usage savings. Support team chat is available without VIP, including help getting into an account. Do not require a VIP upgrade to get ordinary bot leads or support. Use current verified plan/pricing details; do not invent a plan, price, discount or entitlement from the conversation.
+
+Stay with the customer's current step. If they already watched the course, do not tell them to watch it again as the solution. Ask one useful missing question such as the exact bot status or where they are stuck. If product knowledge cannot answer the question, say what is unknown and ask for relevant details or hand off to the team; do not invent features or substitute general business coaching.
+`.trim();
+
+type Turn={role:string;content:string};
+type CourseTopic='leads'|'start'|'course';
+function courseTopic(question:string):CourseTopic|null{
+ if(/\b(?:billing|charged|refund|cancel|password|sign.?in|log.?in|code|card)\b/i.test(question))return null;
+ if(/\b(?:lead|leads|client|clients|customer|customers)\b/i.test(question)&&/\b(?:get|getting|find|finding|generate|generating|come|comes|coming|arrive|arriving|wait|waiting|first|new|no|zero|none|where|when|how|need|buy)\b/i.test(question)&&!/\b(?:buyer|buyers|contract|delete|remove|archive|duplicate)\b|\b(?:call|text|email|reply|respond|message)\b.{0,25}\b(?:lead|leads|client|clients)\b/i.test(question))return 'leads';
+ if(/\bhow (?:do|can|should) i (?:get started|start|use)|\b(?:where do i start|how to (?:start|use)|new here|first steps|set up (?:my|the) bot)\b/i.test(question))return 'start';
+ if(/\b(?:where|find|open|watch|access)\b.{0,40}\b(?:course|training|tutorial|lesson|video|pdf|practice workspace)\b/i.test(question)&&!/(?:can.t|cannot|won.t|not|error|stuck|fail)/i.test(question))return 'course';
+ return null;
+}
+
+/** Core onboarding answers are local so outages/replays cannot turn them into generic sales advice. */
+export function supportCourseAnswer(messages:Turn[],evidence:SupportEvidence[]=[]):{reply:string;needsTeam:boolean}|null{
+ const users=messages.filter(m=>m.role==='user'),question=users.at(-1)?.content??'';
+ let topic=courseTopic(question);
+ if(!topic&&/^(?:i(?:'ve| have)? )?(?:already (?:watched|finished)|watched|finished|it(?:'s| is) running|my bot is running|i have credits|done|now what|what next|how long|still waiting)\b/i.test(question)&&users.slice(0,-1).some(m=>['leads','start'].includes(courseTopic(m.content)??'')))topic='leads';
+ if(!topic)return null;
+ if(topic==='course')return {reply:'Open Course in your workspace to watch the training video. The PDF download and practice workspace are there too, so you can follow the steps and explore sample deals. If it won’t open, tell us what you see on the screen.',needsTeam:false};
+ const watched=messages.some((m,index)=>m.role==='user'&&!/(?:not|haven.t|didn.t|never)\b/i.test(m.content)&&(/\b(?:watched|finished|completed)\b.{0,35}\b(?:course|training|video)\b|\b(?:course|training|video)\b.{0,25}\b(?:done|finished|completed)\b/i.test(m.content)||/^(?:i(?:'ve| have)? )?(?:already )?(?:watched|finished|completed) (?:it|that)[.!?\s]*$/i.test(m.content)&&messages.slice(0,index).some(turn=>turn.role==='assistant'&&/\b(?:course|training|video)\b/i.test(turn.content))));
+ const intro=topic==='start'?(watched?'With the course finished, check that your contact information and individual or company name are saved in Settings.':'Start with the Course in your workspace, then save your contact information and individual or company name in Settings.'):'In iCash X, your bot finds and works eligible seller leads automatically.';
+ const course=topic==='leads'&&!watched?' Watch the Course in your workspace and finish the Settings steps for your contact information and individual or company name.':'';
+ const check=(key:string)=>evidence.find(e=>e.key===key);
+ const payment=check('payments'),readiness=check('readiness'),work=check('work'),credits=check('credits'),subscription=check('subscription');
+ let next:string,needsTeam=false;
+ if(payment?.status==='attention'&&payment.code==='payment_uncredited'){
+  next='Your checks show a recorded payment has not been added to your credits yet. The team needs to review it before you pay again.';needsTeam=true;
+ }else if(readiness?.status==='attention'){
+  next='Your service checks show something needs attention before eligible work can run. The team needs to review it; adding credits will not clear that service issue.';needsTeam=true;
+ }else if(subscription?.status==='attention'){
+  next='Your software access needs attention. Open your subscription settings to review the status, and tell us what message appears.';
+ }else if(payment?.status==='attention'&&payment.code==='checkout_pending'){
+  next='A checkout is still pending. Return from checkout and refresh the status before paying again; tell us if it does not update.';
+ }else if(work?.status==='attention'&&work.code==='paused'){
+  next='Your bot is currently paused. Review the pause in your workspace, check your credits, and choose Run bot when you want it to resume. If you did not pause it, tell us before resuming.';
+ }else if(credits?.status==='attention'&&credits.code==='no_available_credit'){
+  next='Your bot has no available work credits. Review Credits left and use Add money if you want more eligible work to run; if you already paid and the credit is missing, tell us before paying again.';
+ }else if(work?.status==='ok'&&credits?.status==='ok'&&readiness?.status==='ok'){
+  next='Your checks show the bot is not paused, credit is available, and service readiness passed. Keep it running and watch Leads and notifications for incoming leads and anything that needs your review. “Looking for a deal” can mean it is waiting for an eligible opportunity; there is no fixed arrival time.';
+ }else{
+  next='Once setup, access and credits are ready, keep the bot running; new leads appear in Leads and notifications show anything that needs you. I can’t confirm that all your bot checks are ready here. What status does your bot show right now?';
+ }
+ return {reply:`${intro}${course}\n\n${next}`,needsTeam};
+}
