@@ -1,83 +1,39 @@
-/* The homepage is the purchase page: offer and payment first, product imagery alongside. */
+/* One purchase flow: product features, then the inline payment form. */
 .icash-launch-home{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#080808;overflow-x:clip}
-.icash-launch-home .wb-express-header{max-width:1280px;min-height:88px;height:auto;padding:14px 32px;border:0;gap:20px}
-.icash-launch-home .wb-express-brand{display:inline-flex;align-items:center;flex:none;--icash-mark-size:50px}
-.icash-launch-home .wb-express-sign-in{margin-left:auto;min-height:44px;padding:10px 21px;border:1px solid #dedede;border-radius:10px;background:#fff;font-size:13px;letter-spacing:0;text-transform:none;white-space:nowrap}
-.icash-launch-home .wb-express{padding:30px 32px 35px;display:block;min-height:65vh}
-.icash-launch-home .wb-plan-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(340px,1fr);grid-template-rows:auto 1fr auto;gap:26px 52px;max-width:1216px;margin:0 auto;align-items:start}
-.icash-launch-home .wb-plan-story{grid-column:1;grid-row:1;overflow:visible}
-.icash-launch-home .wb-plan-intro{padding:18px 0 0}
-.icash-launch-home .wb-plan-kicker{font-size:10px;letter-spacing:.12em;font-weight:600;color:#777}
-.icash-launch-home .wb-plan-kicker:before{display:none}
-.icash-launch-home .wb-plan-intro h1{font-size:clamp(37px,4.45vw,56px);letter-spacing:-.055em;line-height:1.07;margin:22px 0 20px;font-weight:800;color:#080808;text-wrap:balance}
-.icash-launch-home .wb-plan-intro h1>span{white-space:normal}
-.icash-launch-home .wb-plan-intro>p{max-width:490px;font-size:17px;line-height:1.55;color:#707070;letter-spacing:-.015em;margin:0}
-.icash-launch-home .wb-plan-card{grid-column:2;grid-row:1/3;position:sticky;top:24px;width:100%;min-width:0;margin:0;padding:29px;border-radius:20px;background:linear-gradient(145deg,#fafafa,#fff 55%);border:1px solid #e4e4e4;box-shadow:0 16px 48px #00000007;scroll-margin-top:20px}
-.icash-launch-home .membership-plan-title{font-size:27px;margin:21px 0 10px}
-.icash-launch-home .membership-price{font-size:72px}
-.icash-launch-home .membership-description{max-width:none;font-size:14px;margin:12px 0 20px}
-.icash-launch-home .membership-includes{font-size:13px;gap:11px;margin:15px 0 18px;line-height:1.45}
-.icash-launch-home .membership-consent,.icash-launch-home .membership-renewal{font-size:12px;line-height:1.5}
-.icash-launch-home .membership-renewal{margin:14px 0}
-.icash-launch-home .membership-consent{min-height:44px;padding:4px 0}
-.icash-launch-home .setup-primary{font-size:15px;min-height:52px;border-radius:11px}
-.icash-launch-home .membership-secure{font-size:11px;line-height:1.5}
-.launch-product-preview{grid-column:1;grid-row:2;min-width:0}
-.icash-launch-home .wb-product-stage{height:auto;aspect-ratio:2056/765;margin:0;border-radius:16px;overflow:hidden;background:#111}
-.icash-launch-home .wb-product-stage img{display:block;width:100%;height:100%;object-fit:cover}
-.icash-launch-home .wb-brand-capabilities{border:0;padding-top:26px;gap:20px}
+.icash-launch-home .wb-express-header{max-width:760px;min-height:76px;height:auto;padding:12px 24px;border:0;gap:20px}
+.icash-launch-home .wb-express-brand{display:inline-flex;align-items:center;flex:none;--icash-mark-size:44px}
+.icash-launch-home .wb-express-sign-in{margin-left:auto;min-height:44px;padding:10px 20px;border:1px solid #dedede;border-radius:10px;background:#fff;font-size:13px;letter-spacing:0;text-transform:none;white-space:nowrap}
+.icash-launch-home .wb-express{padding:12px 24px 32px;display:block;min-height:65vh}
+.icash-launch-home .wb-plan-layout{display:flex;flex-direction:column;gap:26px;max-width:680px;width:100%;margin:0 auto;align-items:stretch}
+.icash-launch-home .launch-product-preview{min-width:0;width:100%}
+.icash-launch-home .wb-product-stage{height:auto;aspect-ratio:1672/941;margin:0;border-radius:16px;overflow:hidden;background:#fff}
+.icash-launch-home .wb-product-stage img{display:block;width:100%;height:auto;object-fit:contain}
+.icash-launch-home .wb-brand-capabilities{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:0;padding:22px 0 0;gap:20px}
 .icash-launch-home .wb-brand-capabilities article{padding:0;min-width:0}
-.icash-launch-home .wb-capability-icon{height:42px;width:42px;border:1px solid #e8e8e8;background:linear-gradient(#fff,#f6f6f6);border-radius:12px}
-.icash-launch-home .wb-brand-capabilities h3{font-size:14px;line-height:1.3;letter-spacing:-.025em;margin:14px 0 7px;font-weight:700}
-.icash-launch-home .wb-brand-capabilities p{font-size:13px;line-height:1.5;color:#777;margin:0}
-.icash-launch-home .wb-plan-onboarding{grid-column:1/-1;grid-row:3;margin:12px 0 0;padding-top:24px;gap:26px;align-self:start;font-size:12px}
-.icash-launch-home .wb-plan-footer{display:flex;justify-content:space-between;max-width:1216px;font-size:12px;padding:22px 0 calc(22px + env(safe-area-inset-bottom));border-top:1px solid #ececec;line-height:1.5}
+.icash-launch-home .wb-capability-icon{height:36px;width:36px;border:1px solid #e8e8e8;background:#fafafa;border-radius:10px}
+.icash-launch-home .wb-brand-capabilities h3{font-size:14px;line-height:1.3;letter-spacing:-.025em;margin:10px 0 5px;font-weight:700}
+.icash-launch-home .wb-brand-capabilities p{font-size:12px;line-height:1.5;color:#666;margin:0}
+.icash-launch-home .wb-plan-card{position:static;width:100%;min-width:0;max-width:none;margin:0;padding:24px;border-radius:18px;background:#fff;border:1px solid #e4e4e4;box-shadow:0 10px 40px #00000005;scroll-margin-top:20px}
+.icash-launch-home .wb-plan-card>.wb-text{margin-top:14px;font-size:12px;color:#555}
+.icash-launch-home .membership-secure{font-size:11px;line-height:1.5;color:#666}
+.icash-launch-home .setup-primary{font-size:15px;min-height:52px;border-radius:11px}
+.icash-launch-home .wb-plan-footer{display:flex;justify-content:space-between;max-width:680px;width:calc(100% - 48px);font-size:11px;padding:20px 0 calc(20px + env(safe-area-inset-bottom));border-top:1px solid #ececec;line-height:1.5;gap:16px;flex-wrap:wrap}
 .icash-launch-home .wb-plan-footer a{white-space:nowrap}
-.icash-launch-home .wb-plan-layout[data-engaged=true]{grid-template-columns:minmax(0,620px);grid-template-rows:auto;max-width:620px}
-.icash-launch-home .wb-plan-layout[data-engaged=true] .wb-plan-card{grid-column:1;grid-row:1;position:static;width:100%}
-.icash-launch-home .wb-plan-layout[data-engaged=true] :is(.wb-plan-story,.launch-product-preview,.wb-plan-onboarding){display:none}
-.icash-launch-home .wb-express-status{max-width:540px;margin:70px auto;text-align:center}
-@media(max-width:1000px){
- .icash-launch-home .wb-plan-layout{gap:24px 28px;grid-template-columns:minmax(0,1fr) minmax(330px,1fr)}
- .icash-launch-home .wb-plan-card{padding:23px}
- .icash-launch-home .wb-plan-intro h1{font-size:40px}
- .icash-launch-home .wb-plan-intro>p{font-size:16px}
- .icash-launch-home .wb-brand-capabilities{gap:13px}
-}
+.icash-launch-home .wb-express-status{max-width:540px;margin:60px auto;text-align:center}
 @media(max-width:760px){
- .icash-launch-home .wb-express-header{min-height:72px;padding:12px 20px;gap:12px;margin:0}
- .icash-launch-home .wb-express-brand{--icash-mark-size:42px}
- .icash-launch-home .wb-express-sign-in{padding:10px 16px;font-size:13px}
- .icash-launch-home .wb-express{padding:15px 16px 28px}
- .icash-launch-home .wb-plan-layout{display:flex;flex-direction:column;gap:23px;max-width:540px;align-items:stretch}
- .icash-launch-home .wb-plan-intro{padding:0 5px}
- .icash-launch-home .wb-plan-kicker{font-size:9px;letter-spacing:.1em}
- .icash-launch-home .wb-plan-intro h1{font-size:clamp(28px,7.4vw,38px);line-height:1.09;letter-spacing:-.045em;margin:14px 0 12px;text-wrap:initial}
- .icash-launch-home .wb-plan-intro>p{font-size:15px;line-height:1.5;max-width:460px}
- .icash-launch-home .wb-plan-card{position:static;padding:23px 20px;border-radius:17px}
- .icash-launch-home .membership-plan-title{font-size:24px;margin:17px 0 9px}
- .icash-launch-home .membership-price{font-size:62px}
- .icash-launch-home .membership-description{font-size:13px;margin:10px 0 18px}
- .icash-launch-home .membership-plan-included{padding-top:16px}
- .icash-launch-home .membership-includes{font-size:13px;gap:10px}
- .icash-launch-home .membership-consent{font-size:12px;align-items:flex-start}
- .icash-launch-home .membership-consent input{margin-top:2px;min-width:20px;min-height:20px}
- .icash-launch-home .wb-product-stage{border-radius:13px;aspect-ratio:1.9}
- .icash-launch-home .wb-product-stage img{object-position:48% center}
- .icash-launch-home .wb-brand-capabilities{padding:22px 3px 0;gap:16px;grid-template-columns:1fr}
- .icash-launch-home .wb-brand-capabilities article{display:grid;grid-template-columns:42px minmax(0,1fr);column-gap:14px;align-items:center}
- .icash-launch-home .wb-capability-icon{grid-row:1/3}
- .icash-launch-home .wb-brand-capabilities h3{margin:0 0 3px;font-size:14px}
- .icash-launch-home .wb-brand-capabilities p{font-size:13px}
- .icash-launch-home .wb-plan-onboarding{gap:12px;font-size:10px;margin-top:4px;padding-top:20px;justify-content:space-between;flex-wrap:wrap}
- .icash-launch-home .wb-plan-onboarding span{gap:6px;white-space:normal}
- .icash-launch-home .wb-plan-onboarding>svg{display:none}
- .icash-launch-home .wb-plan-footer{width:calc(100% - 40px);font-size:11px;gap:14px;flex-wrap:wrap}
- .icash-launch-home .wb-express-status{margin:45px auto}
+ .icash-launch-home .wb-express-header{min-height:68px;padding:10px 16px;gap:12px;margin:0}
+ .icash-launch-home .wb-express-brand{--icash-mark-size:40px}
+ .icash-launch-home .wb-express-sign-in{padding:10px 16px}
+ .icash-launch-home .wb-express{padding:8px 16px 24px}
+ .icash-launch-home .wb-plan-layout{gap:22px}
+ .icash-launch-home .wb-product-stage{border-radius:12px}
+ .icash-launch-home .wb-brand-capabilities{padding-top:16px;gap:12px}
+ .icash-launch-home .wb-brand-capabilities h3{font-size:12px;line-height:1.35;margin:8px 0 4px}
+ .icash-launch-home .wb-brand-capabilities p{font-size:11px;line-height:1.45}
+ .icash-launch-home .wb-capability-icon{height:32px;width:32px;border-radius:9px}
+ .icash-launch-home .wb-capability-icon svg{width:19px;height:19px}
+ .icash-launch-home .wb-plan-card{padding:14px 10px;border-radius:14px}
+ .icash-launch-home .wb-plan-footer{width:calc(100% - 32px);font-size:10px}
+ .icash-launch-home .wb-express-status{margin:40px auto}
  .icash-launch-home input:not([type=checkbox]){font-size:16px}
-}
-@media(max-width:360px){
- .icash-launch-home .wb-plan-card{padding:21px 17px}
- .icash-launch-home .wb-plan-intro h1{font-size:28px}
- .icash-launch-home .wb-plan-onboarding{justify-content:flex-start;gap:12px 18px}
 }

@@ -1,16 +1,15 @@
 'use client';
-import {useEffect,useRef} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {usePathname} from 'next/navigation';
 import {dashboardPath} from '@/lib/dashboard-paths';
 import type {WebinarCommerce} from '@/lib/webinar-browser-events';
 import {measurementPolicyVersion} from '@/lib/webinar-measurement-policy';
-import type {WebinarPixelRuntime} from '@/lib/webinar-pixel';
+import {webinarMeasurementPath,type WebinarPixelRuntime} from '@/lib/webinar-pixel';
 type Pixel=((...args:unknown[])=>void)&{queue:unknown[][];callMethod?:(...args:unknown[])=>void;loaded:boolean;version:string;push?:Pixel};
 type PixelWindow=Window&{fbq?:Pixel;_fbq?:Pixel;icashWebinarPixel?:WebinarPixelRuntime};
 type MetaEvent={eventName:string;eventId:string;data:Record<string,unknown>};
 type Measurement={enabled:boolean;pixelId?:string;trackingAllowed?:boolean;consent?:boolean;events?:MetaEvent[]};
-const webinarPage=(path:string)=>path==='/webinar'||/^\/live\/\d{6,12}\/?$/.test(path)||path==='/webinar/checkout'||path==='/webinar/upgrade';
-const measurementPage=()=>webinarPage(location.pathname)&&!new URLSearchParams(location.search).has('preview');
+const measurementPage=()=>webinarMeasurementPath(location.pathname)&&!new URLSearchParams(location.search).has('preview')&&(location.pathname!=='/'||!!document.querySelector('[data-public-checkout="true"]'));
 function pixel(id:string){
  const w=window as PixelWindow;
  if(w.icashWebinarPixel?.pixelId===id&&w.fbq)return w.fbq;
@@ -21,7 +20,14 @@ function pixel(id:string){
 }
 const storage={get(key:string){try{return localStorage.getItem(key);}catch{return null;}},set(key:string,value:string){try{localStorage.setItem(key,value);}catch{/* Optional measurement. */}}};
 export function WebinarMeasurement(){
- const pathname=usePathname(),privatePage=dashboardPath(pathname)||pathname==='/dashboard-unlock'||!webinarPage(pathname);
+ const pathname=usePathname(),[homeCheckoutVisible,setHomeCheckoutVisible]=useState(false);
+ const privatePage=dashboardPath(pathname)||pathname==='/dashboard-unlock'||!webinarMeasurementPath(pathname)||pathname==='/'&&!homeCheckoutVisible;
+ useEffect(()=>{
+  const changed=(event:Event)=>setHomeCheckoutVisible((event as CustomEvent<boolean>).detail===true);
+  window.addEventListener('icash-public-checkout-change',changed);
+  setHomeCheckoutVisible(!!document.querySelector('[data-public-checkout="true"]'));
+  return()=>window.removeEventListener('icash-public-checkout-change',changed);
+ },[pathname]);
  const current=useRef<Measurement|null>(null),session=useRef(''),initialized=useRef(''),sent=useRef(new Set<string>()),refreshVersion=useRef(0),pageView=useRef({path:'',id:''});
  const pendingStages=useRef<MetaEvent[]>([]);
  const gpc=()=>!!(navigator as Navigator&{globalPrivacyControl?:boolean}).globalPrivacyControl;
