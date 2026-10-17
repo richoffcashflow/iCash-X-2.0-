@@ -43,6 +43,10 @@ try{
  const generic=async()=>{leadCalls++;return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'To get a client, focus on marketing your services clearly, networking in relevant communities, and delivering quality work. What type of service or product are you offering?',needsTeam:false})}}]});};
  const firstClient=await replyToSupport(leadsContext,generic);assert.match(firstClient.reply,/bot finds and works eligible seller leads automatically/);assert.equal(leadCalls,0,'Known course flow cannot be replaced by generic model advice');
  assert.equal((await replyToSupport({...leadsContext,allowAI:false},generic)).reply,firstClient.reply,'Interrupted/replayed requests retain course guidance');
+ for(const question of ['How do I use Take over?','How do I use my custom voice?','How do I view a new lead?']){
+  const feature=await replyToSupport({...leadsContext,messages:[user(question)]},async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'Fixture feature-specific answer.',needsTeam:false})}}]}));
+  assert.equal(feature.reply,'Fixture feature-specific answer.','Specific feature questions must reach course-grounded conversation, not generic onboarding');
+ }
  await replyToSupport({kind:'account',messages:[user('What happens after the seller signs?')],evidence:ready},async(url,init)=>{
   const body=JSON.parse(init.body),policy=body.messages[0].content;
   assert.match(policy,/automated member.*Support team/);assert.match(policy,/not asking how to market a freelance service/);assert.match(policy,/After a seller signs, the customer reviews/);assert.match(policy,/no outbound AI calls to buyers/);assert.match(policy,/Support team chat is available without VIP/);assert.match(policy,/Checks take precedence/);

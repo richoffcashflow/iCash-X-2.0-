@@ -26,8 +26,8 @@ type Turn={role:string;content:string};
 type CourseTopic='leads'|'start'|'course';
 function courseTopic(question:string):CourseTopic|null{
  if(/\b(?:billing|charged|refund|cancel|password|sign.?in|log.?in|code|card)\b/i.test(question))return null;
- if(/\b(?:lead|leads|client|clients|customer|customers)\b/i.test(question)&&/\b(?:get|getting|find|finding|generate|generating|come|comes|coming|arrive|arriving|wait|waiting|first|new|no|zero|none|where|when|how|need|buy)\b/i.test(question)&&!/\b(?:buyer|buyers|contract|delete|remove|archive|duplicate)\b|\b(?:call|text|email|reply|respond|message)\b.{0,25}\b(?:lead|leads|client|clients)\b/i.test(question))return 'leads';
- if(/\bhow (?:do|can|should) i (?:get started|start|use)|\b(?:where do i start|how to (?:start|use)|new here|first steps|set up (?:my|the) bot)\b/i.test(question))return 'start';
+ if(/\b(?:lead|leads|client|clients|customer|customers)\b/i.test(question)&&/\b(?:get|getting|find|finding|generate|generating|come|comes|coming|arrive|arriving|wait|waiting|first|new|no|zero|none|where|when|need|buy)\b/i.test(question)&&!/\b(?:buyer|buyers|contract|delete|remove|archive|duplicate|view|open|edit|recording|transcript|call|text|email|reply|respond|message)\b/i.test(question))return 'leads';
+ if(/\b(?:get started|where do i start|new here|first steps|set up (?:my|the) bot)\b|\b(?:how (?:do|can|should) i|how to) (?:start|use) (?:icash\s*x|icashx|(?:my |the |this )?(?:software|app|platform|bot))\b|\bhow (?:do|can|should) i start[.!?\s]*$/i.test(question))return 'start';
  if(/\b(?:where|find|open|watch|access)\b.{0,40}\b(?:course|training|tutorial|lesson|video|pdf|practice workspace)\b/i.test(question)&&!/(?:can.t|cannot|won.t|not|error|stuck|fail)/i.test(question))return 'course';
  return null;
 }
