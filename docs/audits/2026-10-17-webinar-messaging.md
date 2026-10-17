@@ -17,6 +17,8 @@ The departure endpoint authenticates the visitor/session, records an ordered per
 
 VIP enrollment requires a canonical live paid membership with a recorded settled invoice, a stored paired VIP destination, and no prior attendance. Purchase notices do not grant paid VIP plan benefits. A delivered VIP link issues a short-lived video-only capability, scoped to that paired session and rechecked against current membership on entry. It never issues an account session or restores another device's funding identity. Refund/review/cancellation blocks new entry. Existing customer-update activation must preserve VIP recovery jobs.
 
+The first webinar's saved chat name carries into VIP without another name form. Normal and reminder entry preserve the original visitor name. A verified buyer returning in a fresh browser can recover a missing name from the matching main webinar through their server-verified purchase identity. Only the name is copied; existing choices and concurrent edits win, and no contact details, consent or account identity are transferred.
+
 The sender retains STOP, signed one-click unsubscribe, suppression/bounce/complaint checks, sender identity, property-conversation isolation, durable one-use authorization, immutable email retries and no retry of ambiguous SMS attempts. Automatic messages expire rather than accumulating after an outage. The second reminder is scheduled from the accepted first send, not signup or an unsuccessful attempt.
 
 ## Verification

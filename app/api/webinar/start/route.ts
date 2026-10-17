@@ -16,7 +16,7 @@ import {snapshotChat} from '@/lib/webinar-variants';
 import {approximateRegion} from '@/lib/webinar-activity';
 import {webinarReturnJourney} from '@/lib/webinar-ad-returns';
 import {webinarLink} from '@/lib/webinar-links';
-import {webinarViewerMembership,returningBuyerVip} from '@/lib/webinar-vip';
+import {webinarViewerMembership,returningBuyerVip,restoreVipChatName} from '@/lib/webinar-vip';
 import {vipActive} from '@/lib/vip-policy';
 import {webinarBody,webinarError,WebinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarOwner,webinarVisitor,webinarPaid,webinarToken,type WebinarSession} from '@/lib/webinar-server';
 export const dynamic='force-dynamic';
@@ -35,9 +35,9 @@ export async function POST(req:Request){try{
  // Draft previews retain their separate dashboard authorization and isolation.
  const ownerWatching=!i.preview&&account?.isOwner===true;
  const reminder=!i.preview&&current.parentWebinarId?await webinarReminderMembership(current.id):null;
+ const membership=!i.preview&&!ownerWatching?await webinarViewerMembership(account?.id)??reminder:null;
  let target=current,paidAdReturn=false;
  if(!i.preview&&!ownerWatching){
-  const membership=await webinarViewerMembership(account?.id)??reminder;
   if(vipActive(membership))return Response.json({redirect:webinarSite.workspacePath},{headers:webinarHeaders});
   if(current.parentWebinarId){
    if(!membership)return Response.json({redirect:webinarSite.checkoutPath},{headers:webinarHeaders});
@@ -49,7 +49,9 @@ export async function POST(req:Request){try{
    return Response.json({redirect:account.destination,needsBudget:account.needsBudget},{headers:webinarHeaders});
   }
  }
- const visitor=await webinarVisitor(true,reminder?webinarToken(reminder.visitor_id,'resume',3600):i.resume);const timezone=visitorTimezone(process.env.VERCEL?req.headers.get('x-vercel-ip-timezone'):null,i.timezone);
+ let visitor=await webinarVisitor(true,reminder?webinarToken(reminder.visitor_id,'resume',3600):i.resume);
+ if(target.parentWebinarId&&membership&&'guest_hash' in membership)visitor=await restoreVipChatName(visitor,target.parentWebinarId,membership);
+ const timezone=visitorTimezone(process.env.VERCEL?req.headers.get('x-vercel-ip-timezone'):null,i.timezone);
  const location=webinarViewerLocation(req.headers);
  const attribution=Object.fromEntries(Object.entries(i.attribution??{}).filter(([k])=>['utm_source','utm_medium','utm_campaign','utm_content','utm_term','ad_id','adset_id','campaign_id'].includes(k)));
  const jar=await cookies();let fundingGuest=jar.get('icash_funding_guest')?.value;if(!validGuest(fundingGuest)){fundingGuest=randomBytes(32).toString('hex');jar.set('icash_funding_guest',fundingGuest,{httpOnly:true,secure:process.env.NODE_ENV!=='development',sameSite:'lax',path:'/',maxAge:86400*30});}

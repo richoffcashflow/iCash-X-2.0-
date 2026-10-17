@@ -131,7 +131,7 @@ for(const [scenario,[version,preview,outcome]] of [['day',false,'unpaid'],['nigh
  const vip={...w,parentWebinarId:'00000000-0000-4000-8000-000000000999',recordingVersion:version,redirectAtEnd:false,chat:[{id:'taylor',at:805,name:'Taylor',text:'Joined',kind:'purchase'},{id:'emilio',at:810,name:'Emilio',text:'Joined',kind:'purchase'}],offers:[{id:'vip',at:800,replaySpots:3,title:'VIP offer',description:'',ctaLabel:'Upgrade',action:'checkout',url:'',expiresAt:null},{id:'vip-last',at:1200,replaySpots:1,title:'VIP last chance',description:'',ctaLabel:'Upgrade',action:'checkout',url:'',expiresAt:null}]};
  const vh=await harness('components/webinar-room.tsx',{...roomDeps,post:async(url,body)=>{
   events.push({url,body});
-  if(url.endsWith('/start'))return {sessionId:vipSessionId,webinar:policy.publicWebinar(vip),progress:0,name:version==='day'?'Casey':'',email:'',phone:'',contactSaved:false,messages:[],preview,serverNow:Date.now()};
+  if(url.endsWith('/start'))return {sessionId:vipSessionId,webinar:policy.publicWebinar(vip),progress:0,name:preview?'':'Casey',email:'',phone:'',contactSaved:false,messages:[],preview,serverNow:Date.now()};
   if(url.endsWith('/chat'))return {messages:[{id:'vip-message',role:'user',text:body.text,playback_seconds:body.seconds}]};
   if(url.endsWith('/contact'))throw Error('VIP must never collect contact details');
   return {saved:true,redirect:'/webinar/upgrade'};
@@ -145,6 +145,7 @@ for(const [scenario,[version,preview,outcome]] of [['day',false,'unpaid'],['nigh
  }
  all(vt).find(n=>n.props?.id==='wb-question').props.onChange({target:{value:"I'm in"}});vt=renderVip();await all(vt).find(n=>n.props?.className==='wb-chat-composer').props.onSubmit({preventDefault(){}});await flush();vt=renderVip();
  assert.equal(events.filter(e=>e.url.endsWith('/chat')).length,1);assert.equal(events.filter(e=>e.url.endsWith('/contact')).length,0);
+ if(!preview){const message=all(vt).find(n=>n.type==='article'&&n.props.className==='wb-message'&&all(n).some(child=>child.type==='p'&&child.props.children==="I'm in"));assert.equal(find(message,'b').props.children,'Casey','Day and Night VIP chat keep the name saved in the first webinar');}
  find(vt,'WebinarPlayer').props.onProgress(800);vt=renderVip();vt=renderVip();
  assert.equal(find(vt,'WebinarCheckout').props.vipWebinar,true,'The scheduled VIP offer opens upgrade checkout');
  find(vt,'WebinarCheckout').props.onPurchased('standard');vt=renderVip();
