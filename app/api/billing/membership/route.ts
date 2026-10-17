@@ -1,3 +1,5 @@
+import {scheduleWebinarFollowups} from '@/lib/webinar-dispatch';
+export const maxDuration=120;
 import {changeVipPlan,vipRetentionOffer} from '@/lib/vip-membership';
 import {vipRetentionVersion,vipRetentionCents} from '@/lib/vip-policy';
 import {recordPurchaseAcceptance} from '@/lib/purchase-acceptance';
@@ -26,6 +28,7 @@ export async function GET(req:Request){try{
  if(scope&&mode){const rows=await db<Membership[]>(`icash_memberships?${scope}&mode=eq.${mode}${sessionId?'&stripe_session_id=eq.'+sessionId:''}&order=created_at.desc&select=*&limit=1`);m=rows[0]??null;if(sessionId&&!m)return NextResponse.json({error:'Sign in with your payment email to open this purchase.'},{status:404,headers});if(m?.stripe_session_id&&(sessionId||m.state==='pending'||!m.paid_through))m=await reconcileMembershipCheckout(m);}
  const customer=await checkoutCustomerContext(hash,user?.email);
  const postPurchaseUrl=await paidVipDestination(m).catch(()=>null);
+ if(postPurchaseUrl&&mode==='live')scheduleWebinarFollowups();
  return NextResponse.json({postPurchaseUrl,offer,mode,embeddedReady:!!checkoutPublishableKey(mode),customerName:customer.name??'',ready:offer.enabled&&await customerFundingReady(),membership:publicMembership(m),retentionOffer:await vipRetentionOffer(m),needsClaim:!!m?.paid_through&&!m.account_id,email:m?.paid_through&&!user?m.payer_email:user?.email??customer.email??null},{headers});
  }catch{return NextResponse.json({error:'Could not check software access. Please retry.'},{status:503,headers});}}
 const input=z.discriminatedUnion('action',[z.object({action:z.literal('prepare'),version:z.literal(membershipTermsVersion),revision:z.number().int().positive(),totalCents:z.number().int().positive(),embedded:z.literal(true),webinarSessionId:z.string().uuid().optional(),timezone:z.string().max(80).optional()}).strict(),z.object({action:z.literal('checkout'),accepted:z.literal(true),version:z.literal(membershipTermsVersion),revision:z.number().int().positive(),totalCents:z.number().int().positive(),embedded:z.boolean().optional(),webinarSessionId:z.string().uuid().optional(),timezone:z.string().max(80).optional()}).strict(),z.object({action:z.literal('cancel')}).strict(),z.object({action:z.literal('manage')}).strict(),z.object({action:z.literal('retain_vip'),accepted:z.literal(true),version:z.literal(vipRetentionVersion),priceCents:z.literal(vipRetentionCents)}).strict(),z.object({action:z.literal('retain'),accepted:z.literal(true),version:z.literal(retentionVersion),priceCents:z.number().int().positive(),months:z.literal(6)}).strict()]);

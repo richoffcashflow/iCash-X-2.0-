@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import {verifyWebinarInstantRecovery} from './test-webinar-instant-recovery-db.mjs';
+import {verifyWebinarBoundedReminders} from './test-webinar-bounded-reminders-db.mjs';
 import {verifyWebinarReturnMessaging} from './test-webinar-return-messaging-db.mjs';
 import {verifyIndependentMessaging} from './test-independent-messaging-db.mjs';
 import {verifyOngoingSalesFollowups} from './test-ongoing-sales-followups-db.mjs';
@@ -229,6 +231,8 @@ try{
  await verifyIndependentMessaging(pg,q);
  await verifyOngoingSalesFollowups(pg,q,config);
  await verifyWebinarReturnMessaging(pg,q,config);
+ await verifyWebinarBoundedReminders(pg,q,config);
+ await verifyWebinarInstantRecovery(pg,q,config);
  // Production entry must agree with the browser/server one-hour policy.
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261015083217_webinar_one_hour_return.sql',import.meta.url),'utf8'));
  const returnVisitor=randomUUID(),returnSession=randomUUID();

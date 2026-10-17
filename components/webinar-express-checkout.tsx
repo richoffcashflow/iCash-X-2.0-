@@ -1,5 +1,7 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {installWebinarPresence} from '@/lib/webinar-presence';
+import {webinarBeacon} from '@/lib/webinar-client';
 import {IcashMark} from '@/components/icash-mark';
 import {AccountAccess} from '@/components/account-access';
 import {FundingDialog} from '@/components/funding-dialog';
@@ -16,6 +18,7 @@ type Props={preview?:boolean;previewBackHref?:string;checkingAccount?:boolean;ac
 export function WebinarExpressCheckout({preview=false,previewBackHref='/webinar-studio',checkingAccount=false,accountError=false,signInReady=true,onRetry,onSignedIn}:Props={}){
  const [webinarSessionId,setWebinarSessionId]=useState<string>();
  useEffect(()=>{const id=new URLSearchParams(window.location.search).get('webinar_session');if(id&&/^[0-9a-f-]{36}$/i.test(id))setWebinarSessionId(id);},[]);
+ useEffect(()=>{if(!webinarSessionId||preview||checkingAccount)return;return installWebinarPresence(presence=>webinarBeacon('/api/webinar/presence',{sessionId:webinarSessionId,...presence}),document,window,'checkout');},[webinarSessionId,preview,checkingAccount]);
  const [signInOpen,setSignInOpen]=useState(false);
  useEffect(()=>{
   const active=!checkingAccount&&!preview;

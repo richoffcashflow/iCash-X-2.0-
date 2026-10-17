@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {randomUUID} from 'node:crypto';
+import ts from 'typescript';
+import {z} from 'zod';
+import {installWebinarPresence} from '../lib/webinar-presence.ts';
+test('presence distinguishes departure, return, checkout and payment handoff; no hidden heartbeat',()=>{
+ const documentEvents=new EventTarget(),windowEvents=new EventTarget();let tick,cleared=0;const touches=[];
+ const doc={hidden:false,activeElement:null,addEventListener:documentEvents.addEventListener.bind(documentEvents),removeEventListener:documentEvents.removeEventListener.bind(documentEvents)};
+ const win={setInterval:fn=>{tick=fn;return 7;},clearInterval:id=>{assert.equal(id,7);cleared++;},addEventListener:windowEvents.addEventListener.bind(windowEvents),removeEventListener:windowEvents.removeEventListener.bind(windowEvents)};
+ globalThis.window={location:{href:'https://example.test/live/123456',origin:'https://example.test'}};
+ const stop=installWebinarPresence(p=>touches.push(p),doc,win);assert.equal(touches.at(-1).state,'active');tick();
+ doc.hidden=true;documentEvents.dispatchEvent(new Event('visibilitychange'));assert.equal(touches.at(-1).state,'left');const n=touches.length;tick();tick();assert.equal(touches.length,n);
+ doc.hidden=false;documentEvents.dispatchEvent(new Event('visibilitychange'));assert.equal(touches.at(-1).state,'active');windowEvents.dispatchEvent(new Event('icash-webinar-checkout'));assert.equal(touches.at(-1).stage,'checkout');
+ doc.activeElement={tagName:'IFRAME'};doc.hidden=true;documentEvents.dispatchEvent(new Event('visibilitychange'));assert.equal(touches.at(-1).state,'payment','Wallet/3DS tab switch is not abandonment');windowEvents.dispatchEvent(new Event('pagehide'));assert.equal(touches.at(-1).state,'left','A real page close still reports departure');
+ doc.hidden=false;documentEvents.dispatchEvent(new Event('visibilitychange'));windowEvents.dispatchEvent(new CustomEvent('icash-webinar-navigation',{detail:'https://checkout.stripe.com/c/pay'}));windowEvents.dispatchEvent(new Event('pagehide'));assert.equal(touches.at(-1).state,'payment');
+ assert(touches.every((x,i)=>!i||x.sequence>touches[i-1].sequence));assert.equal(new Set(touches.map(x=>x.pageId)).size,1);stop();assert.equal(cleared,1);const count=touches.length;windowEvents.dispatchEvent(new Event('pageshow'));assert.equal(touches.length,count);
+ delete globalThis.window;
+});
+test('presence is visitor-bound; only a saved departure dispatches; preview and stale events cannot send',async()=>{
+ const id=randomUUID(),visitor=randomUUID(),calls=[],tasks=[];let preview=false,deny=false,saved=true;
+ const deps={z,after:fn=>tasks.push(fn),processWebinarFollowups:async args=>calls.push(['dispatch',args]),db:async(...args)=>{calls.push(args);return saved;},webinarOrigin:()=>{},webinarBody:req=>req.json(),webinarSession:async requested=>{assert.equal(requested,id);if(deny)throw Error('different visitor');return {v:{id:visitor},s:{id,is_preview:preview}};},webinarLimit:async()=>{},webinarHeaders:{'Cache-Control':'no-store'},webinarError:()=>new Response(null,{status:403})};
+ globalThis.__presenceRoute=deps;
+ const code=ts.transpileModule(readFileSync(new URL('../app/api/webinar/presence/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
+ const {POST}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__presenceRoute;\n'+code).toString('base64'));
+ const request=state=>new Request('https://example.test/api/webinar/presence',{method:'POST',body:JSON.stringify({sessionId:id,pageId:randomUUID(),sequence:1,stage:'webinar',state})});
+ assert.equal((await POST(request('active'))).status,200);assert.equal(tasks.length,0);assert.equal(calls[0][0],'rpc/icash_webinar_record_presence');assert.equal(calls[0][2].p_visitor,visitor);
+ assert.equal((await POST(request('left'))).status,200);assert.equal(tasks.length,1);await tasks.shift()();assert.deepEqual(calls.at(-1),['dispatch',{visitorId:visitor}]);
+ saved=false;await POST(request('left'));assert.equal(tasks.length,0);calls.length=0;preview=true;await POST(request('left'));assert.equal(calls.length,0);preview=false;deny=true;assert.equal((await POST(request('left'))).status,403);assert.equal(calls.length,0);
+});

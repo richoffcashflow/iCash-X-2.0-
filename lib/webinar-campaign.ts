@@ -3,7 +3,7 @@ import {selectRecording} from './webinar-recordings.ts';
 import {webinarOffers,hasWebinarVideo,type Webinar,type WebinarSettings} from './webinar-policy.ts';
 import {webinarLink} from './webinar-links.ts';
 import type {WebinarSession} from './webinar-server';
-export type CampaignDestination='smart'|'webinar'|'checkout';
+export type CampaignDestination='smart'|'webinar'|'checkout'|'vip';
 /** Follow-up routing is independent of ad entry URLs and never reallocates Meta traffic. */
 export function campaignTarget(destination:CampaignDestination,sourceId:string,history:WebinarSession[],webinars:Webinar[],stats:ConversionRecording[],timezone:string,routing:WebinarSettings['routing'],now=new Date()){
  const latest=history.filter(s=>!s.is_preview&&!s.config.parentWebinarId).sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at))[0];

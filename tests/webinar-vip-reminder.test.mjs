@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {randomUUID} from 'node:crypto';
+import ts from 'typescript';
+import {signWebinarToken,readWebinarToken} from '../lib/webinar-token.ts';
+import {webinarLink} from '../lib/webinar-links.ts';
+const id=randomUUID(),visitor=randomUUID(),video=randomUUID(),key='fixture-secret';let saved=[],cookie,access,calls=[];
+const deps={cookies:async()=>({get:name=>name==='icash_webinar_vip'&&cookie?{value:cookie}:undefined,set:(...args)=>{saved.push(args);cookie=args[1];}}),db:async(path,method,body)=>{calls.push({path,method,body});assert.equal(path,'rpc/icash_webinar_vip_link');return access;},readWebinarToken,webinarKey:()=>key,webinarToken:(id,purpose,seconds)=>signWebinarToken(id,purpose,seconds,key),webinarLink,vipActive:m=>!!m.vip_until&&Date.parse(m.vip_until)>Date.now(),webinarSite:{workspacePath:'/workspace'}};
+globalThis.__vipReminder=deps;
+const code=ts.transpileModule(readFileSync(new URL('../lib/webinar-vip-reminder.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
+const {openVipReminder,webinarReminderMembership}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__vipReminder;\n'+code).toString('base64'));
+test('VIP reminder restores only its pinned paid video; cannot become an account or visitor token',async()=>{
+ access={visitor_id:visitor,webinar_id:video,public_code:123456,mode:'live',state:'active',paid_through:new Date(Date.now()+86400000).toISOString(),vip_until:null,post_purchase_webinar_id:video};
+ const link=await openVipReminder(id);assert.equal(new URL(link,'https://example.test').pathname,'/live/123456');assert.equal(new URL(link,'https://example.test').searchParams.get('watch'),'1');assert.deepEqual(saved.map(x=>x[0]),['icash_webinar_vip'],'Never issues account or funding guest cookies');assert.equal(saved[0][2].httpOnly,true);assert.equal(saved[0][2].maxAge,3600);
+ assert.equal(readWebinarToken(cookie,'resume',key),null);assert.equal(readWebinarToken(cookie,'visitor',key),null);assert.equal(readWebinarToken(cookie,'vip-session',key),id);
+ assert.equal((await webinarReminderMembership(video)).visitor_id,visitor);assert.equal(await webinarReminderMembership(randomUUID()),null,'Cannot enter a different VIP video');
+ access=null;assert.equal(await webinarReminderMembership(video),null,'Entitlement rechecked on entry');assert.equal(await openVipReminder(id),null);
+ const n=calls.length;cookie=signWebinarToken(id,'resume',3600,key);assert.equal(await webinarReminderMembership(video),null);assert.equal(calls.length,n,'A normal resume token cannot authorize VIP');
+});

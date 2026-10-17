@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {webinarReminderMembership} from '@/lib/webinar-vip-reminder';
 import {cookies} from 'next/headers';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {guestHash} from '@/lib/stripe-test';
@@ -17,7 +18,7 @@ import {webinarReturnJourney} from '@/lib/webinar-ad-returns';
 import {webinarLink} from '@/lib/webinar-links';
 import {webinarViewerMembership,returningBuyerVip} from '@/lib/webinar-vip';
 import {vipActive} from '@/lib/vip-policy';
-import {webinarBody,webinarError,WebinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarOwner,webinarVisitor,webinarPaid,type WebinarSession} from '@/lib/webinar-server';
+import {webinarBody,webinarError,WebinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarOwner,webinarVisitor,webinarPaid,webinarToken,type WebinarSession} from '@/lib/webinar-server';
 export const dynamic='force-dynamic';
 export async function POST(req:Request){try{
  webinarOrigin(req);const i=z.object({timezone:z.string().max(80),code:z.string().regex(/^\d{6,12}$/).optional(),variant:z.enum(['day','night']).optional(),resume:z.string().max(600).optional(),returnToWebinar:z.boolean().optional(),preview:z.string().uuid().optional(),attribution:z.record(z.string().max(250)).optional()}).strict().parse(await webinarBody(req,3000));
@@ -33,9 +34,10 @@ export async function POST(req:Request){try{
  // The authenticated owner can test the published funnel with measurement on.
  // Draft previews retain their separate dashboard authorization and isolation.
  const ownerWatching=!i.preview&&account?.isOwner===true;
+ const reminder=!i.preview&&current.parentWebinarId?await webinarReminderMembership(current.id):null;
  let target=current,paidAdReturn=false;
  if(!i.preview&&!ownerWatching){
-  const membership=await webinarViewerMembership(account?.id);
+  const membership=await webinarViewerMembership(account?.id)??reminder;
   if(vipActive(membership))return Response.json({redirect:webinarSite.workspacePath},{headers:webinarHeaders});
   if(current.parentWebinarId){
    if(!membership)return Response.json({redirect:webinarSite.checkoutPath},{headers:webinarHeaders});
@@ -47,14 +49,14 @@ export async function POST(req:Request){try{
    return Response.json({redirect:account.destination,needsBudget:account.needsBudget},{headers:webinarHeaders});
   }
  }
- const visitor=await webinarVisitor(true,i.resume);const timezone=visitorTimezone(process.env.VERCEL?req.headers.get('x-vercel-ip-timezone'):null,i.timezone);
+ const visitor=await webinarVisitor(true,reminder?webinarToken(reminder.visitor_id,'resume',3600):i.resume);const timezone=visitorTimezone(process.env.VERCEL?req.headers.get('x-vercel-ip-timezone'):null,i.timezone);
  const location=webinarViewerLocation(req.headers);
  const attribution=Object.fromEntries(Object.entries(i.attribution??{}).filter(([k])=>['utm_source','utm_medium','utm_campaign','utm_content','utm_term','ad_id','adset_id','campaign_id'].includes(k)));
  const jar=await cookies();let fundingGuest=jar.get('icash_funding_guest')?.value;if(!validGuest(fundingGuest)){fundingGuest=randomBytes(32).toString('hex');jar.set('icash_funding_guest',fundingGuest,{httpOnly:true,secure:process.env.NODE_ENV!=='development',sameSite:'lax',path:'/',maxAge:86400*30});}
  const activityRegion=process.env.VERCEL?approximateRegion(req.headers.get('x-vercel-ip-country'),req.headers.get('x-vercel-ip-country-region')):null;
  // Independent entry reads run together; every access check still finishes before returning a session.
  const [initialHistory,settingsRows,offers,,paid]=await Promise.all([db<WebinarSession[]>(`icash_webinar_sessions?visitor_id=eq.${visitor.id}&webinar_id=eq.${target.id}&is_preview=eq.${!!i.preview}&select=*&order=created_at.desc&limit=100`),db<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config'),i.preview?Promise.resolve([]):db<{session_id:string;created_at:string;kind:string;event_key:string}[]>(`icash_webinar_events?visitor_id=eq.${visitor.id}&kind=in.(pitch_shown,checkout_opened)&select=session_id,created_at,kind,event_key&order=created_at.desc&limit=1000`),
-  db(`icash_webinar_visitors?id=eq.${visitor.id}`,'PATCH',{timezone,activity_region:activityRegion,funding_guest_hash:guestHash(fundingGuest),last_seen_at:new Date().toISOString(),...(account?{account_id:account.id}:{}),...(Object.keys(attribution).length?{attribution}:{})}),
+  db(`icash_webinar_visitors?id=eq.${visitor.id}`,'PATCH',{timezone,activity_region:activityRegion,last_seen_at:new Date().toISOString(),...(!reminder?{funding_guest_hash:guestHash(fundingGuest),...(account?{account_id:account.id}:{})}:{}),...(Object.keys(attribution).length?{attribution}:{})}),
   !i.preview&&!ownerWatching&&!target.parentWebinarId?Promise.all([webinarCustomerPaid(guestHash(fundingGuest)),webinarPaid(visitor)]).then(results=>results.some(Boolean)):Promise.resolve(false)
  ]);
  if(paid)return Response.json({redirect:webinarSite.workspacePath},{headers:webinarHeaders});

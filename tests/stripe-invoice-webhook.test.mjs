@@ -3,8 +3,9 @@ import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 
 process.env.STRIPE_WEBHOOK_SECRET='whsec_fixture';
+let wakes=0,settlementFails=false;
 let event,invoice,reads=[],synced=[],fail=false,member=true;
-const deps={NextResponse:{json:Response.json},fundingMode:()=> 'live',fundingStripe:()=>({
+const deps={scheduleWebinarFollowups:()=>wakes++,settleMembershipInvoice:async()=>{if(settlementFails)throw Error('Canonical settlement failed');return true;},NextResponse:{json:Response.json},fundingMode:()=> 'live',fundingStripe:()=>({
  webhooks:{constructEvent:(_body,sig)=>{if(sig!=='fixture')throw Error('Signature');return event;}},
  invoices:{retrieve:async id=>{reads.push(['invoice',id]);if(fail)throw Error('Private transport failure');return invoice;}},
  subscriptions:{retrieve:async id=>{reads.push(['subscription',id]);return {id,status:'past_due'};}}
@@ -23,5 +24,6 @@ reset();invoice.parent.subscription_details.subscription={id:'sub_current'};awai
 reset();fail=true;let response=await post();assert.equal(response.status,500);assert.equal(synced.length,0);assert(!JSON.stringify(await response.json()).includes('Private'));fail=false;assert.equal((await post()).status,200);assert.equal(synced.length,1,'A retried delivery recovers');
 reset();assert.equal((await post('bad')).status,400);assert.equal(reads.length,0);event.livemode=false;assert.equal((await post()).status,400);assert.equal(reads.length,0);
 reset();invoice.livemode=false;assert.equal((await post()).status,500);assert.equal(synced.length,0);
+reset('invoice.paid');wakes=0;assert.equal((await post()).status,200);assert.equal(wakes,1,'Confirmed live purchase wakes VIP recovery immediately');settlementFails=true;wakes=0;assert.equal((await post()).status,500);assert.equal(wakes,0,'Failed verification cannot dispatch');
 delete globalThis.__invoiceWebhook;
 console.log('PASS Stripe invoice webhooks: old/new event formats, canonical subscription state, retries, non-subscription invoices, signature and mode gates. Fixture only.');

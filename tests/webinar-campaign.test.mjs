@@ -22,7 +22,7 @@ test('campaign links preserve checkout window, resume, unseen webinar choice and
 });
 test('copy is personalized, portable, and based on the current destination',()=>{
  const x=campaignCopy({name:'Alex\r\nHeader: value',brand:'Company Two',host:'Jamie',phase:'checkout',title:'Session',step:100});
- assert.match(x.body,/Hey Alex,/);assert.match(x.body,/Get Company Two access/);assert.doesNotMatch(x.subject,/[\r\n]/);assert.doesNotMatch(x.body,/spots|expires|guaranteed/i);
+ assert.match(x.body,/Hey Alex,/);assert.match(x.body,/Review Company Two access/);assert.doesNotMatch(x.subject,/[\r\n]/);assert.doesNotMatch(x.body,/spots|expires|guaranteed/i);
 });
 const deps={z,db:()=>{throw Error('No real database');}};globalThis.__campaignSenders=deps;
 const source=ts.transpileModule(readFileSync(new URL('../lib/webinar-campaign-senders.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');

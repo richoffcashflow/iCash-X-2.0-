@@ -1,3 +1,5 @@
+import {scheduleWebinarFollowups} from '@/lib/webinar-dispatch';
+export const maxDuration=120;
 import {recordDisputeEvent} from '@/lib/dispute-service';
 import {reconcileVipCheckout} from '@/lib/vip-membership';
 import {settleAutoRecharge} from '@/lib/auto-recharge';
@@ -40,6 +42,7 @@ export async function POST(req:Request) {
   const obj=event.data.object;const payment=typeof obj.payment_intent==="string"?obj.payment_intent:obj.payment_intent?.id;
   if(payment){await db("rpc/icash_flag_billing_issue","POST",{p_event:event.id,p_payment:payment,p_reason:event.type});await db('rpc/icash_flag_membership_issue','POST',{p_payment:payment});const [o]=await db<{daily_plan_id:string|null}[]>(`icash_funding_orders?stripe_payment_id=eq.${payment}&select=daily_plan_id`);if(o?.daily_plan_id){const [p]=await db<DailyPlan[]>(`icash_daily_plans?id=eq.${o.daily_plan_id}&select=*`);if(p)await stopDaily(p);}}
  }
+ if(mode==='live'&&['checkout.session.completed','checkout.session.async_payment_succeeded','invoice.paid'].includes(event.type))scheduleWebinarFollowups();
  return NextResponse.json({received:true});
  }catch{return NextResponse.json({error:"Confirmation pending retry"},{status:500});}
 }

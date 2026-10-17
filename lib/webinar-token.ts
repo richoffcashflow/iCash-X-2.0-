@@ -1,5 +1,5 @@
 import {createHmac,timingSafeEqual} from 'node:crypto';
-type Purpose='visitor'|'resume'|'unsubscribe';
+type Purpose='visitor'|'resume'|'unsubscribe'|'vip-session';
 export function signWebinarToken(id:string,purpose:Purpose,seconds:number,key:string,now=Date.now()){
  const payload=Buffer.from(JSON.stringify({id,purpose,exp:Math.floor(now/1000)+seconds})).toString('base64url');
  return `${payload}.${createHmac('sha256',key).update(payload).digest('base64url')}`;

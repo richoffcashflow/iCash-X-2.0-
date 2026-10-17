@@ -1,0 +1,61 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {randomUUID} from 'node:crypto';
+export async function verifyWebinarInstantRecovery(pg,q,config){
+ const scalar=async(sql,args=[])=>Object.values((await q(sql,args)).rows[0])[0];
+ await pg.exec('alter table icash_memberships add column if not exists vip_until timestamptz;');
+ await pg.exec(readFileSync(new URL('../supabase/migrations/20261017024730_webinar_instant_journey_recovery.sql',import.meta.url),'utf8'));
+ await q("update icash_webinar_outbox set state='canceled' where state in ('pending','claimed','sending')");
+ await q(`update icash_messaging_settings set config=config||'{"enabled":true,"smsEnabled":true,"postalAddress":"123 Example Street"}'::jsonb`);
+ const make=async({consent=true,legacy=false}={})=>{
+  const id=randomUUID(),session=randomUUID(),page=randomUUID(),email=`${id}@example.invalid`,phone=`+1212${String(Math.floor(Math.random()*10000000)).padStart(7,'0')}`;
+  await q("insert into icash_webinar_visitors(id,timezone,funding_guest_hash) values($1::uuid,(select name from pg_timezone_names where extract(hour from now() at time zone name)=23 limit 1),($1::uuid)::text)",[id]);
+  await q('insert into icash_webinar_sessions(id,visitor_id,webinar_id,revision,config) values($1,$2,$3,1,$4)',[session,id,config.id,config]);
+  await q(`select ${legacy?'icash_webinar_contact_bounded_campaign':'icash_webinar_contact_recovery'}($1,$2,'Alex',$3,$4,$5,$5)`,[id,session,email,phone,consent]);
+  const sender=await scalar('select icash_webinar_campaign_sender($1)',[phone]);return {id,session,page,email,phone,sender,seq:0};
+ };
+ const presence=(a,state,stage='webinar',page=a.page,sequence=++a.seq)=>q('select icash_webinar_record_presence($1,$2,$3,$4,$5,$6)',[a.id,a.session,page,sequence,stage,state]);
+ const jobs=async a=>(await q('select * from icash_webinar_outbox where visitor_id=$1 and recovery_id is not null order by step,channel',[a.id])).rows;
+ const claim=async a=>(await q('select * from icash_webinar_claim_followups(true,true,$1)',[a?.id??null])).rows;
+ const authorize=async(a,job)=>scalar('select to_jsonb(icash_webinar_authorize_followup($1,$2))',[job.id,job.channel==='sms'?{from:a.sender,to:a.phone,message:'Join now. Reply STOP to opt out.'}:{subject:'Join now'}]);
+ const state=job=>scalar('select state from icash_webinar_outbox where id=$1',[job.id]);
+ const a=await make();assert.equal((await jobs(a)).length,0,'Signup alone does not enqueue reminders');
+ await presence(a,'active');assert.equal((await claim(a)).length,0);
+ await presence(a,'left');let j=await jobs(a);assert.equal(j.length,4,'Two opportunities with two alternative channels');
+ const first=j.find(x=>x.step===400000&&x.channel==='sms'),twin=j.find(x=>x.step===400000&&x.channel==='email'),second=j.find(x=>x.step===400001&&x.channel==='sms');
+ assert.equal((await claim(a)).length,2,'Only first opportunity is due immediately, including at 11 PM');
+ assert.equal((await authorize(a,first)).state,'sending');assert.equal(await authorize(a,first),null,'One-use authorization');assert.equal(await authorize(a,twin),null,'No duplicate email and text');
+ await q('select icash_webinar_finish_followup($1,$2)',[first.id,'instant-first']);
+ assert.equal(await scalar("select extract(epoch from(second.due_at-first.sent_at))::int from icash_webinar_outbox first join icash_webinar_outbox second on second.id=$2 where first.id=$1",[first.id,second.id]),900,'Second due 15 minutes after accepted send');
+ assert.equal((await claim(a)).length,0,'Second cannot send early');
+ await q("update icash_webinar_outbox set due_at=now()-interval '1 second' where recovery_id=$1 and step=400001",[second.recovery_id]);await claim(a);
+ assert.equal((await authorize(a,second)).state,'sending','No hourly or daily blocker');await q('select icash_webinar_finish_followup($1,$2)',[second.id,'instant-second']);
+ await presence(a,'left');assert.equal((await jobs(a)).length,4,'Repeated exits do not add more reminders');
+ const b=await make();await presence(b,'active');await presence(b,'left');const pending=(await claim(b))[0];await presence(b,'active');assert.equal(await authorize(b,pending),null,'Return between claim and dispatch cancels');
+ await presence(b,'left','webinar',b.page,1);assert.equal(await scalar('select state from icash_webinar_recovery_presence where page_id=$1',[b.page]),'active','Out-of-order leave cannot undo return');
+ const multi=await make(),tab=randomUUID();await presence(multi,'active');await presence(multi,'active','webinar',tab);await presence(multi,'left');assert.equal((await jobs(multi)).length,0,'Another active tab suppresses departure');await presence(multi,'left','webinar',tab);assert.equal((await jobs(multi)).length,4);
+ const cross=await make();await presence(cross,'active');await presence(cross,'left');const crossjob=(await claim(cross))[0];const other=await make();await q('update icash_webinar_visitors set email=$2 where id=$1',[other.id,cross.email]);await presence(other,'active');assert.equal(await authorize(cross,crossjob),null,'Another device returning cancels');
+ const cart=await make();await presence(cart,'active');await presence(cart,'left');await presence(cart,'active','checkout');assert((await jobs(cart)).every(x=>x.state==='canceled'),'Checkout replaces webinar recovery');await presence(cart,'left','checkout');assert.equal((await jobs(cart)).filter(x=>x.destination==='checkout').length,4);
+ // Fresh canonical paid transition, verified invoice and pinned paired VIP.
+ const vip=randomUUID();await q('insert into icash_webinars(id,config,parent_webinar_id) values($1,$2,$3)',[vip,{...config,id:vip,parentWebinarId:config.id,title:'VIP',status:'published',videoUrl:'https://example.invalid/vip.mp4'},config.id]);
+ const member=randomUUID();await q("insert into icash_memberships(id,mode,state,guest_hash,post_purchase_webinar_id) values($1,'live','active',$2,$3)",[member,cart.id,vip]);await q("insert into icash_membership_invoices(stripe_invoice_id,membership_id,stripe_payment_id,amount_cents) values($1,$2,$3,10000)",['in_'+member,member,'pi_'+member]);
+ await q("update icash_memberships set paid_through=now()+interval '30 days' where id=$1",[member]);
+ j=await jobs(cart);const vipjob=j.find(x=>x.destination==='vip'&&x.channel==='sms'&&x.step===400020);assert(vipjob,'Paid buyer missing VIP receives a VIP recovery');
+ const account=randomUUID(),user=randomUUID();await q('insert into auth.users(id,email,email_confirmed_at) values($1,$2,now())',[user,cart.email]);await q('insert into icash_accounts(id,owner_user_id,contact_phone) values($1,$2,$3)',[account,user,cart.phone]);await q('update icash_memberships set account_id=$2,payer_phone=$3 where id=$1',[member,account,cart.phone]);await q('update icash_customer_update_settings set enabled=true where id=1');await q('select icash_webinar_activate_customers()');
+ assert.equal(await scalar('select count(*)::int from icash_customer_update_preferences where account_id=$1',[account]),1,'Post-purchase customer channels activate normally');assert.equal((await jobs(cart)).filter(x=>x.destination==='vip'&&x.state==='pending').length,4,'Customer activation preserves VIP delivery');
+ await claim(cart);assert((await jobs(cart)).filter(x=>x.destination==='checkout').every(x=>x.state==='canceled'),'Purchase stops checkout messages');assert.equal((await authorize(cart,vipjob)).state,'sending');await q('select icash_webinar_finish_followup($1,$2)',[vipjob.id,'vip-first']);
+ const access=await scalar('select icash_webinar_vip_link($1)',[vipjob.id]);assert.equal(access.webinar_id,vip);assert.equal(access.visitor_id,cart.id);
+ await q("update icash_memberships set paid_through=now()+interval '31 days' where id=$1",[member]);assert.equal((await jobs(cart)).filter(x=>x.destination==='vip').length,4,'Renewal cannot enroll again');
+ const vipSession=randomUUID();await q('insert into icash_webinar_sessions(id,visitor_id,webinar_id,revision,config) values($1,$2,$3,1,$4)',[vipSession,cart.id,vip,{...config,id:vip,parentWebinarId:config.id}]);await claim(cart);assert((await jobs(cart)).filter(x=>x.step===400021).every(x=>x.state==='canceled'),'Attending VIP cancels final reminder');
+ const replyId='sms:'+randomUUID();assert.equal(await scalar("select icash_webinar_queue_return($1,'sms',$2,'send me the link')",[replyId,cart.phone]),'queued','Paid buyers can request their VIP link again');assert.equal(await scalar("select destination from icash_webinar_outbox where reply_event_id=$1",[replyId]),'vip');await claim(cart);const requested=(await jobs(cart)).find(x=>x.reply_event_id===replyId);assert.equal((await authorize(cart,requested)).state,'sending','Requested VIP link is immediate even after attendance');
+ await q("update icash_memberships set state='needs_review' where id=$1",[member]);assert.equal(await scalar('select icash_webinar_vip_link($1)',[vipjob.id]),null,'Refund/review revokes video capability');
+ const stopped=await make();await presence(stopped,'left');await claim(stopped);await q('select icash_webinar_text_reply($1,true)',[stopped.phone]);assert.equal(await authorize(stopped,(await jobs(stopped)).find(x=>x.channel==='sms')),null);await q("select icash_webinar_unsubscribe($1,'unsubscribe')",[stopped.id]);assert.equal(await authorize(stopped,(await jobs(stopped)).find(x=>x.channel==='email')),null);
+ for(const options of [{consent:false},{legacy:true}]){const no=await make(options);await presence(no,'left');assert.equal((await jobs(no)).length,0,'No implicit consent upgrade');}
+ const upgraded=await make({legacy:true});await presence(upgraded,'left');await q("select icash_webinar_contact_recovery($1,$2,'Alex',$3,$4,true,true)",[upgraded.id,upgraded.session,upgraded.email,upgraded.phone]);await presence(upgraded,'left');assert.equal((await claim(upgraded)).length,2,'An old open page cannot reserve and block the new recovery step IDs after fresh consent');
+ const fallback=await make();await presence(fallback,'active');await q("update icash_webinar_recovery_presence set seen_at=now()-interval '3 minutes',hold_until=now()-interval '1 second' where visitor_id=$1",[fallback.id]);assert.equal((await claim(fallback)).length,2,'Dropped close beacon has a heartbeat fallback');
+ const payment=await make();await presence(payment,'payment','checkout');assert.equal((await claim(payment)).length,0,'A Stripe handoff is not abandonment');await presence(payment,'active','checkout');await presence(payment,'left','checkout');assert.equal((await claim(payment)).length,2,'Actual checkout departure is immediate');
+ const direct=await make();const event='sms:'+randomUUID();assert.equal(await scalar("select icash_webinar_queue_return($1,'sms',$2,'yes')",[event,direct.phone]),'queued');assert.equal(await scalar("select icash_webinar_queue_return($1,'sms',$2,'yes')",[event,direct.phone]),'queued');const links=(await claim(direct)).filter(x=>x.reply_event_id);assert.equal(links.length,1,'Repeated provider event creates one requested link');assert.equal((await authorize(direct,links[0])).state,'sending','Requested links bypass quiet hours');
+ const support=await make();await presence(support,'left');assert.equal(await scalar("select icash_webinar_queue_return($1,'sms',$2,'I need help with billing')",['sms:'+randomUUID(),support.phone]),'review');assert((await jobs(support)).every(x=>x.state==='canceled'),'Support replies pause automatic nudges on both channels');
+ for(const role of ['anon','authenticated'])for(const sig of ['icash_webinar_record_presence(uuid,uuid,uuid,bigint,text,text)','icash_webinar_queue_recovery(uuid,uuid,text,uuid)','icash_webinar_vip_link(uuid)','icash_webinar_claim_followups(boolean,boolean,uuid)'])assert.equal(await scalar("select has_function_privilege($1,$2,'execute')",[role,sig]),false);
+ console.log('PASS instant recovery: immediate overnight exit, 15-minute accepted-send timing, checkout, verified VIP purchase/attendance/access revocation, return replies, dedupe, late beacons, multi-tab/device return, payment handoff, lost-beacon fallback, opt-outs, consent and private grants.');
+}
