@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {verifyContiguityWebhook,parseTextWebhook} from '@/lib/contiguity';
+import {verifyContiguityWebhook,parseTextWebhook,isServiceTextSender} from '@/lib/contiguity';
 import {db} from '@/lib/stripe-test';
 import {ownerPracticeReply} from '@/lib/owner-practice-replies';
 import {replyToSellerText} from '@/lib/seller-text-replies';
@@ -16,6 +16,9 @@ export async function POST(req:Request){
  try{
  const inbound=event.type.startsWith('text.incoming');const sender=inbound?event.data.to:event.data.from;
  const [known,campaign]=await Promise.all([db<{phone:string}[]>(`icash_text_senders?phone=eq.${encodeURIComponent(sender)}&select=phone`),db<{phone:string}[]>(`icash_webinar_text_senders?phone=eq.${encodeURIComponent(sender)}&select=phone`)]);if(!known.length&&!campaign.length)return new Response(null,{status:400});
+ // Acknowledge authenticated service notices after checking our destination.
+ // Never persist verification codes or route short codes into customer work.
+ if(inbound&&isServiceTextSender(event.data.from))return NextResponse.json({received:true});
  const role=inbound?await db<string>('rpc/icash_route_lifecycle_text','POST',{p_event:event,p_optout:event.optOut}):null;
 
  if(['text.delivery.confirmed','text.delivery.failed','text.cancelled'].includes(event.type))await db('rpc/icash_webinar_followup_delivery','POST',{p_channel:'sms',p_provider:event.data.message_id,p_kind:event.type==='text.delivery.confirmed'?'delivered':'failed'});

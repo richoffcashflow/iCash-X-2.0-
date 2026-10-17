@@ -3,6 +3,11 @@ import { z } from 'zod';
 import {isContactOptOut} from './contact-intent.ts';
 
 const phone = z.string().regex(/^\+[1-9]\d{7,14}$/);
+const serviceSender = z.string().regex(/^\+?\d{5,6}$/);
+/** Short codes can send service notices, but are never customer call/text targets. */
+export function isServiceTextSender(value:unknown):value is string {
+ return typeof value==='string'&&serviceSender.safeParse(value).success;
+}
 const leases = z.object({object:z.literal('response'),data:z.object({numbers:z.array(z.object({
   number:z.object({e164:phone}),lease_status:z.string(),capabilities:z.object({channels:z.array(z.string())})
 }))})});
@@ -61,7 +66,7 @@ export async function sendContiguityText(input:unknown,key:string,fetcher:Transp
 export function isMessageOptOut(text:string){
  return isContactOptOut(text);
 }
-const messageEvent=z.object({id:z.string().min(1).max(200),type:z.string().min(1).max(100),timestamp:z.number().finite(),data:z.object({from:phone,to:phone,body:z.string().max(20000).optional(),message_id:z.string().max(200).optional(),attachments:z.array(z.object({url:z.string().url().max(3000),mime:z.string().max(150).optional(),filename:z.string().max(250).optional()})).max(20).optional()})});
+const messageEvent=z.object({id:z.string().min(1).max(200),type:z.string().min(1).max(100),timestamp:z.number().finite(),data:z.object({from:z.union([phone,serviceSender]),to:phone,body:z.string().max(20000).optional(),message_id:z.string().max(200).optional(),attachments:z.array(z.object({url:z.string().url().max(3000),mime:z.string().max(150).optional(),filename:z.string().max(250).optional()})).max(20).optional()})});
 export function parseTextWebhook(input:unknown){
  const envelope=z.object({type:z.string(),data:z.unknown()}).passthrough().parse(input);
  if(envelope.type==='numbers.substitution'){
@@ -70,6 +75,7 @@ export function parseTextWebhook(input:unknown){
  }
  const event=messageEvent.parse(input);
  if(!['text.incoming.sms','text.incoming.mms','text.delivery.confirmed','text.delivery.failed','text.cancelled','numbers.substitution'].includes(event.type))throw Error('Unsupported text event');
+ if(!event.type.startsWith('text.incoming')&&isServiceTextSender(event.data.from))throw Error('Invalid outgoing sender');
  if(event.type.startsWith('text.incoming')&&event.data.body===undefined&&!event.data.attachments?.length)throw Error('Empty incoming message');
  if(!event.type.startsWith('text.incoming')&&!event.data.message_id)throw Error('Missing message ID');
  // Carrier events may use Unix milliseconds; the database accepts seconds.

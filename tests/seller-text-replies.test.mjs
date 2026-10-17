@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {replyToSellerText} from '../lib/seller-text-replies.ts';
+import {isServiceTextSender} from '../lib/contiguity.ts';
 let result=null,calls=[];
 const db=async(path,method,body)=>{assert.equal(path,'rpc/icash_prepare_seller_text_event');assert.equal(method,'POST');assert.deepEqual(body,{p_event:'signed-provider-event'});return result;};
 const text=async(a,id)=>{calls.push(['sms',a,id]);return {status:'message_accepted'};};
@@ -25,7 +26,7 @@ for(const available of ['verified-failure-message',null]){
 // precede ingestion; STOP must never reach either reply engine.
 let verified=true,event={id:'event-1',type:'text.incoming.sms',optOut:false,data:{to:'+12145550001',from:'+12145550002'}};
 let effects=[],role='property';
-const deps={NextResponse:{json:(body,o={})=>new Response(JSON.stringify(body),{status:o.status??200})},verifyContiguityWebhook:()=>verified,parseTextWebhook:()=>event,
+const deps={NextResponse:{json:(body,o={})=>new Response(JSON.stringify(body),{status:o.status??200})},verifyContiguityWebhook:()=>verified,parseTextWebhook:()=>event,isServiceTextSender,
  db:async(path)=>{effects.push(path);if(path==='rpc/icash_route_lifecycle_text')return role;return path.startsWith('icash_text_senders')?[{phone:event.data.to}]:path.startsWith('icash_webinar_text_senders')?[]:null;},ownerPracticeReply:async()=>effects.push('practice'),replyToSellerText:async()=>effects.push('seller'),dispatchTextMessage:()=>{},processTextAi:()=>{},dispatchLiveVoice:()=>{}};
 globalThis.__sellerTextWebhook=deps;
 const source=ts.transpileModule(readFileSync(new URL('../app/api/webhooks/contiguity/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
