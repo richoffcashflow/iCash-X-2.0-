@@ -22,7 +22,7 @@ const find=(tree,type)=>all(tree).find(n=>n.type===type),text=node=>typeof node=
 const button=(tree,match)=>all(tree).find(n=>n.type==='button'&&text(n).includes(match));
 const flush=async()=>{for(let n=0;n<16;n++)await Promise.resolve();};
 const redirects=[],calls=[],active=[];let verified=false,purchase=null;
-globalThis.window={location:{search:'',assign:url=>redirects.push(url),replace:url=>redirects.push(url)}};globalThis.document={hidden:false};
+globalThis.window={dispatchEvent:()=>true,location:{search:'',assign:url=>redirects.push(url),replace:url=>redirects.push(url)}};globalThis.document={hidden:false};
 const request=async(url,init={})=>{calls.push({url,init});if(url==='/api/billing/membership')return purchase;if(url==='/api/account?view=core')return {signedIn:true};if(init.method==='POST')return {clientSecret:'secret_fixture',publishableKey:'pk_live_fixture',sessionId:'cs_live_fixture'};return {membership:{accessible:true,vip:verified}};};
 const commerceEvents=[];let receiptReads=0;
 const common={Script:'Script',webinarBrowserEvent:(...args)=>commerceEvents.push(args),webinarBrowserPurchaseReady:async()=>{receiptReads++;},...exitReminder,WebinarVipWelcome:'WebinarVipWelcome',...vip,safeVipSession,priceLabel,webinarRequest:request,AccountAccess:'AccountAccess',PostPurchaseSetup:'PostPurchaseSetup',StripeEmbeddedCheckout:'StripeEmbeddedCheckout',WebinarPaymentPreview:'WebinarPaymentPreview'};

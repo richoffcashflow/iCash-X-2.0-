@@ -15,6 +15,7 @@ const one={...policy.newWebinar(randomUUID()),status:'published',videoUrl:'https
 const vip={...policy.newVipWebinar(randomUUID(),one),status:'published',videoUrl:'https://example.test/vip-day.mp4',publicCode:'123457',nightEnabled:true};vip.nightVersion={...createNightRecording(vip),videoUrl:'https://example.test/vip-night.mp4'};
 const settings=policy.settingsSchema.parse({enabled:false,fromEmail:'',postalAddress:'',subjects:['a','b','c'],messages:['a','b','c'],optimizer:{enabled:true,explorationPercent:20,minVisitors:100}});
 const two={...one,id:randomUUID(),publicCode:'123458',title:'Second'},three={...one,id:randomUUID(),publicCode:'123459',title:'Third',nightEnabled:true};three.nightVersion={...createNightRecording(three),videoUrl:'https://example.test/third-night.mp4'};
+let reminder=null,restoredResume,recoveredName=null,nameRestores=[];
 let pool=[one,vip,two,three],stats=[],failRouting=false;
 let now=Date.parse('2026-10-07T18:00:00Z'),history=[],events=[],calls=[],owner=true,ownerLocked=false,account=null,paid=false,vipPaid=false,hasVip=false,missingVip=false;
 class Clock extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
@@ -35,7 +36,7 @@ async function load(path,deps,key){globalThis[key]=deps;const source=ts.transpil
 const common={webinarViewerLocation,recordingRecheckAt,withinWebinarResumeWindow,...policy,z,db,Date:Clock,webinarHeaders:{'Cache-Control':'private, no-store'},WebinarError,webinarBody:req=>req.json(),webinarOrigin:()=>{},webinarLimit:async()=>{},webinarOwner:async()=>{if(ownerLocked)throw Error('DASHBOARD_PASSWORD_REQUIRED');if(!owner)throw new WebinarError(403,'Owner only');},webinarError:e=>Response.json({error:e.message},{status:e.status||503})};
 const returns=await load('../lib/webinar-ad-returns.ts',{...common,returnVisit,paidAdArrival,confirmedWatch,bestConvertingWebinar,stableWebinarOrder,selectRecording,availableWebinarRows:rows=>rows.map(policy.webinarFromRow),webinarConversionRecordings:async()=>stats},'__adReturns');
 const offerServer=await load('../lib/webinar-offer-server.ts',{...common,timerResponseSchema,withOfferDeadlines},'__returnOffers');
-const {POST}=await load('../app/api/webinar/start/route.ts',{...common,...returns,...offerServer,webinarLink,randomUUID,randomBytes,selectRecording:(w,t,_now,...rest)=>selectRecording(w,t,new Date(now),...rest),selectOffer,snapshotChat,returnVisit,approximateRegion:()=>null,webinarSite:{workspacePath:'/',checkoutPath:'/webinar/checkout'},webinarViewerMembership:async()=>vipPaid?{mode:'live',state:'active',paid_through:new Date(now+86400000).toISOString(),vip_until:hasVip?new Date(now+86400000).toISOString():null}:null,vipActive:m=>!!m?.vip_until,returningBuyerVip:async()=>missingVip?null:vip,webinarVisitor:async()=>visitor,webinarCustomerAccount:async()=>account,webinarPaid:async()=>false,webinarCustomerPaid:async()=>paid,validGuest:()=>true,guestHash:()=> 'guest',cookies:async()=>({get:()=>({value:'guest'}),set:()=>{}})},'__fixedRoute');
+const {POST}=await load('../app/api/webinar/start/route.ts',{...common,...returns,...offerServer,webinarReminderMembership:async id=>reminder?.webinar_id===id?reminder:null,webinarToken:id=>'resume-'+id,webinarLink,randomUUID,randomBytes,selectRecording:(w,t,_now,...rest)=>selectRecording(w,t,new Date(now),...rest),selectOffer,snapshotChat,returnVisit,approximateRegion:()=>null,webinarSite:{workspacePath:'/',checkoutPath:'/webinar/checkout'},restoreVipChatName:async(v,parent,m)=>{nameRestores.push({visitor:v.id,parent,hash:m.guest_hash});return recoveredName?{...v,name:recoveredName}:v;},webinarViewerMembership:async()=>vipPaid?{guest_hash:'verified-purchase-hash',mode:'live',state:'active',paid_through:new Date(now+86400000).toISOString(),vip_until:hasVip?new Date(now+86400000).toISOString():null}:null,vipActive:m=>!!m?.vip_until,returningBuyerVip:async()=>missingVip?null:vip,webinarVisitor:async(_create,resume)=>{restoredResume=resume;return visitor;},webinarCustomerAccount:async()=>account,webinarPaid:async()=>false,webinarCustomerPaid:async()=>paid,validGuest:()=>true,guestHash:()=> 'guest',cookies:async()=>({get:()=>({value:'guest'}),set:()=>{}})},'__fixedRoute');
 const post=(body,headers={})=>POST(new Request('https://example.test/api/webinar/start',{method:'POST',headers,body:JSON.stringify({timezone:'America/Chicago',...body})}));
 let data=await(await post({attribution:{ad_id:'55555',email:'ignored@example.invalid'}})).json();
 assert.equal(data.webinar.id,one.id);assert.ok(calls.some(c=>c.path==='rpc/icash_webinar_begin'));assert.ok(!calls.some(c=>c.path.includes('intelligence')),'Legacy enabled settings never assign experiments');assert.equal(calls.find(c=>c.method==='PATCH').body.attribution.email,undefined);
@@ -187,3 +188,21 @@ ownerLocked=true;calls=[];data=await(await post({preview:one.id})).json();
 assert.equal(data.previewLocked,true);assert.equal(data.webinar,undefined);assert.ok(!calls.some(c=>c.path==='rpc/icash_webinar_begin'));
 ownerLocked=false;
 console.log('PASS expired owner proof returns a locked preview without creating a session.');
+
+// A delivered, server-verified video capability works across devices without an account session.
+account=null;vipPaid=false;hasVip=false;paid=false;history=[];events=[];
+visitor.name='Casey';
+reminder={visitor_id:visitor.id,webinar_id:vip.id,mode:'live',state:'active',paid_through:new Date(now+86400000).toISOString(),vip_until:null};
+calls=[];data=await(await post({code:'123457',resume:'unrelated-client-resume'})).json();assert.equal(data.webinar.id,vip.id);assert.equal(data.name,'Casey','A reminder retains the first webinar chat name');assert.equal(restoredResume,'resume-'+visitor.id,'The verified reminder owns the restored visitor context');const reminderTouch=calls.find(c=>c.path.startsWith('icash_webinar_visitors?')&&c.method==='PATCH').body;assert.equal(reminderTouch.funding_guest_hash,undefined,'A video capability cannot reassign funding identity');assert.equal(reminderTouch.account_id,undefined,'A video capability cannot reassign account ownership');
+reminder=null;data=await(await post({code:'123457'})).json();assert.equal(data.redirect,'/webinar/checkout','Missing or revoked capability never unlocks VIP');
+console.log('PASS VIP reminder entry: exact video, verified visitor restoration, no account requirement and revoked capability denial.');
+
+// A fresh browser gets the saved main name only after verified paid VIP entry.
+visitor.name=null;vipPaid=true;recoveredName='Casey';nameRestores=[];history=[];events=[];
+data=await(await post({code:'123457'})).json();
+assert.equal(data.name,'Casey');assert.deepEqual(nameRestores,[{visitor:visitor.id,parent:one.id,hash:'verified-purchase-hash'}]);
+assert.ok(!JSON.stringify(data).includes('verified-purchase-hash'),'Purchase identity stays private');
+nameRestores=[];data=await(await post({code:'123456'})).json();assert.equal(data.name,'Casey');assert.equal(data.canonicalPath,'/live/123457');assert.equal(nameRestores.length,1,'Paid main-link returns also restore the name');
+nameRestores=[];await post({preview:vip.id});assert.equal(nameRestores.length,0,'Owner previews never recover customer identities');
+vipPaid=false;nameRestores=[];data=await(await post({code:'123457'})).json();assert.equal(data.redirect,'/webinar/checkout');assert.equal(nameRestores.length,0,'Unpaid VIP entry cannot recover a name');
+console.log('PASS VIP entry restores the first webinar name for verified paid returns without exposing purchase identity or repeating the name form.');

@@ -1,3 +1,4 @@
+import {scheduleWebinarFollowups} from '@/lib/webinar-dispatch';
 import {NextResponse} from 'next/server';
 import {verifyContiguityWebhook,parseTextWebhook,isServiceTextSender} from '@/lib/contiguity';
 import {db} from '@/lib/stripe-test';
@@ -7,7 +8,7 @@ import {dispatchTextMessage} from '@/lib/text-message-service';
 import {processTextAi} from '@/lib/text-ai-service';
 import {dispatchLiveVoice} from '@/lib/live-dispatch-service';
 export const runtime='nodejs';
-export const maxDuration=60;
+export const maxDuration=120;
 export async function POST(req:Request){
  const secret=process.env.CONTIGUITY_WEBHOOK_SECRET;if(!secret)return new Response(null,{status:503});
  const raw=Buffer.from(await req.arrayBuffer());if(raw.length>262144)return new Response(null,{status:413});
@@ -22,7 +23,7 @@ export async function POST(req:Request){
  const role=inbound?await db<string>('rpc/icash_route_lifecycle_text','POST',{p_event:event,p_optout:event.optOut}):null;
 
  if(['text.delivery.confirmed','text.delivery.failed','text.cancelled'].includes(event.type))await db('rpc/icash_webinar_followup_delivery','POST',{p_channel:'sms',p_provider:event.data.message_id,p_kind:event.type==='text.delivery.confirmed'?'delivered':'failed'});
- if(inbound&&role!=='property')return NextResponse.json({received:true});
+ if(inbound&&role!=='property'){if(!event.optOut&&['prospect','customer'].includes(role??''))scheduleWebinarFollowups();return NextResponse.json({received:true});}
  if(event.type==='numbers.substitution')await db(`icash_webinar_text_senders?phone=eq.${encodeURIComponent(event.data.from)}`,'PATCH',{enabled:false});
  if(!known.length)return NextResponse.json({received:true});
  await db('rpc/icash_ingest_text_event','POST',{p_event:event,p_optout:event.optOut});

@@ -1,3 +1,4 @@
+import {openVipReminder} from '@/lib/webinar-vip-reminder';
 import {cookies} from 'next/headers';
 import {randomBytes} from 'node:crypto';
 import {db,guestHash} from '@/lib/stripe-test';
@@ -17,6 +18,7 @@ export async function GET(req:Request,{params}:{params:Promise<{token:string}>})
   const since=encodeURIComponent(new Date(Date.now()-30*86400000).toISOString());
   const [job]=await db<{visitor_id:string;session_id:string;campaign_id:string|null;destination:CampaignDestination}[]>(`icash_webinar_outbox?id=eq.${token}&or=(sent_at.gte.${since},first_attempt_at.gte.${since})&select=visitor_id,session_id,campaign_id,destination&limit=1`);
   if(job){
+   if(job.destination==='vip'){const path=await openVipReminder(token);return new Response(null,{status:302,headers:{...webinarHeaders,Location:new URL(path??webinarSite.viewerPath,req.url).href}});}
    const [session]=await db<{webinar_id:string}[]>(`icash_webinar_sessions?id=eq.${job.session_id}&visitor_id=eq.${job.visitor_id}&is_preview=eq.false&select=webinar_id&limit=1`);
    if(job.campaign_id&&session){
     const v=await webinarVisitor(true,webinarToken(job.visitor_id,'resume',3600));

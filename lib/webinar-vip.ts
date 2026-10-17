@@ -3,7 +3,7 @@ import {db,guestHash} from '@/lib/stripe-test';
 import {validGuest} from '@/lib/funding';
 import {vipActive} from '@/lib/vip-policy';
 import {membershipAccessible} from '@/lib/membership-policy';
-import {webinarSession,WebinarError} from '@/lib/webinar-server';
+import {webinarSession,WebinarError,type Visitor} from '@/lib/webinar-server';
 import {webinarLink} from '@/lib/webinar-links';
 import {visitorTimezone,isNight,bestConvertingWebinar,type ViewerLocation} from '@/packages/webinar-engine/src/index';
 import {routingSchema,hasWebinarVideo,webinarFromRow,type WebinarSettings,type WebinarRow} from '@/lib/webinar-policy';
@@ -42,17 +42,33 @@ export async function paidVipDestination(m:Membership|null):Promise<string|null>
  return row?.config.status==='published'&&hasWebinarVideo(row.config)?webinarLink({publicCode:String(row.public_code)}):null;
 }
 
-type ViewerMembership=Pick<Membership,'mode'|'state'|'paid_through'|'vip_until'|'post_purchase_webinar_id'>;
+type ViewerMembership=Pick<Membership,'mode'|'state'|'paid_through'|'vip_until'|'post_purchase_webinar_id'>&{guest_hash?:string};
 /** Only verified account ownership or an unclaimed checkout in this browser counts. */
 export async function webinarViewerMembership(accountId?:string):Promise<ViewerMembership|null>{
  const token=(await cookies()).get('icash_funding_guest')?.value;
  const scope=accountId?`account_id=eq.${accountId}`:validGuest(token)?`guest_hash=eq.${guestHash(token!)}&account_id=is.null`:null;
  if(!scope)return null;
- const rows=await db<ViewerMembership[]>(`icash_memberships?${scope}&mode=eq.live&state=eq.active&select=mode,state,paid_through,vip_until,post_purchase_webinar_id&order=created_at.desc&limit=10`);
+ const rows=await db<ViewerMembership[]>(`icash_memberships?${scope}&mode=eq.live&state=eq.active&select=mode,state,paid_through,vip_until,post_purchase_webinar_id,guest_hash&order=created_at.desc&limit=10`);
  const paid=rows.filter(m=>m.mode==='live'&&membershipAccessible(m));
  return paid.find(m=>vipActive(m))??paid[0]??null;
 }
 export async function webinarVipAccess(accountId?:string):Promise<boolean>{return !!await webinarViewerMembership(accountId);}
+
+/** Recover only the chat name from this verified purchase's main webinar. */
+export async function restoreVipChatName(visitor:Visitor,parentWebinarId:string,membership:ViewerMembership):Promise<Visitor>{
+ if(visitor.name?.trim()||!membership.guest_hash||membership.mode!=='live'||!membershipAccessible(membership))return visitor;
+ try{
+  const sources=await db<{icash_webinar_visitors:{name:string|null}}[]>(`icash_webinar_sessions?webinar_id=eq.${parentWebinarId}&is_preview=eq.false&icash_webinar_visitors.funding_guest_hash=eq.${encodeURIComponent(membership.guest_hash)}&icash_webinar_visitors.name=not.is.null&select=icash_webinar_visitors!inner(name)&order=updated_at.desc&limit=10`,'GET',undefined,AbortSignal.timeout(2000));
+  const name=sources.find(s=>s.icash_webinar_visitors.name?.trim())?.icash_webinar_visitors.name?.trim().slice(0,80);
+  if(!name)return visitor;
+  // Compare the original value so a concurrent name edit always wins.
+  const unchanged=visitor.name==null?'name=is.null':`name=eq.${encodeURIComponent(visitor.name)}`;
+  const [saved]=await db<Pick<Visitor,'name'>[]>(`icash_webinar_visitors?id=eq.${visitor.id}&${unchanged}&select=name`,'PATCH',{name},AbortSignal.timeout(2000));
+  if(saved)return {...visitor,name:saved.name};
+  const [latest]=await db<Pick<Visitor,'name'>[]>(`icash_webinar_visitors?id=eq.${visitor.id}&select=name&limit=1`,'GET',undefined,AbortSignal.timeout(2000));
+  return latest?{...visitor,name:latest.name}:visitor;
+ }catch{return visitor;} // A name lookup outage must not block the paid video.
+}
 
 /** A returning Standard buyer keeps the VIP paired with their purchase. */
 export async function returningBuyerVip(m:ViewerMembership,mainId:string){

@@ -16,7 +16,7 @@ const all=(node)=>!node||typeof node!=='object'?[]:[node,...[node.props?.childre
 const find=(tree,type)=>all(tree).find(n=>n.type===type);const flush=async()=>{for(let n=0;n<12;n++)await Promise.resolve();};
 
 const listeners=new Map(),store=new Map();
-globalThis.window={addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n)};
+globalThis.window={dispatchEvent:e=>{listeners.get(e.type)?.(e);return true;},addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n)};
 globalThis.document={hidden:false,addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n)};
 globalThis.location={search:'?ad_id=55555&fbclid=retained&r=signed-token',hash:'#room',pathname:'/live/129339',assign:()=>{},replace:()=>{}};
 window.location=location;
@@ -29,7 +29,7 @@ const w={...policy.newWebinar('00000000-0000-4000-8000-000000000123'),videoUrl:'
 const sessionId='00000000-0000-4000-8000-000000000456';let emptyChat=false;let requestLog=[],remembered='',rememberedEmail='',completionGate=null,chatGate=null,failChat=false,failContact=false;const redirects=[];location.assign=path=>redirects.push(path);
 async function post(url,body){requestLog.push({url,body});if(url.endsWith('/start'))return {canonicalPath:'/live/129340',sessionId,webinar:policy.publicWebinar(w),progress:0,name:remembered,email:rememberedEmail,contactSaved:false,messages:[],preview:false,serverNow:Date.now()};if(url.endsWith('/event')&&body.kind==='completed'){if(completionGate)await completionGate;return {saved:true,redirect:'/webinar/checkout'};}if(url.endsWith('/contact')){if(failContact)throw Error('Name could not be saved.');remembered=body.name;if(!body.onlyName)rememberedEmail=body.email;return {name:remembered,contactSaved:!!body.email&&!!body.phone};}if(url.endsWith('/chat')){if(chatGate)await chatGate;if(failChat)throw Error('Connection lost.');return {messages:emptyChat?[]:[{id:'m'+requestLog.length,role:'user',text:body.text,playback_seconds:body.seconds,public_status:'pending'}]};}return {saved:true};}
 let timerInput;
-const roomDeps={...exitReminder,webinarOfferFocus,useWebinarSharedChat:()=>({messages:[],statuses:[]}),webinarChatStream,withOfferDeadlines,replayOfferActivity,recordedPurchaseMessage,useMemo:fn=>fn(),webinarRequest:async()=>({postPurchaseUrl:'/live/123457'}),dynamic:loader=>loader.toString().includes('WebinarCheckout')?'WebinarCheckout':'AccountAccess',useWebinarTimers:input=>{timerInput=input;return {deadlines:{},offerDeadlines:{},offset:0,now:Date.now()};},...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}};
+const roomDeps={installWebinarPresence:()=>()=>{},...exitReminder,webinarOfferFocus,useWebinarSharedChat:()=>({messages:[],statuses:[]}),webinarChatStream,withOfferDeadlines,replayOfferActivity,recordedPurchaseMessage,useMemo:fn=>fn(),webinarRequest:async()=>({postPurchaseUrl:'/live/123457'}),dynamic:loader=>loader.toString().includes('WebinarCheckout')?'WebinarCheckout':'AccountAccess',useWebinarTimers:input=>{timerInput=input;return {deadlines:{},offerDeadlines:{},offset:0,now:Date.now()};},...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}};
 const h=await harness('components/webinar-room.tsx',roomDeps);
 const render=()=>h.render('WebinarRoom',{webinarCode:'129339'});let tree=render();assert.equal(listeners.has('beforeunload'),false,'Loading never installs a reminder');await flush();tree=render();
 assert.equal(listeners.has('beforeunload'),true,'Regular viewers receive the one-time exit reminder');
@@ -131,7 +131,7 @@ for(const [scenario,[version,preview,outcome]] of [['day',false,'unpaid'],['nigh
  const vip={...w,parentWebinarId:'00000000-0000-4000-8000-000000000999',recordingVersion:version,redirectAtEnd:false,chat:[{id:'taylor',at:805,name:'Taylor',text:'Joined',kind:'purchase'},{id:'emilio',at:810,name:'Emilio',text:'Joined',kind:'purchase'}],offers:[{id:'vip',at:800,replaySpots:3,title:'VIP offer',description:'',ctaLabel:'Upgrade',action:'checkout',url:'',expiresAt:null},{id:'vip-last',at:1200,replaySpots:1,title:'VIP last chance',description:'',ctaLabel:'Upgrade',action:'checkout',url:'',expiresAt:null}]};
  const vh=await harness('components/webinar-room.tsx',{...roomDeps,post:async(url,body)=>{
   events.push({url,body});
-  if(url.endsWith('/start'))return {sessionId:vipSessionId,webinar:policy.publicWebinar(vip),progress:0,name:version==='day'?'Casey':'',email:'',phone:'',contactSaved:false,messages:[],preview,serverNow:Date.now()};
+  if(url.endsWith('/start'))return {sessionId:vipSessionId,webinar:policy.publicWebinar(vip),progress:0,name:preview?'':'Casey',email:'',phone:'',contactSaved:false,messages:[],preview,serverNow:Date.now()};
   if(url.endsWith('/chat'))return {messages:[{id:'vip-message',role:'user',text:body.text,playback_seconds:body.seconds}]};
   if(url.endsWith('/contact'))throw Error('VIP must never collect contact details');
   return {saved:true,redirect:'/webinar/upgrade'};
@@ -145,6 +145,7 @@ for(const [scenario,[version,preview,outcome]] of [['day',false,'unpaid'],['nigh
  }
  all(vt).find(n=>n.props?.id==='wb-question').props.onChange({target:{value:"I'm in"}});vt=renderVip();await all(vt).find(n=>n.props?.className==='wb-chat-composer').props.onSubmit({preventDefault(){}});await flush();vt=renderVip();
  assert.equal(events.filter(e=>e.url.endsWith('/chat')).length,1);assert.equal(events.filter(e=>e.url.endsWith('/contact')).length,0);
+ if(!preview){const message=all(vt).find(n=>n.type==='article'&&n.props.className==='wb-message'&&all(n).some(child=>child.type==='p'&&child.props.children==="I'm in"));assert.equal(find(message,'b').props.children,'Casey','Day and Night VIP chat keep the name saved in the first webinar');}
  find(vt,'WebinarPlayer').props.onProgress(800);vt=renderVip();vt=renderVip();
  assert.equal(find(vt,'WebinarCheckout').props.vipWebinar,true,'The scheduled VIP offer opens upgrade checkout');
  find(vt,'WebinarCheckout').props.onPurchased('standard');vt=renderVip();

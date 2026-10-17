@@ -4,7 +4,7 @@ import {test} from 'node:test';
 async function fixture(storage=new Map()){
  const handlers=new Set(),navigationHandlers=new Set(),clicks=new Set(),navigations=[];let activated=true;
  globalThis.document={addEventListener:(name,fn)=>{assert.equal(name,'click');clicks.add(fn);},removeEventListener:(_name,fn)=>clicks.delete(fn)};
- globalThis.window={navigation:{addEventListener:(name,fn)=>{assert.equal(name,'navigate');navigationHandlers.add(fn);},removeEventListener:(_name,fn)=>navigationHandlers.delete(fn),traverseTo:key=>{navigations.push('history:'+key);return {finished:Promise.resolve()};}},addEventListener:(name,fn)=>{assert.equal(name,'beforeunload');handlers.add(fn);},removeEventListener:(_name,fn)=>handlers.delete(fn),location:{assign:path=>navigations.push(path),replace:path=>navigations.push(path)}};
+ globalThis.window={dispatchEvent:()=>true,navigation:{addEventListener:(name,fn)=>{assert.equal(name,'navigate');navigationHandlers.add(fn);},removeEventListener:(_name,fn)=>navigationHandlers.delete(fn),traverseTo:key=>{navigations.push('history:'+key);return {finished:Promise.resolve()};}},addEventListener:(name,fn)=>{assert.equal(name,'beforeunload');handlers.add(fn);},removeEventListener:(_name,fn)=>handlers.delete(fn),location:{assign:path=>navigations.push(path),replace:path=>navigations.push(path)}};
  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{userActivation:{get hasBeenActive(){return activated;}}}});
  globalThis.sessionStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value)};
  const api=await import('../lib/webinar-exit-reminder.ts?case='+Math.random());

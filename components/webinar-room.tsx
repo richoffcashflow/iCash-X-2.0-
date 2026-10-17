@@ -14,6 +14,7 @@ import {recordedPurchaseMessage} from '@/lib/webinar-activity';
 import {availableOffers,selectOffer} from '@/packages/webinar-engine/src/index';
 import {webinarChatStream,type WebinarMessage,type PendingWebinarMessage} from '@/lib/webinar-chat-stream';
 import {webinarSite} from '@/lib/webinar-site';
+import {installWebinarPresence} from '@/lib/webinar-presence';
 import {webinarBrowserReady,webinarBrowserEvent} from '@/lib/webinar-browser-events';
 import {MessageCircle,Send,X,ChevronDown,ShieldCheck,Check} from 'lucide-react';
 import {WebinarTimers,useWebinarTimers} from '@/components/webinar-timers';
@@ -102,6 +103,10 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
   webinarBrowserReady(d.sessionId,d.preview);offset.current=d.serverNow-Date.now();setNow(d.serverNow);sessionRef.current=d;setSession(d);setName(d.name);setDraftName(d.name);setEmail(d.email||'');setPhone(d.phone||'');setPromptHistory(readPromptHistory(d.sessionId));setContactSaved(d.contactSaved||!!d.email||!!d.phone);setMessages(d.messages);setTime(d.progress);position.current=d.progress;
  }catch(e){if(alive.current)setError(e instanceof Error?e.message:'Could not open the session.');}finally{starting.current=false;}},[webinarCode]);
  useEffect(()=>{alive.current=true;void load();return()=>{alive.current=false;};},[load]);
+ useEffect(()=>{
+  if(!session||session.preview)return;
+  return installWebinarPresence(presence=>webinarBeacon('/api/webinar/presence',{sessionId:session.sessionId,...presence}),document,window,session.webinar.parentWebinarId?'vip':'webinar');
+ },[session?.sessionId,session?.preview]);
  const track=useCallback((kind:WebinarEvent,beacon=false,key='once')=>{
   if(!session||session.preview||returnExpired.current||awaySince.current!==null&&!withinWebinarResumeWindow(awaySince.current)&&!checkoutEngagedRef.current)return;const body={sessionId:session.sessionId,seconds:Math.floor(position.current),kind,key};
   if(kind==='completed')completionPending.current=true;

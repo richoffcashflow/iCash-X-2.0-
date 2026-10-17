@@ -1,3 +1,5 @@
+import {scheduleWebinarFollowups} from '@/lib/webinar-dispatch';
+export const maxDuration=120;
 import {schedulePurchaseAccessEmail} from '@/lib/purchase-access-dispatch';
 import {changeVipPlan,vipRetentionOffer} from '@/lib/vip-membership';
 import {vipRetentionVersion,vipRetentionCents} from '@/lib/vip-policy';
@@ -29,6 +31,7 @@ export async function GET(req:Request){try{
   checkoutCustomerContext(hash,user?.email),paidVipDestination(m).catch(()=>null),
   offer.enabled?customerFundingReady():false,vipRetentionOffer(m)
  ]);
+ if(postPurchaseUrl&&mode==='live')scheduleWebinarFollowups();
  if(m?.mode==='live'&&m.paid_through)schedulePurchaseAccessEmail(m.id);
  return NextResponse.json({postPurchaseUrl,offer,mode,embeddedReady:!!checkoutPublishableKey(mode),customerName:customer.name??'',ready,membership:publicMembership(m),retentionOffer,needsClaim:!!m?.paid_through&&!m.account_id,email:m?.paid_through&&!user?m.payer_email:user?.email??customer.email??null},{headers});
  }catch{return NextResponse.json({error:'Could not check software access. Please retry.'},{status:503,headers});}}

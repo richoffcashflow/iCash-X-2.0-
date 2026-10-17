@@ -5,9 +5,9 @@ import * as webinarPolicy from '../lib/webinar-policy.ts';
 import {selectRecording,createNightRecording} from '../lib/webinar-recordings.ts';
 import {vipActive} from '../lib/vip-policy.ts';
 import {membershipAccessible} from '../lib/membership-policy.ts';import {webinarLink} from '../lib/webinar-links.ts';
-let calls=[],source={webinar_id:'main',is_preview:false,config:{}},rows=[],settings={},token='guest',pool=[],stats=[],failStats=false;
+let calls=[],source={webinar_id:'main',is_preview:false,config:{}},rows=[],settings={},token='guest',pool=[],stats=[],failStats=false,nameRecoveryHandler=null;
 class WebinarError extends Error{constructor(status,message){super(message);this.status=status;}}
-const deps={vipActive,...engine,...webinarPolicy,selectRecording,availableWebinarRows:rows=>rows.map(webinarPolicy.webinarFromRow),webinarConversionRecordings:async()=>{if(failStats)throw Error('report unavailable');return stats;},membershipAccessible,webinarLink,WebinarError,cookies:async()=>({get:()=>token?{value:token}:undefined}),validGuest:token=>token==='guest',guestHash:()=> 'owned-hash',webinarSession:async id=>{assert.equal(id,'owned-session');return {s:source};},db:async(path)=>{calls.push(path);if(path.startsWith('icash_webinar_settings'))return [{config:settings}];if(path.includes('limit=1000'))return pool.map(w=>({config:w,public_code:Number(w.publicCode),parent_webinar_id:w.parentWebinarId}));return rows;}};
+const deps={vipActive,...engine,...webinarPolicy,selectRecording,availableWebinarRows:rows=>rows.map(webinarPolicy.webinarFromRow),webinarConversionRecordings:async()=>{if(failStats)throw Error('report unavailable');return stats;},membershipAccessible,webinarLink,WebinarError,cookies:async()=>({get:()=>token?{value:token}:undefined}),validGuest:token=>token==='guest',guestHash:()=> 'owned-hash',webinarSession:async id=>{assert.equal(id,'owned-session');return {s:source};},db:async(path,method,body)=>{calls.push(path);if(nameRecoveryHandler)return nameRecoveryHandler(path,method,body);if(path.startsWith('icash_webinar_settings'))return [{config:settings}];if(path.includes('limit=1000'))return pool.map(w=>({config:w,public_code:Number(w.publicCode),parent_webinar_id:w.parentWebinarId}));return rows;}};
 globalThis.__vip=deps;const src=ts.transpileModule(readFileSync(new URL('../lib/webinar-vip.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');const api=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__vip;\n'+src).toString('base64'));
 rows=[{id:'vip'}];assert.equal(await api.checkoutVipSession('owned-session'),'vip');assert.match(calls.at(-1),/parent_webinar_id=eq.main/);
 source.is_preview=true;await assert.rejects(()=>api.checkoutVipSession('owned-session'));source.is_preview=false;source.config.parentWebinarId='main';await assert.rejects(()=>api.checkoutVipSession('owned-session'));source.config={};
@@ -45,3 +45,28 @@ assert.equal((await api.returningBuyerVip(paid,mainA.id)).id,vipA.id);assert.mat
 calls=[];assert.equal((await api.returningBuyerVip({...paid,post_purchase_webinar_id:null},mainA.id)).id,vipA.id);assert.match(calls[0],new RegExp('parent_webinar_id=eq.'+mainA.id));
 rows=[{config:{...vipA,status:'draft'},public_code:123452,parent_webinar_id:mainA.id}];assert.equal(await api.returningBuyerVip(paid,mainA.id),null);
 console.log('PASS paid re-entry: trusted account/guest ownership, active VIP preference and published purchase-paired VIP only.');
+
+const unnamed={id:randomUUID(),name:null,email:null,phone:null,funding_guest_hash:'new-browser-hash',account_id:null},named={...unnamed,name:'My chosen name'},purchased={...paid,guest_hash:'original-purchase-hash'};
+calls=[];assert.equal(await api.restoreVipChatName(named,mainA.id,purchased),named);assert.equal(calls.length,0,'Keep an existing chosen name without a lookup');
+for(const patch of [{mode:'test'},{state:'pending'},{state:'cancelled'},{paid_through:null},{paid_through:'2020-01-01'},{guest_hash:''}]){
+ calls=[];assert.equal(await api.restoreVipChatName(unnamed,mainA.id,{...purchased,...patch}),unnamed);assert.equal(calls.length,0,'Unverified purchases cannot recover another visitor’s name');
+}
+let writtenName;
+nameRecoveryHandler=(path,method,body)=>{
+ if(method==='GET'){
+  assert.ok(path.startsWith(`icash_webinar_sessions?webinar_id=eq.${mainA.id}&is_preview=eq.false&`));
+  assert.match(path,/icash_webinar_visitors\.funding_guest_hash=eq.original-purchase-hash/);
+  assert.match(path,/select=icash_webinar_visitors!inner\(name\)/);assert.ok(!path.includes('email')&&!path.includes('phone'),'Do not match by unverified contact details');
+  return [{icash_webinar_visitors:{name:'  Casey  '}}];
+ }
+ assert.equal(method,'PATCH');assert.equal(path,`icash_webinar_visitors?id=eq.${unnamed.id}&name=is.null&select=name`);
+ assert.deepEqual(body,{name:'Casey'},'Only the display name is restored; no identity, contact data or consent is copied');writtenName=body.name;return [{name:body.name}];
+};
+const restored=await api.restoreVipChatName(unnamed,mainA.id,purchased);assert.deepEqual(restored,{...unnamed,name:'Casey'});assert.equal(writtenName,'Casey','VIP chat reads the same persisted name on its next request');
+nameRecoveryHandler=()=>[];assert.equal(await api.restoreVipChatName(unnamed,mainA.id,purchased),unnamed,'No matching main session leaves an anonymous name alone');
+nameRecoveryHandler=()=>{throw Error('History unavailable');};assert.equal(await api.restoreVipChatName(unnamed,mainA.id,purchased),unnamed,'Optional name recovery cannot interrupt the paid video');
+nameRecoveryHandler=(path,method)=>method==='PATCH'?[]:path.startsWith('icash_webinar_sessions?')?[{icash_webinar_visitors:{name:'Casey'}}]:[{name:'Updated name'}];
+assert.equal((await api.restoreVipChatName(unnamed,mainA.id,purchased)).name,'Updated name','A concurrent explicit edit wins over an older restored name');
+nameRecoveryHandler=(path,method)=>{if(method==='PATCH'){assert.match(path,/&name=eq\.&select=name$/);return [{name:'Casey'}];}return [{icash_webinar_visitors:{name:'Casey'}}];};
+assert.equal((await api.restoreVipChatName({...unnamed,name:''},mainA.id,purchased)).name,'Casey');
+console.log('PASS VIP chat name recovery: verified purchase and paired main only, persisted name, no consent/identity copy, concurrent edits and graceful outage fallback.');

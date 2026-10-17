@@ -67,6 +67,7 @@ export function allowWebinarLinkNavigation(event:Pick<MouseEvent,'button'|'defau
  if(!event.defaultPrevented&&event.button===0&&!event.metaKey&&!event.ctrlKey&&!event.shiftKey&&!event.altKey)allowWebinarNavigation();
 }
 export function navigateWebinar(path:string,replace=false){
+ window.dispatchEvent(new CustomEvent('icash-webinar-navigation',{detail:path}));
  allowWebinarNavigation();
  if(replace)window.location.replace(path);else window.location.assign(path);
 }
