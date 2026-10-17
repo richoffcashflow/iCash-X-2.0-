@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {randomBytes} from 'node:crypto';
 import ts from 'typescript';
+import {supportConversationFallback} from '../lib/support-conversation.ts';
 import {z} from 'zod';
 import {supportId,supportMessageInput,supportAnswer,supportTopic,redactSupportQuestion,supportStatusInput,hashCancelNonce,createCancelToken,parseCancelToken} from '../lib/support-policy.ts';
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,accountId=id(1),userId=id(2),threadId=id(3);
@@ -11,12 +12,12 @@ let supportCopiesEnabled=false,scheduledCopies=0;
 let activeMode='live',activeAccount=accountId,activeUser=userId;const fundingMode=()=>activeMode;
 const workAccount=async()=>{if(!authorized)throw Error('SIGN_IN_REQUIRED');return {accountId:activeAccount,userId:activeUser};};
 const request=(path,body)=>new Request('https://www.geticashx.com'+path,{method:'POST',headers:{origin:'https://www.geticashx.com','Content-Type':'application/json'},body:JSON.stringify(body)});
-const route=await load('app/api/support/route.ts',{supportOwnerNotificationsEnabled:()=>supportCopiesEnabled,scheduleSupportOwnerNotifications:()=>{scheduledCopies++;},NextResponse,z,workAccount,db:async(path,method,body)=>{paths.push({path,method,body});if(path.startsWith('rpc/')){assert.equal(body.p_account,accountId);assert.equal(body.p_user,userId);if(path.endsWith('begin_message'))return {threadId,replay,rateLimited,response:replay&&!replayPending?{content:'saved'}:null};if((path.endsWith('finish_message')||path.endsWith('finish_and_notify'))&&finishFailure)throw Error('Receipt unavailable');if(path.endsWith('escalate'))return body.p_thread===threadId;return null;}assert(path.includes(`account_id=eq.${accountId}`),'Tenant filter on every read');if(path.startsWith('icash_support_threads'))return [{id:threadId,subject:'Help',status:'open'}];return [];},allowedOrigin:()=>origin,fundingMode,supportId,supportMessageInput,supportAnswer,supportTopic,redactSupportQuestion,collectSupportDiagnostics:async id=>{assert.equal(id,accountId);diagnostics++;return [];},classifySupportQuestion:async()=>{classifications++;return {topic:'general',ai:false};}},'__supportRoute');
+const route=await load('app/api/support/route.ts',{supportOwnerNotificationsEnabled:()=>supportCopiesEnabled,scheduleSupportOwnerNotifications:()=>{scheduledCopies++;},NextResponse,z,workAccount,db:async(path,method,body)=>{paths.push({path,method,body});if(path.startsWith('rpc/')){assert.equal(body.p_account,accountId);assert.equal(body.p_user,userId);if(path.endsWith('begin_message'))return {threadId,replay,rateLimited,response:replay&&!replayPending?{content:'saved'}:null};if((path.endsWith('finish_conversation'))&&finishFailure)throw Error('Receipt unavailable');if(path.endsWith('escalate'))return body.p_thread===threadId;return null;}assert(path.includes(`account_id=eq.${accountId}`),'Tenant filter on every read');if(path.startsWith('icash_support_threads'))return [{id:threadId,subject:'Help',status:'open'}];return [];},allowedOrigin:()=>origin,fundingMode,supportId,supportMessageInput,supportAnswer,supportTopic,redactSupportQuestion,collectSupportDiagnostics:async id=>{assert.equal(id,accountId);diagnostics++;return [];},replyToSupport:async context=>{if(context.allowAI)classifications++;return supportConversationFallback(context);}},'__supportRoute');
 authorized=false;let r=await route.GET(new Request('https://example.com/api/support'));assert.equal(r.status,401);assert.equal(paths.length,0);
 authorized=true;r=await route.GET(new Request('https://example.com/api/support?threadId='+id(99)));assert.equal(r.status,404);
 paths=[];origin=false;r=await route.POST(request('/api/support',{requestId:id(4),message:'help'}));assert.equal(r.status,403);assert.equal(paths.length,0);origin=true;
 r=await route.POST(request('/api/support',{requestId:id(4),message:'help',accountId:id(99)}));assert.equal(r.status,400);assert.equal(paths.length,0);
-r=await route.POST(request('/api/support',{requestId:id(4),message:'Why paused?'}));assert.equal(r.status,200);assert.equal(diagnostics,1);assert(paths.some(x=>x.path.endsWith('finish_message')));
+r=await route.POST(request('/api/support',{requestId:id(4),message:'Why paused?'}));assert.equal(r.status,200);assert.equal(diagnostics,1);assert(paths.some(x=>x.path.endsWith('finish_conversation')));
 paths=[];replay=true;r=await route.POST(request('/api/support',{requestId:id(4),message:'Why paused?'}));assert.equal(r.status,200);assert.equal(diagnostics,1,'Duplicate request never calls model/diagnostics again');assert.equal(paths.length,1);
 replay=false;rateLimited=true;r=await route.POST(request('/api/support',{requestId:id(5),message:'help'}));assert.equal(r.status,429);assert.equal(diagnostics,1);rateLimited=false;
 r=await route.POST(request('/api/support',{action:'escalate',threadId:id(99)}));assert.equal(r.status,404);
@@ -24,11 +25,11 @@ r=await route.POST(request('/api/support',{action:'escalate',threadId}));assert.
 r=await route.GET(new Request('https://example.com/api/support'));assert.equal(r.status,200);assert.equal(r.body.evidence,undefined);assert.equal(r.headers['Cache-Control'],'private, no-store');assert.equal(diagnostics,1,'history polling does not rerun account diagnostics');
 // A saved question with no reply is recoverable under the same request receipt.
 replay=true;replayPending=true;paths=[];const priorClassifications=classifications;
-r=await route.POST(request('/api/support',{requestId:id(4),message:'Why paused?'}));assert.equal(r.status,200);assert(paths.some(x=>x.path.endsWith('finish_message')));assert.equal(classifications,priorClassifications,'Recovery does not repeat a paid AI classification');
+r=await route.POST(request('/api/support',{requestId:id(4),message:'Why paused?'}));assert.equal(r.status,200);assert(paths.some(x=>x.path.endsWith('finish_conversation')));assert.equal(classifications,priorClassifications,'Recovery does not repeat a paid AI classification');
 finishFailure=true;r=await route.POST(request('/api/support',{requestId:id(4),message:'Why paused?'}));assert.equal(r.status,503,'A failed reply receipt is never presented as saved');
 finishFailure=false;replayPending=false;replay=false;
 supportCopiesEnabled=true;paths=[];const beforeCopies=scheduledCopies;
-r=await route.POST(request('/api/support',{requestId:id(40),message:'Why paused?'}));assert.equal(r.status,200);assert(paths.some(x=>x.path==='rpc/icash_support_finish_and_notify'));assert.equal(scheduledCopies,beforeCopies+1,'Only dispatch after the reply and owner copy are saved');
+r=await route.POST(request('/api/support',{requestId:id(40),message:'Why paused?'}));assert.equal(r.status,200);assert(paths.some(x=>x.path==='rpc/icash_support_finish_conversation'&&x.body.p_notify===true));assert.equal(scheduledCopies,beforeCopies+1,'Only dispatch after the reply and owner copy are saved');
 finishFailure=true;r=await route.POST(request('/api/support',{requestId:id(41),message:'Why paused?'}));assert.equal(r.status,503);assert.equal(scheduledCopies,beforeCopies+1,'No dispatch on failed atomic save');finishFailure=false;supportCopiesEnabled=false;
 
 let stopFailure=false,stops=0,prepared=null;paths=[];delete process.env.ICASH_SUPPORT_CANCEL_SECRET;
