@@ -3,7 +3,7 @@ import {newWebinar,publicWebinar} from '../lib/webinar-policy.ts';
 export async function verifyWebinarMeasurement(browser,base,options,name){
  await verifyCheckoutLoading(browser,base,options,name);
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
- let explicit=false,optedOut=false,regionAllowed=true,scriptLoads=0,reads=0,upgraded=false,checkoutFixture=false,ownerFixture=false,homeFixture=false,privateHomeFixture=false;
+ let explicit=false,optedOut=false,regionAllowed=true,scriptLoads=0,reads=0,upgraded=false,checkoutFixture=false,ownerFixture=false,homeFixture=false,privateHomeFixture=false,homePaid=false;
  const errors=[],membershipRequests=[],pixelId='1104248230721457';
  try{
   await context.addInitScript(()=>{if(window.top!==window)return;window.__pixelCalls=[];});
@@ -19,7 +19,7 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
    if(url.pathname==='/api/webinar/pixel')return route.fulfill({json:{enabled:true,pixelId,trackingAllowed:!optedOut&&(regionAllowed||explicit)}});
    if(checkoutFixture&&url.pathname==='/api/billing/membership'){
     if(route.request().method()==='POST')membershipRequests.push({home:homeFixture,...route.request().postDataJSON()});
-    return route.fulfill({json:route.request().method()==='POST'?{clientSecret:'fixture-secret',publishableKey:'pk_live_fixture',sessionId:homeFixture?'cs_live_home_browser':'cs_live_browser'}:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',embeddedReady:true,needsClaim:false,membership:null}});
+    return route.fulfill({json:route.request().method()==='POST'?{clientSecret:'fixture-secret',publishableKey:'pk_live_fixture',sessionId:homeFixture?'cs_live_home_browser':'cs_live_browser'}:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',embeddedReady:true,needsClaim:false,membership:homeFixture&&homePaid?{accessible:true,vip:false}:null}});
    }
    if(url.pathname==='/api/webinar/measurement'){
     reads++;
@@ -30,7 +30,7 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
     }
     const trackingAllowed=!optedOut&&(regionAllowed||explicit);
     if(checkoutFixture)await new Promise(resolve=>setTimeout(resolve,600));
-    const events=['pi_fixture',...(upgraded?['pi_vip']:[])].flatMap(id=>[{eventName:'AddPaymentInfo',eventId:'webinar:payment-info:'+id,data:{value:50,currency:'USD'}},{eventName:'Purchase',eventId:'webinar:purchase:'+id,data:{value:50,currency:'USD'}}]);
+    const events=(homeFixture?(homePaid?['pi_direct_home']:[]):['pi_fixture',...(upgraded?['pi_vip']:[])]).flatMap(id=>[{eventName:'AddPaymentInfo',eventId:'webinar:payment-info:'+id,data:{value:50,currency:'USD'}},{eventName:'Purchase',eventId:'webinar:purchase:'+id,data:{value:50,currency:'USD'}}]);
     return route.fulfill({json:{enabled:true,pixelId,trackingAllowed,consent:explicit&&!optedOut,events:trackingAllowed?events:[]}});
    }
    if(ownerFixture){
@@ -175,6 +175,15 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   }
   await page.setViewportSize(originalViewport);
   assert.equal(membershipRequests.filter(r=>r.home).length,1,'Resizing or scrolling never recreates the checkout');
+  homePaid=true;
+  await page.evaluate(()=>window.__completeCheckout());
+  await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='Purchase'&&c[4].eventID==='webinar:purchase:pi_direct_home'));
+  assert.equal((await tracks('Purchase')).length,1,'Verified direct checkout sends Purchase without a webinar session');
+  assert.equal((await tracks('Purchase'))[0][3].value,50);
+  assert.equal((await tracks('Purchase'))[0][3].currency,'USD');
+  assert.equal(await page.evaluate(()=>sessionStorage.getItem('icash-webinar-session')),null);
+  await page.reload();await page.waitForLoadState('networkidle');
+  assert.equal((await tracks('Purchase')).length,0,'Refreshing a direct purchase cannot count it twice');
   homeFixture=false;privateHomeFixture=true;
   await page.goto(base+'/');await page.locator('.workspace-ack-shell').waitFor();await page.waitForLoadState('networkidle');
   assert.deepEqual(await calls(),[],'The signed-in workspace at the same URL remains private');

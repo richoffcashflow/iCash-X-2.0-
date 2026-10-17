@@ -15,11 +15,12 @@ export function webinarKey(){const key=process.env.ICASH_WEBINAR_SECRET||process
 export function webinarToken(id:string,purpose:'visitor'|'resume'|'unsubscribe',seconds:number){return signWebinarToken(id,purpose,seconds,webinarKey());}
 export type Visitor={attribution?:Record<string,string>;marketing_consent_at?:string|null;measurement?:Record<string,string>;id:string;name:string|null;email:string|null;phone:string|null;timezone:string;email_consent_at:string|null;sms_consent_at?:string|null;sms_opted_out_at?:string|null;sms_replied_at?:string|null;opted_out_at:string|null;funded_at:string|null;account_id:string|null;funding_guest_hash:string|null};
 export type WebinarSession={id:string;visitor_id:string;webinar_id:string;revision:number;progress_seconds:number;max_seconds:number;watched_seconds?:number;completed_at:string|null;superseded_at:string|null;created_at:string;updated_at:string;config:Webinar;is_preview:boolean};
-export async function webinarVisitor(create=false,resume?:string){
+export async function webinarVisitor(create=false,resume?:string,signal?:AbortSignal){
  const jar=await cookies();let id=readWebinarToken(jar.get('icash_webinar')?.value,'visitor',webinarKey());
  const resumed=readWebinarToken(resume,'resume',webinarKey());if(resumed)id=resumed;
- let v=id?(await db<Visitor[]>(`icash_webinar_visitors?id=eq.${id}&select=*&limit=1`))[0]:undefined;
- if(!v&&create){[v]=await db<Visitor[]>('icash_webinar_visitors','POST',{id:randomUUID()});}
+ let v=id?(await db<Visitor[]>(`icash_webinar_visitors?id=eq.${id}&select=*&limit=1`,'GET',undefined,signal))[0]:undefined;
+ if(!v&&create){[v]=await db<Visitor[]>('icash_webinar_visitors','POST',{id:randomUUID()},signal);}
+ signal?.throwIfAborted();
  if(v&&create)jar.set('icash_webinar',webinarToken(v.id,'visitor',86400*180),{httpOnly:true,secure:process.env.NODE_ENV!=='development',sameSite:'lax',path:'/',maxAge:86400*180});
  if(!v)throw new WebinarError(401,'Reload the webinar to restore your session.');return v;
 }
