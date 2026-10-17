@@ -1,4 +1,5 @@
 'use client';
+import Script from 'next/script';
 import {navigateWebinar} from '@/lib/webinar-exit-reminder';
 import {webinarRequest} from '@/lib/webinar-client';
 import {webinarBrowserEvent,webinarBrowserPurchaseReady} from '@/lib/webinar-browser-events';
@@ -41,7 +42,7 @@ export function MembershipCheckout({preview=false,stayOnWebinar=false,vipWebinar
  if(returning)return <div className="membership-success" role="status"><h2>Confirming your payment</h2><p>Your purchase is being checked. Please don’t pay again.</p>{error&&<p role="alert">{error}</p>}<button className="workspace-quiet" onClick={()=>void load()}>Check payment</button></div>;
  if(checkoutForm)return <div onFocusCapture={()=>engage()}><StripeEmbeddedCheckout {...checkoutForm} onInteract={()=>engage()} onReady={trackCheckout} onComplete={()=>{engage();setCheckoutForm(null);setReturning(true);void load();}}/><p className="membership-secure"><ShieldCheck size={14}/>Your information stays with your purchase.</p>{error&&<p role="alert">{error}</p>}{!direct&&<button className="membership-embedded-back" onClick={()=>{setCheckoutForm(null);void load();}}>Back to offer</button>}</div>;
  // Download Stripe alongside the membership read/session preparation, without starting a payment.
- if(direct)return <section className="membership-checkout" aria-label="Software checkout">{!preview&&<link rel="preload" as="script" href="https://js.stripe.com/endive/stripe.js"/>}<p role="status">{error?'Payment form could not open.':data&&!data.ready?'Checkout is currently unavailable.':'Loading secure payment…'}</p>{error&&<p role="alert">{error}</p>}{(error||data&&!data.ready)&&<button className="setup-primary" disabled={busy} onClick={()=>{if(data?.ready)void checkout(true);else void load();}}>Reload payment form</button>}</section>;
+ if(direct)return <section className="membership-checkout" aria-label="Software checkout">{!preview&&<Script src="https://js.stripe.com/endive/stripe.js" strategy="afterInteractive"/>}<p role="status">{error?'Payment form could not open.':data&&!data.ready?'Checkout is currently unavailable.':'Loading secure payment…'}</p>{error&&<p role="alert">{error}</p>}{(error||data&&!data.ready)&&<button className="setup-primary" disabled={busy} onClick={()=>{if(data?.ready)void checkout(true);else void load();}}>Reload payment form</button>}</section>;
  return <section className="membership-checkout" data-presentation={presentation} aria-label="Software checkout">
   {presentation==='plan'?<><div className="membership-plan-kicker"><span>ICASH X MEMBERSHIP</span><span className="membership-plan-badge">MONTHLY</span></div><h2 className="membership-plan-title">Standard plan</h2></>:!compact&&<span className="membership-caption">ICASH X SOFTWARE ACCESS</span>}
   <div className="membership-price">{data?<>{priceLabel(data.offer.priceCents)}<small>/month</small></>:<span>Checking price…</span>}</div>

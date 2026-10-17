@@ -3,7 +3,7 @@ import {newWebinar,publicWebinar} from '../lib/webinar-policy.ts';
 export async function verifyWebinarMeasurement(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
  let explicit=false,optedOut=false,regionAllowed=true,scriptLoads=0,reads=0,upgraded=false,checkoutFixture=false,ownerFixture=false,homeFixture=false,privateHomeFixture=false;
- let membershipReadGate=null;
+ let membershipReadGate=null,stripeScriptGate=null;
  const errors=[],membershipRequests=[],pixelId='1104248230721457';
  try{
   await context.addInitScript(()=>{if(window.top!==window)return;window.__pixelCalls=[];});
@@ -13,7 +13,7 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
     scriptLoads++;return route.fulfill({contentType:'application/javascript',body:'window.__pixelCalls.push(...window.fbq.queue);window.fbq.callMethod=(...args)=>window.__pixelCalls.push(args);'});
    }
    if(url.origin==='https://www.facebook.com'&&url.pathname==='/signals/iwl.js')return route.fulfill({contentType:'application/javascript',body:'window.__metaSetupLoaded=true;'});
-   if(checkoutFixture&&url.href==='https://js.stripe.com/endive/stripe.js')return route.fulfill({contentType:'application/javascript',body:`window.Stripe=()=>({createEmbeddedCheckoutPage:async options=>({mount:node=>{const frame=document.createElement('iframe');frame.title='Fixture payment';frame.sandbox='allow-scripts';frame.style.cssText='display:block;width:100%;height:860px;border:0';frame.srcdoc='<style>body{margin:12px;font-family:Arial}button,input{display:block;padding:12px;margin:0 0 12px;width:90%;box-sizing:border-box}</style><button>Fixture wallet</button><input placeholder="Fixture payment field"><div style="height:640px"></div><button>Fixture pay</button>';node.appendChild(frame);window.__completeCheckout=options.onComplete;},destroy:()=>{}})});`});
+   if(checkoutFixture&&url.href==='https://js.stripe.com/endive/stripe.js'){if(stripeScriptGate)await stripeScriptGate;return route.fulfill({contentType:'application/javascript',body:`window.Stripe=()=>({createEmbeddedCheckoutPage:async options=>({mount:node=>{const frame=document.createElement('iframe');frame.title='Fixture payment';frame.sandbox='allow-scripts';frame.style.cssText='display:block;width:100%;height:860px;border:0';frame.srcdoc='<style>body{margin:12px;font-family:Arial}button,input{display:block;padding:12px;margin:0 0 12px;width:90%;box-sizing:border-box}</style><button>Fixture wallet</button><input placeholder="Fixture payment field"><div style="height:640px"></div><button>Fixture pay</button>';node.appendChild(frame);window.__completeCheckout=options.onComplete;},destroy:()=>{}})});`});}
    if(url.origin!==base)return route.abort();
    if((homeFixture||privateHomeFixture)&&url.pathname==='/api/account')return route.fulfill({json:privateHomeFixture?{signedIn:true,billingModel:'membership_credits',membershipActive:true,workspaceAcknowledged:false}:{signedIn:false,signInReady:true}});
    if(url.pathname==='/api/webinar/pixel')return route.fulfill({json:{enabled:true,pixelId,trackingAllowed:!optedOut&&(regionAllowed||explicit)}});
@@ -129,7 +129,8 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   try{
    await Promise.all([page.goto(base+'/webinar/checkout'),stripePreload]);
    assert.equal(membershipRequests.length,0,'Stripe downloads while the current membership is still loading');
-   assert.equal(await page.evaluate(()=>typeof window.Stripe),'undefined','Preloading does not initialize Stripe or payment');
+   await page.waitForFunction(()=>typeof window.Stripe==='function');
+   assert.equal(await page.locator('iframe[title="Fixture payment"]').count(),0,'Loading the SDK does not initialize a payment form');
   }finally{releaseMembership();membershipReadGate=null;}
   const field=page.frameLocator('iframe[title="Fixture payment"]').getByPlaceholder('Fixture payment field');await field.waitFor();
   await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='InitiateCheckout'));
@@ -141,7 +142,14 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   assert.equal((await tracks('Purchase')).length,0,'Entering the form never fabricates a purchase');assert.deepEqual(errors,[]);
   homeFixture=true;
   const previousWebinarSession=await page.evaluate(()=>{const saved=sessionStorage.getItem('icash-webinar-session');sessionStorage.removeItem('icash-webinar-session');return saved;});
-  await page.goto(base+'/');
+  let releaseStripe;
+  stripeScriptGate=new Promise(resolve=>{releaseStripe=resolve;});
+  const prepared=page.waitForResponse(response=>response.url().endsWith('/api/billing/membership')&&response.request().method()==='POST');
+  try{
+   await page.goto(base+'/',{waitUntil:'domcontentloaded'});
+   await prepared;
+   assert.equal(await page.locator('iframe[title="Fixture payment"]').count(),0,'Session preparation can finish while Stripe is still downloading');
+  }finally{releaseStripe();stripeScriptGate=null;}
   await field.waitFor();
   await page.getByRole('heading',{name:'Your AI wholesaling bot.',exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'Sign up',exact:true}).count(),0);
