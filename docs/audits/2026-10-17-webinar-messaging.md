@@ -27,6 +27,10 @@ Local PostgreSQL scenarios cover overnight departure, accepted-send timing, earl
 
 ## Production dependencies
 
-Read-only inspection found geticashx.com verified in Resend, the combined delivery/reply webhook enabled, and two enabled text senders. The business mailing address remains blank, so email sending is not ready; SMS can be used for eligible recipients after release. No business address was invented.
+Read-only recheck on October 17 found email and SMS enabled in both webinar and shared messaging settings, a configured mailing address, and two enabled text senders. Existing webinar outbox records confirm email and SMS deliveries on October 17, and worker/maintenance heartbeats and public health are healthy. This verifies the existing production reminders, not the unreleased instant-recovery flow. No messages were sent for development or testing.
 
 The owner's explicit October 17 approval authorizes publishing the prepared branch, applying both messaging migrations in order and deploying. The existing production release gates remain enabled.
+
+## October 17 release follow-up
+
+Merged the current main account-access follow-up changes into this branch and resolved the maintenance-route conflicts, preserving webinar reminders, immediate purchase email and purchase follow-ups as independent lanes. The local release gate, TypeScript and PGlite webinar database scenarios passed. A new attempt to apply the unchanged final migration again returned `Invalid or expired requestState`; no application deployment was made. Keep this PR unmerged until the final migration succeeds and the resulting main production release passes its existing gates.
