@@ -5,7 +5,7 @@ import {titleEmailAddress,titleReference} from './title-inbound-policy.ts';
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 type Environment=Record<string,string|undefined>;
 type Message={from:string;to:string[];subject:string;text:string;html:string;tags:{name:string;value:string}[]};
-type Claim={id:string;claimToken:string;recipient:string;source:'chat'|'email';sourceId:string;threadId:string|null;customerEmail:string|null;subject:string;question:string;reply:string|null;replyStatus:'saved'|'accepted'|'unconfirmed'|'none';createdAt:string;message:Message|null};
+type Claim={id:string;claimToken:string;recipient:string;source:'chat'|'email';sourceId:string;threadId:string|null;customerUserId:string|null;customerEmail:string|null;subject:string;question:string;reply:string|null;replyStatus:'saved'|'accepted'|'unconfirmed'|'none';createdAt:string;message:Message|null};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const escapeHtml=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 export function supportOwnerNotificationsEnabled(env:Environment=process.env){return env.VERCEL_ENV==='production'&&env.ICASH_SUPPORT_OWNER_EMAIL_ENABLED==='true';}
@@ -46,15 +46,27 @@ export function supportOwnerMessage(job:Claim,from:string):Message{
 export async function processSupportOwnerNotifications({db,env=process.env,transport=fetch,limit=5}:{db:Database;env?:Environment;transport?:typeof fetch;limit?:number}){
  if(!supportOwnerNotificationsEnabled(env))return {state:'disabled',accepted:0,failed:0};
  const from=titleEmailAddress(env.ICASH_RELIABILITY_FROM_EMAIL);
- if(!from||!env.RESEND_API_KEY)return {state:'unconfigured',accepted:0,failed:1};
+ let origin:URL;try{origin=new URL(env.SUPABASE_URL??'');}catch{return {state:'unconfigured',accepted:0,failed:1};}
+ if(!from||!env.RESEND_API_KEY||!env.SUPABASE_SECRET_KEY||origin.protocol!=='https:'||!origin.hostname.endsWith('.supabase.co')||origin.username||origin.password||origin.pathname!=='/'||origin.search||origin.hash)return {state:'unconfigured',accepted:0,failed:1};
+ async function verifiedEmail(userId:string){
+  if(!uuid.test(userId))throw Error('Invalid support identity');
+  const response=await transport(new URL(`/auth/v1/admin/users/${userId}`,origin),{headers:{apikey:env.SUPABASE_SECRET_KEY!,Authorization:`Bearer ${env.SUPABASE_SECRET_KEY}`},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(5000)});
+  if(!response.ok)throw Error('Support identity unavailable');
+  const user=await response.json(),email=titleEmailAddress(user.email);
+  if(user.id!==userId||!email||email.length>254||!user.email_confirmed_at||!Number.isFinite(Date.parse(user.email_confirmed_at))||user.deleted_at||user.banned_until&&Date.parse(user.banned_until)>Date.now())throw Error('Support identity unavailable');
+  return email;
+ }
+ // Reuse the Auth admin API; service_role deliberately has no SELECT on auth.users.
+ let recipient:string;try{recipient=await verifiedEmail(ownerInboundTarget.ownerUserId);}catch{return {state:'recipient_unverified',accepted:0,failed:1};}
  let accepted=0,failed=0;
  for(let count=0;count<Math.min(10,Math.max(1,limit));count++){
   // The recipient is resolved from the platform owner's verified auth record.
-  const job=await db<Claim|null>('rpc/icash_claim_support_owner_copy','POST',{p_owner:ownerInboundTarget.ownerUserId});
+  const job=await db<Claim|null>('rpc/icash_claim_support_owner_copy','POST',{p_owner:ownerInboundTarget.ownerUserId,p_recipient:recipient});
   if(!job)break;
   if(!uuid.test(job.id)||!uuid.test(job.claimToken))throw Error('Invalid support notification claim');
   let retry=true;
   try{
+   if(!job.message&&job.source==='chat'&&job.customerUserId){try{job.customerEmail=await verifiedEmail(job.customerUserId);}catch{job.customerEmail=null;}}
    const message=await db<Message|null>('rpc/icash_authorize_support_owner_copy','POST',{p_id:job.id,p_claim:job.claimToken,p_message:job.message??supportOwnerMessage(job,from)});
    if(!message)continue;
    const response=await transport('https://api.resend.com/emails',{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Authorization:`Bearer ${env.RESEND_API_KEY}`,'Content-Type':'application/json','Idempotency-Key':`support-owner-${job.id}`},body:JSON.stringify(message)});

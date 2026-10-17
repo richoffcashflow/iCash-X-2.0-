@@ -5,7 +5,7 @@ create table public.icash_support_owner_copies(
  id uuid primary key default gen_random_uuid(),
  source text not null check(source in ('chat','email')),source_id uuid not null,
  thread_id uuid references public.icash_support_threads(id),
- customer_email text,subject text not null check(length(subject) between 1 and 180),
+ customer_user_id uuid references auth.users(id),customer_email text,subject text not null check(length(subject) between 1 and 180),
  question text not null check(length(question) between 1 and 6000),reply text check(length(reply)<=6000),
  reply_status text not null check(reply_status in ('saved','accepted','unconfirmed','none')),
  status text not null default 'pending' check(status in ('pending','sending','sent','needs_review')),
@@ -28,13 +28,12 @@ create function public.icash_queue_support_chat_copy(p_account uuid,p_user uuid,
 returns void language plpgsql security invoker set search_path='' as $$
 begin
  if not exists(select 1 from public.icash_accounts where id=p_account and owner_user_id=p_user) then raise exception 'Account unavailable';end if;
- insert into public.icash_support_owner_copies(source,source_id,thread_id,customer_email,subject,question,reply,reply_status)
- select 'chat',answer.id,answer.thread_id,u.email,t.subject,question.content,answer.content,'saved'
+ insert into public.icash_support_owner_copies(source,source_id,thread_id,customer_user_id,subject,question,reply,reply_status)
+ select 'chat',answer.id,answer.thread_id,a.owner_user_id,t.subject,question.content,answer.content,'saved'
  from public.icash_support_messages answer
  join public.icash_support_messages question on question.account_id=answer.account_id and question.thread_id=answer.thread_id and question.request_id=answer.request_id and question.role='user'
  join public.icash_support_threads t on t.id=answer.thread_id and t.account_id=answer.account_id
  join public.icash_accounts a on a.id=answer.account_id
- join auth.users u on u.id=a.owner_user_id
  where answer.account_id=p_account and answer.request_id=p_request and answer.role='assistant'
  on conflict(source,source_id) do nothing;
 end $$;
@@ -57,12 +56,12 @@ begin
  on conflict(source,source_id) do nothing;
 end $$;
 
-create function public.icash_claim_support_owner_copy(p_owner uuid) returns jsonb language plpgsql security invoker set search_path='' as $$
+create function public.icash_claim_support_owner_copy(p_owner uuid,p_recipient text) returns jsonb language plpgsql security invoker set search_path='' as $$
 declare e public.icash_support_owner_copies; mail text; receipt text;
 begin
- select lower(trim(email)) into mail from auth.users where id=p_owner and email_confirmed_at is not null and deleted_at is null
- and (banned_until is null or banned_until<=now()) and length(email)<=254 and email ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$';
- if mail is null then raise exception 'Owner email unavailable';end if;
+ -- The server verifies this fixed platform owner with the Auth admin API before calling.
+ mail:=lower(trim(p_recipient));
+ if p_owner is null or mail is null or length(mail)>254 or mail !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' then raise exception 'Owner email unavailable';end if;
  select * into e from public.icash_support_owner_copies where next_attempt_at<=now()
  and (status='pending' or (status='sending' and claimed_at<now()-interval '2 minutes'))
  order by next_attempt_at,created_at,id for update skip locked limit 1;
@@ -85,7 +84,7 @@ begin
  update public.icash_support_owner_copies set status='sending',recipient=mail,owner_user_id=p_owner,claim_token=gen_random_uuid(),claimed_at=now(),attempts=attempts+1,updated_at=now()
  where id=e.id returning * into e;
  return jsonb_build_object('id',e.id,'claimToken',e.claim_token,'recipient',e.recipient,'source',e.source,'sourceId',e.source_id,'threadId',e.thread_id,
- 'customerEmail',e.customer_email,'subject',e.subject,'question',e.question,'reply',e.reply,'replyStatus',e.reply_status,'createdAt',e.created_at,'message',e.message);
+ 'customerUserId',e.customer_user_id,'customerEmail',e.customer_email,'subject',e.subject,'question',e.question,'reply',e.reply,'replyStatus',e.reply_status,'createdAt',e.created_at,'message',e.message);
 end $$;
 
 create function public.icash_authorize_support_owner_copy(p_id uuid,p_claim uuid,p_message jsonb) returns jsonb language plpgsql security invoker set search_path='' as $$
@@ -93,8 +92,7 @@ declare e public.icash_support_owner_copies;
 begin
  select * into e from public.icash_support_owner_copies where id=p_id for update;
  if not found or e.status<>'sending' or e.claim_token is distinct from p_claim or e.claimed_at<now()-interval '90 seconds' then return null;end if;
- if e.first_attempt_at<=now()-interval '23 hours' or not exists(select 1 from auth.users where id=e.owner_user_id and lower(trim(email))=e.recipient
- and email_confirmed_at is not null and deleted_at is null and (banned_until is null or banned_until<=now()))
+ if e.first_attempt_at<=now()-interval '23 hours'
  or exists(select 1 from public.icash_email_suppressions where email=e.recipient)
  or exists(select 1 from public.icash_support_owner_copies where recipient=e.recipient and delivery in ('bounced','complained','suppressed')) then
   update public.icash_support_owner_copies set status='needs_review',updated_at=now() where id=e.id;return null;
@@ -127,6 +125,6 @@ begin
  where recipient=lower(trim(p_recipient)) and (provider_id=p_provider or (id=p_id and provider_id is null and first_attempt_at is not null));
 end $$;
 
-revoke all on function public.icash_queue_support_chat_copy(uuid,uuid,uuid),public.icash_support_finish_and_notify(uuid,uuid,uuid,uuid,text,jsonb),public.icash_queue_support_email_copy(uuid,text,text,text,text),public.icash_claim_support_owner_copy(uuid),public.icash_authorize_support_owner_copy(uuid,uuid,jsonb),public.icash_finish_support_owner_copy(uuid,uuid,uuid,boolean),public.icash_support_owner_copy_delivery(uuid,uuid,text,text) from public,anon,authenticated;
-grant execute on function public.icash_queue_support_chat_copy(uuid,uuid,uuid),public.icash_support_finish_and_notify(uuid,uuid,uuid,uuid,text,jsonb),public.icash_queue_support_email_copy(uuid,text,text,text,text),public.icash_claim_support_owner_copy(uuid),public.icash_authorize_support_owner_copy(uuid,uuid,jsonb),public.icash_finish_support_owner_copy(uuid,uuid,uuid,boolean),public.icash_support_owner_copy_delivery(uuid,uuid,text,text) to service_role;
+revoke all on function public.icash_queue_support_chat_copy(uuid,uuid,uuid),public.icash_support_finish_and_notify(uuid,uuid,uuid,uuid,text,jsonb),public.icash_queue_support_email_copy(uuid,text,text,text,text),public.icash_claim_support_owner_copy(uuid,text),public.icash_authorize_support_owner_copy(uuid,uuid,jsonb),public.icash_finish_support_owner_copy(uuid,uuid,uuid,boolean),public.icash_support_owner_copy_delivery(uuid,uuid,text,text) from public,anon,authenticated;
+grant execute on function public.icash_queue_support_chat_copy(uuid,uuid,uuid),public.icash_support_finish_and_notify(uuid,uuid,uuid,uuid,text,jsonb),public.icash_queue_support_email_copy(uuid,text,text,text,text),public.icash_claim_support_owner_copy(uuid,text),public.icash_authorize_support_owner_copy(uuid,uuid,jsonb),public.icash_finish_support_owner_copy(uuid,uuid,uuid,boolean),public.icash_support_owner_copy_delivery(uuid,uuid,text,text) to service_role;
 commit;

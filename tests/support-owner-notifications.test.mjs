@@ -6,15 +6,19 @@ import {supportOwnerNotificationsEnabled,queueSupportEmailCopy,processSupportOwn
 
 const pg=await PGlite.create(),id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const owner=ownerInboundTarget.ownerUserId,user=id(1),account=id(2),request=id(3);
-const env={VERCEL_ENV:'production',ICASH_SUPPORT_OWNER_EMAIL_ENABLED:'true',ICASH_SUPPORT_EMAIL:'support@example.com',ICASH_RELIABILITY_FROM_EMAIL:'noreply@example.com',RESEND_API_KEY:'fixture'};
+const env={VERCEL_ENV:'production',ICASH_SUPPORT_OWNER_EMAIL_ENABLED:'true',ICASH_SUPPORT_EMAIL:'support@example.com',ICASH_RELIABILITY_FROM_EMAIL:'noreply@example.com',RESEND_API_KEY:'fixture',SUPABASE_URL:'https://fixture.supabase.co',SUPABASE_SECRET_KEY:'fixture'};
 const scalar=async(q,args=[])=>(await pg.query(q,args)).rows[0]?.value;
 const db=async(path,method,body)=>{
  assert.equal(method,'POST');assert.match(path,/^rpc\/icash_[a-z_]+$/);
  const keys=Object.keys(body);for(const key of keys)assert.match(key,/^p_[a-z_]+$/);
  return scalar(`select public.${path.slice(4)}(${keys.map((key,i)=>`${key}=>$${i+1}`).join(',')}) as value`,keys.map(key=>typeof body[key]==='object'&&body[key]!==null?JSON.stringify(body[key]):body[key]));
 };
-let sent=[],fail=false,earlyDelivery=false,provider=100;
+let sent=[],fail=false,earlyDelivery=false,provider=100,ownerEmail='owner@example.com',ownerVerified=true;
 const transport=async(url,options)=>{
+ if(options.method!=='POST'){
+  const target=new URL(url);assert.equal(target.origin,'https://fixture.supabase.co');const userId=target.pathname.split('/').at(-1);assert([owner,user].includes(userId));
+  return {ok:true,json:async()=>({id:userId,email:userId===owner?ownerEmail:'customer@example.com',email_confirmed_at:userId!==owner||ownerVerified?'2026-01-01T00:00:00Z':null})};
+ }
  assert.equal(url,'https://api.resend.com/emails');assert.equal(options.redirect,'error');
  const message=JSON.parse(options.body);assert.deepEqual(message.to,['owner@example.com']);
  assert.equal(message.cc,undefined);assert.equal(message.bcc,undefined);assert.equal(message.reply_to,undefined);
@@ -38,7 +42,8 @@ try{
  await pg.exec(readFileSync(new URL('../config/support-owner-notifications.sql',import.meta.url),'utf8'));
  await pg.query('insert into auth.users(id,email,email_confirmed_at) values($1,$2,now()),($3,$4,now())',[owner,'owner@example.com',user,'customer@example.com']);
  await pg.query('insert into icash_accounts(id,owner_user_id) values($1,$2)',[account,user]);
- await pg.exec('set role service_role');
+ await pg.exec('revoke all on auth.users from service_role;set role service_role');
+ assert.equal(await scalar("select has_table_privilege('service_role','auth.users','SELECT') as value"),false,'Fixture matches production auth privileges');
  const begun=await db('rpc/icash_support_begin_message','POST',{p_account:account,p_user:user,p_thread:null,p_request:request,p_message:'Why is my bot paused?'});
  const args={p_account:account,p_user:user,p_thread:begun.threadId,p_request:request,p_message:'Your credits are empty. Add credits to resume.',p_evidence:[]};
  await Promise.all([db('rpc/icash_support_finish_and_notify','POST',args),db('rpc/icash_support_finish_and_notify','POST',{...args,p_message:'Losing duplicate reply'})]);
@@ -68,14 +73,15 @@ try{
  await queue(31);fail=true;await process();fail=false;await pg.query("update icash_support_owner_copies set next_attempt_at=now(),first_attempt_at=now()-interval '24 hours' where source_id=$1",[id(31)]);const count=sent.length;await process();assert.equal(sent.length,count);assert.equal(await scalar('select status as value from icash_support_owner_copies where source_id=$1',[id(31)]),'needs_review');
 
  // An owner address change cannot redirect a previously authorized payload.
- await queue(32);fail=true;await process();fail=false;await pg.query("update icash_support_owner_copies set next_attempt_at=now() where source_id=$1",[id(32)]);await pg.query('update auth.users set email=$1 where id=$2',['changed-owner@example.com',owner]);await process();assert.equal(await scalar('select status as value from icash_support_owner_copies where source_id=$1',[id(32)]),'needs_review');await pg.query('update auth.users set email=$1 where id=$2',['owner@example.com',owner]);
+ await queue(32);fail=true;await process();fail=false;await pg.query("update icash_support_owner_copies set next_attempt_at=now() where source_id=$1",[id(32)]);ownerEmail='changed-owner@example.com';await process();assert.equal(await scalar('select status as value from icash_support_owner_copies where source_id=$1',[id(32)]),'needs_review');ownerEmail='owner@example.com';
  await queue(33);await pg.query('insert into icash_email_suppressions values($1)',['owner@example.com']);const suppressedCount=sent.length;await process();assert.equal(sent.length,suppressedCount);
  for(const override of [{VERCEL_ENV:'preview'},{ICASH_SUPPORT_OWNER_EMAIL_ENABLED:'false'}]){
   const noDb=()=>assert.fail('Disabled/preview flow must not touch production');assert.equal(supportOwnerNotificationsEnabled({...env,...override}),false);await processSupportOwnerNotifications({db:noDb,env:{...env,...override},transport:noDb});
  }
+ ownerVerified=false;const identityFailure=await processSupportOwnerNotifications({db:()=>assert.fail('Unverified owner cannot claim a notification'),env,transport});assert.equal(identityFailure.state,'recipient_unverified');ownerVerified=true;
  for(const role of ['anon','authenticated']){
   assert.equal(await scalar("select has_table_privilege($1,'icash_support_owner_copies','SELECT') as value",[role]),false);
-  for(const fn of ['icash_claim_support_owner_copy(uuid)','icash_queue_support_chat_copy(uuid,uuid,uuid)','icash_queue_support_email_copy(uuid,text,text,text,text)','icash_authorize_support_owner_copy(uuid,uuid,jsonb)'])assert.equal(await scalar('select has_function_privilege($1,$2,\'EXECUTE\') as value',[role,fn]),false);
+  for(const fn of ['icash_claim_support_owner_copy(uuid,text)','icash_queue_support_chat_copy(uuid,uuid,uuid)','icash_queue_support_email_copy(uuid,text,text,text,text)','icash_authorize_support_owner_copy(uuid,uuid,jsonb)'])assert.equal(await scalar('select has_function_privilege($1,$2,\'EXECUTE\') as value',[role,fn]),false);
  }
  console.log('PASS support owner copies: atomic saved reply, tenant isolation, verified owner, private queue, email content escaping/redaction, exact receipt status, duplicate/retry/expiry handling, delivery race, suppression and preview isolation. All transports mocked.');
 }finally{await pg.close();}
