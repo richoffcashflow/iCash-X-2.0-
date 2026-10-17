@@ -54,4 +54,4 @@ assert.equal(sellerSubmission.safeParse({...input,contactTimezone:'invalid/zone'
 assert.equal(r.property.sellerCostReserveCents,options.sellerCostReserveCents);
 assert.equal(runScreeningJob({propertyId:r.property.id,propertyType:'house',fetchedAt:r.property.fetchedAt,raw:r.property.raw,sellerCostReserveCents:r.property.sellerCostReserveCents},now).financialCheck.status,'eligible','Qualification reserve must survive the delivered snapshot');
 
-assert.equal(sellerMetaEvent({...event,name:'Contact',actionSource:'chat'},now).action_source,'chat');
+assert.equal(sellerMetaEvent({...event,name:'Contact'},now).action_source,'phone_call');

@@ -9,6 +9,7 @@ import {processSellerIntake} from '@/lib/seller-pipeline';
 import {processSellerResponses} from '@/lib/seller-response-service';
 import {dispatchTextMessage} from '@/lib/text-message-service';
 import {dispatchLiveVoice} from '@/lib/live-dispatch-service';
+import {sellerMeasurement,recordSellerMeasurement} from '@/lib/seller-measurement';
 export const dynamic='force-dynamic';
 export const maxDuration=60;
 const headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer'};
@@ -27,6 +28,7 @@ export async function POST(req:Request){
    const [receipt]=await db<{state:string}[]>(`icash_seller_intakes?id=eq.${leadId}&select=state&limit=1`);
    if(receipt&&['received','checking','qualified','assigned'].includes(receipt.state))await db('rpc/icash_request_optin_call_now','POST',{p_lead:leadId,p_request:i.requestId,p_source:'seller_form',p_reference:i.callNowVersion});
   }
+  const registrationEventId=await recordSellerMeasurement(db,leadId,guestHash(token),sellerMeasurement(req,jar,i),req.headers.get('sec-gpc')==='1');
   // Persist first; one-use claims prevent duplicate paid lookups on retries.
   // Cron remains the durable fallback if this bounded callback cannot complete.
   after(async()=>{
@@ -37,6 +39,6 @@ export async function POST(req:Request){
    }catch{console.error('Seller intake background processing deferred to queue');}
   });
   // A persisted request is not a qualified lead or a promise that a call was made.
-  return NextResponse.json({received:true,message:'Your property request is saved. We’ll review the address and available options. No offer has been made yet.'},{headers});
+  return NextResponse.json({received:true,registrationEventId,message:'Your property request is saved. We’ll review the address and available options. No offer has been made yet.'},{headers});
  }catch{return NextResponse.json({error:'We couldn’t confirm your submission. Please wait a moment and retry with the same details.'},{status:503,headers});}
 }
