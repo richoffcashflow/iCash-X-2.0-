@@ -1,6 +1,6 @@
 # Webinar messaging — October 16, 2026 (America/Chicago)
 
-Status: implemented and locally verified; the owner explicitly approved publication, migrations and production deployment on October 17, 2026. Release checks and deployment evidence are recorded with the release pull request. No customer messages were sent during development. The earlier daily/quiet-hours proposal is superseded by the owner's immediate/15-minute, any-hour request.
+Status: published in PR #303 after explicit owner approval on October 17, 2026. All 436 local test suites, TypeScript and GitHub Reliability checks passed. Production deployment is held: the first migration applied as 20261017031403; the final instant-recovery migration has not run because Supabase repeatedly returned `Invalid or expired requestState` during its confirmation step. Readback confirmed no recovery tables or targeted worker were partially created. Do not merge/deploy until the final migration succeeds. Release evidence is recorded with the pull request. No customer messages were sent during development. The earlier daily/quiet-hours proposal is superseded by the owner's immediate/15-minute, any-hour request.
 
 ## Final behavior
 

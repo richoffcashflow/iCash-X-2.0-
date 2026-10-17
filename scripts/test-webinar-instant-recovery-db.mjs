@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 export async function verifyWebinarInstantRecovery(pg,q,config){
  const scalar=async(sql,args=[])=>Object.values((await q(sql,args)).rows[0])[0];
  await pg.exec('alter table icash_memberships add column if not exists vip_until timestamptz;');
- await pg.exec(readFileSync(new URL('../supabase/migrations/20261017024730_webinar_instant_journey_recovery.sql',import.meta.url),'utf8'));
+ await pg.exec(readFileSync(new URL('../supabase/migrations/20261017072728_webinar_instant_journey_recovery.sql',import.meta.url),'utf8'));
  await q("update icash_webinar_outbox set state='canceled' where state in ('pending','claimed','sending')");
  await q(`update icash_messaging_settings set config=config||'{"enabled":true,"smsEnabled":true,"postalAddress":"123 Example Street"}'::jsonb`);
  const make=async({consent=true,legacy=false}={})=>{
