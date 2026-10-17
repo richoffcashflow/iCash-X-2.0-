@@ -61,6 +61,15 @@ export async function POST(req:Request){try{
  const settings=settingsSchema.parse(settingsRows[0].config);
  const history=initialHistory.filter(h=>h.webinar_id===target.id);
  let journey=webinarReturnJourney(history,offers,timezone,settings.routing.checkoutWindowHours);
+ // The owner uses the public link to test the current Day/Night funnel.
+ // A saved daytime test must not pin that link to Day after sunset (or vice versa).
+ // Customer resumes and purchase-paired VIP recordings keep their saved timeline.
+ if(ownerWatching&&!target.parentWebinarId&&journey.kind==='resume'){
+  const savedId=journey.sessionId;
+  const saved=history.find(h=>h.id===savedId);
+  const currentRecording=selectRecording(target,timezone,new Date(),settings.routing,undefined,location);
+  if(saved&&(saved.config.recordingVersion??'day')!==currentRecording.recordingVersion)journey={kind:'advance',sessionId:savedId};
+ }
  // Paid main/ad entry always starts VIP at zero. Canonicalizing to VIP makes
  // refreshes ordinary returns; racing requests reuse the newly created session.
  if(paidAdReturn&&journey.kind!=='new')journey={kind:'advance',sessionId:journey.sessionId};
