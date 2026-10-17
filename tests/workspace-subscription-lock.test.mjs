@@ -10,6 +10,7 @@ let stateIndex=0;
 const account={workspaceAcknowledged:true,signedIn:true,billingModel:'membership_credits',membershipActive:false,balanceCents:99999,paused:false,identity:{principal:'Fixture'},botSetup:{profile:{displayName:'Fixture Bot'}}};
 const component=name=>props=>React.createElement('div',{'data-component':name},props.children);
 const mocks={
+ 'next/dynamic':{__esModule:true,default:loader=>component(loader.toString().match(/m\.(\w+)/)[1])},
  '@/lib/webinar-client':client,
  react:{...React,useState(initial){return React.useState(stateIndex++===0?{...account}:initial);}},
  'next/image':{__esModule:true,default:component('Image')},

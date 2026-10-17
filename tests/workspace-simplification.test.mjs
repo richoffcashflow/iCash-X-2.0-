@@ -15,7 +15,7 @@ function page(account,campaign,error=false){
  let cursor=0;const slots=[account,error,false,false,'budget_ten',false,'',null,false,campaign];
  const hooks={useState:()=>[slots[cursor++],()=>{}],useRef:value=>({current:value}),useCallback:fn=>fn,useEffect(){}};
  const mod={exports:{}};
- new Function('require','module','exports',code('app/page.tsx'))(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/workspace-status'?status:name==='@/lib/workspace-progress'?progress:name==='@/lib/bot-setup'?{setupThemes:{ink:{color:'#111',soft:'#eee'}}}:name==='next/image'?{__esModule:true,default:component('Image')}:new Proxy({},{get:(_target,key)=>component(String(key))}),mod,mod.exports);
+ new Function('require','module','exports',code('app/page.tsx'))(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/workspace-status'?status:name==='@/lib/workspace-progress'?progress:name==='@/lib/bot-setup'?{setupThemes:{ink:{color:'#111',soft:'#eee'}}}:name==='next/dynamic'?{__esModule:true,default:loader=>component(loader.toString().match(/m\.(\w+)/)[1])}:name==='next/image'?{__esModule:true,default:component('Image')}:new Proxy({},{get:(_target,key)=>component(String(key))}),mod,mod.exports);
  return mod.exports.default();
 }
 const campaign={policy:{version:'v1'},acknowledgment:{version:'v1'},configured:true,released:false,liveWorkReady:false,smsChannelEnabled:true};
