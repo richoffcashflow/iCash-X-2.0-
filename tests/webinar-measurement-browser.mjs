@@ -223,7 +223,7 @@ async function verifyCheckoutLoading(browser,base,options,name){
      posts++;return route.fulfill({json:{clientSecret:'fixture-secret',publishableKey:'pk_live_fixture',sessionId:'cs_live_order_fixture'}});
     }
     if(first==='script')await gate;
-    return route.fulfill({json:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',embeddedReady:true,needsClaim:false,membership:homeFixture&&homePaid?{accessible:true,vip:false}:null}});
+    return route.fulfill({json:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',embeddedReady:true,needsClaim:false,membership:null}});
    }
    if(url.pathname==='/api/webinar/pixel')return route.fulfill({json:{enabled:false,trackingAllowed:false}});
    if(url.pathname.startsWith('/api/'))return route.fulfill({status:401,json:{error:'Local fixture only'}});
