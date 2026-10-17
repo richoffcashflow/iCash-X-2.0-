@@ -1,3 +1,4 @@
+import {processSupportCustomerNotifications} from '@/lib/support-customer-notifications';
 import {processPurchaseAccessEmails} from '@/lib/purchase-access-email';
 import {recoverAccessHelpReplies} from '@/lib/access-help-replies';
 import {processSupportOwnerNotifications} from '@/lib/support-owner-notifications';
@@ -18,7 +19,7 @@ export async function GET(request:Request){
  const headers={'Cache-Control':'private, no-store'};
  if(!authorizeOutboundBilling(request,process.env.CRON_SECRET))return Response.json({error:'Unauthorized'},{status:401,headers});
  const pruning=pruneUsageLoopObservations(db);
- const result=await maintenanceBatch({supportCopies:async()=>{const recovered=await recoverAccessHelpReplies(db).catch(()=>null);const result=await processSupportOwnerNotifications({db,monitorAccess:true});return Response.json({...result,recovered},{status:result.failed===0&&recovered!==null?200:503});},purchaseEmail:async()=>{const result=await processPurchaseAccessEmails({db,reconcile:true});return Response.json(result,{status:result.ready&&result.failed===0?200:503});},purchaseFollowups:async()=>{const result=await processPurchaseAccessFollowups({db});return Response.json(result,{status:result.ready&&result.failed===0?200:503});},outbound:()=>outbound(request),recording:()=>recording(request),ownerRecording:()=>ownerRecording(request),reception:()=>reception(request)});
+ const result=await maintenanceBatch({supportCustomerEmail:async()=>{const result=await processSupportCustomerNotifications({db});return Response.json(result,{status:result.failed===0?200:503});},supportCopies:async()=>{const recovered=await recoverAccessHelpReplies(db).catch(()=>null);const result=await processSupportOwnerNotifications({db,monitorAccess:true});return Response.json({...result,recovered},{status:result.failed===0&&recovered!==null?200:503});},purchaseEmail:async()=>{const result=await processPurchaseAccessEmails({db,reconcile:true});return Response.json(result,{status:result.ready&&result.failed===0?200:503});},purchaseFollowups:async()=>{const result=await processPurchaseAccessFollowups({db});return Response.json(result,{status:result.ready&&result.failed===0?200:503});},outbound:()=>outbound(request),recording:()=>recording(request),ownerRecording:()=>ownerRecording(request),reception:()=>reception(request)});
  const monitored=await refreshReliability(db,result.ok);
  await pruning;
  return Response.json({...result,monitored},{status:result.ok&&monitored?200:503,headers});

@@ -9,7 +9,8 @@ type CancelReview={id:string;account_id:string;mode:string;state:string;result:s
 type Purchase={id:string;email:string;paid_at:string;email_status:string|null;email_delivery:string|null;text_status:string|null;text_delivery:string|null;reason:string};
 type Queue={threads:Ticket[];cancellations:CancelReview[];deployment:{detail:string};error?:string};
 type AccessQueue={requests:(Omit<Ticket,'kind'|'subject'>&{email:string})[];purchases:Purchase[];error?:string};
-type Detail={thread?:Ticket;request?:Ticket;messages:Message[];evidence?:SupportEvidence[];error?:string};
+type EmailNotice={status:string;delivery:string|null};
+type Detail={notification?:EmailNotice|null;thread?:Ticket;request?:Ticket;messages:Message[];evidence?:SupportEvidence[];error?:string};
 const key=(t:Ticket)=>`${t.kind}:${t.id}`;
 const when=(value:string)=>new Date(value).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
 const label=(status:string)=>status==='resolved'?'Resolved':status==='waiting_on_customer'?'Waiting on customer':'Needs you';
@@ -17,10 +18,11 @@ const delivery=(state:string|null,receipt:string|null)=>receipt??(state==='sent'
 export function SupportDashboard(){
  const [tickets,setTickets]=useState<Ticket[]>([]),[selected,setSelected]=useState<Ticket|null>(null),[messages,setMessages]=useState<Message[]>([]),[evidence,setEvidence]=useState<SupportEvidence[]>([]);
  const [cancellations,setCancellations]=useState<CancelReview[]>([]),[purchases,setPurchases]=useState<Purchase[]>([]),[deployment,setDeployment]=useState('');
+ const [notification,setNotification]=useState<EmailNotice|null>(null);
  const [filter,setFilter]=useState('needs'),[search,setSearch]=useState(''),[drafts,setDrafts]=useState<Record<string,string>>({}),[toolsOpen,setToolsOpen]=useState(false);
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const sequence=useRef(0),queueSequence=useRef(0),working=useRef(false),selectedRef=useRef<Ticket|null>(null),pending=useRef<Record<string,{body:string;id:string}>>({});
- const clear=useCallback(()=>{sequence.current++;selectedRef.current=null;pending.current={};setTickets([]);setSelected(null);setMessages([]);setEvidence([]);setDrafts({});setPurchases([]);setCancellations([]);setDeployment('');setToolsOpen(false);setNotice('');},[]);
+ const clear=useCallback(()=>{sequence.current++;selectedRef.current=null;pending.current={};setTickets([]);setSelected(null);setMessages([]);setEvidence([]);setNotification(null);setDrafts({});setPurchases([]);setCancellations([]);setDeployment('');setToolsOpen(false);setNotice('');},[]);
  const loadQueue=useCallback(async()=>{
   const seq=++queueSequence.current;
   try{
@@ -39,7 +41,7 @@ export function SupportDashboard(){
    const {ok,status,data}=await supportRequest<Detail>(path+ticket.id,{cache:'no-store'});
    if(seq!==sequence.current)return;
    if(status===403){clear();throw Error('Sign in with a support operator account to open this inbox.');}if(!ok)throw Error(data.error||'Could not open the conversation.');
-   const current={...ticket,...(data.thread??data.request),kind:ticket.kind};selectedRef.current=current;setSelected(current);setMessages(data.messages);setEvidence(data.evidence??[]);
+   const current={...ticket,...(data.thread??data.request),kind:ticket.kind};selectedRef.current=current;setSelected(current);setMessages(data.messages);setEvidence(data.evidence??[]);setNotification(data.notification??null);
   }catch(e){if(seq===sequence.current||!selectedRef.current)setError(e instanceof Error?e.message:'Could not load the conversation.');}finally{if(!quiet)setBusy(false);}
  },[clear]);
  useEffect(()=>{void loadQueue();const refresh=()=>{if(!document.hidden&&!working.current){void loadQueue();if(selectedRef.current)void open(selectedRef.current,true);}};const timer=setInterval(refresh,20000);document.addEventListener('visibilitychange',refresh);return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',refresh);queueSequence.current++;sequence.current++;};},[loadQueue,open]);
@@ -52,7 +54,7 @@ export function SupportDashboard(){
   try{
    const {ok,status:code,data}=await supportRequest<{saved?:boolean;error?:string}>('/api/support/admin'+(ticket.kind==='access'?'/access':''),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...JSON.parse(body),requestId:pending.current[k].id})});
    if(code===403){clear();throw Error('Sign in with a support operator account to reply.');}if(!ok||!data.saved)throw Error(data.error||'Could not confirm the update. Your draft is still here.');
-   delete pending.current[k];if(send)setDrafts(current=>({...current,[k]:''}));await open(ticket,true);await loadQueue();setNotice(send?'Reply sent. The customer can read it in this conversation.':status==='resolved'?'Conversation resolved.':'Conversation reopened.');
+   delete pending.current[k];if(send)setDrafts(current=>({...current,[k]:''}));await open(ticket,true);await loadQueue();setNotice(send?'Reply saved. A customer email notification is queued.':status==='resolved'?'Conversation resolved.':'Conversation reopened.');
   }catch(e){setError(e instanceof Error?e.message:'Could not save. Your draft is still here.');}finally{working.current=false;setBusy(false);}
  }
  const needs=tickets.filter(t=>!['resolved','waiting_on_customer'].includes(t.status)).length;
@@ -70,9 +72,10 @@ export function SupportDashboard(){
    </aside>
    <section className="desk-conversation" aria-label="Selected conversation">
     {selected?<><header className="desk-conversation-heading"><button className="desk-back" type="button" onClick={()=>{sequence.current++;selectedRef.current=null;setSelected(null);setMessages([]);}}>← Inbox</button><div><p className="support-eyebrow">{selected.kind==='access'?'Sign-in help':'Account support'}</p><h2>{selected.subject}</h2></div><button type="button" disabled={busy} onClick={()=>void save(selected.status==='resolved'?'open':'resolved',false)}>{selected.status==='resolved'?'Reopen':'Mark resolved'}</button></header>
-    <details className="desk-details"><summary>{label(selected.status)} · Customer details & checks</summary>{selected.kind==='access'?<p>This visitor’s email and phone are unverified. Keep replies to sign-in guidance; never post codes or private account information.{selected.phone&&<> Phone supplied: {selected.phone}.</>}</p>:<><p>Account: {selected.account_id}</p>{evidence.map(e=><p key={e.key}>{e.detail}<br/><small>{when(e.observedAt)}</small></p>)}</>}<p>Conversation: {selected.id}</p></details>
+    <details className="desk-details"><summary>{label(selected.status)} · Customer details & checks</summary>{selected.kind==='access'?<p>This visitor’s email and phone are unverified. Keep replies to sign-in guidance; never post codes or private account information.{selected.phone&&<> Phone supplied: {selected.phone}.</>}</p>:<><p>Account: {selected.account_id}</p>{evidence.map(e=><p key={e.key}>{e.detail}<br/><small>{when(e.observedAt)}</small></p>)}</>}<p>Conversation: {selected.id}</p><p>Customer email: {notification?delivery(notification.status,notification.delivery):'No reply email yet'}</p></details>
      <div className="desk-messages" role="log" aria-label="Conversation messages">{messages.filter(m=>m.role!=='system').map(m=><article key={m.id} className={`desk-message desk-message-${m.role}`}><div><strong>{m.role==='user'?'Customer':m.role==='assistant'?'Support assistant':'You · Support team'}</strong><time dateTime={m.created_at}>{when(m.created_at)}</time></div><p>{m.content}</p></article>)}</div>
-     <form className="desk-composer" onSubmit={e=>{e.preventDefault();void save('waiting_on_customer',true);}}><label htmlFor="desk-reply">Reply to customer</label><textarea id="desk-reply" placeholder="Write a helpful reply…" value={reply} onChange={e=>setDrafts(current=>({...current,[key(selected)]:e.target.value}))} maxLength={2000} rows={3} disabled={busy}/><div><small>Replies appear in the customer’s support chat.</small><button className="support-primary" disabled={busy||!reply.trim()}>{busy?'Saving…':'Send reply ↗'}</button></div></form>
+     {notification&&(notification.status==='needs_review'||['bounced','complained','failed','suppressed'].includes(notification.delivery??''))&&<p className="support-notice" role="status">Customer email needs attention. The reply is saved in chat, but email delivery was not confirmed.</p>}
+     <form className="desk-composer" onSubmit={e=>{e.preventDefault();void save('waiting_on_customer',true);}}><label htmlFor="desk-reply">Reply to customer</label><textarea id="desk-reply" placeholder="Write a helpful reply…" value={reply} onChange={e=>setDrafts(current=>({...current,[key(selected)]:e.target.value}))} maxLength={2000} rows={3} disabled={busy}/><div><small>Replies appear in chat, with an email link back.</small><button className="support-primary" disabled={busy||!reply.trim()}>{busy?'Saving…':'Send reply ↗'}</button></div></form>
     </>:<div className="desk-welcome"><span aria-hidden="true">↖</span><h2>Your inbox is ready</h2><p>Choose a conversation to read the history and reply.</p><small>Sign-in help and account support live here together.</small></div>}
    </section>
   </div>
