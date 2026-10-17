@@ -138,7 +138,9 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   const graphic=page.locator('img[alt^="iCash X product overview"]'),card=page.locator('#your-plan');
   const imageBounds=await graphic.boundingBox(),formBounds=await card.boundingBox();
   assert.ok(imageBounds&&formBounds&&imageBounds.y+imageBounds.height<=formBounds.y,'Product graphic appears before the payment form');
-  await field.click();await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='AddToCart'));
+  await field.click();
+  try{await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='AddToCart'));}
+  catch(error){console.log('Homepage cart diagnostics',await page.evaluate(()=>({calls:window.__pixelCalls,activeElement:document.activeElement?.tagName,focused:document.hasFocus(),hidden:document.hidden,boot:window.icashWebinarPixel?{path:window.icashWebinarPixel.path,pageViewId:window.icashWebinarPixel.pageViewId}:null,publicCheckout:!!document.querySelector('[data-public-checkout="true"]'),session:sessionStorage.getItem('icash-webinar-session')})),errors);throw error;}
   assert.equal((await tracks('AddToCart')).length,1);
   assert.equal(await graphic.isVisible(),true,'Payment interaction keeps the product visible');
   assert.equal((await tracks('Purchase')).length,0);

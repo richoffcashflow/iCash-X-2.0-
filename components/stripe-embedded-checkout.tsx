@@ -11,13 +11,18 @@ export function StripeEmbeddedCheckout({clientSecret,publishableKey,onComplete,o
  const [ready,setReady]=useState(false),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
  useEffect(()=>{
   if(!watchInteraction)return;
-  let timer:ReturnType<typeof setTimeout>|undefined;
+  let timer:ReturnType<typeof setTimeout>|undefined,poll:ReturnType<typeof setInterval>|undefined,detected=false;
   // Focus events inside Stripe's cross-origin iframe do not bubble to React.
   // Observe only focus entering our iframe; never inspect payment fields.
-  const focus=()=>{clearTimeout(timer);timer=setTimeout(()=>{const node=document.activeElement;if(node?.tagName==='IFRAME'&&host.current?.contains(node))interaction.current?.();},0);};
+  const inspect=()=>{if(detected||document.hidden)return;const node=document.activeElement;if(node?.tagName==='IFRAME'&&host.current?.contains(node)){detected=true;clearInterval(poll);interaction.current?.();}};
+  const focus=()=>{clearTimeout(timer);timer=setTimeout(inspect,0);};
   window.addEventListener('blur',focus);
-  return()=>{clearTimeout(timer);window.removeEventListener('blur',focus);};
- },[watchInteraction]);
+  document.addEventListener('focusin',focus);
+  // Some webviews keep the outer window blurred across navigation. Observe
+  // iframe focus until the first interaction, without reading payment fields.
+  poll=setInterval(inspect,250);
+  return()=>{clearTimeout(timer);clearInterval(poll);window.removeEventListener('blur',focus);document.removeEventListener('focusin',focus);};
+ },[watchInteraction,clientSecret]);
  useEffect(()=>{
   if(!ready||!host.current||!window.Stripe)return;
   let disposed=false,checkout:Checkout|undefined;setError('');
