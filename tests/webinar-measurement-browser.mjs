@@ -16,7 +16,7 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
    if(url.origin!==base)return route.abort();
    if((homeFixture||privateHomeFixture)&&url.pathname==='/api/account')return route.fulfill({json:privateHomeFixture?{signedIn:true,billingModel:'membership_credits',membershipActive:true,workspaceAcknowledged:false}:{signedIn:false,signInReady:true}});
    if(url.pathname==='/api/webinar/pixel')return route.fulfill({json:{enabled:true,pixelId,trackingAllowed:!optedOut&&(regionAllowed||explicit)}});
-   if(checkoutFixture&&url.pathname==='/api/billing/membership')return route.fulfill({json:route.request().method()==='POST'?{clientSecret:'fixture-secret',publishableKey:'pk_live_fixture',sessionId:'cs_live_browser'}:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',embeddedReady:true,needsClaim:false,membership:null}});
+   if(checkoutFixture&&url.pathname==='/api/billing/membership')return route.fulfill({json:route.request().method()==='POST'?{clientSecret:'fixture-secret',publishableKey:'pk_live_fixture',sessionId:homeFixture?'cs_live_home_browser':'cs_live_browser'}:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',embeddedReady:true,needsClaim:false,membership:null}});
    if(url.pathname==='/api/webinar/measurement'){
     reads++;
     if(route.request().method()==='POST'){
@@ -131,7 +131,8 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   await page.evaluate(()=>sessionStorage.removeItem('icash-webinar-session'));
   await page.goto(base+'/');
   await field.waitFor();
-  await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView')&&window.__pixelCalls.some(c=>c[2]==='InitiateCheckout'));
+  try{await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView')&&window.__pixelCalls.some(c=>c[2]==='InitiateCheckout'));}
+  catch(error){console.log('Homepage pixel diagnostics',await page.evaluate(()=>({calls:window.__pixelCalls,boot:window.icashWebinarPixel?{path:window.icashWebinarPixel.path,pageViewId:window.icashWebinarPixel.pageViewId,sentPageView:window.icashWebinarPixel.sentPageView,pixelId:window.icashWebinarPixel.pixelId}:null,publicCheckout:!!document.querySelector('[data-public-checkout="true"]'),session:sessionStorage.getItem('icash-webinar-session')})),errors);throw error;}
   assert.equal(await page.evaluate(()=>sessionStorage.getItem('icash-webinar-session')),null,'Direct buyers do not need a webinar session');
   assert.equal((await tracks('PageView')).length,1);
   const graphic=page.locator('img[alt^="iCash X product overview"]'),card=page.locator('#your-plan');
