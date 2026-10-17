@@ -3,7 +3,7 @@ import {newWebinar,publicWebinar} from '../lib/webinar-policy.ts';
 export async function verifyWebinarMeasurement(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
  let explicit=false,optedOut=false,regionAllowed=true,scriptLoads=0,reads=0,upgraded=false,checkoutFixture=false,ownerFixture=false,homeFixture=false,privateHomeFixture=false;
- const errors=[],pixelId='1104248230721457';
+ const errors=[],membershipRequests=[],pixelId='1104248230721457';
  try{
   await context.addInitScript(()=>{if(window.top!==window)return;window.__pixelCalls=[];});
   await context.route('**/*',async route=>{
@@ -16,7 +16,10 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
    if(url.origin!==base)return route.abort();
    if((homeFixture||privateHomeFixture)&&url.pathname==='/api/account')return route.fulfill({json:privateHomeFixture?{signedIn:true,billingModel:'membership_credits',membershipActive:true,workspaceAcknowledged:false}:{signedIn:false,signInReady:true}});
    if(url.pathname==='/api/webinar/pixel')return route.fulfill({json:{enabled:true,pixelId,trackingAllowed:!optedOut&&(regionAllowed||explicit)}});
-   if(checkoutFixture&&url.pathname==='/api/billing/membership')return route.fulfill({json:route.request().method()==='POST'?{clientSecret:'fixture-secret',publishableKey:'pk_live_fixture',sessionId:homeFixture?'cs_live_home_browser':'cs_live_browser'}:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',embeddedReady:true,needsClaim:false,membership:null}});
+   if(checkoutFixture&&url.pathname==='/api/billing/membership'){
+    if(route.request().method()==='POST')membershipRequests.push({home:homeFixture,...route.request().postDataJSON()});
+    return route.fulfill({json:route.request().method()==='POST'?{clientSecret:'fixture-secret',publishableKey:'pk_live_fixture',sessionId:homeFixture?'cs_live_home_browser':'cs_live_browser'}:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',embeddedReady:true,needsClaim:false,membership:null}});
+   }
    if(url.pathname==='/api/webinar/measurement'){
     reads++;
     if(route.request().method()==='POST'){
@@ -130,22 +133,36 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   homeFixture=true;
   const previousWebinarSession=await page.evaluate(()=>{const saved=sessionStorage.getItem('icash-webinar-session');sessionStorage.removeItem('icash-webinar-session');return saved;});
   await page.goto(base+'/');
-  await field.waitFor();
-  try{await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView')&&window.__pixelCalls.some(c=>c[2]==='InitiateCheckout'));}
+  const signUp=page.getByRole('button',{name:'Sign up',exact:true});
+  await signUp.waitFor();
+  await page.getByRole('heading',{name:'Standard plan',exact:true}).waitFor();
+  assert.equal(await page.locator('.membership-includes li').count(),9);
+  assert.equal(await page.locator('iframe[title="Fixture payment"]').count(),0,'The homepage shows plan features before payment');
+  assert.equal(membershipRequests.filter(r=>r.home).length,0,'Viewing the plan does not create a checkout');
+  assert.equal(await signUp.isDisabled(),true,'Billing acceptance remains explicit');
+  try{await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView'));}
   catch(error){console.log('Homepage pixel diagnostics',await page.evaluate(()=>({calls:window.__pixelCalls,boot:window.icashWebinarPixel?{path:window.icashWebinarPixel.path,pageViewId:window.icashWebinarPixel.pageViewId,sentPageView:window.icashWebinarPixel.sentPageView,pixelId:window.icashWebinarPixel.pixelId}:null,publicCheckout:!!document.querySelector('[data-public-checkout="true"]'),session:sessionStorage.getItem('icash-webinar-session')})),errors);throw error;}
   assert.equal(await page.evaluate(()=>sessionStorage.getItem('icash-webinar-session')),null,'Direct buyers do not need a webinar session');
   assert.equal((await tracks('PageView')).length,1);
+  assert.equal((await tracks('InitiateCheckout')).length,0,'Viewing plan features is not checkout');
+  assert.equal((await tracks('AddToCart')).length,0,'Viewing plan features is not a cart selection');
   const graphic=page.locator('img[alt^="iCash X product concept"]'),card=page.locator('#your-plan');
   const imageBounds=await graphic.boundingBox(),formBounds=await card.boundingBox();
-  assert.ok(imageBounds&&formBounds,'The original product image and payment form are visible');
-  if(page.viewportSize().width>760)assert.ok(imageBounds.x+imageBounds.width<=formBounds.x,'Desktop keeps the original side-by-side product and payment layout');
-  else assert.ok(formBounds.y+formBounds.height<=imageBounds.y,'Mobile keeps the original offer-first layout');
-  await field.click();
-  try{await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='AddToCart'));}
+  assert.ok(imageBounds&&formBounds,'The original product image and plan are visible');
+  if(page.viewportSize().width>760)assert.ok(imageBounds.x+imageBounds.width<=formBounds.x,'Desktop keeps the original side-by-side product and plan layout');
+  else assert.ok(formBounds.y+formBounds.height<=imageBounds.y,'Mobile keeps the original plan-first layout');
+  await page.getByRole('checkbox',{name:/I agree to monthly billing/}).check();
+  await signUp.click();
+  await field.waitFor();
+  assert.equal(membershipRequests.filter(r=>r.home).length,1);
+  assert.equal(membershipRequests.at(-1).action,'checkout');
+  assert.equal(membershipRequests.at(-1).accepted,true);
+  try{await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='AddToCart')&&window.__pixelCalls.some(c=>c[2]==='InitiateCheckout'));}
   catch(error){console.log('Homepage cart diagnostics',await page.evaluate(()=>({calls:window.__pixelCalls,activeElement:document.activeElement?.tagName,focused:document.hasFocus(),hidden:document.hidden,boot:window.icashWebinarPixel?{path:window.icashWebinarPixel.path,pageViewId:window.icashWebinarPixel.pageViewId}:null,publicCheckout:!!document.querySelector('[data-public-checkout="true"]'),session:sessionStorage.getItem('icash-webinar-session')})),errors);throw error;}
   assert.equal((await tracks('AddToCart')).length,1);
+  assert.equal((await tracks('InitiateCheckout')).length,1);
   await page.locator('.wb-plan-layout[data-engaged="true"]').waitFor();
-  assert.equal(await graphic.isVisible(),false,'Payment interaction restores the original focused checkout layout');
+  assert.equal(await graphic.isVisible(),false,'Sign up opens the focused checkout layout');
   assert.equal((await tracks('Purchase')).length,0);
   homeFixture=false;privateHomeFixture=true;
   await page.goto(base+'/');await page.locator('.workspace-ack-shell').waitFor();await page.waitForLoadState('networkidle');

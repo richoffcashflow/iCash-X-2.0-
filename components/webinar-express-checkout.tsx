@@ -13,9 +13,9 @@ import '@/app/plan-homepage.css';
 import '@/app/icash-brand.css';
 import '@/app/launch-homepage.css';
 
-type Props={preview?:boolean;previewBackHref?:string;checkingAccount?:boolean;accountError?:boolean;signInReady?:boolean;onRetry?:()=>void;onSignedIn?:()=>void};
+type Props={preview?:boolean;previewBackHref?:string;showPlan?:boolean;checkingAccount?:boolean;accountError?:boolean;signInReady?:boolean;onRetry?:()=>void;onSignedIn?:()=>void};
 
-export function WebinarExpressCheckout({preview=false,previewBackHref='/webinar-studio',checkingAccount=false,accountError=false,signInReady=true,onRetry,onSignedIn}:Props={}){
+export function WebinarExpressCheckout({preview=false,previewBackHref='/webinar-studio',showPlan=false,checkingAccount=false,accountError=false,signInReady=true,onRetry,onSignedIn}:Props={}){
  const [webinarSessionId,setWebinarSessionId]=useState<string>();
  useEffect(()=>{const id=new URLSearchParams(window.location.search).get('webinar_session');if(id&&/^[0-9a-f-]{36}$/i.test(id))setWebinarSessionId(id);},[]);
  const [signInOpen,setSignInOpen]=useState(false);
@@ -45,7 +45,7 @@ export function WebinarExpressCheckout({preview=false,previewBackHref='/webinar-
      </section>
     </div>
     <div className="wb-express-card wb-plan-card" id="your-plan" tabIndex={-1}>
-     <MembershipCheckout preview={preview} redirectToVip embedded autoOpen webinarSessionId={webinarSessionId} presentation="plan" onEngaged={()=>setCheckoutEngaged(true)} onSignedIn={openWorkspace}/>
+     <MembershipCheckout preview={preview} redirectToVip embedded autoOpen={!showPlan} webinarSessionId={webinarSessionId} presentation="plan" onEngaged={()=>setCheckoutEngaged(true)} onSignedIn={openWorkspace}/>
      <a className="wb-text" href={webinarSite.supportPath}>Have a question? We’re here.</a>
     </div>
     <div className="launch-product-preview">

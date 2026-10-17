@@ -62,11 +62,12 @@ test('email sign-in availability follows the account service',()=>{
 });
 
 test('engaged checkout keeps the same component position while simplifying its surrounding layout',()=>{
- const render=harness();let tree=render();
+ const render=harness({showPlan:true});let tree=render();
  const lineage=(node,type,path=[])=>!node||typeof node!=='object'?null:Array.isArray(node)?node.map((child,index)=>lineage(child,type,[...path,index])).find(Boolean):node.type===type?path:lineage(node.props?.children,type,[...path,node.type]);
  assert.equal(find(tree,'Image').props.src,'/icash-x-launch-hero.webp');
  assert.match(text(tree),/Your AI bot for/);
- assert.equal(find(tree,'MembershipCheckout').props.autoOpen,true);
+ assert.equal(find(tree,'MembershipCheckout').props.autoOpen,false,'The homepage shows the plan before opening checkout');
+ assert.equal(find(harness()(),'MembershipCheckout').props.autoOpen,true,'The post-webinar checkout still opens directly');
  assert.equal(tree.props['data-public-checkout'],'true');
  assert.equal(harness({checkingAccount:true})().props['data-public-checkout'],undefined);
  assert.equal(harness({preview:true})().props['data-public-checkout'],undefined);
