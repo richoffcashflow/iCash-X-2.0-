@@ -11,3 +11,7 @@ The existing immediate post-settlement wake starts both delivery paths independe
 Validation: actual PostgreSQL settlement and queue functions with synthetic transports cover message counts, timing, account claiming, absent/mismatched permission, phone changes, STOP after claim, refund holds, sender-role collisions, duplicate wake-ups, renewals, preview exclusion, email idempotency, ambiguous SMS results, lost receipt writes, early delivery callbacks and private grants. No real customer email, SMS, OTP, call or payment was sent in development.
 
 Migration `20261017152224_purchase_access_reminder_and_text` was applied and read back in production. RLS is enabled; anonymous table and RPC access are denied; service-only queue access is granted. The text setting is enabled and two sender numbers are available. No historical follow-up rows were created.
+
+Checkout phone formatting is normalized for comparison using the same country-code rules as the webinar contact form. Formatting never changes the actual saved SMS recipient or upgrades permission. Fixtures cover formatted international and US national numbers as well as mismatches.
+
+Migration `20261017152700_purchase_access_phone_normalization` was also applied and read back; anonymous execution remains denied.

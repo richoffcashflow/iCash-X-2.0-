@@ -29,15 +29,16 @@ try{
  await pg.exec(read('supabase/migrations/20261008174620_customer_lifecycle_and_text_roles.sql').match(/create or replace function public\.icash_webinar_campaign_sender[\s\S]*?end \$\$;/)[0]);
  await pg.exec(read('supabase/migrations/20261007185116_webinar_smart_followups.sql').match(/create function public\.icash_webinar_followup_delivery[\s\S]*?end \$\$;/)[0]);
  await pg.exec(read('supabase/migrations/20261017145924_purchase_access_email.sql'));
- async function purchase({mode='live',consent=true,guest=true,phoneMatch=true,emailMatch=true,account=null,oldConsent=false}={}){
+ async function purchase({mode='live',consent=true,guest=true,phoneMatch=true,emailMatch=true,account=null,oldConsent=false,payerFormat='normal'}={}){
   const id=randomUUID(),visitor=randomUUID(),phone='+1212555'+String(nextPhone++),email=id+'@example.invalid',hash=randomUUID();
   await q('insert into icash_memberships(id,mode,payer_email,guest_hash,account_id) values($1,$2,$3,$4,$5)',[id,mode,email,hash,account]);
   await q("insert into icash_webinar_visitors values($1,$2,$3,$4,null,case when $5 then now() else null end,null,$6)",[visitor,emailMatch?email:'someoneelse@example.invalid',phone,guest?hash:randomUUID(),consent,oldConsent?'webinar-sms-2026-10-07':'webinar-sms-ongoing-2026-10-09']);
-  await rpc('icash_settle_membership_invoice_v2',{p_membership:id,p_subscription:'sub_'+id.replaceAll('-',''),p_customer:'cus_'+id.replaceAll('-',''),p_invoice:'in_'+id.replaceAll('-',''),p_payment:'pi_'+id.replaceAll('-',''),p_amount:5000,p_email:email,p_phone:phoneMatch?phone:'+12125559999',p_period_end:'2099-02-01T00:00:00Z',p_period_start:'2099-01-01T00:00:00Z',p_discount:null});
+  await rpc('icash_settle_membership_invoice_v2',{p_membership:id,p_subscription:'sub_'+id.replaceAll('-',''),p_customer:'cus_'+id.replaceAll('-',''),p_invoice:'in_'+id.replaceAll('-',''),p_payment:'pi_'+id.replaceAll('-',''),p_amount:5000,p_email:email,p_phone:!phoneMatch?'+12125559999':payerFormat==='formatted'?'+1 (212) 555-'+phone.slice(-4):payerFormat==='national'?phone.slice(2):phone,p_period_end:'2099-02-01T00:00:00Z',p_period_start:'2099-01-01T00:00:00Z',p_discount:null});
   return {id,visitor,phone,email};
  }
  const historical=await purchase();
  await pg.exec(read('supabase/migrations/20261017152224_purchase_access_reminder_and_text.sql'));
+ await pg.exec(read('supabase/migrations/20261017152700_purchase_access_phone_normalization.sql'));
  const rows=async id=>(await q('select * from icash_purchase_access_followups where membership_id=$1 order by channel',[id])).rows;
  const row=async(id,channel)=>(await rows(id)).find(r=>r.channel===channel);
  assert.equal((await rows(historical.id)).length,0,'No historical backfill');
@@ -54,6 +55,7 @@ try{
  await send(buyer.id);await first(buyer.id);assert.equal(sent.length,3,'Exactly two emails and one text across repeat wakes');
  await q("insert into icash_membership_invoices values($1,$2,5000,$3,'2099-03-01',now())",['renewal_'+buyer.id,buyer.id,'pi_renewal']);await q("update icash_memberships set paid_through='2099-03-01' where id=$1",[buyer.id]);assert.equal((await rows(buyer.id)).length,2,'Renewal creates no extra access messages');
  for(const options of [{consent:false},{guest:false},{phoneMatch:false},{emailMatch:false},{oldConsent:true}]){const p=await purchase(options);assert.equal((await rows(p.id)).filter(r=>r.channel==='sms').length,0,'Only permission on the payment-bound phone qualifies');}
+ for(const payerFormat of ['formatted','national']){const p=await purchase({payerFormat});assert.equal((await rows(p.id)).filter(r=>r.channel==='sms').length,1,'Equivalent checkout phone formatting retains the same permission');}
  const test=await purchase({mode:'test'});assert.equal((await rows(test.id)).length,0);
  const claimed=await purchase();await first(claimed.id);await due(claimed.id);await q('update icash_memberships set account_id=$2 where id=$1',[claimed.id,randomUUID()]);await send(claimed.id);assert.equal((await row(claimed.id,'email')).status,'canceled','Account claiming stops the reminder');
  const stopped=await purchase();const claim=await rpc('icash_claim_purchase_access_followup',{p_channel:'sms',p_membership:stopped.id});assert(claim);assert.equal(await rpc('icash_claim_purchase_access_followup',{p_channel:'sms',p_membership:stopped.id}),null,'Atomic exclusive lease');
