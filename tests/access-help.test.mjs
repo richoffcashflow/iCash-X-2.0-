@@ -28,6 +28,7 @@ try{
  await pg.exec(read('config/support-center.sql'));await pg.exec(read('config/support-owner-notifications.sql'));
  await pg.exec(read('supabase/migrations/20261017185057_paid_access_support.sql'));
  await pg.exec(read('supabase/migrations/20261017213055_support_conversation_replies.sql'));
+ await pg.exec(read('supabase/migrations/20261017214402_support_operator_resolution_guard.sql'));
  await q('insert into auth.users values($1,$2,now()),($3,$4,now())',[owner,'owner@example.invalid',other,'other@example.invalid']);
  await q("insert into icash_trusted_operators values($1,null,now()+interval '1 day',array['support'])",[owner]);
  await pg.exec('set role service_role');
@@ -117,6 +118,12 @@ try{
  assert.equal(await rpc('icash_support_finish_conversation',finish),true);assert.equal(await rpc('icash_support_finish_conversation',finish),true);
  assert.equal((await q('select status from icash_support_threads where id=$1',[thread.threadId])).rows[0].status,'waiting_on_customer');
  assert.equal((await q("select count(*)::int as n from icash_support_messages where thread_id=$1 and role='assistant'",[thread.threadId])).rows[0].n,1);
+ // A status-only resolution must also win over an in-flight assistant.
+ const resolvedKey=randomUUID();await rpc('icash_support_begin_message',{p_account:account,p_user:owner,p_thread:thread.threadId,p_request:resolvedKey,p_message:'One more thing'});
+ await rpc('icash_support_operator_update',{p_operator:owner,p_thread:thread.threadId,p_request:randomUUID(),p_status:'resolved',p_reply:null});
+ assert.equal(await rpc('icash_support_finish_conversation',{...finish,p_request:resolvedKey}),false);
+ assert.equal((await q('select status from icash_support_threads where id=$1',[thread.threadId])).rows[0].status,'resolved');
+ assert.equal((await q("select count(*)::int as n from icash_support_messages where request_id=$1 and role='assistant'",[resolvedKey])).rows[0].n,0);
  for(const role of ['anon','authenticated']){await pg.exec('set role '+role);await assert.rejects(()=>q('select * from icash_access_help_requests'));await assert.rejects(()=>q('select * from icash_purchase_access_attention'));await assert.rejects(()=>rpc('icash_access_help_read',{p_hash:a}));await assert.rejects(()=>rpc('icash_access_help_claim_reply',{p_id:autoId,p_key:autoKey}));await assert.rejects(()=>rpc('icash_access_help_pending_replies',{}));await assert.rejects(()=>rpc('icash_queue_purchase_access_attention',{}));await pg.exec('reset role');}
  console.log('PASS access help: actual private SQL and routes, no-login requests and replies, no purchase disclosure, redacted codes, secure browser binding, operator authorization, replay recovery, rate bounds, expiry, positive payment monitoring, resolved queue, grouped owner notices and no customer sends.');
 }finally{await pg.close();}
