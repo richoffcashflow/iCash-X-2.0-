@@ -61,8 +61,9 @@ test('email sign-in availability follows the account service',()=>{
  const render=harness({signInReady:false});find(render(),'button').props.onClick();assert.equal(find(render(),'AccountAccess').props.ready,false);
 });
 
-test('the homepage opens checkout immediately under a compact feature headline',()=>{
+test('direct webinar checkout opens immediately under a compact feature headline',()=>{
  const tree=harness()(),checkout=find(tree,'MembershipCheckout');
+ assert.equal(find(tree,'PlanWorkspacePreview'),undefined,'Direct webinar checkout stays focused');
  assert.equal(checkout.props.autoOpen,true);
  assert.equal(checkout.props.embedded,true);
  assert.equal(checkout.props.onEngaged,undefined,'Payment interaction must not move or replace the form');
@@ -77,4 +78,19 @@ test('the homepage opens checkout immediately under a compact feature headline',
  const region=all(tree).find(node=>node.props?.id==='your-plan');
  assert.equal(region.props.role,'region');
  assert.equal(region.props.tabIndex,0,'Long checkout forms remain keyboard-scrollable');
+});
+
+
+test('homepage features preserve automatic checkout and leave after verified purchase',()=>{
+ const render=harness({showFeatures:true});let tree=render();
+ const checkout=find(tree,'MembershipCheckout');
+ assert.equal(checkout.props.autoOpen,true);assert.equal(checkout.props.embedded,true);
+ assert.equal(checkout.props.onEngaged,undefined,'Exploring features must not move the payment form');
+ assert.ok(find(tree,'PlanWorkspacePreview'));
+ assert.equal(all(tree).find(node=>node.type==='a'&&text(node).includes('Go to checkout')).props.href,'#your-plan');
+ assert.ok(all(tree).indexOf(find(tree,'PlanWorkspacePreview'))<all(tree).indexOf(checkout));
+ checkout.props.onPurchased('standard');tree=render();
+ assert.equal(find(tree,'PlanWorkspacePreview'),undefined,'Paid customers see their access flow');
+ assert.ok(find(tree,'MembershipCheckout'),'Post-purchase setup remains mounted');
+ assert.equal(find(harness({showFeatures:true,checkingAccount:true})(),'PlanWorkspacePreview'),undefined);
 });

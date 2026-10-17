@@ -149,29 +149,53 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   assert.equal((await tracks('InitiateCheckout')).length,1);
   assert.equal((await tracks('AddToCart')).length,0,'Preparing the form is not a cart selection');
   const card=page.getByRole('region',{name:'Secure checkout',exact:true});
-  const checkoutBoundsBefore=await card.boundingBox();
-  await field.click();
+  const overview=page.getByRole('region',{name:'Standard plan features',exact:true});
+  const preview=page.getByRole('region',{name:'Interactive workspace preview',exact:true});
+  await preview.getByRole('button',{name:'Conversations',exact:true}).click();
+  await preview.getByText('The kitchen needs updating.',{exact:false}).waitFor();
+  assert.equal((await tracks('AddToCart')).length,0,'Exploring the workspace preview is not payment interaction');
+  await page.getByRole('link',{name:'Go to checkout',exact:true}).click();
+  await field.scrollIntoViewIfNeeded();
+  const checkoutPosition=()=>card.evaluate(node=>({top:node.getBoundingClientRect().top+scrollY,width:node.getBoundingClientRect().width,height:node.getBoundingClientRect().height}));
+  const checkoutBoundsBefore=await checkoutPosition();
+  await field.fill('Saved checkout progress');
   try{await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='AddToCart'));}
   catch(error){console.log('Homepage cart diagnostics',await page.evaluate(()=>({calls:window.__pixelCalls,activeElement:document.activeElement?.tagName,focused:document.hasFocus(),hidden:document.hidden,boot:window.icashWebinarPixel?{path:window.icashWebinarPixel.path,pageViewId:window.icashWebinarPixel.pageViewId}:null,publicCheckout:!!document.querySelector('[data-public-checkout="true"]'),session:sessionStorage.getItem('icash-webinar-session')})),errors);throw error;}
   assert.equal((await tracks('AddToCart')).length,1);
   assert.equal((await tracks('Purchase')).length,0);
-  assert.deepEqual(await card.boundingBox(),checkoutBoundsBefore,'Entering payment details does not shift checkout');
+  assert.deepEqual(await checkoutPosition(),checkoutBoundsBefore,'Entering payment details does not shift checkout');
+  await preview.getByRole('button',{name:'Deal tools',exact:true}).click();
+  await preview.getByText('Connect with buyers',{exact:true}).waitFor();
+  assert.equal(await field.inputValue(),'Saved checkout progress','Exploring features preserves the mounted payment form');
+  assert.deepEqual(await checkoutPosition(),checkoutBoundsBefore,'Switching preview panels does not move checkout');
   const originalViewport=page.viewportSize();
   for(const viewport of [originalViewport,{width:375,height:667},{width:320,height:568}]){
    await page.setViewportSize(viewport);
-   await card.evaluate(node=>{node.scrollTop=0;});
-   const bounds=await card.boundingBox(),footer=await page.locator('.wb-plan-footer').boundingBox();
+   await preview.getByRole('button',{name:'Research',exact:true}).click();
+   await page.evaluate(()=>scrollTo(0,0));
+   const bounds=await card.boundingBox(),overviewBounds=await overview.boundingBox();
    const screen=await page.evaluate(()=>({width:innerWidth,height:innerHeight,scrollWidth:document.scrollingElement.scrollWidth,scrollHeight:document.scrollingElement.scrollHeight}));
-   assert.ok(screen.scrollHeight<=screen.height+1&&screen.scrollWidth<=screen.width+1,JSON.stringify({viewport,screen}));
-   assert.ok(bounds.y<160&&bounds.height>250&&bounds.y+bounds.height<=screen.height,'Checkout stays in the first screen');
-   assert.ok(footer.y+footer.height<=screen.height+1,'Support and terms remain accessible');
+   assert.ok(screen.scrollWidth<=screen.width+1,JSON.stringify({viewport,screen}));
+   assert.ok(overviewBounds.y+overviewBounds.height<=bounds.y,'Plan benefits and visual appear above checkout');
+   assert.ok(screen.scrollHeight>screen.height,'The homepage scrolls naturally to payment');
+   if(process.env.HOMEPAGE_SCREENSHOT_DIR)await page.screenshot({path:process.env.HOMEPAGE_SCREENSHOT_DIR+'/'+name.replaceAll(' ','-')+'-'+viewport.width+'.png',fullPage:true});
+   for(const label of ['Conversations','Deal tools']){
+    await preview.getByRole('button',{name:label,exact:true}).click();
+    assert.ok(await page.locator('#workspace-feature-preview').evaluate(node=>node.scrollHeight<=node.clientHeight+1&&node.scrollWidth<=node.clientWidth+1),'Preview content fits on small screens');
+   }
+   await page.getByRole('link',{name:'Go to checkout',exact:true}).click();
    const wallet=page.frameLocator('iframe[title="Fixture payment"]').getByRole('button',{name:'Fixture wallet',exact:true});
+   await wallet.scrollIntoViewIfNeeded();
    const walletBounds=await wallet.boundingBox();
-   assert.ok(walletBounds.y>=bounds.y&&walletBounds.y+walletBounds.height<=bounds.y+bounds.height,'The top of the payment form is visible without scrolling');
+   assert.ok(walletBounds.y>=0&&walletBounds.y+walletBounds.height<=screen.height,'Wallet payment remains reachable');
    const pay=page.frameLocator('iframe[title="Fixture payment"]').getByRole('button',{name:'Fixture pay',exact:true});
    await pay.scrollIntoViewIfNeeded();
    const payBounds=await pay.boundingBox();
-   assert.ok(payBounds.y>=bounds.y&&payBounds.y+payBounds.height<=bounds.y+bounds.height,'Longer payment forms remain reachable inside checkout');
+   assert.ok(payBounds.y>=0&&payBounds.y+payBounds.height<=screen.height,'The end of long payment forms remains reachable');
+   await page.locator('.wb-plan-footer').scrollIntoViewIfNeeded();
+   const footer=await page.locator('.wb-plan-footer').boundingBox();
+   assert.ok(footer.y>=0&&footer.y+footer.height<=screen.height+1,'Support and terms remain accessible');
+   assert.equal(await field.inputValue(),'Saved checkout progress');
   }
   await page.setViewportSize(originalViewport);
   assert.equal(membershipRequests.filter(r=>r.home).length,1,'Resizing or scrolling never recreates the checkout');
@@ -181,6 +205,8 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   assert.equal((await tracks('Purchase')).length,1,'Verified direct checkout sends Purchase without a webinar session');
   assert.equal((await tracks('Purchase'))[0][3].value,50);
   assert.equal((await tracks('Purchase'))[0][3].currency,'USD');
+  await overview.waitFor({state:'detached'});
+  assert.deepEqual(errors,[]);
   assert.equal(await page.evaluate(()=>sessionStorage.getItem('icash-webinar-session')),null);
   await page.reload();await page.waitForLoadState('networkidle');
   assert.equal((await tracks('Purchase')).length,0,'Refreshing a direct purchase cannot count it twice');
