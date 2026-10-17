@@ -5,10 +5,10 @@ import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {z} from 'zod';
 import * as policy from '../lib/webinar-policy.ts';
-import {returnVisit,selectOffer,paidAdArrival,confirmedWatch,bestConvertingWebinar,stableWebinarOrder} from '../packages/webinar-engine/src/index.ts';
+import {returnVisit,selectOffer,paidAdArrival,confirmedWatch,bestConvertingWebinar,stableWebinarOrder,withinWebinarResumeWindow} from '../packages/webinar-engine/src/index.ts';
 import {withOfferDeadlines} from '../packages/webinar-engine/src/offer-deadlines.ts';
 import {timerResponseSchema} from '../lib/webinar-timers.ts';
-import {selectRecording,createNightRecording} from '../lib/webinar-recordings.ts';
+import {selectRecording,createNightRecording,recordingRecheckAt} from '../lib/webinar-recordings.ts';
 import {webinarLink} from '../lib/webinar-links.ts';
 import {snapshotChat} from '../lib/webinar-variants.ts';
 const one={...policy.newWebinar(randomUUID()),status:'published',videoUrl:'https://example.test/main.mp4',publicCode:'123456'};
@@ -32,7 +32,7 @@ const db=async(path,method,body)=>{
  return {};
 };
 async function load(path,deps,key){globalThis[key]=deps;const source=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');return import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.'+key+';\n'+source).toString('base64'));}
-const common={webinarViewerLocation,...policy,z,db,Date:Clock,webinarHeaders:{'Cache-Control':'private, no-store'},WebinarError,webinarBody:req=>req.json(),webinarOrigin:()=>{},webinarLimit:async()=>{},webinarOwner:async()=>{if(ownerLocked)throw Error('DASHBOARD_PASSWORD_REQUIRED');if(!owner)throw new WebinarError(403,'Owner only');},webinarError:e=>Response.json({error:e.message},{status:e.status||503})};
+const common={webinarViewerLocation,recordingRecheckAt,withinWebinarResumeWindow,...policy,z,db,Date:Clock,webinarHeaders:{'Cache-Control':'private, no-store'},WebinarError,webinarBody:req=>req.json(),webinarOrigin:()=>{},webinarLimit:async()=>{},webinarOwner:async()=>{if(ownerLocked)throw Error('DASHBOARD_PASSWORD_REQUIRED');if(!owner)throw new WebinarError(403,'Owner only');},webinarError:e=>Response.json({error:e.message},{status:e.status||503})};
 const returns=await load('../lib/webinar-ad-returns.ts',{...common,returnVisit,paidAdArrival,confirmedWatch,bestConvertingWebinar,stableWebinarOrder,selectRecording,availableWebinarRows:rows=>rows.map(policy.webinarFromRow),webinarConversionRecordings:async()=>stats},'__adReturns');
 const offerServer=await load('../lib/webinar-offer-server.ts',{...common,timerResponseSchema,withOfferDeadlines},'__returnOffers');
 const {POST}=await load('../app/api/webinar/start/route.ts',{...common,...returns,...offerServer,webinarLink,randomUUID,randomBytes,selectRecording:(w,t,_now,...rest)=>selectRecording(w,t,new Date(now),...rest),selectOffer,snapshotChat,returnVisit,approximateRegion:()=>null,webinarSite:{workspacePath:'/',checkoutPath:'/webinar/checkout'},webinarViewerMembership:async()=>vipPaid?{mode:'live',state:'active',paid_through:new Date(now+86400000).toISOString(),vip_until:hasVip?new Date(now+86400000).toISOString():null}:null,vipActive:m=>!!m?.vip_until,returningBuyerVip:async()=>missingVip?null:vip,webinarVisitor:async()=>visitor,webinarCustomerAccount:async()=>account,webinarPaid:async()=>false,webinarCustomerPaid:async()=>paid,validGuest:()=>true,guestHash:()=> 'guest',cookies:async()=>({get:()=>({value:'guest'}),set:()=>{}})},'__fixedRoute');
@@ -87,11 +87,11 @@ try{
  assert.ok(!JSON.stringify(calls).includes('40.7128'),'Coordinates are not saved in sessions or visitor records');
  const frozen={...calls.find(c=>c.path==='rpc/icash_webinar_begin').body.p_config,title:'Night already started'};
  history=[{...prior,id:randomUUID(),config:frozen,webinar_id:one.id,completed_at:null,max_seconds:100,watched_seconds:100,created_at:new Date(now-60000).toISOString(),updated_at:new Date(now-60000).toISOString()}];
- data=await(await post({code:'123456'},dallasHeaders)).json();assert.equal(data.webinar.title,'Night already started');assert.equal(data.webinar.recordingVersion,'night','Resume does not replace an existing recording');
+ data=await(await post({code:'123456'},dallasHeaders)).json();assert.equal(data.webinar.recordingVersion,'day','A return in a different daylight context starts the matching recording');assert.equal(data.progress,0);assert.notEqual(data.sessionId,history[0].id);
  history=[{...prior,completed_at:new Date(now-9*3600000).toISOString(),watched_seconds:1700}];
  stats=[{webinarId:three.id,version:'day',viewers:100,cohortBuyers:30},{webinarId:three.id,version:'night',viewers:100,cohortBuyers:30}];
  data=await(await post({code:'123456',attribution:{ad_id:'55555'}},dallasHeaders)).json();assert.equal(data.webinar.id,one.id);assert.equal(data.webinar.recordingVersion,'day','A restarted main uses the viewer daylight context');
- data=await(await post({code:'123456',attribution:{ad_id:'55555'}},nyHeaders)).json();assert.equal(data.webinar.id,one.id);assert.equal(data.webinar.recordingVersion,'night');assert.equal(data.progress,policy.webinarReturnPosition(selectRecording(one,'America/New_York',new Date(now),settings.routing)));assert.equal(data.progress,policy.webinarReturnPosition(one)+120,'Return offset follows the selected Night offer timing');
+ data=await(await post({code:'123456',attribution:{ad_id:'55555'}},nyHeaders)).json();assert.equal(data.webinar.id,one.id);assert.equal(data.webinar.recordingVersion,'night');assert.equal(data.progress,0,'A different recording starts at its beginning, including expired returns');
  history=[];vipPaid=true;vip.nightEnabled=true;vip.nightVersion.videoUrl='https://example.test/vip-night.mp4';
  data=await(await post({code:'123457'},dallasHeaders)).json();assert.equal(data.webinar.recordingVersion,'day');
  data=await(await post({code:'123457'},nyHeaders)).json();assert.equal(data.webinar.recordingVersion,'night','Paid VIP playback uses local daylight');
@@ -100,13 +100,14 @@ console.log('PASS fixed routing: no experiments, stable acquisition attribution,
 
 // Matching VIP stays attached to the watched main recording across time changes.
 vipPaid=true;account=null;events=[];now=Date.parse('2026-10-08T03:00:00Z');
-history=[{id:randomUUID(),webinar_id:one.id,is_preview:false,config:{...one,recordingVersion:'day'},created_at:new Date(now-3600000).toISOString()}];
+history=[{id:randomUUID(),webinar_id:one.id,is_preview:false,config:{...one,recordingVersion:'day'},created_at:new Date(now-3600000).toISOString(),updated_at:new Date(now-30000).toISOString()}];
 data=await(await post({code:'123457'})).json();assert.equal(data.webinar.recordingVersion,'day');assert.equal(data.webinar.videoUrl,vip.videoUrl);
-now=Date.parse('2026-10-08T18:00:00Z');history[0].config.recordingVersion='night';
+now=Date.parse('2026-10-08T18:00:00Z');history[0].config.recordingVersion='night';history[0].updated_at=new Date(now-30000).toISOString();
 data=await(await post({code:'123457'})).json();assert.equal(data.webinar.recordingVersion,'night');assert.equal(data.webinar.videoUrl,vip.nightVersion.videoUrl);
 const savedNight=vip.nightVersion;vip.nightVersion={...savedNight,videoUrl:''};
 data=await(await post({code:'123457'})).json();assert.equal(data.webinar.recordingVersion,'day');assert.equal(data.webinar.videoUrl,vip.videoUrl);vip.nightVersion=savedNight;
-console.log('PASS matching VIP follows watched Day/Night through clock changes, with empty Night VIP fallback.');
+history[0].updated_at=new Date(now-2*3600000).toISOString();data=await(await post({code:'123457'})).json();assert.equal(data.webinar.recordingVersion,'day','An old main recording cannot pin a new VIP visit to the wrong period');history[0].updated_at=new Date(now-30000).toISOString();
+console.log('PASS immediate VIP handoff follows the just-watched main, with stale history and empty Night fallback.');
 vip.videoUrl='';history[0].config.recordingVersion='day';
 data=await(await post({code:'123457'})).json();assert.equal(data.webinar.recordingVersion,'night');assert.equal(data.webinar.videoUrl,vip.nightVersion.videoUrl,'Nighttime-only VIP also covers a Daytime buyer');
 
@@ -137,13 +138,13 @@ for(const [from,to] of [['day','night'],['night','day']]){
  assert.equal(begin.p_advance_from,old.id);assert.equal(begin.p_preview,false);assert.equal(begin.p_config._returnStartSeconds,undefined);
  history=[{...old,id:data.sessionId,config:begin.p_config,progress_seconds:25,max_seconds:25,created_at:new Date(now).toISOString()}];
  data=await(await post({code:'123456'})).json();assert.equal(data.sessionId,history[0].id);assert.equal(data.progress,25,'Refreshing the correct owner recording resumes normally');
- // The same saved customer recording keeps its position across sunset/sunrise.
+ // Customers also switch instead of resuming a recording from the wrong period.
  account=null;paid=false;vipPaid=false;hasVip=false;history=[old];
- data=await(await post({code:'123456'})).json();assert.equal(data.sessionId,old.id);assert.equal(data.webinar.recordingVersion,from);assert.equal(data.progress,39);
+ data=await(await post({code:'123456'})).json();assert.notEqual(data.sessionId,old.id);assert.equal(data.webinar.recordingVersion,to);assert.equal(data.progress,0);
  account={id:randomUUID(),destination:'/',needsBudget:false,isOwner:true};paid=true;vipPaid=true;hasVip=true;
 }
 now=ownerClock;
-console.log('PASS owner Day/Night changes start the current recording at zero; same-period refreshes and customer resumes retain their position.');
+console.log('PASS owner and customer Day/Night changes start the current recording at zero; same-period refreshes retain their position.');
 one.status='draft';data=await(await post({code:'123456'})).json();assert.equal(data.unavailable,true,'Public owner watching cannot expose drafts');one.status='published';
 account.isOwner=false;history=[];
 data=await(await post({code:'123456'})).json();assert.equal(data.redirect,'/','A normal VIP member keeps the workspace destination');
@@ -151,10 +152,34 @@ assert.equal((await post({code:'123456',ownerWatching:true})).status,400,'Reques
 account=null;paid=false;vipPaid=false;hasVip=false;one.videoUrl=savedOwnerVideo;
 console.log('PASS owner public replay: signed identity, pixel-eligible sessions, main/VIP entry, completion/expiry replay, draft protection and unchanged customer routing.');
 
+// Unpaid and Standard buyers switch recordings regardless of elapsed time or completion.
+vip.videoUrl='https://example.test/vip-day.mp4';
+for(const target of [one,vip])for(const from of ['day','night'])for(const age of [30000,3*3600000])for(const completed of [false,true]){
+ const to=from==='day'?'night':'day';now=Date.parse(to==='night'?'2026-10-17T01:07:13Z':'2026-10-17T18:00:00Z');
+ vipPaid=!!target.parentWebinarId;hasVip=false;paid=false;account=null;events=[];
+ const frozen=selectRecording(target,'America/Chicago',new Date(now),settings.routing,from);
+ const old={...prior,id:randomUUID(),webinar_id:target.id,config:frozen,progress_seconds:100,max_seconds:100,completed_at:completed?new Date(now-age).toISOString():null,created_at:new Date(now-4*3600000).toISOString(),updated_at:new Date(now-age).toISOString()};
+ history=[old];calls=[];
+ data=await(await post({code:target.publicCode})).json();
+ const expected=snapshotChat(selectRecording(target,'America/Chicago',new Date(now),settings.routing),data.sessionId);
+ assert.equal(data.webinar.recordingVersion,to);assert.equal(data.webinar.videoUrl,expected.videoUrl);assert.equal(data.progress,0);assert.equal(data.redirect,undefined);assert.notEqual(data.sessionId,old.id);
+ assert.deepEqual(data.webinar.chat,policy.publicWebinar(expected).chat);assert.deepEqual(data.webinar.offers,expected.offers);assert.deepEqual(data.webinar.timers,expected.timers);
+ const begin=calls.find(c=>c.path==='rpc/icash_webinar_begin').body;assert.equal(begin.p_advance_from,old.id);assert.equal(begin.p_config._returnStartSeconds,undefined);
+ assert.ok(data.recordingRecheckAt>now);
+ history=[{...old,id:data.sessionId,config:begin.p_config,progress_seconds:25,max_seconds:25,completed_at:null,created_at:new Date(now).toISOString(),updated_at:new Date(now).toISOString()}];
+ data=await(await post({code:target.publicCode})).json();assert.equal(data.sessionId,history[0].id);assert.equal(data.progress,25,'Same-period return resumes');
+}
+// If the other recording is unavailable, keep playing the usable saved video.
+account=null;vipPaid=false;now=Date.parse('2026-10-17T01:07:13Z');one.nightEnabled=false;
+history=[{...prior,config:selectRecording(one,'America/Chicago',new Date(now)),completed_at:null,progress_seconds:77,updated_at:new Date(now-1000).toISOString()}];
+data=await(await post({code:one.publicCode})).json();assert.equal(data.sessionId,prior.id);assert.equal(data.progress,77);assert.equal(data.recordingRecheckAt,null);one.nightEnabled=true;
+console.log('PASS all viewer returns: Day↔Night, recent/expired, unfinished/completed, regular/VIP, synchronized timelines, same-period resume and unavailable-recording fallback.');
+
 // Owner preview has no ad/checkout return journey and does not read offer history.
 owner=true;history=[];calls=[];
 data=await(await post({preview:one.id,variant:'night'})).json();
 assert.equal(data.preview,true);assert.equal(data.webinar.recordingVersion,'night');
+assert.equal(data.recordingRecheckAt,null,'Explicit owner previews never switch themselves');
 assert.ok(!calls.some(c=>c.path.startsWith('icash_webinar_events?')));
 console.log('PASS fast entry: owner authorization retained and preview skips unused offer history.');
 

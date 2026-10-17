@@ -1,5 +1,8 @@
 import {withinWebinarResumeWindow} from '../packages/webinar-engine/src/index.ts';
 export {withinWebinarResumeWindow};
+export function webinarReturnNeedsReload(awaySince:number,recheckAt:number|null|undefined,now=Date.now(),serverOffset=0){
+ return !withinWebinarResumeWindow(awaySince,now)||(typeof recheckAt==='number'&&Number.isFinite(recheckAt)&&now+serverOffset>=recheckAt);
+}
 type Checkpoint={seconds:number;updatedAt:number};
 const prefix='icash-webinar-progress:';
 export function boundedPosition(seconds:number,duration:number){

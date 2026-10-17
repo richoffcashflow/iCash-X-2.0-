@@ -434,8 +434,20 @@ console.log('PASS webinar audio: audible autoplay, one muted policy fallback, ta
    find(tree,'WebinarPlayer').props.onCheckpoint();await flush();assert.equal(writes,before,'Expired playback cannot refresh the server checkpoint');
    h.close();reloads=0;
   }
+  // Even a brief absence rechecks when sunrise/sunset passed, before stale checkpoints.
+  for(const preview of [false,true]){
+   let writes=0;const recheckAt=now+300000;
+   const h=await harness('components/webinar-room.tsx',{...roomDeps,post:async(url)=>{if(url.endsWith('/start'))return {sessionId,webinar:policy.publicWebinar(w),progress:100,name:'Viewer',messages:[],preview,recordingRecheckAt:recheckAt,serverNow:now};writes++;return {saved:true};}});
+   const render=()=>h.render('WebinarRoom',{});render();await flush();let tree=render();
+   document.hidden=true;listeners.get('visibilitychange')();now=recheckAt-1;document.hidden=false;listeners.get('pageshow')();assert.equal(reloads,0,'The same period resumes');
+   now=recheckAt+1000;tree=render();assert.equal(reloads,0,'Continuous watching never changes recording mid-video');
+   document.hidden=true;listeners.get('visibilitychange')();now+=1000;const before=writes;document.hidden=false;listeners.get('pageshow')();
+   assert.equal(reloads,preview?0:1,'Returning after the period boundary reloads even inside one hour');
+   find(tree,'WebinarPlayer').props.onCheckpoint();await flush();assert.equal(writes,before);
+   h.close();reloads=0;
+  }
   // Leaving an active checkout open must not erase payment fields on return.
-  const h=await harness('components/webinar-room.tsx',{...roomDeps,post:async(url)=>url.endsWith('/start')?{sessionId,webinar:policy.publicWebinar(w),progress:1500,name:'Buyer',messages:[],preview:false,serverNow:now}:{saved:true}});
+  const h=await harness('components/webinar-room.tsx',{...roomDeps,post:async(url)=>url.endsWith('/start')?{sessionId,webinar:policy.publicWebinar(w),progress:1500,name:'Buyer',messages:[],preview:false,recordingRecheckAt:now+60000,serverNow:now}:{saved:true}});
   const render=()=>h.render('WebinarRoom',{});render();await flush();let tree=render();const exitBeforeCheckout=listeners.get('beforeunload');assert.ok(exitBeforeCheckout);find(tree,'WebinarCheckout').props.onEngaged();
   exitBeforeCheckout({isTrusted:true,preventDefault(){throw Error('Checkout must suppress the reminder before React rerenders');}});
   tree=render();assert.equal(listeners.has('beforeunload'),false);
