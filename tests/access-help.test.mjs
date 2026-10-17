@@ -7,6 +7,7 @@ import {accessHelpCookie,accessHelpInput,accessHelpUpdate,accessHelpRedact} from
 import {normalizeAccessPhone} from '../lib/purchase-phone-access.ts';
 import {processSupportOwnerNotifications} from '../lib/support-owner-notifications.ts';
 import {replyToAccessHelp,recoverAccessHelpReplies} from '../lib/access-help-replies.ts';
+import {supportConversationFallback} from '../lib/support-conversation.ts';
 import {ownerInboundTarget} from '../lib/owner-inbound-acceptance.ts';
 const pg=await PGlite.create(),{db:baseDb,rpc,q}=databaseAdapter(pg);
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
@@ -125,6 +126,23 @@ try{
  assert.equal(await rpc('icash_support_finish_conversation',{...finish,p_request:resolvedKey}),false);
  assert.equal((await q('select status from icash_support_threads where id=$1',[thread.threadId])).rows[0].status,'resolved');
  assert.equal((await q("select count(*)::int as n from icash_support_messages where request_id=$1 and role='assistant'",[resolvedKey])).rows[0].n,0);
+ // Fully answered course questions close immediately; fresh questions reopen the same thread.
+ const courseKey=randomUUID(),courseQuestion='Where is the course?';
+ const courseThread=await rpc('icash_support_begin_message',{p_account:account,p_user:owner,p_thread:null,p_request:courseKey,p_message:courseQuestion});
+ const courseAnswer=supportConversationFallback({kind:'account',messages:[{role:'user',content:courseQuestion}]});assert.equal(courseAnswer.status,'resolved');
+ await rpc('icash_support_finish_conversation',{...finish,p_thread:courseThread.threadId,p_request:courseKey,p_message:courseAnswer.reply,p_status:courseAnswer.status});
+ assert.equal((await q('select status from icash_support_threads where id=$1',[courseThread.threadId])).rows[0].status,'resolved');
+ assert.equal((await q("select reply from icash_support_owner_copies where source='chat' and thread_id=$1",[courseThread.threadId])).rows[0].reply,courseAnswer.reply,'Resolved reply and course reminder are included in the owner copy');
+ const reopenedKey=randomUUID();await rpc('icash_support_begin_message',{p_account:account,p_user:owner,p_thread:courseThread.threadId,p_request:reopenedKey,p_message:'The course will not open'});
+ assert.equal((await q('select status from icash_support_threads where id=$1',[courseThread.threadId])).rows[0].status,'open');
+ await rpc('icash_support_finish_conversation',{...finish,p_thread:courseThread.threadId,p_request:reopenedKey,p_message:'What error do you see?',p_status:'waiting_on_customer'});
+ assert.equal((await q('select status from icash_support_threads where id=$1',[courseThread.threadId])).rows[0].status,'waiting_on_customer');
+ const guestCourse={p_hash:hash(randomUUID()),p_key:randomUUID(),p_email:'course@example.invalid',p_phone:null,p_message:courseQuestion};
+ const guestId=await rpc('icash_access_help_submit',guestCourse);await replyToAccessHelp(db,guestId,guestCourse.p_key);
+ assert.equal((await rpc('icash_access_help_read',{p_hash:guestCourse.p_hash})).status,'resolved');
+ const guestNext=randomUUID();await rpc('icash_access_help_submit',{...guestCourse,p_key:guestNext,p_message:'My sign-in code has not arrived'});
+ assert.equal((await rpc('icash_access_help_read',{p_hash:guestCourse.p_hash})).status,'open');
+ await replyToAccessHelp(db,guestId,guestNext);assert.equal((await rpc('icash_access_help_read',{p_hash:guestCourse.p_hash})).status,'waiting_on_customer');
  for(const role of ['anon','authenticated']){await pg.exec('set role '+role);await assert.rejects(()=>q('select * from icash_access_help_requests'));await assert.rejects(()=>q('select * from icash_purchase_access_attention'));await assert.rejects(()=>rpc('icash_access_help_read',{p_hash:a}));await assert.rejects(()=>rpc('icash_access_help_claim_reply',{p_id:autoId,p_key:autoKey}));await assert.rejects(()=>rpc('icash_access_help_pending_replies',{}));await assert.rejects(()=>rpc('icash_queue_purchase_access_attention',{}));await pg.exec('reset role');}
  console.log('PASS access help: actual private SQL and routes, no-login requests and replies, no purchase disclosure, redacted codes, secure browser binding, operator authorization, replay recovery, rate bounds, expiry, positive payment monitoring, resolved queue, grouped owner notices and deferred customer email jobs. All sends mocked.');
 }finally{await pg.close();}

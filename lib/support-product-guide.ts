@@ -33,18 +33,18 @@ function courseTopic(question:string):CourseTopic|null{
 }
 
 /** Core onboarding answers are local so outages/replays cannot turn them into generic sales advice. */
-export function supportCourseAnswer(messages:Turn[],evidence:SupportEvidence[]=[]):{reply:string;needsTeam:boolean}|null{
+export function supportCourseAnswer(messages:Turn[],evidence:SupportEvidence[]=[]):{reply:string;needsTeam:boolean;answered:boolean}|null{
  const users=messages.filter(m=>m.role==='user'),question=users.at(-1)?.content??'';
  let topic=courseTopic(question);
  if(!topic&&/^(?:i(?:'ve| have)? )?(?:already (?:watched|finished)|watched|finished|it(?:'s| is) running|my bot is running|i have credits|done|now what|what next|how long|still waiting)\b/i.test(question)&&users.slice(0,-1).some(m=>['leads','start'].includes(courseTopic(m.content)??'')))topic='leads';
  if(!topic)return null;
- if(topic==='course')return {reply:'Open Course in your workspace to watch the training video. The PDF download and practice workspace are there too, so you can follow the steps and explore sample deals. If it won’t open, tell us what you see on the screen.',needsTeam:false};
+ if(topic==='course')return {reply:'Open Course in your workspace to watch the training video. The PDF download and practice workspace are there too, so you can follow the steps and explore sample deals. If it won’t open, tell us what you see on the screen.',needsTeam:false,answered:true};
  const watched=messages.some((m,index)=>m.role==='user'&&!/(?:not|haven.t|didn.t|never)\b/i.test(m.content)&&(/\b(?:watched|finished|completed)\b.{0,35}\b(?:course|training|video)\b|\b(?:course|training|video)\b.{0,25}\b(?:done|finished|completed)\b/i.test(m.content)||/^(?:i(?:'ve| have)? )?(?:already )?(?:watched|finished|completed) (?:it|that)[.!?\s]*$/i.test(m.content)&&messages.slice(0,index).some(turn=>turn.role==='assistant'&&/\b(?:course|training|video)\b/i.test(turn.content))));
  const intro=topic==='start'?(watched?'With the course finished, check that your contact information and individual or company name are saved in Settings.':'Start with the Course in your workspace, then save your contact information and individual or company name in Settings.'):'In iCash X, your bot finds and works eligible seller leads automatically.';
  const course=topic==='leads'&&!watched?' Watch the Course in your workspace and finish the Settings steps for your contact information and individual or company name.':'';
  const check=(key:string)=>evidence.find(e=>e.key===key);
  const payment=check('payments'),readiness=check('readiness'),work=check('work'),credits=check('credits'),subscription=check('subscription');
- let next:string,needsTeam=false;
+ let next:string,needsTeam=false,answered=false;
  if(payment?.status==='attention'&&payment.code==='payment_uncredited'){
   next='Your checks show a recorded payment has not been added to your credits yet. The team needs to review it before you pay again.';needsTeam=true;
  }else if(readiness?.status==='attention'){
@@ -59,8 +59,9 @@ export function supportCourseAnswer(messages:Turn[],evidence:SupportEvidence[]=[
   next='Your bot has no available work credits. Review Credits left and use Add money if you want more eligible work to run; if you already paid and the credit is missing, tell us before paying again.';
  }else if(work?.status==='ok'&&credits?.status==='ok'&&readiness?.status==='ok'){
   next='Your checks show the bot is not paused, credit is available, and service readiness passed. Keep it running and watch Leads and notifications for incoming leads and anything that needs your review. “Looking for a deal” can mean it is waiting for an eligible opportunity; there is no fixed arrival time.';
+  answered=true;
  }else{
   next='Once setup, access and credits are ready, keep the bot running; new leads appear in Leads and notifications show anything that needs you. I can’t confirm that all your bot checks are ready here. What status does your bot show right now?';
  }
- return {reply:`${intro}${course}\n\n${next}`,needsTeam};
+ return {reply:`${intro}${course}\n\n${next}`,needsTeam,answered};
 }
