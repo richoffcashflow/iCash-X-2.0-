@@ -1,7 +1,7 @@
 import type {SupportEvidence} from './support-policy';
 
 export type SupportNextStep = {action:'workspace'|'cancel'|'team'|'refresh';label:string;text:string};
-export const supportCheckLabels:Record<string,string>={work:'Bot activity',credits:'Available credit',billing:'Earlier daily plans',subscription:'Software subscription',payments:'Credit purchases',readiness:'Service readiness',screening:'Property checks',voice:'Call results'};
+export const supportCheckLabels:Record<string,string>={course:'Course viewing',work:'Bot activity',credits:'Available credit',billing:'Earlier daily plans',subscription:'Software subscription',payments:'Credit purchases',readiness:'Service readiness',screening:'Property checks',voice:'Call results'};
 export const supportPrompts=[
  {label:'My bot stopped',message:'Why did my bot stop working? What needs my attention?'},
  {label:'Account or charges',message:'Help me understand my payment records, available credit, and subscription renewals.'},

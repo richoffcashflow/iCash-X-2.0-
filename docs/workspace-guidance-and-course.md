@@ -23,3 +23,9 @@ Use local fixtures for next-action priorities, title/payment states, navigation 
 Course regressions cover member and owner access, scoped uploads, incomplete files, stale revisions, idempotent publication, storage grants and inert practice fixtures. Browser fixtures exercise playback, PDF downloads, owner uploads, course navigation and explicit VIP upgrade consent on desktop and phone layouts.
 
 Course upload controls are visible above the video for the verified platform owner on desktop and mobile. Locked owner sessions show Unlock owner uploads in the same place; customers do not see publishing controls. The video and PDF are still published only after the complete-file check.
+
+## Course viewing and support
+
+Course playback is now saved per account and video revision. The browser reports actual played ranges in milliseconds at most every 30 seconds during playback, and on pause, completion or leaving the page. The authenticated endpoint validates and merges ranges, so seeking and replaying do not count skipped or duplicate time. At least 95% recorded coverage marks the current video watched. Replacing the video starts a new progress record. This is viewing telemetry, not proof of comprehension and never an access or bot-work requirement.
+
+The progress table and functions are service-only. Support reads only the selected account’s current-video summary. No record means no playback is recorded, including customers who watched before tracking or offline; it must not be described as proof that they never watched. Course reminders do not replace help with billing, access or operational failures. Completed informational answers resolve promptly, and another message reopens the conversation.

@@ -1,5 +1,6 @@
 import {createHmac,timingSafeEqual} from 'node:crypto';
 import {z} from 'zod';
+import type {CourseProgress} from './course-progress';
 
 export const courseBucket='icash-course';
 const uploadFields=z.object({kind:z.enum(['video','pdf']),type:z.enum(['video/mp4','video/webm','application/pdf']),size:z.number().int().positive().max(2147483648),name:z.string().trim().min(1).max(200),revision:z.number().int().nonnegative()}).strict();
@@ -8,7 +9,7 @@ export const courseUploadInput=uploadFields.superRefine((v,ctx)=>{
 });
 export type CourseKind='video'|'pdf';
 export type CourseAsset={kind:CourseKind;path:string|null;name:string|null;size:number|null;mime_type:string|null;revision:number};
-export type CourseOverview={owner:boolean;canUpload:boolean;vip:boolean;assets:Record<CourseKind,{ready:boolean;name:string|null;revision:number}>};
+export type CourseOverview={owner:boolean;canUpload:boolean;vip:boolean;progress?:CourseProgress|null;assets:Record<CourseKind,{ready:boolean;name:string|null;revision:number}>};
 const ticketInput=uploadFields.extend({owner:z.string().uuid(),path:z.string().regex(/^[a-f0-9-]{36}\/[a-f0-9-]{36}\.(mp4|webm|pdf)$/),expires:z.number().int()});
 type Ticket=z.infer<typeof ticketInput>;
 function signature(body:string,key:string){if(key.length<32)throw Error('Course signing unavailable');return createHmac('sha256',key).update('icash-course-upload-v1:'+body).digest('base64url');}
