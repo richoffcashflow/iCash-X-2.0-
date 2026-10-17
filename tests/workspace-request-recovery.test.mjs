@@ -21,7 +21,7 @@ function harness(file,props={}){
  };
  const code=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
  const mod={exports:{}};
- const deps={react:hooks,'@/lib/webinar-client':{webinarRequest:(path,init)=>webinarRequest(path,init,20)},'@/lib/workspace-status':status,'@/lib/workspace-progress':progress,'@/lib/bot-setup':{setupThemes:{ink:{color:'#111',soft:'#fff'}}},'next/dynamic':{default:()=> 'WorkspaceAssistant'},'next/image':{default:'Image'}};
+ const deps={react:hooks,'@/lib/webinar-client':{webinarRequest:(path,init)=>webinarRequest(path,init,20)},'@/lib/workspace-status':status,'@/lib/workspace-progress':progress,'@/lib/bot-setup':{setupThemes:{ink:{color:'#111',soft:'#fff'}}},'next/dynamic':{default:loader=>loader.toString().match(/m\.(\w+)/)[1]},'next/image':{default:'Image'}};
  new Function('require','module','exports',code)(name=>name in deps?deps[name]:name==='react/jsx-runtime'?require(name):name.endsWith('.css')?{default:{}}:new Proxy({},{get:(_,key)=>key}),mod,mod.exports);
  const component=mod.exports.default??mod.exports.AccountAccess;
  function render(){cursor=0;dirty=false;tree=component(props);}

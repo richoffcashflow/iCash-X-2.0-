@@ -10,7 +10,7 @@ let r=await route.GET(new Request('https://example.invalid/api/billing/membershi
 origin=false;r=await route.POST(req(purchase));assert.equal(r.status,403);origin=true;
 r=await route.POST(req({...purchase,accepted:false}));assert.equal(r.status,400);r=await route.POST(req({...purchase,accountId:'other'}));assert.equal(r.status,400);
 for(const change of [{totalCents:4900},{revision:2}]){r=await route.POST(req({...purchase,...change}));assert.equal(r.status,409);}assert.equal(calls.some(c=>c.create),false);
-r=await route.POST(req(purchase));assert.equal(r.status,200);const created=calls.find(c=>c.create);assert.equal(created.create.mode,'subscription');assert.equal(created.create.line_items[0].price_data.unit_amount,5000);assert.equal(created.create.line_items[0].price_data.recurring.interval,'month');assert.equal(created.create.customer_email,undefined,'Guest supplies email only at secure payment');assert.equal(created.create.custom_text.submit.message,policy.membershipCheckoutSummary(5000,'https://example.invalid'));assert.ok(created.create.custom_text.submit.message.length<220);assert.match(created.create.custom_text.submit.message,/\$50 per month until cancelled/);assert.match(created.create.custom_text.submit.message,/Work credits sold separately/);assert.equal(calls.find(c=>c.path==='rpc/icash_begin_membership_v2').body.p_terms,policy.membershipTerms(5000),'Full terms stay with the purchase record');assert.equal(created.options.idempotencyKey,'membership-checkout:'+id);
+r=await route.POST(req(purchase));assert.equal(r.status,200);const created=calls.find(c=>c.create);assert.equal(created.create.mode,'subscription');assert.equal(created.create.line_items[0].price_data.unit_amount,5000);assert.equal(created.create.line_items[0].price_data.recurring.interval,'month');assert.equal(created.create.customer_email,undefined,'Guest supplies email only at secure payment');assert.equal(created.create.custom_text.submit.message,policy.membershipCheckoutSummary(5000,'https://example.invalid'));assert.ok(created.create.custom_text.submit.message.length<220);assert.match(created.create.custom_text.submit.message,/\$50 per month until cancelled/);assert.doesNotMatch(JSON.stringify(created.create),/work credits.*separate/i);assert.equal(calls.find(c=>c.path==='rpc/icash_begin_membership_v2').body.p_terms,policy.membershipTerms(5000),'Full terms stay with the purchase record');assert.equal(created.options.idempotencyKey,'membership-checkout:'+id);
 prior={id,consent_version:policy.membershipTermsVersion,account_id:null,mode:'live',state:'pending',price_cents:5000,offer_revision:1,stripe_session_id:'cs_live_existing'};calls=[];r=await route.POST(req(purchase));assert.equal(r.body.url,'https://checkout.stripe.com/existing');assert.equal(calls.some(c=>c.create),false,'Identical pending purchase reuses payment');
 prior.state='active';r=await route.POST(req(purchase));assert.equal(r.status,409);assert.equal(calls.some(c=>c.create),false);r=await route.POST(req({action:'cancel'}));assert.equal(r.status,401);assert.equal(calls.some(c=>c.stop),false);
 user={id:'user',email:'fixture@example.invalid'};prior.account_id='account';r=await route.POST(req({action:'cancel'}));assert.equal(r.status,200);assert.equal(calls.filter(c=>c.stop).length,1);
@@ -31,3 +31,17 @@ calls=[];const vipRetention={action:'retain_vip',accepted:true,version:vipPolicy
 for(const patch of [{accepted:false},{priceCents:2500},{version:'old'},{months:6},{accountId:'other'}])assert.equal((await route.POST(req({...vipRetention,...patch}))).status,400);
 assert(!calls.some(c=>c.vip));r=await route.POST(req(vipRetention));assert.equal(r.status,200);assert.equal(calls.filter(c=>c.vip).length,1);assert.equal(calls.find(c=>c.vip).vip.account_id,'account');user=null;assert.equal((await route.POST(req(vipRetention))).status,401);
 console.log('PASS $50 VIP offer: strict terms, amount, no client account override and authenticated acceptance.');
+
+// Overlapping readiness reads must never let checkout proceed before both gates pass.
+let releaseOffer,fundingStarted=false;calls=[];user=null;prior=null;
+const delayed=await load('app/api/billing/membership/route.ts',{...deps,
+ membershipOffer:()=>new Promise(resolve=>{releaseOffer=resolve;}),
+ customerFundingReady:async()=>{fundingStarted=true;return false;}
+},'__membershipReadinessOverlap');
+const blocked=delayed.POST(req({...purchase,revision:offer.revision,totalCents:offer.priceCents}));
+for(let n=0;n<30;n++)await Promise.resolve();
+assert(fundingStarted,'Funding readiness starts without waiting for pricing');
+assert.equal(calls.some(c=>c.create),false,'No payment session before readiness resolves');
+releaseOffer(offer);assert.equal((await blocked).status,503);
+assert.equal(calls.some(c=>c.create),false,'A failed parallel readiness check still blocks payment');
+console.log('PASS parallel checkout reads preserve the readiness gate.');

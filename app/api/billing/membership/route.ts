@@ -22,14 +22,16 @@ const headers={'Cache-Control':'private, no-store'};
 export const dynamic='force-dynamic';
 async function owner(create=false){const jar=await cookies();let token=jar.get('icash_funding_guest')?.value;if(create&&!validGuest(token)){token=randomBytes(32).toString('hex');jar.set('icash_funding_guest',token,{httpOnly:true,secure:true,sameSite:'lax',path:'/',maxAge:86400*30});}const user=await currentUser(true);const [account]=user?await db<{id:string}[]>(`icash_accounts?owner_user_id=eq.${user.id}&select=id&limit=1`):[];return {token,user,account,hash:validGuest(token)?guestHash(token):null};}
 export async function GET(req:Request){try{
- const offer=await membershipOffer(),{account,hash,user}=await owner(),mode=fundingMode(),sessionId=new URL(req.url).searchParams.get('session_id');let m:Membership|null=null;
+ const [offer,{account,hash,user}]=await Promise.all([membershipOffer(),owner()]);const mode=fundingMode(),sessionId=new URL(req.url).searchParams.get('session_id');let m:Membership|null=null;
  if(sessionId&&!/^cs_(live|test)_[A-Za-z0-9]{1,240}$/.test(sessionId))return NextResponse.json({error:'Invalid checkout reference.'},{status:400,headers});
  const scope=account?`account_id=eq.${account.id}`:hash?`guest_hash=eq.${hash}&account_id=is.null`:null;
  if(scope&&mode){const rows=await db<Membership[]>(`icash_memberships?${scope}&mode=eq.${mode}${sessionId?'&stripe_session_id=eq.'+sessionId:''}&order=created_at.desc&select=*&limit=1`);m=rows[0]??null;if(sessionId&&!m)return NextResponse.json({error:'Sign in with your payment email to open this purchase.'},{status:404,headers});if(m?.stripe_session_id&&(sessionId||m.state==='pending'||!m.paid_through))m=await reconcileMembershipCheckout(m);}
- const customer=await checkoutCustomerContext(hash,user?.email);
- const postPurchaseUrl=await paidVipDestination(m).catch(()=>null);
+ const [customer,postPurchaseUrl,ready,retentionOffer]=await Promise.all([
+  checkoutCustomerContext(hash,user?.email),paidVipDestination(m).catch(()=>null),
+  offer.enabled?customerFundingReady():false,vipRetentionOffer(m)
+ ]);
  if(postPurchaseUrl&&mode==='live')scheduleWebinarFollowups();
- return NextResponse.json({postPurchaseUrl,offer,mode,embeddedReady:!!checkoutPublishableKey(mode),customerName:customer.name??'',ready:offer.enabled&&await customerFundingReady(),membership:publicMembership(m),retentionOffer:await vipRetentionOffer(m),needsClaim:!!m?.paid_through&&!m.account_id,email:m?.paid_through&&!user?m.payer_email:user?.email??customer.email??null},{headers});
+ return NextResponse.json({postPurchaseUrl,offer,mode,embeddedReady:!!checkoutPublishableKey(mode),customerName:customer.name??'',ready,membership:publicMembership(m),retentionOffer,needsClaim:!!m?.paid_through&&!m.account_id,email:m?.paid_through&&!user?m.payer_email:user?.email??customer.email??null},{headers});
  }catch{return NextResponse.json({error:'Could not check software access. Please retry.'},{status:503,headers});}}
 const input=z.discriminatedUnion('action',[z.object({action:z.literal('prepare'),version:z.literal(membershipTermsVersion),revision:z.number().int().positive(),totalCents:z.number().int().positive(),embedded:z.literal(true),webinarSessionId:z.string().uuid().optional(),timezone:z.string().max(80).optional()}).strict(),z.object({action:z.literal('checkout'),accepted:z.literal(true),version:z.literal(membershipTermsVersion),revision:z.number().int().positive(),totalCents:z.number().int().positive(),embedded:z.boolean().optional(),webinarSessionId:z.string().uuid().optional(),timezone:z.string().max(80).optional()}).strict(),z.object({action:z.literal('cancel')}).strict(),z.object({action:z.literal('manage')}).strict(),z.object({action:z.literal('retain_vip'),accepted:z.literal(true),version:z.literal(vipRetentionVersion),priceCents:z.literal(vipRetentionCents)}).strict(),z.object({action:z.literal('retain'),accepted:z.literal(true),version:z.literal(retentionVersion),priceCents:z.number().int().positive(),months:z.literal(6)}).strict()]);
 export async function POST(req:Request){
@@ -55,7 +57,7 @@ export async function POST(req:Request){
   const config=await stripe.billingPortal.configurations.create({business_profile:{headline:'Manage your iCash X software subscription'},features:{payment_method_update:{enabled:true},invoice_history:{enabled:true},subscription_cancel:{enabled:true,mode:'immediately',proration_behavior:'none'}}},{idempotencyKey:'icash-membership-portal-v2-immediate'});
   const portal=await stripe.billingPortal.sessions.create({customer:m.stripe_customer_id,configuration:config.id,return_url:origin+'/?settings=billing'});return NextResponse.json({url:portal.url},{headers});
  }
- const offer=await membershipOffer();if(!offer.enabled||!await customerFundingReady())return NextResponse.json({error:'Software checkout is currently unavailable.'},{status:503,headers});
+ const [offer,fundingReady]=await Promise.all([membershipOffer(),customerFundingReady()]);if(!offer.enabled||!fundingReady)return NextResponse.json({error:'Software checkout is currently unavailable.'},{status:503,headers});
  if(i.revision!==offer.revision||i.totalCents!==offer.priceCents)return NextResponse.json({error:'The software price changed. Refresh and review it before paying.'},{status:409,headers});
  const publishableKey=checkoutPublishableKey(mode),embedded=i.embedded===true;
  if(embedded&&!publishableKey)return NextResponse.json({error:'Payment inside the room is not connected yet. Use secure checkout to continue.'},{status:503,headers});
@@ -68,12 +70,16 @@ export async function POST(req:Request){
   else if(prior.price_cents!==offer.priceCents||prior.offer_revision!==offer.revision||prior.consent_version!==membershipTermsVersion)await db(`icash_memberships?id=eq.${prior.id}`,'PATCH',{state:'cancelled'});
  }
  const m=await db<Membership>('rpc/icash_begin_membership_v2','POST',{p_guest:hash,p_account:account?.id??null,p_mode:mode,p_price:offer.priceCents,p_revision:offer.revision,p_terms:membershipTerms(offer.priceCents),p_version:membershipTermsVersion});
- if(!m.post_purchase_webinar_id){const vipId=await checkoutVipSession(i.webinarSessionId,{timezone:i.timezone,ipTimezone:process.env.VERCEL?req.headers.get('x-vercel-ip-timezone'):null,location:webinarViewerLocation(req.headers)});if(vipId)await db(`icash_memberships?id=eq.${m.id}&post_purchase_webinar_id=is.null`,'PATCH',{post_purchase_webinar_id:vipId});}
+ // Read saved customer details while resolving this purchase's VIP destination.
+ const [contact,vipId]=await Promise.all([
+  checkoutCustomerContext(hash,user?.email),
+  m.post_purchase_webinar_id?null:checkoutVipSession(i.webinarSessionId,{timezone:i.timezone,ipTimezone:process.env.VERCEL?req.headers.get('x-vercel-ip-timezone'):null,location:webinarViewerLocation(req.headers)})
+ ]);
+ if(vipId)await db(`icash_memberships?id=eq.${m.id}&post_purchase_webinar_id=is.null`,'PATCH',{post_purchase_webinar_id:vipId});
  // Preparing a form is not customer acceptance; the customer authorizes payment in Stripe.
  if(i.action==='checkout')await recordPurchaseAcceptance(req,{kind:'membership',reference:m.id,mode,accountId:account?.id??null,guestHash:hash,version:membershipTermsVersion,terms:membershipTerms(offer.priceCents),amountCents:offer.priceCents});
- const contact=await checkoutCustomerContext(hash,user?.email);
  const customer=contact.name||contact.phone?await stripe.customers.create({...contact,metadata:{icash_membership:m.id}},{idempotencyKey:`membership-customer:${m.id}`}):null;
- const s=await stripe.checkout.sessions.create({mode:'subscription',...(customer?{customer:customer.id}:{customer_email:contact.email}),payment_method_types:['card'],phone_number_collection:{enabled:true},automatic_tax:{enabled:false},line_items:[{price_data:{currency:'usd',unit_amount:m.price_cents,recurring:{interval:'month'},product_data:{name:'iCash X software access',description:'Software membership. Work credits sold separately.'}},quantity:1}],subscription_data:{metadata:{icash_membership:m.id}},metadata:{icash_membership:m.id,icash_terms_version:membershipTermsVersion},custom_text:{submit:{message:membershipCheckoutSummary(m.price_cents,origin)}},...membershipCheckoutPresentation(embedded,origin)},{idempotencyKey:`membership-checkout:${m.id}`});
+ const s=await stripe.checkout.sessions.create({mode:'subscription',...(customer?{customer:customer.id}:{customer_email:contact.email}),payment_method_types:['card'],phone_number_collection:{enabled:true},automatic_tax:{enabled:false},line_items:[{price_data:{currency:'usd',unit_amount:m.price_cents,recurring:{interval:'month'},product_data:{name:'iCash X software access',description:'Software membership.'}},quantity:1}],subscription_data:{metadata:{icash_membership:m.id}},metadata:{icash_membership:m.id,icash_terms_version:membershipTermsVersion},custom_text:{submit:{message:membershipCheckoutSummary(m.price_cents,origin)}},...membershipCheckoutPresentation(embedded,origin)},{idempotencyKey:`membership-checkout:${m.id}`});
  if(!checkoutMatchesPresentation(s,embedded)||s.livemode!==(mode==='live'))throw Error();await db(`icash_memberships?id=eq.${m.id}`,'PATCH',{stripe_session_id:s.id,checkout_url:s.url});return NextResponse.json(checkoutResult(s),{headers});
  }catch(e){return NextResponse.json({error:e instanceof z.ZodError?'Review and accept the current software price to continue.':'Could not open billing. Please refresh and try again.'},{status:400,headers});}
 }

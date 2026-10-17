@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {newWebinar,publicWebinar} from '../lib/webinar-policy.ts';
 export async function verifyWebinarMeasurement(browser,base,options,name){
+ await verifyCheckoutLoading(browser,base,options,name);
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
  let explicit=false,optedOut=false,regionAllowed=true,scriptLoads=0,reads=0,upgraded=false,checkoutFixture=false,ownerFixture=false,homeFixture=false,privateHomeFixture=false;
  const errors=[],membershipRequests=[],pixelId='1104248230721457';
@@ -191,4 +192,54 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   assert.equal(optedOut,true,'Browser GPC is sent to the server to cancel queued measurement');
   console.log(`PASS ${name}: page-head Meta pixel before session startup, setup-tool script allowed, no floating button, PageView deduplication, Standard/VIP cart and checkout, verified receipt refresh, opt-outs/GPC/geography, owner viewing and private/preview exclusions. All Meta traffic intercepted.`);
  }finally{await context.close();}
+}
+
+// Each ordering uses a fresh browser context: earlier webinar visits cannot warm
+// or fail the SDK before the checkout loading scenario starts.
+async function verifyCheckoutLoading(browser,base,options,name){
+ for(const first of ['script','session']){
+  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
+  let release,posts=0;const gate=new Promise(resolve=>{release=resolve;});
+  const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
+  await context.route('**/*',async route=>{
+   const url=new URL(route.request().url());
+   if(url.href==='https://js.stripe.com/endive/stripe.js'){
+    if(first==='session')await gate;
+    return route.fulfill({contentType:'application/javascript',body:"window.Stripe=()=>({createEmbeddedCheckoutPage:async()=>({mount:node=>{const frame=document.createElement('iframe');frame.title='Loading order fixture';node.appendChild(frame);},destroy:()=>{}})});"});
+   }
+   if(url.origin!==base)return route.abort();
+   if(url.pathname==='/api/account')return route.fulfill({json:{signedIn:false,signInReady:true}});
+   if(url.pathname==='/api/billing/membership'){
+    if(route.request().method()==='POST'){
+     posts++;return route.fulfill({json:{clientSecret:'fixture-secret',publishableKey:'pk_live_fixture',sessionId:'cs_live_order_fixture'}});
+    }
+    if(first==='script')await gate;
+    return route.fulfill({json:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',embeddedReady:true,needsClaim:false,membership:null}});
+   }
+   if(url.pathname==='/api/webinar/pixel')return route.fulfill({json:{enabled:false,trackingAllowed:false}});
+   if(url.pathname.startsWith('/api/'))return route.fulfill({status:401,json:{error:'Local fixture only'}});
+   return route.continue();
+  });
+  try{
+   if(first==='script'){
+    await page.goto(base+'/',{waitUntil:'domcontentloaded'});
+    await page.waitForFunction(()=>typeof window.Stripe==='function');
+    assert.equal(posts,0,'The homepage loads Stripe before membership status returns');
+    assert.equal(await page.locator('iframe').count(),0,'Loading the SDK does not initialize payment');
+   }else{
+    const prepared=page.waitForResponse(response=>response.url().endsWith('/api/billing/membership')&&response.request().method()==='POST');
+    await Promise.all([page.goto(base+'/webinar/checkout',{waitUntil:'domcontentloaded'}),prepared]);
+    await page.locator('.stripe-embedded-host').waitFor({state:'attached'});
+    assert.equal(await page.locator('iframe').count(),0,'A prepared session waits for the in-flight script');
+   }
+   release();
+   await page.locator('iframe[title="Loading order fixture"]').waitFor();
+   assert.equal(posts,1,'Either loading order prepares exactly one checkout');
+   assert.deepEqual(errors,[]);
+  }catch(error){
+   console.log('Checkout loading diagnostics',name,first,await page.evaluate(()=>({url:location.href,text:document.body.innerText.slice(0,1200),stripe:typeof window.Stripe,scripts:[...document.scripts].map(script=>script.src).filter(src=>src.includes('stripe'))})),errors);
+   throw error;
+  }finally{release();await context.close();}
+ }
+ console.log('PASS '+name+': cold checkout overlaps Stripe and membership loading; both completion orders mount once. Fake Stripe only.');
 }
