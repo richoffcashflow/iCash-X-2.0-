@@ -39,6 +39,7 @@ try{
  const historical=await purchase();
  await pg.exec(read('supabase/migrations/20261017152224_purchase_access_reminder_and_text.sql'));
  await pg.exec(read('supabase/migrations/20261017152700_purchase_access_phone_normalization.sql'));
+ await pg.exec(read('supabase/migrations/20261017185549_access_delivery_reconciliation.sql'));
  const rows=async id=>(await q('select * from icash_purchase_access_followups where membership_id=$1 order by channel',[id])).rows;
  const row=async(id,channel)=>(await rows(id)).find(r=>r.channel===channel);
  assert.equal((await rows(historical.id)).length,0,'No historical backfill');
@@ -69,8 +70,31 @@ try{
  const bounced=await row(retry.id,'email');await rpc('icash_webinar_followup_delivery',{p_channel:'email',p_provider:bounced.provider_id,p_kind:'bounced'});await rpc('icash_webinar_followup_delivery',{p_channel:'email',p_provider:bounced.provider_id,p_kind:'delivered'});assert.equal((await row(retry.id,'email')).delivery,'bounced');assert((await q('select * from icash_webinar_suppressions where email=$1',[retry.email])).rows.length,'Bounce suppression is shared');
  const early=await purchase();await send(early.id,{transport:async()=>{await rpc('icash_webinar_followup_delivery',{p_channel:'sms',p_provider:'early-receipt',p_kind:'delivered'});return Response.json({data:{message_id:'early-receipt'}});}});assert.equal((await row(early.id,'sms')).delivery,'delivered','Delivery arriving before finish is reconciled');
  const disabled=await purchase();await q("update icash_messaging_settings set config=$1",[{smsEnabled:false}]);await send(disabled.id);assert.equal((await row(disabled.id,'sms')).status,'canceled');await q("update icash_messaging_settings set config=$1",[{smsEnabled:true}]);
+ // Late delay receipts cannot erase delivery; a genuine bounce still wins.
+ const deliveredFirst=(await q('select * from icash_purchase_access_emails where membership_id=$1',[buyer.id])).rows[0];
+ for(const kind of ['delivered','delivery_delayed'])await rpc('icash_purchase_access_email_delivery',{p_id:deliveredFirst.id,p_provider:deliveredFirst.provider_id,p_recipient:buyer.email,p_kind:kind});
+ assert.equal((await q('select delivery from icash_purchase_access_emails where id=$1',[deliveredFirst.id])).rows[0].delivery,'delivered');
+ for(const kind of ['bounced','delivered'])await rpc('icash_purchase_access_email_delivery',{p_id:deliveredFirst.id,p_provider:deliveredFirst.provider_id,p_recipient:buyer.email,p_kind:kind});
+ assert.equal((await q('select delivery from icash_purchase_access_emails where id=$1',[deliveredFirst.id])).rows[0].delivery,'bounced');
+ // Paid purchases predating the outbox get exactly the same finite access sequence.
+ async function missed({mode='live',state='active',account=null,amount=5000,days=10,expired=false,review=false,suppressed=false}={}){
+  const id=randomUUID(),email=id+'@example.invalid',payment='pi_'+id;
+  await q("insert into icash_memberships(id,mode,state,account_id,paid_through,payer_email) values($1,$2,$3,$4,now()+case when $5 then interval '-1 day' else interval '20 days' end,$6)",[id,mode,state,account,expired,email]);
+  await q("insert into icash_membership_invoices values($1,$2,$3,$4,'2099-02-01',now()-make_interval(days=>$5))",['in_'+id,id,amount,payment,days]);
+  if(review)await q('insert into icash_billing_reviews values($1,null)',[payment]);
+  if(suppressed)await q("insert into icash_email_suppressions values($1,'bounce')",[email]);
+  return {id,email};
+ }
+ const missing=await missed();for(const options of [{mode:'test'},{state:'canceled'},{account:randomUUID()},{amount:0},{days:31},{expired:true},{review:true},{suppressed:true}])await missed(options);
+ assert.equal(await rpc('icash_queue_missing_purchase_access_emails',{}),1);assert.equal(await rpc('icash_queue_missing_purchase_access_emails',{}),0);
+ assert.equal((await rows(missing.id)).length,1,'Recovery never invents SMS consent');assert.equal((await row(missing.id,'email')).status,'pending');
+ const beforeRecovery=sent.length;
+ await processPurchaseAccessEmails({db,env,transport,membershipId:missing.id,limit:1,reconcile:true});
+ assert.equal(sent.length,beforeRecovery+1);assert(new Date((await row(missing.id,'email')).due_at).getTime()>Date.now()+14*60000);
+ await due(missing.id);await send(missing.id);await first(missing.id);assert.equal(sent.length,beforeRecovery+2,'Recovered buyer receives only two access emails');
  const before=sent.length;const preview=await processPurchaseAccessFollowups({db:async()=>assert.fail('Preview cannot claim'),env:{...env,VERCEL_ENV:'preview'},transport});assert.equal(preview.ready,false);assert.equal(sent.length,before);
- for(const role of ['anon','authenticated']){await pg.exec('set role '+role);await assert.rejects(()=>pg.query('select * from icash_purchase_access_followups'));await assert.rejects(()=>pg.query("select icash_claim_purchase_access_followup('sms')"));await pg.exec('reset role');}
+ await processPurchaseAccessEmails({db:async()=>assert.fail('Preview cannot reconcile'),env:{...env,VERCEL_ENV:'preview'},transport,reconcile:true});
+ for(const role of ['anon','authenticated']){await pg.exec('set role '+role);await assert.rejects(()=>pg.query('select * from icash_purchase_access_followups'));await assert.rejects(()=>pg.query("select icash_claim_purchase_access_followup('sms')"));await assert.rejects(()=>pg.query('select icash_queue_missing_purchase_access_emails()'));await pg.exec('reset role');}
  let callbacks=[],wakes=[];const dispatch=await loadService('lib/purchase-access-dispatch.ts',{after:fn=>callbacks.push(fn),db,process:{env},processPurchaseAccessEmails:async()=>{wakes.push('email');throw Error('First lane down');},processPurchaseAccessFollowups:async()=>{wakes.push('followups');},console:{warn:()=>{}}});dispatch.schedulePurchaseAccessEmail(buyer.id);await callbacks[0]();assert.deepEqual(wakes,['email','followups'],'Immediate SMS wake survives first email failure');
  console.log('PASS purchase access follow-ups: real settlement, exactly two emails/one text, actual 15-minute spacing, account-claim cancellation, payment/phone/consent/STOP gates, role-safe sender, independent channels, immutable email retries, no ambiguous SMS replay, delivery races, bounce suppression, preview and private permissions. No live provider traffic.');
 }finally{await pg.close();}

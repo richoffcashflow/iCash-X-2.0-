@@ -5,7 +5,7 @@ import {titleEmailAddress,titleReference} from './title-inbound-policy.ts';
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 type Environment=Record<string,string|undefined>;
 type Message={from:string;to:string[];subject:string;text:string;html:string;tags:{name:string;value:string}[]};
-type Claim={id:string;claimToken:string;recipient:string;source:'chat'|'email';sourceId:string;threadId:string|null;customerUserId:string|null;customerEmail:string|null;subject:string;question:string;reply:string|null;replyStatus:'saved'|'accepted'|'unconfirmed'|'none';createdAt:string;message:Message|null};
+type Claim={id:string;claimToken:string;recipient:string;source:'chat'|'email'|'access_help'|'purchase_access';sourceId:string;threadId:string|null;customerUserId:string|null;customerEmail:string|null;subject:string;question:string;reply:string|null;replyStatus:'saved'|'accepted'|'unconfirmed'|'none';createdAt:string;message:Message|null};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const escapeHtml=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 export function supportOwnerNotificationsEnabled(env:Environment=process.env){return env.VERCEL_ENV==='production'&&env.ICASH_SUPPORT_OWNER_EMAIL_ENABLED==='true';}
@@ -29,13 +29,13 @@ export async function queueSupportEmailCopy({db,providerId,email,receiptText,env
 export function supportOwnerMessage(job:Claim,from:string):Message{
  if(!uuid.test(job.id)||!uuid.test(job.sourceId)||!titleEmailAddress(job.recipient)||!titleEmailAddress(from)||job.threadId&&!uuid.test(job.threadId)||!Number.isFinite(Date.parse(job.createdAt)))throw Error('Invalid support notification');
  const when=new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',dateStyle:'medium',timeStyle:'short',hour12:true}).format(new Date(job.createdAt));
- const responseLabel=job.source==='chat'?'AI support response':'Automatic email response';
+ const responseLabel=job.source==='chat'?'AI support response':job.source==='email'?'Automatic email response':'On-page support response';
  const reply=job.reply??'No automatic response was sent.';
  const status=job.replyStatus==='saved'?'Shown in the customer’s support conversation.':job.replyStatus==='accepted'?'Accepted by the email provider.':job.replyStatus==='unconfirmed'?'Sending was not confirmed. This is the attempted response.':'Needs a reply from the team.';
- const link=job.source==='chat'?'https://www.geticashx.com/support/admin':`https://resend.com/emails/receiving/${job.sourceId}`;
- const label=job.source==='chat'?'Open support conversations':'Open original email';
- const customer=job.customerEmail??'Email unavailable';
- const identity=job.source==='email'?'Sender (email address not verified)':'Customer';
+ const link=job.source==='email'?`https://resend.com/emails/receiving/${job.sourceId}`:'https://www.geticashx.com/support/admin';
+ const label=job.source==='email'?'Open original email':job.source==='chat'?'Open support conversations':'Open paid access support';
+ const customer=job.customerEmail??(job.source==='purchase_access'?'Review the paid access queue':'Email unavailable');
+ const identity=['email','access_help'].includes(job.source)?'Sender (email address not verified)':job.source==='purchase_access'?'Access check':'Customer';
  const subject=`iCash X support: ${job.subject.replace(/[\r\n]+/g,' ').slice(0,120)}`;
  const text=`${identity}: ${customer}\nReceived: ${when} Central Time\n\nCUSTOMER MESSAGE\n${job.question}\n\n${responseLabel.toUpperCase()}\n${reply}\n\n${status}\n\n${label}:\n${link}${job.threadId?`\nConversation: ${job.threadId}`:''}\n\nThis is your owner copy. Review the conversation before replying to the customer.`;
  const paragraph=(s:string)=>escapeHtml(s).replace(/\n/g,'<br>');
@@ -43,7 +43,7 @@ export function supportOwnerMessage(job:Claim,from:string):Message{
  return {from:`iCash X Support <${from}>`,to:[job.recipient],subject,text,html,tags:[{name:'icash_support_copy_id',value:job.id}]};
 }
 
-export async function processSupportOwnerNotifications({db,env=process.env,transport=fetch,limit=5}:{db:Database;env?:Environment;transport?:typeof fetch;limit?:number}){
+export async function processSupportOwnerNotifications({db,env=process.env,transport=fetch,limit=5,monitorAccess=false}:{db:Database;env?:Environment;transport?:typeof fetch;limit?:number;monitorAccess?:boolean}){
  if(!supportOwnerNotificationsEnabled(env))return {state:'disabled',accepted:0,failed:0};
  const from=titleEmailAddress(env.ICASH_RELIABILITY_FROM_EMAIL);
  let origin:URL;try{origin=new URL(env.SUPABASE_URL??'');}catch{return {state:'unconfigured',accepted:0,failed:1};}
@@ -58,6 +58,7 @@ export async function processSupportOwnerNotifications({db,env=process.env,trans
  }
  // Reuse the Auth admin API; service_role deliberately has no SELECT on auth.users.
  let recipient:string;try{recipient=await verifiedEmail(ownerInboundTarget.ownerUserId);}catch{return {state:'recipient_unverified',accepted:0,failed:1};}
+ if(monitorAccess)await db('rpc/icash_queue_purchase_access_attention','POST',{});
  let accepted=0,failed=0;
  for(let count=0;count<Math.min(10,Math.max(1,limit));count++){
   // The recipient is resolved from the platform owner's verified auth record.
