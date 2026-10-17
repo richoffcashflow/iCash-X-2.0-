@@ -1,6 +1,7 @@
 import {sellerFunnelStages,validFunnelSteps,type FunnelStep} from './conversion-funnel.ts';
 import {closingOperationsSchema,type ClosingOperations} from './deal-completion.ts';
 import {reliabilitySchema,type ReliabilityReport} from './reliability.ts';
+import {validLeadSupplyPlan,type LeadSupplyPlan} from './lead-supply.ts';
 export type OverviewFilters={days:1|7|30;includeOwner:boolean;query:string;page:number};
 export type OverviewLead={id:string;name:string|null;address:string;phone:string;email:string|null;state:string;source:string;campaign:string|null;assignedTo:string|null;createdAt:string};
 export type OwnerOverview=OverviewFilters & {
@@ -9,6 +10,7 @@ export type OwnerOverview=OverviewFilters & {
  funnel?:FunnelStep[];
  closing?:ClosingOperations;
  reliability?:ReliabilityReport|null;
+ leadSupply?:LeadSupplyPlan|null;
  costHealth?:{pendingCount:number;agedCount:number;oldestAt:string|null;unreconciledObservations:number;checkedAt:string}|null;
  usage:{completedCount:number;missingChargeCount:number;chargedCents:number|null;coveredCents:number;knownCostMicros:number;costMicros:number|null;marginMicros:number|null;missingCostCount:number;estimatedCount:number;pendingCount:number};
 };
@@ -31,6 +33,7 @@ export function validOwnerOverview(value:unknown,filters:OverviewFilters):value 
  if(v.funnel!==undefined&&(!validFunnelSteps(v.funnel,sellerFunnelStages)||v.funnel[0].count!==v.leadCount))return false;
  if(v.costHealth!=null&&!validCostHealth(v.costHealth))return false;
  if(v.reliability!=null&&!reliabilitySchema.safeParse(v.reliability).success)return false;
+ if(v.leadSupply!=null&&!validLeadSupplyPlan(v.leadSupply))return false;
  if(v.closing!==undefined&&!closingOperationsSchema.safeParse(v.closing).success)return false;
  return v.leads.every(lead=>{const l=record(lead);return ['id','address','phone','state','source'].every(k=>typeof l[k]==='string')&&['name','email','campaign','assignedTo'].every(k=>l[k]===null||typeof l[k]==='string')&&date(l.createdAt);});
 }

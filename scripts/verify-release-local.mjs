@@ -25,7 +25,7 @@ const suites = [
  'cost-efficiency', 'property-photo-route', 'property-photo', 'persistent-property-photo',
  'reliability-database', 'text-receipt-recovery', 'worker-heartbeat', 'reliability-monitor', 'service-health',
  'text-sender-routing', 'sms-channel-admission', 'contract-text', 'contract-text-resend',
- 'owner-overview-route', 'owner-overview-ui', 'admin-experience-route', 'admin-experience-ui',
+ 'owner-overview-route', 'owner-overview-ui', 'lead-supply', 'lead-supply-database', 'admin-experience-route', 'admin-experience-ui',
  'workspace-panel-content', 'production-release-gate', 'production-health',
  'workspace-experience', 'workspace-experience-database', 'reliability-alerts',
  'workspace-request-recovery', 'durable-work-billing-stop',
