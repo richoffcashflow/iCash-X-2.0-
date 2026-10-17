@@ -12,7 +12,7 @@ import {allowedOrigin,fundingMode} from '@/lib/funding-policy';
 import {fundingStripe,limitRequest,validGuest} from '@/lib/funding';
 import {customerFundingReady} from '@/lib/launch-readiness';
 import {membershipOffer,accountMembership,publicMembership,reconcileMembershipCheckout,stopMembership,retainMembership,retentionVersion,type Membership} from '@/lib/membership';
-import {membershipTerms,membershipTermsVersion,membershipCheckoutSummary} from '@/lib/membership-policy';
+import {membershipTerms,membershipTermsVersion,membershipCheckoutSummary,purchaseAccessSmsVersion} from '@/lib/membership-policy';
 import {checkoutCustomerContext} from '@/lib/checkout-customer-context';
 import {checkoutPublishableKey,membershipCheckoutPresentation,checkoutMatchesPresentation} from '@/lib/embedded-checkout-policy';
 import {checkoutVipSession,paidVipDestination} from '@/lib/webinar-vip';
@@ -78,7 +78,7 @@ export async function POST(req:Request){
  // Preparing a form is not customer acceptance; the customer authorizes payment in Stripe.
  if(i.action==='checkout')await recordPurchaseAcceptance(req,{kind:'membership',reference:m.id,mode,accountId:account?.id??null,guestHash:hash,version:membershipTermsVersion,terms:membershipTerms(offer.priceCents),amountCents:offer.priceCents});
  const customer=contact.name||contact.phone?await stripe.customers.create({...contact,metadata:{icash_membership:m.id}},{idempotencyKey:`membership-customer:${m.id}`}):null;
- const s=await stripe.checkout.sessions.create({mode:'subscription',...(customer?{customer:customer.id}:{customer_email:contact.email}),payment_method_types:['card'],phone_number_collection:{enabled:true},automatic_tax:{enabled:false},line_items:[{price_data:{currency:'usd',unit_amount:m.price_cents,recurring:{interval:'month'},product_data:{name:'iCash X software access',description:'Software membership.'}},quantity:1}],subscription_data:{metadata:{icash_membership:m.id}},metadata:{icash_membership:m.id,icash_terms_version:membershipTermsVersion},custom_text:{submit:{message:membershipCheckoutSummary(m.price_cents,origin)}},...membershipCheckoutPresentation(embedded,origin)},{idempotencyKey:`membership-checkout:${m.id}`});
+ const s=await stripe.checkout.sessions.create({mode:'subscription',...(customer?{customer:customer.id}:{customer_email:contact.email}),payment_method_types:['card'],phone_number_collection:{enabled:true},automatic_tax:{enabled:false},line_items:[{price_data:{currency:'usd',unit_amount:m.price_cents,recurring:{interval:'month'},product_data:{name:'iCash X software access',description:'Software membership.'}},quantity:1}],subscription_data:{metadata:{icash_membership:m.id}},metadata:{icash_membership:m.id,icash_terms_version:membershipTermsVersion,icash_access_sms:purchaseAccessSmsVersion},custom_text:{submit:{message:membershipCheckoutSummary(m.price_cents,origin)}},...membershipCheckoutPresentation(embedded,origin)},{idempotencyKey:`membership-checkout:${m.id}`});
  if(!checkoutMatchesPresentation(s,embedded)||s.livemode!==(mode==='live'))throw Error();await db(`icash_memberships?id=eq.${m.id}`,'PATCH',{stripe_session_id:s.id,checkout_url:s.url});return NextResponse.json(checkoutResult(s),{headers});
  }catch(e){return NextResponse.json({error:e instanceof z.ZodError?'Review and accept the current software price to continue.':'Could not open billing. Please refresh and try again.'},{status:400,headers});}
 }

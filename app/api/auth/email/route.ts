@@ -15,5 +15,9 @@ export async function POST(req:Request){
   // Keep responses identical for unknown emails. Existing verified accounts may return before purchasing again.
   if(eligible)await authRequest("otp",{email,create_user:true});
   return NextResponse.json({sent:true,message:"If this email has an account or confirmed payment, a sign-in code is on its way."},{headers:{"Cache-Control":"no-store"}});
- }catch{return NextResponse.json({error:"Could not send a code. Wait a moment and try again."},{status:429});}
+ }catch(error){
+  const status=(error as {status?:number})?.status,limited=status===429;
+  console.warn('[account-email-code]',{outcome:limited?'rate_limited':'unavailable',providerStatus:status??null});
+  return NextResponse.json({error:limited?'A code may already be in your inbox. Enter it below, use your checkout phone, or wait 10 minutes before requesting another email.':'Email could not be sent right now. Enter a code you already received or use your checkout phone.'},{status:limited?429:503,headers:{'Cache-Control':'no-store',...(limited?{'Retry-After':'600'}:{})}});
+ }
 }

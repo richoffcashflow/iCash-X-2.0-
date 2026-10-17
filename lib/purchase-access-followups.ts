@@ -11,7 +11,7 @@ export function purchaseAccessFollowupMessage(job:Claim):Record<string,unknown>{
   return {...message,tags:[{name:'icash_access_followup_id',value:job.id}]};
  }
  if(!job.sender||!phone.test(job.sender)||!phone.test(job.recipient))throw Error('Invalid purchase text');
- return {from:job.sender,to:job.recipient,message:'iCash X login: https://www.geticashx.com/access Use your checkout email, then Email me a code. Save this link. Reply STOP to opt out.',attachments:[],fast_track:false};
+ return {from:job.sender,to:job.recipient,message:'iCash X login: https://www.geticashx.com/access Use your checkout email. Need help? Choose Use my checkout phone. Reply STOP to opt out.',attachments:[],fast_track:false};
 }
 
 /** One reminder email and one permission-bound text per first payment. */

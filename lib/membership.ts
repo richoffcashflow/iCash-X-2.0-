@@ -4,7 +4,7 @@ import {authorizedPlanPrice} from '@/lib/vip-membership';
 import {db} from '@/lib/stripe-test';
 import {fundingStripe} from '@/lib/funding';
 import {fundingMode} from '@/lib/funding-policy';
-import {membershipAccessible,validOffer,type MembershipOffer} from './membership-policy';
+import {membershipAccessible,validOffer,purchaseAccessSmsVersion,type MembershipOffer} from './membership-policy';
 export type Membership={private_invite_id?:string|null;vip_retained_at?:string|null;post_purchase_webinar_id?:string|null;vip_until?:string|null;initial_price_cents?:number|null;id:string;mode:'live'|'test';account_id:string|null;guest_hash:string;price_cents:number;offer_revision:number;state:string;stripe_session_id:string|null;stripe_subscription_id:string|null;stripe_customer_id:string|null;paid_through:string|null;cancel_at_period_end:boolean;payer_email:string|null;payer_phone?:string|null;checkout_url:string|null;consent_version?:string;retention_requested_at?:string|null;retention_started_at?:string|null;retention_ends_at?:string|null;retention_discount_id?:string|null};
 export const retentionVersion='retention-50-six-months-v1';
 const retentionCoupon='icash-retention-50-six-months-v1';
@@ -92,7 +92,11 @@ export async function reconcileMembershipCheckout(m:Membership){
  if(s.status!=='complete'||s.payment_status!=='paid')return m;
  const subId=ref(s.subscription);if(!subId||m.stripe_subscription_id&&m.stripe_subscription_id!==subId)throw Error('Subscription binding mismatch');
  const sub=await stripe.subscriptions.retrieve(subId);if(sub.metadata.icash_membership!==m.id||ref(s.customer)!==ref(sub.customer))throw Error('Checkout subscription mismatch');await syncMembershipSubscription(sub);const invoice=ref(sub.latest_invoice);if(invoice)await settleMembershipInvoice(invoice);
- const [saved]=await db<Membership[]>(`icash_memberships?id=eq.${m.id}&select=*`);if(!saved.payer_phone&&s.customer_details?.phone){await db(`icash_memberships?id=eq.${m.id}`,'PATCH',{payer_phone:s.customer_details.phone.slice(0,40)});saved.payer_phone=s.customer_details.phone;}return saved;
+ const [saved]=await db<Membership[]>(`icash_memberships?id=eq.${m.id}&select=*`);if(!saved.payer_phone&&s.customer_details?.phone){await db(`icash_memberships?id=eq.${m.id}`,'PATCH',{payer_phone:s.customer_details.phone.slice(0,40)});saved.payer_phone=s.customer_details.phone;}
+ if(saved.mode==='live'&&membershipAccessible(saved)&&s.metadata?.icash_access_sms===purchaseAccessSmsVersion&&s.customer_details?.phone){
+  await db('rpc/icash_record_purchase_access_contact','POST',{p_membership:saved.id,p_checkout:s.id,p_phone:s.customer_details.phone,p_version:purchaseAccessSmsVersion});
+ }
+ return saved;
 }
 /** Signed webhook input still requires a canonical Checkout and its stored purchase binding. */
 export async function reconcileMembershipSession(sessionId:string){
