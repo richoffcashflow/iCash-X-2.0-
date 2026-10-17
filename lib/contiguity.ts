@@ -66,7 +66,7 @@ export async function sendContiguityText(input:unknown,key:string,fetcher:Transp
 export function isMessageOptOut(text:string){
  return isContactOptOut(text);
 }
-const messageEvent=z.object({id:z.string().min(1).max(200),type:z.string().min(1).max(100),timestamp:z.number().finite(),data:z.object({from:z.union([phone,serviceSender]),to:phone,body:z.string().max(20000).optional(),message_id:z.string().max(200).optional(),error:z.string().max(20000).optional(),attachments:z.array(z.object({url:z.string().url().max(3000),mime:z.string().max(150).optional(),filename:z.string().max(250).optional()})).max(20).optional()})});
+const messageEvent=z.object({id:z.string().min(1).max(200),type:z.string().min(1).max(100),timestamp:z.number().finite(),data:z.object({from:z.union([phone,serviceSender]),to:phone,body:z.string().max(20000).optional(),message_id:z.string().max(200).optional(),error:z.string().max(20000).optional().catch(undefined),attachments:z.array(z.object({url:z.string().url().max(3000),mime:z.string().max(150).optional(),filename:z.string().max(250).optional()})).max(20).optional()})});
 export function parseTextWebhook(input:unknown){
  const envelope=z.object({type:z.string(),data:z.unknown()}).passthrough().parse(input);
  if(envelope.type==='numbers.substitution'){

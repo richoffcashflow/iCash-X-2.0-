@@ -73,7 +73,7 @@ assert.equal(effects.filter(e=>e.path==='icash_webinar_phone_suppressions').leng
 assert.equal((await POST(request({...event,type:'text.delivery.confirmed'}))).status,200);
 assert(suppressions.has(recipient),'A later success cannot lift recipient suppression');
 
-for(const error of [undefined,'Carrier never provided delivery confirmation. Your message may have delivered, but Contiguity has no idea if it did.','Request timed out','Carrier unavailable','Message rejected']){
+for(const error of [undefined,null,400,{message:'Message Blocking is active'},'Carrier never provided delivery confirmation. Your message may have delivered, but Contiguity has no idea if it did.','Request timed out','Carrier unavailable','Message rejected']){
  reset();assert.equal((await POST(request({...event,data:{...event.data,error}}))).status,200);
  assert.equal(suppressions.size,0,'Uncertain/generic failures must not become recipient blocks');
  assert.equal(receipts()[0].body.p_kind,'failed');
