@@ -8,8 +8,8 @@ import {webinarSite} from '@/lib/webinar-site';
 import {db} from '@/lib/stripe-test';
 import {publicWebinar,settingsSchema,webinarSchema,visitorTimezone,webinarFromRow,offerDestination,hasWebinarVideo,webinarReturnPosition,type WebinarSettings,type WebinarRow} from '@/lib/webinar-policy';
 import {sessionWebinarOffers} from '@/lib/webinar-offer-server';
-import {selectOffer} from '@/packages/webinar-engine/src/index';
-import {selectRecording} from '@/lib/webinar-recordings';
+import {selectOffer,withinWebinarResumeWindow} from '@/packages/webinar-engine/src/index';
+import {selectRecording,recordingRecheckAt} from '@/lib/webinar-recordings';
 import {webinarViewerLocation} from '@/lib/webinar-viewer-location';
 import {snapshotChat} from '@/lib/webinar-variants';
 import {approximateRegion} from '@/lib/webinar-activity';
@@ -59,16 +59,18 @@ export async function POST(req:Request){try{
  ]);
  if(paid)return Response.json({redirect:webinarSite.workspacePath},{headers:webinarHeaders});
  const settings=settingsSchema.parse(settingsRows[0].config);
+ const entryNow=new Date();
  const history=initialHistory.filter(h=>h.webinar_id===target.id);
- let journey=webinarReturnJourney(history,offers,timezone,settings.routing.checkoutWindowHours);
- // The owner uses the public link to test the current Day/Night funnel.
- // A saved daytime test must not pin that link to Day after sunset (or vice versa).
- // Customer resumes and purchase-paired VIP recordings keep their saved timeline.
- if(ownerWatching&&!target.parentWebinarId&&journey.kind==='resume'){
+ let journey=webinarReturnJourney(history,offers,timezone,settings.routing.checkoutWindowHours,entryNow);
+ let recordingChanged=false;
+ // Every returning viewer gets the current local recording before resume or
+ // checkout routing. A different video's playback position must start at zero.
+ if(!i.preview&&journey.kind!=='new'){
   const savedId=journey.sessionId;
   const saved=history.find(h=>h.id===savedId);
-  const currentRecording=selectRecording(target,timezone,new Date(),settings.routing,undefined,location);
-  if(saved&&(saved.config.recordingVersion??'day')!==currentRecording.recordingVersion)journey={kind:'advance',sessionId:savedId};
+  const currentRecording=selectRecording(target,timezone,entryNow,settings.routing,undefined,location);
+  recordingChanged=!!saved&&(saved.config.recordingVersion??'day')!==currentRecording.recordingVersion;
+  if(recordingChanged)journey={kind:'advance',sessionId:savedId};
  }
  // Paid main/ad entry always starts VIP at zero. Canonicalizing to VIP makes
  // refreshes ordinary returns; racing requests reuse the newly created session.
@@ -86,17 +88,17 @@ export async function POST(req:Request){try{
  const resumeId=journey.kind==='resume'?journey.sessionId:null;
  const unfinished=history.find(h=>h.id===resumeId);
  const webinar=unfinished?.config??target;
- // Pair a new VIP session with the recording this visitor actually watched.
- // Never re-evaluate their main recording just because sunset passed meanwhile.
+ // An immediate purchase-to-VIP handoff follows the main recording just watched.
+ // Later returns and new main/ad arrivals choose the current local recording.
  let pairedVersion:'day'|'night'|undefined;
- if(!i.preview&&target.parentWebinarId&&!unfinished){
-  const [source]=await db<WebinarSession[]>(`icash_webinar_sessions?visitor_id=eq.${visitor.id}&webinar_id=eq.${target.parentWebinarId}&is_preview=eq.false&select=config&order=created_at.desc&limit=1`);
-  if(source)pairedVersion=source.config.recordingVersion==='night'?'night':'day';
+ if(!i.preview&&target.parentWebinarId&&!unfinished&&!recordingChanged&&!paidAdReturn){
+  const [source]=await db<WebinarSession[]>(`icash_webinar_sessions?visitor_id=eq.${visitor.id}&webinar_id=eq.${target.parentWebinarId}&is_preview=eq.false&select=config,updated_at&order=created_at.desc&limit=1`);
+  if(source&&withinWebinarResumeWindow(Date.parse(source.updated_at),entryNow.getTime()))pairedVersion=source.config.recordingVersion==='night'?'night':'day';
  }
  const sessionId=randomUUID();
- const snapshot=snapshotChat(unfinished&&!i.preview?webinarSchema.parse(webinar):selectRecording(webinarSchema.parse(webinar),timezone,new Date(),settings.routing,i.preview?i.variant:pairedVersion,location),sessionId);
- const returnStart=!i.preview&&!ownerWatching&&!target.parentWebinarId&&journey.kind==='advance'?webinarReturnPosition(snapshot):0;
+ const snapshot=snapshotChat(unfinished&&!i.preview?webinarSchema.parse(webinar):selectRecording(webinarSchema.parse(webinar),timezone,entryNow,settings.routing,i.preview?i.variant:pairedVersion,location),sessionId);
+ const returnStart=!i.preview&&!ownerWatching&&!target.parentWebinarId&&!recordingChanged&&journey.kind==='advance'?webinarReturnPosition(snapshot):0;
  const session=await db<WebinarSession>('rpc/icash_webinar_begin','POST',{p_visitor:visitor.id,p_id:sessionId,p_config:returnStart?{...snapshot,_returnStartSeconds:returnStart}:snapshot,p_advance_from:!i.preview&&journey.kind==='advance'?journey.sessionId:null,p_preview:!!i.preview});
  const messages=await db<{id:string;role:'user'|'assistant';text:string;playback_seconds:number|null}[]>(`icash_webinar_messages?session_id=eq.${session.id}&role=eq.user&select=id,role,text,playback_seconds,display_name,public_status&order=created_at.desc&limit=60`).then(rows=>rows.reverse()).catch(()=>[]);
- return Response.json({webinar:publicWebinar(webinarSchema.parse(session.config)),...(session.config.id!==current.id?{canonicalPath:webinarLink(session.config)}:{}),sessionId:session.id,progress:session.completed_at?0:session.progress_seconds,name:visitor.name??'',email:visitor.email??'',phone:visitor.phone??'',contactSaved:!!visitor.email&&!!visitor.phone,messages,preview:!!i.preview,ownerWatching,serverNow:Date.now()},{headers:webinarHeaders});
+ return Response.json({webinar:publicWebinar(webinarSchema.parse(session.config)),...(session.config.id!==current.id?{canonicalPath:webinarLink(session.config)}:{}),sessionId:session.id,progress:session.completed_at?0:session.progress_seconds,name:visitor.name??'',email:visitor.email??'',phone:visitor.phone??'',contactSaved:!!visitor.email&&!!visitor.phone,messages,preview:!!i.preview,ownerWatching,recordingRecheckAt:i.preview?null:recordingRecheckAt(target,session.config.recordingVersion??'day',timezone,entryNow,settings.routing,location),serverNow:Date.now()},{headers:webinarHeaders});
  }catch(e){if(e instanceof z.ZodError)return Response.json({error:'The webinar link could not be read.'},{status:400,headers:webinarHeaders});return webinarError(e);}}

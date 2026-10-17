@@ -23,13 +23,13 @@ import {WebinarVipWelcome} from '@/components/webinar-vip-welcome';
 import {WebinarPlayer} from '@/components/webinar-player';
 import {WebinarPanelBoundary} from '@/components/webinar-panel-boundary';
 import {webinarPost as post,webinarBeacon,webinarRequest} from '@/lib/webinar-client';
-import {restoredPosition,savePosition,clearPosition,withinWebinarResumeWindow} from '@/lib/webinar-playback';
+import {restoredPosition,savePosition,clearPosition,withinWebinarResumeWindow,webinarReturnNeedsReload} from '@/lib/webinar-playback';
 import {webinarPrompt,readPromptHistory,savePromptHistory,emptyPromptHistory} from '@/lib/webinar-prompts';
 import {publicWebinar,webinarSchema,formatWatchTime,webinarOffers,webinarPitchAt,offerDestination,webinarConsent,webinarConsentVersion,webinarSmsConsent,webinarSmsConsentVersion,type Webinar,type WebinarEvent} from '@/lib/webinar-policy';
 const WebinarCheckout=dynamic(()=>import('@/components/webinar-checkout-adapter').then(m=>m.WebinarCheckout),{loading:()=> <p role="status">Getting checkout ready…</p>});
 type PublicWebinar=ReturnType<typeof publicWebinar>;
 type Message=WebinarMessage;
-type Session={webinar:PublicWebinar;canonicalPath?:string;sessionId:string;progress:number;name:string;email?:string;phone?:string;contactSaved:boolean;messages:Message[];preview:boolean;ownerWatching?:boolean;serverNow:number};
+type Session={webinar:PublicWebinar;canonicalPath?:string;sessionId:string;progress:number;name:string;email?:string;phone?:string;contactSaved:boolean;messages:Message[];preview:boolean;ownerWatching?:boolean;recordingRecheckAt?:number|null;serverNow:number};
 export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  const [vipWelcomeUrl,setVipWelcomeUrl]=useState<string|null>(null),vipWelcomeRef=useRef<string|null>(null);
  const [previewPublicPath,setPreviewPublicPath]=useState<string|null>(null);
@@ -127,7 +127,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
   const leave=()=>{if(awaySince.current===null)awaySince.current=Date.now();};
   const resume=()=>{
    if(document.hidden||awaySince.current===null||!sessionRef.current||purchaseRedirected.current)return;
-   if(!sessionRef.current.preview&&!withinWebinarResumeWindow(awaySince.current)){
+   if(!sessionRef.current.preview&&webinarReturnNeedsReload(awaySince.current,sessionRef.current.recordingRecheckAt,Date.now(),offset.current)){
     if(checkoutEngagedRef.current)return; // Preserve an active payment form.
     if(!returnExpired.current){returnExpired.current=true;allowWebinarNavigation();location.reload();}
     return;
