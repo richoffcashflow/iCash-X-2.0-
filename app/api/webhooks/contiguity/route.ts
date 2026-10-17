@@ -1,5 +1,6 @@
 import {NextResponse} from 'next/server';
 import {verifyContiguityWebhook,parseTextWebhook,isServiceTextSender} from '@/lib/contiguity';
+import {suppressCarrierBlockedSms} from '@/lib/carrier-blocked-sms';
 import {db} from '@/lib/stripe-test';
 import {ownerPracticeReply} from '@/lib/owner-practice-replies';
 import {replyToSellerText} from '@/lib/seller-text-replies';
@@ -21,7 +22,10 @@ export async function POST(req:Request){
  if(inbound&&isServiceTextSender(event.data.from))return NextResponse.json({received:true});
  const role=inbound?await db<string>('rpc/icash_route_lifecycle_text','POST',{p_event:event,p_optout:event.optOut}):null;
 
- if(['text.delivery.confirmed','text.delivery.failed','text.cancelled'].includes(event.type))await db('rpc/icash_webinar_followup_delivery','POST',{p_channel:'sms',p_provider:event.data.message_id,p_kind:event.type==='text.delivery.confirmed'?'delivered':'failed'});
+ if(['text.delivery.confirmed','text.delivery.failed','text.cancelled'].includes(event.type)){
+  const blocked=await suppressCarrierBlockedSms(db,event);
+  await db('rpc/icash_webinar_followup_delivery','POST',{p_channel:'sms',p_provider:event.data.message_id,p_kind:blocked?'suppressed':event.type==='text.delivery.confirmed'?'delivered':'failed'});
+ }
  if(inbound&&role!=='property')return NextResponse.json({received:true});
  if(event.type==='numbers.substitution')await db(`icash_webinar_text_senders?phone=eq.${encodeURIComponent(event.data.from)}`,'PATCH',{enabled:false});
  if(!known.length)return NextResponse.json({received:true});
