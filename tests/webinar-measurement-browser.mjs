@@ -128,7 +128,7 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   assert.equal((await tracks('AddToCart')).length,1,'Real cross-origin iframe interaction reaches AddToCart');
   assert.equal((await tracks('Purchase')).length,0,'Entering the form never fabricates a purchase');assert.deepEqual(errors,[]);
   homeFixture=true;
-  await page.evaluate(()=>sessionStorage.removeItem('icash-webinar-session'));
+  const previousWebinarSession=await page.evaluate(()=>{const saved=sessionStorage.getItem('icash-webinar-session');sessionStorage.removeItem('icash-webinar-session');return saved;});
   await page.goto(base+'/');
   await field.waitFor();
   try{await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView')&&window.__pixelCalls.some(c=>c[2]==='InitiateCheckout'));}
@@ -145,6 +145,7 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   homeFixture=false;privateHomeFixture=true;
   await page.goto(base+'/');await page.locator('.workspace-ack-shell').waitFor();await page.waitForLoadState('networkidle');
   assert.deepEqual(await calls(),[],'The signed-in workspace at the same URL remains private');
+  await page.evaluate(saved=>{if(saved)sessionStorage.setItem('icash-webinar-session',saved);},previousWebinarSession);
   privateHomeFixture=false;checkoutFixture=false;regionAllowed=false;explicit=false;optedOut=false;
   await page.evaluate(()=>localStorage.removeItem('wb-meta-choice'));
   const beforeRestricted=scriptLoads;
