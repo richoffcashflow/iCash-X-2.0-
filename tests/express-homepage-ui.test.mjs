@@ -61,19 +61,20 @@ test('email sign-in availability follows the account service',()=>{
  const render=harness({signInReady:false});find(render(),'button').props.onClick();assert.equal(find(render(),'AccountAccess').props.ready,false);
 });
 
-test('engaged checkout keeps the same component position while simplifying its surrounding layout',()=>{
- const render=harness({showPlan:true});let tree=render();
- const lineage=(node,type,path=[])=>!node||typeof node!=='object'?null:Array.isArray(node)?node.map((child,index)=>lineage(child,type,[...path,index])).find(Boolean):node.type===type?path:lineage(node.props?.children,type,[...path,node.type]);
- assert.equal(find(tree,'Image').props.src,'/icash-x-launch-hero.webp');
- assert.match(text(tree),/Your AI bot for/);
- assert.equal(find(tree,'MembershipCheckout').props.autoOpen,false,'The homepage shows the plan before opening checkout');
- assert.equal(find(harness()(),'MembershipCheckout').props.autoOpen,true,'The post-webinar checkout still opens directly');
+test('the homepage opens checkout immediately under a compact feature headline',()=>{
+ const tree=harness()(),checkout=find(tree,'MembershipCheckout');
+ assert.equal(checkout.props.autoOpen,true);
+ assert.equal(checkout.props.embedded,true);
+ assert.equal(checkout.props.onEngaged,undefined,'Payment interaction must not move or replace the form');
+ assert.match(text(tree),/Your AI wholesaling bot/);
+ assert.match(text(tree),/Property research, seller calls, texts and contracts/);
+ assert.equal(find(tree,'Image'),undefined,'Large promotional artwork does not push payment below the fold');
+ assert.equal(all(tree).some(node=>node.type==='input'&&node.props.type==='checkbox'),false);
+ assert.equal(all(tree).some(node=>node.type==='button'&&/Sign up|Buy now/.test(text(node))),false);
  assert.equal(tree.props['data-public-checkout'],'true');
  assert.equal(harness({checkingAccount:true})().props['data-public-checkout'],undefined);
  assert.equal(harness({preview:true})().props['data-public-checkout'],undefined);
- const before=lineage(tree,'MembershipCheckout');
- find(tree,'MembershipCheckout').props.onEngaged();tree=render();
- assert.deepEqual(lineage(tree,'MembershipCheckout'),before,'payment form must not remount when checkout begins');
- assert.equal(all(tree).find(node=>node.props?.className==='wb-plan-layout').props['data-engaged'],true);
- assert.equal(find(tree,'FundingDialog'),undefined,'engagement does not open sign-in');
+ const region=all(tree).find(node=>node.props?.id==='your-plan');
+ assert.equal(region.props.role,'region');
+ assert.equal(region.props.tabIndex,0,'Long checkout forms remain keyboard-scrollable');
 });
