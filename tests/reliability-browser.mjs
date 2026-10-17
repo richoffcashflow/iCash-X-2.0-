@@ -9,6 +9,7 @@ import http from 'node:http';
 import https from 'node:https';
 import {chromium,webkit,devices} from 'playwright';
 import {verifyWorkspace} from './workspace-browser-scenarios.mjs';
+import {verifyPurchaseAccess} from './purchase-access-browser.mjs';
 import {verifyCourse,coursePdf,serveCourseUpload} from './course-browser.mjs';
 import {verifyWebinarExit,verifyRegularWebinarRoom} from './webinar-exit-browser.mjs';
 import {verifySellerIntake} from './seller-intake-browser.mjs';
@@ -48,10 +49,12 @@ try{
   if(process.env.BROWSER_ENGINES==='chromium'&&engine!==chromium)continue;
   const browser=await engine.launch({headless:true});
   try{
+   if(process.env.BROWSER_SCENARIOS==='purchase-access'){await verifyPurchaseAccess(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='course'){await verifyCourse(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-recovery'){await verifyWebinarRecovery(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='seller'){await verifySellerIntake(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-measurement'){await verifyWebinarMeasurement(browser,base,options,name);continue;}
+   await verifyPurchaseAccess(browser,base,options,name);
    await verifyWebinarMeasurement(browser,base,options,name);
    await verifySellerIntake(browser,base,options,name);
    if(name==='desktop Chromium')await verifyWebinarExit(browser);

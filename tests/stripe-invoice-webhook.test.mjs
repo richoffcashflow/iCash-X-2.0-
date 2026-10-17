@@ -3,8 +3,9 @@ import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 
 process.env.STRIPE_WEBHOOK_SECRET='whsec_fixture';
+let wakes=0,settlementFails=false;
 let event,invoice,reads=[],synced=[],fail=false,member=true;
-const deps={NextResponse:{json:Response.json},fundingMode:()=> 'live',fundingStripe:()=>({
+const deps={schedulePurchaseAccessEmail:()=>wakes++,settleMembershipInvoice:async()=>{if(settlementFails)throw Error('Settlement failed');return true;},NextResponse:{json:Response.json},fundingMode:()=> 'live',fundingStripe:()=>({
  webhooks:{constructEvent:(_body,sig)=>{if(sig!=='fixture')throw Error('Signature');return event;}},
  invoices:{retrieve:async id=>{reads.push(['invoice',id]);if(fail)throw Error('Private transport failure');return invoice;}},
  subscriptions:{retrieve:async id=>{reads.push(['subscription',id]);return {id,status:'past_due'};}}
@@ -25,3 +26,5 @@ reset();assert.equal((await post('bad')).status,400);assert.equal(reads.length,0
 reset();invoice.livemode=false;assert.equal((await post()).status,500);assert.equal(synced.length,0);
 delete globalThis.__invoiceWebhook;
 console.log('PASS Stripe invoice webhooks: old/new event formats, canonical subscription state, retries, non-subscription invoices, signature and mode gates. Fixture only.');
+
+reset('invoice.paid');wakes=0;assert.equal((await post()).status,200);assert.equal(wakes,1,'Confirmed purchase immediately wakes the durable email');settlementFails=true;wakes=0;assert.equal((await post()).status,500);assert.equal(wakes,0,'Unverified payment never dispatches');

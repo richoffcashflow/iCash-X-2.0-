@@ -1,3 +1,4 @@
+import {processPurchaseAccessEmails} from '@/lib/purchase-access-email';
 import {authorizeOutboundBilling} from '@/lib/outbound-billing-service';
 import {maintenanceBatch} from '@/lib/maintenance-batch';
 import {refreshReliability} from '@/lib/reliability-monitor';
@@ -14,7 +15,7 @@ export async function GET(request:Request){
  const headers={'Cache-Control':'private, no-store'};
  if(!authorizeOutboundBilling(request,process.env.CRON_SECRET))return Response.json({error:'Unauthorized'},{status:401,headers});
  const pruning=pruneUsageLoopObservations(db);
- const result=await maintenanceBatch({outbound:()=>outbound(request),recording:()=>recording(request),ownerRecording:()=>ownerRecording(request),reception:()=>reception(request)});
+ const result=await maintenanceBatch({purchaseEmail:async()=>{const result=await processPurchaseAccessEmails({db});return Response.json(result,{status:result.ready&&result.failed===0?200:503});},outbound:()=>outbound(request),recording:()=>recording(request),ownerRecording:()=>ownerRecording(request),reception:()=>reception(request)});
  const monitored=await refreshReliability(db,result.ok);
  await pruning;
  return Response.json({...result,monitored},{status:result.ok&&monitored?200:503,headers});
