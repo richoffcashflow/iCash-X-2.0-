@@ -109,7 +109,7 @@ for(const isPreview of [false,true])for(const display of [{presentation:'webinar
  }});
  const props={preview:isPreview,...display,embedded:true,onSignedIn:()=>{},onEngaged:()=>{throw Error('Automatic display is not engagement');}};
  const loading=h.render('MembershipCheckout',props);
- assert.equal(find(loading,'Script')?.props.src,isPreview?undefined:'https://js.stripe.com/endive/stripe.js','Only real automatic checkout warms Stripe while membership loads');
+ assert.equal(find(loading,'Script')?.props.src,isPreview||!display.autoOpen?undefined:'https://js.stripe.com/endive/stripe.js','Only real automatic checkout warms Stripe while membership loads');
  assert.equal(events.some(e=>e.init.method==='POST'),false,'Payment preparation still waits for the current offer');
  await flush();h.render('MembershipCheckout',props);await flush();let tree=h.render('MembershipCheckout',props);
  assert.equal(button(tree,'Buy now'),undefined);assert.equal(button(tree,'Get my AI bot'),undefined);
