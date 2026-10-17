@@ -14,6 +14,7 @@ import {verifyAccessHelp} from './access-help-browser.mjs';
 import {verifyCourse,coursePdf,serveCourseUpload} from './course-browser.mjs';
 import {verifyWebinarExit,verifyRegularWebinarRoom} from './webinar-exit-browser.mjs';
 import {verifySellerIntake} from './seller-intake-browser.mjs';
+import {verifySellerAdLinks} from './seller-ad-links-browser.mjs';
 import {verifyWebinarMeasurement} from './webinar-measurement-browser.mjs';
 import {verifyWebinarRecovery} from './webinar-recovery-browser.mjs';
 import {sellerFunnelStages} from '../lib/conversion-funnel.ts';
@@ -55,11 +56,13 @@ try{
    if(process.env.BROWSER_SCENARIOS==='course'){await verifyCourse(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-recovery'){await verifyWebinarRecovery(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='seller'){await verifySellerIntake(browser,base,options,name);continue;}
+   if(process.env.BROWSER_SCENARIOS==='ad-links'){await verifySellerAdLinks(browser,base,options,name,fixtureCookies);await verifySellerIntake(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-measurement'){await verifyWebinarMeasurement(browser,base,options,name);continue;}
    await verifyPurchaseAccess(browser,base,options,name);
    await verifyAccessHelp(browser,base,options,name,fixtureCookies);
    await verifyWebinarMeasurement(browser,base,options,name);
    await verifySellerIntake(browser,base,options,name);
+   await verifySellerAdLinks(browser,base,options,name,fixtureCookies);
    if(name==='desktop Chromium')await verifyWebinarExit(browser);
    await verifyRegularWebinarRoom(browser,base,options);
    await verifyWebinarRecovery(browser,base,options,name);

@@ -19,6 +19,7 @@ export function SellerIntake(){
  const copy=sellerOptinCopy(variant);
  const sent=useRef(new Set<string>());
  const eventQueue=useRef(Promise.resolve());
+ const opening=useRef<Promise<unknown>>(Promise.resolve());
  function track(event:'view'|'start'|'contact'){
   if(!measured.current||sent.current.has(event))return;
   sent.current.add(event);
@@ -28,7 +29,7 @@ export function SellerIntake(){
   let active=true;
   (window as Window&{homeOfferPixel?:SellerPixelRuntime}).homeOfferPixel?.start();
   const q=new URLSearchParams(window.location.search);
-  void fetch('/api/seller/experiment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:'open',source:sellerOptinSource(q.get('utm_source')),campaign:sellerOptinCampaign(q.get('campaign')||q.get('utm_campaign'))})})
+  opening.current=fetch('/api/seller/experiment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:'open',source:q.get('fbclid')?'meta':sellerOptinSource(q.get('utm_source')),campaign:sellerOptinCampaign(q.get('campaign')||q.get('utm_campaign')),ad:(q.get('ad')||'').replace(/[^a-z0-9_-]/g,'').slice(0,80)})})
    .then(r=>r.ok?r.json():null).then(data=>{
     // Never change the offer once a visitor has begun. Unseen variants do not count.
     if(!active||interacted.current||!data?.measured)return;
@@ -66,7 +67,7 @@ export function SellerIntake(){
   try{
    const q=new URLSearchParams(window.location.search),source=q.get('fbclid')?'meta':sellerOptinSource(q.get('utm_source'));
    const campaign=sellerOptinCampaign(q.get('campaign')||q.get('utm_campaign')),clickId=(q.get('fbclid')||q.get('gclid')||q.get('ttclid')||'').replace(/[^a-zA-Z0-9_.:-]/g,'').slice(0,300);
-   await Promise.race([eventQueue.current,new Promise(resolve=>setTimeout(resolve,800))]);
+   await Promise.race([Promise.all([opening.current,eventQueue.current]),new Promise(resolve=>setTimeout(resolve,800))]);
    const r=await fetch('/api/seller/intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address,phone,consented,consentVersion:sellerConsentVersion,callNowVersion:optinCallNowVersion,contactTimezone:Intl.DateTimeFormat().resolvedOptions().timeZone,requestId:request.current,campaign,source,clickId,honeypot:trap})});
    const d=await r.json();if(!r.ok)throw Error(d.error||'Please retry.');setProgress(sellerSubmissionStatus('received'));setDone(true);requestAnimationFrame(()=>success.current?.focus());
    try{if(d.registrationEventId)(window as Window&{homeOfferPixel?:SellerPixelRuntime}).homeOfferPixel?.registration(d.registrationEventId);}catch{/* A blocked pixel never changes a saved submission. */}

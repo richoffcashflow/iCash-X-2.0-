@@ -9,7 +9,7 @@ import {sellerOptinSource, sellerOptinCampaign, sellerOptinPlan, chooseSellerOpt
 
 export const dynamic = 'force-dynamic';
 const headers = {'Cache-Control': 'private, no-store'};
-const input = z.object({event: z.enum(['open','view','start','contact']), source: z.string().max(50).optional(), campaign: z.string().max(150).optional()}).strict();
+const input = z.object({event: z.enum(['open','view','start','contact']), source: z.string().max(50).optional(), campaign: z.string().max(150).optional(), ad:z.string().max(80).regex(/^[a-z0-9_-]*$/).optional()}).strict();
 
 export async function POST(req: Request) {
   if (!allowedOrigin(req)) return Response.json({error: 'Invalid origin'}, {status: 403, headers});
@@ -33,7 +33,12 @@ export async function POST(req: Request) {
       await db('rpc/icash_record_seller_optin_event', 'POST', {p_guest: guest, p_event: parsed.data.event});
       return Response.json({measured: true}, {headers});
     }
-    const existing = await db<{variant: string}[]>(`icash_seller_optin_visits?guest_hash=eq.${guest}&experiment=eq.homeoffer-optin-v1&select=variant&limit=1`);
+    // Creative attribution is independent of the sticky landing-page experiment.
+    // Record a new ad touch on return visits too; never delay rendering the form.
+    const [existing] = await Promise.all([
+      db<{variant: string}[]>(`icash_seller_optin_visits?guest_hash=eq.${guest}&experiment=eq.homeoffer-optin-v1&select=variant&limit=1`),
+      (parsed.data.ad||parsed.data.campaign)?db('rpc/icash_visit_seller_ad','POST',{p_guest:guest,p_slug:parsed.data.ad||'',p_legacy_campaign:sellerOptinCampaign(parsed.data.campaign||null)},AbortSignal.timeout(2000)).catch(()=>null):Promise.resolve(null),
+    ]);
     if (existing[0]) return Response.json({variant: existing[0].variant, measured: true}, {headers});
     const source = sellerOptinSource(parsed.data.source || null);
     const device = /mobile|android|iphone|ipad/i.test(req.headers.get('user-agent') || '') ? 'mobile' : 'desktop';
