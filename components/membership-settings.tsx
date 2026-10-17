@@ -4,7 +4,7 @@ import {VipPlan} from '@/components/vip-plan';
 import {useEffect,useRef,useState} from 'react';
 import {priceLabel} from '@/lib/membership-policy';
 import {FundingDialog} from '@/components/funding-dialog';
-type MembershipView={vip?:boolean;vipRetained?:boolean;vipUntil?:string|null;pendingDowngrade?:boolean;state:string;priceCents:number;paidThrough:string|null;cancelAtPeriodEnd:boolean;accessible:boolean;retentionEndsAt?:string|null};
+type MembershipView={complimentary?:boolean;vip?:boolean;vipRetained?:boolean;vipUntil?:string|null;pendingDowngrade?:boolean;state:string;priceCents:number;paidThrough:string|null;cancelAtPeriodEnd:boolean;accessible:boolean;retentionEndsAt?:string|null};
 type Offer={eligible:boolean;retryable:boolean;priceCents:number;plan:'vip';version:string};
 export function MembershipSettings({locked=false,cancellationOnly=false,planOnly=false,initialUpgradeReview=false,onClosed,onChanged}:{locked?:boolean;cancellationOnly?:boolean;planOnly?:boolean;initialUpgradeReview?:boolean;onClosed?:()=>void;onChanged?:(stopped?:boolean)=>void|Promise<unknown>}={}){
  const [data,setData]=useState<MembershipView|null>(null),[offer,setOffer]=useState<Offer|null>(null),[loaded,setLoaded]=useState(false),[review,setReview]=useState(cancellationOnly),[busy,setBusy]=useState(false),[message,setMessage]=useState('');const operation=useRef(false);
@@ -21,6 +21,10 @@ export function MembershipSettings({locked=false,cancellationOnly=false,planOnly
  }
  const cancelling=data?.state==='cancel_requested',canCancel=data&&data.state!=='cancelled'&&!cancelling;
  const offerAvailable=offer&&(offer.eligible||offer.retryable);
+ if(data?.complimentary){
+  const content=<div className="membership-settings"><div className="membership-summary"><strong>Free Standard access</strong><span>Private invitation</span></div><p>No monthly subscription or card is required. Work credits are purchased separately.</p>{planOnly&&<p>Your invitation includes Standard. <a href="/support">Contact support about VIP access.</a></p>}</div>;
+  return cancellationOnly?<FundingDialog title="Your access" onClose={()=>onClosed?.()}>{content}</FundingDialog>:content;
+ }
  return <div className="membership-settings">{!cancellationOnly&&(data?<>
   {!planOnly&&<><div className="membership-summary"><strong>{priceLabel(data.retentionEndsAt&&Date.parse(data.retentionEndsAt)>Date.now()?data.priceCents-Math.round(data.priceCents*.5):data.priceCents)}/month</strong><span>Software subscription</span></div>
   {data.retentionEndsAt&&Date.parse(data.retentionEndsAt)>Date.now()&&<p>50% off through {new Date(data.retentionEndsAt).toLocaleDateString()}. Then {priceLabel(data.priceCents)}/month.</p>}
