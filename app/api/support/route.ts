@@ -1,3 +1,4 @@
+import {scheduleSupportCustomerNotifications} from '@/lib/support-customer-dispatch';
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {workAccount} from '@/lib/work-account';
@@ -16,7 +17,10 @@ export async function GET(req:Request){
   const {accountId}=await workAccount({allowInactiveMembership:true,allowUnacknowledged:true});const raw=new URL(req.url).searchParams.get('threadId');const threadId=raw?supportId.parse(raw):null;
   const threads=await db<{id:string;subject:string;status:string;updated_at:string}[]>(`icash_support_threads?account_id=eq.${accountId}&select=id,subject,status,updated_at&order=updated_at.desc&limit=30`);
   const chosen=threadId??threads[0]?.id;
-  if(threadId&&!threads.some(t=>t.id===threadId))return NextResponse.json({error:'Conversation not found.'},{status:404,headers});
+  if(threadId&&!threads.some(t=>t.id===threadId)){
+   const [linked]=await db<(typeof threads)[number][]>(`icash_support_threads?account_id=eq.${accountId}&id=eq.${threadId}&select=id,subject,status,updated_at&limit=1`);
+   if(!linked)return NextResponse.json({error:'Conversation not found.'},{status:404,headers});threads.unshift(linked);
+  }
   const mode=fundingMode();
   const [messages,cancellations]=await Promise.all([
    chosen?db(`icash_support_messages?account_id=eq.${accountId}&thread_id=eq.${chosen}&select=id,role,content,created_at&order=created_at.desc&limit=100`):[],
@@ -42,7 +46,7 @@ export async function POST(req:Request){
   const started=await db<{threadId:string;replay?:boolean;response?:unknown;rateLimited?:boolean}>('rpc/icash_support_begin_message','POST',{p_account:accountId,p_user:userId,p_thread:i.threadId??null,p_request:i.requestId,p_message:question});
   if(started.rateLimited)return NextResponse.json({error:'Please wait a minute before sending more messages. The daily limit is 60 messages.'},{status:429,headers});
   if(started.replay&&started.response){
-   scheduleSupportOwnerNotifications();
+   scheduleSupportOwnerNotifications();scheduleSupportCustomerNotifications();
    return NextResponse.json({threadId:started.threadId,replay:true},{headers});
   }
   const [evidence,history,threads]=await Promise.all([
@@ -55,7 +59,7 @@ export async function POST(req:Request){
   // Replayed receipts use the local answer; they never repeat a paid model call.
   const answer=await replyToSupport({kind:'account',messages,evidence,handedOff:threads[0]?.status==='escalated',allowAI:!started.replay});
   await db('rpc/icash_support_finish_conversation','POST',{p_account:accountId,p_user:userId,p_thread:started.threadId,p_request:i.requestId,p_message:answer.reply,p_evidence:evidence,p_status:answer.status,p_notify:supportOwnerNotificationsEnabled()});
-  scheduleSupportOwnerNotifications();
+  scheduleSupportOwnerNotifications();scheduleSupportCustomerNotifications();
   return NextResponse.json({threadId:started.threadId,ai:answer.ai},{headers});
  }catch(e){const auth=e instanceof Error&&['SIGN_IN_REQUIRED','ACCOUNT_REQUIRED'].includes(e.message);return NextResponse.json({error:auth?'Sign in to get help.':e instanceof z.ZodError||e instanceof SyntaxError?'Please check your message and try again.':'Could not confirm that the reply was saved. Refresh the conversation before retrying.'},{status:auth?401:e instanceof z.ZodError||e instanceof SyntaxError?400:503,headers});}
 }

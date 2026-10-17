@@ -1,3 +1,4 @@
+import {scheduleSupportCustomerNotifications} from '@/lib/support-customer-dispatch';
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {requireTrustedOperator} from '@/lib/trusted-operator';
@@ -14,7 +15,8 @@ export async function GET(req:Request){
   await requireTrustedOperator();const raw=new URL(req.url).searchParams.get('threadId');
   if(raw){const id=supportId.parse(raw);const [thread]=await db<{id:string;account_id:string;status:string;subject:string}[]>(`icash_support_threads?id=eq.${id}&select=id,account_id,status,subject`);if(!thread)return NextResponse.json({error:'Conversation not found.'},{status:404,headers});
    const [messages,evidence]=await Promise.all([db(`icash_support_messages?thread_id=eq.${id}&account_id=eq.${thread.account_id}&select=id,role,content,evidence,created_at&order=created_at.desc&limit=100`),collectSupportDiagnostics(thread.account_id)]);
-   return NextResponse.json({thread,messages:Array.isArray(messages)?messages.reverse():[],evidence},{headers});
+   const [notification]=await db<{status:string;delivery:string|null}[]>(`icash_support_customer_emails?thread_id=eq.${id}&account_id=eq.${thread.account_id}&select=status,delivery&order=created_at.desc,id.desc&limit=1`);
+   return NextResponse.json({thread,messages:Array.isArray(messages)?messages.reverse():[],evidence,notification:notification??null},{headers});
   }
   const [threads,resolved,cancellations,deployment]=await Promise.all([
    db<Record<string,unknown>[]>('icash_support_threads?status=neq.resolved&select=id,account_id,subject,status,updated_at&order=updated_at.desc&limit=100'),
@@ -28,6 +30,7 @@ export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
  try{const {userId}=await requireTrustedOperator();const raw=await req.text();if(raw.length>6000)return NextResponse.json({error:'Reply too long.'},{status:413,headers});const i=supportStatusInput.parse(JSON.parse(raw));
   await db('rpc/icash_support_operator_update','POST',{p_operator:userId,p_thread:i.threadId,p_request:i.requestId,p_status:i.status,p_reply:i.reply?redactSupportQuestion(i.reply):null});
+  scheduleSupportCustomerNotifications();
   return NextResponse.json({saved:true},{headers});
  }catch(e){return failure(e);}
 }

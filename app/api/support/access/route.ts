@@ -1,3 +1,4 @@
+import {scheduleSupportCustomerNotifications} from '@/lib/support-customer-dispatch';
 import {cookies} from 'next/headers';
 import {randomBytes,createHash} from 'node:crypto';
 import {db} from '@/lib/stripe-test';
@@ -21,7 +22,7 @@ export async function GET(){
   const jar=await cookies();let secret=jar.get(accessHelpCookie)?.value;
   let conversation=valid(secret)?await db<(AccessHelpConversation&{expired?:boolean})|null>('rpc/icash_access_help_read','POST',{p_hash:hash(secret!)}):null;
   if(!valid(secret)||conversation?.expired){secret=randomBytes(32).toString('hex');jar.set(accessHelpCookie,secret,options);conversation=null;}
-  if(conversation?.messages?.at(-1)?.role==='user'){await replyToAccessHelp(db,conversation.id,conversation.messages.at(-1)!.requestId);conversation=await db('rpc/icash_access_help_read','POST',{p_hash:hash(secret!)});scheduleSupportOwnerNotifications();}
+  if(conversation?.messages?.at(-1)?.role==='user'){await replyToAccessHelp(db,conversation.id,conversation.messages.at(-1)!.requestId);conversation=await db('rpc/icash_access_help_read','POST',{p_hash:hash(secret!)});scheduleSupportOwnerNotifications();scheduleSupportCustomerNotifications();}
   return Response.json({ready:true,conversation},{headers});
  }catch{return Response.json({error:'Support could not load. Try again or email support@geticashx.com.'},{status:503,headers});}
 }
@@ -39,7 +40,7 @@ export async function POST(req:Request){
   const id=await db<string>('rpc/icash_access_help_submit','POST',{p_hash:key,p_key:i.requestId,p_email:i.email.toLowerCase(),p_phone:phone,p_message:accessHelpRedact(i.message)});
   await replyToAccessHelp(db,id,i.requestId);
   const conversation=await db('rpc/icash_access_help_read','POST',{p_hash:key});
-  jar.set(accessHelpCookie,secret!,options);scheduleSupportOwnerNotifications();
+  jar.set(accessHelpCookie,secret!,options);scheduleSupportOwnerNotifications();scheduleSupportCustomerNotifications();
   return Response.json({saved:true,conversation},{headers});
  }catch(error){
   const limited=(error as {status?:number})?.status===429;
