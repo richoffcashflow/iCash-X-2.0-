@@ -6,7 +6,7 @@ export function webinarBrowserReady(sessionId:string,preview:boolean){
  window.dispatchEvent(new CustomEvent('icash-webinar-ready',{detail:{sessionId}}));
 }
 export type WebinarCommerce={product:'membership'|'vip_upgrade';checkoutId?:string;valueCents?:number};
-export function webinarBrowserEvent(kind:'started'|'contact_saved'|'add_to_cart'|'checkout_opened'|'checkout_started',sessionId?:string,commerce?:WebinarCommerce){
+export function webinarBrowserEvent(kind:'started'|'offer_viewed'|'contact_saved'|'add_to_cart'|'checkout_opened'|'checkout_started',sessionId?:string,commerce?:WebinarCommerce){
  try{sessionId=sessionId||sessionStorage.getItem('icash-webinar-session')||undefined;}catch{/* Optional measurement. */}
  // Direct checkout visitors have no webinar session. Use the existing page
  // event scope so their cart/checkout stages still deduplicate on this page.

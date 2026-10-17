@@ -34,7 +34,7 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
     return route.fulfill({json:{enabled:true,pixelId,trackingAllowed,consent:explicit&&!optedOut,events:trackingAllowed?events:[]}});
    }
    if(ownerFixture){
-    if(url.pathname==='/api/webinar/start')return route.fulfill({json:{sessionId:'00000000-0000-4000-8000-000000000456',webinar:publicWebinar({...newWebinar('00000000-0000-4000-8000-000000000123'),title:'Owner public webinar',status:'published',publicCode:'123456',videoUrl:base+'/fixture-owner.mp4',showAudienceCount:false,offers:[{id:'primary',at:0,title:'Join iCash X',description:'',ctaLabel:'Continue',action:'checkout',url:'',expiresAt:null}]}),progress:0,name:'Owner',contactSaved:true,messages:[],preview:false,ownerWatching:true,serverNow:Date.now()}});
+    if(url.pathname==='/api/webinar/start')return route.fulfill({json:{sessionId:'00000000-0000-4000-8000-000000000456',webinar:publicWebinar({...newWebinar('00000000-0000-4000-8000-000000000123'),title:'Owner public webinar',status:'published',publicCode:'123456',videoUrl:base+'/fixture-owner.mp4',showAudienceCount:false,offers:[{id:'primary',at:90,title:'Join iCash X',description:'',ctaLabel:'Continue',action:'checkout',url:'',expiresAt:null}]}),progress:0,name:'Owner',contactSaved:true,messages:[],preview:false,ownerWatching:true,serverNow:Date.now()}});
     if(url.pathname==='/api/billing/membership'){
      assert.equal(route.request().method(),'GET','Paid owner must not create another checkout');
      return route.fulfill({json:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',needsClaim:false,postPurchaseUrl:'/live/123457',membership:{accessible:true,vip:false}}});
@@ -66,7 +66,15 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   assert.equal(await page.getByRole('button',{name:'Allow measurement',exact:true}).count(),0);
   assert.equal(await page.evaluate(()=>localStorage.getItem('wb-meta-choice')),null,'Automatic tracking never invents a saved permission');
   assert.equal(scriptLoads,1);assert.equal((await calls()).filter(c=>c[0]==='init'&&c[1]===pixelId).length,1);
-  assert.equal((await tracks('PageView')).length,1);assert.equal((await tracks('ViewContent')).length,1);assert.equal((await tracks('Purchase')).length,1);
+  assert.equal((await tracks('PageView')).length,1);assert.equal((await tracks('ViewContent')).length,0,'Opening a webinar session is not an offer view');assert.equal((await tracks('Purchase')).length,1);
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('icash-webinar-track',{detail:{sessionId:'fixture-webinar',kind:'started'}})));
+  assert.equal((await tracks('ViewContent')).length,0,'Starting playback does not qualify as ViewContent');
+  await page.evaluate(()=>{
+   for(let retry=0;retry<3;retry++)window.dispatchEvent(new CustomEvent('icash-webinar-track',{detail:{sessionId:'fixture-webinar',kind:'offer_viewed',commerce:{product:'membership'}}}));
+  });
+  assert.equal((await tracks('ViewContent')).length,1,'Offer exposure sends one ViewContent per session');
+  assert.equal((await tracks('ViewContent'))[0][4].eventID,'webinar:fixture-webinar:view');
+  assert.equal((await tracks('ViewContent'))[0][3].content_category,'membership');
   assert.equal((await tracks('AddPaymentInfo')).length,1);
   await page.evaluate(()=>{
    for(const product of ['membership','vip_upgrade'])for(let retry=0;retry<3;retry++)for(const kind of ['add_to_cart','checkout_started'])window.dispatchEvent(new CustomEvent('icash-webinar-track',{detail:{sessionId:'fixture-webinar',kind,commerce:{product,checkoutId:'cs_live_'+product,valueCents:5000}}}));
@@ -83,6 +91,7 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   for(let n=0;n<3;n++)await page.evaluate(()=>window.dispatchEvent(new CustomEvent('icash-webinar-ready',{detail:{sessionId:'fixture-webinar'}})));
   await page.waitForFunction(()=>window.fbq!==undefined);
   assert.equal((await tracks('PageView')).length,1,'Repeated session refresh does not duplicate a page view');
+  assert.equal((await tracks('ViewContent')).length,1,'Session and receipt refreshes cannot resend an offer view');
   assert.equal((await tracks('Purchase')).length,2,'Purchase IDs remain deduplicated');
   const privacy=await context.newPage();privacy.on('pageerror',e=>errors.push(e.message));
   await privacy.goto(base+'/webinar/privacy#advertising');
@@ -99,9 +108,12 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   await privacy.getByText('Ad measurement is on.',{exact:true}).waitFor();
   await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView'));
   assert.notEqual((await tracks('PageView'))[0][4].eventID,firstView,'A real reload has a new PageView');assert.equal((await tracks('Purchase')).length,0,'Reload cannot resend a settled purchase');
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('icash-webinar-track',{detail:{sessionId:'fixture-webinar',kind:'offer_viewed',commerce:{product:'membership'}}})));
+  assert.equal((await tracks('ViewContent')).length,0,'The same offer remains deduplicated after reload');
   await privacy.close();
   await page.goto(base+'/live/123457');await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView'));
   assert.equal((await tracks('PageView')).length,1,'VIP uses the shared pixel integration');
+  assert.equal((await tracks('ViewContent')).length,0,'A VIP arrival does not inherit an offer view from the previous session');
   const before=reads;
   for(const path of ['/webinar?preview=00000000-0000-4000-8000-000000000123','/preview/workspace']){
    await page.goto(base+path);await page.waitForLoadState('networkidle');assert.deepEqual(await calls(),[]);
@@ -109,8 +121,20 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   assert.equal(reads,before,'Previews and non-webinar pages never request tracking configuration');assert.deepEqual(errors,[]);
   ownerFixture=true;
   await page.goto(base+'/live/123456');
+  await page.getByRole('heading',{name:'Owner public webinar',exact:true}).waitFor({state:'attached'});
+  await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView'));
+  assert.equal((await tracks('ViewContent')).length,0,'A real room waits for its offer');
+  await page.locator('video').evaluate(video=>{
+   Object.defineProperty(video,'duration',{value:1800,configurable:true});
+   Object.defineProperty(video,'currentTime',{value:0,writable:true,configurable:true});
+   video.dispatchEvent(new Event('loadedmetadata'));video.currentTime=61;video.dispatchEvent(new Event('timeupdate'));
+  });
+  assert.equal((await tracks('ViewContent')).length,0,'More than one minute of playback alone is not an offer view');
+  await page.locator('video').evaluate(video=>{video.currentTime=90;video.dispatchEvent(new Event('timeupdate'));});
+  await page.locator('#webinar-offer h2').scrollIntoViewIfNeeded();
   await page.getByRole('heading',{name:'Your membership is active.',exact:true}).waitFor();
   await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView')&&window.__pixelCalls.some(c=>c[2]==='ViewContent'));
+  assert.equal((await tracks('ViewContent')).length,1,'A visible real offer qualifies once');
   assert.equal(page.url(),base+'/live/123456');assert.equal(await page.locator('video').count(),1);
   assert.equal((await tracks('AddToCart')).length,0,'Owner membership lookup does not fabricate cart engagement');
   assert.equal((await tracks('Purchase')).length,0,'Watching again does not create another purchase');
@@ -126,6 +150,7 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   const field=page.frameLocator('iframe[title="Fixture payment"]').getByPlaceholder('Fixture payment field');await field.waitFor();
   await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='InitiateCheckout'));
   assert.equal((await tracks('AddToCart')).length,0,'An automatically mounted form is not a cart selection');
+  assert.equal((await tracks('ViewContent')).length,0,'Checkout receipt refreshes do not fabricate webinar offer views');
   // Use a new session so earlier synthetic cart tests cannot hide this event.
   await page.evaluate(()=>sessionStorage.setItem('icash-webinar-session','iframe-interaction'));
   await field.click();await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='AddToCart'));
@@ -225,7 +250,7 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   await page.reload();await page.waitForLoadState('networkidle');
   assert.deepEqual(await calls(),[]);assert.equal(scriptLoads,beforeRestricted,'GPC blocks automatic pixel loading');
   assert.equal(optedOut,true,'Browser GPC is sent to the server to cancel queued measurement');
-  console.log(`PASS ${name}: page-head Meta pixel before session startup, setup-tool script allowed, no floating button, PageView deduplication, Standard/VIP cart and checkout, verified receipt refresh, opt-outs/GPC/geography, owner viewing and private/preview exclusions. All Meta traffic intercepted.`);
+  console.log(`PASS ${name}: page-head Meta pixel, ViewContent only after a visible offer, no qualification at arrival/start/one minute, PageView and offer deduplication, Standard/VIP cart and checkout, verified receipt refresh, opt-outs/GPC/geography, owner viewing and private/preview exclusions. All Meta traffic intercepted.`);
  }finally{await context.close();}
 }
 
