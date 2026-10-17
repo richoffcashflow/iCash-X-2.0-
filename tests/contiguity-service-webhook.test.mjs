@@ -3,11 +3,12 @@ import {createHmac} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {isServiceTextSender,parseTextWebhook,textPayload,verifyContiguityWebhook} from '../lib/contiguity.ts';
+import {suppressCarrierBlockedSms} from '../lib/carrier-blocked-sms.ts';
 
 const destination='+17208134296',secret='fixture-service-webhook-secret';
 const fixture={id:'fixture-service-message',type:'text.incoming.sms',timestamp:Math.floor(Date.now()/1000),data:{from:'+22395',to:destination,body:'Synthetic service notice: do not persist or send to an AI.'}};
 let registered=true,campaignOnly=false,effects=[];
-const deps={NextResponse:{json:Response.json},verifyContiguityWebhook,parseTextWebhook,isServiceTextSender,
+const deps={NextResponse:{json:Response.json},verifyContiguityWebhook,parseTextWebhook,isServiceTextSender,suppressCarrierBlockedSms,
  db:async(path,method,body)=>{
   effects.push({path,method,body});
   if(path.startsWith('icash_text_senders?'))return registered&&!campaignOnly?[{phone:destination}]:[];

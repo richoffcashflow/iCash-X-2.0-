@@ -25,7 +25,7 @@ const suites = [
  'buyer-scenarios', 'buyer-privacy-release-source', 'worker-recovery',
  'cost-efficiency', 'property-photo-route', 'property-photo', 'persistent-property-photo',
  'reliability-database', 'text-receipt-recovery', 'worker-heartbeat', 'reliability-monitor', 'service-health',
- 'text-sender-routing', 'sms-channel-admission', 'contract-text', 'contract-text-resend',
+ 'text-sender-routing', 'sms-channel-admission', 'contiguity-service-webhook', 'carrier-blocked-sms', 'seller-text-replies', 'contract-text', 'contract-text-resend',
  'owner-overview-route', 'owner-overview-ui', 'lead-supply', 'lead-supply-database', 'admin-experience-route', 'admin-experience-ui',
  'workspace-panel-content', 'production-release-gate', 'production-health',
  'workspace-experience', 'workspace-experience-database', 'reliability-alerts',

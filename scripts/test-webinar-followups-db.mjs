@@ -49,6 +49,12 @@ export async function verifyWebinarFollowups(q,config){
  await q("update icash_webinar_outbox set sent_at=now()-interval '2 hours' where id=$1",[steps[2].id]);assert.equal(await authorize(steps[3].id),null,'Two messages per rolling 24 hours across channels');
  await q("select icash_webinar_text_reply('+12125550106',true)");assert.ok((await jobs(frequency)).filter(j=>j.channel==='sms').every(j=>j.state==='canceled'));
  const stopped=await make({email:false,phone:'2125550106'});assert.equal((await jobs(stopped)).length,0,'STOP applies across new visits');await clear();
+ const carrierBlocked=await make({phone:'2125550107'});await age(carrierBlocked);await due(carrierBlocked);leased=await claim(false,true);
+ await q("insert into icash_webinar_phone_suppressions(phone) values('+12125550107')");
+ assert.equal(await authorize(leased[0].id),null,'Carrier suppression between claim and dispatch stops a later text');
+ assert.ok((await jobs(carrierBlocked)).filter(j=>j.channel==='email').every(j=>j.state==='pending'),'SMS suppression does not opt the recipient out of email');
+ assert.equal(await scalar('select sms_opted_out_at is null and sms_replied_at is null from icash_webinar_visitors where id=$1',[carrierBlocked.id]),true,'Carrier block never fabricates a customer STOP or reply');
+ const blockedReturn=await make({phone:'2125550107'});assert.ok((await jobs(blockedReturn)).every(j=>j.channel==='email'),'New visits cannot restart SMS to the blocked number');await clear();
  const expired=await make({sms:false,phone:''});await age(expired);await due(expired);await q("update icash_webinar_outbox set first_attempt_at=now()-interval '21 hours' where visitor_id=$1",[expired.id]);assert.equal((await claim()).length,0);assert.ok((await jobs(expired)).every(j=>j.state==='failed'),'Do not retry beyond provider idempotency retention');
  const fourth=await make({sms:false,phone:''});await age(fourth);await due(fourth);leased=await claim();await authorize(leased[0].id);await q('update icash_webinar_outbox set attempts=4 where id=$1',[leased[0].id]);await claim();assert.equal(await scalar('select state from icash_webinar_outbox where id=$1',[leased[0].id]),'sending','A live fourth attempt is not expired by an overlapping cron');
  for(const role of ['anon','authenticated']){
