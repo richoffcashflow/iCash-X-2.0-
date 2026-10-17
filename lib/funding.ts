@@ -19,7 +19,9 @@ export async function limitRequest(req:Request,scope:string,identifier:string,li
  // Vercel overwrites this trusted proxy header; a missing address shares a restrictive bucket.
  const ip=req.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim()||"unknown";
  for(const key of [`${scope}:ip:${guestHash(ip)}`,`${scope}:id:${guestHash(identifier)}`]) {
-  if(!await db<boolean>("rpc/icash_take_request","POST",{p_bucket:key,p_limit:limit,p_seconds:seconds}))throw new Error("Too many attempts. Please wait and try again.");
+  const shared:Record<string,number>={email:30,'phone-signin':30,verify:80,'phone-verify':80};
+  const budget=key.includes(':ip:')?(shared[scope]??limit):limit;
+  if(!await db<boolean>("rpc/icash_take_request","POST",{p_bucket:key,p_limit:budget,p_seconds:seconds}))throw Object.assign(new Error("Too many attempts. Please wait and try again."),{status:429,retryAfter:seconds});
  }
 }
 export function validGuest(value?:string):value is string{return !!value && /^[a-f0-9]{64}$/.test(value);}

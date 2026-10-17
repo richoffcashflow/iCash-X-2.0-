@@ -147,6 +147,7 @@ test('carrier errors, redirect, foreign response URL and oversized bodies are re
 test('expired access with valid refresh session is authenticated and cookies saved in the guarded API, never SSR',async()=>{
  const jar=new Map([['icash_access','EXPIRED_SYNTHETIC_ACCESS'],['icash_refresh','SYNTHETIC_REFRESH']]),writes=[],authCalls=[];let providerReads=0;
  const auth=await loadService('lib/account-auth.ts',{
+  ...await import('../lib/purchase-phone-access.ts'),
   cookies:async()=>({get:name=>jar.has(name)?{value:jar.get(name)}:undefined,set:(name,value,options)=>{writes.push({name,options});jar.set(name,value);},delete:name=>jar.delete(name)}),
   db:async()=>{throw Error('UNEXPECTED_AUTH_DB');},accountMode:()=>null,
   process:{env:{SUPABASE_URL:'https://synthetic-auth.invalid',SUPABASE_SECRET_KEY:'SYNTHETIC_AUTH_KEY'}},

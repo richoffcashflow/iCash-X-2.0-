@@ -43,7 +43,7 @@ calls=[];assert.equal((await post(emailRoute,{email:user.email})).status,200);as
 let request;
 process.env.SUPABASE_URL='https://synthetic.invalid';process.env.SUPABASE_SECRET_KEY='SYNTHETIC';
 const originalFetch=globalThis.fetch;globalThis.fetch=async(url,options)=>{request={url,...options};return Response.json({id:uid});};
-const authService=load('lib/account-auth.ts',{'next/headers':mocks['next/headers'],'@/lib/stripe-test':mocks['@/lib/stripe-test'],'@/lib/account-mode':{accountMode:()=>null}});
+const authService=load('lib/account-auth.ts',{'next/headers':mocks['next/headers'],'@/lib/stripe-test':mocks['@/lib/stripe-test'],'@/lib/account-mode':{accountMode:()=>null},'@/lib/purchase-phone-access':await import('../lib/purchase-phone-access.ts')});
 await authService.authRequest('user',undefined,'USER_ACCESS');assert.equal(request.method,'GET');await authService.authRequest('otp',{email:user.email});assert.equal(request.method,'POST');await authService.authRequest('user',{email:'next@example.com'},'USER_ACCESS','PUT');assert.equal(request.method,'PUT');assert.equal(request.headers.Authorization,'Bearer USER_ACCESS');
 globalThis.fetch=originalFetch;
 console.log('PASS editable account API: authenticated owner scope, normalized/cleared phone, individual/company validation, preserved voice, explicit user-token email confirmation, CSRF and rate limits.');

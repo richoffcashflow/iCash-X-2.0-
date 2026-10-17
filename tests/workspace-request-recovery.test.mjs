@@ -103,7 +103,7 @@ try{
   const ui=harness('components/account-access.tsx',{initialEmail:'fixture@example.invalid',onSignedIn(){throw Error('No successful sign-in');}});try{
    await ui.flush();const form=ui.find(n=>n.type==='form');const event={preventDefault(){}};
    await Promise.all([form.props.onSubmit(event),form.props.onSubmit(event)]);await ui.flush();
-   assert.equal(calls,1);assert.equal(ui.find(n=>n.type==='button'&&text(n)==='Email me a code').props.disabled,false);assert.match(ui.text(),/too long/);
+   assert.equal(calls,1);assert.equal(ui.find(n=>n.type==='button'&&text(n)==='Sign in').props.disabled,false);assert.match(ui.text(),/Email code/);assert.match(ui.text(),/Use my checkout phone/);assert.match(ui.text(),/too long/);
   }finally{ui.dispose();}
  });
 }finally{globalThis.fetch=originalFetch;}
