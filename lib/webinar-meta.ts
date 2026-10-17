@@ -3,7 +3,7 @@ import {settingsSchema,type WebinarSettings} from '@/lib/webinar-policy';
 import {metaPurchasePayload,type MetaIdentity,type MetaPurchase} from '@/lib/webinar-meta-policy';
 import {measurementSince} from '@/lib/webinar-measurement-policy';
 export function metaReady(){return !!process.env.ICASH_META_ACCESS_TOKEN&&/^v\d+\.\d+$/.test(process.env.ICASH_META_GRAPH_VERSION||'')&&!!process.env.ICASH_APP_ORIGIN;}
-export async function webinarSettings(){const [row]=await db<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config');return settingsSchema.parse(row.config);}
+export async function webinarSettings(signal?:AbortSignal){const [row]=await db<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config','GET',undefined,signal);return settingsSchema.parse(row.config);}
 export async function processWebinarMeta(){
  const settings=await webinarSettings();
  if(process.env.VERCEL_ENV!=='production'||!settings.meta.enabled||!settings.meta.pixelId||!metaReady())return {paused:true};

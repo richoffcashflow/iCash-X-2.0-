@@ -29,7 +29,7 @@ export function WebinarMeasurement(){
   return()=>window.removeEventListener('icash-public-checkout-change',changed);
  },[pathname]);
  const current=useRef<Measurement|null>(null),session=useRef(''),initialized=useRef(''),sent=useRef(new Set<string>()),refreshVersion=useRef(0),pageView=useRef({path:'',id:''});
- const pendingStages=useRef<MetaEvent[]>([]);
+ const pendingStages=useRef<MetaEvent[]>([]),checkoutReady=useRef(false);
  const gpc=()=>!!(navigator as Navigator&{globalPrivacyControl?:boolean}).globalPrivacyControl;
  function emit(event:MetaEvent){
   if(!measurementPage())return;
@@ -49,7 +49,7 @@ export function WebinarMeasurement(){
   const identifiers=current.current?.trackingAllowed?{fbp:cookie('_fbp'),fbc:cookie('_fbc')}:{};
   try{
    let next:Measurement|null;
-   if(!session.current){next=await (window as PixelWindow).icashWebinarPixel?.start(forcePage)??null;}
+   if(!session.current&&!checkoutReady.current){next=await (window as PixelWindow).icashWebinarPixel?.start(forcePage)??null;}
    else{const res=await fetch('/api/webinar/measurement',{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',signal:AbortSignal.timeout(timeoutMs),body:JSON.stringify({action:'automatic',version:measurementPolicyVersion,optedOut,...identifiers,fbclid:new URLSearchParams(location.search).get('fbclid')||undefined})});if(!res.ok)return;next=await res.json() as Measurement;}
    if(version!==refreshVersion.current||!next)return;current.current=next;
    if(next.trackingAllowed){emit({eventName:'PageView',eventId:pageView.current.id,data:{}});if(session.current)emit({eventName:'ViewContent',eventId:`webinar:${session.current}:view`,data:{content_type:'product',content_ids:['icash-webinar']}});}
@@ -60,6 +60,7 @@ export function WebinarMeasurement(){
  }
  useEffect(()=>{
   refreshVersion.current++;current.current=null;pendingStages.current=[];session.current='';
+  const params=new URLSearchParams(location.search);checkoutReady.current=params.has('session_id')||params.has('vip_session');
   if(pageView.current.path!==pathname)pageView.current={path:pathname,id:privatePage?'':`webinar:page:${crypto.randomUUID()}`};
   if(privatePage||!measurementPage())return;
   const boot=(window as PixelWindow).icashWebinarPixel;void boot?.start();
@@ -70,6 +71,7 @@ export function WebinarMeasurement(){
    const d=(event as CustomEvent<{sessionId:string;kind:string;commerce?:WebinarCommerce}>).detail;
    const names:Record<string,string>={started:'ViewContent',contact_saved:'Lead',add_to_cart:'AddToCart',checkout_opened:'WebinarOfferOpened',checkout_started:'InitiateCheckout'};
    if(!names[d.kind])return;
+   if(d.kind==='checkout_started'){checkoutReady.current=true;void refresh();}
    const c=d.commerce,scope=c?`${d.kind==='checkout_started'&&c.checkoutId?'checkout:'+c.checkoutId:d.sessionId}:${c.product}`:d.sessionId;
    const stage={eventName:names[d.kind],eventId:`webinar:${scope}:${d.kind==='started'?'view':d.kind}`,data:{content_type:'product',content_ids:[c?'icash-'+c.product:'icash-webinar'],...(c?{content_category:c.product,num_items:1}:{}),...(c?.valueCents!==undefined&&Number.isSafeInteger(c.valueCents)&&c.valueCents>0?{value:c.valueCents/100,currency:'USD'}:{})}};
    // Hold early stages only until server geography and privacy checks finish.
@@ -77,11 +79,11 @@ export function WebinarMeasurement(){
    if(!current.current&&storage.get('wb-meta-choice')!=='deny'&&!gpc()){pendingStages.current.push(stage);if(pendingStages.current.length>20)pendingStages.current.shift();return;}
    emit(stage);
   };
-  const paid=(event:Event)=>{if(!gpc())(event as CustomEvent<{waitUntil:(promise:Promise<void>)=>void}>).detail.waitUntil(refresh(1800));};
+  const paid=(event:Event)=>{checkoutReady.current=true;(event as CustomEvent<{waitUntil:(promise:Promise<void>)=>void}>).detail.waitUntil(refresh(1800));};
   const privacy=(event:StorageEvent)=>{if(event.key==='wb-meta-choice')void refresh(8000,true);};
   window.addEventListener('storage',privacy);
   window.addEventListener('icash-webinar-ready',ready);window.addEventListener('icash-webinar-track',track);window.addEventListener('icash-webinar-payment-confirmed',paid);void refresh();
-  const returned=new URLSearchParams(location.search).has('session_id');let tries=0;
+  const returned=params.has('session_id')||params.has('vip_session');let tries=0;
   const timer=returned?setInterval(()=>{if(!document.hidden&&++tries<=12)void refresh();},5000):undefined;
   return()=>{refreshVersion.current++;window.removeEventListener('storage',privacy);window.removeEventListener('icash-webinar-ready',ready);window.removeEventListener('icash-webinar-track',track);window.removeEventListener('icash-webinar-payment-confirmed',paid);clearInterval(timer);};
  // The listeners read current configuration through refs, including consent changes.

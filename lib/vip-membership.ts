@@ -7,6 +7,7 @@ import {fundingMode} from '@/lib/funding-policy';
 import {vipActive,vipUpgradeCents} from '@/lib/vip-policy';
 import {checkoutPublishableKey,checkoutMatchesPresentation} from '@/lib/embedded-checkout-policy';
 import type {Membership} from '@/lib/membership';
+import {bindCheckoutMeasurement} from '@/lib/checkout-measurement';
 export type PlanChange={id:string;membership_id:string;account_id:string;action:'upgrade'|'downgrade'|'keep_vip'|'retain_vip';state:string;period_end:string;from_price:number;to_price:number;session_id:string|null;payment_id:string|null;price_id:string|null};
 const ref=(v:string|{id:string}|null|undefined)=>typeof v==='string'?v:v?.id;
 async function membership(id:string){const [m]=await db<Membership[]>(`icash_memberships?id=eq.${id}&select=*`);if(!m)throw Error('Subscription unavailable');return m;}
@@ -89,7 +90,7 @@ export async function changeVipPlan(m:Membership,action:PlanChange['action'],ori
  }
  if(action!=='upgrade'){await applyChange(c);return {saved:true,message:action==='downgrade'?'Downgrade saved. VIP continues through your paid period.':'VIP renewal restored. No charge today.'};}
  const publishableKey=checkoutPublishableKey(m.mode),embedded=options.embedded===true&&!!publishableKey;
- const response=(session:Stripe.Checkout.Session)=>session.ui_mode==='embedded_page'?{clientSecret:session.client_secret,publishableKey,sessionId:session.id}:{url:session.url,sessionId:session.id};
+ const response=async(session:Stripe.Checkout.Session)=>{if(options.request)await bindCheckoutMeasurement(options.request,session.id,m.mode);return session.ui_mode==='embedded_page'?{clientSecret:session.client_secret,publishableKey,sessionId:session.id}:{url:session.url,sessionId:session.id};};
  if(!options.request)throw Error('Review the current VIP terms before payment');
  if(c.session_id){const old=await stripe.checkout.sessions.retrieve(c.session_id);if(old.metadata?.icash_vip_change!==c.id||old.livemode!==(m.mode==='live')||ref(old.customer)!==m.stripe_customer_id)throw Error('Upgrade checkout binding changed');if(old.status==='open'){if(checkoutMatchesPresentation(old,embedded)&&old.metadata?.icash_terms_version===vipTermsVersion&&old.custom_text?.submit?.message===vipCheckoutSummary)return response(old);await stripe.checkout.sessions.expire(old.id);}if(old.status==='complete')throw Error('Your upgrade payment is being confirmed. Do not pay again.');}
  await recordPurchaseAcceptance(options.request,{kind:'vip',reference:c.id,mode:m.mode,accountId:m.account_id,guestHash:m.guest_hash,version:vipTermsVersion,terms:vipPurchaseTerms,amountCents:vipUpgradeCents});

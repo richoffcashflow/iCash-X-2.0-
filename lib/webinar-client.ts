@@ -1,3 +1,4 @@
+import {checkoutMeasurementHeaders} from './checkout-measurement-client.ts';
 /** Bounded browser requests. Never automatically repeat a write or payment. */
 export async function webinarRequest<T>(path:string,init:RequestInit={},timeoutMs=25000):Promise<T>{
  const controller=new AbortController();
@@ -10,7 +11,9 @@ export async function webinarRequest<T>(path:string,init:RequestInit={},timeoutM
  try{
   return await Promise.race([(async()=>{
    if(controller.signal.aborted)throw Error('Request interrupted');
-   const response=await fetch(path,{...init,signal:controller.signal});
+   const headers=new Headers(init.headers);
+   if(init.method==='POST'&&['/api/billing/membership','/api/billing/vip'].includes(path))for(const [key,value] of Object.entries(checkoutMeasurementHeaders()))headers.set(key,value);
+   const response=await fetch(path,{...init,headers,signal:controller.signal});
    const data=await response.json().catch(()=>null);
    if(!response.ok||!data||typeof data!=='object')throw Object.assign(Error(typeof data?.error==='string'?data.error:'Could not connect. Please try again.'),{status:response.status});
    return data as T;
