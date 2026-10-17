@@ -1,4 +1,5 @@
 'use client';
+import type {WebinarPixelRuntime} from './webinar-pixel';
 export function webinarBrowserReady(sessionId:string,preview:boolean){
  if(preview)return;
  try{sessionStorage.setItem('icash-webinar-session',sessionId);}catch{/* Playback works without browser storage. */}
@@ -7,6 +8,9 @@ export function webinarBrowserReady(sessionId:string,preview:boolean){
 export type WebinarCommerce={product:'membership'|'vip_upgrade';checkoutId?:string;valueCents?:number};
 export function webinarBrowserEvent(kind:'started'|'contact_saved'|'add_to_cart'|'checkout_opened'|'checkout_started',sessionId?:string,commerce?:WebinarCommerce){
  try{sessionId=sessionId||sessionStorage.getItem('icash-webinar-session')||undefined;}catch{/* Optional measurement. */}
+ // Direct checkout visitors have no webinar session. Use the existing page
+ // event scope so their cart/checkout stages still deduplicate on this page.
+ if(!sessionId&&commerce)sessionId=(window as Window&{icashWebinarPixel?:WebinarPixelRuntime}).icashWebinarPixel?.pageViewId||undefined;
  if(sessionId)window.dispatchEvent(new CustomEvent('icash-webinar-track',{detail:{sessionId,kind,commerce}}));
 }
 /** Give the receipt lookup a bounded chance to queue conversions before navigation.

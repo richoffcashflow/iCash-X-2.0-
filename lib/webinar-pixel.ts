@@ -1,11 +1,14 @@
 export type WebinarPixelConfig={enabled:boolean;pixelId?:string;trackingAllowed?:boolean;consent?:boolean};
 export type WebinarPixelRuntime={path:string;pageViewId:string;sentPageView:string;pixelId:string;ready:Promise<WebinarPixelConfig|null>|null;start:(force?:boolean)=>Promise<WebinarPixelConfig|null>};
+const measurementPaths=['/','/join','/webinar','/webinar/checkout','/webinar/upgrade'];
+export function webinarMeasurementPath(path:string){return measurementPaths.includes(path)||/^\/live\/\d{6,12}\/?$/.test(path);}
 
 // Runs from the document head, before React or the webinar session request.
-// Only public webinar pages ask for configuration; private pages do nothing.
+// Public purchase and webinar pages share one pixel. The homepage must first
+// confirm it is showing the guest checkout, since / also hosts the workspace.
 export const webinarPixelBootstrap=String.raw`(function(w,d){
  if(w.icashWebinarPixel)return;
- function page(){return (/^\/live\/\d{6,12}\/?$/.test(w.location.pathname)||['/webinar','/webinar/checkout','/webinar/upgrade'].indexOf(w.location.pathname)!==-1)&&!new URLSearchParams(w.location.search).has('preview');}
+ function page(){var path=w.location.pathname;return (/^\/live\/\d{6,12}\/?$/.test(path)||${JSON.stringify(measurementPaths)}.indexOf(path)!==-1)&&!new URLSearchParams(w.location.search).has('preview')&&(path!=='/'||!!d.querySelector('[data-public-checkout="true"]'));}
  function get(key){try{return w.localStorage.getItem(key);}catch(e){return null;}}
  function blocked(){return !!w.navigator.globalPrivacyControl||get('wb-meta-choice')==='deny';}
  var state=w.icashWebinarPixel={path:'',pageViewId:'',sentPageView:'',pixelId:'',ready:null,start:function(force){

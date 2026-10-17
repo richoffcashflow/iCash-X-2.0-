@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {newWebinar,publicWebinar} from '../lib/webinar-policy.ts';
 export async function verifyWebinarMeasurement(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
- let explicit=false,optedOut=false,regionAllowed=true,scriptLoads=0,reads=0,upgraded=false,checkoutFixture=false,ownerFixture=false;
+ let explicit=false,optedOut=false,regionAllowed=true,scriptLoads=0,reads=0,upgraded=false,checkoutFixture=false,ownerFixture=false,homeFixture=false,privateHomeFixture=false;
  const errors=[],pixelId='1104248230721457';
  try{
   await context.addInitScript(()=>{if(window.top!==window)return;window.__pixelCalls=[];});
@@ -14,6 +14,7 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
    if(url.origin==='https://www.facebook.com'&&url.pathname==='/signals/iwl.js')return route.fulfill({contentType:'application/javascript',body:'window.__metaSetupLoaded=true;'});
    if(checkoutFixture&&url.href==='https://js.stripe.com/endive/stripe.js')return route.fulfill({contentType:'application/javascript',body:`window.Stripe=()=>({createEmbeddedCheckoutPage:async options=>({mount:node=>{const frame=document.createElement('iframe');frame.title='Fixture payment';frame.sandbox='allow-scripts';frame.srcdoc='<input placeholder="Fixture payment field">';node.appendChild(frame);window.__completeCheckout=options.onComplete;},destroy:()=>{}})});`});
    if(url.origin!==base)return route.abort();
+   if((homeFixture||privateHomeFixture)&&url.pathname==='/api/account')return route.fulfill({json:privateHomeFixture?{signedIn:true,billingModel:'membership_credits',membershipActive:true,workspaceAcknowledged:false}:{signedIn:false,signInReady:true}});
    if(url.pathname==='/api/webinar/pixel')return route.fulfill({json:{enabled:true,pixelId,trackingAllowed:!optedOut&&(regionAllowed||explicit)}});
    if(checkoutFixture&&url.pathname==='/api/billing/membership')return route.fulfill({json:route.request().method()==='POST'?{clientSecret:'fixture-secret',publishableKey:'pk_live_fixture',sessionId:'cs_live_browser'}:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',embeddedReady:true,needsClaim:false,membership:null}});
    if(url.pathname==='/api/webinar/measurement'){
@@ -126,7 +127,24 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   await field.click();await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='AddToCart'));
   assert.equal((await tracks('AddToCart')).length,1,'Real cross-origin iframe interaction reaches AddToCart');
   assert.equal((await tracks('Purchase')).length,0,'Entering the form never fabricates a purchase');assert.deepEqual(errors,[]);
-  checkoutFixture=false;regionAllowed=false;explicit=false;optedOut=false;
+  homeFixture=true;
+  await page.evaluate(()=>sessionStorage.removeItem('icash-webinar-session'));
+  await page.goto(base+'/');
+  await field.waitFor();
+  await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView')&&window.__pixelCalls.some(c=>c[2]==='InitiateCheckout'));
+  assert.equal(await page.evaluate(()=>sessionStorage.getItem('icash-webinar-session')),null,'Direct buyers do not need a webinar session');
+  assert.equal((await tracks('PageView')).length,1);
+  const graphic=page.locator('img[alt^="iCash X product overview"]'),card=page.locator('#your-plan');
+  const imageBounds=await graphic.boundingBox(),formBounds=await card.boundingBox();
+  assert.ok(imageBounds&&formBounds&&imageBounds.y+imageBounds.height<=formBounds.y,'Product graphic appears before the payment form');
+  await field.click();await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='AddToCart'));
+  assert.equal((await tracks('AddToCart')).length,1);
+  assert.equal(await graphic.isVisible(),true,'Payment interaction keeps the product visible');
+  assert.equal((await tracks('Purchase')).length,0);
+  homeFixture=false;privateHomeFixture=true;
+  await page.goto(base+'/');await page.locator('.workspace-ack-shell').waitFor();await page.waitForLoadState('networkidle');
+  assert.deepEqual(await calls(),[],'The signed-in workspace at the same URL remains private');
+  privateHomeFixture=false;checkoutFixture=false;regionAllowed=false;explicit=false;optedOut=false;
   await page.evaluate(()=>localStorage.removeItem('wb-meta-choice'));
   const beforeRestricted=scriptLoads;
   await page.goto(base+'/live/123456');await page.waitForLoadState('networkidle');
