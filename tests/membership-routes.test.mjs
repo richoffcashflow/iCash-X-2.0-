@@ -31,3 +31,17 @@ calls=[];const vipRetention={action:'retain_vip',accepted:true,version:vipPolicy
 for(const patch of [{accepted:false},{priceCents:2500},{version:'old'},{months:6},{accountId:'other'}])assert.equal((await route.POST(req({...vipRetention,...patch}))).status,400);
 assert(!calls.some(c=>c.vip));r=await route.POST(req(vipRetention));assert.equal(r.status,200);assert.equal(calls.filter(c=>c.vip).length,1);assert.equal(calls.find(c=>c.vip).vip.account_id,'account');user=null;assert.equal((await route.POST(req(vipRetention))).status,401);
 console.log('PASS $50 VIP offer: strict terms, amount, no client account override and authenticated acceptance.');
+
+// Overlapping readiness reads must never let checkout proceed before both gates pass.
+let releaseOffer,fundingStarted=false;calls=[];user=null;prior=null;
+const delayed=await load('app/api/billing/membership/route.ts',{...deps,
+ membershipOffer:()=>new Promise(resolve=>{releaseOffer=resolve;}),
+ customerFundingReady:async()=>{fundingStarted=true;return false;}
+},'__membershipReadinessOverlap');
+const blocked=delayed.POST(req({...purchase,revision:offer.revision,totalCents:offer.priceCents}));
+for(let n=0;n<30;n++)await Promise.resolve();
+assert(fundingStarted,'Funding readiness starts without waiting for pricing');
+assert.equal(calls.some(c=>c.create),false,'No payment session before readiness resolves');
+releaseOffer(offer);assert.equal((await blocked).status,503);
+assert.equal(calls.some(c=>c.create),false,'A failed parallel readiness check still blocks payment');
+console.log('PASS parallel checkout reads preserve the readiness gate.');

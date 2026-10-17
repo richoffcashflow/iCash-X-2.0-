@@ -3,6 +3,7 @@ import {newWebinar,publicWebinar} from '../lib/webinar-policy.ts';
 export async function verifyWebinarMeasurement(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
  let explicit=false,optedOut=false,regionAllowed=true,scriptLoads=0,reads=0,upgraded=false,checkoutFixture=false,ownerFixture=false,homeFixture=false,privateHomeFixture=false;
+ let membershipReadGate=null;
  const errors=[],membershipRequests=[],pixelId='1104248230721457';
  try{
   await context.addInitScript(()=>{if(window.top!==window)return;window.__pixelCalls=[];});
@@ -17,6 +18,7 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
    if((homeFixture||privateHomeFixture)&&url.pathname==='/api/account')return route.fulfill({json:privateHomeFixture?{signedIn:true,billingModel:'membership_credits',membershipActive:true,workspaceAcknowledged:false}:{signedIn:false,signInReady:true}});
    if(url.pathname==='/api/webinar/pixel')return route.fulfill({json:{enabled:true,pixelId,trackingAllowed:!optedOut&&(regionAllowed||explicit)}});
    if(checkoutFixture&&url.pathname==='/api/billing/membership'){
+    if(route.request().method()==='GET'&&membershipReadGate)await membershipReadGate;
     if(route.request().method()==='POST')membershipRequests.push({home:homeFixture,...route.request().postDataJSON()});
     return route.fulfill({json:route.request().method()==='POST'?{clientSecret:'fixture-secret',publishableKey:'pk_live_fixture',sessionId:homeFixture?'cs_live_home_browser':'cs_live_browser'}:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',embeddedReady:true,needsClaim:false,membership:null}});
    }
@@ -121,7 +123,14 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   assert.equal(page.url(),base+'/live/123456','Owner remains on the public webinar after completion');
   ownerFixture=false;
   checkoutFixture=true;
-  await page.goto(base+'/webinar/checkout');
+  let releaseMembership;
+  membershipReadGate=new Promise(resolve=>{releaseMembership=resolve;});
+  const stripePreload=page.waitForRequest(request=>request.url()==='https://js.stripe.com/endive/stripe.js');
+  try{
+   await Promise.all([page.goto(base+'/webinar/checkout'),stripePreload]);
+   assert.equal(membershipRequests.length,0,'Stripe downloads while the current membership is still loading');
+   assert.equal(await page.evaluate(()=>typeof window.Stripe),'undefined','Preloading does not initialize Stripe or payment');
+  }finally{releaseMembership();membershipReadGate=null;}
   const field=page.frameLocator('iframe[title="Fixture payment"]').getByPlaceholder('Fixture payment field');await field.waitFor();
   await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='InitiateCheckout'));
   assert.equal((await tracks('AddToCart')).length,0,'An automatically mounted form is not a cart selection');
