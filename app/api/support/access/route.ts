@@ -5,6 +5,8 @@ import {allowedOrigin} from '@/lib/funding-policy';
 import {limitRequest} from '@/lib/funding';
 import {normalizeAccessPhone} from '@/lib/purchase-phone-access';
 import {accessHelpCookie,accessHelpInput,accessHelpRedact} from '@/lib/access-help';
+import {replyToAccessHelp} from '@/lib/access-help-replies';
+import type {AccessHelpConversation} from '@/lib/access-help';
 import {scheduleSupportOwnerNotifications} from '@/lib/support-owner-dispatch';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -17,8 +19,9 @@ export async function GET(){
  if(process.env.VERCEL_ENV!=='production')return Response.json({ready:false,conversation:null},{headers});
  try{
   const jar=await cookies();let secret=jar.get(accessHelpCookie)?.value;
-  let conversation=valid(secret)?await db<{expired?:boolean}>('rpc/icash_access_help_read','POST',{p_hash:hash(secret!)}):null;
+  let conversation=valid(secret)?await db<(AccessHelpConversation&{expired?:boolean})|null>('rpc/icash_access_help_read','POST',{p_hash:hash(secret!)}):null;
   if(!valid(secret)||conversation?.expired){secret=randomBytes(32).toString('hex');jar.set(accessHelpCookie,secret,options);conversation=null;}
+  if(conversation?.messages?.at(-1)?.role==='user'){await replyToAccessHelp(db,conversation.id,conversation.messages.at(-1)!.requestId);conversation=await db('rpc/icash_access_help_read','POST',{p_hash:hash(secret!)});scheduleSupportOwnerNotifications();}
   return Response.json({ready:true,conversation},{headers});
  }catch{return Response.json({error:'Support could not load. Try again or email support@geticashx.com.'},{status:503,headers});}
 }
@@ -33,7 +36,8 @@ export async function POST(req:Request){
   const jar=await cookies(),secret=jar.get(accessHelpCookie)?.value;
   if(!valid(secret))return Response.json({error:'Refresh this page before sending. Your draft is still here.'},{status:409,headers});
   const key=hash(secret!);await limitRequest(req,'access-help',key,20,3600);
-  await db('rpc/icash_access_help_submit','POST',{p_hash:key,p_key:i.requestId,p_email:i.email.toLowerCase(),p_phone:phone,p_message:accessHelpRedact(i.message)});
+  const id=await db<string>('rpc/icash_access_help_submit','POST',{p_hash:key,p_key:i.requestId,p_email:i.email.toLowerCase(),p_phone:phone,p_message:accessHelpRedact(i.message)});
+  await replyToAccessHelp(db,id,i.requestId);
   const conversation=await db('rpc/icash_access_help_read','POST',{p_hash:key});
   jar.set(accessHelpCookie,secret!,options);scheduleSupportOwnerNotifications();
   return Response.json({saved:true,conversation},{headers});

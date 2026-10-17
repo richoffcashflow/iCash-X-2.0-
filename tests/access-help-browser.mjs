@@ -16,7 +16,7 @@ export async function verifyAccessHelp(browser,base,options,name,fixtureCookies)
     return json({error:'We could not confirm your message was saved. Refresh before retrying; your draft is still here.'},503);
    }
    if(url.pathname==='/api/support/admin/access'){
-    if(denied)return json({error:'A support operator account is required.'},403);
+    if(denied)return json({error:'Sign in with a support operator account to open this inbox.'},403);
     const request={id,email:conversation.email,phone:conversation.phone,status:conversation.status,created_at:now,updated_at:now};
     if(route.request().method()==='POST'){
      const body=route.request().postDataJSON();assert.equal(body.id,id);conversation.status=body.status;
@@ -41,13 +41,22 @@ export async function verifyAccessHelp(browser,base,options,name,fixtureCookies)
   assert.equal(await page.locator('textarea').inputValue(),question,'Failed response preserves draft');
   await page.getByRole('button',{name:'Refresh support',exact:true}).click();await page.getByText('Your earlier message was saved. The team can see it.',{exact:true}).waitFor();
   assert.equal(await page.getByLabel('Reply to the team',{exact:true}).inputValue(),'','Saved receipt clears only the confirmed draft');assert.equal(sends,1);
-  await page.goto(base+'/support/admin');const desk=page.getByRole('region',{name:'Paid access support',exact:true});
+  await page.goto(base+'/support/admin');const desk=page.getByRole('region',{name:'Support inbox',exact:true});
+  await desk.getByRole('button',{name:/buyer@example.invalid/}).waitFor();
+  assert.equal(await desk.getByText('Fixture deployment ready.',{exact:true}).isVisible(),false,'Diagnostics stay out of the inbox');
+  assert.equal(await desk.getByText('Operations needing review',{exact:true}).isVisible(),false,'Review tools are collapsed');
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'No mobile inbox overflow');
+  if(process.env.SUPPORT_DESK_SCREENSHOT)await page.screenshot({path:process.env.SUPPORT_DESK_SCREENSHOT.replace('.png',name.startsWith('mobile')?'-mobile.png':'-desktop.png'),fullPage:true});
   await desk.getByRole('button',{name:/buyer@example.invalid/}).click();
-  await desk.getByLabel('Reply about access',{exact:true}).fill('Choose Use my checkout phone on the account page. Your payment is saved.');
-  await desk.getByLabel('Access request status',{exact:true}).selectOption('waiting_on_customer');await desk.getByRole('button',{name:'Save access reply',exact:true}).click();
-  await desk.getByText('Saved. The buyer can read your reply on their access-help page without signing in.',{exact:true}).waitFor();
-  denied=true;await desk.getByRole('button',{name:'Refresh access queue',exact:true}).click();await desk.getByText('A support operator account is required.',{exact:true}).waitFor();assert(!(await desk.innerText()).includes('buyer@example.invalid'),'Denied operator read clears previous private ticket');
-  await page.goto(base+'/access/help');await page.getByText('The team replied',{exact:true}).waitFor();
+  await desk.getByLabel('Reply to customer',{exact:true}).fill('Draft kept while navigating');
+  if(name.startsWith('mobile')){await desk.getByRole('button',{name:'← Inbox',exact:true}).click();await desk.getByRole('button',{name:/buyer@example.invalid/}).click();assert.equal(await desk.getByLabel('Reply to customer',{exact:true}).inputValue(),'Draft kept while navigating');}
+  await desk.getByLabel('Reply to customer',{exact:true}).fill('Choose Use my checkout phone on the account page. Your payment is saved.');
+  await desk.getByRole('button',{name:'Send reply ↗',exact:true}).click();
+  await desk.getByText('Reply sent. The customer can read it in this conversation.',{exact:true}).waitFor();
+  assert.equal(await desk.getByLabel('Reply to customer',{exact:true}).inputValue(),'','Confirmed reply clears the draft');
+  if(process.env.SUPPORT_DESK_SCREENSHOT)await page.screenshot({path:process.env.SUPPORT_DESK_SCREENSHOT.replace('.png',name.startsWith('mobile')?'-conversation-mobile.png':'-conversation-desktop.png'),fullPage:true});
+  denied=true;await desk.getByRole('button',{name:'Refresh',exact:true}).click();await desk.getByText('Sign in with a support operator account to open this inbox.',{exact:true}).waitFor();assert(!(await desk.innerText()).includes('buyer@example.invalid'),'Denied operator read clears previous private ticket');
+  await page.goto(base+'/access/help');await page.getByText('Support replied',{exact:true}).waitFor();
   await page.getByRole('log',{name:'Access support messages'}).getByText('Choose Use my checkout phone on the account page. Your payment is saved.',{exact:true}).waitFor();
   assert.equal(sends,1);assert.equal(external,0);assert.deepEqual(errors,[]);
   console.log(`PASS ${name}: locked-out support link, anonymous request, lost-response recovery without duplicate ticket, owner reply, private data cleared on denial, and reply readable without login. No real messages.`);

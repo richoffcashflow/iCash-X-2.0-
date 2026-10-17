@@ -16,11 +16,12 @@ export async function GET(req:Request){
    const [messages,evidence]=await Promise.all([db(`icash_support_messages?thread_id=eq.${id}&account_id=eq.${thread.account_id}&select=id,role,content,evidence,created_at&order=created_at.desc&limit=100`),collectSupportDiagnostics(thread.account_id)]);
    return NextResponse.json({thread,messages:Array.isArray(messages)?messages.reverse():[],evidence},{headers});
   }
-  const [threads,cancellations,deployment]=await Promise.all([
-   db('icash_support_threads?select=id,account_id,subject,status,updated_at&order=updated_at.desc&limit=100'),
+  const [threads,resolved,cancellations,deployment]=await Promise.all([
+   db<Record<string,unknown>[]>('icash_support_threads?status=neq.resolved&select=id,account_id,subject,status,updated_at&order=updated_at.desc&limit=100'),
+   db<Record<string,unknown>[]>('icash_support_threads?status=eq.resolved&select=id,account_id,subject,status,updated_at&order=updated_at.desc&limit=20'),
    db('icash_support_cancel_requests?or=(state.in.(processing,needs_review),and(state.neq.cancelled,receipt_state.in.(claimed,needs_review,suppressed,rate_limited)))&select=id,account_id,mode,state,result,receipt_state,updated_at&order=updated_at.desc&limit=30'),supportDeploymentHealth()
   ]);
-  return NextResponse.json({threads,cancellations,deployment},{headers});
+  return NextResponse.json({threads:[...threads,...resolved],cancellations,deployment},{headers});
  }catch(e){return failure(e);}
 }
 export async function POST(req:Request){

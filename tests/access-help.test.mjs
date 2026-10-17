@@ -6,6 +6,7 @@ import {databaseAdapter,loadService} from './helpers/simulated-journey-services.
 import {accessHelpCookie,accessHelpInput,accessHelpUpdate,accessHelpRedact} from '../lib/access-help.ts';
 import {normalizeAccessPhone} from '../lib/purchase-phone-access.ts';
 import {processSupportOwnerNotifications} from '../lib/support-owner-notifications.ts';
+import {replyToAccessHelp,recoverAccessHelpReplies} from '../lib/access-help-replies.ts';
 import {ownerInboundTarget} from '../lib/owner-inbound-acceptance.ts';
 const pg=await PGlite.create(),{db:baseDb,rpc,q}=databaseAdapter(pg);
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
@@ -26,6 +27,7 @@ try{
  grant usage on schema public,auth to service_role;grant all on all tables in schema public,auth to service_role;`);
  await pg.exec(read('config/support-center.sql'));await pg.exec(read('config/support-owner-notifications.sql'));
  await pg.exec(read('supabase/migrations/20261017185057_paid_access_support.sql'));
+ await pg.exec(read('supabase/migrations/20261017213055_support_conversation_replies.sql'));
  await q('insert into auth.users values($1,$2,now()),($3,$4,now())',[owner,'owner@example.invalid',other,'other@example.invalid']);
  await q("insert into icash_trusted_operators values($1,null,now()+interval '1 day',array['support'])",[owner]);
  await pg.exec('set role service_role');
@@ -63,18 +65,19 @@ try{
  await q('update icash_memberships set account_id=$2 where id=$1',[unclaimed,randomUUID()]);assert(!(await q('select id from icash_purchase_access_attention')).rows.some(row=>row.id===unclaimed),'Claimed accounts leave the live queue');
  let sent=[];const env={VERCEL_ENV:'production',ICASH_SUPPORT_OWNER_EMAIL_ENABLED:'true',ICASH_RELIABILITY_FROM_EMAIL:'noreply@example.invalid',RESEND_API_KEY:'fixture',SUPABASE_URL:'https://fixture.supabase.co',SUPABASE_SECRET_KEY:'fixture'};
  const transport=async(url,init)=>{if(init.method!=='POST')return Response.json({id:owner,email:'owner@example.invalid',email_confirmed_at:'2026-01-01T00:00:00Z'});assert.equal(url,'https://api.resend.com/emails');const message=JSON.parse(init.body);assert.deepEqual(message.to,['owner@example.invalid']);assert(message.text.includes('https://www.geticashx.com/support/admin'));assert(!message.text.includes('https://resend.com/emails/receiving'));sent.push(message);return Response.json({id:randomUUID()});};
+ await q("update icash_support_owner_copies set next_attempt_at=now()-interval '1 second'");
  await processSupportOwnerNotifications({db,env,transport,limit:10,monitorAccess:true});await processSupportOwnerNotifications({db,env,transport,limit:10,monitorAccess:true});assert.equal(sent.length,12);assert(sent.some(message=>message.text.includes('email address not verified')));
 
  // Real route functions: no login dependency, secure browser proof, CSRF, replay and private replies.
  const jar=new Map(),cookieOptions=new Map();let allowed=true,scheduled=0;
  const cookies=async()=>({get:name=>jar.has(name)?{value:jar.get(name)}:undefined,set:(name,value,options)=>{jar.set(name,value);cookieOptions.set(name,options);}});
- const route=await loadService('app/api/support/access/route.ts',{cookies,randomBytes,createHash,db,allowedOrigin:()=>allowed,limitRequest:async()=>{},normalizeAccessPhone,accessHelpCookie,accessHelpInput,accessHelpRedact,scheduleSupportOwnerNotifications:()=>{scheduled++;},process:{env:{VERCEL_ENV:'production'}}});
+ const route=await loadService('app/api/support/access/route.ts',{cookies,randomBytes,createHash,db,allowedOrigin:()=>allowed,limitRequest:async()=>{},normalizeAccessPhone,accessHelpCookie,accessHelpInput,accessHelpRedact,replyToAccessHelp,scheduleSupportOwnerNotifications:()=>{scheduled++;},process:{env:{VERCEL_ENV:'production'}}});
  assert.equal((await route.GET()).status,200);const secret=jar.get(accessHelpCookie);assert(cookieOptions.get(accessHelpCookie).httpOnly&&cookieOptions.get(accessHelpCookie).secure);await route.GET();assert.equal(jar.get(accessHelpCookie),secret,'Refresh before a first message preserves browser proof');
  const post=body=>route.POST(new Request('https://example.invalid/api/support/access',{method:'POST',body:JSON.stringify(body)}));
  const body={requestId:randomUUID(),email:'new@example.invalid',phone:'2125559999',message:'I cannot get either code.'};
  allowed=false;assert.equal((await post(body)).status,403);allowed=true;
- let response=await post(body);assert.equal(response.status,200);let created=(await response.json()).conversation;assert.equal(created.messages.length,1);assert.equal(created.phone,'+12125559999');assert.equal(scheduled,1);
- await post(body);assert.equal((await (await route.GET()).json()).conversation.messages.length,1);
+ let response=await post(body);assert.equal(response.status,200);let created=(await response.json()).conversation;assert.equal(created.messages.length,2);assert.equal(created.phone,'+12125559999');assert.equal(scheduled,1);
+ await post(body);assert.equal((await (await route.GET()).json()).conversation.messages.length,2);
  assert.equal((await post({...body,email:'invalid'})).status,400);
  assert.equal((await post({...body,phone:'letters'})).status,400);
  const admin=await loadService('app/api/support/admin/access/route.ts',{db,requireTrustedOperator:async()=>{if(!allowed)throw Error('OPERATOR_REQUIRED');return {userId:owner};},allowedOrigin:()=>allowed,accessHelpUpdate,accessHelpRedact});
@@ -84,6 +87,36 @@ try{
  assert.equal((await (await route.GET()).json()).conversation.messages.at(-1).role,'operator');
  await q("update icash_access_help_requests set expires_at=now()-interval '1 second' where id=$1",[created.id]);
  assert.equal((await (await route.GET()).json()).conversation,null);assert.notEqual(jar.get(accessHelpCookie),secret,'Expired browser conversations rotate their proof');
- for(const role of ['anon','authenticated']){await pg.exec('set role '+role);await assert.rejects(()=>q('select * from icash_access_help_requests'));await assert.rejects(()=>q('select * from icash_purchase_access_attention'));await assert.rejects(()=>rpc('icash_access_help_read',{p_hash:a}));await assert.rejects(()=>rpc('icash_queue_purchase_access_attention',{}));await pg.exec('reset role');}
+ // Actual automatic conversation: ask only the missing detail, recover, and hand off.
+ const autoHash=hash(randomUUID()),autoKey=randomUUID();
+ const autoArgs={p_hash:autoHash,p_key:autoKey,p_email:'auto@example.invalid',p_phone:null,p_message:'Filled out the code & nothing happened.'};
+ const autoId=await rpc('icash_access_help_submit',autoArgs);
+ const claim=await rpc('icash_access_help_claim_reply',{p_id:autoId,p_key:autoKey});
+ assert(claim.token);assert.equal(await rpc('icash_access_help_claim_reply',{p_id:autoId,p_key:autoKey}),null,'Concurrent reply has one claim');
+ assert.equal(await rpc('icash_access_help_finish_reply',{p_id:autoId,p_key:autoKey,p_token:randomUUID(),p_reply:'Wrong claim',p_status:'waiting_on_customer',p_handoff:false}),false);
+ await q("update icash_access_help_messages set reply_claimed_at=now()-interval '2 minutes' where request_id=$1",[autoId]);
+ await recoverAccessHelpReplies(db);
+ let auto=await rpc('icash_access_help_read',{p_hash:autoHash});assert.match(auto.messages.at(-1).content,/email or text/);assert.equal(auto.status,'waiting_on_customer');
+ await replyToAccessHelp(db,autoId,autoKey);assert.equal((await rpc('icash_access_help_read',{p_hash:autoHash})).messages.length,2,'Retry never duplicates an automatic reply');
+ for(const [question,expected] of [['email',/device and browser/],['iPhone Safari',/error message/],['No error, still nothing',/team for review/]]){
+  const nextKey=randomUUID();await rpc('icash_access_help_submit',{...autoArgs,p_key:nextKey,p_message:question});await replyToAccessHelp(db,autoId,nextKey);auto=await rpc('icash_access_help_read',{p_hash:autoHash});assert.match(auto.messages.at(-1).content,expected);
+ }
+ assert.equal(auto.status,'open','Unresolved problems return to the operator queue');
+ const copy=(await q("select reply from icash_support_owner_copies where source='access_help' and source_id=$1",[auto.messages.at(-2).id])).rows[0];assert.equal(copy.reply,auto.messages.at(-1).content,'Owner copy contains the actual saved answer');
+ // A person replying during generation wins; the automatic answer cannot overwrite it.
+ const raceKey=randomUUID();await rpc('icash_access_help_submit',{...autoArgs,p_key:raceKey,p_message:'More details'});
+ const race=await rpc('icash_access_help_claim_reply',{p_id:autoId,p_key:raceKey});
+ await rpc('icash_access_help_operator_update',{p_operator:owner,p_id:autoId,p_key:randomUUID(),p_status:'resolved',p_reply:'We are reviewing this with you.'});
+ assert.equal(await rpc('icash_access_help_finish_reply',{p_id:autoId,p_key:raceKey,p_token:race.token,p_reply:'Late answer',p_status:'waiting_on_customer',p_handoff:false}),false);
+ assert.equal((await rpc('icash_access_help_read',{p_hash:autoHash})).messages.at(-1).role,'operator');
+ // The signed-in reply transaction preserves tenant binding, statuses, and one reply.
+ const account=randomUUID();await q('insert into icash_accounts(id,owner_user_id) values($1,$2)',[account,owner]);const req=randomUUID();
+ const thread=await rpc('icash_support_begin_message',{p_account:account,p_user:owner,p_thread:null,p_request:req,p_message:'My bot stopped'});
+ const finish={p_account:account,p_user:owner,p_thread:thread.threadId,p_request:req,p_message:'Which screen are you on?',p_evidence:[],p_status:'waiting_on_customer',p_notify:true};
+ await assert.rejects(()=>rpc('icash_support_finish_conversation',{...finish,p_user:other}));
+ assert.equal(await rpc('icash_support_finish_conversation',finish),true);assert.equal(await rpc('icash_support_finish_conversation',finish),true);
+ assert.equal((await q('select status from icash_support_threads where id=$1',[thread.threadId])).rows[0].status,'waiting_on_customer');
+ assert.equal((await q("select count(*)::int as n from icash_support_messages where thread_id=$1 and role='assistant'",[thread.threadId])).rows[0].n,1);
+ for(const role of ['anon','authenticated']){await pg.exec('set role '+role);await assert.rejects(()=>q('select * from icash_access_help_requests'));await assert.rejects(()=>q('select * from icash_purchase_access_attention'));await assert.rejects(()=>rpc('icash_access_help_read',{p_hash:a}));await assert.rejects(()=>rpc('icash_access_help_claim_reply',{p_id:autoId,p_key:autoKey}));await assert.rejects(()=>rpc('icash_access_help_pending_replies',{}));await assert.rejects(()=>rpc('icash_queue_purchase_access_attention',{}));await pg.exec('reset role');}
  console.log('PASS access help: actual private SQL and routes, no-login requests and replies, no purchase disclosure, redacted codes, secure browser binding, operator authorization, replay recovery, rate bounds, expiry, positive payment monitoring, resolved queue, grouped owner notices and no customer sends.');
 }finally{await pg.close();}

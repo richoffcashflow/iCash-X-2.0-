@@ -3,9 +3,9 @@ import {z} from 'zod';
 import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
 import {allowedOrigin,fundingMode} from '@/lib/funding-policy';
-import {supportId,supportMessageInput,supportAnswer,supportTopic,redactSupportQuestion} from '@/lib/support-policy';
+import {supportId,supportMessageInput,redactSupportQuestion} from '@/lib/support-policy';
 import {collectSupportDiagnostics} from '@/lib/support-diagnostics';
-import {classifySupportQuestion} from '@/lib/support-ai';
+import {replyToSupport,type SupportTurn} from '@/lib/support-conversation';
 import {supportOwnerNotificationsEnabled} from '@/lib/support-owner-notifications';
 import {scheduleSupportOwnerNotifications} from '@/lib/support-owner-dispatch';
 export const runtime='nodejs';
@@ -45,13 +45,17 @@ export async function POST(req:Request){
    scheduleSupportOwnerNotifications();
    return NextResponse.json({threadId:started.threadId,replay:true},{headers});
   }
-  // A lost/failed reply must not leave a saved question pending forever. The
-  // begin RPC checks the original account, text and thread; finish is one-use.
-  // Recovery uses local classification, never a second paid model request.
-  const evidence=await collectSupportDiagnostics(accountId);const selected=started.replay?{topic:supportTopic(question),ai:false}:await classifySupportQuestion(question,evidence);
-  const answer=supportAnswer(selected.topic,evidence,selected.ai);
-  await db(supportOwnerNotificationsEnabled()?'rpc/icash_support_finish_and_notify':'rpc/icash_support_finish_message','POST',{p_account:accountId,p_user:userId,p_thread:started.threadId,p_request:i.requestId,p_message:answer,p_evidence:evidence});
+  const [evidence,history,threads]=await Promise.all([
+   collectSupportDiagnostics(accountId),
+   db<SupportTurn[]>(`icash_support_messages?account_id=eq.${accountId}&thread_id=eq.${started.threadId}&select=role,content&order=created_at.desc,id.desc&limit=16`),
+   db<{status:string}[]>(`icash_support_threads?account_id=eq.${accountId}&id=eq.${started.threadId}&select=status`)
+  ]);
+  const messages=history.reverse();
+  if(messages.at(-1)?.content!==question||messages.at(-1)?.role!=='user')messages.push({role:'user',content:question});
+  // Replayed receipts use the local answer; they never repeat a paid model call.
+  const answer=await replyToSupport({kind:'account',messages,evidence,handedOff:threads[0]?.status==='escalated',allowAI:!started.replay});
+  await db('rpc/icash_support_finish_conversation','POST',{p_account:accountId,p_user:userId,p_thread:started.threadId,p_request:i.requestId,p_message:answer.reply,p_evidence:evidence,p_status:answer.status,p_notify:supportOwnerNotificationsEnabled()});
   scheduleSupportOwnerNotifications();
-  return NextResponse.json({threadId:started.threadId,ai:selected.ai},{headers});
+  return NextResponse.json({threadId:started.threadId,ai:answer.ai},{headers});
  }catch(e){const auth=e instanceof Error&&['SIGN_IN_REQUIRED','ACCOUNT_REQUIRED'].includes(e.message);return NextResponse.json({error:auth?'Sign in to get help.':e instanceof z.ZodError||e instanceof SyntaxError?'Please check your message and try again.':'Could not confirm that the reply was saved. Refresh the conversation before retrying.'},{status:auth?401:e instanceof z.ZodError||e instanceof SyntaxError?400:503,headers});}
 }
