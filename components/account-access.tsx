@@ -38,6 +38,6 @@ export function AccountAccess({initialEmail='',onSignedIn,ready=true}:{initialEm
   </>:<button type="button" className="demo-button" disabled={busy} onClick={()=>setSent(true)}>I already have a code</button>}
   <button type="button" className="demo-button" disabled={busy} onClick={()=>choose(channel==='email'?'sms':'email')}>{channel==='email'?'Use my checkout phone':'Use email instead'}</button>
   {message&&<p role="status">{message}</p>}
-  <p className="sign-in-help"><a href="/support">Still need help getting in?</a></p>
+  <p className="sign-in-help"><a href="/access/help">Still need help getting in?</a></p>
  </form>;
 }
