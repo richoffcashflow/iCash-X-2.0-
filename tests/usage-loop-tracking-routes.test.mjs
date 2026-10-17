@@ -33,7 +33,7 @@ let lanesRan=false,monitorRan=false,pruneTried=false;
 const maintenance=await load('app/api/internal/maintenance/route.ts','usageMaintenanceTest',{
  authorizeOutboundBilling:()=>true,pruneUsageLoopObservations,
  db:async path=>{assert.equal(path,'rpc/icash_prune_usage_loop_observations');pruneTried=true;throw Error('telemetry unavailable');},
- maintenanceBatch:async lanes=>{assert.deepEqual(Object.keys(lanes),['purchaseEmail','purchaseFollowups','outbound','recording','ownerRecording','reception']);lanesRan=true;return {ok:true};},
+ maintenanceBatch:async lanes=>{assert.deepEqual(Object.keys(lanes),['supportCopies','purchaseEmail','purchaseFollowups','outbound','recording','ownerRecording','reception']);lanesRan=true;return {ok:true};},
  refreshReliability:async(_db,ok)=>{assert.equal(ok,true);monitorRan=true;return true;},
  outbound:async()=>{},recording:async()=>{},ownerRecording:async()=>{},reception:async()=>{},
 });

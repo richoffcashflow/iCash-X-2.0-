@@ -3,6 +3,7 @@ import {fundingMode} from '@/lib/funding-policy';
 import {verifyTitleWebhook,titleEmailAddress} from '@/lib/title-inbound-policy';
 import {supportId} from '@/lib/support-policy';
 import {intakeVerifiedSupportEmail} from '@/lib/support-email-intake';
+import {scheduleSupportOwnerNotifications} from '@/lib/support-owner-dispatch';
 export const runtime='nodejs';
 /** Verified request intake and bounded receipt only: no AI, billing action, deletion or account change. */
 export async function POST(req:Request){
@@ -15,6 +16,7 @@ export async function POST(req:Request){
  try{
   const r=await fetch(`https://api.resend.com/emails/receiving/${parsed.data}`,{headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error();const email=await r.json();
   await intakeVerifiedSupportEmail(parsed.data,email);
+  scheduleSupportOwnerNotifications();
   return NextResponse.json({received:true});
  }catch{return NextResponse.json({error:'Retry required'},{status:503});}
 }
