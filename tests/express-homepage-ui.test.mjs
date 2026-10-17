@@ -61,15 +61,18 @@ test('email sign-in availability follows the account service',()=>{
  const render=harness({signInReady:false});find(render(),'button').props.onClick();assert.equal(find(render(),'AccountAccess').props.ready,false);
 });
 
-test('product features precede the automatic payment form and stay visible during checkout',()=>{
+test('engaged checkout keeps the same component position while simplifying its surrounding layout',()=>{
  const render=harness();let tree=render();
- const nodes=all(tree),checkout=find(tree,'MembershipCheckout'),graphic=find(tree,'Image');
- assert.equal(graphic.props.src,'/webinar-offer-icash-x.png');
- assert.ok(nodes.indexOf(graphic)<nodes.indexOf(checkout));
- assert.ok(nodes.findIndex(node=>node.props?.['aria-label']==='AI wholesale automation')<nodes.indexOf(checkout));
- assert.equal(checkout.props.autoOpen,true);
- assert.equal(checkout.props.onEngaged,undefined,'Entering payment details must not hide the product or shift the form');
+ const lineage=(node,type,path=[])=>!node||typeof node!=='object'?null:Array.isArray(node)?node.map((child,index)=>lineage(child,type,[...path,index])).find(Boolean):node.type===type?path:lineage(node.props?.children,type,[...path,node.type]);
+ assert.equal(find(tree,'Image').props.src,'/icash-x-launch-hero.webp');
+ assert.match(text(tree),/Your AI bot for/);
+ assert.equal(find(tree,'MembershipCheckout').props.autoOpen,true);
  assert.equal(tree.props['data-public-checkout'],'true');
  assert.equal(harness({checkingAccount:true})().props['data-public-checkout'],undefined);
  assert.equal(harness({preview:true})().props['data-public-checkout'],undefined);
+ const before=lineage(tree,'MembershipCheckout');
+ find(tree,'MembershipCheckout').props.onEngaged();tree=render();
+ assert.deepEqual(lineage(tree,'MembershipCheckout'),before,'payment form must not remount when checkout begins');
+ assert.equal(all(tree).find(node=>node.props?.className==='wb-plan-layout').props['data-engaged'],true);
+ assert.equal(find(tree,'FundingDialog'),undefined,'engagement does not open sign-in');
 });

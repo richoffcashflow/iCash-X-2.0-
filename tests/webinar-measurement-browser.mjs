@@ -135,14 +135,17 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   catch(error){console.log('Homepage pixel diagnostics',await page.evaluate(()=>({calls:window.__pixelCalls,boot:window.icashWebinarPixel?{path:window.icashWebinarPixel.path,pageViewId:window.icashWebinarPixel.pageViewId,sentPageView:window.icashWebinarPixel.sentPageView,pixelId:window.icashWebinarPixel.pixelId}:null,publicCheckout:!!document.querySelector('[data-public-checkout="true"]'),session:sessionStorage.getItem('icash-webinar-session')})),errors);throw error;}
   assert.equal(await page.evaluate(()=>sessionStorage.getItem('icash-webinar-session')),null,'Direct buyers do not need a webinar session');
   assert.equal((await tracks('PageView')).length,1);
-  const graphic=page.locator('img[alt^="iCash X product overview"]'),card=page.locator('#your-plan');
+  const graphic=page.locator('img[alt^="iCash X product concept"]'),card=page.locator('#your-plan');
   const imageBounds=await graphic.boundingBox(),formBounds=await card.boundingBox();
-  assert.ok(imageBounds&&formBounds&&imageBounds.y+imageBounds.height<=formBounds.y,'Product graphic appears before the payment form');
+  assert.ok(imageBounds&&formBounds,'The original product image and payment form are visible');
+  if(page.viewportSize().width>760)assert.ok(imageBounds.x+imageBounds.width<=formBounds.x,'Desktop keeps the original side-by-side product and payment layout');
+  else assert.ok(formBounds.y+formBounds.height<=imageBounds.y,'Mobile keeps the original offer-first layout');
   await field.click();
   try{await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='AddToCart'));}
   catch(error){console.log('Homepage cart diagnostics',await page.evaluate(()=>({calls:window.__pixelCalls,activeElement:document.activeElement?.tagName,focused:document.hasFocus(),hidden:document.hidden,boot:window.icashWebinarPixel?{path:window.icashWebinarPixel.path,pageViewId:window.icashWebinarPixel.pageViewId}:null,publicCheckout:!!document.querySelector('[data-public-checkout="true"]'),session:sessionStorage.getItem('icash-webinar-session')})),errors);throw error;}
   assert.equal((await tracks('AddToCart')).length,1);
-  assert.equal(await graphic.isVisible(),true,'Payment interaction keeps the product visible');
+  await page.locator('.wb-plan-layout[data-engaged="true"]').waitFor();
+  assert.equal(await graphic.isVisible(),false,'Payment interaction restores the original focused checkout layout');
   assert.equal((await tracks('Purchase')).length,0);
   homeFixture=false;privateHomeFixture=true;
   await page.goto(base+'/');await page.locator('.workspace-ack-shell').waitFor();await page.waitForLoadState('networkidle');
