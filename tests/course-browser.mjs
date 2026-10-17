@@ -17,11 +17,12 @@ export function serveCourseUpload(request,response){
  request.on('end',()=>{const body=Buffer.concat(chunks);courseUploadReceipts.push({id,body,offset});uploadOffsets.set(id,offset+size);response.writeHead(204,{'Upload-Offset':String(offset+size),'Tus-Resumable':'1.0.0'});response.end();});
 }
 export async function verifyCourse(browser,base,options,name){
- const context=await browser.newContext({...options,ignoreHTTPSErrors:true});const page=await context.newPage(),errors=[],writes=[];
+ const context=await browser.newContext({...options,ignoreHTTPSErrors:true});const page=await context.newPage(),errors=[],writes=[],progressWrites=[];
  let signedIn=true,owner=false,unlocked=false,vip=false,ready=true;
  await context.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url());if(url.origin!==base)throw Error('Unexpected external request: '+url.origin);
   if(url.pathname==='/api/course')return route.fulfill({status:signedIn?200:401,json:signedIn?{owner,canUpload:owner&&unlocked,vip,assets:{video:{ready,name:ready?'Course.webm':null,revision:ready?1:0},pdf:{ready,name:ready?'Course.pdf':null,revision:ready?1:0}}}:{error:'Sign in to watch your course.'}});
+  if(url.pathname==='/api/course/progress'){const body=req.postDataJSON();if(!signedIn)return route.fulfill({status:401,json:{error:'Sign in'}});assert.equal(body.revision,1);assert(body.ranges.length>0);assert(!('accountId' in body));progressWrites.push(body);return route.fulfill({json:{revision:1,state:'in_progress',percent:1}});}
   if(url.pathname==='/api/course/assets/video'){
    const range=req.headers().range;
    if(range){const match=/bytes=(\d+)-(\d*)/.exec(range),start=Number(match?.[1]??0),end=Math.min(Number(match?.[2]||courseVideo.length-1),courseVideo.length-1);return route.fulfill({status:206,headers:{'Content-Type':'video/webm','Accept-Ranges':'bytes','Content-Range':`bytes ${start}-${end}/${courseVideo.length}`},body:courseVideo.subarray(start,end+1)});}
@@ -40,7 +41,8 @@ export async function verifyCourse(browser,base,options,name){
  try{
   await page.goto(base+'/course');await page.getByRole('link',{name:'Download PDF',exact:true}).waitFor();
   const video=page.getByLabel('How to use iCash X course video');await page.waitForFunction(()=>document.querySelector('video')?.readyState>=1);assert(await video.evaluate(node=>Number.isFinite(node.duration)&&node.duration>0));
-  await video.evaluate(node=>{node.muted=true;return node.play();});await page.waitForFunction(()=>document.querySelector('video')?.currentTime>0);
+  assert.equal(progressWrites.length,0,'Opening the course does not count as watching');const progressSaved=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/course/progress');
+  await video.evaluate(node=>{node.muted=true;return node.play();});await progressSaved;assert(progressWrites.length>0);assert(progressWrites[0].ranges.every(([start,end])=>start>=0&&end>start&&end<=progressWrites[0].durationMs));await page.waitForFunction(()=>document.querySelector('video')?.currentTime>0);
   assert.equal(await page.getByText('Manage course files',{exact:true}).count(),0);
   const pdfLink=page.getByRole('link',{name:'Download PDF',exact:true}),practice=page.getByRole('link',{name:'Open practice workspace',exact:true});
   assert((await pdfLink.boundingBox()).y<(await practice.boundingBox()).y,'Practice link is directly below the PDF');
