@@ -124,6 +124,26 @@ history[0].updated_at=new Date(now-2*3600000).toISOString();
 data=await(await post({code:'123456'})).json();assert.equal(data.progress,0,'Expired owner visits restart from the beginning');
 history[0].completed_at=null;history[0].progress_seconds=500;history[0].updated_at=new Date(now-1000).toISOString();
 data=await(await post({code:'123456'})).json();assert.equal(data.progress,500,'Recent unfinished owner sessions still resume');
+// Owner public tests follow the current recording when Day/Night changes.
+const ownerClock=now;
+for(const [from,to] of [['day','night'],['night','day']]){
+ now=Date.parse(to==='night'?'2026-10-17T01:07:13Z':'2026-10-17T18:00:00Z');
+ const frozen=selectRecording(one,'America/Chicago',new Date(now),settings.routing,from);
+ const old={...prior,id:randomUUID(),config:frozen,completed_at:null,progress_seconds:39,max_seconds:39,created_at:new Date(now-3*3600000).toISOString(),updated_at:new Date(now-1000).toISOString()};
+ history=[old];calls=[];
+ data=await(await post({code:'123456'})).json();
+ assert.equal(data.webinar.recordingVersion,to);assert.equal(data.progress,0);assert.notEqual(data.sessionId,old.id);
+ const begin=calls.find(c=>c.path==='rpc/icash_webinar_begin').body;
+ assert.equal(begin.p_advance_from,old.id);assert.equal(begin.p_preview,false);assert.equal(begin.p_config._returnStartSeconds,undefined);
+ history=[{...old,id:data.sessionId,config:begin.p_config,progress_seconds:25,max_seconds:25,created_at:new Date(now).toISOString()}];
+ data=await(await post({code:'123456'})).json();assert.equal(data.sessionId,history[0].id);assert.equal(data.progress,25,'Refreshing the correct owner recording resumes normally');
+ // The same saved customer recording keeps its position across sunset/sunrise.
+ account=null;paid=false;vipPaid=false;hasVip=false;history=[old];
+ data=await(await post({code:'123456'})).json();assert.equal(data.sessionId,old.id);assert.equal(data.webinar.recordingVersion,from);assert.equal(data.progress,39);
+ account={id:randomUUID(),destination:'/',needsBudget:false,isOwner:true};paid=true;vipPaid=true;hasVip=true;
+}
+now=ownerClock;
+console.log('PASS owner Day/Night changes start the current recording at zero; same-period refreshes and customer resumes retain their position.');
 one.status='draft';data=await(await post({code:'123456'})).json();assert.equal(data.unavailable,true,'Public owner watching cannot expose drafts');one.status='published';
 account.isOwner=false;history=[];
 data=await(await post({code:'123456'})).json();assert.equal(data.redirect,'/','A normal VIP member keeps the workspace destination');
