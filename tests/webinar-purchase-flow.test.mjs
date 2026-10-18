@@ -138,9 +138,10 @@ for(const savedEmail of [false,true])for(const isPreview of [false,true])for(con
  await flush();h.render('MembershipCheckout',props);await flush();let tree=h.render('MembershipCheckout',props);
  assert.equal(button(tree,'Buy now'),undefined);assert.equal(button(tree,'Get my AI bot'),undefined);
  h.render('MembershipCheckout',props);await flush();
- if(!isPreview&&!savedEmail){assert.equal(events.filter(e=>e.init.method==='POST').length,0,'No checkout before checking the payment email');find(tree,'input').props.onChange({target:{value:'fixture@example.invalid'}});tree=h.render('MembershipCheckout',props);find(tree,'form').props.onSubmit({preventDefault(){}});await flush();tree=h.render('MembershipCheckout',props);}
+ if(!isPreview&&!savedEmail&&!display.autoOpen){assert.equal(events.filter(e=>e.init.method==='POST').length,0,'Webinar checkout checks email when registration details are missing');find(tree,'input').props.onChange({target:{value:'fixture@example.invalid'}});tree=h.render('MembershipCheckout',props);find(tree,'form').props.onSubmit({preventDefault(){}});await flush();tree=h.render('MembershipCheckout',props);}
+ if(display.autoOpen)assert.equal(find(tree,'input'),undefined,'Homepage opens payment without an extra email form');
  const writes=events.filter(e=>e.init.method==='POST');assert.equal(writes.length,isPreview?0:1);
- if(!isPreview){const body=JSON.parse(writes[0].init.body);assert.equal(body.email,'fixture@example.invalid');assert.equal(body.action,'prepare');assert.equal(body.accepted,undefined);assert.equal(body.embedded,true);assert.equal(body.revision,9);assert.equal(body.totalCents,5000);assert.ok(find(tree,'StripeEmbeddedCheckout'));}
+ if(!isPreview){const body=JSON.parse(writes[0].init.body);assert.equal(body.email,savedEmail||!display.autoOpen?'fixture@example.invalid':undefined);assert.equal(body.action,'prepare');assert.equal(body.accepted,undefined);assert.equal(body.embedded,true);assert.equal(body.revision,9);assert.equal(body.totalCents,5000);assert.ok(find(tree,'StripeEmbeddedCheckout'));}
  else {assert.ok(find(tree,'WebinarPaymentPreview'));assert.equal(find(tree,'WebinarPaymentPreview').props.onBack,undefined);}
  h.close();
 }
