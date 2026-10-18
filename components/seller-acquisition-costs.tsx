@@ -29,7 +29,7 @@ export function SellerAcquisitionCosts(){
   {!data?<p>Loading lead costs…</p>:<>
    <div className="lead-cost-settings"><h3>Pricing for new usage</h3><p>Standard pays 2× recorded cost for new usage. VIP gets 20% off, making it 1.6×. Lead pricing includes advertising and processing and is fixed at the first assignment. Existing prices stay unchanged.</p>
    </div>
-   <SellerMetaCostConnection sources={data.automation} onSaved={load}/>
+   <SellerMetaCostConnection sources={data.automation} onSaved={load} onDenied={()=>{setData(null);setError('Platform owner access required. Sign in again.');}}/>
    <div className="lead-cost-settings"><h3>Backup estimate for new leads</h3><p>Use this when an automatic campaign average is unavailable. New leads include ad cost and processing; paid sources without either a recorded cost or an estimate wait for a cost entry.</p>
     <form onSubmit={e=>void save(e,'estimate')}>
      <label>Source<select value={source} onChange={e=>{setSource(e.target.value);const saved=data.estimates.find(x=>x.source===e.target.value&&x.campaign===campaign);setAmount(saved?(saved.costMicros/1000000).toFixed(2):'');}}>{acquisitionSources.map(s=><option key={s} value={s}>{acquisitionSourceLabels[s]}</option>)}</select></label>
