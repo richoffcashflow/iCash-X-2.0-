@@ -8,7 +8,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const q=(sql,args=[])=>pg.query(sql,args);
 const one=async(sql,args=[])=>{const result=await q(sql,args);assert.equal(result.rows.length,1,sql);return result.rows[0];};
 const rpc=async(name,args)=>Object.values(await one(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) result`,args))[0];
-const configs=['meta-instant-leads','meta-instant-lead-work','meta-instant-lead-property','meta-instant-address-form','meta-instant-lead-workspace','meta-instant-lead-reception','meta-instant-lead-measurement','meta-instant-network-pool','meta-make-intake','meta-test-contact-exclusion'];
+const configs=['meta-instant-leads','meta-instant-lead-work','meta-instant-lead-property','meta-instant-address-form','meta-instant-lead-workspace','meta-instant-lead-reception','meta-instant-lead-measurement','meta-instant-network-pool','meta-make-intake','meta-test-contact-exclusion','meta-import-waiting-priority'];
 try{
  await pg.exec(`create role anon;create role authenticated;create role service_role bypassrls;
  create schema auth;create schema extensions;create schema icash_recording_private;create schema icash_recorded_reception_private;create schema icash_seller_agreement_private;
@@ -359,7 +359,29 @@ try{
  assert.equal((await one('select state,financial_checked_at from icash_operation_spend where operation_key=$1',['voice:'+replacement])).financial_checked_at,null,'no financial evidence is fabricated');
  assert.equal((await one('select state from icash_voice_jobs where id=$1',[replacement])).state,'dispatching');
  assert.equal(Number((await one('select count(*) n from icash_voice_jobs where meta_retry_of=$1',[initialJob])).n),1);
+ // An explicitly marked export batch uses time since the last inbound lead,
+ // or account creation when never served. Live forms keep their VIP rotation.
+ assert.equal(read('config/meta-import-waiting-priority.sql'),read('supabase/migrations/20261018233714_meta_import_waiting_priority.sql'));
+ await q('update icash_wallets set balance_cents=0');
+ const waitingBuyer=randomUUID(),newVip=randomUUID(),pausedBuyer=randomUUID();
+ for(const [id,age,balance,paused] of [[waitingBuyer,3,1000,false],[newVip,1,100000,false],[pausedBuyer,4,1000,true]]){
+  await q("insert into icash_accounts(id,owner_user_id,assistant_name,bot_paused,daily_limit_cents,created_at) values($1,$2,'SIMULATION batch buyer',$3,10000,now()-$4*interval '1 day')",[id,randomUUID(),paused,age]);
+  await q('insert into test_memberships(account_id) values($1)',[id]);
+  await q("insert into icash_wallets(account_id,balance_cents,currency) values($1,$2,'USD')",[id,balance]);
+  await q("insert into icash_customer_identities(account_id,first_name,last_name,company_name,voice_id,voice_name) values($1,'SIMULATION','Import','SIMULATION Import Buyer','fixture_voice','Fixture')",[id]);
+ }
+ await q(`create or replace function icash_vip_active(uuid) returns boolean language sql as $$select $1='${newVip}'::uuid$$`);
+ const firstImport='990000001',secondImport='990000002',ordinaryImportId='990000003';
+ await q("insert into icash_meta_import_priorities(source_id,meta_id,batch_ref) values($1,$2,'SIMULATION export batch'),($1,$3,'SIMULATION export batch'),($4,$5,'SIMULATION unrelated source')",[pool,firstImport,secondImport,source,ordinaryImportId]);
+ const firstAssigned=await rpc('icash_meta_accept_lead',[pool,{...networkReceipt,metaId:firstImport,phone:'+12145550701'},randomUUID().replaceAll('-','').repeat(2)]);
+ assert.equal(firstAssigned.accountId,waitingBuyer,'batch selects the older eligible Standard buyer ahead of new VIP and paused buyer');
+ assert.equal((await rpc('icash_meta_assign_contact',[firstAssigned.leadId])).accountId,waitingBuyer,'retry never reassigns a served contact');
+ const secondAssigned=await rpc('icash_meta_accept_lead',[pool,{...networkReceipt,metaId:secondImport,phone:'+12145550702'},randomUUID().replaceAll('-','').repeat(2)]);
+ assert.equal(secondAssigned.accountId,newVip,'first assignment resets waiting time before the next batch lead');
+ const ordinaryAssigned=await rpc('icash_meta_accept_lead',[pool,{...networkReceipt,metaId:ordinaryImportId,phone:'+12145550703'},randomUUID().replaceAll('-','').repeat(2)]);
+ assert.equal(ordinaryAssigned.accountId,newVip,'an unrelated source marker cannot change ordinary VIP priority');
  for(const role of ['anon','authenticated']){
+  assert.equal((await one("select has_table_privilege($1,'icash_meta_import_priorities','insert') permitted",[role])).permitted,false,'clients cannot select assignment priority');
   assert.equal((await one("select count(*) n from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like 'icash_meta_%' and has_function_privilege($1,p.oid,'execute')",[role])).n,0);
  }
  console.log('PASS Meta receipt binding, deduplication, private links, address races, no uncertain replay, SMS/call queues, real final call admission, one evidence-preserving recovery, text-only requests, Run/Pause, credits, membership, ordinary financial checks, same-card promotion, 2x acquisition, funded buyer rotation, shared-recipient bindings, 24/72-hour allocation and private RPC privileges.');

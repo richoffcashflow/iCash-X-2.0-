@@ -252,3 +252,18 @@ Contact-only cards show call/text history and
 Pause/Resume; their manual SMS composer becomes available after property matching.
 All provider transports are local fixtures. PostgreSQL fixtures use a schema-only
 snapshot and isolated billing/provider delegates, not production account rows.
+# Owner-requested historical imports
+
+For an owner-selected export batch, register only the new source/Meta lead ID
+pairs in `icash_meta_import_priorities`, with a batch reference to the original
+export. This service-only marker chooses the eligible client whose last inbound
+seller assignment is oldest, using account creation when they have never received
+a lead. Both website assignments and unfinished Meta contacts reset the wait.
+Existing funded membership, Run/Pause, channel and billing-review checks still
+apply. The normal VIP/weighted rotation remains unchanged for unmarked leads.
+
+Submit original records oldest first through the authenticated Make receiver,
+preserving Meta timestamps and ad/set/campaign IDs. Remove only Meta export ID
+prefixes (`l:`, `f:`, `ag:`, `as:`, `c:`). Exclude known tests and already imported
+IDs before sending; do not replay an existing ID with corrected attribution.
+Priorities never reassign existing contacts or create another outreach attempt.
