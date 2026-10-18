@@ -9,6 +9,19 @@ const numericId=value=>typeof value==='string'&&/^[0-9]{5,40}$/.test(value);
 const production=env=>env.VERCEL_ENV==='production'&&canSaveSharedIntegrationCheck(env);
 const object=value=>value&&typeof value==='object'&&!Array.isArray(value)?value:{};
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const relevantScopes=['ads_read','ads_management','leads_retrieval','pages_show_list','pages_read_engagement','pages_manage_ads','pages_manage_metadata'];
+
+// Classify provider failures without persisting their messages, which may echo
+// credentials. Error 100 alone cannot distinguish a bad field from missing access.
+function graphFailure(data,httpStatus){
+ const error=object(object(data).error),message=typeof error.message==='string'?error.message:'';
+ const code=Number(error.code)||0,subcode=Number(error.error_subcode)||0;
+ const reason=code===190?'invalid_access_token':/appsecret[_ ]?proof/i.test(message)?'invalid_appsecret_proof':
+  /non.?existing field/i.test(message)?'unsupported_field':
+  /unsupported get request|does not exist|cannot be loaded/i.test(message)?'object_unavailable':
+  code===10||code===200||/permission/i.test(message)?'permission_required':'request_rejected';
+ return {ok:false,httpStatus,code,subcode,reason,permissions:relevantScopes.filter(scope=>message.includes(scope))};
+}
 
 // Only explicitly requested form metadata is persisted. Even provider error
 // messages and pagination URLs are excluded: they can echo access credentials.
@@ -35,32 +48,39 @@ export async function checkMetaLeadConnection(env=process.env,fetcher=fetch){
  const appToken=appId+'|'+env.META_LEAD_APP_SECRET;
  const proof=createHmac('sha256',env.META_LEAD_APP_SECRET).update(token).digest('hex');
  const secrets=[token,appToken,env.META_LEAD_APP_SECRET,proof];
- const get=async(path,fields,accessToken,withProof=false)=>{
+ const get=async(path,fields,accessToken,withProof=false,params={})=>{
   const url=new URL(`https://graph.facebook.com/${env.META_GRAPH_VERSION}/${path}`);
   if(fields)url.searchParams.set('fields',fields);
   if(withProof)url.searchParams.set('appsecret_proof',proof);
+  for(const [key,value] of Object.entries(params))url.searchParams.set(key,value);
   try{
    const response=await fetcher(url,{method:'GET',headers:{Authorization:'Bearer '+accessToken},redirect:'error',signal:AbortSignal.timeout(8000)});
    const body=await response.text();
    if(body.length>100000)return {ok:false,httpStatus:response.status,reason:'response_too_large'};
    let data;try{data=JSON.parse(body);}catch{return {ok:false,httpStatus:response.status,reason:'invalid_response'};}
-   if(!response.ok)return {ok:false,httpStatus:response.status,code:Number(object(data).error?.code)||0};
+   if(!response.ok)return graphFailure(data,response.status);
    return {ok:true,data:object(data)};
   }catch{return {ok:false,reason:'request_unavailable'};}
  };
- const form=await get(formId,'id,name,status,page_id,questions,legal_content,privacy_policy_url,follow_up_action_url,thank_you_page',token,true);
+ const [form,page,app,debug]=await Promise.all([
+  get(formId,'id,name,status,page_id,questions,legal_content,privacy_policy_url,follow_up_action_url,thank_you_page',token,true),
+  get(pageId+'/subscribed_apps','id,subscribed_fields',token,true),
+  get(appId+'/subscriptions',null,appToken),
+  get('debug_token',null,appToken,false,{input_token:token}),
+ ]);
+ // Only the selected app/Page and relevant permission names enter the private
+ // receipt. Token identity, other assets and the input-token URL never do.
+ const tokenInfo=object(debug.data?.data);
+ result.accessToken=debug.ok?{readable:true,valid:tokenInfo.is_valid===true,appMatches:String(tokenInfo.app_id)===appId,
+  scopes:relevantScopes.filter(scope=>Array.isArray(tokenInfo.scopes)&&tokenInfo.scopes.includes(scope))}:{readable:false,...debug};
+ result.pageSubscription=page.ok?{readable:true,subscribed:Array.isArray(page.data.data)&&page.data.data.some(entry=>entry.id===appId&&Array.isArray(entry.subscribed_fields)&&entry.subscribed_fields.includes('leadgen'))}:{readable:false,...page};
+ result.appSubscription=app.ok?{readable:true,active:Array.isArray(app.data.data)&&app.data.data.some(entry=>entry.object==='page'&&entry.active===true&&entry.callback_url==='https://homeoffernetwork.com/api/webhooks/meta-leads'&&Array.isArray(entry.fields)&&entry.fields.some(field=>(typeof field==='string'?field:field?.name)==='leadgen'))}:{readable:false,...app};
  if(!form.ok)return {...result,status:'form_access_unverified',form};
  if(form.data.id!==formId||String(form.data.page_id)!==pageId)return {...result,status:'form_page_mismatch'};
  const snapshot=Object.fromEntries(['id','name','status','page_id','questions','legal_content','privacy_policy_url','follow_up_action_url','thank_you_page'].filter(key=>Object.hasOwn(form.data,key)).map(key=>[key,form.data[key]]));
  result.form=publicMetadata(snapshot,secrets);
  result.formHash=hash(snapshot);
  result.formAccessVerified=true;
- const [page,app]=await Promise.all([
-  get(pageId+'/subscribed_apps','id,subscribed_fields',token,true),
-  get(appId+'/subscriptions',null,appToken),
- ]);
- result.pageSubscription=page.ok?{readable:true,subscribed:Array.isArray(page.data.data)&&page.data.data.some(entry=>entry.id===appId&&Array.isArray(entry.subscribed_fields)&&entry.subscribed_fields.includes('leadgen'))}:{readable:false,...page};
- result.appSubscription=app.ok?{readable:true,active:Array.isArray(app.data.data)&&app.data.data.some(entry=>entry.object==='page'&&entry.active===true&&entry.callback_url==='https://homeoffernetwork.com/api/webhooks/meta-leads'&&Array.isArray(entry.fields)&&entry.fields.some(field=>(typeof field==='string'?field:field?.name)==='leadgen'))}:{readable:false,...app};
  result.status=result.pageSubscription.subscribed&&result.appSubscription.active?'metadata_verified':'webhook_setup_required';
  // Form access alone never enables intake or certifies contact permission.
  return result;
