@@ -158,6 +158,20 @@ Send JSON or `application/x-www-form-urlencoded` fields: `lead_id`, `page_id`,
 `adset_id`, `campaign_id`. Map the original date as ISO with timezone or UNIX
 seconds. Optional `custom_disclaimer_responses` contains actual responses only;
 the two-field submission source does not require it. Empty ad IDs are accepted.
+Use the Facebook **Date created** mapping chip directly when it already produces
+an ISO timestamp. Do not send a literal `formatDate(...)` expression. Field names
+are the exact lowercase keys above; `Ad ID` is not an alias for `ad_id`, and an
+ad's ID must not be reused as its ad-set ID.
+
+Apply `20261018221018_meta_make_intake.sql` before
+`20261018225224_meta_first_call_admission.sql`. The latter aligns final call
+admission with reservation admission for a currently verified, contact-only Meta
+job. Property underwriting remains required for ordinary seller offer calls.
+`icash_meta_recover_unstarted_voice(account, job)` is a service-only recovery for
+the specific pre-provider `dispatch_permission_changed` failure with a cancelled,
+zero-cost, never-dispatched authorization. It creates at most one replacement
+job, retains the original job/spend evidence, and returns to the normal worker.
+Provider attempts, unknown outcomes, opt-outs and inactive accounts are excluded.
 
 Known test `1075706761942372` and Meta's dummy name/phone placeholders are stored
 as tests and never dispatched. Real receipts are immutable, Page/form scoped,
@@ -209,7 +223,9 @@ Run `node --experimental-strip-types tests/meta-instant-leads.test.mjs`,
 `tsc --noEmit --incremental false`. Fixtures exercise signed receipts, consent
 bindings, spoken address evidence, single-segment links, canonical deduplication,
 same-record promotion, unknown-result protection, Run/Pause, text-only requests,
-wallet admission and private RPCs. Contact-only cards show call/text history and
+wallet admission and private RPCs. The CI suite also executes the real final SQL
+admission chain and verifies evidence-preserving recovery of an unsent first call.
+Contact-only cards show call/text history and
 Pause/Resume; their manual SMS composer becomes available after property matching.
 All provider transports are local fixtures. PostgreSQL fixtures use a schema-only
 snapshot and isolated billing/provider delegates, not production account rows.

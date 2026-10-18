@@ -256,7 +256,11 @@ try{
  // The owner's two-field form uses its actual authenticated submission, with
  // no checkbox synthesized and the same pool/phone/stop bindings downstream.
  const submissionSource=randomUUID();
- await q("insert into icash_meta_lead_sources(id,page_id,form_id,account_id,slug,enabled,principal,routing_mode,sharing_text,consent_key,consent_text,consent_version,timezone,review_ref,reviewed_until,contact_basis) values($1,'111111111','999999998',null,'simulation-submission',true,'HomeOffer Network','network_pool','SIMULATION HomeOffer Network shares this request with its matched independent buyers.','','SIMULATION name and phone submitted to request property follow-up.','simulation-submission-v1','America/Chicago','SIMULATION owner configured submission follow-up',now()+interval '40 days','form_submission')",[submissionSource]);
+ // Keep this fictional source in daytime at every CI execution hour without
+ // inventing a call-now response on a submission-only form.
+ const offset=new Date().getUTCHours()-12,daytimeZone=offset===0?'Etc/GMT':`Etc/GMT${offset>0?'+':''}${offset}`;
+ await q('insert into icash_timezone_names(name) values($1) on conflict do nothing',[daytimeZone]);
+ await q("insert into icash_meta_lead_sources(id,page_id,form_id,account_id,slug,enabled,principal,routing_mode,sharing_text,consent_key,consent_text,consent_version,timezone,review_ref,reviewed_until,contact_basis) values($1,'111111111','999999998',null,'simulation-submission',true,'HomeOffer Network','network_pool','SIMULATION HomeOffer Network shares this request with its matched independent buyers.','','SIMULATION name and phone submitted to request property follow-up.','simulation-submission-v1',$2,'SIMULATION owner configured submission follow-up',now()+interval '40 days','form_submission')",[submissionSource,daytimeZone]);
  const submittedAt=new Date(Date.now()-2000).toISOString();
  const submission={...base,metaId:'900000010',phone:'+12145550789',name:'SIMULATION Submission',formId:'999999998',submittedAt,consentResponses:[{kind:'form_submission',provider:'meta',metaId:'900000010',pageId:'111111111',formId:'999999998',submittedAt}]};
  await assert.rejects(rpc('icash_meta_accept_lead',[submissionSource,submission,'1'.repeat(64)]),/Verified Meta/,'a caller cannot invent the underlying submission');
@@ -278,8 +282,76 @@ try{
  await q('update icash_meta_leads set paused=false where lead_id=$1',[submitted.leadId]);
  await q("insert into icash_contact_suppressions(account_id,contact_key,source_conversation) values($1,encode(sha256(convert_to($2,'UTF8')),'hex'),$3)",[submissionRow.account_id,submission.phone,randomUUID()]);
  assert.equal(await rpc('icash_meta_pool_receipt_current',[submitted.leadId]),false,'an opt-out still blocks submission-based outreach');
+ // Reproduce the real production failure through the final admission chain,
+ // not the reservation stub used by the earlier property-promotion fixtures.
+ await q("delete from icash_contact_suppressions where account_id=$1 and contact_key=encode(sha256(convert_to($2,'UTF8')),'hex')",[submissionRow.account_id,submission.phone]);
+ await pg.exec(`
+ create table if not exists icash_spend_activations(account_id uuid,enabled boolean);
+ create or replace function icash_general_reception_pause_exempt(uuid,text,bigint) returns boolean language sql as $$select false$$;
+ create or replace function icash_customer_text_operation(uuid,text) returns boolean language sql as $$select false$$;
+ create or replace function icash_limited_seller_voice(uuid,text) returns boolean language sql as $$select false$$;
+ create or replace function icash_cancellation_voice_current(uuid,text) returns boolean language sql as $$select false$$;
+ `);
+ await pg.exec(read('tests/fixtures/meta-upstream-claim.sql'));
+ const callAccount=submissionRow.account_id,initialJob=submissionCall.voiceJobId,callRate=randomUUID();
+ await q("insert into icash_operation_rates(id,operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled,voice_max_duration_seconds) values($1,'seller_call','SIMULATION-meta-claim',100,$2,'SIMULATION actual final claim',now(),now()+interval '1 day',true,600)",[callRate,smsCosts]);
+ await q("insert into icash_voice_configs(account_id,enabled,agent_id,phone_number_id,agent_config_hash,reviewed_until,seller_rate_id,max_duration_seconds,required_tool_ids) values($1,true,'agent_fixture','fixture_phone',$2,now()+interval '1 day',$3,600,array['fixture_one','fixture_two'])",[callAccount,'0'.repeat(64),callRate]);
+ const reserveFixture=async(key,owner=callAccount)=>q("insert into icash_operation_spend(operation_key,account_id,rate_id,credit_reservation_id,charge_cap_cents,reserved_micros,permission_until) values($1,$2,$3,$4,100,0,now()+interval '1 day')",[key,owner,callRate,randomUUID()]);
+ await reserveFixture('voice:'+initialJob);
+ assert.equal(await rpc('icash_meta_claim_voice',[callAccount,initialJob]),false,'reproduce: reservation succeeded but the final property-financial gate rejects a contact-only call');
+ const migration=read('config/meta-first-call-admission.sql');
+ assert.equal(migration,read('supabase/migrations/20261018225224_meta_first_call_admission.sql'));
+ await pg.exec(migration);
+ await q('update icash_wallets set balance_cents=0 where account_id=$1',[callAccount]);
+ assert.equal(await rpc('icash_meta_claim_voice',[callAccount,initialJob]),false,'zero credits still prevent final dispatch');
+ await q('update icash_wallets set balance_cents=10000 where account_id=$1',[callAccount]);
+ await q('update test_memberships set active=false where account_id=$1',[callAccount]);
+ assert.equal(await rpc('icash_meta_claim_voice',[callAccount,initialJob]),false,'membership is checked at final dispatch');
+ await q('update test_memberships set active=true where account_id=$1',[callAccount]);
+ await q('update icash_accounts set bot_paused=true where id=$1',[callAccount]);
+ assert.equal(await rpc('icash_meta_claim_voice',[callAccount,initialJob]),false,'Run/Pause remains effective');
+ await q('update icash_accounts set bot_paused=false where id=$1',[callAccount]);
+ await q('update icash_meta_leads set voice_paused=true where lead_id=$1',[submitted.leadId]);
+ assert.equal(await rpc('icash_meta_claim_voice',[callAccount,initialJob]),false,'text-only request remains effective');
+ await q('update icash_meta_leads set voice_paused=false where lead_id=$1',[submitted.leadId]);
+ await q("insert into icash_text_suppressions(phone,reason) values($1,'SIMULATION opt-out')",[submission.phone]);
+ assert.equal(await rpc('icash_meta_claim_voice',[callAccount,initialJob]),false,'opt-out is rechecked before final dispatch');
+ await q('delete from icash_text_suppressions where phone=$1',[submission.phone]);
+ const ordinary='voice:'+randomUUID();await reserveFixture(ordinary);
+ assert.equal(await rpc('icash_claim_operation',[ordinary]),false,'ordinary seller calls still require property financials');
+ await q('update icash_operation_spend set financial_checked_at=now() where operation_key=$1',[ordinary]);
+ assert.equal(await rpc('icash_claim_operation',[ordinary]),true,'a screened ordinary operation retains its existing admission');
+ const wrongAccount=callAccount===account?other:account;
+ await q('update icash_operation_spend set account_id=$2 where operation_key=$1',['voice:'+initialJob,wrongAccount]);
+ assert.equal(await rpc('icash_claim_operation',['voice:'+initialJob]),false,'Meta exception requires the exact operation account');
+ await q('update icash_operation_spend set account_id=$2 where operation_key=$1',['voice:'+initialJob,callAccount]);
+ await q("update icash_operation_spend set permission_until=now()-interval '1 second' where operation_key=$1",['voice:'+initialJob]);
+ assert.equal(await rpc('icash_meta_claim_voice',[callAccount,initialJob]),false,'expired permission cannot use the exception');
+ await q("update icash_operation_spend set permission_until=now()+interval '1 day',state='cancelled',actual_micros=0,charged_cents=0,settled_at=now(),settlement_evidence='Voice stopped before provider dispatch: dispatch_permission_changed' where operation_key=$1",['voice:'+initialJob]);
+ await q("update icash_voice_jobs set state='held',outcome='dispatch_permission_changed' where id=$1",[initialJob]);
+ assert.equal(await rpc('icash_meta_recover_unstarted_voice',[wrongAccount,initialJob]),null,'recovery is account-bound');
+ await q("update icash_voice_jobs set outcome='provider_outcome_unknown_no_retry' where id=$1",[initialJob]);
+ assert.equal(await rpc('icash_meta_recover_unstarted_voice',[callAccount,initialJob]),null,'an uncertain provider outcome is never retried');
+ await q("update icash_voice_jobs set outcome='dispatch_permission_changed',provider_call_sid=$2 where id=$1",[initialJob,'CA'+'1'.repeat(32)]);
+ assert.equal(await rpc('icash_meta_recover_unstarted_voice',[callAccount,initialJob]),null,'provider evidence forbids replacement');
+ await q('update icash_voice_jobs set provider_call_sid=null where id=$1',[initialJob]);
+ await q('update icash_operation_spend set dispatched_at=now() where operation_key=$1',['voice:'+initialJob]);
+ assert.equal(await rpc('icash_meta_recover_unstarted_voice',[callAccount,initialJob]),null,'a dispatched authorization is never replaced');
+ await q('update icash_operation_spend set dispatched_at=null where operation_key=$1',['voice:'+initialJob]);
+ const oldJob=await one('select * from icash_voice_jobs where id=$1',[initialJob]),oldSpend=await one('select * from icash_operation_spend where operation_key=$1',['voice:'+initialJob]);
+ const replacement=await rpc('icash_meta_recover_unstarted_voice',[callAccount,initialJob]);assert(replacement);assert.notEqual(replacement,initialJob);
+ assert.equal(await rpc('icash_meta_recover_unstarted_voice',[callAccount,initialJob]),replacement,'repeated recovery returns the same replacement');
+ assert.deepEqual(await one('select * from icash_voice_jobs where id=$1',[initialJob]),oldJob,'original failure evidence is unchanged');
+ assert.deepEqual(await one('select * from icash_operation_spend where operation_key=$1',['voice:'+initialJob]),oldSpend,'cancelled zero-cost authorization is unchanged');
+ assert.equal((await rpc('icash_meta_prepare_voice',[submitted.leadId])).voiceJobId,replacement,'normal worker selects the replacement');
+ await reserveFixture('voice:'+replacement);
+ assert.equal(await rpc('icash_meta_claim_voice',[callAccount,replacement]),true,'valid name-and-phone lead passes the real final admission without property financials');
+ assert.equal(await rpc('icash_meta_claim_voice',[callAccount,replacement]),false,'a second claim cannot dispatch twice');
+ assert.equal((await one('select state,financial_checked_at from icash_operation_spend where operation_key=$1',['voice:'+replacement])).financial_checked_at,null,'no financial evidence is fabricated');
+ assert.equal((await one('select state from icash_voice_jobs where id=$1',[replacement])).state,'dispatching');
+ assert.equal(Number((await one('select count(*) n from icash_voice_jobs where meta_retry_of=$1',[initialJob])).n),1);
  for(const role of ['anon','authenticated']){
   assert.equal((await one("select count(*) n from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like 'icash_meta_%' and has_function_privilege($1,p.oid,'execute')",[role])).n,0);
  }
- console.log('PASS Meta receipt binding, canonical deduplication, private token expiry, pending completion form, tenant isolation, cross-channel address races, no uncertain lookup replay, one corrected zero-charge retry, contact-only SMS/call queues, text-only requests, Run/Pause and wallet admission, same-card promotion, one 2x acquisition charge, durable unfunded pool contacts, eligible buyer rotation, exact shared-recipient bindings, normal 24/72-hour website allocation, mature response cohorts and private RPC privileges.');
+ console.log('PASS Meta receipt binding, deduplication, private links, address races, no uncertain replay, SMS/call queues, real final call admission, one evidence-preserving recovery, text-only requests, Run/Pause, credits, membership, ordinary financial checks, same-card promotion, 2x acquisition, funded buyer rotation, shared-recipient bindings, 24/72-hour allocation and private RPC privileges.');
 }catch(error){console.error({message:error.message,cause:error.cause?.message,detail:error.detail,where:error.where,query:typeof error.query==='string'?error.query.slice(Math.max(0,Number(error.position)-180),Number(error.position)+180):undefined});process.exitCode=1;}finally{await pg.close();}
