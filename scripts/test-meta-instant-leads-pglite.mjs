@@ -8,7 +8,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const q=(sql,args=[])=>pg.query(sql,args);
 const one=async(sql,args=[])=>{const result=await q(sql,args);assert.equal(result.rows.length,1,sql);return result.rows[0];};
 const rpc=async(name,args)=>Object.values(await one(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) result`,args))[0];
-const configs=['meta-instant-leads','meta-instant-lead-work','meta-instant-lead-property','meta-instant-address-form','meta-instant-lead-workspace','meta-instant-lead-reception','meta-instant-lead-measurement'];
+const configs=['meta-instant-leads','meta-instant-lead-work','meta-instant-lead-property','meta-instant-address-form','meta-instant-lead-workspace','meta-instant-lead-reception','meta-instant-lead-measurement','meta-instant-network-pool'];
 try{
  await pg.exec(`create role anon;create role authenticated;create role service_role bypassrls;
  create schema auth;create schema extensions;create schema icash_recording_private;create schema icash_recorded_reception_private;create schema icash_seller_agreement_private;
@@ -37,6 +37,12 @@ try{
  create function icash_sms_single_segment(text) returns boolean language sql set search_path=public as $$select length($1)<=160 and $1 !~ '[^ -~]'$$;
  create function icash_research_state_allowed(text) returns boolean language sql set search_path=public as $$select $1='TX'$$;
  create function icash_seller_acquisition_quote(uuid) returns jsonb language sql set search_path=public as $$select jsonb_build_object('costMicros',300000,'kind','estimate','note','SIMULATION recorded estimate')$$;
+ create table icash_billing_reviews(account_id uuid,resolved_at timestamptz);
+ create table icash_seller_cost_settings(id integer,threshold_cents bigint);
+ create table icash_signing_envelopes(account_id uuid,deal_id uuid,kind text,test_mode boolean,state text);
+ create function icash_daily_allowance(uuid) returns jsonb language sql set search_path=public as $$select jsonb_build_object('remainingCents',balance_cents) from icash_wallets where account_id=$1$$;
+ create function icash_hybrid_inbound_share(bigint) returns numeric language sql as $$select case when $1>=5000 then .5 when $1>=2500 then .35 else .2 end$$;
+ create function icash_seller_assignment_due(integer,timestamptz,timestamptz) returns timestamptz language sql as $$select case when $1>=3 then 'infinity'::timestamptz when $1<=0 then coalesce($3,'-infinity'::timestamptz) when $1=1 then greatest($2+interval '24 hours',$3+interval '24 hours') else greatest($2+interval '72 hours',$3+interval '24 hours') end$$;
  create function icash_vip_active(uuid) returns boolean language sql set search_path=public as $$select false$$;
  create function icash_claim_inventory(uuid,uuid,text) returns boolean language sql set search_path=public as $$select exists(select 1 from icash_screening_jobs where account_id=$1 and id=$2 and snapshot->>'propertyId' like 'prop_%')$$;
  create function icash_reserve_operation(p_account uuid,p_operation text,p_rate uuid,p_until timestamptz,p_checked timestamptz default null,p_eligible boolean default false) returns jsonb language plpgsql set search_path=public as $$begin
@@ -156,8 +162,77 @@ try{
  assert.equal(Number((await one('select count(*) n from test_reservations')).n),1,'promotion charges only once');
  assert.equal(Number((await one('select charge_cents from icash_seller_matches where lead_id=$1',[lead])).charge_cents),80,'2x the recorded processing plus ad cost');
  const report=await rpc('icash_meta_response_report',[account]);assert.equal(report[0].leads,1);assert.equal(report[0].addresses,1);assert.equal(report[0].responses,1);assert.equal(report[0].matureLeads,0,'fresh leads do not dilute the mature cohort');
+
+ // The same published network form can route to different eligible buyers.
+ // A contact with no funded recipient remains durable and has no tenant access.
+ const pool=randomUUID(),poolPhone='+12145550678';
+ await q("insert into icash_meta_lead_sources(id,page_id,form_id,account_id,slug,enabled,principal,routing_mode,sharing_text,consent_key,consent_text,consent_version,timezone,review_ref,reviewed_until) values($1,'111111111','777777777',null,'simulation-network',true,'HomeOffer Network','network_pool','SIMULATION HomeOffer Network shares this request with its matched independent buyers.','ai_contact','SIMULATION explicit AI calls and texts permission for HomeOffer Network and matched buyers.','simulation-network-v1','America/Chicago','SIMULATION reviewed network form and sharing disclosure',now()+interval '40 days')",[pool]);
+ await q('update icash_wallets set balance_cents=0');
+ const networkReceipt={...base,metaId:'888888888',formId:'777777777',phone:poolPhone};
+ const network=await rpc('icash_meta_accept_lead',[pool,networkReceipt,'d'.repeat(64)]);
+ assert.equal(network.accountId,null);
+ assert.equal((await one('select screening_id from icash_meta_leads where lead_id=$1',[network.leadId])).screening_id,null);
+ assert.equal(await rpc('icash_seller_contact_evidence',[account,priorScreen,network.leadId,poolPhone]),null,'NULL routing never grants a tenant access');
+ assert.equal((await rpc('icash_meta_accept_lead',[pool,{...networkReceipt,metaId:'888888889'},'e'.repeat(64)])).leadId,network.leadId,'unassigned duplicate receipt retains one contact');
+ assert.equal((await rpc('icash_meta_assign_contact',[network.leadId])).status,'waiting_for_funded_buyer');
+ await q("insert into icash_customer_identities(account_id,first_name,last_name,company_name,voice_id,voice_name) values($1,'SIMULATION','Other','SIMULATION Pool Buyer','fixture_voice','Fixture')",[other]);
+ await q('update icash_wallets set balance_cents=10000 where account_id=$1',[other]);
+ await q('update test_memberships set active=false where account_id=$1',[other]);
+ assert.equal((await rpc('icash_meta_assign_contact',[network.leadId])).status,'waiting_for_funded_buyer');
+ await q('update test_memberships set active=true where account_id=$1',[other]);
+ await q('update icash_accounts set bot_paused=true where id=$1',[other]);
+ assert.equal((await rpc('icash_meta_assign_contact',[network.leadId])).status,'waiting_for_funded_buyer');
+ await q('update icash_accounts set bot_paused=false where id=$1',[other]);
+ await q('insert into icash_billing_reviews(account_id) values($1)',[other]);
+ assert.equal((await rpc('icash_meta_assign_contact',[network.leadId])).status,'waiting_for_funded_buyer');
+ await q('update icash_billing_reviews set resolved_at=now() where account_id=$1',[other]);
+ const routed=await rpc('icash_meta_assign_contact',[network.leadId]);assert.equal(routed.accountId,other);
+ assert.equal((await rpc('icash_meta_assign_contact',[network.leadId])).screeningId,routed.screeningId,'replay keeps the same provisional recipient/card');
+ assert.equal(Number((await one('select count(*) n from icash_screening_jobs where event_key=$1',['meta-lead:'+networkReceipt.metaId])).n),1);
+ assert(await rpc('icash_seller_contact_evidence',[other,routed.screeningId,network.leadId,poolPhone]));
+ assert.equal(await rpc('icash_seller_contact_evidence',[account,routed.screeningId,network.leadId,poolPhone]),null);
+ assert.equal((await rpc('icash_meta_workspace_leads',[other,'',0,7,null]))[0].leadId,network.leadId);
+ assert.equal(Number((await one('select count(*) n from test_reservations')).n),1,'contact assignment does not charge an invented property acquisition');
+ const networkDeal=await one('select id from icash_deal_files where screening_id=$1',[routed.screeningId]);
+ await q('update icash_wallets set balance_cents=10000 where account_id=$1',[account]);
+ await q("update icash_seller_matches set assigned_at=now()-interval '8 days' where lead_id=$1",[lead]);
+ const rotated=await rpc('icash_meta_accept_lead',[pool,{...networkReceipt,metaId:'888888890',phone:'+12145550679'},'f'.repeat(64)]);
+ assert.equal(rotated.accountId,account,'the pool rotates first access using unfinished contacts too');
+ assert.equal((await rpc('icash_meta_save_address',[network.leadId,'75 Pool Street, Austin, TX','form','SIMULATION private network address link'])).status,'received');
+ assert.equal(await rpc('icash_claim_seller_lookup_for',[network.leadId]),null,'generic research cannot race the Meta call');
+ const poolProperty={...property,id:'prop_pool123',address:'75 Pool Street, Austin, TX 78701'};
+ const poolResult={...result,property:{propertyId:poolProperty.id,address:poolProperty.address}};
+ await q("update icash_seller_intakes set state='qualified',property=$2,result=$3,lookup_costs=$4,lookup_cost_basis='SIMULATION network research receipt',checked_at=now(),numbers_passed=true where id=$1",[network.leadId,poolProperty,poolResult,costs]);
+ assert.equal(await rpc('icash_assign_seller_lead_for',[network.leadId]),null,'website allocation waits for the first contact card to promote');
+ const poolPromotion=await rpc('icash_meta_promote_property',[network.leadId]);assert.equal(poolPromotion.status,'property_ready');assert.equal(poolPromotion.screeningId,routed.screeningId);
+ assert.equal((await one('select id from icash_deal_files where screening_id=$1',[routed.screeningId])).id,networkDeal.id);
+ const poolState=await one('select assigned_account,next_assignment_at,attribution from icash_seller_intakes where id=$1',[network.leadId]);
+ assert.equal(poolState.assigned_account,other);assert.equal(poolState.attribution.campaign,base.campaignId);
+ assert(Date.parse(poolState.next_assignment_at)>Date.now()+23*3600000&&Date.parse(poolState.next_assignment_at)<Date.now()+25*3600000,'normal 24-hour second-buyer schedule resumes');
+ assert.equal((await one('select snapshot from icash_screening_jobs where id=$1',[routed.screeningId])).snapshot.sellerRequest.maximumBuyers,3);
+ assert.equal(await rpc('icash_assign_seller_lead_for',[network.leadId]),null,'no immediate duplicate buyer allocation');
+ await q("update icash_seller_intakes set assigned_at=now()-interval '25 hours',next_assignment_at=now() where id=$1",[network.leadId]);
+ await q("update icash_seller_matches set assigned_at=now()-interval '25 hours' where lead_id=$1",[network.leadId]);
+ const later=await rpc('icash_assign_seller_lead_for',[network.leadId]);assert.equal(later?.status,'assigned');assert.equal(later.accountId,account,'existing website allocator handles the later buyer');
+ const laterMatch=await one('select screening_id,charge_cents from icash_seller_matches where lead_id=$1 and account_id=$2',[network.leadId,account]);
+ assert.equal(Number(laterMatch.charge_cents),80);assert(await rpc('icash_seller_contact_evidence',[account,laterMatch.screening_id,network.leadId,poolPhone]));
+ assert.equal(await rpc('icash_seller_contact_evidence',[other,laterMatch.screening_id,network.leadId,poolPhone]),null,'shared consent still requires the exact recipient screening');
+ assert.equal(Number((await one('select count(*) n from icash_seller_matches where lead_id=$1',[network.leadId])).n),2);
+ assert.equal(await rpc('icash_assign_seller_lead_for',[network.leadId]),null,'same-tick retries do not add a third buyer or charge');
+ const third=randomUUID();
+ await q("insert into icash_accounts(id,owner_user_id,assistant_name,bot_paused,daily_limit_cents) values($1,$2,'Third buyer',false,100000)",[third,randomUUID()]);
+ await q('insert into test_memberships(account_id) values($1)',[third]);
+ await q("insert into icash_wallets(account_id,balance_cents,currency) values($1,10000,'USD')",[third]);
+ await q("insert into icash_customer_identities(account_id,first_name,last_name,company_name,voice_id,voice_name) values($1,'Third','Buyer','SIMULATION Third Buyer','fixture_voice','Fixture')",[third]);
+ await q("update icash_seller_matches set assigned_at=now()-interval '73 hours' where lead_id=$1",[network.leadId]);
+ await q("update icash_seller_intakes set assigned_at=now()-interval '73 hours' where id=$1",[network.leadId]);
+ await q('update icash_meta_leads set declined_at=now(),paused=true where lead_id=$1',[network.leadId]);
+ assert.equal(await rpc('icash_seller_contact_evidence',[account,laterMatch.screening_id,network.leadId,poolPhone]),null);
+ assert.equal(await rpc('icash_seller_contact_evidence',[other,routed.screeningId,network.leadId,poolPhone]),null,'a seller stop applies across matched buyers');
+ await q("update icash_seller_intakes set next_assignment_at=now() where id=$1",[network.leadId]);
+ assert.equal(await rpc('icash_assign_seller_lead_for',[network.leadId]),null,'a stopped network contact cannot be sold to another buyer');
  for(const role of ['anon','authenticated']){
   assert.equal((await one("select count(*) n from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like 'icash_meta_%' and has_function_privilege($1,p.oid,'execute')",[role])).n,0);
  }
- console.log('PASS Meta receipt binding, canonical deduplication, private token expiry, pending completion form, tenant isolation, cross-channel address races, no uncertain lookup replay, one corrected zero-charge retry, contact-only SMS/call queues, text-only requests, Run/Pause and wallet admission, same-card promotion, one 2x acquisition charge, mature response cohorts and private RPC privileges.');
+ console.log('PASS Meta receipt binding, canonical deduplication, private token expiry, pending completion form, tenant isolation, cross-channel address races, no uncertain lookup replay, one corrected zero-charge retry, contact-only SMS/call queues, text-only requests, Run/Pause and wallet admission, same-card promotion, one 2x acquisition charge, durable unfunded pool contacts, eligible buyer rotation, exact shared-recipient bindings, normal 24/72-hour website allocation, mature response cohorts and private RPC privileges.');
 }catch(error){console.error({message:error.message,cause:error.cause?.message,detail:error.detail,where:error.where,query:typeof error.query==='string'?error.query.slice(Math.max(0,Number(error.position)-180),Number(error.position)+180):undefined});process.exitCode=1;}finally{await pg.close();}

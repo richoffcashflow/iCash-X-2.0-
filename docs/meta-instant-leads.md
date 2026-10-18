@@ -10,7 +10,9 @@ form, subscribe a Page, send a test message, or authorize a paid provider test.
    text recorded in `icash_meta_lead_sources`. Never infer permission from a phone.
 2. A signed Page `leadgen` webhook is stored durably. The worker retrieves the
    lead from Graph, checks Page/form/ad/consent/timestamp bindings, then creates a
-   contact-only screening and draft deal. The first SMS and seller call dispatch
+   contact-only screening and draft deal for an eligible buyer in the HomeOffer
+   Network pool. Unassigned contacts remain durable until a funded, active buyer
+   is available. The first SMS and seller call dispatch
    independently through existing account and provider admission checks.
 3. The AI asks for street, city and state, reads the address back, and waits for
    confirmation. The existing `icash_offer_and_contract` tool's `report_change`
@@ -47,11 +49,12 @@ and original campaign/ad attribution; duplicate opt-ins have separate receipts.
 
 ## Activation dependencies
 
-Apply `supabase/migrations/20261018150000_meta_contact_first_intake.sql` against
-the expected schema after reviewing it. It contains the seven `config/meta-*`
-files in the order exercised by the local PostgreSQL test. Existing function
-patches assert their prerequisites and stop on schema drift. Do not execute the
-individual config files again after the migration.
+Apply `supabase/migrations/20261018150000_meta_contact_first_intake.sql`, followed
+by `supabase/migrations/20261018161751_meta_instant_network_pool.sql`, against the
+expected schema. The second migration adds the owner-selected shared-pool routing.
+The local PostgreSQL test exercises both, including the original website allocator.
+Existing function patches assert their prerequisites and stop on schema drift.
+Do not execute the individual config files again after the migrations.
 
 Provision these **server-only** values through the deployment's secret controls:
 
@@ -70,18 +73,24 @@ Provision these **server-only** values through the deployment's secret controls:
   recording, DealMachine, SMS, wallet, membership and provider approvals remain
   necessary; this feature does not replace them.
 
-Create one `icash_meta_lead_sources` row for each reviewed immutable form. Supply
-the actual Page ID, form ID, source slug, funded buying account, exact principal
-name, exact consent checkbox key/text/version, optional call-now key/text, and
-timezone supported by that form's targeting. Preserve a review reference and
-expiry for the actual form evidence. `principal` must equal the account's current
-principal. Changed consent, principal, timezone or targeting requires a new
-reviewed form/source rather than rewriting past receipts.
+Create one `icash_meta_lead_sources` row for each reviewed immutable form. For the
+HomeOffer Network form, use `routing_mode=network_pool`, `account_id=NULL` and
+`principal=HomeOffer Network`, with the actual network-sharing text and exact
+contact-choice key/text/version from the form. Also supply its Page ID, form ID,
+source slug, optional call-now key/text, and supported timezone. Preserve a review
+reference and expiry for the actual form evidence. Never invent a checked choice
+or infer permission from a phone number. Changed disclosures or targeting need
+a new reviewed source rather than rewriting prior receipts.
 
-This implementation binds each form to **one named buying principal/account**.
-It does not put Meta contacts into the website's shared lead allocation. A shared
-marketplace allocation would require a separately designed and reviewed consent
-and allocation flow; do not silently reuse these receipts for it.
+Contact allocation uses the existing funded-membership, Run/Pause, channel,
+billing-review and VIP-priority predicates. Rotation also counts unfinished Meta
+contacts. Assignment does not create an acquisition charge. The first recipient
+keeps the same screening, deal and thread when research becomes ready. Normal
+recorded-cost acquisition pricing applies once, and the existing website
+allocator resumes the second/third buyer schedule after 24/72 hours. Each later
+recipient needs its own exact match/screening binding; a seller stop applies
+across matches. The optional `direct` routing mode remains available for separate
+forms that name one specific buying principal and account.
 
 Webhook callback: `https://homeoffernetwork.com/api/webhooks/meta-leads`. Subscribe
 the reviewed Page to `leadgen`; keep verification and signature secrets separate.
@@ -126,8 +135,9 @@ production build diagnostic. The diagnostic records bounded form metadata and
 subscription status in the service-only `icash_integration_checks` row
 `meta_lead_setup`; it never retrieves lead records or sends outreach. Preview
 builds make no provider requests and cannot replace that production receipt.
-Do not create or enable a source until the receiving account/principal and the
-actual form's contact-choice keys/text are known. Webhook setup, migration,
+The owner selected the **HomeOffer Network pool** on October 18. No fixed owner
+workspace is required for this source. Do not enable it until the actual form's
+contact-choice keys/text and network-sharing disclosure are verified. Webhook setup, migrations,
 deployment, and the integration check remain activation dependencies. No paid
 simulation is authorized by this setup request.
 

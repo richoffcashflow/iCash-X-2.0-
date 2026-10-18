@@ -10,7 +10,7 @@ export const instantAddress=z.string().trim().min(8).max(300).refine(value=>{
 },'Include the street, city and two-letter state.');
 export const metaLeadNotice=z.object({leadgen_id:metaId,page_id:metaId,form_id:metaId,ad_id:metaId.optional(),created_time:z.number().int().positive()}).passthrough();
 export type MetaLeadNotice=z.infer<typeof metaLeadNotice>;
-export type MetaLeadSource={id:string;page_id:string;form_id:string;account_id:string;consent_key:string;call_now_key:string|null;consent_text:string;consent_version:string;timezone:string;enabled:boolean};
+export type MetaLeadSource={id:string;page_id:string;form_id:string;account_id:string|null;routing_mode?:'direct'|'network_pool';consent_key:string;call_now_key:string|null;consent_text:string;consent_version:string;timezone:string;enabled:boolean};
 const metaAccessToken=z.string().min(20).max(4096).regex(/^[A-Za-z0-9._|-]+$/);
 /** Reuse an owner-provided system-user token only for explicitly selected Pages.
  * The caller must still load an enabled, reviewed Page/form source before use. */

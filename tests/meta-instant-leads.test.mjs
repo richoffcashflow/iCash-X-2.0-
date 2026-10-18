@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 import {verifyMetaSignature,metaNotices,parseMetaLead,instantLeadToken,hashLeadToken,validInstantLeadToken,confirmedCallAddress,metaLeadAccessToken} from '../lib/meta-instant-leads.ts';
-import {queueInstantAddressLink,researchInstantAddress,instantLeadsEnabled,retrieveInstantLead} from '../lib/meta-instant-lead-service.ts';
+import {queueInstantAddressLink,researchInstantAddress,instantLeadsEnabled,retrieveInstantLead,processInstantLead} from '../lib/meta-instant-lead-service.ts';
 import {instantCallAddress} from '../lib/meta-instant-call.ts';
 import {instantCrmEvent,deliverInstantCrmEvent} from '../lib/meta-instant-events.ts';
 import {smsLength} from '../lib/sms-length.ts';
@@ -58,6 +58,20 @@ assert.equal(confirmedCallAddress(address,{transcript:[...history.transcript.sli
 
 const lead={lead_id:'lead',account_id:'account',screening_id:'screen',meta_id:notice.leadgen_id,submitted_at:submitted,link_hash:hashLeadToken(token),link_expires_at:new Date(now+86400000).toISOString(),paused:false,declined_at:null,lead:{name:'Fixture',phone:'+12145550123',address:null,state:'awaiting_address'}};
 const env={META_INSTANT_LEADS_ENABLED:'true',META_LEAD_LINK_SECRET:secret,DEALMACHINE_API_KEY:'dm_sk_live_FIXTURE_ONLY'};
+let poolAssigned=false,poolCalls=0,poolTexts=0,poolReads=[];
+const poolDeps={env,sms:async()=>{poolTexts++;throw Error('SIMULATION text provider unavailable');},voice:async(account,id)=>{assert.deepEqual([account,id],['account','pool-call']);poolCalls++;return {status:'call_started'};},db:async(path)=>{
+ poolReads.push(path);
+ if(path==='rpc/icash_meta_assign_contact')return {status:poolAssigned?'assigned':'waiting_for_funded_buyer'};
+ if(path.startsWith('icash_meta_leads?'))return [lead];
+ if(path==='rpc/icash_meta_match_address_request')return false;
+ if(path.startsWith('icash_customer_identities?'))return [{principal:'Fixture matched buyer'}];
+ if(path==='rpc/icash_meta_queue_message')return 'pool-text';
+ if(path==='rpc/icash_meta_prepare_voice')return {accountId:'account',voiceJobId:'pool-call'};
+ throw Error('Unexpected pool request');
+}};
+assert.equal((await processInstantLead(poolDeps,'lead')).status,'waiting_for_funded_buyer');assert.deepEqual(poolReads,['rpc/icash_meta_assign_contact']);assert.equal(poolCalls+poolTexts,0);
+assert.equal((await queueInstantAddressLink(poolDeps,{...lead,account_id:null,screening_id:null},'initial','initial')).status,'held');assert.equal(poolCalls+poolTexts,0);
+poolAssigned=true;const poolWork=await processInstantLead(poolDeps,'lead');assert.equal(poolWork.sms,'pending');assert.equal(poolWork.voice,'call_started');assert.equal(poolCalls,1);assert.equal(poolTexts,1,'the independent call continues when initial SMS fails');
 let sent=0,queued=[];
 const deps={env,voice:async()=>({status:'fixture'}),sms:async()=>{sent++;return {status:'message_accepted'};},db:async(path,method,body)=>{
  if(path.startsWith('icash_customer_identities'))return [{principal:'Fixture Buyer'}];

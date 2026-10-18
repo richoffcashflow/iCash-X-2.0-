@@ -117,12 +117,18 @@ export async function verifyWorkspace(browser,base,options,name){
   const debt=panel.locator('.property-debt-summary');
   if(await debt.count())assert(await messages.evaluate(node=>!!(node.compareDocumentPosition(node.closest('dialog').querySelector('.property-debt-summary'))&Node.DOCUMENT_POSITION_FOLLOWING)),'title messages appear before optional mortgage details');
  }
+ async function visit(url){
+  // Drain mocked fetches before discarding their document. Otherwise WebKit can
+  // report an abandoned fulfillment as an uncaught access-control error.
+  await page.waitForLoadState('networkidle');
+  await page.goto(url);
+ }
  async function openProperty(state){
   // Finish the previous document's mocked reads before changing their fixture
   // state and navigating. WebKit can otherwise report abandoned fulfills as
   // access-control errors. Keep every page-error assertion intact.
   await page.waitForLoadState('networkidle');
-  scenario=state;await page.goto(base+'/');
+  scenario=state;await visit(base+'/');
   const card=page.locator('.live-property').first();await card.waitFor();await card.locator('.property-summary').click();
   await card.locator('.property-details').waitFor({state:'visible'});return card;
  }
@@ -136,7 +142,7 @@ export async function verifyWorkspace(browser,base,options,name){
   await panel.getByRole('alert').waitFor({state:'hidden'});
  }
  try{
-  await page.goto(base+'/preview/workspace?preview=1');
+  await visit(base+'/preview/workspace?preview=1');
   await page.getByRole('heading',{name:'One property. One clear next step.'}).waitFor();
   await page.getByRole('region',{name:'Course walkthrough'}).waitFor();
   for(const kind of ['purchase','assignment']){
@@ -208,11 +214,11 @@ export async function verifyWorkspace(browser,base,options,name){
   const paymentPreview=page.getByRole('dialog',{name:'Closing',exact:true});await paymentPreview.waitFor();
   assert.match(await paymentPreview.innerText(),/Closing funds disbursed.*\$8,000.*\$2,000.*\$10,000/s);
   await page.keyboard.press('Escape');await paymentPreview.waitFor({state:'hidden'});
-  await page.goto(base+'/preview/workspace?stage=lead');
+  await visit(base+'/preview/workspace?stage=lead');
   await page.getByText('Latest from the seller',{exact:true}).waitFor();
   assert.equal(await page.getByLabel('Explore a step').inputValue(),'lead');
   assert.deepEqual(writes,[],'sample preview never calls account/work APIs');
-  await page.goto(base+'/preview/workspace?preview=1&recovery=1');
+  await visit(base+'/preview/workspace?preview=1&recovery=1');
   const recovery=page.getByRole('region',{name:'Recovery example',exact:true});await recovery.waitFor();
   await recovery.getByRole('button',{name:'Break sample panel',exact:true}).click();intentionalCrash=true;
   await recovery.getByRole('button',{name:'Open recovery example',exact:true}).click();
@@ -229,7 +235,7 @@ export async function verifyWorkspace(browser,base,options,name){
   await page.keyboard.press('Escape');intentionalCrash=false;
   assert.deepEqual(writes,[],'preview recovery never calls APIs');
   preview=false;
-  acknowledged=false;ackFail=true;apiReads.length=0;await page.goto(base+'/');
+  acknowledged=false;ackFail=true;apiReads.length=0;await visit(base+'/');
   await page.getByRole('heading',{name:'Before you use iCash X'}).waitFor();
   assert.equal(await page.locator('.live-property').count(),0);assert.equal(await page.getByRole('button',{name:'Run bot',exact:true}).count(),0);
   assert(!apiReads.includes('/api/work/activity')&&!apiReads.includes('/api/work/next-action'),'workspace data and activation remain unmounted before acceptance');
@@ -238,7 +244,7 @@ export async function verifyWorkspace(browser,base,options,name){
   await page.getByRole('checkbox').check();await accept.click();await page.getByRole('alert').getByText('Fixture save failed. Please try again.',{exact:true}).waitFor();
   assert.equal(await page.locator('.live-property').count(),0);assert.equal(acceptedWrites.length,1);
   ackFail=false;await accept.click();await page.locator('.live-property').first().waitFor();assert.equal(acceptedWrites.length,2);
-  await page.reload();await page.locator('.live-property').first().waitFor();assert.equal(await page.getByRole('heading',{name:'Before you use iCash X'}).count(),0);
+  await page.waitForLoadState('networkidle');await page.reload();await page.locator('.live-property').first().waitFor();assert.equal(await page.getByRole('heading',{name:'Before you use iCash X'}).count(),0);
   const collapsed=page.locator('.live-property').first();assert.equal(await collapsed.locator('.property-summary').getAttribute('aria-expanded'),'false');
   const ask=collapsed.getByRole('button',{name:/^Ask AI about /});await ask.waitFor();assert.equal(await ask.getAttribute('data-vip'),'true');
   assert(await ask.evaluate(node=>{const b=node.getBoundingClientRect(),card=node.closest('.live-property').getBoundingClientRect();return b.height>=44&&b.left>=card.left&&b.right<=Math.min(innerWidth,card.right)+1;}),'Ask AI is visible and fits the collapsed card');
@@ -254,7 +260,7 @@ export async function verifyWorkspace(browser,base,options,name){
   const beforeLockedReads=apiReads.filter(path=>path==='/api/work/assistant').length;await ask.click();const vipReview=page.getByRole('dialog',{name:'Switch to VIP',exact:true});await vipReview.waitFor();
   assert.equal(await page.getByRole('dialog',{name:'Ask AI Bot',exact:true}).count(),0);assert.equal(apiReads.filter(path=>path==='/api/work/assistant').length,beforeLockedReads,'Standard review never fetches saved assistant replies');
   await vipReview.getByRole('button',{name:'Close',exact:true}).click();
-  await page.goto(base+'/?upgrade=vip');await vipReview.waitFor();
+  await visit(base+'/?upgrade=vip');await vipReview.waitFor();
   await vipReview.getByRole('button',{name:'Upgrade for $50',exact:true}).click();
   const paymentReview=page.getByRole('dialog',{name:'Upgrade to VIP',exact:true});await paymentReview.waitFor();
   assert(await paymentReview.getByRole('button',{name:'Continue to $50 payment',exact:true}).isDisabled(),'Course upgrade requires explicit billing consent');

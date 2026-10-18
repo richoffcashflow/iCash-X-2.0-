@@ -5,14 +5,14 @@ import {hashLeadToken,instantLeadToken,instantAddressLink,parseMetaLead,metaLead
 import {processSellerIntake,type SellerDb} from './seller-pipeline.ts';
 type Dispatch=(account:string,id:string)=>Promise<{status:string}>;
 type Deps={db:SellerDb;sms:Dispatch;voice:Dispatch;env:NodeJS.ProcessEnv;fetch?:typeof fetch};
-export type InstantLead={lead_id:string;account_id:string;screening_id:string;meta_id:string;submitted_at:string;link_hash:string;link_expires_at:string;paused:boolean;declined_at:string|null;offer_ready_at:string|null;lead:{name:string|null;phone:string;address:string|null;state:string};};
+export type InstantLead={lead_id:string;account_id:string|null;screening_id:string|null;meta_id:string;submitted_at:string;link_hash:string;link_expires_at:string;paused:boolean;declined_at:string|null;offer_ready_at:string|null;lead:{name:string|null;phone:string;address:string|null;state:string};};
 export const instantLeadsEnabled=(env:NodeJS.ProcessEnv)=>env.META_INSTANT_LEADS_ENABLED==='true'&&(!env.VERCEL_ENV||env.VERCEL_ENV==='production');
 export async function getInstantLead(db:SellerDb,id:string){
  const [lead]=await db<InstantLead[]>(`icash_meta_leads?lead_id=eq.${encodeURIComponent(id)}&select=lead_id,account_id,screening_id,meta_id,submitted_at,link_hash,link_expires_at,paused,declined_at,offer_ready_at,lead:icash_seller_intakes!lead_id(name,phone,address,state)&limit=1`);
  return lead??null;
 }
 export async function queueInstantAddressLink(d:Deps,lead:InstantLead,purpose:'initial'|'address_link'|'reply',key:string,reply?:string){
- if(!instantLeadsEnabled(d.env)||!d.env.META_LEAD_LINK_SECRET||lead.paused||lead.declined_at)return {status:'held'};
+ if(!instantLeadsEnabled(d.env)||!d.env.META_LEAD_LINK_SECRET||!lead.account_id||!lead.screening_id||lead.paused||lead.declined_at)return {status:'held'};
  const token=instantLeadToken(lead.meta_id,lead.submitted_at,d.env.META_LEAD_LINK_SECRET);
  if(hashLeadToken(token)!==lead.link_hash||Date.parse(lead.link_expires_at)<=Date.now())return {status:'link_expired'};
  const [identity]=await d.db<{principal:string}[]>(`icash_customer_identities?account_id=eq.${lead.account_id}&select=principal`);
@@ -27,7 +27,9 @@ export async function queueInstantAddressLink(d:Deps,lead:InstantLead,purpose:'i
 }
 export async function processInstantLead(d:Deps,id:string){
  if(!instantLeadsEnabled(d.env))return {status:'disabled'};
- const lead=await getInstantLead(d.db,id);if(!lead||lead.paused||lead.declined_at)return {status:'held'};
+ const assigned=await d.db<{status:string}>('rpc/icash_meta_assign_contact','POST',{p_lead:id});
+ if(assigned.status!=='assigned')return {status:assigned.status};
+ const lead=await getInstantLead(d.db,id);if(!lead?.account_id||!lead.screening_id||lead.paused||lead.declined_at)return {status:'held'};
  const completion=await d.db<boolean>('rpc/icash_meta_match_address_request','POST',{p_lead:id});
  if(completion)await queueInstantAddressLink(d,lead,'address_link','completion');
  // Independent channels; a lookup or SMS outage must not block a valid call.
@@ -56,7 +58,7 @@ export async function retrieveInstantLead(d:Deps){
   stage='validate';const lead=parseMetaLead(JSON.parse(raw),claim.notice,source);
   const token=instantLeadToken(lead.metaId,lead.submittedAt,d.env.META_LEAD_LINK_SECRET);
   stage='save';
-  const saved=await d.db<{leadId:string;accountId:string;duplicate:boolean}>('rpc/icash_meta_accept_lead','POST',{p_source:source.id,p_payload:lead,p_link_hash:hashLeadToken(token)});
+  const saved=await d.db<{leadId:string;accountId:string|null;duplicate:boolean}>('rpc/icash_meta_accept_lead','POST',{p_source:source.id,p_payload:lead,p_link_hash:hashLeadToken(token)});
   await d.db(`icash_meta_lead_inbox?meta_id=eq.${claim.metaId}&claim_token=eq.${claim.token}`,'PATCH',{state:'accepted',lead_id:saved.leadId,reason:null});
   await processInstantLead(d,saved.leadId);
   return {status:'accepted'};
@@ -68,7 +70,7 @@ export async function retrieveInstantLead(d:Deps){
 }
 export async function researchInstantAddress(d:Deps,id:string,options?:{liveCall?:boolean}){
  if(!instantLeadsEnabled(d.env))return {status:'disabled'};
- const lead=await getInstantLead(d.db,id);if(!lead||lead.paused||lead.declined_at)return {status:'unavailable'};
+ const lead=await getInstantLead(d.db,id);if(!lead?.account_id||!lead.screening_id||lead.paused||lead.declined_at)return {status:'unavailable'};
  // The database claim serializes voice, SMS, form and worker races. A timeout
  // stays in review and cannot purchase another lookup automatically.
  const lookup=await processSellerIntake(<T>(path:string,method?:string,body?:unknown)=>d.db<T>(path==='rpc/icash_claim_seller_lookup_for'?'rpc/icash_meta_claim_lookup':path,method,body),d.env.DEALMACHINE_API_KEY,d.fetch??fetch,id,options?.liveCall?8000:15000);
