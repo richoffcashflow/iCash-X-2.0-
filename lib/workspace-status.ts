@@ -17,13 +17,13 @@ export function workspaceStatus(a:{billingModel?:string;membershipActive?:boolea
 }
 
 /** One navigation/action hint, derived only from verified current status. Never grants authority. */
-export function workspaceNextAction(a:{billingModel?:string;membershipActive?:boolean;billingReview?:boolean;paused?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;spendingActivationAvailable?:boolean;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;balanceCents?:number;activeWork?:boolean;identity?:unknown},campaign:{mode?:'outbound_voice_sms'|'sms_inbound'|null;configured:boolean;released:boolean;liveWorkReady:boolean;smsChannelEnabled?:boolean;policy:{version:string};acknowledgment:{version:string}|null}|null){
+export function workspaceNextAction(a:{billingModel?:string;membershipActive?:boolean;billingReview?:boolean;paused?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;spendingActivationAvailable?:boolean;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;balanceCents?:number;activeWork?:boolean;identity?:unknown},campaign:{mode?:'outbound_voice_sms'|'sms_inbound'|null;configured:boolean;automatic?:boolean;released:boolean;liveWorkReady:boolean;smsChannelEnabled?:boolean;policy:{version:string};acknowledgment:{version:string}|null}|null){
  if(a.billingModel==='membership_credits'&&!a.membershipActive)return {kind:'membership' as const,label:'Manage software access',reason:'Check your subscription before starting new paid work.'};
  if(a.billingReview)return {kind:'support' as const,label:'Get help with payment',reason:'A payment review is holding new work.'};
  if(!a.identity)return {kind:'identity' as const,label:'Add my contract name',reason:'Add your legal name or company before your bot can work.'};
  if(a.activeWork&&!a.paused)return {kind:'pause' as const,label:'Pause bot',reason:'Work is in progress. Pause here to stop new AI work. Your software subscription is managed separately.'};
  if(!a.workReady&&a.contactWorkReady){
-  const withSms=a.smsWorkReady===true&&campaign?.configured===true&&campaign.released===true&&campaign.smsChannelEnabled===true&&campaign.acknowledgment?.version===campaign.policy.version;
+  const withSms=a.smsWorkReady===true&&campaign?.configured===true&&campaign.released===true&&campaign.smsChannelEnabled===true&&(campaign.automatic===true||campaign.acknowledgment?.version===campaign.policy.version);
   const quote=a.contactQuote?`Up to ${a.contactQuote.maxContacts} owner-associated people per lookup with a $${(a.contactQuote.chargeCents/100).toFixed(2)} planning reservation. `:'';
   return a.paused?{kind:'resume' as const,label:withSms?'Start contact lookup & SMS':'Start contact lookup',reason:quote+(withSms?'Eligible SMS can also run under the released campaign. Wallet and account spending limits still apply.':'Wallet and account spending limits apply. This starts eligible data work; contact details do not authorize outreach.')}
    :{kind:'work' as const,label:'View current work',reason:'Eligible contact lookups can run within your account limits. Outreach permissions and AI call holds are unchanged.'};
@@ -39,8 +39,13 @@ export function workspaceNextAction(a:{billingModel?:string;membershipActive?:bo
  if(blocker&&a.discoveryBlocker==='available_credits_required')return {kind:'funding' as const,label:'Review funding',reason:blocker.detail};
  if(blocker)return {kind:'support' as const,label:'Get setup help',reason:blocker.detail};
  if(!campaign)return {kind:'campaign' as const,label:'Check outreach status',reason:'Verify campaign status before starting.'};
- if(!campaign.configured||campaign.acknowledgment?.version!==campaign.policy.version)return {kind:'campaign' as const,label:'Choose outreach channels',reason:'Choose outbound AI calls + SMS or SMS with inbound-call invitations, then save your account’s responsibilities.'};
- if(!campaign.released)return {kind:'campaign' as const,label:'Confirm outreach channels',reason:'Review your selected channels and sending business, then save to complete account setup.'};
+ if(campaign.automatic===true){
+  if(!campaign.configured)return {kind:'identity' as const,label:'Add my contract name',reason:'Add your legal name or company so your bot can contact sellers automatically.'};
+  if(!campaign.released)return {kind:'support' as const,label:'Get setup help',reason:'Calling and texting are disabled for this account.'};
+ }else{
+  if(!campaign.configured||campaign.acknowledgment?.version!==campaign.policy.version)return {kind:'campaign' as const,label:'Choose outreach channels',reason:'Choose outbound AI calls + SMS or SMS with inbound-call invitations, then save your account’s responsibilities.'};
+  if(!campaign.released)return {kind:'campaign' as const,label:'Confirm outreach channels',reason:'Review your selected channels and sending business, then save to complete account setup.'};
+ }
  const smsOnly=(campaign.mode==='sms_inbound'||!a.workReady)&&a.smsWorkReady===true&&campaign.smsChannelEnabled===true;
  const inboundMode=campaign.mode==='sms_inbound'&&campaign.liveWorkReady&&a.workReady;
  if(!smsOnly&&(!campaign.liveWorkReady||!a.workReady))return {kind:'campaign' as const,label:'View setup status',reason:'Required setup checks are pending. Review the status; funding does not clear them.'};

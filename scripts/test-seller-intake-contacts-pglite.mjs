@@ -7,6 +7,7 @@ import {sellerConsentText,sellerConsentVersion} from '../lib/seller-leads.ts';
 const f=await createOperationalContactFixture(process.argv[2]);
 const {pg,q,rpc,one,account,user,other,phone,screening,deal,timezone,isolated}=f;
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const automatic=process.argv.includes('--automatic');
 try{
  await pg.exec(`create table icash_seller_intakes(id uuid primary key,phone text,property jsonb,ai_consented boolean,created_at timestamptz default now(),name text default 'SIMULATION Seller',state text default 'assigned',consent_version text,consent_text text,contact_consent_scope text,attribution jsonb,data_rights_until timestamptz);
  create table icash_seller_matches(lead_id uuid,account_id uuid,screening_id uuid,assigned_at timestamptz default now(),primary key(lead_id,account_id));
@@ -21,7 +22,25 @@ try{
  await pg.exec(read('config/recording-consent-evidence-v4.sql'));
  await pg.exec(read('config/required-call-recording-consent-v4.sql'));
  await pg.exec(read('config/self-service-outreach-campaigns.sql'));
- await rpc('icash_record_outreach_campaign',{p_account:account,p_user:user,p_mode:'outbound_voice_sms',p_version:'outreach-channels-2026-10-03.1',p_accepted:true});
+ if(automatic){
+  await q('delete from icash_outreach_campaigns');
+  const acknowledgmentCount=(await one('select count(*)::int n from icash_campaign_acknowledgments')).n;
+  await pg.exec(read('config/automatic-outreach-channels.sql'));
+  assert.equal(await rpc('icash_outreach_sms_current',{p_account:account}),true);
+  assert.equal(await rpc('icash_outreach_voice_current',{p_account:account}),true);
+  assert.equal(await rpc('icash_outreach_voice_current',{p_account:other}),false,'missing principal remains visible');
+  await q("insert into icash_customer_identities(account_id,first_name,last_name,company_name,voice_id,voice_name) values($1,'NEW','User','NEW business','fixture_voice','Fixture')",[other]);
+  assert.equal(await rpc('icash_outreach_voice_current',{p_account:other}),true,'future account setup automatically has calling');
+  assert.equal(await rpc('icash_outreach_sms_current',{p_account:other}),true,'future account setup automatically has texting');
+  assert.equal(await rpc('icash_outreach_sms_current',{p_account:randomUUID()}),false,'unknown account is not configured');
+  const status=await rpc('icash_sms_inbound_campaign_status',{p_account:account,p_user:user});
+  assert.equal(status.automatic,true);assert.equal(status.configured,true);assert.equal(status.released,true);
+  assert.equal(status.mode,'outbound_voice_sms');assert.equal(status.acknowledgment,null,'no fictional acceptance');
+  await assert.rejects(rpc('icash_sms_inbound_campaign_status',{p_account:other,p_user:user}),/ownership/);
+  assert.equal((await one('select count(*)::int n from icash_campaign_acknowledgments')).n,acknowledgmentCount);
+  assert.equal((await one('select count(*)::int n from icash_campaign_channel_selections')).n,0);
+  assert.equal((await one('select count(*)::int n from icash_outreach_campaigns')).n,0);
+ }else await rpc('icash_record_outreach_campaign',{p_account:account,p_user:user,p_mode:'outbound_voice_sms',p_version:'outreach-channels-2026-10-03.1',p_accepted:true});
  await pg.exec(read('supabase/migrations/20261005124045_seller_response_handoff_and_activity.sql'));
  await pg.exec(read('config/seller-intake-contacts.sql'));
  // Apply every exact production migration patch, including final claim and recording gates.

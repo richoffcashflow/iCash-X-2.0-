@@ -55,6 +55,10 @@ export function OutreachCampaignAcknowledgment({onStatus,statusOnly=false}:{onSt
   const busy = state.phase === 'loading' || state.phase === 'saving';
   const choiceChanged = state.selectedMode !== status?.mode;
   if(statusOnly)return null;
+  if(status?.automatic)return <details id="outreach-campaign-details" className="workspace-campaign-settings">
+    <summary><span>Calling and texting</span><small>{status.released?'Automatic':'Setup needed'}</small></summary>
+    <p className="text-sm">{status.released?'Your bot contacts eligible sellers automatically. Use Run or Pause to control new work.':status.principal?'Calling and texting are disabled for this account.':'Add your legal name or company in your account to finish setup.'}</p>
+  </details>;
   return <details id="outreach-campaign-details" className="workspace-campaign-settings">
     <summary><span>Outreach channels</span><small>{state.error?'Status unavailable':busy?'Checking…':recorded?'Configured':'Choose channels'}</small></summary>
     <section className="campaign-settings-content space-y-3 text-sm" aria-labelledby="outreach-campaign-heading" aria-busy={busy}>

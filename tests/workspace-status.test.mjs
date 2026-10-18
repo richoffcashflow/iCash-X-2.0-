@@ -31,3 +31,9 @@ const inbound={...campaign,mode:'sms_inbound',smsChannelEnabled:true};
 assert.match(workspaceNextAction({...a,paused:true,smsWorkReady:true},inbound).reason,/inbound-call invitations/);
 assert.match(workspaceNextAction({...a,paused:false,smsWorkReady:true},inbound).reason,/Outbound AI calls stay off/);
 assert.doesNotMatch(workspaceNextAction({...a,paused:false,smsWorkReady:true},inbound).reason,/invitations remain held/);
+
+const automatic={...campaign,automatic:true,acknowledgment:null,mode:'outbound_voice_sms',smsChannelEnabled:true};
+assert.equal(workspaceNextAction({...a,paused:true},automatic).kind,'resume','automatic channels do not require separate campaign acceptance');
+assert.equal(workspaceNextAction({...a,paused:false},automatic).kind,'work');
+assert.equal(workspaceNextAction({...a,paused:true,balanceCents:0},automatic).kind,'funding','automatic channels do not grant credits');
+assert.equal(workspaceNextAction({...a,paused:true},{...automatic,released:false}).kind,'support','explicit disable is visible');

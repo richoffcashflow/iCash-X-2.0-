@@ -6,6 +6,7 @@ export type OutreachCampaignStatus = {
   principal: string | null;
   acknowledgment: {acceptedAt: string; version: string} | null;
   configured: boolean;
+  automatic?: boolean;
   released: boolean;
   liveWorkReady: boolean;
   smsChannelEnabled?: boolean;
@@ -43,7 +44,7 @@ export function parseCampaignStatus(value: unknown): OutreachCampaignStatus {
   if (!data || data.policy?.mode !== 'outreach_channels' || typeof data.policy.version !== 'string' || !data.policy.version ||
       typeof data.policy.text !== 'string' || !data.policy.text || typeof data.configured !== 'boolean' ||
       ![null, 'outbound_voice_sms', 'sms_inbound'].includes(data.mode) || (data.principal !== null && typeof data.principal !== 'string') ||
-      typeof data.released !== 'boolean' || typeof data.liveWorkReady !== 'boolean' || (data.smsChannelEnabled !== undefined && typeof data.smsChannelEnabled !== 'boolean') || (data.acknowledgment !== null &&
+      typeof data.released !== 'boolean' || typeof data.liveWorkReady !== 'boolean' || (data.automatic !== undefined && typeof data.automatic !== 'boolean') || (data.smsChannelEnabled !== undefined && typeof data.smsChannelEnabled !== 'boolean') || (data.acknowledgment !== null &&
       (!data.acknowledgment || typeof data.acknowledgment.version !== 'string' ||
        typeof data.acknowledgment.acceptedAt !== 'string' || !Number.isFinite(Date.parse(data.acknowledgment.acceptedAt))))) {
     throw Error('Could not verify campaign status. Refresh before continuing.');
