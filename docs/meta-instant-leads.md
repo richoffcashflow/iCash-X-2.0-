@@ -102,17 +102,34 @@ setup inputs, not proof that Meta permissions or form consent have been checked:
 - Business portfolio: `802460598438968`.
 - Page candidate from the supplied Business Suite `asset_id`: `1307748055763550`.
 - Form: `4401851653462589`.
+- Ad account: `act_588883577262327`.
+- Published campaign: `120255627041280155`.
 - Source slug: `hon-fast-cash`.
 - Completion URL: `https://homeoffernetwork.com/sell/address?form=hon-fast-cash`.
 
 The existing Production `META_ADS_READ_ACCESS_TOKEN` was present during setup.
 The owner reports it includes both `ads_read` and `leads_retrieval`. Its actual
 Page/form access still needs verification. The Page-scoped reuse setting is
-`META_LEAD_ADS_READ_PAGE_IDS=1307748055763550`; no second token copy is needed.
+`META_LEAD_ADS_READ_PAGE_IDS=1307748055763550` was saved for Production on
+October 18; no second token copy is needed. It takes effect in the next build
+that includes this integration.
 Do not create or enable a source until the receiving account/principal and the
 actual form's contact-choice keys/text are known. App secret, webhook setup,
 migration, deployment, and a non-dispatching integration check remain activation
 dependencies. No paid simulation is authorized by this setup request.
+
+The owner supplied the published campaign through an Ads Manager URL containing
+both the ad account and campaign IDs above. Its existing production spend source
+was saved with tracking campaign `120255627041280155` and automatic imports
+enabled. Its initial status is `pending`, with no successful provider receipt
+yet. The scheduled importer validates Meta account access, campaign ownership,
+USD currency and timezone before accepting any spend. Saving the source is not
+proof that the saved token has that access. This configuration does not publish
+or change ads, and it does not activate instant-form intake or CRM feedback.
+The importer reads seven completed account-local days, not today's running
+spend; a newly launched campaign may have no usable acquisition-cost average
+until completed-day spend and attributed leads exist. Never treat missing
+campaign costs as zero or silently manufacture an estimate.
 
 ## Response optimization
 
