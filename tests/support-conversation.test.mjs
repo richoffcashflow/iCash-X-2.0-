@@ -9,6 +9,12 @@ for(const question of ['How do I get a client?','Where do leads come from?','Do 
  assert.match(response.reply,/Course/);assert.match(response.reply,/running/);assert.match(response.reply,/Leads and notifications/);assert.match(response.reply,/no fixed arrival time/);
  assert.doesNotMatch(response.reply,/marketing|networking|referrals|social media|what (?:type of )?(?:service|product)/i);assert.equal(response.status,'resolved');assert.match(response.reply,/rewatch the Course/);
 }
+for(const question of ['How do I add the listing for this?','Where do I add listings?','How can I upload a property?','Do I need to enter leads myself?']){
+ const response=await replyToSupport({...leadsContext,messages:[user(question)]},async()=>{throw Error('Listing guidance must not need the model');});
+ assert.match(response.reply,/don’t need to add listings or upload properties/);assert.match(response.reply,/incoming leads appear in Leads/);assert.equal(response.ai,false);
+ const held=supportConversationFallback({...leadsContext,messages:[user(question)],evidence:[check('readiness','attention','readiness_blocked')]});
+ assert.equal(held.status,'open');assert.doesNotMatch(held.reply,/Keep it running/);
+}
 const paused=supportConversationFallback({...leadsContext,evidence:[...ready.filter(c=>c.key!=='work'),check('work','attention','paused')]});
 assert.match(paused.reply,/currently paused/);assert.match(paused.reply,/Run bot/);assert.doesNotMatch(paused.reply,/Keep it running/);
 assert.equal(paused.status,'waiting_on_customer','A suggested action alone does not confirm an actual problem is resolved');

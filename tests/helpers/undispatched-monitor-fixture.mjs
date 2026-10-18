@@ -16,7 +16,10 @@ export async function verifyUndispatchedMonitoring({pg,one,refresh,id}){
  alter table icash_deal_files add terms jsonb default '{}';
  alter table icash_screening_jobs add snapshot jsonb default '{}';
  alter table icash_text_threads add party text default 'seller',add paused boolean default false,add ai_mode text default 'auto',add manual_only boolean default false,add sms_intake_pending boolean default false;
- alter table icash_voice_jobs add permission_id uuid,add callback_id uuid,add due_at timestamptz default now(),add provider_call_sid text;
+ alter table icash_voice_jobs add permission_id uuid,add callback_id uuid,add due_at timestamptz default now(),add provider_call_sid text,add outcome text,add operation_key text,add conversation_id text;
+ create table icash_call_recordings(id uuid primary key,account_id uuid,voice_job_id uuid,operation_key text,call_sid text,state text,start_claimed_at timestamptz,recording_sid text,conversation_id text);
+ create table icash_recorded_gate_terminal_receipts(recording_id uuid,account_id uuid,call_sid text,receipt jsonb);
+ create function icash_prepare_seller_responses(uuid) returns boolean language sql as $$select exists(select 1 from icash_voice_jobs v join icash_contact_permissions p on p.id=v.permission_id where true and v.state='dispatched' and v.provider_call_sid is not null)$$;
  -- Controlled eligibility inputs; full channel, signed-package and membership
  -- admission are exercised by the automatic outreach SQL suites.
  create function icash_membership_work_allowed(uuid) returns boolean language sql set search_path='' as $$select member from public.icash_accounts where id=$1$$;
@@ -26,6 +29,7 @@ export async function verifyUndispatchedMonitoring({pg,one,refresh,id}){
  grant select on all tables in schema public to service_role;
  `);
  await pg.exec(readFileSync(new URL('../../config/undispatched-work-monitoring.sql',import.meta.url),'utf8'));
+ await pg.exec(readFileSync(new URL('../../config/recorded-seller-attempt-progress.sql',import.meta.url),'utf8'));
  const account=id(20),lead=id(21),screen=id(22),deal=id(23),thread=id(24),permission=id(25),job=id(26),buyerDeal=id(27),buyerJob=id(28);
  await pg.query('insert into icash_accounts(id) values($1)',[account]);
  await pg.query('insert into icash_wallets values($1,1000)',[account]);
@@ -55,6 +59,27 @@ export async function verifyUndispatchedMonitoring({pg,one,refresh,id}){
  assert.equal((await refresh()).snapshot.issues[0].kind,'seller_response','overdue first call is visible even with an empty dispatch queue');
  await pg.query("update icash_voice_jobs set state='dispatched',provider_call_sid='SIMULATION call receipt' where id=$1",[job]);
  assert.equal((await refresh()).snapshot.issueCount,0,'actual provider receipts clear the missing-start finding');
+ await pg.query("update icash_voice_jobs set state='held',outcome='ended_before_recording',operation_key='voice:fixture' where id=$1",[job]);
+ assert.equal((await refresh()).snapshot.issueCount,1,'a SID or terminal label alone is not evidence');
+ await pg.query("insert into icash_call_recordings(id,account_id,voice_job_id,operation_key,call_sid,state) values($1,$2,$3,'voice:fixture','SIMULATION call receipt','failed')",[id(30),account,job]);
+ await pg.query("insert into icash_recorded_gate_terminal_receipts values($1,$2,'SIMULATION call receipt',$3)",[id(30),account,{sid:'SIMULATION call receipt',status:'no-answer'}]);
+ for(const terminal of ['no-answer','busy','completed']){
+  await pg.query("update icash_recorded_gate_terminal_receipts set receipt=jsonb_set(receipt,'{status}',to_jsonb($1::text))",[terminal]);
+  assert.equal((await refresh()).snapshot.issueCount,0,'bound terminal attempt clears missing-start finding: '+terminal);
+  assert.equal(await one('select icash_prepare_seller_responses(null)'),true,'response preparation uses the same receipt evidence');
+ }
+ for(const terminal of ['failed','canceled','in-progress']){
+  await pg.query("update icash_recorded_gate_terminal_receipts set receipt=jsonb_set(receipt,'{status}',to_jsonb($1::text))",[terminal]);
+  assert.equal((await refresh()).snapshot.issueCount,1,'failed/unknown/unfinished attempts remain visible');
+ }
+ await pg.query("update icash_recorded_gate_terminal_receipts set receipt=jsonb_set(receipt,'{status}','\"no-answer\"')");
+ for(const [change,undo] of [
+  ["update icash_recorded_gate_terminal_receipts set account_id='"+id(99)+"'","update icash_recorded_gate_terminal_receipts set account_id='"+account+"'"],
+  ["update icash_call_recordings set operation_key='wrong'","update icash_call_recordings set operation_key='voice:fixture'"],
+  ["update icash_call_recordings set start_claimed_at=now()","update icash_call_recordings set start_claimed_at=null"],
+  ["update icash_voice_jobs set outcome='provider_outcome_unknown_no_retry'","update icash_voice_jobs set outcome='ended_before_recording'"],
+ ]){await pg.exec(change);assert.equal((await refresh()).snapshot.issueCount,1,'invalid binding/uncertainty stays flagged');await pg.exec(undo);}
+ assert.equal(await one('select state from icash_voice_jobs where id=$1',[job]),'held','monitor never requeues terminal calls');
  await pg.query("insert into icash_deal_files(id,account_id,stage) values($1,$2,'under_contract')",[buyerDeal,account]);
  await pg.query("insert into icash_fulfillment_jobs values($1,$2,$3,'ready',now()-interval '11 minutes')",[buyerJob,account,buyerDeal]);
  report=await refresh();assert.equal(report.snapshot.issues[0].kind,'buyer_fulfillment');
