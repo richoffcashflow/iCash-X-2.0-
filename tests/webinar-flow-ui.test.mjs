@@ -457,12 +457,22 @@ console.log('PASS webinar audio: audible autoplay, one muted policy fallback, ta
 }
 
 {
- const instance=await harness('components/webinar-room.tsx',roomDeps),render=()=>instance.render('WebinarRoom',{webinarCode:'129339'});
+ let canRemind;
+ const instance=await harness('components/webinar-room.tsx',{...roomDeps,installWebinarExitReminder:predicate=>{canRemind=predicate;return ()=>{};}}),render=()=>instance.render('WebinarRoom',{webinarCode:'129339'});
  render();await flush();let tree=render();find(tree,'WebinarPlayer').props.onProgress(1500);tree=render();
- const before=redirects.length,exitBeforePurchase=listeners.get('beforeunload');find(tree,'WebinarCheckout').props.onPurchased('standard','/live/123457');
- exitBeforePurchase({isTrusted:true,preventDefault(){throw Error('Verified Standard purchase must suppress the old room immediately');}});tree=render();
+ const before=redirects.length,player=find(tree,'WebinarPlayer');find(tree,'WebinarCheckout').props.onEngaged();tree=render();
+ assert.equal(canRemind(),false,'An active payment is not interrupted');
+ find(tree,'WebinarCheckout').props.onPurchased('standard','/live/123457');tree=render();
+ assert.equal(find(tree,'WebinarVipWelcome'),undefined,'Payment must not replace the playing video');
+ assert.equal(find(tree,'WebinarPlayer').props.sessionId,player.props.sessionId,'Payment keeps the same player mounted');
+ assert.equal(find(tree,'WebinarPlayer').props.progress,player.props.progress,'Payment must not reset playback');
+ assert.equal(canRemind(),true,'A buyer still watching gets the normal one-time leave protection');
+ assert.equal(redirects.length,before,'No navigation on payment');
+ find(tree,'WebinarPlayer').props.onProgress(1510);tree=render();assert.ok(find(tree,'WebinarPlayer'));
+ find(tree,'WebinarPlayer').props.onEnded();tree=render();await flush();
  assert.equal(find(tree,'WebinarVipWelcome').props.href,'/live/123457');assert.equal(find(tree,'WebinarVipWelcome').props.fullScreen,true);
- assert.equal(find(tree,'WebinarPlayer'),undefined,'The main video stops when the purchase handoff is shown');assert.equal(find(tree,'WebinarCheckout'),undefined,'No second payment offer competes with the VIP video handoff');
+ assert.equal(find(tree,'WebinarPlayer'),undefined,'The video is replaced only after it ends');
+ assert.equal(canRemind(),false,'The intended next session never triggers the old leave warning');
  assert.equal(redirects.length,before,'The welcome owns navigation after its visible countdown');instance.close();
- console.log('PASS main purchase: the verified VIP destination replaces the room immediately and stops main playback before the next video.');
+ console.log('PASS main purchase: playback survives payment, paid viewers retain leave protection, and the VIP handoff waits for the video to end.');
 }

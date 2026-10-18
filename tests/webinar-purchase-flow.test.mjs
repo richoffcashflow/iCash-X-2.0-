@@ -85,10 +85,10 @@ const redirectMember=await harness('components/membership-checkout.tsx',{...comm
 purchase.membership.vip=false;purchase.postPurchaseUrl='/live/123456';
 const purchaseStates=[],redirectProps={...mp,redirectToVip:true,webinarPhase:'watching',onPurchased:(state,url)=>purchaseStates.push([state,url])};
 redirectMember.render('MembershipCheckout',redirectProps);await flush();const beforeRedirect=redirects.length;
-let welcomeTree=redirectMember.render('MembershipCheckout',redirectProps);assert.equal(find(welcomeTree,'WebinarVipWelcome').props.href,'/live/123456');assert.equal(find(welcomeTree,'WebinarVipUpsell'),undefined,'The next video is the immediate next step');
+let welcomeTree=redirectMember.render('MembershipCheckout',redirectProps);assert.equal(find(welcomeTree,'WebinarVipWelcome'),undefined);assert.equal(find(welcomeTree,'WebinarVipUpsell'),undefined,'An early purchase must not start the VIP pitch');assert.match(text(welcomeTree),/Keep watching/);assert.equal(find(welcomeTree,'StripeEmbeddedCheckout'),undefined,'A verified purchase cannot offer a second payment');
 assert.deepEqual(purchaseStates,[['standard','/live/123456']]);assert.equal(redirects.length,beforeRedirect,'The confirmation remains visible before the countdown handoff');
 welcomeTree=redirectMember.render('MembershipCheckout',{...redirectProps,webinarPhase:'ended'});assert.ok(find(welcomeTree,'WebinarVipWelcome'));redirectMember.close();
-console.log('PASS paid handoff: verified Standard access shows the VIP welcome immediately, including before the main video ends.');
+console.log('PASS paid handoff: confirmed payment keeps the main webinar playing; VIP welcome starts only after its end.');
 
 for(const scenario of [
  {name:'Pending payment',accessible:false,vip:false,search:'?membership=paid',url:'/live/123456'},
