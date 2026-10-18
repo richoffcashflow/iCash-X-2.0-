@@ -2,7 +2,7 @@ export type MessagePhase='resume'|'next'|'checkout';
 const clean=(value:string,length:number)=>value.replace(/[\r\n\t]+/g,' ').trim().slice(0,length);
 export function campaignCopy({name,brand,host,phase,title,step,reply=false,departure=false}:{name:string;brand:string;host:string;phase:MessagePhase;title:string;step:number;reply?:boolean;departure?:boolean}){
  const first=clean(name,80).split(/\s+/)[0]||'there';
- if(departure)return {subject:'Come back to your webinar 👇',body:`Hey ${first},\n\nYou left the webinar. Jump back in now and see the rest of the walkthrough. Your return link is below.\n\nContinue my webinar:`,signature:`— ${host}`,sms:`Hey ${first}, ${brand} here. Jump back into your webinar now and catch the rest of the walkthrough:`};
+ if(departure)return {subject:'Come back to your webinar 👇',body:`Hey ${first},\n\nYou left the webinar. Jump back in now to review the walkthrough and your next step. Your return link is below.\n\nContinue my webinar:`,signature:`— ${host}`,sms:`Hey ${first}, ${brand} here. Jump back into your webinar now. Your return link is here:`};
  const variants: [string,string,string][]=phase==='checkout'?[
   ['Your next step 👇','Review the current plan, price and terms. After payment, you can name your bot and set up your workspace.','Ready to get started? Review your access here 👇'],
  ]:phase==='next'?[

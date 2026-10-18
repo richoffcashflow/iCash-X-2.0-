@@ -4,6 +4,7 @@ import {randomUUID} from 'node:crypto';
 
 export async function verifyWebinarExitRecovery(pg,q,config){
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261018045440_webinar_immediate_exit_recovery.sql',import.meta.url),'utf8'));
+ await pg.exec(readFileSync(new URL('../supabase/migrations/20261018045823_webinar_completed_exit_recovery.sql',import.meta.url),'utf8'));
  const scalar=async(sql,args=[])=>Object.values((await q(sql,args)).rows[0])[0];
  await q("update icash_webinar_outbox set state='canceled' where state in ('pending','claimed','sending')");
  await q("update icash_messaging_settings set config=config||'{\"enabled\":true,\"smsEnabled\":true,\"postalAddress\":\"123 Test Street\"}'::jsonb");
@@ -48,6 +49,7 @@ export async function verifyWebinarExitRecovery(pg,q,config){
  for(const j of leased)assert.equal(await authorize(legacy,j),null,'Earlier daily limits still apply');await signal(legacy,'active');
 
  const quick=await make();await signal(quick,'active');await signal(quick,'left');await signal(quick,'active');await due(quick);assert.equal((await claim(quick)).length,0,'Quick return cancels both');
+ const ended=await make();await signal(ended,'active');await q('update icash_webinar_sessions set completed_at=now() where id=$1',[ended.session]);assert.equal(await signal(ended,'left'),true);await due(ended);leased=await claim(ended);assert.equal(leased.length,2,'Finished video without purchase still gets both return links');for(const j of leased){assert(await authorize(ended,j));await finish(j);}
  assert.equal(await signal(quick,'left',quick.page,2),false,'A late exit beacon cannot undo a newer return');
  const refresh=await make();await signal(refresh,'active');await signal(refresh,'left');await signal(refresh,'active',randomUUID(),1);await due(refresh);assert.equal((await claim(refresh)).length,0,'A fresh document cancels the old document departure');
  const tabs=await make();const tab2=randomUUID();await signal(tabs,'active');await signal(tabs,'active',tab2,1);assert.equal(await signal(tabs,'left'),false,'Leaving one tab while another is active sends nothing');

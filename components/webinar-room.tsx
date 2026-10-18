@@ -65,7 +65,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  const recovery=useRef<ReturnType<typeof installWebinarRecovery>|null>(null);
  useEffect(()=>{
   if(!session||session.preview||session.ownerWatching||isVip)return;
-  const control=installWebinarRecovery(session.sessionId,()=>!endedRef.current&&!checkoutEngagedRef.current&&!purchaseRedirected.current&&!returnExpired.current&&!upgradeActiveRef.current&&!purchasedRef.current,
+  const control=installWebinarRecovery(session.sessionId,()=>!completionRedirected.current&&!checkoutEngagedRef.current&&!purchaseRedirected.current&&!returnExpired.current&&!upgradeActiveRef.current&&!purchasedRef.current,
    signal=>webinarBeacon('/api/webinar/recovery',signal));
   recovery.current=control;
   return()=>{control.stop();recovery.current=null;};
@@ -172,7 +172,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
   timer=setTimeout(()=>void retry(),delays[0]);return()=>{stopped=true;clearTimeout(timer);};
  },[ended,session,track]);
  useEffect(()=>{const id=setInterval(()=>setNow(Date.now()+offset.current),1000);return()=>clearInterval(id);},[]);
- useEffect(()=>{if(endCountdown===null||!session||checkoutEngaged)return;if(endCountdown===0){const offer=selectOffer(offerState.current.offers,session.webinar.durationSeconds,Date.now()+offerState.current.offset,session.webinar.endOfferId);if(offer?.action==='checkout'){setSelectedOfferId(offer.id);setFunding(true);setEndCountdown(null);}else if(offer)navigateWebinar(offerDestination(offer));else setEndCountdown(null);return;}const id=setTimeout(()=>setEndCountdown(n=>n===null?null:n-1),1000);return()=>clearTimeout(id);},[endCountdown,session,checkoutEngaged]);
+ useEffect(()=>{if(endCountdown===null||!session||checkoutEngaged)return;if(endCountdown===0){const offer=selectOffer(offerState.current.offers,session.webinar.durationSeconds,Date.now()+offerState.current.offset,session.webinar.endOfferId);if(offer?.action==='checkout'){setSelectedOfferId(offer.id);setFunding(true);setEndCountdown(null);}else if(offer){completionRedirected.current=true;navigateWebinar(offerDestination(offer));}else setEndCountdown(null);return;}const id=setTimeout(()=>setEndCountdown(n=>n===null?null:n-1),1000);return()=>clearTimeout(id);},[endCountdown,session,checkoutEngaged]);
  function latestMessages(){const log=chatLog.current;if(log)log.scrollTop=log.scrollHeight;followChat.current=true;setUnread(false);}
  function tick(n:number){if(!session||returnExpired.current)return;position.current=n;setTime(n);
   if(Date.now()-lastSync.current>15000){lastSync.current=Date.now();track('progress');}
