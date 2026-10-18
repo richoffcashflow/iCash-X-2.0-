@@ -1,3 +1,4 @@
+import {replyToInstantLeadText} from '@/lib/meta-instant-text';
 import {NextResponse} from 'next/server';
 import {verifyContiguityWebhook,parseTextWebhook,isServiceTextSender} from '@/lib/contiguity';
 import {suppressCarrierBlockedSms} from '@/lib/carrier-blocked-sms';
@@ -31,6 +32,7 @@ export async function POST(req:Request){
  if(!known.length)return NextResponse.json({received:true});
  await db('rpc/icash_ingest_text_event','POST',{p_event:event,p_optout:event.optOut});
  if(inbound&&!event.optOut){
+  if(await replyToInstantLeadText({db,sms:dispatchTextMessage,voice:dispatchLiveVoice,env:process.env},event.id))return NextResponse.json({received:true});
   // Queuing is idempotent and provider claims are atomic. A failed immediate
   // attempt remains durable for the automation worker; never replay a send.
   try{await replyToSellerText(db,dispatchTextMessage,event.id,processTextAi,dispatchLiveVoice);}catch{/* Durable queue is retried only before provider claim. */}

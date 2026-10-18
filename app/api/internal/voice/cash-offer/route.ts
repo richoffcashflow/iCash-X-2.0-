@@ -1,3 +1,6 @@
+import {instantCallAddress} from '@/lib/meta-instant-call';
+import {dispatchTextMessage} from '@/lib/text-message-service';
+import {dispatchLiveVoice} from '@/lib/live-dispatch-service';
 import {NextResponse} from 'next/server';
 import {db} from '@/lib/stripe-test';
 import {bindSellerAgreementCall} from '@/lib/seller-agreement-binding';
@@ -29,8 +32,14 @@ export async function POST(request:Request){
   if(process.env.ICASH_LIVE_WORK_READY!=='true'||process.env.ICASH_RECORDING_RECEIPTS_READY!=='true')return NextResponse.json(blockedOffer('unavailable','The live property workflow is not currently available.'),{status:409,headers});
   let evidence:Promise<unknown>|undefined;
   const transcript=(i:Record<string,unknown>)=>currentHistory?Promise.resolve(currentHistory):evidence??=createRecordedReceptionProviders(process.env).conversation(String(i.conversationId));
+  const intake=await instantCallAddress(token,input,{db,sms:dispatchTextMessage,voice:dispatchLiveVoice,bind:bindSellerAgreementCall,history:()=>transcript(input),env:process.env});
+  if(intake)return NextResponse.json(intake,{headers});
   const d={db,bind:bindSellerAgreementCall,verifyQualification:async(i:Record<string,unknown>,context:Parameters<typeof boundSellerQualification>[1])=>boundSellerQualification(db,context,await transcript(i)),resolveStatement:async(i:Record<string,unknown>)=>callSellerStatement(await transcript(i),i),verifyInput:async(i:Record<string,unknown>)=>callOfferEvidence(await transcript(i),i),verifyPayoffChange:async(i:Record<string,unknown>)=>callPayoffEvidence(await transcript(i),i),verifyListingStatus:async(i:Record<string,unknown>)=>sellerListingEvidence(await transcript(i),i),verifySellerPrice:async(i:Record<string,unknown>)=>callSellerPriceEvidence(await transcript(i),i),verifyPayoffFacts:async(i:Record<string,unknown>)=>sellerPayoffEvidence(await transcript(i),i)};
-  if(input.action!=='confirm_and_send'&&input.action!=='status')return NextResponse.json(await automaticCallOffer(token,input,d),{headers});
+  if(input.action!=='confirm_and_send'&&input.action!=='status'){
+   const result=await automaticCallOffer(token,input,d);
+   if(process.env.META_INSTANT_LEADS_ENABLED==='true'&&result.quoteAllowed&&'priceCents' in result)try{await db('rpc/icash_meta_note_offer_authorized','POST',{p_hash:sha(token),p_conversation:input.conversationId,p_price:result.priceCents});}catch{console.warn('instant_offer_observation_pending');}
+   return NextResponse.json(result,{headers});
+  }
   const agreement=sellerAgreementInput.parse(input);
   if(process.env.DOCUSEAL_MODE!=='live')return NextResponse.json({sent:false,status:'unavailable',instruction:'Live agreement delivery is not ready.'},{status:409,headers});
   if(agreement.action==='confirm_and_send'){

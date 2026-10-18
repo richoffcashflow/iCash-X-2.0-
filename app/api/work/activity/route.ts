@@ -1,3 +1,5 @@
+import {instantLeadsEnabled} from '@/lib/meta-instant-lead-service';
+import type {InstantLeadCardData} from '@/components/instant-lead-card';
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {workAccount} from '@/lib/work-account';
@@ -47,6 +49,8 @@ export async function GET(req:Request){
    if(query)filters.set('result->property->>address',`ilike.*${query}*`);
    properties=await db<Property[]>(`icash_screening_jobs?${filters}`);
   }
+  const instantRows=instantLeadsEnabled(process.env)?await db<InstantLeadCardData[]>('rpc/icash_meta_workspace_leads','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_screening:screeningId??null}):[];
+  const instantLeads=instantRows.slice(0,pageSize);
   const visible=properties.slice(0,pageSize);
   const ids=visible.map(p=>p.id).join(',');
   const propertyIds=visible.map(p=>p.result.property.propertyId).filter(id=>/^prop_[a-zA-Z0-9]+$/.test(id)).join(',');
@@ -102,6 +106,6 @@ export async function GET(req:Request){
   for(const item of allAttention)item.address=item.screening_id?addressById.get(item.screening_id)??null:null;
   const smsRouteReviews=routeRows.slice(0,pageSize);
   const attentionHasMoreByKind={closingTasks:closingTaskRows.length>pageSize,closing:closingRows.length>pageSize,sellerRecovery:recoveryRows.length>pageSize,viewings:viewingRows.length>pageSize,routing:routeRows.length>pageSize,texts:textRows.length>pageSize,calls:callRows.length>pageSize,handoffs:handoffRows.length>pageSize,signatures:signatureRows.length>pageSize};
-  return NextResponse.json({proceedsReceivedDealIds:proceeds.map(p=>p.deal_id),journeys,closingTasks,closingReview,sellerRecovery,viewingRequests,smsRouteReviews,textAttention,signatureActions,signing,signingConfigured:!!(process.env.DOCUSEAL_API_KEY||process.env.DOCUSEAL_TEST_API_KEY),properties:visible,propertyAttentionIds,hasMore:!screeningId&&properties.length>pageSize,deals,contacts,controls,conversations,callbacks,callRequests,handoffs,page,attentionPage,attentionHasMore:Object.values(attentionHasMoreByKind).some(Boolean),attentionHasMoreByKind,searchSupported:true,query},{headers});
+  return NextResponse.json({instantLeads,proceedsReceivedDealIds:proceeds.map(p=>p.deal_id),journeys,closingTasks,closingReview,sellerRecovery,viewingRequests,smsRouteReviews,textAttention,signatureActions,signing,signingConfigured:!!(process.env.DOCUSEAL_API_KEY||process.env.DOCUSEAL_TEST_API_KEY),properties:visible,propertyAttentionIds,hasMore:!screeningId&&(properties.length>pageSize||instantRows.length>pageSize),deals,contacts,controls,conversations,callbacks,callRequests,handoffs,page,attentionPage,attentionHasMore:Object.values(attentionHasMoreByKind).some(Boolean),attentionHasMoreByKind,searchSupported:true,query},{headers});
  }catch{return NextResponse.json({error:'Could not load your work. Sign in and retry.'},{status:503,headers});}
 }
