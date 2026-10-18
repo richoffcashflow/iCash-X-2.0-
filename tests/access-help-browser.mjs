@@ -51,8 +51,8 @@ export async function verifyAccessHelp(browser,base,options,name,fixtureCookies)
   if(process.env.ACCESS_HELP_SCREENSHOT)await page.screenshot({path:process.env.ACCESS_HELP_SCREENSHOT,fullPage:true});
   await page.getByRole('button',{name:'Send to support',exact:true}).click();await page.getByRole('button',{name:'Refresh support',exact:true}).waitFor();
   assert.equal(await page.locator('textarea').inputValue(),question,'Failed response preserves draft');
-  await page.getByRole('button',{name:'Refresh support',exact:true}).click();await page.getByText('Your earlier message was saved. The team can see it.',{exact:true}).waitFor();
-  assert.equal(await page.getByLabel('Reply to the team',{exact:true}).inputValue(),'','Saved receipt clears only the confirmed draft');assert.equal(sends,1);
+  await page.getByRole('button',{name:'Refresh support',exact:true}).click();await page.getByText('Your earlier message was saved. Support continues here.',{exact:true}).waitFor();
+  assert.equal(await page.getByLabel('Reply to support',{exact:true}).inputValue(),'','Saved receipt clears only the confirmed draft');assert.equal(sends,1);
   await page.goto(base+'/support/admin');const desk=page.getByRole('region',{name:'Support inbox',exact:true});
   await desk.getByRole('button',{name:/buyer@example.invalid/}).waitFor();
   assert.equal(await desk.getByText('Fixture deployment ready.',{exact:true}).isVisible(),false,'Diagnostics stay out of the inbox');

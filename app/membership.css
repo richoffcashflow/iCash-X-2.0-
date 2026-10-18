@@ -102,3 +102,5 @@
 .webinar-vip-welcome .setup-primary:focus-visible{outline:3px solid #777;outline-offset:3px}
 .webinar-vip-welcome .webinar-vip-welcome-countdown{font-size:13px;margin:14px 0 0;color:#666}
 @media(max-height:600px){.webinar-vip-welcome-full{padding:20px}.webinar-vip-welcome .purchase-receipt{margin-bottom:16px}.webinar-vip-welcome .webinar-vip-welcome-content .setup-primary{margin-top:16px}}
+
+.membership-email{display:grid;gap:8px;margin:18px 0;font-size:14px;font-weight:600;color:#333;text-align:left}.membership-email input{box-sizing:border-box;min-width:0;width:100%;min-height:48px;border:1px solid #aaa;border-radius:9px;padding:12px;background:#fff;color:#111;font:400 16px Arial,sans-serif}.membership-email input:focus-visible{outline:2px solid #222;outline-offset:2px}

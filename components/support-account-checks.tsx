@@ -2,7 +2,7 @@
 import type {SupportEvidence} from '@/lib/support-policy';
 import {supportCheckLabels,supportCheckTime,supportNextStep} from '@/lib/support-self-service';
 
-export function SupportAccountChecks({evidence,loading,busy,onRefresh,onCancel,onTeam}:{evidence:SupportEvidence[];loading:boolean;busy:boolean;onRefresh:()=>void;onCancel:()=>void;onTeam:(e:SupportEvidence)=>void}){
+export function SupportAccountChecks({evidence,loading,busy,onRefresh,onCancel}:{evidence:SupportEvidence[];loading:boolean;busy:boolean;onRefresh:()=>void;onCancel:()=>void;onTeam?:(e:SupportEvidence)=>void}){
  const summary=evidence.filter(e=>['work','credits','billing','payments'].includes(e.key));
  const other=evidence.filter(e=>!['work','credits','billing','payments'].includes(e.key));
  function card(e:SupportEvidence){
@@ -10,7 +10,7 @@ export function SupportAccountChecks({evidence,loading,busy,onRefresh,onCancel,o
   return <article className="support-check" data-status={e.status} key={e.key}>
    <div className="support-check-heading"><h3>{supportCheckLabels[e.key]??'Account check'}</h3><span>{e.status==='unknown'?'Unverified':e.status==='attention'?'Needs attention':'Checked'}</span></div>
    <p>{e.detail}</p>
-   {next&&<div className="support-check-next"><p>{next.text}</p>{next.action==='workspace'?<a href="/">{next.label} →</a>:<button type="button" disabled={busy||loading} onClick={next.action==='cancel'?onCancel:next.action==='team'?()=>onTeam(e):onRefresh}>{next.action==='team'?'Prepare support question':next.label}</button>}</div>}
+   {next&&<div className="support-check-next"><p>{next.text}</p>{next.action==='workspace'?<a href="/">{next.label} →</a>:<button type="button" disabled={busy||loading} onClick={next.action==='cancel'?onCancel:onRefresh}>{next.label}</button>}</div>}
   </article>;
  }
  return <section className="support-account-checks" aria-labelledby="support-account-heading" aria-busy={loading}>

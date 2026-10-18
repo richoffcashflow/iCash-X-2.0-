@@ -100,12 +100,12 @@ previewCheckout.close();
 console.log('PASS owner checkout preview: current price, real layout, paid URL flags ignored, no payment or conversion side effects.');
 
 // Webinar and post-webinar offers open payment automatically, once, without consent fabrication.
-for(const isPreview of [false,true])for(const display of [{presentation:'webinar'},{presentation:'plan',autoOpen:true}]){
+for(const savedEmail of [false,true])for(const isPreview of [false,true])for(const display of [{presentation:'webinar'},{presentation:'plan',autoOpen:true}]){
  const events=[];window.location.search='';
  const h=await harness('components/membership-checkout.tsx',{...common,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserEvent:()=>{throw Error('Automatic display must not track purchase intent');},webinarRequest:async(url,init={})=>{
   events.push({url,init});
   if(init.method==='POST')return {clientSecret:'fixture',publishableKey:'pk_test_fixture',sessionId:'cs_fixture'};
-  return {offer:{revision:9,priceCents:5000},ready:true,mode:'test',embeddedReady:true,membership:null};
+  return {offer:{revision:9,priceCents:5000},ready:true,mode:'test',email:savedEmail?'fixture@example.invalid':null,embeddedReady:true,membership:null};
  }});
  const props={preview:isPreview,...display,embedded:true,onSignedIn:()=>{},onEngaged:()=>{throw Error('Automatic display is not engagement');}};
  const loading=h.render('MembershipCheckout',props);
@@ -114,8 +114,9 @@ for(const isPreview of [false,true])for(const display of [{presentation:'webinar
  await flush();h.render('MembershipCheckout',props);await flush();let tree=h.render('MembershipCheckout',props);
  assert.equal(button(tree,'Buy now'),undefined);assert.equal(button(tree,'Get my AI bot'),undefined);
  h.render('MembershipCheckout',props);await flush();
+ if(!isPreview&&!savedEmail){assert.equal(events.filter(e=>e.init.method==='POST').length,0,'No checkout before checking the payment email');find(tree,'input').props.onChange({target:{value:'fixture@example.invalid'}});tree=h.render('MembershipCheckout',props);find(tree,'form').props.onSubmit({preventDefault(){}});await flush();tree=h.render('MembershipCheckout',props);}
  const writes=events.filter(e=>e.init.method==='POST');assert.equal(writes.length,isPreview?0:1);
- if(!isPreview){const body=JSON.parse(writes[0].init.body);assert.equal(body.action,'prepare');assert.equal(body.accepted,undefined);assert.equal(body.embedded,true);assert.equal(body.revision,9);assert.equal(body.totalCents,5000);assert.ok(find(tree,'StripeEmbeddedCheckout'));}
+ if(!isPreview){const body=JSON.parse(writes[0].init.body);assert.equal(body.email,'fixture@example.invalid');assert.equal(body.action,'prepare');assert.equal(body.accepted,undefined);assert.equal(body.embedded,true);assert.equal(body.revision,9);assert.equal(body.totalCents,5000);assert.ok(find(tree,'StripeEmbeddedCheckout'));}
  else {assert.ok(find(tree,'WebinarPaymentPreview'));assert.equal(find(tree,'WebinarPaymentPreview').props.onBack,undefined);}
  h.close();
 }
@@ -201,7 +202,7 @@ console.log('PASS final VIP offer: verified upgrades open the workspace; Standar
  // An automatically prepared embedded checkout can fall back to hosted Stripe.
  // This intended navigation must bypass the regular-room guard as well.
  window.location.search='';
- const hosted=await harness('components/membership-checkout.tsx',{...common,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserEvent:()=>{},webinarRequest:async(_url,init={})=>init.method==='POST'?{url:'https://checkout.stripe.com/fixture'}:{offer:{revision:1,priceCents:5000},ready:true,mode:'test',embeddedReady:true,membership:null}});
+ const hosted=await harness('components/membership-checkout.tsx',{...common,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserEvent:()=>{},webinarRequest:async(_url,init={})=>init.method==='POST'?{url:'https://checkout.stripe.com/fixture'}:{offer:{revision:1,priceCents:5000},ready:true,mode:'test',email:'fixture@example.invalid',embeddedReady:true,membership:null}});
  exitReminder.installWebinarExitReminder();assert.equal(exitHandlers.size,1);
  const hostedProps={presentation:'webinar',embedded:true,onSignedIn:()=>{},onEngaged:()=>{throw Error('Preparation is not payment engagement');}};
  hosted.render('MembershipCheckout',hostedProps);await flush();hosted.render('MembershipCheckout',hostedProps);await flush();hosted.render('MembershipCheckout',hostedProps);
@@ -216,7 +217,7 @@ window.location.search='';
 for(const mode of ['live','test']){
  const events=[];let settled=false,converted=0,releaseReceipt;
  const receiptGate=new Promise(resolve=>{releaseReceipt=resolve;});
- const status={offer:{revision:1,priceCents:5000},ready:true,mode,embeddedReady:true,needsClaim:false,membership:null};
+ const status={offer:{revision:1,priceCents:5000},ready:true,mode,email:'fixture@example.invalid',embeddedReady:true,needsClaim:false,membership:null};
  const fixture=await harness('components/membership-checkout.tsx',{...common,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',
   webinarBrowserEvent:(...args)=>events.push(args),webinarBrowserPurchaseReady:()=>receiptGate,
   webinarRequest:async(_url,init={})=>init.method==='POST'?{clientSecret:'secret',publishableKey:'pk_'+mode+'_fixture',sessionId:'cs_'+mode+'_fixture'}:{...status,membership:settled?{accessible:true,vip:false}:null}

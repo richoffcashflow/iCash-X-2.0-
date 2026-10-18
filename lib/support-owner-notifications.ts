@@ -11,7 +11,7 @@ const escapeHtml=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>
 export function supportOwnerNotificationsEnabled(env:Environment=process.env){return env.VERCEL_ENV==='production'&&env.ICASH_SUPPORT_OWNER_EMAIL_ENABLED==='true';}
 
 export function supportCancelReceiptText(mode:string,origin:string){
- return `We received an email asking to cancel ${mode} subscription renewals in this environment. That email alone does not pause your bot or stop subscription renewals.\n\nSign in and review the request here:\n${new URL('/support',origin).href}\n\nTo stop future bot work and subscription renewals, select Review this request and explicitly confirm. Until your account shows cancellation is confirmed, do not assume renewals have stopped. If you already confirmed, check the current result there.\n\nIf you did not request this, you can ignore the request; the email alone cannot change your account. Deletion and refunds require a separate support review.\n\niCash X support`;
+ return `We received an email asking to cancel ${mode} subscription renewals in this environment. That email alone does not pause your bot or stop subscription renewals.\n\nSign in and review the request here:\n${new URL('/support',origin).href}\n\nTo stop future bot work and subscription renewals, select Review this request and explicitly confirm. Until your account shows cancellation is confirmed, do not assume renewals have stopped. If you already confirmed, check the current result there.\n\nIf you did not request this, you can ignore the request; the email alone cannot change your account. All sales are final. Account deletion requires a separate verified request.\n\niCash X support`;
 }
 
 /** Called only after the webhook signature and exact provider email have been verified.
@@ -31,7 +31,7 @@ export function supportOwnerMessage(job:Claim,from:string):Message{
  const when=new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',dateStyle:'medium',timeStyle:'short',hour12:true}).format(new Date(job.createdAt));
  const responseLabel=job.source==='chat'?'AI support response':job.source==='email'?'Automatic email response':'On-page support response';
  const reply=job.reply??'No automatic response was sent.';
- const status=job.replyStatus==='saved'?'Shown in the customer’s support conversation.':job.replyStatus==='accepted'?'Accepted by the email provider.':job.replyStatus==='unconfirmed'?'Sending was not confirmed. This is the attempted response.':'Needs a reply from the team.';
+ const status=job.replyStatus==='saved'?'Shown in the customer’s support conversation.':job.replyStatus==='accepted'?'Accepted by the email provider.':job.replyStatus==='unconfirmed'?'Sending was not confirmed. This is the attempted response.':'Automatic reply pending.';
  const link=job.source==='email'?`https://resend.com/emails/receiving/${job.sourceId}`:'https://www.geticashx.com/support/admin';
  const label=job.source==='email'?'Open original email':job.source==='chat'?'Open support conversations':'Open paid access support';
  const customer=job.customerEmail??(job.source==='purchase_access'?'Review the paid access queue':'Email unavailable');

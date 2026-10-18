@@ -42,8 +42,7 @@ export function SupportChat({onClose,active=true,onMembershipChanged,initialThre
  function chooseConversation(id:string){if(draft.trim()){setNotice('Send or clear your draft before switching conversations.');composer.current?.focus();return;}request.current=null;setConfirmation(null);setAck(false);nearLatest.current=true;void load(id);}
  function startOperation(){if(operation.current)return false;operation.current=true;setBusy(true);setError('');setNotice('');return true;}
  function finishOperation(){operation.current=false;setBusy(false);}
- function usePrompt(text:string){if(operation.current)return false;if(draft.trim()){setNotice('You have an unsent message. Send it or clear it before choosing another question.');composer.current?.focus();return false;}setDraft(text);composer.current?.focus();return true;}
- async function send(e:Pick<React.FormEvent,'preventDefault'>,toTeam=false){
+ async function send(e:Pick<React.FormEvent,'preventDefault'>){
   e.preventDefault();if(!draft.trim()||loading||!startOperation())return;
   const text=draft.trim();
   if(!request.current||request.current.text!==text)request.current={id:crypto.randomUUID(),text,threadId:thread};
@@ -52,23 +51,9 @@ export function SupportChat({onClose,active=true,onMembershipChanged,initialThre
    if(r.status===401){clearAccount();return;}
    if(!r.ok||!d.threadId)throw Error(d.error||'Could not confirm your message was saved. Your draft is still here.');
    setDraft('');request.current=null;setThread(d.threadId);nearLatest.current=true;
-   if(toTeam){const {data:result,...response}=await supportRequest<{escalated?:boolean}>('/api/support',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'escalate',threadId:d.threadId})});if(response.status===401){clearAccount();return;}if(!response.ok||result.escalated!==true){await load(d.threadId);throw Error('Your message is saved. The team request was not confirmed. Choose Ask the team to retry.');}}
    const refreshed=await load(d.threadId);
-   if(toTeam&&refreshed!=='signed_out')setNotice('Sent to the team. Their reply will appear here.');
-   if(d.pending&&!toTeam&&refreshed!=='signed_out')setNotice('Your message is saved. A reply is still pending.');
+   if(d.pending&&refreshed!=='signed_out')setNotice('Your message is saved. A reply is still pending.');
   }catch(e){setError(e instanceof Error?e.message:'Could not send. Your draft is still here.');}
-  finally{finishOperation();}
- }
- async function escalate(){
-  if(draft.trim()){await send({preventDefault(){}},true);return;}
-  if(!thread){usePrompt('I need help with ');setNotice('Describe the issue, then choose “Send to team”.');return;}
-  if(loading||!startOperation())return;
-  try{
-   const {data:d,...r}=await supportRequest<{error?:string;escalated?:boolean}>('/api/support',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'escalate',threadId:thread})});
-   if(r.status===401){clearAccount();return;}
-   if(!r.ok||d.escalated!==true)throw Error(d.error||'Could not confirm the support request. Refresh its status before retrying.');
-   if(await load(thread)==='signed_out')return;setNotice('Sent to the team. Their reply will appear here.');
-  }catch(e){setError(e instanceof Error?e.message:'Could not send to the team.');}
   finally{finishOperation();}
  }
  async function cancel(action:'prepare'|'confirm',requestId?:string){
@@ -88,11 +73,11 @@ export function SupportChat({onClose,active=true,onMembershipChanged,initialThre
   finally{finishOperation();}
  }
  const currentStatus=threads.find(item=>item.id===thread)?.status;
- const statusLabel=currentStatus==='escalated'?'Sent to the team':currentStatus==='waiting_on_customer'?'Your reply is needed':currentStatus==='resolved'?'Resolved · Reply to reopen':'Ask us anything';
+ const statusLabel=currentStatus==='escalated'||currentStatus==='open'?'Troubleshooting here':currentStatus==='waiting_on_customer'?'Your reply is needed':currentStatus==='resolved'?'Resolved · Reply to reopen':'Ask us anything';
  const exit=onClose?<button className="support-close" aria-label="Close support" onClick={onClose} type="button"><X size={20}/></button>:<a className="support-back" href="/" aria-label="Back to workspace"><ArrowLeft size={18}/><span>Workspace</span></a>;
  if(needsSignIn)return <section className="support-shell support-chat support-sign-in"><header className="support-heading"><div><p className="support-eyebrow">iCash X</p><h1>Let’s get you some help</h1></div>{exit}</header><div className="support-sign-in-body"><div className="support-welcome-icon"><LifeBuoy size={25}/></div><p><a href="/access/help">Can’t sign in? Contact support without signing in.</a></p><p>Sign in to review your account and earlier conversations.</p><AccountAccess onSignedIn={()=>void load(initialThreadId)}/><small>Already paid? Your payment is saved. You don’t need to pay again.</small></div></section>;
  return <section className="support-shell support-chat" aria-label="Support conversation">
-  <header className="support-heading"><div className="support-title"><span className="support-avatar" aria-hidden="true"><LifeBuoy size={22}/></span><div><h1>Support team</h1><p className="support-status">{statusLabel}</p></div></div>{exit}</header>
+  <header className="support-heading"><div className="support-title"><span className="support-avatar" aria-hidden="true"><LifeBuoy size={22}/></span><div><h1>AI support</h1><p className="support-status">{statusLabel}</p></div></div>{exit}</header>
   <details className="support-options"><summary aria-label="Chat options"><MoreHorizontal size={20}/></summary><div><button type="button" disabled={busy||loading} onClick={()=>void load(thread??undefined)}>Refresh conversation</button>{threads.length>1&&<label>Past conversations<select value={thread??''} disabled={busy||loading} onChange={e=>chooseConversation(e.target.value)}>{threads.map(t=><option value={t.id} key={t.id}>{t.subject.slice(0,50)}</option>)}</select></label>}{cancellations.length>0&&<details className="support-cancellation-history"><summary>Cancellation requests</summary>{cancellations.map(c=><div className="support-notice" key={c.id}><p>{c.state==='awaiting_confirmation'?`${c.source==='email'?'Email cancellation request received. ':''}Awaiting your confirmation. This request has not changed your bot or renewals.`:c.state==='cancelled'?`Cancellation confirmed when this request was completed. ${c.result??'Refresh account checks for the current state.'}`:c.result??'Your confirmed cancellation is still being checked.'}</p>{!['processing','cancelled'].includes(c.state)&&<button disabled={busy||loading} onClick={()=>void cancel('prepare',c.id)}>Review this request</button>}</div>)}</details>}</div></details>
   <div className="support-chat-alerts">
    {error&&<p className="support-error" role="alert">{error} <button type="button" disabled={busy||loading} onClick={()=>void load(thread??undefined)}>Refresh status</button></p>}{notice&&<p className="support-notice" role="status">{notice}</p>}
@@ -101,14 +86,14 @@ export function SupportChat({onClose,active=true,onMembershipChanged,initialThre
   </div>
   <section className="support-conversation-section" aria-label="Messages">
    <div ref={historyLog} className="support-messages" role="log" aria-label="Support messages" aria-live="polite" aria-busy={busy||loading} onScroll={()=>{const log=historyLog.current;if(log){nearLatest.current=log.scrollHeight-log.clientHeight-log.scrollTop<72;setShowLatest(!nearLatest.current);}}}>
-    {loading&&!messages.length?<p className="support-loading" role="status">Opening your conversation…</p>:!messages.length?<div className="support-empty"><div className="support-welcome-icon"><LifeBuoy size={25}/></div><h2>How can we help?</h2><p>Send a message below.</p></div>:messages.map(m=><article key={m.id} className={`support-message support-message-${m.role}`}><strong>{m.role==='user'?'You':m.role==='system'?'Update':'Support team'}</strong><p>{m.content}</p></article>)}
+    {loading&&!messages.length?<p className="support-loading" role="status">Opening your conversation…</p>:!messages.length?<div className="support-empty"><div className="support-welcome-icon"><LifeBuoy size={25}/></div><h2>How can we help?</h2><p>Send a message below.</p></div>:messages.map(m=><article key={m.id} className={`support-message support-message-${m.role}`}><strong>{m.role==='user'?'You':m.role==='system'?'Update':'AI support'}</strong><p>{m.content}</p></article>)}
     {busy&&<div className="support-working" role="status"><span aria-hidden="true">•••</span> Replying…</div>}
    </div>
    {showLatest&&<button className="support-latest" type="button" onClick={latest}><ArrowDown size={14}/>Back to latest</button>}
   </section>
   <div className="support-compose-dock">
    <form onSubmit={send} className="support-composer" data-unsaved-draft={draft.trim()?'true':undefined}><label htmlFor="support-message" className="sr-only">Your message</label><div className="support-input-row"><textarea ref={composer} id="support-message" value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing&&window.matchMedia('(pointer: fine)').matches){e.preventDefault();void send(e);}}} maxLength={2000} rows={1} placeholder="Message support…" disabled={busy}/><button type="submit" className="support-primary support-send" aria-label={busy?'Sending message':'Send message'} disabled={busy||loading||!draft.trim()}><ArrowUp size={20}/></button></div></form>
-   <div className="support-actions"><button type="button" disabled={busy||loading} onClick={()=>void escalate()}>{draft.trim()?'Send to team':'Ask the team'}</button></div>
+
   </div>
  </section>;
 }

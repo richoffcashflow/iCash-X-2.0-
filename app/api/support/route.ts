@@ -1,3 +1,4 @@
+import {recoverSupportAccount} from '@/lib/support-recovery';
 import {scheduleSupportCustomerNotifications} from '@/lib/support-customer-dispatch';
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
@@ -35,10 +36,8 @@ export async function POST(req:Request){
   const {accountId,userId}=await workAccount({allowInactiveMembership:true,allowUnacknowledged:true});const raw=await req.text();if(raw.length>5000)return NextResponse.json({error:'Message too long.'},{status:413,headers});
   const value=JSON.parse(raw);
   if(value.action==='escalate'){
-   const i=z.object({action:z.literal('escalate'),threadId:supportId}).strict().parse(value);
-   const escalated=await db<boolean>('rpc/icash_support_escalate','POST',{p_account:accountId,p_user:userId,p_thread:i.threadId});
-   if(!escalated)return NextResponse.json({error:'Conversation not found.'},{status:404,headers});
-   return NextResponse.json({escalated:true},{headers});
+   z.object({action:z.literal('escalate'),threadId:supportId}).strict().parse(value);
+   return NextResponse.json({error:'Support continues automatically in this chat. Send what is still happening so I can check it.'},{status:409,headers});
   }
   const i=supportMessageInput.parse(value);
   // Redact common credentials/contact details before durable storage and model use.
@@ -49,6 +48,7 @@ export async function POST(req:Request){
    scheduleSupportOwnerNotifications();scheduleSupportCustomerNotifications();
    return NextResponse.json({threadId:started.threadId,replay:true},{headers});
   }
+  await recoverSupportAccount(accountId,userId).catch(()=>undefined);
   const [evidence,history,threads]=await Promise.all([
    collectSupportDiagnostics(accountId),
    db<SupportTurn[]>(`icash_support_messages?account_id=eq.${accountId}&thread_id=eq.${started.threadId}&select=role,content&order=created_at.desc,id.desc&limit=16`),
