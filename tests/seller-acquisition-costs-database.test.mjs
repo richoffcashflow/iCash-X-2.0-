@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
+import {pricingBlock,pricingBaseline} from './helpers/two-times-pricing-fixture.mjs';
 const pg=new PGlite(),owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7',account=randomUUID();
 const file=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const query=(s,v=[])=>pg.query(s,v),one=async(s,v=[])=>(await query(s,v)).rows[0];
@@ -37,7 +38,8 @@ try{
  create function icash_daily_allowance(p uuid) returns jsonb language sql set search_path='public' as $$select jsonb_build_object('remainingCents',balance_cents) from icash_wallets where account_id=p$$;
  create function icash_seller_assignment_due(n integer,first_at timestamptz,last_at timestamptz) returns timestamptz language sql set search_path='public' as $$select case when n=0 then now() else first_at+interval '24 hours'*n end$$;
  create table icash_fractional_usage(operation_key text,account_id uuid,price_micros bigint,charged_cents bigint);
- create table icash_question_usage(account_id uuid,state text,settled_at timestamptz,provider_id text,multiplier numeric,cost_micros bigint,price_micros bigint,charged_cents bigint);
+ create table icash_workspace_questions(id uuid primary key,account_id uuid,state text);
+ create table icash_question_usage(question_id uuid primary key,account_id uuid,model text,state text default 'reserved',settled_at timestamptz,provider_id text,multiplier numeric constraint icash_question_usage_multiplier_check check(multiplier in (3,2.4)),cost_micros bigint,price_micros bigint,charged_cents bigint);
  create table icash_text_messages(id uuid,account_id uuid,customer_price_micros bigint);
  create function icash_voice_credit_bound(uuid,text,uuid) returns jsonb language sql as $$select null::jsonb$$;
  create function icash_reception_credit_bound(uuid,text,uuid) returns jsonb language sql as $$select null::jsonb$$;
@@ -59,6 +61,16 @@ try{
  assert.equal(file('config/lead-acquisition-costs.sql'),file('supabase/migrations/20261018021153_lead_acquisition_costs.sql'));
  await pg.exec(file('config/lead-acquisition-costs.sql'));
  await pg.exec(file('config/seller-meta-cost-sync.sql'));
+ assert.equal(file('config/two-times-usage-pricing.sql'),file('supabase/migrations/20261018023348_two_times_usage_pricing.sql'));
+ await pg.exec(pricingBaseline('icash_reserve_question'));
+ const oldRate=randomUUID();await query("insert into icash_operation_rates(id,operation,version,charge_cents,costs_micros,buffer_bps,evidence_ref,verified_at,expires_at,enabled) values($1,'property_search','synthetic-old',12,'{\"dealmachine\":10000,\"elevenlabs\":0,\"twilio\":0,\"messaging\":0,\"email\":0,\"llm\":0,\"vercel\":30000,\"railway\":0,\"supabase\":0,\"github\":0,\"payments\":0,\"title_and_signing\":0,\"support_and_overhead\":0,\"acquisition\":0,\"refund_and_dispute_reserve\":0,\"other\":0}',0,'Synthetic prior quote',now(),now()+interval '1 day',true)",[oldRate]);
+ await rpc("icash_reserve_before_fractional($1,'old-snapshot',$2,now()+interval '1 day',null,false)",[account,oldRate]);
+ for(const name of ['reserve_before_fractional','assign_seller_lead_for','seller_lead_rate_multiplier','reserve_question','vip_savings'])await pg.exec(pricingBlock(name));
+ await pg.exec("alter table icash_question_usage drop constraint icash_question_usage_multiplier_check;alter table icash_question_usage add constraint icash_question_usage_multiplier_check check(multiplier in(3,2.4,2,1.6));update icash_operating_budget set standard_cost_multiplier=2,elevenlabs_cost_multiplier=2;");
+ assert.equal((await one("select standard_cost_multiplier from icash_operation_spend where operation_key='old-snapshot'")).standard_cost_multiplier,'3','In-flight usage keeps its snapshot');
+ for(const vip of [false,true]){await query('update icash_accounts set vip=$1 where id=$2',[vip,account]);const id=randomUUID();await query("insert into icash_workspace_questions values($1,$2,'pending')",[id,account]);assert.equal(await rpc("icash_reserve_question($1,$2,'gpt-4.1-mini')",[account,id]),true);assert.equal(await rpc("icash_reserve_question($1,$2,'gpt-4.1-mini')",[account,id]),false);assert.equal(Number((await one('select multiplier from icash_question_usage where question_id=$1',[id])).multiplier),vip?1.6:2);}
+ await query('update icash_accounts set vip=false where id=$1',[account]);
+
  const lead=async(source='meta',campaign='ads')=>{const id=randomUUID();await query('insert into icash_seller_intakes(id,attribution) values($1,$2)',[id,{source,campaign}]);return id;};
  const save=(kind,id,cents,source='meta',campaign='',request=randomUUID(),actor=owner,note='Synthetic owner cost')=>rpc('icash_record_seller_acquisition_cost($1,$2,$3,$4,$5,$6,$7,$8)',[actor,request,kind,id,source,campaign,cents,note]);
  const quote=id=>rpc('icash_seller_acquisition_quote($1)',[id]);
@@ -97,10 +109,12 @@ try{
  await assert.rejects(save('estimate',null,-1),/Valid cost/);await assert.rejects(save('estimate',null,1000001),/Valid cost/);
  await assert.rejects(save('estimate',null,1,'meta','x&bad'),/Valid source/);
  await query('update icash_wallets set balance_cents=100000 where account_id=$1',[account]);
- for(const [ad,expected] of [[995,2997],[996,2000],[997,2002]]){const edge=await lead('other');await save('lead',edge,ad);assert.equal((await assign(edge)).chargeCents,expected,'Threshold applies to total cost at exact cent boundary');}
+ for(const [ad,expected] of [[0,8],[1,10],[995,1998],[996,2000],[997,2002]]){const edge=await lead('other');await save('lead',edge,ad);assert.equal((await assign(edge)).chargeCents,expected,'All costs use 2x without a threshold');}
  assert.equal((await one("select standard_cost_multiplier from icash_operation_spend where operation_key=$1",['seller-lead:'+first+':'+account])).standard_cost_multiplier,'2','Reservation gate snapshots 2x');
  const unrelatedRate=randomUUID();await query("insert into icash_operation_rates(id,operation,version,charge_cents,costs_micros,buffer_bps,evidence_ref,verified_at,expires_at,enabled) select $1,'property_search','synthetic-other',8,lookup_costs,0,'Synthetic unrelated rate',now(),now()+interval '1 day',true from icash_seller_intakes where id=$2",[unrelatedRate,first]);
- await assert.rejects(rpc("icash_reserve_before_fractional($1,$2,$3,now()+interval '1 day',null,false)",[account,'synthetic-other',unrelatedRate]),/Price below provider cost multiplier/);
+ await rpc("icash_reserve_before_fractional($1,$2,$3,now()+interval '1 day',null,false)",[account,'synthetic-other',unrelatedRate]);
+ assert.equal(Number((await one("select standard_cost_multiplier from icash_operation_spend where operation_key='synthetic-other'")).standard_cost_multiplier),2);
+ await query('update icash_accounts set vip=true where id=$1',[account]);await rpc("icash_reserve_before_fractional($1,$2,$3,now()+interval '1 day',null,false)",[account,'synthetic-vip-other',unrelatedRate]);assert.equal(Number((await one("select standard_cost_multiplier from icash_operation_spend where operation_key='synthetic-vip-other'")).standard_cost_multiplier),1.6);await query('update icash_accounts set vip=false where id=$1',[account]);
  const metaLead=await lead('meta','automatic');
  await query("update icash_seller_intakes set created_at=((now() at time zone 'America/Chicago')::date-1)::timestamp at time zone 'America/Chicago' where id=$1",[metaLead]);
  await rpc('icash_save_seller_meta_source($1,$2,$3,$4,$5)',[owner,'automatic','act_123456789','987654321',true]);

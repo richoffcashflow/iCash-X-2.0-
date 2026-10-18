@@ -28,7 +28,7 @@ for(const [city,state] of [['Houston','TX'],['Phoenix','AZ'],['Columbus','OH']])
 const missingRepairs=qualifySellerProperty({...raw,data:[{...raw.data[0],estimated_repair_cost:null}]},options,now);assert.equal(missingRepairs.numbersPassed,false);assert.equal(missingRepairs.result.offerAuthorized,false);assert.equal(missingRepairs.result.cashOfferPriceCents,null);assert.equal(missingRepairs.result.outreachAuthorized,false);
 assert.throws(()=>qualifySellerProperty({...raw,credits:{used:2,people:0}},options,now));
 assert.throws(()=>qualifySellerProperty({...raw,data:[{...raw.data[0],match_warning:'Ambiguous'}]},options,now));
-assert.equal(sellerLeadCharge(1000000,100000),330);assert.equal(sellerLeadCharge(1,0),1);assert.throws(()=>sellerLeadCharge(-1,0));
+assert.equal(sellerLeadCharge(1000000,100000),220);assert.equal(sellerLeadCharge(1,0),1);assert.throws(()=>sellerLeadCharge(-1,0));
 assert(validDailyBudget(1000));assert(!validDailyBudget(999));assert(!validDailyBudget(500));assert(!validDailyBudget(1000.5));assert.equal(dailyBudgetTier(500).name,'Starter');assert.equal(dailyBudgetTier(5000).name,'Growth');
 let requests=0,saved=0,claimed=false;
 const db=async(path,method,body)=>{if(path==='rpc/icash_take_dealmachine_request')return true;if(path==='rpc/icash_claim_seller_lookup'){if(claimed)return null;claimed=true;return {id:'lead',token:'one-use',address:input.address,...options};}if(path==='rpc/icash_finish_seller_lookup'){saved++;assert.equal(body.p_output.status,'qualified');return true;}throw Error(path);};
@@ -46,7 +46,7 @@ let writes=[];const eventDb=async(path,method,body)=>{writes.push({path,body});r
 assert.equal((await deliverSellerEvent(eventDb,{})).status,'measurement_setup_required');assert.equal(writes.length,0);
 const env={META_SELLER_EVENTS_ENABLED:'true',META_SELLER_DATASET_ID:'123456789',META_SELLER_ACCESS_TOKEN:'fixture',META_GRAPH_VERSION:'v25.0'};
 assert.equal((await deliverSellerEvent(eventDb,env,async()=>Response.json({events_received:1}))).status,'delivered');assert.equal(writes.at(-1).body.p_delivered,true);
-console.log('PASS seller funnel: explicit affirmative consent, input validation, real financial screening, address-driven research, exact 3× pricing, one-use paid lookup, ambiguous-outcome hold, private measurement payload and credential gate.');
+console.log('PASS seller funnel: explicit affirmative consent, input validation, real financial screening, address-driven research, exact 2× pricing, one-use paid lookup, ambiguous-outcome hold, private measurement payload and credential gate.');
 
 assert.equal(sellerSubmission.parse({...input,contactTimezone:'America/Chicago'}).contactTimezone,'America/Chicago');
 assert.equal(sellerSubmission.safeParse({...input,contactTimezone:'invalid/zone'}).success,false);

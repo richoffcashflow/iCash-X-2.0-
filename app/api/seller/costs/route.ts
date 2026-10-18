@@ -19,10 +19,6 @@ export async function POST(req:Request){
   const raw=await req.text();if(raw.length>3000)return Response.json({error:'Cost entry is too large.'},{status:413,headers});
   const parsed=acquisitionCostInput.safeParse(JSON.parse(raw));if(!parsed.success)return Response.json({error:'Check the amount, source and note.'},{status:400,headers});
   const i=parsed.data;
-  if(i.action==='threshold'){
-   const result=await db<{saved:boolean}>('rpc/icash_save_seller_cost_threshold','POST',{p_actor:user.id,p_cents:i.costCents});if(!result?.saved)throw Error();
-   return Response.json({saved:true,message:'Price threshold saved for new leads. Existing charges are unchanged.'},{headers});
-  }
   if(i.action==='meta'){
    if(i.enabled)await validateMetaCostSource(i.accountId,i.metaCampaignId,process.env);
    const result=await db<{saved:boolean}>('rpc/icash_save_seller_meta_source','POST',{p_actor:user.id,p_campaign:i.campaign,p_account:i.accountId,p_meta_campaign:i.metaCampaignId,p_enabled:i.enabled});if(!result?.saved)throw Error();

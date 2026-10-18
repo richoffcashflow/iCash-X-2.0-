@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {pricingBlock} from './two-times-pricing-fixture.mjs';
 import {receptionSettlementAttestation} from '../../lib/recorded-reception-settlement.ts';
 export async function testAvailableInboundCredits(f){
  const {db,q,val,rpc,read,fn,scenario,account,reserve}=f;
@@ -57,4 +58,32 @@ export async function testAvailableInboundCredits(f){
   const actual=Number(await val('select actual_micros from public.icash_operation_spend where operation_key=$1',[r.operation_key]));
   assert.equal(settled.chargedCents,Math.ceil(actual*2.4/10000));
  });
+ for(const vip of [false,true])await scenario('2x policy rotation and '+(vip?'VIP 1.6x':'Standard 2x')+' actual incoming settlement',async()=>{
+  for(const name of ['reserve_before_fractional','reserve_direct_reception','reserve_flexible_reception','automatic_components'])await db.exec(pricingBlock(name));
+  await db.exec('create or replace function public.icash_vip_active(p_account uuid) returns boolean language sql as $$select '+vip+'$$;');
+  const c=await val('select to_jsonb(c) from icash_recorded_reception_private.configs c where id=$1',[f.config]);
+  const costs=c.rate_snapshot.costs_micros;
+  const rules=Object.fromEntries(Object.keys(costs).map(cat=>[cat,cat==='twilio'||cat==='elevenlabs'?{source:'provider_receipt',evidenceRef:'SIMULATION provider receipt'}:cat==='llm'?{source:'inclusive_zero',evidenceRef:'SIMULATION inclusive model'}:cat==='other'?{source:'recorded_reception_addons',policyVersion:c.pricing_policy.version,pricingPolicy:c.pricing_policy,evidenceRef:'SIMULATION recording policy'}:{source:'fixed_estimate',amountMicros:costs[cat],evidenceRef:'SIMULATION cost '+cat}]));
+  const policy=await val("insert into icash_recorded_reception_private.cost_policies(version,account_id,rate_id,rate_snapshot,enabled,approved_at,reviewed_until,approval_reference,standard_cost_multiplier,elevenlabs_cost_multiplier,components) values('recorded-reception-cost-v1:2x-simulation',$1,$2,$3,true,now()-interval '1 hour',now()+interval '1 day','SIMULATION approved costs',3,3,$4) returning to_jsonb(cost_policies)-'enabled'",[account,f.rate,c.rate_snapshot,rules]);
+  const old=await reserve({cost_policy_id:policy.id,cost_policy_snapshot:policy});assert(old.allowed,JSON.stringify(old));
+  await q('savepoint active_call');await assert.rejects(db.exec(pricingBlock('inbound_policy')),/Wait for active inbound calls/);await q('rollback to savepoint active_call');
+  await f.trans('claim_setup');await f.trans('bounded',f.boundPayload(old.session));await f.trans('bind_call_start',f.startPayload(old.session));
+  const {timeLimitSeconds,...binding}=f.boundPayload(old.session);await f.trans('call_ended',{...binding,status:'completed'});
+  await db.exec(pricingBlock('inbound_policy'));await q('update icash_operating_budget set standard_cost_multiplier=2,elevenlabs_cost_multiplier=2');
+  const current=await val('select to_jsonb(c) from icash_recorded_reception_private.configs c where enabled');
+  assert.equal(current.cost_policy_snapshot.standard_cost_multiplier,2);assert.equal(current.reviewed_until,c.reviewed_until);assert.equal(current.config_hash,c.config_hash);assert.equal(current.rate_id,c.rate_id);
+  assert.equal(await val('select enabled from icash_recorded_reception_private.configs where id=$1',[old.session.config_id]),false);
+  assert.equal(Number(await val('select standard_cost_multiplier from icash_recorded_reception_private.sessions where id=$1',[old.session.id])),vip?2.4:3,'Existing call keeps historical multiplier');
+  const a=await rpc('icash_reserve_direct_reception',{p_config_id:current.id,p_call_sid:'CA'+'d'.repeat(32),p_provider_account_sid:current.provider_account_sid,p_from_phone:'+12125550222',p_to_phone:current.called_number,p_direction:'inbound',p_caller_hash:'e'.repeat(64),p_nonce_hash:'f'.repeat(64),p_stop_token_hash:'1'.repeat(64),p_config_hash:current.config_hash,p_version_id:current.version_id});
+  assert(a.allowed,JSON.stringify(a));let r=a.session;assert.equal(Number(r.standard_cost_multiplier),vip?1.6:2);assert.equal(r.max_total_seconds,600);
+  // The second call's local transition helper stays explicitly session-bound.
+  const trans=async(action,payload={})=>{r=await rpc('icash_transition_recorded_reception',{p_id:r.id,p_account:r.account_id,p_operation:r.operation_key,p_expected_version:r.row_version,p_action:action,p_payload:payload});assert(r,action);return r;};
+  await trans('claim_setup');await trans('bounded',f.boundPayload(r));await trans('bind_call_start',f.startPayload(r));
+  const {timeLimitSeconds:limit,...nextBinding}=f.boundPayload(r);await trans('call_ended',{...nextBinding,status:'completed'});
+  const call={sid:r.call_sid,account_sid:r.provider_account_sid,from:r.from_phone,to:r.to_phone,direction:'inbound',status:'completed',start_time:r.call_started_at,price:'-0.0085',price_unit:'USD',duration:'10'};
+  const evidence=receptionSettlementAttestation(r,call,null,null);assert(evidence);
+  const paid=await rpc('icash_settle_recorded_reception',{p_id:r.id,p_account:account,p_operation:r.operation_key,p_attestation:evidence});assert(paid.settled,JSON.stringify(paid));
+  const actual=Number(await val('select actual_micros from public.icash_operation_spend where operation_key=$1',[r.operation_key]));assert.equal(paid.chargedCents,Math.ceil(actual*(vip?1.6:2)/10000));
+ });
+
 }

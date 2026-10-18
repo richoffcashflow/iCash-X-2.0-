@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
+import {pricingBlock} from '../tests/helpers/two-times-pricing-fixture.mjs';
 import {createOperationalContactFixture} from '../tests/helpers/operational-contact-fixture.mjs';
 import {sellerConsentText,sellerConsentVersion} from '../lib/seller-leads.ts';
 const f=await createOperationalContactFixture(process.argv[2]);
@@ -130,6 +131,12 @@ try{
   await q('update icash_wallets set balance_cents=110 where account_id=$1',[account]);assert.equal((await reserve()).maxSeconds,120,'financially limited intake keeps its separate hard limit');
   console.log('PASS positive-credit seller calls keep 600 seconds; retries, actual-zero stop, no wallet hold, and limited intake preserved.');
  });
+ for(const vip of [false,true])await isolated(async()=>{
+  await pg.exec(pricingBlock('reserve_before_fractional'));await pg.exec(pricingBlock('reserve_flexible_voice'));
+  await q('update icash_operating_budget set standard_cost_multiplier=2,elevenlabs_cost_multiplier=2');
+  if(vip)await q("insert into icash_memberships(account_id,mode,state,guest_hash,price_cents,offer_revision,paid_through,consent_version,consent_text,vip_until) values($1,'live','active',repeat('a',64),10000,1,now()+interval '1 day','SIMULATION','SIMULATION consent',now()+interval '1 day')",[account]);
+  const result=await reserve();assert(result);const op=await one('select standard_cost_multiplier,elevenlabs_cost_multiplier from icash_operation_spend where operation_key=$1',['voice:'+job.id]);assert.equal(Number(op.standard_cost_multiplier),vip?1.6:2);assert.equal(Number(op.elevenlabs_cost_multiplier),vip?1.6:2);
+ });
  const funded=await reserve();assert(funded,'short call starts below full quote');assert.equal(funded.maxSeconds,120,'limited contact stays brief');
  const spend=await one("select charge_cap_cents from icash_operation_spend where operation_key=$1",['voice:'+job.id]);assert(spend.charge_cap_cents<=226,'fits current 50% daily allowance');
  const before=(await one('select reserved_cents from icash_wallets where account_id=$1',[account])).reserved_cents;
@@ -149,6 +156,13 @@ try{
  assert.equal(await smsCurrent(),false,'previous final hours gate stops fresh form inquiries');
  await pg.exec(read('config/seller-inquiry-sms-hours.sql'));
  assert.equal(await smsCurrent(),true,'own consented inquiry can receive an immediate text');
+ await isolated(async()=>{
+  await pg.exec(pricingBlock('seller_sms_permission_current'));
+  const approved=(await one('select seller_sms_price_micros from icash_text_threads where id=$1',[t.id])).seller_sms_price_micros;
+  await q("update icash_communication_prices set customer_micros=$1 where operation='sms_segment'",[approved-1]);assert.equal(await smsCurrent(),true,'Lower price keeps existing contact approval');
+  await q("update icash_communication_prices set customer_micros=$1 where operation='sms_segment'",[approved+1]);assert.equal(await smsCurrent(),false,'Higher price still requires review');
+ });
+
  await isolated(async()=>{await q('update icash_text_threads set paused=true where id=$1',[t.id]);assert.equal(await smsCurrent(),false,'pause enforced');});
  await isolated(async()=>{await q('update icash_text_threads set manual_only=true where id=$1',[t.id]);assert.equal(await smsCurrent(),false,'manual handoff enforced');});
  await isolated(async()=>{await q("update icash_seller_intakes set created_at=now()-interval '25 hours' where id=$1",[lead]);await q('update icash_text_threads set permission_evidence=$1 where id=$2',[(await evidence()).evidence,t.id]);assert.equal(await smsCurrent(),false,'older form does not open night outreach');

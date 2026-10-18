@@ -6,12 +6,10 @@ const costFields={requestId:z.string().uuid(),costCents:z.number().int().min(0).
 export const acquisitionCostInput=z.discriminatedUnion('action',[
  z.object({...costFields,action:z.literal('lead'),leadId:z.string().uuid()}).strict(),
  z.object({...costFields,action:z.literal('estimate'),source:z.enum(acquisitionSources),campaign:z.string().max(100).regex(/^[a-zA-Z0-9_-]*$/)}).strict(),
- z.object({action:z.literal('threshold'),requestId:z.string().uuid(),costCents:z.number().int().min(1).max(1000000)}).strict(),
  z.object({action:z.literal('meta'),requestId:z.string().uuid(),campaign:z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/),accountId:z.string().regex(/^act_\d{5,30}$/),metaCampaignId:z.string().regex(/^\d{5,30}$/),enabled:z.boolean()}).strict(),
 ]);
 const micros=z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 export const acquisitionCostReport=z.object({
- thresholdCents:z.number().int().positive(),
  estimates:z.array(z.object({source:z.enum(acquisitionSources),campaign:z.string(),costMicros:micros,note:z.string(),updatedAt:z.string()})),
  leads:z.array(z.object({id:z.string().uuid(),address:z.string(),state:z.string(),createdAt:z.string(),source:z.string(),campaign:z.string(),
   acquisition:z.object({costMicros:micros,kind:z.enum(['reported','campaign_report','estimate','organic','demo','meta_report','meta_estimate']),note:z.string()}).passthrough().nullable(),

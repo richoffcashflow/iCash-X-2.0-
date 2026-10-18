@@ -12,9 +12,8 @@ export async function verifySellerCosts(browser,base,options,name,fixtureCookies
     const b=req.postDataJSON();writes.push(b);if(b.action==='lead'||b.action==='estimate'){assert.equal(b.costCents,1120);assert(!('accountId' in b));}
     if(failSave)return route.fulfill({status:503,json:{error:'Synthetic save failure. Retry the same entry.'}});
     if(b.action==='lead')report.leads[0].acquisition={costMicros:b.costCents*10000,kind:'reported',note:b.note};
-    if(b.action==='threshold')report.thresholdCents=b.costCents;
     if(b.action==='meta')report.automation=[{id,campaign:b.campaign,accountId:b.accountId,metaCampaignId:b.metaCampaignId,enabled:b.enabled,status:'pending',checkedAt:null,syncedAt:null,spendMicros:0,leadCount:0,unallocatedMicros:0,averageMicros:null}];
-    return route.fulfill({json:{saved:true,message:({lead:'Lead cost recorded. Existing charges are unchanged.',estimate:'Estimate saved for new leads.',threshold:'Price threshold saved for new leads.',meta:'Automatic Meta cost tracking saved.'})[b.action]}});
+    return route.fulfill({json:{saved:true,message:({lead:'Lead cost recorded. Existing charges are unchanged.',estimate:'Estimate saved for new leads.',meta:'Automatic Meta cost tracking saved.'})[b.action]}});
    }
    return route.fulfill({json:report});
   }
@@ -34,7 +33,7 @@ export async function verifySellerCosts(browser,base,options,name,fixtureCookies
   assert.equal(writes[1].requestId,requestId,'Retry reuses the original idempotency key');
   await card.locator('dd').filter({hasText:'-$11.12'}).waitFor();assert.match(await card.innerText(),/\$11.24/);assert.match(await card.innerText(),/\$0.12/);assert.match(await card.innerText(),/AM|PM/);
   await panel.getByRole('button',{name:'Save estimate for new leads'}).click();await panel.getByRole('status').getByText(/Estimate saved/).waitFor();assert.equal(writes.at(-1).source,'meta');
-  await panel.getByLabel('Switch to 2× at, USD').fill('15');await panel.getByRole('button',{name:'Save price threshold'}).click();await panel.getByText('Standard pays 3× total lead cost below $15.00, and 2× at $15.00 or more.',{exact:false}).waitFor();assert.equal(writes.at(-1).costCents,1500);
+  await panel.getByText('Standard pays 2× recorded cost for new usage.',{exact:false}).waitFor();assert.equal(await panel.getByRole('button',{name:'Save price threshold'}).count(),0);
   await panel.getByText('Connect Meta campaign',{exact:true}).click();await panel.getByRole('button',{name:'Check Meta connection'}).click();
   await panel.getByLabel('Ad account',{exact:true}).selectOption('act_123456789');await panel.getByLabel('Meta campaign',{exact:true}).selectOption('987654321');
   await panel.getByRole('button',{name:'Start automatic cost tracking'}).click();await panel.getByText('image_ads · First import pending').waitFor();assert.equal(writes.at(-1).metaCampaignId,'987654321');

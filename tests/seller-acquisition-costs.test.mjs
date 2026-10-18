@@ -21,7 +21,7 @@ assert.equal(calls.length,0);let result=await route.POST(request());assert.equal
 assert.deepEqual(calls.at(-1).body,{p_actor:owner,p_request:id,p_kind:'lead',p_lead:id,p_source:null,p_campaign:null,p_cents:1120,p_note:payload.note});
 result=await route.POST(request({action:'estimate',source:'meta',campaign:'image_ads',costCents:1120,note:'Owner entered estimate',requestId:id}));assert.equal(result.status,200);assert.equal(calls.at(-1).body.p_lead,null);assert.equal(calls.at(-1).body.p_campaign,'image_ads');
 assert.equal((await route.GET()).status,200);
-assert.equal((await route.POST(request({action:'threshold',requestId:id,costCents:1000}))).status,200);assert.equal(calls.at(-1).body.p_actor,owner);
+assert.equal((await route.POST(request({action:'threshold',requestId:id,costCents:1000}))).status,400);
 assert.equal((await route.POST(request({action:'threshold',requestId:id,costCents:0}))).status,400);
 assert.equal((await route.POST(request({action:'meta',requestId:id,accountId:'act_123456789',metaCampaignId:'987654321',campaign:'image_ads',enabled:true}))).status,200);
 assert.equal(calls.at(-1).path,'rpc/icash_save_seller_meta_source');assert.equal(calls.at(-1).body.p_actor,owner);
