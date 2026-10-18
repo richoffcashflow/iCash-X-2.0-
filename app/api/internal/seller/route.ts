@@ -1,3 +1,4 @@
+import {processInstantLeadWork} from '@/lib/meta-instant-lead-service';
 import {db} from '@/lib/stripe-test';
 import {authorizeOutboundBilling} from '@/lib/outbound-billing-service';
 import {processSellerIntake} from '@/lib/seller-pipeline';
@@ -13,6 +14,7 @@ export const maxDuration=120;
 export async function GET(req:Request){
  const headers={'Cache-Control':'no-store'};
  if(!authorizeOutboundBilling(req,process.env.CRON_SECRET))return Response.json({error:'Unauthorized'},{status:401,headers});
+ const instantWork=processInstantLeadWork({db,sms:dispatchTextMessage,voice:dispatchLiveVoice,env:process.env}).catch(()=>({status:'instant_lead_retry_pending'}));
  // Recovery is independent of new seller intake. A failed or slow receipt
  // lookup must not delay a newly submitted property's first response.
  const agreementRecovery=recoverAgreementDelivery({db,send:sendForSignatures,text:textPendingContract},process.env).catch(()=>{
@@ -32,7 +34,7 @@ export async function GET(req:Request){
  });
  try{
   const [controls]=await db<{enabled:boolean}[]>('icash_seller_controls?id=eq.1&select=enabled');
-  if(!controls?.enabled)return Response.json({status:'seller_setup_required',responses:await responseWork,measurement:await measurementWork,agreementRecovery:await agreementRecovery},{status:responseFailed?503:200,headers});
+  if(!controls?.enabled)return Response.json({status:'seller_setup_required',instantLeads:await instantWork,responses:await responseWork,measurement:await measurementWork,agreementRecovery:await agreementRecovery},{status:responseFailed?503:200,headers});
   let lookupFailed=false;
   const lookup=await processSellerIntake(db,process.env.DEALMACHINE_API_KEY).catch(()=>{
    lookupFailed=true;return {status:'seller_lookup_unavailable'};
@@ -43,6 +45,6 @@ export async function GET(req:Request){
   const immediate=allocation?.status==='assigned'?await processSellerResponses(db,dispatchTextMessage,dispatchLiveVoice,allocation.leadId):[];
   const responses=[...await responseWork,...immediate];
   const measurement=await measurementWork;
-  return Response.json({lookup,allocation,responses,measurement,agreementRecovery:await agreementRecovery},{status:lookupFailed||responseFailed?503:200,headers});
- }catch{await Promise.all([agreementRecovery,measurementWork,responseWork]);return Response.json({status:'seller_processing_requires_review'},{status:503,headers});}
+  return Response.json({instantLeads:await instantWork,lookup,allocation,responses,measurement,agreementRecovery:await agreementRecovery},{status:lookupFailed||responseFailed?503:200,headers});
+ }catch{await Promise.all([agreementRecovery,measurementWork,responseWork,instantWork]);return Response.json({status:'seller_processing_requires_review'},{status:503,headers});}
 }

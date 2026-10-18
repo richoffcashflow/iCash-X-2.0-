@@ -1,3 +1,4 @@
+import {instantLeadsEnabled} from '../lib/meta-instant-lead-service.ts';
 import assert from 'node:assert/strict';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {sameBusinessNumber} from '../lib/number-continuity.ts';
@@ -17,7 +18,7 @@ try{
   if(path==='rpc/icash_accept_text')return;
   throw Error(path);
  };
- const {dispatchTextMessage}=await loadService('lib/text-message-service.ts',{db,saveTextReceipt,smsWorkEnabled:()=>true,liveWorkReady:()=>true,sameBusinessNumber,textPayload:()=>{},elevenRequest:async()=>({phone_number:voiceNumber}),sendContiguityText:async job=>{sends++;assert.equal(job.from,from);assert.equal(job.to,to);return {messageId:'SIMULATION receipt'};}});
+ const {dispatchTextMessage}=await loadService('lib/text-message-service.ts',{instantLeadsEnabled,db,saveTextReceipt,smsWorkEnabled:()=>true,liveWorkReady:()=>true,sameBusinessNumber,textPayload:()=>{},elevenRequest:async()=>({phone_number:voiceNumber}),sendContiguityText:async job=>{sends++;assert.equal(job.from,from);assert.equal(job.to,to);return {messageId:'SIMULATION receipt'};}});
  assert.equal((await dispatchTextMessage('owned','message')).status,'message_accepted');assert.equal(sends,1,'uses separately configured thread sender, not global default');
  enabled=false;assert.equal((await dispatchTextMessage('owned','message')).status,'business_number_mismatch');assert.equal(claims,1);
  enabled=true;voiceEnabled=true;voiceNumber='+12125550198';assert.equal((await dispatchTextMessage('owned','message')).status,'business_number_mismatch');assert.equal(claims,1);

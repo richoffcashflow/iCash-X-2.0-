@@ -1,3 +1,4 @@
+import {instantLeadsEnabled} from './meta-instant-lead-service.ts';
 import {liveWorkReady,smsWorkEnabled} from './live-work-admission.ts';
 import {sameBusinessNumber} from './number-continuity.ts';
 import {elevenRequest} from './elevenlabs.ts';
@@ -29,7 +30,8 @@ export async function dispatchTextMessage(accountId:string,messageId:string,manu
   catch{return {status:'business_number_verification_required'};}
  }
  textPayload({from,to:thread.recipient,message:m.body,attachments:m.attachments});
- const job=await db<unknown>(manual?'rpc/icash_claim_customer_text':'rpc/icash_claim_text','POST',{p_account:accountId,p_message:messageId,p_sender:from});if(!job)return {status:'message_held'};
+ const metaMessage=!manual&&instantLeadsEnabled(process.env)?await db<{message_id:string}[]>(`icash_meta_lead_messages?message_id=eq.${messageId}&select=message_id&limit=1`):[];
+ const job=await db<unknown>(metaMessage.length?'rpc/icash_meta_claim_text':manual?'rpc/icash_claim_customer_text':'rpc/icash_claim_text','POST',{p_account:accountId,p_message:messageId,p_sender:from});if(!job)return {status:'message_held'};
  try{
  const result=await sendContiguityText(job,key);
  return await saveTextReceipt(db,accountId,messageId,result.messageId);

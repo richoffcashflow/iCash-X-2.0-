@@ -1,3 +1,5 @@
+import {instantLeadsEnabled} from '../lib/meta-instant-lead-service.ts';
+import {instantLeadPrompt} from '../lib/meta-instant-leads.ts';
 import {signatureRequestMessage} from '../lib/signing-invitation.ts';
 /**
  * SIMULATION ONLY: synthetic accounts, properties, authority evidence, signatures,
@@ -174,7 +176,7 @@ try{await (async()=>{
   savedCall={result:{transcript:[{role:'user',message:'I accept $90,000.'}]}};
   note('Recorded calling','NOT RUN','Downstream-only mode uses an explicit synthetic seller statement. Run current recording suites separately; this is not end-to-end live proof.');
  }else{
- const voice=await loadService('lib/live-dispatch-service.ts',{createHash,randomBytes,db,elevenRequest,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,buyerCallInstructions,contactEligibility,callEligibility,verifiedOfferCeiling,productionDealInstructions,acquisitionOpeners});
+ const voice=await loadService('lib/live-dispatch-service.ts',{instantLeadsEnabled,instantLeadPrompt,createHash,randomBytes,db,elevenRequest,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,buyerCallInstructions,contactEligibility,callEligibility,verifiedOfferCeiling,productionDealInstructions,acquisitionOpeners});
  const ticket=await rpc('icash_next_automation',{});assert(ticket?.token,'Voice job was not issued');
  work=await rpc('icash_consume_automation',{p_token:ticket.token});assert.equal(work.kind,'voice_dispatch');assert.equal(await rpc('icash_consume_automation',{p_token:ticket.token}),null);
  assert.equal((await voice.dispatchLiveVoice(otherAccount,work.voiceJobId)).status,'held');assert.equal(voiceWrites,0);

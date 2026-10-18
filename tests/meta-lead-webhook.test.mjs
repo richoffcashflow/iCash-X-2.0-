@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {timingSafeEqual} from 'node:crypto';
+import {loadService} from './helpers/simulated-journey-services.mjs';
+import {instantLeadsEnabled} from '../lib/meta-instant-lead-service.ts';
+const env={VERCEL_ENV:'production',META_LEAD_APP_SECRET:'FIXTURE_ONLY',META_LEAD_VERIFY_TOKEN:'FIXTURE_VERIFY_TOKEN_1234567890',META_INSTANT_LEADS_ENABLED:'false'};
+const forbidden=()=>assert.fail('Webhook verification cannot retrieve a lead, save work or send outreach');
+const route=await loadService('app/api/webhooks/meta-leads/route.ts',{process:{env},timingSafeEqual,instantLeadsEnabled,db:forbidden,after:forbidden,verifyMetaSignature:forbidden,metaNotices:forbidden,dispatchTextMessage:forbidden,dispatchLiveVoice:forbidden,retrieveInstantLead:forbidden});
+const request=(token=env.META_LEAD_VERIFY_TOKEN,challenge='1234567890')=>new Request('https://homeoffernetwork.com/api/webhooks/meta-leads?'+new URLSearchParams({'hub.mode':'subscribe','hub.verify_token':token,'hub.challenge':challenge}));
+let response=await route.GET(request());assert.equal(response.status,200);assert.equal(await response.text(),'1234567890');
+assert.equal((await route.GET(request('wrong'))).status,403);
+assert.equal((await route.GET(request('é'.repeat(env.META_LEAD_VERIFY_TOKEN.length)))).status,403,'multibyte input cannot crash timingSafeEqual');
+assert.equal((await route.GET(request(env.META_LEAD_VERIFY_TOKEN,'not-a-challenge'))).status,400);
+assert.equal((await route.POST(new Request('https://homeoffernetwork.com/api/webhooks/meta-leads',{method:'POST',body:'{}'}))).status,503,'verification never activates ingestion or dispatch');
+env.VERCEL_ENV='preview';assert.equal((await route.GET(request())).status,403);
+delete env.VERCEL_ENV;assert.equal((await route.GET(request())).status,403);
+env.VERCEL_ENV='production';delete env.META_LEAD_APP_SECRET;assert.equal((await route.GET(request())).status,403);
+console.log('PASS Meta webhook setup: production-only exact challenge before activation, no intake/dispatch, wrong token and multibyte input rejected.');

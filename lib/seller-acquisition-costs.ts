@@ -11,7 +11,7 @@ export const acquisitionCostInput=z.discriminatedUnion('action',[
 const micros=z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 export const acquisitionCostReport=z.object({
  estimates:z.array(z.object({source:z.enum(acquisitionSources),campaign:z.string(),costMicros:micros,note:z.string(),updatedAt:z.string()})),
- leads:z.array(z.object({id:z.string().uuid(),address:z.string(),state:z.string(),createdAt:z.string(),source:z.string(),campaign:z.string(),
+ leads:z.array(z.object({id:z.string().uuid(),address:z.string().nullable().transform(value=>value??'Awaiting property address'),state:z.string(),createdAt:z.string(),source:z.string(),campaign:z.string(),
   acquisition:z.object({costMicros:micros,kind:z.enum(['reported','campaign_report','estimate','organic','demo','meta_report','meta_estimate']),note:z.string()}).passthrough().nullable(),
   processingMicros:micros.nullable(),collectedCents:micros,recipients:z.number().int().nonnegative(),holdReason:z.string().nullable(),
  })),

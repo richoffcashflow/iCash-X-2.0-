@@ -1,3 +1,6 @@
+import {instantLeadPrompt} from './meta-instant-leads.ts';
+import {instantLeadsEnabled} from './meta-instant-lead-service.ts';
+import {object} from './required-call-recording.ts';
 import {buyerSpeakingPolicy,selectedSpeakingRoleInstructions} from './buyer-speaking-policy.ts';
 import {buyerValidatedPolicy,selectedValidatedRoleInstructions} from './buyer-validated-policy.ts';
 import {buyerAnswerPolicy,selectedAnswerRoleInstructions} from './buyer-answer-policy.ts';
@@ -28,6 +31,8 @@ export function propertyReceptionVariables(value:unknown){
 
 export function receptionContextPrompt(config:Record<string,unknown>){return sellerAgreementReceptionEnabled(config)?sellerAgreementPrompt(config):sellerOfferReceptionEnabled(config)?sellerOfferReceptionPrompt:buyerReceptionEnabled(config)?buyerReceptionPrompt:propertyReceptionPrompt;}
 export function receptionContextVariables(config:Record<string,unknown>,value:unknown){
+ const intake=object(value);
+ if(instantLeadsEnabled(process.env)&&config.context_policy===buyerSpeakingPolicy&&intake.status==='instant_lead'&&typeof intake.principal==='string'&&typeof intake.assistantName==='string')return {icash_property_greeting:`Hi, this is ${intake.assistantName}, the AI assistant for ${intake.principal}. What property are you calling about?`,icash_property_context:JSON.stringify(intake),icash_role_instructions:instantLeadPrompt(intake.principal,intake.assistantName)};
  const result=sellerAgreementReceptionEnabled(config)?sellerAgreementReceptionVariables(value):sellerOfferReceptionEnabled(config)?sellerOfferReceptionVariables(value):buyerReceptionEnabled(config)?buyerReceptionVariables(value):propertyReceptionVariables(value);
  const context=JSON.parse(result.icash_property_context);
  if(context&&typeof context.address==='string')Object.assign(context,conversationAddressFields(context.address));

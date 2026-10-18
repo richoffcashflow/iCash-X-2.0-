@@ -1,3 +1,4 @@
+import {instantLeadsEnabled} from '../lib/meta-instant-lead-service.ts';
 import assert from 'node:assert/strict';
 import {saveTextReceipt} from '../lib/text-receipt.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
@@ -24,7 +25,7 @@ try{
    if(path==='rpc/icash_claim_text'){if(state!=='ready')return null;state='dispatching';return {};}
    throw Error(path);
   };
-  const {dispatchTextMessage}=await loadService('lib/text-message-service.ts',{db,saveTextReceipt,smsWorkEnabled:()=>true,liveWorkReady:()=>true,sameBusinessNumber:(a,b)=>a===b,textPayload:()=>{},sendContiguityText:async()=>{sends++;if(scenario==='unknown_send')throw Error('Ambiguous provider timeout');return {messageId:'receipt'};}});
+  const {dispatchTextMessage}=await loadService('lib/text-message-service.ts',{instantLeadsEnabled,db,saveTextReceipt,smsWorkEnabled:()=>true,liveWorkReady:()=>true,sameBusinessNumber:(a,b)=>a===b,textPayload:()=>{},sendContiguityText:async()=>{sends++;if(scenario==='unknown_send')throw Error('Ambiguous provider timeout');return {messageId:'receipt'};}});
   const result=await dispatchTextMessage('account','message');
   assert.equal(result.status,scenario==='lost_commit_response'?'message_accepted':'message_delivery_needs_review');
   assert.equal(sends,1);await dispatchTextMessage('account','message');assert.equal(sends,1,'A retry must never send again');
