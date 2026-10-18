@@ -9,6 +9,7 @@ import http from 'node:http';
 import https from 'node:https';
 import {chromium,webkit,devices} from 'playwright';
 import {verifyWorkspace} from './workspace-browser-scenarios.mjs';
+import {verifyWalkthrough} from './workspace-walkthrough-browser.mjs';
 import {verifyPurchaseAccess} from './purchase-access-browser.mjs';
 import {verifyAccessHelp} from './access-help-browser.mjs';
 import {verifySellerCosts} from './seller-acquisition-costs-browser.mjs';
@@ -52,12 +53,14 @@ try{
   const browser=await engine.launch({headless:true});
   try{
    if(process.env.BROWSER_SCENARIOS==='access-help'){await verifyAccessHelp(browser,base,options,name,fixtureCookies);continue;}
+   if(process.env.BROWSER_SCENARIOS==='walkthrough'){await verifyWalkthrough(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='purchase-access'){await verifyPurchaseAccess(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='lead-costs'){await verifySellerCosts(browser,base,options,name,fixtureCookies);continue;}
    if(process.env.BROWSER_SCENARIOS==='course'){await verifyCourse(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-recovery'){await verifyWebinarRecovery(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='seller'){await verifySellerIntake(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-measurement'){await verifyWebinarMeasurement(browser,base,options,name);continue;}
+   await verifyWalkthrough(browser,base,options,name);
    await verifySellerCosts(browser,base,options,name,fixtureCookies);
    await verifyPurchaseAccess(browser,base,options,name);
    await verifyAccessHelp(browser,base,options,name,fixtureCookies);
