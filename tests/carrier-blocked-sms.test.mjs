@@ -1,3 +1,4 @@
+import {replyToInstantLeadText} from '../lib/meta-instant-text.ts';
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 import {readFileSync} from 'node:fs';
@@ -48,7 +49,7 @@ const db=async(path,method,body)=>{
  throw Error('Unexpected side effect: '+path);
 };
 const noProvider=()=>{throw Error('Fixtures must not contact a provider or generate a customer reply');};
-const deps={NextResponse:{json:Response.json},verifyContiguityWebhook,parseTextWebhook,isServiceTextSender,suppressCarrierBlockedSms,db,
+const deps={replyToInstantLeadText,NextResponse:{json:Response.json},verifyContiguityWebhook,parseTextWebhook,isServiceTextSender,suppressCarrierBlockedSms,db,
  ownerPracticeReply:noProvider,replyToSellerText:noProvider,dispatchTextMessage:noProvider,processTextAi:noProvider,dispatchLiveVoice:noProvider};
 globalThis.__carrierBlock=deps;
 const source=ts.transpileModule(readFileSync(new URL('../app/api/webhooks/contiguity/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');

@@ -1,3 +1,4 @@
+import {instantLeadsEnabled} from '../lib/meta-instant-lead-service.ts';
 // Local fixtures only: archived agreements remain intact, but never create work.
 import assert from 'node:assert/strict';
 import {z} from 'zod';
@@ -58,7 +59,7 @@ const db=async(path,method='GET',body)=>{
  if(['icash_owner_contacts','icash_seller_matches','icash_property_controls','icash_live_conversations','icash_live_callbacks','icash_automation_tickets'].includes(table))return [];
  throw Error('Unexpected read '+table);
 };
-const {GET}=await loadService('app/api/work/activity/route.ts',{db,z,workspaceAttentionQuery,workAccount:async()=>({accountId:account}),attachTaskRecovery:async(_,rows)=>rows,NextResponse:{json:(body,options={})=>({body,status:options.status??200})}});
+const {GET}=await loadService('app/api/work/activity/route.ts',{instantLeadsEnabled,db,z,workspaceAttentionQuery,workAccount:async()=>({accountId:account}),attachTaskRecovery:async(_,rows)=>rows,NextResponse:{json:(body,options={})=>({body,status:options.status??200})}});
 const {workspaceAssistantContext}=await loadService('lib/workspace-assistant-context.ts',{db,workspaceAttentionQuery,workspaceAttentionTables,validActivityReport,currentBotActivity:()=>({checkedAt:'2026-10-12T00:00:00Z',label:'Ready',active:false})});
 const get=query=>GET(new Request('https://example.invalid/api/work/activity'+query));
 const attentionKeys=['textAttention','callRequests','handoffs','signatureActions','viewingRequests','sellerRecovery','closingReview','closingTasks'];

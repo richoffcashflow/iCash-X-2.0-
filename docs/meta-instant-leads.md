@@ -106,6 +106,9 @@ setup inputs, not proof that Meta permissions or form consent have been checked:
 - Published campaign: `120255627041280155`.
 - Source slug: `hon-fast-cash`.
 - Completion URL: `https://homeoffernetwork.com/sell/address?form=hon-fast-cash`.
+- Contact fields confirmed by the owner: **Full name** and **phone**. There is
+  no required property-address or email question in the Meta form. The phone
+  field maps to `phone_number`; the address is collected after submission.
 
 The existing Production `META_ADS_READ_ACCESS_TOKEN` was present during setup.
 The owner reports it includes both `ads_read` and `leads_retrieval`. Its actual
@@ -113,16 +116,24 @@ Page/form access still needs verification. The Page-scoped reuse setting is
 `META_LEAD_ADS_READ_PAGE_IDS=1307748055763550` was saved for Production on
 October 18; no second token copy is needed. It takes effect in the next build
 that includes this integration.
+The Production `META_LEAD_APP_SECRET` is present. Its value remains inside the
+deployment's secret storage. `META_LEAD_SETUP_APP_ID`, `META_LEAD_SETUP_PAGE_ID`
+and `META_LEAD_SETUP_FORM_ID` select only the supplied objects for the read-only
+production build diagnostic. The diagnostic records bounded form metadata and
+subscription status in the service-only `icash_integration_checks` row
+`meta_lead_setup`; it never retrieves lead records or sends outreach. Preview
+builds make no provider requests and cannot replace that production receipt.
 Do not create or enable a source until the receiving account/principal and the
-actual form's contact-choice keys/text are known. App secret, webhook setup,
-migration, deployment, and a non-dispatching integration check remain activation
-dependencies. No paid simulation is authorized by this setup request.
+actual form's contact-choice keys/text are known. Webhook setup, migration,
+deployment, and the integration check remain activation dependencies. No paid
+simulation is authorized by this setup request.
 
 The owner supplied the published campaign through an Ads Manager URL containing
 both the ad account and campaign IDs above. Its existing production spend source
 was saved with tracking campaign `120255627041280155` and automatic imports
-enabled. Its initial status is `pending`, with no successful provider receipt
-yet. The scheduled importer validates Meta account access, campaign ownership,
+enabled. Its first successful production import was October 18, 2026 at
+11:00:30 AM CDT (`2026-10-18T16:00:30Z`), with status `synced`. The scheduled
+importer validates Meta account access, campaign ownership,
 USD currency and timezone before accepting any spend. Saving the source is not
 proof that the saved token has that access. This configuration does not publish
 or change ads, and it does not activate instant-form intake or CRM feedback.

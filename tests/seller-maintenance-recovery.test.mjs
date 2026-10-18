@@ -1,8 +1,9 @@
+import {processInstantLeadWork} from '../lib/meta-instant-lead-service.ts';
 import assert from 'node:assert/strict';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 let enabled=true,lookupFails=false,allocationFails=false,responseFails=false,assigned=false,authorized=true;
 let responses=[],research=0,recovery=0,measurement=0;
-const route=await loadService('app/api/internal/seller/route.ts',{
+const route=await loadService('app/api/internal/seller/route.ts',{processInstantLeadWork,
  db:async path=>{
   if(path.startsWith('icash_seller_controls?'))return [{enabled}];
   if(path==='rpc/icash_collect_seller_milestones'){measurement++;return null;}

@@ -1,3 +1,4 @@
+import {instantCallAddress} from '../lib/meta-instant-call.ts';
 import assert from 'node:assert/strict';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {liveToolHistory} from '../lib/live-tool-history.ts';
@@ -31,6 +32,7 @@ const db=async(path,method,b)=>{
  throw Error(path);
 };
 const route=await loadService('app/api/internal/voice/cash-offer/route.ts',{
+ instantCallAddress,dispatchTextMessage:()=>assert.fail('Unexpected intake text'),dispatchLiveVoice:()=>assert.fail('Unexpected intake call'),
  liveToolHistory,boundSellerQualification,NextResponse:{json:Response.json},process:{env:{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',DOCUSEAL_MODE:'live'}},db,
  bindSellerAgreementCall:async()=>{},createRecordedReceptionProviders:()=>({conversation:async()=>assert.fail('The live tool history must work even when a provider GET is stale')}),
  callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence,sellerPayoffEvidence,sellerListingEvidence,automaticCallOffer,blockedOffer,buyerAgreementHandoff,sellerAgreementInput,object,sha,sellerAgreementFailure,sellerAgreementAction,
