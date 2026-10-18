@@ -58,7 +58,12 @@ Provision these **server-only** values through the deployment's secret controls:
 - `META_LEAD_APP_SECRET`, `META_LEAD_VERIFY_TOKEN` and a random, at least
   32-character `META_LEAD_LINK_SECRET`.
 - `META_LEAD_PAGE_TOKENS`: JSON mapping reviewed Page IDs to their Page access
-  tokens with the required lead-retrieval/Page subscription access.
+  tokens with the required lead-retrieval/Page subscription access. Alternatively,
+  an owner-provided system-user token already saved in
+  `META_ADS_READ_ACCESS_TOKEN` may be reused only for Page IDs explicitly listed
+  in `META_LEAD_ADS_READ_PAGE_IDS` (comma-separated). An explicit per-Page token
+  takes precedence; malformed token maps fail closed. Reuse does not grant Meta
+  permissions or subscribe a Page, and still requires an enabled source.
 - `META_GRAPH_VERSION`: the Graph version reviewed for the connected app.
 - `META_INSTANT_LEADS_ENABLED=true` only in production after installation and
   source review. Preview deployments remain disabled. Existing live-work,
@@ -87,6 +92,27 @@ visible in the inbox; reconcile before resetting any attempt.
 
 The address input uses the existing Google Places key when configured and always
 allows manual full-address entry. No new paid development test is authorized.
+
+## HomeOffer Network form supplied October 18, 2026
+
+The owner supplied these IDs and selected the completion URL below. They are
+setup inputs, not proof that Meta permissions or form consent have been checked:
+
+- Meta app: `1728166318272061`.
+- Business portfolio: `802460598438968`.
+- Page candidate from the supplied Business Suite `asset_id`: `1307748055763550`.
+- Form: `4401851653462589`.
+- Source slug: `hon-fast-cash`.
+- Completion URL: `https://homeoffernetwork.com/sell/address?form=hon-fast-cash`.
+
+The existing Production `META_ADS_READ_ACCESS_TOKEN` was present during setup.
+The owner reports it includes both `ads_read` and `leads_retrieval`. Its actual
+Page/form access still needs verification. The Page-scoped reuse setting is
+`META_LEAD_ADS_READ_PAGE_IDS=1307748055763550`; no second token copy is needed.
+Do not create or enable a source until the receiving account/principal and the
+actual form's contact-choice keys/text are known. App secret, webhook setup,
+migration, deployment, and a non-dispatching integration check remain activation
+dependencies. No paid simulation is authorized by this setup request.
 
 ## Response optimization
 

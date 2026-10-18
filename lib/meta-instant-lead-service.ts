@@ -1,7 +1,7 @@
 import {deliverInstantCrmEvent} from './meta-instant-events.ts';
 import {smsLength} from './sms-length.ts';
 import {createHmac} from 'node:crypto';
-import {hashLeadToken,instantLeadToken,instantAddressLink,parseMetaLead,type MetaLeadSource,type MetaLeadNotice} from './meta-instant-leads.ts';
+import {hashLeadToken,instantLeadToken,instantAddressLink,parseMetaLead,metaLeadAccessToken,type MetaLeadSource,type MetaLeadNotice} from './meta-instant-leads.ts';
 import {processSellerIntake,type SellerDb} from './seller-pipeline.ts';
 type Dispatch=(account:string,id:string)=>Promise<{status:string}>;
 type Deps={db:SellerDb;sms:Dispatch;voice:Dispatch;env:NodeJS.ProcessEnv;fetch?:typeof fetch};
@@ -46,8 +46,7 @@ export async function retrieveInstantLead(d:Deps){
  try{
   const [source]=await d.db<MetaLeadSource[]>(`icash_meta_lead_sources?id=eq.${claim.sourceId}&select=*`);
   if(!source?.enabled)throw Error('META_SOURCE_DISABLED');
-  let tokens:Record<string,string>={};try{tokens=JSON.parse(d.env.META_LEAD_PAGE_TOKENS??'{}');}catch{throw Error('META_PAGE_TOKEN_REQUIRED');}
-  const pageToken=tokens[source.page_id];if(typeof pageToken!=='string'||pageToken.length<20)throw Error('META_PAGE_TOKEN_REQUIRED');
+  const pageToken=metaLeadAccessToken(source.page_id,d.env);
   const url=new URL(`https://graph.facebook.com/${d.env.META_GRAPH_VERSION}/${claim.metaId}`);
   url.searchParams.set('fields','id,form_id,ad_id,adset_id,campaign_id,created_time,field_data,custom_disclaimer_responses');
   if(d.env.META_LEAD_APP_SECRET)url.searchParams.set('appsecret_proof',createHmac('sha256',d.env.META_LEAD_APP_SECRET).update(pageToken).digest('hex'));

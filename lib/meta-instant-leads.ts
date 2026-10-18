@@ -11,6 +11,20 @@ export const instantAddress=z.string().trim().min(8).max(300).refine(value=>{
 export const metaLeadNotice=z.object({leadgen_id:metaId,page_id:metaId,form_id:metaId,ad_id:metaId.optional(),created_time:z.number().int().positive()}).passthrough();
 export type MetaLeadNotice=z.infer<typeof metaLeadNotice>;
 export type MetaLeadSource={id:string;page_id:string;form_id:string;account_id:string;consent_key:string;call_now_key:string|null;consent_text:string;consent_version:string;timezone:string;enabled:boolean};
+const metaAccessToken=z.string().min(20).max(4096).regex(/^[A-Za-z0-9._|-]+$/);
+/** Reuse an owner-provided system-user token only for explicitly selected Pages.
+ * The caller must still load an enabled, reviewed Page/form source before use. */
+export function metaLeadAccessToken(pageId:string,env:NodeJS.ProcessEnv){
+ if(!metaId.safeParse(pageId).success)throw Error('META_PAGE_TOKEN_REQUIRED');
+ let tokens:Record<string,string>;
+ try{tokens=z.record(metaId,metaAccessToken).parse(JSON.parse(env.META_LEAD_PAGE_TOKENS??'{}'));}
+ catch{throw Error('META_PAGE_TOKEN_REQUIRED');}
+ if(tokens[pageId])return tokens[pageId];
+ const sharedPages=z.array(metaId).safeParse((env.META_LEAD_ADS_READ_PAGE_IDS??'').split(',').map(p=>p.trim()).filter(Boolean));
+ const shared=metaAccessToken.safeParse(env.META_ADS_READ_ACCESS_TOKEN);
+ if(sharedPages.success&&sharedPages.data.includes(pageId)&&shared.success)return shared.data;
+ throw Error('META_PAGE_TOKEN_REQUIRED');
+}
 export const hashLeadToken=(token:string)=>createHash('sha256').update(token).digest('hex');
 const equal=(a:string,b:string)=>a.length===b.length&&timingSafeEqual(Buffer.from(a),Buffer.from(b));
 export function verifyMetaSignature(raw:Buffer,signature:string|null,secret:string|undefined){

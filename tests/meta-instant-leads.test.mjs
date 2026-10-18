@@ -1,8 +1,8 @@
 // Local fixtures only. Never connects to Meta, SMS, voice, or DealMachine.
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
-import {verifyMetaSignature,metaNotices,parseMetaLead,instantLeadToken,hashLeadToken,validInstantLeadToken,confirmedCallAddress} from '../lib/meta-instant-leads.ts';
-import {queueInstantAddressLink,researchInstantAddress,instantLeadsEnabled} from '../lib/meta-instant-lead-service.ts';
+import {verifyMetaSignature,metaNotices,parseMetaLead,instantLeadToken,hashLeadToken,validInstantLeadToken,confirmedCallAddress,metaLeadAccessToken} from '../lib/meta-instant-leads.ts';
+import {queueInstantAddressLink,researchInstantAddress,instantLeadsEnabled,retrieveInstantLead} from '../lib/meta-instant-lead-service.ts';
 import {instantCallAddress} from '../lib/meta-instant-call.ts';
 import {instantCrmEvent,deliverInstantCrmEvent} from '../lib/meta-instant-events.ts';
 import {smsLength} from '../lib/sms-length.ts';
@@ -30,6 +30,25 @@ assert.equal(token,instantLeadToken(notice.leadgen_id,submitted,secret));assert.
 assert.notEqual(token,instantLeadToken('333333334',submitted,secret));
 assert(validInstantLeadToken(token,secret));assert(!validInstantLeadToken(token+'x',secret));
 assert(!instantLeadsEnabled({META_INSTANT_LEADS_ENABLED:'true',VERCEL_ENV:'preview'}));
+const sharedAccess='SIMULATION_ONLY_SHARED_ACCESS_TOKEN',pageAccess='SIMULATION_ONLY_PAGE_ACCESS_TOKEN';
+const sharedEnv={META_ADS_READ_ACCESS_TOKEN:sharedAccess,META_LEAD_ADS_READ_PAGE_IDS:notice.page_id};
+assert.equal(metaLeadAccessToken(notice.page_id,sharedEnv),sharedAccess);
+assert.throws(()=>metaLeadAccessToken('999999999',sharedEnv),/META_PAGE_TOKEN_REQUIRED/,'a shared system token is not an implicit Page allowlist');
+assert.throws(()=>metaLeadAccessToken(notice.page_id,{META_ADS_READ_ACCESS_TOKEN:sharedAccess}),/META_PAGE_TOKEN_REQUIRED/);
+assert.equal(metaLeadAccessToken(notice.page_id,{...sharedEnv,META_LEAD_PAGE_TOKENS:JSON.stringify({[notice.page_id]:pageAccess})}),pageAccess);
+assert.throws(()=>metaLeadAccessToken(notice.page_id,{...sharedEnv,META_LEAD_PAGE_TOKENS:'null'}),/META_PAGE_TOKEN_REQUIRED/);
+assert.throws(()=>metaLeadAccessToken(notice.page_id,{...sharedEnv,META_LEAD_PAGE_TOKENS:'{broken'}),/META_PAGE_TOKEN_REQUIRED/);
+let retrievalFetches=0;
+const retrievalDeps={env:{...sharedEnv,META_INSTANT_LEADS_ENABLED:'true',META_LEAD_LINK_SECRET:secret,META_LEAD_APP_SECRET:secret,META_GRAPH_VERSION:'v26.0'},
+ sms:async()=>{throw Error('No outreach in token fixture');},voice:async()=>{throw Error('No outreach in token fixture');},
+ db:async(path,method)=>{if(method==='PATCH')return [];if(path==='rpc/icash_meta_claim_notice')return {metaId:notice.leadgen_id,sourceId:source.id,notice,token:'claim'};if(path.startsWith('icash_meta_lead_sources?'))return [source];throw Error('Unexpected retrieval query');},
+ fetch:async(url,options)=>{retrievalFetches++;assert.equal(options.headers.Authorization,'Bearer '+sharedAccess);assert.equal(url.searchParams.get('appsecret_proof'),createHmac('sha256',secret).update(sharedAccess).digest('hex'));return new Response('',{status:403});}};
+assert.equal((await retrieveInstantLead(retrievalDeps)).status,'retry_pending');
+assert.equal(retrievalFetches,1);
+assert.equal((await retrieveInstantLead({...retrievalDeps,env:{...retrievalDeps.env,META_LEAD_ADS_READ_PAGE_IDS:'999999999'}})).status,'retry_pending');
+assert.equal(retrievalFetches,1,'an unselected Page cannot send the shared token to Graph');
+assert.equal((await retrieveInstantLead({...retrievalDeps,env:{...retrievalDeps.env,VERCEL_ENV:'preview'}})).status,'disabled');
+assert.equal(retrievalFetches,1,'previews cannot retrieve live leads');
 const address='123 Main St, Austin, TX 78701';
 const history={transcript:[{role:'user',message:'123 Main Street in Austin, Texas.'},{role:'agent',message:'123 Main Street, Austin, Texas. Is that correct?'},{role:'user',message:"Yes, that's correct."}]};
 assert.equal(confirmedCallAddress(address,history),address);
