@@ -19,7 +19,7 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
    if(url.pathname==='/api/webinar/pixel')return route.fulfill({json:{enabled:true,pixelId,trackingAllowed:!optedOut&&(regionAllowed||explicit)}});
    if(checkoutFixture&&url.pathname==='/api/billing/membership'){
     if(route.request().method()==='POST')membershipRequests.push({home:homeFixture,...route.request().postDataJSON()});
-    return route.fulfill({json:route.request().method()==='POST'?{clientSecret:'fixture-secret',publishableKey:'pk_live_fixture',sessionId:homeFixture?'cs_live_home_browser':'cs_live_browser'}:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',embeddedReady:true,needsClaim:false,membership:homeFixture&&homePaid?{accessible:true,vip:false}:null}});
+    return route.fulfill({json:route.request().method()==='POST'?{clientSecret:'fixture-secret',publishableKey:'pk_live_fixture',sessionId:homeFixture?'cs_live_home_browser':'cs_live_browser'}:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',email:homeFixture?null:'fixture@example.invalid',embeddedReady:true,needsClaim:false,membership:homeFixture&&homePaid?{accessible:true,vip:false}:null}});
    }
    if(url.pathname==='/api/webinar/measurement'){
     reads++;
@@ -159,12 +159,16 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   homeFixture=true;
   const previousWebinarSession=await page.evaluate(()=>{const saved=sessionStorage.getItem('icash-webinar-session');sessionStorage.removeItem('icash-webinar-session');return saved;});
   await page.goto(base+'/');
+  await page.getByLabel('Payment email',{exact:true}).waitFor();
+  assert.equal(membershipRequests.filter(r=>r.home).length,0,'A new browser checks email before creating a purchase');
+  await page.getByLabel('Payment email',{exact:true}).fill('fixture@example.invalid');
+  await page.getByRole('button',{name:'Continue to payment',exact:true}).click();
   await field.waitFor();
   await page.getByRole('heading',{name:'Your AI wholesaling bot.',exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'Sign up',exact:true}).count(),0);
   assert.equal(await page.getByRole('button',{name:'Buy now',exact:true}).count(),0);
   assert.equal(await page.locator('input[type="checkbox"]').count(),0,'There is no separate agreement before the payment form');
-  assert.equal(membershipRequests.filter(r=>r.home).length,1,'Checkout opens once automatically');
+  assert.equal(membershipRequests.filter(r=>r.home).length,1,'Checkout opens once after the email check');
   assert.equal(membershipRequests.at(-1).action,'prepare');
   assert.equal(membershipRequests.at(-1).accepted,undefined,'Opening checkout does not invent purchase acceptance');
   try{await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView')&&window.__pixelCalls.some(c=>c[2]==='InitiateCheckout'));}
@@ -274,7 +278,7 @@ async function verifyCheckoutLoading(browser,base,options,name){
      posts++;return route.fulfill({json:{clientSecret:'fixture-secret',publishableKey:'pk_live_fixture',sessionId:'cs_live_order_fixture'}});
     }
     if(first==='script')await gate;
-    return route.fulfill({json:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',embeddedReady:true,needsClaim:false,membership:null}});
+    return route.fulfill({json:{offer:{revision:1,priceCents:5000},ready:true,mode:'live',email:homeFixture?null:'fixture@example.invalid',embeddedReady:true,needsClaim:false,membership:null}});
    }
    if(url.pathname==='/api/webinar/pixel')return route.fulfill({json:{enabled:false,trackingAllowed:false}});
    if(url.pathname.startsWith('/api/'))return route.fulfill({status:401,json:{error:'Local fixture only'}});

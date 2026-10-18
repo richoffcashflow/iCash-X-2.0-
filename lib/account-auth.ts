@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { db } from "@/lib/stripe-test";
 import {accountMode} from "@/lib/account-mode";
 import {accessHash,phoneSessionCookie} from '@/lib/purchase-phone-access';
-class AuthRequestError extends Error { constructor(public status:number){super("Account authentication unavailable");} }
+export class AuthRequestError extends Error { constructor(public status:number){super("Account authentication unavailable");} }
 type AuthUser={id:string;email?:string;email_confirmed_at?:string;new_email?:string;phone_verified?:boolean};
 export type AuthSession={access_token:string;refresh_token:string;expires_in:number;user:AuthUser};
 export async function authRequest<T>(path:string,body?:unknown,access?:string,method?:'PUT'):Promise<T> {
@@ -36,6 +36,9 @@ export async function verifyEmail(email:string,token:string) {
  const s=await authRequest<AuthSession>("verify",{email,token,type:"email"});
  if(!s.user.email_confirmed_at)throw new Error("Verify your email first");
  const mode=accountMode();if(!mode)throw new Error("Account mode unavailable");
- await db("rpc/icash_claim_funding","POST",{p_user:s.user.id,p_mode:mode});
+ // An accepted code is consumed by Auth. Persist its verified session before
+ // provisioning, so a recoverable database error never discards a valid sign-in.
  await saveSession(s);
+ try{await db("rpc/icash_claim_funding","POST",{p_user:s.user.id,p_mode:mode});return {accessPending:false};}
+ catch{return {accessPending:true};}
 }

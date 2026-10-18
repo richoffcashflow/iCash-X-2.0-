@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {z} from 'zod';
 import {supportNextStep} from './support-self-service.ts';
 export const supportId = z.string().uuid();
-export const supportTopics = ['work','billing','setup','cancel','human','general'] as const;
+export const supportTopics = ['work','billing','setup','cancel','refund','human','general'] as const;
 export type SupportTopic = typeof supportTopics[number];
 export type SupportEvidence = {key:string; source:string; status:'ok'|'attention'|'unknown'; detail:string; observedAt:string; code?:string};
 export const supportMessageInput = z.object({requestId:supportId,threadId:supportId.optional(),message:z.string().trim().min(1).max(2000)}).strict();
@@ -10,6 +10,8 @@ export const supportStatusInput = z.object({requestId:supportId,threadId:support
 /** Only these literal topics influence diagnostics. Model output is never an executable instruction. */
 export function supportTopic(text:string):SupportTopic {
  if(/^(hi|hello|hey|thanks|thank you)[.!?\s]*$/i.test(text.trim()))return 'general';
+ if(/(?:charg(?:e|ed)|bill(?:ed)?|paid).{0,30}(?:twice|double|two times)|(?:duplicate|double).{0,20}(?:charge|payment|billing)/i.test(text))return 'billing';
+ if(/\b(?:refund|money back)\b/i.test(text))return 'refund';
  if(/\b(human|person|owner|agent|escalate)\b/i.test(text))return 'human';
  if(/\b(cancel|delete|refund)\b/i.test(text)||/^(?:please\s+)?stop[.!?\s]*$/i.test(text.trim())||/\b(?:want to|please|help me|can you)\s+stop\b|\bstop (?:my |the |future )?(?:bot|work|renewals|billing|plan|subscription)\b/i.test(text))return 'cancel';
  if(/\b(bill|billing|charge|charged|payment|credit|balance|renewal)\b/i.test(text))return 'billing';
@@ -25,13 +27,14 @@ export function redactSupportQuestion(text:string){
 }
 export function supportAnswer(topic:SupportTopic,evidence:SupportEvidence[],ai:boolean){
  if(topic==='general')return 'Hi! How can we help with your bot, billing, or a property?';
- if(topic==='cancel')return 'Open Chat options (•••), then Manage cancellation to review and confirm. Chat messages alone do not cancel anything. Ask the team for refunds or account deletion.';
- if(topic==='human')return 'Choose “Ask the team” below to send them this conversation. Their reply will appear here.';
- const wanted=topic==='billing'?['billing','payments','credits']:topic==='setup'?['readiness','work']:['work','credits','readiness','screening','voice'];
+ if(topic==='cancel')return 'Open the workspace account menu, then Cancel subscription to review and confirm. Chat messages alone do not cancel anything. This stops future renewals; it does not refund earlier purchases. If you need account deletion, describe that request here so the required identity and record checks can be explained.';
+ if(topic==='refund')return 'All sales are final; we do not offer refunds. I can help fix an access, payment-record or software issue here.';
+ if(topic==='human')return 'I can help troubleshoot this here. What is still happening?';
+ const wanted=topic==='billing'?['membership_payments','subscription','billing','payments','credits']:topic==='setup'?['readiness','work']:['work','credits','readiness','screening','voice'];
  const relevant=evidence.filter(e=>wanted.includes(e.key));
  const attention=relevant.filter(e=>e.status!=='ok');
  const details=(attention.length?attention:relevant).slice(0,2).map(e=>{const next=supportNextStep(e);return e.detail+(next?' '+next.text:'');}).join('\n\n');
- return details||'I couldn’t verify your account details just now. Try again, or choose “Ask the team” below.';
+ return details||'I couldn’t verify your account details just now. I can continue troubleshooting here. What is the exact message on your screen?';
 }
 export function hashCancelNonce(nonce:string){return createHash('sha256').update(nonce).digest('hex');}
 const cancelNonce=z.string().regex(/^[a-f0-9]{64}$/);

@@ -30,6 +30,7 @@ try{
  await pg.exec(read('supabase/migrations/20261017185057_paid_access_support.sql'));
  await pg.exec(read('supabase/migrations/20261017213055_support_conversation_replies.sql'));
  await pg.exec(read('supabase/migrations/20261017214402_support_operator_resolution_guard.sql'));
+ await pg.exec(read('supabase/migrations/20261018065930_automated_support_resolution.sql'));
  await pg.exec(read('supabase/migrations/20261017222557_support_customer_reply_email.sql'));
  await q('insert into auth.users values($1,$2,now()),($3,$4,now())',[owner,'owner@example.invalid',other,'other@example.invalid']);
  await q("insert into icash_trusted_operators values($1,null,now()+interval '1 day',array['support'])",[owner]);
@@ -101,10 +102,10 @@ try{
  await recoverAccessHelpReplies(db);
  let auto=await rpc('icash_access_help_read',{p_hash:autoHash});assert.match(auto.messages.at(-1).content,/email or text/);assert.equal(auto.status,'waiting_on_customer');
  await replyToAccessHelp(db,autoId,autoKey);assert.equal((await rpc('icash_access_help_read',{p_hash:autoHash})).messages.length,2,'Retry never duplicates an automatic reply');
- for(const [question,expected] of [['email',/device and browser/],['iPhone Safari',/error message/],['No error, still nothing',/team for review/]]){
+ for(const [question,expected] of [['email',/device and browser/],['iPhone Safari',/error message/],['No error, still nothing',/saved browser session/]]){
   const nextKey=randomUUID();await rpc('icash_access_help_submit',{...autoArgs,p_key:nextKey,p_message:question});await replyToAccessHelp(db,autoId,nextKey);auto=await rpc('icash_access_help_read',{p_hash:autoHash});assert.match(auto.messages.at(-1).content,expected);
  }
- assert.equal(auto.status,'open','Unresolved problems return to the operator queue');
+ assert.equal(auto.status,'waiting_on_customer','Unresolved problems stay in automatic troubleshooting');
  const copy=(await q("select reply from icash_support_owner_copies where source='access_help' and source_id=$1",[auto.messages.at(-2).id])).rows[0];assert.equal(copy.reply,auto.messages.at(-1).content,'Owner copy contains the actual saved answer');
  // A person replying during generation wins; the automatic answer cannot overwrite it.
  const raceKey=randomUUID();await rpc('icash_access_help_submit',{...autoArgs,p_key:raceKey,p_message:'More details'});

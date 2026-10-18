@@ -4,7 +4,7 @@ import {membershipAccessible} from '../lib/membership-policy.ts';
 const purchase='00000000-0000-4000-8000-000000000001';
 let user=null,rows=[],calls=[],account=true,destination='/live/100002',fail=false;
 process.env.ICASH_AUTH_EMAIL_READY='true';
-const {GET}=await loadService('app/api/account/access/route.ts',{currentUser:async()=>user,accountMode:()=> 'live',membershipAccessible,paidVipDestination:async()=>destination,db:async path=>{calls.push(path);if(fail)throw Error('Private error');if(path.startsWith('icash_accounts?'))return account?[{id:'owned-account'}]:[];assert(path.includes('account_id=eq.owned-account'));assert(path.includes('mode=eq.live'));return rows;}});
+const {GET}=await loadService('app/api/account/access/route.ts',{currentUser:async()=>user,accountMode:()=> 'live',membershipAccessible,paidVipDestination:async()=>destination,db:async (path,method,body)=>{calls.push(path);if(fail)throw Error('Private error');if(path==='rpc/icash_claim_funding'){assert.equal(body.p_user,user.id);return 'owned-account';}if(path.startsWith('icash_accounts?'))return account?[{id:'owned-account'}]:[];assert(path.includes('account_id=eq.owned-account'));assert(path.includes('mode=eq.live'));return rows;}});
 const get=query=>GET(new Request('https://www.geticashx.com/api/account/access'+(query?'?'+query:'')));
 assert.deepEqual(await (await get()).json(),{signedIn:false,signInReady:true});assert.equal(calls.length,0,'Anonymous links reveal no purchase/account data');
 assert.equal((await get('purchase=invalid')).status,400);
@@ -15,5 +15,5 @@ assert.equal((await (await get('purchase='+purchase+'&destination=vip')).json())
 rows[0].state='needs_review';assert.equal((await get('purchase='+purchase+'&destination=vip')).status,403);rows[0].state='active';
 destination=null;assert.equal((await get('purchase='+purchase+'&destination=vip')).status,409);
 assert.equal((await (await get('destination=https://evil.invalid')).json()).destination,'/','No open redirect');
-account=false;assert.equal((await get()).status,409);account=true;fail=true;res=await get();assert.equal(res.status,503);assert(!(await res.text()).includes('Private error'));
+account=false;assert.equal((await get()).status,200);account=true;fail=true;res=await get();assert.equal(res.status,503);assert(!(await res.text()).includes('Private error'));
 console.log('PASS purchase access: anonymous privacy, verified account scope, wrong-email recovery, membership reference, active VIP destination and no arbitrary redirect.');

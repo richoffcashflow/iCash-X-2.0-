@@ -12,8 +12,8 @@ export async function GET(req:Request){
   if(purchase&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(purchase))return Response.json({error:'This purchase link could not be read. Open /access to sign in.'},{status:400,headers});
   const user=await currentUser(true);
   if(!user)return Response.json({signedIn:false,signInReady:process.env.ICASH_AUTH_EMAIL_READY==='true'},{headers});
-  const [account]=await db<{id:string}[]>(`icash_accounts?owner_user_id=eq.${user.id}&select=id&limit=1`);
-  if(!account)return Response.json({signedIn:true,error:'Your account could not be restored. Please contact support; do not pay again.'},{status:409,headers});
+  let [account]=await db<{id:string}[]>(`icash_accounts?owner_user_id=eq.${user.id}&select=id&limit=1`);
+  if(!account){const mode=accountMode();if(!mode)throw Error('Account mode unavailable');const id=await db<string>('rpc/icash_claim_funding','POST',{p_user:user.id,p_mode:mode});account={id};}
   if(!purchase&&!vip)return Response.json({signedIn:true,destination:'/'},{headers});
   const mode=accountMode();if(!mode)throw Error('Account mode unavailable');
   const rows=await db<Membership[]>(`icash_memberships?account_id=eq.${account.id}&mode=eq.${mode}${purchase?'&id=eq.'+purchase:''}&order=created_at.desc&select=*&limit=10`);
