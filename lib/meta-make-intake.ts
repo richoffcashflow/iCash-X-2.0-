@@ -79,7 +79,7 @@ export async function processMakeLead(d:{db:SellerDb;env:NodeJS.ProcessEnv;onAcc
   await d.db(path,'PATCH',{state:'accepted',lead_id:saved.leadId,reason:null});
  }catch(error){
   const reason=error instanceof Error&&/^[A-Z_]{5,70}$/.test(error.message)?error.message:'META_RECEIPT_REVIEW_REQUIRED';
-  await d.db(path,'PATCH',{state:claim.isTest?'test':stage==='validate'?'review':'pending',reason,next_attempt_at:new Date(Date.now()+120000).toISOString()});
+  await d.db(path,'PATCH',{state:claim.isTest||reason==='META_TEST_LEAD'?'test':stage==='validate'?'review':'pending',reason,next_attempt_at:new Date(Date.now()+120000).toISOString()});
   return {status:stage==='validate'?'review':'retry_pending'};
  }
  // A dispatch failure must not undo durable acceptance. The normal lead worker

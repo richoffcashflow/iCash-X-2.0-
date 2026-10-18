@@ -182,6 +182,29 @@ The pool, text-only requests, opt-outs, Pause, credits, provider admission,
 private address links and same-card property conversion remain shared paths.
 No outside-hours call-now request is fabricated from the submission.
 
+Apply `20261018232526_meta_test_contact_exclusion.sql` to enable source-scoped
+`test_lead_names`. Save only owner-identified test contacts on the specific source.
+Matching ignores case and repeated spaces. The database classifies them before
+claiming or assigning work; the acceptance function also prevents a bypass.
+The original connector payload remains intact. Never apply a global name block.
+
+For earlier form submissions, create a one-time Make scenario using Facebook Lead
+Ads **List Leads**, the same Page/form, and the existing authenticated HTTP module.
+Map the original IDs, submission times and contact fields from that module. Keep
+the instant scenario running for new leads. Skip already imported IDs when their
+optional attribution fields would differ: conflicting receipts are not rewritten.
+The normal network pool assigns each accepted contact; a replay does not create
+a second card or repeat initial outreach. Keep this import scenario unscheduled.
+
+The first SMS asks for a reply with the street, city and state in one segment.
+It includes the supplied first name when it fits without changing SMS encoding.
+Private address links are sent for the lookup fallback, instead of making the
+initial response depend on a click. Initial outbound and returning inbound calls
+identify HomeOffer Network and ask for the seller's property address before
+qualification. Confirm the complete address before research, and reuse any saved
+address. Contact cards show the seller, activity and address progress; the same
+screening/deal IDs become the normal property card after a successful match.
+
 The owner supplied the published campaign through an Ads Manager URL containing
 both the ad account and campaign IDs above. Its existing production spend source
 was saved with tracking campaign `120255627041280155` and automatic imports

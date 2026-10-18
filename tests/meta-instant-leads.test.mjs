@@ -1,7 +1,7 @@
 // Local fixtures only. Never connects to Meta, SMS, voice, or DealMachine.
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
-import {verifyMetaSignature,metaNotices,parseMetaLead,instantLeadToken,hashLeadToken,validInstantLeadToken,confirmedCallAddress,metaLeadAccessToken} from '../lib/meta-instant-leads.ts';
+import {verifyMetaSignature,metaNotices,parseMetaLead,instantLeadToken,hashLeadToken,validInstantLeadToken,confirmedCallAddress,metaLeadAccessToken,instantLeadInitialText} from '../lib/meta-instant-leads.ts';
 import {queueInstantAddressLink,researchInstantAddress,instantLeadsEnabled,retrieveInstantLead,processInstantLead} from '../lib/meta-instant-lead-service.ts';
 import {instantCallAddress} from '../lib/meta-instant-call.ts';
 import {instantCrmEvent,deliverInstantCrmEvent} from '../lib/meta-instant-events.ts';
@@ -20,6 +20,11 @@ assert(!verifyMetaSignature(raw,null,secret));
 assert.deepEqual(metaNotices(JSON.parse(raw)),[notice]);
 assert.throws(()=>metaNotices({object:'page',entry:[{id:'999999999',changes:[{field:'leadgen',value:notice}]}]}),/PAGE_MISMATCH/);
 assert.equal(parseMetaLead(receipt,notice,source,now).phone,'+12145550123');
+assert.throws(()=>parseMetaLead(receipt,notice,{...source,test_lead_names:['  fixture   seller ']},now),/META_TEST_LEAD/);
+assert.equal(parseMetaLead(receipt,notice,{...source,test_lead_names:['Another Seller']},now).name,'Fixture Seller');
+for(const name of ['Sam','A'.repeat(100),'李先生',null]){
+ const text=instantLeadInitialText(name);assert(smsLength(text).fits);assert(!text.includes('https://'));assert(text.includes('street, city and state'));assert(text.endsWith('STOP to opt out.'));
+}
 assert.equal(parseMetaLead(receipt,notice,source,now).callNow,true);
 assert.equal(parseMetaLead(receipt,notice,source,now+6*60000).callNow,false);
 assert.throws(()=>parseMetaLead({...receipt,form_id:'999999999'},notice,source,now),/BINDING/);
@@ -80,7 +85,7 @@ const deps={env,voice:async()=>({status:'fixture'}),sms:async()=>{sent++;return 
 }};
 for(const purpose of ['initial','address_link','reply']){
  assert.equal((await queueInstantAddressLink(deps,lead,purpose,purpose,'A'.repeat(400))).status,'message_accepted');
- assert(smsLength(queued.at(-1).p_body).fits);assert(queued.at(-1).p_body.includes(token));
+ assert(smsLength(queued.at(-1).p_body).fits);assert.equal(queued.at(-1).p_body.includes(token),purpose!=='initial','the first text invites a reply; fallback messages retain the private address link');
  assert(queued.at(-1).p_body.endsWith('STOP to opt out.'));
 }
 assert.equal((await queueInstantAddressLink(deps,{...lead,paused:true},'initial','initial')).status,'held');assert.equal(sent,3);

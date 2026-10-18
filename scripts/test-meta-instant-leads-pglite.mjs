@@ -8,7 +8,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const q=(sql,args=[])=>pg.query(sql,args);
 const one=async(sql,args=[])=>{const result=await q(sql,args);assert.equal(result.rows.length,1,sql);return result.rows[0];};
 const rpc=async(name,args)=>Object.values(await one(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) result`,args))[0];
-const configs=['meta-instant-leads','meta-instant-lead-work','meta-instant-lead-property','meta-instant-address-form','meta-instant-lead-workspace','meta-instant-lead-reception','meta-instant-lead-measurement','meta-instant-network-pool','meta-make-intake'];
+const configs=['meta-instant-leads','meta-instant-lead-work','meta-instant-lead-property','meta-instant-address-form','meta-instant-lead-workspace','meta-instant-lead-reception','meta-instant-lead-measurement','meta-instant-network-pool','meta-make-intake','meta-test-contact-exclusion'];
 try{
  await pg.exec(`create role anon;create role authenticated;create role service_role bypassrls;
  create schema auth;create schema extensions;create schema icash_recording_private;create schema icash_recorded_reception_private;create schema icash_seller_agreement_private;
@@ -63,6 +63,15 @@ try{
  await q("insert into icash_meta_lead_sources(id,page_id,form_id,account_id,slug,enabled,principal,consent_key,call_now_key,call_now_text,consent_text,consent_version,timezone,review_ref,reviewed_until) values($1,'111111111','222222222',$2,'simulation-form',true,'SIMULATION Buyer','ai_contact','call_now','Call me now about this property, including outside normal calling hours.','SIMULATION explicit calls and texts consent naming the direct buying principal.','simulation-v1','America/Chicago','SIMULATION immutable form consent review',now()+interval '40 days')",[source,account]);
  const base={metaId:'333333333',phone:'+12145550123',name:'SIMULATION Seller',submittedAt:new Date(Date.now()-2000).toISOString(),pageId:'111111111',formId:'222222222',adId:'444444444',adsetId:'555555555',campaignId:'666666666',consentResponses:[{checkbox_key:'ai_contact',is_checked:true},{checkbox_key:'call_now',is_checked:true}]};
  const makeReceipt={id:'900000001',page_id:'111111111',form_id:'222222222',created_time:base.submittedAt,field_data:[{name:'full_name',values:['SIMULATION Seller']},{name:'phone_number',values:[base.phone]}],custom_disclaimer_responses:base.consentResponses};
+ assert.equal(read('config/meta-test-contact-exclusion.sql'),read('supabase/migrations/20261018232526_meta_test_contact_exclusion.sql'));
+ await q("update icash_meta_lead_sources set test_lead_names=array['SIMULATION Test Seller'] where id=$1",[source]);
+ const namedTest={...makeReceipt,id:'900000090',field_data:[{name:'full_name',values:['  simulation   TEST Seller  ']},makeReceipt.field_data[1]]};
+ assert.equal((await rpc('icash_make_receive_lead',[namedTest,false])).outreach,'test_excluded','source exclusions classify test names before assignment');
+ assert.equal((await rpc('icash_make_receive_lead',[namedTest,false])).duplicate,true,'replayed test stays excluded');
+ assert.equal(await rpc('icash_make_claim_lead',[namedTest.id]),null);
+ await assert.rejects(rpc('icash_meta_accept_lead',[source,{...base,metaId:namedTest.id,name:'simulation test seller'},'b'.repeat(64)]),/META_TEST_LEAD/,'direct acceptance cannot bypass a source test exclusion');
+ assert.equal(await rpc('icash_meta_is_test_contact',[randomUUID(),'SIMULATION Test Seller']),false,'test names do not suppress unrelated sources');
+ assert.equal(Number((await one('select count(*) n from icash_meta_leads')).n),0,'excluded tests never become assigned leads');
  const unconfigured={...makeReceipt,id:'900000002',form_id:'999999999'};
  assert.equal((await rpc('icash_make_receive_lead',[unconfigured,false])).outreach,'form_setup_required','unconfigured source is stored without granting permission');
  assert.equal(await rpc('icash_make_claim_lead',[unconfigured.id]),null,'unconfigured source cannot consume attempts or start outreach');
