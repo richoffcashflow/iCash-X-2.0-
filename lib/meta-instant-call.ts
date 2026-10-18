@@ -24,7 +24,7 @@ export async function instantCallAddress(token:string,input:Record<string,unknow
  const fallback=async(reason:string,instruction:string)=>{
   const lead=await getInstantLead(d.db,scope!.leadId);
   const text=lead?await queueInstantAddressLink(d,lead,'address_link','call-fallback'):null;
-  return {quoteAllowed:false,priceCents:null,status:reason,addressRequired:true,textAccepted:text?.status==='message_accepted',instruction:instruction+' '+(text?.status==='message_accepted'?'The address link was accepted for sending to the same phone. Ask them to open it and confirm the full address.':'Do not claim a text was sent. Ask them to check the earlier address link or try the form from their ad completion screen.')};
+  return {quoteAllowed:false,priceCents:null,status:reason,addressRequired:true,textAccepted:text?.status==='message_accepted',instruction:instruction+' '+(text?.status==='message_accepted'?'The address link was accepted for sending to the same phone. Ask them to open it and confirm the full address.':'Do not claim a text was sent. Ask them to reply to the earlier text with the full street, city and state, or use the form from their ad completion screen.')};
  };
  if(input.action==='report_change'){
   const address=confirmedCallAddress(input.sellerStatement,await d.history());

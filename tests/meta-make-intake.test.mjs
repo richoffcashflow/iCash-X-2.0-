@@ -54,6 +54,10 @@ claim={...claim,isTest:true};assert.equal((await processMakeLead(deps)).status,'
 assert.equal(updates.at(-1).state,'test');
 source.contact_basis='form_submission';claim={...claim,isTest:false,payload:parsed.payload};
 assert.equal((await processMakeLead(deps)).status,'accepted');assert.equal(saved,2);assert.equal(dispatched,2);
+source.test_lead_names=[' fixture   seller '];
+assert.equal((await processMakeLead(deps)).status,'review');assert.equal(saved,2);assert.equal(dispatched,2);
+assert.equal(updates.at(-1).state,'test');assert.equal(updates.at(-1).reason,'META_TEST_LEAD');
+source.test_lead_names=[];
 const {parseMetaLead}=await import('../lib/meta-instant-leads.ts');
 const submission=parseMetaLead(parsed.payload,{leadgen_id:body.lead_id,page_id:config.pageId,form_id:config.formId,created_time:Math.floor(Date.parse(body.created_time)/1000)},source,now);
 assert.deepEqual(submission.consentResponses,[{kind:'form_submission',provider:'meta',metaId:body.lead_id,pageId:config.pageId,formId:config.formId,submittedAt:body.created_time}]);

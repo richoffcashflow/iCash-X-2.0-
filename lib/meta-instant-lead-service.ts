@@ -1,7 +1,7 @@
 import {deliverInstantCrmEvent} from './meta-instant-events.ts';
 import {smsLength} from './sms-length.ts';
 import {createHmac} from 'node:crypto';
-import {hashLeadToken,instantLeadToken,instantAddressLink,parseMetaLead,metaLeadAccessToken,type MetaLeadSource,type MetaLeadNotice} from './meta-instant-leads.ts';
+import {hashLeadToken,instantLeadToken,instantAddressLink,instantLeadInitialText,parseMetaLead,metaLeadAccessToken,type MetaLeadSource,type MetaLeadNotice} from './meta-instant-leads.ts';
 import {processSellerIntake,type SellerDb} from './seller-pipeline.ts';
 import {processMakeLead} from './meta-make-intake.ts';
 type Dispatch=(account:string,id:string)=>Promise<{status:string}>;
@@ -18,10 +18,10 @@ export async function queueInstantAddressLink(d:Deps,lead:InstantLead,purpose:'i
  if(hashLeadToken(token)!==lead.link_hash||Date.parse(lead.link_expires_at)<=Date.now())return {status:'link_expired'};
  const [identity]=await d.db<{principal:string}[]>(`icash_customer_identities?account_id=eq.${lead.account_id}&select=principal`);
  if(!identity?.principal)return {status:'principal_required'};
- const intro=purpose==='initial'?'HomeOffer Network AI: What is the property address? ':reply??'HomeOffer Network: Confirm the full address here: ';
+ const intro=reply??'HomeOffer Network: Confirm the full address here: ';
  const suffix=' STOP to opt out.';
- let body=intro+instantAddressLink(token)+suffix;
- if(!smsLength(body).fits)body='AI property assistant: Enter the full address: '+instantAddressLink(token)+suffix;
+ let body=purpose==='initial'?instantLeadInitialText(lead.lead.name):intro+instantAddressLink(token)+suffix;
+ if(!smsLength(body).fits)body='HomeOffer Network AI: Enter the full address: '+instantAddressLink(token)+suffix;
  if(!smsLength(body).fits)return {status:'message_format_required'};
  const id=await d.db<string|null>('rpc/icash_meta_queue_message','POST',{p_lead:lead.lead_id,p_purpose:purpose,p_key:key,p_body:body});
  return id?d.sms(lead.account_id,id):{status:'message_held'};
