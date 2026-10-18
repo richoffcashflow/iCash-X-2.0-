@@ -63,12 +63,27 @@ export async function saveTelephonyCheck(result,env=process.env,fetcher=fetch){
  return response.ok;
 }
 
+// Immutable, service-only cost-rule evidence. Refuse the snapshot if redaction
+// would change it; never store credentials or alter a billing approval here.
+export async function saveVoiceUsagePolicyReview(env=process.env,fetcher=fetch){
+ if(!canSaveSharedIntegrationCheck(env)||!env.SUPABASE_URL||!env.SUPABASE_SECRET_KEY||!env.VOICE_USAGE_POLICIES_JSON)return false;
+ const policies=JSON.parse(env.VOICE_USAGE_POLICIES_JSON);
+ if(!Array.isArray(policies)||!policies.length||policies.length>100)return false;
+ const serialized=JSON.stringify(policies);
+ const safe=receptionReviewReport({conversation_config:{policies}},[env.ELEVENLABS_API_KEY,env.TWILIO_AUTH_TOKEN,env.SUPABASE_SECRET_KEY]).conversation_config.policies;
+ if(JSON.stringify(safe)!==serialized)return false;
+ const policyHash=sha(serialized);
+ const response=await fetcher(env.SUPABASE_URL+'/rest/v1/icash_integration_checks?on_conflict=provider',{method:'POST',headers:{apikey:env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+env.SUPABASE_SECRET_KEY,'Content-Type':'application/json',Prefer:'resolution=ignore-duplicates'},body:JSON.stringify({provider:'voice_usage_policy_review_'+policyHash.slice(0,12),checked_at:new Date().toISOString(),result:{policies,policyHash,providerWrites:false,charges:false}}),redirect:'error',signal:AbortSignal.timeout(10000)});
+ return response.ok;
+}
+
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  try{
   let agent;
   const result=await checkTelephonyConnection(process.env,fetch,value=>{agent=value;});
   const saved=await saveTelephonyCheck(result).catch(()=>false);
   const reviewSaved=await saveOutboundReviewReport(result,agent).catch(()=>false);
+  await saveVoiceUsagePolicyReview().catch(()=>false);
   if(reviewSaved)console.log('Outbound configuration mismatch saved for private review. No approval or provider changed.');
   console.log(`Telephony: forwarding=${result.forwarding.routeConfigured}; inbound=${result.incoming.status}; outbound=${result.outgoing.status}; diagnostic_saved=${saved}. No calls or messages sent.`);
  }catch{console.log('Telephony: diagnostic unavailable. No calls or messages sent.');}
