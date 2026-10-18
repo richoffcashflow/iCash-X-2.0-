@@ -35,8 +35,10 @@ assert.equal((await readyModule.contactAccountReadiness('account','other')).read
 for(const [table,key,value] of [
  ['icash_discovery_configs','enabled',false],['icash_discovery_configs','auto_enabled',false],['icash_discovery_configs','contacts_enabled',false],['icash_discovery_configs','contact_credit_cap',26],['icash_discovery_configs','data_rights_until','bad'],
  ['icash_operation_rates','operation','property_search'],['icash_operation_rates','expires_at',past],['icash_operation_rates','verified_at',future],['icash_operation_rates','charge_cents',1],
- ['icash_wallets','balance_cents',173],['icash_spend_activations','enabled',false],['icash_operating_budget','enabled',false],
+ ['icash_wallets','balance_cents',0],['icash_spend_activations','enabled',false],['icash_operating_budget','enabled',false],
  ]){const old=rows[table][0][key];rows[table][0][key]=value;assert.equal((await ready()).ready,false,`${table}.${key}`);rows[table][0][key]=old;}
+rows.icash_wallets[0].balance_cents=1;
+assert.equal((await ready()).ready,true,'positive credit admits the next eligible contact lookup without holding its full quote');
 for(const [table,key] of [['icash_accounts','daily_limit_cents'],['icash_spend_activations','customer_cap_cents']]){const before=rows[table][0][key];rows[table][0][key]=0;assert.equal((await ready()).ready,true,'Legacy daily/lifetime caps do not block funded work');rows[table][0][key]=before;}
 candidate=null;assert.equal((await ready()).ready,false);candidate=screen;prior=true;assert.equal((await ready()).ready,false);prior=false;
 rows.icash_screening_jobs[0].snapshot={...snapshot,fetchedAt:new Date(Date.now()-25*3600000).toISOString()};assert.equal((await ready()).ready,false);rows.icash_screening_jobs[0].snapshot=snapshot;

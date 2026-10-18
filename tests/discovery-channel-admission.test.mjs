@@ -24,7 +24,7 @@ assert.equal((await readiness.discoveryAccountReadiness('account','wrong-owner')
 for(const [table,key,value] of [
  ['icash_discovery_configs','enabled',false],['icash_discovery_configs','auto_enabled',false],['icash_discovery_configs','per_page',6],['icash_discovery_configs','data_rights_until','invalid'],['icash_discovery_configs','data_rights_until',past],
  ['icash_operation_rates','expires_at',past],['icash_operation_rates','verified_at',future],['icash_operation_rates','operation','owner_enrichment'],['icash_operation_rates','charge_cents',1],
- ['icash_wallets','balance_cents',83],['icash_spend_activations','enabled',false],['icash_operating_budget','enabled',false],
+ ['icash_wallets','balance_cents',0],['icash_spend_activations','enabled',false],['icash_operating_budget','enabled',false],
  ]){const old=rows[table][0][key];rows[table][0][key]=value;assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,false,`${table}.${key}`);rows[table][0][key]=old;}
 rows.icash_credit_ledger=[{delta_cents:-217}];assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,true,'Historical charges are already reflected in the wallet');rows.icash_credit_ledger=[];
 rows.icash_operation_spend=[{state:'settled',charged_cents:217}];assert.equal((await readiness.discoveryAccountReadiness('account','owner')).ready,true,'No obsolete lifetime cap');rows.icash_operation_spend=[];
@@ -39,7 +39,8 @@ const control=await loadService('app/api/work/control/route.ts',{NextResponse:re
 const request=action=>new Request('https://example.invalid/api/work/control',{method:'POST',body:JSON.stringify({action})});
 assert.equal((await control.POST(request('resume'))).status,200);assert.equal(writes,1);
 assert.equal((await control.POST(request('return_to_bot'))).status,503);assert.equal(writes,1);
-rows.icash_wallets[0].balance_cents=83;assert.equal((await control.POST(request('resume'))).status,503);assert.equal(writes,1);rows.icash_wallets[0].balance_cents=300;
+rows.icash_wallets[0].balance_cents=0;assert.equal((await control.POST(request('resume'))).status,503);assert.equal(writes,1);
+rows.icash_wallets[0].balance_cents=1;assert.equal((await control.POST(request('resume'))).status,200);assert.equal(writes,2,'positive credit can resume without the full quote');rows.icash_wallets[0].balance_cents=300;
 const a={identity:{},paused:true,balanceCents:300,workReady:false,smsWorkReady:false,discoveryWorkReady:true,discoveryQuote:ready.quote};
 assert.equal(workspaceNextAction(a,null).label,'Start discovery');assert.match(workspaceNextAction(a,null).reason,/5 properties.*\$0.84 planning/);
 const campaign={configured:true,released:false,liveWorkReady:false,smsChannelEnabled:true,policy:{version:'v'},acknowledgment:{version:'v'}};
