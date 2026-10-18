@@ -1,6 +1,7 @@
 import {z} from 'zod';
 import {redactSupportQuestion,supportAnswer,supportTopic,type SupportEvidence} from './support-policy.ts';
 import {supportCourseAnswer,supportProductGuide} from './support-product-guide.ts';
+import {supportCodeDelivery} from './support-code-delivery.ts';
 
 export type SupportTurn={role:string;content:string};
 export type SupportReply={reply:string;status:'waiting_on_customer'|'escalated'|'resolved';ai:boolean};
@@ -22,14 +23,22 @@ export function supportConversationFallback(context:SupportContext):SupportReply
  const course=supportCourseAnswer(context.messages,context.kind==='account'?context.evidence:[]);
  if(course)return result(course.needsTeam?`${course.reply}\n\n${handoff}`:course.answered?resolvedReply(course.reply):course.reply,course.needsTeam?'escalated':course.answered?'resolved':'waiting_on_customer');
  if(context.kind==='access'){
-  const code=/code|sign.?in|log.?in|nothing happened|getting in|access/i.test(history);
+  const delivery=supportCodeDelivery(context.messages);
+  const code=delivery!=='unknown'||/code|sign.?in|log.?in|nothing happened|getting in|access/i.test(history);
   const channel=/email|inbox|spam/i.test(history)?'email':/text|sms|phone/i.test(history)?'text':null;
   if(code){
-   if(!channel)return result('I can help you get past that. Was the code sent by email or text? Please don’t share the code itself.');
-   if(/not (?:arriv|receiv)|no code|never (?:arriv|receiv)|didn.t (?:arriv|get|receiv)|neither|haven.t (?:got|receiv)/i.test(history)&&!previous.includes('newest'))return result(channel==='email'?'Check spam or junk, then request a fresh code on the sign-in page and use only the newest one. You can also choose “Use my checkout phone” there. Does the new email arrive?':'On the sign-in page, choose “Use my checkout phone” and enter the number used at checkout, including the country code. Request a fresh code and use only the newest one. Does the text arrive?');
+   if(!channel)return result('Are you requesting the code by email or text? Please don’t share the code itself.');
+   if(delivery==='missing'){
+    const replies=context.messages.filter(m=>m.role==='assistant').map(m=>m.content);
+    const checkedReceipt=replies.some(reply=>reply.includes('email on your iCash X payment receipt'));
+    const requestedFresh=replies.some(reply=>/request (?:one|a) fresh code/i.test(reply));
+    if(requestedFresh||checkedReceipt&&/no receipt|can.t find.*receipt|cannot find.*receipt|don.t have.*receipt|already.*(?:tried|resent|requested)|still.*(?:no code|not.*(?:arriv|receiv|get))/i.test(question))return result('The code still hasn’t arrived. I’m passing this to the team to review the checkout-email match and code delivery. Their reply will appear here; you don’t need to pay again.','escalated');
+    if(!checkedReceipt)return result('The code hasn’t arrived yet. Check the email on your iCash X payment receipt and use that exact email to sign in. Text sign-in also needs that email and the phone used at checkout. Does the receipt email match the one you entered?');
+    return result(channel==='email'?'Choose “Use another email or resend” on the sign-in page, enter the email on your iCash X payment receipt, and request one fresh code. Check that inbox and its spam or junk folder. If you use text instead, enter that same email and your checkout phone. Does a code arrive?':'Choose “Use my checkout phone” on the sign-in page. Enter the email on your iCash X payment receipt and the phone used at checkout, then request one fresh code. Does the text arrive?');
+   }
    if(!/safari|chrome|firefox|edge|iphone|android|ipad|desktop|laptop|browser/i.test(history))return result(`Thanks — the ${channel} code. Open the sign-in page directly in Safari or Chrome, enter the newest code, and press the sign-in button. Which device and browser are you using?`);
    if(!previous.includes('error message')&&!/invalid|expired|error|spinning|stuck|blank|no error/i.test(question))return result('What happens after you press the sign-in button: an error message, a loading spinner, or the same page? You can copy the error text, but leave out the code.');
-   if(/expired|invalid/i.test(question)&&!previous.includes('fresh code'))return result('Request one fresh code and enter that newest code in the same browser where you requested it. Older codes may no longer work. What message appears after you try that?');
+   if(/expired|invalid/i.test(question)&&!previous.includes('Older codes may no longer work'))return result('Request one fresh code and enter that newest code in the same browser where you requested it. Older codes may no longer work. What message appears after you try that?');
    return result('Thanks — those details help. I’m passing the sign-in problem and the steps you tried to the team for review. Their reply will appear here; you don’t need to pay again.','escalated');
   }
   if(users.length>2)return result(handoff,'escalated');
