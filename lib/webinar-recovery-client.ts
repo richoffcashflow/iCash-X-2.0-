@@ -15,5 +15,7 @@ export function installWebinarRecovery(sessionId:string,eligible:()=>boolean,sen
  window.addEventListener('pagehide',leave);window.addEventListener('pageshow',sync);
  const timer=setInterval(()=>{if(!document.hidden)emit(eligible()?'active':'checkout',true);},25000);
  sync();
- return {sync,stop(){clearInterval(timer);document.removeEventListener('visibilitychange',visibility);window.removeEventListener('pagehide',leave);window.removeEventListener('pageshow',sync);}};
+ // SPA/back navigation can unmount the room without pagehide. A Strict Mode
+ // remount immediately reports active and cancels this during the same grace.
+ return {sync,stop(){leave();clearInterval(timer);document.removeEventListener('visibilitychange',visibility);window.removeEventListener('pagehide',leave);window.removeEventListener('pageshow',sync);}};
 }

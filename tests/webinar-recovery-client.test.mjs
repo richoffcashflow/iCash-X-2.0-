@@ -22,3 +22,10 @@ test('a background tab does not depart before it has ever become visible',()=>{
  const recovery=installWebinarRecovery('session',()=>true,s=>sent.push(s));win.dispatchEvent(new Event('pagehide'));assert.equal(sent.length,0);
  doc.hidden=false;doc.dispatchEvent(new Event('visibilitychange'));assert.equal(sent.at(-1).state,'active');recovery.stop();
 });
+
+test('client-side Back or navigation unmounts signal departure without pagehide; remount reports a fresh active page',()=>{
+ const doc=new EventTarget(),win=new EventTarget(),sent=[];doc.hidden=false;globalThis.document=doc;globalThis.window=win;
+ const first=installWebinarRecovery('session',()=>true,s=>sent.push(s));first.stop();
+ assert.deepEqual(sent.map(s=>s.state),['active','left']);
+ const next=installWebinarRecovery('session',()=>true,s=>sent.push(s));assert.equal(sent.at(-1).state,'active');assert.notEqual(sent[0].pageId,sent.at(-1).pageId);next.stop();
+});
