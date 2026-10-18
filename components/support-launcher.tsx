@@ -20,7 +20,7 @@ export function SupportLauncher({onMembershipChanged,onOpen,onClose}:{onMembersh
  function close(){setVisible(false);if(onClose)onClose();else trigger.current?.focus();}
  return <>
   <button ref={trigger} type="button" className="workspace-support-launcher" aria-haspopup="dialog" aria-expanded={visible} onClick={()=>{onOpen?.();setOpened(true);setVisible(true);}}><LifeBuoy size={17} aria-hidden="true"/>Help</button>
-  {opened&&createPortal(<dialog ref={dialog} className="support-panel" aria-label="AI support" onCancel={event=>{event.preventDefault();close();}} onClose={close}>
+  {opened&&createPortal(<dialog ref={dialog} className="support-panel" aria-label="Support" onCancel={event=>{event.preventDefault();close();}} onClose={close}>
    <SupportChat active={visible} onClose={close} onMembershipChanged={onMembershipChanged}/>
   </dialog>,document.body)}
  </>;

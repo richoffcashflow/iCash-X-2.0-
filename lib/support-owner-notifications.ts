@@ -29,7 +29,7 @@ export async function queueSupportEmailCopy({db,providerId,email,receiptText,env
 export function supportOwnerMessage(job:Claim,from:string):Message{
  if(!uuid.test(job.id)||!uuid.test(job.sourceId)||!titleEmailAddress(job.recipient)||!titleEmailAddress(from)||job.threadId&&!uuid.test(job.threadId)||!Number.isFinite(Date.parse(job.createdAt)))throw Error('Invalid support notification');
  const when=new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',dateStyle:'medium',timeStyle:'short',hour12:true}).format(new Date(job.createdAt));
- const responseLabel=job.source==='chat'?'AI support response':job.source==='email'?'Automatic email response':'On-page support response';
+ const responseLabel=job.source==='chat'?'Support response':job.source==='email'?'Automatic email response':'On-page support response';
  const reply=job.reply??'No automatic response was sent.';
  const status=job.replyStatus==='saved'?'Shown in the customer’s support conversation.':job.replyStatus==='accepted'?'Accepted by the email provider.':job.replyStatus==='unconfirmed'?'Sending was not confirmed. This is the attempted response.':'Automatic reply pending.';
  const link=job.source==='email'?`https://resend.com/emails/receiving/${job.sourceId}`:'https://www.geticashx.com/support/admin';
