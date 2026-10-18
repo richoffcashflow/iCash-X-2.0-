@@ -60,6 +60,12 @@ try{
  await pg.exec(natural.match(/do \$patch\$[\s\S]*?end \$patch\$;/)[0]);
  await pg.exec(read('supabase/migrations/20261007001915_short_seller_interest_question.sql'));
  await pg.exec(read('config/seller-response-progress.sql'));
+ // Receipt binding is exercised by reliability-database; isolate the response
+ // transition here over the real intake, contact and queue functions.
+ await pg.exec(`create function icash_voice_attempt_recorded(uuid) returns boolean language sql as $$select exists(select 1 from public.icash_voice_jobs where id=$1 and provider_call_sid is not null and (state='dispatched' or state='held' and outcome='ended_before_recording'))$$;
+ create function icash_undispatched_outreach_findings() returns boolean language sql as $$select exists(select 1 from icash_voice_jobs v where (v.state='dispatched' and v.provider_call_sid is not null))$$;`);
+ await pg.exec(read('config/recorded-seller-attempt-progress.sql').match(/do \$patch\$[\s\S]*?end \$patch\$;/)[0]);
+
  const oldScreen=(await one("insert into icash_screening_jobs(account_id,event_key,snapshot,state,result,completed_at) values($1,'SIMULATION old practice','{\"propertyId\":\"practice_old\"}','complete','{}',now()) returning id",[account])).id;
  const oldDeal=(await one("insert into icash_deal_files(account_id,screening_id,stage,terms) values($1,$2,'draft','{\"practice\":true,\"address\":\"SIMULATION old practice\"}') returning id",[account,oldScreen])).id;
  const oldThread=(await one("insert into icash_text_threads(account_id,deal_id,sender,recipient,permission_until,permission_evidence,timezone,dnc_checked_at,dnc_clear,sms_rate_id,paused) values($1,$2,$3,$4,now()-interval '1 day','SIMULATION old practice consent',$5,now()-interval '2 days',true,$6,true) returning id",[account,oldDeal,f.sender,phone,timezone,f.sms])).id;
@@ -118,6 +124,16 @@ try{
   await rpc('icash_prepare_seller_responses',{p_lead:lead});
   assert.equal((await one('select state from icash_seller_responses')).state,'needs_setup','unknown provider outcome remains visible');
   assert.equal((await one('select state from icash_voice_jobs where id=$1',[job])).state,'held','an uncertain call is never rearmed');
+
+  await q("update icash_voice_jobs set outcome='ended_before_recording',provider_call_sid='CA' || repeat('b',32) where id=$1",[job]);
+  await q('update icash_seller_responses set next_attempt_at=now()');
+  const finished=await rpc('icash_prepare_seller_responses',{p_lead:lead});
+  assert.deepEqual(await one('select state,detail from icash_seller_responses'),{state:'contact_started',detail:'Text accepted; call attempt recorded'});
+  assert.equal(finished[0].voiceJobId,null);assert.equal(finished[0].smsMessageId,null);
+  assert.equal((await one('select state from icash_voice_jobs where id=$1',[job])).state,'held');
+  assert.equal((await one('select count(*)::int n from icash_voice_jobs')).n,1,'completed attempt never creates a repeat call');
+  await q("update icash_voice_jobs set outcome='provider_outcome_unknown_no_retry',provider_call_sid=null where id=$1",[job]);
+  await q("update icash_seller_responses set state='needs_setup'");
   await rpc('icash_record_outreach_campaign',{p_account:account,p_user:user,p_mode:'sms_inbound',p_version:'outreach-channels-2026-10-03.1',p_accepted:true});
   await q('update icash_seller_responses set next_attempt_at=now()');
   await rpc('icash_prepare_seller_responses',{p_lead:lead});
