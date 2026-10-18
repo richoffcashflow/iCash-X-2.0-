@@ -12,6 +12,7 @@ import {automaticOfferReceptionPrompt,streamingAutomaticOfferReceptionPrompt,leg
 import {sellerAgreementDeliveryPrompt} from '../lib/seller-agreement-delivery-prompt.ts';
 import {automaticOfferGuardrails,automaticOfferPolicy} from '../lib/automatic-offer-policy.ts';
 process.env.ICASH_LIVE_WORK_READY='true'; // Ready-state provider fixtures only.
+process.env.META_INSTANT_LEADS_ENABLED='false'; // Scenarios select their own feature state, independent of the deployment environment.
 import assert from 'node:assert/strict';
 import {createHash,randomBytes} from 'node:crypto';
 import {readFileSync} from 'node:fs';
@@ -72,6 +73,7 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_webinar_text_senders'))return preferredPhone?[{phone:preferredPhone}]:[];
  if(path.startsWith('icash_business_voice_numbers'))return [{outbound_enabled:secondEnabled}];
  if(path==='rpc/icash_voice_sms_context')return null;
+ if(path==='rpc/icash_meta_voice_context'){assert.equal(body.p_account,'account');assert.equal(body.p_job,'job');return null;}
  if(path==='rpc/icash_seller_call_request'){assert.equal(body.p_account,'account');assert.equal(body.p_screening,'screening');assert.equal(body.p_phone,permission.phone);return {name:null,submittedAt:new Date(now-1000).toISOString()};}
  if(path==='rpc/icash_seller_sms_call_ack')return 'ack-message';
  if(path==='rpc/icash_seller_voice_permission_current')return sellerConsentCurrent;
@@ -248,6 +250,22 @@ reset();smsSource='seller-now';timeout=true;assert.equal((await dispatchLiveVoic
 reset();sellerConsentCurrent=true;textThreads=[{sender:newBusinessPhone,sender_pool_assigned:true}];secondEnabled=true;secondVerified=true;customVoice='voice_custom_vip';assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(outboundBody.fromPhone,newBusinessPhone);assert.equal(outboundBody.voiceId,'voice_custom_vip');
 reset();sellerConsentCurrent=true;textThreads=[];preferredPhone=newBusinessPhone;secondEnabled=true;secondVerified=true;assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(outboundBody.fromPhone,newBusinessPhone);preferredPhone=null;
 reset();sellerConsentCurrent=true;textThreads=[{sender:newBusinessPhone,sender_pool_assigned:true}];secondEnabled=true;secondVerified=false;assert.equal((await dispatchLiveVoice('account','job')).status,'business_number_verification_required');assert.equal(postCount,0);
+
+// Enabling Meta intake must keep ordinary website seller calls working. The
+// feature lookup legitimately returns no Meta context for this saved intake.
+const deploymentEnvironment=process.env.VERCEL_ENV;
+process.env.VERCEL_ENV='production';
+for(const enabled of ['false','true']){
+ reset();sellerConsentCurrent=true;permission={...permission,party:'seller',timezone:'America/Chicago',seller_intake_id:'saved-intake'};
+ process.env.META_INSTANT_LEADS_ENABLED=enabled;
+ assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');
+ assert.equal(postCount,1);
+ assert.equal(records.some(r=>r.path==='rpc/icash_meta_voice_context'),enabled==='true');
+ assert(!records.some(r=>r.path==='rpc/icash_meta_claim_voice'),'Ordinary seller calls keep their own admission path');
+}
+process.env.META_INSTANT_LEADS_ENABLED='false';
+if(deploymentEnvironment===undefined)delete process.env.VERCEL_ENV;else process.env.VERCEL_ENV=deploymentEnvironment;
+console.log('PASS ordinary seller dispatch with Meta intake disabled and enabled; build environment cannot select fixture behavior.');
 
 delete process.env.CONTIGUITY_FROM;delete globalThis.__voiceTest;delete process.env.ELEVENLABS_API_KEY;Date.now=realNow;
 console.log('Voice dispatch: permissions, hours, fresh underwriting, reviewed offer ceilings, full-duration costs, Stop, practice-agent isolation, uncertain-call no-retry and honest launch readiness passed. No provider traffic.');
