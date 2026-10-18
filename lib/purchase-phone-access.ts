@@ -19,7 +19,7 @@ export async function requestPurchasePhoneCode({db,email,phone,priorChallenge,sc
  if(!phoneAccessReady(env))throw Error('Text sign-in is temporarily unavailable. Use email or contact support.');
  const id=randomUUID(),secret=randomBytes(32).toString('hex'),code=String(randomInt(10000000,100000000));
  const binding={p_id:id,p_secret_hash:accessHash(secret)};
- const job=await db<{id:string;phone:string;sender:string}|null>('rpc/icash_begin_phone_challenge','POST',{...binding,p_email:email,p_phone:phone,p_code_hash:accessHash(secret+':'+code)});
+ const job=await db<{id:string;phone:string;sender:string}|null>('rpc/icash_begin_phone_challenge_v2','POST',{...binding,p_email:email,p_phone:phone,p_code_hash:accessHash(secret+':'+code)});
  // A decoy cookie and identical response do not disclose which purchases exist.
  if(job){
   if(job.id!==id||job.phone!==phone||!normalizeAccessPhone(job.sender))throw Error('Text sign-in is temporarily unavailable.');
@@ -45,7 +45,9 @@ export async function verifyPurchasePhoneCode({db,auth,challenge,code,email,phon
  const {id,secret}=challengeParts(challenge),binding={p_id:id,p_secret_hash:accessHash(secret)};
  const args={...binding,p_code_hash:accessHash(secret+':'+code)};
  let target=await db<Target|null>('rpc/icash_verify_phone_challenge','POST',args);
- if(!target||!uuid.test(target.membershipId)||target.email!==email||target.phone!==phone||!normalizeAccessPhone(target.phone))throw Error('That code could not be verified. Check the code or request a new text.');
+ // The verified challenge supplies the purchase identity. An optional email
+ // typed before requesting SMS must not replace or override that saved identity.
+ if(!target||!uuid.test(target.membershipId)||typeof target.email!=='string'||!target.email.includes('@')||target.phone!==phone||!normalizeAccessPhone(target.phone))throw Error('That code could not be verified. Check the code or request a new text.');
  let userId=target.userId;
  if(!userId){
   // Create an unverified email identity only after phone possession is proven.

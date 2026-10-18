@@ -39,6 +39,8 @@ try{
  await pg.exec(read('supabase/migrations/20261017152224_purchase_access_reminder_and_text.sql'));
  await pg.exec(read('supabase/migrations/20261017152700_purchase_access_phone_normalization.sql'));
  await pg.exec(read('supabase/migrations/20261017171814_paid_phone_access_recovery.sql'));
+ await pg.exec(read('supabase/migrations/20261018131012_checkout_phone_email_recovery.sql'));
+ await pg.exec(read('supabase/migrations/20261017150110_purchase_email_signin_eligibility.sql'));
  async function buyer(overrides={}){
   const id=randomUUID(),phone='+1212555'+String(sequence++),email=id+'@example.invalid',guest=accessHash(randomUUID());
   await q("insert into icash_memberships(id,mode,state,payer_email,payer_phone,guest_hash,stripe_session_id) values($1,'live','active',$2,$3,$4,$5)",[id,email,phone,guest,'cs_live_'+id.replaceAll('-','')]);
@@ -65,6 +67,18 @@ try{
  assert.equal((await q('select profile from icash_bot_setups where account_id=$1',[aid])).rows[0].profile.displayName,'Saved Realty');
  assert.equal(await rpc('icash_claim_funding',{p_user:identity.id,p_mode:'live'}),aid,'Existing workspace snapshot accepts the phone identity');
  assert.equal((await q('select credited_at from icash_funding_orders where id=$1',[unboundCredit])).rows[0].credited_at,null,'Unverified email cannot claim another credit purchase');
+ // With no unrelated funding order, the old eligibility rule stranded an
+ // unverified email after phone recovery had linked its subscription.
+ const afterPhone=await buyer(),afterPhoneRequest=await request(afterPhone);
+ const afterPhoneSession=await verify(afterPhoneRequest.cookie,code());
+ assert.equal(await rpc('icash_can_sign_in',{p_email:afterPhone.email,p_mode:'live'}),false,'Reproduce phone recovery blocking later email-code requests');
+ await pg.exec(read('supabase/migrations/20261018131443_verified_phone_identity_email_signin.sql'));
+ assert.equal(await rpc('icash_can_sign_in',{p_email:afterPhone.email,p_mode:'live'}),true,'A verified phone identity may request a code to prove its saved email');
+ assert.equal(await rpc('icash_can_sign_in',{p_email:afterPhone.email,p_mode:'test'}),false);
+ const afterPhoneIdentity=await rpc('icash_phone_session_user',{p_hash:accessHash(afterPhoneSession)});
+ assert.equal(afterPhoneIdentity.email_confirmed_at,null,'Email verification still requires its own actual code');
+ await q('update icash_purchase_phone_identities set revoked_at=now() where user_id=$1',[afterPhoneIdentity.id]);
+ assert.equal(await rpc('icash_can_sign_in',{p_email:afterPhone.email,p_mode:'live'}),false,'Revoked phone identity does not qualify an unverified email');
  await assert.rejects(()=>verify(start.cookie,firstCode),'Code cannot be reused after session creation');
  assert.equal(await rpc('icash_phone_session_user',{p_hash:accessHash('other-session')}),null);
  await rpc('icash_revoke_phone_session',{p_hash:accessHash(session)});assert.equal(await rpc('icash_phone_session_user',{p_hash:accessHash(session)}),null,'Sign out revokes the server session');
@@ -78,6 +92,28 @@ try{
  const mismatched=await buyer();assert.equal(await rpc('icash_phone_access_target',{p_email:mismatched.email,p_phone:'+12125559999'}),null);
  const stopped=await buyer();await q("insert into icash_text_suppressions values($1,'STOP')",[stopped.phone]);assert.equal(await target(stopped),null);
  const refunded=await buyer();await q("insert into icash_billing_reviews values($1,null,null)",['pi_'+refunded.id.replaceAll('-','')]);assert.equal(await target(refunded),null);
+ // Reproduce a buyer using a support email different from the checkout email.
+ const receiptBuyer=await buyer(),typedEmail='different-inbox@example.invalid';
+ const mismatchedRequest=await request({...receiptBuyer,email:typedEmail});
+ const mismatchCode=code();
+ const mismatchSession=await verifyPurchasePhoneCode({db,auth,challenge:mismatchedRequest.cookie,code:mismatchCode,email:typedEmail,phone:receiptBuyer.phone});
+ const mismatchIdentity=await rpc('icash_phone_session_user',{p_hash:accessHash(mismatchSession)});
+ assert.equal(mismatchIdentity.email,receiptBuyer.email,'The verified purchase identity comes from the challenge, never the typed email');
+ assert.equal(mismatchIdentity.email_confirmed_at,null,'Possessing a phone does not verify either email');
+ assert.equal((await q('select count(*)::int n from auth.users where email=$1',[typedEmail])).rows[0].n,0);
+ const phoneOnly=await buyer(),phoneOnlyRequest=await request({...phoneOnly,email:''});
+ const phoneOnlySession=await verifyPurchasePhoneCode({db,auth,challenge:phoneOnlyRequest.cookie,code:code(),email:'',phone:phoneOnly.phone});
+ assert.equal((await rpc('icash_phone_session_user',{p_hash:accessHash(phoneOnlySession)})).email,phoneOnly.email);
+ for(const blocked of [confirmed,occupied,stopped,refunded]){
+  assert.equal(await rpc('icash_resolve_phone_access_target',{p_email:'',p_phone:blocked.phone}),null,'Phone-only recovery preserves the existing identity and payment restrictions');
+  const before=sent.length;await request({...blocked,email:''});assert.equal(sent.length,before);
+ }
+ const shared=await buyer(),sharedOther=await buyer();
+ await q('update icash_memberships set payer_phone=$2 where id=$1',[sharedOther.id,shared.phone]);
+ const beforeShared=sent.length;const decoy=await request({...shared,email:''});
+ assert.equal(sent.length,beforeShared,'A shared phone cannot choose between eligible identities');
+ assert.equal((await q('select count(*)::int n from icash_purchase_phone_challenges where id=$1',[decoy.cookie.split('.')[0]])).rows[0].n,0);
+ assert.equal((await rpc('icash_resolve_phone_access_target',{p_email:shared.email,p_phone:shared.phone})).membershipId,shared.id,'A receipt email can disambiguate a shared phone');
  const locked=await buyer(),lockedRequest=await request(locked);for(let n=0;n<5;n++)await assert.rejects(()=>verify(lockedRequest.cookie,'00000000'));await assert.rejects(()=>verify(lockedRequest.cookie,code()),'Five wrong attempts lock the challenge');
  const early=await buyer(),earlyReq=await request(early);await q("update icash_purchase_phone_challenges set expires_at=now()-interval '1 second' where id=$1",[earlyReq.cookie.split('.')[0]]);await assert.rejects(()=>verify(earlyReq.cookie,code()));
  const ambiguity=await buyer();let attempts=0,captured;
@@ -93,7 +129,7 @@ try{
  await q("insert into icash_text_suppressions values($1,'STOP')",[checkout.phone]);assert.equal(await rpc('icash_purchase_access_followup_allowed',{p_id:texts[0].id}),false);
  await assert.rejects(()=>rpc('icash_record_purchase_access_contact',{...mark,p_checkout:'cs_live_wrong'}));
  await assert.rejects(()=>request(b,{env:{...env,VERCEL_ENV:'preview'},db:async()=>assert.fail('Preview cannot send')}));
- for(const role of ['anon','authenticated']){await pg.exec('set role '+role);await assert.rejects(()=>q('select * from icash_purchase_phone_sessions'));await assert.rejects(()=>rpc('icash_phone_access_target',{p_email:b.email,p_phone:b.phone}));await assert.rejects(()=>rpc('icash_complete_phone_access',{p_id:randomUUID(),p_secret_hash:'x',p_user:identity.id,p_session_hash:'x'}));await pg.exec('reset role');}
+ for(const role of ['anon','authenticated']){await pg.exec('set role '+role);await assert.rejects(()=>q('select * from icash_purchase_phone_sessions'));await assert.rejects(()=>rpc('icash_phone_access_target',{p_email:b.email,p_phone:b.phone}));await assert.rejects(()=>rpc('icash_resolve_phone_access_target',{p_email:'',p_phone:b.phone}));await assert.rejects(()=>rpc('icash_begin_phone_challenge_v2',{p_id:randomUUID(),p_email:'',p_phone:b.phone,p_secret_hash:accessHash('fixture'),p_code_hash:accessHash('fixture-code')}));await assert.rejects(()=>rpc('icash_complete_phone_access',{p_id:randomUUID(),p_secret_hash:'x',p_user:identity.id,p_session_hash:'x'}));await pg.exec('reset role');}
  const routeBuyer=await buyer(),jar=new Map(),cookieOptions=new Map(),callbacks=[];let allowed=true;
  const cookies=async()=>({get:key=>jar.has(key)?{value:jar.get(key)}:undefined,set:(key,value,options)=>{jar.set(key,value);cookieOptions.set(key,options);},delete:key=>jar.delete(key)});
  const route=await loadService('app/api/auth/phone/route.ts',{cookies,after:fn=>callbacks.push(fn),db,authRequest:auth,allowedOrigin:()=>allowed,normalizeEmail:value=>typeof value==='string'?value.trim().toLowerCase():null,limitRequest:async()=>{},normalizeAccessPhone,phoneAccessReady:()=>true,phoneChallengeCookie,phoneSessionCookie,requestPurchasePhoneCode:args=>requestPurchasePhoneCode({...args,env,transport}),verifyPurchasePhoneCode,console:{warn:()=>{}}});
@@ -107,5 +143,11 @@ try{
  const authService=await loadService('lib/account-auth.ts',{cookies,db,accountMode:()=> 'live',accessHash,phoneSessionCookie,process:{env:{}},fetch:async()=>assert.fail('Phone session needs no email token')});
  assert.equal((await authService.currentUser(true)).email,routeBuyer.email,'Production authentication reads the private phone session');
  const sessionHash=accessHash(jar.get(phoneSessionCookie));await authService.clearSession();assert(!jar.has(phoneSessionCookie));assert.equal(await rpc('icash_phone_session_user',{p_hash:sessionHash}),null);
+ const routePhoneOnly=await buyer(),onlyPhoneBody={action:'send',phone:routePhoneOnly.phone,accepted:true};
+ const onlyPhoneResponse=await post(onlyPhoneBody);assert.equal(onlyPhoneResponse.status,200);
+ const onlyPhoneResult=await onlyPhoneResponse.json();assert.equal(JSON.stringify(onlyPhoneResult).includes(routePhoneOnly.email),false,'No purchase email is disclosed before verification');
+ await callbacks.shift()();const onlyPhoneCode=code();
+ assert.equal((await post({action:'verify',phone:routePhoneOnly.phone,code:onlyPhoneCode})).status,200,'The public route completes sign-in with no email supplied');
+ assert.equal((await authService.currentUser(true)).email,routePhoneOnly.email);
  console.log('PASS paid phone access: actual SQL + transport fixtures, isolated purchase claim, preserved bot, no false email verification or account takeover, cooldown, expiry, failed attempts, STOP, refund, sender binding, ambiguous sends, session revocation, checkout permission, no duplicate enrollment, preview and private grants. No real texts.');
 }finally{await pg.close();}
