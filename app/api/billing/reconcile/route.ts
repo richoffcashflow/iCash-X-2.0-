@@ -1,3 +1,4 @@
+import {reconcilePrivateVips} from '@/lib/private-vip';
 import {reconcileAutoRecharge} from '@/lib/auto-recharge';
 import {reconcileMemberships} from '@/lib/membership-reconciliation';
 import {NextResponse} from 'next/server';
@@ -16,6 +17,7 @@ export async function GET(req:Request){const expected=`Bearer ${process.env.CRON
  for(const membership of cancellations){if(Date.now()>=deadline)break;cancellationChecked++;try{await stopMembership(membership);}catch{cancellationFailed++;}}
  // Recover missed membership webhooks without consuming the whole legacy/recharge budget.
  const memberships=await reconcileMemberships(Math.min(deadline,Date.now()+15_000));
+ const privateVip=await reconcilePrivateVips(Math.min(deadline,Date.now()+8_000));
  // Reserve capacity for active billing while also recovering paid history after Stop.
  const [active,stopped,recent]=await Promise.all([
   db<DailyPlan[]>(`icash_daily_plans?mode=eq.${mode}&state=neq.stopped&order=reconciled_at.asc.nullsfirst&limit=80`),
@@ -40,4 +42,4 @@ export async function GET(req:Request){const expected=`Bearer ${process.env.CRON
  const autoRecharge=await reconcileAutoRecharge(deadline);
  // Monitoring is independent of settlement and cannot overwrite its outcome.
  const costHealth=await db('rpc/icash_refresh_cost_health','POST',{}).catch(()=>null);
- return NextResponse.json({memberships,autoRecharge,costHealth,checked,failed,historyPending,deferred:plans.length-checked,cancellationChecked,cancellationFailed,cancellationDeferred:cancellations.length-cancellationChecked},{status:failed||memberships.failed||cancellationFailed||autoRecharge.failed?503:200});}
+ return NextResponse.json({memberships,privateVip,autoRecharge,costHealth,checked,failed,historyPending,deferred:plans.length-checked,cancellationChecked,cancellationFailed,cancellationDeferred:cancellations.length-cancellationChecked},{status:failed||privateVip.failed||memberships.failed||cancellationFailed||autoRecharge.failed?503:200});}

@@ -5,7 +5,7 @@ import ts from 'typescript';
 process.env.STRIPE_WEBHOOK_SECRET='whsec_fixture';
 let wakes=0,settlementFails=false;
 let event,invoice,reads=[],synced=[],fail=false,member=true;
-const deps={schedulePurchaseAccessEmail:()=>wakes++,settleMembershipInvoice:async()=>{if(settlementFails)throw Error('Settlement failed');return true;},NextResponse:{json:Response.json},fundingMode:()=> 'live',fundingStripe:()=>({
+const deps={settlePrivateVipInvoice:async()=>false,syncPrivateVip:async()=>false,schedulePurchaseAccessEmail:()=>wakes++,settleMembershipInvoice:async()=>{if(settlementFails)throw Error('Settlement failed');return true;},NextResponse:{json:Response.json},fundingMode:()=> 'live',fundingStripe:()=>({
  webhooks:{constructEvent:(_body,sig)=>{if(sig!=='fixture')throw Error('Signature');return event;}},
  invoices:{retrieve:async id=>{reads.push(['invoice',id]);if(fail)throw Error('Private transport failure');return invoice;}},
  subscriptions:{retrieve:async id=>{reads.push(['subscription',id]);return {id,status:'past_due'};}}

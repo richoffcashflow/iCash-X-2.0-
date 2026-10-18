@@ -1,4 +1,5 @@
 'use client';
+import {PrivateVipPlan} from '@/components/private-vip-plan';
 import {vipBenefits,vipRetentionTerms} from '@/lib/vip-policy';
 import {VipPlan} from '@/components/vip-plan';
 import {useEffect,useRef,useState} from 'react';
@@ -22,7 +23,7 @@ export function MembershipSettings({locked=false,cancellationOnly=false,planOnly
  const cancelling=data?.state==='cancel_requested',canCancel=data&&data.state!=='cancelled'&&!cancelling;
  const offerAvailable=offer&&(offer.eligible||offer.retryable);
  if(data?.complimentary){
-  const content=<div className="membership-settings"><div className="membership-summary"><strong>Free Standard access</strong><span>Private invitation</span></div><p>No monthly subscription or card is required. Work credits are purchased separately.</p>{planOnly&&<p>Your invitation includes Standard. <a href="/support">Contact support about VIP access.</a></p>}</div>;
+  const content=<div className="membership-settings"><div className="membership-summary"><strong>Free Standard access</strong><span>Private invitation</span></div><PrivateVipPlan cancellationOnly={cancellationOnly} onChanged={async()=>{await load();await onChanged?.();}}/></div>;
   return cancellationOnly?<FundingDialog title="Your access" onClose={()=>onClosed?.()}>{content}</FundingDialog>:content;
  }
  return <div className="membership-settings">{!cancellationOnly&&(data?<>

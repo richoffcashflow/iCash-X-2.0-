@@ -1,4 +1,5 @@
 'use client';
+import {PrivateVipPlan} from '@/components/private-vip-plan';
 import {useEffect,useRef,useState} from 'react';
 import {ArrowRight,Check,ShieldCheck} from 'lucide-react';
 import {AccountAccess} from '@/components/account-access';
@@ -12,8 +13,8 @@ import {vipBenefits,vipTermsVersion,vipMonthlyCents,vipUpgradeCents} from '@/lib
 import {priceLabel} from '@/lib/membership-policy';
 
 type RefreshResult={membership:{accessible:boolean;vip?:boolean}|null;needsClaim:boolean};
-type Props={mode:'live'|'test';webinarSessionId?:string;phase:'watching'|'ended';email:string;customerName:string;needsClaim:boolean;paidThrough:string|null;retentionEndsAt?:string|null;vipSessionUrl?:string|null;onRefresh:()=>Promise<RefreshResult|null|undefined>;onWorkspace:()=>void;onActive?:(active:boolean)=>void};
-export function WebinarVipUpsell({mode,webinarSessionId,phase,email,customerName,needsClaim,paidThrough,retentionEndsAt,vipSessionUrl,onRefresh,onWorkspace,onActive}:Props){
+type Props={complimentary?:boolean;mode:'live'|'test';webinarSessionId?:string;phase:'watching'|'ended';email:string;customerName:string;needsClaim:boolean;paidThrough:string|null;retentionEndsAt?:string|null;vipSessionUrl?:string|null;onRefresh:()=>Promise<RefreshResult|null|undefined>;onWorkspace:()=>void;onActive?:(active:boolean)=>void};
+export function WebinarVipUpsell({complimentary=false,mode,webinarSessionId,phase,email,customerName,needsClaim,paidThrough,retentionEndsAt,vipSessionUrl,onRefresh,onWorkspace,onActive}:Props){
  const [accepted,setAccepted]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[claim,setClaim]=useState(false),[declined,setDeclined]=useState(false),[confirming,setConfirming]=useState(false);
  const [form,setForm]=useState<{clientSecret:string;publishableKey:string;sessionId:string}|null>(null);
  const alive=useRef(true),checking=useRef(false),operation=useRef(false),refresh=useRef(onRefresh),active=useRef(onActive);
@@ -28,7 +29,7 @@ export function WebinarVipUpsell({mode,webinarSessionId,phase,email,customerName
    return false;
   }catch(e){if(alive.current){if((e as {status?:number})?.status===401)setClaim(true);setError(e instanceof Error?e.message:'Could not confirm your upgrade. Please retry.');}return false;}finally{checking.current=false;}
  }
- useEffect(()=>{if(needsClaim)return;const returned=new URLSearchParams(window.location.search).get('upgrade')==='paid';if(returned){setConfirming(true);active.current?.(true);}void check();},[needsClaim]);
+ useEffect(()=>{if(needsClaim||complimentary)return;const returned=new URLSearchParams(window.location.search).get('upgrade')==='paid';if(returned){setConfirming(true);active.current?.(true);}void check();},[needsClaim,complimentary]);
  useEffect(()=>{if(!confirming)return;let tries=0;const id=setInterval(()=>{if(!document.hidden&&++tries<=12)void check();if(tries>=12)clearInterval(id);},5000);return()=>clearInterval(id);},[confirming]);
  function track(kind:'add_to_cart'|'checkout_started',checkoutId?:string){if(mode==='live')webinarBrowserEvent(kind,webinarSessionId,{product:'vip_upgrade',checkoutId,valueCents:vipUpgradeCents});}
  async function upgrade(){
@@ -48,6 +49,7 @@ export function WebinarVipUpsell({mode,webinarSessionId,phase,email,customerName
   setBusy(true);setError('');try{const account=await webinarRequest<{signedIn:boolean}>('/api/account?view=core',{cache:'no-store'},30000);if(!account.signedIn)throw Error('Confirm your payment email to continue.');const result=await refresh.current();if(!result?.membership?.accessible||result.needsClaim)throw Error('Sign in with the email used for this purchase. Your payment is saved.');if(alive.current)setClaim(false);await check();}catch(e){if(alive.current)setError(e instanceof Error?e.message:'Could not restore your purchase.');}finally{if(alive.current)setBusy(false);}
  }
  function skip(){if(busy||confirming||form)return;setClaim(false);setDeclined(true);active.current?.(false);if(phase==='ended'){const destination=safeVipSession(vipSessionUrl);if(destination)window.location.assign(destination);}}
+ if(complimentary)return <PrivateVipPlan onChanged={onRefresh}/>;
  if(declined&&phase==='ended'&&!safeVipSession(vipSessionUrl))return <PostPurchaseSetup email={email} customerName={customerName} needsClaim={needsClaim} onWorkspace={onWorkspace}/>;
  if(declined)return <section className="membership-success"><p className="purchase-receipt"><Check size={16}/>Software payment confirmed</p><h2>{phase==='watching'?'You’re in. Keep watching.':'Your VIP session is ready.'}</h2>{phase==='watching'?<p>Your next step will open when this webinar ends.</p>:<a className="setup-primary" href={safeVipSession(vipSessionUrl)!}>Open my VIP session<ArrowRight size={17}/></a>}<button type="button" className="membership-embedded-back" onClick={()=>navigateWebinar('/access')}>Open my workspace</button></section>;
  return <section className="webinar-vip-upsell vip-checkout" aria-label="VIP upgrade">
