@@ -23,7 +23,7 @@ export function AccountAccess({initialEmail='',onSignedIn,ready=true}:{initialEm
  function choose(next:'email'|'sms'){setChannel(next);setSent(false);setCode('');setMessage('');setCooldown(0);}
  const emailInbox=/@(icloud|me|mac)\.com$/i.test(email.trim())?'https://www.icloud.com/mail':/@gmail\.com$/i.test(email.trim())?'https://mail.google.com':null;
  return <form className="account-access" onSubmit={async event=>{event.preventDefault();await perform(sent?'verify':'send');}}>
-  <p>{channel==='sms'?'Use your payment email and the mobile number from checkout.':'Enter your account or payment email. No password needed.'}</p>
+  <p>{channel==='sms'?'Use the email on your payment receipt and the mobile number from checkout.':'Already paid? Use the email on your payment receipt. Returning users can use their account email. No password needed.'}</p>
   {!ready&&channel==='email'&&<p role="status">Email sign-in is temporarily unavailable. Try your checkout phone below.</p>}
   <label>Email<input type="email" autoComplete="email" required value={email} disabled={sent||busy} onChange={event=>setEmail(event.target.value)}/></label>
   {channel==='sms'&&<><label>Checkout mobile number<input type="tel" autoComplete="tel" required value={phone} disabled={sent||busy} onChange={event=>setPhone(event.target.value)} placeholder="(555) 555-1234"/></label><p className="sign-in-help">Choose “Text me a code” to request one sign-in text. Reply STOP to opt out.</p></>}
@@ -33,6 +33,7 @@ export function AccountAccess({initialEmail='',onSignedIn,ready=true}:{initialEm
   </>}
   <button className="fund-button full" disabled={busy||!sent&&cooldown>0||channel==='email'&&!ready}>{busy?'One moment…':sent?'Sign in':channel==='sms'?'Text me a code':'Email me a code'}</button>
   {sent?<>
+   <p className="sign-in-help">No code? Check that the email above matches your payment receipt. Text sign-in needs the same payment email too.</p>
    <button type="button" className="demo-button" disabled={busy||cooldown>0} onClick={()=>void perform('send')}>{cooldown>0?`Resend in ${Math.floor(cooldown/60)}:${String(cooldown%60).padStart(2,'0')}`:'Send a new code'}</button>
    <button type="button" className="demo-button" disabled={busy} onClick={()=>choose(channel)}>Use another email or resend</button>
   </>:<button type="button" className="demo-button" disabled={busy} onClick={()=>setSent(true)}>I already have a code</button>}

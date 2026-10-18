@@ -34,6 +34,38 @@ let answer=supportConversationFallback({kind:'access',messages:history});assert.
 history.push(assistant(answer.reply),user('Email'));answer=supportConversationFallback({kind:'access',messages:history});assert.match(answer.reply,/device and browser/);assert.doesNotMatch(answer.reply,/email or text/);
 history.push(assistant(answer.reply),user('iPhone Safari'));answer=supportConversationFallback({kind:'access',messages:history});assert.match(answer.reply,/error message/);
 history.push(assistant(answer.reply),user('Nothing, no error'));answer=supportConversationFallback({kind:'access',messages:history});assert.equal(answer.status,'escalated');
+// Missing delivery is a distinct step: never tell a customer to enter an absent code.
+for(const question of [
+ 'I’m trying to login it will not send me a email or text',
+ 'I’ve entered my phone number and email but have not gotten a sign in code to either and I already paid',
+ 'It never sent me the sign in code in the first place',
+ 'The email code has not arrived',
+ "I haven't received the email",
+ "It didn't send a text",
+ 'No email code',
+ 'Still waiting for my text code',
+ 'I cannot get either code',
+]){
+ const missing=supportConversationFallback({kind:'access',messages:[user('I need my email sign-in code'),user(question)]});
+ assert.equal(missing.status,'waiting_on_customer');assert.match(missing.reply,/email on your iCash X payment receipt/);assert.match(missing.reply,/Text sign-in also needs that email/);
+ assert.doesNotMatch(missing.reply,/enter the newest code|press the sign-in button|device and browser|error message|code is on its way/i);
+}
+assert.match(supportConversationFallback({kind:'access',messages:[user('It never sent me the code')]}).reply,/email or text/);
+const missingHistory=[user('It will not send me a email or text')];
+let missingAnswer=supportConversationFallback({kind:'access',messages:missingHistory});
+missingHistory.push(assistant(missingAnswer.reply),user('Yes, the email matches my receipt'));
+missingAnswer=supportConversationFallback({kind:'access',messages:missingHistory});assert.match(missingAnswer.reply,/request one fresh code/);assert.match(missingAnswer.reply,/spam or junk/);
+missingHistory.push(assistant(missingAnswer.reply),user('Still no code in either inbox or text'));
+missingAnswer=supportConversationFallback({kind:'access',messages:missingHistory});assert.equal(missingAnswer.status,'escalated');assert.match(missingAnswer.reply,/checkout-email match and code delivery/);assert.doesNotMatch(missingAnswer.reply,/press the sign-in|device and browser/i);
+for(const confirmation of ['I got the email code now, but it says expired','I have the code now, but it says invalid','Got it now, but it says expired']){
+ const received=supportConversationFallback({kind:'access',messages:[...missingHistory.slice(0,-1),user('iPhone Safari'),user(confirmation)]});
+ assert.match(received.reply,/Request one fresh code and enter that newest code/);assert.doesNotMatch(received.reply,/hasn’t arrived|Does the receipt email match/);
+}
+const staleInstructions=[user('My email code has not arrived'),assistant('Enter the newest code in Safari.'),user('iPhone Safari')];
+assert.match(supportConversationFallback({kind:'access',messages:staleInstructions}).reply,/payment receipt/,'Support instructions and browser details do not imply receipt');
+for(const question of ['No email code works','I am not getting past the sign-in screen'])assert.doesNotMatch(supportConversationFallback({kind:'access',messages:[user('iPhone Safari email code'),user(question)]}).reply,/hasn’t arrived|receipt email match/,'Rejected codes and a stuck screen are not missing delivery');
+assert.equal(supportConversationFallback({kind:'access',messages:[...missingHistory,user('Cancel my subscription')]}).status,'escalated');
+assert.equal(supportConversationFallback({kind:'access',messages:missingHistory,handedOff:true}).status,'escalated');
 assert.equal(supportConversationFallback({kind:'access',messages:[user('That worked, I’m in!')]}).status,'resolved');
 assert.notEqual(supportConversationFallback({kind:'access',messages:[user('That worked but I am still stuck')]}).status,'resolved');
 assert.notEqual(supportConversationFallback({kind:'access',messages:[user('I got in. Why is the course not opening?')]}).status,'resolved','Confirmation with an unanswered question is not a complete resolution');
