@@ -44,6 +44,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Complete feature flows
 
+- On October 18, 2026 the owner selected automatic follow-up from the actual name-and-phone submission for HomeOffer Network Meta form `4401851653462589`, without an extra checkbox. Keep `form_submission` as this source's contact basis and preserve its existing network-pool routing. Retain the authenticated submission receipt; do not invent checked disclaimer or outside-hours call-now responses. Keep test exclusion, phone/source binding, opt-outs, text-only requests, Run/Pause, membership, credits and provider receipts.
+
 - On October 18, 2026 the owner required a purchase during the main webinar to keep its video playing. Show the VIP session handoff only when the main video ends. Unpaid viewers follow the post-webinar checkout flow, then VIP after verified payment. Keep the one-time leave confirmation for paid viewers still watching; preserve active payment recovery and prevent duplicate charges.
 
 - On October 18, 2026 the owner reiterated that funded users must not get stuck behind redundant software setup. Keep read-only readiness and recovery scheduling consistent with positive-credit, actual-usage admission. A scheduled first call is queued work, and SMS-only accounts do not require an outbound call. Existing seller responses must continue if new address research fails or acquisition is disabled. Monitor work before dispatch as well as provider receipts; preserve explicit holds, recipient evidence, manual controls and uncertain-send protection.

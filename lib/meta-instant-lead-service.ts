@@ -3,6 +3,7 @@ import {smsLength} from './sms-length.ts';
 import {createHmac} from 'node:crypto';
 import {hashLeadToken,instantLeadToken,instantAddressLink,parseMetaLead,metaLeadAccessToken,type MetaLeadSource,type MetaLeadNotice} from './meta-instant-leads.ts';
 import {processSellerIntake,type SellerDb} from './seller-pipeline.ts';
+import {processMakeLead} from './meta-make-intake.ts';
 type Dispatch=(account:string,id:string)=>Promise<{status:string}>;
 type Deps={db:SellerDb;sms:Dispatch;voice:Dispatch;env:NodeJS.ProcessEnv;fetch?:typeof fetch};
 export type InstantLead={lead_id:string;account_id:string|null;screening_id:string|null;meta_id:string;submitted_at:string;link_hash:string;link_expires_at:string;paused:boolean;declined_at:string|null;offer_ready_at:string|null;lead:{name:string|null;phone:string;address:string|null;state:string};};
@@ -81,6 +82,7 @@ export async function processInstantLeadWork(d:Deps){
  if(!instantLeadsEnabled(d.env))return {status:'disabled'};
  const measurement=Promise.allSettled(Array.from({length:3},()=>deliverInstantCrmEvent(d.db,d.env,d.fetch??fetch)));
  const intake=await retrieveInstantLead(d);
+ try{await processMakeLead({db:d.db,env:d.env,onAccepted:id=>processInstantLead(d,id)});}catch{console.warn('make_lead_worker_pending');}
  const due=await d.db<{lead_id:string}[]>('icash_meta_leads?paused=eq.false&declined_at=is.null&contact_until=gt.'+encodeURIComponent(new Date().toISOString())+'&next_attempt_at=lte.'+encodeURIComponent(new Date().toISOString())+'&select=lead_id&order=next_attempt_at&limit=3');
  for(const row of due){
   await d.db(`icash_meta_leads?lead_id=eq.${row.lead_id}`,'PATCH',{next_attempt_at:new Date(Date.now()+60000).toISOString()});

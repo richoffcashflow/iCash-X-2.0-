@@ -8,7 +8,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const q=(sql,args=[])=>pg.query(sql,args);
 const one=async(sql,args=[])=>{const result=await q(sql,args);assert.equal(result.rows.length,1,sql);return result.rows[0];};
 const rpc=async(name,args)=>Object.values(await one(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) result`,args))[0];
-const configs=['meta-instant-leads','meta-instant-lead-work','meta-instant-lead-property','meta-instant-address-form','meta-instant-lead-workspace','meta-instant-lead-reception','meta-instant-lead-measurement','meta-instant-network-pool'];
+const configs=['meta-instant-leads','meta-instant-lead-work','meta-instant-lead-property','meta-instant-address-form','meta-instant-lead-workspace','meta-instant-lead-reception','meta-instant-lead-measurement','meta-instant-network-pool','meta-make-intake'];
 try{
  await pg.exec(`create role anon;create role authenticated;create role service_role bypassrls;
  create schema auth;create schema extensions;create schema icash_recording_private;create schema icash_recorded_reception_private;create schema icash_seller_agreement_private;
@@ -62,6 +62,28 @@ try{
  await q('insert into icash_operating_budget(id,enabled,standard_cost_multiplier) values(1,true,2)');
  await q("insert into icash_meta_lead_sources(id,page_id,form_id,account_id,slug,enabled,principal,consent_key,call_now_key,call_now_text,consent_text,consent_version,timezone,review_ref,reviewed_until) values($1,'111111111','222222222',$2,'simulation-form',true,'SIMULATION Buyer','ai_contact','call_now','Call me now about this property, including outside normal calling hours.','SIMULATION explicit calls and texts consent naming the direct buying principal.','simulation-v1','America/Chicago','SIMULATION immutable form consent review',now()+interval '40 days')",[source,account]);
  const base={metaId:'333333333',phone:'+12145550123',name:'SIMULATION Seller',submittedAt:new Date(Date.now()-2000).toISOString(),pageId:'111111111',formId:'222222222',adId:'444444444',adsetId:'555555555',campaignId:'666666666',consentResponses:[{checkbox_key:'ai_contact',is_checked:true},{checkbox_key:'call_now',is_checked:true}]};
+ const makeReceipt={id:'900000001',page_id:'111111111',form_id:'222222222',created_time:base.submittedAt,field_data:[{name:'full_name',values:['SIMULATION Seller']},{name:'phone_number',values:[base.phone]}],custom_disclaimer_responses:base.consentResponses};
+ const unconfigured={...makeReceipt,id:'900000002',form_id:'999999999'};
+ assert.equal((await rpc('icash_make_receive_lead',[unconfigured,false])).outreach,'form_setup_required','unconfigured source is stored without granting permission');
+ assert.equal(await rpc('icash_make_claim_lead',[unconfigured.id]),null,'unconfigured source cannot consume attempts or start outreach');
+ const testReceipt={...makeReceipt,id:'900000003'};
+ assert.equal((await rpc('icash_make_receive_lead',[testReceipt,true])).outreach,'test_excluded');
+ assert.equal(await rpc('icash_make_claim_lead',[testReceipt.id]),null,'a test with a plausible phone and consent cannot be claimed');
+ assert.equal((await rpc('icash_make_receive_lead',[testReceipt,false])).status,'conflict','test classification is immutable on replay');
+ const noConsent={...makeReceipt,id:'900000004',custom_disclaimer_responses:[]};
+ assert.equal((await rpc('icash_make_receive_lead',[noConsent,false])).outreach,'contact_evidence_required');
+ assert.equal(await rpc('icash_make_claim_lead',[noConsent.id]),null);
+ assert.equal((await rpc('icash_make_receive_lead',[makeReceipt,false])).outreach,'eligible_for_validation');
+ assert.equal((await rpc('icash_make_receive_lead',[makeReceipt,false])).duplicate,true);
+ assert.equal((await rpc('icash_make_receive_lead',[{...makeReceipt,field_data:[]},false])).status,'conflict','conflicting replays never replace the original receipt');
+ assert.equal(Number((await one('select count(*) n from icash_make_lead_inbox where meta_id=$1',[makeReceipt.id])).n),1);
+ const makeClaim=await rpc('icash_make_claim_lead',[makeReceipt.id]);assert.equal(makeClaim.sourceId,source);assert.deepEqual(makeClaim.payload,makeReceipt);
+ assert.equal(await rpc('icash_make_claim_lead',[makeReceipt.id]),null,'a second worker cannot claim in-flight work');
+ await q("update icash_make_lead_inbox set claimed_at=now()-interval '3 minutes',next_attempt_at=now()-interval '1 second' where meta_id=$1",[makeReceipt.id]);
+ const retryClaim=await rpc('icash_make_claim_lead',[makeReceipt.id]);assert.notEqual(retryClaim.token,makeClaim.token);
+ assert.equal((await one('select attempts from icash_make_lead_inbox where meta_id=$1',[makeReceipt.id])).attempts,2);
+ const denied=await one("select has_table_privilege('anon','icash_make_lead_inbox','select') a,has_table_privilege('authenticated','icash_make_lead_inbox','select') b,has_function_privilege('authenticated','icash_make_receive_lead(jsonb,boolean)','execute') c,has_function_privilege('anon','icash_make_claim_lead(text)','execute') d");
+ assert.deepEqual(denied,{a:false,b:false,c:false,d:false});
  const accepted=await rpc('icash_meta_accept_lead',[source,base,'a'.repeat(64)]);
  const lead=accepted.leadId;
  const before=await one('select * from icash_meta_leads where lead_id=$1',[lead]);
@@ -231,6 +253,31 @@ try{
  assert.equal(await rpc('icash_seller_contact_evidence',[other,routed.screeningId,network.leadId,poolPhone]),null,'a seller stop applies across matched buyers');
  await q("update icash_seller_intakes set next_assignment_at=now() where id=$1",[network.leadId]);
  assert.equal(await rpc('icash_assign_seller_lead_for',[network.leadId]),null,'a stopped network contact cannot be sold to another buyer');
+ // The owner's two-field form uses its actual authenticated submission, with
+ // no checkbox synthesized and the same pool/phone/stop bindings downstream.
+ const submissionSource=randomUUID();
+ await q("insert into icash_meta_lead_sources(id,page_id,form_id,account_id,slug,enabled,principal,routing_mode,sharing_text,consent_key,consent_text,consent_version,timezone,review_ref,reviewed_until,contact_basis) values($1,'111111111','999999998',null,'simulation-submission',true,'HomeOffer Network','network_pool','SIMULATION HomeOffer Network shares this request with its matched independent buyers.','','SIMULATION name and phone submitted to request property follow-up.','simulation-submission-v1','America/Chicago','SIMULATION owner configured submission follow-up',now()+interval '40 days','form_submission')",[submissionSource]);
+ const submittedAt=new Date(Date.now()-2000).toISOString();
+ const submission={...base,metaId:'900000010',phone:'+12145550789',name:'SIMULATION Submission',formId:'999999998',submittedAt,consentResponses:[{kind:'form_submission',provider:'meta',metaId:'900000010',pageId:'111111111',formId:'999999998',submittedAt}]};
+ await assert.rejects(rpc('icash_meta_accept_lead',[submissionSource,submission,'1'.repeat(64)]),/Verified Meta/,'a caller cannot invent the underlying submission');
+ const receipt={...makeReceipt,id:submission.metaId,form_id:submission.formId,created_time:submittedAt,field_data:[{name:'full_name',values:[submission.name]},{name:'phone_number',values:['(214) 555-0789']}],custom_disclaimer_responses:[]};
+ assert.equal((await rpc('icash_make_receive_lead',[receipt,false])).outreach,'eligible_for_validation','name and phone are enough for the configured source');
+ assert(await rpc('icash_make_claim_lead',[receipt.id]));
+ assert.equal(await rpc('icash_meta_contact_receipt_current',[submissionSource,{...submission,phone:'+12145550788'}]),false);
+ assert.equal(await rpc('icash_meta_contact_receipt_current',[submissionSource,{...submission,name:'Someone else'}]),false);
+ assert.equal(await rpc('icash_meta_contact_receipt_current',[submissionSource,{...submission,consentResponses:base.consentResponses}]),false,'checkbox receipt cannot substitute for a submission');
+ const submitted=await rpc('icash_meta_accept_lead',[submissionSource,submission,'1'.repeat(64)]);
+ const submissionRow=await one('select * from icash_meta_leads where lead_id=$1',[submitted.leadId]);
+ assert(submissionRow.account_id,'submission-only contact enters the funded buyer pool');
+ assert.deepEqual(submissionRow.consent_receipt,submission.consentResponses);assert.equal(submissionRow.call_now,false);
+ assert(await rpc('icash_seller_contact_evidence',[submissionRow.account_id,submissionRow.screening_id,submitted.leadId,submission.phone]));
+ assert.equal((await rpc('icash_meta_accept_lead',[submissionSource,submission,'1'.repeat(64)])).leadId,submitted.leadId);
+ const submissionCall=await rpc('icash_meta_prepare_voice',[submitted.leadId]);assert(submissionCall?.voiceJobId,'submission-only contact queues its initial call');
+ await q('update icash_meta_leads set paused=true where lead_id=$1',[submitted.leadId]);
+ assert.equal(await rpc('icash_seller_contact_evidence',[submissionRow.account_id,submissionRow.screening_id,submitted.leadId,submission.phone]),null,'Pause remains effective for submission-based leads');
+ await q('update icash_meta_leads set paused=false where lead_id=$1',[submitted.leadId]);
+ await q("insert into icash_contact_suppressions(account_id,contact_key,source_conversation) values($1,encode(sha256(convert_to($2,'UTF8')),'hex'),$3)",[submissionRow.account_id,submission.phone,randomUUID()]);
+ assert.equal(await rpc('icash_meta_pool_receipt_current',[submitted.leadId]),false,'an opt-out still blocks submission-based outreach');
  for(const role of ['anon','authenticated']){
   assert.equal((await one("select count(*) n from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like 'icash_meta_%' and has_function_privilege($1,p.oid,'execute')",[role])).n,0);
  }
