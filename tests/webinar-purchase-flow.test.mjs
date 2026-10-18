@@ -41,6 +41,30 @@ window.location.search='?membership=paid&upgrade=paid';purchase={offer:{revision
 const mp={onSignedIn:()=>{},onPurchased:()=>{}};member.render('MembershipCheckout',mp);await flush();tree=member.render('MembershipCheckout',mp);assert.ok(find(tree,'WebinarVipUpsell'));assert.equal(redirects.length,1,'Verified base purchase shows upsell instead of redirecting to video');purchase.membership.vip=true;await find(tree,'WebinarVipUpsell').props.onRefresh();tree=member.render('MembershipCheckout',mp);assert.ok(find(tree,'PostPurchaseSetup'),'Only verified VIP skips the VIP session');member.close();
 console.log('PASS purchase flow: unpaid checkout, two upgrade opportunities, guest continuity, verified VIP setup, draft fallback, payment protection, and no query-string access bypass.');
 
+// Expired authentication during a long VIP video must offer the saved-email
+// sign-in, even when a completed payment is still being confirmed.
+for(const afterPayment of [false,true]){
+ window.location.search='';
+ let signedOut=!afterPayment,posts=0,paid=false;
+ const auth=await harness('components/webinar-vip-upsell.tsx',{...common,webinarRequest:async(url,init={})=>{
+  if(url==='/api/account?view=core')return {signedIn:!signedOut};
+  if(signedOut)throw Object.assign(Error('Sign in with your payment email to continue your VIP upgrade.'),{status:401});
+  if(init.method==='POST'){posts++;return {clientSecret:'fixture',publishableKey:'pk_test_fixture',sessionId:'cs_test_fixture'};}
+  return {membership:{accessible:true,vip:paid}};
+ }});
+ const authProps={...props,needsClaim:false,onRefresh:async()=>({membership:{accessible:true,vip:paid},needsClaim:false})};
+ const draw=()=>auth.render('WebinarVipUpsell',authProps);
+ draw();await flush();let view=draw();
+ if(afterPayment){find(view,'input').props.onChange({target:{checked:true}});view=draw();await button(view,'Upgrade to VIP').props.onClick();await flush();view=draw();signedOut=true;paid=true;find(view,'StripeEmbeddedCheckout').props.onComplete();await flush();view=draw();}
+ assert.equal(find(view,'AccountAccess')?.props.initialEmail,props.email,'Expired session restores sign-in using the saved payment email');
+ assert.equal(find(view,'StripeEmbeddedCheckout'),undefined,'No second payment form while authentication is missing');
+ signedOut=false;find(view,'AccountAccess').props.onSignedIn();await flush();view=draw();
+ assert.equal(find(view,'AccountAccess'),undefined,'Successful sign-in resumes the same upgrade');
+ assert.equal(posts,afterPayment?1:0,'Authentication recovery never automatically retries a payment');
+ auth.close();
+}
+console.log('PASS VIP expired-session recovery before checkout and during paid confirmation, without a second payment.');
+
 // A paid owner remains in the public webinar without a second checkout or automatic welcome.
 for(const vipWebinar of [false,true])for(const alreadyVip of [false,true]){
  const reads=[],cart=[],states=[];let opened=0;

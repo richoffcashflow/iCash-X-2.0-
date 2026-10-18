@@ -8,9 +8,18 @@ import {vipTermsVersion} from '@/lib/vip-policy';
 import {limitRequest} from '@/lib/funding';
 const headers={'Cache-Control':'private, no-store'};
 const input=z.object({action:z.enum(['upgrade','downgrade','keep_vip']),accepted:z.literal(true),version:z.literal(vipTermsVersion),webinar:z.boolean().optional(),embedded:z.boolean().optional()}).strict();
-export async function GET(){try{const {accountId}=await workAccount();const m=await accountMembership(accountId);if(m)await reconcileVipChanges(m.id);return NextResponse.json({membership:publicMembership(await accountMembership(accountId))},{headers});}catch{return NextResponse.json({error:'Could not confirm your plan. Please retry.'},{status:503,headers});}}
+function accessError(error:unknown){
+ const code=error instanceof Error?error.message:'';
+ if(code==='SIGN_IN_REQUIRED')return NextResponse.json({error:'Sign in with your payment email to continue your VIP upgrade.'},{status:401,headers});
+ if(code==='ACCOUNT_REQUIRED')return NextResponse.json({error:'Your account is still connecting. Sign in with your payment email and retry.'},{status:409,headers});
+ if(code==='SUBSCRIPTION_REQUIRED')return NextResponse.json({error:'Restore your active software subscription before upgrading. Do not purchase it again.'},{status:409,headers});
+ return null;
+}
+// Billing comes before the first workspace visit in both VIP webinar sessions.
+// Keep verified ownership and paid membership; only workspace work needs its acknowledgment.
+export async function GET(){try{const {accountId}=await workAccount({allowUnacknowledged:true});const m=await accountMembership(accountId);if(m)await reconcileVipChanges(m.id);return NextResponse.json({membership:publicMembership(await accountMembership(accountId))},{headers});}catch(e){const denied=accessError(e);if(denied)return denied;console.error('VIP plan lookup failed',{errorType:e instanceof Error?e.name:'UnknownError'});return NextResponse.json({error:'Could not confirm your plan. Please retry.'},{status:503,headers});}}
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
- try{const raw=await req.text();if(raw.length>500)throw Error('Invalid request');const i=input.parse(JSON.parse(raw));const {accountId}=await workAccount();await limitRequest(req,'vip-plan',accountId,8,600);const m=await accountMembership(accountId);if(!m)throw Error('Active subscription required');return NextResponse.json(await changeVipPlan(m,i.action,req.headers.get('origin')!,{webinar:i.webinar===true,embedded:i.embedded===true,request:req}),{headers});}
- catch(e){return NextResponse.json({error:e instanceof Error&&e.message!=='Database request failed'?e.message:'Could not confirm your plan change. Refresh before retrying.'},{status:409,headers});}
+ try{const raw=await req.text();if(raw.length>500)throw Error('Invalid request');const i=input.parse(JSON.parse(raw));const {accountId}=await workAccount({allowUnacknowledged:true});await limitRequest(req,'vip-plan',accountId,8,600);const m=await accountMembership(accountId);if(!m)throw Error('Active subscription required');return NextResponse.json(await changeVipPlan(m,i.action,req.headers.get('origin')!,{webinar:i.webinar===true,embedded:i.embedded===true,request:req}),{headers});}
+ catch(e){return accessError(e)??NextResponse.json({error:e instanceof Error&&e.message!=='Database request failed'?e.message:'Could not confirm your plan change. Refresh before retrying.'},{status:409,headers});}
 }
