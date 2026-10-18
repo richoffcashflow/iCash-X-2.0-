@@ -1,4 +1,5 @@
 import {instantLeadsEnabled} from '../lib/meta-instant-lead-service.ts';
+process.env.META_INSTANT_LEADS_ENABLED='true';process.env.VERCEL_ENV='production';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
@@ -19,6 +20,7 @@ let paths=[],authorized=true,sellerFixtures=[];
 const paginate=(rows,q)=>rows.slice(Number(q.get('offset')??0),Number(q.get('offset')??0)+Number(q.get('limit')??rows.length));
 const mocks={instantLeadsEnabled,z,workspaceAttentionQuery,attachTaskRecovery:async(id,tasks)=>{assert.equal(id,account);return tasks;},NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
  paths.push({path,method,body});
+ if(path==='rpc/icash_meta_workspace_leads'){assert.equal(body.p_account,account);return [];}
  if(path==='rpc/icash_journey_progress'){assert.equal(body.p_account,account);return [];}
  if(path==='rpc/icash_closing_task_attention'){assert.equal(body.p_account,account);assert.equal(body.p_limit,7);return queue.slice(body.p_offset,body.p_offset+body.p_limit).map(q=>({...q,kind:'deadline',label:'Confirm closing date',state:'needs_review',due_date:null}));}
  if(path==='rpc/icash_buyer_reception_calls'){assert.equal(body.p_account,account);return [];}

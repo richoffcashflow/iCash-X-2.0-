@@ -1,4 +1,5 @@
 import {instantLeadsEnabled} from '../lib/meta-instant-lead-service.ts';
+process.env.META_INSTANT_LEADS_ENABLED='true';process.env.VERCEL_ENV='production';
 // Local fixtures only: archived agreements remain intact, but never create work.
 import assert from 'node:assert/strict';
 import {z} from 'zod';
@@ -24,7 +25,7 @@ const db=async(path,method='GET',body)=>{
   if(path==='rpc/icash_closing_task_attention')return closingEnabled?requests.filter(r=>active(r.screening_id)).slice(body.p_offset,body.p_offset+body.p_limit):[];
   if(path==='rpc/icash_sms_route_review_items')return unmatchedText?[{message_id:uuid(800),needs_review:true,candidates:[]}]:[];
   if(path==='rpc/icash_activity_report')return {days:body.p_days,timezone:'America/Chicago',startAt:'2026-10-01T00:00:00Z',endAt:'2026-10-12T00:00:00Z',leads:0,calls:0,texts:0,contracts:0};
-  if(['rpc/icash_journey_progress','rpc/icash_buyer_reception_calls','rpc/icash_prioritized_work'].includes(path))return [];
+  if(['rpc/icash_journey_progress','rpc/icash_buyer_reception_calls','rpc/icash_prioritized_work','rpc/icash_meta_workspace_leads'].includes(path))return [];
   throw Error('Unexpected RPC '+path);
  }
  assert.equal(method,'GET','Workspace reads never mutate retained history');

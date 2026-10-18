@@ -5,7 +5,7 @@ import {sameBusinessNumber} from '../lib/number-continuity.ts';
 import {saveTextReceipt} from '../lib/text-receipt.ts';
 const before={...process.env};
 try{
- Object.assign(process.env,{CONTIGUITY_FROM:'+12125550100',CONTIGUITY_API_KEY:'SIMULATION',CONTIGUITY_WEBHOOK_SECRET:'SIMULATION'});
+ Object.assign(process.env,{CONTIGUITY_FROM:'+12125550100',CONTIGUITY_API_KEY:'SIMULATION',CONTIGUITY_WEBHOOK_SECRET:'SIMULATION',META_INSTANT_LEADS_ENABLED:'true',VERCEL_ENV:'production'});
  let enabled=true,voiceNumber='+12125550199',voiceEnabled=false,poolAssigned=false,sends=0,claims=0,manualClaims=0;
  const from='+12125550199',to='+12125550123';
  const db=async(path,method,body)=>{
@@ -13,6 +13,7 @@ try{
   if(path.startsWith('icash_text_threads?'))return [{sender:from,recipient:to,sender_pool_assigned:poolAssigned}];
   if(path.startsWith('icash_text_senders?')){assert(path.includes(encodeURIComponent(from)));return enabled?[{phone:from}]:[];}
   if(path.startsWith('icash_voice_configs?'))return [{enabled:voiceEnabled,phone_number_id:'verified-id'}];
+  if(path.startsWith('icash_meta_lead_messages?'))return [];
   if(path==='rpc/icash_claim_customer_text'){manualClaims++;return {from,to,message:'Synthetic only',attachments:[]};}
   if(path==='rpc/icash_claim_text'){claims++;assert.equal(body.p_sender,from);return {from,to,message:'Synthetic only',attachments:[]};}
   if(path==='rpc/icash_accept_text')return;

@@ -4,7 +4,7 @@ import {saveTextReceipt} from '../lib/text-receipt.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 const saved={...process.env};
 try{
- Object.assign(process.env,{CONTIGUITY_API_KEY:'fixture',CONTIGUITY_WEBHOOK_SECRET:'fixture'});
+ Object.assign(process.env,{CONTIGUITY_API_KEY:'fixture',CONTIGUITY_WEBHOOK_SECRET:'fixture',META_INSTANT_LEADS_ENABLED:'true',VERCEL_ENV:'production'});
  for(const scenario of ['lost_commit_response','early_delivery_failure','persistent_database_failure','unknown_send']){
   let sends=0,receipts=0,patches=0,state='ready',provider=null;
   const db=async(path,method,body)=>{
@@ -22,6 +22,7 @@ try{
    if(path.startsWith('icash_text_threads?'))return [{sender:'+12025550100',recipient:'+12025550101'}];
    if(path.startsWith('icash_text_senders?'))return [{phone:'+12025550100'}];
    if(path.startsWith('icash_voice_configs?'))return [{enabled:false}];
+   if(path.startsWith('icash_meta_lead_messages?'))return [];
    if(path==='rpc/icash_claim_text'){if(state!=='ready')return null;state='dispatching';return {};}
    throw Error(path);
   };
