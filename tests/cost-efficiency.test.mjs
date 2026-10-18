@@ -15,7 +15,8 @@ assert.deepEqual(called,['a','b','c']);assert.equal(result.ok,false);assert.deep
 assert.equal((await maintenanceBatch({a:async()=>new Response(null,{status:200})})).ok,true);
 assert.equal(automationChanged('awaiting_counterparty'),false);assert.equal(automationChanged('updates_idle'),false);assert.equal(automationChanged('completed'),true);assert.equal(automationChanged('contacts_saved'),true);
 const config=JSON.parse(readFileSync(new URL('../vercel.json',import.meta.url)));assert.equal(config.crons.find(x=>x.path==='/api/internal/maintenance').schedule,'* * * * *');
-assert.equal(config.crons.reduce((n,c)=>n+(c.schedule.startsWith('*/5')?288:1440),0),5184);
+assert.equal(config.crons.find(x=>x.path==='/api/internal/lead-costs').schedule,'*/15 * * * *','Read-only ad-cost sync stays on a bounded 15-minute schedule');
+assert.equal(config.crons.filter(c=>c.path!=='/api/internal/lead-costs').reduce((n,c)=>n+(c.schedule.startsWith('*/5')?288:1440),0),5184);
 console.log('Cost efficiency: safe build skipping, independent maintenance failure and unchanged minute cadence passed.');
 
 const {createPollCadence}=await import('../lib/poll-cadence.ts');
