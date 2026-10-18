@@ -24,15 +24,25 @@ export async function GET(req:Request){
   await db('rpc/icash_collect_seller_milestones','POST',{});
   return deliverSellerEvent(db,process.env);
  })().catch(()=>({status:'measurement_retry_pending'}));
+ // Existing paid leads must keep progressing during a new-address provider
+ // outage or when acquisition is disabled. Final channel claims own dispatch.
+ let responseFailed=false;
+ const responseWork=processSellerResponses(db,dispatchTextMessage,dispatchLiveVoice).catch(()=>{
+  responseFailed=true;return [];
+ });
  try{
   const [controls]=await db<{enabled:boolean}[]>('icash_seller_controls?id=eq.1&select=enabled');
-  if(!controls?.enabled)return Response.json({status:'seller_setup_required',measurement:await measurementWork,agreementRecovery:await agreementRecovery},{headers});
-  const lookup=await processSellerIntake(db,process.env.DEALMACHINE_API_KEY);
+  if(!controls?.enabled)return Response.json({status:'seller_setup_required',responses:await responseWork,measurement:await measurementWork,agreementRecovery:await agreementRecovery},{status:responseFailed?503:200,headers});
+  let lookupFailed=false;
+  const lookup=await processSellerIntake(db,process.env.DEALMACHINE_API_KEY).catch(()=>{
+   lookupFailed=true;return {status:'seller_lookup_unavailable'};
+  });
   const allocation=await db<{status:string;leadId?:string}|null>('rpc/icash_assign_seller_lead','POST',{});
   // A recovered intake gets the same immediate handoff as a form submission.
   // Older setup retries must not take the newly assigned lead's response slot.
-  const responses=await processSellerResponses(db,dispatchTextMessage,dispatchLiveVoice,allocation?.status==='assigned'?allocation.leadId:undefined);
+  const immediate=allocation?.status==='assigned'?await processSellerResponses(db,dispatchTextMessage,dispatchLiveVoice,allocation.leadId):[];
+  const responses=[...await responseWork,...immediate];
   const measurement=await measurementWork;
-  return Response.json({lookup,allocation,responses,measurement,agreementRecovery:await agreementRecovery},{headers});
- }catch{await Promise.all([agreementRecovery,measurementWork]);return Response.json({status:'seller_processing_requires_review'},{status:503,headers});}
+  return Response.json({lookup,allocation,responses,measurement,agreementRecovery:await agreementRecovery},{status:lookupFailed||responseFailed?503:200,headers});
+ }catch{await Promise.all([agreementRecovery,measurementWork,responseWork]);return Response.json({status:'seller_processing_requires_review'},{status:503,headers});}
 }

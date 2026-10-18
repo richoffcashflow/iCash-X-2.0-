@@ -59,6 +59,7 @@ try{
  await pg.exec(read('config/homeoffer-buyer-introductions.sql'));
  await pg.exec(natural.match(/do \$patch\$[\s\S]*?end \$patch\$;/)[0]);
  await pg.exec(read('supabase/migrations/20261007001915_short_seller_interest_question.sql'));
+ await pg.exec(read('config/seller-response-progress.sql'));
  const oldScreen=(await one("insert into icash_screening_jobs(account_id,event_key,snapshot,state,result,completed_at) values($1,'SIMULATION old practice','{\"propertyId\":\"practice_old\"}','complete','{}',now()) returning id",[account])).id;
  const oldDeal=(await one("insert into icash_deal_files(account_id,screening_id,stage,terms) values($1,$2,'draft','{\"practice\":true,\"address\":\"SIMULATION old practice\"}') returning id",[account,oldScreen])).id;
  const oldThread=(await one("insert into icash_text_threads(account_id,deal_id,sender,recipient,permission_until,permission_evidence,timezone,dnc_checked_at,dnc_clear,sms_rate_id,paused) values($1,$2,$3,$4,now()-interval '1 day','SIMULATION old practice consent',$5,now()-interval '2 days',true,$6,true) returning id",[account,oldDeal,f.sender,phone,timezone,f.sms])).id;
@@ -103,6 +104,26 @@ try{
  assert(response[0].smsMessageId,'form consent queues actual first SMS');
  assert(response[0].voiceJobId,'form consent queues actual first call');
  const job=response[0].voiceJobId;
+ await isolated(async()=>{
+  await q("update icash_text_messages set state='delivered',provider_id='SIMULATION first-text receipt' where id=$1",[response[0].smsMessageId]);
+  await q("update icash_voice_jobs set state='ready',due_at=now()+interval '8 hours' where id=$1",[job]);
+  await q('update icash_seller_responses set next_attempt_at=now()');
+  const scheduled=await rpc('icash_prepare_seller_responses',{p_lead:lead});
+  assert.equal(scheduled[0].voiceJobId,null,'a future call is not issued early');
+  assert.equal(scheduled[0].smsMessageId,null,'delivered opener is not repeated');
+  assert.equal(scheduled[0].status,'queued');
+  assert.deepEqual(await one('select state,detail from icash_seller_responses'),{state:'queued',detail:'Text accepted; call scheduled'});
+  await q("update icash_voice_jobs set state='held',outcome='provider_outcome_unknown_no_retry' where id=$1",[job]);
+  await q('update icash_seller_responses set next_attempt_at=now()');
+  await rpc('icash_prepare_seller_responses',{p_lead:lead});
+  assert.equal((await one('select state from icash_seller_responses')).state,'needs_setup','unknown provider outcome remains visible');
+  assert.equal((await one('select state from icash_voice_jobs where id=$1',[job])).state,'held','an uncertain call is never rearmed');
+  await rpc('icash_record_outreach_campaign',{p_account:account,p_user:user,p_mode:'sms_inbound',p_version:'outreach-channels-2026-10-03.1',p_accepted:true});
+  await q('update icash_seller_responses set next_attempt_at=now()');
+  await rpc('icash_prepare_seller_responses',{p_lead:lead});
+  assert.deepEqual(await one('select state,detail from icash_seller_responses'),{state:'contact_started',detail:'Text accepted'},'SMS-only accounts do not require a call');
+  assert.equal((await one('select count(*)::int n from icash_voice_jobs')).n,1,'SMS-only processing adds no calls');
+ });
  assert.equal(await rpc('icash_reserve_paced_voice',{p_account:account,p_job:job,p_rate:rate,p_permission_until:p.permission_until,p_financial_checked_at:new Date().toISOString(),p_financial_eligible:true}),true);
  assert.equal(await rpc('icash_claim_reviewed_voice_job',{p_job:job}),true,'normal final voice claim accepts real saved consent');
  const recording=await rpc('icash_create_call_recording',{p_account:account,p_operation:'voice:'+job,p_provider_account_sid:'AC'+'a'.repeat(32),p_call_sid:null,p_nonce_hash:'b'.repeat(64),p_stop_token_hash:'c'.repeat(64),p_disclosure_version:'SIMULATION disclosure',p_pricing_policy:{version:'required-audio-30d-speech-v1',retentionDays:30,recordingMicrosPerMinute:2500,storageMicrosPerMinuteMonth:500,recordingAllowanceMicros:31000,speechGatherMicros:20000,estimate:true},p_context:{fromPhone:f.sender,branchId:'agtbrch_fixture',versionId:'agtvrsn_fixture',maxTotalSeconds:600}});

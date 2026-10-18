@@ -32,15 +32,16 @@ for(const [table,key,value,reason] of [
  ['icash_discovery_configs','data_rights_until',past,'data_review_required'],
  ['icash_discovery_configs','exhausted',true,'inventory_exhausted'],
  ['icash_operation_rates','enabled',false,'pricing_review_required'],
- ['icash_wallets','balance_cents',80,'available_credits_required'],
+ ['icash_wallets','balance_cents',0,'available_credits_required'],
  ['icash_spend_activations','enabled',false,'spending_activation_required'],
  ['icash_operating_budget','enabled',false,'operating_budget_unavailable'],
 ]){const before=rows[table][0][key];rows[table][0][key]=value;assert.equal((await read()).reason,reason);rows[table][0][key]=before;}
 rows.icash_spend_activations[0].customer_cap_cents=1;
+rows.icash_wallets[0].balance_cents=1;
 rows.icash_accounts[0].daily_limit_cents=0;
 rows.icash_operation_spend=Array.from({length:1001},()=>({state:'settled',charged_cents:100}));
 rows.icash_credit_ledger=Array.from({length:1001},()=>({delta_cents:-100}));
-assert.equal((await read()).ready,true,'funded users are not blocked by lifetime, daily, or history-size limits');
+assert.equal((await read()).ready,true,'positive credits are not blocked by maximum estimates, lifetime, daily, or history-size limits');
 assert(calls>0);assert.equal(discoveryBlockerMessage('constructor'),null);assert.equal(discoveryBlockerMessage('arbitrary database error'),null);
 assert.equal(workspaceNextAction({...presentation,discoveryBlocker:'available_credits_required'},null).kind,'funding');
 assert.match(discoveryBlockerMessage('confirmed_funding_required').detail,/before paying again/);

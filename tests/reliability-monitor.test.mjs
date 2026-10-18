@@ -8,6 +8,7 @@ try{
  let calls=[];
  const db=async(path,method,body)=>{calls.push({path,body});return path.endsWith('snapshot')?{issueCount:2}:null;};
  assert.equal(await refreshReliability(db,false),true);assert.equal(calls[0].body.p_status,'degraded');assert.equal(logs.length,1);
+ assert.equal(calls[1].path,'rpc/icash_refresh_outreach_reliability_snapshot','the deployed app activates the expanded workflow monitor');
  assert.equal(await refreshReliability(async()=>{throw Error('secret')},true),false);assert(!logs.join('').includes('secret'));
  let authorized=false,ran=0,recovered=0;
  const route=await loadService('app/api/internal/maintenance/route.ts',{processSupportCustomerNotifications:async()=>{ran++;return {state:'ready',failed:0};},recoverAccessHelpReplies:async()=>{recovered++;return 0;},processSupportOwnerNotifications:async()=>{ran++;return {state:'ready',failed:0};},processPurchaseAccessEmails:async()=>{ran++;return {ready:true,failed:0};},processPurchaseAccessFollowups:async()=>{ran++;return {ready:true,failed:0};},authorizeOutboundBilling:()=>authorized,process:{env:{}},maintenanceBatch,refreshReliability,pruneUsageLoopObservations,db,

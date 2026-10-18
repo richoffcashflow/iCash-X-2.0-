@@ -1,7 +1,7 @@
 /** Public, presentation-only descriptions. Never expose provider keys or approve work. */
 export function discoveryBlockerMessage(reason?:string|null):{title:string;detail:string}|null {
  const messages:Record<string,{title:string;detail:string}>={
-  available_credits_required:{title:'Available credits do not cover the next search.',detail:'Your balance minus existing holds is below the next search’s planning charge. Review your available credits and holds before adding funds.'},
+  available_credits_required:{title:'Add credits to continue.',detail:'Your work credit balance is empty. Completed usage uses your balance; the full planning estimate is not held in advance.'},
   confirmed_funding_required:{title:'Your funding needs confirmation.',detail:'No confirmed paid funding is available for this account’s search. Refresh your payment status or contact support before paying again.'},
   discovery_configuration_required:{title:'Your property search needs setup.',detail:'Your account has no configured property search yet. Contact support to finish setup; paying again will not fix this.'},
   discovery_not_enabled:{title:'Property discovery is paused for setup.',detail:'Your account’s automatic property search has not been enabled. Contact support to review its setup.'},

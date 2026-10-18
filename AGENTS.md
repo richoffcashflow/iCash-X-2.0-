@@ -40,6 +40,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Complete feature flows
 
+- On October 18, 2026 the owner reiterated that funded users must not get stuck behind redundant software setup. Keep read-only readiness and recovery scheduling consistent with positive-credit, actual-usage admission. A scheduled first call is queued work, and SMS-only accounts do not require an outbound call. Existing seller responses must continue if new address research fails or acquisition is disabled. Monitor work before dispatch as well as provider receipts; preserve explicit holds, recipient evidence, manual controls and uncertain-send protection.
+
 - On October 18, 2026 the owner required the same automatic operation for buyer outreach. Release only the initial intake pause on an actually eligible buyer SMS contact; do not require campaign setup or a second Run action. Apply eligibility and duplicate/uncertain-send exclusions before batch limits, and wake requested packages promptly. Audit sourced prospects, eligible contacts, queued work and provider receipts separately; an empty send queue is not proof that outreach works. Preserve buyer SMS/email-only scope, recipient evidence, explicit deal/test holds, manual takeover and payment admission.
 
 - On October 18, 2026 the owner required webinar departures to send both opted-in email and SMS promptly at any hour. Preserve the authenticated departure signal, five-second quick-return cancellation, independent per-channel dispatch, and durable idempotency. Do not restore webinar timezone sending windows or the 15-minute wait for a confirmed departure. Keep preview/checkout/purchase suppression, real consent, legacy limits, opt-outs and safe provider retries.

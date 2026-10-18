@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {createOperationalContactFixture} from '../tests/helpers/operational-contact-fixture.mjs';
-const f=await createOperationalContactFixture(process.argv[2]);
+const f=await createOperationalContactFixture(process.argv[2],{automaticChannels:true});
 const {pg,q,rpc,one,account,other,phone,screening,deal,prepare,project}=f;
 try{
  await pg.exec(`
@@ -15,6 +15,7 @@ try{
  create function icash_customer_update_sources(uuid) returns table(source_key text,kind text,screening_id uuid,event_at timestamptz,priority integer) language sql as $$select null::text,null::text,null::uuid,null::timestamptz,null::integer where false$$;
  `);
  await pg.exec(readFileSync(new URL('../supabase/migrations/20261005124045_seller_response_handoff_and_activity.sql',import.meta.url),'utf8'));
+ await pg.exec(readFileSync(new URL('../config/seller-response-progress.sql',import.meta.url),'utf8'));
  const lead=randomUUID();
  await q('insert into icash_seller_intakes(id,phone,property,ai_consented) values($1,$2,$3,true)',[lead,phone,{address:'123 Main Street',state:'TX'}]);
  await q('insert into icash_seller_matches(lead_id,account_id,screening_id) values($1,$2,$3)',[lead,account,screening]);

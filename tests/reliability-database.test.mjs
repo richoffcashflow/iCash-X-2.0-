@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {reliabilitySchema} from '../lib/reliability.ts';
+import {verifyUndispatchedMonitoring} from './helpers/undispatched-monitor-fixture.mjs';
 const pg=await PGlite.create();
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 try{
@@ -42,7 +43,8 @@ try{
  await pg.exec("update public.icash_signing_envelopes set updated_at=now()-interval '6 minutes'");
  await pg.query("insert into public.icash_screening_jobs values($1,$2,'running',now()-interval '3 minutes')",[id(5),id(2)]);
  await pg.query("insert into public.icash_voice_jobs values($1,$2,'dispatching',now()-interval '6 minutes')",[id(6),id(2)]);
- const refresh=async()=>{await pg.exec("update icash_reliability_private.snapshots set checked_at=now()-interval '1 minute';select public.icash_refresh_reliability_snapshot()");return status();};
+ let refreshFunction='icash_refresh_reliability_snapshot';
+ const refresh=async()=>{await pg.exec("update icash_reliability_private.snapshots set checked_at=now()-interval '1 minute';select public."+refreshFunction+'()');return status();};
  let report=await refresh();assert.equal(report.snapshot.issueCount,4);assert.equal(report.status,'degraded');
  assert.deepEqual(report.snapshot.issues.map(x=>x.kind).sort(),['call_receipt','contract_preparation','screening_lease','text_receipt']);
  assert(!JSON.stringify(report).includes('+1202'));assert(!JSON.stringify(report).includes('provider-one'));
@@ -55,6 +57,8 @@ try{
  assert.equal((await status()).components.worker.status,'unavailable');assert.equal((await status()).status,'degraded');
  await pg.exec("select public.icash_record_service_heartbeat('worker','ok');update icash_reliability_private.snapshots set checked_at=now()-interval '4 minutes'");
  assert.equal((await status()).fresh,false);assert.equal((await status()).status,'degraded');
+ refreshFunction='icash_refresh_outreach_reliability_snapshot';
+ await verifyUndispatchedMonitoring({pg,one,refresh,id});
  for(const role of ['anon','authenticated']){
   await pg.exec(`set role ${role}`);
   await assert.rejects(pg.query('select public.icash_reliability_status()'),/permission denied/);

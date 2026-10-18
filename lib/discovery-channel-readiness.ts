@@ -51,7 +51,9 @@ async function dataAccountReadiness(accountId:string,userId:string,operation:'pr
   const required=Math.ceil(cost.estimatedTotalMicros*budget.standard_cost_multiplier*(10000+rate.buffer_bps)/10000);
   if(!Number.isSafeInteger(required)||rate.charge_cents*10000<required)return held;
   if(!integer(wallet.balance_cents))return held;
-  if(wallet.balance_cents<rate.charge_cents)return blocked('available_credits_required');
+  // The quote bounds provider usage; actual completed usage charges the wallet.
+  // Match final SQL admission instead of requiring the full planning estimate.
+  if(wallet.balance_cents<=0)return blocked('available_credits_required');
   if(!budget.require_company_reserve){
    if(!funding.length)return blocked('confirmed_funding_required');
    if(!activation?.enabled)return blocked('spending_activation_required');
