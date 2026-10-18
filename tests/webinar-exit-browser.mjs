@@ -88,11 +88,18 @@ export async function verifyWebinarExit(browser){
   const page=await context.newPage();await page.goto(origin+path);
   if(path!=='/away')await page.waitForFunction(()=>window.ready);return page;
  }
+ async function resumedAfterStay(page){
+  // Dismissing the native dialog acknowledges the command before Chromium's
+  // renderer has finished cancelling the navigation. Let the surviving page
+  // render again before a second user departure; otherwise its Back can be
+  // cancelled by the first departure's still-pending beforeunload reply.
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ }
  async function attempt(page,action,accept=false){
   const dialogReady=page.waitForEvent('dialog');
   const pending=Promise.resolve().then(action).catch(error=>{assert.match(error.message,/ERR_ABORTED|Navigation.*cancelled/i);});
   const dialog=await dialogReady;assert.equal(dialog.type(),'beforeunload');
-  if(accept)await dialog.accept();else await dialog.dismiss();await pending;
+  if(accept)await dialog.accept();else {await dialog.dismiss();await resumedAfterStay(page);}await pending;
  }
  try{
   // A real tab close asks once; Stay keeps the page, and refresh/remount cannot rearm it.
@@ -120,7 +127,7 @@ export async function verifyWebinarExit(browser){
   // A real Back departure uses custom wording only when the browser permits it.
   // Resume the original history entry rather than adding a replacement Back trap.
   const regular=await open('/away');await regular.goto(origin+'/regular');await regular.waitForFunction(()=>window.ready);await regular.getByText('Keep watching',{exact:true}).click();
-  let fallback=0;regular.on('dialog',async d=>{fallback++;await d.dismiss();await regular.evaluate(()=>{window.nativeFallback=true;});});
+  let fallback=0;regular.on('dialog',async d=>{fallback++;await d.dismiss();await resumedAfterStay(regular);await regular.evaluate(()=>{window.nativeFallback=true;});});
   await regular.evaluate(()=>navigation.addEventListener('navigate',event=>{window.exitEvent={cancelable:event.cancelable,userInitiated:event.userInitiated};}));
   const regularTab=await context.newCDPSession(regular),entries=await regularTab.send('Page.getNavigationHistory');
   await regularTab.send('Page.navigateToHistoryEntry',{entryId:entries.entries[entries.currentIndex-1].id});
