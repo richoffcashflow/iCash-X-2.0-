@@ -13,7 +13,7 @@ export async function verifyPurchaseAccess(browser,base,options,name){
    if(url.pathname==='/api/account/access')return wrongAccount?json({signedIn:true,error:'Sign in with the same email you used for this purchase. Your payment is saved; do not pay again.'},403):json(signedIn?{signedIn:true,destination:url.searchParams.get('destination')==='vip'?'/live/100002':'/'}:{signedIn:false,signInReady:true});
    if(url.pathname==='/api/auth/email'){codeRequests++;assert.deepEqual(route.request().postDataJSON().email,'buyer@example.invalid');if(failEmail)return json({error:'Email could not be sent right now. Enter a code you already received or use your checkout phone.'},503);return json({sent:true,message:'A sign-in code is on its way.'});}
    if(url.pathname==='/api/auth/phone'){
-    const body=route.request().postDataJSON();assert.equal(body.email,'buyer@example.invalid');assert.equal(body.phone,'2125551234');
+    const body=route.request().postDataJSON();assert.equal(body.email,'');assert.equal(body.phone,'2125551234');
     if(body.action==='send'){textRequests++;assert.equal(body.accepted,true);return json({sent:true,message:'A text code is on its way.'});}
     if(body.code!=='12345678')return json({error:'That code could not be verified. Check the code or request a new text.'},400);
     signedIn=true;return json({signedIn:true});
@@ -59,6 +59,9 @@ export async function verifyPurchaseAccess(browser,base,options,name){
   signedIn=false;
   await page.goto(base+'/access');await page.getByLabel('Email',{exact:true}).fill('buyer@example.invalid');
   await page.getByRole('button',{name:'Use my checkout phone',exact:true}).click();
+  const optionalEmail=page.getByLabel('Receipt email (optional)',{exact:true});
+  assert.equal(await optionalEmail.evaluate(input=>input.required),false,'Checkout phone recovery does not require remembering the receipt email');
+  await optionalEmail.fill('');
   await page.getByLabel('Checkout mobile number',{exact:true}).fill('2125551234');
   await page.getByRole('button',{name:'Text me a code',exact:true}).click();
   await page.getByLabel('Text code',{exact:true}).fill('00000000');await page.getByRole('button',{name:'Sign in',exact:true}).click();

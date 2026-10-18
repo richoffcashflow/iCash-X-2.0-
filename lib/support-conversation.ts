@@ -15,7 +15,7 @@ const clean=(text:string)=>redactSupportQuestion(text).replace(/\b\d{6,10}\b/g,'
 /** Local replies also work during provider outages and interruption recovery. */
 export function supportConversationFallback(context:SupportContext):SupportReply{
  const users=context.messages.filter(m=>m.role==='user'),question=users.at(-1)?.content??'';
- const history=users.map(m=>m.content).join('\n'),previous=context.messages.filter(m=>m.role==='assistant').at(-1)?.content??'';
+ const history=users.map(m=>m.content).join('\n'),previous=context.messages.filter(m=>m.role==='assistant'||m.role==='operator').at(-1)?.content??'';
  const result=(reply:string,status:SupportReply['status']='waiting_on_customer'):SupportReply=>({reply,status,ai:false});
  if(/\b(?:that worked|it worked|working now|fixed now|all fixed|i(?:’|')?m in|got in|problem solved)\b/i.test(question)&&!/(?:not|isn.t|didn.t|still|but)\b/i.test(question)&&!/[?]|\b(?:how|what|where|when|why|which|also|another|more questions|next question)\b/i.test(question))return result(resolvedReply('Glad that worked.'),'resolved');
  if(supportTopic(history)==='billing'&&/(?:twice|double|duplicate|two times)/i.test(history)){
@@ -31,16 +31,25 @@ export function supportConversationFallback(context:SupportContext):SupportReply
  if(context.kind==='access'){
   const delivery=supportCodeDelivery(context.messages);
   const code=delivery!=='unknown'||/code|sign.?in|log.?in|nothing happened|getting in|access/i.test(history);
-  const channel=/email|inbox|spam/i.test(history)?'email':/text|sms|phone/i.test(history)?'text':null;
+  const bothTried=/(?:tried|used|requested).{0,30}both|both.{0,30}(?:tried|not.*(?:send|arrive)|no code)/i.test(history);
+  const channel=/email|inbox|spam/i.test(history)?'email':/text|sms|phone/i.test(history)||bothTried?'text':null;
   if(code){
    if(!channel)return result('Are you requesting the code by email or text? Please don’t share the code itself.');
    if(delivery==='missing'){
-    const replies=context.messages.filter(m=>m.role==='assistant').map(m=>m.content);
+    const replies=context.messages.filter(m=>m.role==='assistant'||m.role==='operator').map(m=>m.content);
     const checkedReceipt=replies.some(reply=>reply.includes('email on your iCash X payment receipt'));
     const requestedFresh=replies.some(reply=>/request (?:one|a) fresh code/i.test(reply));
-    if(requestedFresh||checkedReceipt&&/no receipt|can.t find.*receipt|cannot find.*receipt|don.t have.*receipt|already.*(?:tried|resent|requested)|still.*(?:no code|not.*(?:arriv|receiv|get))/i.test(question))return result(channel==='email'?'The email code still hasn’t arrived, so let’s check the other sign-in route. Choose “Use my checkout phone” and use the same payment email with the phone entered at checkout. If you already tried both, what message appears immediately after requesting the code? Please leave out the code itself.':'The text still hasn’t arrived. Try email sign-in with your payment email. If you already tried both, what message appears immediately after requesting the code? Please leave out the code itself.');
-    if(!checkedReceipt)return result('The code hasn’t arrived yet. Check the email on your iCash X payment receipt and use that exact email to sign in. Text sign-in also needs that email and the phone used at checkout. Does the receipt email match the one you entered?');
-    return result(channel==='email'?'Choose “Use another email or resend” on the sign-in page, enter the email on your iCash X payment receipt, and request one fresh code. Check that inbox and its spam or junk folder. If you use text instead, enter that same email and your checkout phone. Does a code arrive?':'Choose “Use my checkout phone” on the sign-in page. Enter the email on your iCash X payment receipt and the phone used at checkout, then request one fresh code. Does the text arrive?');
+    const phoneOnlyExplained=replies.some(reply=>reply.includes('optional receipt email blank'));
+    const noResponse=/no (?:error )?message|nothing (?:appears|happens)|doesn.t (?:say|show) anything|same page/i.test(question);
+    if(!phoneOnlyExplained&&(requestedFresh||bothTried||noResponse))return result('Phone sign-in can use your checkout mobile number without matching an email first. Choose “Use my checkout phone,” leave the optional receipt email blank, and select “Text me a code.” Does a box labeled “Text code” appear? Please do not share the code.');
+    if(phoneOnlyExplained&&(noResponse||bothTried)){
+     if(/^\s*[“"']?sign in[”"'.!\s]*$/i.test(question))return result('“Sign in” submits a code already received. Choose “Check my checkout details,” leave the optional receipt email blank, and select “Text me a code” to request one. Does the page show a resend countdown?');
+     if(!replies.some(reply=>/main button.*(?:say|right now)|(?:words|text).{0,40}main button/i.test(reply)))return result('You reported that no message appears. What does the main button say now: “Email me a code,” “Text me a code,” “Sign in,” or “One moment…”?');
+     if(!replies.some(reply=>reply.includes('private Safari or Chrome window')))return result('The page is not showing a usable result. Open the sign-in page in a private Safari or Chrome window and choose “Use my checkout phone.” Leave the optional receipt email blank. Does “Text me a code” change to “One moment…” when pressed?');
+     return result('Please copy just the visible field labels and button text from the sign-in page, leaving out their values and any code. That will identify whether the page is requesting a code or waiting for one you have not received.','open');
+    }
+    if(!checkedReceipt)return result('The code hasn’t arrived yet. Check the email on your iCash X payment receipt and use that exact email for email sign-in. Text sign-in can use your checkout phone without an email. Does the receipt email match the one you entered?');
+    return result(channel==='email'?'Choose “Use another email or resend” on the sign-in page, enter the email on your iCash X payment receipt, and request one fresh code. Check that inbox and its spam or junk folder. You can also use your checkout phone without entering an email. Does a code arrive?':'Choose “Use my checkout phone” on the sign-in page. Enter the phone used at checkout, leave the optional receipt email blank, and request one fresh code. Does the text arrive?');
    }
    if(!/safari|chrome|firefox|edge|iphone|android|ipad|desktop|laptop|browser/i.test(history))return result(`Thanks — the ${channel} code. Open the sign-in page directly in Safari or Chrome, enter the newest code, and press the sign-in button. Which device and browser are you using?`);
    if(!previous.includes('error message')&&!/invalid|expired|error|spinning|stuck|blank|no error/i.test(question))return result('What happens after you press the sign-in button: an error message, a loading spinner, or the same page? You can copy the error text, but leave out the code.');

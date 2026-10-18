@@ -14,8 +14,8 @@ export async function POST(req:Request){
  if(!phoneAccessReady())return Response.json({error:'Text sign-in is temporarily unavailable. Use email or contact support.'},{status:503,headers});
  try{
   const raw=await req.text();if(raw.length>1024)return Response.json({error:'Check your email and checkout phone.'},{status:400,headers});
-  const body=JSON.parse(raw),email=normalizeEmail(body.email),phone=normalizeAccessPhone(body.phone);
-  if(!email||!phone||!['send','verify'].includes(body.action))return Response.json({error:'Enter your payment email and the mobile number used at checkout.'},{status:400,headers});
+  const body=JSON.parse(raw),email=normalizeEmail(body.email)??'',phone=normalizeAccessPhone(body.phone);
+  if(!phone||!['send','verify'].includes(body.action))return Response.json({error:'Enter the mobile number used at checkout.'},{status:400,headers});
   const jar=await cookies();
   if(body.action==='send'){
    if(body.accepted!==true)return Response.json({error:'Choose Text me a code to request a sign-in text.'},{status:400,headers});

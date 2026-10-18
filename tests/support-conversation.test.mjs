@@ -47,7 +47,7 @@ for(const question of [
  'I cannot get either code',
 ]){
  const missing=supportConversationFallback({kind:'access',messages:[user('I need my email sign-in code'),user(question)]});
- assert.equal(missing.status,'waiting_on_customer');assert.match(missing.reply,/email on your iCash X payment receipt/);assert.match(missing.reply,/Text sign-in also needs that email/);
+ assert.equal(missing.status,'waiting_on_customer');assert.match(missing.reply,/email on your iCash X payment receipt/);assert.match(missing.reply,/Text sign-in can use your checkout phone without an email/);
  assert.doesNotMatch(missing.reply,/enter the newest code|press the sign-in button|device and browser|error message|code is on its way/i);
 }
 assert.match(supportConversationFallback({kind:'access',messages:[user('It never sent me the code')]}).reply,/email or text/);
@@ -56,7 +56,18 @@ let missingAnswer=supportConversationFallback({kind:'access',messages:missingHis
 missingHistory.push(assistant(missingAnswer.reply),user('Yes, the email matches my receipt'));
 missingAnswer=supportConversationFallback({kind:'access',messages:missingHistory});assert.match(missingAnswer.reply,/request one fresh code/);assert.match(missingAnswer.reply,/spam or junk/);
 missingHistory.push(assistant(missingAnswer.reply),user('Still no code in either inbox or text'));
-missingAnswer=supportConversationFallback({kind:'access',messages:missingHistory});assert.equal(missingAnswer.status,'waiting_on_customer');assert.match(missingAnswer.reply,/other sign-in route/);assert.doesNotMatch(missingAnswer.reply,/press the sign-in|device and browser/i);
+missingAnswer=supportConversationFallback({kind:'access',messages:missingHistory});assert.equal(missingAnswer.status,'waiting_on_customer');assert.match(missingAnswer.reply,/optional receipt email blank/);assert.doesNotMatch(missingAnswer.reply,/press the sign-in|device and browser/i);
+// A real missing-code report must not loop after the customer says both routes
+// were tried and the page displays no message. Operator replies count as history.
+const stalled=[user('I have tried both methods it will not send me a login code'),assistant('The email code still hasn’t arrived. What message appears immediately after requesting the code?'),user('No message appears it just doesn’t send the code and it doesn’t say anything'),{role:'operator',content:'Please tell me the exact words on the main button right now, and whether there is already a box asking you to enter a code.'},user('No message appears')];
+const stalledReplies=[];
+for(let n=0;n<3;n++){
+ const next=supportConversationFallback({kind:'access',messages:stalled});
+ assert.notEqual(next.status,'resolved');assert.doesNotMatch(next.reply,/what message appears immediately|same payment email|team|review queue/i);
+ stalledReplies.push(next.reply);stalled.push(assistant(next.reply),user('No message appears'));
+}
+assert.equal(new Set(stalledReplies).size,3,'The same failed instruction is never repeated through this stalled flow');
+assert.match(stalledReplies[0],/optional receipt email blank/);assert.match(stalledReplies[2],/field labels and button text/);
 for(const confirmation of ['I got the email code now, but it says expired','I have the code now, but it says invalid','Got it now, but it says expired']){
  const received=supportConversationFallback({kind:'access',messages:[...missingHistory.slice(0,-1),user('iPhone Safari'),user(confirmation)]});
  assert.match(received.reply,/Request one fresh code and enter that newest code/);assert.doesNotMatch(received.reply,/hasn’t arrived|Does the receipt email match/);
