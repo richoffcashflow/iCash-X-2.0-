@@ -33,6 +33,7 @@ function reset(channel='email'){
 const database=async(path,method,body)=>{
  calls.push({path,method,body});if(path.startsWith('icash_messaging_settings'))return [{config:campaignSettingsSchema.strip().parse(settings),revision:1}];if(path.startsWith('icash_webinar_settings'))return [{config:settings}];if(path.startsWith('icash_webinar_text_senders'))return [{phone:env.CONTIGUITY_FROM}];
  if(path==='rpc/icash_webinar_claim_followups')return (job.channel==='email'?body.p_email_ready:body.p_sms_ready)?[job]:[];
+ if(path==='rpc/icash_webinar_campaign_sender')return env.CONTIGUITY_FROM;
  if(path.startsWith('icash_webinar_visitors'))return [visitor];if(path.startsWith('icash_webinar_sessions'))return history;if(path.startsWith('icash_webinar_events'))return [];
  if(path==='rpc/icash_webinar_authorize_followup')return authorized?{...job,payload:job.payload??body.p_payload}:null;
  return null;
@@ -41,17 +42,26 @@ const transport=async(url,init)=>{sends.push({url,init});if(transportError)throw
 const deps={campaignCopy,resolveCampaignTarget:async()=>campaignTargetMock,webinarReplyAddress,readCampaignSettings,db:database,...policy,webinarPaid:async()=>paid,webinarToken:()=> 'signed-unsubscribe',followupCopy,followupPhase,webinarSite:{brandName:'Brand',hostName:'Host'}};
 globalThis.__followupTest=deps;
 const code=ts.transpileModule(readFileSync(new URL('../lib/webinar-email.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-const {processWebinarFollowups,webinarMailTime,webinarFollowupReadiness}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__followupTest;\n'+code).toString('base64'));
+const {processWebinarFollowups,webinarFollowupReadiness}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__followupTest;\n'+code).toString('base64'));
 const run=(override={})=>processWebinarFollowups({database,transport,env,clock:()=>now,...override});
 test('email waits for a mailing address while explicitly opted-in texts can run',async()=>{
  reset();settings.postalAddress='';await run();assert.equal(sends.length,0);assert.equal(calls.find(c=>c.path==='rpc/icash_webinar_claim_followups').body.p_email_ready,false);
  reset('sms');settings.postalAddress='';await run();assert.equal(sends.length,1);assert.match(JSON.parse(sends[0].init.body).message,/Hey Casey/);assert.doesNotMatch(JSON.parse(sends[0].init.body).message,/Reply STOP/);assert.equal(calls.at(-1).path,'rpc/icash_webinar_finish_followup');
 });
-test('preview deployments never dispatch and quiet hours defer in the viewer timezone',async()=>{
+test('preview deployments never dispatch; production webinar messages run at any local hour',async()=>{
  reset();await run({env:{...env,VERCEL_ENV:'preview'}});assert.equal(sends.length,0);assert.ok(!calls.some(c=>c.path.includes('claim_followups')));
- reset();await run({clock:()=>new Date('2026-10-07T02:00:00Z')});assert.equal(sends.length,0);assert.equal(calls.at(-1).body.attempts,0);assert.equal(calls.at(-1).body.due_at,'2026-10-07T09:00:00.000Z');
- assert.equal(webinarMailTime('America/Chicago',new Date('2026-11-01T06:30:00Z')).toISOString(),'2026-11-01T15:30:00.000Z');
+ for(const channel of ['email','sms'])for(const timezone of ['UTC','America/Chicago','Invalid/Zone']){
+  reset(channel);visitor.timezone=timezone;await run({clock:()=>new Date('2026-10-07T02:00:00Z')});assert.equal(sends.length,1);assert.equal(calls.at(-1).path,'rpc/icash_webinar_finish_followup');
+ }
  assert.equal(webinarFollowupReadiness(settings,{...env,ICASH_APP_ORIGIN:'http://insecure.test'}).email,false);
+});
+
+test('a departure pair uses a direct return CTA and each message gets its own resumable link',async()=>{
+ for(const channel of ['email','sms']){
+  reset(channel);job.campaign_id='campaign';job.departure_id='departure';job.destination='webinar';campaignTargetMock={phase:'resume',path:'/live/123456',title:'Walkthrough'};
+  await run();assert.equal(sends.length,1);const payload=JSON.parse(sends[0].init.body);
+  assert.match(payload.text??payload.message,/Jump back in(?:to your webinar)? now/);assert.match(payload.text??payload.message,new RegExp('/w/'+job.id));
+ }
 });
 test('purchase and last-moment authorization failures suppress both channels',async()=>{
  for(const channel of ['email','sms']){reset(channel);paid=true;await run();assert.equal(sends.length,0);assert.equal(calls.at(-1).body.state,'canceled');reset(channel);authorized=false;await run();assert.equal(sends.length,0);}

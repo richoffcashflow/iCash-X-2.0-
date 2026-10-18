@@ -1,6 +1,6 @@
 import {webinarReplyAddress} from '@/lib/webinar-email-replies';
 import {db} from '@/lib/stripe-test';
-import {localHour,settingsSchema,webinarPitchAt,type WebinarSettings} from '@/lib/webinar-policy';
+import {settingsSchema,webinarPitchAt,type WebinarSettings} from '@/lib/webinar-policy';
 import {webinarPaid,webinarToken,type Visitor,type WebinarSession} from '@/lib/webinar-server';
 import {followupCopy,followupPhase} from '@/lib/webinar-followup-policy';
 import {webinarSite} from '@/lib/webinar-site';
@@ -8,8 +8,7 @@ import {campaignCopy,type CampaignDestination} from '@/lib/webinar-campaign';
 import {resolveCampaignTarget} from '@/lib/webinar-campaign-server';
 import {readCampaignSettings,type CampaignSettings} from './messaging-settings.ts';
 type Database=typeof db;
-export type FollowupJob={reply_event_id?:string|null;campaign_id?:string|null;destination?:CampaignDestination;id:string;visitor_id:string;session_id:string;channel:'email'|'sms';recipient:string;step:number;attempts:number;payload:Record<string,unknown>|null;first_attempt_at:string|null};
-export function webinarMailTime(timezone:string,now=new Date()){let next=new Date(now);for(let n=0;n<26;n++){const hour=localHour(timezone,next);if(hour>=9&&hour<20)return next;next=new Date(next.getTime()+3600000);}return next;}
+export type FollowupJob={departure_id?:string|null;reply_event_id?:string|null;campaign_id?:string|null;destination?:CampaignDestination;id:string;visitor_id:string;session_id:string;channel:'email'|'sms';recipient:string;step:number;attempts:number;payload:Record<string,unknown>|null;first_attempt_at:string|null};
 export function webinarFollowupReadiness(settings:CampaignSettings,env:Record<string,string|undefined>=process.env){
  const production=env.VERCEL_ENV==='production',origin=env.ICASH_APP_ORIGIN;
  let validOrigin=false;try{const url=new URL(origin||'');validOrigin=url.protocol==='https:'&&!url.username&&!url.password;}catch{}
@@ -30,8 +29,7 @@ export async function processWebinarFollowups({database=db,transport=fetch,env=p
   try{
    const [v]=await database<Visitor[]>(`icash_webinar_visitors?id=eq.${job.visitor_id}&select=*&limit=1`);
    if(!v||await webinarPaid(v)){await database(`icash_webinar_outbox?id=eq.${job.id}&state=eq.claimed`,'PATCH',{state:'canceled'});canceled++;return;}
-   const now=clock(),next=webinarMailTime(v.timezone,now);
-   if(next.getTime()>now.getTime()){await database(`icash_webinar_outbox?id=eq.${job.id}&state=eq.claimed`,'PATCH',{state:'pending',due_at:next.toISOString(),attempts:Math.max(0,job.attempts-1)});return;}
+   const now=clock();
    let payload=job.payload;
    if(!payload){
     const [source]=await database<WebinarSession[]>(`icash_webinar_sessions?id=eq.${job.session_id}&visitor_id=eq.${v.id}&is_preview=eq.false&select=*&limit=1`);
@@ -42,7 +40,7 @@ export async function processWebinarFollowups({database=db,transport=fetch,env=p
     const phase=followupPhase(history,v.timezone,settings.routing.checkoutWindowHours,now),emailStep=job.step===0?0:job.step===2?1:2;
     const target=job.campaign_id?await resolveCampaignTarget(v.id,source.webinar_id,job.destination??'smart',v.timezone,settings,database,now):null;
     if(job.destination==='webinar'&&target?.phase==='checkout'){await database(`icash_webinar_outbox?id=eq.${job.id}&state=eq.claimed`,'PATCH',{state:'pending',due_at:new Date(now.getTime()+3600000).toISOString(),attempts:Math.max(0,job.attempts-1),last_error:'Waiting for a published webinar'});return;}
-    const copy=target?campaignCopy({name:v.name??'',brand:webinarSite.brandName,host:webinarSite.hostName,phase:target.phase,title:target.title,step:job.step,reply:!!job.reply_event_id}):followupCopy({name:v.name??'',title:latest.config.title,seconds:latest.progress_seconds,phase,step:job.step,brand:webinarSite.brandName,host:webinarSite.hostName,smart:settings.smartFollowups,subject:settings.subjects[emailStep],message:settings.messages[emailStep]});
+    const copy=target?campaignCopy({name:v.name??'',brand:webinarSite.brandName,host:webinarSite.hostName,phase:target.phase,title:target.title,step:job.step,reply:!!job.reply_event_id,departure:!!job.departure_id}):followupCopy({name:v.name??'',title:latest.config.title,seconds:latest.progress_seconds,phase,step:job.step,brand:webinarSite.brandName,host:webinarSite.hostName,smart:settings.smartFollowups,subject:settings.subjects[emailStep],message:settings.messages[emailStep]});
     const link=`${origin}/w/${job.id}`;
     if(job.channel==='sms'){
      const from=job.campaign_id?await database<string|null>('rpc/icash_webinar_campaign_sender','POST',{p_recipient:job.recipient}):env.CONTIGUITY_FROM;

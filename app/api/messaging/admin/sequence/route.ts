@@ -7,7 +7,7 @@ export async function GET(){try{
  await webinarOwner();
  const [steps,jobs,replies,campaign]=await Promise.all([
   db('rpc/icash_webinar_return_steps','POST',{}),
-  db('icash_webinar_outbox?select=id,channel,recipient,step,state,due_at,sent_at,last_error,destination,payload,reply_event_id,visitor:icash_webinar_visitors(name,timezone)&order=created_at.desc,id.desc&limit=100'),
+  db('icash_webinar_outbox?select=id,channel,recipient,step,state,due_at,sent_at,last_error,destination,payload,reply_event_id,departure_id,visitor:icash_webinar_visitors(name,timezone)&order=created_at.desc,id.desc&limit=100'),
   db('icash_webinar_reply_events?select=event_id,channel,recipient,body,outcome,created_at&order=created_at.desc&limit=30'),
   readCampaignSettings(db),
  ]);

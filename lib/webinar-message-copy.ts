@@ -1,7 +1,8 @@
 export type MessagePhase='resume'|'next'|'checkout';
 const clean=(value:string,length:number)=>value.replace(/[\r\n\t]+/g,' ').trim().slice(0,length);
-export function campaignCopy({name,brand,host,phase,title,step,reply=false}:{name:string;brand:string;host:string;phase:MessagePhase;title:string;step:number;reply?:boolean}){
+export function campaignCopy({name,brand,host,phase,title,step,reply=false,departure=false}:{name:string;brand:string;host:string;phase:MessagePhase;title:string;step:number;reply?:boolean;departure?:boolean}){
  const first=clean(name,80).split(/\s+/)[0]||'there';
+ if(departure)return {subject:'Come back to your webinar 👇',body:`Hey ${first},\n\nYou left the webinar. Jump back in now and see the rest of the walkthrough. Your return link is below.\n\nContinue my webinar:`,signature:`— ${host}`,sms:`Hey ${first}, ${brand} here. Jump back into your webinar now and catch the rest of the walkthrough:`};
  const variants: [string,string,string][]=phase==='checkout'?[
   ['Your next step 👇','Review the current plan, price and terms. After payment, you can name your bot and set up your workspace.','Ready to get started? Review your access here 👇'],
  ]:phase==='next'?[
@@ -21,4 +22,4 @@ export function campaignCopy({name,brand,host,phase,title,step,reply=false}:{nam
  const cta=phase==='checkout'?`Get ${brand} access`:phase==='next'?'Join my next webinar':'Join my webinar';
  return {subject:clean(subject,150),body:`Hey ${first},\n\n${message}${phase==='next'&&title?`\n\nSession: ${clean(title,160)}`:''}\n\n${cta}:`,signature:`— ${host}`,sms:`Hey ${first}, ${brand} here. ${sms}`};
 }
-export function campaignReason(step:number,reply=false){return reply?'A session request received a return link.':step>=1000?'Weekly follow-up for an opted-in lead who has not purchased.':step>=200&&step<221?'First-week reminder to return and watch the webinar.':step>=200?'Follow-up to bring a non-buyer back into a webinar.':'Original campaign reminder for an earlier signup.';}
+export function campaignReason(step:number,reply=false,departure=false){return departure?'Viewer left the webinar; immediate return link.':step>=300000&&step<=300002?'Scheduled return reminder in the bounded three-round sequence.':reply?'A session request received a return link.':step>=1000?'Weekly follow-up for an opted-in lead who has not purchased.':step>=200&&step<221?'First-week reminder to return and watch the webinar.':step>=200?'Follow-up to bring a non-buyer back into a webinar.':'Original campaign reminder for an earlier signup.';}

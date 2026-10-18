@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {verifyWebinarExitRecovery} from './test-webinar-exit-recovery-db.mjs';
 import {verifyWebinarReturnMessaging} from './test-webinar-return-messaging-db.mjs';
 import {verifyIndependentMessaging} from './test-independent-messaging-db.mjs';
 import {verifyOngoingSalesFollowups} from './test-ongoing-sales-followups-db.mjs';
@@ -269,6 +270,7 @@ try{
  const vipEntry=await preOfferBegin(randomUUID(),preOffer.id,{parentWebinarId:secondWebinar});assert.equal(vipEntry.progress_seconds,0,'Paid VIP restarts remain at zero');
  assert.equal((await preOfferBegin(randomUUID(),preOffer.id,{},true)).progress_seconds,0,'Owner previews never skip');
  console.log('PASS unpaid return offset: atomic pre-offer entry, first-visit and VIP exclusions, one-hour boundary, bounded positions, private control field, retry recovery and no fabricated watch time.');
+ await verifyWebinarExitRecovery(pg,q,config);
  const grants=(await q("select has_table_privilege('anon','icash_webinar_visitors','select') as read,has_function_privilege('authenticated','icash_webinar_contact(uuid,text,text,text,boolean)','execute') as write")).rows[0];assert.equal(grants.read,false);assert.equal(grants.write,false);
  const rls=await q("select relname,relrowsecurity from pg_class where relname like 'icash_webinar%' and relkind='r'");assert.ok(rls.rows.every(r=>r.relrowsecurity));
  console.log('Webinar database checks passed: sessions, attribution, audience, activity, verified checkout triggers, daily funnel, local midnight, DST, earlier-day buyers, preserved revisions, renewals, test/refund exclusion and RLS.');
