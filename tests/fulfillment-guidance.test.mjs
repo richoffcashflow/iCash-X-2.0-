@@ -26,5 +26,6 @@ assert.match(buyerOutreachMessage(outreach),/100 buyer prospects found\. No perm
 assert.equal(buyerOutreachMessage(outreach,1),null,'a separate network match must not be described as no contacts');
 assert.match(buyerOutreachMessage({...outreach,blockers:['credits_required']}),/waiting for work credits/);
 assert.match(buyerOutreachMessage({...outreach,smsContacts:1}),/contact hours/);
+assert.doesNotMatch(buyerOutreachMessage({...outreach,smsContacts:1,smsReadyNow:1}),/queued|sent|delivered/,'permission alone is not a send receipt');
 assert.match(buyerOutreachMessage({...outreach,textsAccepted:1}),/accepted for delivery/);
 assert.doesNotMatch(buyerOutreachMessage({...outreach,textsAccepted:1}),/delivered/,'provider acceptance is not delivery');

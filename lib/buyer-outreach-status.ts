@@ -9,8 +9,8 @@ export function buyerOutreachMessage(status?:BuyerOutreachStatus|null,networkMat
  const sent=status.textsAccepted+status.emailsAccepted;
  if(sent)return `${sent} buyer ${sent===1?'package accepted':'packages accepted'} for delivery.`;
  if(networkMatches>0)return null;
- if(status.smsContacts>0)return status.smsReadyNow>0?'Buyer outreach is queued automatically.':'Buyer texts are waiting for the recipient’s contact hours.';
- if(status.requestedEmails>0)return 'Requested buyer packages are queued automatically.';
+ if(status.smsContacts>0)return status.smsReadyNow>0?'Buyer text permissions are current. Delivery status appears in message history.':'Buyer texts are waiting for the recipient’s contact hours.';
+ if(status.requestedEmails>0)return 'Buyer package email requests are recorded. Delivery status appears in message history.';
  if(status.candidates>0)return `${status.candidates} buyer prospects found. No permitted text contacts or package email requests are available yet.`;
  return 'No contactable buyers have been found yet.';
 }
