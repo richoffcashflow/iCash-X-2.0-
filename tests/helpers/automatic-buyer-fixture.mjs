@@ -25,6 +25,10 @@ export async function installAutomaticBuyerOutreach(f){
  const scope=read('config/buyer-outreach-receipt-scope.sql');
  assert.equal(scope,read('supabase/migrations/'+readdirSync('supabase/migrations').find(name=>name.endsWith('_buyer_outreach_receipt_scope.sql'))));
  await pg.exec(scope);
+ const scheduler=read('config/buyer-scheduler-lock-order.sql');
+ assert.equal(scheduler,read('supabase/migrations/'+readdirSync('supabase/migrations').find(name=>name.endsWith('_buyer_scheduler_lock_order.sql'))));
+ assert(!/for update|icash_sms_thread_review_current/i.test(scheduler),'signature completion must not acquire dispatch locks while holding its deal row');
+ await pg.exec(scheduler);
 }
 
 export async function testAutomaticBuyerOutreach(f,{thread,packageBody,emailRate,envelope}){
