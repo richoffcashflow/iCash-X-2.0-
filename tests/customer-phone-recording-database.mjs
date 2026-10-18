@@ -3,6 +3,8 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
+import {randomUUID} from 'node:crypto';
+import {pricingBlock} from './helpers/two-times-pricing-fixture.mjs';
 const {PGlite}=await import(pathToFileURL(process.argv[2]).href),db=await PGlite.create();
 try{
  await db.exec(`create role anon;create role authenticated;create role service_role;
@@ -38,6 +40,21 @@ try{
  await db.query("update public.icash_customer_phone_calls set recording_sid=$2,recording_state='available',recording_receipt=$3 where id=$1",[call,recording,{...receipt,callSid:'CA'+'d'.repeat(32)}]);assert.equal(await settle(),false,'another call cannot fund this recording');
  await db.query('update public.icash_customer_phone_calls set recording_receipt=$2 where id=$1',[call,receipt]);assert.equal(await settle(),true);assert.equal(await settle(),true);
  const {rows}=await db.query('select * from public.settlements');assert.equal(rows.length,1,'replayed callbacks settle once');assert.equal(rows[0].charge,11);assert.equal(rows[0].components.other.amountMicros,6000);assert.equal(rows[0].components.twilio.amountMicros,28000);
+ // Upgrade after the historical call was settled; new calls snapshot the new price.
+ await db.exec('alter table icash_operation_spend add standard_cost_multiplier numeric;create function icash_vip_active(uuid) returns boolean language sql as $$select false$$;');
+ await db.exec(pricingBlock('begin_customer_phone_call'));await db.exec(pricingBlock('settle_customer_phone_call'));
+ await db.exec('update icash_operating_budget set standard_cost_multiplier=2,elevenlabs_cost_multiplier=2;');
+ await db.exec("create or replace function public.icash_reserve_operation(a uuid,k text,r uuid,t timestamptz) returns void language sql as $$insert into public.icash_operation_spend select k,a,'dispatched',charge_cents,case when public.icash_vip_active(a) then 1.6 else 2 end from public.icash_operation_rates where id=r$$;");
+ for(const vip of [false,true]){
+  await db.exec('create or replace function icash_vip_active(uuid) returns boolean language sql as $$select '+vip+'$$;');
+  const id=randomUUID();const args=[actor,account,screen,quote.recipient,quote.callback,id,quote.from,ac,id.replaceAll('-','').repeat(2),quote];
+  const next=(await db.query('select public.icash_begin_customer_phone_call($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) as result',args)).rows[0].result;
+  assert.equal(next.holdCents,76,'New maximum quote is 2x with the existing buffer');
+  await db.query("update public.icash_customer_phone_calls set parent_sid=$2,ended_at=now(),connected_at=now(),parent_receipt=$3,child_receipt=$3,recording_sid=$4,recording_state='available',recording_receipt=$5 where id=$1",[id,'CA'+id.replaceAll('-',''),carrier,'RE'+id.replaceAll('-',''),{...receipt,sid:'RE'+id.replaceAll('-',''),callSid:'CA'+id.replaceAll('-','')}]);
+  assert.equal((await db.query('select public.icash_settle_customer_phone_call($1) ok',[id])).rows[0].ok,true);
+  assert.equal((await db.query('select charge from settlements where operation=$1',[next.call.operation_key])).rows[0].charge,vip?6:7,'Actual completed cost gets the saved Standard/VIP multiplier');
+ }
+ assert.equal((await db.query('select charge from settlements where operation=$1',[result.call.operation_key])).rows[0].charge,11,'Old settled call remains unchanged');
  for(const role of ['anon','authenticated']){const {rows:[r]}=await db.query("select has_table_privilege($1,'public.icash_customer_phone_calls','SELECT,INSERT,UPDATE,DELETE') as allowed",[role]);assert.equal(r.allowed,false);}
  console.log('PASS recorded manual-call migration: bounded hold includes capture/storage, absent or wrong-call receipts cannot settle, exact cost settles once, browser roles cannot read audio records.');
 }finally{await db.close();}

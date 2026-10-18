@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {randomUUID} from 'node:crypto';
+import {pricingBlock} from '../tests/helpers/two-times-pricing-fixture.mjs';
 const {PGlite}=await import(pathToFileURL(process.argv[2]).href),pg=await PGlite.create();
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const one=async(s,p=[])=>(await pg.query(s,p)).rows[0];
@@ -41,6 +42,13 @@ await pg.exec(read('config/sms-ai-token-billing.sql'));
 assert.equal((await one('select customer_micros from icash_communication_prices')).customer_micros,30000);
 assert.equal((await one('select customer_price_micros from icash_text_messages where id=$1',[delivered])).customer_price_micros,90000,'delivered pricing remains immutable');
 assert.equal((await one('select customer_price_micros from icash_text_messages where id=$1',[ready])).customer_price_micros,30000);
+await pg.exec('alter table icash_communication_prices add source text,add updated_at timestamptz;');
+await assert.rejects(pg.exec(pricingBlock('sms_price')),/Reviewed SMS cost changed/,'Mixed active costs must hold the migration');
+await pg.query('update icash_operation_rates set enabled=false where id=$1',[old]);
+await pg.exec(pricingBlock('sms_price'));
+assert.equal((await one('select customer_micros from icash_communication_prices')).customer_micros,20000,'New transport is 2x reviewed cost');
+assert.equal((await one('select customer_price_micros from icash_text_messages where id=$1',[delivered])).customer_price_micros,90000,'Price change never rewrites delivered SMS');
+assert.equal((await one('select customer_price_micros from icash_text_messages where id=$1',[ready])).customer_price_micros,30000,'Previously prepared SMS retains its snapshot');
 const ai=(await one('select rate_id from icash_text_ai_settings')).rate_id;
 assert.equal((await one('select charge_cents from icash_operation_rates where id=$1',[ai])).charge_cents,6);
 async function settle(multiplier,input=1000,cached=500,output=100){
@@ -53,9 +61,11 @@ async function settle(multiplier,input=1000,cached=500,output=100){
 let x=await settle(3);assert.equal(x.result,true);assert.equal(x.row.actual_micros,410);assert.equal(x.row.customer_price_micros,1230);assert.equal(x.row.charged_cents,0);
 const carry=(await one('select remaining_micros from icash_fractional_credit_carry')).remaining_micros;
 assert.equal((await one('select icash_settle_sms_ai_tokens($1,$2) ok',[a,x.j])).ok,true);assert.equal((await one('select remaining_micros from icash_fractional_credit_carry')).remaining_micros,carry,'retry cannot debit twice');
-x=await settle(2.4);assert.equal(x.row.customer_price_micros,984,'VIP is twenty percent less');
+x=await settle(2.4);assert.equal(x.row.customer_price_micros,984,'Historical VIP snapshot stays valid');
+x=await settle(2);assert.equal(x.row.customer_price_micros,820,'New Standard actual tokens use 2x');
+x=await settle(1.6);assert.equal(x.row.customer_price_micros,656,'New VIP actual tokens use 1.6x');
 x=await settle(3,46000,0,800);assert.equal(x.result,true);assert.equal(x.row.actual_micros,19680);assert.equal(x.row.customer_price_micros,59040);assert.ok(x.row.charged_cents<=6);
 for(const args of [[3,46001,0,100],[3,1000,1001,100],[3,1000,0,801]]){x=await settle(...args);assert.equal(x.result,false);assert.equal(x.row.state,'dispatched');assert.equal((await one('select icash_settle_estimated_operation($1) ok',['sms-ai:'+x.j])).ok,false,'invalid token receipts never bill the maximum estimate');}
 assert.equal((await one("select count(*)::int n from information_schema.routine_privileges where routine_name='icash_settle_sms_ai_tokens' and grantee in ('PUBLIC','anon','authenticated')")).n,0);
-console.log('PASS token billing SQL: rate split, preserved delivered prices, actual input/cache/output cost, 3x/2.4x, fractional carry, idempotency, reservation cap, invalid receipt holds and no maximum-estimate fallback. Ledger delegate simulated.');
+console.log('PASS token billing SQL: rate split, preserved delivered prices, actual input/cache/output cost, new 2x/1.6x and historical 3x/2.4x, fractional carry, idempotency, reservation cap, invalid receipt holds and no maximum-estimate fallback. Ledger delegate simulated.');
 }catch(e){console.error(e.stack,e.where??'');process.exitCode=1;}finally{await pg.close();}

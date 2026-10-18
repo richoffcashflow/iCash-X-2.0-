@@ -16,8 +16,8 @@ export function qualifySellerProperty(raw:unknown,options:{assignmentFeeCents:nu
  return {status:numbersPassed?'qualified' as const:'numbers_review' as const,numbersPassed,marketQualified:numbersPassed,property:{sellerCostReserveCents:options.sellerCostReserveCents,id:row.dm_property_id,city:row.city,state:row.state,zip:row.zip,address:row.full_address,fetchedAt,raw:{data:row,credits:r.credits}},result,creditsUsed:Number(r.credits!.used)};
 }
 /** A maximum bid is an eligibility ceiling, not the price charged to a customer. */
-export function sellerLeadCharge(adCostMicros:number,otherCostMicros:number,multiplier=3){
- if(![adCostMicros,otherCostMicros,multiplier].every(Number.isSafeInteger)||adCostMicros<0||otherCostMicros<0||multiplier!==3)throw Error('LEAD_COST_REQUIRED');
+export function sellerLeadCharge(adCostMicros:number,otherCostMicros:number,multiplier=2){
+ if(![adCostMicros,otherCostMicros,multiplier].every(Number.isSafeInteger)||adCostMicros<0||otherCostMicros<0||multiplier!==2)throw Error('LEAD_COST_REQUIRED');
  const amount=(BigInt(adCostMicros)+BigInt(otherCostMicros))*BigInt(multiplier);const cents=(amount+BigInt(9999))/BigInt(10000);if(cents>BigInt(Number.MAX_SAFE_INTEGER))throw Error('LEAD_COST_TOO_LARGE');return Number(cents);
 }
 export function sellerLeadEvent(stage:'registration'|'numbers_passed'|'market_qualified'|'call_connected'|'application_submitted'){return ({registration:'CompleteRegistration',numbers_passed:'Lead',market_qualified:'Lead',call_connected:'Contact',application_submitted:'SubmitApplication'} as const)[stage];}

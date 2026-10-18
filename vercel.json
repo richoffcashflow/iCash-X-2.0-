@@ -2,6 +2,10 @@
   "buildCommand": "node scripts/verify-production-release.mjs && pnpm run build:verified",
   "crons": [
     {
+      "path": "/api/internal/lead-costs",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/billing/reconcile",
       "schedule": "*/5 * * * *"
     },

@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import {completedMetaDays,metaSpendDays,syncSellerMetaCosts,listMetaCostAccounts} from '../lib/seller-meta-costs.ts';
+const now=new Date('2026-10-18T02:00:00Z'),days=completedMetaDays('America/Chicago',now),campaign='987654321';
+assert.equal(days[0],'2026-10-10');assert.equal(days[6],'2026-10-16','Use the ad account calendar, not UTC today');
+assert.deepEqual(completedMetaDays('America/Chicago',new Date('2026-11-02T06:00:00Z')).slice(-2),['2026-10-31','2026-11-01'],'DST days remain calendar days');
+const row={campaign_id:campaign,date_start:days[6],date_stop:days[6],spend:'11.20',account_currency:'USD'};
+assert.equal(metaSpendDays({data:[row]},campaign,days)[6].spendMicros,11200000);
+assert.equal(metaSpendDays({data:[]},campaign,days).length,7);
+for(const bad of [{spend:'-1'},{spend:'NaN'},{spend:'1.0000001'},{account_currency:'EUR'},{campaign_id:'111111111'},{date_stop:days[0]},{date_start:'2026-10-17',date_stop:'2026-10-17'}])assert.throws(()=>metaSpendDays({data:[{...row,...bad}]},campaign,days));
+assert.throws(()=>metaSpendDays({data:[row,row]},campaign,days));assert.throws(()=>metaSpendDays({data:[row],paging:{next:'https://example.com'}},campaign,days));
+const env={VERCEL_ENV:'production',META_GRAPH_VERSION:'v26.0',META_ADS_READ_ACCESS_TOKEN:'synthetic-token'},calls=[],requests=[];
+let fail=false;const transport=async(url,options)=>{
+ const u=new URL(url);requests.push({url:u,options});assert.equal(u.origin,'https://graph.facebook.com');assert.equal(options.method,'GET');assert.equal(options.redirect,'error');assert.equal(u.searchParams.has('access_token'),false);
+ if(fail)return Response.json({error:{code:190,message:'sensitive provider text'}},{status:400});
+ if(u.pathname.endsWith('/insights'))return Response.json({data:[row]});
+ if(u.pathname.endsWith('/'+campaign))return Response.json({id:campaign,account_id:'123456789'});
+ return Response.json({id:'act_123456789',currency:'USD',timezone_name:'America/Chicago'});
+};
+const db=async(path,method,body)=>{calls.push({path,method,body});return path.includes('claim_')?{id:'synthetic-source',token:'synthetic-lease',accountId:'act_123456789',metaCampaignId:campaign}:true;};
+assert.equal((await syncSellerMetaCosts(db,{...env,VERCEL_ENV:'preview'},transport,now)).status,'disabled_outside_production');assert.equal(calls.length,0);
+assert.equal((await syncSellerMetaCosts(db,env,transport,now)).status,'synced');assert.equal(requests.length,3);assert.equal(calls.at(-1).body.p_days[6].spendMicros,11200000);
+const insight=requests.at(-1).url;assert.equal(insight.searchParams.get('time_increment'),'1');assert.equal(JSON.parse(insight.searchParams.get('filtering'))[0].value[0],campaign);
+fail=true;assert.equal((await syncSellerMetaCosts(db,env,transport,now)).status,'connection_required');assert.equal(calls.at(-1).body.p_days,null,'Provider errors cannot become zero spend');assert(!JSON.stringify(calls).includes('synthetic-token'));assert(!JSON.stringify(calls).includes('sensitive provider text'));
+let pages=0;const accounts=await listMetaCostAccounts(env,async(url)=>{const u=new URL(url);pages++;assert.equal(u.origin,'https://graph.facebook.com');assert.equal(pages===2?u.searchParams.get('after'):null,pages===2?'safe-cursor':null);return Response.json({data:[{id:pages===1?'act_111111':'act_222222',name:'Synthetic',currency:pages===1?'USD':'EUR'}],...(pages===1?{paging:{next:'https://untrusted.example/token',cursors:{after:'safe-cursor'}}}:{})});});
+assert.deepEqual(accounts,[{id:'act_111111',name:'Synthetic'}]);assert.equal(pages,2,'Pagination uses validated cursor on the original endpoint');
+console.log('PASS automatic Meta costs: read-only requests, exact USD amounts, timezone/DST, complete reports, duplicate/currency rejection, safe pagination, secret redaction, failed reads preserve costs and preview does no work.');
