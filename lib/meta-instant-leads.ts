@@ -10,7 +10,7 @@ export const instantAddress=z.string().trim().min(8).max(300).refine(value=>{
 },'Include the street, city and two-letter state.');
 export const metaLeadNotice=z.object({leadgen_id:metaId,page_id:metaId,form_id:metaId,ad_id:metaId.optional(),created_time:z.number().int().positive()}).passthrough();
 export type MetaLeadNotice=z.infer<typeof metaLeadNotice>;
-export type MetaLeadSource={id:string;page_id:string;form_id:string;account_id:string|null;routing_mode?:'direct'|'network_pool';consent_key:string;call_now_key:string|null;consent_text:string;consent_version:string;timezone:string;enabled:boolean};
+export type MetaLeadSource={id:string;page_id:string;form_id:string;account_id:string|null;routing_mode?:'direct'|'network_pool';contact_basis?:'checkbox'|'form_submission';consent_key:string;call_now_key:string|null;consent_text:string;consent_version:string;timezone:string;enabled:boolean};
 const metaAccessToken=z.string().min(20).max(4096).regex(/^[A-Za-z0-9._|-]+$/);
 /** Reuse an owner-provided system-user token only for explicitly selected Pages.
  * The caller must still load an enabled, reviewed Page/form source before use. */
@@ -39,8 +39,8 @@ export function metaNotices(raw:unknown):MetaLeadNotice[]{
   return notice;
  }));
 }
-/** Source configuration is an allowlist of a reviewed, immutable form. Never
- * infer AI calling consent from a phone field or a successful webhook. */
+/** The source selects its contact basis. Submission-based forms retain an
+ * actual submission receipt; they never manufacture a checked disclaimer. */
 export function parseMetaLead(raw:unknown,notice:MetaLeadNotice,source:MetaLeadSource,now=Date.now()){
  const data=z.object({id:metaId,form_id:metaId,ad_id:metaId.optional(),adset_id:metaId.optional(),campaign_id:metaId.optional(),created_time:z.string(),field_data:z.array(z.object({name:z.string(),values:z.array(z.string()).max(5)})).max(40),custom_disclaimer_responses:z.array(z.object({checkbox_key:z.string(),is_checked:z.boolean()})).max(20)}).parse(raw);
  if(!source.enabled||data.id!==notice.leadgen_id||data.form_id!==notice.form_id||source.form_id!==notice.form_id||source.page_id!==notice.page_id||(notice.ad_id&&notice.ad_id!==data.ad_id))throw Error('META_LEAD_BINDING_REQUIRED');
@@ -48,10 +48,13 @@ export function parseMetaLead(raw:unknown,notice:MetaLeadNotice,source:MetaLeadS
  if(!Number.isFinite(submitted)||submitted>now+60000||submitted<now-30*86400000||Math.abs(submitted-notice.created_time*1000)>1000)throw Error('META_SUBMISSION_TIME_REQUIRED');
  const field=(name:string)=>{const matches=data.field_data.filter(f=>f.name===name);if(matches.length>1||matches[0]?.values.length!==1)return undefined;return matches[0].values[0];};
  const checked=(key:string)=>{const responses=data.custom_disclaimer_responses.filter(d=>d.checkbox_key===key);return responses.length===1&&responses[0].is_checked;};
- if(!checked(source.consent_key))throw Error('META_CONTACT_CONSENT_REQUIRED');
+ const submissionBased=source.contact_basis==='form_submission';
+ if(!submissionBased&&!checked(source.consent_key))throw Error('META_CONTACT_CONSENT_REQUIRED');
  const phone=sellerPhone(field('phone_number')??'');if(!phone)throw Error('META_PHONE_REQUIRED');
  const name=z.string().trim().min(1).max(100).parse(field('full_name')??[field('first_name'),field('last_name')].filter(Boolean).join(' '));
- return {metaId:data.id,name,phone,submittedAt:new Date(submitted).toISOString(),pageId:notice.page_id,formId:data.form_id,adId:data.ad_id??null,adsetId:data.adset_id??null,campaignId:data.campaign_id??null,consentResponses:data.custom_disclaimer_responses,callNow:!!source.call_now_key&&checked(source.call_now_key)&&now-submitted<5*60000};
+ const submittedAt=new Date(submitted).toISOString();
+ const consentResponses=submissionBased?[{kind:'form_submission',provider:'meta',metaId:data.id,pageId:notice.page_id,formId:data.form_id,submittedAt}]:data.custom_disclaimer_responses;
+ return {metaId:data.id,name,phone,submittedAt,pageId:notice.page_id,formId:data.form_id,adId:data.ad_id??null,adsetId:data.adset_id??null,campaignId:data.campaign_id??null,consentResponses,callNow:!submissionBased&&!!source.call_now_key&&checked(source.call_now_key)&&now-submitted<5*60000};
 }
 /** Stable on webhook replay. The URL contains no phone or property data. */
 export function instantLeadToken(id:string,submittedAt:string,secret:string){

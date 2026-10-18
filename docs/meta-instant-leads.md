@@ -79,7 +79,9 @@ HomeOffer Network form, use `routing_mode=network_pool`, `account_id=NULL` and
 contact-choice key/text/version from the form. Also supply its Page ID, form ID,
 source slug, optional call-now key/text, and supported timezone. Preserve a review
 reference and expiry for the actual form evidence. Never invent a checked choice
-or infer permission from a phone number. Changed disclosures or targeting need
+or infer permission from an arbitrary phone number. The owner-configured
+submission basis below uses the authenticated receipt for that exact form.
+Changed disclosures or targeting need
 a new reviewed source rather than rewriting prior receipts.
 
 Contact allocation uses the existing funded-membership, Run/Pause, channel,
@@ -136,10 +138,35 @@ subscription status in the service-only `icash_integration_checks` row
 `meta_lead_setup`; it never retrieves lead records or sends outreach. Preview
 builds make no provider requests and cannot replace that production receipt.
 The owner selected the **HomeOffer Network pool** on October 18. No fixed owner
-workspace is required for this source. Do not enable it until the actual form's
-contact-choice keys/text and network-sharing disclosure are verified. Webhook setup, migrations,
-deployment, and the integration check remain activation dependencies. No paid
+workspace is required for this source. The owner subsequently selected automatic
+follow-up from the actual name-and-phone submission, without an additional
+checkbox. This source uses `contact_basis=form_submission`; retain the original
+Make receipt rather than inventing checked disclaimer or call-now responses.
+Make setup, migrations and deployment remain activation dependencies. No paid
 simulation is authorized by this setup request.
+
+## Make connector intake
+
+`POST https://homeoffernetwork.com/api/webhooks/make-leads` accepts the connected
+Facebook Lead Ads **New Lead (Instant)** bundle. Authenticate with a dedicated
+Bearer key in Make's saved HTTP credentials. Production stores only its SHA-256
+hash in `META_MAKE_RECEIVER_JSON`, together with `pageId`, `formId`, and
+`testLeadIds`. Never use the Meta App Secret or Page access token as this key.
+
+Send JSON or `application/x-www-form-urlencoded` fields: `lead_id`, `page_id`,
+`form_id`, `created_time`, `full_name`, `phone_number`, and optional `ad_id`,
+`adset_id`, `campaign_id`. Map the original date as ISO with timezone or UNIX
+seconds. Optional `custom_disclaimer_responses` contains actual responses only;
+the two-field submission source does not require it. Empty ad IDs are accepted.
+
+Known test `1075706761942372` and Meta's dummy name/phone placeholders are stored
+as tests and never dispatched. Real receipts are immutable, Page/form scoped,
+and deduplicated by the same acceptance function as the original Meta callback.
+The submission receipt retains its actual ID/time/name/phone; source policy
+selects the basis for follow-up. Existing checkbox sources remain unchanged.
+The pool, text-only requests, opt-outs, Pause, credits, provider admission,
+private address links and same-card property conversion remain shared paths.
+No outside-hours call-now request is fabricated from the submission.
 
 The owner supplied the published campaign through an Ads Manager URL containing
 both the ad account and campaign IDs above. Its existing production spend source
