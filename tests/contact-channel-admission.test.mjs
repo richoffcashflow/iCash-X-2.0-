@@ -8,7 +8,8 @@ import {runScreeningJob} from '../lib/screening-job.ts';
 import {workspaceNextAction,workspaceStatus} from '../lib/workspace-status.ts';
 const {contactWorkEnabled,automationWorkReady,newLiveWorkKinds}=admission;
 assert.equal(contactWorkEnabled({}),false);assert.equal(contactWorkEnabled({ICASH_CONTACT_WORK_READY:'TRUE'}),false);
-const env={ICASH_LIVE_WORK_READY:'false',ICASH_DISCOVERY_WORK_READY:'false',ICASH_SMS_WORK_READY:'false',ICASH_CONTACT_WORK_READY:'true'};
+// Own every release flag, including an inherited inbound acquisition setting.
+const env={ICASH_ACQUISITION_MODE:'outbound',ICASH_LIVE_WORK_READY:'false',ICASH_DISCOVERY_WORK_READY:'false',ICASH_SMS_WORK_READY:'false',ICASH_CONTACT_WORK_READY:'true'};
 for(const kind of newLiveWorkKinds)assert.equal(automationWorkReady(kind,env),kind==='contacts',kind);
 Object.assign(process.env,env,{DEALMACHINE_API_KEY:'dm_sk_live_SIMULATION_NO_NETWORK'});
 const screen='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',future=new Date(Date.now()+86400000).toISOString(),past=new Date(Date.now()-60000).toISOString();

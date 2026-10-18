@@ -6,9 +6,10 @@ import {discoveryWorkEnabled,contactWorkEnabled,liveWorkReady,smsWorkEnabled,aut
 import {fullCostReserve,costCategories} from '../lib/cost-guard.ts';
 import {workspaceNextAction,workspaceStatus} from '../lib/workspace-status.ts';
 assert.equal(discoveryWorkEnabled({}),false);assert.equal(discoveryWorkEnabled({ICASH_DISCOVERY_WORK_READY:'TRUE'}),false);
-const env={ICASH_LIVE_WORK_READY:'false',ICASH_DISCOVERY_WORK_READY:'true'};
+// Own every release flag: deployment settings must not enable a sibling fixture.
+const env={ICASH_ACQUISITION_MODE:'outbound',ICASH_LIVE_WORK_READY:'false',ICASH_DISCOVERY_WORK_READY:'true',ICASH_CONTACT_WORK_READY:'false',ICASH_SMS_WORK_READY:'false'};
 for(const kind of newLiveWorkKinds)assert.equal(automationWorkReady(kind,env),kind==='discovery',kind);
-Object.assign(process.env,env,{DEALMACHINE_API_KEY:'dm_sk_live_SIMULATION_NO_NETWORK',ICASH_SMS_WORK_READY:'false'});
+Object.assign(process.env,env,{DEALMACHINE_API_KEY:'dm_sk_live_SIMULATION_NO_NETWORK'});
 const future=new Date(Date.now()+86400000).toISOString(),past=new Date(Date.now()-60000).toISOString();
 const rows={
  icash_discovery_configs:[{enabled:true,auto_enabled:true,exhausted:false,zip:'38118',rate_id:'rate',per_page:5,property_credit_micros:10000,data_rights_until:future,revision:'revision',next_page:1}],
