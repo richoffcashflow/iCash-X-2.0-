@@ -159,16 +159,15 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   homeFixture=true;
   const previousWebinarSession=await page.evaluate(()=>{const saved=sessionStorage.getItem('icash-webinar-session');sessionStorage.removeItem('icash-webinar-session');return saved;});
   await page.goto(base+'/');
-  await page.getByLabel('Payment email',{exact:true}).waitFor();
-  assert.equal(membershipRequests.filter(r=>r.home).length,0,'A new browser checks email before creating a purchase');
-  await page.getByLabel('Payment email',{exact:true}).fill('fixture@example.invalid');
-  await page.getByRole('button',{name:'Continue to payment',exact:true}).click();
   await field.waitFor();
+  assert.equal(await page.getByLabel('Payment email',{exact:true}).count(),0,'Homepage has no extra payment-email step');
+  assert.equal(await page.getByRole('button',{name:'Continue to payment',exact:true}).count(),0);
   await page.getByRole('heading',{name:'Your AI wholesaling bot.',exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'Sign up',exact:true}).count(),0);
   assert.equal(await page.getByRole('button',{name:'Buy now',exact:true}).count(),0);
   assert.equal(await page.locator('input[type="checkbox"]').count(),0,'There is no separate agreement before the payment form');
-  assert.equal(membershipRequests.filter(r=>r.home).length,1,'Checkout opens once after the email check');
+  assert.equal(membershipRequests.filter(r=>r.home).length,1,'Homepage checkout opens automatically once');
+  assert.equal(membershipRequests.at(-1).email,undefined,'A new buyer enters email inside Stripe');
   assert.equal(membershipRequests.at(-1).action,'prepare');
   assert.equal(membershipRequests.at(-1).accepted,undefined,'Opening checkout does not invent purchase acceptance');
   try{await page.waitForFunction(()=>window.__pixelCalls.some(c=>c[2]==='PageView')&&window.__pixelCalls.some(c=>c[2]==='InitiateCheckout'));}

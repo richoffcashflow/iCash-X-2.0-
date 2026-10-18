@@ -74,19 +74,24 @@ export async function POST(req:Request){
  if(embedded&&!publishableKey)return NextResponse.json({error:'Payment inside the room is not connected yet. Use secure checkout to continue.'},{status:503,headers});
  const checkoutResult=async(s:import('stripe').default.Checkout.Session)=>{await bindCheckoutMeasurement(req,s.id,mode);return embedded?{clientSecret:s.client_secret,sessionId:s.id,publishableKey}:{url:s.url,sessionId:s.id};};
  const contact=await checkoutCustomerContext(hash,user?.email);
- const paymentEmail=normalizeEmail(user?.email??i.email??contact.email);
- if(!paymentEmail)return NextResponse.json({error:'Enter your payment email to check for an existing purchase before opening checkout.'},{status:422,headers});
- contact.email=paymentEmail;
+ let paymentEmail=normalizeEmail(user?.email??i.email??contact.email);
+ // The public homepage opens Stripe directly; Stripe collects a new buyer's email.
+ // Known account/webinar emails still reserve their purchase before opening payment.
+ if(!paymentEmail&&i.action!=='prepare')return NextResponse.json({error:'Enter your payment email to check for an existing purchase before opening checkout.'},{status:422,headers});
  const filter=account?`account_id=eq.${account.id}`:`guest_hash=eq.${hash}`;const [prior]=await db<Membership[]>(`icash_memberships?${filter}&mode=eq.${mode}&state=neq.cancelled&select=*&limit=1`);
  if(prior){
   if(prior.account_id!==(account?.id??null))return NextResponse.json({error:'This browser has another account’s checkout. Sign in to that account to continue.'},{status:409,headers});
+  paymentEmail??=normalizeEmail(prior.checkout_email);
   if(prior.state!=='pending')return NextResponse.json({error:'Your software subscription already exists. Open your workspace or manage your payment.'},{status:409,headers});
   if(prior.stripe_session_id){const s=await stripe.checkout.sessions.retrieve(prior.stripe_session_id);if(s.metadata?.icash_membership!==prior.id||s.livemode!==(mode==='live'))throw Error();if(s.status==='complete'){await reconcileMembershipCheckout(prior);return NextResponse.json({error:'Your payment is being confirmed. Refresh; do not pay again.'},{status:409,headers});}if(s.status==='open'&&prior.price_cents===offer.priceCents&&prior.offer_revision===offer.revision&&prior.consent_version===membershipTermsVersion&&checkoutMatchesPresentation(s,embedded)&&(!prior.checkout_email||prior.checkout_email===paymentEmail)&&s.custom_text?.submit?.message===membershipCheckoutSummary(prior.price_cents,origin))return NextResponse.json(await checkoutResult(s),{headers});if(s.status==='open')await stripe.checkout.sessions.expire(s.id);await db(`icash_memberships?id=eq.${prior.id}`,'PATCH',{state:'cancelled'});}
   else if(prior.price_cents!==offer.priceCents||prior.offer_revision!==offer.revision||prior.consent_version!==membershipTermsVersion)await db(`icash_memberships?id=eq.${prior.id}`,'PATCH',{state:'cancelled'});
  }
  const m=await db<Membership>('rpc/icash_begin_membership_v2','POST',{p_guest:hash,p_account:account?.id??null,p_mode:mode,p_price:offer.priceCents,p_revision:offer.revision,p_terms:membershipTerms(offer.priceCents),p_version:membershipTermsVersion});
- const reserved=await db<boolean>('rpc/icash_reserve_membership_email','POST',{p_membership:m.id,p_email:paymentEmail});
- if(!reserved)return NextResponse.json({error:'A purchase or checkout already exists for this email. Sign in to restore your access, or return to the original checkout. Do not pay again.',signIn:true},{status:409,headers});
+ if(paymentEmail){
+  contact.email=paymentEmail;
+  const reserved=await db<boolean>('rpc/icash_reserve_membership_email','POST',{p_membership:m.id,p_email:paymentEmail});
+  if(!reserved)return NextResponse.json({error:'A purchase or checkout already exists for this email. Sign in to restore your access, or return to the original checkout. Do not pay again.',signIn:true},{status:409,headers});
+ }
  const vipId=m.post_purchase_webinar_id?null:await checkoutVipSession(i.webinarSessionId,{timezone:i.timezone,ipTimezone:process.env.VERCEL?req.headers.get('x-vercel-ip-timezone'):null,location:webinarViewerLocation(req.headers)});
  if(vipId)await db(`icash_memberships?id=eq.${m.id}&post_purchase_webinar_id=is.null`,'PATCH',{post_purchase_webinar_id:vipId});
  // Preparing a form is not customer acceptance; the customer authorizes payment in Stripe.

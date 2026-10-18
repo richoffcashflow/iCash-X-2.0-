@@ -14,6 +14,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - Public signup and checkout copy must not reintroduce the 'work credits sold separately' sentence or equivalent separate-credit blurbs. Apply this to page copy and Standard/VIP Stripe checkout descriptions and summaries. Keep pricing, recurring billing, and saved purchase terms accurate.
 
+- On October 18, 2026 the owner required the public homepage/bio link to open embedded payment automatically. Collect a new buyer’s email inside Stripe; do not add a separate payment-email prompt before the form. Preserve saved buyer details, same-session retries, completed-payment guards and verified paid access.
+
 - Ask AI Bot is VIP-only. Require verified VIP access for assistant questions and saved replies. Standard users open VIP upgrade review; credits do not grant access. Keep ordinary Standard bot automation available.
 - Show the property-specific Ask AI action directly on the deal card, including before expansion. Opening it selects that property without submitting a paid question. Call history prioritizes the actual audio player; transcripts remain optional secondary details, and recordings must remain visible independently of completed AI transcripts.
 - Spoken property addresses expand street abbreviations (St to Street, Ln to Lane, Rd to Road, and similar suffixes) in call openings and voice context. Keep canonical addresses and written contract/SMS wording unchanged. Preserve proper names and unit identifiers; pronunciation changes must not reset confirmed ownership or call progress.
