@@ -118,6 +118,10 @@ export async function verifyWorkspace(browser,base,options,name){
   if(await debt.count())assert(await messages.evaluate(node=>!!(node.compareDocumentPosition(node.closest('dialog').querySelector('.property-debt-summary'))&Node.DOCUMENT_POSITION_FOLLOWING)),'title messages appear before optional mortgage details');
  }
  async function openProperty(state){
+  // Finish the previous document's mocked reads before changing their fixture
+  // state and navigating. WebKit can otherwise report abandoned fulfills as
+  // access-control errors. Keep every page-error assertion intact.
+  await page.waitForLoadState('networkidle');
   scenario=state;await page.goto(base+'/');
   const card=page.locator('.live-property').first();await card.waitFor();await card.locator('.property-summary').click();
   await card.locator('.property-details').waitFor({state:'visible'});return card;

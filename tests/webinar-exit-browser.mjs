@@ -112,7 +112,10 @@ export async function verifyWebinarExit(browser){
   const back=await open('/away');await back.goto(origin+'/watch');await back.waitForFunction(()=>window.ready);await back.getByText('Keep watching',{exact:true}).click();
   const backTab=await context.newCDPSession(back),history=await backTab.send('Page.getNavigationHistory');
   await attempt(back,()=>backTab.send('Page.navigateToHistoryEntry',{entryId:history.entries[history.currentIndex-1].id}));assert.equal(back.url(),origin+'/watch');
-  await back.goBack();assert.equal(back.url(),origin+'/away');await backTab.detach();await back.close();
+  // Use the same genuine history command after Stay. Waiting for the target
+  // document avoids tying this assertion to the cancelled navigation's load.
+  await backTab.send('Page.navigateToHistoryEntry',{entryId:history.entries[history.currentIndex-1].id});
+  await back.waitForFunction(expected=>location.href===expected,origin+'/away');assert.equal(back.url(),origin+'/away');await backTab.detach();await back.close();
 
   // A real Back departure uses custom wording only when the browser permits it.
   // Resume the original history entry rather than adding a replacement Back trap.
