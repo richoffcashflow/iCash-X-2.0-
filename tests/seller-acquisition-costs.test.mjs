@@ -7,7 +7,7 @@ const owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7',id='00000000-0000-4000-8000-0
 for(const [d,c] of [['11.20',1120],['0',0],['0.01',1],['10000.00',1000000]])assert.equal(acquisitionDollarsToCents(d),c);
 for(const d of ['-1','1.001','NaN','1e3','10000.01',''])assert.throws(()=>acquisitionDollarsToCents(d));
 let user={id:owner},origin=true,calls=[],fail=false;
-const mocks={MetaCostError,validateMetaCostSource:async()=>({timezone:'America/Chicago'}),dashboardCurrentUser:async()=>user,ownerInboundTarget:{ownerUserId:owner},allowedOrigin:()=>origin,acquisitionCostInput,acquisitionCostReport,
+const mocks={MetaCostError,sellerMetaCostEnvironment:async(_db,env)=>env,validateMetaCostSource:async()=>({timezone:'America/Chicago'}),dashboardCurrentUser:async()=>user,ownerInboundTarget:{ownerUserId:owner},allowedOrigin:()=>origin,acquisitionCostInput,acquisitionCostReport,
  db:async(path,method,body)=>{calls.push({path,method,body});if(fail)throw Error('Synthetic failure');return path.endsWith('icash_owner_seller_costs')?{estimates:[],leads:[],thresholdCents:1000}:path.endsWith('icash_owner_seller_meta_costs')?[]:{saved:true};}};
 globalThis.__acquisitionRoute=mocks;
 let s=ts.transpileModule(readFileSync(new URL('../app/api/seller/costs/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .*;\s*$/gm,'');

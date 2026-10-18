@@ -16,7 +16,7 @@ let fail=false;const transport=async(url,options)=>{
  if(u.pathname.endsWith('/'+campaign))return Response.json({id:campaign,account_id:'123456789'});
  return Response.json({id:'act_123456789',currency:'USD',timezone_name:'America/Chicago'});
 };
-const db=async(path,method,body)=>{calls.push({path,method,body});return path.includes('claim_')?{id:'synthetic-source',token:'synthetic-lease',accountId:'act_123456789',metaCampaignId:campaign}:true;};
+const db=async(path,method,body)=>{calls.push({path,method,body});if(path==='rpc/icash_seller_meta_access')return null;return path.includes('claim_')?{id:'synthetic-source',token:'synthetic-lease',accountId:'act_123456789',metaCampaignId:campaign}:true;};
 assert.equal((await syncSellerMetaCosts(db,{...env,VERCEL_ENV:'preview'},transport,now)).status,'disabled_outside_production');assert.equal(calls.length,0);
 assert.equal((await syncSellerMetaCosts(db,env,transport,now)).status,'synced');assert.equal(requests.length,3);assert.equal(calls.at(-1).body.p_days[6].spendMicros,11200000);
 const insight=requests.at(-1).url;assert.equal(insight.searchParams.get('time_increment'),'1');assert.equal(JSON.parse(insight.searchParams.get('filtering'))[0].value[0],campaign);

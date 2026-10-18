@@ -1,8 +1,14 @@
 import type {SellerDb} from './seller-pipeline.ts';
 export type MetaCostStatus='connection_required'|'invalid_report'|'unavailable';
-export class MetaCostError extends Error {status:MetaCostStatus;constructor(status:MetaCostStatus){super(status==='connection_required'?'Meta Ads needs read access. Connect an ads_read token for the advertising account.':status==='invalid_report'?'Meta returned an incomplete or unsupported spend report. Saved costs are unchanged.':'Meta spend is temporarily unavailable. Saved costs are unchanged.');this.status=status;}}
+export class MetaCostError extends Error {status:MetaCostStatus;constructor(status:MetaCostStatus){super(status==='connection_required'?'Meta needs read access. Paste a token with ads_read access to your advertising account below.':status==='invalid_report'?'Meta returned an incomplete or unsupported spend report. Saved costs are unchanged.':'Meta spend is temporarily unavailable. Saved costs are unchanged.');this.status=status;}}
 type Env=NodeJS.ProcessEnv;
 const id=/^\d{5,30}$/;
+// Server-only usage: neither this credential nor the environment is returned by an API.
+export async function sellerMetaCostEnvironment(db:SellerDb,env:Env){
+ const token=await db<string|null>('rpc/icash_seller_meta_access','POST',{});
+ if(token!==null&&(typeof token!=='string'||token.length<20||token.length>4096))throw new MetaCostError('unavailable');
+ return token?{...env,META_ADS_READ_ACCESS_TOKEN:token}:env;
+}
 export function metaCostConfigured(env:Env){return !!(env.META_ADS_READ_ACCESS_TOKEN||env.META_SELLER_ACCESS_TOKEN||env.META_CAPI_ACCESS_TOKEN)&&/^v\d{1,3}\.0$/.test(env.META_GRAPH_VERSION||'');}
 async function graph(path:string,params:Record<string,string>,env:Env,transport:typeof fetch){
  if(!metaCostConfigured(env))throw new MetaCostError('connection_required');
@@ -63,8 +69,9 @@ export async function syncSellerMetaCosts(db:SellerDb,env:Env,transport:typeof f
  const claim=await db<{id:string;token:string;accountId:string;metaCampaignId:string}|null>('rpc/icash_claim_seller_cost_sync','POST',{});if(!claim)return {status:'not_configured_or_not_due'};
  let status:MetaCostStatus|'synced'='synced',timezone:string|null=null,days:ReturnType<typeof metaSpendDays>|null=null;
  try{
-  ({timezone}=await validateMetaCostSource(claim.accountId,claim.metaCampaignId,env,transport));const dates=completedMetaDays(timezone,now);
-  const report=await graph(`${claim.accountId}/insights`,{fields:'campaign_id,date_start,date_stop,spend,account_currency',level:'campaign',time_increment:'1',time_range:JSON.stringify({since:dates[0],until:dates[6]}),filtering:JSON.stringify([{field:'campaign.id',operator:'IN',value:[claim.metaCampaignId]}]),limit:'100'},env,transport);
+  const access=await sellerMetaCostEnvironment(db,env);
+  ({timezone}=await validateMetaCostSource(claim.accountId,claim.metaCampaignId,access,transport));const dates=completedMetaDays(timezone,now);
+  const report=await graph(`${claim.accountId}/insights`,{fields:'campaign_id,date_start,date_stop,spend,account_currency',level:'campaign',time_increment:'1',time_range:JSON.stringify({since:dates[0],until:dates[6]}),filtering:JSON.stringify([{field:'campaign.id',operator:'IN',value:[claim.metaCampaignId]}]),limit:'100'},access,transport);
   days=metaSpendDays(report,claim.metaCampaignId,dates);
  }catch(e){status=e instanceof MetaCostError?e.status:'unavailable';}
  const saved=await db<boolean>('rpc/icash_finish_seller_cost_sync','POST',{p_id:claim.id,p_token:claim.token,p_status:status,p_timezone:timezone,p_days:days});

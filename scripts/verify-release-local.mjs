@@ -2,7 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
- 'seller-acquisition-costs', 'seller-acquisition-costs-database', 'seller-meta-costs', 'two-times-usage', 'course-progress', 'support-customer-notifications', 'support-conversation', 'access-help', 'support-owner-notifications', 'support-routes', 'support-email-intake',
+ 'seller-acquisition-costs', 'seller-acquisition-costs-database', 'seller-meta-costs', 'seller-meta-access', 'two-times-usage', 'course-progress', 'support-customer-notifications', 'support-conversation', 'access-help', 'support-owner-notifications', 'support-routes', 'support-email-intake',
  'purchase-access-email', 'purchase-access-followups', 'purchase-account-access', 'purchase-email-signin', 'purchase-phone-access', 'cancellation-notifications', 'agreement-cancellation', 'live-dispatch', 'conversation-address',
  'workspace-acknowledgment', 'work-account-membership', 'account-activity-route', 'customer-provisioning-recovery', 'stripe-invoice-webhook', 'stripe-dispute-webhooks', 'manual-funding-route', 'early-access-funding', 'course-preview-contracts', 'course-preview-access', 'course-portal',
  'consented-browser-calling-database', 'contact-rpc-readback', 'manual-call-options', 'browser-phone-route', 'browser-phone-service', 'browser-call-session', 'authority-review-status', 'sms-review-status-route',
