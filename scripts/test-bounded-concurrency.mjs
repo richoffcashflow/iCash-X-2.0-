@@ -70,6 +70,8 @@ try{
  const byBody=new Map(messages.map(message=>[message.body,message])),byId=new Map(messages.map(message=>[message.id,message]));
  const sends=new Map(),receiptAttempts=new Map();
  const fixtureDb=async(path,method,body,signal)=>{
+  // These synthetic messages are ordinary workspace SMS, not Meta lead follow-ups.
+  if(path.startsWith('icash_meta_lead_messages?'))return [];
   const result=await db(path,method,body,signal);
   if(path==='rpc/icash_accept_text'){
    const count=(receiptAttempts.get(body.p_message)||0)+1;receiptAttempts.set(body.p_message,count);
