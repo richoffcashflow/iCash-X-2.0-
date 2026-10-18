@@ -6,6 +6,7 @@ import {PostPurchaseSetup} from '@/components/post-purchase-setup';
 import {StripeEmbeddedCheckout} from '@/components/stripe-embedded-checkout';
 import {webinarBrowserEvent} from '@/lib/webinar-browser-events';
 import {webinarRequest} from '@/lib/webinar-client';
+import {navigateWebinar} from '@/lib/webinar-exit-reminder';
 import {safeVipSession} from '@/lib/webinar-purchase-flow';
 import {vipBenefits,vipTermsVersion,vipMonthlyCents,vipUpgradeCents} from '@/lib/vip-policy';
 import {priceLabel} from '@/lib/membership-policy';
@@ -48,7 +49,7 @@ export function WebinarVipUpsell({mode,webinarSessionId,phase,email,customerName
  }
  function skip(){if(busy||confirming||form)return;setClaim(false);setDeclined(true);active.current?.(false);if(phase==='ended'){const destination=safeVipSession(vipSessionUrl);if(destination)window.location.assign(destination);}}
  if(declined&&phase==='ended'&&!safeVipSession(vipSessionUrl))return <PostPurchaseSetup email={email} customerName={customerName} needsClaim={needsClaim} onWorkspace={onWorkspace}/>;
- if(declined)return <section className="membership-success"><p className="purchase-receipt"><Check size={16}/>Software payment confirmed</p><h2>{phase==='watching'?'You’re in. Keep watching.':'Your VIP session is ready.'}</h2>{phase==='watching'?<p>Your next step will open when this webinar ends.</p>:<a className="setup-primary" href={safeVipSession(vipSessionUrl)!}>Open my VIP session<ArrowRight size={17}/></a>}</section>;
+ if(declined)return <section className="membership-success"><p className="purchase-receipt"><Check size={16}/>Software payment confirmed</p><h2>{phase==='watching'?'You’re in. Keep watching.':'Your VIP session is ready.'}</h2>{phase==='watching'?<p>Your next step will open when this webinar ends.</p>:<a className="setup-primary" href={safeVipSession(vipSessionUrl)!}>Open my VIP session<ArrowRight size={17}/></a>}<button type="button" className="membership-embedded-back" onClick={()=>navigateWebinar('/access')}>Open my workspace</button></section>;
  return <section className="webinar-vip-upsell vip-checkout" aria-label="VIP upgrade">
   <div className="vip-checkout-brand"><span>VIP</span><strong>iCash X upgrade</strong></div>
   <p className="purchase-receipt"><Check size={16}/>Your software access is paid</p>
@@ -64,6 +65,7 @@ export function WebinarVipUpsell({mode,webinarSessionId,phase,email,customerName
    <p className="membership-secure"><ShieldCheck size={14}/>Secure payment through Stripe</p>
   </>}
   {!form&&!confirming&&<button type="button" className="webinar-vip-skip" disabled={busy} onClick={skip}>{phase==='watching'?'Not now — keep watching':safeVipSession(vipSessionUrl)?'No thanks — continue to my VIP session':'No thanks — continue with Standard'}</button>}
+  {!form&&<button type="button" className="membership-embedded-back" disabled={busy} onClick={()=>navigateWebinar('/access')}>Open my workspace</button>}
   {error&&<p className="membership-error" role="alert">{error}</p>}
  </section>;
 }

@@ -9,6 +9,7 @@ export function WebinarVipWelcome({href,fullScreen=false}:{href:string;fullScree
  const destination=safeVipSession(href),[seconds,setSeconds]=useState(5);
  const heading=useRef<HTMLHeadingElement>(null),remaining=useRef(5),navigated=useRef(false);
  function open(){if(!destination||navigated.current)return;navigated.current=true;navigateWebinar(destination);}
+ function workspace(){if(navigated.current)return;navigated.current=true;navigateWebinar('/access');}
  useEffect(()=>{
   heading.current?.focus({preventScroll:true});
   if(!destination)return;
@@ -30,6 +31,7 @@ export function WebinarVipWelcome({href,fullScreen=false}:{href:string;fullScree
    <p className="webinar-vip-welcome-message">Stay here to watch your VIP webinar.</p>
    <p>Your iCash X purchase is complete. See what VIP adds in your next video.</p>
    <button type="button" className="setup-primary" onClick={open}>Watch VIP now<ArrowRight size={19} aria-hidden="true"/></button>
+   <button type="button" className="membership-embedded-back" onClick={workspace}>Open my workspace</button>
    <p className="webinar-vip-welcome-countdown" role="timer" aria-live="off">{seconds>0?`Starting automatically in ${seconds} seconds…`:'Opening your VIP webinar…'}</p>
   </div>
  </section>;

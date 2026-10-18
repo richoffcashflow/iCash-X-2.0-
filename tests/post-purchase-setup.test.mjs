@@ -31,3 +31,11 @@ hold();await flush();tree=h.render('PostPurchaseSetup',props);assert.equal(saved
 saved={...saved,stage:0,profile:{...saved.profile,displayName:''}};requests=[];opens=0;
 const signed=await harness('components/post-purchase-setup.tsx',{AccountAccess,BotBuilding,saveBotBuild,waitForBotCreationTransition,defaultBotProfile,setupProfileSchema}),signedProps={...props,needsClaim:false};signed.render('PostPurchaseSetup',signedProps);await flush();tree=signed.render('PostPurchaseSetup',signedProps);find(tree,'form').props.onSubmit({preventDefault(){}});await flush();assert.equal(opens,0);hold();await flush();assert.equal(opens,1,'Workspace navigation follows the saved bot, not the animation timer alone');signed.close();
 console.log('PASS immediate payoff handlers: verified billing gate, carried name/email, durable bot save, visible creation state, preserved preferences, guest email verification and immediate signed-in workspace handoff.');
+
+// Optional profile setup cannot strand a paid buyer during a save/read outage.
+globalThis.fetch=async()=>Response.json({error:'Setup unavailable'},{status:503});
+const unavailable=await harness('components/post-purchase-setup.tsx',{AccountAccess,BotBuilding,saveBotBuild,waitForBotCreationTransition,defaultBotProfile,setupProfileSchema});
+unavailable.render('PostPurchaseSetup',props);await flush();tree=unavailable.render('PostPurchaseSetup',props);
+assert(all(tree).some(n=>n.type==='a'&&n.props.href==='/access'),'Paid buyers can open verified account access without saving a bot name');
+assert.equal(find(tree,AccountAccess),undefined,'The escape route does not fabricate a verified session');unavailable.close();
+console.log('PASS paid workspace remains reachable when optional bot naming is unavailable.');
