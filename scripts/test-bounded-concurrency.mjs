@@ -1,3 +1,4 @@
+import {instantLeadsEnabled} from '../lib/meta-instant-lead-service.ts';
 // ISOLATED SIMULATION. Real dispatch/receipt service bodies and PostgreSQL functions;
 // fixed-size synthetic work, in-memory database, provider stubs, no network or live credentials.
 import assert from 'node:assert/strict';
@@ -76,7 +77,7 @@ try{
   }
   return result;
  };
- const {dispatchTextMessage}=await loadService('lib/text-message-service.ts',{
+ const {dispatchTextMessage}=await loadService('lib/text-message-service.ts',{instantLeadsEnabled,
   db:fixtureDb,saveTextReceipt,smsWorkEnabled:()=>true,liveWorkReady:()=>true,sameBusinessNumber:(a,b)=>a===b,
   elevenRequest:async()=>{throw Error('Voice provider is forbidden in this fixture');},
   textPayload:payload=>{assert.equal(payload.from,from);assert(byBody.has(payload.message));},

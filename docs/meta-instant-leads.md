@@ -85,6 +85,9 @@ and allocation flow; do not silently reuse these receipts for it.
 
 Webhook callback: `https://homeoffernetwork.com/api/webhooks/meta-leads`. Subscribe
 the reviewed Page to `leadgen`; keep verification and signature secrets separate.
+The production verification challenge works once both webhook secrets are saved,
+even while intake is disabled. POST delivery remains unavailable until intake is
+enabled; verifying the callback alone never creates leads or sends outreach.
 The existing authenticated seller worker is the recovery path. Monitor durable
 inbox states, provider receipts and held research rather than assuming a 200
 webhook means a seller has been contacted. Exhausted retrieval attempts remain

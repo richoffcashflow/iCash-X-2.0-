@@ -10,7 +10,9 @@ export const maxDuration=60;
 const headers={'Cache-Control':'no-store'};
 export async function GET(req:Request){
  const p=new URL(req.url).searchParams,token=p.get('hub.verify_token')??'',expected=process.env.META_LEAD_VERIFY_TOKEN??'';
- if(!instantLeadsEnabled(process.env)||!expected||p.get('hub.mode')!=='subscribe'||token.length!==expected.length||!timingSafeEqual(Buffer.from(token),Buffer.from(expected)))return new Response(null,{status:403,headers});
+ // Meta must be able to verify this production callback before intake is
+ // activated. This challenge cannot retrieve a lead or start outreach.
+ if(process.env.VERCEL_ENV!=='production'||!process.env.META_LEAD_APP_SECRET||!expected||p.get('hub.mode')!=='subscribe'||Buffer.byteLength(token)!==Buffer.byteLength(expected)||!timingSafeEqual(Buffer.from(token),Buffer.from(expected)))return new Response(null,{status:403,headers});
  const challenge=p.get('hub.challenge');return challenge&&/^\d{1,100}$/.test(challenge)?new Response(challenge,{headers}):new Response(null,{status:400,headers});
 }
 export async function POST(req:Request){
