@@ -24,7 +24,19 @@ export async function queueInstantAddressLink(d:Deps,lead:InstantLead,purpose:'i
  if(!smsLength(body).fits)body='HomeOffer Network AI: Enter the full address: '+instantAddressLink(token)+suffix;
  if(!smsLength(body).fits)return {status:'message_format_required'};
  const id=await d.db<string|null>('rpc/icash_meta_queue_message','POST',{p_lead:lead.lead_id,p_purpose:purpose,p_key:key,p_body:body});
- return id?d.sms(lead.account_id,id):{status:'message_held'};
+ if(!id)return {status:'message_held'};
+ const receipt=async()=>{
+  const [message]=await d.db<{state:string;provider_id:string|null}[]>(`icash_text_messages?id=eq.${encodeURIComponent(id)}&account_id=eq.${lead.account_id}&direction=eq.outgoing&select=state,provider_id&limit=1`);
+  return message;
+ };
+ const accepted=(message:Awaited<ReturnType<typeof receipt>>)=>!!message?.provider_id&&['accepted','delivered'].includes(message.state);
+ // The queue returns the same message on replay. A saved provider receipt is
+ // success even though dispatch correctly refuses to send that message again.
+ const message=await receipt();
+ if(accepted(message))return {status:'message_accepted'};
+ if(message?.state!=='ready')return {status:'message_held'};
+ const result=await d.sms(lead.account_id,id);
+ return result.status==='message_held'&&accepted(await receipt())?{status:'message_accepted'}:result;
 }
 export async function processInstantLead(d:Deps,id:string){
  if(!instantLeadsEnabled(d.env))return {status:'disabled'};
