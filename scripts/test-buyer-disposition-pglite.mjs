@@ -7,10 +7,11 @@ import {databaseAdapter,loadService} from '../tests/helpers/simulated-journey-se
 import {buyerAskingPrice,buyerPackageText,renderBuyerPackage} from '../lib/buyer-disposition.ts';
 import {dealTermsSchema} from '../lib/deal-documents.ts';
 import {testOwnerBuyerDelivery} from '../tests/helpers/owner-buyer-delivery-fixture.mjs';
+import {installAutomaticBuyerOutreach,testAutomaticBuyerOutreach} from '../tests/helpers/automatic-buyer-fixture.mjs';
 const originalFetch=globalThis.fetch,originalReady=process.env.ICASH_LIVE_WORK_READY;
 globalThis.fetch=async()=>{throw Error('NETWORK BLOCKED: buyer test is local only');};
 process.env.ICASH_LIVE_WORK_READY='true';
-const f=await createOperationalContactFixture(process.argv[2]);
+const f=await createOperationalContactFixture(process.argv[2],{automaticChannels:true});
 const {pg,q,one,rpc,account,other,user,screening,deal}=f;
 try{
  await q('alter table icash_text_threads add column if not exists retired_at timestamptz');
@@ -68,7 +69,9 @@ try{
  const manualStart=manualSql.indexOf('create or replace function public.icash_claim_customer_text(');
  await pg.exec(manualSql.slice(manualStart,manualSql.indexOf('end $$;',manualStart)+7));
  await pg.exec(readFileSync('config/buyer-outreach-hold.sql','utf8'));
+ await installAutomaticBuyerOutreach(f);
  const emailRate=(await one("insert into icash_operation_rates(operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled) select 'manual_email','SIMULATION buyer hold',charge_cents,costs_micros,'SIMULATION email costs',verified_at,expires_at,true from icash_operation_rates where id=$1 returning id",[f.sms])).id;
+ await testAutomaticBuyerOutreach(f,{thread:thread.id,packageBody,emailRate,envelope});
  const incomingEmail=(await one("insert into icash_text_messages(account_id,thread_id,direction,body,state) values($1,$2,'incoming','Please email the package to buyer@example.invalid','received') returning id",[account,thread.id])).id;
  const email=await rpc('icash_queue_deal_email',{p_account:account,p_actor:user,p_deal:deal,p_contact:'buyer-request:'+incomingEmail,p_key:randomUUID(),p_subject:'SIMULATION buyer package',p_body:'Synthetic package only',p_rate:emailRate});
  const hold=(held,p_actor=user,p_account=account)=>rpc('icash_set_buyer_outreach_hold',{p_account,p_deal:deal,p_actor,p_held:held,p_reason:'Owner requested local test without buyer outreach'});
@@ -183,6 +186,9 @@ try{
  assert.equal((await data()).askingPriceCents,4900000,'buyer package survives channel change');
  console.log('PASS buyer written-only migration: untouched queued calls retired, callback denied, inbound buyer calls and signed-price package retained.');
  await testOwnerBuyerDelivery(f,{link:l,realBuyerThread:thread.id,realBuyerEmail:email,emailRate,session});
+ const outreachStatus=await rpc('icash_buyer_outreach_status',{p_account:account,p_deal:deal});
+ assert.equal(outreachStatus.textsAccepted,1,'only the real-buyer fixture receipt counts; accepted owner tests are separate');
+ assert.equal(outreachStatus.smsContacts,1,'owner test contacts never inflate the contactable buyer count');
  console.log('PASS: seller-only signature held; all signatures trigger one research job; rounded buyer total with matching fee; legacy advertised price retained; share link without private seller data; tenant isolation; cancellation, changed price, revocation and expiry invalidate package. Synthetic evidence only.');
 }catch(e){console.error('BUYER SIMULATION FAILED:',e.message,e.where??'',e.stack?.split('\n').slice(1,4).join('\n'));process.exitCode=1;}
 finally{await pg.close();globalThis.fetch=originalFetch;if(originalReady===undefined)delete process.env.ICASH_LIVE_WORK_READY;else process.env.ICASH_LIVE_WORK_READY=originalReady;}

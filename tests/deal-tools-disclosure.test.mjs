@@ -6,6 +6,7 @@ import {dealToolVisibility,showPropertyContract} from '../lib/property-contract-
 import * as terms from '../lib/buyer-purchase-terms.ts';
 import * as analysis from '../lib/property-analysis-view.ts';
 import * as dates from '../components/workspace-view.ts';
+import * as outreach from '../lib/buyer-outreach-status.ts';
 
 const deal={id:'fixture-deal',stage:'draft'},signed={deal_id:deal.id,kind:'purchase',state:'completed',test_mode:false};
 const hidden={buyers:false,coordination:false,buyerReview:false};
@@ -34,7 +35,7 @@ function render(file,name,props,values=[]){
  const source=readFileSync(new URL('../'+file,import.meta.url),'utf8');
  const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
  const mod={exports:{}};
- new Function('require','module','exports',code)(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/buyer-purchase-terms'?terms:name==='@/lib/property-analysis-view'?analysis:name==='./workspace-view'?dates:new Proxy({},{get:(_,key)=>String(key)}),mod,mod.exports);
+ new Function('require','module','exports',code)(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/buyer-purchase-terms'?terms:name==='@/lib/property-analysis-view'?analysis:name==='@/lib/buyer-outreach-status'?outreach:name==='./workspace-view'?dates:new Proxy({},{get:(_,key)=>String(key)}),mod,mod.exports);
  return mod.exports[name](props);
 }
 const cancel=(stage,view=null,error='')=>render('components/agreement-cancellation-controls.tsx','AgreementCancellationControls',{dealId:deal.id,stage,signingVersion:'',onUpdated(){}},[view,error,false]);

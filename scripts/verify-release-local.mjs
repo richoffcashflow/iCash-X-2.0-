@@ -20,7 +20,7 @@ const suites = [
  'seller-scenario-fine-tuning', 'buyer-intent-context',
  'agreement-delivery-recovery', 'seller-queue-handoff',
  'closing-payout-readiness-database', 'title-request-snapshot-database', 'title-service',
- 'paid-provider-tests-disabled', 'buyer-package-photos', 'buyer-package-email',
+ 'paid-provider-tests-disabled', 'buyer-package-photos', 'buyer-package-email', 'automatic-buyer-outreach-database',
  'deal-documents', 'signing-service-validation', 'assignment-contract-policy',
  'buyer-scenarios', 'buyer-privacy-release-source', 'worker-recovery',
  'cost-efficiency', 'property-photo-route', 'property-photo', 'persistent-property-photo',

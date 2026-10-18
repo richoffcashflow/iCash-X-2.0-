@@ -2,6 +2,7 @@
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
 import {BuyerOverview,type BuyerNetworkProgress,type BuyerSelection} from './buyer-overview';
+import {buyerOutreachMessage,type BuyerOutreachStatus} from '@/lib/buyer-outreach-status';
 import {ClosingSetup} from './closing-setup';
 import type {ClosingSetupView} from '@/lib/closing-setup';
 import {ClosingProgress} from './closing-progress';
@@ -16,7 +17,7 @@ import {PropertyDebtSummary} from './property-debt-summary';
 import {WorkspaceLoadStatus} from './workspace-load-status';
 import {TitleCompanyMessages} from './title-company-messages';
 import {recordWorkspaceExperience,type WorkspaceExperienceStage} from '@/lib/workspace-experience-client';
-type Progress={proceedsReceipt?:ProceedsReceipt|null;dealStage?:string;buyerPricingReview?:string|null;buyerOutreachHeld?:boolean;closingSetup?:ClosingSetupView;buyerPackage?:{url:string;askingPriceCents:number;purchasePriceCents:number;assignmentFeeCents:number}|null;closingUpdates?:ClosingUpdate[];titleTasks?:TitleTask[];titleReplies?:{id:string;sender:string;subject:string;body_text:string;received_at:string;needs_review:boolean}[];title?:string|null;titleReady?:boolean;candidates?:{id:string;name:string}[];job?:{state:string;updated_at:string;result?:{buyerStatus:string;buyerCount:number;buyerDiscovery?:{status:string;canContinue:boolean};buyerTexts?:{status:string;accepted:number;held?:number};buyerEmail?:{status:string;accepted:number}}};documents:{id:string;kind:string}[];buyers:{buyer_id:string;name:string;rank:number;ready:boolean}[]};
+type Progress={buyerOutreach?:BuyerOutreachStatus|null;proceedsReceipt?:ProceedsReceipt|null;dealStage?:string;buyerPricingReview?:string|null;buyerOutreachHeld?:boolean;closingSetup?:ClosingSetupView;buyerPackage?:{url:string;askingPriceCents:number;purchasePriceCents:number;assignmentFeeCents:number}|null;closingUpdates?:ClosingUpdate[];titleTasks?:TitleTask[];titleReplies?:{id:string;sender:string;subject:string;body_text:string;received_at:string;needs_review:boolean}[];title?:string|null;titleReady?:boolean;candidates?:{id:string;name:string}[];job?:{state:string;updated_at:string;result?:{buyerStatus:string;buyerCount:number;buyerDiscovery?:{status:string;canContinue:boolean};buyerTexts?:{status:string;accepted:number;held?:number};buyerEmail?:{status:string;accepted:number}}};documents:{id:string;kind:string}[];buyers:{buyer_id:string;name:string;rank:number;ready:boolean}[]};
 type FulfillmentProgress=Progress&{buyerNetwork?:BuyerNetworkProgress|null};
 export function FulfillmentDetails({dealId,buyerReviewAvailable=false,coordination,propertyResult}:{dealId:string;buyerReviewAvailable?:boolean;coordination?:ReactNode;propertyResult?:unknown}){
  const [refresh,setRefresh]=useState(0),[selected,setSelected]=useState<BuyerSelection|null>(null);
@@ -40,9 +41,9 @@ export function FulfillmentDetails({dealId,buyerReviewAvailable=false,coordinati
   {error&&<p role="alert">{error} <button type="button" onClick={()=>setRefresh(v=>v+1)}>Try again</button></p>}
   {(loadError||!data)&&loadStatus('deal')}
   {data&&!closing&&<>
-   <BuyerOverview buyers={data.buyers} network={data.buyerNetwork} buyerPackage={data.buyerPackage} pricingReview={data.buyerPricingReview} held={data.buyerOutreachHeld} researchContinuing={data.job?.result?.buyerDiscovery?.canContinue} onBuyer={openBuyer} onAllBuyers={count>3?()=>openBuyer(null):undefined}/>
+   <BuyerOverview buyers={data.buyers} network={data.buyerNetwork} buyerPackage={data.buyerPackage} pricingReview={data.buyerPricingReview} held={data.buyerOutreachHeld} outreachMessage={buyerOutreachMessage(data.buyerOutreach,data.buyerNetwork?.matches)} researchContinuing={data.job?.result?.buyerDiscovery?.canContinue} onBuyer={openBuyer} onAllBuyers={count>3?()=>openBuyer(null):undefined}/>
    {!data.buyerPackage&&data.documents.filter(doc=>doc.kind==='buyer_package').map(doc=><button key={doc.id} type="button" onClick={()=>void download(doc)}>View prepared buyer package</button>)}
-   {!!data.job?.result?.buyerTexts?.held&&<p>Some buyer texts are waiting for current contact eligibility or the calling window.</p>}
+   {!!data.job?.result?.buyerTexts?.held&&<p>Some buyer texts are waiting for current contact eligibility or their contact hours.</p>}
   </>}
   <WorkspacePanel id={`buyer-details-${dealId}`} title={selected?.buyer.name??'Buyers'} section="fulfillment" onOpenChange={refreshBuyerOnOpen}>
    {loadStatus('buyer')}

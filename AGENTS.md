@@ -40,6 +40,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Complete feature flows
 
+- On October 18, 2026 the owner required the same automatic operation for buyer outreach. Release only the initial intake pause on an actually eligible buyer SMS contact; do not require campaign setup or a second Run action. Apply eligibility and duplicate/uncertain-send exclusions before batch limits, and wake requested packages promptly. Audit sourced prospects, eligible contacts, queued work and provider receipts separately; an empty send queue is not proof that outreach works. Preserve buyer SMS/email-only scope, recipient evidence, explicit deal/test holds, manual takeover and payment admission.
+
 - On October 17, 2026 the owner required calls and texts to work automatically for every current and future user, without activating a campaign or accepting a separate channel acknowledgment. Use the shared automatic channel predicates in config/automatic-outreach-channels.sql. Do not fabricate acknowledgment/selection receipts. Preserve actual recipient consent, opt-outs, Run/Pause, membership, positive credits, provider configuration and existing explicit channel disables or SMS-only choices.
 
 - The course lives at `/course`: owner-uploaded video, PDF download, then a client practice workspace link, with a gold VIP upgrade banner. Course files are private and membership-authorized; only the platform owner with dashboard proof can publish replacements. `/preview/workspace` is public, fictional practice with no live work or acknowledgment acceptance. Keep its instructions learner-facing.

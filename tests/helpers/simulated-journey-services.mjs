@@ -11,10 +11,13 @@ export function databaseAdapter(pg){
  const rpc=async(name,args={})=>{
   identifier(name);calls.push({rpc:name,args});
   let sig=functions.get(name);
-  if(!sig){sig=(await q(`select proretset as retset,proargnames as names,array(select format_type(x,null) from unnest(proargtypes::oid[]) x) as types from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and proname=$1`,[name])).rows;
+  if(!sig){sig=(await q(`select proretset as retset,coalesce('t'=any(proargmodes),false) as table_result,proargnames as names,array(select format_type(x,null) from unnest(proargtypes::oid[]) x) as types from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and proname=$1`,[name])).rows;
    assert.equal(sig.length,1,`RPC ${name} must have one real signature`);sig=sig[0];functions.set(name,sig);}
   const keys=Object.keys(args),params=keys.map((key,i)=>{const index=sig.names.indexOf(key);assert(index>=0,`Unknown argument ${name}.${key}`);return identifier(key)+'=> $'+(i+1)+'::'+sig.types[index];});
-  const rows=(await q(`select to_jsonb(public.${identifier(name)}(${params.join(',')})) as result`,keys.map(k=>args[k]))).rows;return sig.retset?rows.map(r=>r.result):rows[0].result;
+  const call=`public.${identifier(name)}(${params.join(',')})`;
+  // PostgREST keeps RETURNS TABLE rows as objects even for a single column.
+  const output=sig.table_result?sig.names.slice(sig.types.length).map(key=>`'${identifier(key).slice(1,-1)}', row.${identifier(key)}`).join(','):null;
+  const rows=(await q(sig.table_result?`select jsonb_build_object(${output}) as result from ${call} row`:`select to_jsonb(${call}) as result`,keys.map(k=>args[k]))).rows;return sig.retset?rows.map(r=>r.result):rows[0].result;
  };
  const db=async(path,method='GET',body)=>{
   if(path.startsWith('rpc/')){assert.equal(method,'POST');return rpc(path.slice(4),body);}
