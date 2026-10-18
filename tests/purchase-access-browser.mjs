@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 /** Actual page and form, isolated HTTP fixtures; never requests a real code. */
 export async function verifyPurchaseAccess(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
- let signedIn=false,wrongAccount=false,codeRequests=0,textRequests=0,external=0,failEmail=false;
+ let signedIn=false,wrongAccount=false,codeRequests=0,textRequests=0,external=0,failEmail=false,paidView=null;
  const errors=[];
  try{
   await context.route('**/*',async route=>{
@@ -23,6 +23,11 @@ export async function verifyPurchaseAccess(browser,base,options,name){
     signedIn=true;return json({signedIn:true});
    }
    if(url.pathname==='/api/auth/logout'){signedIn=false;wrongAccount=false;return json({signedOut:true});}
+   if(url.pathname==='/api/billing/membership'&&paidView){
+    assert.equal(route.request().method(),'GET','A paid or confirming buyer must never open a second checkout');
+    return json({offer:{revision:1,priceCents:5000},ready:false,mode:'test',email:'buyer@example.invalid',needsClaim:!signedIn,postPurchaseUrl:paidView==='welcome'?'/live/100002':null,membership:paidView==='pending'?null:{accessible:true,vip:false}});
+   }
+   if(url.pathname==='/api/setup'&&paidView)return json({error:'Setup unavailable'},503);
    if(url.pathname.startsWith('/api/'))return json({error:'Fixture only'},401);
    if(url.pathname==='/'||url.pathname==='/live/100002')return route.fulfill({contentType:'text/html',body:'<!doctype html><h1>Verified destination</h1>'});
    return route.continue();
@@ -60,7 +65,20 @@ export async function verifyPurchaseAccess(browser,base,options,name){
   await page.getByText('That code could not be verified. Check the code or request a new text.',{exact:true}).waitFor();
   await page.getByLabel('Text code',{exact:true}).fill('12345678');await page.getByRole('button',{name:'Sign in',exact:true}).click();
   await page.waitForURL(base+'/');assert.equal(textRequests,1);
+  const beforeRecovery=codeRequests;
+  paidView='setup';signedIn=false;
+  await page.goto(base+'/join?setup=1');
+  await page.getByText('Could not restore your setup. Your payment is saved.',{exact:false}).waitFor();
+  await page.getByRole('link',{name:'Skip naming — open my workspace',exact:true}).click();
+  await page.waitForURL(base+'/access');await page.getByRole('button',{name:'Email me a code',exact:true}).waitFor();
+  assert.equal(codeRequests,beforeRecovery,'Skipping optional setup still uses verified sign-in and does not send a code automatically');
+  paidView='welcome';signedIn=true;
+  await page.goto(base+'/join');await page.getByRole('button',{name:'Open my workspace',exact:true}).click();
+  await page.waitForURL(base+'/');
+  paidView='pending';
+  await page.goto(base+'/join?membership=paid');await page.getByRole('button',{name:'Restore access with my payment email',exact:true}).click();
+  await page.waitForURL(base+'/');assert.equal(codeRequests,beforeRecovery,'An existing verified session opens without another email code');
   assert.equal(external,0);assert.deepEqual(errors,[]);
-  console.log(`PASS ${name}: direct account link, wrong-code recovery, code entry after email failure, checkout-phone recovery, same-email sign-in, account switching and VIP destination. No real emails or texts.`);
+  console.log(`PASS ${name}: direct account link, wrong-code/email/phone recovery, account switching, VIP destination, and workspace entry despite optional setup failure or delayed confirmation. No real emails or texts.`);
  }finally{await context.close();}
 }

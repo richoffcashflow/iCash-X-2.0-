@@ -12,7 +12,7 @@ import {allowedOrigin,fundingMode,normalizeEmail} from '@/lib/funding-policy';
 import {fundingStripe,limitRequest,validGuest} from '@/lib/funding';
 import {customerFundingReady} from '@/lib/launch-readiness';
 import {membershipOffer,accountMembership,publicMembership,reconcileMembershipCheckout,stopMembership,retainMembership,retentionVersion,type Membership} from '@/lib/membership';
-import {membershipTerms,membershipTermsVersion,membershipCheckoutSummary,purchaseAccessSmsVersion} from '@/lib/membership-policy';
+import {membershipAccessible,membershipTerms,membershipTermsVersion,membershipCheckoutSummary,purchaseAccessSmsVersion} from '@/lib/membership-policy';
 import {checkoutCustomerContext} from '@/lib/checkout-customer-context';
 import {checkoutPublishableKey,membershipCheckoutPresentation,checkoutMatchesPresentation} from '@/lib/embedded-checkout-policy';
 import {checkoutVipSession,paidVipDestination} from '@/lib/webinar-vip';
@@ -25,10 +25,21 @@ export async function GET(req:Request){try{
  const [offer,{account,hash,user}]=await Promise.all([membershipOffer(),owner()]);const mode=fundingMode(),sessionId=new URL(req.url).searchParams.get('session_id');let m:Membership|null=null;
  if(sessionId&&!/^cs_(live|test)_[A-Za-z0-9]{1,240}$/.test(sessionId))return NextResponse.json({error:'Invalid checkout reference.'},{status:400,headers});
  const scope=account?`account_id=eq.${account.id}`:hash?`guest_hash=eq.${hash}&account_id=is.null`:null;
- if(scope&&mode){const rows=await db<Membership[]>(`icash_memberships?${scope}&mode=eq.${mode}${sessionId?'&stripe_session_id=eq.'+sessionId:''}&order=created_at.desc&select=*&limit=1`);m=rows[0]??null;if(sessionId&&!m)return NextResponse.json({error:'Sign in with your payment email to open this purchase.'},{status:404,headers});if(m?.stripe_session_id&&(sessionId||m.state==='pending'||!m.paid_through))m=await reconcileMembershipCheckout(m);}
+ if(scope&&mode){
+  // Cancelled checkout history must not hide the current entitlement, regardless
+  // of how many abandoned checkouts came later. Explicit receipts stay scoped.
+  const query=`icash_memberships?${scope}&mode=eq.${mode}`;
+  const rows=await db<Membership[]>(`${query}${sessionId?'&stripe_session_id=eq.'+sessionId:'&state=neq.cancelled'}&order=created_at.desc&select=*&limit=1`);
+  m=rows[0]??null;
+  if(sessionId&&!m)return NextResponse.json({error:'Sign in with your payment email to open this purchase.'},{status:404,headers});
+  if(!m&&!sessionId){const history=await db<Membership[]>(`${query}&state=eq.cancelled&order=created_at.desc&select=*&limit=1`);m=history[0]??null;}
+  // A durable paid entitlement does not need another Stripe round trip to open.
+  // Pending/expired payments still use canonical settlement; holds stay closed.
+  if(m?.stripe_session_id&&!membershipAccessible(m)&&['pending','active','payment_failed'].includes(m.state))m=await reconcileMembershipCheckout(m);
+ }
  const [customer,postPurchaseUrl,ready,retentionOffer]=await Promise.all([
-  checkoutCustomerContext(hash,user?.email),paidVipDestination(m).catch(()=>null),
-  offer.enabled?customerFundingReady():false,vipRetentionOffer(m)
+  checkoutCustomerContext(hash,user?.email).catch(()=>({name:null,email:user?.email??null})),paidVipDestination(m).catch(()=>null),
+  offer.enabled&&!membershipAccessible(m)?customerFundingReady().catch(()=>false):false,vipRetentionOffer(m).catch(()=>null)
  ]);
  if(m?.mode==='live'&&m.paid_through)schedulePurchaseAccessEmail(m.id);
  return NextResponse.json({postPurchaseUrl,offer,mode,embeddedReady:!!checkoutPublishableKey(mode),customerName:customer.name??'',ready,membership:publicMembership(m),retentionOffer,needsClaim:!!m?.paid_through&&!m.account_id,email:m?.paid_through&&!user?m.payer_email:user?.email??customer.email??null},{headers});

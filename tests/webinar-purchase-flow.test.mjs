@@ -223,6 +223,11 @@ console.log('PASS final VIP offer: verified upgrades open the workspace; Standar
  const direct=await harness('components/webinar-vip-welcome.tsx',{...exitReminder,safeVipSession,setInterval:fn=>{tick=fn;return 1;},clearInterval:()=>{}});
  tree=direct.render('WebinarVipWelcome',props);button(tree,'Watch VIP now').props.onClick();assert.equal(redirects.length,before+2);direct.close();
  assert.equal(exitHandlers.size,0,'Watch VIP now also bypasses the reminder');
+ const workspace=await harness('components/webinar-vip-welcome.tsx',{...exitReminder,safeVipSession,setInterval:fn=>{tick=fn;return 1;},clearInterval:()=>{}});
+ tree=workspace.render('WebinarVipWelcome',props);button(tree,'Open my workspace').props.onClick();
+ const workspaceNavigations=redirects.length;assert.equal(redirects.at(-1),'/access');tick();button(tree,'Watch VIP now').props.onClick();
+ assert.equal(redirects.length,workspaceNavigations,'Choosing the workspace stops the VIP countdown and competing navigation');workspace.close();
+ assert.equal(exitHandlers.size,0,'Explicit paid workspace entry never prompts an exit reminder');
  // An automatically prepared embedded checkout can fall back to hosted Stripe.
  // This intended navigation must bypass the regular-room guard as well.
  window.location.search='';
