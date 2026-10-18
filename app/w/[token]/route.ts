@@ -8,6 +8,7 @@ import {resolveCampaignTarget} from '@/lib/webinar-campaign-server';
 import type {CampaignDestination} from '@/lib/webinar-campaign';
 import {webinarLink} from '@/lib/webinar-links';
 import {webinarSite} from '@/lib/webinar-site';
+import {beginReminderVisit} from '@/lib/webinar-reminder-server';
 export const dynamic='force-dynamic';
 /** An unguessable reminder link restores webinar context, never software account access. */
 export async function GET(req:Request,{params}:{params:Promise<{token:string}>}){
@@ -37,6 +38,7 @@ export async function GET(req:Request,{params}:{params:Promise<{token:string}>})
     if(session){const [webinar]=await db<{public_code:number}[]>(`icash_webinars?id=eq.${session.webinar_id}&select=public_code&limit=1`);if(webinar)destination.pathname=webinarLink({publicCode:String(webinar.public_code)});}
     destination.searchParams.set('r',webinarToken(job.visitor_id,'resume',3600));
    }
+   if(session)await beginReminderVisit(req,token,job.visitor_id);
   }
  }catch{return new Response('Your link could not open. Please refresh to try again.',{status:503,headers:webinarHeaders});}
  return new Response(null,{status:302,headers:{...webinarHeaders,Location:destination.href}});

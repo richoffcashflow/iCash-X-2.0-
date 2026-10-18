@@ -1,6 +1,7 @@
 import {DashboardLock} from '@/components/dashboard-lock';
 import './dashboard-security.css';
 import {WebinarMeasurement} from "@/components/webinar-measurement";
+import {WebinarReminderTracking} from '@/components/webinar-reminder-tracking';
 import {webinarPixelBootstrap} from '@/lib/webinar-pixel';
 import {sellerPixelBootstrap} from '@/lib/seller-pixel';
 import type { Metadata } from "next";
@@ -21,4 +22,4 @@ import "./workspace-assistant.css";
 import "./agreement-cancellation.css";
 import "./workspace-progressive.css";
 export const metadata: Metadata = { ...icashShareMetadata, title: "iCash X | Your AI Bot for Wholesale Real Estate", description: "Automate wholesale real estate with your AI bot. Property research, seller calls, texts, follow-up and deal tools in one workspace. Software access is $50/month.", icons: { icon: "/favicon.svg?v=chrome-x" } };
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="en"><head><script id="icash-webinar-pixel" dangerouslySetInnerHTML={{__html:webinarPixelBootstrap}}/><script id="homeoffer-meta-pixel" dangerouslySetInnerHTML={{__html:sellerPixelBootstrap}}/></head><body>{children}<DashboardLock/><WebinarMeasurement/></body></html>; }
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="en"><head><script id="icash-webinar-pixel" dangerouslySetInnerHTML={{__html:webinarPixelBootstrap}}/><script id="homeoffer-meta-pixel" dangerouslySetInnerHTML={{__html:sellerPixelBootstrap}}/></head><body>{children}<DashboardLock/><WebinarMeasurement/><WebinarReminderTracking/></body></html>; }

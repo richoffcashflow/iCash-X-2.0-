@@ -5,8 +5,8 @@ import ts from 'typescript';
 import {automaticMeasurementEligible} from '../lib/webinar-measurement-policy.ts';
 import {checkoutMeasurementHeaders} from '../lib/checkout-measurement-client.ts';
 const original={VERCEL_ENV:process.env.VERCEL_ENV,VERCEL:process.env.VERCEL};
-let enabled=true,exists=false,writes=[],creates=[],unavailable=false;
-const deps={isIP,automaticMeasurementEligible,
+let enabled=true,exists=false,writes=[],creates=[],unavailable=false,reminderBindings=[];
+const deps={bindReminderCheckout:async(...args)=>reminderBindings.push(args),isIP,automaticMeasurementEligible,
  cookies:async()=>({get:name=>({value:name==='_fbp'?'fb.1.123.browser':undefined})}),
  webinarSettings:async()=>({meta:{enabled,pixelId:'1104248230721457'}}),
  webinarVisitor:async create=>{creates.push(create);if(!create&&!exists)throw Error('No visitor');exists=true;return {id:'visitor'};},
@@ -32,7 +32,7 @@ try{
  process.env.VERCEL='';writes=[];await bindCheckoutMeasurement(request(),'cs_live_direct','live');assert.equal(writes[0].body.p_automatic_eligible,false);assert.equal(writes[0].body.p_metadata.client_ip_address,undefined);
  process.env.VERCEL='1';writes=[];await bindCheckoutMeasurement(request(),'cs_test_fixture','test');assert.equal(writes.length,0);
  process.env.VERCEL_ENV='preview';await bindCheckoutMeasurement(request(),'cs_live_direct','live');assert.equal(writes.length,0);
- process.env.VERCEL_ENV='production';enabled=false;await bindCheckoutMeasurement(request(),'cs_live_direct','live');assert.equal(writes.length,0);
+ process.env.VERCEL_ENV='production';enabled=false;await bindCheckoutMeasurement(request(),'cs_live_direct','live');assert.equal(writes.length,0);assert.equal(reminderBindings.at(-1)[1],'cs_live_direct','Internal reminder tracking is independent of the Meta enable setting');
  enabled=true;unavailable=true;await assert.doesNotReject(()=>bindCheckoutMeasurement(request(),'cs_live_direct','live'),'Measurement failure must not interrupt payment');
  const globals=Object.fromEntries(['location','document','localStorage','navigator'].map(k=>[k,Object.getOwnPropertyDescriptor(globalThis,k)]));
  try{
