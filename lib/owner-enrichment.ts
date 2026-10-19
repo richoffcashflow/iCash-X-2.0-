@@ -29,14 +29,19 @@ function previewAudience(raw:unknown,propertyId:string,cap:number){
  const error='CONTACT_PREVIEW_INVALID';
  const credits=requireCredits(raw,error);
  if(credits.used!==0||credits.properties!==0||credits.people!==0||credits.deduplicated!==0||!record(raw)||!record(raw.data)||raw.data.dm_property_id!==propertyId||!Array.isArray(raw.data.contacts))throw new Error(error);
- const owners=new Map<string,{likelyOwner:boolean;matchFlags:Record<string,boolean|null>}>();
+ const owners=new Map<string,{likelyOwner:boolean;propertyContactType:'owner'|null;matchFlags:Record<string,boolean|null>}>();
  for(const p of raw.data.contacts){
   // Validate the whole preview, including rows beyond the cap, before reserving money.
   if(!record(p)||!personId(p.dm_person_id))throw new Error(error);
   const matchFlags={is_likely_owner:flag(p.is_likely_owner),is_in_owner_family:flag(p.is_in_owner_family),is_resident:flag(p.is_resident),is_likely_renter:flag(p.is_likely_renter)};
+  // The live property preview uses contact_type=owner (observed on October 19),
+  // while older receipts use is_likely_owner. Only the property-bound preview
+  // establishes this association; person-level fields and residents never do.
+  const propertyContactType=p.contact_type==='owner'?'owner' as const:null;
+  const likelyOwner=matchFlags.is_likely_renter!==true&&(matchFlags.is_likely_owner===true||matchFlags.is_likely_owner===null&&propertyContactType==='owner');
   const prior=owners.get(p.dm_person_id);
-  if(prior&&JSON.stringify(prior.matchFlags)!==JSON.stringify(matchFlags))throw new Error(error);
-  if(!prior)owners.set(p.dm_person_id,{likelyOwner:p.is_likely_owner===true,matchFlags});
+  if(prior&&(JSON.stringify(prior.matchFlags)!==JSON.stringify(matchFlags)||prior.propertyContactType!==propertyContactType))throw new Error(error);
+  if(!prior)owners.set(p.dm_person_id,{likelyOwner,propertyContactType,matchFlags});
  }
  const ids=Object.freeze([...owners.keys()].slice(0,cap));
  return {ids,owners};
@@ -58,7 +63,7 @@ function contactsFromReceipt(raw:unknown,ids:readonly string[],owners:ReturnType
   const emails=Array.isArray(p.emails)?p.emails.slice(0,20).map(v=>record(v)&&typeof v.address==='string'?v.address.slice(0,320):null).filter((v):v is string=>v!==null):[];
   const association=owners.get(p.dm_person_id)!;
   contacts.push({personId:p.dm_person_id,name:typeof p.full_name==='string'?p.full_name.slice(0,200):null,
-   likelyOwner:association.likelyOwner,matchFlags:association.matchFlags,ownershipVerified:false,phones,emails,outreachAuthorized:false});
+   likelyOwner:association.likelyOwner,propertyContactType:association.propertyContactType,matchFlags:association.matchFlags,ownershipVerified:false,phones,emails,outreachAuthorized:false});
  }
  const found=contacts.length;
  if(raw.totals.submitted!==ids.length||raw.totals.found!==found||raw.totals.not_found!==ids.length-found||credits.properties!==0||credits.people!==found||credits.used>found||credits.deduplicated>found||credits.used+credits.deduplicated!==found)throw new Error(error);
