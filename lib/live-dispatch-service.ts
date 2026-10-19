@@ -25,6 +25,7 @@ import {dispatchTextMessage} from './text-message-service';
 import {elevenRequest} from '@/lib/elevenlabs';
 import {buyerCallInstructions,buyerFirstMessage,type BuyerCallContext} from './buyer-call-policy.ts';
 import {contactEligibility,callEligibility,nextContactWindow,type VoicePermission} from './live-dispatch-policy.ts';
+import {readVoiceOutreachContext} from './outreach-hours.ts';
 import {sellerFirstMessage,sellerCallPrompt,sellerCallContext,compactSellerProgress,type SellerRequestContext} from './seller-call-context.ts';
 type Job={id:string;account_id:string;permission_id:string|null;operational_contact_id?:string|null;callback_id:string|null;sms_source_message_id?:string|null;cancellation_notice_id?:string|null;state:string};
 type Config={approved_voice_ids:string[];enabled:boolean;agent_id:string;phone_number_id:string;agent_config_hash:string;reviewed_until:string;seller_rate_id:string;buyer_rate_id:string|null;max_duration_seconds:number;required_tool_ids:string[]};
@@ -65,23 +66,22 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const suppressed=await db<{phone:string}[]>(`icash_text_suppressions?phone=eq.${encodeURIComponent(p.phone)}&select=phone&limit=1`);if(suppressed.length)return hold('contact_opted_out');
  // This flag is derived exclusively from a fresh server-side database check.
  p.sellerConsentVerified=p.seller_intake_id?await db<boolean>('rpc/icash_seller_voice_permission_current','POST',{p_account:accountId,p_permission:p.id})===true:false;
- // A fresh form or SMS call-now request is distinct from timed outreach.
- // The database binds the saved request to this job, phone and property and
- // rechecks its five-minute validity during the final atomic claim.
- p.sellerCallbackVerified=p.sellerConsentVerified&&(j.sms_source_message_id
-  ?await db<boolean>('rpc/icash_requested_seller_call_current','POST',{p_account:accountId,p_job:j.id})===true
-  :await db<boolean>('rpc/icash_requested_optin_call_current','POST',{p_account:accountId,p_job:j.id})===true);
- if(intake&&p.sellerConsentVerified&&!p.sellerCallbackVerified)p.sellerCallbackVerified=await db<boolean>('rpc/icash_meta_call_now','POST',{p_account:accountId,p_job:j.id})===true;
- const contact=contactEligibility(p);
+ // First contact (including a new seller form) uses the current outreach
+ // window. Only fresh database evidence of an active conversation or a
+ // specifically requested callback establishes an exception, never a flag
+ // loaded from a contact record. Final database admission rechecks it.
+ const outreach=readVoiceOutreachContext(await db<unknown>('rpc/icash_voice_outreach_context','POST',{p_account:accountId,p_job:j.id}));
+ if(!outreach)return hold('contact_hours_required');
+ const contact=contactEligibility(p,Date.now(),outreach);
  if(!contact.ready){
-  const dueAt=contact.reason==='outside_contact_hours'&&!j.callback_id&&!j.sms_source_message_id?nextContactWindow(p):null;
+  const dueAt=contact.reason==='outside_contact_hours'&&!j.callback_id&&!j.sms_source_message_id?nextContactWindow(p,Date.now(),outreach):null;
   if(dueAt){
    await db(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&state=eq.issued`,'PATCH',{state:'ready',due_at:dueAt,outcome:'Waiting for calling hours'});
    return {status:contact.reason,dueAt};
   }
   return hold(contact.reason);
  }
- const eligible=p.party==='seller'&&!cancellation&&!intake?callEligibility(p,snapshot.snapshot):null;
+ const eligible=p.party==='seller'&&!cancellation&&!intake?callEligibility(p,snapshot.snapshot,Date.now(),outreach):null;
  const limited=p.party==='seller'&&eligible&&!eligible.ready&&eligible.reason==='financial_hold'&&p.sellerConsentVerified&&await db<boolean>('rpc/icash_seller_limited_contact','POST',{p_account:accountId,p_screening:p.screening_id})===true;
  if(eligible&&!eligible.ready&&!limited)return hold(eligible.reason);
  const limitedScreen=limited?runScreeningJob(snapshot.snapshot):null;
