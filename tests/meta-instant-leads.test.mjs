@@ -148,3 +148,17 @@ const eventEnv={...env,VERCEL_ENV:'production',META_INSTANT_CRM_EVENTS_ENABLED:'
 assert.equal((await deliverInstantCrmEvent(async(path,method,body)=>{if(method==='PATCH'){assert.equal(body.state,'delivered');return [];}return event;},eventEnv,async()=>{eventCalls++;return Response.json({events_received:1});})).status,'delivered');
 assert.equal(eventCalls,1);
 console.log('PASS signed Meta receipts, exact consent/source binding, short private links, spoken address confirmation, SMS limits, same-call lookup and normal-offer handoff, uncertain-result protection, and CRM event privacy.');
+
+// Follow-up channels are independent; database IDs, never fresh sends, drive retries.
+const {processInstantFollowups}=await import('../lib/meta-instant-lead-service.ts');
+let followCalls=[];
+const followDeps={env:{META_INSTANT_LEADS_ENABLED:'true',VERCEL_ENV:'production'},
+ db:async(path,method,body)=>{assert.equal(path,'rpc/icash_meta_prepare_followups');assert.deepEqual(body,{p_lead:'fixture-lead'});return {accountId:'fixture-account',messageIds:['saved-text'],voiceJobId:'saved-call'};},
+ sms:async(account,id)=>{followCalls.push(['sms',account,id]);throw Error('SIMULATION SMS unavailable');},
+ voice:async(account,id)=>{followCalls.push(['call',account,id]);return {status:'call_started'};}};
+assert.equal((await processInstantFollowups(followDeps,'fixture-lead')).status,'pending');
+assert.deepEqual(followCalls,[['sms','fixture-account','saved-text'],['call','fixture-account','saved-call']]);
+followCalls=[];
+assert.equal((await processInstantFollowups({...followDeps,env:{...followDeps.env,VERCEL_ENV:'preview'}},'fixture-lead')).status,'disabled');
+assert.equal(followCalls.length,0);
+assert.equal((await processInstantFollowups({...followDeps,db:async()=>null},'fixture-lead')).status,'idle');

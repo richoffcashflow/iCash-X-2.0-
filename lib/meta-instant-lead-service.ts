@@ -90,6 +90,18 @@ export async function researchInstantAddress(d:Deps,id:string,options?:{liveCall
  const promoted=await d.db<{status:string;offerReady?:boolean}>('rpc/icash_meta_promote_property','POST',{p_lead:id});
  return promoted.status==='property_ready'?promoted:lookup;
 }
+export async function processInstantFollowups(d:Deps,id:string){
+ if(!instantLeadsEnabled(d.env))return {status:'disabled'};
+ const work=await d.db<{accountId:string;messageIds:string[];voiceJobId:string|null}|null>('rpc/icash_meta_prepare_followups','POST',{p_lead:id});
+ if(!work?.accountId)return {status:'idle'};
+ // Database receipts cap each step; final channel claims recheck for replies.
+ // One provider outage must not prevent the other channel from progressing.
+ const results=await Promise.allSettled([
+  ...work.messageIds.map(message=>d.sms(work.accountId,message)),
+  ...(work.voiceJobId?[d.voice(work.accountId,work.voiceJobId)]:[]),
+ ]);
+ return {status:results.some(result=>result.status==='rejected')?'pending':'processed'};
+}
 export async function processInstantLeadWork(d:Deps){
  if(!instantLeadsEnabled(d.env))return {status:'disabled'};
  const measurement=Promise.allSettled(Array.from({length:3},()=>deliverInstantCrmEvent(d.db,d.env,d.fetch??fetch)));
@@ -101,6 +113,7 @@ export async function processInstantLeadWork(d:Deps){
   const lead=await getInstantLead(d.db,row.lead_id);if(!lead)continue;
   if(['received','qualified','numbers_review'].includes(lead.lead.state))await researchInstantAddress(d,lead.lead_id);
   await processInstantLead(d,row.lead_id);
+  try{await processInstantFollowups(d,row.lead_id);}catch{console.warn('meta_followup_pending');}
   const call=await d.db<{accountId:string;voiceJobId:string}|null>('rpc/icash_meta_offer_followup','POST',{p_lead:row.lead_id});
   if(call)await d.voice(call.accountId,call.voiceJobId);
   if(lead.lead.state==='assigned')await d.db(`icash_meta_leads?lead_id=eq.${row.lead_id}`,'PATCH',{next_attempt_at:new Date(Date.now()+15*60000).toISOString()});
