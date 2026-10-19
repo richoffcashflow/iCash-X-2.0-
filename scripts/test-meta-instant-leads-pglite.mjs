@@ -399,12 +399,30 @@ try{
  await pg.exec('create table icash_recorded_gate_terminal_receipts(recording_id uuid,account_id uuid,call_sid text,receipt jsonb);');
  await pg.exec(read('config/recorded-seller-attempt-progress.sql').split('do $patch$')[0]+'commit;');
  await pg.exec(read('config/meta-no-response-followups.sql'));
+ await pg.exec(read('tests/fixtures/inbound-hours-upstream-functions.sql'));
+ assert.equal(read('config/inbound-contact-anytime.sql'),read('supabase/migrations/20261019014138_inbound_contact_anytime.sql'));
+ await pg.exec(read('config/inbound-contact-anytime.sql'));
+ await pg.exec("create or replace function icash_cancellation_voice_context(uuid,uuid) returns jsonb language sql as $$select null::jsonb$$; create or replace function icash_operational_contact_current(uuid,uuid,text,boolean) returns boolean language sql as $$select false$$;");
+ // Run real final Meta claims at local midnight, without a call-now receipt.
+ const nightOffset=(new Date().getUTCHours()+12)%24-12,nightZone=nightOffset===0?'Etc/GMT':`Etc/GMT${nightOffset>0?'+':''}${nightOffset}`;
+ await q('insert into icash_timezone_names(name) values($1) on conflict do nothing',[nightZone]);
+ await q('update icash_meta_lead_sources set timezone=$2 where id=$1',[submissionSource,nightZone]);
+ await q('update icash_meta_leads set timezone=$2 where lead_id=$1',[submitted.leadId,nightZone]);
+ const nightEvidence=await rpc('icash_seller_contact_evidence',[callAccount,submissionRow.screening_id,submitted.leadId,submission.phone]);
+ await q('update icash_contact_permissions set timezone=$2,permission_evidence=$3 where seller_intake_id=$1',[submitted.leadId,nightZone,nightEvidence.evidence]);
+ assert.equal(Number((await one('select extract(hour from now() at time zone $1) h',[nightZone])).h),0);
+
  const followLead=submitted.leadId;
  await q("update icash_voice_jobs set state='dispatched',provider_call_sid=$2 where id=$1",[replacement,'CA'+'2'.repeat(32)]);
  const followThread=randomUUID(),followEvidence=await rpc('icash_seller_contact_evidence',[callAccount,submissionRow.screening_id,followLead,submission.phone]);
- await q("insert into icash_text_threads(id,account_id,deal_id,sender,recipient,permission_until,permission_evidence,timezone,sms_rate_id,paused,ai_mode,seller_intake_id,seller_sms_rate_hash,seller_sms_price_micros) select $1,$2,d.id,'+12145550124',$3,$4,$5,$9,$6,false,'auto',$7,encode(sha256(convert_to(to_jsonb(r)::text,'UTF8')),'hex'),10000 from icash_deal_files d cross join icash_operation_rates r where d.screening_id=$8 and r.id=$6",[followThread,callAccount,submission.phone,followEvidence.until,followEvidence.evidence,smsRate,followLead,submissionRow.screening_id,daytimeZone]);
+ await q("insert into icash_text_threads(id,account_id,deal_id,sender,recipient,permission_until,permission_evidence,timezone,sms_rate_id,paused,ai_mode,seller_intake_id,seller_sms_rate_hash,seller_sms_price_micros) select $1,$2,d.id,'+12145550124',$3,$4,$5,$9,$6,false,'auto',$7,encode(sha256(convert_to(to_jsonb(r)::text,'UTF8')),'hex'),10000 from icash_deal_files d cross join icash_operation_rates r where d.screening_id=$8 and r.id=$6",[followThread,callAccount,submission.phone,followEvidence.until,followEvidence.evidence,smsRate,followLead,submissionRow.screening_id,nightZone]);
  const followInitial=await rpc('icash_meta_queue_message',[followLead,'initial','initial','HomeOffer Network AI: What address? STOP to opt out.']);
+ const reserveTextFixture=async id=>q("insert into icash_operation_spend(operation_key,account_id,rate_id,credit_reservation_id,charge_cap_cents,reserved_micros,permission_until) values($1,$2,$3,$4,1,0,now()+interval '1 day')",['text:'+id,callAccount,smsRate,randomUUID()]);
  assert(followInitial);
+ await reserveTextFixture(followInitial);
+ assert.equal(await rpc('icash_seller_sms_permission_current',[callAccount,followThread,true]),true,'Meta seller text permission is valid at midnight');
+ assert(await rpc('icash_meta_claim_text',[callAccount,followInitial,'+12145550124']),'initial Meta SMS dispatches at midnight without call-now');
+ assert.equal(await rpc('icash_meta_claim_text',[callAccount,followInitial,'+12145550124']),null,'initial text cannot dispatch twice');
  await q("update icash_text_messages set state='accepted',provider_id='SIMULATION-initial' where id=$1",[followInitial]);
  assert.equal(await rpc('icash_meta_followup_current',[followLead,'followup_1']),false,'fresh initial contact has no immediate nudge');
  await q("update icash_meta_leads set first_outreach_at=now()-interval '16 minutes' where lead_id=$1",[followLead]);
@@ -415,6 +433,8 @@ try{
  const followText=await one('select body,thread_id from icash_text_messages where id=$1',[nudgeOne]);
  assert(followText.body.includes('street, city and state'));assert(followText.body.length<=160);
  assert.equal(await rpc('icash_meta_queue_message',[followLead,'followup_1','other-key','Do not send']),null,'a new key cannot multiply a follow-up');
+ await reserveTextFixture(nudgeOne);
+ assert(await rpc('icash_meta_claim_text',[callAccount,nudgeOne,'+12145550124']),'first extra text dispatches at midnight');
  await q("update icash_text_messages set state='accepted',provider_id='SIMULATION-nudge-one' where id=$1",[nudgeOne]);
  await q("update icash_meta_leads set first_outreach_at=now()-interval '25 hours' where lead_id=$1",[followLead]);
  assert.equal(await rpc('icash_meta_followup_current',[followLead,'followup_2']),false,'late/backlogged first nudge cannot burst into the second');
@@ -426,6 +446,11 @@ try{
  assert.equal(await rpc('icash_meta_prepare_voice',[followLead]),null,'initial-call selection cannot consume the extra-call slot');
  assert.equal((await rpc('icash_meta_prepare_followups',[followLead])).voiceJobId,nudgeCall,'one extra call even on worker replay');
  assert.equal(await rpc('icash_meta_call_now',[callAccount,nudgeCall]),false,'an extra call cannot reuse the initial call-now request');
+ await q("update icash_voice_jobs set state='ready',due_at=now()+interval '9 hours',outcome='Waiting for calling hours' where id=$1",[nudgeCall]);
+ const wakeSql=read('config/inbound-contact-anytime.sql').split('-- Wake only')[1].split('update public.icash_voice_jobs')[1];
+ await pg.exec('update public.icash_voice_jobs'+wakeSql.replace('commit;',''));
+ assert((await one('select due_at<=now() due from icash_voice_jobs where id=$1',[nudgeCall])).due,'previous hour-only deferral is released');
+ assert.equal((await rpc('icash_meta_prepare_followups',[followLead])).voiceJobId,nudgeCall,'released call returns to the ordinary worker');
  await reserveFixture('voice:'+nudgeCall);
  await q('update icash_meta_leads set response_at=now() where lead_id=$1',[followLead]);
  assert.equal(await rpc('icash_meta_claim_voice',[callAccount,nudgeCall]),false,'reply after queueing blocks final call dispatch');
