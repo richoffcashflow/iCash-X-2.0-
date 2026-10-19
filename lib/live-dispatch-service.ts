@@ -113,10 +113,19 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
   if(!sameBusinessNumber(businessNumber,phone.phone_number))return hold('business_number_mismatch');
  }
  let agent:unknown;
- try{agent=await elevenRequest<unknown>(`/v1/convai/agents/${encodeURIComponent(recordedReview.agentId)}?branch_id=${encodeURIComponent(recordedReview.branchId)}`);}catch{return hold('production_agent_review_required');}
+ try{agent=await elevenRequest<unknown>(`/v1/convai/agents/${encodeURIComponent(recordedReview.agentId)}?branch_id=${encodeURIComponent(recordedReview.branchId)}`);}catch(error){
+  // Distinguish a failed read from configuration drift without logging provider
+  // payloads, credentials, contact data or caller-supplied error text.
+  const code=error instanceof Error&&/^(?:VOICE_UNREACHABLE|VOICE_KEY_MISSING|VOICE_SERVER_ONLY|VOICE_HTTP_[1-5][0-9]{2}(?:_(?:CONVAI_WRITE|CONVAI_READ|VOICES_READ|TEXT_TO_SPEECH))?)$/.test(error.message)?error.message:'VOICE_AGENT_READ_FAILED';
+  console.warn('production_agent_preflight_held',{stage:'provider_read',code});
+  return hold('production_agent_review_required');
+ }
  // Share the recording service's exact non-main branch/version, privacy,
  // override, tool-set and canonical full-projection validation before reserve.
- if(!recordingAgentMatches(recordedReview,agent))return hold('production_agent_review_required');
+ if(!recordingAgentMatches(recordedReview,agent)){
+  console.warn('production_agent_preflight_held',{stage:'review_match',code:'VOICE_AGENT_CONFIGURATION_MISMATCH'});
+  return hold('production_agent_review_required');
+ }
  const customVoice=await selectedCustomCallVoice(accountId);
  const callVoiceId=customVoice??identity.voice_id;
  const voiceOverride=object(object(object(agent).conversation_config).tts).voice_id!==callVoiceId;
