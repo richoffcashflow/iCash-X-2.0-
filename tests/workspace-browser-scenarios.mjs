@@ -253,12 +253,13 @@ export async function verifyWorkspace(browser,base,options,name){
   opportunityProgress={budgetId:1,startedAt:new Date().toISOString(),limitCents:5000,spentCents:120,pendingCents:977,remainingCents:3903,queued:2,screened:40,eligible:3,contacted:2,responded:0,status:'working'};
   await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
   const momentum=page.getByRole('region',{name:'Opportunity progress'});await momentum.getByRole('heading',{name:'Finding your next opportunity'}).waitFor();
-  assert.match(await momentum.innerText(),/40[\s\S]*Eligible matches[\s\S]*3/);assert.match(await momentum.innerText(),/50%/);assert.equal(await momentum.getByRole('button',{name:'View responses'}).count(),0);
+  assert.match(await momentum.innerText(),/40[\s\S]*Eligible matches[\s\S]*3/);assert.match(await momentum.innerText(),/50%/);assert.match(await momentum.innerText(),/30-day search plan/);assert.equal(await momentum.getByRole('button',{name:'View responses'}).count(),0);
   assert(await momentum.evaluate(node=>{const b=node.getBoundingClientRect();return b.left>=0&&b.right<=innerWidth+1;}),'Live counters fit desktop and mobile');
   opportunityProgress={...opportunityProgress,responded:1};await page.evaluate(()=>window.dispatchEvent(new Event('icash:credits-funded')));
   await momentum.getByText('A seller replied.',{exact:true}).waitFor();await momentum.getByRole('button',{name:'View responses'}).click();
   assert.equal(await page.getByRole('button',{name:'Seller responses',exact:true}).getAttribute('aria-pressed'),'true');
   await page.screenshot({path:`/tmp/icash-opportunity-progress-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
+  opportunityProgress={...opportunityProgress,status:'paced'};await page.evaluate(()=>window.dispatchEvent(new Event('icash:credits-funded')));await momentum.getByRole('heading',{name:'Your search continues automatically'}).waitFor();assert.match(await momentum.innerText(),/next search allowance is building/);
   opportunityProgress={...opportunityProgress,status:'paused'};await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await momentum.getByRole('heading',{name:'Your search is paused'}).waitFor();
   opportunityProgress=null;await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await momentum.waitFor({state:'hidden'});
   const collapsed=page.locator('.live-property').first();assert.equal(await collapsed.locator('.property-summary').getAttribute('aria-expanded'),'false');

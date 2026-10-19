@@ -47,7 +47,16 @@ begin
   where d.account_id=p_account and d.screening_id=screen and t.party='seller' and m.direction='incoming' and m.state='received' and (m.provider_id is not null or m.event_id is not null));
 end $$;
 
-create function public.icash_prospecting_available(p_account uuid) returns bigint
+-- One modest starter allowance, then continuous release through day 30. Unused
+-- capacity accumulates so even small wallets can eventually fit a useful call.
+create function public.icash_prospecting_released(p_balance bigint,p_started timestamptz) returns bigint
+language sql stable set search_path='' as $$
+ with cap as (select greatest(0,p_balance/2) total),
+ starter as (select total,least(total,greatest(250,ceil(total/30.0))) initial from cap)
+ select (initial+floor((total-initial)*least(1,greatest(0,extract(epoch from (now()-p_started))/(29*86400)))))::bigint from starter;
+$$;
+
+create function public.icash_prospecting_total_available(p_account uuid) returns bigint
 language sql stable set search_path='' as $$
  with budget as (select * from public.icash_prospecting_budgets where account_id=p_account order by id desc limit 1),
  spend as (select coalesce(sum(case when o.state='settled' then o.charged_cents when o.state in ('reserved','dispatched') then o.charge_cap_cents else 0 end),0) amount
@@ -57,6 +66,17 @@ language sql stable set search_path='' as $$
   (o.prospecting_budget_id is not null or public.icash_new_prospect_operation(p_account,o.operation_key,o.rate_id)))
  select coalesce((select greatest(0,least(b.limit_cents-spend.amount,w.balance_cents-(b.baseline_cents-b.limit_cents)-pending.amount))::bigint
   from budget b join public.icash_wallets w on w.account_id=b.account_id cross join spend cross join pending),0);
+$$;
+
+-- A top-up cannot erase unresolved work or the previous day's actual usage.
+-- Current-period actual usage is counted once for the entire 30-day plan.
+create function public.icash_prospecting_available(p_account uuid) returns bigint
+language sql stable set search_path='' as $$
+ with budget as (select * from public.icash_prospecting_budgets where account_id=p_account order by id desc limit 1),
+ usage as (select coalesce(sum(case when o.state='settled' and (o.prospecting_budget_id=b.id or (o.prospecting_budget_id is not null and o.settled_at>now()-interval '24 hours')) then o.charged_cents
+  when o.state in ('reserved','dispatched') and (o.prospecting_budget_id is not null or public.icash_new_prospect_operation(p_account,o.operation_key,o.rate_id)) then o.charge_cap_cents else 0 end),0) amount
+  from public.icash_operation_spend o cross join budget b where o.account_id=p_account)
+ select coalesce((select greatest(0,least(public.icash_prospecting_total_available(p_account),public.icash_prospecting_released(b.baseline_cents,b.created_at)-usage.amount))::bigint from budget b cross join usage),0);
 $$;
 
 create function public.icash_guard_prospecting_spend() returns trigger
@@ -74,6 +94,24 @@ begin
  return new;
 end $$;
 create trigger icash_prospecting_spend_guard before insert on public.icash_operation_spend for each row execute function public.icash_guard_prospecting_spend();
+
+-- Use the existing 2–10 minute call bounds to fit new-prospect allowance. Replies
+-- and active conversations retain their existing duration and credit policy.
+do $$declare definition text;needle text;begin
+ select pg_get_functiondef('public.icash_reserve_flexible_voice(uuid,uuid,uuid,timestamptz,timestamptz,boolean)'::regprocedure) into definition;
+ needle:='operation text:=''voice:''||p_job;';
+ if position(needle in definition)=0 then raise exception 'Flexible voice declaration changed';end if;
+ definition:=replace(definition,needle,needle||'is_prospect boolean;');
+ needle:=' if coalesce(capacity,0)<=0 then return null;end if;';
+ if position(needle in definition)=0 then raise exception 'Flexible voice capacity changed';end if;
+ definition:=replace(definition,needle,needle||chr(10)||' is_prospect:=public.icash_new_prospect_operation(p_account,operation,p_rate);if is_prospect then capacity:=least(capacity,public.icash_prospecting_available(p_account));end if;');
+ needle:='  if price>0 then';
+ if position(needle in definition)=0 then raise exception 'Flexible voice quote changed';end if;
+ definition:=replace(definition,needle,'  if price>0 and (not is_prospect or price<=capacity) then');
+ needle:=' update public.icash_voice_jobs set state=''ready'',due_at=now()+interval ''1 minute''';
+ if position(needle in definition)=0 then raise exception 'Flexible voice hold changed';end if;
+ execute replace(definition,needle,' if is_prospect then raise exception ''Prospecting budget reached'' using detail=jsonb_build_object(''quoteCents'',price)::text;end if;'||chr(10)||needle);
+end $$;
 
 create function public.icash_start_funded_prospecting(p_account uuid,p_event text) returns void
 language plpgsql set search_path='' as $$
@@ -204,11 +242,12 @@ begin
 end $$;
 
 create function public.icash_prospecting_progress(p_account uuid) returns jsonb language plpgsql stable set search_path='' as $$
-declare b public.icash_prospecting_budgets;remaining bigint;minimum bigint;spent bigint;pending bigint;queued bigint;screened bigint;eligible bigint;attempted bigint;responded bigint;active boolean;paused boolean;
+declare b public.icash_prospecting_budgets;remaining bigint;total_remaining bigint;minimum bigint;spent bigint;pending bigint;queued bigint;screened bigint;eligible bigint;attempted bigint;responded bigint;active boolean;paused boolean;
 begin
  select * into b from public.icash_prospecting_budgets where account_id=p_account order by id desc limit 1;
  if not found then return null;end if;
  remaining:=public.icash_prospecting_available(p_account);
+ total_remaining:=public.icash_prospecting_total_available(p_account);
  select least(search.charge_cents,contacts.charge_cents) into minimum from public.icash_discovery_configs c join public.icash_operation_rates search on search.id=c.rate_id left join public.icash_operation_rates contacts on contacts.id=c.contact_rate_id where c.account_id=p_account;
  select coalesce(sum(charged_cents) filter(where state='settled'),0),coalesce(sum(charge_cap_cents) filter(where state in ('reserved','dispatched')),0) into spent,pending from public.icash_operation_spend where account_id=p_account and prospecting_budget_id=b.id;
  select bot_paused into paused from public.icash_accounts where id=p_account;
@@ -217,13 +256,15 @@ begin
  select count(*) filter(where o.attempted),count(*) filter(where o.responded and not o.opted_out) into attempted,responded
   from public.icash_opportunity_outcomes o where o.account_id=p_account and o.discovered_at>=b.created_at;
  active:=exists(select 1 from public.icash_automation_tickets where account_id=p_account and kind in ('discovery','contacts','voice_dispatch','seller_opener') and state='consumed' and created_at>now()-interval '2 minutes') or queued>0;
- return jsonb_build_object('budgetId',b.id,'startedAt',b.created_at,'limitCents',b.limit_cents,'spentCents',spent,'pendingCents',pending,'remainingCents',remaining,
+ return jsonb_build_object('budgetId',b.id,'startedAt',b.created_at,'limitCents',b.limit_cents,'pacingDays',30,'releasedCents',public.icash_prospecting_released(b.baseline_cents,b.created_at),'spentCents',spent,'pendingCents',pending,'remainingCents',remaining,
   'queued',queued,'screened',screened,'eligible',eligible,'contacted',attempted,'responded',responded,
   'status',case when paused then 'paused' when not public.icash_membership_work_allowed(p_account) then 'membership_required'
-   when remaining<coalesce(minimum,1) and pending>0 then 'settling' when remaining<coalesce(minimum,1) then 'budget_reached' when active then 'working'
+   when remaining<coalesce(minimum,1) and pending>0 then 'settling' when remaining<coalesce(minimum,1) and total_remaining>=coalesce(minimum,1) then 'paced' when remaining<coalesce(minimum,1) then 'budget_reached' when active then 'working'
    when exists(select 1 from public.icash_discovery_configs where account_id=p_account and enabled and auto_enabled and data_rights_until>now()) then 'ready' else 'waiting' end);
 end $$;
 
 revoke all on function public.icash_new_prospect_operation(uuid,text,uuid),public.icash_prospecting_available(uuid),public.icash_guard_prospecting_spend(),public.icash_start_funded_prospecting(uuid,text),public.icash_outbound_search_due(uuid),public.icash_search_due_before_prospecting_budget(uuid),public.icash_enrichment_candidate(uuid),public.icash_enrichment_before_prospecting_budget(uuid),public.icash_hold_prospecting_ticket(uuid,uuid,bigint),public.icash_resume_prospecting_ticket(),public.icash_next_automation(),public.icash_next_before_prospecting_budget(),public.icash_prospecting_progress(uuid) from public,anon,authenticated;
 grant execute on function public.icash_new_prospect_operation(uuid,text,uuid),public.icash_prospecting_available(uuid),public.icash_guard_prospecting_spend(),public.icash_start_funded_prospecting(uuid,text),public.icash_outbound_search_due(uuid),public.icash_search_due_before_prospecting_budget(uuid),public.icash_enrichment_candidate(uuid),public.icash_enrichment_before_prospecting_budget(uuid),public.icash_hold_prospecting_ticket(uuid,uuid,bigint),public.icash_resume_prospecting_ticket(),public.icash_next_automation(),public.icash_next_before_prospecting_budget(),public.icash_prospecting_progress(uuid) to service_role;
+revoke all on function public.icash_prospecting_released(bigint,timestamptz),public.icash_prospecting_total_available(uuid) from public,anon,authenticated;
+grant execute on function public.icash_prospecting_released(bigint,timestamptz),public.icash_prospecting_total_available(uuid) to service_role;
 commit;
