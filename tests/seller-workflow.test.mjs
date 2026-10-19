@@ -12,9 +12,10 @@ await discoverPage({zip:'75217',page:1,perPage:1,unitCostMicros:10000,quotedData
 const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:100000,raw:{data:saved.rows[0]}};
 assert.equal(runScreeningJob(snapshot,now).financialCheck.status,'eligible');
 assert.equal((await enrichOwners({snapshot,creditCap:1,unitCostMicros:10000,quotedDataCostMicros:10000},{previewOwners:async()=>({data:{dm_property_id:'prop_123',contacts:[{dm_person_id:'per_123',is_likely_owner:true}]},credits:{used:0,people:0,properties:0,deduplicated:0}}),reserveAndClaim:async()=>true,fetchPeople:async ids=>{lookups++;assert.deepEqual(ids,['per_123']);return {data:[{dm_person_id:'per_123',found:false}],totals:{submitted:1,found:0,not_found:1},credits:{used:0,people:0,properties:0,deduplicated:0}}},recordReceipt:async()=>{},persist:async()=>{}},now)).status,'contacts_saved');
+const outreach={timezone:'America/Chicago',startHour:9,endHour:21,activeConversation:false,policyVersion:'outreach-hours-2026-10-19'};
 const permission={phone:'+12145550123',timezone:'America/Chicago',local_start_hour:9,local_end_hour:20,permission_until:'2026-09-30T16:00:00Z',dnc_checked_at:new Date(now).toISOString(),dnc_clear:true,revoked_at:null};
-assert.equal(callEligibility(permission,snapshot,now).ready,true);
-assert.equal(callEligibility({...permission,revoked_at:new Date(now).toISOString()},snapshot,now).ready,false);
+assert.equal(callEligibility(permission,snapshot,now,outreach).ready,true);
+assert.equal(callEligibility({...permission,revoked_at:new Date(now).toISOString()},snapshot,now,outreach).ready,false);
 const bad={...snapshot,raw:{data:{...row,total_estimated_loan_balance:190000}}};
 assert.equal((await enrichOwners({snapshot:bad,creditCap:1,unitCostMicros:10000,quotedDataCostMicros:10000},{previewOwners:async()=>{throw Error('Should not preview');},reserveAndClaim:async()=>{throw Error('Should not spend');},fetchPeople:async()=>{throw Error('Should not fetch');},recordReceipt:async()=>{throw Error('Should not record');},persist:async()=>{}},now)).status,'financial_hold');
 assert.equal(lookups,1);

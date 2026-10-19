@@ -47,6 +47,34 @@ export async function testOwnerBuyerDelivery(f,{link,realBuyerThread,realBuyerEm
   assert.equal(await rpc('icash_claim_text',args),null);
  }finally{await q('rollback');}
 
+ assert.equal(read('config/propertymsgs-buyer-package-links.sql'),read('supabase/migrations/20261019165543_propertymsgs_buyer_package_links.sql'));
+ await pg.exec(read('config/propertymsgs-buyer-package-links.sql'));
+ const propertyMsgs=await rpc('icash_buyer_outreach_content',{p_account:account,p_deal:deal});
+ const propertyMsgsLink=await rpc('icash_ensure_buyer_package',{p_account:account,p_deal:deal});
+ assert.equal(propertyMsgsLink.id,link.id,'domain update never rotates the package');
+ assert.equal(propertyMsgsLink.url,link.url.replace('https://www.geticashx.com/','https://propertymsgs.com/'));
+ assert.equal(propertyMsgs.sms,branded.sms.replace('https://homeoffernetwork.com/d/','https://propertymsgs.com/d/'));
+ assert.equal(propertyMsgs.email,branded.email.replace('https://homeoffernetwork.com/d/','https://propertymsgs.com/d/'));
+ assert.equal(await rpc('icash_buyer_factual_text',{p_account:account,p_thread:realBuyerThread,p_incoming:'Send me the package'}),'Here is the buyer package: '+propertyMsgsLink.url);
+ for(const origin of ['https://propertymsgs.com/d/','https://homeoffernetwork.com/d/','https://www.geticashx.com/d/']){
+  await q('begin');try{
+   await q('delete from icash_buyer_package_texts where thread_id=$1',[realBuyerThread]);
+   const body=propertyMsgs.sms.replace('https://propertymsgs.com/d/',origin);
+   const id=await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:realBuyerThread,p_body:body});assert(id);
+   assert.equal((await rpc('icash_claim_text',{p_account:account,p_message:id,p_sender:f.sender})).message,body,'approved new or historical SMS retains its exact body');
+  }finally{await q('rollback');}
+ }
+ await q('begin');try{
+  const targets=await rpc('icash_buyer_package_email_targets',{p_account:account,p_deal:deal});assert(targets.length);
+  const target=targets[0];
+  const id=await rpc('icash_queue_deal_email',{p_account:account,p_actor:user,p_deal:deal,p_contact:target.contact_key,p_key:target.request_key,p_subject:branded.subject,p_body:branded.email,p_rate:emailRate});
+  assert((await rpc('icash_buyer_package_email_targets',{p_account:account,p_deal:deal})).some(t=>t.message_id===id),'queued historical email is still selected with its original key');
+  assert.equal((await rpc('icash_claim_deal_email',{p_account:account,p_id:id})).text,branded.email,'historical email body is not rewritten');
+  assert.equal(await rpc('icash_claim_deal_email',{p_account:account,p_id:id}),null,'historical email cannot be claimed twice');
+ }finally{await q('rollback');}
+ assert.equal(await rpc('icash_buyer_package_brand',{p_text:'https://untrusted.example/d/'+link.url.split('/').at(-1)}),'https://untrusted.example/d/'+link.url.split('/').at(-1));
+ console.log('PASS propertymsgs package links: new SMS/email/replies, same token, old approved bodies remain sendable without duplicate sends.');
+
  const ownerPhone='+12145550188',sender='+14245550188',run=randomUUID(),thread=randomUUID(),seller=randomUUID(),oldDeal=randomUUID(),oldScreen=randomUUID();
  await q('update auth.users set email_confirmed_at=now() where id=$1',[user]);
  await q('insert into icash_owner_voice_acceptance_config values($1,$2,$3)',[account,user,ownerPhone]);
@@ -69,11 +97,11 @@ export async function testOwnerBuyerDelivery(f,{link,realBuyerThread,realBuyerEm
  const message=await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:thread,p_body:content.sms});assert(message);
  assert.equal(await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:thread,p_body:content.sms}),message);
  const sendArgs={p_account:account,p_message:message,p_sender:sender};
- assert.equal(await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:thread,p_body:content.sms.replace('homeoffernetwork.com','untrusted.example')}),null);
+ assert.equal(await rpc('icash_queue_buyer_package_text',{p_account:account,p_thread:thread,p_body:content.sms.replace('propertymsgs.com','untrusted.example')}),null);
  await q('begin');try{
-  await q('update icash_text_messages set body=$2 where id=$1',[message,content.sms.replace('homeoffernetwork.com','untrusted.example')]);
+  await q('update icash_text_messages set body=$2 where id=$1',[message,content.sms.replace('propertymsgs.com','untrusted.example')]);
   assert.equal(await rpc('icash_claim_text',sendArgs),null,'unapproved domain never dispatches');
-  const legacyBody=content.sms.replace('https://homeoffernetwork.com/d/','https://www.geticashx.com/d/');
+  const legacyBody=content.sms.replace('https://propertymsgs.com/d/','https://www.geticashx.com/d/');
   await q('update icash_text_messages set body=$2 where id=$1',[message,legacyBody]);
   assert.equal((await rpc('icash_claim_text',sendArgs)).message,legacyBody,'already queued approved legacy link remains sendable');
  }finally{await q('rollback');}

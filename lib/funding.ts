@@ -13,6 +13,14 @@ export async function settleFunding(s:Stripe.Checkout.Session) {
  if(!o || !fundingSessionMatches(s,o))throw new Error("Payment mismatch");
  await db("rpc/icash_settle_taxed_funding","POST",{p_order:o.id,p_mode:o.mode,p_session:s.id,p_payment:s.payment_intent,p_amount:s.amount_total,p_tax:s.total_details?.amount_tax??0,p_email:s.customer_details?.email,p_phone:s.customer_details?.phone??null});
  if(s.metadata?.icash_prepaid_work==='true')await db('rpc/icash_apply_prepaid_purchase','POST',{p_order:o.id});
+ // Funding is already durably committed. Prepare only this account's saved,
+ // eligible contacts; this bounded RPC never searches, sends or charges.
+ // A duplicate credited checkout needs no extra scan. The ordinary worker
+ // remains scheduled when this best-effort handoff is unavailable or slow.
+ if(o.mode==='live'&&o.account_id&&!o.credited_at){
+  try{await db('rpc/icash_project_operational_sms_contacts','POST',{p_account:o.account_id},AbortSignal.timeout(2000));}
+  catch{console.warn('Funded prospect preparation deferred to the ordinary worker.');}
+ }
  await activateAutoRecharge(s);
 }
 export async function limitRequest(req:Request,scope:string,identifier:string,limit:number,seconds:number) {

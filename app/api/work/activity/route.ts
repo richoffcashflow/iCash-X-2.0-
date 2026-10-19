@@ -37,7 +37,7 @@ export async function GET(req:Request){
   const page=pageNumber(params.get('page')),attentionPage=pageNumber(params.get('attentionPage'));
   const screeningId=params.get('screeningId');if(screeningId)z.string().uuid().parse(screeningId);
   const query=(params.get('query')??'').trim();
-  const responsesOnly=params.get('view')==='responses';
+  const responsesOnly=params.get('view')==='responses',opportunitiesOnly=params.get('view')==='opportunities';
   // A literal address fragment, never a caller-supplied PostgREST expression or wildcard.
   if(query.length>100||/[^\p{L}\p{N}\s#.,'\-]/u.test(query))return NextResponse.json({error:'Search using a street, city or ZIP code.'},{status:400,headers});
   await db('rpc/icash_refresh_opportunity_outcomes','POST',{p_account:accountId});
@@ -47,9 +47,11 @@ export async function GET(req:Request){
    properties=await db<Property[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=eq.${screeningId}&state=eq.complete&select=id,state,result,completed_at&limit=1`);
   }else{
    // Rank actual seller responses across the account before paging.
-   properties=await db<Property[]>('rpc/icash_workspace_opportunities','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_responses_only:responsesOnly});
+   properties=opportunitiesOnly
+    ?await db<Property[]>('rpc/icash_workspace_ready_opportunities','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1})
+    :await db<Property[]>('rpc/icash_workspace_opportunities','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_responses_only:responsesOnly});
   }
-  const instantRows=instantLeadsEnabled(process.env)?await db<InstantLeadCardData[]>('rpc/icash_meta_workspace_response_leads','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_screening:screeningId??null,p_responses_only:responsesOnly&&!screeningId}):[];
+  const instantRows=instantLeadsEnabled(process.env)?await db<InstantLeadCardData[]>('rpc/icash_meta_workspace_response_leads','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_screening:screeningId??null,p_responses_only:(responsesOnly||opportunitiesOnly)&&!screeningId}):[];
   const instantLeads=instantRows.slice(0,pageSize);
   const visible=properties.slice(0,pageSize);
   const ids=visible.map(p=>p.id).join(',');

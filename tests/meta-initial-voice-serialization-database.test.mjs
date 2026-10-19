@@ -255,6 +255,31 @@ try{
   await pg.exec(`update icash_voice_jobs set state='held',outcome='dispatch_permission_changed' where id='${second.job}'`);
   await unchangedWait();
  });
+ // The owner's separately deployed hours policy may arrive before or after
+ // this migration. Apply its exact Meta final-claim patch with a controlled
+ // clock dependency, then apply both scheduler changes again from their old
+ // definitions. The independent first-contact-hours suites test the real clock.
+ await pg.exec(`create table fixture_voice_hours(open boolean);insert into fixture_voice_hours values(false);
+  create function icash_voice_outreach_hours_current(uuid,uuid) returns boolean language sql stable as $$select open from public.fixture_voice_hours$$;`);
+ const hoursSql=read('config/first-contact-voice-hours.sql');
+ const hoursStart=hoursSql.indexOf(" signature:='public.icash_meta_claim_voice(uuid,uuid)';");
+ const hoursEnd=hoursSql.indexOf('\n\n -- A verified contract-cancellation',hoursStart);
+ assert(hoursStart>0&&hoursEnd>hoursStart);
+ await pg.exec('do $hours$ declare definition text;needle text;signature text;begin '+hoursSql.slice(hoursStart,hoursEnd)+' end $hours$;');
+ const hoursClaim=await scalar("select pg_get_functiondef('icash_meta_claim_voice(uuid,uuid)'::regprocedure)");
+ assert(hoursClaim.includes('if not public.icash_voice_outreach_hours_current(p_account,p_job) then return false;end if;'));
+ await pg.exec(oldDefinition);await pg.exec(oldGeneric);await pg.exec(sql);
+ assert.equal(await scalar("select pg_get_functiondef('icash_meta_claim_voice(uuid,uuid)'::regprocedure)"),hoursClaim,'scheduler migration preserves the owner hours policy byte-for-byte');
+ await scenario('owner hours guard still controls final admission',async()=>{
+  assert.equal((await prepare(first.lead)).voiceJobId,first.job);
+  await pg.exec(`insert into icash_operation_spend(operation_key,account_id,rate_id) values('voice:${first.job}','${first.account}','${id(90)}');`);
+  const before=await row('icash_operation_spend','operation_key','voice:'+first.job);
+  assert.equal(await scalar('select icash_meta_claim_voice($1,$2)',[first.account,first.job]),false,'first contact remains blocked outside the owner business window');
+  assert.deepEqual(await row('icash_operation_spend','operation_key','voice:'+first.job),before);
+  await pg.exec('update fixture_voice_hours set open=true');
+  assert.equal(await scalar('select icash_meta_claim_voice($1,$2)',[first.account,first.job]),true,'normal valid-hours final claim remains available');
+  await unchangedWait();assert.equal(await generic(),null);
+ });
  // Fail closed if a future migration changes the critical serialized section.
  await pg.exec('begin');
  await pg.exec(oldDefinition.replace('perform 1 from public.icash_operating_budget where id=1 for update;','-- Missing lock fixture.'));
@@ -272,5 +297,5 @@ try{
  assert.equal(await scalar('select count(*)::int from icash_voice_jobs'),3);
  assert.equal(await scalar('select count(*)::int from icash_operation_spend'),1);
  assert.equal((await row('icash_operation_spend','operation_key','voice:SIMULATION-cancelled')).state,'cancelled');
- console.log('PASS Meta initial voice serialization: reproduced double issuance, pre-reservation account/contact waiting, unknown-outcome protection, generic-route exclusion and non-Meta continuity, independent accounts, completion release, real consent/binding guards, unchanged final claim and cancelled spend, no replacements or provider calls.');
+ console.log('PASS Meta initial voice serialization: reproduced double issuance, pre-reservation account/contact waiting, unknown-outcome protection, generic-route exclusion and non-Meta continuity, independent accounts, completion release, real consent/binding guards, unchanged pre/post business-hours final claim and cancelled spend, no replacements or provider calls.');
 }finally{await pg.close();}
