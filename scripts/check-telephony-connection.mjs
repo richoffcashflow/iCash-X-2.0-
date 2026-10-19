@@ -8,17 +8,17 @@ import {readActiveReceptionReadiness} from '../lib/active-reception-readiness.ts
 import {readRecordedOutboundReadiness} from '../lib/recorded-outbound-readiness.ts';
 import {readVoiceUsagePolicies} from '../lib/voice-usage-service.ts';
 import {observeLegacyReceptionCosts} from '../lib/legacy-reception-cost-observation.ts';
-import {readRecordingReview,recordingAgentMatches,object,sha} from '../lib/required-call-recording.ts';
+import {readRecordingReview,recordingAgentMatches,object,sha,canonical} from '../lib/required-call-recording.ts';
 import {automaticOfferReceptionPrompt} from '../lib/seller-agreement-reception.ts';
 import {receptionReviewReport} from './reception-review-report.mjs';
 
-export async function checkTelephonyConnection(env=process.env,fetcher=fetch,onOutboundAgent){
+export async function checkTelephonyConnection(env=process.env,fetcher=fetch,onOutboundAgent,onIncomingAgent){
  const reads=await Promise.allSettled([
   readOwnerForwarding(env,fetcher),
   readRecordedReceptionReadiness(env,{fetcher}),
   readRecordedOutboundReadiness(env,{fetcher,onAgent:onOutboundAgent}),
   observeLegacyReceptionCosts(env,fetcher),
-  readActiveReceptionReadiness(env,fetcher),
+  readActiveReceptionReadiness(env,fetcher,onIncomingAgent),
  ]);
  const value=(i)=>reads[i].status==='fulfilled'?reads[i].value:null;
  const forwarding=value(0),incoming=value(1),outgoing=value(2);
@@ -66,6 +66,26 @@ export async function saveTelephonyCheck(result,env=process.env,fetcher=fetch){
  return response.ok;
 }
 
+// Capture an unexplained active-template mismatch for private review. This
+// cannot authorize a configuration or change the exact runtime admission gate.
+export async function saveActiveIncomingReviewReport(result,agent,config,env=process.env,fetcher=fetch){
+ const out=result.activeIncoming,a=object(agent),c=object(config);
+ if(!canSaveSharedIntegrationCheck(env)||!env.SUPABASE_URL||!env.SUPABASE_SECRET_KEY
+  ||out?.status!=='checked'||out.hashMatch!=='none'||!agent||!config
+  ||!/^[a-f0-9]{64}$/.test(out.observedHash??'')||!/^[a-f0-9]{64}$/.test(out.approvedHash??'')
+  ||out.configId!==c.id||out.approvedHash!==c.config_hash||a.agent_id!==c.agent_id
+  ||out.branchId!==a.branch_id||out.branchId!==c.branch_id
+  ||out.versionId!==a.version_id||out.versionId!==c.reviewed_version_id)return false;
+ const snapshot={main_branch_id:a.main_branch_id,agent_id:a.agent_id,branch_id:a.branch_id,version_id:a.version_id,conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null};
+ if(sha(JSON.stringify(canonical(snapshot)))!==out.observedHash)return false;
+ const report={status:'needs_review',sourceConfigId:c.id,sourceConfigHash:c.config_hash,observedHash:out.observedHash,
+  agentId:c.agent_id,branchId:c.branch_id,versionId:c.reviewed_version_id,checks:out.checks,
+  configuration:receptionReviewReport(a,[env.ELEVENLABS_API_KEY,env.TWILIO_AUTH_TOKEN,env.SUPABASE_SECRET_KEY]),
+  providerWrites:false,calls:false,approvalChanged:false};
+ const response=await fetcher(env.SUPABASE_URL+'/rest/v1/icash_integration_checks?on_conflict=provider',{method:'POST',headers:{apikey:env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+env.SUPABASE_SECRET_KEY,'Content-Type':'application/json',Prefer:'resolution=ignore-duplicates'},body:JSON.stringify({provider:'active_incoming_config_review_'+out.observedHash.slice(0,12),checked_at:result.checkedAt,result:report}),redirect:'error',signal:AbortSignal.timeout(10000)});
+ return response.ok;
+}
+
 // Immutable, service-only cost-rule evidence. Refuse the snapshot if redaction
 // would change it; never store credentials or alter a billing approval here.
 export async function saveVoiceUsagePolicyReview(env=process.env,fetcher=fetch){
@@ -82,12 +102,14 @@ export async function saveVoiceUsagePolicyReview(env=process.env,fetcher=fetch){
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  try{
-  let agent;
-  const result=await checkTelephonyConnection(process.env,fetch,value=>{agent=value;});
+  let agent,incomingAgent,incomingConfig;
+  const result=await checkTelephonyConnection(process.env,fetch,value=>{agent=value;},(value,config)=>{incomingAgent=value;incomingConfig=config;});
   const saved=await saveTelephonyCheck(result).catch(()=>false);
   const reviewSaved=await saveOutboundReviewReport(result,agent).catch(()=>false);
+  const incomingReviewSaved=await saveActiveIncomingReviewReport(result,incomingAgent,incomingConfig).catch(()=>false);
   await saveVoiceUsagePolicyReview().catch(()=>false);
   if(reviewSaved)console.log('Outbound configuration mismatch saved for private review. No approval or provider changed.');
+  if(incomingReviewSaved)console.log('Active incoming configuration mismatch saved for private review. No approval or provider changed.');
   console.log(`Telephony: forwarding=${result.forwarding.routeConfigured}; inbound=${result.incoming.status}; outbound=${result.outgoing.status}; diagnostic_saved=${saved}. No calls or messages sent.`);
  }catch{console.log('Telephony: diagnostic unavailable. No calls or messages sent.');}
 }

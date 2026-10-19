@@ -7,7 +7,7 @@ import {object} from './required-call-recording.ts';
 
 /** Actual active reception template, not a prepared historical branch. All
  * provider requests are GETs; the database RPC only reads configuration. */
-export async function readActiveReceptionReadiness(env:Record<string,string|undefined>,fetcher:typeof fetch=fetch){
+export async function readActiveReceptionReadiness(env:Record<string,string|undefined>,fetcher:typeof fetch=fetch,onAgent?:(agent:Record<string,unknown>,config:RecordedReceptionConfig)=>void){
  if(!env.SUPABASE_URL||!env.SUPABASE_SECRET_KEY)return {status:'unavailable',providerChecksPass:false};
  const signal=AbortSignal.timeout(12000);
  const response=await fetcher(env.SUPABASE_URL+'/rest/v1/rpc/icash_get_recorded_reception_config',{method:'POST',headers:{apikey:env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+env.SUPABASE_SECRET_KEY,'Content-Type':'application/json'},body:JSON.stringify({p_called_number:receptionTarget.calledNumber}),redirect:'error',cache:'no-store',signal});
@@ -19,5 +19,6 @@ export async function readActiveReceptionReadiness(env:Record<string,string|unde
  const rows=branches.results,meta=object(branches.meta),complete=Array.isArray(rows)&&rows.length<100&&(meta.total===undefined||meta.total===rows.length);
  const matches=Array.isArray(rows)?rows.filter(r=>object(r).id===c.branch_id):[];
  const inspected=inspectRecordedReceptionAgent(c,agent,matches[0],receptionWorkspacePostcallAbsent(workspace),stop,agreement);
+ onAgent?.(agent,c);
  return {status:'checked',providerChecksPass:complete&&matches.length===1&&inspected.safe,configId:c.id,branchId:c.branch_id,versionId:c.reviewed_version_id,approvedHash:c.config_hash,observedHash:inspected.hash,hashMatch:inspected.hashMatch,checks:{...inspected.checks,branchListComplete:complete,uniqueBranch:matches.length===1},callsPlaced:0};
 }
