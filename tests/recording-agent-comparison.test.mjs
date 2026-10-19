@@ -3,10 +3,10 @@ import test from 'node:test';
 import {automaticOfferGuardrails} from '../lib/automatic-offer-policy.ts';
 import {canonical,sha,recordingAgentMatches,recordingPolicy,readRecordingReview} from '../lib/required-call-recording.ts';
 
-// Synthetic, offline fixtures only. Keep both historical hash representations
+// Synthetic, offline fixtures only. Keep all historical hash representations
 // pinned independently of the comparison so this never changes stored reviews.
 const emptySubagents=()=>({agents:[],self_subagent:null});
-function fixture(withEmptyDefault=false){
+function fixture(withEmptyDefault=false,withEmptyList=false){
  const agent={
   agent_id:'agent_fixture',branch_id:'agtbrch_recorded',main_branch_id:'agtbrch_main',version_id:'agtvrsn_reviewed',
   conversation_config:{
@@ -20,6 +20,7 @@ function fixture(withEmptyDefault=false){
   },
  };
  if(withEmptyDefault)agent.conversation_config.agent.subagent_config=emptySubagents();
+ if(withEmptyList)agent.conversation_config.agent.subagents=[];
  return agent;
 }
 function configHash(a){
@@ -30,15 +31,21 @@ function reviewFor(a){
 }
 const legacyHash='9e42ced461a3ded8119440d39a752274f2206894af33351048b6a4d2293e8eaf';
 const currentHash='5de940f218242fef502b83c68829447368af8dda908d5469e0e5817549e9a741';
-const reviews=[reviewFor(fixture()),reviewFor(fixture(true))];
+const listHash='5c5b0c31aad194adca4b9c67786f1bfb21764ad75d7d6ea023ad8c3a0d71bc54';
+const bothHash='875eb33f2156f6a7e6305606b6ea3dd2868cadbc336c4a269b7497d3a9d3ec82';
+const representations=[[false,false],[true,false],[false,true],[true,true]];
+const reviews=representations.map(([empty,list])=>reviewFor(fixture(empty,list)));
 
-test('legacy and current reviewed hashes accept only the exact absent/empty counterpart',()=>{
+test('all four approved empty-default representations match without changing saved hashes',()=>{
  assert.equal(configHash(fixture()),legacyHash);
  assert.equal(configHash(fixture(true)),currentHash);
+ assert.equal(configHash(fixture(false,true)),listHash);
+ assert.equal(configHash(fixture(true,true)),bothHash);
+ assert.equal(new Set(reviews.map(review=>review.configHash)).size,4);
  assert.notEqual(legacyHash,currentHash);
  for(const review of reviews){
   assert(readRecordingReview(JSON.stringify(review),Date.parse('2026-10-19T00:00:00Z')));
-  for(const empty of [false,true])assert.equal(recordingAgentMatches(review,fixture(empty)),true);
+  for(const [empty,list] of representations)assert.equal(recordingAgentMatches(review,fixture(empty,list)),true);
  }
 });
 
@@ -47,8 +54,8 @@ test('ordinary exact-hash reviews retain their behavior and wrong hashes fail',(
   const agent=fixture();agent.conversation_config.agent.subagent_config=subagents;
   assert.equal(recordingAgentMatches(reviewFor(agent),agent),true,'explicitly reviewed content still matches exactly');
  }
- for(const empty of [false,true]){
-  const agent=fixture(empty);
+ for(const [empty,list] of representations){
+  const agent=fixture(empty,list);
   assert.equal(recordingAgentMatches({...reviewFor(agent),configHash:'0'.repeat(64)},agent),false);
   const reordered=JSON.parse(JSON.stringify(agent),(_key,value)=>value&&!Array.isArray(value)&&typeof value==='object'?Object.fromEntries(Object.entries(value).reverse()):value);
   assert.equal(recordingAgentMatches(reviewFor(agent),reordered),true);
@@ -66,11 +73,38 @@ test('nonempty, malformed and extended subagent values are not empty defaults',(
   const agent=fixture();agent.conversation_config.agent.subagent_config=value;
   for(const review of reviews)assert.equal(recordingAgentMatches(review,agent),false,JSON.stringify(value));
   const explicitReview=reviewFor(agent);
-  for(const empty of [false,true])assert.equal(recordingAgentMatches(explicitReview,fixture(empty)),false,'equivalence must fail in reverse too');
+  for(const [empty,list] of representations)assert.equal(recordingAgentMatches(explicitReview,fixture(empty,list)),false,'equivalence must fail in reverse too');
  }
 });
 
-test('prompt, tools, voice, workflow and procedures drift still fail for both hashes',()=>{
+test('subagents must be an exact empty array or remain part of the exact approved hash',()=>{
+ for(const value of [null,{},false,0,'',{agents:[]},[null],['agent_other'],[{agent_id:'agent_other'}]]){
+  for(const empty of [false,true]){
+   const agent=fixture(empty);agent.conversation_config.agent.subagents=value;
+   for(const review of reviews)assert.equal(recordingAgentMatches(review,agent),false,JSON.stringify(value));
+   const explicitReview=reviewFor(agent);
+   assert.equal(recordingAgentMatches(explicitReview,agent),true,'explicitly reviewed list content still matches exactly');
+   for(const [defaultConfig,defaultList] of representations)assert.equal(recordingAgentMatches(explicitReview,fixture(defaultConfig,defaultList)),false,'nondefault content cannot disappear in reverse');
+  }
+ }
+});
+
+test('one empty default may vary while the other nonempty or extended field stays exactly reviewed',()=>{
+ for(const value of [{agents:[{agent_id:'agent_reviewed'}],self_subagent:null},{agents:[],self_subagent:null,reviewed_extension:false}]){
+  const agent=fixture(false,true);agent.conversation_config.agent.subagent_config=value;
+  const review=reviewFor(agent),counterpart=structuredClone(agent);delete counterpart.conversation_config.agent.subagents;
+  assert.equal(recordingAgentMatches(review,counterpart),true);
+  counterpart.conversation_config.agent.subagent_config=emptySubagents();
+  assert.equal(recordingAgentMatches(review,counterpart),false,'real subagent configuration is never normalized');
+ }
+ const agent=fixture(true);agent.conversation_config.agent.subagents=[{agent_id:'agent_reviewed'}];
+ const counterpart=structuredClone(agent);delete counterpart.conversation_config.agent.subagent_config;
+ assert.equal(recordingAgentMatches(reviewFor(agent),counterpart),true);
+ counterpart.conversation_config.agent.subagents=[];
+ assert.equal(recordingAgentMatches(reviewFor(agent),counterpart),false);
+});
+
+test('prompt, tools, voice, workflow and procedures drift still fail for all hashes',()=>{
  const changes=[
   a=>a.conversation_config.agent.prompt.prompt='Unreviewed prompt',
   a=>a.conversation_config.agent.prompt.llm='unreviewed-model',
@@ -83,8 +117,8 @@ test('prompt, tools, voice, workflow and procedures drift still fail for both ha
   a=>a.workflow={nodes:[]},
   a=>a.procedures=[],
  ];
- for(const change of changes)for(const empty of [false,true]){
-  const agent=fixture(empty);change(agent);
+ for(const change of changes)for(const [empty,list] of representations){
+  const agent=fixture(empty,list);change(agent);
   for(const review of reviews)assert.equal(recordingAgentMatches(review,agent),false,change.toString());
  }
 });
@@ -98,9 +132,10 @@ test('unknown fields remain in the fingerprint at every projected level',()=>{
   a=>a.platform_settings.unknown={},
   a=>a.platform_settings.privacy.unknown=false,
   a=>a.platform_settings.overrides.conversation_config_override.agent.subagent_config=emptySubagents(),
+  a=>a.platform_settings.overrides.conversation_config_override.agent.subagents=[],
  ];
- for(const change of changes)for(const empty of [false,true]){
-  const agent=fixture(empty);change(agent);
+ for(const change of changes)for(const [empty,list] of representations){
+  const agent=fixture(empty,list);change(agent);
   for(const review of reviews)assert.equal(recordingAgentMatches(review,agent),false,change.toString());
  }
 });
@@ -120,17 +155,17 @@ test('independent identity and security checks cannot be bypassed by a matching 
   a=>a.conversation_config.agent.prompt.tool_ids[0]='tool_other',
   a=>a.conversation_config.agent.prompt.tool_ids.push('tool_extra'),
  ];
- for(const change of changes)for(const empty of [false,true]){
-  const agent=fixture(empty);change(agent);
+ for(const change of changes)for(const [empty,list] of representations){
+  const agent=fixture(empty,list);change(agent);
   assert.equal(recordingAgentMatches({...reviews[0],configHash:configHash(agent)},agent),false,change.toString());
   for(const review of reviews)assert.equal(recordingAgentMatches(review,agent),false,change.toString());
  }
  for(const value of [null,[],{},false])assert.equal(recordingAgentMatches(reviews[0],value),false);
 });
 
-test('automatic-offer guardrails remain independently required with either representation',()=>{
- for(const empty of [false,true]){
-  const agent=fixture(empty);agent.platform_settings.guardrails=automaticOfferGuardrails();
+test('automatic-offer guardrails remain independently required with every representation',()=>{
+ for(const [empty,list] of representations){
+  const agent=fixture(empty,list);agent.platform_settings.guardrails=automaticOfferGuardrails();
   agent.conversation_config.agent.prompt.tool_ids.push('tool_contract');
   const review={...reviewFor(agent),offerPolicy:'automatic_offer_v6',contractToolId:'tool_contract',toolIds:[...reviews[0].toolIds,'tool_contract']};
   assert.equal(recordingAgentMatches(review,agent),true);
@@ -148,10 +183,10 @@ test('automatic-offer guardrails remain independently required with either repre
 
 test('comparison never mutates a frozen review or provider snapshot',()=>{
  function freeze(value){if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;}
- for(const empty of [false,true])for(const originalReview of reviews){
-  const agent=freeze(fixture(empty)),review=freeze(structuredClone(originalReview)),beforeAgent=structuredClone(agent),beforeReview=structuredClone(review);
+ for(const [empty,list] of representations)for(const originalReview of reviews){
+  const agent=freeze(fixture(empty,list)),review=freeze(structuredClone(originalReview)),beforeAgent=structuredClone(agent),beforeReview=structuredClone(review);
   assert.equal(recordingAgentMatches(review,agent),true);
   assert.deepEqual(agent,beforeAgent);assert.deepEqual(review,beforeReview);
-  assert.equal(configHash(agent),empty?currentHash:legacyHash);
+  assert.equal(configHash(agent),reviews[representations.findIndex(([configPresent,listPresent])=>configPresent===empty&&listPresent===list)].configHash);
  }
 });
