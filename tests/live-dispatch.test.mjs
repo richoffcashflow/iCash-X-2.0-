@@ -56,10 +56,12 @@ let preferredPhone=null;
 let textThreads=[{sender:'+14243948384'}],secondEnabled=false,secondVerified=false;
 const secondaryCallingReady=async()=>secondVerified;
 let reservationError=null,budgetHoldAccepted=true,flexibleFunding={maxSeconds:120};
+let metaClaimResult='claimed';
 let sellerConsentCurrent=true,activeConversation=false,outreachContextOverride=undefined,metaContext=null,cancellationCurrent=true;
 let customVoice=null;
 const selectedCustomCallVoice=async()=>customVoice;
-let c=structuredClone(configTemplate),providerAgent=structuredClone(agent),providerPaths=[],agentReadFailed=false,identityVoice='voice';
+let c=structuredClone(configTemplate),providerAgent=structuredClone(agent),providerPaths=[],agentReadFailed=false,agentReadError=null,identityVoice='voice';
+let preflightDiagnostics=[];
 let providerReads=0,flipAt=null,flip=()=>{},legacyRate=false,recordingStatus='recording_consent_pending';
 let outboundBody,contextOverrides=true,operational=false,operationalCurrent=true;
 let smsSource=null,ackFails=false;const dispatchTextMessage=async()=>{if(ackFails)throw Error("Synthetic SMS failure");records.push({smsAck:true});return {status:"message_accepted"};};
@@ -77,6 +79,7 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_webinar_text_senders'))return preferredPhone?[{phone:preferredPhone}]:[];
  if(path.startsWith('icash_business_voice_numbers'))return [{outbound_enabled:secondEnabled}];
  if(path==='rpc/icash_voice_sms_context')return null;
+ if(path==='rpc/icash_meta_claim_or_defer_voice'){if(metaClaimResult==='claimed')jobState='dispatching';if(metaClaimResult==='deferred')jobState='ready';if(metaClaimResult==='held')jobState='held';return metaClaimResult;}
  if(path==='rpc/icash_meta_voice_context'){assert.equal(body.p_account,'account');assert.equal(body.p_job,'job');return metaContext;}
  if(path==='rpc/icash_seller_call_request'){assert.equal(body.p_account,'account');assert.equal(body.p_screening,'screening');assert.equal(body.p_phone,permission.phone);return {name:null,submittedAt:new Date(now-1000).toISOString()};}
  if(path==='rpc/icash_seller_sms_call_ack')return 'ack-message';
@@ -104,14 +107,14 @@ const db=async(path,method,body)=>{
  if(path==='icash_live_conversations')return [];
  throw Error('Unexpected request '+path);
 };
-const elevenRequest=async(path,body)=>{providerReads++;providerPaths.push(path);assert.equal(body,undefined,'No legacy direct dial, even if recording dispatch fails');if(path.includes('/phone-numbers/'))return {phone_number:providerNumber};assert.equal(path,`/v1/convai/agents/${review.agentId}?branch_id=${review.branchId}`,'Never read main instead of the reviewed recorded branch');if(agentReadFailed)throw Error('Synthetic metadata read failure');const result=structuredClone(providerAgent);if(!contextOverrides)result.platform_settings.overrides.conversation_config_override.agent={first_message:false,prompt:{prompt:false}};return result;};
+const elevenRequest=async(path,body)=>{providerReads++;providerPaths.push(path);assert.equal(body,undefined,'No legacy direct dial, even if recording dispatch fails');if(path.includes('/phone-numbers/'))return {phone_number:providerNumber};assert.equal(path,`/v1/convai/agents/${review.agentId}?branch_id=${review.branchId}`,'Never read main instead of the reviewed recorded branch');if(agentReadFailed)throw agentReadError??Error('Synthetic metadata read failure');const result=structuredClone(providerAgent);if(!contextOverrides)result.platform_settings.overrides.conversation_config_override.agent={first_message:false,prompt:{prompt:false}};return result;};
 const recordingServer=()=>({dispatch:async input=>{outboundBody=input;postCount++;if(timeout)return {status:'recording_dial_unknown_no_retry'};return {status:recordingStatus};}});
-globalThis.__voiceTest={readVoiceOutreachContext,opportunityConversationInstructions,instantLeadsEnabled,instantLeadPrompt,cancellationCallPrompt,sellerAgreementDeliveryPrompt,conversationAddressFields,conversationAddressInstructions,dispatchTextMessage,selectBusinessCaller,isAdditionalBusinessPhone,secondaryBusinessPhone,secondaryCallingReady,sellerOfferPresentation,VoiceActivationBudgetError,selectedCustomCallVoice,recordingServer,object,readRecordingReview,recordingAgentMatches,recordingPolicy,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation:async()=>records.push({reserve:true}),contactEligibility,nextContactWindow,buyerCallInstructions,buyerFirstMessage,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt,sellerCallContext,compactSellerProgress,automaticOfferReceptionPrompt,loadSellerClosingContext,sellerContractToolId,legacyAutomaticOfferReceptionPrompt,streamingAutomaticOfferReceptionPrompt,automaticOfferPolicy};
+globalThis.__voiceTest={console:{warn:(...args)=>preflightDiagnostics.push(args)},readVoiceOutreachContext,opportunityConversationInstructions,instantLeadsEnabled,instantLeadPrompt,cancellationCallPrompt,sellerAgreementDeliveryPrompt,conversationAddressFields,conversationAddressInstructions,dispatchTextMessage,selectBusinessCaller,isAdditionalBusinessPhone,secondaryBusinessPhone,secondaryCallingReady,sellerOfferPresentation,VoiceActivationBudgetError,selectedCustomCallVoice,recordingServer,object,readRecordingReview,recordingAgentMatches,recordingPolicy,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation:async()=>records.push({reserve:true}),contactEligibility,nextContactWindow,buyerCallInstructions,buyerFirstMessage,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt,sellerCallContext,compactSellerProgress,automaticOfferReceptionPrompt,loadSellerClosingContext,sellerContractToolId,legacyAutomaticOfferReceptionPrompt,streamingAutomaticOfferReceptionPrompt,automaticOfferPolicy};
 let source=ts.transpileModule(readFileSync(new URL('../lib/live-dispatch-service.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-source='const {readVoiceOutreachContext,opportunityConversationInstructions,instantLeadsEnabled,instantLeadPrompt,cancellationCallPrompt,sellerAgreementDeliveryPrompt,conversationAddressFields,conversationAddressInstructions,dispatchTextMessage,selectBusinessCaller,isAdditionalBusinessPhone,secondaryBusinessPhone,secondaryCallingReady,sellerOfferPresentation,VoiceActivationBudgetError,selectedCustomCallVoice,recordingServer,object,readRecordingReview,recordingAgentMatches,recordingPolicy,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation,contactEligibility,nextContactWindow,buyerCallInstructions,buyerFirstMessage,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt,sellerCallContext,compactSellerProgress,automaticOfferReceptionPrompt,loadSellerClosingContext,sellerContractToolId,legacyAutomaticOfferReceptionPrompt,streamingAutomaticOfferReceptionPrompt,automaticOfferPolicy}=globalThis.__voiceTest;\n'+source;
+source='const {console,readVoiceOutreachContext,opportunityConversationInstructions,instantLeadsEnabled,instantLeadPrompt,cancellationCallPrompt,sellerAgreementDeliveryPrompt,conversationAddressFields,conversationAddressInstructions,dispatchTextMessage,selectBusinessCaller,isAdditionalBusinessPhone,secondaryBusinessPhone,secondaryCallingReady,sellerOfferPresentation,VoiceActivationBudgetError,selectedCustomCallVoice,recordingServer,object,readRecordingReview,recordingAgentMatches,recordingPolicy,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation,contactEligibility,nextContactWindow,buyerCallInstructions,buyerFirstMessage,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt,sellerCallContext,compactSellerProgress,automaticOfferReceptionPrompt,loadSellerClosingContext,sellerContractToolId,legacyAutomaticOfferReceptionPrompt,streamingAutomaticOfferReceptionPrompt,automaticOfferPolicy}=globalThis.__voiceTest;\n'+source;
 const {dispatchLiveVoice}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 process.env.ELEVENLABS_API_KEY='fixture-no-network';process.env.CONTIGUITY_FROM='+14243948384';
-const reset=()=>{preferredPhone=null;activeConversation=false;outreachContextOverride=undefined;metaContext=null;cancellationCurrent=true;cancellationId=null;cancellationContext=null;priorSellerCalls=[];smsSource=null;ackFails=false;textThreads=[{sender:'+14243948384'}];secondEnabled=false;secondVerified=false;delete process.env.ICASH_FLEXIBLE_VOICE_READY;flexibleFunding={maxSeconds:120};reservationError=null;budgetHoldAccepted=true;c=structuredClone(configTemplate);providerAgent=structuredClone(agent);providerPaths=[];agentReadFailed=false;identityVoice='voice';providerReads=0;flipAt=null;flip=()=>{};legacyRate=false;recordingStatus='recording_consent_pending';Object.assign(process.env,{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:review.providerAccountSid,TWILIO_AUTH_TOKEN:'synthetic-provider-token'});operational=false;operationalCurrent=true;contextOverrides=true;outboundBody=undefined;buyerApproved=true;records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;callbackId=null;providerNumber='+14243948384';suppressed=false;paced=true;};
+const reset=()=>{metaClaimResult='claimed';preferredPhone=null;activeConversation=false;outreachContextOverride=undefined;metaContext=null;cancellationCurrent=true;cancellationId=null;cancellationContext=null;priorSellerCalls=[];smsSource=null;ackFails=false;textThreads=[{sender:'+14243948384'}];secondEnabled=false;secondVerified=false;delete process.env.ICASH_FLEXIBLE_VOICE_READY;flexibleFunding={maxSeconds:120};reservationError=null;budgetHoldAccepted=true;c=structuredClone(configTemplate);providerAgent=structuredClone(agent);providerPaths=[];agentReadFailed=false;agentReadError=null;preflightDiagnostics=[];identityVoice='voice';providerReads=0;flipAt=null;flip=()=>{};legacyRate=false;recordingStatus='recording_consent_pending';Object.assign(process.env,{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:review.providerAccountSid,TWILIO_AUTH_TOKEN:'synthetic-provider-token'});operational=false;operationalCurrent=true;contextOverrides=true;outboundBody=undefined;buyerApproved=true;records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;callbackId=null;providerNumber='+14243948384';suppressed=false;paced=true;};
 reset();cancellationId='notice';cancellationContext={address:'128 Sample Lane',body:'Cancellation requested; signed terms still apply.',completed:false};
 assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');
 assert.equal(outboundBody.maxTotalSeconds,120);assert.match(outboundBody.prompt,/sole task is one brief cancellation update/);assert(!outboundBody.firstMessage.includes('128 Sample Lane'));assert(!outboundBody.prompt.includes('get_offer'));assert(!records.some(r=>r.path==='rpc/icash_claim_automatic_offer_voice_job'));assert(!records.some(r=>r.path==='rpc/icash_seller_prior_call_context'));
@@ -184,6 +187,30 @@ for(const mutate of agentMutations){reset();mutate(providerAgent);assert.equal((
 permission={...permission,party:'seller'};
 for(const malformed of [null,{},[],{conversation_config:null}]){reset();providerAgent=malformed;assert.equal((await dispatchLiveVoice('account','job')).status,'production_agent_review_required');noAdmission();}
 reset();agentReadFailed=true;assert.equal((await dispatchLiveVoice('account','job')).status,'production_agent_review_required');noAdmission();
+// Diagnostics separate failed GETs from rejected readbacks while retaining the
+// same hold and exactly one read. Unrecognized error content never reaches logs.
+for(const [error,code] of [
+ [Error('VOICE_HTTP_429'),'VOICE_HTTP_429'],
+ [Error('VOICE_HTTP_403_CONVAI_READ'),'VOICE_HTTP_403_CONVAI_READ'],
+ [Error('VOICE_UNREACHABLE'),'VOICE_UNREACHABLE'],
+ [Error('VOICE_KEY_MISSING'),'VOICE_KEY_MISSING'],
+ [Error('VOICE_HTTP_503 bearer private-key +12125550123'),'VOICE_AGENT_READ_FAILED'],
+ [Error('VOICE_HTTP_422_BODY_PRIVATE_FIELD'),'VOICE_AGENT_READ_FAILED'],
+ [Error('private payload, prompt and customer address'),'VOICE_AGENT_READ_FAILED'],
+ [{message:'VOICE_HTTP_401'},'VOICE_AGENT_READ_FAILED'],
+ ['VOICE_HTTP_403','VOICE_AGENT_READ_FAILED'],
+]){
+ reset();agentReadFailed=true;agentReadError=error;
+ assert.equal((await dispatchLiveVoice('account','job')).status,'production_agent_review_required');noAdmission();
+ assert.deepEqual(preflightDiagnostics,[['production_agent_preflight_held',{stage:'provider_read',code}]]);
+ assert.equal(providerPaths.filter(path=>path.includes('/agents/')).length,1,'No automatic metadata retry');
+ assert.equal(records.filter(r=>r.path==='rpc/icash_hold_voice_job').length,1);
+}
+reset();providerAgent.conversation_config.agent.prompt.prompt='Private unreviewed prompt, +12125550123';
+assert.equal((await dispatchLiveVoice('account','job')).status,'production_agent_review_required');noAdmission();
+assert.deepEqual(preflightDiagnostics,[['production_agent_preflight_held',{stage:'review_match',code:'VOICE_AGENT_CONFIGURATION_MISMATCH'}]]);
+assert.equal(providerPaths.filter(path=>path.includes('/agents/')).length,1);
+reset();assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.deepEqual(preflightDiagnostics,[]);
 reset();identityVoice='unapproved-voice';assert.equal((await dispatchLiveVoice('account','job')).status,'voice_selection_setup_required');noAdmission();
 reset();identityVoice='approved-voice';c.approved_voice_ids=[identityVoice];assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(outboundBody.voiceId,identityVoice);
 reset();customVoice='custom_fixture';assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(outboundBody.voiceId,'custom_fixture');customVoice=null;
@@ -279,12 +306,20 @@ for(const enabled of ['false','true']){
  assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');
  assert.equal(postCount,1);
  assert.equal(records.some(r=>r.path==='rpc/icash_meta_voice_context'),enabled==='true');
- assert(!records.some(r=>r.path==='rpc/icash_meta_claim_voice'),'Ordinary seller calls keep their own admission path');
+ assert(!records.some(r=>r.path==='rpc/icash_meta_claim_or_defer_voice'),'Ordinary seller calls keep their own admission path');
 }
 reset();sellerConsentCurrent=true;permission={...permission,party:'seller',timezone:'Pacific/Honolulu',seller_intake_id:'saved-intake'};
 process.env.META_INSTANT_LEADS_ENABLED='true';metaContext={leadId:'saved-intake',name:null,state:'submitted',address:null};
 assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');assert.equal(postCount,0,'Initial Meta calls use the first-contact window, even with verified consent');
-assert(records.some(r=>r.path==='rpc/icash_meta_voice_context'));assert(!records.some(r=>r.path==='rpc/icash_meta_claim_voice'));
+assert(records.some(r=>r.path==='rpc/icash_meta_voice_context'));assert(!records.some(r=>r.path==='rpc/icash_meta_claim_or_defer_voice'));
+for(const result of ['deferred','held','unavailable','claimed']){
+ reset();permission={...permission,party:'seller',timezone:'America/Chicago',seller_intake_id:'saved-intake'};
+ process.env.META_INSTANT_LEADS_ENABLED='true';metaContext={leadId:'saved-intake',name:null,state:'submitted',address:null};metaClaimResult=result;
+ assert.equal((await dispatchLiveVoice('account','job')).status,result==='deferred'?'waiting_for_active_call':result==='held'?'dispatch_permission_changed':result==='unavailable'?'held':'call_started');
+ assert.equal(postCount,result==='claimed'?1:0,'Only an explicit claimed result may reach the recording provider');
+ assert(!records.some(r=>r.path==='rpc/icash_hold_voice_job'),'Explicit Meta result never creates a stale follow-on hold');
+ assert(!records.some(r=>r.path==='rpc/icash_meta_claim_voice'),'Do not invoke the legacy boolean claim after the explicit result');
+}
 process.env.META_INSTANT_LEADS_ENABLED='false';
 if(deploymentEnvironment===undefined)delete process.env.VERCEL_ENV;else process.env.VERCEL_ENV=deploymentEnvironment;
 console.log('PASS ordinary seller dispatch with Meta intake disabled and enabled; build environment cannot select fixture behavior.');

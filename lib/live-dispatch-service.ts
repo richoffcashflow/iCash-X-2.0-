@@ -113,10 +113,19 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
   if(!sameBusinessNumber(businessNumber,phone.phone_number))return hold('business_number_mismatch');
  }
  let agent:unknown;
- try{agent=await elevenRequest<unknown>(`/v1/convai/agents/${encodeURIComponent(recordedReview.agentId)}?branch_id=${encodeURIComponent(recordedReview.branchId)}`);}catch{return hold('production_agent_review_required');}
+ try{agent=await elevenRequest<unknown>(`/v1/convai/agents/${encodeURIComponent(recordedReview.agentId)}?branch_id=${encodeURIComponent(recordedReview.branchId)}`);}catch(error){
+  // Distinguish a failed read from configuration drift without logging provider
+  // payloads, credentials, contact data or caller-supplied error text.
+  const code=error instanceof Error&&/^(?:VOICE_UNREACHABLE|VOICE_KEY_MISSING|VOICE_SERVER_ONLY|VOICE_HTTP_[1-5][0-9]{2}(?:_(?:CONVAI_WRITE|CONVAI_READ|VOICES_READ|TEXT_TO_SPEECH))?)$/.test(error.message)?error.message:'VOICE_AGENT_READ_FAILED';
+  console.warn('production_agent_preflight_held',{stage:'provider_read',code});
+  return hold('production_agent_review_required');
+ }
  // Share the recording service's exact non-main branch/version, privacy,
  // override, tool-set and canonical full-projection validation before reserve.
- if(!recordingAgentMatches(recordedReview,agent))return hold('production_agent_review_required');
+ if(!recordingAgentMatches(recordedReview,agent)){
+  console.warn('production_agent_preflight_held',{stage:'review_match',code:'VOICE_AGENT_CONFIGURATION_MISMATCH'});
+  return hold('production_agent_review_required');
+ }
  const customVoice=await selectedCustomCallVoice(accountId);
  const callVoiceId=customVoice??identity.voice_id;
  const voiceOverride=object(object(object(agent).conversation_config).tts).voice_id!==callVoiceId;
@@ -179,7 +188,12 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  }
  if(!fundedCall)return {status:cancellation?'cancellation_notice_waiting':process.env.ICASH_FLEXIBLE_VOICE_READY==='true'?'waiting_for_available_credits':'waiting_for_daytime_budget'};
  const claimHold=recordingReleaseHold();if(claimHold)return hold(claimHold);
- const claimed=intake?await db<boolean>('rpc/icash_meta_claim_voice','POST',{p_account:accountId,p_job:j.id}):cancellation?await db<boolean>('rpc/icash_claim_cancellation_voice','POST',{p_account:accountId,p_job:j.id,p_context:cancellation}):p.party==='seller'
+ const metaClaim=intake?await db<'claimed'|'deferred'|'held'|'unavailable'>('rpc/icash_meta_claim_or_defer_voice','POST',{p_account:accountId,p_job:j.id}):null;
+ // Deferral retains the unattempted reservation. Never send a later generic
+ // hold: it could arrive after the same job has been issued for its next turn.
+ if(metaClaim==='deferred')return {status:'waiting_for_active_call'};
+ if(intake&&metaClaim!=='claimed')return {status:metaClaim==='held'?'dispatch_permission_changed':'held'};
+ const claimed=intake?metaClaim==='claimed':cancellation?await db<boolean>('rpc/icash_claim_cancellation_voice','POST',{p_account:accountId,p_job:j.id,p_context:cancellation}):p.party==='seller'
   ?limited?await db<boolean>('rpc/icash_claim_limited_seller_voice','POST',{p_job:j.id,p_snapshot:snapshot.snapshot}):await db<boolean>('rpc/icash_claim_automatic_offer_voice_job','POST',{p_job:j.id,p_snapshot:snapshot.snapshot,p_offer_price_cents:cashOfferPrice})
   :await db<boolean>('rpc/icash_claim_reviewed_voice_job','POST',{p_job:j.id,p_offer_snapshot:null,p_buyer_snapshot:buyerContext});
  if(!claimed)return hold('dispatch_permission_changed');

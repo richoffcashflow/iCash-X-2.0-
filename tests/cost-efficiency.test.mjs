@@ -13,7 +13,7 @@ assert.equal(ignoreBuild(env,(...args)=>args[0]==='diff'?'docs/a.md\0app/page.ts
 let called=[];const result=await maintenanceBatch({a:async()=>{called.push('a');throw Error('provider failed');},b:async()=>{called.push('b');return new Response(null,{status:200});},c:async()=>{called.push('c');return new Response(null,{status:503});}});
 assert.deepEqual(called,['a','b','c']);assert.equal(result.ok,false);assert.deepEqual(result.lanes,{a:{ok:false,status:503},b:{ok:true,status:200},c:{ok:false,status:503}});
 assert.equal((await maintenanceBatch({a:async()=>new Response(null,{status:200})})).ok,true);
-assert.equal(automationChanged('awaiting_counterparty'),false);assert.equal(automationChanged('updates_idle'),false);assert.equal(automationChanged('completed'),true);assert.equal(automationChanged('contacts_saved'),true);
+assert.equal(automationChanged('waiting_for_active_call'),false);assert.equal(automationChanged('awaiting_counterparty'),false);assert.equal(automationChanged('updates_idle'),false);assert.equal(automationChanged('completed'),true);assert.equal(automationChanged('contacts_saved'),true);
 const config=JSON.parse(readFileSync(new URL('../vercel.json',import.meta.url)));assert.equal(config.crons.find(x=>x.path==='/api/internal/maintenance').schedule,'* * * * *');
 assert.equal(config.crons.find(x=>x.path==='/api/internal/lead-costs').schedule,'*/15 * * * *','Read-only ad-cost sync stays on a bounded 15-minute schedule');
 assert.equal(config.crons.filter(c=>c.path!=='/api/internal/lead-costs').reduce((n,c)=>n+(c.schedule.startsWith('*/5')?288:1440),0),5184);
