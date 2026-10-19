@@ -9,3 +9,6 @@ const work=makeWorkspaceFixture(),best=mostPromisingProperty(work.properties,wor
 assert.equal(mostPromisingProperty([],work),null);
 assert.match(propertyNextMove({...work.properties[0],result:{...work.properties[0].result,financialCheck:{status:'review'}}},{...work,deals:[],callbacks:[],handoffs:[],textAttention:[],signing:[],callRequests:[],propertyAttentionIds:[]}),/Review the property numbers/);
 console.log('Property guidance: truthful active/paused/stale/manual states and saved-evidence priorities passed.');
+
+assert.equal(mostPromisingProperty(work.properties.map(p=>({...p,engagement:{responded:false,interested:false,optedOut:false}})),work),null,'Unanswered attempts are never promoted as promising');
+assert.equal(mostPromisingProperty(work.properties.map(p=>({...p,engagement:{responded:true,interested:false,optedOut:true}})),work),null,'Opt-outs are never promoted as promising');

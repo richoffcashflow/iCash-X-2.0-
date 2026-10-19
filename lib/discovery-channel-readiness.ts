@@ -48,7 +48,7 @@ async function dataAccountReadiness(accountId:string,userId:string,operation:'pr
   if(!cost.ok||!Number.isFinite(budget.standard_cost_multiplier)||budget.standard_cost_multiplier<1)return blocked('pricing_review_required');
   const data=rate.costs_micros.dealmachine;
   if(data===null||BigInt(quantity)*BigInt(config.property_credit_micros)>BigInt(data))return held;
-  const required=Math.ceil(cost.estimatedTotalMicros*budget.standard_cost_multiplier*(10000+rate.buffer_bps)/10000);
+  const required=Math.ceil((cost.estimatedTotalMicros*budget.standard_cost_multiplier+data*(3-budget.standard_cost_multiplier))*(10000+rate.buffer_bps)/10000);
   if(!Number.isSafeInteger(required)||rate.charge_cents*10000<required)return held;
   if(!integer(wallet.balance_cents))return held;
   // The quote bounds provider usage; actual completed usage charges the wallet.

@@ -29,7 +29,7 @@ export async function discoverBuyersForDeal(accountId:string,dealId:string){
  await db('rpc/icash_reserve_operation','POST',{p_account:accountId,p_operation:operationKey,p_rate:config.rate_id,p_permission_until:config.rights_until});
  return db<boolean>('rpc/icash_claim_buyer_search','POST',{p_account:accountId,p_deal:dealId,p_revision:config.revision,p_operation:operationKey});
  },
- persist:async receipt=>{await db('rpc/icash_save_buyer_search','POST',{p_account:accountId,p_deal:dealId,p_revision:config.revision,p_page:page,p_operation:operationKey,p_receipt:{...receipt,strategy,providerPage,zip:dealZip.slice(0,5)}});},
+ persist:async receipt=>{await db('rpc/icash_save_buyer_search','POST',{p_account:accountId,p_deal:dealId,p_revision:config.revision,p_page:page,p_operation:operationKey,p_receipt:{...receipt,strategy,providerPage,zip:dealZip.slice(0,5)}});await db('rpc/icash_settle_dealmachine_usage','POST',{p_operation:operationKey});},
  empty:async()=>{await db('rpc/icash_save_empty_buyer_search','POST',{p_account:accountId,p_deal:dealId,p_revision:config.revision,p_page:page,p_strategy:strategy,p_provider_page:providerPage,p_zip:dealZip.slice(0,5)});}
  });
  return {...result,strategy,canContinue:page<config.max_pages&&(result.canContinue||strategy==='recent_corporate'&&['no_candidates','buyers_saved'].includes(result.status))};

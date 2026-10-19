@@ -15,6 +15,11 @@ const previous={key:process.env.DEALMACHINE_API_KEY,ready:process.env.ICASH_LIVE
 try{
  for(const name of ['text-ai','market-expansion','seller-opener-experiments','seller-opener-delivery-order','sms-inbound-campaign','sms-contact-intake','owner-enrichment-claim'])await pg.exec(read('config/'+name+'.sql'));
  await pg.exec(read('supabase/migrations/20261016200100_seller_skip_owner_enrichment.sql'));
+ // These legacy reservations keep their original prices. The new settler must
+ // recognize the absent DealMachine snapshot and leave them for old reconciliation.
+ await pg.exec('alter table icash_operation_spend add column dealmachine_cost_multiplier numeric,add column data_unit_cost_micros bigint,add column data_cost_basis text;');
+ const billing=read('config/dealmachine-three-times-usage.sql');
+ await pg.exec(billing.slice(billing.indexOf('create function public.icash_settle_dealmachine_usage')).replace(/commit;\s*$/,''));
  console.log('SIMULATION owner-contact claim schema loaded');
  const user=randomUUID(),account=randomUUID(),otherUser=randomUUID(),other=randomUUID();
  await q('insert into auth.users(id,email) values($1,$2),($3,$4)',[user,'owners@example.invalid',otherUser,'other@example.invalid']);

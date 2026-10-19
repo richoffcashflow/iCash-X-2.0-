@@ -35,7 +35,7 @@ export async function discoverForAccount(accountId:string){
   },
   // Scope validation, reservation and one-use claim share one locked DB transaction.
   reserveAndClaim:()=>db<boolean>('rpc/icash_reserve_and_claim_property_discovery','POST',{p_account:accountId,p_zip:c.zip,p_revision:c.revision,p_page:c.next_page,p_per_page:c.per_page,p_rate:c.rate_id,p_unit:c.property_credit_micros,p_permission_until:c.data_rights_until,p_setup_revision:setup?.revision??null,p_market_mode:setup?.profile?.marketMode??null,p_market:setup?.profile?.market??null}),
-  persist:async result=>{await db('rpc/icash_save_discovery','POST',{p_account:accountId,p_operation:operationKey,p_revision:c.revision,p_page:c.next_page,p_result:result});},
+  persist:async result=>{await db('rpc/icash_save_discovery','POST',{p_account:accountId,p_operation:operationKey,p_revision:c.revision,p_page:c.next_page,p_result:result});await db('rpc/icash_settle_dealmachine_usage','POST',{p_operation:operationKey});},
  });
  if(result.status==='empty')await db('rpc/icash_mark_inventory_empty','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});
  return result;

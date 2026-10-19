@@ -17,6 +17,7 @@ function reset(){
 }
 const db=async(path,method,body)=>{
  state.dbCalls.push({path,method,body});
+ if(path==='rpc/icash_settle_dealmachine_usage'){assert.equal(body.p_operation,operationKey);assert.equal(state.saved.length,1,'Usage settlement follows the persisted receipt');return true;}
  if(path.startsWith(`icash_discovery_configs?account_id=eq.${accountId}&select=`))return [structuredClone(state.config)];
  if(path.startsWith(`icash_screening_jobs?id=eq.${screeningId}&account_id=eq.${accountId}&select=`))return state.job?[structuredClone(state.job)]:[];
  if(path===`icash_property_controls?account_id=eq.${accountId}&property_id=eq.prop_123&select=manual`)return [{manual:state.manual}];

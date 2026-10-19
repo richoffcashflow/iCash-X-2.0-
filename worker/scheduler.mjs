@@ -23,7 +23,7 @@ export function createScheduler({screening,automation,now=Date.now,onFailure=()=
      try{
       const worked=await work();lane.failures=0;
       lane.idle=worked?0:Math.min(lane.idle+1,3);
-      delay=worked?(name==='screening'?250:15000):Math.min(60000,15000*2**(lane.idle-1));
+      delay=worked?(name==='screening'?250:1000):Math.min(name==='automation'?15000:60000,(name==='automation'?5000:15000)*2**(lane.idle-1));
      }catch{
       lane.failures=Math.min(lane.failures+1,6);
       delay=name==='screening'?Math.min(60000,1000*2**lane.failures):Math.min(300000,15000*2**lane.failures);

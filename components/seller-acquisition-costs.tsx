@@ -27,7 +27,7 @@ export function SellerAcquisitionCosts(){
   <div className="lead-costs-heading"><div><h2>Lead costs</h2><p>Track acquisition costs, customer charges, and the balance for each lead.</p></div><button type="button" disabled={busy} onClick={()=>{setError('');void load().catch(e=>setError(e.message));}}>Refresh costs</button></div>
   {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
   {!data?<p>Loading lead costs…</p>:<>
-   <div className="lead-cost-settings"><h3>Pricing for new usage</h3><p>Standard pays 2× recorded cost for new usage. VIP gets 20% off, making it 1.6×. Lead pricing includes advertising and processing and is fixed at the first assignment. Existing prices stay unchanged.</p>
+   <div className="lead-cost-settings"><h3>Pricing for new usage</h3><p>DealMachine research usage is 3× its saved provider cost. Other usage stays at 2×. VIP keeps its 20% discount. Lead pricing includes advertising and processing and is fixed at the first assignment. Existing prices stay unchanged.</p>
    </div>
    <SellerMetaCostConnection sources={data.automation} onSaved={load} onDenied={()=>{setData(null);setError('Platform owner access required. Sign in again.');}}/>
    <div className="lead-cost-settings"><h3>Backup estimate for new leads</h3><p>Use this when an automatic campaign average is unavailable. New leads include ad cost and processing; paid sources without either a recorded cost or an estimate wait for a cost entry.</p>

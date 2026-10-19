@@ -47,7 +47,7 @@ export async function verifySellerCosts(browser,base,options,name,fixtureCookies
   assert.equal(writes[1].requestId,requestId,'Retry reuses the original idempotency key');
   await card.locator('dd').filter({hasText:'-$11.12'}).waitFor();assert.match(await card.innerText(),/\$11.24/);assert.match(await card.innerText(),/\$0.12/);assert.match(await card.innerText(),/AM|PM/);
   await panel.getByRole('button',{name:'Save estimate for new leads'}).click();await panel.getByRole('status').getByText(/Estimate saved/).waitFor();assert.equal(writes.at(-1).source,'meta');
-  await panel.getByText('Standard pays 2× recorded cost for new usage.',{exact:false}).waitFor();assert.equal(await panel.getByRole('button',{name:'Save price threshold'}).count(),0);
+  await panel.getByText('DealMachine research usage is 3× its saved provider cost. Other usage stays at 2×.',{exact:false}).waitFor();assert.equal(await panel.getByRole('button',{name:'Save price threshold'}).count(),0);
   await panel.getByRole('button',{name:'Check Meta connection'}).click();
   await panel.getByLabel('Ad account',{exact:true}).selectOption('act_123456789');await panel.getByLabel('Meta campaign',{exact:true}).selectOption('987654321');
   await panel.getByRole('button',{name:'Start automatic cost tracking'}).click();await panel.getByText('image_ads · First import pending').waitFor();assert.equal(writes.at(-1).metaCampaignId,'987654321');

@@ -38,10 +38,12 @@ const concurrent=createScheduler({screening:()=>pending,automation:async()=>fals
 await assert.rejects(concurrent.run(),/WORKER_LOOP_ALREADY_RUNNING/);release(false);await running;
 console.log('Worker recovery: independent lanes, backoff, health, fresh tickets and overlap guard passed');
 
-// Empty queues back off to one minute; finding work immediately restores normal cadence.
+// Screening can idle for a minute; automation checks funded work within 15 seconds.
 let idleTime=0,hasWork=false;const idleCalls=[];
 const idle=createScheduler({now:()=>idleTime,screening:async()=>{idleCalls.push(idleTime);return hasWork;},automation:async()=>false});
-assert.equal(await idle.run(),15000);idleTime=15000;assert.equal(await idle.run(),30000);
-idleTime=45000;assert.equal(await idle.run(),60000);idleTime=105000;assert.equal(await idle.run(),60000);
+assert.equal(await idle.run(),5000);idleTime=15000;assert.equal(await idle.run(),10000);
+idleTime=45000;assert.equal(await idle.run(),15000);idleTime=105000;assert.equal(await idle.run(),15000);
 hasWork=true;idleTime=165000;assert.equal(await idle.run(),250);
 assert.deepEqual(idleCalls,[0,15000,45000,105000,165000]);
+
+let activeTime=0;const fast=createScheduler({now:()=>activeTime,screening:async()=>false,automation:async()=>true});assert.equal(await fast.run(),1000);activeTime=1000;assert.equal(await fast.run(),1000);

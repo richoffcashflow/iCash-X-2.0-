@@ -1,7 +1,7 @@
 /** Presentation-only grouping over authenticated records. Never predicts deal progress. */
 import {journeyNextAction} from '../lib/deal-journey-progress.ts';
 export type WorkspaceFilter = 'all' | 'attention' | 'active' | 'waiting' | 'history';
-export type WorkspaceProperty = {id:string;completed_at:string;result:{property:{address:string;propertyId:string;legalDescription?:string|null;images?:unknown;bedrooms?:number|null;bathrooms?:number|null;livingAreaSqft?:number|null;yearBuilt?:number|null};financialCheck:{status:string;reason:string};preliminarySellerCeilingCents:number|null}};
+export type WorkspaceProperty = {engagement?:{responded:boolean;interested:boolean;optedOut:boolean};id:string;completed_at:string;result:{property:{address:string;propertyId:string;legalDescription?:string|null;images?:unknown;bedrooms?:number|null;bathrooms?:number|null;livingAreaSqft?:number|null;yearBuilt?:number|null};financialCheck:{status:string;reason:string};preliminarySellerCeilingCents:number|null}};
 export type WorkspaceDeal = {id:string;screening_id:string;stage:string};
 export type WorkspaceEvidence = {
  proceedsReceivedDealIds?:string[];
