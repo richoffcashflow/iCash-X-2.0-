@@ -123,5 +123,39 @@ try{
  await replyToSupport({kind:'access',messages:[user('code does nothing')]},fetcher);assert.equal(calls,1,'Access recovery has no paid provider dependency');
  for(const bad of [{choices:[{finish_reason:'length',message:{content:'{}'}}]},{choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'I have refunded your payment.',answered:false})}}]},{choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'Open https://attacker.invalid',answered:false})}}]}])assert.equal((await replyToSupport(context,async()=>Response.json(bad))).ai,false);
  assert.equal((await replyToSupport(context,async()=>{throw Error('timeout');})).ai,false);
+
+ // Card entries are not charges. Unrelated service checks must not become a billing diagnosis.
+ const card={kind:'account',messages:[user('Adding a new card creates a duplicate line and returns me to the original payment method.')],evidence:[check('subscription','ok','renewal_active'),check('readiness','attention','readiness_blocked'),check('voice','attention','voice_review')]};
+ const cardFallback=supportConversationFallback(card);
+ assert.match(cardFallback.reply,/new card saved/);assert.equal((cardFallback.reply.match(/\?/g)??[]).length,1);
+ assert.doesNotMatch(cardFallback.reply,/duplicate.charge|two charges|calling|contract|readiness|configuration/i);
+ const cardReply=await replyToSupport(card,async(url,init)=>{
+  const body=JSON.parse(init.body),input=JSON.parse(body.messages[1].content);
+  assert.deepEqual(input.verifiedChecks.map(check=>check.key),['subscription']);
+  assert.match(body.messages[0].content,/everyday words/);assert.match(body.messages[0].content,/Do not rephrase a question already asked/);
+  return modelReply('The page still shows your old card. What does the button beside the new card say?',false)();
+ });
+ assert.equal(cardReply.ai,true);
+ const followup={...card,messages:[...card.messages,assistant(cardReply.reply),user('It says Make default. I already tried that and it switches back.') ]};
+ const repeated=await replyToSupport(followup,modelReply('What does the button beside the new card say?',false));
+ assert.equal(repeated.ai,false);assert.equal(repeated.status,'open');assert.doesNotMatch(repeated.reply,/\?/);
+ assert.doesNotMatch(repeated.reply,/Make default|exact message|error text|calling|readiness|configuration/i);
+ for(const badReply of [
+  'Your workspace readiness is blocked. Calling and contract configuration might indirectly affect billing updates. What error text appears?',
+  'What error appears? Which card are you adding?',
+  Array(101).fill('detail').join(' '),
+ ])assert.equal((await replyToSupport(card,modelReply(badReply,false))).ai,false);
+
+ const described={kind:'account',messages:[user('The bot stopped'),{role:'operator',content:'What is the exact message on your screen?'},user('No error message appears. It just returns to the same page.')],evidence:[]};
+ const repeatedError=await replyToSupport(described,modelReply('What error text is shown?',false));
+ assert.equal(repeatedError.ai,false);assert.doesNotMatch(repeatedError.reply,/what (?:exact )?(?:error|message)|which screen/i);
+ assert.notEqual(repeatedError.status,'resolved');
+ const older=[user('The bot stopped'),assistant('What message is shown?'),...Array.from({length:17},()=>user('Still checking')),user('No message appears')];
+ await replyToSupport({kind:'account',messages:older},async(url,init)=>{
+  const input=JSON.parse(JSON.parse(init.body).messages[1].content);
+  assert.equal(input.conversation.length,20);assert(input.alreadyAsked.includes('What message is shown?'));
+  return modelReply('I can’t confirm why the page closes from these checks.',false)();
+ });
+ assert.match(supportConversationFallback({kind:'account',messages:[user('You charged me twice'),assistant('What dates and amounts appear for the two charges?'),user('Cancel my subscription')]}).reply,/Chat messages alone do not cancel/,'A prior charge issue must not override a new cancellation request');
 }finally{process.env=env;}
 console.log('PASS support conversations: multi-turn missing details, resolution, continued automatic troubleshooting, cancellation boundaries, redaction, bounded structured AI, provider failure and replay fallback; no real provider requests.');

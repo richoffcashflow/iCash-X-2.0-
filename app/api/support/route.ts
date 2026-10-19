@@ -51,7 +51,7 @@ export async function POST(req:Request){
   await recoverSupportAccount(accountId,userId).catch(()=>undefined);
   const [evidence,history,threads]=await Promise.all([
    collectSupportDiagnostics(accountId),
-   db<SupportTurn[]>(`icash_support_messages?account_id=eq.${accountId}&thread_id=eq.${started.threadId}&select=role,content&order=created_at.desc,id.desc&limit=16`),
+   db<SupportTurn[]>(`icash_support_messages?account_id=eq.${accountId}&thread_id=eq.${started.threadId}&select=role,content&order=created_at.desc,id.desc&limit=40`),
    db<{status:string}[]>(`icash_support_threads?account_id=eq.${accountId}&id=eq.${started.threadId}&select=status`)
   ]);
   const messages=history.reverse();
