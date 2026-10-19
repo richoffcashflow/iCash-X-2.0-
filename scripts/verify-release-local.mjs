@@ -3,7 +3,8 @@
 import {spawnSync} from 'node:child_process';
 const suites = [
  'first-contact-hours', 'first-contact-voice-hours', 'voice-daytime-policy',
- 'funded-prospecting-budget', 'prospecting-admission', 'automatic-prospect-drafts', 'automatic-prospect-sms-route-conflicts', 'automatic-seller-email', 'opportunity-engine-database', 'workspace-activity-route',
+ 'funded-lead-handoff', 'workspace-funded-refresh', 'workspace-ready-opportunities',
+ 'funded-prospecting-budget', 'first-day-prospecting-pacing', 'prospecting-admission', 'automatic-prospect-drafts', 'automatic-prospect-sms-route-conflicts', 'automatic-seller-email', 'opportunity-engine-database', 'workspace-activity-route',
  'private-vip', 'private-vip-database', 'private-vip-ui',
  'meta-instant-leads', 'meta-instant-leads-database', 'meta-lead-connection', 'meta-lead-webhook',
  'seller-acquisition-costs', 'seller-acquisition-costs-database', 'seller-meta-costs', 'seller-meta-access', 'two-times-usage', 'course-progress', 'support-customer-notifications', 'support-conversation', 'access-help', 'support-owner-notifications', 'support-routes', 'support-email-intake',

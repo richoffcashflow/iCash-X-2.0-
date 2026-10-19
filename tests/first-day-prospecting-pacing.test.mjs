@@ -1,0 +1,116 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {PGlite} from '@electric-sql/pglite';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const db=new PGlite();
+const q=(sql,args=[])=>db.query(sql,args);
+const val=async(sql,args=[])=>Object.values((await q(sql,args)).rows[0]??{})[0];
+const uuid=n=>`10000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+const account=uuid(1),other=uuid(2),rate=uuid(3);
+try{
+await db.exec('create role anon;create role authenticated;create role service_role;');
+await db.exec(read('tests/fixtures/opportunity-schema.sql'));
+// Unchanged external gates are explicit fixture inputs; billing/selection/ledger
+// functions under test below are their actual production implementations.
+await db.exec(`
+create function icash_membership_work_allowed(uuid) returns boolean language sql as $$select true$$;
+create function icash_vip_active(uuid) returns boolean language sql as $$select false$$;
+create function icash_voice_credit_bound(uuid,text,uuid) returns jsonb language sql as $$select null::jsonb$$;
+create function icash_reception_credit_bound(uuid,text,uuid) returns jsonb language sql as $$select null::jsonb$$;
+create function icash_general_reception_pause_exempt(uuid,text,bigint) returns boolean language sql as $$select false$$;
+create function icash_customer_text_operation(uuid,text) returns boolean language sql as $$select false$$;
+create function icash_limited_seller_voice(uuid,text) returns boolean language sql as $$select false$$;
+create function icash_cancellation_voice_current(uuid,text) returns boolean language sql as $$select false$$;
+create function icash_meta_voice_context(uuid,uuid) returns jsonb language sql as $$select null::jsonb$$;
+create function icash_seller_lead_rate_multiplier(uuid,text,uuid) returns numeric language sql as $$select 2::numeric$$;
+create function icash_research_state_allowed(text) returns boolean language sql as $$select $1='TX'$$;
+create function icash_research_zip_known(text) returns boolean language sql as $$select $1 in ('75217','75216')$$;
+create function icash_credit_acquisition_allowed(uuid) returns boolean language sql as $$select true$$;
+create function icash_seller_acquisition_quote(uuid) returns jsonb language sql as $$select null::jsonb$$;
+create function icash_seller_assignment_due(integer,timestamptz,timestamptz) returns timestamptz language sql as $$select now()$$;
+`);
+await db.exec(read('tests/fixtures/opportunity-dependencies.sql'));
+await db.exec(read('supabase/migrations/20261019150042_dealmachine_usage_and_opportunity_engine.sql'));
+await db.exec(read('config/opportunity-score-bounds.sql'));
+await db.exec(read('tests/fixtures/prospecting-funding.sql'));
+await db.exec(`create function icash_next_automation() returns jsonb language sql as $$select null::jsonb$$;
+create table icash_voice_contact_targets(id uuid primary key,account_id uuid,screening_id uuid,party text);`);
+await db.exec(read('tests/fixtures/prospecting-flexible-voice.sql'));
+await q("insert into icash_accounts(id,owner_user_id,assistant_name,bot_paused) values($1,$1,'Fixture',false),($2,$2,'Other',true)",[account,other]);
+await q('insert into icash_wallets(account_id,balance_cents) values($1,5000),($2,10000)',[account,other]);
+await db.exec("insert into icash_operating_budget(id,enabled,require_company_reserve,standard_cost_multiplier,elevenlabs_cost_multiplier) values(1,true,false,2,2);insert into icash_data_cost_settings(provider,credit_micros,cost_basis,source_ref) values('dealmachine',10000,'estimated','SYNTHETIC allocation');insert into icash_acquisition_policy(id,mode) values(1,'hybrid');");
+const categories=['dealmachine','elevenlabs','twilio','messaging','email','llm','vercel','railway','supabase','github','payments','title_and_signing','support_and_overhead','acquisition','refund_and_dispute_reserve','other'];
+const costs=Object.fromEntries(categories.map(k=>[k,k==='dealmachine'?100000:0]));
+await q("insert into icash_operation_rates(id,operation,version,charge_cents,costs_micros,buffer_bps,evidence_ref,verified_at,expires_at,enabled) values($1,'property_search','fixture-search',500,$2,0,'SYNTHETIC',now()-interval '1 day',now()+interval '1 day',true)",[rate,costs]);
+await q("insert into icash_discovery_configs(account_id,enabled,zip,rate_id,property_credit_micros,data_rights_until,seller_cost_reserve_cents,max_open_prospects,next_run_at) values($1,true,'75217',$3,10000,now()+interval '1 day',0,2,now()+interval '1 day'),($2,true,'75217',$3,10000,now()+interval '1 day',0,2,now()+interval '1 day')",[account,other,rate]);
+await db.exec(read('config/funded-prospecting-budget.sql'));
+
+await db.exec(read('config/prospecting-delivery-pacing.sql'));
+const historicalBudget=await val('select to_jsonb(b) from icash_prospecting_budgets b where account_id=$1',[account]);
+const fundingHook=await val("select pg_get_functiondef('icash_post_credit(uuid,text,text,bigint,text)'::regprocedure)");
+const spendGuard=await val("select pg_get_functiondef('icash_guard_prospecting_spend()'::regprocedure)");
+const sql=read('config/first-day-prospecting-pacing.sql');
+await db.exec(sql);
+assert.deepEqual(await val('select to_jsonb(b) from icash_prospecting_budgets b where account_id=$1',[account]),historicalBudget,'rollout does not reset funding time, cap or history');
+assert.equal(await val("select pg_get_functiondef('icash_post_credit(uuid,text,text,bigint,text)'::regprocedure)"),fundingHook,'verified funding and idempotency untouched');
+assert.equal(await val("select pg_get_functiondef('icash_guard_prospecting_spend()'::regprocedure)"),spendGuard,'atomic final spend admission untouched');
+for(const [balance,starter] of [[1000,500],[10000,500],[50000,2500],[100000,5000]]){
+ assert.equal(Number(await val('select icash_prospecting_released($1,now())',[balance])),starter);
+ assert.equal(Number(await val("select icash_prospecting_released($1,now()+interval '1 day')",[balance])),starter,'future clock retains bounded starter');
+ assert.equal(Number(await val("select icash_prospecting_released($1,now()-interval '6 hours')",[balance])),Math.floor(starter+(Math.floor(balance/2)-starter)/2));
+ assert.equal(Number(await val("select icash_prospecting_released($1,now()-interval '12 hours')",[balance])),Math.floor(balance/2),'full 50% releases within first day');
+ assert.equal(Number(await val("select icash_prospecting_released($1,now()-interval '3 days')",[balance])),Math.floor(balance/2),'time cannot exceed fixed cap');
+}
+assert.equal(Number(await val('select icash_prospecting_released(101,now())')),50,'small/odd wallet cap is exact integer half');
+const available=async(a=account)=>Number(await val('select icash_prospecting_available($1)',[a]));
+const reserve=(key,r=rate,a=account)=>val("select icash_reserve_before_fractional($1,$2,$3,now()+interval '1 day',now(),true)",[a,key,r]);
+assert.equal(await available(),500);
+await Promise.all([reserve('discovery:first-day:one'),reserve('discovery:first-day:one')]);
+assert.equal(await available(),0,'idempotent first batch consumes one authorization');
+await assert.rejects(reserve('discovery:first-day:burst'),/Prospecting budget reached/);
+assert.equal(Number(await val('select balance_cents from icash_wallets where account_id=$1',[account])),5000,'quotes never debit wallet');
+assert.equal(Number(await val("select count(*) from icash_credit_reservations where operation_key='discovery:first-day:burst'")),0,'rejected burst leaves no authorization');
+await q("update icash_operation_spend set state='dispatched',dispatched_at=now() where operation_key='discovery:first-day:one'");
+await q("insert into icash_discovery_results values('discovery:first-day:one',$1,'{\"creditsUsed\":1}',now())",[account]);
+await q("insert into icash_cost_observations(provider,event_key,source_ref,amount,units) values('dealmachine','discovery:first-day:one','dealmachine:search:discovery:first-day:one',1,'provider_credits')");
+assert.equal(await val("select icash_settle_dealmachine_usage('discovery:first-day:one')"),true);
+assert.equal(await available(),497,'only actual completed usage remains in batch');
+const cheap=uuid(90);
+await q("insert into icash_operation_rates select $1,'property_search','fixture-cheap',100,costs_micros,buffer_bps,evidence_ref,verified_at,expires_at,enabled,null,null from icash_operation_rates where id=$2",[cheap,rate]);
+await reserve('discovery:first-day:unknown',cheap);
+await q("update icash_operation_spend set state='dispatched',dispatched_at=now() where operation_key='discovery:first-day:unknown'");
+await q("select icash_post_credit($1,'funding:first-day','purchase',2000,'SYNTHETIC payment')",[account]);
+assert.equal(await available(),397,'top-up carries recent actual spending and unknown provider hold');
+const newBudget=await val('select to_jsonb(b) from icash_prospecting_budgets b where account_id=$1 order by id desc limit 1',[account]);
+assert.equal(newBudget.baseline_cents,6997);
+await q("select icash_post_credit($1,'funding:first-day','purchase',2000,'SYNTHETIC payment')",[account]);
+assert.deepEqual(await val('select to_jsonb(b) from icash_prospecting_budgets b where account_id=$1 order by id desc limit 1',[account]),newBudget,'duplicate funding cannot reset clock');
+await q("update icash_prospecting_budgets set created_at=now()-interval '13 hours' where id=$1",[newBudget.id]);
+assert.equal(await available(),397,'idle accumulated allowance remains batch-bounded');
+await q("update icash_operation_spend set settled_at=now()-interval '61 minutes' where operation_key='discovery:first-day:one'");
+assert.equal(await available(),400,'one-hour actual charges roll off, unknown holds stay');
+await q("update icash_operation_spend set dispatched_at=now()-interval '25 hours' where operation_key='discovery:first-day:unknown'");
+assert.equal(await available(),400,'uncertain provider hold never ages out');
+await q("update icash_operation_spend set state='cancelled' where operation_key='discovery:first-day:unknown'");
+assert.equal(await available(),500,'confirmed unattempted cancellation releases batch');
+// Matured budgets remain limited by fixed half-wallet floor and rolling day.
+await q("update icash_operation_spend set charged_cents=3400,settled_at=now()-interval '2 hours' where operation_key='discovery:first-day:one'");
+assert.equal(await available(),98,'previous funding actual spend remains in 24-hour ceiling');
+await q("update icash_operation_spend set settled_at=now()-interval '25 hours' where operation_key='discovery:first-day:one'");
+assert.equal(await available(),500,'old settled spend leaves rolling window without resetting cap');
+// Exhausting a current funding cap cannot be fixed by time, refund or settlement.
+await reserve('discovery:first-day:cap',rate);
+await q("update icash_operation_spend set state='settled',charged_cents=3498,settled_at=now()-interval '25 hours' where operation_key='discovery:first-day:cap'");
+assert.equal(await available(),0);
+await q("select icash_post_credit($1,'refund:first-day','refund',-100,'SYNTHETIC refund')",[account]);
+assert.equal(await available(),0,'refund never grants a fresh allowance');
+assert.equal(Number(await val('select count(*) from icash_prospecting_budgets where account_id=$1',[account])),2);
+await q("select icash_post_credit($1,'funding:first-day-paused','purchase',1000,'SYNTHETIC paused payment')",[other]);
+assert.equal(await val('select bot_paused from icash_accounts where id=$1',[other]),true);
+assert.equal(await val('select next_run_at>now() from icash_discovery_configs where account_id=$1',[other]),true,'funding wake preserves Pause');
+const progress=await val('select icash_prospecting_progress($1)',[other]);
+assert.equal(progress.pacingHours,12);assert.equal(progress.batchHours,1);assert.equal(progress.hourlyLimitCents,550);assert.equal(progress.status,'paused');assert.equal(progress.pacingDays,undefined);
+for(const role of ['anon','authenticated'])for(const fn of ['icash_prospecting_progress(uuid)','icash_prospecting_released(bigint,timestamptz)','icash_prospecting_available(uuid)'])assert.equal(await val("select has_function_privilege($1,$2,'execute')",[role,fn]),false);
+assert.equal(sql,read('supabase/migrations/20261019171315_first_day_prospecting_pacing.sql'));
+console.log('First-day prospecting: 12-hour release, hourly batches, fixed 50% and rolling 24-hour caps, idempotent funding, atomic admission, actual settlement, unknown holds, top-up carryover, Pause and private progress passed. Local fixtures only.');
+}catch(error){console.error(error.message);console.error(error.query??'');process.exitCode=1;}finally{await db.close();}
