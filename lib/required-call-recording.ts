@@ -22,17 +22,26 @@ export function readRecordingReview(raw:string|undefined,now=Date.now()):Recordi
 function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>){
  const matches=(value:unknown)=>sha(JSON.stringify(canonical(value)))===configHash;
  if(matches(snapshot))return true;
- const config=object(snapshot.conversation_config),agent=object(config.agent),alternateAgent={...agent};
- // ElevenLabs may materialize this exact empty default on an unchanged version.
- // Try only its absent/present counterpart, preserving both historical hashes
- // and every other field. Nonempty, malformed and extended values stay exact.
- if(!Object.hasOwn(agent,'subagent_config'))alternateAgent.subagent_config={agents:[],self_subagent:null};
- else{
-  const subagents=object(agent.subagent_config),keys=Object.keys(subagents);
-  if(keys.length!==2||!Object.hasOwn(subagents,'agents')||!Object.hasOwn(subagents,'self_subagent')||!Array.isArray(subagents.agents)||subagents.agents.length!==0||subagents.self_subagent!==null)return false;
-  delete alternateAgent.subagent_config;
+ const config=object(snapshot.conversation_config),agent=object(config.agent),alternateAgents:Record<string,unknown>[]=[];
+ // ElevenLabs may materialize or omit these exact empty defaults on the same
+ // version. Try only their absent/present combinations (at most 3 alternates).
+ // Historical hashes and every nonempty, malformed or unknown field stay exact.
+ const subagentConfig=object(agent.subagent_config),keys=Object.keys(subagentConfig);
+ if(!Object.hasOwn(agent,'subagent_config')||keys.length===2&&Object.hasOwn(subagentConfig,'agents')&&Object.hasOwn(subagentConfig,'self_subagent')&&Array.isArray(subagentConfig.agents)&&subagentConfig.agents.length===0&&subagentConfig.self_subagent===null){
+  const alternate={...agent};
+  if(Object.hasOwn(agent,'subagent_config'))delete alternate.subagent_config;
+  else alternate.subagent_config={agents:[],self_subagent:null};
+  alternateAgents.push(alternate);
  }
- return matches({...snapshot,conversation_config:{...config,agent:alternateAgent}});
+ if(!Object.hasOwn(agent,'subagents')||Array.isArray(agent.subagents)&&agent.subagents.length===0){
+  for(const candidate of [agent,...alternateAgents]){
+   const alternate={...candidate};
+   if(Object.hasOwn(agent,'subagents'))delete alternate.subagents;
+   else alternate.subagents=[];
+   alternateAgents.push(alternate);
+  }
+ }
+ return alternateAgents.some(alternate=>matches({...snapshot,conversation_config:{...config,agent:alternate}}));
 }
 export function recordingAgentMatches(review:RecordingReview,raw:unknown){
  const a=object(raw),config=object(a.conversation_config),platform=object(a.platform_settings),prompt=object(object(config.agent).prompt),overrides=object(object(platform.overrides).conversation_config_override);
