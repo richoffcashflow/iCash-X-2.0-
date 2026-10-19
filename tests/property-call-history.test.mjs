@@ -68,3 +68,27 @@ test('independent receipt and media endpoints keep authenticated account binding
  assert.equal((await audioRoute.GET(mediaRequest)).status,206);assert.deepEqual(events.at(-1).args,[account,id,'bytes=0-3']);assert.equal(events.at(-1).signal,mediaRequest.signal);
  assert.equal((await audioRoute.GET(new Request(mediaRequest.url+'&accountId='+foreign))).status,404);
 });
+
+// Missing audio is not a failed lead. Only a bound carrier receipt can explain it.
+test('unanswered calls stay distinct from failures and mismatched provider receipts',async()=>{
+ const callSid='CA'+'c'.repeat(32);
+ const row=fixture({state:'failed',call_sid:callSid,recording_sid:null,conversation_id:null,duration_seconds:null,audio_expires_at:null});
+ let terminal={recording_id:id,account_id:account,call_sid:callSid,outcome:'no-answer'};
+ const db=async path=>{
+  if(path.startsWith('icash_screening_jobs?'))return [{id:screen}];
+  if(path.startsWith('icash_call_recordings?'))return [row];
+  if(path.startsWith('icash_live_conversations?'))return [];
+  const q=new URLSearchParams(path.split('?')[1]);
+  assert(path.startsWith('icash_recorded_gate_terminal_receipts?'));assert.equal(q.get('account_id'),'eq.'+account);assert.equal(q.get('recording_id'),'in.('+id+')');
+  return terminal?[terminal]:[];
+ };
+ let result=await propertyCallHistory(db,account,screen,0,now);
+ assert.equal(result.recordings[0].callOutcome,'no-answer');assert.equal(result.recordings[0].status,'failed','the original recording status remains intact');
+ assert(!JSON.stringify(result).includes(callSid),'provider identifiers remain private');
+ terminal.outcome='busy';assert.equal((await propertyCallHistory(db,account,screen,0,now)).recordings[0].callOutcome,'busy');
+ terminal.outcome='failed';assert.equal((await propertyCallHistory(db,account,screen,0,now)).recordings[0].callOutcome,undefined);
+ for(const change of [{account_id:foreign},{recording_id:foreign},{call_sid:'CA'+'d'.repeat(32)}]){
+  terminal={recording_id:id,account_id:account,call_sid:callSid,outcome:'no-answer',...change};await assert.rejects(propertyCallHistory(db,account,screen,0,now),/OWNED_CALL_OUTCOME_REQUIRED/);
+ }
+ terminal=null;assert.equal((await propertyCallHistory(db,account,screen,0,now)).recordings[0].callOutcome,undefined);
+});

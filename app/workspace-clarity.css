@@ -214,3 +214,7 @@
 
 .personalized-workspace .live-property[data-expanded=true] .property-cash-preview{display:none}
 @media(max-width:640px){.personalized-workspace .property-library .workspace-filters button{display:flex;flex-direction:column;align-items:center;gap:3px;white-space:nowrap;overflow-wrap:normal;font-size:11px;padding:9px 4px}.personalized-workspace .property-library .workspace-filters button span{margin:0;font-size:11px}}
+
+/* A received seller lead is a milestone, independent of their response. */
+.personalized-workspace .property-lead-generated{display:inline-flex;align-items:center;gap:5px;width:fit-content;margin-bottom:8px;padding:4px 8px;background:#242424;color:#fff;border-radius:6px;font-size:10px;font-weight:650;line-height:1.4}
+.conversation-call-update{margin:12px 0;padding:14px 16px;border:1px solid #e6e6e6;background:#f7f7f7;border-radius:10px;color:#3b3b3b}.conversation-call-update strong{font-size:13px}.conversation-call-update p{margin:5px 0 0;font-size:12px;line-height:1.6;color:#666}

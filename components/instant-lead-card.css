@@ -16,7 +16,7 @@
 .instant-lead-card .instant-lead-next h5{margin:9px 0 6px;font-size:14px;font-weight:650;line-height:1.4}
 .instant-lead-card .instant-lead-next p{margin:0;color:#6a6a6a;font-size:12px;line-height:1.55}
 .instant-lead-card .instant-lead-next .instant-lead-address{color:#292929;margin:0 0 6px;overflow-wrap:anywhere}
-.instant-lead-card .instant-lead-progress{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;list-style:none;margin:0 24px;padding:0 0 22px}
+.instant-lead-card .instant-lead-progress{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;list-style:none;margin:0 24px;padding:0 0 22px}
 .instant-lead-progress li{display:flex;align-items:center;gap:7px;border-top:2px solid #e8e8e8;padding-top:11px;color:#858585;font-size:11px;line-height:1.4}
 .instant-lead-progress li>span{display:grid;place-items:center;flex:none;width:19px;height:19px;border:1px solid #ddd;border-radius:50%;font-size:10px}
 .instant-lead-progress li.is-complete{color:#444;border-color:#2d2d2d}
