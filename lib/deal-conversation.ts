@@ -1,5 +1,6 @@
 import {voiceResult,type VoiceConversation} from './voice-result.ts';
 import {isContactOptOut} from './contact-intent.ts';
+import {sellerCallDisposition} from './seller-response-policy.ts';
 import {conversationTrustInstructions} from './conversation-trust.ts';
 
 /** Stable variants are assigned before contact; never rotate an opener mid-conversation. */
@@ -29,7 +30,10 @@ export function dealNextStep(i:{humanRequested:boolean;optedOut:boolean;interest
 }
 /** Provider pull only, with an already persisted live conversation/agent binding. */
 export function liveConversationResult(c:VoiceConversation,expected:{conversationId:string;agentId:string;party:'seller'|'buyer'},now=Date.now()){
- const r=voiceResult(c,expected,now);if(!r)return null;
+ // Seller contact decisions come from complete source turns, never a model flag.
+ // Removing only that ungrounded flag also preserves an otherwise valid callback.
+ const source=expected.party==='seller'&&c.analysis?{...c,analysis:{...c.analysis,data_collection_results:{...c.analysis.data_collection_results,opted_out:{value:false}}}}:c;
+ const r=voiceResult(source,expected,now);if(!r)return null;
  const fields=c.analysis?.data_collection_results??{};
  const quote=(name:string)=>{
   const v=fields[name]?.value;
@@ -38,13 +42,15 @@ export function liveConversationResult(c:VoiceConversation,expected:{conversatio
  const humanQuote=quote('human_request_quote');
  // A conservative pause is preferable to ignoring an explicit request, even if extraction omitted a quote.
  const humanRequested=fields.human_requested?.value===true||r.transcript.some(t=>t.role==='user'&&/\b(speak|talk) (?:to|with) (?:a |an |the |your )?(?:human|person|manager|owner|supervisor|representative)\b|\breal person\b|\bhave (?:someone|a person) call me\b/i.test(t.message));
- const optedOut=fields.opted_out?.value===true||r.transcript.some(t=>t.role==='user'&&isContactOptOut(t.message));
- const interested=fields.interested?.value===true&&!!quote('interest_quote');
+ const responseDisposition=expected.party==='seller'?sellerCallDisposition(r.transcript):null;
+ const optedOut=expected.party==='seller'?responseDisposition==='opt_out':fields.opted_out?.value===true||r.transcript.some(t=>t.role==='user'&&isContactOptOut(t.message));
+ const followupHeld=expected.party==='seller'&&responseDisposition!==null;
+ const interested=!followupHeld&&fields.interested?.value===true&&!!quote('interest_quote');
  return {summary:r.summary,transcript:r.transcript,durationSeconds:r.durationSeconds,providerCostUsd:r.providerCostUsd,
-  humanRequested,humanQuote,optedOut,interested,interestQuote:quote('interest_quote'),party:expected.party,
-  callbackStatus:optedOut?'blocked_opt_out':humanRequested?'held_for_human':r.callbackStatus==='scheduled_test'?'pending_dispatch_review':r.callbackStatus,
-  callbackDueAt:optedOut?null:r.dueAt,callbackTimezone:optedOut?null:r.timezone,callbackQuote:r.callbackQuote,callbackEvidence:r.callbackEvidence,
-  nextAction:optedOut?'Do not contact again.':humanRequested?`Review the ${expected.party} conversation and contact them personally.`:interested?'Confirm condition, timing, price and all owners before negotiating.':'Review the conversation before the next contact.',
+  humanRequested,humanQuote,optedOut,interested,responseDisposition,interestQuote:quote('interest_quote'),party:expected.party,
+  callbackStatus:optedOut?'blocked_opt_out':followupHeld?'held_for_seller_response':humanRequested?'held_for_human':r.callbackStatus==='scheduled_test'?'pending_dispatch_review':r.callbackStatus,
+  callbackDueAt:optedOut||followupHeld?null:r.dueAt,callbackTimezone:optedOut||followupHeld?null:r.timezone,callbackQuote:r.callbackQuote,callbackEvidence:r.callbackEvidence,
+  nextAction:optedOut?'Do not contact again.':followupHeld?'Automatic follow-up stopped after the seller response; review the original conversation.':humanRequested?`Review the ${expected.party} conversation and contact them personally.`:interested?'Confirm condition, timing, price and all owners before negotiating.':'Review the conversation before the next contact.',
   // Provider/model analysis is not signature, escrow, title, or payoff evidence.
   underContract:false as const,
  };
