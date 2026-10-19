@@ -93,4 +93,5 @@ export async function testDirectRecordedInbound(f){
  await (await import('./reception-return-call-limit-fixture.mjs')).testReceptionReturnCallLimit(f);
  if(process.env.RECEPTION_SELLER_OFFER_ONLY==='1')await (await import('./seller-offer-inbound-fixture.mjs')).testSellerOfferInbound({...f,reserve});
  if(process.env.RECEPTION_AVAILABLE_CREDITS==='1')await (await import('./available-inbound-credits-fixture.mjs')).testAvailableInboundCredits({...f,reserve});
+ if(process.env.RECEPTION_CALLBACK_ONLY==='1')await (await import('./seller-callback-routing-fixture.mjs')).testSellerCallbackRouting(f);
 }

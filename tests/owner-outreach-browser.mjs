@@ -8,6 +8,10 @@ export async function verifyOwnerOutreach(browser,base,options,name,fixtureCooki
   await context.route('**/*',async route=>{
    const url=new URL(route.request().url());
    if(url.origin!==base){external++;return route.abort();}
+   if(url.pathname==='/api/admin/callback-context'){
+    const body=route.request().postDataJSON(),matches=body.phone==='+12125550199'?[{account:'Example customer',accountId:'11111111-1111-4111-8111-111111111111',address:'Callback Fixture Lane',screeningId:'22222222-2222-4222-8222-222222222222',businessNumber:body.businessNumber??'+14243948384',lastContactAt:'2026-10-19T19:30:00Z',available:true}]:[];
+    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({report:{phone:body.phone,businessNumber:body.businessNumber,status:matches.length?'matched':'unknown',matches}})});
+   }
    if(url.pathname==='/api/admin/outreach'){
     requests.push(url);
     return route.fulfill({status:denied?403:failure?503:200,contentType:'application/json',body:JSON.stringify(denied?{error:'Owner required'}:failure?{error:'Fixture outage'}:ownerOutreachFixture(url))});
@@ -27,6 +31,17 @@ export async function verifyOwnerOutreach(browser,base,options,name,fixtureCooki
   assert.match(await panel.innerText(),/2:30 PM/);
   assert.equal(await page.getByRole('heading',{name:/Inbound|Daily lead goal|Lead to close/}).count(),0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'No horizontal page overflow');
+  await panel.getByText('Seller calling back? Find their property',{exact:true}).click();
+  await panel.getByLabel('Seller’s phone',{exact:true}).fill('(212) 555-0199');
+  await panel.getByRole('button',{name:'Find property',exact:true}).click();
+  await panel.getByText('Callback Fixture Lane',{exact:true}).waitFor();
+  assert.match(await panel.innerText(),/Confirm this is the property/);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'Callback lookup fits mobile');
+  await panel.getByLabel('Seller’s phone',{exact:true}).fill('2125550100');
+  assert.equal(await panel.getByText('Callback Fixture Lane',{exact:true}).count(),0,'Editing caller clears previous account/property');
+  await panel.getByRole('button',{name:'Find property',exact:true}).click();
+  await panel.getByText('No recent outreach matches. Ask which property they are calling about.',{exact:true}).waitFor();
+  await panel.getByText('Seller calling back? Find their property',{exact:true}).click();
   await panel.getByRole('combobox',{name:'Show'}).selectOption('interested');
   await panel.getByText('No properties match this period and filter.',{exact:true}).waitFor();
   assert.match(await panel.innerText(),/4\s*1 seller responses/,'Filtering the list cannot change activity totals');

@@ -1,4 +1,5 @@
 import {buyerSpeakingPolicy,buyerSpeakingModelMatches,buyerSpeakingGuardrail,buyerSpeakingEntryInstructions} from './buyer-speaking-policy.ts';
+import {sellerCallbackProviderConfig} from './seller-callback-config.ts';
 import {buyerValidatedPolicy,buyerValidatedModelMatches,buyerValidatedGuardrail,buyerValidatedEntryInstructions,buyerOpeningGuardrail} from './buyer-validated-policy.ts';
 import {buyerAnswerPolicy,buyerAnswerModelMatches,buyerAnswerGuardrail,buyerAnswerEntryInstructions} from './buyer-answer-policy.ts';
 import {buyerConversationPolicy,buyerConversationModelMatches,buyerConversationGuardrail} from './buyer-conversation-policy.ts';
@@ -27,6 +28,7 @@ export type RecordedReceptionEnv=Record<string,string|undefined>;
 export const receptionStopToken=(row:Pick<RecordedReceptionRow,'operation_key'>,env:RecordedReceptionEnv)=>createHmac('sha256',env.TWILIO_AUTH_TOKEN!).update('icash-recorded-reception-stop-v1:'+row.operation_key).digest('hex');
 export const receptionCallerHash=(from:string,env:RecordedReceptionEnv)=>createHmac('sha256',env.TWILIO_AUTH_TOKEN!).update('reception-caller-v1\0'+from).digest('hex');
 export function validRecordedReceptionConfig(c:RecordedReceptionConfig|null,now=Date.now()):c is RecordedReceptionConfig{
+ if(c){const provider=sellerCallbackProviderConfig(c);if(!provider)return false;c=provider as RecordedReceptionConfig;}
  if(!c||c.disclosure_version!=='required-audio-30d-speech-2026-10-03'||JSON.stringify(canonical(c.pricing_policy))!==JSON.stringify(canonical(recordedReceptionPricing)))return false;
  if(!c||!uuid(c.id)||c.enabled!==true||c.account_id!==receptionTarget.accountId||c.owner_user_id!==receptionTarget.ownerUserId||c.called_number!==receptionTarget.calledNumber||c.agent_id!==receptionTarget.agentId||c.policy_version!==recordedReceptionPolicy||!sid(c.provider_account_sid,'AC')||!uuid(c.rate_id)||!/^tool_[A-Za-z0-9]+$/.test(c.stop_tool_id)||!/^agtbrch_[A-Za-z0-9]+$/.test(c.branch_id)||!/^agtvrsn_[A-Za-z0-9]+$/.test(c.reviewed_version_id)||!/^[a-f0-9]{64}$/.test(c.config_hash)||!Number.isSafeInteger(c.customer_charge_cap_cents)||c.customer_charge_cap_cents<1||c.funding_mode!=='customer_credits'||c.receipt_mode!=='provider_readback'||!(c.context_policy==='message_only'||propertyReceptionEnabled(c))||!Number.isFinite(Date.parse(c.approved_at))||Date.parse(c.approved_at)>now||!Number.isFinite(Date.parse(c.reviewed_until))||Date.parse(c.reviewed_until)<now+(c.max_duration_seconds+60)*1000)return false;
  return c.call_profile==='normal'&&c.max_duration_seconds===600||c.call_profile==='owner_quick_test'&&c.max_duration_seconds===60&&c.owner_quick_test_enabled===true&&typeof c.owner_quick_test_approval_reference==='string'&&c.owner_quick_test_approval_reference.trim().length>=10&&/^[a-f0-9]{64}$/.test(c.owner_caller_hash??'');
@@ -78,7 +80,9 @@ export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:un
  const responseModel=c.context_policy===buyerSpeakingPolicy?buyerSpeakingModelMatches(prompt):c.context_policy===buyerValidatedPolicy?buyerValidatedModelMatches(prompt):c.context_policy===buyerAnswerPolicy?buyerAnswerModelMatches(prompt):c.context_policy===buyerConversationPolicy?buyerConversationModelMatches(prompt):c.context_policy===buyerTurnPolicy?buyerTurnModelMatches(prompt):c.context_policy!==buyerResponsePolicy||buyerResponseModelMatches(prompt);
  const exactPrompt=prompt.prompt===expectedPrompt+(c.entry_policy==='direct_recorded_v1'?(c.context_policy===buyerSpeakingPolicy?buyerSpeakingEntryInstructions:c.context_policy===buyerValidatedPolicy?buyerValidatedEntryInstructions:c.context_policy===buyerAnswerPolicy?buyerAnswerEntryInstructions:directRecordedInstructions):recordedReceptionStopInstruction);
  prompt.tool_ids=[];prompt.prompt=expectedPrompt;
- const base=inspectReceptionAgent({...c,config_hash:''},a,branch,workspaceAbsent);
+ const providerConfig=sellerCallbackProviderConfig(c);
+ const base=inspectReceptionAgent({...providerConfig??c,config_hash:''},a,branch,workspaceAbsent);
+ if(!providerConfig)base.checks.target=false;
  const snapshot={main_branch_id:raw.main_branch_id,agent_id:raw.agent_id,branch_id:raw.branch_id,version_id:raw.version_id,conversation_config:raw.conversation_config,platform_settings:raw.platform_settings,workflow:raw.workflow??null,procedures:raw.procedures??null};
  const hash=sha(JSON.stringify(canonical(snapshot)));
  const guardrails=object(raw.platform_settings).guardrails;

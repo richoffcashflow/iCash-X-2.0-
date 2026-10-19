@@ -50,6 +50,7 @@ function fixture(options={}) {
     events.push({rpc:name,body:clone(body)});
     if (name==='icash_call_credit_available') return !options.emptyCredits;
     if (name==='icash_get_recorded_reception_config') return options.missingConfig?null:clone(cfg.c);
+    if (name==='icash_resolve_seller_callback_config') {if(options.callbackDenied)return null;if(options.callbackConfig&&body.p_caller)cfg.c=options.callbackConfig(clone(cfg.c));return clone(cfg.c);}
     if (name==='icash_get_recorded_reception_session') return row && body.p_id===row.id && (!body.p_account || body.p_account===row.account_id) ? snapshot() : null;
     if (name==='icash_reserve_flexible_reception'||name==='icash_reserve_direct_reception') {
       if (row || options.denied) return {allowed:false};
@@ -526,4 +527,29 @@ test('production reception server wires the bounded account voice resolver',asyn
  assert.equal(await server.selectVoice(cfg.c.account_id,cfg.c),'voice_custom_fixture');assert.deepEqual(calls,['voice','agent']);
  parent.abort();assert.equal(requestSignal.aborted,true);calls.length=0;
  assert.equal(await server.selectVoice(cfg.c.account_id,cfg.c),null);assert.deepEqual(calls,[]);
+});
+
+function callbackProfile(source){
+ const account='11111111-1111-4111-8111-111111111111',owner='22222222-2222-4222-8222-222222222222',id='33333333-3333-4333-8333-333333333333',policy='44444444-4444-4444-8444-444444444444';
+ return {...source,id,account_id:account,owner_user_id:owner,callback_template_id:source.id,cost_policy_id:policy,cost_policy_snapshot:{...source.cost_policy_snapshot,id:policy,account_id:account},callback_template:clone(source)};
+}
+function standingSource({c}){
+ c.callback_template_id=null;c.reviewed_until='9999-12-31T23:59:59Z';c.cost_policy_id='55555555-5555-4555-8555-555555555555';c.cost_policy_snapshot={id:c.cost_policy_id,account_id:c.account_id,rate_id:c.rate_id,approved_at:c.approved_at,reviewed_until:c.reviewed_until};
+}
+test('seller callback uses the verified template with the receipt-matched customer through recording setup',async()=>{
+ const f=fixture({direct:true,mutate:standingSource,callbackConfig:callbackProfile});
+ const result=await f.admit();assert.match(result.text,/\/connect\?/);
+ const connected=await f.service.connect(signed('connect?id='+id+'&nonce='+f.nonce,{CallStatus:'in-progress'}));assert.match(await connected.text(),/<Connect>/);
+ assert.equal(f.row.account_id,'11111111-1111-4111-8111-111111111111');assert.equal(f.row.config_id,'33333333-3333-4333-8333-333333333333');
+ assert.equal(f.events.filter(e=>e.rpc==='icash_resolve_seller_callback_config').length,2);
+ assert.deepEqual(providerWrites(f).map(e=>e.provider),['boundCall','start','register']);
+ const first=f.events.findIndex(e=>e.rpc==='icash_resolve_seller_callback_config');assert(first>f.events.findIndex(e=>e.provider==='agent'));
+ assert.equal(f.events.find(e=>e.rpc==='icash_reserve_direct_reception').body.p_config_id,f.row.config_id);
+});
+test('ambiguous/held callback and changed provider or billing approval never reserve or connect',async()=>{
+ const denied=fixture({direct:true,callbackDenied:true});assert.equal((await denied.admit()).text,rejectTwiml);assert.equal(providerWrites(denied).length,0);assert(!denied.events.some(e=>e.rpc==='icash_reserve_direct_reception'));
+ for(const change of [c=>c.config_hash='f'.repeat(64),c=>c.rate_id='66666666-6666-4666-8666-666666666666',c=>c.max_duration_seconds=900,c=>c.callback_template.enabled=false,c=>c.cost_policy_snapshot.reviewed_until='9999-12-30T00:00:00Z',c=>c.owner_user_id='invalid']){
+  const f=fixture({direct:true,mutate:standingSource,callbackConfig:source=>{const c=callbackProfile(source);change(c);return c;}});
+  assert.equal((await f.admit()).text,rejectTwiml);assert.equal(providerWrites(f).length,0);assert(!f.events.some(e=>e.rpc==='icash_reserve_direct_reception'));
+ }
 });
