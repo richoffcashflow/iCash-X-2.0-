@@ -19,11 +19,26 @@ export const recordingBaseUrl='https://www.geticashx.com/api/internal/voice/reco
 export function readRecordingReview(raw:string|undefined,now=Date.now()):RecordingReview|null{
  try{const r=JSON.parse(raw??'null') as RecordingReview;if(!r||r.offerPolicy!==undefined&&(!automaticOfferPolicy(r.offerPolicy)||!r.contractToolId)||r.enabled!==true||!/^agent_[A-Za-z0-9]+$/.test(r.agentId)||!/^agtbrch_[A-Za-z0-9]+$/.test(r.branchId)||!/^agtvrsn_[A-Za-z0-9]+$/.test(r.versionId)||!/^tool_[A-Za-z0-9]+$/.test(r.stopToolId)||!/^\+[1-9]\d{7,14}$/.test(r.fromPhone)||!sid(r.providerAccountSid,'AC')||!/^[a-f0-9]{64}$/.test(r.configHash)||!Array.isArray(r.toolIds)||r.toolIds.length!==(r.contractToolId?4:3)||new Set(r.toolIds).size!==r.toolIds.length||r.contractToolId!==undefined&&(!/^tool_[A-Za-z0-9]+$/.test(r.contractToolId)||r.contractToolId===r.stopToolId||!r.toolIds.includes(r.contractToolId))||!r.toolIds.includes(r.stopToolId)||!r.toolIds.every(x=>/^tool_[A-Za-z0-9]+$/.test(x))||r.approvedHoldCents!==recordingPolicy.minimumHoldCents||r.retentionDays!==30||r.maxTotalSeconds!==600||r.policyVersion!==recordingPolicy.version||!Number.isFinite(Date.parse(r.reviewedAt))||Date.parse(r.reviewedAt)>now||!Number.isFinite(Date.parse(r.reviewedUntil))||Date.parse(r.reviewedUntil)<=now)return null;return r;}catch{return null;}
 }
+function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>){
+ const matches=(value:unknown)=>sha(JSON.stringify(canonical(value)))===configHash;
+ if(matches(snapshot))return true;
+ const config=object(snapshot.conversation_config),agent=object(config.agent),alternateAgent={...agent};
+ // ElevenLabs may materialize this exact empty default on an unchanged version.
+ // Try only its absent/present counterpart, preserving both historical hashes
+ // and every other field. Nonempty, malformed and extended values stay exact.
+ if(!Object.hasOwn(agent,'subagent_config'))alternateAgent.subagent_config={agents:[],self_subagent:null};
+ else{
+  const subagents=object(agent.subagent_config),keys=Object.keys(subagents);
+  if(keys.length!==2||!Object.hasOwn(subagents,'agents')||!Object.hasOwn(subagents,'self_subagent')||!Array.isArray(subagents.agents)||subagents.agents.length!==0||subagents.self_subagent!==null)return false;
+  delete alternateAgent.subagent_config;
+ }
+ return matches({...snapshot,conversation_config:{...config,agent:alternateAgent}});
+}
 export function recordingAgentMatches(review:RecordingReview,raw:unknown){
  const a=object(raw),config=object(a.conversation_config),platform=object(a.platform_settings),prompt=object(object(config.agent).prompt),overrides=object(object(platform.overrides).conversation_config_override);
  const snapshot={conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null};
  if(review.offerPolicy!==undefined&&(!automaticOfferPolicy(review.offerPolicy)||!automaticOfferGuardrailMatches(platform.guardrails,review.offerPolicy)))return false;
- return a.agent_id===review.agentId&&a.branch_id===review.branchId&&typeof a.main_branch_id==='string'&&/^agtbrch_[A-Za-z0-9]+$/.test(a.main_branch_id)&&a.main_branch_id!==review.branchId&&a.version_id===review.versionId&&object(platform.privacy).record_voice===false&&object(platform.auth).enable_auth===true&&object(config.asr).user_input_audio_format==='ulaw_8000'&&object(config.tts).agent_output_audio_format==='ulaw_8000'&&object(config.conversation).max_duration_seconds===600&&object(platform.call_limits).bursting_enabled===false&&object(platform.queueing_config).enabled===false&&object(overrides.conversation).max_duration_seconds===true&&object(overrides.agent).first_message===true&&object(object(overrides.agent).prompt).prompt===true&&object(overrides.tts).voice_id===true&&Array.isArray(prompt.tool_ids)&&prompt.tool_ids.length===review.toolIds.length&&review.toolIds.every(id=>(prompt.tool_ids as unknown[]).includes(id))&&sha(JSON.stringify(canonical(snapshot)))===review.configHash;
+ return a.agent_id===review.agentId&&a.branch_id===review.branchId&&typeof a.main_branch_id==='string'&&/^agtbrch_[A-Za-z0-9]+$/.test(a.main_branch_id)&&a.main_branch_id!==review.branchId&&a.version_id===review.versionId&&object(platform.privacy).record_voice===false&&object(platform.auth).enable_auth===true&&object(config.asr).user_input_audio_format==='ulaw_8000'&&object(config.tts).agent_output_audio_format==='ulaw_8000'&&object(config.conversation).max_duration_seconds===600&&object(platform.call_limits).bursting_enabled===false&&object(platform.queueing_config).enabled===false&&object(overrides.conversation).max_duration_seconds===true&&object(overrides.agent).first_message===true&&object(object(overrides.agent).prompt).prompt===true&&object(overrides.tts).voice_id===true&&Array.isArray(prompt.tool_ids)&&prompt.tool_ids.length===review.toolIds.length&&review.toolIds.every(id=>(prompt.tool_ids as unknown[]).includes(id))&&recordingConfigHashMatches(review.configHash,snapshot);
 }
 export function recordingDisclosure(principal:string,assistantName:string,buyerKind?:NetworkBuyerKind){
  const valid=(s:string)=>typeof s==='string'&&s.trim().length>0&&s.length<=160&&!/[<>\x00-\x1f]/.test(s);
