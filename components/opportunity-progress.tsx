@@ -9,16 +9,16 @@ export function OpportunityProgress({botAvailable,paused,stale,onResponses,onAct
  const [progress,setProgress]=useState<OpportunityProgressData|null>(null),[delayed,setDelayed]=useState(false);
  const previous=useRef<OpportunityProgressData|null>(null),activity=useRef(onActivity);activity.current=onActivity;
  useEffect(()=>{
-  let mounted=true,inFlight=false;const controller=new AbortController();
+  let mounted=true,inFlight=false,refreshQueued=false;const controller=new AbortController();
   async function load(){
-   if(document.hidden||inFlight)return;inFlight=true;
+   if(document.hidden)return;if(inFlight){refreshQueued=true;return;}inFlight=true;
    try{
     const result=await webinarRequest<{progress:OpportunityProgressData|null}>('/api/work/progress',{cache:'no-store',signal:controller.signal});
     if(!mounted)return;
     const next=result.progress,prior=previous.current;
     if(next&&prior&&(next.responded!==prior.responded||next.eligible!==prior.eligible))activity.current();
     previous.current=next;setProgress(next);setDelayed(false);
-   }catch{if(mounted)setDelayed(true);}finally{inFlight=false;}
+   }catch{if(mounted)setDelayed(true);}finally{inFlight=false;if(mounted&&refreshQueued){refreshQueued=false;void load();}}
   }
   void load();const timer=setInterval(load,paused?15000:4000);
   document.addEventListener('visibilitychange',load);window.addEventListener('icash:credits-funded',load);
