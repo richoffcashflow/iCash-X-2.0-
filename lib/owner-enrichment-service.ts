@@ -24,16 +24,20 @@ export async function enrichForAccount(accountId:string,screeningId:string){
  const key=process.env.DEALMACHINE_API_KEY;if(!key||!/^dm_sk_live_[A-Za-z0-9_-]+$/.test(key))return {status:'provider_not_configured'};
  const operationKey=`owners:${accountId}:${screeningId}`;
  const frozenSnapshot=JSON.stringify(job.snapshot);
+ let stage='validation',providerStatus:number|null=null;
  const request=async(url:string,init:RequestInit,error:string)=>{
+  stage=init.method==='GET'?'free_preview':'paid_lookup';providerStatus=null;
   if(!await db<boolean>('rpc/icash_take_dealmachine_request','POST',{}))throw new Error('PROVIDER_RATE_LIMIT');
   try{
    const r=await fetch(url,{...init,headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
+   providerStatus=r.status;
    if(!r.ok)throw new Error();return await r.json();
   }catch{throw new Error(error);}
  };
- return enrichOwners({snapshot:job.snapshot,creditCap:c.contact_credit_cap,unitCostMicros:c.property_credit_micros,quotedDataCostMicros:rate.costs_micros?.dealmachine},{
+ try{return await enrichOwners({snapshot:job.snapshot,creditCap:c.contact_credit_cap,unitCostMicros:c.property_credit_micros,quotedDataCostMicros:rate.costs_micros?.dealmachine},{
   previewOwners:id=>request(`https://api.v2.dealmachine.com/v1/properties/${id}?enrich=false&contact_audience=owners`,{method:'GET'},'OWNER_PREVIEW_FAILED_NO_RETRY'),
   reserveAndClaim:async()=>{
+   stage='reservation';providerStatus=null;
    // Recheck server-owned scope after the free network request, before committing funds.
    const [current]=await db<{snapshot:unknown;state:string}[]>(jobPath);
    const [manual]=await db<{manual:boolean}[]>(controlPath);
@@ -50,11 +54,18 @@ export async function enrichForAccount(accountId:string,screeningId:string){
   },
   fetchPeople:ids=>request('https://api.v2.dealmachine.com/v1/people/ids',{method:'POST',body:JSON.stringify({ids,enrich:true,include_properties:false})},'OWNER_LOOKUP_FAILED_NO_RETRY'),
   recordReceipt:async receipt=>{
+   stage='receipt';
    for(const field of ['used','people','properties','deduplicated'] as const){
     await db('rpc/icash_record_cost_observation','POST',{p_provider:'dealmachine',p_event:field==='used'?operationKey:`${operationKey}:${field}`,
      p_source:`dealmachine:owners:${operationKey}${field==='used'?'':`:${field}`}`,p_amount:receipt[field],p_units:'provider_credits'});
    }
   },
-  persist:async result=>{await db('rpc/icash_save_contacts','POST',{p_account:accountId,p_screening:screeningId,p_operation:operationKey,p_result:result});await db('rpc/icash_settle_dealmachine_usage','POST',{p_operation:operationKey});},
- });
+  persist:async result=>{stage='persist';await db('rpc/icash_save_contacts','POST',{p_account:accountId,p_screening:screeningId,p_operation:operationKey,p_result:result});await db('rpc/icash_settle_dealmachine_usage','POST',{p_operation:operationKey});},
+ });}catch(error){
+  const allowed=['CONTACT_RATE_REQUIRED','CONTACT_PREVIEW_INVALID','OWNER_PREVIEW_FAILED_NO_RETRY','PROVIDER_RATE_LIMIT','CONTACT_RECEIPT_REQUIRES_RECONCILIATION','OWNER_LOOKUP_FAILED_NO_RETRY','Prospecting budget reached','INVALID_SNAPSHOT','PROPERTY_RESPONSE_INVALID'];
+  const code=error instanceof Error&&allowed.includes(error.message)?error.message:'unclassified';
+  // Never log credentials, identities, property IDs, URLs or provider bodies.
+  console.warn('owner_enrichment_held',{stage,code,httpStatus:providerStatus});
+  throw error;
+ }
 }

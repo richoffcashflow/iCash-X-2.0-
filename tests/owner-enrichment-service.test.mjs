@@ -11,8 +11,9 @@ const screeningId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const operationKey=`owners:${accountId}:${screeningId}`;
 const rights=new Date(Date.now()+3600000).toISOString();
 const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date().toISOString(),sellerCostReserveCents:100000,raw:{data:{dm_property_id:'prop_123',full_address:'Fixture',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}}};
-let state;
+let state;const diagnostics=[];
 function reset(){
+ diagnostics.length=0;
  state={config:{enabled:true,contacts_enabled:true,contact_rate_id:'rate',contact_credit_cap:25,property_credit_micros:10000,data_rights_until:rights},job:{state:'complete',completed_at:new Date().toISOString(),result:runScreeningJob(snapshot),snapshot:structuredClone(snapshot)},rate:{operation:'owner_enrichment',enabled:true,expires_at:rights,costs_micros:{dealmachine:250000}},manual:false,requests:[],dbCalls:[],observations:[],saved:[],claimed:false,reserved:false,reserveCount:0,paidCount:0,previewCount:0,denyReserve:null,denyClaim:false,denyRateSlot:0,afterPreview:null,beforeFinalClaim:null,previewTransform:null,paidTransform:null,paidError:null,previewError:null,owners:Array.from({length:30},(_,i)=>({dm_person_id:'per_'+i,full_name:'Fixture',is_likely_owner:true,is_in_owner_family:false,is_resident:false,is_likely_renter:false}))};
 }
 const db=async(path,method,body)=>{
@@ -63,6 +64,7 @@ const transport=async(url,options)=>{
   assert.equal(url,'https://api.v2.dealmachine.com/v1/properties/prop_123?enrich=false&contact_audience=owners');
   assert.equal(options.body,undefined);state.previewCount++;
   if(state.previewError)throw Error(state.previewError);
+  if(state.previewStatus)return new Response('sensitive-provider-body dm_sk_live_fixture',{status:state.previewStatus});
   const raw={data:{dm_property_id:'prop_123',contacts:structuredClone(state.owners)},credits:{used:0,people:0,properties:0,deduplicated:0}};
   state.previewTransform?.(raw);state.afterPreview?.();return Response.json(raw);
  }
@@ -82,7 +84,8 @@ async function loadActual(path,bindings,key){
  source=`const {${Object.keys(bindings).join(',')}}=globalThis.${key};\n`+source;
  return import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 }
-const previous={key:process.env.DEALMACHINE_API_KEY,ready:process.env.ICASH_LIVE_WORK_READY,fetch:globalThis.fetch};
+const previous={key:process.env.DEALMACHINE_API_KEY,ready:process.env.ICASH_LIVE_WORK_READY,fetch:globalThis.fetch,warn:console.warn};
+console.warn=(...args)=>diagnostics.push(args);
 process.env.DEALMACHINE_API_KEY='dm_sk_live_fixture';process.env.ICASH_LIVE_WORK_READY='true';globalThis.fetch=transport;
 try{
  const {reserveOperation,dispatchReservedOperation}=await loadActual('../lib/operating-costs.ts',{db,...liveWorkAdmission},'__ownerCostsFixture');
@@ -135,6 +138,10 @@ try{
  reset();state.paidError='timeout';await assert.rejects(run(),/OWNER_LOOKUP_FAILED_NO_RETRY/);assert.equal(state.paidCount,1);assert(state.reserved&&state.claimed);
  await assert.rejects(run(),/already dispatched/);assert.equal(state.paidCount,1);
  reset();state.previewError='timeout';await assert.rejects(run(),/OWNER_PREVIEW_FAILED_NO_RETRY/);assert.equal(state.reserveCount,0);assert.equal(state.paidCount,0);
+ assert.deepEqual(diagnostics,[['owner_enrichment_held',{stage:'free_preview',code:'OWNER_PREVIEW_FAILED_NO_RETRY',httpStatus:null}]]);
+ reset();state.previewStatus=503;await assert.rejects(run(),/OWNER_PREVIEW_FAILED_NO_RETRY/);assert.equal(state.previewCount,1);assert.equal(state.reserveCount,0);assert.equal(state.paidCount,0);
+ assert.deepEqual(diagnostics,[['owner_enrichment_held',{stage:'free_preview',code:'OWNER_PREVIEW_FAILED_NO_RETRY',httpStatus:503}]]);
+ assert(!JSON.stringify(diagnostics).includes('dm_sk_live_fixture'));assert(!JSON.stringify(diagnostics).includes('sensitive-provider-body'));assert(!JSON.stringify(diagnostics).includes('prop_123'));
  reset();state.denyRateSlot=1;await assert.rejects(run(),/PROVIDER_RATE_LIMIT/);assert.equal(state.requests.length,0);assert.equal(state.reserveCount,0);
  reset();state.denyRateSlot=2;await assert.rejects(run(),/PROVIDER_RATE_LIMIT/);assert.equal(state.requests.length,1);assert(state.claimed);assert.equal(state.paidCount,0);
  for(const mutate of [r=>{r.data[0].dm_person_id='per_unexpected';},r=>{r.credits.used=26;r.credits.people=26;},r=>{r.credits.properties=1;},r=>{r.data[0].properties=[{dm_property_id:'prop_456'}];}]){
@@ -151,6 +158,7 @@ try{
  reset();state.job.result.financialCheck.status='hold';await assert.rejects(()=>reserveOperation(input),/Owned eligible screening/);assert.equal(state.reserveCount,0);
  delete process.env.ICASH_CONTACT_WORK_READY;
 }finally{
+ console.warn=previous.warn;
  globalThis.fetch=previous.fetch;
  if(previous.key===undefined)delete process.env.DEALMACHINE_API_KEY;else process.env.DEALMACHINE_API_KEY=previous.key;
  if(previous.ready===undefined)delete process.env.ICASH_LIVE_WORK_READY;else process.env.ICASH_LIVE_WORK_READY=previous.ready;

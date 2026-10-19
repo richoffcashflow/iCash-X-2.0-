@@ -19,7 +19,7 @@ export const recordingBaseUrl='https://www.geticashx.com/api/internal/voice/reco
 export function readRecordingReview(raw:string|undefined,now=Date.now()):RecordingReview|null{
  try{const r=JSON.parse(raw??'null') as RecordingReview;if(!r||r.offerPolicy!==undefined&&(!automaticOfferPolicy(r.offerPolicy)||!r.contractToolId)||r.enabled!==true||!/^agent_[A-Za-z0-9]+$/.test(r.agentId)||!/^agtbrch_[A-Za-z0-9]+$/.test(r.branchId)||!/^agtvrsn_[A-Za-z0-9]+$/.test(r.versionId)||!/^tool_[A-Za-z0-9]+$/.test(r.stopToolId)||!/^\+[1-9]\d{7,14}$/.test(r.fromPhone)||!sid(r.providerAccountSid,'AC')||!/^[a-f0-9]{64}$/.test(r.configHash)||!Array.isArray(r.toolIds)||r.toolIds.length!==(r.contractToolId?4:3)||new Set(r.toolIds).size!==r.toolIds.length||r.contractToolId!==undefined&&(!/^tool_[A-Za-z0-9]+$/.test(r.contractToolId)||r.contractToolId===r.stopToolId||!r.toolIds.includes(r.contractToolId))||!r.toolIds.includes(r.stopToolId)||!r.toolIds.every(x=>/^tool_[A-Za-z0-9]+$/.test(x))||r.approvedHoldCents!==recordingPolicy.minimumHoldCents||r.retentionDays!==30||r.maxTotalSeconds!==600||r.policyVersion!==recordingPolicy.version||!Number.isFinite(Date.parse(r.reviewedAt))||Date.parse(r.reviewedAt)>now||!Number.isFinite(Date.parse(r.reviewedUntil))||Date.parse(r.reviewedUntil)<=now)return null;return r;}catch{return null;}
 }
-function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>){
+export function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>){
  const matches=(value:unknown)=>sha(JSON.stringify(canonical(value)))===configHash;
  if(matches(snapshot))return true;
  const config=object(snapshot.conversation_config),agent=object(config.agent),variants=[agent];

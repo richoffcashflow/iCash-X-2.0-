@@ -14,7 +14,7 @@ import {receptionContextPrompt,receptionContextVariables} from './reception-prop
 import {createHmac} from 'node:crypto';
 import {inspectReceptionAgent,receptionTarget,receptionPrompt,type ReceptionConfig} from './general-reception.ts';
 import {propertyReceptionEnabled,propertyReceptionPrompt} from './reception-property-context.ts';
-import {canonical,object,sha,sid,uuid,recordingDisclosure,consentTwiml} from './required-call-recording.ts';
+import {canonical,object,sha,sid,uuid,recordingDisclosure,consentTwiml,recordingConfigHashMatches} from './required-call-recording.ts';
 
 /** Candidate only. No configuration/rate is installed or enabled by this module. */
 export const recordedReceptionPolicy='recorded-reception-30d-speech-v1';
@@ -85,12 +85,16 @@ export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:un
  if(!providerConfig)base.checks.target=false;
  const snapshot={main_branch_id:raw.main_branch_id,agent_id:raw.agent_id,branch_id:raw.branch_id,version_id:raw.version_id,conversation_config:raw.conversation_config,platform_settings:raw.platform_settings,workflow:raw.workflow??null,procedures:raw.procedures??null};
  const hash=sha(JSON.stringify(canonical(snapshot)));
+ // Reuse the outbound comparison: only omitted versus exact empty provider
+ // defaults may match the SAME approved complete snapshot. Identity, prompt,
+ // tools, nonempty/default extensions and every structural check stay exact.
+ const approvedHashMatches=recordingConfigHashMatches(c.config_hash,snapshot);
  const guardrails=object(raw.platform_settings).guardrails;
  const buyerGuards=object(object(object(guardrails).custom).config).configs;
  const expectedBuyerGuardrail=c.context_policy===buyerSpeakingPolicy?buyerSpeakingGuardrail:c.context_policy===buyerValidatedPolicy?buyerValidatedGuardrail:c.context_policy===buyerAnswerPolicy?buyerAnswerGuardrail:c.context_policy===buyerConversationPolicy?buyerConversationGuardrail:buyerVoiceGuardrail;
  const priceEnforcement=(c.context_policy===buyerVoicePolicy||['automatic_offer_v11','automatic_offer_v12','automatic_offer_v13','automatic_offer_v14','automatic_offer_v15','automatic_offer_v16','automatic_offer_v17','automatic_offer_v18'].includes(String(c.context_policy)))?object(guardrails).version==='1'&&object(object(guardrails).focus).is_enabled===true&&Array.isArray(buyerGuards)&&buyerGuards.filter(g=>object(g).name===expectedBuyerGuardrail.name).length===1&&buyerGuards.some(g=>Object.entries(expectedBuyerGuardrail).every(([key,value])=>JSON.stringify(canonical(object(g)[key]))===JSON.stringify(canonical(value)))):!automaticOfferPolicy(c.context_policy)||automaticOfferGuardrailMatches(guardrails,c.context_policy);
  const buyerOpeningValidation=c.context_policy!==buyerValidatedPolicy||Array.isArray(buyerGuards)&&buyerGuards.filter(g=>object(g).name===buyerOpeningGuardrail.name).length===1&&buyerGuards.some(g=>Object.entries(buyerOpeningGuardrail).every(([key,value])=>JSON.stringify(canonical(object(g)[key]))===JSON.stringify(canonical(value))));
- return {safe:buyerOpeningValidation&&responseModel&&exactStop&&exactAgreement&&exactPrompt&&priceEnforcement&&inlineStopMatchesReviewedDefinition&&Object.values(base.checks).every(Boolean)&&hash===c.config_hash,hash,checks:{...base.checks,buyerOpeningValidation,responseModel,exactStop,exactAgreement,exactPrompt,priceEnforcement,inlineStopMatchesReviewedDefinition},inlineTools};
+ return {safe:buyerOpeningValidation&&responseModel&&exactStop&&exactAgreement&&exactPrompt&&priceEnforcement&&inlineStopMatchesReviewedDefinition&&Object.values(base.checks).every(Boolean)&&approvedHashMatches,hash,hashMatch:hash===c.config_hash?'exact':approvedHashMatches?'equivalent_empty_defaults':'none',checks:{...base.checks,buyerOpeningValidation,responseModel,exactStop,exactAgreement,exactPrompt,priceEnforcement,inlineStopMatchesReviewedDefinition,approvedHashMatches},inlineTools};
 }
 export function recordedReceptionToolMatches(id:string,input:unknown){
  const t=object(input),c=object(t.tool_config),a=object(c.api_schema),b=object(a.request_body_schema),p=object(b.properties),r=object(p.recordingId),h=object(object(a.request_headers).Authorization);

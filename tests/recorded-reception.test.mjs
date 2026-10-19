@@ -19,6 +19,39 @@ const caller = '+12125550199', operation = 'recorded-reception:' + callSid;
 const env = {ICASH_RECORDED_RECEPTION_READY:'true', TWILIO_ACCOUNT_SID:accountSid, TWILIO_AUTH_TOKEN:'synthetic-only-twilio-token-not-live', ELEVENLABS_API_KEY:'synthetic-only-eleven-key-not-live'};
 const clone = value => structuredClone(value);
 const providerWrites = f => f.events.filter(e => ['boundCall','start','register','stop','end','deleteRecording'].includes(e.provider));
+
+test('reception accepts only exact empty provider defaults against the unchanged approved hash',()=>{
+ const cfg=configuration();
+ const inspect=(agent,c=cfg.c,branch=cfg.branch)=>inspectRecordedReceptionAgent(c,agent,branch,true,cfg.tool);
+ assert.equal(inspect(cfg.agent).safe,true);
+ assert.equal(inspect(cfg.agent).hashMatch,'exact');
+ for(const subagents of [false,true])for(const subagentConfig of [false,true]){
+  const expanded=clone(cfg.agent),agent=expanded.conversation_config.agent;
+  if(subagents)agent.subagents=[];
+  if(subagentConfig)agent.subagent_config={agents:[],self_subagent:null};
+  const result=inspect(expanded);
+  assert.equal(result.safe,true);
+  assert.equal(result.checks.approvedHashMatches,true);
+  assert.equal(result.hashMatch,subagents||subagentConfig?'equivalent_empty_defaults':'exact');
+  assert.equal(inspect(cfg.agent,{...cfg.c,config_hash:result.hash}).safe,true,'same comparison in either provider representation');
+ }
+ for(const mutate of [
+  a=>{a.subagents=[{id:'not-empty'}];},a=>{a.subagents=null;},a=>{a.subagents={};},
+  a=>{a.subagent_config={agents:[{id:'not-empty'}],self_subagent:null};},
+  a=>{a.subagent_config={agents:[],self_subagent:'not-empty'};},
+  a=>{a.subagent_config={agents:[],self_subagent:null,extra:false};},
+  a=>{a.subagent_config=null;},a=>{a.subagent_config={};},
+  a=>{a.prompt.prompt+=' Unreviewed change.';},a=>{a.prompt.max_tokens+=1;},
+  a=>{a.unreviewed_default=false;},
+ ]){
+  const changed=clone(cfg.agent);mutate(changed.conversation_config.agent);
+  assert.equal(inspect(changed).safe,false);assert.equal(inspect(changed).checks.approvedHashMatches,false);
+ }
+ const expanded=clone(cfg.agent);expanded.conversation_config.agent.subagents=[];
+ assert.equal(inspect(expanded,cfg.c,{...cfg.branch,draft_exists:true}).safe,false,'structural admission remains required');
+ assert.equal(inspect({...expanded,version_id:'agtvrsn_unreviewed'}).safe,false,'provider version remains exact');
+ assert.equal(inspect(expanded,{...cfg.c,config_hash:'0'.repeat(64)}).safe,false,'no new approval is invented');
+});
 const streamXml = '<Response><Connect><Stream url="wss://api.us.elevenlabs.io/fixture"/></Connect></Response>';
 // A missing dependency must never silently become a real network call.
 globalThis.fetch = async () => { throw Error('UNEXPECTED_EXTERNAL_NETWORK_IN_SYNTHETIC_TEST'); };

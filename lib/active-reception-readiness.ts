@@ -19,5 +19,5 @@ export async function readActiveReceptionReadiness(env:Record<string,string|unde
  const rows=branches.results,meta=object(branches.meta),complete=Array.isArray(rows)&&rows.length<100&&(meta.total===undefined||meta.total===rows.length);
  const matches=Array.isArray(rows)?rows.filter(r=>object(r).id===c.branch_id):[];
  const inspected=inspectRecordedReceptionAgent(c,agent,matches[0],receptionWorkspacePostcallAbsent(workspace),stop,agreement);
- return {status:'checked',providerChecksPass:complete&&matches.length===1&&inspected.safe,configId:c.id,branchId:c.branch_id,versionId:c.reviewed_version_id,approvedHash:c.config_hash,observedHash:inspected.hash,checks:{...inspected.checks,branchListComplete:complete,uniqueBranch:matches.length===1},callsPlaced:0};
+ return {status:'checked',providerChecksPass:complete&&matches.length===1&&inspected.safe,configId:c.id,branchId:c.branch_id,versionId:c.reviewed_version_id,approvedHash:c.config_hash,observedHash:inspected.hash,hashMatch:inspected.hashMatch,checks:{...inspected.checks,branchListComplete:complete,uniqueBranch:matches.length===1},callsPlaced:0};
 }
