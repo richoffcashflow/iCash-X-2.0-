@@ -94,17 +94,16 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  // Verify the actual provider caller ID before reserving credits or placing a call.
  const primaryNumber=process.env.CONTIGUITY_FROM;
  const threads=await db<{sender:string;sender_pool_assigned?:boolean}[]>('rpc/icash_property_voice_threads','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone});
- let businessNumber:string;
- try{businessNumber=selectBusinessCaller(primaryNumber,threads);}catch{return hold('business_number_mismatch');}
- if(!threads.length){
-  const [preferred]=await db<{phone:string}[]>('icash_webinar_text_senders?preferred=eq.true&enabled=eq.true&select=phone&limit=1');
-  if(isAdditionalBusinessPhone(preferred?.phone))businessNumber=preferred.phone;
- }
+ let threadNumber:string;
+ try{threadNumber=selectBusinessCaller(primaryNumber,threads);}catch{return hold('business_number_mismatch');}
+ // Calls and texts share one recipient-specific allocation. The database keeps
+ // established thread/call identities and balances only new conversations.
+ const businessNumber=await db<string|null>('rpc/icash_property_call_sender','POST',{p_account:accountId,p_screening:p.screening_id,p_recipient:p.phone});
+ if(!businessNumber||(threads.length&&businessNumber!==threadNumber)||(!isAdditionalBusinessPhone(businessNumber)&&businessNumber!==primaryNumber))return hold('business_number_mismatch');
  if(isAdditionalBusinessPhone(businessNumber)){
   const [secondary]=await db<{outbound_enabled:boolean}[]>(`icash_business_voice_numbers?phone=eq.${encodeURIComponent(businessNumber)}&select=outbound_enabled`);
-  // Keep the existing caller until the owner finishes secondary activation.
-  if(!secondary?.outbound_enabled)businessNumber=primaryNumber!;
-  else try{if(!await secondaryCallingReady(db,process.env,fetch,businessNumber))return hold('business_number_verification_required');}catch{return hold('business_number_verification_required');}
+  if(!secondary?.outbound_enabled)return hold('business_number_verification_required');
+  try{if(!await secondaryCallingReady(db,process.env,fetch,businessNumber))return hold('business_number_verification_required');}catch{return hold('business_number_verification_required');}
  }
  if(!isAdditionalBusinessPhone(businessNumber)){
   if(!consistentTextSenders(businessNumber,threads.filter(t=>!t.sender_pool_assigned)))return hold('business_number_mismatch');

@@ -2,7 +2,7 @@
 import {useEffect,useEffectEvent,useRef,useState} from 'react';
 import {Mic,MicOff,Phone,PhoneOff} from 'lucide-react';
 import {BrowserCallSession,type BrowserCallPhase} from '@/lib/browser-call-session';
-type Contact={phone:string;name?:string;available:boolean};
+type Contact={phone:string;name?:string;available:boolean;businessNumber?:string|null};
 export function BrowserCallControls({screeningId,contacts,activeCall,onStarted,onFinished,autoStart=false,onAutoStartHandled}:{screeningId:string;contacts:Contact[];activeCall?:{id:string;connection_type?:string;ended_at:string|null};onStarted?:()=>void;onFinished:()=>void;autoStart?:boolean;onAutoStartHandled?:()=>void}){
  const session=useRef<BrowserCallSession|null>(null),mounted=useRef(true),finishing=useRef(false),busy=useRef(false);
  const autoConsumed=useRef(false);
@@ -36,6 +36,6 @@ export function BrowserCallControls({screeningId,contacts,activeCall,onStarted,o
   {active?<div className="browser-call-active" role="group" aria-label="Current call">
    <div><strong>{contact?.name||'Seller'}</strong><p>{contact?.phone.replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3')}</p></div><strong role="status">{phase==='connecting'?'Connecting…':phase==='ringing'?'Calling seller…':`On call · ${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`}</strong>
    <div className="seller-contact-actions"><button className="contact-secondary" type="button" disabled={phase==='connecting'} aria-pressed={muted} onClick={()=>{session.current?.mute(!muted);setMuted(!muted);}}>{muted?<MicOff size={16}/>:<Mic size={16}/>} {muted?'Unmute':'Mute'}</button><button className="contact-primary" type="button" onClick={()=>void end()}><PhoneOff size={16}/>End call</button></div>
-  </div>:previous?.connection_type==='browser'?<button className="contact-primary" type="button" onClick={()=>void end()}><PhoneOff size={16}/>End call</button>:contacts.filter(c=>c.available).map(c=><div className="seller-contact-card" key={c.phone}><div className="seller-contact-identity"><span className="seller-contact-avatar">{(c.name||'S').slice(0,1).toUpperCase()}</span><div><strong>{c.name||'Seller'}</strong><span>{c.phone.replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3')}</span></div></div><button className="contact-primary" type="button" data-credit-action disabled={!!previous} onClick={()=>void start(c.phone)}><Phone size={16}/>Call seller</button></div>)}
+  </div>:previous?.connection_type==='browser'?<button className="contact-primary" type="button" onClick={()=>void end()}><PhoneOff size={16}/>End call</button>:contacts.filter(c=>c.available).map(c=><div className="seller-contact-card" key={c.phone}><div className="seller-contact-identity"><span className="seller-contact-avatar">{(c.name||'S').slice(0,1).toUpperCase()}</span><div><strong>{c.name||'Seller'}</strong><span>{c.phone.replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3')}</span>{c.businessNumber&&<span>From {c.businessNumber.replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3')}</span>}</div></div><button className="contact-primary" type="button" data-credit-action disabled={!!previous} aria-label={c.businessNumber?`Call ${c.name||'seller'} from ${c.businessNumber}`:undefined} onClick={()=>void start(c.phone)}><Phone size={16}/>Call seller</button></div>)}
  </div>;
 }
