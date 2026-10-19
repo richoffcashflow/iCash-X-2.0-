@@ -20,7 +20,7 @@ const recordingStates = {
 
 type RecordingStatus = keyof typeof recordingStates;
 export type RecordingSource = 'outbound' | 'reception';
-export type RecordingReceipt = {id: string | null; status: RecordingStatus; durationSeconds: number | null; audioExpiresAt: string | null};
+export type RecordingReceipt = {id: string | null; status: RecordingStatus; durationSeconds: number | null; audioExpiresAt: string | null; callOutcome?: 'no-answer' | 'busy'};
 export type ReceiptResult = RecordingReceipt | {status: 'not_recorded'};
 type ReceiptState = {scope: string; phase: 'loading' | 'error' | 'ready'; receipt?: ReceiptResult};
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -35,6 +35,7 @@ export function readReceipt(value: unknown): ReceiptResult {
     !(r.durationSeconds === null || typeof r.durationSeconds === 'number' && Number.isFinite(r.durationSeconds) && r.durationSeconds >= 0) ||
     !(r.audioExpiresAt === null || typeof r.audioExpiresAt === 'string' && Number.isFinite(Date.parse(r.audioExpiresAt)))) throw Error('Invalid recording receipt');
   return {id:r.id as string|null, status:status === 'available' && r.audioAvailable === false ? 'expired' : status as RecordingStatus,
+    ...(['failed','absent'].includes(status)&&['no-answer','busy'].includes(String(r.callOutcome))?{callOutcome:r.callOutcome as 'no-answer'|'busy'}:{}),
     durationSeconds:r.durationSeconds as number|null, audioExpiresAt:r.audioExpiresAt as string|null};
 }
 
@@ -101,6 +102,8 @@ export function CallRecording({conversationId, recordingId, source='outbound', r
 
   // A changed property or source must never display the previous call's audio.
   const current = receipt !== undefined ? {phase: 'ready' as const, receipt} : state.scope === scope ? state : {phase: 'loading' as const};
+  const callOutcome=current.phase==='ready'&&current.receipt&&'callOutcome' in current.receipt&&['failed','absent'].includes(current.receipt.status)?current.receipt.callOutcome:null;
+  if(callOutcome)return <section className="conversation-call-update" aria-label="Call update"><strong>{callOutcome==='no-answer'?'Not answered yet':'Line was busy'}</strong><p>{callOutcome==='no-answer'?'This call wasn’t answered, so there’s no recording.':'The line was busy, so there’s no recording.'} The lead and this contact attempt are saved.</p></section>;
   return <section className="conversation-call-player" aria-label="Call recording">
     <h4>Listen to call recording</h4>
     {current.phase === 'loading' && <p role="status">Loading recording…</p>}

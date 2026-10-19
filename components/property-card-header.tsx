@@ -1,16 +1,17 @@
 import type {ReactNode} from 'react';
-import {Phone,MessageCircle,Hand,RotateCcw} from 'lucide-react';
+import {Phone,MessageCircle,Hand,RotateCcw,Check} from 'lucide-react';
 import {analysisMoney,propertyAnalysisView} from '@/lib/property-analysis-view';
 import {propertyAddressLines,type WorkspaceProperty} from './workspace-view';
 import type {BotState} from '@/lib/workspace-guidance';
 import type {dealCardSummary} from '@/lib/deal-card-summary';
 
-export function PropertyCardHeader({property:p,owner,bot,dealSummary,phase,practice=false,active,sellerSummary,thumbnail,onToggle,onContact,onControl,manual=false,controlBusy=false,controlDisabled=false}:{property:WorkspaceProperty;owner?:string|null;bot:BotState;dealSummary:ReturnType<typeof dealCardSummary>;phase:string;practice?:boolean;active:boolean;sellerSummary?:string|null;thumbnail:ReactNode;onToggle:()=>void;onContact:(view:'texts'|'calls')=>void;onControl?:()=>void;manual?:boolean;controlBusy?:boolean;controlDisabled?:boolean}){
+export function PropertyCardHeader({property:p,owner,bot,dealSummary,phase,practice=false,sellerLead=false,active,sellerSummary,thumbnail,onToggle,onContact,onControl,manual=false,controlBusy=false,controlDisabled=false}:{property:WorkspaceProperty;owner?:string|null;bot:BotState;dealSummary:ReturnType<typeof dealCardSummary>;phase:string;practice?:boolean;sellerLead?:boolean;active:boolean;sellerSummary?:string|null;thumbnail:ReactNode;onToggle:()=>void;onContact:(view:'texts'|'calls')=>void;onControl?:()=>void;manual?:boolean;controlBusy?:boolean;controlDisabled?:boolean}){
  const address=propertyAddressLines(p.result.property.address),analysis=propertyAnalysisView(p.result);
  return <>
    <button type="button" className="property-summary" aria-expanded={active} aria-controls={`property-content-${p.id}`} onClick={()=>onToggle()}>
     {thumbnail}
     <span className="property-summary-main">
+     {sellerLead&&!practice&&!dealSummary?.contractSigned&&<span className="property-lead-generated"><Check size={13} aria-hidden="true"/>Lead generated</span>}
      <span className="property-address" id={`property-address-${p.id}`}><strong>{address.street}</strong>{address.location&&<span>{address.location}</span>}</span>
      {owner&&<span className="property-owner-name">{owner}</span>}
      <span className="property-summary-status">{practice&&<span className="property-manual-label">Practice only · no real property</span>}{dealSummary?.contractSigned&&<span className="property-status">{phase}</span>}</span>

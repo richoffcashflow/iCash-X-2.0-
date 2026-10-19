@@ -12,6 +12,7 @@ export async function verifyWorkspace(browser,base,options,name){
  page.setDefaultTimeout(12000);page.setDefaultNavigationTimeout(20000);page.on('dialog',dialog=>void dialog.accept());
  let contractFlow=false;const contractWrites=[];
  let acknowledged=true,ackFail=false,manual=false,controlFail=false,vip=true;const acceptedWrites=[],controlWrites=[],assistantWrites=[],apiReads=[];
+ let instantVariant=null,inboundLead=false,callOutcome=null;
  let scenario='lead',preview=true,emptySearch=false,fulfillmentMode='ok',intentionalCrash=false,callMode='unavailable';
  await context.addInitScript(()=>{Object.defineProperty(navigator,'mediaDevices',{value:{getUserMedia:async()=>{window.fixtureMicrophoneRequests=(window.fixtureMicrophoneRequests||0)+1;throw new DOMException('Fixture microphone denied','NotAllowedError');}},configurable:true});});
  const fulfillmentHolds=new Set();
@@ -41,6 +42,8 @@ export async function verifyWorkspace(browser,base,options,name){
   if(journey){const {label,dialog,...progress}=journey;data.journeys=[{id:'sample-journey',deal_id:deal.id,screening_id:deal.screening_id,state:'collecting',wants_assignment:false,wants_viewing:false,review_reason:null,deposit_due_at:null,last_progress_at:new Date().toISOString(),envelopeState:null,messageReview:false,hasSlots:true,showingState:null,titleState:null,titleSelected:false,closingKind:null,...progress}];}
   deal.terms={...deal.terms,seller:'Example Seller',priceSource:scenario==='lead'?'proposed':'seller_reported',priceCents:9000000,assignmentFeeCents:1000000,assignmentDepositCents:200000};
   if(scenario!=='lead')data.signing=[{id:'sample-purchase',deal_id:deal.id,kind:'purchase',state:scenario==='signature'?'customer_signature_needed':signed()?'completed':'awaiting_counterparty',test_mode:false}];
+  if(inboundLead){data.properties[0].result.financialCheck.status='eligible';data.contacts=[{screening_id:deal.screening_id,source:'HomeOffer Network · seller-submitted',contacts:[{name:'Example Seller',phones:[]}]}];}
+  if(instantVariant){data.properties=[];data.deals=[];data.signing=[];data.instantLeads=[{leadId:'11111111-1111-4111-8111-111111111111',screeningId:'22222222-2222-4222-8222-222222222222',dealId:'33333333-3333-4333-8333-333333333333',name:'Jordan Example',phone:'+12025550101',address:null,state:'awaiting_address',paused:instantVariant==='paused',declinedAt:instantVariant==='stopped'?'2026-10-18T22:00:00Z':null,submittedAt:'2026-10-18T21:00:00Z',firstOutreachAt:instantVariant==='new'?null:'2026-10-18T21:00:15Z',responseAt:instantVariant==='replied'?'2026-10-18T21:05:00Z':null,addressConfirmedAt:null,formId:'fixture-form',campaignId:null,holdReason:instantVariant==='review'?'Text delivery needs review.':null}];}
   if(url.searchParams.get('query')){emptySearch=true;data.properties=[];data.deals=[];data.signing=[];}
   return data;
  }
@@ -67,7 +70,7 @@ export async function verifyWorkspace(browser,base,options,name){
   }
   if(request.method()!=='GET'){writes.push(url.pathname);return route.fulfill({status:403,json:{error:'Read-only fixture'}});}
   const p=url.pathname;apiReads.push(p);
-  if(p==='/api/account')return route.fulfill({json:{...fixtureAccount,workspaceAcknowledged:acknowledged,mode:'live',vip,vipFeatures:vip,billingModel:'membership_credits',membershipActive:true}});
+  if(p==='/api/account')return route.fulfill({json:{...fixtureAccount,...(instantVariant?{paused:false}:{}),workspaceAcknowledged:acknowledged,mode:'live',vip,vipFeatures:vip,billingModel:'membership_credits',membershipActive:true}});
   if(p==='/api/work/assistant')return route.fulfill({json:{items:[]}});
   if(p==='/api/billing/membership')return route.fulfill({json:{membership:{state:'active',accessible:true,vip,priceCents:vip?10000:5000,paidThrough:'2026-11-16T05:00:00Z',cancelAtPeriodEnd:false}}});
   if(p==='/api/work/activity')return route.fulfill({json:work(url)});
@@ -86,7 +89,7 @@ export async function verifyWorkspace(browser,base,options,name){
   if(p==='/api/work/text-contact')return route.fulfill({json:{contacts:[]}});
   if(p==='/api/work/manual-call')return route.fulfill({json:{businessNumber:'+12025550199',contacts:[{phone:'+12025550101',name:'Example Seller',available:callMode!=='blocked',reason:callMode==='blocked'?'This contact asked not to be called.':''},...(callMode==='multiple'?[{phone:'+12025550102',name:'Other Seller',available:true}]:[])],personalCalls:[]}});
   if(p==='/api/work/browser-call')return route.fulfill({json:{ready:callMode!=='unavailable'}});
-  if(p==='/api/work/call-history')return route.fulfill({json:{recordings:[{id:'33333333-3333-4333-8333-333333333333',status:'available',createdAt:'2026-10-16T05:00:00Z',durationSeconds:62,audioAvailable:true,audioExpiresAt:'2027-01-01T05:00:00Z',source:'outbound',party:'seller',conversationId:null}],next:null}});
+  if(p==='/api/work/call-history')return route.fulfill({json:{recordings:[{id:'33333333-3333-4333-8333-333333333333',status:callOutcome?'failed':'available',...(callOutcome&&callOutcome!=='failed'?{callOutcome}:{}),createdAt:'2026-10-16T05:00:00Z',durationSeconds:62,audioAvailable:true,audioExpiresAt:'2027-01-01T05:00:00Z',source:'outbound',party:'seller',conversationId:null}],next:null}});
   if(p==='/api/work/recording/audio')return route.fulfill({contentType:'audio/wav',body:fixtureAudio});
   if(p==='/api/buyer-qualifications')return route.fulfill({json:{requests:[],candidates:[],hasMore:false,notice:'Fixture'}});
   if(p==='/api/work/buyer-coordination')return route.fulfill({json:{availability:null,receipt:null,assignment:scenario==='deposit_due'?{id:'signed-buyer-assignment',buyer:'Cedar Ridge Homes',depositCents:200000}:null}});
@@ -461,6 +464,29 @@ export async function verifyWorkspace(browser,base,options,name){
   await page.keyboard.press('Escape');await recoveringBuyers.waitFor({state:'hidden'});
   assert(diagnostics.some(item=>item.event==='panel_error'&&item.stage==='closing'),'closing load failures produce content-free diagnostics');
   assert(diagnostics.some(item=>item.event==='panel_retry'&&item.stage==='buyer_details'),'in-panel retries are observable');
+  inboundLead=true;
+  const generated=await openProperty('lead');
+  await generated.locator('.property-lead-generated').getByText('Lead generated',{exact:true}).waitFor();
+  await generated.getByText('This seller is in your pipeline. Texts, calls and replies stay with this property as the conversation develops.',{exact:true}).waitFor();
+  inboundLead=false;
+  for(const [variant,status,completed] of [['new','New lead',1],['waiting','Awaiting seller reply',2],['replied','Seller replied',3],['paused','Follow-up paused',2],['stopped','Contact stopped',2],['review','Needs review',2]]){
+   await page.waitForLoadState('networkidle');instantVariant=variant;await visit(base+'/');
+   const lead=page.locator('.instant-lead-card');await lead.waitFor();
+   await lead.locator('.instant-lead-label').getByText('Lead generated',{exact:true}).waitFor();
+   await lead.locator('.instant-lead-status').getByText(status,{exact:true}).waitFor();
+   assert.equal(await lead.locator('.instant-lead-progress .is-complete').count(),completed,'only saved milestones advance');
+   assert.equal(await lead.getByRole('alert').count(),0);
+   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'lead card fits mobile and desktop');
+   if(variant==='waiting'){
+    await lead.screenshot({path:'/tmp/icash-lead-waiting-'+(name.includes('desktop')?'desktop':'mobile')+'.png'});
+    callOutcome='no-answer';await lead.getByRole('button',{name:'Calls',exact:true}).click();
+    await lead.getByText('Not answered yet',{exact:true}).waitFor();
+    assert.equal(await lead.getByText('The recording failed. Audio is not available.',{exact:true}).count(),0);
+    callOutcome='failed';await lead.getByRole('button',{name:'Refresh recordings',exact:true}).click();
+    await lead.getByText('The recording failed. Audio is not available.',{exact:true}).waitFor();
+    assert.equal(await lead.getByText('Not answered yet',{exact:true}).count(),0,'a real failure is never presented as no answer');callOutcome=null;
+   }
+  }
   assert.deepEqual(errors,[]);assert.deepEqual(writes,[],'navigation never signs, sends, charges or changes controls');assert.deepEqual(external,[]);
   console.log(`PASS ${name}: staged access, title messages, in-panel loading/failure/recovery, preserved drafts, crash containment, cancellation and search; required acknowledgment, takeover recovery and inert contract previews. No live work or provider requests.`);
  }catch(error){console.error({name,scenario,errors,writes,body:(await page.locator('body').innerText()).slice(-7000)});throw error;}
