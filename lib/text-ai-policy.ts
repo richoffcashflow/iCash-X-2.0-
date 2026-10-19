@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {isContactOptOut,asksForCallback} from './contact-intent.ts';
+import {sellerResponseDisposition} from './seller-response-policy.ts';
 import {sellerConversationGuide} from './seller-outreach.ts';
 import {conversationTrustInstructions,groundedConversationSummary} from './conversation-trust.ts';
 export const textActions=['ask_condition','ask_price','ask_timing','ask_owners','ask_occupancy','ask_callback','ask_flexibility','ask_payoff','reply_identity','ask_photos','ask_callback_details','acknowledge_callback','photo_received','explain_process','explain_price','review','handoff'] as const;
@@ -31,7 +32,8 @@ export function validateTextAnalysis(input:unknown,incoming:string[],party:TextP
   return source&&source.length<=500?[{...f,quote:source}]:[];
  }).filter((f,index,all)=>all.findIndex(other=>other.kind===f.kind&&other.quote===f.quote)===index);
  const latest=incoming.at(-1)??'';
- const optedOut=incoming.some(declinedTextContact),declined=declinedTextConversation(latest);
+ const responseDisposition=party==='seller'?sellerResponseDisposition(latest):null;
+ const optedOut=incoming.some(declinedTextContact),declined=party==='seller'?responseDisposition!==null:declinedTextConversation(latest);
  const callRequested=party==='seller'&&conversationEnabled&&!optedOut&&!declined&&(asksForCallback(latest)||facts.some(f=>f.kind==='callback'&&f.quote===latest));
  const identityQuestion=conversationEnabled&&sellerIdentityQuestion(latest);
  const explicitlyHuman=incoming.some(body=>!sellerIdentityQuestion(body)&&/\b(human|real person|(?:speak|talk) (?:to|with) (?:someone|(?:a |an |the |your )?(?:person|manager|owner|supervisor|representative)))\b/i.test(body));
@@ -41,7 +43,7 @@ export function validateTextAnalysis(input:unknown,incoming:string[],party:TextP
  // Buyer replies have no approved automatic question templates. Model output cannot opt in to seller automation.
  const action=optedOut||declined?'review':humanRequested||callbackRequested?'handoff':party==='buyer'?'review':identityQuestion?'reply_identity':callRequested?(value.action==='acknowledge_callback'?'acknowledge_callback':'ask_callback_details'):missedCall?'ask_callback':value.action;
  // Whole source statements preserve negation and corrections that a model's summary or quote fragment can omit.
- return {...value,action,facts,summary:groundedConversationSummary(incoming),callbackRequested,callRequested,humanRequested,optedOut,declined};
+ return {...value,action,facts,summary:groundedConversationSummary(incoming),callbackRequested,callRequested,humanRequested,optedOut,declined,responseDisposition};
 }
 export function textConversationInstructions(party:TextParty,conversationEnabled=false,viewingCoordination=false){
  if(party==='seller'&&conversationEnabled&&viewingCoordination)return conversationTrustInstructions+' The purchase agreement is signed. Review seller-provided property viewing availability, changes or cancellations. Use review for scheduling statements and exact incoming quotes with kind timing. A viewing time is not a phone callback; do not label it callback or ask acquisition, price, mortgage, ownership or condition questions. An independent deterministic workflow captures times, asks for exact dates, start/end times with AM or PM and timezone, and acknowledges saved availability. Do not book a visit or claim someone is coming. Keep explicit requests for a person or phone call as handoff. Honor STOP and declines. Never claim to be the seller or property owner, or call visitors financial partners without verified evidence. Return JSON with action, reply (draft only), summary and facts.';
