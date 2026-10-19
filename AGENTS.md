@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 19, 2026 the owner requested that `/admin` focus on outbound DealMachine properties, calls, texts, actual responses and interested sellers, with inbound sections removed for now. Keep usage earnings and system health. Report actual receipt-backed activity, distinguish queues/holds from attempts and interest, and preserve owner-only access. Customer property cards remain unchanged without inbound/outbound labels.
+
 - On October 19, 2026 the owner required support replies that a customer with no technical background can follow: short everyday sentences, one useful next step and at most one new question. Use conversation history, including operator replies; never repeat answered questions or failed steps. Keep billing explanations separate from unrelated calling, property-search and contract checks. A duplicate saved-card entry is not evidence of a duplicate charge. Do not claim a repair, saved card, or handoff without evidence.
 
 - On October 19, 2026 the owner requested a pretend-only $5 running-bot display for their own account. Bind it to the existing owner user and account on the server and show it only while the real wallet is $0 and the real bot is paused. Label the preview as a display test; its Run/Pause controls must remain local and must never poll live status, add funds or start work. Keep ordinary customer status truthful and preserve real wallet/account values.

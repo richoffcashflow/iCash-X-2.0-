@@ -8,6 +8,8 @@ import {join} from 'node:path';
 import http from 'node:http';
 import https from 'node:https';
 import {chromium,webkit,devices} from 'playwright';
+import {verifyOwnerOutreach} from './owner-outreach-browser.mjs';
+import {ownerOutreachFixture} from './helpers/owner-outreach-fixture.mjs';
 import {verifyWorkspace} from './workspace-browser-scenarios.mjs';
 import {verifyWalkthrough} from './workspace-walkthrough-browser.mjs';
 import {verifyPurchaseAccess} from './purchase-access-browser.mjs';
@@ -52,6 +54,7 @@ try{
   if(process.env.BROWSER_ENGINES==='chromium'&&engine!==chromium)continue;
   const browser=await engine.launch({headless:true});
   try{
+   if(process.env.BROWSER_SCENARIOS==='admin-outreach'){await verifyOwnerOutreach(browser,base,options,name,fixtureCookies,fixture);continue;}
    if(process.env.BROWSER_SCENARIOS==='workspace'){await verifyWorkspace(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='access-help'){await verifyAccessHelp(browser,base,options,name,fixtureCookies);continue;}
    if(process.env.BROWSER_SCENARIOS==='walkthrough'){await verifyWalkthrough(browser,base,options,name);continue;}
@@ -61,6 +64,7 @@ try{
    if(process.env.BROWSER_SCENARIOS==='webinar-recovery'){await verifyWebinarRecovery(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='seller'){await verifySellerIntake(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-measurement'){await verifyWebinarMeasurement(browser,base,options,name);continue;}
+   await verifyOwnerOutreach(browser,base,options,name,fixtureCookies,fixture);
    await verifyWalkthrough(browser,base,options,name);
    await verifySellerCosts(browser,base,options,name,fixtureCookies);
    await verifyPurchaseAccess(browser,base,options,name);
@@ -75,6 +79,7 @@ try{
     const url=new URL(route.request().url());
     if(url.origin!==base){external++;return route.abort();}
     if(url.pathname==='/api/admin/overview')return route.fulfill({status:denied?403:failure?503:200,contentType:'application/json',body:JSON.stringify(denied?{error:'Owner required'}:failure?{error:'Fixture outage'}:fixture(url))});
+    if(url.pathname==='/api/admin/outreach')return route.fulfill({contentType:'application/json',body:JSON.stringify(ownerOutreachFixture(url))});
     if(url.pathname==='/api/admin/experience')return route.fulfill({status:experienceDenied?403:experienceFailure?503:200,contentType:'application/json',body:JSON.stringify(experienceDenied?{error:'Owner required'}:experienceFailure?{error:'Fixture outage'}:experienceFixture)});
     if(url.pathname.startsWith('/api/'))return route.fulfill({status:401,contentType:'application/json',body:'{"error":"Fixture only"}'});
     if(url.pathname==='/admin')return route.fulfill({response:await route.fetch({headers:{...route.request().headers(),cookie:fixtureCookies},maxRedirects:0})});
