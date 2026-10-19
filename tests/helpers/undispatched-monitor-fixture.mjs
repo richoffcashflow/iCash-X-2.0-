@@ -37,6 +37,9 @@ export async function verifyUndispatchedMonitoring({pg,one,refresh,id}){
  const scheduledSql=readFileSync(new URL('../../config/scheduled-seller-sms-monitoring.sql',import.meta.url),'utf8');
  assert.equal(scheduledSql,readFileSync(new URL('../../supabase/migrations/20261019013456_scheduled_seller_sms_monitoring.sql',import.meta.url),'utf8'));
  await pg.exec(scheduledSql);
+ const anytimeSql=readFileSync(new URL('../../config/anytime-seller-monitoring.sql',import.meta.url),'utf8');
+ assert.equal(anytimeSql,readFileSync(new URL('../../supabase/migrations/20261019021302_anytime_seller_monitoring.sql',import.meta.url),'utf8'));
+ await pg.exec(anytimeSql);
  const account=id(20),lead=id(21),screen=id(22),deal=id(23),thread=id(24),permission=id(25),job=id(26),buyerDeal=id(27),buyerJob=id(28);
  await pg.query('insert into icash_accounts(id) values($1)',[account]);
  await pg.query('insert into icash_wallets values($1,1000)',[account]);
@@ -62,15 +65,15 @@ export async function verifyUndispatchedMonitoring({pg,one,refresh,id}){
  await pg.query("insert into icash_contact_permissions values($1,$2,$3,'+12025550123')",[permission,account,screen]);
  await pg.query("insert into icash_voice_jobs(id,account_id,state,permission_id,due_at) values($1,$2,'ready',$3,now()+interval '8 hours')",[job,account,permission]);
  assert.equal((await refresh()).snapshot.issueCount,0,'a delivered text plus scheduled call is not a setup failure');
- // A first SMS waiting for its actual overnight window is scheduled work.
- // Keep genuine readiness failures and the independent voice channel visible.
+ // Inbound texts have no contact window. An undelivered first SMS stays
+ // visible overnight even when the separate voice call is scheduled later.
  await pg.exec('begin');
  try{
   await pg.query("update icash_screening_jobs set snapshot=snapshot||jsonb_build_object('fetchedAt',now()) where id=$1",[screen]);
   await pg.query("update icash_text_threads set timezone=(select name from pg_timezone_names where extract(hour from now() at time zone name)=21 limit 1) where id=$1",[thread]);
   await pg.query("update icash_text_messages set state='ready',provider_id=null where id=$1",[id(29)]);
   const finding=()=>one('select count(*)::int from icash_undispatched_outreach_findings()');
-  assert.equal(await finding(),0,'otherwise eligible overnight text and future call are not stalled');
+  assert.equal(await finding(),1,'retired contact hours must not hide a missing first text');
   assert.equal(await one('select state from icash_text_messages where id=$1',[id(29)]),'ready');
   for(const mutation of [
    "update icash_text_threads set fixture_permission=false",
