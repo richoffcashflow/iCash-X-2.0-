@@ -41,6 +41,24 @@ export function validReceptionCreditBound(c:RecordedReceptionConfig,r:RecordedRe
    Number.isInteger(seconds)&&seconds>=120&&seconds<=c.max_duration_seconds&&seconds%60===0);
 }
 export type ReceptionInlineToolEvidence={shape:'absent'|'array'|'invalid';count:number|null;reviewedStopDefinition:boolean;matchingStopCount:number;nativeEndCallCount:number;unrecognizedCount:number;bounded:boolean;entries:{kind:'native_end_call'|'reviewed_stop'|'unrecognized';type:'system'|'webhook'|'client'|'other';stopNameMatches:boolean;wrappedDefinitionPresent:boolean;definitionMatches:boolean}[]};
+
+/** The same approved reception version now serializes two additional disabled
+ * PVC fields (observed 2026-10-19). Only their joint exact 0/false representation
+ * may be omitted when reconstructing an older COMPLETE approved fingerprint.
+ * No hash/approval, provider setting, outbound caller or other field changes. */
+function receptionDisabledTtsDefaultsMatch(approvedHash:string,snapshot:Record<string,unknown>){
+ const config=object(snapshot.conversation_config),tts=object(config.tts);
+ const platform=object(snapshot.platform_settings),overrides=object(platform.overrides);
+ const overrideConfig=object(overrides.conversation_config_override),overrideTts=object(overrideConfig.tts);
+ if(!Object.hasOwn(tts,'pvc_strength')||tts.pvc_strength!==0
+  ||!Object.hasOwn(overrideTts,'pvc_strength')||overrideTts.pvc_strength!==false)return false;
+ const priorTts={...tts},priorOverrideTts={...overrideTts};
+ delete priorTts.pvc_strength;delete priorOverrideTts.pvc_strength;
+ return recordingConfigHashMatches(approvedHash,{...snapshot,
+  conversation_config:{...config,tts:priorTts},
+  platform_settings:{...platform,overrides:{...overrides,conversation_config_override:{...overrideConfig,tts:priorOverrideTts}}},
+ });
+}
 /** Only a direct canonical tool config, equal in every field to the separately
  * fetched and checked stop definition, may be removed from the base no-tools
  * comparison. Never remove by name, ID, URL, or an unchecked tool definition. */
@@ -88,13 +106,15 @@ export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:un
  // Reuse the outbound comparison: only omitted versus exact empty provider
  // defaults may match the SAME approved complete snapshot. Identity, prompt,
  // tools, nonempty/default extensions and every structural check stay exact.
- const approvedHashMatches=recordingConfigHashMatches(c.config_hash,snapshot);
+ const emptyDefaultsMatch=recordingConfigHashMatches(c.config_hash,snapshot);
+ const disabledTtsDefaultsMatch=!emptyDefaultsMatch&&receptionDisabledTtsDefaultsMatch(c.config_hash,snapshot);
+ const approvedHashMatches=emptyDefaultsMatch||disabledTtsDefaultsMatch;
  const guardrails=object(raw.platform_settings).guardrails;
  const buyerGuards=object(object(object(guardrails).custom).config).configs;
  const expectedBuyerGuardrail=c.context_policy===buyerSpeakingPolicy?buyerSpeakingGuardrail:c.context_policy===buyerValidatedPolicy?buyerValidatedGuardrail:c.context_policy===buyerAnswerPolicy?buyerAnswerGuardrail:c.context_policy===buyerConversationPolicy?buyerConversationGuardrail:buyerVoiceGuardrail;
  const priceEnforcement=(c.context_policy===buyerVoicePolicy||['automatic_offer_v11','automatic_offer_v12','automatic_offer_v13','automatic_offer_v14','automatic_offer_v15','automatic_offer_v16','automatic_offer_v17','automatic_offer_v18'].includes(String(c.context_policy)))?object(guardrails).version==='1'&&object(object(guardrails).focus).is_enabled===true&&Array.isArray(buyerGuards)&&buyerGuards.filter(g=>object(g).name===expectedBuyerGuardrail.name).length===1&&buyerGuards.some(g=>Object.entries(expectedBuyerGuardrail).every(([key,value])=>JSON.stringify(canonical(object(g)[key]))===JSON.stringify(canonical(value)))):!automaticOfferPolicy(c.context_policy)||automaticOfferGuardrailMatches(guardrails,c.context_policy);
  const buyerOpeningValidation=c.context_policy!==buyerValidatedPolicy||Array.isArray(buyerGuards)&&buyerGuards.filter(g=>object(g).name===buyerOpeningGuardrail.name).length===1&&buyerGuards.some(g=>Object.entries(buyerOpeningGuardrail).every(([key,value])=>JSON.stringify(canonical(object(g)[key]))===JSON.stringify(canonical(value))));
- return {safe:buyerOpeningValidation&&responseModel&&exactStop&&exactAgreement&&exactPrompt&&priceEnforcement&&inlineStopMatchesReviewedDefinition&&Object.values(base.checks).every(Boolean)&&approvedHashMatches,hash,hashMatch:hash===c.config_hash?'exact':approvedHashMatches?'equivalent_empty_defaults':'none',checks:{...base.checks,buyerOpeningValidation,responseModel,exactStop,exactAgreement,exactPrompt,priceEnforcement,inlineStopMatchesReviewedDefinition,approvedHashMatches},inlineTools};
+ return {safe:buyerOpeningValidation&&responseModel&&exactStop&&exactAgreement&&exactPrompt&&priceEnforcement&&inlineStopMatchesReviewedDefinition&&Object.values(base.checks).every(Boolean)&&approvedHashMatches,hash,hashMatch:hash===c.config_hash?'exact':emptyDefaultsMatch?'equivalent_empty_defaults':disabledTtsDefaultsMatch?'equivalent_disabled_tts_defaults':'none',checks:{...base.checks,buyerOpeningValidation,responseModel,exactStop,exactAgreement,exactPrompt,priceEnforcement,inlineStopMatchesReviewedDefinition,approvedHashMatches},inlineTools};
 }
 export function recordedReceptionToolMatches(id:string,input:unknown){
  const t=object(input),c=object(t.tool_config),a=object(c.api_schema),b=object(a.request_body_schema),p=object(b.properties),r=object(p.recordingId),h=object(object(a.request_headers).Authorization);

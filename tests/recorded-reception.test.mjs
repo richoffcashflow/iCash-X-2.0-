@@ -53,6 +53,40 @@ test('reception accepts only exact empty provider defaults against the unchanged
  assert.equal(inspect(expanded,{...cfg.c,config_hash:'0'.repeat(64)}).safe,false,'no new approval is invented');
 });
 const streamXml = '<Response><Connect><Stream url="wss://api.us.elevenlabs.io/fixture"/></Connect></Response>';
+
+test('reception reconstructs the same older fingerprint only for the observed joint disabled PVC defaults',()=>{
+ const cfg=configuration(),inspect=(agent,c=cfg.c,branch=cfg.branch)=>inspectRecordedReceptionAgent(c,agent,branch,true,cfg.tool);
+ cfg.agent.platform_settings.overrides.conversation_config_override.tts={voice_id:false};
+ cfg.c.config_hash=inspect(cfg.agent).hash;
+ const expanded=()=>{const a=clone(cfg.agent);a.conversation_config.tts.pvc_strength=0;a.platform_settings.overrides.conversation_config_override.tts.pvc_strength=false;return a;};
+ for(const subagents of [false,true])for(const subagentConfig of [false,true]){
+  const a=expanded();if(subagents)a.conversation_config.agent.subagents=[];
+  if(subagentConfig)a.conversation_config.agent.subagent_config={agents:[],self_subagent:null};
+  const before=clone(a),result=inspect(a);
+  assert.equal(result.safe,true);assert.equal(result.checks.approvedHashMatches,true);
+  assert.equal(result.hashMatch,'equivalent_disabled_tts_defaults');
+  assert.notEqual(result.hash,cfg.c.config_hash,'raw observation is retained separately from the original approval');
+  assert.equal(inspect(cfg.agent,{...cfg.c,config_hash:result.hash}).safe,false,'newly reviewed fields cannot disappear in reverse');
+  assert.deepEqual(a,before,'the provider response is never rewritten');
+ }
+ for(const mutate of [
+  a=>{a.conversation_config.tts.pvc_strength=0.1;},a=>{a.conversation_config.tts.pvc_strength=null;},
+  a=>{a.conversation_config.tts.pvc_strength='0';},a=>{delete a.conversation_config.tts.pvc_strength;},
+  a=>{a.platform_settings.overrides.conversation_config_override.tts.pvc_strength=true;},
+  a=>{a.platform_settings.overrides.conversation_config_override.tts.pvc_strength=null;},
+  a=>{a.platform_settings.overrides.conversation_config_override.tts.pvc_strength='false';},
+  a=>{delete a.platform_settings.overrides.conversation_config_override.tts.pvc_strength;},
+  a=>{a.conversation_config.tts.unreviewed_default=0;},
+  a=>{a.platform_settings.overrides.conversation_config_override.tts.unreviewed_default=false;},
+  a=>{a.conversation_config.tts.voice_id='changed-voice';},
+  a=>{a.conversation_config.agent.prompt.prompt+=' Unreviewed change.';},
+  a=>{a.conversation_config.agent.subagent_config={agents:[{}],self_subagent:null};},
+  a=>{a.conversation_config.agent.subagent_config={agents:[],self_subagent:null,extra:false};},
+  a=>{a.version_id='agtvrsn_changed';},a=>{a.branch_id='agtbrch_changed';},
+ ]){const a=expanded();mutate(a);const result=inspect(a);assert.equal(result.safe,false);assert.equal(result.checks.approvedHashMatches,false);}
+ assert.equal(inspect(expanded(),cfg.c,{...cfg.branch,draft_exists:true}).safe,false,'all structural admission checks remain mandatory');
+ assert.equal(inspect(expanded(),{...cfg.c,config_hash:'0'.repeat(64)}).safe,false,'no approved hash is invented');
+});
 // A missing dependency must never silently become a real network call.
 globalThis.fetch = async () => { throw Error('UNEXPECTED_EXTERNAL_NETWORK_IN_SYNTHETIC_TEST'); };
 
@@ -578,6 +612,26 @@ test('seller callback uses the verified template with the receipt-matched custom
  assert.deepEqual(providerWrites(f).map(e=>e.provider),['boundCall','start','register']);
  const first=f.events.findIndex(e=>e.rpc==='icash_resolve_seller_callback_config');assert(first>f.events.findIndex(e=>e.provider==='agent'));
  assert.equal(f.events.find(e=>e.rpc==='icash_reserve_direct_reception').body.p_config_id,f.row.config_id);
+});
+test('seller callback retains the original customer approval through the observed provider default serialization',async()=>{
+ let approvedHash;
+ const f=fixture({direct:true,callbackConfig:callbackProfile,mutate:cfg=>{
+  standingSource(cfg);
+  cfg.agent.platform_settings.overrides.conversation_config_override.tts={voice_id:false};
+  cfg.agent.conversation_config.agent.subagents=[];
+  approvedHash=cfg.c.config_hash=inspectRecordedReceptionAgent(cfg.c,cfg.agent,cfg.branch,true,cfg.tool).hash;
+  delete cfg.agent.conversation_config.agent.subagents;
+  cfg.agent.conversation_config.agent.subagent_config={agents:[],self_subagent:null};
+  cfg.agent.conversation_config.tts.pvc_strength=0;
+  cfg.agent.platform_settings.overrides.conversation_config_override.tts.pvc_strength=false;
+ }});
+ assert.match((await f.admit()).text,/\/connect\?/);
+ const connected=await f.service.connect(signed('connect?id='+id+'&nonce='+f.nonce,{CallStatus:'in-progress'}));
+ assert.match(await connected.text(),/<Connect>/);
+ assert.equal(f.row.account_id,'11111111-1111-4111-8111-111111111111');
+ assert.equal(f.row.configuration.config_hash,approvedHash);
+ assert.equal(f.row.configuration.callback_template.config_hash,approvedHash);
+ assert.deepEqual(providerWrites(f).map(e=>e.provider),['boundCall','start','register']);
 });
 test('ambiguous/held callback and changed provider or billing approval never reserve or connect',async()=>{
  const denied=fixture({direct:true,callbackDenied:true});assert.equal((await denied.admit()).text,rejectTwiml);assert.equal(providerWrites(denied).length,0);assert(!denied.events.some(e=>e.rpc==='icash_reserve_direct_reception'));
