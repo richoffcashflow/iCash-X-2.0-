@@ -395,6 +395,64 @@ try{
  assert.equal((await one('select state,financial_checked_at from icash_operation_spend where operation_key=$1',['voice:'+replacement])).financial_checked_at,null,'no financial evidence is fabricated');
  assert.equal((await one('select state from icash_voice_jobs where id=$1',[replacement])).state,'dispatching');
  assert.equal(Number((await one('select count(*) n from icash_voice_jobs where meta_retry_of=$1',[initialJob])).n),1);
+ // Follow-up scheduling uses saved receipts, and final admission stops races.
+ await pg.exec('create table icash_recorded_gate_terminal_receipts(recording_id uuid,account_id uuid,call_sid text,receipt jsonb);');
+ await pg.exec(read('config/recorded-seller-attempt-progress.sql').split('do $patch$')[0]+'commit;');
+ await pg.exec(read('config/meta-no-response-followups.sql'));
+ const followLead=submitted.leadId;
+ await q("update icash_voice_jobs set state='dispatched',provider_call_sid=$2 where id=$1",[replacement,'CA'+'2'.repeat(32)]);
+ const followThread=randomUUID(),followEvidence=await rpc('icash_seller_contact_evidence',[callAccount,submissionRow.screening_id,followLead,submission.phone]);
+ await q("insert into icash_text_threads(id,account_id,deal_id,sender,recipient,permission_until,permission_evidence,timezone,sms_rate_id,paused,ai_mode,seller_intake_id,seller_sms_rate_hash,seller_sms_price_micros) select $1,$2,d.id,'+12145550124',$3,$4,$5,$9,$6,false,'auto',$7,encode(sha256(convert_to(to_jsonb(r)::text,'UTF8')),'hex'),10000 from icash_deal_files d cross join icash_operation_rates r where d.screening_id=$8 and r.id=$6",[followThread,callAccount,submission.phone,followEvidence.until,followEvidence.evidence,smsRate,followLead,submissionRow.screening_id,daytimeZone]);
+ const followInitial=await rpc('icash_meta_queue_message',[followLead,'initial','initial','HomeOffer Network AI: What address? STOP to opt out.']);
+ assert(followInitial);
+ await q("update icash_text_messages set state='accepted',provider_id='SIMULATION-initial' where id=$1",[followInitial]);
+ assert.equal(await rpc('icash_meta_followup_current',[followLead,'followup_1']),false,'fresh initial contact has no immediate nudge');
+ await q("update icash_meta_leads set first_outreach_at=now()-interval '16 minutes' where lead_id=$1",[followLead]);
+ let nudges=await rpc('icash_meta_prepare_followups',[followLead]);
+ assert.equal(nudges.messageIds.length,1);assert.equal(nudges.voiceJobId,null);
+ const nudgeOne=nudges.messageIds[0];
+ assert.equal((await rpc('icash_meta_prepare_followups',[followLead])).messageIds[0],nudgeOne,'worker replay returns the same queued text');
+ const followText=await one('select body,thread_id from icash_text_messages where id=$1',[nudgeOne]);
+ assert(followText.body.includes('street, city and state'));assert(followText.body.length<=160);
+ assert.equal(await rpc('icash_meta_queue_message',[followLead,'followup_1','other-key','Do not send']),null,'a new key cannot multiply a follow-up');
+ await q("update icash_text_messages set state='accepted',provider_id='SIMULATION-nudge-one' where id=$1",[nudgeOne]);
+ await q("update icash_meta_leads set first_outreach_at=now()-interval '25 hours' where lead_id=$1",[followLead]);
+ assert.equal(await rpc('icash_meta_followup_current',[followLead,'followup_2']),false,'late/backlogged first nudge cannot burst into the second');
+ await q("update icash_text_messages set updated_at=now()-interval '7 hours' where id=$1",[nudgeOne]);
+ nudges=await rpc('icash_meta_prepare_followups',[followLead]);
+ assert.equal(nudges.messageIds.length,1);assert(nudges.voiceJobId);
+ const nudgeTwo=nudges.messageIds[0],nudgeCall=nudges.voiceJobId;
+ assert.notEqual(nudgeTwo,nudgeOne);assert.notEqual(nudgeCall,replacement);
+ assert.equal(await rpc('icash_meta_prepare_voice',[followLead]),null,'initial-call selection cannot consume the extra-call slot');
+ assert.equal((await rpc('icash_meta_prepare_followups',[followLead])).voiceJobId,nudgeCall,'one extra call even on worker replay');
+ assert.equal(await rpc('icash_meta_call_now',[callAccount,nudgeCall]),false,'an extra call cannot reuse the initial call-now request');
+ await reserveFixture('voice:'+nudgeCall);
+ await q('update icash_meta_leads set response_at=now() where lead_id=$1',[followLead]);
+ assert.equal(await rpc('icash_meta_claim_voice',[callAccount,nudgeCall]),false,'reply after queueing blocks final call dispatch');
+ await q("update icash_operation_spend set financial_checked_at=now() where operation_key=$1",['voice:'+nudgeCall]);
+ assert.equal(await rpc('icash_claim_operation',['voice:'+nudgeCall]),false,'generic screened-call admission cannot bypass a reply');
+ assert.equal(await rpc('icash_meta_claim_text',[callAccount,nudgeTwo,'+12145550124']),null,'reply after queueing blocks final text dispatch');
+ await q('update icash_meta_leads set response_at=null where lead_id=$1',[followLead]);
+ for(const field of ['paused','voice_paused']){
+  await q(`update icash_meta_leads set ${field}=true where lead_id=$1`,[followLead]);
+  assert.equal(await rpc('icash_meta_claim_voice',[callAccount,nudgeCall]),false,field+' stops the call');
+  await q(`update icash_meta_leads set ${field}=false where lead_id=$1`,[followLead]);
+ }
+ await q('update icash_wallets set balance_cents=0 where account_id=$1',[callAccount]);
+ assert.equal(await rpc('icash_meta_followup_current',[followLead,'followup_1']),false,'zero credits stop follow-ups');
+ await q('update icash_wallets set balance_cents=10000 where account_id=$1',[callAccount]);
+ await q("update icash_meta_leads set first_outreach_at=now()-interval '73 hours' where lead_id=$1",[followLead]);
+ assert.equal(await rpc('icash_meta_followup_current',[followLead,'call']),false,'no stale catch-up campaign');
+ await q("update icash_meta_leads set first_outreach_at=now()-interval '25 hours' where lead_id=$1",[followLead]);
+ assert.equal(await rpc('icash_meta_claim_voice',[callAccount,nudgeCall]),true,'unanswered contact passes real final call admission');
+ assert.equal(await rpc('icash_meta_claim_voice',[callAccount,nudgeCall]),false,'extra call dispatch is idempotent');
+ await q("update icash_voice_jobs set state='held',outcome='provider_outcome_unknown_no_retry' where id=$1",[nudgeCall]);
+ assert.equal((await rpc('icash_meta_prepare_followups',[followLead])).voiceJobId,null,'uncertain extra call is never redialled');
+ await q("update icash_text_messages set state='accepted',provider_id='SIMULATION-nudge-two' where id=$1",[nudgeTwo]);
+ assert.deepEqual((await rpc('icash_meta_prepare_followups',[followLead])).messageIds,[],'exactly two extra texts');
+ await q("insert into icash_text_messages(account_id,thread_id,direction,state,body,event_id) values($1,$2,'incoming','received','k','SIMULATION-short-reply')",[callAccount,followText.thread_id]);
+ assert.equal(await rpc('icash_meta_followup_current',[followLead,'followup_1']),false,'even a one-character reply stops the no-response series');
+ console.log('PASS unanswered Meta follow-ups: timing, two texts, one extra call, replay, late backlog spacing, reply-at-dispatch, pause, credits, expiry and uncertain-call protection.');
  // An explicitly marked export batch uses time since the last inbound lead,
  // or account creation when never served. Live forms keep their VIP rotation.
  assert.equal(read('config/meta-import-waiting-priority.sql'),read('supabase/migrations/20261018233714_meta_import_waiting_priority.sql'));
