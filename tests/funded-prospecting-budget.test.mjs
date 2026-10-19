@@ -145,6 +145,32 @@ await q("update icash_prospecting_budgets set created_at=now()-interval '3 days'
 assert.deepEqual(await val("select icash_reserve_flexible_voice($1,$2,$3,now()+interval '1 day',now(),true)",[small,nextFlex,flexRate]),{maxSeconds:180,reservedCents:240},'Time releases enough capacity without a top-up');
 const callback=uuid(26);await q("insert into icash_voice_jobs(id,account_id,permission_id,state,callback_id) values($1,$2,$3,'issued',$4)",[callback,small,flexTarget,uuid(27)]);
 assert.deepEqual(await val("select icash_reserve_flexible_voice($1,$2,$3,now()+interval '1 day',now(),true)",[small,callback,flexRate]),{maxSeconds:600,reservedCents:800},'Requested callbacks retain the existing full call bound');
+// Apply the delivery refinement after testing the underlying monthly cap.
+await db.exec(read('config/prospecting-delivery-pacing.sql'));
+const paced=uuid(30),pacedRate=uuid(31);
+await q("insert into icash_accounts(id,owner_user_id,assistant_name,bot_paused) values($1,$1,'Delivery fixture',false)",[paced]);
+await q('insert into icash_wallets(account_id,balance_cents) values($1,10000)',[paced]);
+await q("insert into icash_prospecting_budgets(account_id,funding_event,baseline_cents,created_at) values($1,'fixture:paced',10000,now()-interval '35 days')",[paced]);
+await q("insert into icash_operation_rates(id,operation,version,charge_cents,costs_micros,buffer_bps,evidence_ref,verified_at,expires_at,enabled) values($1,'property_search','fixture-paced',100,$2,0,'SYNTHETIC',now()-interval '1 day',now()+interval '1 day',true)",[pacedRate,costs]);
+const pacedReserve=key=>val("select icash_reserve_before_fractional($1,$2,$3,now()+interval '1 day',now(),true)",[paced,key,pacedRate]);
+assert.equal(await available(paced),250,'A month of inactivity cannot release the entire $50 cap in one burst');
+await Promise.all([pacedReserve('discovery:paced:1'),pacedReserve('discovery:paced:2')]);
+assert.equal(await available(paced),50);
+await assert.rejects(pacedReserve('discovery:paced:3'),/Prospecting budget reached/);
+await q("update icash_operation_spend set state='dispatched',dispatched_at=now() where operation_key='discovery:paced:1'");
+await q("insert into icash_discovery_results values('discovery:paced:1',$1,'{\"creditsUsed\":1}',now())",[paced]);
+await q("insert into icash_cost_observations(provider,event_key,source_ref,amount,units) values('dealmachine','discovery:paced:1','dealmachine:search:discovery:paced:1',1,'provider_credits')");
+assert.equal(await val("select icash_settle_dealmachine_usage('discovery:paced:1')"),true);
+assert.equal(await available(paced),147,'Only actual cost remains after a confirmed result');
+await pacedReserve('discovery:paced:3');assert.equal(await available(paced),47);
+await q("select icash_post_credit($1,'funding:paced','purchase',10000,'synthetic-pacing-payment')",[paced]);
+assert.equal(await available(paced),131,'New funding preserves both existing authorizations and recent actual costs');
+await q("update icash_operation_spend set settled_at=now()-interval '25 hours' where operation_key='discovery:paced:1'");
+assert.equal(await available(paced),134,'Rolling allowance replenishes without a calendar-midnight reset');
+await q("update icash_operation_spend set state='cancelled' where operation_key='discovery:paced:2'");
+assert.equal(await available(paced),234,'Confirmed unattempted cancellation releases its unused allowance');
+await q("update icash_prospecting_budgets set created_at=now()-interval '35 days' where account_id=$1",[small]);
+assert.equal(await available(small),0,'Old pending first calls still count toward the rolling limit');
 for(const role of ['anon','authenticated'])for(const fn of ['icash_prospecting_progress(uuid)','icash_start_funded_prospecting(uuid,text)','icash_hold_prospecting_ticket(uuid,uuid,bigint)','icash_prospecting_available(uuid)'])assert.equal(await val('select has_function_privilege($1,$2,\'execute\')',[role,fn]),false);
-console.log('Funded prospecting: 30-day release, fixed 50% cap, small-budget call bounds, atomic admission, actual settlement, duplicate funding, old in-flight work, protected replies/callbacks, paused accounts, safe unattempted resume and private progress passed. Synthetic fixtures; no providers.');
+console.log('Funded prospecting: 30-day release, rolling delivery limit, fixed 50% cap, small-budget call bounds, atomic admission, actual settlement, duplicate funding, old in-flight work, protected replies/callbacks, paused accounts, safe unattempted resume and private progress passed. Synthetic fixtures; no providers.');
 }catch(error){console.error(error.stack);console.error(error.query??'');process.exitCode=1;}finally{await db.close();}
