@@ -1,4 +1,5 @@
 import {reliabilityAlertClaimSchema} from './reliability-alerts.ts';
+import {reliabilitySeverityLabels,reliabilitySeverityGuidance} from './reliability-priority.ts';
 import {ownerInboundTarget} from './owner-inbound-acceptance.ts';
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 type Dependencies={db:Database;env?:Record<string,string|undefined>;transport?:typeof fetch;delay?:(ms:number)=>Promise<void>};
@@ -30,15 +31,15 @@ export async function dispatchReliabilityAlerts(dependencies:Dependencies){
   await db('rpc/icash_refresh_reliability_incident','POST',{p_configuration:'recipient_unverified'});
   return 'recipient_unverified';
  }
- const raw=await db<unknown>('rpc/icash_claim_reliability_notification','POST',{});
+ const raw=await db<unknown>('rpc/icash_claim_reliability_notification_v2','POST',{});
  if(raw===null)return 'idle';
  const claim=reliabilityAlertClaimSchema.parse(raw);
  const detected=claim.event==='detected';
  const labels={worker:'background worker',maintenance:'maintenance',monitor:'monitor freshness',workflows:'stalled work'};
  const summary=claim.reasons.map(reason=>labels[reason]).join(', ')||'workflow checks';
  const message={from:`iCash X <${config.from}>`,to:[recipient],
-  subject:detected?'iCash X needs attention':'iCash X monitoring recovered',
-  text:detected?`The latest checks need attention: ${summary}. ${claim.issueCount} workflow items were flagged.\n\nReview the current state: https://www.geticashx.com/admin\n\nCheck original provider receipts before repeating any send or payment. Incident reference: ${claim.incidentId}`:
+  subject:detected?`iCash X · ${reliabilitySeverityLabels[claim.severity]} priority`:'iCash X monitoring recovered',
+  text:detected?`${reliabilitySeverityLabels[claim.severity]} priority — ${summary}. ${claim.issueCount} workflow item${claim.issueCount===1?'':'s'} flagged.\n\n${reliabilitySeverityGuidance[claim.severity]}\n\nReview the current state: https://www.geticashx.com/admin\n\nCheck original provider receipts before repeating any send or payment. Incident reference: ${claim.incidentId}`:
    `The latest monitored checks are passing again for incident ${claim.incidentId}. This confirms the monitored checks recovered; it does not confirm every message was delivered or every deal completed.\n\nReview the current state: https://www.geticashx.com/admin`,
  };
  let provider:string|null=null;

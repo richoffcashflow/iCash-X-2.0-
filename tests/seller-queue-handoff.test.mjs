@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 let allocation={status:'assigned',leadId:'recovered-lead'},target,allowed=true,calls=[],recoveryFails=false,recoveryWait,onResponse;
-const mocks={processInstantLeadWork,authorizeOutboundBilling:()=>allowed,recoverAgreementDelivery:async()=>{if(recoveryFails)throw Error('Temporary receipt lookup failure');if(recoveryWait)await recoveryWait;return {status:'idle'};},sendForSignatures:()=>{},textPendingContract:()=>{},processSellerIntake:async()=>({status:'property_checked'}),deliverSellerEvent:async()=>({status:'idle'}),dispatchTextMessage:()=>{},dispatchLiveVoice:()=>{},db:async(path)=>{
+const mocks={processInstantLeadWork,processSellerResearchRefresh:async()=>({status:'idle'}),authorizeOutboundBilling:()=>allowed,recoverAgreementDelivery:async()=>{if(recoveryFails)throw Error('Temporary receipt lookup failure');if(recoveryWait)await recoveryWait;return {status:'idle'};},sendForSignatures:()=>{},textPendingContract:()=>{},processSellerIntake:async()=>({status:'property_checked'}),deliverSellerEvent:async()=>({status:'idle'}),dispatchTextMessage:()=>{},dispatchLiveVoice:()=>{},db:async(path)=>{
  calls.push(path);
  if(path==='icash_seller_controls?id=eq.1&select=enabled')return [{enabled:true}];
  if(path==='rpc/icash_collect_seller_milestones')return [];

@@ -4,6 +4,7 @@ import {createRequire} from 'node:module';
 import ts from 'typescript';
 import {webinarRequest} from '../lib/webinar-client.ts';
 import * as overview from '../lib/owner-overview.ts';
+import * as priority from '../lib/reliability-priority.ts';
 import * as funnel from '../lib/conversion-funnel.ts';
 import {ConversionFunnel} from './helpers/conversion-funnel.mjs';
 const require=createRequire(import.meta.url),originalFetch=globalThis.fetch;
@@ -21,7 +22,7 @@ function harness(){
  globalThis.window={addEventListener:(key,fn)=>listeners.set(key,fn),removeEventListener:(key,fn)=>{if(listeners.get(key)===fn)listeners.delete(key);}};
  const hooks={useState(initial){const i=cursor++;if(!(i in slots))slots[i]=initial;return [slots[i],next=>{const v=typeof next==='function'?next(slots[i]):next;if(!Object.is(v,slots[i])){slots[i]=v;dirty=true;}}];},useEffect(fn,deps){const i=cursor++,prior=slots[i];if(!prior||deps.some((v,n)=>!Object.is(v,prior.deps[n]))){slots[i]={deps,cleanup:prior?.cleanup};pending.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}}};
  const code=ts.transpileModule(readFileSync(new URL('../app/admin/overview.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
- const mod={exports:{}},deps={react:hooks,'@/lib/webinar-client':{webinarRequest:(path,init)=>webinarRequest(path,init,40)},'@/lib/owner-overview':overview,'@/lib/conversion-funnel':funnel,'@/components/conversion-funnel':{ConversionFunnel},'@/components/account-access':{AccountAccess:'AccountAccess'}};
+ const mod={exports:{}},deps={react:hooks,'@/lib/reliability-priority':priority,'@/lib/webinar-client':{webinarRequest:(path,init)=>webinarRequest(path,init,40)},'@/lib/owner-overview':overview,'@/lib/conversion-funnel':funnel,'@/components/conversion-funnel':{ConversionFunnel},'@/components/account-access':{AccountAccess:'AccountAccess'}};
  new Function('require','module','exports',code)(name=>deps[name]??(name==='react/jsx-runtime'?require(name):{default:{}}),mod,mod.exports);
  return {async flush(){for(let i=0;i<20;i++){if(dirty){cursor=0;dirty=false;tree=mod.exports.OwnerOverviewView();}const effects=pending;pending=[];effects.forEach(fn=>fn());await tick();if(!dirty&&!pending.length)return;}throw Error('Render did not settle');},find(predicate){const node=nodes(tree).find(predicate);assert(node,'Expected UI control');return node;},text:()=>text(tree),focus:()=>listeners.get('focus')?.(),dispose(){slots.forEach(s=>s?.cleanup?.());}};
 }

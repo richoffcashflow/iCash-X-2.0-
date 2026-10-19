@@ -3,13 +3,13 @@ import {dispatchReliabilityAlerts} from '../lib/reliability-alerts-service.ts';
 import {ownerInboundTarget} from '../lib/owner-inbound-acceptance.ts';
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const env={VERCEL_ENV:'production',ICASH_RELIABILITY_EMAIL_ENABLED:'true',ICASH_RELIABILITY_FROM_EMAIL:'noreply@example.invalid',RESEND_API_KEY:'fixture',SUPABASE_URL:'https://fixture.supabase.co',SUPABASE_SECRET_KEY:'fixture'};
-const claim={id:id(1),incidentId:id(2),event:'detected',openedAt:new Date().toISOString(),reasons:['workflows'],issueCount:2};
+const claim={id:id(1),incidentId:id(2),event:'detected',openedAt:new Date().toISOString(),reasons:['workflows'],issueCount:2,severity:'minor'};
 const owner={id:ownerInboundTarget.ownerUserId,email:'verified-owner@example.invalid',email_confirmed_at:new Date().toISOString()};
 let calls=[],providerCalls=0,claimed=false,finishFailures=0,failProvider=false,ownerValue=owner,event='detected';
 const db=async(path,method,body)=>{
  calls.push({path,method,body});
  if(path.endsWith('refresh_reliability_incident'))return true;
- if(path.endsWith('claim_reliability_notification')){if(claimed)return null;claimed=true;return {...claim,event};}
+ if(path.endsWith('claim_reliability_notification_v2')){if(claimed)return null;claimed=true;return {...claim,event};}
  if(path.endsWith('finish_reliability_notification')&&finishFailures-->0)throw Error('fixture lost response');
  return null;
 };
@@ -17,6 +17,7 @@ const transport=async(url,options)=>{
  if(String(url).includes('/auth/v1/admin/users/')){assert.equal(new URL(url).pathname,'/auth/v1/admin/users/'+ownerInboundTarget.ownerUserId);return Response.json(ownerValue);}
  assert.equal(url,'https://api.resend.com/emails');providerCalls++;
  const payload=JSON.parse(options.body);assert.deepEqual(payload.to,[owner.email]);assert.equal(options.headers['Idempotency-Key'],'reliability-'+claim.id);
+ if(event==='detected'){assert.equal(payload.subject,'iCash X · Minor priority');assert.match(payload.text,/Minor priority/);assert.match(payload.text,/Core background checks are healthy/);}
  assert(!JSON.stringify(payload).includes('customer'));assert(!JSON.stringify(payload).includes('server-account'));assert(payload.text.includes('https://www.geticashx.com/admin'));
  if(failProvider)throw Error('fixture ambiguous provider timeout');
  return Response.json({id:id(3)});
