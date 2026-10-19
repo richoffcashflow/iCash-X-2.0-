@@ -30,7 +30,9 @@ export async function GET(req:Request){
    db<WorkspaceAcknowledgmentRecord[]>(`icash_accounts?id=eq.${snapshot.accountId}&owner_user_id=eq.${user.id}&select=workspace_ack_version,workspace_ack_user_id,workspace_ack_hash&limit=1`)
   ]);
   const workspaceAcknowledged=!!acknowledgments[0]&&workspaceAcknowledgmentCurrent(acknowledgments[0],user.id);
-  const base={...account,...access,workspaceAcknowledged,signedIn:true,mode,email:user.email,pendingEmail:user.new_email&&user.new_email!==user.email?user.new_email:null,membershipActive,isBillingOwner:user.id===ownerInboundTarget.ownerUserId};
+  // Owner-requested display test. Real balance and readiness stay authoritative.
+  const pretendBotAvailable=user.id===ownerInboundTarget.ownerUserId&&snapshot.accountId===ownerInboundTarget.accountId&&account.paused===true&&account.balanceCents===0;
+  const base={...account,...access,pretendBotAvailable,workspaceAcknowledged,signedIn:true,mode,email:user.email,pendingEmail:user.new_email&&user.new_email!==user.email?user.new_email:null,membershipActive,isBillingOwner:user.id===ownerInboundTarget.ownerUserId};
   const canCheck=workspaceAcknowledged&&mode==='live'&&account.balanceCents>0&&!account.billingReview&&(account.billingModel!=='membership_credits'||membershipActive);
   const core=req&&new URL(req.url).searchParams.get('view')==='core';
   const held={workReady:false,smsWorkReady:false,discoveryWorkReady:false,contactWorkReady:false,discoveryQuote:null,contactQuote:null,discoveryBlocker:account.balanceCents<=0?'available_credits_required':null};
