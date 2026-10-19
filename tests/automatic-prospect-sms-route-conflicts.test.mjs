@@ -51,6 +51,7 @@ try{
  // Restore the exact pre-359 function, as the emergency rollback does, then install the fix.
  await pg.exec(readFileSync(new URL('./fixtures/prospecting-sms-routing.sql',import.meta.url),'utf8'));
  await pg.exec(sql);
+ await pg.exec(readFileSync(new URL('../config/operational-sms-candidate-fence.sql',import.meta.url),'utf8'));
  assert.deepEqual(await one("select pg_get_functiondef('icash_sms_thread_binding()'::regprocedure) definition"),bindingBefore,'property binding guard unchanged');
  await isolated(async()=>{
   // Both candidates are initially routable. The first creates the pair in this
