@@ -62,6 +62,15 @@ test('ordinary exact-hash reviews retain their behavior and wrong hashes fail',(
  }
 });
 
+test('incoming disabled PVC compatibility does not loosen outbound approval checks',()=>{
+ const original=fixture(),review=reviewFor(original),expanded=structuredClone(original);
+ expanded.conversation_config.tts.pvc_strength=0;
+ expanded.platform_settings.overrides.conversation_config_override.tts.pvc_strength=false;
+ assert.equal(recordingAgentMatches(review,original),true);
+ assert.equal(recordingAgentMatches(review,expanded),false);
+ assert.equal(recordingAgentMatches(reviewFor(expanded),expanded),true);
+});
+
 test('nonempty, malformed and extended subagent values are not empty defaults',()=>{
  const invalid=[null,[],false,0,'',{},
   {agents:[]},{self_subagent:null},{agents:null,self_subagent:null},{agents:{},self_subagent:null},

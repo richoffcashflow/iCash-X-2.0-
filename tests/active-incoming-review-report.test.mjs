@@ -34,6 +34,7 @@ test('preview, unavailable, compatible and mismatched-source reports cannot writ
   f=>{f.env.VERCEL_ENV='preview';},f=>{f.env.VERCEL_TARGET_ENV='preview';},
   f=>{delete f.env.SUPABASE_SECRET_KEY;},f=>{f.result.activeIncoming.status='unavailable';},
   f=>{f.result.activeIncoming.hashMatch='exact';},f=>{f.result.activeIncoming.hashMatch='equivalent_empty_defaults';},
+  f=>{f.result.activeIncoming.hashMatch='equivalent_disabled_tts_defaults';},
   f=>{f.result.activeIncoming.observedHash='invalid';},f=>{f.result.activeIncoming.observedHash='b'.repeat(64);},
   f=>{f.config.config_hash='b'.repeat(64);},f=>{f.config.id='different';},
   f=>{f.config.agent_id='agent_other';},f=>{f.config.branch_id='agtbrch_other';},f=>{f.config.reviewed_version_id='agtvrsn_other';},
