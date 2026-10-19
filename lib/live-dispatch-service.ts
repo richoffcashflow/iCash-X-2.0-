@@ -179,7 +179,12 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  }
  if(!fundedCall)return {status:cancellation?'cancellation_notice_waiting':process.env.ICASH_FLEXIBLE_VOICE_READY==='true'?'waiting_for_available_credits':'waiting_for_daytime_budget'};
  const claimHold=recordingReleaseHold();if(claimHold)return hold(claimHold);
- const claimed=intake?await db<boolean>('rpc/icash_meta_claim_voice','POST',{p_account:accountId,p_job:j.id}):cancellation?await db<boolean>('rpc/icash_claim_cancellation_voice','POST',{p_account:accountId,p_job:j.id,p_context:cancellation}):p.party==='seller'
+ const metaClaim=intake?await db<'claimed'|'deferred'|'held'|'unavailable'>('rpc/icash_meta_claim_or_defer_voice','POST',{p_account:accountId,p_job:j.id}):null;
+ // Deferral retains the unattempted reservation. Never send a later generic
+ // hold: it could arrive after the same job has been issued for its next turn.
+ if(metaClaim==='deferred')return {status:'waiting_for_active_call'};
+ if(intake&&metaClaim!=='claimed')return {status:metaClaim==='held'?'dispatch_permission_changed':'held'};
+ const claimed=intake?metaClaim==='claimed':cancellation?await db<boolean>('rpc/icash_claim_cancellation_voice','POST',{p_account:accountId,p_job:j.id,p_context:cancellation}):p.party==='seller'
   ?limited?await db<boolean>('rpc/icash_claim_limited_seller_voice','POST',{p_job:j.id,p_snapshot:snapshot.snapshot}):await db<boolean>('rpc/icash_claim_automatic_offer_voice_job','POST',{p_job:j.id,p_snapshot:snapshot.snapshot,p_offer_price_cents:cashOfferPrice})
   :await db<boolean>('rpc/icash_claim_reviewed_voice_job','POST',{p_job:j.id,p_offer_snapshot:null,p_buyer_snapshot:buyerContext});
  if(!claimed)return hold('dispatch_permission_changed');

@@ -56,6 +56,7 @@ let preferredPhone=null;
 let textThreads=[{sender:'+14243948384'}],secondEnabled=false,secondVerified=false;
 const secondaryCallingReady=async()=>secondVerified;
 let reservationError=null,budgetHoldAccepted=true,flexibleFunding={maxSeconds:120};
+let metaClaimResult='claimed';
 let sellerConsentCurrent=true,activeConversation=false,outreachContextOverride=undefined,metaContext=null,cancellationCurrent=true;
 let customVoice=null;
 const selectedCustomCallVoice=async()=>customVoice;
@@ -77,6 +78,7 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_webinar_text_senders'))return preferredPhone?[{phone:preferredPhone}]:[];
  if(path.startsWith('icash_business_voice_numbers'))return [{outbound_enabled:secondEnabled}];
  if(path==='rpc/icash_voice_sms_context')return null;
+ if(path==='rpc/icash_meta_claim_or_defer_voice'){if(metaClaimResult==='claimed')jobState='dispatching';if(metaClaimResult==='deferred')jobState='ready';if(metaClaimResult==='held')jobState='held';return metaClaimResult;}
  if(path==='rpc/icash_meta_voice_context'){assert.equal(body.p_account,'account');assert.equal(body.p_job,'job');return metaContext;}
  if(path==='rpc/icash_seller_call_request'){assert.equal(body.p_account,'account');assert.equal(body.p_screening,'screening');assert.equal(body.p_phone,permission.phone);return {name:null,submittedAt:new Date(now-1000).toISOString()};}
  if(path==='rpc/icash_seller_sms_call_ack')return 'ack-message';
@@ -111,7 +113,7 @@ let source=ts.transpileModule(readFileSync(new URL('../lib/live-dispatch-service
 source='const {readVoiceOutreachContext,opportunityConversationInstructions,instantLeadsEnabled,instantLeadPrompt,cancellationCallPrompt,sellerAgreementDeliveryPrompt,conversationAddressFields,conversationAddressInstructions,dispatchTextMessage,selectBusinessCaller,isAdditionalBusinessPhone,secondaryBusinessPhone,secondaryCallingReady,sellerOfferPresentation,VoiceActivationBudgetError,selectedCustomCallVoice,recordingServer,object,readRecordingReview,recordingAgentMatches,recordingPolicy,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation,contactEligibility,nextContactWindow,buyerCallInstructions,buyerFirstMessage,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt,sellerCallContext,compactSellerProgress,automaticOfferReceptionPrompt,loadSellerClosingContext,sellerContractToolId,legacyAutomaticOfferReceptionPrompt,streamingAutomaticOfferReceptionPrompt,automaticOfferPolicy}=globalThis.__voiceTest;\n'+source;
 const {dispatchLiveVoice}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 process.env.ELEVENLABS_API_KEY='fixture-no-network';process.env.CONTIGUITY_FROM='+14243948384';
-const reset=()=>{preferredPhone=null;activeConversation=false;outreachContextOverride=undefined;metaContext=null;cancellationCurrent=true;cancellationId=null;cancellationContext=null;priorSellerCalls=[];smsSource=null;ackFails=false;textThreads=[{sender:'+14243948384'}];secondEnabled=false;secondVerified=false;delete process.env.ICASH_FLEXIBLE_VOICE_READY;flexibleFunding={maxSeconds:120};reservationError=null;budgetHoldAccepted=true;c=structuredClone(configTemplate);providerAgent=structuredClone(agent);providerPaths=[];agentReadFailed=false;identityVoice='voice';providerReads=0;flipAt=null;flip=()=>{};legacyRate=false;recordingStatus='recording_consent_pending';Object.assign(process.env,{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:review.providerAccountSid,TWILIO_AUTH_TOKEN:'synthetic-provider-token'});operational=false;operationalCurrent=true;contextOverrides=true;outboundBody=undefined;buyerApproved=true;records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;callbackId=null;providerNumber='+14243948384';suppressed=false;paced=true;};
+const reset=()=>{metaClaimResult='claimed';preferredPhone=null;activeConversation=false;outreachContextOverride=undefined;metaContext=null;cancellationCurrent=true;cancellationId=null;cancellationContext=null;priorSellerCalls=[];smsSource=null;ackFails=false;textThreads=[{sender:'+14243948384'}];secondEnabled=false;secondVerified=false;delete process.env.ICASH_FLEXIBLE_VOICE_READY;flexibleFunding={maxSeconds:120};reservationError=null;budgetHoldAccepted=true;c=structuredClone(configTemplate);providerAgent=structuredClone(agent);providerPaths=[];agentReadFailed=false;identityVoice='voice';providerReads=0;flipAt=null;flip=()=>{};legacyRate=false;recordingStatus='recording_consent_pending';Object.assign(process.env,{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:review.providerAccountSid,TWILIO_AUTH_TOKEN:'synthetic-provider-token'});operational=false;operationalCurrent=true;contextOverrides=true;outboundBody=undefined;buyerApproved=true;records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;callbackId=null;providerNumber='+14243948384';suppressed=false;paced=true;};
 reset();cancellationId='notice';cancellationContext={address:'128 Sample Lane',body:'Cancellation requested; signed terms still apply.',completed:false};
 assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');
 assert.equal(outboundBody.maxTotalSeconds,120);assert.match(outboundBody.prompt,/sole task is one brief cancellation update/);assert(!outboundBody.firstMessage.includes('128 Sample Lane'));assert(!outboundBody.prompt.includes('get_offer'));assert(!records.some(r=>r.path==='rpc/icash_claim_automatic_offer_voice_job'));assert(!records.some(r=>r.path==='rpc/icash_seller_prior_call_context'));
@@ -279,12 +281,20 @@ for(const enabled of ['false','true']){
  assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');
  assert.equal(postCount,1);
  assert.equal(records.some(r=>r.path==='rpc/icash_meta_voice_context'),enabled==='true');
- assert(!records.some(r=>r.path==='rpc/icash_meta_claim_voice'),'Ordinary seller calls keep their own admission path');
+ assert(!records.some(r=>r.path==='rpc/icash_meta_claim_or_defer_voice'),'Ordinary seller calls keep their own admission path');
 }
 reset();sellerConsentCurrent=true;permission={...permission,party:'seller',timezone:'Pacific/Honolulu',seller_intake_id:'saved-intake'};
 process.env.META_INSTANT_LEADS_ENABLED='true';metaContext={leadId:'saved-intake',name:null,state:'submitted',address:null};
 assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');assert.equal(postCount,0,'Initial Meta calls use the first-contact window, even with verified consent');
-assert(records.some(r=>r.path==='rpc/icash_meta_voice_context'));assert(!records.some(r=>r.path==='rpc/icash_meta_claim_voice'));
+assert(records.some(r=>r.path==='rpc/icash_meta_voice_context'));assert(!records.some(r=>r.path==='rpc/icash_meta_claim_or_defer_voice'));
+for(const result of ['deferred','held','unavailable','claimed']){
+ reset();permission={...permission,party:'seller',timezone:'America/Chicago',seller_intake_id:'saved-intake'};
+ process.env.META_INSTANT_LEADS_ENABLED='true';metaContext={leadId:'saved-intake',name:null,state:'submitted',address:null};metaClaimResult=result;
+ assert.equal((await dispatchLiveVoice('account','job')).status,result==='deferred'?'waiting_for_active_call':result==='held'?'dispatch_permission_changed':result==='unavailable'?'held':'call_started');
+ assert.equal(postCount,result==='claimed'?1:0,'Only an explicit claimed result may reach the recording provider');
+ assert(!records.some(r=>r.path==='rpc/icash_hold_voice_job'),'Explicit Meta result never creates a stale follow-on hold');
+ assert(!records.some(r=>r.path==='rpc/icash_meta_claim_voice'),'Do not invoke the legacy boolean claim after the explicit result');
+}
 process.env.META_INSTANT_LEADS_ENABLED='false';
 if(deploymentEnvironment===undefined)delete process.env.VERCEL_ENV;else process.env.VERCEL_ENV=deploymentEnvironment;
 console.log('PASS ordinary seller dispatch with Meta intake disabled and enabled; build environment cannot select fixture behavior.');
