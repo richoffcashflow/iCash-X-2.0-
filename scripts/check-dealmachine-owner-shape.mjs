@@ -12,7 +12,7 @@ export async function inspectOwnerShape(env=process.env,fetcher=fetch){
  const raw=await preview.json();
  if(raw?.credits?.used!==0||!Array.isArray(raw?.data?.contacts))return {status:'invalid_free_preview'};
  return {status:'checked',paidRequests:0,creditsUsed:0,contacts:raw.data.contacts.slice(0,25).map(person=>({
-  keys:Object.keys(person).sort(),flags:Object.fromEntries(Object.entries(person).filter(([key])=>/^is_[a-z_]+$/.test(key)).map(([key,value])=>[key,{type:typeof value,value:typeof value==='boolean'||typeof value==='number'||value===null?value:typeof value==='string'&&['true','false','0','1','owner','renter','resident'].includes(value.toLowerCase())?value:'redacted'}]))
+  keys:Object.keys(person).sort(),contactType:typeof person.contact_type==='string'&&/^[a-z_ -]{1,64}$/i.test(person.contact_type)?person.contact_type:null,flags:Object.fromEntries(Object.entries(person).filter(([key])=>/^is_[a-z_]+$/.test(key)).map(([key,value])=>[key,{type:typeof value,value:typeof value==='boolean'||typeof value==='number'||value===null?value:typeof value==='string'&&['true','false','0','1','owner','renter','resident'].includes(value.toLowerCase())?value:'redacted'}]))
  }))};
 }
 try{console.log('DealMachine owner preview schema: '+JSON.stringify(await inspectOwnerShape()));}catch{console.log('DealMachine owner preview schema: unavailable. No paid request.');}
