@@ -19,7 +19,7 @@ try{
  user={id:'another-user',user_metadata:{isBillingOwner:true,ownerUserId:owner}};response=await get();assert.equal(response.status,403);checkPrivate(response);assert.equal(queries.length,0);
  authFailure=true;response=await get();assert.equal(response.status,503);assert(!JSON.stringify(await response.json()).includes('Private'));assert.equal(queries.length,0);authFailure=false;
  user={id:owner};response=await get();assert.equal(response.status,200);checkPrivate(response);assert.deepEqual(await response.json(),{experience,alerts});
- assert.equal(queries.length,2);assert.deepEqual(queries.map(q=>q.path),['rpc/icash_workspace_experience_summary','rpc/icash_reliability_alert_status']);
+ assert.equal(queries.length,2);assert.deepEqual(queries.map(q=>q.path),['rpc/icash_workspace_experience_summary','rpc/icash_reliability_alert_status_v2']);
  for(const query of queries){assert.equal(query.method,'POST');assert.deepEqual(query.body,{p_actor:owner});assert(query.signal instanceof AbortSignal);}
  const unavailable={error:'Workspace monitoring could not load. Try again in a moment.'};
  for(const bad of [null,{}, {...experience,counts:[{event:'panel_error',stage:'closing',count:-1,accounts:1}]},{...experience,email:'private@example.invalid'},{...experience,counts:[{event:'panel_error',stage:'closing',count:1,accounts:1,message:'Private property'}]}]){

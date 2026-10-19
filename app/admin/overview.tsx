@@ -8,6 +8,7 @@ import {overviewLeadStatus,overviewMoney,overviewTime,validOwnerOverview,type Ow
 import styles from './overview.module.css';
 import {ClosingOperationsView} from './closing-operations';
 import {reliabilityIssueLabels} from '@/lib/reliability';
+import {reliabilityPriority,reliabilityItemPriority,reliabilitySeverityLabels,reliabilitySeverityGuidance} from '@/lib/reliability-priority';
 import {ExperienceHealth} from './experience-health';
 import {UsageLoopReport} from '@/components/usage-loop-report';
 import {LeadSupply} from './lead-supply';
@@ -48,20 +49,22 @@ export function OwnerOverviewView(){
  const reload=()=>setRefresh(v=>v+1);
  function update(next:Partial<OverviewFilters>){setFilters(current=>({...current,...next,page:next.page??1}));}
  const usage=report?.usage,estimated=!!usage?.estimatedCount;
+ const priority=report?reliabilityPriority(report.reliability??null):null;
  return <main className={styles.page}>
   <nav className={styles.nav} aria-label="Admin navigation"><a href="/">← Workspace</a><a href="/admin/disputes">Disputes ↗</a><a href="/seller-operations#lead-costs">Lead costs ↗</a><span>iCash X <b>Owner</b></span></nav>
   <header className={styles.heading}><div><h1>Overview</h1><p>Your leads and usage earnings, in one place.</p></div>{!denied&&<button className={styles.button} onClick={reload} disabled={busy}>{busy?'Refreshing…':'Refresh'}</button>}</header>
   {denied?<section className={styles.empty}><h2>{denied===401?'Sign in to your owner account':'Owner access only'}</h2><p>{denied===401?'This overview is private.':'Your signed-in account does not have access to this overview.'}</p>{denied===401&&<AccountAccess onSignedIn={()=>{setDenied(null);reload();}}/>}</section>:<>
    {report&&<LeadSupply data={report.leadSupply??null} stale={!!error}/>}
    {report&&<section className={styles.notice} aria-label="Workflow reliability" role="status">
-    <strong>Workflow reliability · {report.reliability?.status==='ok'?'Checks passing':report.reliability?'Needs attention':'Unavailable'}</strong>
+    <strong>Workflow reliability · {priority?`${reliabilitySeverityLabels[priority]} priority`:'Checks passing'}</strong>
+    {priority&&<span>{reliabilitySeverityGuidance[priority]}</span>}
     {report.reliability?<>
      <span>Background worker: {report.reliability.components.worker.status} · Maintenance: {report.reliability.components.maintenance.status}</span>
      {!report.reliability.fresh&&<span>Monitoring is overdue. The saved results do not confirm current health.</span>}
      {report.reliability.snapshot&&<>
       <span>{report.reliability.snapshot.issueCount} items need review · Checked {overviewTime(report.reliability.snapshot.checkedAt)} CT</span>
       <span>Past 24 hours: {report.reliability.snapshot.texts.accepted} texts accepted, {report.reliability.snapshot.texts.delivered} delivery confirmations · {report.reliability.snapshot.contracts.created} contracts created, {report.reliability.snapshot.contracts.completed} signed.</span>
-      {report.reliability.snapshot.issues.length>0&&<details><summary>Review stalled work</summary><ul>{report.reliability.snapshot.issues.map(issue=><li key={`${issue.kind}:${issue.resourceId}`}><strong>{reliabilityIssueLabels[issue.kind]}</strong> · {overviewTime(issue.since)} CT · Reference {issue.resourceId}<br/>Check the saved provider receipt before repeating any action.</li>)}</ul>{report.reliability.snapshot.issueCount>25&&<p>Showing the 25 oldest items.</p>}</details>}
+      {report.reliability.snapshot.issues.length>0&&<details><summary>Review stalled work</summary><ul>{report.reliability.snapshot.issues.map(issue=><li key={`${issue.kind}:${issue.resourceId}`}><strong>{reliabilitySeverityLabels[reliabilityItemPriority(issue)]} · {reliabilityIssueLabels[issue.kind]}</strong> · {overviewTime(issue.since)} CT · Reference {issue.resourceId}<br/>Check the saved provider receipt before repeating any action.</li>)}</ul>{report.reliability.snapshot.issueCount>25&&<p>Showing the 25 oldest items.</p>}</details>}
      </>}
     </>:<span>Monitoring could not be loaded. Refresh to try again.</span>}
    </section>}

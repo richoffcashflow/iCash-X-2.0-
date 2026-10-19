@@ -4,6 +4,7 @@ import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {overviewTime} from '@/lib/owner-overview';
 import {workspaceExperienceSummarySchema,type WorkspaceExperienceSummary} from '@/lib/workspace-experience';
 import {reliabilityAlertStatusSchema,type ReliabilityAlertStatus} from '@/lib/reliability-alerts';
+import {reliabilitySeverityLabels} from '@/lib/reliability-priority';
 import styles from './overview.module.css';
 
 type ExperienceReport={experience:WorkspaceExperienceSummary;alerts:ReliabilityAlertStatus};
@@ -49,7 +50,7 @@ export function ExperienceHealth(){
      {errors.length>0&&<ul>{errors.map(item=><li key={item.stage}>{stageLabels[item.stage]}: {item.count.toLocaleString('en-US')} errors across {item.accounts.toLocaleString('en-US')} accounts</li>)}</ul>}
      <p>{report.experience.lastObservedAt?`Latest signal: ${overviewTime(report.experience.lastObservedAt)} CT`:'No interface signals recorded in this period.'}</p>
      <p><strong>Owner incident emails: {configurationLabels[report.alerts.configuration]}</strong>{report.alerts.checkedAt?` · Checked ${overviewTime(report.alerts.checkedAt)} CT`:' · Status has not been checked yet.'}</p>
-     {report.alerts.active?<p>{report.alerts.active.issueCount} items need attention · {report.alerts.active.reasons.map(reason=>reasonLabels[reason]).join(', ')} · Opened {overviewTime(report.alerts.active.openedAt)} CT</p>:<p>{report.alerts.checkedAt?'No incident was open at the last check.':'Incident status is awaiting its first check.'}</p>}
+     {report.alerts.active?<p><strong>{report.alerts.active.severity?`${reliabilitySeverityLabels[report.alerts.active.severity]} priority`:'Priority awaiting check'}</strong> · {report.alerts.active.issueCount} items need attention · {report.alerts.active.reasons.map(reason=>reasonLabels[reason]).join(', ')} · Opened {overviewTime(report.alerts.active.openedAt)} CT</p>:<p>{report.alerts.checkedAt?'No incident was open at the last check.':'Incident status is awaiting its first check.'}</p>}
      <p>Notifications: {report.alerts.notifications.pending} pending · {report.alerts.notifications.accepted} accepted by the email provider · {report.alerts.notifications.needsReview} need review. Provider acceptance does not confirm delivery.</p>
      {report.alerts.lastNotificationAt&&<p>Latest notification: {overviewTime(report.alerts.lastNotificationAt)} CT</p>}
     </details>

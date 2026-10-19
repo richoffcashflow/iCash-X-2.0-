@@ -14,6 +14,7 @@ const route=await loadService('app/api/internal/seller/route.ts',{processInstant
  recoverAgreementDelivery:async()=>{recovery++;return {status:'recovery_idle'};},
  deliverSellerEvent:async()=>({status:'measurement_idle'}),
  processSellerIntake:async()=>{research++;if(lookupFails)throw Error('SIMULATION research outage');return {status:'idle'};},
+ processSellerResearchRefresh:async()=>({status:'idle_or_setup_required'}),
  processSellerResponses:async(_db,_text,_voice,lead)=>{responses.push(lead??'existing');if(responseFails)throw Error('SIMULATION response outage');return [{leadId:lead??'existing',status:'queued'}];},
  dispatchTextMessage:()=>{throw Error('No network');},dispatchLiveVoice:()=>{throw Error('No network');},
  sendForSignatures:()=>{throw Error('No network');},textPendingContract:()=>{throw Error('No network');},
