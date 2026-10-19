@@ -8,13 +8,16 @@ export type SupportEvidence = {key:string; source:string; status:'ok'|'attention
 export const supportMessageInput = z.object({requestId:supportId,threadId:supportId.optional(),message:z.string().trim().min(1).max(2000)}).strict();
 export const supportStatusInput = z.object({requestId:supportId,threadId:supportId,status:z.enum(['open','escalated','waiting_on_customer','resolved']),reply:z.string().trim().min(1).max(3000).optional()}).strict();
 /** Only these literal topics influence diagnostics. Model output is never an executable instruction. */
+export function supportDuplicateCharge(text:string){
+ return /\b(?:charg(?:e|ed)|billed|paid|debited)\b.{0,40}\b(?:twice|double|two times)\b|\b(?:duplicate|double)\s+(?:card\s+)?charges?\b|\b(?:two|2)\s+(?:charges|payments)\b|\bduplicate\s+payments?\b(?!\s+methods?)/i.test(text);
+}
 export function supportTopic(text:string):SupportTopic {
  if(/^(hi|hello|hey|thanks|thank you)[.!?\s]*$/i.test(text.trim()))return 'general';
- if(/(?:charg(?:e|ed)|bill(?:ed)?|paid).{0,30}(?:twice|double|two times)|(?:duplicate|double).{0,20}(?:charge|payment|billing)/i.test(text))return 'billing';
+ if(supportDuplicateCharge(text))return 'billing';
  if(/\b(?:refund|money back)\b/i.test(text))return 'refund';
  if(/\b(human|person|owner|agent|escalate)\b/i.test(text))return 'human';
  if(/\b(cancel|delete|refund)\b/i.test(text)||/^(?:please\s+)?stop[.!?\s]*$/i.test(text.trim())||/\b(?:want to|please|help me|can you)\s+stop\b|\bstop (?:my |the |future )?(?:bot|work|renewals|billing|plan|subscription)\b/i.test(text))return 'cancel';
- if(/\b(bill|billing|charge|charged|payment|credit|balance|renewal)\b/i.test(text))return 'billing';
+ if(/\b(bill|billing|charge|charged|payment|card|credit|balance|renewal)\b/i.test(text))return 'billing';
  if(/\b(sign.?in|setup|start|login)\b/i.test(text))return 'setup';
  return 'work';
 }
@@ -34,7 +37,7 @@ export function supportAnswer(topic:SupportTopic,evidence:SupportEvidence[],ai:b
  const relevant=evidence.filter(e=>wanted.includes(e.key));
  const attention=relevant.filter(e=>e.status!=='ok');
  const details=(attention.length?attention:relevant).slice(0,2).map(e=>{const next=supportNextStep(e);return e.detail+(next?' '+next.text:'');}).join('\n\n');
- return details||'I couldn’t verify your account details just now. I can continue troubleshooting here. What is the exact message on your screen?';
+ return details||'I couldn’t verify your account details just now. I can continue troubleshooting here.';
 }
 export function hashCancelNonce(nonce:string){return createHash('sha256').update(nonce).digest('hex');}
 const cancelNonce=z.string().regex(/^[a-f0-9]{64}$/);
