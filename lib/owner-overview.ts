@@ -3,7 +3,7 @@ import {closingOperationsSchema,type ClosingOperations} from './deal-completion.
 import {reliabilitySchema,type ReliabilityReport} from './reliability.ts';
 import {validLeadSupplyPlan,type LeadSupplyPlan} from './lead-supply.ts';
 export type OverviewFilters={days:1|7|30;includeOwner:boolean;query:string;page:number};
-export type OverviewLead={id:string;name:string|null;address:string;phone:string;email:string|null;state:string;source:string;campaign:string|null;assignedTo:string|null;createdAt:string};
+export type OverviewLead={id:string;name:string|null;address:string|null;phone:string;email:string|null;state:string;source:string;campaign:string|null;assignedTo:string|null;createdAt:string};
 export type OwnerOverview=OverviewFilters & {
  pageSize:25;timezone:'America/Chicago';startAt:string;endAt:string;
  leadCount:number;reviewCount:number;matchedCount:number;leads:OverviewLead[];
@@ -35,13 +35,13 @@ export function validOwnerOverview(value:unknown,filters:OverviewFilters):value 
  if(v.reliability!=null&&!reliabilitySchema.safeParse(v.reliability).success)return false;
  if(v.leadSupply!=null&&!validLeadSupplyPlan(v.leadSupply))return false;
  if(v.closing!==undefined&&!closingOperationsSchema.safeParse(v.closing).success)return false;
- return v.leads.every(lead=>{const l=record(lead);return ['id','address','phone','state','source'].every(k=>typeof l[k]==='string')&&['name','email','campaign','assignedTo'].every(k=>l[k]===null||typeof l[k]==='string')&&date(l.createdAt);});
+ return v.leads.every(lead=>{const l=record(lead);return ['id','phone','state','source'].every(k=>typeof l[k]==='string')&&['name','address','email','campaign','assignedTo'].every(k=>l[k]===null||typeof l[k]==='string')&&date(l.createdAt);});
 }
 export function overviewMoney(amount:number|null,unit:'cents'|'micros'='micros'){
  return amount===null?'—':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:2}).format(amount/(unit==='cents'?100:1000000));
 }
 export function overviewTime(value:string){return new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true}).format(new Date(value));}
 export function overviewLeadStatus(state:string){
- const labels:Record<string,string>={received:'New',looking_up:'Checking property',checking:'Checking property',qualified:'Awaiting match',assigned:'Assigned',review:'Needs review',numbers_review:'Needs review',market_review:'Needs review',unmatched:'Check address',suppressed:'Contact stopped',rejected:'Not qualified'};
+ const labels:Record<string,string>={awaiting_address:'Collecting address',received:'New',looking_up:'Checking property',checking:'Checking property',qualified:'Awaiting match',assigned:'Assigned',review:'Needs review',numbers_review:'Needs review',market_review:'Needs review',unmatched:'Check address',suppressed:'Contact stopped',rejected:'Not qualified'};
  return labels[state]??'Needs review';
 }

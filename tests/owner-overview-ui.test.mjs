@@ -26,7 +26,7 @@ function harness(){
  return {async flush(){for(let i=0;i<20;i++){if(dirty){cursor=0;dirty=false;tree=mod.exports.OwnerOverviewView();}const effects=pending;pending=[];effects.forEach(fn=>fn());await tick();if(!dirty&&!pending.length)return;}throw Error('Render did not settle');},find(predicate){const node=nodes(tree).find(predicate);assert(node,'Expected UI control');return node;},text:()=>text(tree),focus:()=>listeners.get('focus')?.(),dispose(){slots.forEach(s=>s?.cleanup?.());}};
 }
 let count=0;
-async function scenario(name,fn){await fn();console.log(`PASS ${++count}/5 ${name}`);}
+async function scenario(name,fn){await fn();console.log(`PASS ${++count}/6 ${name}`);}
 try{
  await scenario('Switching periods cancels old reads and never displays old totals under a new filter',async()=>{
   let late,signal;globalThis.fetch=async(path,init)=>{if(path.includes('days=7&')){signal=init.signal;return new Promise(resolve=>{late=resolve;});}return Response.json(fixture(path,path.includes('days=1&')?'Today seller':'Private seller'));};
@@ -44,8 +44,12 @@ try{
   let calls=0,signal;globalThis.fetch=async(_path,init)=>{calls++;signal=init.signal;return new Promise(()=>{});};
   const ui=harness();try{await ui.flush();ui.focus();ui.focus();await new Promise(resolve=>setTimeout(resolve,50));await ui.flush();assert.equal(calls,1);assert(signal.aborted);assert.match(ui.text(),/too long/);assert.equal(ui.find(n=>n.type==='button'&&text(n)==='Refresh').props.disabled,false);assert(!ui.text().includes('$0.00'));}finally{ui.dispose();}
  });
+ await scenario('Contact-only leads keep totals visible and show the address-collection step',async()=>{
+  let hasAddress=false;globalThis.fetch=async path=>{const result=fixture(path,'Instant seller');result.report.leads[0].address=hasAddress?'123 Example St':null;result.report.leads[0].state=hasAddress?'assigned':'awaiting_address';return Response.json(result);};
+  const ui=harness();try{await ui.flush();assert.match(ui.text(),/Instant seller/);assert.match(ui.text(),/Address not provided yet/);assert.match(ui.text(),/Collecting address/);assert.match(ui.text(),/\$0.80/);assert(!ui.text().includes('Overview unavailable'));assert.equal(ui.find(n=>n.type===ConversionFunnel).props.steps[0].count,1);hasAddress=true;ui.find(n=>n.type==='button'&&text(n)==='Refresh').props.onClick();await ui.flush();assert.match(ui.text(),/123 Example St/);assert(!ui.text().includes('Address not provided yet'));assert(!ui.text().includes('Collecting address'));}finally{ui.dispose();}
+ });
  await scenario('Malformed successful responses show an error instead of fake zero totals',async()=>{
   globalThis.fetch=async()=>Response.json({report:{}});const ui=harness();try{await ui.flush();assert.match(ui.text(),/incomplete data/);assert(!ui.text().includes('$0.00'));}finally{ui.dispose();}
  });
 }finally{globalThis.fetch=originalFetch;}
-assert.equal(count,5);
+assert.equal(count,6);
