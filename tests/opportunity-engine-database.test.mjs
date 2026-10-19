@@ -31,6 +31,7 @@ create function icash_seller_assignment_due(integer,timestamptz,timestamptz) ret
 `);
 await db.exec(read('tests/fixtures/opportunity-dependencies.sql'));
 await db.exec(read('supabase/migrations/20261019150042_dealmachine_usage_and_opportunity_engine.sql'));
+await db.exec(read('config/opportunity-score-bounds.sql'));
 await q("insert into icash_accounts(id,owner_user_id,assistant_name,bot_paused) values($1,$1,'Fixture',false),($2,$2,'Other',false)",[account,other]);
 await q('insert into icash_wallets(account_id,balance_cents) values($1,10000),($2,10000)',[account,other]);
 await db.exec("insert into icash_operating_budget(id,enabled,require_company_reserve,standard_cost_multiplier,elevenlabs_cost_multiplier) values(1,true,false,2,2);insert into icash_data_cost_settings(provider,credit_micros,cost_basis,source_ref) values('dealmachine',10000,'estimated','SYNTHETIC unit allocation');insert into icash_acquisition_policy(id,mode) values(1,'hybrid');");
@@ -113,6 +114,8 @@ for(let n=20;n<40;n++){const id=await screen(n,account,'75216',2);await call(n,i
 await db.exec('delete from icash_opportunity_refreshes');await q('select icash_refresh_opportunity_outcomes($1)',[account]);
 assert(Number(await val('select icash_opportunity_market_score($1,$2)',[account,'75216']))>0,'Recorded outcomes improve market ranking after enough samples');
 assert.equal(Number(await val('select icash_opportunity_market_score($1,$2)',[other,'75216'])),0,'Learning never leaks another account’s property outcomes');
+await q("update icash_opportunity_outcomes set attempted=false where account_id=$1 and zip='75216'",[account]);
+const sellerInitiatedScore=Number(await val('select icash_opportunity_market_score($1,$2)',[account,'75216']));assert(sellerInitiatedScore>0&&sellerInitiatedScore<=1,'Seller-initiated responses cannot inflate market influence beyond its bound');
 for(const role of ['anon','authenticated'])assert.equal(await val("select has_function_privilege($1,'icash_workspace_opportunities(uuid,text,integer,integer,boolean)','execute')",[role]),false);
 console.log('Opportunity engine: mixed 3×/2× actual-usage settlement, VIP, idempotency, historical prices, funding wake, response pagination, no-answer/voicemail exclusion, bounded queue and tenant-isolated learning passed. Synthetic local fixtures only.');
 }catch(error){console.error(error.message);console.error(error.query??'');process.exitCode=1;}finally{await db.close();}
