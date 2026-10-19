@@ -44,6 +44,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Complete feature flows
 
+- On October 18, 2026 the owner reiterated that consented inbound seller calls and texts have no contact-hour window. Apply this to HomeOffer Network forms, Meta contact-only leads, follow-ups and property conversations through final database admission. Do not require or fabricate a call-now receipt. Preserve actual contact evidence, opt-outs, manual pauses, explicit callback appointments, membership/credits and provider idempotency.
+
 - On October 18, 2026 the owner requested one additional call and two additional texts for unanswered Meta leads. Keep the bounded sequence (15-minute text, 2-hour call, next-day text), actual initial outreach receipts, distinct idempotent jobs, reply/address/opt-out cancellation and existing channel/credit admission. Never reset a prior call or retry an unknown provider outcome.
 
 - On October 18, 2026 the owner selected automatic follow-up from the actual name-and-phone submission for HomeOffer Network Meta form `4401851653462589`, without an extra checkbox. Keep `form_submission` as this source's contact basis and preserve its existing network-pool routing. Retain the authenticated submission receipt; do not invent checked disclaimer or outside-hours call-now responses. Keep test exclusion, phone/source binding, opt-outs, text-only requests, Run/Pause, membership, credits and provider receipts.

@@ -24,7 +24,7 @@ import {contactEligibility,callEligibility,nextContactWindow,verifiedOfferCeilin
 import {evaluateLaunch} from '../lib/launch-readiness-policy.ts';
 import {canonical,object,readRecordingReview,recordingAgentMatches,recordingPolicy,sha} from '../lib/required-call-recording.ts';
 import {sellerFirstMessage,sellerCallPrompt,sellerCallContext,compactSellerProgress} from '../lib/seller-call-context.ts';
-const dstPermission={phone:'+12125550123',timezone:'America/Chicago',local_start_hour:9,local_end_hour:20,permission_until:'2026-12-01T00:00:00Z',dnc_checked_at:null,dnc_clear:false,revoked_at:null,sellerConsentVerified:true};
+const dstPermission={phone:'+12125550123',timezone:'America/Chicago',local_start_hour:9,local_end_hour:20,permission_until:'2026-12-01T00:00:00Z',dnc_checked_at:'2026-10-31T00:00:00Z',dnc_clear:true,revoked_at:null};
 assert.equal(nextContactWindow(dstPermission,Date.parse('2026-11-01T02:30:00Z')),'2026-11-01T15:00:00.000Z','DST fall-back schedules local 9 AM');
 assert.equal(nextContactWindow({...dstPermission,permission_until:'2026-11-01T14:00:00Z'},Date.parse('2026-11-01T02:30:00Z')),null,'never schedule beyond consent');
 assert.equal(nextContactWindow({...dstPermission,timezone:'invalid'},Date.parse('2026-11-01T02:30:00Z')),null);
@@ -38,6 +38,7 @@ assert.equal(callEligibility({...permission,dnc_checked_at:new Date(now+1000).to
 assert.equal(callEligibility({...permission,timezone:'bogus'},snapshot,now).ready,false);
 assert.equal(callEligibility({...permission,timezone:'Pacific/Honolulu'},snapshot,now).reason,'outside_contact_hours');
 assert.equal(callEligibility({...permission,timezone:'Pacific/Honolulu',sellerConsentVerified:true,sellerCallbackVerified:true},snapshot,now).ready,true);
+for(let hour=0;hour<24;hour++){const at=Date.parse('2026-09-29T00:00:00Z')+hour*3600000;assert.equal(contactEligibility({...permission,sellerConsentVerified:true,dnc_checked_at:null,dnc_clear:false},at).ready,true,'Verified inbound seller remains eligible every hour');}
 assert.equal(callEligibility({...permission,timezone:'Pacific/Honolulu',sellerCallbackVerified:true},snapshot,now).reason,'outside_contact_hours','A callback flag alone cannot replace verified seller consent');
 assert.equal(callEligibility({...permission,revoked_at:new Date(now).toISOString(),sellerConsentVerified:true,sellerCallbackVerified:true},snapshot,now).ready,false);
 assert.equal(callEligibility(permission,{...snapshot,fetchedAt:new Date(now-86400001).toISOString()},now).reason,'fresh_screening_required');
@@ -201,13 +202,13 @@ assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');a
 reset();permission={...permission,party:'seller',timezone:'Pacific/Honolulu',seller_intake_id:'lead'};optinRequestCurrent=true;
 assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);assert(records.some(r=>r.path==='rpc/icash_requested_optin_call_current'));assert(!records.some(r=>r.smsAck),'Form request is never presented as an incoming SMS');
 reset();optinRequestCurrent=false;
-assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');assert.equal(postCount,0,'A missing or expired form request preserves normal contact hours');
+assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1,'Verified inbound seller consent has no contact window or call-now dependency');
 reset();optinRequestCurrent=true;allowClaim=false;
 await dispatchLiveVoice('account','job');assert.equal(postCount,0,'Form request must survive the final atomic claim');
 reset();optinRequestCurrent=true;suppressed=true;
 assert.equal((await dispatchLiveVoice('account','job')).status,'contact_opted_out');assert.equal(postCount,0,'Call-now never overrides STOP');
 reset();smsSource='requested-message';callbackRequestCurrent=false;
-assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');assert.equal(postCount,0,'Expired or changed request never reaches provider dispatch');
+assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1,'An ordinary consented inbound call is eligible at any hour; final claims still validate SMS-specific requests');
 delete permission.seller_intake_id;
 reset();permission={...permission,party:'seller',timezone:'America/Chicago'};operational=true;assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);assert(records.some(r=>r.path.startsWith('icash_voice_contact_targets')));assert(!records.some(r=>r.path==='icash_contact_permissions'&&r.method==='POST'));
 reset();operational=true;operationalCurrent=false;assert.equal((await dispatchLiveVoice('account','job')).status,'contact_operating_checks_required');assert.equal(postCount,0);assert(!records.some(r=>r.path==='rpc/icash_reserve_paced_voice'));
