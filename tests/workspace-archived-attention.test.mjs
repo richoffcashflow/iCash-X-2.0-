@@ -25,7 +25,10 @@ const db=async(path,method='GET',body)=>{
   if(path==='rpc/icash_closing_task_attention')return closingEnabled?requests.filter(r=>active(r.screening_id)).slice(body.p_offset,body.p_offset+body.p_limit):[];
   if(path==='rpc/icash_sms_route_review_items')return unmatchedText?[{message_id:uuid(800),needs_review:true,candidates:[]}]:[];
   if(path==='rpc/icash_activity_report')return {days:body.p_days,timezone:'America/Chicago',startAt:'2026-10-01T00:00:00Z',endAt:'2026-10-12T00:00:00Z',leads:0,calls:0,texts:0,contracts:0};
-  if(['rpc/icash_journey_progress','rpc/icash_buyer_reception_calls','rpc/icash_prioritized_work','rpc/icash_meta_workspace_leads'].includes(path))return [];
+  if(path==='rpc/icash_refresh_opportunity_outcomes')return null;
+  if(path==='rpc/icash_workspace_response_counts')return {responded:0,total:0};
+  if(path==='rpc/icash_workspace_opportunities')return properties.filter(p=>p.account_id===account&&p.state==='complete'&&(!body.p_query||p.result.property.address.includes(body.p_query))).slice(body.p_offset,body.p_offset+body.p_limit);
+  if(['rpc/icash_journey_progress','rpc/icash_buyer_reception_calls','rpc/icash_prioritized_work','rpc/icash_meta_workspace_response_leads'].includes(path))return [];
   throw Error('Unexpected RPC '+path);
  }
  assert.equal(method,'GET','Workspace reads never mutate retained history');

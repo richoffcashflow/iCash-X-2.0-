@@ -37,19 +37,19 @@ export async function GET(req:Request){
   const page=pageNumber(params.get('page')),attentionPage=pageNumber(params.get('attentionPage'));
   const screeningId=params.get('screeningId');if(screeningId)z.string().uuid().parse(screeningId);
   const query=(params.get('query')??'').trim();
+  const responsesOnly=params.get('view')==='responses';
   // A literal address fragment, never a caller-supplied PostgREST expression or wildcard.
   if(query.length>100||/[^\p{L}\p{N}\s#.,'\-]/u.test(query))return NextResponse.json({error:'Search using a street, city or ZIP code.'},{status:400,headers});
+  await db('rpc/icash_refresh_opportunity_outcomes','POST',{p_account:accountId});
+  const responseCounts=await db<{responded:number;total:number}>('rpc/icash_workspace_response_counts','POST',{p_account:accountId});
   let properties:Property[];
   if(screeningId){
    properties=await db<Property[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=eq.${screeningId}&state=eq.complete&select=id,state,result,completed_at&limit=1`);
   }else{
-   // Lead arrival order stays stable when calls, replies or research update it.
-   // Apply the same order before pagination, with or without an address search.
-   const filters=new URLSearchParams({account_id:`eq.${accountId}`,state:'eq.complete',select:'id,state,result,completed_at',order:'created_at.desc,id.desc',limit:String(pageSize+1),offset:String(page*pageSize)});
-   if(query)filters.set('result->property->>address',`ilike.*${query}*`);
-   properties=await db<Property[]>(`icash_screening_jobs?${filters}`);
+   // Rank actual seller responses across the account before paging.
+   properties=await db<Property[]>('rpc/icash_workspace_opportunities','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_responses_only:responsesOnly});
   }
-  const instantRows=instantLeadsEnabled(process.env)?await db<InstantLeadCardData[]>('rpc/icash_meta_workspace_leads','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_screening:screeningId??null}):[];
+  const instantRows=instantLeadsEnabled(process.env)?await db<InstantLeadCardData[]>('rpc/icash_meta_workspace_response_leads','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_screening:screeningId??null,p_responses_only:responsesOnly&&!screeningId}):[];
   const instantLeads=instantRows.slice(0,pageSize);
   const visible=properties.slice(0,pageSize);
   const ids=visible.map(p=>p.id).join(',');
@@ -106,6 +106,6 @@ export async function GET(req:Request){
   for(const item of allAttention)item.address=item.screening_id?addressById.get(item.screening_id)??null:null;
   const smsRouteReviews=routeRows.slice(0,pageSize);
   const attentionHasMoreByKind={closingTasks:closingTaskRows.length>pageSize,closing:closingRows.length>pageSize,sellerRecovery:recoveryRows.length>pageSize,viewings:viewingRows.length>pageSize,routing:routeRows.length>pageSize,texts:textRows.length>pageSize,calls:callRows.length>pageSize,handoffs:handoffRows.length>pageSize,signatures:signatureRows.length>pageSize};
-  return NextResponse.json({instantLeads,proceedsReceivedDealIds:proceeds.map(p=>p.deal_id),journeys,closingTasks,closingReview,sellerRecovery,viewingRequests,smsRouteReviews,textAttention,signatureActions,signing,signingConfigured:!!(process.env.DOCUSEAL_API_KEY||process.env.DOCUSEAL_TEST_API_KEY),properties:visible,propertyAttentionIds,hasMore:!screeningId&&(properties.length>pageSize||instantRows.length>pageSize),deals,contacts,controls,conversations,callbacks,callRequests,handoffs,page,attentionPage,attentionHasMore:Object.values(attentionHasMoreByKind).some(Boolean),attentionHasMoreByKind,searchSupported:true,query},{headers});
+  return NextResponse.json({responseCounts,instantLeads,proceedsReceivedDealIds:proceeds.map(p=>p.deal_id),journeys,closingTasks,closingReview,sellerRecovery,viewingRequests,smsRouteReviews,textAttention,signatureActions,signing,signingConfigured:!!(process.env.DOCUSEAL_API_KEY||process.env.DOCUSEAL_TEST_API_KEY),properties:visible,propertyAttentionIds,hasMore:!screeningId&&(properties.length>pageSize||instantRows.length>pageSize),deals,contacts,controls,conversations,callbacks,callRequests,handoffs,page,attentionPage,attentionHasMore:Object.values(attentionHasMoreByKind).some(Boolean),attentionHasMoreByKind,searchSupported:true,query},{headers});
  }catch{return NextResponse.json({error:'Could not load your work. Sign in and retry.'},{status:503,headers});}
 }

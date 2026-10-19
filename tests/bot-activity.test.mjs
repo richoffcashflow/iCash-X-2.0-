@@ -3,7 +3,7 @@ import {currentBotActivity} from '../lib/bot-activity.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 const now=Date.now(),expires_at=new Date(now+60000).toISOString();
 const ticket={kind:'contacts',state:'consumed',expires_at};
-assert.equal(currentBotActivity({paused:false,tickets:[ticket],screening:[]},now).label,'Looking up owners');
+assert.equal(currentBotActivity({paused:false,tickets:[ticket],screening:[]},now).label,'Finding property owners');
 assert.equal(currentBotActivity({paused:true,tickets:[ticket],screening:[]},now).active,false,'paused takes precedence');
 for(const state of ['issued','complete','held'])assert.equal(currentBotActivity({paused:false,tickets:[{...ticket,state}],screening:[]},now).active,false,'unstarted/finished tickets never animate');
 assert.equal(currentBotActivity({paused:false,tickets:[{...ticket,expires_at:new Date(now-1).toISOString()}],screening:[]},now).active,false,'expired work never appears live');
@@ -23,7 +23,7 @@ const route=await loadService('app/api/work/bot-status/route.ts',{
   return path.startsWith('icash_accounts?')?[{bot_paused:false}]:path.startsWith('icash_automation_tickets?')?[ticket]:[];
  },
 });
-let response=await route.GET();assert.equal(response.body.label,'Looking up owners');assert.equal(response.headers['Cache-Control'],'private, no-store');
+let response=await route.GET();assert.equal(response.body.label,'Finding property owners');assert.equal(response.headers['Cache-Control'],'private, no-store');
 assert.equal(queries.length,3);authorized=false;queries=[];assert.equal((await route.GET()).status,401);assert.equal(queries.length,0,'no reads without authentication');
 authorized=true;failed=true;response=await route.GET();assert.equal(response.status,503);assert(!('active' in response.body),'failure never fabricates work');
 console.log('PASS bot activity: actual active tasks, waiting/paused/stale states, tenant scoping, no contact data and authentication');

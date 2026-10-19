@@ -20,7 +20,10 @@ let paths=[],authorized=true,sellerFixtures=[];
 const paginate=(rows,q)=>rows.slice(Number(q.get('offset')??0),Number(q.get('offset')??0)+Number(q.get('limit')??rows.length));
 const mocks={instantLeadsEnabled,z,workspaceAttentionQuery,attachTaskRecovery:async(id,tasks)=>{assert.equal(id,account);return tasks;},NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
  paths.push({path,method,body});
- if(path==='rpc/icash_meta_workspace_leads'){assert.equal(body.p_account,account);return [];}
+ if(path==='rpc/icash_refresh_opportunity_outcomes'){assert.equal(body.p_account,account);return null;}
+ if(path==='rpc/icash_workspace_response_counts'){assert.equal(body.p_account,account);return {responded:3,total:20};}
+ if(path==='rpc/icash_workspace_opportunities'){assert.equal(body.p_account,account);assert.equal(body.p_limit,7);const rows=properties.filter(p=>(!body.p_query||p.result.property.address.toLowerCase().includes(body.p_query.toLowerCase()))&&(!body.p_responses_only||[uuid(17),uuid(18),uuid(19)].includes(p.id)));return rows.slice(body.p_offset,body.p_offset+body.p_limit);}
+ if(path==='rpc/icash_meta_workspace_response_leads'){assert.equal(body.p_account,account);return [];}
  if(path==='rpc/icash_journey_progress'){assert.equal(body.p_account,account);return [];}
  if(path==='rpc/icash_closing_task_attention'){assert.equal(body.p_account,account);assert.equal(body.p_limit,7);return queue.slice(body.p_offset,body.p_offset+body.p_limit).map(q=>({...q,kind:'deadline',label:'Confirm closing date',state:'needs_review',due_date:null}));}
  if(path==='rpc/icash_buyer_reception_calls'){assert.equal(body.p_account,account);return [];}
@@ -87,6 +90,7 @@ for(const bad of ['?query=*','?query=%25','?query=abc%26account_id=eq.other','?q
 for(const bad of ['?page=-1','?page=1.5','?page=Infinity','?attentionPage=10001','?screeningId=invalid']){paths=[];r=await get(bad);assert.notEqual(r.status,200);assert.equal(paths.length,0);}
 sellerFixtures=[{account_id:account,screening_id:uuid(1),lead:{name:'Assigned seller',phone:'+12025550111'}},{account_id:otherAccount,screening_id:uuid(1),lead:{name:'Wrong seller',phone:'+12025550112'}},{account_id:account,screening_id:uuid(19),lead:{name:'Nonvisible seller',phone:'+12025550113'}}];
 r=await get('');const shared=r.body.contacts.find(c=>c.source==='HomeOffer Network · seller-submitted');assert.equal(shared.contacts[0].name,'Assigned seller');assert.equal(shared.created_at,null);assert.equal(shared.fetchedAt,null);assert(!JSON.stringify(r.body).includes('Wrong seller'));assert(!JSON.stringify(r.body).includes('Nonvisible seller'));
+r=await get('?view=responses');assert.deepEqual(r.body.properties.map(p=>p.id),[uuid(17),uuid(18),uuid(19)],'Response filtering is passed to the server before pagination');assert.deepEqual(r.body.responseCounts,{responded:3,total:20});
 authorized=false;paths=[];r=await get('');assert.notEqual(r.status,200);assert.equal(paths.length,0,'No data access without account ownership');
 delete globalThis.__activityRoute;
 console.log('Activity route: tenant-bound purchased contacts, explicit field projection, DNC states, missing/malformed results, bounded arrays, pagination, retained views, search and authentication passed. Synthetic fixtures only.');

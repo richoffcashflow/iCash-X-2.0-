@@ -53,6 +53,7 @@ export function propertyNextMove(property:WorkspaceProperty,work:Context){return
 export function mostPromisingProperty(properties: WorkspaceProperty[], work: Context) {
  const candidates = properties.filter(property => {
   const stage = work.deals.find(item => item.screening_id === property.id)?.stage;
+  if(property.engagement&&(!property.engagement.responded||property.engagement.optedOut))return false;
   return property.result.financialCheck.status === 'eligible' && !['closed','canceled','cancelled','cancellation_pending'].includes(stage ?? '') && !property.result.property.propertyId.startsWith('practice_');
  });
  const score = (property: WorkspaceProperty) => {

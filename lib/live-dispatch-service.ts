@@ -1,4 +1,5 @@
 import {instantLeadPrompt} from './meta-instant-leads.ts';
+import {opportunityConversationInstructions} from './outreach-conversation.ts';
 import {instantLeadsEnabled} from './meta-instant-lead-service.ts';
 import {cancellationCallPrompt,type CancellationCallContext} from './cancellation-notice-policy.ts';
 import {conversationAddressFields,conversationAddressInstructions} from './conversation-address.ts';
@@ -147,7 +148,10 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const basePrompt=()=>intake?sellerPrompt!:cancellation?cancellationCallPrompt(cancellation,identity.principal,account.assistant_name):(automaticOfferPolicy(recordedReview.offerPolicy)
   ?(recordedReview.offerPolicy==='automatic_offer_v5'?legacyAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v6'?streamingAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v7'?payoffAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v8'?progressAutomaticOfferReceptionPrompt:automaticOfferReceptionPrompt).replace('{{icash_property_context}}',JSON.stringify({...automaticContext,...conversationAddressFields(address),principal:identity.principal,companyName:identity.company_name?.trim()||null,assistantName:account.assistant_name}))+'\nOUTBOUND CAPABILITIES: Use the callback tool only for an explicitly agreed date, time and timezone; use the handoff tool when requested. Claim either action only after its successful result. Do not claim an immediate transfer unless the tool confirms one.'
   :buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!)+ '\n'+conversationAddressInstructions;
- const buildPrompt=()=>!intake&&!cancellation&&p.party==='seller'&&automaticOfferPolicy(recordedReview.offerPolicy)?sellerAgreementDeliveryPrompt(basePrompt()):basePrompt();
+ const buildPrompt=()=>{
+  const base=!intake&&!cancellation&&p.party==='seller'&&automaticOfferPolicy(recordedReview.offerPolicy)?sellerAgreementDeliveryPrompt(basePrompt()):basePrompt();
+  return !intake&&!cancellation&&p.party==='seller'&&!automaticOfferPolicy(recordedReview.offerPolicy)?base+'\n'+opportunityConversationInstructions:base;
+ };
  if(automaticContext&&p.party==='seller'){
   // Reserve space for the complete runtime instructions, then retain whole
   // historical exchanges within the existing provider limit.

@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 19, 2026 the owner clarified that new DealMachine research charges use 3× the recorded credit cost allocation (2.4× with the existing VIP discount). All other usage and lead-package pricing remain unchanged. Preserve historical and in-flight cost snapshots. Keep property cards visually unchanged with no inbound/outbound labels; prioritize actual seller responses. Automatically source financially eligible single-family properties, use real outcomes to improve selection, and wake funded work promptly while preserving consent, opt-outs, manual controls and provider idempotency.
+
 - On October 17, 2026 the owner chose 2× recorded cost for all new usage, with the existing 20% VIP discount (1.6×). Include advertising in lead cost using recorded costs or a labeled estimate. Preserve completed charges, in-flight operation snapshots and existing lead prices. Keep provider receipts, consent and standing production approvals intact; do not restore the earlier 3× pricing or expensive-lead threshold.
 
 - Public signup and checkout copy must not reintroduce the 'work credits sold separately' sentence or equivalent separate-credit blurbs. Apply this to page copy and Standard/VIP Stripe checkout descriptions and summaries. Keep pricing, recurring billing, and saved purchase terms accurate.

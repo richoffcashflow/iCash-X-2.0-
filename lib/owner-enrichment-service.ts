@@ -55,6 +55,6 @@ export async function enrichForAccount(accountId:string,screeningId:string){
      p_source:`dealmachine:owners:${operationKey}${field==='used'?'':`:${field}`}`,p_amount:receipt[field],p_units:'provider_credits'});
    }
   },
-  persist:async result=>{await db('rpc/icash_save_contacts','POST',{p_account:accountId,p_screening:screeningId,p_operation:operationKey,p_result:result});},
+  persist:async result=>{await db('rpc/icash_save_contacts','POST',{p_account:accountId,p_screening:screeningId,p_operation:operationKey,p_result:result});await db('rpc/icash_settle_dealmachine_usage','POST',{p_operation:operationKey});},
  });
 }
