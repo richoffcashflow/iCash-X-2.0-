@@ -22,17 +22,26 @@ export function readRecordingReview(raw:string|undefined,now=Date.now()):Recordi
 function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>){
  const matches=(value:unknown)=>sha(JSON.stringify(canonical(value)))===configHash;
  if(matches(snapshot))return true;
- const config=object(snapshot.conversation_config),agent=object(config.agent),alternateAgent={...agent};
- // ElevenLabs may materialize this exact empty default on an unchanged version.
- // Try only its absent/present counterpart, preserving both historical hashes
- // and every other field. Nonempty, malformed and extended values stay exact.
- if(!Object.hasOwn(agent,'subagent_config'))alternateAgent.subagent_config={agents:[],self_subagent:null};
- else{
-  const subagents=object(agent.subagent_config),keys=Object.keys(subagents);
-  if(keys.length!==2||!Object.hasOwn(subagents,'agents')||!Object.hasOwn(subagents,'self_subagent')||!Array.isArray(subagents.agents)||subagents.agents.length!==0||subagents.self_subagent!==null)return false;
-  delete alternateAgent.subagent_config;
+ const config=object(snapshot.conversation_config),agent=object(config.agent),variants=[agent];
+ // ElevenLabs may omit either exact empty default on an unchanged version.
+ // Compare at most four complete fingerprints; preserve the approved hash and
+ // every other field. Nonempty, malformed and extended values stay exact.
+ const subagentConfig=object(agent.subagent_config),keys=Object.keys(subagentConfig);
+ if(!Object.hasOwn(agent,'subagent_config')||keys.length===2&&Object.hasOwn(subagentConfig,'agents')&&Object.hasOwn(subagentConfig,'self_subagent')&&Array.isArray(subagentConfig.agents)&&subagentConfig.agents.length===0&&subagentConfig.self_subagent===null){
+  const alternate={...agent};
+  if(Object.hasOwn(agent,'subagent_config'))delete alternate.subagent_config;
+  else alternate.subagent_config={agents:[],self_subagent:null};
+  variants.push(alternate);
  }
- return matches({...snapshot,conversation_config:{...config,agent:alternateAgent}});
+ if(!Object.hasOwn(agent,'subagents')||Array.isArray(agent.subagents)&&agent.subagents.length===0){
+  for(const variant of [...variants]){
+   const alternate={...variant};
+   if(Object.hasOwn(agent,'subagents'))delete alternate.subagents;
+   else alternate.subagents=[];
+   variants.push(alternate);
+  }
+ }
+ return variants.slice(1).some(alternate=>matches({...snapshot,conversation_config:{...config,agent:alternate}}));
 }
 export function recordingAgentMatches(review:RecordingReview,raw:unknown){
  const a=object(raw),config=object(a.conversation_config),platform=object(a.platform_settings),prompt=object(object(config.agent).prompt),overrides=object(object(platform.overrides).conversation_config_override);
