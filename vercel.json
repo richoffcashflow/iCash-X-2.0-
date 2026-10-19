@@ -1,5 +1,5 @@
 {
-  "buildCommand": "node scripts/verify-production-release.mjs && node --experimental-strip-types scripts/check-telephony-connection.mjs && pnpm run build:verified",
+  "buildCommand": "node scripts/verify-production-release.mjs && node scripts/check-dealmachine-owner-shape.mjs && node --experimental-strip-types scripts/check-telephony-connection.mjs && pnpm run build:verified",
   "crons": [
     {
       "path": "/api/internal/lead-costs",
