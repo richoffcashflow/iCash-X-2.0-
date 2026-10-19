@@ -2,7 +2,7 @@
 import {useEffect,useState} from 'react';
 import {BrowserCallControls} from '@/components/browser-call-controls';
 import {Phone} from 'lucide-react';
-type Data={businessNumber?:string|null;personalCalls?:{id:string;state:string;connection_type?:string;ended_at:string|null;audioAvailable?:boolean}[];attempts?:{id:string;createdAt:string;status:string;costPending:boolean}[];contacts:{phone:string;name?:string;available:boolean;reason:string}[];reason?:string};
+type Data={personalCalls?:{id:string;state:string;connection_type?:string;ended_at:string|null;audioAvailable?:boolean}[];attempts?:{id:string;createdAt:string;status:string;costPending:boolean}[];contacts:{phone:string;name?:string;available:boolean;businessNumber:string|null;reason:string}[];reason?:string};
 export function displayContactPhone(phone:string){return phone.replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3');}
 export function ManualCallOptions({screeningId,onTakeover,autoStart=false,onAutoStartHandled}:{screeningId:string;onTakeover?:()=>void;autoStart?:boolean;onAutoStartHandled?:()=>void}){
  const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[refresh,setRefresh]=useState(0),[setupRetry,setSetupRetry]=useState(0);
@@ -20,7 +20,7 @@ export function ManualCallOptions({screeningId,onTakeover,autoStart=false,onAuto
  // A failed initial click must never turn into an unexpected call after a refresh.
  useEffect(()=>{if(autoStart&&(error||browserReady===false))onAutoStartHandled?.();},[autoStart,error,browserReady,onAutoStartHandled]);
  return <section className="manual-call-options" aria-label="Call using your business number">
-  <div className="contact-section-title"><span className="contact-section-icon"><Phone size={20}/></span><div><h5>Call the seller</h5><p>{data?.businessNumber?`From ${displayContactPhone(data.businessNumber)}`:'From your business number'}</p></div></div>
+  <div className="contact-section-title"><span className="contact-section-icon"><Phone size={20}/></span><div><h5>Call the seller</h5><p>From your business number</p></div></div>
   {(!data&&!error||browserReady===null)&&<p className="contact-feedback" role="status">Getting your call ready…</p>}
   {error&&<div className="contact-alert" role="alert"><span>{error}</span><button type="button" onClick={()=>setRefresh(v=>v+1)}>Retry</button></div>}
   {browserReady===false&&<div className="contact-alert" role="alert"><span>Calling is temporarily unavailable.</span><button type="button" onClick={()=>{setBrowserReady(null);setSetupRetry(v=>v+1);}}>Retry</button></div>}

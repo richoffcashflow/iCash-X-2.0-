@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
-let acknowledged=true,paths=[],checks=0,signedIn=true,fullReady=true,smsReady=false,discoveryReady=false,contactReady=false,failSnapshot=false;
+let acknowledged=true,paths=[],checks=0,signedIn=true,fullReady=true,smsReady=false,discoveryReady=false,contactReady=false,failSnapshot=false,userId='user';
 const snapshot={accountId:'account',account:{billingModel:'membership_credits',membership:{state:'active',paid_through:'2099-01-01'},balanceCents:800,reservedCents:200,paused:false,activeWork:true,billingReview:false,identity:{principal:'Fixture'}}};
-const receipts=[];const mocks={workspaceAcknowledgmentCurrent:()=>acknowledged,after:fn=>void fn(),recordSoftwareAccess:async(req,account,user)=>receipts.push({req,account,user}),membershipAccessible:m=>m?.state==='active'&&Date.parse(m.paid_through)>Date.now(),ownerInboundTarget:{ownerUserId:'owner-admin'},resolveRequestedPropertyMarket:async()=>{checks++;return {status:'not_requested'};},contactAccountReadiness:async()=>{checks++;return {ready:contactReady,quote:contactReady?{chargeCents:174,maxContacts:25}:null};},discoveryAccountReadiness:async()=>{checks++;return {ready:discoveryReady,quote:discoveryReady?{chargeCents:84,maxProperties:5}:null};},liveWorkReady:()=>fullReady,smsAccountReady:async()=>{checks++;return smsReady;},launchReadiness:async()=>{checks++;return {ready:true};},accountMode:()=> 'live',currentUser:async()=>signedIn?{id:'user',email:'fixture@example.invalid'}:null,NextResponse:{json:(body,options={})=>({body,status:options.status??200})},db:async(path,method,body)=>{
- paths.push(path);if(path.startsWith('icash_accounts?')){assert(path.includes('owner_user_id=eq.user'));return [{}];}if(path==='rpc/icash_workspace_vip_access'){assert.equal(method,'POST');assert.deepEqual(body,{p_account:'account'});return {vip:false,vipFeatures:false,workspacePreview:null};}assert.equal(path,'rpc/icash_load_workspace_account');assert.equal(method,'POST');assert.deepEqual(body,{p_user:'user',p_mode:'live'});if(failSnapshot)throw Error('private database details');return structuredClone(snapshot);
+const receipts=[];const mocks={workspaceAcknowledgmentCurrent:()=>acknowledged,after:fn=>void fn(),recordSoftwareAccess:async(req,account,user)=>receipts.push({req,account,user}),membershipAccessible:m=>m?.state==='active'&&Date.parse(m.paid_through)>Date.now(),ownerInboundTarget:{ownerUserId:'owner-admin',accountId:'owner-account'},resolveRequestedPropertyMarket:async()=>{checks++;return {status:'not_requested'};},contactAccountReadiness:async()=>{checks++;return {ready:contactReady,quote:contactReady?{chargeCents:174,maxContacts:25}:null};},discoveryAccountReadiness:async()=>{checks++;return {ready:discoveryReady,quote:discoveryReady?{chargeCents:84,maxProperties:5}:null};},liveWorkReady:()=>fullReady,smsAccountReady:async()=>{checks++;return smsReady;},launchReadiness:async()=>{checks++;return {ready:true};},accountMode:()=> 'live',currentUser:async()=>signedIn?{id:userId,email:'fixture@example.invalid'}:null,NextResponse:{json:(body,options={})=>({body,status:options.status??200})},db:async(path,method,body)=>{
+ paths.push(path);if(path.startsWith('icash_accounts?')){assert.equal(method,undefined);assert(path.includes(`id=eq.${snapshot.accountId}&owner_user_id=eq.${userId}`));return [{}];}if(path==='rpc/icash_workspace_vip_access'){assert.equal(method,'POST');assert.deepEqual(body,{p_account:snapshot.accountId});return {vip:false,vipFeatures:false,workspacePreview:null};}assert.equal(path,'rpc/icash_load_workspace_account','account display must not introduce any work or wallet mutation');assert.equal(method,'POST');assert.deepEqual(body,{p_user:userId,p_mode:'live'});if(failSnapshot)throw Error('private database details');return structuredClone(snapshot);
 }};
 globalThis.__accountActivity=mocks;
 let source=ts.transpileModule(readFileSync(new URL('../app/api/account/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');source='const {'+Object.keys(mocks).join(',')+'}=globalThis.__accountActivity;\n'+source;
@@ -19,7 +19,31 @@ for(const change of [{balanceCents:0},{billingReview:true},{membership:{state:'p
 }
 acknowledged=false;checks=0;const receiptCount=receipts.length;r=await core();assert.equal(r.body.workspaceAcknowledged,false);assert.equal(r.body.readinessPending,false);assert.equal(receipts.length,receiptCount);await GET();assert.equal(checks,0);acknowledged=true;
 signedIn=false;paths=[];r=await core();assert.equal(r.body.signedIn,false);assert.equal(paths.length,0);signedIn=true;
+const originalSnapshot=structuredClone(snapshot);
+for(const scenario of [
+ {name:'exact owner, paused and empty',user:'owner-admin',account:'owner-account',paused:true,balance:0,available:true},
+ {name:'ordinary user',user:'user',account:'account',paused:true,balance:0,available:false},
+ {name:'different user with owner account ID',user:'user',account:'owner-account',paused:true,balance:0,available:false},
+ {name:'owner with different account ID',user:'owner-admin',account:'account',paused:true,balance:0,available:false},
+ {name:'owner with actual funds',user:'owner-admin',account:'owner-account',paused:true,balance:500,available:false},
+ {name:'owner with actual bot unpaused',user:'owner-admin',account:'owner-account',paused:false,balance:0,available:false},
+]){
+ userId=scenario.user;snapshot.accountId=scenario.account;
+ Object.assign(snapshot.account,{paused:scenario.paused,balanceCents:scenario.balance,activeWork:false});
+ const before=structuredClone(snapshot);
+ for(const request of [core,()=>GET(new Request('https://www.geticashx.com/api/account'))]){
+  paths=[];checks=0;r=await request();
+  assert.equal(r.status,200,scenario.name);assert.equal(r.body.pretendBotAvailable,scenario.available,scenario.name);
+  assert.equal(r.body.balanceCents,scenario.balance,'display eligibility never changes real credits');
+  assert.equal(r.body.paused,scenario.paused,'display eligibility never unpauses actual work');
+  assert.equal(r.body.activeWork,false,'display eligibility never invents real activity');
+  assert.equal(paths.length,3,'only the existing snapshot, VIP and acknowledgment reads execute');
+  assert.deepEqual(snapshot,before,'display eligibility leaves stored account state unchanged');
+  if(scenario.balance===0){assert.equal(checks,0,'no provider readiness or provisioning for a pretend balance');assert.equal(r.body.workReady,false);assert.equal(r.body.readinessPending,false);}
+ }
+}
+userId='user';Object.assign(snapshot,originalSnapshot);
 const oldLog=console.error;let diagnostic;console.error=(...args)=>{diagnostic=args};failSnapshot=true;r=await core();console.error=oldLog;assert.equal(r.status,503);assert(!JSON.stringify(r.body).includes('private database'));assert.equal(diagnostic[1].stage,'account_snapshot');assert(!JSON.stringify(diagnostic).includes('private database'));
 assert.equal(receipts[0].account,'account');assert.equal(receipts[0].user,'user');
 delete globalThis.__accountActivity;
-console.log('PASS account load: one snapshot plus scoped VIP check, deferred readiness, no empty-credit scans, membership lock, safe errors and exact saved balances.');
+console.log('PASS account load: scoped reads, deferred readiness, exact saved balances, membership lock, safe errors, and owner-only pretend display without wallet or work changes.');
