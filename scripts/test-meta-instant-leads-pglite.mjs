@@ -8,7 +8,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const q=(sql,args=[])=>pg.query(sql,args);
 const one=async(sql,args=[])=>{const result=await q(sql,args);assert.equal(result.rows.length,1,sql);return result.rows[0];};
 const rpc=async(name,args)=>Object.values(await one(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) result`,args))[0];
-const configs=['meta-instant-leads','meta-instant-lead-work','meta-instant-lead-property','meta-instant-address-form','meta-instant-lead-workspace','meta-instant-lead-reception','meta-instant-lead-measurement','meta-instant-network-pool','meta-make-intake','meta-test-contact-exclusion','meta-import-waiting-priority'];
+const configs=['meta-instant-leads','meta-instant-lead-work','meta-instant-lead-property','meta-instant-address-form','meta-instant-lead-workspace','meta-instant-lead-reception','meta-instant-lead-measurement','meta-instant-network-pool','meta-make-intake','meta-test-contact-exclusion','meta-import-waiting-priority','meta-live-address-continuation'];
 try{
  await pg.exec(`create role anon;create role authenticated;create role service_role bypassrls;
  create schema auth;create schema extensions;create schema icash_recording_private;create schema icash_recorded_reception_private;create schema icash_seller_agreement_private;
@@ -121,6 +121,42 @@ try{
  assert.equal(await rpc('icash_seller_voice_permission_current',[account,permission]),false,'text-only request disables future voice');
  await q('update icash_meta_leads set voice_paused=false,response_at=null,response_channel=null where lead_id=$1',[lead]);
  await q("update icash_voice_jobs set state='held',outcome='SIMULATION complete intake path' where id=$1",[voice.voiceJobId]);
+
+ // Saved production transcript shapes: voicemail and a brief hello did not
+ // establish interest, but neither was a rejection. Exercise the real trigger.
+ assert.equal(read('config/meta-live-address-continuation.sql'),read('supabase/migrations/20261018235452_meta_live_address_continuation.sql'));
+ const voicemail=[{role:'user',message:'Comunicarte no está disponible. Graba tu mensaje después del tono. Puedes colgar cuando hayas terminado de grabarlo.'},{role:'agent',message:'What is the property address?'},{role:'user',message:'...'}];
+ const hello=[{role:'agent',message:'What is the property address?'},{role:'user',message:'Hello?'}];
+ const outcomeCases=[
+  [voicemail,'no_response'],
+  [[{role:'user',message:'Please leave your message after the tone.'}],'no_response'],
+  [[{role:'user',message:'...'}],'no_response'],
+  [hello,'responded'],
+  [[{role:'agent',message:'Do you have a unit number?'},{role:'user',message:'No.'}],'responded'],
+  [[{role:'user',message:'I am not interested in texting, can we talk?'}],'responded'],
+  [[{role:'user',message:'I am not interested in selling at that price.'}],'responded'],
+  [[{role:'user',message:"I don't want to sell for $100,000. I need $150,000."}],'responded'],
+  [[{role:'user',message:"I'm not interested."}],'declined'],
+  [[{role:'user',message:"I don't want to sell my house."}],'declined'],
+  [[{role:'user',message:'No quiero vender.'}],'declined'],
+  [[{role:'agent',message:'Would you be interested in selling for a cash offer?'},{role:'user',message:'No thanks.'}],'declined'],
+ ];
+ let callIndex=0;
+ for(const [transcript,expected] of outcomeCases){
+  const result={transcript,interested:false,interestQuote:null,optedOut:false};
+  assert.equal(await rpc('icash_meta_call_outcome',[result]),expected,JSON.stringify(transcript));
+  await q('update icash_meta_leads set paused=false,declined_at=null,response_at=null,response_channel=null where lead_id=$1',[lead]);
+  await q("insert into icash_live_conversations(account_id,screening_id,party,agent_id,conversation_id,operation_key,contact_key,strategy_key,state,completed_at,result) values($1,$2,'seller','agent_fixture',$3,$4,encode(sha256(convert_to($5,'UTF8')),'hex'),'cash_interest','complete',now(),$6)",[account,before.screening_id,'conv_outcome'+(++callIndex),'fixture:outcome:'+callIndex,base.phone,result]);
+  const observed=await one('select paused,declined_at,response_at from icash_meta_leads where lead_id=$1',[lead]);
+  assert.equal(observed.paused,expected==='declined');
+  assert.equal(observed.declined_at!==null,expected==='declined');
+  assert.equal(observed.response_at!==null,expected==='responded');
+ }
+ assert.equal(await rpc('icash_meta_call_outcome',[{transcript:hello,optedOut:true,interested:false}]),'opted_out');
+ await q("update icash_live_conversations set result=$1 where conversation_id='conv_outcome1'",[{transcript:hello,optedOut:false,interested:false}]);
+ assert.equal((await one('select paused from icash_meta_leads where lead_id=$1',[lead])).paused,true,'a later answered call must not clear an existing pause or decline');
+ await q('update icash_meta_leads set paused=false,declined_at=null,response_at=null,response_channel=null where lead_id=$1',[lead]);
+ assert.deepEqual(await one("select has_function_privilege('anon','icash_meta_call_outcome(jsonb)','execute') a,has_function_privilege('authenticated','icash_meta_call_outcome(jsonb)','execute') b"),{a:false,b:false});
 
  const intake=await one('select * from icash_seller_intakes where id=$1',[lead]);
  const deal=await one('select * from icash_deal_files where screening_id=$1',[before.screening_id]);

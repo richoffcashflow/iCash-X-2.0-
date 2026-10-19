@@ -61,6 +61,11 @@ assert.equal(confirmedCallAddress('124 Main St, Austin, TX 78701',history),null)
 assert.equal(confirmedCallAddress(address,{transcript:history.transcript.slice(1)}),null,'AI readback alone cannot invent the address');
 assert.equal(confirmedCallAddress(address,{transcript:[...history.transcript.slice(0,-1),{role:'user',message:'No, 125 Main Street.'}]}),null);
 
+const driveHistory={transcript:[{role:'user',message:'123 North Oak Drive Apartment 2 in Austin, Texas.'},{role:'agent',message:'123 North Oak Drive Apartment 2, Austin, Texas. Is that correct?'},{role:'user',message:'Sí, correcto.'}]};
+assert.equal(confirmedCallAddress('123 N Oak Dr Apt 2, Austin, TX',driveHistory),'123 N Oak Dr Apt 2, Austin, TX');
+assert.equal(confirmedCallAddress('123 N Oak Dr Apt 3, Austin, TX',driveHistory),null,'unit changes cannot pass spoken confirmation');
+assert.equal(confirmedCallAddress('123 N Oak Dr Apt 2, Austin, TX',{transcript:driveHistory.transcript.slice(1)}),null,'spoken expansion still needs the seller street statement');
+
 const lead={lead_id:'lead',account_id:'account',screening_id:'screen',meta_id:notice.leadgen_id,submitted_at:submitted,link_hash:hashLeadToken(token),link_expires_at:new Date(now+86400000).toISOString(),paused:false,declined_at:null,lead:{name:'Fixture',phone:'+12145550123',address:null,state:'awaiting_address'}};
 const env={META_INSTANT_LEADS_ENABLED:'true',META_LEAD_LINK_SECRET:secret,DEALMACHINE_API_KEY:'dm_sk_live_FIXTURE_ONLY'};
 let poolAssigned=false,poolCalls=0,poolTexts=0,poolReads=[];
@@ -71,6 +76,7 @@ const poolDeps={env,sms:async()=>{poolTexts++;throw Error('SIMULATION text provi
  if(path==='rpc/icash_meta_match_address_request')return false;
  if(path.startsWith('icash_customer_identities?'))return [{principal:'Fixture matched buyer'}];
  if(path==='rpc/icash_meta_queue_message')return 'pool-text';
+ if(path.startsWith('icash_text_messages?'))return [{state:'ready',provider_id:null}];
  if(path==='rpc/icash_meta_prepare_voice')return {accountId:'account',voiceJobId:'pool-call'};
  throw Error('Unexpected pool request');
 }};
@@ -80,6 +86,7 @@ poolAssigned=true;const poolWork=await processInstantLead(poolDeps,'lead');asser
 let sent=0,queued=[];
 const deps={env,voice:async()=>({status:'fixture'}),sms:async()=>{sent++;return {status:'message_accepted'};},db:async(path,method,body)=>{
  if(path.startsWith('icash_customer_identities'))return [{principal:'Fixture Buyer'}];
+ if(path.startsWith('icash_text_messages?'))return [{state:'ready',provider_id:null}];
  if(path==='rpc/icash_meta_queue_message'){queued.push(body);return 'message';}
  throw Error('Unexpected fixture query: '+path);
 }};
@@ -90,6 +97,18 @@ for(const purpose of ['initial','address_link','reply']){
 }
 assert.equal((await queueInstantAddressLink(deps,{...lead,paused:true},'initial','initial')).status,'held');assert.equal(sent,3);
 assert.equal((await queueInstantAddressLink(deps,{...lead,link_hash:'bad'},'initial','initial')).status,'link_expired');
+
+// Replay acknowledges only an actual saved provider receipt; it never resends.
+for(const state of ['accepted','delivered','dispatching','needs_review','cancelled']){
+ const before=sent;
+ const retry={...deps,db:async(path,...args)=>path.startsWith('icash_text_messages?')?[{state,provider_id:'text_fixture'}]:deps.db(path,...args)};
+ assert.equal((await queueInstantAddressLink(retry,lead,'address_link','call-fallback')).status,['accepted','delivered'].includes(state)?'message_accepted':'message_held');
+ assert.equal(sent,before,'a previously attempted message cannot be sent again');
+}
+assert.equal((await queueInstantAddressLink({...deps,db:async(path,...args)=>path.startsWith('icash_text_messages?')?[{state:'accepted',provider_id:null}]:deps.db(path,...args)},lead,'address_link','call-fallback')).status,'message_held','status without provider proof is not success');
+let concurrentReads=0;
+const concurrent={...deps,db:async(path,...args)=>path.startsWith('icash_text_messages?')?[++concurrentReads===1?{state:'ready',provider_id:null}:{state:'accepted',provider_id:'text_fixture'}]:deps.db(path,...args),sms:async()=>({status:'message_held'})};
+assert.equal((await queueInstantAddressLink(concurrent,lead,'address_link','call-fallback')).status,'message_accepted','a concurrent worker receipt is recognized');
 
 let complete=false,saved=false,fetches=0,claimAvailable=true;
 const db=async(path,method,body)=>{
@@ -112,6 +131,9 @@ await researchInstantAddress(callDeps,'lead',{liveCall:true});assert.equal(fetch
 complete=false;saved=false;
 const fallback=await instantCallAddress('fixture-capability',{conversationId:'conv_fixture',action:'get_offer'},callDeps);
 assert.equal(fallback.quoteAllowed,false);assert.equal(fallback.textAccepted,true);assert.equal(fetches,1);
+const replayTexts=sent;
+const replay=await instantCallAddress('fixture-capability',{conversationId:'conv_fixture',action:'get_offer'},{...callDeps,db:async(path,...args)=>path.startsWith('icash_text_messages?')?[{state:'delivered',provider_id:'text_fixture'}]:db(path,...args)});
+assert.equal(replay.textAccepted,true);assert.equal(sent,replayTexts,'repeating the fallback does not send a second text');
 claimAvailable=true;
 const failed=await researchInstantAddress({...callDeps,fetch:async()=>{fetches++;throw Error('fixture timeout');}},'lead',{liveCall:true});
 assert.equal(failed.status,'lookup_requires_review');

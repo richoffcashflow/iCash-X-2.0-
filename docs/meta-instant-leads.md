@@ -205,6 +205,16 @@ qualification. Confirm the complete address before research, and reuse any saved
 address. Contact cards show the seller, activity and address progress; the same
 screening/deal IDs become the normal property card after a successful match.
 
+A greeting or missing extracted interest is not a decline. Call observations
+require actual seller refusal wording or an opt-out before pausing the lead.
+English and Spanish voicemail greetings and empty/silent turns do not count as
+responses. The live prompt leaves one brief voicemail and uses `end_call`, with
+one check for a silent human line. Returning callers with a submitted address
+confirm the same property and continue its existing lookup. Fallback-link replays
+recognize accepted/delivered provider receipts without sending again; uncertain
+messages remain held. Spoken street expansions and Spanish yes/correct are
+accepted only with the original seller street and full agent readback.
+
 The owner supplied the published campaign through an Ads Manager URL containing
 both the ad account and campaign IDs above. Its existing production spend source
 was saved with tracking campaign `120255627041280155` and automatic imports

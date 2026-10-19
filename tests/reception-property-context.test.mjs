@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import {propertyReceptionEnabled,propertyReceptionPolicy,propertyReceptionPolicyHash,propertyReceptionGreeting,propertyReceptionPrompt,propertyReceptionVariables} from '../lib/reception-property-context.ts';
+import {propertyReceptionEnabled,propertyReceptionPolicy,propertyReceptionPolicyHash,propertyReceptionGreeting,propertyReceptionPrompt,propertyReceptionVariables,receptionContextVariables} from '../lib/reception-property-context.ts';
+import {buyerSpeakingPolicy} from '../lib/buyer-speaking-policy.ts';
 import {receptionRegisterBody} from '../lib/general-reception.ts';
 const config={context_policy:propertyReceptionPolicy,context_policy_hash:propertyReceptionPolicyHash,context_approval_reference:'review-fixture-only',agent_id:'agent_test',branch_id:'agtbrch_test',called_number:'+12125550111',max_duration_seconds:60};
 assert(propertyReceptionEnabled(config));
@@ -19,4 +20,15 @@ assert(upgraded.conversation_initiation_client_data.dynamic_variables.icash_prop
 assert.equal(upgraded.conversation_initiation_client_data.conversation_config_override.conversation.max_duration_seconds,60);
 assert.equal(propertyReceptionGreeting,'{{icash_property_greeting}}');
 assert(propertyReceptionPrompt.includes('Only after they confirm ownership'));
+const savedEnv={...process.env};
+try{
+ process.env.META_INSTANT_LEADS_ENABLED='true';process.env.VERCEL_ENV='production';
+ const contact={status:'instant_lead',principal:'Fixture Buyer',assistantName:'Alex'};
+ const unknown=receptionContextVariables({context_policy:buyerSpeakingPolicy},contact);
+ assert(unknown.icash_property_greeting.includes("What's the address"));
+ const returning=receptionContextVariables({context_policy:buyerSpeakingPolicy},{...contact,addressProvided:true});
+ assert(returning.icash_property_greeting.includes('same property'));
+ assert(!returning.icash_property_greeting.includes("What's the address"));
+ assert.equal(JSON.parse(returning.icash_property_context).addressProvided,true);
+}finally{process.env=savedEnv;}
 console.log('Property reception: reviewed opt-in only, owner-first greeting, unique known first name, ambiguous/unknown generic, no private data or cap changes passed');
