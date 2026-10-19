@@ -7,3 +7,5 @@ The seller allocator can share an inbound request with up to three buyers on its
 Unmatched inventory still uses the original exclusion logic. Its phone expression uses `[+]` to accept E.164 without ambiguous backslash escaping.
 
 The database-only migration changes no queued message, call, provider receipt or payment. Existing workers retry never-dispatched work through the same atomic channel claims. The regression test reproduces both SMS and voice reservation failures with the actual upstream SQL, then exercises shared matches, source mismatches, expiry, suppression, signed purchases and cold inventory isolation locally. No paid simulations are used.
+
+The companion monitoring migration retires the old overnight SMS exemption. Since verified inbound sellers have no contact-hour window, a missing first text must remain visible at any hour. Explicit future call appointments still count as scheduled work.
