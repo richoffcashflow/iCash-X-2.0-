@@ -54,6 +54,7 @@ try{
  const human=read('config/homeoffer-meta-events.sql');const hs=human.indexOf('create or replace function public.icash_seller_human_answer');await pg.exec(human.slice(hs,human.indexOf('$$;',hs)+3));
  await pg.exec(read('config/text-stop-voice.sql'));
  await pg.exec(read('config/seller-response-policy.sql'));
+ await pg.exec(read('config/seller-optout-base-verbs.sql'));
  await pg.exec(read('config/seller-negative-response-holds.sql'));
  await pg.exec(fn('config/manual-deal-email.sql','icash_record_deal_email_reply'));
  await pg.exec('create trigger fixture_meta_observe_text after insert or update of state,provider_id on icash_text_messages for each row execute function icash_meta_observe_text()');
@@ -100,7 +101,7 @@ try{
  };
  for(const text of ['not super interested','This sounds like a scam','not a scam?'])await isolated(async()=>{await sms(text);await stopped();assert.equal((await one('select count(*) n from icash_text_suppressions')).n,0);});
  for(const text of ['The roof is terrible and the house needs repairs','not a scam, happy to proceed',"I never said not interested, I want to sell",'You wrote STOP in your message'])await isolated(async()=>{await sms(text);assert.equal((await one('select count(*) n from icash_property_controls')).n,0,text);assert.equal((await one("select icash_text_signal($1,'seller') signal",[text])).signal,null,text);});
- await isolated(async()=>{await sms('STOP');assert.equal((await one('select count(*) n from icash_text_suppressions')).n,1);assert.equal((await one('select count(*) n from icash_email_suppressions')).n,2,'exact shared phone opt-out propagates to its bound emails');assert.equal((await one('select revoked_at is not null revoked from icash_contact_permissions where id=$1',[permission])).revoked,true);assert.equal(await allowed('text:'+manualText),false,'manual sends never bypass permanent suppression');});
+ for(const body of ['STOP','Stop text me','Stop contact me','Stop call me','Stop message me'])await isolated(async()=>{await sms(body);assert.equal((await one('select count(*) n from icash_text_suppressions')).n,1);assert.equal((await one('select count(*) n from icash_email_suppressions')).n,2,'exact shared phone opt-out propagates to its bound emails');assert.equal((await one('select revoked_at is not null revoked from icash_contact_permissions where id=$1',[permission])).revoked,true);assert.equal(await allowed('text:'+manualText),false,'manual sends never bypass permanent suppression');});
  await isolated(async()=>{await sms('not interested',{account:b,thread});assert.equal((await one('select count(*) n from icash_property_controls')).n,0,'mismatched source tenant ignored');});
  await isolated(async()=>{await q("update icash_deal_files set terms='{\"practice\":true}' where id=$1",[deal]);await sms('STOP');assert.equal((await one('select count(*) n from icash_text_suppressions')).n,0,'practice source is excluded');});
  for(const source of ['call','inbound_call'])await isolated(async()=>{

@@ -15,6 +15,7 @@ try{
  await pg.exec(read('tests/fixtures/voice-queue-current-validator.sql'));
  const validator=(await one("select pg_get_functiondef('icash_operational_contact_current(uuid,uuid,text,boolean)'::regprocedure) definition")).definition;
  await pg.exec(read('config/voice-queue-candidate-fence.sql'));
+ await pg.exec(read('config/voice-queue-prior-route-scan.sql'));
  assert.equal((await one("select pg_get_functiondef('icash_operational_contact_current(uuid,uuid,text,boolean)'::regprocedure) definition")).definition,validator);
  const op=(await one("select id from icash_operational_contacts where account_id=$1 and channel='voice'",[account])).id;
  assert.equal(await rpc('icash_operational_contact_current',{p_account:account,p_contact:op,p_channel:'voice',p_check_hour:false}),true);
@@ -44,5 +45,5 @@ try{
  assert.equal((await one('select outcome from icash_voice_jobs where operational_contact_id=$1',[op])).outcome,'provider_outcome_unknown_no_retry');
  assert.deepEqual((await one('select to_jsonb(w) wallet from icash_wallets w where account_id=$1',[account])).wallet,moneyBefore);
  assert.equal((await one('select count(*) n from icash_operation_spend')).n,spendBefore,'queue performance patch never authorizes spend');
- console.log('Voice candidate fence with exact live validator: real source/hash/owner/DNC/STOP/Pause/config/financial gates, account scope, unknown holds, idempotency and unchanged wallet/spend all pass. No provider calls.');
+ console.log('Voice candidate fence and prior-route materialization with exact live validator: real source/hash/owner/DNC/STOP/Pause/config/financial gates, account scope, unknown holds, idempotency and unchanged wallet/spend all pass. No provider calls.');
 }catch(error){console.error(error.message,error.where??'');process.exitCode=1;}finally{await pg.close();}
