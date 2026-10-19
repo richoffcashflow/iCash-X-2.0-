@@ -17,7 +17,7 @@ const suites = [
  'webinar-reminder-attribution-database', 'webinar-reminder-client', 'webinar-reminder-routes', 'webinar-reminder-results', 'checkout-measurement',
  'webinar-recovery-client', 'webinar-recovery-route', 'webinar-followups', 'webinar-purchase-flow', 'webinar-exit-reminder', 'webinar-chat-no-assistant', 'webinar-followup-routes', 'webinar-replay-spots',
  'workspace-simplification', 'workspace-stage-summary', 'buyer-network-workspace', 'fulfillment-guidance', 'workspace-next-actions', 'deal-tools-disclosure',
- 'workspace-vip-ui', 'property-call-history', 'call-recording-ui', 'property-call-history-ui', 'recording-maintenance-retry', 'outbound-recording-final-clock', 'recording-agent-comparison',
+ 'workspace-vip-ui', 'property-call-history', 'call-recording-ui', 'property-call-history-ui', 'recording-maintenance-retry', 'recording-gate-settlement', 'recording-gate-settlement-database', 'outbound-recording-final-clock', 'recording-agent-comparison',
  'property-analysis-summary', 'property-debt-summary',
  'seller-submission-status', 'seller-meta', 'seller-meta-database',
  'optin-call-now-route', 'optin-call-now-database',

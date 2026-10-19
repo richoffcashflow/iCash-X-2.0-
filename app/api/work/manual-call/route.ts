@@ -1,3 +1,4 @@
+import {recordingGateCostPending} from '@/lib/recording-gate-diagnostics';
 import {customerPhoneAudioAvailable,type CustomerPhoneCall} from '@/lib/customer-phone';
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
@@ -16,9 +17,9 @@ export async function GET(req:Request){
    const businessNumber=reason===null?await db<string|null>('rpc/icash_customer_call_sender','POST',{p_account:accountId,p_screening:screeningId,p_recipient:c.phone}):null;
    return {...c,businessNumber,available:reason===null&&businessNumber!==null,reason:reason??(businessNumber?'Call using your business number.':'Your business calling number is unavailable. Please try again.')};
   }));
-  const attempts=await db<{id:string;state:string;created_at:string;consent_at:string|null;last_error:string|null}[]>(`icash_call_recordings?account_id=eq.${accountId}&screening_id=eq.${screeningId}&call_sid=not.is.null&conversation_id=is.null&select=id,state,created_at,consent_at,last_error&order=created_at.desc&limit=3`);
+  const attempts=await db<{id:string;state:string;created_at:string;consent_at:string|null;last_error:string|null;last_action:string|null}[]>(`icash_call_recordings?account_id=eq.${accountId}&screening_id=eq.${screeningId}&call_sid=not.is.null&conversation_id=is.null&select=id,state,created_at,consent_at,last_error,last_action&order=created_at.desc&limit=3`);
   const personalCalls=await db<CustomerPhoneCall[]>(`icash_customer_phone_calls?account_id=eq.${accountId}&screening_id=eq.${screeningId}&select=id,state,connection_type,callback_phone,ended_at,recording_required,recording_state,recording_sid,recording_expires_at,recording_deleted_at&order=created_at.desc&limit=1`);
-  return NextResponse.json({personalCalls:personalCalls.map(c=>({id:c.id,state:c.state,connection_type:c.connection_type,callback_phone:c.callback_phone,ended_at:c.ended_at,audioAvailable:customerPhoneAudioAvailable(c)})),attempts:attempts.map(a=>({id:a.id,createdAt:a.created_at,status:['failed','declined','absent'].includes(a.state)?'Call ended before the AI conversation':'Call connecting',costPending:a.last_error==='terminal_carrier_reconciliation_required'})),contacts:choices,reason:choices.length?undefined:'No phone number has been saved for this property yet.'},{headers});
+  return NextResponse.json({personalCalls:personalCalls.map(c=>({id:c.id,state:c.state,connection_type:c.connection_type,callback_phone:c.callback_phone,ended_at:c.ended_at,audioAvailable:customerPhoneAudioAvailable(c)})),attempts:attempts.map(a=>({id:a.id,createdAt:a.created_at,status:['failed','declined','absent'].includes(a.state)?'Call ended before the AI conversation':'Call connecting',costPending:recordingGateCostPending(a.last_error,a.last_action)})),contacts:choices,reason:choices.length?undefined:'No phone number has been saved for this property yet.'},{headers});
  }catch{return NextResponse.json({error:'Could not load contacts. Try again.'},{status:503,headers});}
 }
 // External dialer launches are retired; calls stay inside the authenticated browser flow.
