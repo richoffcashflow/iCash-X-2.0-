@@ -11,6 +11,7 @@ try{
  create table public.icash_funding_orders(account_id uuid,mode text,state text);
  create table public.icash_seller_intakes(id uuid primary key,created_at timestamptz,state text,numbers_passed boolean,market_qualified boolean,canonical_id uuid,contact_consent_scope text);
  create table public.icash_seller_matches(lead_id uuid,account_id uuid,assigned_at timestamptz);
+ create table public.icash_meta_leads(lead_id uuid,account_id uuid,routed_at timestamptz);
  create function public.icash_membership_work_allowed(p uuid) returns boolean language sql stable as 'select member from public.icash_accounts where id=p';
  create function public.icash_credit_acquisition_allowed(p uuid) returns boolean language sql stable as 'select coalesce(bool_or(a.member and a.enabled and not a.bot_paused and w.balance_cents>0),false) from public.icash_accounts a left join public.icash_wallets w on w.account_id=a.id where a.id=p';
  insert into public.icash_accounts(id,owner_user_id,bot_paused) select md5(n::text)::uuid,md5(('user'||n)::text)::uuid,false from generate_series(1,7) n;
@@ -36,7 +37,8 @@ try{
  -- Yesterday's pending request does not lower the completed-request yield.
  insert into public.icash_seller_intakes values(md5('resolved')::uuid,now()-interval '2 days','qualified',true,true,null,null),
  (md5('rejected')::uuid,now()-interval '2 days','rejected',false,false,null,null),
- (md5('pending')::uuid,now()-interval '2 days','looking_up',false,false,null,null);
+ (md5('pending')::uuid,now()-interval '2 days','looking_up',false,false,null,null),
+ (md5('address_pending')::uuid,now()-interval '2 days','awaiting_address',false,false,null,null);
  `);
  await db.exec(readFileSync(new URL('../config/owner-lead-supply.sql',import.meta.url),'utf8'));
  const report=async()=> (await db.query('select public.icash_owner_lead_supply($1::uuid) report',[owner])).rows[0].report;
@@ -46,6 +48,23 @@ try{
  assert.equal(r.pausedAccounts,1);assert.equal(r.unfundedAccounts,1);assert.equal(r.setupAccounts,1);
  assert.equal(r.matureLeads,1);assert.equal(r.matureDeliveries,1,'Owner/test deliveries cannot inflate realized customer yield');
  assert.equal(r.resolvedRequests7d,2);assert.equal(r.qualifiedRequests7d,1);
+ // Old imported contacts count from actual routing time, not CSV submission time.
+ await db.exec(`insert into public.icash_meta_leads values
+  (md5('address_pending')::uuid,md5('2')::uuid,now()-interval '1 hour'),
+  (md5('good1')::uuid,md5('1')::uuid,now()-interval '1 hour');`);
+ r=await report();assert.equal(r.coveredAccounts24h,2,'CSV/live Meta routing counts; multiple paths to one customer do not double count');
+ assert.equal(r.qualified24h,2,'Address-pending imports are not qualified properties');
+ assert.equal(r.resolvedRequests7d,2,'Awaiting an address is not a completed qualification attempt');
+ await db.exec(`delete from public.icash_meta_leads;
+  insert into public.icash_meta_leads values
+  (md5('address_pending')::uuid,md5('2')::uuid,null),
+  (md5('address_pending')::uuid,md5('2')::uuid,now()-interval '25 hours'),
+  (md5('address_pending')::uuid,md5('2')::uuid,now()+interval '1 hour'),
+  (md5('demo')::uuid,md5('2')::uuid,now()-interval '1 hour'),
+  (md5('duplicate')::uuid,md5('2')::uuid,now()-interval '1 hour'),
+  (md5('repeat')::uuid,md5('2')::uuid,now()-interval '1 hour');
+  insert into public.icash_meta_leads select md5('address_pending')::uuid,md5(n::text)::uuid,now()-interval '1 hour' from generate_series(3,7) n;`);
+ r=await report();assert.equal(r.coveredAccounts24h,1,'Unrouted, stale, future, demo, duplicate, owner, test and ineligible routes never satisfy coverage');
  await assert.rejects(()=>db.query('select public.icash_owner_lead_supply($1::uuid) report',['00000000-0000-0000-0000-000000000000']),/Owner required/);
  const privileges=(await db.query(`select has_function_privilege('anon','public.icash_owner_lead_supply(uuid)','execute') anon,has_function_privilege('authenticated','public.icash_owner_lead_supply(uuid)','execute') authenticated,has_function_privilege('service_role','public.icash_owner_lead_supply(uuid)','execute') service`)).rows[0];
  assert.deepEqual(privileges,{anon:false,authenticated:false,service:true});
