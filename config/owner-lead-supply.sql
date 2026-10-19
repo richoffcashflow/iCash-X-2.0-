@@ -19,12 +19,19 @@ begin
   where i.canonical_id is null and i.state<>'duplicate'
    and i.contact_consent_scope is distinct from 'icash_x_demo'
    and i.created_at>=now()-interval '38 days' and i.created_at<now()
+ ), recent_deliveries as (
+  -- Contact-only Meta leads (including CSV imports) reach a customer's
+  -- workspace before address research creates a seller match.
+  select m.lead_id,m.account_id from public.icash_seller_matches m
+  where m.assigned_at>=now()-interval '24 hours' and m.assigned_at<now()
+  union all
+  select m.lead_id,m.account_id from public.icash_meta_leads m
+  where m.routed_at>=now()-interval '24 hours' and m.routed_at<now()
  ), recent_coverage as (
   select count(distinct m.account_id) covered
-  from public.icash_seller_matches m join accounts a on a.id=m.account_id and a.ready
+  from recent_deliveries m join accounts a on a.id=m.account_id and a.ready
   join public.icash_seller_intakes i on i.id=m.lead_id
-  where m.assigned_at>=now()-interval '24 hours' and m.assigned_at<now()
-   and i.canonical_id is null and i.state<>'duplicate'
+  where i.canonical_id is null and i.state<>'duplicate'
    and i.contact_consent_scope is distinct from 'icash_x_demo'
  ), mature as (
   -- Completed eight-day research windows. Cap historical eight-user cohorts
@@ -36,7 +43,7 @@ begin
   -- Allow 24 hours for research; pending requests cannot depress the yield.
   select l.qualified from leads l
   where l.created_at>=now()-interval '8 days' and l.created_at<now()-interval '24 hours'
-   and l.state not in ('received','looking_up','checking')
+   and l.state not in ('received','awaiting_address','looking_up','checking')
  )
  select jsonb_build_object(
   'checkedAt',now(),
