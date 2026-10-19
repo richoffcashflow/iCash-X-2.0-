@@ -13,6 +13,7 @@ export async function verifyWorkspace(browser,base,options,name){
  let contractFlow=false;const contractWrites=[];
  let acknowledged=true,ackFail=false,manual=false,controlFail=false,vip=true;const acceptedWrites=[],controlWrites=[],assistantWrites=[],apiReads=[];
  let instantVariant=null,inboundLead=false,callOutcome=null;
+ let opportunityProgress=null;
  let scenario='lead',preview=true,emptySearch=false,fulfillmentMode='ok',intentionalCrash=false,callMode='unavailable';
  await context.addInitScript(()=>{Object.defineProperty(navigator,'mediaDevices',{value:{getUserMedia:async()=>{window.fixtureMicrophoneRequests=(window.fixtureMicrophoneRequests||0)+1;throw new DOMException('Fixture microphone denied','NotAllowedError');}},configurable:true});});
  const fulfillmentHolds=new Set();
@@ -70,7 +71,8 @@ export async function verifyWorkspace(browser,base,options,name){
   }
   if(request.method()!=='GET'){writes.push(url.pathname);return route.fulfill({status:403,json:{error:'Read-only fixture'}});}
   const p=url.pathname;apiReads.push(p);
-  if(p==='/api/account')return route.fulfill({json:{...fixtureAccount,...(instantVariant?{paused:false}:{}),workspaceAcknowledged:acknowledged,mode:'live',vip,vipFeatures:vip,billingModel:'membership_credits',membershipActive:true}});
+  if(p==='/api/account')return route.fulfill({json:{...fixtureAccount,...(instantVariant?{paused:false}:{}),...(opportunityProgress?{paused:opportunityProgress.status==='paused'}:{}),workspaceAcknowledged:acknowledged,mode:'live',vip,vipFeatures:vip,billingModel:'membership_credits',membershipActive:true}});
+  if(p==='/api/work/progress')return route.fulfill({json:{progress:opportunityProgress}});
   if(p==='/api/work/assistant')return route.fulfill({json:{items:[]}});
   if(p==='/api/billing/membership')return route.fulfill({json:{membership:{state:'active',accessible:true,vip,priceCents:vip?10000:5000,paidThrough:'2026-11-16T05:00:00Z',cancelAtPeriodEnd:false}}});
   if(p==='/api/work/activity')return route.fulfill({json:work(url)});
@@ -248,6 +250,18 @@ export async function verifyWorkspace(browser,base,options,name){
   assert.equal(await page.locator('.live-property').count(),0);assert.equal(acceptedWrites.length,1);
   ackFail=false;await accept.click();await page.locator('.live-property').first().waitFor();assert.equal(acceptedWrites.length,2);
   await page.waitForLoadState('networkidle');await page.reload();await page.locator('.live-property').first().waitFor();assert.equal(await page.getByRole('heading',{name:'Before you use iCash X'}).count(),0);
+  opportunityProgress={budgetId:1,startedAt:new Date().toISOString(),limitCents:5000,spentCents:120,pendingCents:977,remainingCents:3903,queued:2,screened:40,eligible:3,contacted:2,responded:0,status:'working'};
+  await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+  const momentum=page.getByRole('region',{name:'Opportunity progress'});await momentum.getByRole('heading',{name:'Finding your next opportunity'}).waitFor();
+  assert.match(await momentum.innerText(),/40[\s\S]*Eligible matches[\s\S]*3/);assert.match(await momentum.innerText(),/50%/);assert.match(await momentum.innerText(),/30-day search plan/);assert.equal(await momentum.getByRole('button',{name:'View responses'}).count(),0);
+  assert(await momentum.evaluate(node=>{const b=node.getBoundingClientRect();return b.left>=0&&b.right<=innerWidth+1;}),'Live counters fit desktop and mobile');
+  opportunityProgress={...opportunityProgress,responded:1};await page.evaluate(()=>window.dispatchEvent(new Event('icash:credits-funded')));
+  await momentum.getByText('A seller replied.',{exact:true}).waitFor();await momentum.getByRole('button',{name:'View responses'}).click();
+  assert.equal(await page.getByRole('button',{name:'Seller responses',exact:true}).getAttribute('aria-pressed'),'true');
+  await page.screenshot({path:`/tmp/icash-opportunity-progress-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
+  opportunityProgress={...opportunityProgress,status:'paced'};await page.evaluate(()=>window.dispatchEvent(new Event('icash:credits-funded')));await momentum.getByRole('heading',{name:'Your search continues automatically'}).waitFor();assert.match(await momentum.innerText(),/next search allowance is building/);
+  opportunityProgress={...opportunityProgress,status:'paused'};await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await momentum.getByRole('heading',{name:'Your search is paused'}).waitFor();
+  opportunityProgress=null;await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await momentum.waitFor({state:'hidden'});
   const collapsed=page.locator('.live-property').first();assert.equal(await collapsed.locator('.property-summary').getAttribute('aria-expanded'),'false');
   const ask=collapsed.getByRole('button',{name:/^Ask AI about /});await ask.waitFor();assert.equal(await ask.getAttribute('data-vip'),'true');
   assert(await ask.evaluate(node=>{const b=node.getBoundingClientRect(),card=node.closest('.live-property').getBoundingClientRect();return b.height>=44&&b.left>=card.left&&b.right<=Math.min(innerWidth,card.right)+1;}),'Ask AI is visible and fits the collapsed card');

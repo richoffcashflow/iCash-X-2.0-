@@ -3,9 +3,20 @@
 export class VoiceActivationBudgetError extends Error {
  constructor(){super('Voice activation budget exhausted');this.name='VoiceActivationBudgetError';}
 }
+export class ProspectingBudgetError extends Error {
+ readonly quoteCents:number;
+ constructor(quoteCents:number){super('Prospecting budget reached');this.name='ProspectingBudgetError';this.quoteCents=quoteCents;}
+}
 export async function voiceReservationFailure(path:string,status:number,response:Response):Promise<Error>{
- if(status===400&&['rpc/icash_reserve_paced_voice','rpc/icash_reserve_flexible_voice'].includes(path)){
-  try{const body=await response.json();if(body?.code==='P0001'&&body?.message==='Activation spending cap reached')return new VoiceActivationBudgetError();}catch{/* Unrecognized response is not a safe budget rejection. */}
+ const voice=['rpc/icash_reserve_paced_voice','rpc/icash_reserve_flexible_voice'].includes(path);
+ if(status===400&&(voice||['rpc/icash_reserve_operation','rpc/icash_reserve_and_claim_property_discovery','rpc/icash_claim_text','rpc/icash_claim_customer_text'].includes(path))){
+  try{const body=await response.json();
+   if(voice&&body?.code==='P0001'&&body?.message==='Activation spending cap reached')return new VoiceActivationBudgetError();
+   if(body?.code==='P0001'&&body?.message==='Prospecting budget reached'){
+    const detail=JSON.parse(body.details??'null');
+    if(Number.isSafeInteger(detail?.quoteCents)&&detail.quoteCents>0)return new ProspectingBudgetError(detail.quoteCents);
+   }
+  }catch{/* Unrecognized response is not a safe budget rejection. */}
  }
  return new Error('Database request failed');
 }

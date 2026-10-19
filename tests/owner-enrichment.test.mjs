@@ -44,6 +44,15 @@ await enrichOwners(input,h.dependencies,now);assert.equal(h.saved.creditsUsed,0)
 h=harness([{dm_person_id:'per_1'}]);h.raw=receipt(['per_1']);h.raw.data[0].is_likely_owner=true;
 await enrichOwners(input,h.dependencies,now);assert.equal(h.saved.contacts[0].likelyOwner,false);assert.equal(h.saved.contacts[0].matchFlags.is_likely_owner,null);
 
+// Actual live property-preview schema, with unknown/conflicting shapes held.
+for(const [contact,expected] of [[{contact_type:'owner',is_resident:false},true],[{contact_type:'resident',is_resident:true},false],[{contact_type:'family'},false],[{contact_type:'owner',is_likely_owner:false},false],[{contact_type:'owner',is_likely_renter:true},false]]){
+ h=harness([{dm_person_id:'per_1',...contact}]);await enrichOwners(input,h.dependencies,now);
+ assert.equal(h.saved.contacts[0].likelyOwner,expected);assert.equal(h.saved.contacts[0].ownershipVerified,false);assert.equal(h.saved.contacts[0].outreachAuthorized,false);
+ assert.equal(h.saved.contacts[0].propertyContactType,contact.contact_type==='owner'?'owner':null);
+}
+h=harness([{dm_person_id:'per_1',is_resident:false}]);h.raw=receipt(['per_1']);h.raw.data[0].contact_type='owner';
+await enrichOwners(input,h.dependencies,now);assert.equal(h.saved.contacts[0].likelyOwner,false,'Paid person data cannot invent a property association');
+
 h=harness([]);assert.equal((await enrichOwners(input,h.dependencies,now)).status,'empty');assert.deepEqual(h.events,['preview']);
 for(const malformed of [null,{},preview([{}]),preview([{dm_person_id:'123'}]),preview([{dm_person_id:'per_'}]),preview([null]),preview([owner('per_1'),{...owner('per_1'),is_likely_owner:false}]),{...preview([owner('per_1')]),data:{dm_property_id:'prop_456',contacts:[owner('per_1')]}},{...preview([owner('per_1')]),credits:{used:0,people:1,properties:0,deduplicated:0}},preview([...Array.from({length:25},(_,i)=>owner('per_'+i)),{}])]){
  h=harness();h.preview=malformed;await assert.rejects(enrichOwners(input,h.dependencies,now),/CONTACT_PREVIEW_INVALID/);assert.deepEqual(h.events,['preview']);

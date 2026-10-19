@@ -1,4 +1,5 @@
 'use client';
+import {OpportunityProgress} from './opportunity-progress';
 import {InstantLeadCard,instantLeadGroup,type InstantLeadCardData} from './instant-lead-card';
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {HandoffCard,type Handoff} from './handoff-card';
@@ -88,9 +89,10 @@ export function LiveWorkspace({onLeadPresenceChange,onAttentionChange,principal,
  const coachProperty=work?.properties.find(p=>needsAttention(p.id,work))??work?.properties.find(p=>p.id===promisingId);
  function openProperty(id:string){if(!work?.properties.some(p=>p.id===id)&&!leaveDrafts())return;setFilter('all');setActiveId(id);setVisited(v=>v.includes(id)?v:[...v,id]);if(!work?.properties.some(p=>p.id===id)){setWork(null);setVisited([id]);setFocusedId(id);setQuery('');setSearch('');setLoading(true);}requestAnimationFrame(()=>document.getElementById(`property-${id}`)?.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'}));}
  useEffect(()=>{if(propertyRequest)openProperty(propertyRequest.id);},[propertyRequest]);
- function changeView(next:'responses'|'all'){if(!leaveDrafts())return;setView(next);setPage(0);setFilter('all');setFocusedId('');setWork(null);setActiveId('');setVisited([]);setLoading(true);}
+ function changeView(next:'responses'|'all',clearSearch=false){if(!leaveDrafts())return;if(clearSearch){setQuery('');setSearch('');}setView(next);setPage(0);setFilter('all');setFocusedId('');setWork(null);setActiveId('');setVisited([]);setLoading(true);}
  function changePage(next:number){if(!leaveDrafts())return;setPage(next);setWork(null);setActiveId('');setVisited([]);setLoading(true);}
  return <div className="live-work" id="workspace-properties">
+  <OpportunityProgress botAvailable={botAvailable} paused={botPaused} stale={accountStale} onResponses={()=>changeView('responses',true)} onActivity={()=>setRefresh(v=>v+1)}/>
   {showCoach&&work&&<section className="deal-coach" aria-label="Your next move"><span className="workspace-eyebrow">Your AI coach</span><h3>{coachProperty?needsAttention(coachProperty.id,work)?'One thing needs your attention.':'Start with your strongest prospect.':botPaused?'Your work is saved.':'Your next opportunity starts here.'}</h3><p>{coachProperty?propertyNextMove(coachProperty,work):botPaused?'Resume when you’re ready. Your property history and conversations stay here.':'Your bot’s saved research and conversations will appear below.'}</p>{coachProperty&&<button className="coach-action" onClick={()=>{if(needsAttention(coachProperty.id,work)){const queue=document.getElementById('workspace-attention') as HTMLDetailsElement|null;if(queue){queue.open=true;queue.scrollIntoView({block:'start'});return;}}openProperty(coachProperty.id);}}>{needsAttention(coachProperty.id,work)?'Review next step':'Open priority property'}</button>}</section>}
   {error&&<div className="workspace-notice" role="alert"><p>{error}</p><button onClick={()=>{setLoading(true);setRefresh(v=>v+1);}}>Try again</button></div>}
   {!work&&loading&&<p className="workspace-empty" role="status">Loading your saved work…</p>}

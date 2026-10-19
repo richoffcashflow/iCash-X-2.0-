@@ -1,0 +1,19 @@
+.panel{border:1px solid #dedede;border-radius:20px;background:#fff;padding:24px;margin-bottom:20px;color:#161616;box-shadow:0 4px 18px #00000004}
+.top{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;text-transform:uppercase;letter-spacing:.1em;font-size:10px;font-weight:750}
+.allowance{color:#666;font-size:11px}
+.panel h3{font-size:24px;line-height:1.2;letter-spacing:-.035em;margin:0 0 8px;font-weight:650}
+.description{font-size:13px;line-height:1.6;color:#666;margin:0;max-width:620px}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:24px 0}
+.metric{border-left:1px solid #e9e9e9;padding-left:16px}.metric:first-child{border-left:0;padding-left:0}
+.metric>span{display:flex;gap:6px;align-items:center;color:#777;font-size:11px;line-height:1.4}
+.count{display:block;font-size:36px;line-height:1.25;letter-spacing:-.04em;font-variant-numeric:tabular-nums;margin-top:8px;animation:countIn .3s ease-out}
+.bottom{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:17px;border-top:1px solid #eee}
+.bottom p{margin:0;font-size:12px;line-height:1.6;color:#666}.bottom strong{color:#222;font-weight:600}
+.bottom button{display:inline-flex;gap:7px;align-items:center;flex-shrink:0;background:#161616;border:1px solid #161616;color:white;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:600;cursor:pointer}.bottom button:focus-visible{outline:2px solid #161616;outline-offset:3px}
+.scope{display:block;font-size:10px;line-height:1.5;color:#777;margin-top:14px}
+.dot{width:6px;height:6px;border-radius:50%;background:#23a45a;box-shadow:0 0 0 3px #23a45a12;animation:pulse 2s ease-in-out infinite}
+@keyframes countIn{from{opacity:.45;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{50%{opacity:.5}}
+@media(max-width:640px){.panel{padding:20px 16px;border-radius:16px}.panel h3{font-size:22px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 12px}.metric:nth-child(3){border-left:0;padding-left:0}.bottom{align-items:flex-start;flex-direction:column}.count{font-size:32px}}
+@media(prefers-reduced-motion:reduce){.count,.dot{animation:none}}

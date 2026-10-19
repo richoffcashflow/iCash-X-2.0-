@@ -1,4 +1,5 @@
 import {automationChanged} from '@/lib/automation-outcome';
+import {ProspectingBudgetError} from '@/lib/voice-budget-failure';
 import {dispatchCustomerUpdate} from '@/lib/customer-updates-service';
 import {automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '@/lib/live-work-admission';
 import {dispatchAttentionNotification} from '@/lib/attention-notifications-service';
@@ -42,7 +43,10 @@ export async function POST(request:Request){
    try{await dispatchAttentionNotification(ticket.accountId,{db,signal:billingDeadline});}catch{/* Durable claims remain held for review; never repeat the primary action. */}
   }
   return NextResponse.json({status:result.status,billing},{headers});
- }catch{
+ }catch(error){
+  if(ticket&&error instanceof ProspectingBudgetError){
+   try{if(await db<boolean>('rpc/icash_hold_prospecting_ticket','POST',{p_id:ticket.id,p_account:ticket.accountId,p_quote:error.quoteCents}))return NextResponse.json({status:'prospecting_budget_held'},{headers});}catch{/* Unknown outcomes retain reconciliation. */}
+  }
   if(ticket)try{await db('rpc/icash_finish_automation','POST',{p_id:ticket.id,p_success:false,p_outcome:'held_for_reconciliation'});}catch{/* Preserve consumed capability on database failure. */}
   return NextResponse.json({status:'held_for_reconciliation'},{status:503,headers});
  }
