@@ -5,6 +5,8 @@ import {processSellerIntake} from '@/lib/seller-pipeline';
 import {processSellerResearchRefresh} from '@/lib/seller-research-refresh';
 import {deliverSellerEvent} from '@/lib/seller-conversions';
 import {processSellerResponses} from '@/lib/seller-response-service';
+import {processSellerEmails} from '@/lib/seller-email-service';
+import {dealEmailConfigured,dispatchDealEmail} from '@/lib/deal-email-service';
 import {dispatchTextMessage} from '@/lib/text-message-service';
 import {dispatchLiveVoice} from '@/lib/live-dispatch-service';
 import {recoverAgreementDelivery} from '@/lib/agreement-delivery-recovery';
@@ -15,6 +17,7 @@ export const maxDuration=120;
 export async function GET(req:Request){
  const headers={'Cache-Control':'no-store'};
  if(!authorizeOutboundBilling(req,process.env.CRON_SECRET))return Response.json({error:'Unauthorized'},{status:401,headers});
+ const sellerEmails=processSellerEmails({db,dispatch:dispatchDealEmail,configured:dealEmailConfigured}).catch(()=>({status:'seller_email_retry_pending'}));
  const instantWork=processInstantLeadWork({db,sms:dispatchTextMessage,voice:dispatchLiveVoice,env:process.env}).catch(()=>({status:'instant_lead_retry_pending'}));
  // Recovery is independent of new seller intake. A failed or slow receipt
  // lookup must not delay a newly submitted property's first response.
@@ -38,7 +41,7 @@ export async function GET(req:Request){
  const researchRefresh=processSellerResearchRefresh(db,process.env.DEALMACHINE_API_KEY).catch(()=>({status:'research_refresh_requires_review'}));
  try{
   const [controls]=await db<{enabled:boolean}[]>('icash_seller_controls?id=eq.1&select=enabled');
-  if(!controls?.enabled)return Response.json({status:'seller_setup_required',instantLeads:await instantWork,responses:await responseWork,measurement:await measurementWork,agreementRecovery:await agreementRecovery,researchRefresh:await researchRefresh},{status:responseFailed?503:200,headers});
+  if(!controls?.enabled)return Response.json({status:'seller_setup_required',sellerEmails:await sellerEmails,instantLeads:await instantWork,responses:await responseWork,measurement:await measurementWork,agreementRecovery:await agreementRecovery,researchRefresh:await researchRefresh},{status:responseFailed?503:200,headers});
   let lookupFailed=false;
   const lookup=await processSellerIntake(db,process.env.DEALMACHINE_API_KEY).catch(()=>{
    lookupFailed=true;return {status:'seller_lookup_unavailable'};
@@ -49,6 +52,6 @@ export async function GET(req:Request){
   const immediate=allocation?.status==='assigned'?await processSellerResponses(db,dispatchTextMessage,dispatchLiveVoice,allocation.leadId):[];
   const responses=[...await responseWork,...immediate];
   const measurement=await measurementWork;
-  return Response.json({instantLeads:await instantWork,lookup,allocation,responses,measurement,agreementRecovery:await agreementRecovery,researchRefresh:await researchRefresh},{status:lookupFailed||responseFailed?503:200,headers});
- }catch{await Promise.all([agreementRecovery,measurementWork,responseWork,instantWork,researchRefresh]);return Response.json({status:'seller_processing_requires_review'},{status:503,headers});}
+  return Response.json({sellerEmails:await sellerEmails,instantLeads:await instantWork,lookup,allocation,responses,measurement,agreementRecovery:await agreementRecovery,researchRefresh:await researchRefresh},{status:lookupFailed||responseFailed?503:200,headers});
+ }catch{await Promise.all([sellerEmails,agreementRecovery,measurementWork,responseWork,instantWork,researchRefresh]);return Response.json({status:'seller_processing_requires_review'},{status:503,headers});}
 }
