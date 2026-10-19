@@ -19,6 +19,9 @@ try{
  };
  await timestamps();
  await pg.exec(readFileSync(new URL('../config/dealmachine-dnc-observations.sql',import.meta.url),'utf8'));
+ await pg.exec('create table icash_timezone_names as select name from pg_timezone_names;grant select on icash_timezone_names to service_role');
+ await pg.exec(readFileSync(new URL('../tests/fixtures/operational-preparation-before-fence.sql',import.meta.url),'utf8'));
+ await pg.exec(readFileSync(new URL('../config/operational-preparation-candidate-fence.sql',import.meta.url),'utf8'));
  const policy=await one("select * from icash_dnc_verification_sources where observation_provider='dealmachine'");
  assert.equal(policy.enabled,false);assert.equal(policy.max_observation_age_seconds,86400);
  assert(new Date(policy.expires_at)<new Date());
