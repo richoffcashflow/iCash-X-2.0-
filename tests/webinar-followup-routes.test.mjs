@@ -18,16 +18,14 @@ preview=true;response=await post(event,{sessionId:id,seconds:config.durationSeco
 response=await post(event,{sessionId:id,seconds:10,kind:'completed'});assert.equal((await response.json()).redirect,undefined);
 config.parentWebinarId=null;config.redirectAtEnd=true;
 const body={sessionId:id,name:'Casey',email:'casey@example.invalid',phone:'2125550100',consent:true,version:policy.webinarConsentVersion};
-await post(contact,body);assert.equal(calls.at(-1).body.p_sms_consent,false,'Phone alone is never text consent');
-await post(contact,{...body,smsConsent:true});assert.equal(calls.at(-1).body.p_sms_consent,false,'SMS requires its own versioned checkbox');
-await post(contact,{...body,smsConsent:true,smsVersion:policy.webinarSmsConsentVersion});assert.equal(calls.at(-1).body.p_sms_consent,true);
-assert.equal(calls.at(-1).path,'rpc/icash_webinar_contact_exit_campaign','Current consent explicitly enables departure reminders');
-await post(contact,{...body,version:'webinar-email-campaign-2026-10-08',smsConsent:true,smsVersion:'webinar-sms-campaign-2026-10-08'});assert.equal(calls.at(-1).path,'rpc/icash_webinar_contact_campaign','Previously opened clients retain their original consent limits');
-await post(contact,{...body,version:'webinar-email-ongoing-2026-10-09',smsConsent:true,smsVersion:'webinar-sms-ongoing-2026-10-09'});assert.equal(calls.at(-1).path,'rpc/icash_webinar_contact_ongoing_campaign','Previously opened forms retain their recorded daily limits');
-preview=true;await post(contact,{...body,smsConsent:true,smsVersion:policy.webinarSmsConsentVersion});assert.equal(calls.at(-1).body.p_email_consent,false);assert.equal(calls.at(-1).body.p_sms_consent,false);preview=false;
-assert.equal((await post(contact,{...body,phone:'1234567'})).status,400);
-assert.equal((await post(contact,{...body,email:'',consent:false,smsConsent:true,smsVersion:policy.webinarSmsConsentVersion})).status,200,'Text-only opt-in does not require email');
+calls=[];
+for(const patch of [{},{smsConsent:true,smsVersion:policy.webinarSmsConsentVersion},{version:'webinar-email-campaign-2026-10-08'},{version:'webinar-email-ongoing-2026-10-09'}]){
+ assert.equal((await post(contact,{...body,...patch})).status,410,'Old forms cannot enroll reminder contacts');
+}
+assert.equal(calls.length,0,'Retired opt-ins never write contacts or enqueue work');
+assert.equal((await post(contact,{sessionId:id,name:'Casey',onlyName:true})).status,200);
+assert.deepEqual(calls.at(-1),{path:'icash_webinar_visitors?id=eq.'+visitorId,method:'PATCH',body:{name:'Casey'}},'Name-only chat stays available');
 const get=token=>link.GET(new Request('https://example.test/w/'+token),{params:Promise.resolve({token})});
 calls=[];response=await get(jobId);assert.equal(response.status,302);assert.equal(new URL(response.headers.get('Location')).pathname,'/live/129339');assert.equal(response.headers.get('Referrer-Policy'),'no-referrer');assert.equal(new URL(response.headers.get('Location')).searchParams.get('r'),'resume-'+visitorId);assert.ok(calls.every(c=>!c.method),'Opening a link does not enroll or send anything');assert.ok(calls[0].path.includes('sent_at.gte.'));
 jobFound=false;response=await get(jobId);assert.equal(response.headers.get('Location'),'https://example.test/webinar');calls=[];await get('malformed');assert.equal(calls.length,0);fail=true;assert.equal((await get(jobId)).status,503);
-console.log('Follow-up routes passed: durable completion redirect, preview isolation, explicit SMS consent, readable phone validation, private resume links and safe expiration.');
+console.log('Follow-up routes passed: durable completion redirect, preview isolation, removed reminder enrollment, name-only chat, private resume links and safe expiration.');

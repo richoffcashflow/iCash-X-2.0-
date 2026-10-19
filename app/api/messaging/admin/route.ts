@@ -17,7 +17,7 @@ export async function GET(){try{
 export async function POST(req:Request){try{
  webinarOrigin(req);await webinarOwner();
  const input=z.object({settings:campaignSettingsSchema,customerUpdatesEnabled:z.boolean(),revision:z.number().int().positive()}).strict().parse(await webinarBody(req,12000));
- const revision=await db<number|null>('rpc/icash_messaging_save','POST',{p_config:input.settings,p_customer_enabled:input.customerUpdatesEnabled,p_revision:input.revision});
+ const revision=await db<number|null>('rpc/icash_messaging_save','POST',{p_config:{...input.settings,enabled:false,smsEnabled:false},p_customer_enabled:input.customerUpdatesEnabled,p_revision:input.revision});
  if(revision===null)throw new WebinarError(409,'Messaging settings changed in another tab. Reload before saving.');
  const customer=customerUpdateConfiguration(process.env,input.settings.fromEmail);
  return Response.json({saved:true,revision,readiness:webinarFollowupReadiness(input.settings),customerReadiness:{email:customer.email,sms:customer.sms}},{headers:webinarHeaders});

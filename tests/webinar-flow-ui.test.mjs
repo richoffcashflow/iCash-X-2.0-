@@ -48,38 +48,12 @@ failContact=true;prompt.props.onSubmit({preventDefault(){}});await flush();tree=
 failContact=false;prompt=all(tree).find(n=>n.type==='form'&&n.props.className?.startsWith('wb-prompt '));prompt.props.onSubmit({preventDefault(){}});await flush();tree=render();assert.ok(all(tree).some(n=>n.props?.id==='wb-question'),'Saving the name opens chat');
 assert.equal(all(tree).some(n=>n.props?.className?.startsWith('wb-prompt ')),false,'Contact does not stack immediately on the name prompt');
 player=find(tree,'WebinarPlayer');player.props.onProgress(60);tree=render();prompt=all(tree).find(n=>n.props?.className==='wb-chat-composer');
-fields=all(prompt).filter(n=>n.type==='input');assert.deepEqual(fields.map(n=>n.props.type),['email']);assert.ok(!fields.some(n=>n.props.autoComplete==='given-name'));
-assert.equal(fields[0].props.id,'wb-question','Email uses the existing chat composer');
-assert.equal(all(tree).filter(n=>n.type==='input'&&n.props.type!=='checkbox').length,1,'No extra contact input appears above chat');
-assert.equal(all(tree).filter(n=>n.type==='form').length,1,'Contact and chat share one form');
-fields[0].props.onChange({target:{value:'casey@example.invalid'}});tree=render();prompt=all(tree).find(n=>n.props?.className==='wb-chat-composer');
-assert.equal(all(prompt).filter(n=>n.type==='input'&&n.props.type==='checkbox').length,1,'Only the entered channel asks for optional consent');
-assert.equal(all(prompt).find(n=>n.props?.type==='checkbox').props.checked,false,'Follow-up consent is never selected automatically');
-assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).length,2);assert.equal(requestLog.find(r=>r.url.endsWith('/contact')).body.onlyName,true);
-// Private contact data uses the composer without becoming a public chat message.
-// A failed save keeps the draft; the optional phone step reuses the same input.
-failContact=true;prompt.props.onSubmit({preventDefault(){}});await flush();tree=render();
-prompt=all(tree).find(n=>n.props?.className==='wb-chat-composer');
-assert.equal(all(prompt).find(n=>n.type==='input').props.type,'email');
-assert.equal(all(prompt).find(n=>n.type==='input').props.value,'casey@example.invalid');
-failContact=false;const beforeEmailSave=requestLog.filter(r=>r.url.endsWith('/contact')).length;prompt.props.onSubmit({preventDefault(){}});prompt.props.onSubmit({preventDefault(){}});await flush();tree=render();
-assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).length,beforeEmailSave+1,'A duplicate email submit saves only once');
-assert.equal(requestLog.filter(r=>r.url.endsWith('/chat')).length,0,'Email is never posted as a chat message');
-prompt=all(tree).find(n=>n.props?.className==='wb-chat-composer');
-assert.deepEqual(all(prompt).filter(n=>n.type==='input').map(n=>n.props.type),['tel'],'Only phone appears after email is saved');
-assert.equal(all(prompt).find(n=>n.type==='input').props.id,'wb-question');
-assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).at(-1).body.smsConsent,false);
-assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).at(-1).body.consent,false);
-all(prompt).find(n=>n.type==='input').props.onChange({target:{value:'2145550100'}});tree=render();
-prompt=all(tree).find(n=>n.props?.className==='wb-chat-composer');
-assert.equal(all(prompt).find(n=>n.props?.type==='checkbox').props.checked,false,'SMS consent is independent and optional');
-prompt.props.onSubmit({preventDefault(){}});await flush();tree=render();
-const details=requestLog.filter(r=>r.url.endsWith('/contact')).at(-1).body;
-assert.equal(details.email,'casey@example.invalid','Phone save preserves the email');assert.equal(details.phone,'2145550100');
-assert.equal(details.consent,false);assert.equal(details.smsConsent,false);
-find(tree,'WebinarPlayer').props.onProgress(500);tree=render();assert.equal(all(tree).some(n=>n.props?.className?.startsWith('wb-prompt ')),false);
-assert.equal(all(tree).find(n=>n.props?.id==='wb-question').props.name,'message');
-assert.equal(all(tree).find(n=>n.props?.id==='wb-question').props.value,'','Saved contact details never become a chat draft');
+fields=all(prompt).filter(n=>n.type==='input');assert.deepEqual(fields.map(n=>n.props.type),['text']);
+assert.equal(fields[0].props.name,'message','Chat never becomes an email or phone opt-in');
+assert.equal(all(tree).some(n=>n.type==='input'&&['email','tel','checkbox'].includes(n.props.type)),false);
+assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).length,2);
+assert.deepEqual(requestLog.filter(r=>r.url.endsWith('/contact')).at(-1).body,{sessionId,name:'Casey',onlyName:true});
+find(tree,'WebinarPlayer').props.onProgress(500);tree=render();
 // An outgoing question appears immediately, duplicate submits are blocked, and
 // the eventual reply cannot delete a second draft or scroll away from old notes.
 const input=()=>all(tree).find(n=>n.props?.id==='wb-question');
@@ -288,27 +262,6 @@ assert.equal(redirects.at(-1),previewLink.props.href,'Preview completion opens t
 assert.equal(requestLog.length,countBeforePreview,'Preview completion does not write conversion events');
 previewRoom.close();
 
-// One Skip exits contact capture, discards the private draft, and stays dismissed.
-rememberedEmail='';store.delete('icash-webinar-prompts:'+sessionId);
-const skipRoom=await harness('components/webinar-room.tsx',roomDeps);const renderSkip=()=>skipRoom.render('WebinarRoom',{webinarCode:'129339'});
-renderSkip();await flush();let st=renderSkip();find(st,'WebinarPlayer').props.onProgress(65);st=renderSkip();
-const contactCalls=requestLog.filter(r=>r.url.endsWith('/contact')).length;
-all(st).find(n=>n.props?.id==='wb-question').props.onChange({target:{value:'unsaved@example.invalid'}});st=renderSkip();
-all(st).find(n=>n.props?.className==='wb-contact-skip').props.onClick();st=renderSkip();
-assert.equal(all(st).find(n=>n.props?.id==='wb-question').props.name,'message','Skipping email goes straight back to chat');
-assert.equal(all(st).find(n=>n.props?.id==='wb-question').props.value,'','A skipped email never becomes a chat draft');
-find(st,'WebinarPlayer').props.onProgress(600);st=renderSkip();
-assert.equal(all(st).some(n=>n.props?.id==='wb-contact-label'),false);
-assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).length,contactCalls);skipRoom.close();
-const skippedReload=await harness('components/webinar-room.tsx',roomDeps);skippedReload.render('WebinarRoom',{});await flush();let reloaded=skippedReload.render('WebinarRoom',{});find(reloaded,'WebinarPlayer').props.onProgress(650);reloaded=skippedReload.render('WebinarRoom',{});assert.equal(all(reloaded).some(n=>n.props?.id==='wb-contact-label'),false,'Skipping remains dismissed after reloading the session');skippedReload.close();
-// Saving an email still permits skipping phone without losing the saved email.
-store.delete('icash-webinar-prompts:'+sessionId);rememberedEmail='';
-const phoneSkip=await harness('components/webinar-room.tsx',roomDeps),renderPhoneSkip=()=>phoneSkip.render('WebinarRoom',{});renderPhoneSkip();await flush();let pst=renderPhoneSkip();find(pst,'WebinarPlayer').props.onProgress(65);pst=renderPhoneSkip();
-all(pst).find(n=>n.props?.id==='wb-question').props.onChange({target:{value:'keep@example.invalid'}});pst=renderPhoneSkip();all(pst).find(n=>n.props?.className==='wb-chat-composer').props.onSubmit({preventDefault(){}});await flush();pst=renderPhoneSkip();
-assert.equal(all(pst).find(n=>n.props?.id==='wb-question').props.type,'tel');
-all(pst).find(n=>n.props?.id==='wb-question').props.onChange({target:{value:'2145550100'}});pst=renderPhoneSkip();const beforePhoneSkip=requestLog.filter(r=>r.url.endsWith('/contact')).length;
-all(pst).find(n=>n.props?.className==='wb-contact-skip').props.onClick();pst=renderPhoneSkip();
-assert.equal(all(pst).find(n=>n.props?.id==='wb-question').props.name,'message');assert.equal(all(pst).find(n=>n.props?.id==='wb-question').props.value,'');assert.equal(rememberedEmail,'keep@example.invalid');assert.equal(requestLog.filter(r=>r.url.endsWith('/contact')).length,beforePhoneSkip);phoneSkip.close();
 // The timed email request cannot replace a message already being written.
 store.delete('icash-webinar-prompts:'+sessionId);rememberedEmail='';
 const draftRoom=await harness('components/webinar-room.tsx',roomDeps),renderDraftRoom=()=>draftRoom.render('WebinarRoom',{});renderDraftRoom();await flush();let dr=renderDraftRoom();
@@ -407,7 +360,7 @@ for(const name of ['AbortError','NotSupportedError']){
  document.hidden=true;pendingSlow();assert.equal(all(p.render()).some(n=>n.props?.className==='wb-player-recovery'),false,'Hidden tabs cannot create a slow warning');document.hidden=false;
  p.media.pause();p.render();assert.equal(timeout,null,'Pausing clears the buffering timer');p.close();
 }
-console.log('PASS webinar flows: one composer for chat and private optional contact, single-click Skip, remembered details, immediate chat echo, draft and scroll preservation, automatic offers, countdown chat gating, payment continuity, player recovery and empty draft guidance.');
+console.log('PASS webinar flows: name-only chat without email/phone opt-ins, immediate chat echo, draft and scroll preservation, automatic offers, countdown chat gating, payment continuity, player recovery and empty draft guidance.');
 console.log('PASS webinar audio: audible autoplay, one muted policy fallback, tap to listen, persistent mute, blocked playback recovery, stale rejection protection, and no retry on media errors.');
 
 // A locked mobile preview returns through password unlock, never customer sign-in.

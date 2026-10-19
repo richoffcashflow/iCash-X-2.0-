@@ -33,7 +33,7 @@ test('messaging owner API rejects unauthenticated, cross-origin and stale writes
  owner=false;assert.equal((await api.GET()).status,403);assert.equal((await post(body)).status,403);assert.equal(calls.length,0);
  owner=true;origin=false;assert.equal((await post(body)).status,403);assert.equal(calls.length,0);origin=true;
  assert.equal((await post({...body,settings:{...settings,meta:{enabled:false}}})).status,400);assert.equal(calls.length,0);
- assert.equal((await post(body)).status,200);assert.equal(calls.at(-1).path,'rpc/icash_messaging_save');assert.equal((await post(body)).status,409);
+ assert.equal((await post(body)).status,200);assert.equal(calls.at(-1).path,'rpc/icash_messaging_save');assert.equal(calls.at(-1).body.p_config.enabled,false);assert.equal(calls.at(-1).body.p_config.smsEnabled,false);assert.equal(calls.at(-1).body.p_customer_enabled,true);assert.equal((await post(body)).status,409);
  const response=await api.GET();assert.equal(response.headers.get('Cache-Control'),'private, no-store');assert.equal((await response.json()).settings.fromEmail,settings.fromEmail);
  assert(calls.every(c=>!c.path.startsWith('icash_webinars')&&!c.path.startsWith('icash_webinar_settings')),'Opening messaging never depends on webinar records');
 });
