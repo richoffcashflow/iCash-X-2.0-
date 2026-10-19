@@ -58,8 +58,9 @@ tree=page({...account,balanceCents:0,billingModel:'membership_credits',membershi
 
 assert(all(tree).some(n=>n.type===component('MembershipSettings')&&n.props.locked),'missed membership payment shows subscription recovery');
 
-const barModule={exports:{}};new Function('require','module','exports',code('components/bot-run-bar.tsx'))(name=>name==='react'?{useState:()=>[null,()=>{}],useEffect(){}}:name==='@/lib/workspace-progress'?progress:name==='@/components/icash-mark'?{IcashMark:component('IcashMark')}:require(name),barModule,barModule.exports);
-const renderBar=patch=>barModule.exports.BotRunBar({running:false,stopped:false,paymentRequired:false,busy:false,stale:false,balanceCents:0,onBudget(){},onPause(){},...patch});
+let previewRunning=true,barEffects=0;
+const barModule={exports:{}};new Function('require','module','exports',code('components/bot-run-bar.tsx'))(name=>name==='react'?{useState:initial=>typeof initial==='boolean'?[previewRunning,value=>{previewRunning=typeof value==='function'?value(previewRunning):value;}]:[null,()=>{}],useEffect(){barEffects++;}}:name==='@/lib/workspace-progress'?progress:name==='@/components/icash-mark'?{IcashMark:component('IcashMark')}:require(name),barModule,barModule.exports);
+const renderBar=patch=>{const branch=barModule.exports.BotRunBar({running:false,stopped:false,paymentRequired:false,busy:false,stale:false,balanceCents:0,onBudget(){},onPause(){},onResume(){},...patch});return typeof branch.type==='function'?branch.type(branch.props):branch;};
 assert.match(text(renderBar({hasCreditHistory:true})),/Out of credits/);
 assert.match(text(renderBar({paymentRequired:true,balanceCents:1000})),/Update your subscription/);
 assert.match(text(renderBar({running:true,balanceCents:1000})),/Bot running/);
@@ -71,3 +72,17 @@ assert.match(text(renderBar({balanceCents:undefined})),/Ready when you are/);
 tree=page({...account,identity:null,membershipActive:true,billingModel:'membership_credits'},campaign);assert(all(tree).some(n=>n.type===component('CustomerIdentity')&&n.props.onboarding),'identity is collected in setup');assert(!all(tree).some(n=>n.type===component('PostPaymentBotName')),'identity comes before bot naming');
 
 assert.match(text(renderBar({})),/Add money to start your bot/);assert.doesNotMatch(text(renderBar({})),/Out of credits|credits left/);
+
+const forbidRealAction=()=>assert.fail('Pretend controls must not invoke a real action');
+const pretend={pretend:true,balanceCents:0,running:false,stopped:true,paymentRequired:true,busy:true,stale:true,onBudget:forbidRealAction,onPause:forbidRealAction,onResume:forbidRealAction,onVip:forbidRealAction};
+const effectsBeforePreview=barEffects;
+tree=renderBar(pretend);
+assert.match(text(tree),/Bot running/);assert.match(text(tree),/Test mode · Display only/);assert.match(text(tree),/Pretend credits\s+\$5\.00/);
+assert.doesNotMatch(text(tree),/Add money|Restore access|Switch to VIP|VIP settings/,'pretend controls expose no payment or plan actions');
+assert.equal(all(tree).find(n=>n.props?.className==='bot-live-status').props['data-live'],true);
+let previewButtons=all(tree).filter(n=>n.type==='button');assert.equal(previewButtons.length,1);assert.equal(text(previewButtons[0]).trim(),'Pause bot');previewButtons[0].props.onClick();
+tree=renderBar(pretend);assert.match(text(tree),/Bot paused/);assert.match(text(tree),/Pretend credits\s+\$5\.00/);assert.equal(all(tree).find(n=>n.props?.className==='bot-live-status').props['data-live'],false);
+previewButtons=all(tree).filter(n=>n.type==='button');assert.equal(previewButtons.length,1);assert.equal(text(previewButtons[0]).trim(),'Run bot');previewButtons[0].props.onClick();
+tree=renderBar({...pretend,botName:'Alex'});assert.match(text(tree),/Alex is running/);assert.equal(barEffects,effectsBeforePreview,'pretend mode never mounts the live status polling effect');
+assert.match(text(renderBar({pretend:false,balanceCents:0,hasCreditHistory:true})),/Out of credits/,'exiting preview restores the actual balance display');
+console.log('PASS pretend bot display: fixed test credits, local-only pause/resume, no polling or real callbacks, and actual balance restored on exit.');

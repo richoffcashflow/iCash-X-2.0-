@@ -16,7 +16,7 @@ new Function('require','module','exports',code)(name=>name==='react'?{useState:(
 const all=root=>!root||typeof root!=='object'?[]:Array.isArray(root)?root.flatMap(all):[root,...all(root.props?.children)];
 const text=root=>typeof root==='string'?root:Array.isArray(root)?root.map(text).join(' '):root&&typeof root==='object'?text(root.props?.children):'';
 const props={running:true,stopped:false,paymentRequired:false,busy:false,stale:false,balanceCents:1000,principalKey:'fixture',hasLeads:false,onBudget(){},onResume(){},onPause(){}};
-const render=(patch={})=>mod.exports.BotRunBar({...props,...patch});
+const render=(patch={})=>{const branch=mod.exports.BotRunBar({...props,...patch});return typeof branch.type==='function'?branch.type(branch.props):branch;};
 const live=tree=>all(tree).find(n=>n.props?.className==='bot-live-status').props['data-live'];
 assert.equal(live(render()),false,'No green status before confirmation');
 activity={principalKey:'fixture',active:false,label:'Waiting for the next task',checkedAt:new Date().toISOString()};
