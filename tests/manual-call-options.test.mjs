@@ -1,14 +1,15 @@
+import {recordingGateCostPending,recordingGateHoldReasons} from '../lib/recording-gate-diagnostics.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {renderToStaticMarkup} from 'react-dom/server';
 import ts from 'typescript';
 import {z} from 'zod';
-let origin=true,authorized=true,blocked=false,extraContact=false;const mutations=[],senderReads=[];
+let origin=true,authorized=true,blocked=false,extraContact=false,recordingAttempts=[];const mutations=[],senderReads=[];
 const account='11111111-1111-4111-8111-111111111111',screen='22222222-2222-4222-8222-222222222222',phone='+12025550101';
 const secondPhone='+12025550102',primary='+14243948384',secondary='+17208134296',senders=new Map([[phone,primary],[secondPhone,secondary]]);
-const mocks={z,allowedOrigin:()=>origin,NextResponse:{json:(body,options={})=>({body,status:options.status??200})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account,userId:'owner'};},db:async(path,method,body)=>{
- if(method!=='POST'){assert(path.includes('account_id=eq.'+account));assert(path.includes('screening_id=eq.'+screen));if(['icash_call_recordings?','icash_customer_phone_calls?','icash_deal_files?'].some(prefix=>path.startsWith(prefix)))return [];throw Error('Unexpected read '+path);}
+const mocks={recordingGateCostPending,z,allowedOrigin:()=>origin,NextResponse:{json:(body,options={})=>({body,status:options.status??200})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account,userId:'owner'};},db:async(path,method,body)=>{
+ if(method!=='POST'){assert(path.includes('account_id=eq.'+account));assert(path.includes('screening_id=eq.'+screen));if(path.startsWith('icash_call_recordings?')){assert(path.includes('last_error,last_action'));return recordingAttempts;}if(['icash_customer_phone_calls?','icash_deal_files?'].some(prefix=>path.startsWith(prefix)))return [];throw Error('Unexpected read '+path);}
  assert.equal(body.p_account,account);if(body.p_screening)assert.equal(body.p_screening,screen);
  if(path==='rpc/icash_customer_call_sender'){senderReads.push(body.p_recipient);return senders.get(body.p_recipient)??null;}
  if(path==='rpc/icash_manual_contacts')return [{phone,name:'Alex',phone_type:'wireless',blocked},...(extraContact?[{phone:secondPhone,name:'Blake',phone_type:'wireless',blocked:false}]:[])];
@@ -21,6 +22,15 @@ const source=ts.transpileModule(readFileSync(new URL('../app/api/work/manual-cal
 const {GET,POST}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(mocks).join(',')+'}=globalThis.__manualCall;\n'+source).toString('base64'));
 const get=()=>GET(new Request('https://example.test/api/work/manual-call?screeningId='+screen));
 let r=await get();assert.equal(r.body.contacts[0].available,true);assert.equal(r.body.contacts[0].name,'Alex');assert.equal(r.body.contacts[0].businessNumber,primary);assert.equal(r.body.businessNumber,undefined,'A property-wide sender must not override each recipient’s routing');assert.equal(mutations.length,0);
+for(const reason of ['terminal_carrier_reconciliation_required',...recordingGateHoldReasons]){
+ recordingAttempts=[{id:screen,state:'declined',created_at:'2026-10-19T00:00:00Z',last_error:reason,last_action:'reconcile_retry'}];
+ r=await get();assert.equal(r.body.attempts[0].costPending,true,reason);
+ recordingAttempts[0].last_action='gate_settled';r=await get();assert.equal(r.body.attempts[0].costPending,false,'Settled must override stale '+reason);
+}
+for(const reason of [null,'unrelated_error','RAW_PROVIDER_PRIVATE_VALUE']){
+ recordingAttempts=[{id:screen,state:'declined',created_at:'2026-10-19T00:00:00Z',last_error:reason,last_action:'reconcile_retry'}];r=await get();assert.equal(r.body.attempts[0].costPending,false);
+}
+recordingAttempts=[];
 const beforeBlocked=senderReads.length;blocked=true;r=await get();assert.equal(r.body.contacts[0].available,false);assert.equal(r.body.contacts[0].businessNumber,null);assert.equal(senderReads.length,beforeBlocked,'Blocked contacts do not select an alternate caller');
 const post=(p=phone)=>POST(new Request('https://example.test/api/work/manual-call',{method:'POST',body:JSON.stringify({screeningId:screen,phone:p})}));
 r=await post();assert.equal(r.status,410);assert.equal(r.body.dialUrl,undefined);blocked=false;

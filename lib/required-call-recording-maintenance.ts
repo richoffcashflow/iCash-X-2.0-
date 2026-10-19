@@ -53,7 +53,14 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
    if(!row.start_claimed_at){
     let terminal=row;const call=await provider.getCall(row.call_sid!);
     if(row.state==='consent_pending'&&['completed','busy','failed','no-answer','canceled'].includes(String(call.status))){const failed=await recordingTransition(db,row,'fail',{reason:'call_ended_before_recording'});if(failed)terminal=failed;}
-    const settled=object(await settleRecordingGateOnly(db,provider,terminal));if(settled.settled===true)result.reconciled++;else{await finish(terminal,'reconcile','retry',{reason:'terminal_carrier_reconciliation_required'});result.held++;}continue;
+    const settled=await settleRecordingGateOnly(db,provider,terminal);
+    if(settled.settled)result.reconciled++;
+    else{
+     // Never log raw receipts, phone numbers, provider errors, or arbitrary RPC fields.
+     console.warn('recording_reconcile_diagnostic',{stage:'carrier',recordingId:row.id,reason:settled.reason});
+     if(!await finish(terminal,'reconcile','retry',{reason:settled.reason}))console.warn('recording_reconcile_diagnostic',{stage:'retry_commit',recordingId:row.id,reason:'recording_retry_not_saved'});
+     result.held++;
+    }continue;
    }
    stage='recording_receipt';
    let receipt:Record<string,unknown>;
