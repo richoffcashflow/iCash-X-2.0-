@@ -14,8 +14,12 @@ export async function verifyUndispatchedMonitoring({pg,one,refresh,id}){
  create table icash_contact_permissions(id uuid primary key,account_id uuid,screening_id uuid,phone text);
  create table icash_fulfillment_jobs(id uuid primary key,account_id uuid,deal_id uuid,state text,updated_at timestamptz);
  alter table icash_deal_files add terms jsonb default '{}';
- alter table icash_screening_jobs add snapshot jsonb default '{}';
- alter table icash_text_threads add party text default 'seller',add paused boolean default false,add ai_mode text default 'auto',add manual_only boolean default false,add sms_intake_pending boolean default false;
+ alter table icash_screening_jobs add snapshot jsonb default '{}',add result jsonb default '{"financialCheck":{"status":"eligible"}}',add completed_at timestamptz default now();
+ alter table icash_text_threads add party text default 'seller',add paused boolean default false,add ai_mode text default 'auto',add manual_only boolean default false,add sms_intake_pending boolean default false,add timezone text default 'America/Chicago',add fixture_permission boolean default true,add fixture_inquiry boolean default false;
+ create table icash_operation_spend(operation_key text);
+ create function icash_seller_sms_permission_current(uuid,uuid,boolean) returns boolean language sql as $$select fixture_permission from public.icash_text_threads where id=$2 and account_id=$1$$;
+ create function icash_seller_sms_inquiry_window(uuid,uuid) returns boolean language sql as $$select fixture_inquiry from public.icash_text_threads where id=$2 and account_id=$1$$;
+ create function icash_sms_message_route_current(uuid,uuid) returns boolean language sql as $$select exists(select 1 from public.icash_text_messages where id=$2 and account_id=$1)$$;
  alter table icash_voice_jobs add permission_id uuid,add callback_id uuid,add due_at timestamptz default now(),add provider_call_sid text,add outcome text,add operation_key text,add conversation_id text;
  create table icash_call_recordings(id uuid primary key,account_id uuid,voice_job_id uuid,operation_key text,call_sid text,state text,start_claimed_at timestamptz,recording_sid text,conversation_id text);
  create table icash_recorded_gate_terminal_receipts(recording_id uuid,account_id uuid,call_sid text,receipt jsonb);
@@ -30,6 +34,9 @@ export async function verifyUndispatchedMonitoring({pg,one,refresh,id}){
  `);
  await pg.exec(readFileSync(new URL('../../config/undispatched-work-monitoring.sql',import.meta.url),'utf8'));
  await pg.exec(readFileSync(new URL('../../config/recorded-seller-attempt-progress.sql',import.meta.url),'utf8'));
+ const scheduledSql=readFileSync(new URL('../../config/scheduled-seller-sms-monitoring.sql',import.meta.url),'utf8');
+ assert.equal(scheduledSql,readFileSync(new URL('../../supabase/migrations/20261019013456_scheduled_seller_sms_monitoring.sql',import.meta.url),'utf8'));
+ await pg.exec(scheduledSql);
  const account=id(20),lead=id(21),screen=id(22),deal=id(23),thread=id(24),permission=id(25),job=id(26),buyerDeal=id(27),buyerJob=id(28);
  await pg.query('insert into icash_accounts(id) values($1)',[account]);
  await pg.query('insert into icash_wallets values($1,1000)',[account]);
@@ -55,6 +62,35 @@ export async function verifyUndispatchedMonitoring({pg,one,refresh,id}){
  await pg.query("insert into icash_contact_permissions values($1,$2,$3,'+12025550123')",[permission,account,screen]);
  await pg.query("insert into icash_voice_jobs(id,account_id,state,permission_id,due_at) values($1,$2,'ready',$3,now()+interval '8 hours')",[job,account,permission]);
  assert.equal((await refresh()).snapshot.issueCount,0,'a delivered text plus scheduled call is not a setup failure');
+ // A first SMS waiting for its actual overnight window is scheduled work.
+ // Keep genuine readiness failures and the independent voice channel visible.
+ await pg.exec('begin');
+ try{
+  await pg.query("update icash_screening_jobs set snapshot=snapshot||jsonb_build_object('fetchedAt',now()) where id=$1",[screen]);
+  await pg.query("update icash_text_threads set timezone=(select name from pg_timezone_names where extract(hour from now() at time zone name)=21 limit 1) where id=$1",[thread]);
+  await pg.query("update icash_text_messages set state='ready',provider_id=null where id=$1",[id(29)]);
+  const finding=()=>one('select count(*)::int from icash_undispatched_outreach_findings()');
+  assert.equal(await finding(),0,'otherwise eligible overnight text and future call are not stalled');
+  assert.equal(await one('select state from icash_text_messages where id=$1',[id(29)]),'ready');
+  for(const mutation of [
+   "update icash_text_threads set fixture_permission=false",
+   "update icash_text_threads set fixture_inquiry=true",
+   "update icash_text_threads set timezone=(select name from pg_timezone_names where extract(hour from now() at time zone name)=10 limit 1)",
+   "update icash_screening_jobs set completed_at=now()-interval '25 hours'",
+   "update icash_screening_jobs set snapshot=snapshot||jsonb_build_object('fetchedAt',now()-interval '25 hours')",
+   "update icash_screening_jobs set result='{\"financialCheck\":{\"status\":\"held\"}}'",
+   "update icash_text_messages set provider_id='SIMULATION uncertain receipt'",
+   "update icash_text_messages set state='dispatching'",
+   "delete from icash_text_messages",
+   "insert into icash_operation_spend values('text:"+id(29)+"')",
+   "update icash_voice_jobs set due_at=now()-interval '6 minutes' where id='"+job+"'",
+  ]){
+   await pg.exec('savepoint scenario');await pg.exec(mutation);
+   assert.equal(await finding(),1,'real missing/uncertain work remains visible: '+mutation);
+   await pg.exec('rollback to scenario');
+  }
+  assert.equal(await one('select count(*)::int from icash_operation_spend'),0);
+ }finally{await pg.exec('rollback');}
  await pg.query("update icash_voice_jobs set due_at=now()-interval '6 minutes' where id=$1",[job]);
  assert.equal((await refresh()).snapshot.issues[0].kind,'seller_response','overdue first call is visible even with an empty dispatch queue');
  await pg.query("update icash_voice_jobs set state='dispatched',provider_call_sid='SIMULATION call receipt' where id=$1",[job]);
@@ -92,4 +128,5 @@ export async function verifyUndispatchedMonitoring({pg,one,refresh,id}){
  assert.equal(await one('select count(*)::int from public.icash_undispatched_outreach_findings()'),0);
  await pg.exec('reset role');
  for(const role of ['anon','authenticated'])assert.equal(await one("select has_function_privilege($1,'public.icash_undispatched_outreach_findings()','EXECUTE')",[role]),false);
+ for(const role of ['anon','authenticated'])assert.equal(await one("select has_function_privilege($1,'public.icash_seller_sms_waiting_window(uuid,uuid,text)','EXECUTE')",[role]),false);
 }

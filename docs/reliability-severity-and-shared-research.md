@@ -14,4 +14,6 @@ The owner dashboard and incident emails use these priorities:
 
 Severity can rise within the same incident. A new highest level generates one escalation notification; repeated checks and severity oscillation do not resend that level. Existing provider idempotency, uncertain-email protections and recovery notifications remain in place. The classifier covers the existing monitored workflows; it does not claim that every payment, sign-in or external provider is monitored.
 
+A ready first seller text outside its existing contact window is scheduled work when its permission, route and property research are current and no provider attempt exists. Monitoring excludes that SMS delay until the window opens, while retaining missing queues, stale research, uncertain attempts and overdue calls. This check does not send messages, alter contact hours or mark a response as delivered.
+
 Apply the research and severity migrations before releasing the application. Versioned alert claim/status responses preserve compatibility with the old app during deployment. Local PostgreSQL and provider-fixture tests cover exact research identity, receipt replay, changes during a lookup, private privileges, severity parity and escalation. Development tests make no live provider requests.
