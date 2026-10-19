@@ -50,7 +50,11 @@ export async function endRecordedReception(rpc:RecordedReceptionRpc,provider:Rec
 export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:RecordedReceptionRpc;provider:RecordedReceptionProviders;selectVoice?:(accountId:string,config:RecordedReceptionConfig)=>Promise<string|null>;now?:()=>number}){
  const {rpc,provider}=deps,now=deps.now??Date.now;
  const transition=(r:RecordedReceptionRow,a:string,p:Record<string,unknown>={})=>transitionRecordedReception(rpc,r,a,p);
- async function currentConfig(called:string){if(env.ICASH_RECORDED_RECEPTION_READY!=='true')return null;const c=await rpc<RecordedReceptionConfig|null>('icash_get_recorded_reception_config',{p_called_number:called});return validRecordedReceptionConfig(c,now())&&c.provider_account_sid===env.TWILIO_ACCOUNT_SID?c:null;}
+ async function currentConfig(called:string,row?:RecordedReceptionRow){
+  if(env.ICASH_RECORDED_RECEPTION_READY!=='true')return null;
+  const c=await rpc<RecordedReceptionConfig|null>(row?.configuration.callback_template_id?'icash_resolve_seller_callback_config':'icash_get_recorded_reception_config',row?.configuration.callback_template_id?{p_called:called,p_id:row.config_id}:{p_called_number:called});
+  return validRecordedReceptionConfig(c,now())&&c.provider_account_sid===env.TWILIO_ACCOUNT_SID?c:null;
+ }
  async function checkAgent(c:RecordedReceptionConfig){
   const [agent,branches,workspace,tool,agreementTool]=await Promise.all([provider.agent(c),provider.branches(c),provider.workspace(),provider.tool(c.stop_tool_id),sellerAgreementReceptionEnabled(c)?provider.tool(String(c.agreement_tool_id)):Promise.resolve(undefined)]);
   const rows=branches.results,meta=object(branches.meta);if(!Array.isArray(rows)||rows.length>=100||meta.total!==undefined&&meta.total!==rows.length)return false;
@@ -99,12 +103,21 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
     if(!f||f.get('AccountSid')!==env.TWILIO_ACCOUNT_SID||f.get('Direction')!=='inbound'||f.get('CallStatus')!=='ringing'||f.get('To')!==receptionTarget.calledNumber||!sid(f.get('CallSid'),'CA'))return deny('authentication_or_call_fields');
     const from=f.get('From')??'';if(!/^\+[1-9]\d{7,14}$/.test(from)&&!['anonymous','restricted','unknown'].includes(from))return deny('invalid_caller');
     stage='configuration';
-    const c=await currentConfig(f.get('To')!);if(!c)return deny('configuration_unavailable');
+    let c=await currentConfig(f.get('To')!);if(!c)return deny('configuration_unavailable');
     const callerHash=receptionCallerHash(from,env);if(c.call_profile==='owner_quick_test'&&c.owner_caller_hash!==callerHash)return deny('caller_not_authorized');
     stage='carrier_readback';
     const call=await provider.getCall(f.get('CallSid')!);const age=now()-Date.parse(String(call.date_created));
     if(call.sid!==f.get('CallSid')||call.account_sid!==c.provider_account_sid||call.from!==from||call.to!==c.called_number||call.direction!=='inbound'||call.status!=='ringing'||!Number.isFinite(age)||age<0||age>120000)return deny('carrier_mismatch');
     stage='agent_readback';if(!await checkAgent(c))return deny('agent_mismatch');
+    // Only after the signed request AND canonical carrier/agent readback may
+    // the server resolve a customer from real prior outreach receipts.
+    if(c.call_profile==='normal'&&c.entry_policy==='direct_recorded_v1'){
+     stage='callback_routing';
+     const routed=await rpc<RecordedReceptionConfig|null>('icash_resolve_seller_callback_config',{p_called:c.called_number,p_caller:from});
+     if(!validRecordedReceptionConfig(routed,now())||routed.provider_account_sid!==c.provider_account_sid
+      ||routed.config_hash!==c.config_hash||routed.reviewed_version_id!==c.reviewed_version_id)return deny('callback_route_unavailable');
+     c=routed;
+    }
     const nonce=randomBytes(32).toString('hex'),op='recorded-reception:'+call.sid,token=receptionStopToken({operation_key:op},env);
     stage='credit_reservation';
     const admission=await rpc<{allowed:boolean;reason?:string;session:RecordedReceptionRow}>(c.entry_policy==='direct_recorded_v1'?'icash_reserve_direct_reception':'icash_reserve_flexible_reception',{p_config_id:c.id,p_call_sid:call.sid,p_provider_account_sid:c.provider_account_sid,p_from_phone:from,p_to_phone:c.called_number,p_direction:'inbound',p_caller_hash:callerHash,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(token),p_config_hash:c.config_hash,p_version_id:c.reviewed_version_id});
@@ -140,7 +153,7 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
    try{
     const auth=await signed(request,'connect',true);if(!auth)return hangup();row=auth.row;
     if(row.entry_policy!=='direct_recorded_v1'||row.state!=='consent_pending'||row.recording_authorized_at||row.start_claimed_at||row.end_requested_at||row.call_ended_at)return hangup();
-    const c=await currentConfig(row.to_phone);if(!c||c.id!==row.config_id||c.entry_policy!=='direct_recorded_v1')throw Error('DIRECT_ENTRY_CONFIGURATION_REQUIRED');
+    const c=await currentConfig(row.to_phone,row);if(!c||c.id!==row.config_id||c.entry_policy!=='direct_recorded_v1')throw Error('DIRECT_ENTRY_CONFIGURATION_REQUIRED');
     const call=await provider.getCall(row.call_sid);if(!incomingCallMatches(row,call,now(),true))throw Error('ANSWERED_CALL_REQUIRED');
     const authorized=await transition(row,'authorize_recording',{nonceHash:row.nonce_hash,policy:'direct_recorded_v1'});if(!authorized)throw Error('RECORDING_AUTHORITY_REQUIRED');row=authorized;
     return await recordAndConnect(row,c);
@@ -159,7 +172,7 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
     row=await bindRecordedReceptionCallStart(rpc,row,call);
     const optOut=recordingGateOptOut(auth.f);
     if(optOut){const stopped=await transition(row,'contact_opt_out',{nonceHash:row.nonce_hash,utterance:optOut});if(stopped)row=stopped;await endRecordedReception(rpc,provider,row,'contact_opt_out');return xml(receptionEndTwiml);}
-    const c=await currentConfig(row.to_phone),age=now()-Date.parse(row.call_started_at??'');
+    const c=await currentConfig(row.to_phone,row),age=now()-Date.parse(row.call_started_at??'');
     if(!c||c.id!==row.config_id||!Number.isFinite(age)||age<0||age>45000||Date.parse(row.consent_deadline_at)<=now()||!await checkAgent(c)){await transition(row,'decline',{reason:'timeout'});await endRecordedReception(rpc,provider,row,'consent_unavailable');return hangup();}
     const yes=affirmativeSpeech(auth.f);
     if(!yes){await transition(row,'decline',{reason:auth.f.has('SpeechResult')?'ambiguous':'timeout'});await endRecordedReception(rpc,provider,row,'consent_declined');return xml(receptionEndTwiml);}

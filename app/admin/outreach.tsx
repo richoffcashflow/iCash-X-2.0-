@@ -4,6 +4,7 @@ import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {overviewTime} from '@/lib/owner-overview';
 import {outreachLeadStatus,validOwnerOutreach,type OwnerOutreach,type OutreachFilters,type OutreachStatus} from '@/lib/owner-outreach';
 import styles from './outreach.module.css';
+import {OwnerCallbackLookup} from './callback-context';
 const n=(value:number)=>value.toLocaleString('en-US');
 const statusOptions:[OutreachStatus,string][]=[['all','All activity'],['responded','Responded'],['interested','Interested'],['queued','Queued'],['held','On hold']];
 
@@ -55,6 +56,7 @@ export function OwnerOutreachView({days,includeOwner,refresh}:{days:1|7|30;inclu
     <article><h3>Calls</h3><p><b>{n(t.conversations)}</b> completed AI calls · <b>{n(t.unanswered)}</b> unanswered · <b>{n(t.busy)}</b> busy · <b>{n(t.failed)}</b> failed / canceled</p><p className={styles.queue}>Currently <b>{n(t.queuedCalls)}</b> queued · <b>{n(t.heldCalls)}</b> on hold</p></article>
     <article><h3>Texts</h3><p><b>{n(t.textsAccepted)}</b> accepted by provider · <b>{n(t.textsDelivered)}</b> delivery confirmations · <b>{n(t.textReplies)}</b> replies</p><p className={styles.queue}>Currently <b>{n(t.queuedTexts)}</b> queued · <b>{n(t.heldTexts)}</b> on hold</p></article>
    </div>}
+   <OwnerCallbackLookup/>
    <div className={styles.controls}>
     <div><h3>Property activity</h3><p>Interested sellers and responses first.</p></div>
     <form role="search" aria-label="Search outbound properties" onSubmit={e=>{e.preventDefault();update({query:search.trim()});}}><label className={styles.srOnly} htmlFor="outreach-search">Search property or account</label><input id="outreach-search" type="search" value={search} maxLength={100} placeholder="Property or account" onChange={e=>setSearch(e.target.value)}/><button type="submit">Search</button></form>
