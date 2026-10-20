@@ -2,7 +2,7 @@
 import {useEffect,useState} from 'react';
 import {AccountAccess} from '@/components/account-access';
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
-import {overviewMoney,overviewTime,validOwnerOverview,type OwnerOverview,type OverviewFilters} from '@/lib/owner-overview';
+import {overviewMoney,overviewTime,overviewLeadStatus,validOwnerOverview,type OwnerOverview,type OverviewFilters} from '@/lib/owner-overview';
 import styles from './overview.module.css';
 import {ClosingOperationsView} from './closing-operations';
 import {reliabilityIssueLabels} from '@/lib/reliability';
@@ -14,6 +14,7 @@ import {OwnerOutreachView} from './outreach';
 export function OwnerOverviewView(){
  const [filters,setFilters]=useState<OverviewFilters>({days:30,includeOwner:false,query:'',page:1});
  const [refresh,setRefresh]=useState(0);
+ const [search,setSearch]=useState('');
  const [loaded,setLoaded]=useState<{key:string;report:OwnerOverview}|null>(null);
  const [failure,setFailure]=useState<{key:string;message:string}|null>(null);
  const [busy,setBusy]=useState(true),[denied,setDenied]=useState<401|403|null>(null);
@@ -50,13 +51,35 @@ export function OwnerOverviewView(){
  const priority=report?reliabilityPriority(report.reliability??null):null;
  return <main className={styles.page}>
   <nav className={styles.nav} aria-label="Admin navigation"><a href="/">← Workspace</a><a href="/admin/launch">Customer launch ↗</a><a href="/admin/disputes">Disputes ↗</a><a href="/seller-operations#lead-costs">Lead costs ↗</a><span>iCash X <b>Owner</b></span></nav>
-  <header className={styles.heading}><div><h1>Overview</h1><p>Your outreach, seller responses and usage earnings.</p></div>{!denied&&<button className={styles.button} onClick={reload} disabled={busy}>{busy?'Refreshing…':'Refresh'}</button>}</header>
+  <header className={styles.heading}><div><h1>Overview</h1><p>Inbound leads, outbound outreach and usage earnings.</p></div>{!denied&&<button className={styles.button} onClick={reload} disabled={busy}>{busy?'Refreshing…':'Refresh'}</button>}</header>
   {denied?<section className={styles.empty}><h2>{denied===401?'Sign in to your owner account':'Owner access only'}</h2><p>{denied===401?'This overview is private.':'Your signed-in account does not have access to this overview.'}</p>{denied===401&&<AccountAccess onSignedIn={()=>{setDenied(null);reload();}}/>}</section>:<>
    <div className={styles.toolbar}>
     <div className={styles.periods} role="group" aria-label="Reporting period">{([1,7,30] as const).map(period=><button key={period} aria-pressed={days===period} onClick={()=>update({days:period})}>{period===1?'Today':`${period} days`}</button>)}</div>
     <label className={styles.checkbox}><input type="checkbox" checked={includeOwner} onChange={e=>update({includeOwner:e.target.checked})}/>Include my account in usage & outreach</label>
    </div>
+   <nav className={styles.activityNav} aria-label="Lead activity"><a href="#outbound-leads">Outbound · DealMachine</a><a href="#inbound-leads">Inbound · Seller requests</a></nav>
    <OwnerOutreachView key={`${days}:${includeOwner}`} days={days} includeOwner={includeOwner} refresh={refresh}/>
+   <section id="inbound-leads" className={styles.inbound} aria-labelledby="inbound-title" aria-busy={busy}>
+    <header className={styles.leadHeading}><div><h2 id="inbound-title">Inbound seller leads</h2><p>Seller requests from Meta forms and your website, including leads still collecting an address.</p></div><span role="status">{report?`${error?'Last successful update':'Updated'} ${overviewTime(report.endAt)} CT`:error?'Inbound activity unavailable':'Loading inbound leads…'}</span></header>
+    {error&&<p className={styles.searchNote}>{report?'Refresh failed. Showing the last saved inbound activity.':'Inbound activity could not be loaded.'} <button onClick={reload} disabled={busy}>Retry inbound</button></p>}
+    <div className={styles.metrics} aria-label="Inbound lead totals">
+     <article><h2>Seller requests</h2><strong>{report?report.leadCount.toLocaleString('en-US'):'—'}</strong><p>Received in the selected period</p></article>
+     <article><h2>Assigned</h2><strong>{report?.funnel?report.funnel[1].count.toLocaleString('en-US'):'—'}</strong><p>Requests matched to an account</p></article>
+     <article><h2>Needs review</h2><strong>{report?report.reviewCount.toLocaleString('en-US'):'—'}</strong><p>Property or address checks need attention</p></article>
+    </div>
+    <div className={styles.leads}>
+     <div className={styles.leadHeading}><div><h3>Recent inbound leads</h3><p>Newest requests first · Central time</p></div><form className={styles.search} role="search" aria-label="Search inbound leads" onSubmit={e=>{e.preventDefault();update({query:search.trim()});}}><label className={styles.srOnly} htmlFor="inbound-search">Search inbound seller or property</label><input id="inbound-search" type="search" maxLength={100} value={search} placeholder="Seller or property" onChange={e=>setSearch(e.target.value)}/><button className={styles.button} type="submit">Search inbound</button></form></div>
+     {query&&<p className={styles.searchNote}>Results for “{query}” <button onClick={()=>{setSearch('');update({query:''});}}>Clear inbound search</button></p>}
+     {report&&report.leads.length>0?<table className={styles.table}><caption className={styles.srOnly}>Inbound seller requests, source and assigned account</caption><thead><tr><th scope="col">Seller / property</th><th scope="col">Source</th><th scope="col">Status / account</th><th scope="col">Received · CT</th></tr></thead><tbody>{report.leads.map(lead=><tr key={lead.id}>
+      <td><details className={styles.leadDetails}><summary><strong>{lead.name||'Seller request'}</strong><span>{lead.address||'Waiting for property address'}</span></summary><div><p>Phone: {lead.phone}</p>{lead.email&&<p>Email: {lead.email}</p>}{lead.campaign&&<p>Campaign: {lead.campaign}</p>}<p>Lead reference: {lead.id}</p></div></details></td>
+      <td className={styles.source}>{lead.source==='meta'?'Meta form':lead.source==='direct'?'Website / direct':lead.source}</td>
+      <td><span className={styles.status}>{overviewLeadStatus(lead.state)}</span><p>{lead.assignedTo||'Not assigned yet'}</p></td>
+      <td><time dateTime={lead.createdAt}>{overviewTime(lead.createdAt)}</time></td>
+     </tr>)}</tbody></table>:<p className={styles.empty} role="status">{report?'No inbound leads match this period and search.':error?'Inbound activity unavailable.':'Loading inbound leads…'}</p>}
+     {report&&<div className={styles.pagination}><span>{report.matchedCount===0?'0 leads':report.leads.length===0?`${report.matchedCount.toLocaleString('en-US')} leads total`:`${((page-1)*25+1).toLocaleString('en-US')}–${((page-1)*25+report.leads.length).toLocaleString('en-US')} of ${report.matchedCount.toLocaleString('en-US')} leads`}</span><div><button className={styles.button} disabled={busy||page<=1} onClick={()=>update({page:page-1})}>Previous inbound leads</button><button className={styles.button} disabled={busy||page*25>=report.matchedCount} onClick={()=>update({page:page+1})}>Next inbound leads</button></div></div>}
+    </div>
+    <p className={styles.inboundNote}>Inbound describes where the seller request started, not the direction of every call or text. These platform-wide requests are separate from DealMachine properties. Search changes this list only; the account switch changes usage and outbound totals. A request or assignment does not mean the seller is interested or a deal is ready.</p>
+   </section>
    {report&&<section className={styles.notice} aria-label="Workflow reliability" role="status">
     <strong>Workflow reliability · {priority?`${reliabilitySeverityLabels[priority]} priority`:'Checks passing'}</strong>
     {priority&&<span>{reliabilitySeverityGuidance[priority]}</span>}

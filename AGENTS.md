@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 20, 2026 the owner requested both inbound and outbound leads in admin. Restore inbound seller requests alongside DealMachine outreach with clear source labels, independent searches and shared reporting periods. Inbound source is not call/message direction; do not combine requests, attempts, replies or interested sellers. Preserve owner-only access and unchanged customer property cards. This supersedes the earlier instruction to hide inbound admin sections.
+
 - On October 20, 2026 the owner requested fixes for missing seller information and outreach. Prioritize real seller responses, actual outreach and saved contact details before blank research. Protect capacity for a first seller call before buying more research, and work existing eligible contacts first. Support must read actual lead/contact/provider receipts and spending holds, never infer outreach from setup readiness or mark an unresolved complaint solved. Preserve funding policy, historical charges, unknown holds, Pause and VIP pricing.
 
 - On October 20, 2026 the owner restored the 50% rolling 24-hour new-opportunity ceiling and the earlier 12-hour cumulative release. Preserve the immediate starter and hourly batch ceiling, existing 50% total allowance, actual charges, unresolved holds, funding snapshots, Pause and 30% VIP savings. This supersedes the 25% policy below. New credit purchases use work-credits-2026-10-20.2; retain every previous acceptance version and separate auto-recharge authorization.
