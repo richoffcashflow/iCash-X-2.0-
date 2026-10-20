@@ -55,7 +55,7 @@ export function workspaceConversionOffer(input: WorkspaceConversionInput): Works
   };
   if (input.vipAvailable && !input.vip && !input.recentPurchase) return {
     key: 'vip', action: 'vip', title: 'Make your credits go further.',
-    detail: 'VIP gives you 20% off AI work and lead costs, plus priority for eligible new leads.',
+    detail: 'VIP gives you 30% off AI work and lead costs, plus priority for eligible new leads.',
     compact: 'Save on AI work with VIP', button: 'View my upgrade',
   };
   return null;

@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 20, 2026 the owner lowered new-opportunity spending to 25% of the verified-funding balance per rolling 24 hours, while explicitly preserving an immediate first batch. Keep the existing starter/hourly ceiling capped by that daily limit, 50% total search allowance and protected balance for replies/active deals. Release the total search allowance over 24 hours; never reset historical spending, unresolved holds, funding snapshots or Pause. VIP now receives 30% off new usage and lead assignments (DealMachine 2.1×, other usage 1.4×); historical and in-flight snapshots retain their original discount. Show actual settled savings and a clearly labeled Standard-versus-VIP price comparison. This supersedes the earlier 50% first-day ceiling and 20% VIP benefit below.
+
 - On October 19, 2026 the owner requested a clear notification after confirmed funding explaining when outreach starts. Show the next 9 AM Central window after hours, respect known seller time zones, keep manual Pause truthful, and do not promise immediate responses or deals. Keep the confirmation visible after checkout closes and suppress competing refill/upgrade prompts until it is dismissed.
 
 - On October 19, 2026 the owner requested that `/admin` focus on outbound DealMachine properties, calls, texts, actual responses and interested sellers, with inbound sections removed for now. Keep usage earnings and system health. Report actual receipt-backed activity, distinguish queues/holds from attempts and interest, and preserve owner-only access. Customer property cards remain unchanged without inbound/outbound labels.
