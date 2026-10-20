@@ -1,17 +1,19 @@
 import {z} from 'zod';
+import {requireDashboardPassword} from '@/lib/dashboard-password';
 import {db} from '@/lib/stripe-test';
 import {launchSlug,parseLaunchCsv,prepareLaunchImport} from '@/lib/legacy-launch';
 import {webinarOwner,webinarOrigin,webinarBody,webinarHeaders,webinarError,WebinarError} from '@/lib/webinar-server';
 export const dynamic='force-dynamic';
+async function requireLaunchOwner(){const owner=await webinarOwner();await requireDashboardPassword(owner.id);}
 const step=z.object({id:z.string().regex(/^[a-z0-9-]{1,50}$/),day:z.number().int().min(0).max(29),hour:z.number().int().min(0).max(23),channel:z.enum(['email','sms']),subject:z.string().max(160),body:z.string().min(20).max(6000)}).strict();
 async function campaign(){const [l]=await db<{id:string;revision:number}[]>(`icash_legacy_launches?slug=eq.${launchSlug}&select=id,revision&limit=1`);if(!l)throw new WebinarError(503,'The launch is being prepared. Please refresh shortly.');return l;}
 export async function GET(req:Request){try{
- await webinarOwner();const l=await campaign(),params=new URL(req.url).searchParams;
+ await requireLaunchOwner();const l=await campaign(),params=new URL(req.url).searchParams;
  const q=z.string().max(200).parse(params.get('q')||''),page=z.coerce.number().int().min(1).max(10000).parse(params.get('page')||1);
  return Response.json(await db('rpc/icash_legacy_report','POST',{p_launch:l.id,p_query:q,p_page:page}),{headers:webinarHeaders});
 }catch(e){return webinarError(e);}}
 export async function POST(req:Request){try{
- webinarOrigin(req);await webinarOwner();const l=await campaign(),raw=await webinarBody(req,12_100_000);
+ webinarOrigin(req);await requireLaunchOwner();const l=await campaign(),raw=await webinarBody(req,12_100_000);
  const i=z.discriminatedUnion('action',[
   z.object({action:z.literal('import'),source:z.enum(['whop','highlevel']),csv:z.string().max(12_000_000)}).strict(),
   z.object({action:z.literal('save'),revision:z.number().int().positive(),steps:z.array(step).min(1).max(60)}).strict(),
