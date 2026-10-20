@@ -14,6 +14,7 @@ export async function verifyWorkspace(browser,base,options,name){
  let acknowledged=true,ackFail=false,manual=false,controlFail=false,vip=true;const acceptedWrites=[],controlWrites=[],assistantWrites=[],apiReads=[];
  let instantVariant=null,inboundLead=false,callOutcome=null;
  let opportunityProgress=null;
+ let fundingFixture=null;
  let scenario='lead',preview=true,emptySearch=false,fulfillmentMode='ok',intentionalCrash=false,callMode='unavailable';
  await context.addInitScript(()=>{Object.defineProperty(navigator,'mediaDevices',{value:{getUserMedia:async()=>{window.fixtureMicrophoneRequests=(window.fixtureMicrophoneRequests||0)+1;throw new DOMException('Fixture microphone denied','NotAllowedError');}},configurable:true});});
  const fulfillmentHolds=new Set();
@@ -71,7 +72,8 @@ export async function verifyWorkspace(browser,base,options,name){
   }
   if(request.method()!=='GET'){writes.push(url.pathname);return route.fulfill({status:403,json:{error:'Read-only fixture'}});}
   const p=url.pathname;apiReads.push(p);
-  if(p==='/api/account')return route.fulfill({json:{...fixtureAccount,...(instantVariant?{paused:false}:{}),...(opportunityProgress?{paused:opportunityProgress.status==='paused'}:{}),workspaceAcknowledged:acknowledged,mode:'live',vip,vipFeatures:vip,billingModel:'membership_credits',membershipActive:true}});
+  if(p==='/api/account')return route.fulfill({json:{...fixtureAccount,...(fundingFixture?{paused:fundingFixture.paused,workReady:true}:{}),...(instantVariant?{paused:false}:{}),...(opportunityProgress?{paused:opportunityProgress.status==='paused'}:{}),workspaceAcknowledged:acknowledged,mode:'live',vip,vipFeatures:vip,billingModel:'membership_credits',membershipActive:true}});
+  if(p==='/api/funding/status')return route.fulfill({json:{enabled:true,mode:'live',paidCents:fundingFixture?.paidCents??0,needsClaim:false,packs:[]}});
   if(p==='/api/work/progress')return route.fulfill({json:{progress:opportunityProgress}});
   if(p==='/api/work/assistant')return route.fulfill({json:{items:[]}});
   if(p==='/api/billing/membership')return route.fulfill({json:{membership:{state:'active',accessible:true,vip,priceCents:vip?10000:5000,paidThrough:'2026-11-16T05:00:00Z',cancelAtPeriodEnd:false}}});
@@ -501,6 +503,29 @@ export async function verifyWorkspace(browser,base,options,name){
     assert.equal(await lead.getByText('Not answered yet',{exact:true}).count(),0,'a real failure is never presented as no answer');callOutcome=null;
    }
   }
+  instantVariant=null;opportunityProgress=null;
+  for(const [clock,paused,expected] of [
+   ['2026-10-20T03:00:00Z',false,'tomorrow at 9 AM Central'],
+   ['2026-10-20T15:00:00Z',false,'Your bot can start eligible outreach automatically.'],
+   ['2026-10-20T03:00:00Z',true,'Your bot is still paused.'],
+  ]){
+   fundingFixture={paused,paidCents:1000};
+   await page.clock.setFixedTime(new Date(clock));
+   await page.waitForLoadState('networkidle');
+   await visit(base+'/?payment=funded&session_id=cs_live_fixture#funding');
+   const notice=page.getByRole('region',{name:'Credits added',exact:true});
+   await notice.getByText(expected,{exact:false}).waitFor();
+   await notice.getByText('Research can continue overnight.',{exact:false}).waitFor();
+   assert.equal(await page.getByRole('dialog',{name:'Add money',exact:true}).count(),0,'confirmation remains after checkout closes');
+   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+   await notice.getByRole('button',{name:'Dismiss funding notice'}).click();
+   await notice.waitFor({state:'hidden'});
+  }
+  fundingFixture={paused:false,paidCents:0};
+  await page.waitForLoadState('networkidle');
+  await visit(base+'/?payment=funded&session_id=cs_live_pending#funding');
+  await page.getByText('Confirming your credits',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('region',{name:'Credits added',exact:true}).count(),0,'pending payment is never described as funded');
   assert.deepEqual(errors,[]);assert.deepEqual(writes,[],'navigation never signs, sends, charges or changes controls');assert.deepEqual(external,[]);
   console.log(`PASS ${name}: staged access, title messages, in-panel loading/failure/recovery, preserved drafts, crash containment, cancellation and search; required acknowledgment, takeover recovery and inert contract previews. No live work or provider requests.`);
  }catch(error){console.error({name,scenario,errors,writes,body:(await page.locator('body').innerText()).slice(-7000)});throw error;}

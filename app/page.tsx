@@ -19,6 +19,7 @@ import {nextWorkFunding} from '@/lib/workspace-progress';
 import type {AssistantRequest} from '@/components/workspace-assistant';
 import type {AssistantAction} from '@/lib/workspace-assistant-policy';
 import {BotRunBar} from '@/components/bot-run-bar';
+import {FundingOutreachNotice} from '@/components/funding-outreach-notice';
 import {AdminPlanToggle,type AccountPlan} from '@/components/workspace-vip-banner';
 import {setupThemes,type BotProfile} from '@/lib/bot-setup';
 // Load private workspace tools only when their signed-in controls are rendered.
@@ -43,6 +44,13 @@ type Account={pretendBotAvailable?:boolean;workspaceAcknowledged?:boolean;vip?:b
 export default function Home(){
  const [account,setAccount]=useState<Account|null>(null),[accountError,setAccountError]=useState(false),[signInOpen,setSignInOpen]=useState(false),[fundingOpen,setFundingOpen]=useState(false),[fundingCode,setFundingCode]=useState(''),[controlBusy,setControlBusy]=useState(false),[controlError,setControlError]=useState(''),[draftBrand,setDraftBrand]=useState<BotProfile|null>(null);
  const [reviewVip,setReviewVip]=useState(false);
+ const [fundingNotice,setFundingNotice]=useState<{email:string;accountAtFunding:Account}|null>(null);
+ useEffect(()=>{
+  if(!account?.signedIn||!account.email){setFundingNotice(null);return;}
+  const funded=()=>setFundingNotice({email:account.email!,accountAtFunding:account});
+  window.addEventListener('icash:credits-funded',funded);
+  return()=>window.removeEventListener('icash:credits-funded',funded);
+ },[account]);
  const [walkthroughRequest,setWalkthroughRequest]=useState<{email?:string;nonce:number}>({nonce:0}),[walkthroughOpen,setWalkthroughOpen]=useState(false);
  const [assistantOpenRequest,setAssistantOpenRequest]=useState(0);
  const [assistantAccount,setAssistantAccount]=useState<string|null>(null);
@@ -194,7 +202,8 @@ export default function Home(){
     {controlError&&<p role="alert">{controlError}</p>}
     <WorkspaceWalkthrough key={`walkthrough:${account.email}`} openRequest={walkthroughRequest.email===account.email?walkthroughRequest.nonce:0} blocked={accountError||customizeOpen||fundingOpen||settingsOpen||preferencesOpen||cancellationOpen||reviewVip} onOpenChange={setWalkthroughOpen}/>
     <BotRunBar key={`${account.email}:${pretendBot}`} pretend={pretendBot} hasLeads={leadPresence?.email===account.email?leadPresence?.hasLeads:undefined} botName={profile?.displayName||account.assistantName} vip={displayVip} onVip={displayVip&&!canSwitchPlan&&account.billingModel==='membership_credits'?()=>setReviewVip(true):undefined} running={botRunning} paymentRequired={account.billingModel==='membership_credits'&&!account.membershipActive} stopped={account.paused===true&&(account.balanceCents??0)>0} busy={controlBusy} stale={accountError} balanceCents={guest?undefined:account.balanceCents} hasCreditHistory={account.hasCreditHistory} canPause={account.paused===false&&((account.balanceCents??0)>0||account.billingActive===true)} principalKey={account.email} onBudget={()=>openFunding()} onPause={()=>void toggleBot('pause')} onResume={()=>void toggleBot('resume')}/>
-    {!pretendBot&&<WorkspaceConversion key={account.email??'account'} principal={account.email??''} balanceCents={account.balanceCents} paused={account.paused} stale={accountError||!!account.billingReview} attentionPending={attentionPending} hidden={walkthroughOpen||customizeOpen||fundingOpen||settingsOpen||preferencesOpen||cancellationOpen||reviewVip||needsIdentity||needsBotName||new URLSearchParams(typeof window==='undefined'?'':window.location.search).get('payment')==='funded'} busy={controlBusy} onFunding={(amountCents,reason)=>openFunding('',{amountCents,reason})} onResume={()=>void toggleBot('resume')} onVip={()=>setReviewVip(true)} onWork={openNextWork}/>}
+    {!pretendBot&&fundingNotice&&fundingNotice.email===account.email&&<FundingOutreachNotice paused={account.paused} ready={botRunning&&(account.balanceCents??0)>0&&!controlBusy} stale={accountError||account.readinessPending===true||fundingNotice.accountAtFunding===account} test={account.mode==='test'} onDismiss={()=>setFundingNotice(null)}/>}
+    {!pretendBot&&<WorkspaceConversion key={account.email??'account'} principal={account.email??''} balanceCents={account.balanceCents} paused={account.paused} stale={accountError||!!account.billingReview} attentionPending={attentionPending} hidden={fundingNotice?.email===account.email||walkthroughOpen||customizeOpen||fundingOpen||settingsOpen||preferencesOpen||cancellationOpen||reviewVip||needsIdentity||needsBotName||new URLSearchParams(typeof window==='undefined'?'':window.location.search).get('payment')==='funded'} busy={controlBusy} onFunding={(amountCents,reason)=>openFunding('',{amountCents,reason})} onResume={()=>void toggleBot('resume')} onVip={()=>setReviewVip(true)} onWork={openNextWork}/>}
     <div className={styles.activity}><BudgetSummary key={`${account.email}:${displayVip}`} vip={displayVip}/></div>
     {fundingOpen&&<FundingDialog title={guest||account.billingModel==='membership_credits'&&!account.membershipActive?'iCash X 2.0':returningWithoutCredits?'Out of credits':creditsExhausted?'Start your bot':'Add money'} onClose={closeFunding}>{guest||account.billingModel==='membership_credits'&&!account.membershipActive?<MembershipCheckout onSignedIn={()=>{closeFunding();void refreshAccount(true);}}/>:<FundingCheckout initialAmountCents={fundingSuggestion?.amountCents} reason={fundingSuggestion?.reason} outOfCredits={returningWithoutCredits} initialCode={fundingCode||undefined} onSignedIn={()=>{closeFunding();void refreshAccount(true);}}/>}</FundingDialog>}
     {reviewVip&&<FundingDialog title={account.isBillingOwner?'Your account plan':account.vip?'Your VIP membership':'Switch to VIP'} onClose={()=>setReviewVip(false)}><div className={styles.vipPanel}>{account.isBillingOwner?<><AdminPlanToggle plan={account.vip?'vip':'standard'} busy={controlBusy||accountError} onChange={plan=>void changePlan(plan)}/>{controlError&&<p role="alert">{controlError}</p>}</>:<MembershipSettings key={account.email} planOnly onChanged={membershipChanged}/>}</div></FundingDialog>}

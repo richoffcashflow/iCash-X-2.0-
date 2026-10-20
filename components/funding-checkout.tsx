@@ -1,5 +1,6 @@
 'use client';
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
+import {fundingOutreachSchedule} from '@/lib/funding-outreach-notice';
 import {fundingReasonAtAmount} from '@/lib/credit-refill-recommendation';
 import {useEffect,useRef,useState} from 'react';
 import {ArrowRight,ShieldCheck,RefreshCw} from 'lucide-react';
@@ -22,7 +23,7 @@ export function FundingCheckout({onSignedIn,initialCode,initialAmountCents,reaso
  async function refresh(){if(polling.current)return;polling.current=true;try{const sessionId=sessionRef.current??new URLSearchParams(window.location.search).get('session_id');const d=await workspaceRequest<Funding>('/api/funding/status'+(sessionId?'?session_id='+encodeURIComponent(sessionId):''),{cache:'no-store'});if(alive.current){setStatus(d);if(sessionId&&d.paidCents)setPaymentReturn(true);setError('');}}catch(e){if(alive.current)setError(e instanceof Error?e.message:'Could not check credits. Please retry.');}finally{polling.current=false;}}
  useEffect(()=>{alive.current=true;setPaymentReturn(new URLSearchParams(window.location.search).get('payment')==='funded');void refresh();return()=>{alive.current=false;};},[]);
  useEffect(()=>{if(!paymentReturn||status?.paidCents||status?.needsClaim)return;let tries=0;const timer=setInterval(()=>{if(!document.hidden&&++tries<=12)void refresh();},5000);return()=>clearInterval(timer);},[paymentReturn,status?.paidCents,status?.needsClaim]);
- useEffect(()=>{if(paymentReturn&&status?.paidCents&&!status.needsClaim&&!notified.current){notified.current=true;const url=new URL(window.location.href);url.searchParams.delete('payment');url.searchParams.delete('session_id');window.history.replaceState(null,'',url.pathname+url.search+url.hash);window.dispatchEvent(new Event('icash:credits-funded'));onSignedIn();}},[paymentReturn,status?.paidCents,status?.needsClaim,onSignedIn]);
+ useEffect(()=>{if(paymentReturn&&(sessionRef.current||new URLSearchParams(window.location.search).get('session_id'))&&status?.paidCents&&!status.needsClaim&&!notified.current){notified.current=true;const url=new URL(window.location.href);url.searchParams.delete('payment');url.searchParams.delete('session_id');window.history.replaceState(null,'',url.pathname+url.search+url.hash);window.dispatchEvent(new Event('icash:credits-funded'));onSignedIn();}},[paymentReturn,status?.paidCents,status?.needsClaim,onSignedIn]);
  const packs=(status?.packs??[]).filter(p=>p.price_cents>=1000&&p.price_cents<=100000&&(status?.mode!=='live'||p.enabled)),selected=packs.find(p=>p.code===code);
  function chooseAmount(cents:number){picked.current=true;const pack=packs.find(p=>p.price_cents===cents);if(pack){setCode(pack.code);setCustomAmount('');}else{setCode(customFundingCode);setCustomAmount(String(cents/100));}}
  useEffect(()=>{if(!status||picked.current||recommended.current)return;recommended.current=true;const cents=initialAmountCents??status.recommendedCents??1000;const pack=(status.packs??[]).find(p=>p.enabled&&p.price_cents===cents);if(pack)setCode(pack.code);else if(status.custom?.enabled){setCode(customFundingCode);setCustomAmount(String(cents/100));}},[status,outOfCredits,initialAmountCents]);
@@ -46,6 +47,7 @@ export function FundingCheckout({onSignedIn,initialCode,initialAmountCents,reaso
    {status.autoRecharge?.issue&&<p role="status" className="credit-recharge-issue">{status.autoRecharge.issue}</p>}
   </div>}
   <p className="credit-purchase-terms" id="credit-purchase-terms">{status?.earlyAccess?earlyAccessDisclosure:'Your bot starts eligible work after payment and can use up to 50% of your new balance to find opportunities. Up to that 50% can be used during the first day, in paced batches. The rest stays available for replies and active deals.'}</p>
+  <p className="credit-purchase-terms">{fundingOutreachSchedule} Adding credits does not change a manual pause.</p>
   <label className="membership-consent"><input id="credit-final-sale" type="checkbox" checked={accepted} disabled={busy||!canPay} onChange={e=>setAccepted(e.target.checked)}/><span>I agree to the <a href="/costs-and-disclosures#refunds" target="_blank" rel="noopener noreferrer">billing policy</a>.</span></label>
   <button className="fund-button full" disabled={busy||!canPay||!accepted} aria-describedby="credit-purchase-terms" onClick={()=>void checkout()}>{busy?'Opening secure checkout…':amount!==null?`Add ${priceLabel(amount)} & continue`:'Enter an amount'}<ArrowRight size={17}/></button>
   <p className="credit-purchase-safe"><ShieldCheck size={14}/>{autoRecharge||status?.autoRecharge?.enabled?'You control auto recharge.':'One-time payment · Add more whenever you want.'}</p>
