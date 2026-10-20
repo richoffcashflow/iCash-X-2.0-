@@ -102,6 +102,7 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
   if(/closing (?:this|your|the) chat|chat (?:is|has been) closed/i.test(answer.reply))return fallback;
   if(answer.reply.split(/\s+/).length>100||(answer.reply.match(/\?/g)?.length??0)>1||/\b(?:workspace readiness|configuration|reconciliation|payment method persistence)\b/i.test(answer.reply))return fallback;
   if(repeatsSupportQuestion(answer.reply,context.messages))return fallback;
+  if(/\b(?:test (?:checkout |work )?credits?|test payments?|sandbox|bank balance|refund amount)\b/i.test(answer.reply)&&!context.messages.some(m=>m.role==='user'&&/\b(?:test|sandbox|refund|bank)\b/i.test(m.content))&&!relevantEvidence.some(e=>e.key==='payments'&&/Test payments do not fund/i.test(e.detail)))return fallback;
   const unresolved=relevantEvidence.some(e=>e.status!=='ok'&&e.key!=='course');
   const failure=/not working|stopped|stuck|missing|no code|didn.t|doesn.t|can.t|cannot|failed|error|problem/i.test(context.messages.filter(m=>m.role==='user').at(-1)?.content??'');
   const answered=answer.answered&&!answer.reply.includes('?')&&!unresolved&&!failure;

@@ -34,7 +34,22 @@ export function recordingRenamedDisabledTtsSnapshot(snapshot:Record<string,unkno
  return {...snapshot,conversation_config:{...config,tts:priorTts},
   platform_settings:{...platform,overrides:{...overrides,conversation_config_override:{...overrideConfig,tts:priorOverrideTts}}}};
 }
-export function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>):boolean{
+/** Observed on the unchanged approved version on 2026-10-20. Accept only
+ * the complete, disabled noise feature with its exact provider default text
+ * and disabled text override, and only if removing it restores the saved hash.
+ * Enabled, partial, custom, malformed or otherwise changed settings stay exact. */
+function recordingDisabledNoiseSnapshot(snapshot:Record<string,unknown>):Record<string,unknown>|null{
+ const config=object(snapshot.conversation_config),turn=object(config.turn);
+ const platform=object(snapshot.platform_settings),overrides=object(platform.overrides);
+ const overrideConfig=object(overrides.conversation_config_override),overrideTurn=object(overrideConfig.turn);
+ if(turn.noisy_environment_detection!==false
+  ||turn.noisy_environment_message!=="Uhh ... sorry, I'm picking up some noise in the background. Could you move somewhere quieter?"
+  ||overrideTurn.noisy_environment_message!==false)return null;
+ const priorTurn={...turn},priorOverrideTurn={...overrideTurn};
+ delete priorTurn.noisy_environment_detection;delete priorTurn.noisy_environment_message;delete priorOverrideTurn.noisy_environment_message;
+ return {...snapshot,conversation_config:{...config,turn:priorTurn},platform_settings:{...platform,overrides:{...overrides,conversation_config_override:{...overrideConfig,turn:priorOverrideTurn}}}};
+}
+function recordingEmptyAgentHashMatches(configHash:string,snapshot:Record<string,unknown>):boolean{
  const matches=(value:unknown)=>sha(JSON.stringify(canonical(value)))===configHash;
  if(matches(snapshot))return true;
  const config=object(snapshot.conversation_config),agent=object(config.agent),variants=[agent];
@@ -57,10 +72,18 @@ export function recordingConfigHashMatches(configHash:string,snapshot:Record<str
   }
  }
  if(variants.slice(1).some(alternate=>matches({...snapshot,conversation_config:{...config,agent:alternate}})))return true;
- // At most one additional representation (eight complete hashes total).
- // The reconstructed object has no clone_strength fields, so cannot recurse again.
- const renamed=recordingRenamedDisabledTtsSnapshot(snapshot);
- return renamed!==null&&recordingConfigHashMatches(configHash,renamed);
+ return false;
+}
+export function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>):boolean{
+ // At most four fixed representations, each with up to four empty-agent
+ // variants. Never ignore arbitrary fields or rewrite a saved approval.
+ const snapshots=[snapshot],withoutNoise=recordingDisabledNoiseSnapshot(snapshot);
+ if(withoutNoise)snapshots.push(withoutNoise);
+ for(const value of [...snapshots]){
+  const renamed=recordingRenamedDisabledTtsSnapshot(value);
+  if(renamed)snapshots.push(renamed);
+ }
+ return snapshots.some(value=>recordingEmptyAgentHashMatches(configHash,value));
 }
 export function recordingAgentMatches(review:RecordingReview,raw:unknown){
  const a=object(raw),config=object(a.conversation_config),platform=object(a.platform_settings),prompt=object(object(config.agent).prompt),overrides=object(object(platform.overrides).conversation_config_override);

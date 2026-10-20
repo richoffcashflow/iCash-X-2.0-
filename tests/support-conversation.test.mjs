@@ -118,6 +118,11 @@ try{
  const fetcher=async(url,init)=>{calls++;const body=JSON.parse(init.body);assert.equal(url,'https://api.openai.com/v1/chat/completions');assert.equal(body.store,false);assert.equal(body.response_format.json_schema.strict,true);assert.equal(body.tools,undefined);assert(init.signal);assert.match(body.messages[1].content,/Which screen/);assert(!body.messages[1].content.includes('sk_live_abcdefghijkl'));assert(!body.messages[1].content.includes('me@example.invalid'));return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'Your bot is paused. Are you ready to resume it from the workspace?',answered:false})}}]});};
  const response=await replyToSupport(context,fetcher);assert(response.ai);assert.match(response.reply,/paused/);assert.equal(calls,1);
  const modelReply=(reply,answered,needsTeam=false)=>async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply,answered})}}]});
+ for(const irrelevant of ['Test checkout credit is separate.','This is not a bank balance or refund amount.','Your sandbox payments are separate.']){
+  const reply=await replyToSupport(context,modelReply(irrelevant,false));
+  assert.equal(reply.ai,false);assert.doesNotMatch(reply.reply,/test checkout|sandbox|bank balance|refund amount/i);
+ }
+ assert.equal((await replyToSupport({...context,messages:[user('Are my test credits usable?')]},modelReply('Test credits do not fund live work.',false))).ai,true,'An explicit test-credit question can still be answered honestly');
  const complete=await replyToSupport({...leadsContext,messages:[user('What is Take over?')]},modelReply('Take over pauses new automatic work on that property so you can handle it yourself.',true));
  assert.equal(complete.status,'resolved');assert.match(complete.reply,/rewatch the Course/);assert.match(complete.reply,/Reply here/);
  const missing=await replyToSupport(context,modelReply('Which screen are you on?',true));assert.equal(missing.status,'waiting_on_customer','A model cannot close a reply that still asks a question');

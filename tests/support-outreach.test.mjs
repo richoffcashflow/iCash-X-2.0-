@@ -8,6 +8,14 @@ const env={...process.env};process.env.ICASH_SUPPORT_AI_ENABLED='true';process.e
 let calls=0;
 const forbidden=async()=>{calls++;throw Error('Known account evidence must not need a model call');};
 try{
+ // Exact customer wording must use the real outreach evidence on the first turn.
+ for(const question of ["hi my bot isn't making any calls or texts and it's been running all day",'my bot isn’t making calls','my bot isnt making any calls','It does not make calls or send texts','It has not called anyone','It hasn’t been calling sellers','No calls are being made','Why are calls not starting?',"I'm just trying to figure out why its not making calls or texts"]){
+  const response=await replyToSupport({kind:'account',messages:[user(question)],evidence:[{...evidence[0],...supportOutreachEvidence({...facts,callsStarted:4,progress:{...facts.progress,status:'ready',remainingCents:121}})}]},forbidden);
+  assert.equal(response.status,'open');assert.equal(response.ai,false,question);
+  assert.match(response.reply,/4 recorded call attempts/);assert.match(response.reply,/11 texts \(6 delivered\) so far/);assert.match(response.reply,/Calls are waiting on the spending limit/);
+  assert.doesNotMatch(response.reply,/test|sandbox|bank balance|refund|What were you trying|\?|tap Texts|used up/i);
+  if(question.includes('all day'))assert.match(response.reply,/aren’t limited to today/);
+ }
  const messages=[user('My bot is not showing seller info or starting conversations.'),assistant('What does your bot status button say?'),user('Ready'),assistant('Do you have credit?'),user('I have $5.06 in credits')];
  let response=await replyToSupport({kind:'account',messages,evidence},forbidden);
  assert.equal(response.status,'open');assert.match(response.reply,/7 properties/);assert.match(response.reply,/11 texts \(6 delivered\)/);assert.match(response.reply,/no text replies/);assert.match(response.reply,/Calls are waiting/);assert.doesNotMatch(response.reply,/\?|keep.*running|rewatch|fixed|resolved/i);
