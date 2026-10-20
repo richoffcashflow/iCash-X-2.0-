@@ -1,3 +1,4 @@
+import {bindLegacyWebinar} from "@/lib/legacy-launch-server";
 import {z} from 'zod';
 import {cookies} from 'next/headers';
 import {randomBytes,randomUUID} from 'node:crypto';
@@ -27,7 +28,7 @@ export async function POST(req:Request){try{
   const [published]=await db<{public_code:number|null}[]>(`icash_webinars?id=eq.${i.preview}&config->>status=eq.published&select=public_code&limit=1`);
   return Response.json({previewLocked:true,publicPath:published?.public_code?webinarLink({publicCode:String(published.public_code)}):null},{headers:webinarHeaders});
  }}
- const [rows,account]=await Promise.all([db<WebinarRow[]>(`icash_webinars?${i.preview?'id=eq.'+i.preview+'&':i.code?'public_code=eq.'+i.code+'&':'parent_webinar_id=is.null&config->>status=eq.published&'}select=config,public_code,parent_webinar_id&order=public_code.asc&limit=1`),i.preview?Promise.resolve(null):webinarCustomerAccount()]);
+ const [rows,account]=await Promise.all([db<WebinarRow[]>(`icash_webinars?${i.preview?'id=eq.'+i.preview+'&':i.code?'public_code=eq.'+i.code+'&':'parent_webinar_id=is.null&config->>legacyCampaignId=is.null&config->>status=eq.published&'}select=config,public_code,parent_webinar_id&order=public_code.asc&limit=1`),i.preview?Promise.resolve(null):webinarCustomerAccount()]);
  const current=rows[0]?webinarFromRow(rows[0]):null;
  if(!current||!i.preview&&(current.status!=='published'||!hasWebinarVideo(current)))return Response.json({unavailable:true,message:'This webinar is not available yet.'},{headers:webinarHeaders});
  // The authenticated owner can test the published funnel with measurement on.
@@ -99,6 +100,7 @@ export async function POST(req:Request){try{
  const snapshot=snapshotChat(unfinished&&!i.preview?webinarSchema.parse(webinar):selectRecording(webinarSchema.parse(webinar),timezone,entryNow,settings.routing,i.preview?i.variant:pairedVersion,location),sessionId);
  const returnStart=!i.preview&&!ownerWatching&&!target.parentWebinarId&&!recordingChanged&&journey.kind==='advance'?webinarReturnPosition(snapshot):0;
  const session=await db<WebinarSession>('rpc/icash_webinar_begin','POST',{p_visitor:visitor.id,p_id:sessionId,p_config:returnStart?{...snapshot,_returnStartSeconds:returnStart}:snapshot,p_advance_from:!i.preview&&journey.kind==='advance'?journey.sessionId:null,p_preview:!!i.preview});
+ if(target.legacyCampaignId&&!i.preview)await bindLegacyWebinar(visitor.id,target.legacyCampaignId).catch(()=>{});
  const messages=await db<{id:string;role:'user'|'assistant';text:string;playback_seconds:number|null}[]>(`icash_webinar_messages?session_id=eq.${session.id}&role=eq.user&select=id,role,text,playback_seconds,display_name,public_status&order=created_at.desc&limit=60`).then(rows=>rows.reverse()).catch(()=>[]);
  return Response.json({webinar:publicWebinar(webinarSchema.parse(session.config)),...(session.config.id!==current.id?{canonicalPath:webinarLink(session.config)}:{}),sessionId:session.id,progress:session.completed_at?0:session.progress_seconds,name:visitor.name??'',email:visitor.email??'',phone:visitor.phone??'',contactSaved:!!visitor.email&&!!visitor.phone,messages,preview:!!i.preview,ownerWatching,recordingRecheckAt:i.preview?null:recordingRecheckAt(target,session.config.recordingVersion??'day',timezone,entryNow,settings.routing,location),serverNow:Date.now()},{headers:webinarHeaders});
  }catch(e){if(e instanceof z.ZodError)return Response.json({error:'The webinar link could not be read.'},{status:400,headers:webinarHeaders});return webinarError(e);}}

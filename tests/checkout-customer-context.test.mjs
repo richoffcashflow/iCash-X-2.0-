@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import ts from 'typescript';
 let saved={name:'Casey',email:'casey@example.invalid',phone:'+1 (555) 555-0123'},token='signed',reads=[];
-const deps={cookies:async()=>({get:()=>({value:token})}),readWebinarToken:v=>v==='signed'?'00000000-0000-4000-8000-000000000001':null,normalizeEmail:v=>typeof v==='string'?v.toLowerCase():null,db:async path=>{reads.push(path);return saved?[saved]:[];}};
+const deps={legacyInviteContext:async()=>null,cookies:async()=>({get:()=>({value:token})}),readWebinarToken:v=>v==='signed'?'00000000-0000-4000-8000-000000000001':null,normalizeEmail:v=>typeof v==='string'?v.toLowerCase():null,db:async path=>{reads.push(path);return saved?[saved]:[];}};
 process.env.ICASH_WEBINAR_SECRET='fixture';globalThis.__context=deps;const code=ts.transpileModule(readFileSync(new URL('../lib/checkout-customer-context.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .*;\s*$/gm,'');const {checkoutCustomerContext}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__context;\n'+code).toString('base64'));
 assert.deepEqual(await checkoutCustomerContext(null),{});assert.equal(reads.length,0);
 assert.deepEqual(await checkoutCustomerContext('owned'),{name:'Casey',email:'casey@example.invalid',phone:'+15555550123'});assert.match(reads.at(-1),/funding_guest_hash=eq.owned/);
