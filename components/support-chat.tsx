@@ -73,7 +73,7 @@ export function SupportChat({onClose,active=true,onMembershipChanged,initialThre
   finally{finishOperation();}
  }
  const currentStatus=threads.find(item=>item.id===thread)?.status;
- const statusLabel=currentStatus==='escalated'||currentStatus==='open'?'Troubleshooting here':currentStatus==='waiting_on_customer'?'Your reply is needed':currentStatus==='resolved'?'Resolved · Reply to reopen':'Ask us anything';
+ const statusLabel=currentStatus==='escalated'||currentStatus==='open'?'Troubleshooting here':currentStatus==='waiting_on_customer'?'Your reply is needed':currentStatus==='closed'?'Closed · Reply to reopen':currentStatus==='resolved'?'Resolved · Reply to reopen':'Ask us anything';
  const exit=onClose?<button className="support-close" aria-label="Close support" onClick={onClose} type="button"><X size={20}/></button>:<a className="support-back" href="/" aria-label="Back to workspace"><ArrowLeft size={18}/><span>Workspace</span></a>;
  if(needsSignIn)return <section className="support-shell support-chat support-sign-in"><header className="support-heading"><div><p className="support-eyebrow">iCash X</p><h1>Let’s get you some help</h1></div>{exit}</header><div className="support-sign-in-body"><div className="support-welcome-icon"><LifeBuoy size={25}/></div><p><a href="/access/help">Can’t sign in? Contact support without signing in.</a></p><p>Sign in to review your account and earlier conversations.</p><AccountAccess onSignedIn={()=>void load(initialThreadId)}/><small>Already paid? Your payment is saved. You don’t need to pay again.</small></div></section>;
  return <section className="support-shell support-chat" aria-label="Support conversation">

@@ -32,7 +32,7 @@ export async function verifyAccessHelp(browser,base,options,name,fixtureCookies)
     const request={id,email:conversation.email,phone:conversation.phone,status:conversation.status,created_at:now,updated_at:now};
     if(route.request().method()==='POST'){
      const body=route.request().postDataJSON();assert.equal(body.id,id);conversation.status=body.status;
-     conversation.messages.push({id:'00000000-0000-4000-8000-000000000302',requestId:body.requestId,role:'operator',content:body.reply,createdAt:now});return json({saved:true});
+     if(body.reply)conversation.messages.push({id:'00000000-0000-4000-8000-000000000302',requestId:body.requestId,role:'operator',content:body.reply,createdAt:now});return json({saved:true});
     }
     if(url.searchParams.has('id'))return json({request,messages:conversation.messages.map(message=>({...message,created_at:message.createdAt}))});
     return json({requests:[request],purchases:[{id:'00000000-0000-4000-8000-000000000303',email:'paid@example.invalid',paid_at:now,email_status:'sent',email_delivery:'bounced',text_status:'needs_review',text_delivery:null,reason:'delivery_problem'}]});
@@ -67,8 +67,14 @@ export async function verifyAccessHelp(browser,base,options,name,fixtureCookies)
   await desk.getByText('Reply saved. A customer email notification is queued.',{exact:true}).waitFor();
   assert.equal(await desk.getByLabel('Reply to customer',{exact:true}).inputValue(),'','Confirmed reply clears the draft');
   if(process.env.SUPPORT_DESK_SCREENSHOT)await page.screenshot({path:process.env.SUPPORT_DESK_SCREENSHOT.replace('.png',name.startsWith('mobile')?'-conversation-mobile.png':'-conversation-desktop.png'),fullPage:true});
+  await desk.getByRole('button',{name:'Close chat',exact:true}).click();
+  await desk.getByText('Conversation closed.',{exact:true}).waitFor();
+  assert.equal(conversation.status,'closed');
+  await desk.getByRole('button',{name:'Reopen',exact:true}).click();
+  await desk.getByText('Conversation reopened.',{exact:true}).waitFor();
+  assert.equal(conversation.status,'open');
   denied=true;await desk.getByRole('button',{name:'Refresh',exact:true}).click();await desk.getByText('Sign in with a support operator account to open this inbox.',{exact:true}).waitFor();assert(!(await desk.innerText()).includes('buyer@example.invalid'),'Denied operator read clears previous private ticket');
-  await page.goto(base+'/access/help');await page.getByText('Support replied',{exact:true}).waitFor();
+  await page.goto(base+'/access/help');await page.getByText('Request saved',{exact:true}).waitFor();
   await page.getByRole('log',{name:'Access support messages'}).getByText('Choose Use my checkout phone on the account page. Your payment is saved.',{exact:true}).waitFor();
   // Open the actual standalone return page as a fresh browser, with no account.
   await context.clearCookies();requiresReturn=true;
