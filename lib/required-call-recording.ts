@@ -19,12 +19,27 @@ export const recordingBaseUrl='https://www.geticashx.com/api/internal/voice/reco
 export function readRecordingReview(raw:string|undefined,now=Date.now()):RecordingReview|null{
  try{const r=JSON.parse(raw??'null') as RecordingReview;if(!r||r.offerPolicy!==undefined&&(!automaticOfferPolicy(r.offerPolicy)||!r.contractToolId)||r.enabled!==true||!/^agent_[A-Za-z0-9]+$/.test(r.agentId)||!/^agtbrch_[A-Za-z0-9]+$/.test(r.branchId)||!/^agtvrsn_[A-Za-z0-9]+$/.test(r.versionId)||!/^tool_[A-Za-z0-9]+$/.test(r.stopToolId)||!/^\+[1-9]\d{7,14}$/.test(r.fromPhone)||!sid(r.providerAccountSid,'AC')||!/^[a-f0-9]{64}$/.test(r.configHash)||!Array.isArray(r.toolIds)||r.toolIds.length!==(r.contractToolId?4:3)||new Set(r.toolIds).size!==r.toolIds.length||r.contractToolId!==undefined&&(!/^tool_[A-Za-z0-9]+$/.test(r.contractToolId)||r.contractToolId===r.stopToolId||!r.toolIds.includes(r.contractToolId))||!r.toolIds.includes(r.stopToolId)||!r.toolIds.every(x=>/^tool_[A-Za-z0-9]+$/.test(x))||r.approvedHoldCents!==recordingPolicy.minimumHoldCents||r.retentionDays!==30||r.maxTotalSeconds!==600||r.policyVersion!==recordingPolicy.version||!Number.isFinite(Date.parse(r.reviewedAt))||Date.parse(r.reviewedAt)>now||!Number.isFinite(Date.parse(r.reviewedUntil))||Date.parse(r.reviewedUntil)<=now)return null;return r;}catch{return null;}
 }
-export function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>){
+/** Observed on the same approved provider version on 2026-10-19: the joint
+ * numeric-zero/boolean-false PVC fields were renamed to clone_strength.
+ * Reconstruct only that exact older representation, never an approval. */
+export function recordingRenamedDisabledTtsSnapshot(snapshot:Record<string,unknown>):Record<string,unknown>|null{
+ const config=object(snapshot.conversation_config),tts=object(config.tts);
+ const platform=object(snapshot.platform_settings),overrides=object(platform.overrides);
+ const overrideConfig=object(overrides.conversation_config_override),overrideTts=object(overrideConfig.tts);
+ if(!Object.hasOwn(tts,'clone_strength')||tts.clone_strength!==0
+  ||!Object.hasOwn(overrideTts,'clone_strength')||overrideTts.clone_strength!==false
+  ||Object.hasOwn(tts,'pvc_strength')||Object.hasOwn(overrideTts,'pvc_strength'))return null;
+ const priorTts:Record<string,unknown>={...tts,pvc_strength:0},priorOverrideTts:Record<string,unknown>={...overrideTts,pvc_strength:false};
+ delete priorTts.clone_strength;delete priorOverrideTts.clone_strength;
+ return {...snapshot,conversation_config:{...config,tts:priorTts},
+  platform_settings:{...platform,overrides:{...overrides,conversation_config_override:{...overrideConfig,tts:priorOverrideTts}}}};
+}
+export function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>):boolean{
  const matches=(value:unknown)=>sha(JSON.stringify(canonical(value)))===configHash;
  if(matches(snapshot))return true;
  const config=object(snapshot.conversation_config),agent=object(config.agent),variants=[agent];
  // ElevenLabs may omit either exact empty default on an unchanged version.
- // Compare at most four complete fingerprints; preserve the approved hash and
+ // Compare at most four complete fingerprints per representation; preserve the approved hash and
  // every other field. Nonempty, malformed and extended values stay exact.
  const subagentConfig=object(agent.subagent_config),keys=Object.keys(subagentConfig);
  if(!Object.hasOwn(agent,'subagent_config')||keys.length===2&&Object.hasOwn(subagentConfig,'agents')&&Object.hasOwn(subagentConfig,'self_subagent')&&Array.isArray(subagentConfig.agents)&&subagentConfig.agents.length===0&&subagentConfig.self_subagent===null){
@@ -41,7 +56,11 @@ export function recordingConfigHashMatches(configHash:string,snapshot:Record<str
    variants.push(alternate);
   }
  }
- return variants.slice(1).some(alternate=>matches({...snapshot,conversation_config:{...config,agent:alternate}}));
+ if(variants.slice(1).some(alternate=>matches({...snapshot,conversation_config:{...config,agent:alternate}})))return true;
+ // At most one additional representation (eight complete hashes total).
+ // The reconstructed object has no clone_strength fields, so cannot recurse again.
+ const renamed=recordingRenamedDisabledTtsSnapshot(snapshot);
+ return renamed!==null&&recordingConfigHashMatches(configHash,renamed);
 }
 export function recordingAgentMatches(review:RecordingReview,raw:unknown){
  const a=object(raw),config=object(a.conversation_config),platform=object(a.platform_settings),prompt=object(object(config.agent).prompt),overrides=object(object(platform.overrides).conversation_config_override);

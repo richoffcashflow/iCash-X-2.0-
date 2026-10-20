@@ -71,6 +71,46 @@ test('incoming disabled PVC compatibility does not loosen outbound approval chec
  assert.equal(recordingAgentMatches(reviewFor(expanded),expanded),true);
 });
 
+function renamedVoiceFixture(){
+ const old=fixture(false,true);old.conversation_config.tts.pvc_strength=0;
+ old.platform_settings.overrides.conversation_config_override.tts.pvc_strength=false;
+ const current=structuredClone(old);
+ delete current.conversation_config.tts.pvc_strength;
+ delete current.platform_settings.overrides.conversation_config_override.tts.pvc_strength;
+ current.conversation_config.tts.clone_strength=0;
+ current.platform_settings.overrides.conversation_config_override.tts.clone_strength=false;
+ return {old,current,review:reviewFor(old)};
+}
+test('only the observed joint zero/false voice rename reconstructs the same approved outbound fingerprint',()=>{
+ const {old,current,review}=renamedVoiceFixture(),saved=structuredClone(review);
+ assert.notEqual(configHash(current),review.configHash);
+ for(const [empty,list] of representations){
+  const a=structuredClone(current);delete a.conversation_config.agent.subagents;
+  if(empty)a.conversation_config.agent.subagent_config=emptySubagents();
+  if(list)a.conversation_config.agent.subagents=[];
+  const before=structuredClone(a);assert.equal(recordingAgentMatches(review,a),true);
+  assert.deepEqual(a,before);assert.deepEqual(review,saved);
+ }
+ assert.equal(recordingAgentMatches(reviewFor(current),old),false,'field renaming is not invented in reverse');
+ assert.equal(recordingAgentMatches(reviewFor(fixture()),current),false,'outbound fields cannot be omitted from the approval');
+ for(const mutate of [
+  a=>a.conversation_config.tts.clone_strength=0.1,a=>a.conversation_config.tts.clone_strength=null,
+  a=>a.conversation_config.tts.clone_strength='0',a=>delete a.conversation_config.tts.clone_strength,
+  a=>a.platform_settings.overrides.conversation_config_override.tts.clone_strength=true,
+  a=>a.platform_settings.overrides.conversation_config_override.tts.clone_strength=null,
+  a=>a.platform_settings.overrides.conversation_config_override.tts.clone_strength='false',
+  a=>delete a.platform_settings.overrides.conversation_config_override.tts.clone_strength,
+  a=>a.conversation_config.tts.pvc_strength=0,
+  a=>a.platform_settings.overrides.conversation_config_override.tts.pvc_strength=false,
+  a=>a.conversation_config.tts.extra=0,a=>a.platform_settings.overrides.conversation_config_override.tts.extra=false,
+  a=>a.conversation_config.tts.voice_id='voice_other',a=>a.conversation_config.agent.prompt.prompt+=' changed',
+  a=>a.conversation_config.agent.prompt.tool_ids.push('tool_extra'),a=>a.workflow={nodes:[]},
+  a=>a.version_id='agtvrsn_other',a=>a.branch_id='agtbrch_other',a=>a.agent_id='agent_other',
+  a=>a.platform_settings.privacy.record_voice=true,a=>a.platform_settings.auth.enable_auth=false,
+ ]){const a=structuredClone(current);mutate(a);assert.equal(recordingAgentMatches(review,a),false,mutate.toString());}
+ assert.equal(recordingAgentMatches({...review,configHash:'0'.repeat(64)},current),false);
+});
+
 test('nonempty, malformed and extended subagent values are not empty defaults',()=>{
  const invalid=[null,[],false,0,'',{},
   {agents:[]},{self_subagent:null},{agents:null,self_subagent:null},{agents:{},self_subagent:null},

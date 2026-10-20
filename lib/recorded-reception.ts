@@ -14,7 +14,7 @@ import {receptionContextPrompt,receptionContextVariables} from './reception-prop
 import {createHmac} from 'node:crypto';
 import {inspectReceptionAgent,receptionTarget,receptionPrompt,type ReceptionConfig} from './general-reception.ts';
 import {propertyReceptionEnabled,propertyReceptionPrompt} from './reception-property-context.ts';
-import {canonical,object,sha,sid,uuid,recordingDisclosure,consentTwiml,recordingConfigHashMatches} from './required-call-recording.ts';
+import {canonical,object,sha,sid,uuid,recordingDisclosure,consentTwiml,recordingConfigHashMatches,recordingRenamedDisabledTtsSnapshot} from './required-call-recording.ts';
 
 /** Candidate only. No configuration/rate is installed or enabled by this module. */
 export const recordedReceptionPolicy='recorded-reception-30d-speech-v1';
@@ -47,6 +47,7 @@ export type ReceptionInlineToolEvidence={shape:'absent'|'array'|'invalid';count:
  * may be omitted when reconstructing an older COMPLETE approved fingerprint.
  * No hash/approval, provider setting, outbound caller or other field changes. */
 function receptionDisabledTtsDefaultsMatch(approvedHash:string,snapshot:Record<string,unknown>){
+ snapshot=recordingRenamedDisabledTtsSnapshot(snapshot)??snapshot;
  const config=object(snapshot.conversation_config),tts=object(config.tts);
  const platform=object(snapshot.platform_settings),overrides=object(platform.overrides);
  const overrideConfig=object(overrides.conversation_config_override),overrideTts=object(overrideConfig.tts);
@@ -114,7 +115,7 @@ export function inspectRecordedReceptionAgent(c:RecordedReceptionConfig,input:un
  const expectedBuyerGuardrail=c.context_policy===buyerSpeakingPolicy?buyerSpeakingGuardrail:c.context_policy===buyerValidatedPolicy?buyerValidatedGuardrail:c.context_policy===buyerAnswerPolicy?buyerAnswerGuardrail:c.context_policy===buyerConversationPolicy?buyerConversationGuardrail:buyerVoiceGuardrail;
  const priceEnforcement=(c.context_policy===buyerVoicePolicy||['automatic_offer_v11','automatic_offer_v12','automatic_offer_v13','automatic_offer_v14','automatic_offer_v15','automatic_offer_v16','automatic_offer_v17','automatic_offer_v18'].includes(String(c.context_policy)))?object(guardrails).version==='1'&&object(object(guardrails).focus).is_enabled===true&&Array.isArray(buyerGuards)&&buyerGuards.filter(g=>object(g).name===expectedBuyerGuardrail.name).length===1&&buyerGuards.some(g=>Object.entries(expectedBuyerGuardrail).every(([key,value])=>JSON.stringify(canonical(object(g)[key]))===JSON.stringify(canonical(value)))):!automaticOfferPolicy(c.context_policy)||automaticOfferGuardrailMatches(guardrails,c.context_policy);
  const buyerOpeningValidation=c.context_policy!==buyerValidatedPolicy||Array.isArray(buyerGuards)&&buyerGuards.filter(g=>object(g).name===buyerOpeningGuardrail.name).length===1&&buyerGuards.some(g=>Object.entries(buyerOpeningGuardrail).every(([key,value])=>JSON.stringify(canonical(object(g)[key]))===JSON.stringify(canonical(value))));
- return {safe:buyerOpeningValidation&&responseModel&&exactStop&&exactAgreement&&exactPrompt&&priceEnforcement&&inlineStopMatchesReviewedDefinition&&Object.values(base.checks).every(Boolean)&&approvedHashMatches,hash,hashMatch:hash===c.config_hash?'exact':emptyDefaultsMatch?'equivalent_empty_defaults':disabledTtsDefaultsMatch?'equivalent_disabled_tts_defaults':'none',checks:{...base.checks,buyerOpeningValidation,responseModel,exactStop,exactAgreement,exactPrompt,priceEnforcement,inlineStopMatchesReviewedDefinition,approvedHashMatches},inlineTools};
+ return {safe:buyerOpeningValidation&&responseModel&&exactStop&&exactAgreement&&exactPrompt&&priceEnforcement&&inlineStopMatchesReviewedDefinition&&Object.values(base.checks).every(Boolean)&&approvedHashMatches,hash,hashMatch:hash===c.config_hash?'exact':emptyDefaultsMatch?(recordingRenamedDisabledTtsSnapshot(snapshot)?'equivalent_renamed_voice_defaults':'equivalent_empty_defaults'):disabledTtsDefaultsMatch?'equivalent_disabled_tts_defaults':'none',checks:{...base.checks,buyerOpeningValidation,responseModel,exactStop,exactAgreement,exactPrompt,priceEnforcement,inlineStopMatchesReviewedDefinition,approvedHashMatches},inlineTools};
 }
 export function recordedReceptionToolMatches(id:string,input:unknown){
  const t=object(input),c=object(t.tool_config),a=object(c.api_schema),b=object(a.request_body_schema),p=object(b.properties),r=object(p.recordingId),h=object(object(a.request_headers).Authorization);
