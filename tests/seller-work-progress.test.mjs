@@ -58,7 +58,7 @@ await db.exec(read('config/restore-fifty-percent-prospecting.sql'));
 const budgetBefore=await val('select jsonb_agg(to_jsonb(b)) from icash_prospecting_budgets b');
 const walletBefore=await val('select jsonb_agg(to_jsonb(w)) from icash_wallets w');
 const sql=read('config/seller-work-progress.sql');
-assert.equal(sql,read('supabase/migrations/20261020173125_seller_work_progress.sql'));
+assert.equal(sql,read('supabase/migrations/20261020174343_seller_work_progress.sql'));
 await db.exec(sql);
 assert.deepEqual(await val('select jsonb_agg(to_jsonb(b)) from icash_prospecting_budgets b'),budgetBefore);
 assert.deepEqual(await val('select jsonb_agg(to_jsonb(w)) from icash_wallets w'),walletBefore);
