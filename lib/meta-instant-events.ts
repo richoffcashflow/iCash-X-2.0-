@@ -13,7 +13,11 @@ export async function deliverInstantCrmEvent(db:SellerDb,env:NodeJS.ProcessEnv,t
  if(env.META_INSTANT_LEADS_ENABLED!=='true'||env.META_INSTANT_CRM_EVENTS_ENABLED!=='true'||env.VERCEL_ENV&&env.VERCEL_ENV!=='production'||!key||!/^\d{5,30}$/.test(dataset??'')||!/^v\d{1,3}\.0$/.test(version??''))return {status:'measurement_setup_required'};
  const event=await db<StageEvent|null>('rpc/icash_meta_claim_event','POST',{});if(!event)return {status:'idle'};
  let delivered=false;
- try{const result=await transport(`https://graph.facebook.com/${version}/${dataset}/events`,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({data:[instantCrmEvent(event)]}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(10000)});const body=await result.json();delivered=result.ok&&body.events_received===1;}catch{/* Same stable ID on retry. */}
+ try{
+  const result=await transport(`https://graph.facebook.com/${version}/${dataset}/events`,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({data:[instantCrmEvent(event)]}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(10000)});
+  const body=await result.json();delivered=result.ok&&body.events_received===1;
+  if(!delivered)console.warn('instant_meta_delivery_failed',{httpStatus:result.status,code:Number(body.error?.code)||null,subcode:Number(body.error?.error_subcode)||null});
+ }catch{/* Same stable ID on retry. */}
  await db(`icash_meta_lead_events?id=eq.${event.id}&claim_token=eq.${event.token}`,'PATCH',{state:delivered?'delivered':'pending',...(delivered?{delivered_at:new Date().toISOString()}:{})});
  return {status:delivered?'delivered':'pending'};
 }

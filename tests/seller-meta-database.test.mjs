@@ -8,7 +8,7 @@ const transcript=[{role:'agent',message:'Is this the owner?'},{role:'user',messa
 try{
  await pg.exec(`create role anon;create role authenticated;create role service_role;
  create schema icash_seller_agreement_private;
- create table public.icash_seller_intakes(id uuid primary key,guest_hash text,state text,attribution jsonb,phone text,created_at timestamptz default now()-interval '1 hour');
+ create table public.icash_seller_intakes(id uuid primary key,guest_hash text,state text,attribution jsonb,phone text,address text,created_at timestamptz default now()-interval '1 hour');
  create table public.icash_seller_matches(lead_id uuid,account_id uuid,screening_id uuid);
  create table public.icash_live_conversations(id uuid primary key,account_id uuid,screening_id uuid,party text,state text,conversation_id text,contact_key text,completed_at timestamptz,result jsonb);
  create table public.icash_deal_files(id uuid,account_id uuid,screening_id uuid,seller_signed_at timestamptz);
@@ -21,6 +21,7 @@ try{
  const original=readFileSync(new URL('../supabase/migrations/20261004170451_seller_intake_and_budgeted_lead_assignment.sql',import.meta.url),'utf8');
  await pg.exec(original.match(/create table public\.icash_seller_events \([\s\S]*?\n\);/)[0]);
  await pg.exec(readFileSync(new URL('../config/homeoffer-meta-events.sql',import.meta.url),'utf8'));
+ await pg.exec(readFileSync(new URL('../config/homeoffer-address-meta-event.sql',import.meta.url),'utf8'));
  const lead=async(source='direct',state='received')=>{const id=uuid(),account=uuid(),screen=uuid();await q('insert into icash_seller_intakes(id,guest_hash,state,attribution,phone) values($1,$2,$3,$4,$5)',[id,guest,state,{source},phone]);await q('insert into icash_seller_matches values($1,$2,$3)',[id,account,screen]);return {id,account,screen};};
  const event=async(l,name='CompleteRegistration',ref='seller-form:fixture')=>(await one('insert into icash_seller_events(lead_id,event_name,evidence_ref) values($1,$2,$3) returning id',[l.id,name,ref])).id;
  const measure=async(l,m={client_user_agent:'fixture'},optout=false,g=guest)=>(await one('select icash_record_seller_measurement($1,$2,$3,$4) id',[l.id,g,m,optout])).id;
@@ -61,5 +62,20 @@ try{
  assert.equal((await one('select count(*)::int n from fixture_viewing_calls')).n,1,'Existing viewing-availability capture must remain intact');
  assert.equal((await one("select has_function_privilege('authenticated','icash_record_seller_measurement(uuid,text,jsonb,boolean)','execute') allowed")).allowed,false);
  assert.equal((await one("select has_function_privilege('anon','icash_collect_seller_milestones()','execute') allowed")).allowed,false);
- console.log('PASS HON database: source and guest binding, opt-outs, duplicates, first attribution, leased delivery, real outbound/inbound contact, voicemail exclusion, signed live contracts and existing viewing capture.');
+ const addressLead=await lead(),registration=await event(addressLead);
+ await q('update icash_seller_intakes set address=$1 where id=$2',['123 Fixture Street, Dallas, TX',addressLead.id]);
+ await q("update icash_seller_events set occurred_at=now()-interval '1 hour' where id=$1",[registration]);
+ const recordAddress=async(l,g=guest,optedOut=false)=>(await one('select icash_record_seller_intake_measurement($1,$2,$3,$4) receipt',[l.id,g,{client_user_agent:'fixture'},optedOut])).receipt;
+ assert.equal(await recordAddress(addressLead,'wrong'),null,'Wrong browser cannot record an address conversion');
+ const receipt=await recordAddress(addressLead);assert.equal(receipt.registrationEventId,'keypath:'+registration);assert.match(receipt.addressEventId,/^keypath:[a-f0-9-]{36}$/);
+ assert.deepEqual(await recordAddress(addressLead),receipt,'Retries return the original event IDs');
+ const savedAddress=await one("select e.id,e.occurred_at=r.occurred_at as original_time,e.evidence_ref from icash_seller_events e join icash_seller_events r on r.lead_id=e.lead_id and r.event_name='CompleteRegistration' where e.lead_id=$1 and e.event_name='PropertyAddressConfirmed'",[addressLead.id]);
+ assert.equal(savedAddress.original_time,true);assert.equal(savedAddress.evidence_ref,'seller-form-address:'+registration);
+ const addressClaims=[await claim(),await claim()];assert.equal(addressClaims.filter(e=>e.name==='PropertyAddressConfirmed').length,1);assert(addressClaims.some(e=>'keypath:'+e.id===receipt.addressEventId));assert.equal(await claim(),null);
+ const noAddress=await lead();await event(noAddress);assert.equal((await recordAddress(noAddress)).addressEventId,null,'No address means no address conversion');
+ for(const l of [duplicate,opted,await lead('icash_x_demo')]){await q('update icash_seller_intakes set address=$1 where id=$2',['123 Fixture Street, Dallas, TX',l.id]);assert.equal(await recordAddress(l),null);}
+ const blocked=await lead();await event(blocked);await q('update icash_seller_intakes set address=$1 where id=$2',['123 Fixture Street, Dallas, TX',blocked.id]);assert.equal(await recordAddress(blocked,guest,true),null);assert.equal(await recordAddress(blocked),null,'Privacy opt-out remains sticky');
+ assert.equal((await one("select has_function_privilege('anon','icash_record_seller_intake_measurement(uuid,text,jsonb,boolean)','execute') allowed")).allowed,false);
+ assert.equal((await one("select has_function_privilege('authenticated','icash_record_seller_intake_measurement(uuid,text,jsonb,boolean)','execute') allowed")).allowed,false);
+ console.log('PASS HON database: saved-address milestone, stable browser/server IDs, original timestamps, source and guest binding, opt-outs, duplicates, leased delivery, real contact and signed contracts.');
 }finally{await pg.close();}
