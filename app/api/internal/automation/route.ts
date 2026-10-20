@@ -1,5 +1,6 @@
 import {automationChanged} from '@/lib/automation-outcome';
 import {ProspectingBudgetError} from '@/lib/voice-budget-failure';
+import {OwnerPreviewRateLimitError} from '@/lib/owner-enrichment-deferral';
 import {dispatchCustomerUpdate} from '@/lib/customer-updates-service';
 import {automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '@/lib/live-work-admission';
 import {dispatchAttentionNotification} from '@/lib/attention-notifications-service';
@@ -30,7 +31,8 @@ export async function POST(request:Request){
   if(!ticket)return NextResponse.json({error:'Expired or consumed'},{status:401,headers});
   const result=!automationWorkReady(ticket.kind)&&newLiveWorkKinds.has(ticket.kind)?await deferUnstartedAutomation(db,ticket,token):ticket.kind==='customer_updates'?await dispatchCustomerUpdate(ticket.accountId,{db,signal:billingDeadline}):ticket.kind==='customer_attention'?await dispatchAttentionNotification(ticket.accountId,{db,signal:billingDeadline}):['seller_opener','seller_recovery'].includes(ticket.kind)&&ticket.openerMessageId?await dispatchTextMessage(ticket.accountId,ticket.openerMessageId):ticket.kind==='market_research'&&ticket.marketResearchJobId?await expandMarket(ticket.accountId,ticket.marketResearchJobId):ticket.kind==='text_ai'&&ticket.textAiJobId?await processTextAi(ticket.accountId,ticket.textAiJobId):ticket.kind==='title_followup'&&ticket.titleTaskId?await dispatchTitleFollowup(ticket.accountId,ticket.titleTaskId):ticket.kind==='fulfillment'&&ticket.fulfillmentJobId?await prepareFulfillment(ticket.accountId,ticket.fulfillmentJobId):ticket.kind==='voice_dispatch'&&ticket.voiceJobId?await dispatchLiveVoice(ticket.accountId,ticket.voiceJobId):ticket.kind==='signing_result'&&ticket.signingId?await refreshSigning(ticket.accountId,ticket.signingId):ticket.kind==='voice_result'&&ticket.liveCallId?await reconcileLiveConversation(ticket.accountId,ticket.liveCallId):ticket.kind==='discovery'?await discoverForAccount(ticket.accountId):ticket.kind==='contacts'&&ticket.screeningId?await enrichForAccount(ticket.accountId,ticket.screeningId):{status:'held'};
   const success=['supply_target_met','updates_disabled','updates_idle','updates_held','updates_accepted','attention_disabled','attention_idle','attention_held','attention_accepted','market_research_saved','waiting_for_daytime_budget','waiting_for_available_credits','waiting_for_active_call','text_ai_drafted','text_ai_handoff','message_accepted','title_followup_sent','fulfillment_prepared','call_started','outside_contact_hours','screening_queued','empty','contacts_saved','conversation_saved','awaiting_conversation','awaiting_counterparty','customer_signature_needed','completed','test_completed'].includes(result.status);
-  await db('rpc/icash_finish_automation','POST',{p_id:ticket.id,p_success:success,p_outcome:result.status});
+  if(ticket.kind==='contacts')await db('rpc/icash_finish_owner_enrichment','POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_success:success,p_outcome:result.status});
+  else await db('rpc/icash_finish_automation','POST',{p_id:ticket.id,p_success:success,p_outcome:result.status});
   try{await db('rpc/icash_settle_pending_estimates','POST',{p_account:ticket.accountId,p_limit:25});}catch{/* Scheduled reconciliation retries without changing a completed job. */}
   let billing;
   try{billing=await settlePendingVoiceUsage(db,ticket.accountId,readVoiceUsagePolicies(process.env.VOICE_USAGE_POLICIES_JSON,process.env.VOICE_USAGE_POLICY_ACTIVATIONS_JSON),reconcileLiveConversation,billingDeadline);}
@@ -44,10 +46,24 @@ export async function POST(request:Request){
   }
   return NextResponse.json({status:result.status,billing},{headers});
  }catch(error){
+  if(ticket?.kind==='contacts'&&ticket.screeningId&&error instanceof OwnerPreviewRateLimitError
+   &&error.accountId===ticket.accountId&&error.screeningId===ticket.screeningId
+   &&error.operationKey===`owners:${ticket.accountId}:${ticket.screeningId}`){
+   // The RPC checks the exact consumed capability and absence of all paid-work
+   // evidence under lock. It schedules a new capability, never reuses this token.
+   try{if(await db<boolean>('rpc/icash_defer_owner_enrichment','POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_operation:error.operationKey})===true)return NextResponse.json({status:'owner_preview_rate_limited'},{headers});}catch{/* An uncertain database outcome is never treated as a retry grant. */}
+   // A lost deferral response may already have led to a fresh issued/consumed
+   // capability. Never let this stale worker finish that newer attempt by ID.
+   try{await db('rpc/icash_finish_owner_enrichment','POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_success:false,p_outcome:'held_for_reconciliation'});}catch{/* Preserve the original capability on an uncertain completion; never repeat it. */}
+   return NextResponse.json({status:'held_for_reconciliation'},{status:503,headers});
+  }
   if(ticket&&error instanceof ProspectingBudgetError){
    try{if(await db<boolean>('rpc/icash_hold_prospecting_ticket','POST',{p_id:ticket.id,p_account:ticket.accountId,p_quote:error.quoteCents}))return NextResponse.json({status:'prospecting_budget_held'},{headers});}catch{/* Unknown outcomes retain reconciliation. */}
   }
-  if(ticket)try{await db('rpc/icash_finish_automation','POST',{p_id:ticket.id,p_success:false,p_outcome:'held_for_reconciliation'});}catch{/* Preserve consumed capability on database failure. */}
+  if(ticket)try{
+   if(ticket.kind==='contacts')await db('rpc/icash_finish_owner_enrichment','POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_success:false,p_outcome:'held_for_reconciliation'});
+   else await db('rpc/icash_finish_automation','POST',{p_id:ticket.id,p_success:false,p_outcome:'held_for_reconciliation'});
+  }catch{/* Preserve consumed capability on database failure. */}
   return NextResponse.json({status:'held_for_reconciliation'},{status:503,headers});
  }
 }
