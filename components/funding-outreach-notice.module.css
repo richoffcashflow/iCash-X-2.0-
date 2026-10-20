@@ -1,0 +1,8 @@
+.notice{display:flex;align-items:flex-start;gap:16px;padding:18px 20px;margin:0 0 20px;border:1px solid #d8d8d8;border-radius:14px;background:#fafafa;color:#171717}
+.notice>div{flex:1;min-width:0}
+.notice strong{font-size:16px;line-height:1.4}
+.notice p{margin:6px 0;line-height:1.5;font-size:14px}
+.notice small{display:block;color:#555;font-size:12px;line-height:1.5}
+.notice button{display:grid;place-items:center;flex:none;min-width:44px;min-height:44px;border:1px solid #ddd;border-radius:10px;background:white;color:#333;cursor:pointer}
+.notice button:focus-visible{outline:2px solid #171717;outline-offset:3px}
+@media(max-width:600px){.notice{padding:14px;gap:10px}}

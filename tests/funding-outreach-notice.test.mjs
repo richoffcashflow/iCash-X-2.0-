@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import {fundingOutreachNotice,fundingOutreachSchedule} from '../lib/funding-outreach-notice.ts';
+const ready={paused:false,ready:true,stale:false,test:false};
+const message=(when,state=ready)=>fundingOutreachNotice(state,Date.parse(when));
+assert.match(message('2026-10-20T13:59:59Z').detail,/today at 9 AM Central/);
+assert.match(message('2026-10-20T14:00:00Z').detail,/start eligible outreach automatically/);
+assert.match(message('2026-10-21T01:59:59Z').detail,/start eligible outreach automatically/);
+assert.match(message('2026-10-21T02:00:00Z').detail,/tomorrow at 9 AM Central/);
+assert.match(message('2026-10-21T05:00:00Z').detail,/today at 9 AM Central/);
+// The business clock follows Chicago daylight saving, not the browser's zone.
+assert.match(message('2026-11-02T14:59:59Z').detail,/today at 9 AM Central/);
+assert.match(message('2026-11-02T15:00:00Z').detail,/start eligible outreach automatically/);
+assert.match(message('2026-03-08T13:59:59Z').detail,/today at 9 AM Central/);
+assert.match(message('2026-03-08T14:00:00Z').detail,/start eligible outreach automatically/);
+assert.match(message('2026-10-20T03:00:00Z',{...ready,paused:true}).title,/still paused/);
+assert.match(message('2026-10-20T15:00:00Z',{...ready,stale:true}).detail,/Checking your bot/);
+assert.match(message('2026-10-20T15:00:00Z',{...ready,ready:false}).detail,/once your account is ready/);
+assert.match(message('2026-10-20T15:00:00Z',{...ready,paused:undefined}).detail,/once your account is ready/);
+assert.match(message('2026-10-20T15:00:00Z',{...ready,test:true}).detail,/does not start live outreach/);
+assert.match(fundingOutreachSchedule,/seller’s time zone when known; otherwise Central Time/);
+console.log('Funding notice: hours, midnight, DST, Pause, stale readiness and test mode passed.');
