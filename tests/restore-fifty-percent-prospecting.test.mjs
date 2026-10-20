@@ -48,6 +48,9 @@ await db.exec(read('config/funded-prospecting-budget.sql'));
 await db.exec(read('config/prospecting-delivery-pacing.sql'));
 await db.exec(read('config/first-day-prospecting-pacing.sql'));
 
+// Funding receipt execution has its own complete fixture in quarter-credit-terms.
+// This composite type is also required when compiling the exact forward patch.
+await db.exec("create table icash_funding_orders(id uuid primary key,mode text,state text,account_id uuid,guest_hash text,price_cents bigint,credit_cents bigint,auto_recharge boolean,credited_at timestamptz,prepaid_applied_at timestamptz,pacing_applied_at timestamptz,daily_plan_id uuid,billing_period_start timestamptz,paid_at timestamptz,created_at timestamptz default now());");
 const baseline=JSON.parse(read('tests/fixtures/restore-fifty-percent-baseline.json'));
 for(const item of baseline)await db.exec(item.definition);
 for(const name of ['icash_apply_prepaid_purchase','icash_activate_auto_recharge'])await db.exec('revoke all on function '+name+' from public,anon,authenticated');
