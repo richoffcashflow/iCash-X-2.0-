@@ -111,6 +111,46 @@ test('only the observed joint zero/false voice rename reconstructs the same appr
  assert.equal(recordingAgentMatches({...review,configHash:'0'.repeat(64)},current),false);
 });
 
+test('only the complete disabled noise defaults can reconstruct the unchanged approval',()=>{
+ const {old,current}=renamedVoiceFixture();
+ old.conversation_config.turn={turn_timeout:7};old.platform_settings.overrides.conversation_config_override.turn={turn_timeout:false};
+ current.conversation_config.turn={turn_timeout:7,noisy_environment_detection:false,noisy_environment_message:"Uhh ... sorry, I'm picking up some noise in the background. Could you move somewhere quieter?"};
+ current.platform_settings.overrides.conversation_config_override.turn={turn_timeout:false,noisy_environment_message:false};
+ const review=reviewFor(old),saved=structuredClone(current);
+ for(const [empty,list] of representations){
+  const a=structuredClone(current);delete a.conversation_config.agent.subagents;
+  if(empty)a.conversation_config.agent.subagent_config=emptySubagents();
+  if(list)a.conversation_config.agent.subagents=[];
+  assert.equal(recordingAgentMatches(review,a),true);
+ }
+ assert.deepEqual(current,saved);assert.equal(review.configHash,configHash(old));
+ assert.equal(recordingAgentMatches(reviewFor(current),old),false,'never invent newer fields for an older response');
+ for(const mutate of [
+  a=>a.conversation_config.turn.noisy_environment_detection=true,
+  a=>a.conversation_config.turn.noisy_environment_detection=null,
+  a=>a.conversation_config.turn.noisy_environment_detection='false',
+  a=>delete a.conversation_config.turn.noisy_environment_detection,
+  a=>a.conversation_config.turn.noisy_environment_message='Custom prompt',
+  a=>a.conversation_config.turn.noisy_environment_message=null,
+  a=>delete a.conversation_config.turn.noisy_environment_message,
+  a=>a.platform_settings.overrides.conversation_config_override.turn.noisy_environment_message=true,
+  a=>a.platform_settings.overrides.conversation_config_override.turn.noisy_environment_message=null,
+  a=>delete a.platform_settings.overrides.conversation_config_override.turn.noisy_environment_message,
+  a=>a.platform_settings.overrides.conversation_config_override.turn.noisy_environment_detection=true,
+  a=>a.conversation_config.turn.unknown=false,
+  a=>a.conversation_config.turn.turn_timeout=9,
+  a=>a.platform_settings.overrides.conversation_config_override.turn.turn_timeout=true,
+  a=>a.conversation_config.agent.prompt.prompt+=' changed',
+  a=>a.conversation_config.tts.voice_id='changed',
+  a=>a.platform_settings.privacy.record_voice=true,
+  a=>a.version_id='agtvrsn_other',a=>a.branch_id='agtbrch_other',a=>a.agent_id='agent_other',
+ ]){const a=structuredClone(current);mutate(a);assert.equal(recordingAgentMatches(review,a),false,mutate.toString());}
+ assert.equal(recordingAgentMatches({...review,configHash:'0'.repeat(64)},current),false);
+ // A genuinely approved nondefault value can still match exactly.
+ const enabled=structuredClone(current);enabled.conversation_config.turn.noisy_environment_detection=true;
+ assert.equal(recordingAgentMatches(reviewFor(enabled),enabled),true);
+});
+
 test('nonempty, malformed and extended subagent values are not empty defaults',()=>{
  const invalid=[null,[],false,0,'',{},
   {agents:[]},{self_subagent:null},{agents:null,self_subagent:null},{agents:{},self_subagent:null},
