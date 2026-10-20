@@ -32,6 +32,8 @@ for(const name of ['icash_apply_prepaid_purchase','icash_activate_auto_recharge'
  await db.exec(baselines.find(x=>x.proname===name).definition);
  await db.exec(newPolicy.split('-- BEGIN '+name+'\n')[1].split('-- END '+name)[0]);
 }
+const restored=readFileSync(new URL('../config/restore-fifty-percent-prospecting.sql',import.meta.url),'utf8');
+for(const name of ['icash_apply_prepaid_purchase','icash_activate_auto_recharge'])await db.exec(restored.split('-- BEGIN '+name+'\n')[1].split('-- END '+name)[0]);
 await db.exec('set role service_role');
 for(const prefix of ['dp','du']){
  const event={eventId:'evt_'+prefix,disputeId:prefix+'_fixture',mode:'live',chargeId:'ch_fixture',paymentId:'pi_fixture',eventType:'charge.dispute.updated',status:'needs_response',reason:'fraudulent',amountCents:1000,currency:'usd',createdAt:'2026-10-10T00:00:00Z'};
@@ -54,10 +56,10 @@ await db.exec('set role service_role');await assert.rejects(db.query('update ica
 await db.query(`insert into icash_wallets values($1,2500,0);`,[account]);
 await db.query(`insert into icash_auto_recharges(account_id,mode,pending_order,enabled) values($1,'live',$2,false)`,[account,order]);
 await db.query(`update icash_funding_orders set state='paid',credited_at=now() where id=$1`,[order]);
-for(const version of ['work-credits-2026-10-20.1','work-credits-2026-10-20.1:recharge-2026-10-10.1','work-credits-2026-10-07.1','work-credits-2026-10-07.1:recharge-2026-10-06.1','work-credits-2026-10-10.1','work-credits-2026-10-10.1:recharge-2026-10-10.1']){
+for(const version of ['work-credits-2026-10-20.2','work-credits-2026-10-20.2:recharge-2026-10-10.1','work-credits-2026-10-20.1','work-credits-2026-10-20.1:recharge-2026-10-10.1','work-credits-2026-10-07.1','work-credits-2026-10-07.1:recharge-2026-10-06.1','work-credits-2026-10-10.1','work-credits-2026-10-10.1:recharge-2026-10-10.1']){
  await db.exec('delete from icash_funding_consents;update icash_funding_orders set prepaid_applied_at=null');await db.query(`insert into icash_funding_consents values($1,$2,2500,2500,$3)`,[order,version,account]);assert.equal((await db.query('select icash_apply_prepaid_purchase($1) as ok',[order])).rows[0].ok,true);
  if(version.includes('recharge')){await db.query('update icash_auto_recharges set pending_order=$1,enabled=false',[order]);await db.query(`select icash_activate_auto_recharge($1,'cus_fixture','pm_fixture')`,[order]);assert.equal((await db.query('select enabled from icash_auto_recharges')).rows[0].enabled,true);}
 }
 await db.exec("update icash_funding_consents set version='made-up';update icash_funding_orders set prepaid_applied_at=null");assert.equal((await db.query('select icash_apply_prepaid_purchase($1) as ok',[order])).rows[0].ok,false);await assert.rejects(db.query(`select icash_activate_auto_recharge($1,'cus_fixture','pm_fixture')`,[order]));
 await db.exec("update icash_funding_consents set version='work-credits-2026-10-10.1'");await db.query('insert into icash_billing_reviews(account_id) values($1)',[account]);assert.equal((await db.query('select icash_apply_prepaid_purchase($1) as ok',[order])).rows[0].ok,false);
-console.log('PASS new 25% funding terms plus original durable acceptance: exact binding, immutable retries, private grants, hourly authenticated access, current/previous credit and recharge versions, fabricated consent rejection, existing billing hold.');await db.close();
+console.log('PASS restored 50% funding terms plus original durable acceptance: exact binding, immutable retries, private grants, hourly authenticated access, current/previous credit and recharge versions, fabricated consent rejection, existing billing hold.');await db.close();
