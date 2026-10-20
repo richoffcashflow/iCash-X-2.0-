@@ -87,8 +87,8 @@ const purchaseStates=[],redirectProps={...mp,redirectToVip:true,webinarPhase:'wa
 redirectMember.render('MembershipCheckout',redirectProps);await flush();const beforeRedirect=redirects.length;
 let welcomeTree=redirectMember.render('MembershipCheckout',redirectProps);assert.equal(find(welcomeTree,'WebinarVipWelcome'),undefined);assert.equal(find(welcomeTree,'WebinarVipUpsell'),undefined,'An early purchase must not start the VIP pitch');assert.match(text(welcomeTree),/Keep watching/);assert.equal(find(welcomeTree,'StripeEmbeddedCheckout'),undefined,'A verified purchase cannot offer a second payment');
 assert.deepEqual(purchaseStates,[['standard','/live/123456']]);assert.equal(redirects.length,beforeRedirect,'The confirmation remains visible before the countdown handoff');
-welcomeTree=redirectMember.render('MembershipCheckout',{...redirectProps,webinarPhase:'ended'});assert.ok(find(welcomeTree,'WebinarVipWelcome'));redirectMember.close();
-console.log('PASS paid handoff: confirmed payment keeps the main webinar playing; VIP welcome starts only after its end.');
+welcomeTree=redirectMember.render('MembershipCheckout',{...redirectProps,webinarPhase:'ended'});assert.equal(find(welcomeTree,'WebinarVipWelcome'),undefined);assert.equal(redirects.at(-1),'/live/123456');redirectMember.render('MembershipCheckout',{...redirectProps,webinarPhase:'ended'});assert.equal(redirects.length,beforeRedirect+1,'Standalone handoff navigates once');redirectMember.close();
+console.log('PASS paid handoff: playing video is preserved; standalone checkout redirects once after its verified purchase.');
 
 for(const scenario of [
  {name:'Pending payment',accessible:false,vip:false,search:'?membership=paid',url:'/live/123456'},
@@ -274,3 +274,21 @@ for(const mode of ['live','test']){
  assert.deepEqual(events.map(e=>e[0]),['add_to_cart','checkout_started']);assert(events.every(e=>e[2].product==='vip_upgrade'&&e[2].valueCents===5000));fixture.close();
 }
 console.log('PASS real commerce paths: Standard auto-embed, VIP selected/mounted, $50 amounts, live-only stages, no premature paid callback and receipt-before-navigation.');
+
+// Direct checkout must not race the existing receipt measurement flush or trust
+// a paid query flag. Inline webinar handoff keeps its separate welcome behavior.
+for(const standalone of [false,true]){
+ window.location.search='?membership=paid&session_id=cs_test_fixture';
+ let releaseReceipt;const receiptGate=new Promise(resolve=>{releaseReceipt=resolve;});
+ let requests=0;const before=redirects.length;
+ const instance=await harness('components/membership-checkout.tsx',{...common,membershipTermsVersion,WebinarVipUpsell:'WebinarVipUpsell',webinarBrowserPurchaseReady:()=>receiptGate,webinarRequest:async(_url,init={})=>{assert.notEqual(init.method,'POST');requests++;return {offer:{revision:1,priceCents:5000},ready:true,mode:'live',postPurchaseUrl:'/live/123456',membership:{accessible:true,vip:false}};}});
+ const input={onSignedIn:()=>{},redirectToVip:standalone,presentation:standalone?'plan':'webinar',webinarPhase:'ended'};
+ instance.render('MembershipCheckout',input);await flush();let tree=instance.render('MembershipCheckout',input);
+ assert.equal(redirects.length,before,'Payment receipt gets its bounded opportunity before direct navigation');
+ if(standalone){assert.equal(find(tree,'WebinarVipWelcome'),undefined);assert.doesNotMatch(text(tree),/Don.t leave|Starting automatically/);}
+ releaseReceipt();await flush();tree=instance.render('MembershipCheckout',input);
+ assert.equal(redirects.length,before+(standalone?1:0));
+ if(standalone)assert.equal(redirects.at(-1),'/live/123456');else assert.ok(find(tree,'WebinarVipWelcome'));
+ instance.render('MembershipCheckout',input);assert.equal(redirects.length,before+(standalone?1:0),'Rerenders cannot navigate twice');assert.equal(requests,1);instance.close();
+}
+console.log('PASS direct VIP session: no welcome/countdown, bounded measurement before navigation, one redirect and unchanged inline welcome.');

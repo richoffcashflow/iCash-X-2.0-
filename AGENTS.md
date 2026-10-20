@@ -56,6 +56,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Complete feature flows
 
+- On October 20, 2026 the owner requested that standalone purchases (homepage, join and post-webinar checkout) go directly to their saved VIP session after verified payment, without the “Don’t leave” welcome/countdown. Preserve the bounded receipt measurement flush, safe destination validation, preview/setup/VIP guards and the playing-webinar handoff.
+
 - On October 20, 2026 the owner required active webinar checkout to remain open past the offer timer. Protect email entry, Stripe payment fields and VIP verification/upgrade until verified purchase or intentional departure. Keep the same form/session through expiry, video completion and temporary payment errors; do not infer payment or read card details. Unengaged offers still expire normally.
 
 - On October 19, 2026 the owner required seller callbacks to reach the AI with the correct property context and humans to identify the property before discussing it. Route only from real prior call/text receipts, keep the matched customer's wallet and controls, preserve the exact approved reception template, and never use the owner's paused/empty account for another customer's callback. Multiple properties require address clarification; multiple accounts must never be guessed or charged. Keep caller lookup owner-authorized and distinguish a phone match from verified ownership. Never place paid test calls to verify this flow.

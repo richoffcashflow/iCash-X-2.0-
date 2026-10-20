@@ -21,6 +21,7 @@ import {verifySellerIntake} from './seller-intake-browser.mjs';
 import {verifyWebinarMeasurement} from './webinar-measurement-browser.mjs';
 import {verifyWebinarRecovery} from './webinar-recovery-browser.mjs';
 import {verifyWebinarCheckoutWindow} from './webinar-checkout-window-browser.mjs';
+import {verifyDirectVipCheckout} from './direct-vip-checkout-browser.mjs';
 import {sellerFunnelStages} from '../lib/conversion-funnel.ts';
 import {dashboardCookie,issueDashboardProof} from '../lib/dashboard-password-policy.ts';
 const port=3015,upstream=`http://127.0.0.1:${port}`,base=`https://127.0.0.1:${port+1}`;
@@ -62,6 +63,7 @@ try{
    if(process.env.BROWSER_SCENARIOS==='purchase-access'){await verifyPurchaseAccess(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='lead-costs'){await verifySellerCosts(browser,base,options,name,fixtureCookies);continue;}
    if(process.env.BROWSER_SCENARIOS==='course'){await verifyCourse(browser,base,options,name);continue;}
+   if(process.env.BROWSER_SCENARIOS==='direct-vip-checkout'){await verifyDirectVipCheckout(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-checkout-window'){await verifyWebinarCheckoutWindow(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-recovery'){await verifyWebinarRecovery(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='seller'){await verifySellerIntake(browser,base,options,name);continue;}
@@ -70,6 +72,7 @@ try{
    await verifyWalkthrough(browser,base,options,name);
    await verifySellerCosts(browser,base,options,name,fixtureCookies);
    await verifyPurchaseAccess(browser,base,options,name);
+   await verifyDirectVipCheckout(browser,base,options,name);
    await verifyAccessHelp(browser,base,options,name,fixtureCookies);
    await verifyWebinarMeasurement(browser,base,options,name);
    await verifySellerIntake(browser,base,options,name);
