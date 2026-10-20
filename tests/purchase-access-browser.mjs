@@ -76,8 +76,8 @@ export async function verifyPurchaseAccess(browser,base,options,name){
   await page.waitForURL(base+'/access');await page.getByRole('button',{name:'Email me a code',exact:true}).waitFor();
   assert.equal(codeRequests,beforeRecovery,'Skipping optional setup still uses verified sign-in and does not send a code automatically');
   paidView='welcome';signedIn=true;
-  await page.goto(base+'/join');await page.getByRole('button',{name:'Open my workspace',exact:true}).click();
-  await page.waitForURL(base+'/');
+  await page.goto(base+'/join');await page.waitForURL(base+'/live/100002');
+  assert.equal(await page.getByText('Don’t leave yet.',{exact:true}).count(),0,'Standalone purchase goes directly to the saved VIP session');
   paidView='pending';
   await page.goto(base+'/join?membership=paid');await page.getByRole('button',{name:'Restore access with my payment email',exact:true}).click();
   await page.waitForURL(base+'/');assert.equal(codeRequests,beforeRecovery,'An existing verified session opens without another email code');
