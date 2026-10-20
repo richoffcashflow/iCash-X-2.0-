@@ -98,7 +98,7 @@ assert.deepEqual(await val('select to_jsonb(b) from icash_prospecting_budgets b 
 const progress=await val('select icash_prospecting_progress($1)',[account]);
 assert.equal(progress.dailyPercent,50);assert.equal(progress.dailyLimitCents,3500);assert.equal(progress.hourlyLimitCents,500);assert.equal(progress.pacingHours,12);
 assert.equal((await val('select icash_prospecting_progress($1)',[other])).status,'paused');
-for(const role of ['anon','authenticated'])for(const item of baseline)assert.equal(await val("select has_function_privilege($1,$2,'execute')",[role,item.proname]),false);
+for(const role of ['anon','authenticated'])for(const item of baseline)assert.equal(await val("select has_function_privilege($1,$2::regproc::oid,'execute')",[role,item.proname]),false);
 for(const item of baseline){
  let expected=item.definition;
  const section=sql.split('-- BEGIN '+item.proname+'\n')[1].split('-- END '+item.proname)[0];
