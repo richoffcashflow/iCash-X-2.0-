@@ -69,7 +69,11 @@ export function SellerIntake(){
    await Promise.race([eventQueue.current,new Promise(resolve=>setTimeout(resolve,800))]);
    const r=await fetch('/api/seller/intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address,phone,consented,consentVersion:sellerConsentVersion,callNowVersion:optinCallNowVersion,contactTimezone:Intl.DateTimeFormat().resolvedOptions().timeZone,requestId:request.current,campaign,source,clickId,honeypot:trap})});
    const d=await r.json();if(!r.ok)throw Error(d.error||'Please retry.');setProgress(sellerSubmissionStatus('received'));setDone(true);requestAnimationFrame(()=>success.current?.focus());
-   try{if(d.registrationEventId)(window as Window&{homeOfferPixel?:SellerPixelRuntime}).homeOfferPixel?.registration(d.registrationEventId);}catch{/* A blocked pixel never changes a saved submission. */}
+   try{
+    const pixel=(window as Window&{homeOfferPixel?:SellerPixelRuntime}).homeOfferPixel;
+    if(d.registrationEventId)pixel?.registration(d.registrationEventId);
+    if(d.addressEventId)pixel?.address(d.addressEventId);
+   }catch{/* A blocked pixel never changes a saved submission. */}
   }catch(e){setError(e instanceof Error?e.message:'Please retry.');}finally{lock.current=false;setBusy(false);}
  }
  return <main className={`seller-shell seller-step-${done?'done':step}`}>

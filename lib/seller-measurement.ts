@@ -12,6 +12,6 @@ export function sellerMeasurement(req:Request,cookies:{get:(key:string)=>{value:
 
 /** Measurement cannot turn a saved request into an error or dispatch paid work. */
 export async function recordSellerMeasurement(db:SellerDb,leadId:string,guest:string,measurement:Record<string,string>,optedOut:boolean){
- try{return await db<string|null>('rpc/icash_record_seller_measurement','POST',{p_lead:leadId,p_guest:guest,p_measurement:measurement,p_opted_out:optedOut});}
+ try{return await db<{registrationEventId:string;addressEventId:string|null}|null>('rpc/icash_record_seller_intake_measurement','POST',{p_lead:leadId,p_guest:guest,p_measurement:measurement,p_opted_out:optedOut});}
  catch{console.warn('seller_measurement_receipt_unavailable');return null;}
 }

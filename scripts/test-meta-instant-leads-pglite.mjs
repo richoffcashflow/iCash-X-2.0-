@@ -190,6 +190,8 @@ try{
  assert.equal((await rpc('icash_meta_save_address',[lead,'123 Main St, Austin, TX','form','SIMULATION signed-link confirmation'])).status,'received');
  assert.equal((await rpc('icash_meta_save_address',[lead,'123 Main St, Austin, TX','call','conversation:conv_fixture'])).status,'received','same address is idempotent across channels');
  assert.equal((await rpc('icash_meta_save_address',[lead,'999 Other St, Austin, TX','sms','sms:fixture-message'])).status,'review_required','concurrent correction cannot reset research');
+ const addressMilestone=await one("select count(*)::int n,min(e.occurred_at)=min(m.address_confirmed_at) as saved_time from icash_meta_lead_events e join icash_meta_leads m on m.lead_id=e.lead_id where e.lead_id=$1 and e.stage='PropertyAddressConfirmed'",[lead]);
+ assert.deepEqual(addressMilestone,{n:1,saved_time:true},'Form, call and SMS retries share one saved-address milestone before property research');
  assert.equal((await one('select response_channel from icash_meta_leads where lead_id=$1',[lead])).response_channel,'form');
  await q("insert into icash_seller_controls(id,enabled,lookup_allowance_micros,data_rights_until,review_ref) values(1,true,10000000,now()+interval '1 day','SIMULATION paid lookup admission')");
  await q("insert into icash_data_cost_settings(provider,credit_micros,cost_basis,source_ref) values('dealmachine',100000,'estimated','SIMULATION provider cost fixture')");

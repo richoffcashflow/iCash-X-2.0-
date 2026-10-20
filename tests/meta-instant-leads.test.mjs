@@ -147,6 +147,13 @@ assert.equal((await deliverInstantCrmEvent(async()=>{throw Error('disabled');},{
 const eventEnv={...env,VERCEL_ENV:'production',META_INSTANT_CRM_EVENTS_ENABLED:'true',META_SELLER_DATASET_ID:'123456789',META_CAPI_ACCESS_TOKEN:'fixture',META_GRAPH_VERSION:'v26.0'};
 assert.equal((await deliverInstantCrmEvent(async(path,method,body)=>{if(method==='PATCH'){assert.equal(body.state,'delivered');return [];}return event;},eventEnv,async()=>{eventCalls++;return Response.json({events_received:1});})).status,'delivered');
 assert.equal(eventCalls,1);
+const addressStage={...event,name:'PropertyAddressConfirmed'};
+const crmAddressPayload=instantCrmEvent(addressStage,now);
+assert.equal(crmAddressPayload.event_name,'PropertyAddressConfirmed');assert.equal(crmAddressPayload.user_data.lead_id,notice.leadgen_id);assert(!JSON.stringify(crmAddressPayload).includes(address));
+const retriedIds=[],states=[];
+const stageDb=async(path,method,body)=>{if(method==='PATCH'){states.push(body.state);return [];}return addressStage;};
+for(const status of [503,200])await deliverInstantCrmEvent(stageDb,eventEnv,async(_url,options)=>{retriedIds.push(JSON.parse(options.body).data[0].event_id);return Response.json(status===200?{events_received:1}:{error:{code:2}},{status});});
+assert.deepEqual(states,['pending','delivered']);assert.equal(retriedIds[0],retriedIds[1],'Address retries keep the same Meta event ID');
 console.log('PASS signed Meta receipts, exact consent/source binding, short private links, spoken address confirmation, SMS limits, same-call lookup and normal-offer handoff, uncertain-result protection, and CRM event privacy.');
 
 // Follow-up channels are independent; database IDs, never fresh sends, drive retries.

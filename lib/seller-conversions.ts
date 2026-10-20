@@ -3,11 +3,12 @@ import type {SellerDb} from './seller-pipeline.ts';
 type Event={id:string;leadId:string;token:string;name:string;occurredAt:string;phone:string;actionSource?:'website'|'phone_call'|'system_generated';measurement?:Record<string,string>};
 export function sellerMetaEvent(e:Event,now=Date.now()){
  const time=Date.parse(e.occurredAt);
- if(!['CompleteRegistration','Lead','Contact','SubmitApplication'].includes(e.name)||!/^\+1[2-9]\d{2}[2-9]\d{6}$/.test(e.phone)||!Number.isFinite(time)||time>now||time<now-7*86400000)throw Error('Event outside delivery window');
+ if(!['CompleteRegistration','PropertyAddressConfirmed','Lead','Contact','SubmitApplication'].includes(e.name)||!/^\+1[2-9]\d{2}[2-9]\d{6}$/.test(e.phone)||!Number.isFinite(time)||time>now||time<now-7*86400000)throw Error('Event outside delivery window');
  const hash=(v:string)=>createHash('sha256').update(v).digest('hex');
  const userData:Record<string,unknown>={ph:[hash(e.phone.slice(1))],external_id:[hash(e.leadId)]};
  for(const key of ['fbp','fbc','client_user_agent'])if(e.measurement?.[key])userData[key]=e.measurement[key];
- return {event_name:e.name,event_time:Math.floor(time/1000),event_id:`keypath:${e.id}`,action_source:e.name==='Contact'?'phone_call':e.name==='CompleteRegistration'?'website':'system_generated',...(e.name==='CompleteRegistration'?{event_source_url:'https://homeoffernetwork.com/'}:{}),user_data:userData};
+ const website=['CompleteRegistration','PropertyAddressConfirmed'].includes(e.name);
+ return {event_name:e.name,event_time:Math.floor(time/1000),event_id:`keypath:${e.id}`,action_source:e.name==='Contact'?'phone_call':website?'website':'system_generated',...(website?{event_source_url:'https://homeoffernetwork.com/'}:{}),user_data:userData};
 }
 /** Stable IDs survive retries. No raw address, financial estimate or transcript is exported. */
 export async function deliverSellerEvent(db:SellerDb,env:NodeJS.ProcessEnv,transport:typeof fetch=fetch){
