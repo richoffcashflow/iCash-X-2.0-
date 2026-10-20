@@ -16,7 +16,10 @@ export async function verifyOwnerOutreach(browser,base,options,name,fixtureCooki
     requests.push(url);
     return route.fulfill({status:denied?403:failure?503:200,contentType:'application/json',body:JSON.stringify(denied?{error:'Owner required'}:failure?{error:'Fixture outage'}:ownerOutreachFixture(url))});
    }
-   if(url.pathname==='/api/admin/overview')return route.fulfill({contentType:'application/json',body:JSON.stringify(overviewFixture(url))});
+   if(url.pathname==='/api/admin/overview'){
+    const data=overviewFixture(url),r=data.report;r.leadCount=1;r.funnel[0].count=1;r.matchedCount=url.searchParams.get('q')?0:1;r.leads=r.matchedCount?[{id:'inbound-fixture',name:'Inbound Fixture Seller',address:null,phone:'+12125550199',email:null,state:'awaiting_address',source:'meta',campaign:null,assignedTo:'Assigned Fixture Customer',createdAt:r.endAt}]:[];
+    return route.fulfill({contentType:'application/json',body:JSON.stringify(data)});
+   }
    if(url.pathname.startsWith('/api/'))return route.fulfill({status:503,contentType:'application/json',body:'{"error":"Fixture unavailable"}'});
    if(url.pathname==='/admin')return route.fulfill({response:await route.fetch({headers:{...route.request().headers(),cookie:fixtureCookies},maxRedirects:0})});
    return route.continue();
@@ -29,7 +32,17 @@ export async function verifyOwnerOutreach(browser,base,options,name,fixtureCooki
   assert.match(await panel.innerText(),/3\s*2 incoming replies/);
   assert.match(await panel.innerText(),/0 with interested sellers/);
   assert.match(await panel.innerText(),/2:30 PM/);
-  assert.equal(await page.getByRole('heading',{name:/Inbound|Daily lead goal|Lead to close/}).count(),0);
+  const inbound=page.getByRole('region',{name:'Inbound seller leads'});
+  await inbound.getByText('Inbound Fixture Seller',{exact:true}).waitFor();
+  await inbound.getByText('Waiting for property address',{exact:true}).waitFor();
+  await inbound.getByText('Assigned Fixture Customer',{exact:true}).waitFor();
+  await inbound.getByLabel('Search inbound seller or property').fill('missing');
+  await inbound.getByRole('button',{name:'Search inbound',exact:true}).click();
+  await inbound.getByText('No inbound leads match this period and search.',{exact:true}).waitFor();
+  assert.equal(await panel.getByText('123 Example Street',{exact:true}).count(),1,'Inbound search preserves outbound results');
+  await inbound.getByRole('button',{name:'Clear inbound search'}).click();
+  await inbound.getByText('Inbound Fixture Seller',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('navigation',{name:'Lead activity'}).getByRole('link').count(),2);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'No horizontal page overflow');
   await panel.getByText('Seller calling back? Find their property',{exact:true}).click();
   await panel.getByLabel('Seller’s phone',{exact:true}).fill('(212) 555-0199');
@@ -67,6 +80,6 @@ export async function verifyOwnerOutreach(browser,base,options,name,fixtureCooki
   await panel.getByText('Sign in with the owner account to view outreach activity.',{exact:true}).waitFor();
   assert.doesNotMatch(await panel.innerText(),/123 Example Street|Example customer|0 with interested sellers/);
   assert.deepEqual(errors,[]);assert.equal(external,0);
-  console.log(`PASS ${name}: outbound calls/texts/responses, no inbound sections, search/status/period/owner filters, responsive layout, stale warning and denied-data clearing.`);
+  console.log(`PASS ${name}: outbound calls/texts/responses, separate inbound section, search/status/period/owner filters, responsive layout, stale warning and denied-data clearing.`);
  }finally{await context.close();}
 }

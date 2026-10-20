@@ -27,7 +27,7 @@ function harness(){
  return {async flush(){for(let i=0;i<20;i++){if(dirty){cursor=0;dirty=false;tree=mod.exports.OwnerOverviewView();}const effects=pending;pending=[];effects.forEach(fn=>fn());await tick();if(!dirty&&!pending.length)return;}throw Error('Render did not settle');},find(predicate){const node=nodes(tree).find(predicate);assert(node,'Expected UI control');return node;},text:()=>text(tree),focus:()=>listeners.get('focus')?.(),dispose(){slots.forEach(s=>s?.cleanup?.());}};
 }
 let count=0;
-async function scenario(name,fn){await fn();console.log(`PASS ${++count}/6 ${name}`);}
+async function scenario(name,fn){await fn();console.log(`PASS ${++count}/7 ${name}`);}
 try{
  await scenario('Switching periods cancels old reads and never displays old totals under a new filter',async()=>{
   let late,signal;globalThis.fetch=async(path,init)=>{if(path.includes('days=7&')){signal=init.signal;return new Promise(resolve=>{late=resolve;});}return Response.json(fixture(path,path.includes('days=1&')?'Today seller':'Private seller'));};
@@ -39,18 +39,22 @@ try{
  });
  await scenario('Lost authorization erases private leads and stops background requests',async()=>{
   let status=200,calls=0;globalThis.fetch=async path=>{calls++;return status===200?Response.json(fixture(path)):Response.json({error:'Owner required'},{status});};
-  const ui=harness();try{await ui.flush();status=403;ui.focus();await ui.flush();assert.match(ui.text(),/Owner access only/);assert(!ui.text().includes('$1.00'));assert(!ui.text().includes('$0.80'));const before=calls;ui.focus();await ui.flush();assert.equal(calls,before);}finally{ui.dispose();}
+  const ui=harness();try{await ui.flush();status=403;ui.focus();await ui.flush();assert.match(ui.text(),/Owner access only/);assert(!ui.text().includes('$1.00'));assert(!ui.text().includes('$0.80'));assert(!ui.text().includes('Private seller'));const before=calls;ui.focus();await ui.flush();assert.equal(calls,before);}finally{ui.dispose();}
  });
  await scenario('A stalled read releases Refresh and duplicate focus events do not create more requests',async()=>{
   let calls=0,signal;globalThis.fetch=async(_path,init)=>{calls++;signal=init.signal;return new Promise(()=>{});};
   const ui=harness();try{await ui.flush();ui.focus();ui.focus();await new Promise(resolve=>setTimeout(resolve,50));await ui.flush();assert.equal(calls,1);assert(signal.aborted);assert.match(ui.text(),/too long/);assert.equal(ui.find(n=>n.type==='button'&&text(n)==='Refresh').props.disabled,false);assert(!ui.text().includes('$0.00'));}finally{ui.dispose();}
  });
- await scenario('Admin prioritizes outbound reporting and removes inbound sections while preserving earnings',async()=>{
+ await scenario('Admin shows inbound requests alongside outbound reporting while preserving earnings',async()=>{
   globalThis.fetch=async path=>Response.json(fixture(path));const ui=harness();
-  try{await ui.flush();assert.equal(ui.find(n=>n.type===OwnerOutreachView).props.includeOwner,false);assert.match(ui.text(),/Usage charged/);assert.match(ui.text(),/\$0.80/);assert.doesNotMatch(ui.text(),/Inbound seller leads|Inbound leads|Daily lead goal|Lead to close|Private seller/);ui.find(n=>n.type==='input'&&n.props.type==='checkbox').props.onChange({target:{checked:true}});await ui.flush();assert.equal(ui.find(n=>n.type===OwnerOutreachView).props.includeOwner,true);}finally{ui.dispose();}
+  try{await ui.flush();assert.equal(ui.find(n=>n.type===OwnerOutreachView).props.includeOwner,false);assert.match(ui.text(),/Usage charged/);assert.match(ui.text(),/\$0.80/);assert.match(ui.text(),/Inbound seller leads/);assert.match(ui.text(),/Private seller/);assert.match(ui.text(),/Fixture account/);assert.match(ui.text(),/Website \/ direct/);ui.find(n=>n.type==='input'&&n.props.type==='checkbox').props.onChange({target:{checked:true}});await ui.flush();assert.equal(ui.find(n=>n.type===OwnerOutreachView).props.includeOwner,true);}finally{ui.dispose();}
+ });
+ await scenario('Inbound search and later pages preserve outbound filters and show missing addresses honestly',async()=>{
+  const requests=[];globalThis.fetch=async path=>{requests.push(path);const f=fixture(path),r=f.report;r.leadCount=r.matchedCount=26;r.funnel[0].count=26;r.leads=Array.from({length:r.page===1?25:1},(_,i)=>({...r.leads[0],id:`lead-${r.page}-${i}`,name:r.page===1?`Seller ${i}`:'Last seller',address:null,state:'awaiting_address',source:'meta'}));if(r.query==='missing'){r.matchedCount=0;r.leads=[];}return Response.json(f);};
+  const ui=harness();try{await ui.flush();assert.match(ui.text(),/Waiting for property address/);assert.match(ui.text(),/Collecting address/);assert.match(ui.text(),/Meta form/);ui.find(n=>n.type==='button'&&text(n)==='Next inbound leads').props.onClick();await ui.flush();assert.match(ui.text(),/Last seller/);assert.match(ui.text(),/26–26 of 26 leads/);ui.find(n=>n.type==='input'&&n.props.id==='inbound-search').props.onChange({target:{value:'missing'}});await ui.flush();ui.find(n=>n.type==='form'&&n.props['aria-label']==='Search inbound leads').props.onSubmit({preventDefault(){}});await ui.flush();assert.match(ui.text(),/No inbound leads match/);assert.equal(ui.find(n=>n.type===OwnerOutreachView).props.days,30);assert(requests.at(-1).includes('page=1'));assert(requests.at(-1).includes('q=missing'));ui.find(n=>n.type==='button'&&text(n)==='Clear inbound search').props.onClick();await ui.flush();assert.match(ui.text(),/Seller 0/);}finally{ui.dispose();}
  });
  await scenario('Malformed successful responses show an error instead of fake zero totals',async()=>{
   globalThis.fetch=async()=>Response.json({report:{}});const ui=harness();try{await ui.flush();assert.match(ui.text(),/incomplete data/);assert(!ui.text().includes('$0.00'));}finally{ui.dispose();}
  });
 }finally{globalThis.fetch=originalFetch;}
-assert.equal(count,6);
+assert.equal(count,7);

@@ -42,7 +42,7 @@ export function OwnerOutreachView({days,includeOwner,refresh}:{days:1|7|30;inclu
  },[days,includeOwner,query,page,status,key,refresh,retry]);
  function update(next:Partial<Pick<OutreachFilters,'query'|'page'|'status'>>){setFilters(current=>({...current,...next,page:next.page??1}));}
  const t=report?.totals;
- return <section className={styles.panel} aria-labelledby="outreach-title" aria-busy={busy}>
+ return <section id="outbound-leads" className={styles.panel} aria-labelledby="outreach-title" aria-busy={busy}>
   <header className={styles.heading}><div><span className={styles.eyebrow}>DealMachine · {days===1?'Today':`Past ${days} calendar days`}</span><h2 id="outreach-title">Outbound leads & outreach</h2><p>Real properties, calls, texts and seller responses.</p></div><span className={styles.updated} role="status">{denied?'Owner access required':report?`${error?'Last successful update':'Updated'} ${overviewTime(report.endAt)} CT`:'Loading outreach…'}</span></header>
   {denied?<p className={styles.empty}>Sign in with the owner account to view outreach activity.</p>:<>
    {error&&<div className={styles.notice} role="alert"><strong>{report?'Outreach refresh failed. Showing the last saved activity.':'Outreach unavailable.'}</strong><span>{error}</span><button onClick={()=>setRetry(v=>v+1)} disabled={busy}>Retry outreach</button></div>}
