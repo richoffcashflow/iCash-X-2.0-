@@ -3,7 +3,7 @@ import {webinarFromRow,type WebinarRow} from '@/lib/webinar-policy';
 import type {ConversionRecording} from '@/packages/webinar-engine/src/index';
 
 export function availableWebinarRows(rows:WebinarRow[]){
- return rows.flatMap(row=>{try{return [webinarFromRow(row)];}catch{return [];}});
+ return rows.flatMap(row=>{try{const w=webinarFromRow(row);return w.legacyCampaignId?[]:[w];}catch{return [];}});
 }
 /** Optional reporting must not block a video or a payment when reporting is down. */
 export async function webinarConversionRecordings():Promise<ConversionRecording[]>{

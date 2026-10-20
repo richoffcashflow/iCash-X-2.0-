@@ -18,7 +18,7 @@ function validationMessage(issue:z.ZodIssue){
  return `${scope}${field?' '+field:''}: ${issue.message}`;
 }
 export async function GET(){try{
- await webinarOwner();const [webinars,settings,metaHealth,followupStats]=await Promise.all([db<WebinarRow[]>('icash_webinars?select=config,public_code,parent_webinar_id&order=public_code.asc&limit=1000'),db<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config'),db('rpc/icash_webinar_meta_health','POST',{}),db('rpc/icash_webinar_followup_stats','POST',{}).catch(()=>null)]);
+ await webinarOwner();const [webinars,settings,metaHealth,followupStats]=await Promise.all([db<WebinarRow[]>('icash_webinars?config->>legacyCampaignId=is.null&select=config,public_code,parent_webinar_id&order=public_code.asc&limit=1000'),db<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config'),db('rpc/icash_webinar_meta_health','POST',{}),db('rpc/icash_webinar_followup_stats','POST',{}).catch(()=>null)]);
  const config=settingsSchema.parse(settings[0].config);config.optimizer.enabled=false;const followupReadiness=webinarFollowupReadiness(config);
  return Response.json({webinars:webinars.map(webinarFromRow),settings:config,followupReadiness,followupStats,metaHealth,metaReady:metaReady(),embeddedCheckoutReady:!!checkoutPublishableKey(fundingMode()),aiReady:!!process.env.OPENAI_API_KEY&&!!(process.env.ICASH_WEBINAR_AI_MODEL||process.env.ICASH_SUPPORT_AI_MODEL),emailReady:followupReadiness.email},{headers:webinarHeaders});
  }catch(e){return webinarError(e);}}

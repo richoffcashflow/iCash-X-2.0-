@@ -22,10 +22,12 @@ export async function POST(req:Request){
  // Never persist verification codes or route short codes into customer work.
  if(inbound&&isServiceTextSender(event.data.from))return NextResponse.json({received:true});
  const role=inbound?await db<string>('rpc/icash_route_lifecycle_text','POST',{p_event:event,p_optout:event.optOut}):null;
+ if(inbound)await db('rpc/icash_legacy_reply','POST',{p_phone:event.data.from,p_optout:event.optOut});
 
  if(['text.delivery.confirmed','text.delivery.failed','text.cancelled'].includes(event.type)){
   const blocked=await suppressCarrierBlockedSms(db,event);
   await db('rpc/icash_webinar_followup_delivery','POST',{p_channel:'sms',p_provider:event.data.message_id,p_kind:blocked?'suppressed':event.type==='text.delivery.confirmed'?'delivered':'failed'});
+  await db('rpc/icash_legacy_delivery','POST',{p_channel:'sms',p_provider:event.data.message_id,p_kind:blocked?'suppressed':event.type==='text.delivery.confirmed'?'delivered':'failed'});
  }
  if(inbound&&role!=='property')return NextResponse.json({received:true});
  if(event.type==='numbers.substitution')await db(`icash_webinar_text_senders?phone=eq.${encodeURIComponent(event.data.from)}`,'PATCH',{enabled:false});

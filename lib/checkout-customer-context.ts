@@ -2,10 +2,14 @@ import {cookies} from 'next/headers';
 import {db} from '@/lib/stripe-test';
 import {readWebinarToken} from '@/lib/webinar-token';
 import {normalizeEmail} from '@/lib/funding-policy';
+import {legacyInviteContext} from '@/lib/legacy-launch-server';
 export type CheckoutCustomerContext={name?:string;email?:string;phone?:string};
 /** Prefill only this browser's saved webinar details. An email is not authentication. */
 export async function checkoutCustomerContext(guest:string|null,accountEmail?:string):Promise<CheckoutCustomerContext>{
  const fallback=accountEmail?{email:accountEmail}:{};
+ // Owner-imported invitation details reduce typing. They never verify identity.
+ const invite=await legacyInviteContext(accountEmail).catch(()=>null);
+ if(invite)return {name:invite.name.trim().slice(0,80)||undefined,email:accountEmail||invite.email||undefined,phone:invite.phone||undefined};
  if(!guest)return fallback;
  try{
   const key=process.env.ICASH_WEBINAR_SECRET||process.env.SUPABASE_SECRET_KEY;if(!key)return fallback;
