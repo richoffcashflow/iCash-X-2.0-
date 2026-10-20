@@ -19,7 +19,7 @@ export function BudgetSummary({vip=false}:{vip?:boolean}={}){
  return <section className="workspace-activity" aria-labelledby="workspace-activity-title">
   <div className="workspace-activity-heading"><h3 id="workspace-activity-title">Bot activity</h3><div className="activity-periods" role="group" aria-label="Activity period">{activityPeriods.map(period=><button key={period.days} type="button" aria-pressed={days===period.days} onClick={()=>setDays(period.days)}>{period.label}</button>)}</div></div>
   <dl className="activity-metrics" aria-busy={!current&&!error}>{metrics.map(([key,label,meaning])=><div key={key}><dt title={meaning}>{label}</dt><dd>{current?current[key].toLocaleString():'—'}</dd></div>)}</dl>
-  {current?.vipSavingsCents!=null&&(vip||current.vipSavingsCents>0)&&<p className="workspace-vip-savings"><strong>VIP saved you {new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(current.vipSavingsCents/100)}</strong><span>On completed usage and leads · all time</span></p>}
+  {current?.vipSavingsCents!=null&&(vip||current.vipSavingsCents>0)&&<p className="workspace-vip-savings"><strong>VIP saved you {new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(current.vipSavingsCents/100)}</strong><span>Actual savings on completed work · all time</span>{vip&&<span>30% off new work and leads · more of your credits stay available</span>}</p>}
   <div className="activity-report-status">{!current&&!error&&<span role="status">Loading…</span>}{error&&<span role="status">{error}{current?' Showing last update.':''} <button type="button" onClick={()=>setRetry(v=>v+1)}>Retry</button></span>}</div>
  </section>;
 }

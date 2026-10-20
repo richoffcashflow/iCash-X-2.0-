@@ -67,7 +67,7 @@ props(tree,'LiveWorkspace').onAsk('fixture-property','123 Fixture Lane');tree=me
 member.account({...account,email:'other-vip@example.com',vip:true});tree=member.render();assert.equal(props(tree,'WorkspaceAssistant').request,null,'Property context cannot cross account identities before effect cleanup');assert.equal(props(tree,'WorkspaceAssistant').openRequest,0);
 member.account({...account,vip:false});tree=member.render();assert(!props(tree,'WorkspaceAssistant'),'Assistant unmounts when VIP entitlement is lost');
 const bannerModule={exports:{}};new Function('require','module','exports',code('components/workspace-vip-banner.tsx'))(require,bannerModule,bannerModule.exports);
-let reviewed=0;tree=bannerModule.exports.WorkspaceVipBanner({onUpgrade(){reviewed++;}});const upgrade=all(tree).find(n=>n.type==='button');assert.equal(upgrade.props.type,'button');assert.equal(upgrade.props['aria-haspopup'],'dialog');upgrade.props.onClick();assert.equal(reviewed,1);assert.match(text(tree),/20%/);
+let reviewed=0;tree=bannerModule.exports.WorkspaceVipBanner({onUpgrade(){reviewed++;}});const upgrade=all(tree).find(n=>n.type==='button');assert.equal(upgrade.props.type,'button');assert.equal(upgrade.props['aria-haspopup'],'dialog');upgrade.props.onClick();assert.equal(reviewed,1);assert.match(text(tree),/30%/);
 let selected;
 for(const plan of ['standard','vip']){
  tree=bannerModule.exports.AdminPlanToggle({plan,onChange:value=>{selected=value;}});
