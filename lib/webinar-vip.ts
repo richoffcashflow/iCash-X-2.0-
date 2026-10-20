@@ -1,3 +1,4 @@
+import {legacyInviteContext} from '@/lib/legacy-launch-server';
 import {cookies} from 'next/headers';
 import {db,guestHash} from '@/lib/stripe-test';
 import {validGuest} from '@/lib/funding';
@@ -17,6 +18,13 @@ export async function checkoutVipSession(sourceSession?:string,context:{timezone
   const {s:session}=await webinarSession(sourceSession);
   if(session.is_preview||session.config.parentWebinarId)throw new WebinarError(400,'Use the main webinar to open this checkout.');
   const [vip]=await db<{id:string}[]>(`icash_webinars?parent_webinar_id=eq.${session.webinar_id}&select=id&limit=1`);
+  return vip?.id??null;
+ }
+ const invitation=await legacyInviteContext().catch(()=>null);
+ if(invitation){
+  const [launch]=await db<{webinar_id:string|null}[]>(`icash_legacy_launches?id=eq.${invitation.launch_id}&select=webinar_id&limit=1`);
+  if(!launch?.webinar_id)return null;
+  const [vip]=await db<{id:string}[]>(`icash_webinars?parent_webinar_id=eq.${launch.webinar_id}&config->>status=eq.published&select=id&limit=1`);
   return vip?.id??null;
  }
  const [settings]=await db<{config:Partial<WebinarSettings>}[]>('icash_webinar_settings?id=eq.1&select=config');

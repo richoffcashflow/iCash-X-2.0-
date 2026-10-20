@@ -14,3 +14,10 @@ export async function bindLegacyWebinar(visitorId:string,campaignId:string) {
  const c=await legacyInviteContext();if(c?.launch_id!==campaignId)return;
  await db('rpc/icash_legacy_bind','POST',{p_contact:c.id,p_visitor:visitorId});
 }
+
+/** Called only after the billing route verified this browser/account owns the checkout. */
+export async function bindLegacyMembership(membershipId:string|undefined,accountEmail?:string){
+ if(!membershipId||!/^[a-f0-9-]{36}$/i.test(membershipId))return;
+ const c=await legacyInviteContext(accountEmail);if(!c)return;
+ await db('rpc/icash_legacy_checkout_bind','POST',{p_contact:c.id,p_membership:membershipId});
+}

@@ -1,3 +1,4 @@
+import {bindLegacyMembership} from '@/lib/legacy-launch-server';
 import {schedulePurchaseAccessEmail} from '@/lib/purchase-access-dispatch';
 import {changeVipPlan,vipRetentionOffer} from '@/lib/vip-membership';
 import {vipRetentionVersion,vipRetentionCents} from '@/lib/vip-policy';
@@ -72,7 +73,7 @@ export async function POST(req:Request){
  if(i.revision!==offer.revision||i.totalCents!==offer.priceCents)return NextResponse.json({error:'The software price changed. Refresh and review it before paying.'},{status:409,headers});
  const publishableKey=checkoutPublishableKey(mode),embedded=i.embedded===true;
  if(embedded&&!publishableKey)return NextResponse.json({error:'Payment inside the room is not connected yet. Use secure checkout to continue.'},{status:503,headers});
- const checkoutResult=async(s:import('stripe').default.Checkout.Session)=>{await bindCheckoutMeasurement(req,s.id,mode);return embedded?{clientSecret:s.client_secret,sessionId:s.id,publishableKey}:{url:s.url,sessionId:s.id};};
+ const checkoutResult=async(s:import('stripe').default.Checkout.Session)=>{await bindCheckoutMeasurement(req,s.id,mode);await bindLegacyMembership(s.metadata?.icash_membership,user?.email).catch(()=>{});return embedded?{clientSecret:s.client_secret,sessionId:s.id,publishableKey}:{url:s.url,sessionId:s.id};};
  const contact=await checkoutCustomerContext(hash,user?.email);
  let paymentEmail=normalizeEmail(user?.email??i.email??contact.email);
  // The public homepage opens Stripe directly; Stripe collects a new buyer's email.

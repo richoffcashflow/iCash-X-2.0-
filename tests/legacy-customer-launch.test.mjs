@@ -18,7 +18,7 @@ try{
  create table icash_webinar_visitors(id uuid primary key);
  create table icash_webinar_sessions(id uuid primary key,visitor_id uuid,webinar_id uuid,is_preview boolean default false,config jsonb default '{}');
  create table icash_webinar_events(session_id uuid,kind text);
- create table icash_memberships(id uuid primary key,mode text,payer_email text,payer_phone text,paid_through timestamptz);
+ create table icash_memberships(id uuid primary key,mode text,payer_email text,payer_phone text,paid_through timestamptz,state text default 'pending');
  create table icash_membership_invoices(stripe_invoice_id text primary key,membership_id uuid,stripe_payment_id text,recorded_at timestamptz default now());
  create table icash_billing_reviews(payment_id text);
  create table icash_email_suppressions(email text);create table icash_webinar_suppressions(email text);
@@ -28,7 +28,7 @@ try{
  create function icash_webinar_daily_report(text,text) returns jsonb language sql as $$select to_jsonb(count(*)) from public.icash_webinar_sessions$$;
  create function icash_webinar_report_with_funnel(text,text) returns jsonb language sql as $$select to_jsonb(count(*)) from public.icash_webinar_sessions$$;`);
  const sql=readFileSync(new URL('../config/legacy-customer-launch.sql',import.meta.url),'utf8');
- await pg.exec(sql);await pg.exec(readFileSync(new URL('../config/legacy-customer-phone-stop.sql',import.meta.url),'utf8'));
+ await pg.exec(sql);await pg.exec(readFileSync(new URL('../config/legacy-customer-phone-stop.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/legacy-launch-checkout-binding.sql',import.meta.url),'utf8'));
  const q=(s,a=[])=>pg.query(s,a),v=async(s,a=[])=>(await q(s,a)).rows[0].value;
  await q("insert into icash_legacy_launches(id,slug,title,steps) values($1,'launch','Launch',$2)",[id(1),JSON.stringify(launchSteps)]);
  const customer=(n,extra={})=>({email:`person${n}@example.invalid`,phone:null,name:'Customer',source:'whop',sourceIds:[`payment${n}`],products:['Any course'],lastPurchaseAt:'2026-01-01T12:00:00Z',emailPermission:true,smsPermission:false,...extra});
@@ -43,7 +43,7 @@ try{
  assert.equal(await admit(1),true);assert.equal(await admit(2),false,'Recent purchase waits a full week');assert.equal(await admit(3),false,'Unknown date waits from import');assert.equal(await admit(4),false,'No invented permission');assert.equal(await admit(5),false,'Refund excluded');
  await q("update icash_legacy_contacts set created_at=now()-interval '10 days',last_purchase_at=now()-interval '7 days'-interval '1 second' where email='person2@example.invalid'");assert.equal(await admit(2),true,'Eligible after seven days');
  await v('select icash_legacy_enqueue() as value');const count=await v('select count(*) as value from icash_legacy_outbox');await v('select icash_legacy_enqueue() as value');assert.equal(await v('select count(*) as value from icash_legacy_outbox'),count,'Retries do not duplicate jobs');
- await q("insert into icash_memberships values($1,'live','person1@example.invalid',null,null)",[id(10)]);assert.equal(await admit(1),true,'Pending checkout is not payment');
+ await q("insert into icash_memberships(id,mode,payer_email,payer_phone,paid_through) values($1,'live','person1@example.invalid',null,null)",[id(10)]);assert.equal(await admit(1),true,'Pending checkout is not payment');
  await q("insert into icash_membership_invoices values('in_one',$1,'pi_one',now())",[id(10)]);
  assert.equal(await admit(1),false);assert.equal(await v('select count(*) as value from icash_legacy_outbox where contact_id=$1 and state=\'queued\'',[await cid(1)]),0,'Payment cancels queued follow-ups synchronously');
  const token=await v('select token as value from icash_legacy_contacts where id=$1',[await cid(2)]);await v('select icash_legacy_stop($1) as value',[token]);assert.equal(await admit(2),false);
@@ -56,11 +56,13 @@ try{
  let report=await v("select icash_legacy_report($1,'',1) as value",[id(1)]);assert.equal(report.counts.watched,0);
  await q("insert into icash_webinar_events values($1,'started')",[id(41)]);report=await v("select icash_legacy_report($1,'',1) as value",[id(1)]);assert.equal(report.counts.watched,1);assert.equal(report.counts.alreadyPaid,1);assert.equal(report.counts.acquired,0,'Old purchase with no launch interaction is not conversion');assert(report.contacts.every(c=>!('token' in c)));
  await q("update icash_legacy_contacts set first_visit_at=now()-interval '1 minute' where email='person6@example.invalid'");
- await q("insert into icash_memberships values($1,'live','person6@example.invalid',null,null)",[id(11)]);await q("insert into icash_membership_invoices values('in_six',$1,'pi_six',now())",[id(11)]);
+ await q("insert into icash_memberships(id,mode,payer_email,payer_phone,paid_through) values($1,'live','person6@example.invalid',null,null)",[id(11)]);await q("insert into icash_membership_invoices values('in_six',$1,'pi_six',now())",[id(11)]);
  report=await v("select icash_legacy_report($1,'',1) as value",[id(1)]);assert.equal(report.counts.acquired,1);
  await imp([customer(7,{email:null,phone:'+12125550107',smsPermission:true})]);
- await q("insert into icash_memberships values($1,'live','other-receipt@example.invalid','+12125550107',null)",[id(12)]);await q("insert into icash_membership_invoices values('in_phone',$1,'pi_phone',now())",[id(12)]);
+ await q("insert into icash_memberships(id,mode,payer_email,payer_phone,paid_through) values($1,'live','other-receipt@example.invalid','+12125550107',null)",[id(12)]);await q("insert into icash_membership_invoices values('in_phone',$1,'pi_phone',now())",[id(12)]);
  assert.equal(await v("select converted_at is not null as value from icash_legacy_contacts where phone='+12125550107'"),true,'Verified checkout phone stops phone-only customer follow-up');
+ await imp([customer(8)]);await q("insert into icash_memberships(id,mode,payer_email) values($1,'live','different-receipt@example.invalid')",[id(13)]);await v('select icash_legacy_checkout_bind($1,$2) as value',[await cid(8),id(13)]);
+ await q("insert into icash_membership_invoices values('in_bound',$1,'pi_bound',now())",[id(13)]);assert.equal(await admit(8),false,'Personal checkout stops follow-ups even when receipt email changes');
  await v('select icash_legacy_save($1,1,$2) as value',[id(1),JSON.stringify(launchSteps)]);assert.equal(await v('select state as value from icash_legacy_launches'),'draft');
  for(const role of ['anon','authenticated']){
   for(const table of ['icash_legacy_launches','icash_legacy_contacts','icash_legacy_outbox','icash_legacy_visitors'])assert.equal(await v('select has_table_privilege($1,$2,\'select,insert,update\') as value',[role,table]),false);

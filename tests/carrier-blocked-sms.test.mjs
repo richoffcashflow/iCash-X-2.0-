@@ -45,7 +45,7 @@ const db=async(path,method,body)=>{
   for(const job of queue)if(job.channel==='sms'&&job.recipient===recipient&&['pending','claimed'].includes(job.state))Object.assign(job,body);
   return [];
  }
- if(path==='rpc/icash_webinar_followup_delivery')return null;
+ if(path==='rpc/icash_webinar_followup_delivery'||path==='rpc/icash_legacy_delivery')return null;
  throw Error('Unexpected side effect: '+path);
 };
 const noProvider=()=>{throw Error('Fixtures must not contact a provider or generate a customer reply');};
