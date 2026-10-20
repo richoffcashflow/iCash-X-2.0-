@@ -4,10 +4,14 @@ const user=content=>({role:'user',content}),assistant=content=>({role:'assistant
 const check=(key,status,code)=>({key,status,code,detail:`Fixture ${key} check.`,source:'fixture',observedAt:'2026-10-17T18:00:00Z'});
 const ready=[check('work','ok','not_paused'),check('credits','ok','credit_available'),check('readiness','ok','readiness_ready')];
 const leadsContext={kind:'account',messages:[user('How do I get a client?')],evidence:ready};
-for(const question of ['How do I get a client?','Where do leads come from?','Do I need to find clients myself?','No leads yet, what do I do?','How do I get started?']){
+for(const question of ['How do I get a client?','Do I need to find clients myself?','How do I get started?']){
  const response=supportConversationFallback({...leadsContext,messages:[user(question)]});
  assert.match(response.reply,/Course/);assert.match(response.reply,/running/);assert.match(response.reply,/Leads and notifications/);assert.match(response.reply,/no fixed arrival time/);
  assert.doesNotMatch(response.reply,/marketing|networking|referrals|social media|what (?:type of )?(?:service|product)/i);assert.equal(response.status,'resolved');assert.match(response.reply,/rewatch the Course/);
+}
+for(const question of ['Where do leads come from?','No leads yet, what do I do?']){
+ const response=supportConversationFallback({...leadsContext,messages:[user(question)]});
+ assert.equal(response.status,'open');assert.match(response.reply,/can’t verify/);assert.doesNotMatch(response.reply,/rewatch|keep.*running/i);
 }
 for(const question of ['How do I add the listing for this?','Where do I add listings?','How can I upload a property?','Do I need to enter leads myself?']){
  const response=await replyToSupport({...leadsContext,messages:[user(question)]},async()=>{throw Error('Listing guidance must not need the model');});

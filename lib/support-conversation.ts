@@ -3,6 +3,7 @@ import {redactSupportQuestion,supportAnswer,supportTopic,supportDuplicateCharge,
 import {supportCourseAnswer,supportProductGuide} from './support-product-guide.ts';
 import {supportCodeDelivery} from './support-code-delivery.ts';
 import {currentSupportIssue,supportReplyEvidence,supportAskedQuestions,removeRepeatedSupportQuestions,repeatsSupportQuestion,supportReplyStyle} from './support-reply-style.ts';
+import {supportOutreachReply} from './support-outreach.ts';
 
 export type SupportTurn={role:string;content:string};
 export type SupportReply={reply:string;status:'open'|'waiting_on_customer'|'resolved';ai:boolean};
@@ -27,8 +28,10 @@ export function supportConversationFallback(context:SupportContext):SupportReply
   return result(context.kind==='account'&&checks.length?checks.map(e=>e.detail).join('\n\n')+'\n\nDo not pay again. Do both statement entries match these recorded software payments, or is one a different amount or date?' :'Do not pay again. I can help restore access here, and a duplicate-charge report needs its own payment check. What dates and amounts appear for the two charges? Please leave out card numbers.','waiting_on_customer');
  }
  if(supportTopic(question)==='refund')return result(`${noRefunds}${/\bcancel\b/i.test(question)?' '+supportAnswer('cancel',[],false):' What problem are you experiencing?'}`);
- if(supportTopic(question)==='human')return result(continueHere);
  if(supportTopic(question)==='cancel')return result(context.kind==='account'?supportAnswer('cancel',[],false):'To stop future renewals, sign in and open Cancel subscription in the workspace account menu. Confirm the cancellation there. If you cannot sign in, tell me which sign-in step fails so I can help you get access.');
+ const outreach=context.kind==='account'?supportOutreachReply(context.messages,context.evidence??[]):null;
+ if(outreach)return outreach;
+ if(supportTopic(question)==='human')return result(continueHere);
  const issue=currentSupportIssue(context.messages);
  if(/\b(?:card|payment method)\b/i.test(issue)&&/\b(?:add|adding|new|save|saved|saving|select|selected|update|change|duplicate|original|old)\b/i.test(issue)){
   const alreadyAsked=context.messages.some(m=>(m.role==='assistant'||m.role==='operator')&&/button (?:beside|next to) (?:the|your) new card/i.test(m.content));
@@ -84,6 +87,7 @@ export function supportConversationFallback(context:SupportContext):SupportReply
 export async function replyToSupport(context:SupportContext,fetcher:typeof fetch=fetch):Promise<SupportReply>{
  const fallback=supportConversationFallback(context);
  const relevantEvidence=supportReplyEvidence(context.messages,context.evidence??[]);
+ if(context.kind==='account'&&fallback.status==='open'&&supportOutreachReply(context.messages,context.evidence??[]))return fallback;
  // Known policies, access guidance and confirmations work without a model dependency.
  if(context.kind==='access'||fallback.status==='resolved'||['cancel','refund','human'].includes(supportTopic(context.messages.filter(m=>m.role==='user').at(-1)?.content??''))||supportCourseAnswer(context.messages,context.evidence)||context.allowAI===false||process.env.ICASH_SUPPORT_AI_ENABLED!=='true'||!process.env.OPENAI_API_KEY||!process.env.ICASH_SUPPORT_AI_MODEL)return fallback;
  try{
