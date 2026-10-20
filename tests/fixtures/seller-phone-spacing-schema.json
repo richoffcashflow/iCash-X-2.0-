@@ -1,0 +1,1755 @@
+[
+  {
+    "name": "icash_accounts",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "owner_user_id",
+        "type": "uuid"
+      },
+      {
+        "name": "assistant_name",
+        "type": "text"
+      },
+      {
+        "name": "legal_name",
+        "type": "text"
+      },
+      {
+        "name": "identity_verified_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "bot_paused",
+        "type": "boolean"
+      },
+      {
+        "name": "daily_limit_cents",
+        "type": "bigint"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "billing_model",
+        "type": "text"
+      },
+      {
+        "name": "contact_phone",
+        "type": "text"
+      },
+      {
+        "name": "workspace_ack_version",
+        "type": "text"
+      },
+      {
+        "name": "workspace_ack_user_id",
+        "type": "uuid"
+      },
+      {
+        "name": "workspace_ack_hash",
+        "type": "text"
+      }
+    ]
+  },
+  {
+    "name": "icash_automation_tickets",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "token",
+        "type": "text"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "kind",
+        "type": "text"
+      },
+      {
+        "name": "screening_id",
+        "type": "uuid"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "expires_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "completed_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "outcome",
+        "type": "text"
+      },
+      {
+        "name": "live_call_id",
+        "type": "uuid"
+      },
+      {
+        "name": "signing_id",
+        "type": "uuid"
+      },
+      {
+        "name": "voice_job_id",
+        "type": "uuid"
+      },
+      {
+        "name": "fulfillment_job_id",
+        "type": "uuid"
+      },
+      {
+        "name": "title_task_id",
+        "type": "uuid"
+      },
+      {
+        "name": "text_ai_job_id",
+        "type": "uuid"
+      },
+      {
+        "name": "market_research_job_id",
+        "type": "uuid"
+      },
+      {
+        "name": "issue_attempts",
+        "type": "integer"
+      },
+      {
+        "name": "opener_message_id",
+        "type": "uuid"
+      },
+      {
+        "name": "prospecting_quote_cents",
+        "type": "bigint"
+      }
+    ]
+  },
+  {
+    "name": "icash_call_recordings",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "operation_key",
+        "type": "text"
+      },
+      {
+        "name": "voice_job_id",
+        "type": "uuid"
+      },
+      {
+        "name": "permission_id",
+        "type": "uuid"
+      },
+      {
+        "name": "operational_contact_id",
+        "type": "uuid"
+      },
+      {
+        "name": "screening_id",
+        "type": "uuid"
+      },
+      {
+        "name": "party",
+        "type": "text"
+      },
+      {
+        "name": "call_context",
+        "type": "jsonb"
+      },
+      {
+        "name": "provider_account_sid",
+        "type": "text"
+      },
+      {
+        "name": "call_sid",
+        "type": "text"
+      },
+      {
+        "name": "recording_sid",
+        "type": "text"
+      },
+      {
+        "name": "conversation_id",
+        "type": "text"
+      },
+      {
+        "name": "to_phone",
+        "type": "text"
+      },
+      {
+        "name": "from_phone",
+        "type": "text"
+      },
+      {
+        "name": "contact_key",
+        "type": "text"
+      },
+      {
+        "name": "agent_id",
+        "type": "text"
+      },
+      {
+        "name": "branch_id",
+        "type": "text"
+      },
+      {
+        "name": "version_id",
+        "type": "text"
+      },
+      {
+        "name": "rate_id",
+        "type": "uuid"
+      },
+      {
+        "name": "charge_cap_cents",
+        "type": "bigint"
+      },
+      {
+        "name": "max_total_seconds",
+        "type": "integer"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "nonce_hash",
+        "type": "text"
+      },
+      {
+        "name": "stop_token_hash",
+        "type": "text"
+      },
+      {
+        "name": "disclosure_version",
+        "type": "text"
+      },
+      {
+        "name": "pricing_policy",
+        "type": "jsonb"
+      },
+      {
+        "name": "row_version",
+        "type": "bigint"
+      },
+      {
+        "name": "consent_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "consent_evidence",
+        "type": "jsonb"
+      },
+      {
+        "name": "dial_claimed_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "start_claimed_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "provider_started_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "ended_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "duration_seconds",
+        "type": "integer"
+      },
+      {
+        "name": "audio_expires_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "deleted_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "end_requested_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "call_ended_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "provider_recording_price_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "price_is_estimate",
+        "type": "boolean"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "consent_deadline_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "next_reconcile_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "reconcile_attempts",
+        "type": "integer"
+      },
+      {
+        "name": "reconcile_lease_token",
+        "type": "uuid"
+      },
+      {
+        "name": "reconcile_lease_expires_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "next_delete_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "deletion_attempts",
+        "type": "integer"
+      },
+      {
+        "name": "deletion_lease_token",
+        "type": "uuid"
+      },
+      {
+        "name": "deletion_lease_expires_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "last_error",
+        "type": "text"
+      },
+      {
+        "name": "last_action",
+        "type": "text"
+      },
+      {
+        "name": "entry_policy",
+        "type": "text"
+      },
+      {
+        "name": "recording_authorized_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "caller_id_sid",
+        "type": "text"
+      },
+      {
+        "name": "final_provider_started_at",
+        "type": "timestamp with time zone"
+      }
+    ]
+  },
+  {
+    "name": "icash_contact_permissions",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "screening_id",
+        "type": "uuid"
+      },
+      {
+        "name": "party",
+        "type": "text"
+      },
+      {
+        "name": "phone",
+        "type": "text"
+      },
+      {
+        "name": "contact_key",
+        "type": "text"
+      },
+      {
+        "name": "timezone",
+        "type": "text"
+      },
+      {
+        "name": "local_start_hour",
+        "type": "integer"
+      },
+      {
+        "name": "local_end_hour",
+        "type": "integer"
+      },
+      {
+        "name": "permission_evidence",
+        "type": "text"
+      },
+      {
+        "name": "permission_until",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "dnc_checked_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "dnc_clear",
+        "type": "boolean"
+      },
+      {
+        "name": "revoked_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "buyer_id",
+        "type": "uuid"
+      },
+      {
+        "name": "review_request_id",
+        "type": "uuid"
+      },
+      {
+        "name": "seller_intake_id",
+        "type": "uuid"
+      }
+    ]
+  },
+  {
+    "name": "icash_customer_phone_calls",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "actor_id",
+        "type": "uuid"
+      },
+      {
+        "name": "screening_id",
+        "type": "uuid"
+      },
+      {
+        "name": "callback_phone",
+        "type": "text"
+      },
+      {
+        "name": "recipient_phone",
+        "type": "text"
+      },
+      {
+        "name": "business_phone",
+        "type": "text"
+      },
+      {
+        "name": "provider_account_sid",
+        "type": "text"
+      },
+      {
+        "name": "nonce_hash",
+        "type": "text"
+      },
+      {
+        "name": "operation_key",
+        "type": "text"
+      },
+      {
+        "name": "rate_id",
+        "type": "uuid"
+      },
+      {
+        "name": "max_seconds",
+        "type": "integer"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "parent_sid",
+        "type": "text"
+      },
+      {
+        "name": "child_sid",
+        "type": "text"
+      },
+      {
+        "name": "connected_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "ended_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "parent_receipt",
+        "type": "jsonb"
+      },
+      {
+        "name": "child_receipt",
+        "type": "jsonb"
+      },
+      {
+        "name": "settled_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "recording_required",
+        "type": "boolean"
+      },
+      {
+        "name": "recording_state",
+        "type": "text"
+      },
+      {
+        "name": "recording_sid",
+        "type": "text"
+      },
+      {
+        "name": "recording_receipt",
+        "type": "jsonb"
+      },
+      {
+        "name": "recording_expires_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "recording_deleted_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "recipient_answered_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "connection_type",
+        "type": "text"
+      }
+    ]
+  },
+  {
+    "name": "icash_live_callbacks",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "conversation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "screening_id",
+        "type": "uuid"
+      },
+      {
+        "name": "due_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "timezone",
+        "type": "text"
+      },
+      {
+        "name": "evidence",
+        "type": "jsonb"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      }
+    ]
+  },
+  {
+    "name": "icash_live_conversations",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "screening_id",
+        "type": "uuid"
+      },
+      {
+        "name": "party",
+        "type": "text"
+      },
+      {
+        "name": "agent_id",
+        "type": "text"
+      },
+      {
+        "name": "conversation_id",
+        "type": "text"
+      },
+      {
+        "name": "operation_key",
+        "type": "text"
+      },
+      {
+        "name": "contact_key",
+        "type": "text"
+      },
+      {
+        "name": "strategy_key",
+        "type": "text"
+      },
+      {
+        "name": "tool_token_hash",
+        "type": "text"
+      },
+      {
+        "name": "tool_expires_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "next_poll_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "poll_attempts",
+        "type": "integer"
+      },
+      {
+        "name": "result",
+        "type": "jsonb"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "completed_at",
+        "type": "timestamp with time zone"
+      }
+    ]
+  },
+  {
+    "name": "icash_meta_lead_messages",
+    "columns": [
+      {
+        "name": "message_id",
+        "type": "uuid"
+      },
+      {
+        "name": "lead_id",
+        "type": "uuid"
+      },
+      {
+        "name": "purpose",
+        "type": "text"
+      },
+      {
+        "name": "evidence_key",
+        "type": "text"
+      }
+    ]
+  },
+  {
+    "name": "icash_meta_leads",
+    "columns": [
+      {
+        "name": "lead_id",
+        "type": "uuid"
+      },
+      {
+        "name": "source_id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "screening_id",
+        "type": "uuid"
+      },
+      {
+        "name": "meta_id",
+        "type": "text"
+      },
+      {
+        "name": "submitted_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "page_id",
+        "type": "text"
+      },
+      {
+        "name": "form_id",
+        "type": "text"
+      },
+      {
+        "name": "ad_id",
+        "type": "text"
+      },
+      {
+        "name": "adset_id",
+        "type": "text"
+      },
+      {
+        "name": "campaign_id",
+        "type": "text"
+      },
+      {
+        "name": "consent_receipt",
+        "type": "jsonb"
+      },
+      {
+        "name": "consent_text",
+        "type": "text"
+      },
+      {
+        "name": "consent_version",
+        "type": "text"
+      },
+      {
+        "name": "timezone",
+        "type": "text"
+      },
+      {
+        "name": "call_now",
+        "type": "boolean"
+      },
+      {
+        "name": "contact_until",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "link_hash",
+        "type": "text"
+      },
+      {
+        "name": "link_expires_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "first_outreach_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "response_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "response_channel",
+        "type": "text"
+      },
+      {
+        "name": "address_confirmed_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "address_channel",
+        "type": "text"
+      },
+      {
+        "name": "voice_paused",
+        "type": "boolean"
+      },
+      {
+        "name": "offer_ready_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "declined_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "paused",
+        "type": "boolean"
+      },
+      {
+        "name": "next_attempt_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "voice_job_id",
+        "type": "uuid"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "offer_authorized_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "offer_conversation_id",
+        "type": "text"
+      },
+      {
+        "name": "routed_at",
+        "type": "timestamp with time zone"
+      }
+    ]
+  },
+  {
+    "name": "icash_operating_budget",
+    "columns": [
+      {
+        "name": "id",
+        "type": "integer"
+      },
+      {
+        "name": "enabled",
+        "type": "boolean"
+      },
+      {
+        "name": "funded_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "protected_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "reserved_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "spent_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "daily_limit_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "minimum_margin_bps",
+        "type": "integer"
+      },
+      {
+        "name": "hold_reason",
+        "type": "text"
+      },
+      {
+        "name": "tax_reserve_bps",
+        "type": "integer"
+      },
+      {
+        "name": "require_company_reserve",
+        "type": "boolean"
+      },
+      {
+        "name": "standard_cost_multiplier",
+        "type": "numeric"
+      },
+      {
+        "name": "elevenlabs_cost_multiplier",
+        "type": "numeric"
+      }
+    ]
+  },
+  {
+    "name": "icash_operation_rates",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "operation",
+        "type": "text"
+      },
+      {
+        "name": "version",
+        "type": "text"
+      },
+      {
+        "name": "charge_cents",
+        "type": "bigint"
+      },
+      {
+        "name": "costs_micros",
+        "type": "jsonb"
+      },
+      {
+        "name": "buffer_bps",
+        "type": "integer"
+      },
+      {
+        "name": "evidence_ref",
+        "type": "text"
+      },
+      {
+        "name": "verified_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "expires_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "enabled",
+        "type": "boolean"
+      },
+      {
+        "name": "voice_max_duration_seconds",
+        "type": "integer"
+      },
+      {
+        "name": "flat_customer_price_cents",
+        "type": "bigint"
+      }
+    ]
+  },
+  {
+    "name": "icash_operation_spend",
+    "columns": [
+      {
+        "name": "operation_key",
+        "type": "text"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "rate_id",
+        "type": "uuid"
+      },
+      {
+        "name": "credit_reservation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "charge_cap_cents",
+        "type": "bigint"
+      },
+      {
+        "name": "reserved_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "permission_until",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "financial_checked_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "actual_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "charged_cents",
+        "type": "bigint"
+      },
+      {
+        "name": "settlement_evidence",
+        "type": "text"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "dispatched_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "settled_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "customer_price_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "standard_cost_multiplier",
+        "type": "numeric"
+      },
+      {
+        "name": "elevenlabs_cost_multiplier",
+        "type": "numeric"
+      },
+      {
+        "name": "required_revenue_micros",
+        "type": "numeric"
+      },
+      {
+        "name": "cost_basis",
+        "type": "text"
+      },
+      {
+        "name": "estimate_checked_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "dealmachine_cost_multiplier",
+        "type": "numeric"
+      },
+      {
+        "name": "data_unit_cost_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "data_cost_basis",
+        "type": "text"
+      },
+      {
+        "name": "prospecting_budget_id",
+        "type": "bigint"
+      }
+    ]
+  },
+  {
+    "name": "icash_operational_contacts",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "screening_id",
+        "type": "uuid"
+      },
+      {
+        "name": "channel",
+        "type": "text"
+      },
+      {
+        "name": "phone",
+        "type": "text"
+      },
+      {
+        "name": "contact_key",
+        "type": "text"
+      },
+      {
+        "name": "timezone",
+        "type": "text"
+      },
+      {
+        "name": "timezone_basis",
+        "type": "text"
+      },
+      {
+        "name": "local_start_hour",
+        "type": "integer"
+      },
+      {
+        "name": "local_end_hour",
+        "type": "integer"
+      },
+      {
+        "name": "owner_user_id",
+        "type": "uuid"
+      },
+      {
+        "name": "sending_principal",
+        "type": "text"
+      },
+      {
+        "name": "source_hash",
+        "type": "text"
+      },
+      {
+        "name": "dnc_receipt_id",
+        "type": "uuid"
+      },
+      {
+        "name": "eligibility_until",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "revoked_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "provenance",
+        "type": "text"
+      },
+      {
+        "name": "consent_verification",
+        "type": "text"
+      }
+    ]
+  },
+  {
+    "name": "icash_screening_jobs",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "event_key",
+        "type": "text"
+      },
+      {
+        "name": "snapshot",
+        "type": "jsonb"
+      },
+      {
+        "name": "due_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "attempts",
+        "type": "integer"
+      },
+      {
+        "name": "lease_token",
+        "type": "uuid"
+      },
+      {
+        "name": "lease_until",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "result",
+        "type": "jsonb"
+      },
+      {
+        "name": "error_code",
+        "type": "text"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "completed_at",
+        "type": "timestamp with time zone"
+      }
+    ]
+  },
+  {
+    "name": "icash_seller_intakes",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "request_id",
+        "type": "uuid"
+      },
+      {
+        "name": "guest_hash",
+        "type": "text"
+      },
+      {
+        "name": "duplicate_key",
+        "type": "text"
+      },
+      {
+        "name": "name",
+        "type": "text"
+      },
+      {
+        "name": "address",
+        "type": "text"
+      },
+      {
+        "name": "phone",
+        "type": "text"
+      },
+      {
+        "name": "ai_consented",
+        "type": "boolean"
+      },
+      {
+        "name": "consent_version",
+        "type": "text"
+      },
+      {
+        "name": "consent_text",
+        "type": "text"
+      },
+      {
+        "name": "sharing_text",
+        "type": "text"
+      },
+      {
+        "name": "owner_claimed",
+        "type": "boolean"
+      },
+      {
+        "name": "agent_hash",
+        "type": "text"
+      },
+      {
+        "name": "attribution",
+        "type": "jsonb"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "canonical_id",
+        "type": "uuid"
+      },
+      {
+        "name": "claim_token",
+        "type": "uuid"
+      },
+      {
+        "name": "claimed_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "lookup_costs",
+        "type": "jsonb"
+      },
+      {
+        "name": "lookup_cap_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "lookup_cost_basis",
+        "type": "text"
+      },
+      {
+        "name": "data_rights_until",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "result",
+        "type": "jsonb"
+      },
+      {
+        "name": "property",
+        "type": "jsonb"
+      },
+      {
+        "name": "numbers_passed",
+        "type": "boolean"
+      },
+      {
+        "name": "market_qualified",
+        "type": "boolean"
+      },
+      {
+        "name": "checked_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "ad_cost_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "ad_cost_receipt",
+        "type": "text"
+      },
+      {
+        "name": "assigned_account",
+        "type": "uuid"
+      },
+      {
+        "name": "screening_id",
+        "type": "uuid"
+      },
+      {
+        "name": "operation_key",
+        "type": "text"
+      },
+      {
+        "name": "assigned_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "next_assignment_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "hold_reason",
+        "type": "text"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "email",
+        "type": "text"
+      },
+      {
+        "name": "email_consented",
+        "type": "boolean"
+      },
+      {
+        "name": "contact_consent_scope",
+        "type": "text"
+      },
+      {
+        "name": "customer_costs",
+        "type": "jsonb"
+      },
+      {
+        "name": "customer_cost_basis",
+        "type": "text"
+      },
+      {
+        "name": "lookup_history",
+        "type": "jsonb"
+      },
+      {
+        "name": "meta_measurement",
+        "type": "jsonb"
+      },
+      {
+        "name": "customer_lead_multiplier",
+        "type": "integer"
+      }
+    ]
+  },
+  {
+    "name": "icash_text_messages",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "thread_id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "direction",
+        "type": "text"
+      },
+      {
+        "name": "body",
+        "type": "text"
+      },
+      {
+        "name": "attachments",
+        "type": "jsonb"
+      },
+      {
+        "name": "asset_ids",
+        "type": "uuid[]"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "request_key",
+        "type": "uuid"
+      },
+      {
+        "name": "event_id",
+        "type": "text"
+      },
+      {
+        "name": "provider_id",
+        "type": "text"
+      },
+      {
+        "name": "last_delivery_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "customer_price_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "customer_author_id",
+        "type": "uuid"
+      },
+      {
+        "name": "route_revision",
+        "type": "bigint"
+      }
+    ]
+  },
+  {
+    "name": "icash_text_threads",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "deal_id",
+        "type": "uuid"
+      },
+      {
+        "name": "sender",
+        "type": "text"
+      },
+      {
+        "name": "recipient",
+        "type": "text"
+      },
+      {
+        "name": "permission_until",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "permission_evidence",
+        "type": "text"
+      },
+      {
+        "name": "timezone",
+        "type": "text"
+      },
+      {
+        "name": "dnc_checked_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "dnc_clear",
+        "type": "boolean"
+      },
+      {
+        "name": "sms_rate_id",
+        "type": "uuid"
+      },
+      {
+        "name": "mms_rate_id",
+        "type": "uuid"
+      },
+      {
+        "name": "paused",
+        "type": "boolean"
+      },
+      {
+        "name": "ai_mode",
+        "type": "text"
+      },
+      {
+        "name": "party",
+        "type": "text"
+      },
+      {
+        "name": "sms_review_request_id",
+        "type": "uuid"
+      },
+      {
+        "name": "sms_intake_pending",
+        "type": "boolean"
+      },
+      {
+        "name": "operational_contact_id",
+        "type": "uuid"
+      },
+      {
+        "name": "eligibility_until",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "operational_sms_sender",
+        "type": "text"
+      },
+      {
+        "name": "operational_sms_rate_hash",
+        "type": "text"
+      },
+      {
+        "name": "operational_sms_price_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "manual_only",
+        "type": "boolean"
+      },
+      {
+        "name": "seller_intake_id",
+        "type": "uuid"
+      },
+      {
+        "name": "seller_sms_rate_hash",
+        "type": "text"
+      },
+      {
+        "name": "seller_sms_price_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "retired_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "sender_pool_assigned",
+        "type": "boolean"
+      },
+      {
+        "name": "owner_buyer_test_id",
+        "type": "uuid"
+      }
+    ]
+  },
+  {
+    "name": "icash_voice_configs",
+    "columns": [
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "enabled",
+        "type": "boolean"
+      },
+      {
+        "name": "agent_id",
+        "type": "text"
+      },
+      {
+        "name": "phone_number_id",
+        "type": "text"
+      },
+      {
+        "name": "agent_config_hash",
+        "type": "text"
+      },
+      {
+        "name": "reviewed_until",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "seller_rate_id",
+        "type": "uuid"
+      },
+      {
+        "name": "buyer_rate_id",
+        "type": "uuid"
+      },
+      {
+        "name": "max_duration_seconds",
+        "type": "integer"
+      },
+      {
+        "name": "required_tool_ids",
+        "type": "text[]"
+      },
+      {
+        "name": "approved_voice_ids",
+        "type": "text[]"
+      }
+    ]
+  },
+  {
+    "name": "icash_voice_jobs",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "permission_id",
+        "type": "uuid"
+      },
+      {
+        "name": "callback_id",
+        "type": "uuid"
+      },
+      {
+        "name": "due_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "outcome",
+        "type": "text"
+      },
+      {
+        "name": "operation_key",
+        "type": "text"
+      },
+      {
+        "name": "conversation_id",
+        "type": "text"
+      },
+      {
+        "name": "provider_call_sid",
+        "type": "text"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "sms_context",
+        "type": "jsonb"
+      },
+      {
+        "name": "operational_contact_id",
+        "type": "uuid"
+      },
+      {
+        "name": "sms_source_message_id",
+        "type": "uuid"
+      },
+      {
+        "name": "sms_requested_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "sms_requested_by",
+        "type": "uuid"
+      },
+      {
+        "name": "cancellation_notice_id",
+        "type": "uuid"
+      },
+      {
+        "name": "meta_offer_lead_id",
+        "type": "uuid"
+      },
+      {
+        "name": "meta_retry_of",
+        "type": "uuid"
+      },
+      {
+        "name": "meta_followup_lead_id",
+        "type": "uuid"
+      }
+    ]
+  },
+  {
+    "name": "icash_voice_scheduler",
+    "columns": [
+      {
+        "name": "id",
+        "type": "integer"
+      },
+      {
+        "name": "last_dispatch_at",
+        "type": "timestamp with time zone"
+      }
+    ]
+  },
+  {
+    "name": "icash_wallets",
+    "columns": [
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "balance_cents",
+        "type": "bigint"
+      },
+      {
+        "name": "reserved_cents",
+        "type": "bigint"
+      },
+      {
+        "name": "currency",
+        "type": "text"
+      }
+    ]
+  }
+]

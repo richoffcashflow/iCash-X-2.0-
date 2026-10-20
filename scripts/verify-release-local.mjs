@@ -2,7 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
- 'first-contact-hours', 'first-contact-voice-hours', 'voice-daytime-policy',
+ 'first-contact-hours', 'first-contact-voice-hours', 'voice-daytime-policy', 'seller-phone-call-spacing',
  'voice-queue-candidate-fence', 'voice-queue-candidate-validation', 'voice-queue-prior-route-scan', 'voice-channel-candidate-fence', 'voice-account-fairness', 'operational-preparation-candidate-fence',
  'funded-lead-handoff', 'workspace-funded-refresh', 'workspace-ready-opportunities',
  'funded-prospecting-budget', 'first-day-prospecting-pacing', 'prospecting-admission', 'automatic-prospect-drafts', 'automatic-prospect-sms-route-conflicts', 'automatic-seller-email', 'opportunity-engine-database', 'workspace-activity-route',

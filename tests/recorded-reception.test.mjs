@@ -87,6 +87,25 @@ test('reception reconstructs the same older fingerprint only for the observed jo
  assert.equal(inspect(expanded(),cfg.c,{...cfg.branch,draft_exists:true}).safe,false,'all structural admission checks remain mandatory');
  assert.equal(inspect(expanded(),{...cfg.c,config_hash:'0'.repeat(64)}).safe,false,'no approved hash is invented');
 });
+test('incoming admission handles the same exact provider voice-field rename with the original complete approval',()=>{
+ const cfg=configuration();cfg.agent.platform_settings.overrides.conversation_config_override.tts={voice_id:false};
+ cfg.c.config_hash=inspectRecordedReceptionAgent(cfg.c,cfg.agent,cfg.branch,true,cfg.tool).hash;
+ const originalHash=cfg.c.config_hash,current=clone(cfg.agent);
+ current.conversation_config.tts.clone_strength=0;
+ current.platform_settings.overrides.conversation_config_override.tts.clone_strength=false;
+ const inspect=()=>inspectRecordedReceptionAgent(cfg.c,current,cfg.branch,true,cfg.tool);
+ assert.equal(inspect().safe,true);assert.equal(inspect().hashMatch,'equivalent_disabled_tts_defaults');
+ cfg.agent.conversation_config.tts.pvc_strength=0;
+ cfg.agent.platform_settings.overrides.conversation_config_override.tts.pvc_strength=false;
+ cfg.c.config_hash=inspectRecordedReceptionAgent(cfg.c,cfg.agent,cfg.branch,true,cfg.tool).hash;
+ assert.equal(inspect().safe,true);assert.equal(inspect().hashMatch,'equivalent_renamed_voice_defaults');
+ cfg.c.config_hash=originalHash;
+ for(const value of [0.1,null,'0']){current.conversation_config.tts.clone_strength=value;assert.equal(inspect().safe,false);}
+ current.conversation_config.tts.clone_strength=0;
+ current.platform_settings.overrides.conversation_config_override.tts.clone_strength=true;assert.equal(inspect().safe,false);
+ current.platform_settings.overrides.conversation_config_override.tts.clone_strength=false;
+ current.conversation_config.tts.pvc_strength=0;assert.equal(inspect().safe,false,'conflicting names cannot be normalized');
+});
 // A missing dependency must never silently become a real network call.
 globalThis.fetch = async () => { throw Error('UNEXPECTED_EXTERNAL_NETWORK_IN_SYNTHETIC_TEST'); };
 
