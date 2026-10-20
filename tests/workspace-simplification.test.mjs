@@ -12,11 +12,14 @@ const all=root=>!root||typeof root!=='object'?[]:Array.isArray(root)?root.flatMa
 const text=root=>typeof root==='string'?root:typeof root==='number'?String(root):Array.isArray(root)?root.map(text).join(' '):root&&typeof root==='object'?text(root.props?.children):'';
 const stubs={};function component(name){return stubs[name]??=Object.assign(()=>null,{displayName:name});}
 function page(account,campaign,error=false){
- let cursor=0;const slots=[account,error,false,false,'budget_ten',false,'',null,false,campaign];
- const hooks={useState:()=>[slots[cursor++],()=>{}],useRef:value=>({current:value}),useCallback:fn=>fn,useEffect(){}};
+ let cursor=0;const slots=[account,error];
+ const hooks={useState(initial){const index=cursor++;if(!(index in slots))slots[index]=typeof initial==='function'?initial():initial;return [slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;}];},useRef:value=>({current:value}),useCallback:fn=>fn,useEffect(){}};
  const mod={exports:{}};
  new Function('require','module','exports',code('app/page.tsx'))(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/workspace-status'?status:name==='@/lib/workspace-progress'?progress:name==='@/lib/bot-setup'?{setupThemes:{ink:{color:'#111',soft:'#eee'}}}:name==='next/dynamic'?{__esModule:true,default:loader=>component(loader.toString().match(/m\.(\w+)/)[1])}:name==='next/image'?{__esModule:true,default:component('Image')}:new Proxy({},{get:(_target,key)=>component(String(key))}),mod,mod.exports);
- return mod.exports.default();
+ const initial=mod.exports.default();
+ // Supply campaign status through the actual child callback, not a hook index.
+ all(initial).find(node=>node.type===component('OutreachCampaignAcknowledgment'))?.props.onStatus(campaign);
+ cursor=0;return mod.exports.default();
 }
 const campaign={policy:{version:'v1'},acknowledgment:{version:'v1'},configured:true,released:false,liveWorkReady:false,smsChannelEnabled:true};
 const account={workspaceAcknowledged:true,signedIn:true,mode:'live',balanceCents:850,assistantName:'Synthetic bot',paused:true,billingActive:false,identity:{principal:'Synthetic company'},smsWorkReady:false,workReady:false};
