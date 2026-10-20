@@ -56,6 +56,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Complete feature flows
 
+- On October 20, 2026 the owner required active webinar checkout to remain open past the offer timer. Protect email entry, Stripe payment fields and VIP verification/upgrade until verified purchase or intentional departure. Keep the same form/session through expiry, video completion and temporary payment errors; do not infer payment or read card details. Unengaged offers still expire normally.
+
 - On October 19, 2026 the owner required seller callbacks to reach the AI with the correct property context and humans to identify the property before discussing it. Route only from real prior call/text receipts, keep the matched customer's wallet and controls, preserve the exact approved reception template, and never use the owner's paused/empty account for another customer's callback. Multiple properties require address clarification; multiple accounts must never be guessed or charged. Keep caller lookup owner-authorized and distinguish a phone match from verified ownership. Never place paid test calls to verify this flow.
 
 - On October 19, 2026 the owner requested sharing calls and texts across the active business numbers +14243948384 and +17208134296. Balance new conversations across eligible numbers and keep each conversation's calls and texts on its established number. Use the shared database resolver for automatic, manual/browser and SMS paths; recheck at final admission. Preserve existing threads and call identities, uncertain outcomes, tenant/role isolation, opt-outs and the paused +14244377030 number. Do not fall back to a different number when an established route is disabled or conflicted.

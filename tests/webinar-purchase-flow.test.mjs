@@ -162,8 +162,8 @@ console.log('PASS direct checkout: opens once, no intermediate buy button, no fa
 console.log('PASS owner payment walkthrough: sample-only fields, local completion and return to offer.');
 
 // VIP checkout never treats Standard access as a completed upgrade or loops to the video.
-for(const state of [null,'standard','vip'])for(const active of [false,true]){
- assert.equal(webinarPurchaseDestination(state,true,active,true),state==='vip'?'/':active?null:'/webinar/upgrade');
+for(const state of [null,'standard','vip'])for(const active of [false,true])for(const engaged of [false,true]){
+ assert.equal(webinarPurchaseDestination(state,engaged,active,true),state==='vip'?'/':active||engaged?null:'/webinar/upgrade');
 }
 for(const accessible of [false,true]){
  const events=[],paidStates=[],engagement=[];window.location.search='?setup=1&upgrade=paid';
