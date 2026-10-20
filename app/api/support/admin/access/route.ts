@@ -19,8 +19,8 @@ export async function GET(req:Request){
    return Response.json({request,messages:messages.reverse(),notification:notification??null},{headers});
   }
   const [requests,resolved,purchases]=await Promise.all([
-   db<Record<string,unknown>[]>('icash_access_help_requests?status=neq.resolved&select=id,email,phone,status,created_at,updated_at&order=updated_at.desc&limit=100'),
-   db<Record<string,unknown>[]>('icash_access_help_requests?status=eq.resolved&select=id,email,phone,status,created_at,updated_at&order=updated_at.desc&limit=20'),
+   db<Record<string,unknown>[]>('icash_access_help_requests?status=not.in.(resolved,closed)&select=id,email,phone,status,created_at,updated_at&order=updated_at.desc&limit=100'),
+   db<Record<string,unknown>[]>('icash_access_help_requests?status=in.(resolved,closed)&select=id,email,phone,status,created_at,updated_at&order=updated_at.desc&limit=20'),
    db('icash_purchase_access_attention?select=id,email,paid_at,email_status,email_delivery,text_status,text_delivery,reason&order=paid_at.asc&limit=100')
   ]);
   return Response.json({requests:[...requests,...resolved],purchases},{headers});

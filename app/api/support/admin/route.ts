@@ -19,8 +19,8 @@ export async function GET(req:Request){
    return NextResponse.json({thread,messages:Array.isArray(messages)?messages.reverse():[],evidence,notification:notification??null},{headers});
   }
   const [threads,resolved,cancellations,deployment]=await Promise.all([
-   db<Record<string,unknown>[]>('icash_support_threads?status=neq.resolved&select=id,account_id,subject,status,updated_at&order=updated_at.desc&limit=100'),
-   db<Record<string,unknown>[]>('icash_support_threads?status=eq.resolved&select=id,account_id,subject,status,updated_at&order=updated_at.desc&limit=20'),
+   db<Record<string,unknown>[]>('icash_support_threads?status=not.in.(resolved,closed)&select=id,account_id,subject,status,updated_at&order=updated_at.desc&limit=100'),
+   db<Record<string,unknown>[]>('icash_support_threads?status=in.(resolved,closed)&select=id,account_id,subject,status,updated_at&order=updated_at.desc&limit=20'),
    db('icash_support_cancel_requests?or=(state.in.(processing,needs_review),and(state.neq.cancelled,receipt_state.in.(claimed,needs_review,suppressed,rate_limited)))&select=id,account_id,mode,state,result,receipt_state,updated_at&order=updated_at.desc&limit=30'),supportDeploymentHealth()
   ]);
   return NextResponse.json({threads:[...threads,...resolved],cancellations,deployment},{headers});

@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 20, 2026 the owner authorized closing inactive support chats and ending repeated refund-only conversations with a polite notice. Close waiting-on-customer chats after 24 hours without a reply, never unanswered customer turns or active troubleshooting. Explain the policy, warn once, then close repeated refund-only requests with no new issue; preserve payment-error/access/cancellation help and mandatory rights. Closed is distinct from resolved; preserve history and allow replies to reopen. Use short, natural, respectful replies.
+
 - On October 20, 2026 the owner requested both inbound and outbound leads in admin. Restore inbound seller requests alongside DealMachine outreach with clear source labels, independent searches and shared reporting periods. Inbound source is not call/message direction; do not combine requests, attempts, replies or interested sellers. Preserve owner-only access and unchanged customer property cards. This supersedes the earlier instruction to hide inbound admin sections.
 
 - On October 20, 2026 the owner requested fixes for missing seller information and outreach. Prioritize real seller responses, actual outreach and saved contact details before blank research. Protect capacity for a first seller call before buying more research, and work existing eligible contacts first. Support must read actual lead/contact/provider receipts and spending holds, never infer outreach from setup readiness or mark an unresolved complaint solved. Preserve funding policy, historical charges, unknown holds, Pause and VIP pricing.
