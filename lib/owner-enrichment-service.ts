@@ -3,6 +3,7 @@ import {db} from '@/lib/stripe-test';
 import {reserveOperation} from '@/lib/operating-costs';
 import {enrichOwners} from './owner-enrichment.ts';
 import {runScreeningJob} from './screening-job.ts';
+import {OwnerPreviewRateLimitError} from './owner-enrichment-deferral.ts';
 const future=(value:string)=>Number.isFinite(Date.parse(value))&&Date.parse(value)>Date.now();
 export async function enrichForAccount(accountId:string,screeningId:string){
  if(!contactWorkEnabled())return {status:'live_work_not_ready'};
@@ -27,7 +28,13 @@ export async function enrichForAccount(accountId:string,screeningId:string){
  let stage='validation',providerStatus:number|null=null;
  const request=async(url:string,init:RequestInit,error:string)=>{
   stage=init.method==='GET'?'free_preview':'paid_lookup';providerStatus=null;
-  if(!await db<boolean>('rpc/icash_take_dealmachine_request','POST',{}))throw new Error('PROVIDER_RATE_LIMIT');
+  const admitted=await db<boolean>('rpc/icash_take_dealmachine_request','POST',{});
+  if(admitted!==true){
+   // A local limiter refusal is safe to defer only before ANY provider request
+   // or reservation. A paid-stage refusal retains its already-claimed operation.
+   if(admitted===false&&stage==='free_preview')throw new OwnerPreviewRateLimitError(accountId,screeningId);
+   throw new Error('PROVIDER_RATE_LIMIT');
+  }
   try{
    const r=await fetch(url,{...init,headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
    providerStatus=r.status;
@@ -62,7 +69,7 @@ export async function enrichForAccount(accountId:string,screeningId:string){
   },
   persist:async result=>{stage='persist';await db('rpc/icash_save_contacts','POST',{p_account:accountId,p_screening:screeningId,p_operation:operationKey,p_result:result});await db('rpc/icash_settle_dealmachine_usage','POST',{p_operation:operationKey});},
  });}catch(error){
-  const allowed=['CONTACT_RATE_REQUIRED','CONTACT_PREVIEW_INVALID','OWNER_PREVIEW_FAILED_NO_RETRY','PROVIDER_RATE_LIMIT','CONTACT_RECEIPT_REQUIRES_RECONCILIATION','OWNER_LOOKUP_FAILED_NO_RETRY','Prospecting budget reached','INVALID_SNAPSHOT','PROPERTY_RESPONSE_INVALID'];
+  const allowed=['CONTACT_RATE_REQUIRED','CONTACT_PREVIEW_INVALID','OWNER_PREVIEW_FAILED_NO_RETRY','OWNER_PREVIEW_RATE_LIMITED','PROVIDER_RATE_LIMIT','CONTACT_RECEIPT_REQUIRES_RECONCILIATION','OWNER_LOOKUP_FAILED_NO_RETRY','Prospecting budget reached','INVALID_SNAPSHOT','PROPERTY_RESPONSE_INVALID'];
   const code=error instanceof Error&&allowed.includes(error.message)?error.message:'unclassified';
   // Never log credentials, identities, property IDs, URLs or provider bodies.
   console.warn('owner_enrichment_held',{stage,code,httpStatus:providerStatus});

@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {enrichOwners} from '../lib/owner-enrichment.ts';
 import {runScreeningJob} from '../lib/screening-job.ts';
+import {OwnerPreviewRateLimitError} from '../lib/owner-enrichment-deferral.ts';
 import * as liveWorkAdmission from '../lib/live-work-admission.ts';
 
 // Exercise the actual service AND reservation code; the specialized claim is modeled here and exercised with real SQL separately; all I/O stays in local fakes.
@@ -25,6 +26,8 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_operation_rates?id=eq.rate&select='))return [structuredClone(state.rate)];
  if(path==='rpc/icash_take_dealmachine_request'){
   const slots=state.dbCalls.filter(c=>c.path===path).length;
+  if(state.limiterError)throw state.limiterError;
+  if('limiterResult' in state)return state.limiterResult;
   return slots!==state.denyRateSlot;
  }
  if(path==='rpc/icash_reserve_operation'){
@@ -89,7 +92,7 @@ console.warn=(...args)=>diagnostics.push(args);
 process.env.DEALMACHINE_API_KEY='dm_sk_live_fixture';process.env.ICASH_LIVE_WORK_READY='true';globalThis.fetch=transport;
 try{
  const {reserveOperation,dispatchReservedOperation}=await loadActual('../lib/operating-costs.ts',{db,...liveWorkAdmission},'__ownerCostsFixture');
- const {enrichForAccount}=await loadActual('../lib/owner-enrichment-service.ts',{db,enrichOwners,runScreeningJob,reserveOperation,...liveWorkAdmission},'__ownerServiceFixture');
+ const {enrichForAccount}=await loadActual('../lib/owner-enrichment-service.ts',{db,enrichOwners,runScreeningJob,reserveOperation,OwnerPreviewRateLimitError,...liveWorkAdmission},'__ownerServiceFixture');
  const run=()=>enrichForAccount(accountId,screeningId);
  for(const sellerRequest of [{phone:'+12145550123',ownerName:null},null]){
   reset();state.job.snapshot.sellerRequest=sellerRequest;assert.equal((await run()).status,'seller_contact_supplied');
@@ -142,8 +145,19 @@ try{
  reset();state.previewStatus=503;await assert.rejects(run(),/OWNER_PREVIEW_FAILED_NO_RETRY/);assert.equal(state.previewCount,1);assert.equal(state.reserveCount,0);assert.equal(state.paidCount,0);
  assert.deepEqual(diagnostics,[['owner_enrichment_held',{stage:'free_preview',code:'OWNER_PREVIEW_FAILED_NO_RETRY',httpStatus:503}]]);
  assert(!JSON.stringify(diagnostics).includes('dm_sk_live_fixture'));assert(!JSON.stringify(diagnostics).includes('sensitive-provider-body'));assert(!JSON.stringify(diagnostics).includes('prop_123'));
- reset();state.denyRateSlot=1;await assert.rejects(run(),/PROVIDER_RATE_LIMIT/);assert.equal(state.requests.length,0);assert.equal(state.reserveCount,0);
- reset();state.denyRateSlot=2;await assert.rejects(run(),/PROVIDER_RATE_LIMIT/);assert.equal(state.requests.length,1);assert(state.claimed);assert.equal(state.paidCount,0);
+ reset();state.denyRateSlot=1;await assert.rejects(run(),error=>{
+  assert(error instanceof OwnerPreviewRateLimitError);assert.equal(error.accountId,accountId);assert.equal(error.screeningId,screeningId);assert.equal(error.operationKey,operationKey);return true;
+ });assert.equal(state.requests.length,0);assert.equal(state.reserveCount,0);assert.equal(state.claimed,false);
+ assert.deepEqual(diagnostics,[['owner_enrichment_held',{stage:'free_preview',code:'OWNER_PREVIEW_RATE_LIMITED',httpStatus:null}]]);
+ reset();state.denyRateSlot=2;await assert.rejects(run(),error=>error.message==='PROVIDER_RATE_LIMIT'&&!(error instanceof OwnerPreviewRateLimitError));assert.equal(state.requests.length,1);assert(state.claimed);assert.equal(state.paidCount,0);
+ // Only a definite boolean false is a local rejection, not an unknown RPC result
+ // or an exception whose message merely resembles a retryable error.
+ for(const value of [null,undefined,0,'false',{},[]]){
+  reset();state.limiterResult=value;await assert.rejects(run(),error=>error.message==='PROVIDER_RATE_LIMIT'&&!(error instanceof OwnerPreviewRateLimitError));assert.equal(state.requests.length,0);assert.equal(state.reserveCount,0);
+ }
+ for(const message of ['PROVIDER_RATE_LIMIT','OWNER_PREVIEW_RATE_LIMITED','Database timeout']){
+  reset();state.limiterError=Error(message);await assert.rejects(run(),error=>error===state.limiterError&&!(error instanceof OwnerPreviewRateLimitError));assert.equal(state.requests.length,0);
+ }
  for(const mutate of [r=>{r.data[0].dm_person_id='per_unexpected';},r=>{r.credits.used=26;r.credits.people=26;},r=>{r.credits.properties=1;},r=>{r.data[0].properties=[{dm_property_id:'prop_456'}];}]){
   reset();state.paidTransform=mutate;await assert.rejects(run(),/CONTACT_RECEIPT_REQUIRES_RECONCILIATION/);
   assert.equal(state.paidCount,1);assert.equal(state.saved.length,0);assert.equal(state.observations.length,4);assert(state.claimed);
