@@ -50,7 +50,7 @@ export function WebinarMeasurement(){
   try{
    let next:Measurement|null;
    if(!session.current&&!checkoutReady.current){next=await (window as PixelWindow).icashWebinarPixel?.start(forcePage)??null;}
-   else{const res=await fetch('/api/webinar/measurement',{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',signal:AbortSignal.timeout(timeoutMs),body:JSON.stringify({action:'automatic',version:measurementPolicyVersion,optedOut,...identifiers,fbclid:new URLSearchParams(location.search).get('fbclid')||undefined})});if(!res.ok)return;next=await res.json() as Measurement;}
+   else{const res=await fetch('/api/webinar/measurement?page='+encodeURIComponent(location.pathname+location.search),{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',signal:AbortSignal.timeout(timeoutMs),body:JSON.stringify({action:'automatic',version:measurementPolicyVersion,optedOut,...identifiers,fbclid:new URLSearchParams(location.search).get('fbclid')||undefined})});if(!res.ok)return;next=await res.json() as Measurement;}
    if(version!==refreshVersion.current||!next)return;current.current=next;
    if(next.trackingAllowed)emit({eventName:'PageView',eventId:pageView.current.id,data:{}});
    else (window as PixelWindow).fbq?.('consent','revoke');

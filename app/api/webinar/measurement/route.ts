@@ -2,6 +2,7 @@ import {z} from 'zod';
 import {isIP} from 'node:net';
 import {db} from '@/lib/stripe-test';
 import {webinarSettings} from '@/lib/webinar-meta';
+import {legacyAdMeasurementExcluded} from '@/lib/legacy-launch-measurement';
 import {browserPaymentInfo,browserPurchase,marketingConsentVersion,type MetaIdentity,type MetaPurchase} from '@/lib/webinar-meta-policy';
 import {automaticMeasurementEligible,measurementPolicyVersion,measurementSince} from '@/lib/webinar-measurement-policy';
 import {webinarBody,webinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarVisitor,WebinarError} from '@/lib/webinar-server';
@@ -14,7 +15,9 @@ const input=z.union([
 async function measurementResponse(req:Request,action:'read'|'automatic'|'allow'|'deny',metadata:Record<string,string>={}){
  if(req.headers.get('sec-gpc')==='1')action='deny';
  const v=await webinarVisitor();await webinarLimit(req,v.id,'measurement-read',30,60);
- const settings=await webinarSettings(),enabled=process.env.VERCEL_ENV==='production'&&settings.meta.enabled&&!!settings.meta.pixelId;
+ const privateCampaign=await legacyAdMeasurementExcluded(req,v.id);
+ if(privateCampaign&&action!=='deny')return Response.json({enabled:false,trackingAllowed:false,events:[]},{headers:webinarHeaders});
+ const settings=await webinarSettings(),enabled=!privateCampaign&&process.env.VERCEL_ENV==='production'&&settings.meta.enabled&&!!settings.meta.pixelId;
  if(!enabled&&action==='allow')throw new WebinarError(409,'Ad measurement is not enabled.');
  if(!enabled&&action!=='deny')return Response.json({enabled:false,trackingAllowed:false},{headers:webinarHeaders});
  const identity=await db<MetaIdentity>('rpc/icash_webinar_measurement_access','POST',{

@@ -5,6 +5,7 @@ import {webinarSettings} from '@/lib/webinar-meta';
 import {webinarVisitor} from '@/lib/webinar-server';
 import {automaticMeasurementEligible} from '@/lib/webinar-measurement-policy';
 import {bindReminderCheckout} from '@/lib/webinar-reminder-server';
+import {legacyAdMeasurementExcluded} from '@/lib/legacy-launch-measurement';
 
 /** Called only after billing verifies ownership of an open Stripe Checkout.
  * A checkout identity does not create a webinar session or marketing consent. */
@@ -12,9 +13,11 @@ export async function bindCheckoutMeasurement(req:Request,checkoutId:string,mode
  if(process.env.VERCEL_ENV!=='production'||mode!=='live'||!/^cs_live_[A-Za-z0-9]{1,240}$/.test(checkoutId))return;
  await bindReminderCheckout(req,checkoutId,mode);
  try{
+  if(await legacyAdMeasurementExcluded(req))return;
   const signal=AbortSignal.timeout(2000),settings=await webinarSettings(signal);if(!settings.meta.enabled||!settings.meta.pixelId)return;
   const choice=req.headers.get('x-icash-measurement'),blocked=req.headers.get('sec-gpc')==='1'||choice==='deny';
   const visitor=await webinarVisitor(!blocked&&choice==='automatic',undefined,signal),metadata:Record<string,string>={};
+  if(await legacyAdMeasurementExcluded(req,visitor.id))return;
   if(!blocked){
    const jar=await cookies(),fbp=jar.get('_fbp')?.value,fbc=jar.get('_fbc')?.value,click=req.headers.get('x-icash-fbclid');
    if(fbp&&/^fb\.\d+\.\d+\.[A-Za-z0-9_-]{1,200}$/.test(fbp))metadata.fbp=fbp;
