@@ -5,8 +5,8 @@ import ts from 'typescript';
 import {automaticMeasurementEligible} from '../lib/webinar-measurement-policy.ts';
 import {checkoutMeasurementHeaders} from '../lib/checkout-measurement-client.ts';
 const original={VERCEL_ENV:process.env.VERCEL_ENV,VERCEL:process.env.VERCEL};
-let enabled=true,exists=false,writes=[],creates=[],unavailable=false,reminderBindings=[];
-const deps={bindReminderCheckout:async(...args)=>reminderBindings.push(args),isIP,automaticMeasurementEligible,
+let enabled=true,exists=false,writes=[],creates=[],unavailable=false,reminderBindings=[],privateCampaign=false;
+const deps={bindReminderCheckout:async(...args)=>reminderBindings.push(args),isIP,automaticMeasurementEligible,legacyAdMeasurementExcluded:async()=>privateCampaign,
  cookies:async()=>({get:name=>({value:name==='_fbp'?'fb.1.123.browser':undefined})}),
  webinarSettings:async()=>({meta:{enabled,pixelId:'1104248230721457'}}),
  webinarVisitor:async create=>{creates.push(create);if(!create&&!exists)throw Error('No visitor');exists=true;return {id:'visitor'};},
@@ -18,6 +18,7 @@ const {bindCheckoutMeasurement}=await import('data:text/javascript;base64,'+Buff
 const request=(headers={})=>new Request('https://www.geticashx.com/api/billing/membership',{headers:{'x-icash-measurement':'automatic','x-vercel-ip-country':'US','x-vercel-forwarded-for':'203.0.113.4','x-icash-fbclid':'click_fixture',...headers}});
 try{
  process.env.VERCEL_ENV='production';process.env.VERCEL='1';
+ privateCampaign=true;await bindCheckoutMeasurement(request(),'cs_live_private','live');assert.equal(writes.length,0);assert.equal(creates.length,0,'Private signup creates no ad identity');privateCampaign=false;
  await bindCheckoutMeasurement(request(),'cs_live_direct','live');
  assert.deepEqual(creates,[true]);assert.equal(writes.length,2);
  assert.equal(writes[0].body.p_action,'automatic');assert.equal(writes[0].body.p_automatic_eligible,true);

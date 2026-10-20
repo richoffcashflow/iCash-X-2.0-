@@ -13,9 +13,9 @@ export async function processWebinarMeta(){
  for(const job of jobs){
   const filter=`icash_webinar_meta_events?event_id=eq.${encodeURIComponent(job.event_id)}`;
   try{
-   const [[v],latest,[current],reviews]=await Promise.all([db<MetaIdentity[]>(`icash_webinar_visitors?id=eq.${job.visitor_id}&select=email,marketing_consent_at,measurement`),webinarSettings(),db<{state:string}[]>(`${filter}&select=state`),db<unknown[]>(`icash_billing_reviews?payment_id=eq.${encodeURIComponent(job.payment_id)}&select=payment_id&limit=1`)]);
+   const [[v],latest,[current],reviews,privateCampaign]=await Promise.all([db<MetaIdentity[]>(`icash_webinar_visitors?id=eq.${job.visitor_id}&select=email,marketing_consent_at,measurement`),webinarSettings(),db<{state:string}[]>(`${filter}&select=state`),db<unknown[]>(`icash_billing_reviews?payment_id=eq.${encodeURIComponent(job.payment_id)}&select=payment_id&limit=1`),db<boolean>('rpc/icash_legacy_meta_excluded','POST',{p_payment:job.payment_id,p_session:job.session_id})]);
    const since=v?measurementSince(v):null;
-   if(!since||Date.parse(since)>Date.parse(job.occurred_at)||!latest.meta.enabled||current?.state!=='sending'||reviews.length){
+   if(privateCampaign||!since||Date.parse(since)>Date.parse(job.occurred_at)||!latest.meta.enabled||current?.state!=='sending'||reviews.length){
     await db(filter,'PATCH',{state:'canceled',payload:null});continue;
    }
    const payload=job.payload??metaPurchasePayload(job,v,process.env.ICASH_APP_ORIGIN!);

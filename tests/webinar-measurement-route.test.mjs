@@ -8,9 +8,9 @@ import * as measurementPolicy from '../lib/webinar-measurement-policy.ts';
 import {browserPaymentInfo,browserPurchase,marketingConsentVersion} from '../lib/webinar-meta-policy.ts';
 const {measurementPolicyVersion}=measurementPolicy,pixelId='1104248230721457';
 let settings=policy.settingsSchema.parse({enabled:false,fromEmail:'',postalAddress:'',subjects:['a','b','c'],messages:['a','b','c'],meta:{enabled:true,pixelId}});
-let identity={email:null,marketing_consent_at:null,measurement:{}},writes=[],visitorMissing=false;
+let identity={email:null,marketing_consent_at:null,measurement:{}},writes=[],visitorMissing=false,privateCampaign=false;
 class WebinarError extends Error{constructor(status,message){super(message);this.status=status;}}
-const deps={...policy,...measurementPolicy,z,isIP,browserPaymentInfo,browserPurchase,marketingConsentVersion,WebinarError,webinarHeaders:{},
+const deps={...policy,...measurementPolicy,z,isIP,browserPaymentInfo,browserPurchase,marketingConsentVersion,WebinarError,webinarHeaders:{},legacyAdMeasurementExcluded:async()=>privateCampaign,
  webinarLimit:async()=>{},webinarOrigin:()=>{},webinarOwner:async()=>{},webinarVisitor:async(create=false)=>{assert.equal(create,false,'Measurement must not race session creation');if(visitorMissing)throw new WebinarError(401,'No session');return {id:'fixture-visitor',...identity};},
  webinarSettings:async()=>settings,webinarBody:r=>r.json(),webinarError:e=>Response.json({error:e.message},{status:e.status??400}),
  metaReady:()=>false,webinarFollowupReadiness:()=>({email:false}),
@@ -34,6 +34,11 @@ const original=process.env.VERCEL_ENV,originalVercel=process.env.VERCEL;
 try{
  process.env.VERCEL_ENV='production';process.env.VERCEL='1';
  const pagePixel=(headers={})=>pixel.GET(new Request('https://example.test/api/webinar/pixel',{headers}));
+ privateCampaign=true;
+ assert.deepEqual(await(await pagePixel({'x-vercel-ip-country':'US'})).json(),{enabled:false,trackingAllowed:false});
+ assert.deepEqual(await(await automatic({'x-vercel-ip-country':'US'})).json(),{enabled:false,trackingAllowed:false,events:[]});
+ assert.equal(writes.length,0,'Private customer campaign never creates ad measurement evidence');
+ await post(false);assert.equal(lastAccess().p_action,'deny','Private campaign retains explicit opt-out');writes=[];privateCampaign=false;
  visitorMissing=true;
  let pageResult=await(await pagePixel({'x-vercel-ip-country':'US'})).json();assert.equal(pageResult.pixelId,pixelId);assert.equal(pageResult.trackingAllowed,true);assert.equal(writes.length,0,'Page bootstrap never creates consent or purchase receipts');
  for(const headers of [{},{'x-vercel-ip-country':'GB'},{'x-vercel-ip-country':'US','sec-gpc':'1'}])assert.equal((await(await pagePixel(headers)).json()).trackingAllowed,false);

@@ -18,7 +18,7 @@ export const webinarPixelBootstrap=String.raw`(function(w,d){
   if(state.path!==path){state.path=path;state.pageViewId='webinar:page:'+w.crypto.randomUUID();}
   var id=state.pageViewId;
   if(blocked()){if(w.fbq)w.fbq('consent','revoke');return state.ready=Promise.resolve({enabled:true,trackingAllowed:false});}
-  state.ready=w.fetch('/api/webinar/pixel',{cache:'no-store',signal:AbortSignal.timeout(8000)}).then(function(response){if(!response.ok)throw Error('Pixel configuration unavailable');return response.json();}).then(function(config){
+  state.ready=w.fetch('/api/webinar/pixel?page='+encodeURIComponent(w.location.pathname+w.location.search),{cache:'no-store',signal:AbortSignal.timeout(8000)}).then(function(response){if(!response.ok)throw Error('Pixel configuration unavailable');return response.json();}).then(function(config){
    if(!page()||state.path!==path)return null;
    if(blocked())return Object.assign({},config,{trackingAllowed:false});
    if(!config.enabled||!config.trackingAllowed||!/^\d{5,25}$/.test(config.pixelId||''))return config;
