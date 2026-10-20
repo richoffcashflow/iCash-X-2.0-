@@ -5,7 +5,7 @@ export type WebinarPurchaseListener=(state:WebinarPurchaseState,vipSessionUrl?:s
 export function webinarPurchaseDestination(purchased:WebinarPurchaseState,checkoutEngaged:boolean,upgradeActive:boolean,vipWebinar=false){
  if(vipWebinar){
   if(purchased==='vip')return '/';
-  return upgradeActive?null:'/webinar/upgrade';
+  return upgradeActive||checkoutEngaged?null:'/webinar/upgrade';
  }
  if(purchased==='vip')return '/join?setup=1';
  if(upgradeActive)return null;

@@ -6,7 +6,7 @@ import ts from 'typescript';
 
 const require=createRequire(import.meta.url);
 const source=ts.transpileModule(readFileSync(new URL('../components/stripe-embedded-checkout.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
-test('iframe focus is detected once without relying on an outer-window blur event',()=>{
+for(const event of [null,'blur','focusin'])test(`iframe focus is detected once via ${event??'polling'} without reading payment fields`,()=>{
  const saved=new Map(['window','document','setTimeout','clearTimeout','setInterval','clearInterval'].map(key=>[key,globalThis[key]]));
  const refs=[],effects=[],intervals=new Map(),timers=new Map(),outer=new EventTarget(),document=new EventTarget();let sequence=0,interactions=0;
  const ownFrame={tagName:'IFRAME'},otherFrame={tagName:'IFRAME'};
@@ -22,7 +22,7 @@ test('iframe focus is detected once without relying on an outer-window blur even
   tick();assert.equal(interactions,0,'Mounting the payment form alone is not cart engagement');
   document.activeElement=otherFrame;tick();assert.equal(interactions,0,'Unrelated iframes cannot trigger this checkout');
   document.activeElement=ownFrame;document.hidden=true;tick();assert.equal(interactions,0);
-  document.hidden=false;tick();assert.equal(interactions,1,'Iframe focus works even when no window blur event fires');
+  document.hidden=false;if(event){(event==='blur'?outer:document).dispatchEvent(new Event(event));assert.equal(interactions,1,'Known iframe focus protects payment synchronously before an expiry tick');}else tick();assert.equal(interactions,1,'Iframe focus works even when no window blur event fires');
   assert.equal(intervals.size,0,'Polling stops after the first interaction');
   outer.dispatchEvent(new Event('blur'));[...timers.values()].forEach(fn=>fn());assert.equal(interactions,1);
   cleanup();assert.equal(intervals.size,0);assert.equal(timers.size,0);

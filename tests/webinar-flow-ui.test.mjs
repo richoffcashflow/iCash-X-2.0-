@@ -136,9 +136,9 @@ for(const [scenario,[version,preview,outcome]] of [['day',false,'unpaid'],['nigh
  assert.equal(find(vt,'WebinarOfferSpots').props.spots.remaining,1,'The counter keeps updating during payment');
  assert.equal(find(find(vt,'WebinarPlayer').props.overlay,'WebinarPurchaseNotifications').props.replayPurchase.name,'Emilio');
  find(vt,'WebinarCheckout').props.onUpgradeActive(false);vt=renderVip();
- assert.equal(listeners.has('beforeunload'),!preview,'Watching can resume without consuming the one reminder');
+ assert.equal(listeners.has('beforeunload'),false,'A transient idle upgrade retains payment protection');
  find(vt,'WebinarPlayer').props.onProgress(1200);vt=renderVip();vt=renderVip();
- assert.ok(all(vt).some(n=>n.type==='h2'&&n.props.children==='VIP last chance'),'Later VIP offers still open');
+ assert.ok(all(vt).some(n=>n.type==='h2'&&n.props.children==='VIP offer'),'Later offers cannot replace an engaged upgrade');
  if(outcome==='pending'){
   find(vt,'WebinarCheckout').props.onUpgradeActive(true);vt=renderVip();find(vt,'WebinarPlayer').props.onEnded();await flush();vt=renderVip();
   assert.equal(redirects.length,navigated,'Finishing cannot interrupt an upgrade in progress');
@@ -149,9 +149,9 @@ for(const [scenario,[version,preview,outcome]] of [['day',false,'unpaid'],['nigh
   if(!preview)assert.equal(redirects.at(-1),'/','Verified VIP opens the workspace immediately');
  }else{
   find(vt,'WebinarPlayer').props.onEnded();await flush();
-  assert.equal(redirects.length,navigated+1);
+  assert.equal(redirects.length,preview?navigated+1:navigated);
   if(preview)assert.ok(redirects.at(-1).startsWith('/webinar/checkout/preview?')&&redirects.at(-1).includes('vip=1'));
-  else assert.equal(redirects.at(-1),'/webinar/upgrade','Unupgraded viewers go to the VIP offer at the end');
+  else assert.ok(find(renderVip(),'WebinarCheckout'),'An engaged live upgrade stays open after the video ends');
  }
  vh.close();
  assert.equal(listeners.has('beforeunload'),false,'Completed, purchased and unmounted rooms release the exit listener');
@@ -429,3 +429,34 @@ console.log('PASS webinar audio: audible autoplay, one muted policy fallback, ta
  assert.equal(redirects.length,before,'The welcome owns navigation after its visible countdown');instance.close();
  console.log('PASS main purchase: playback survives payment, paid viewers retain leave protection, and the VIP handoff waits for the video to end.');
 }
+
+// Focus/input in the checkout belongs to the buyer, including the email step
+// before Stripe mounts and VIP verification before a payment request starts.
+for(const vip of [false,true])for(const interaction of [null,'onFocusCapture','onInputCapture','onEngaged','onUpgradeActive']){
+ if(!vip&&interaction==='onUpgradeActive')continue;
+ const originalNow=Date.now;let clock=Date.parse('2026-10-20T05:00:00Z');Date.now=()=>clock;
+ const expiring={...w,parentWebinarId:vip?'00000000-0000-4000-8000-000000000999':null,offers:[{id:'expiring',at:0,title:'Original checkout',description:'',ctaLabel:'Buy',action:'checkout',url:'',expiresAt:new Date(clock+1000).toISOString()}]};
+ const instance=await harness('components/webinar-room.tsx',{...roomDeps,post:async url=>url.endsWith('/start')?{sessionId,webinar:policy.publicWebinar(expiring),progress:100,name:'Buyer',messages:[],preview:false,serverNow:clock}:{saved:true,redirect:vip?'/webinar/upgrade':'/webinar/checkout'}});
+ try{
+  const draw=()=>instance.render('WebinarRoom',{});draw();await flush();let current=draw();current=draw();
+  const before=redirects.length;
+  if(interaction==='onEngaged')find(current,'WebinarCheckout').props.onEngaged();
+  else if(interaction==='onUpgradeActive')find(current,'WebinarCheckout').props.onUpgradeActive(true);
+  else if(interaction)all(current).find(n=>n.props?.className==='wb-embedded-checkout').props[interaction]();
+  clock+=2000;current=draw();
+  assert.equal(!!find(current,'WebinarCheckout'),!!interaction,'Only engaged checkout survives the actual deadline');
+  if(interaction){
+   assert.equal(find(current,'WebinarCountdownBanner').props.countdown,null,'No closed-offer countdown over active payment');
+   find(current,'WebinarCheckout').props.onUpgradeActive(false);current=draw();
+   assert.ok(find(current,'WebinarCheckout'),'Idle/error callbacks do not discard the checkout');
+  }
+  find(current,'WebinarPlayer').props.onEnded();await flush();current=draw();
+  assert.equal(redirects.length,before+(interaction?0:1),'Completion redirects only an unengaged viewer');
+  if(interaction){
+   assert.ok(find(current,'WebinarCheckout'));
+   find(current,'WebinarCheckout').props.onPurchased(vip?'vip':'standard',vip?null:'/live/123457');current=draw();
+   if(vip)assert.equal(redirects.at(-1),'/');else assert.equal(find(current,'WebinarVipWelcome').props.href,'/live/123457');
+  }
+ }finally{instance.close();Date.now=originalNow;}
+}
+console.log('PASS main/VIP active checkout: email/input/iframe/upgrade engagement pins the offer across expiry, idle errors and video end; only verified purchase advances.');

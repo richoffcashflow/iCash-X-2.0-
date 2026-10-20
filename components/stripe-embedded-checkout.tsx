@@ -15,7 +15,7 @@ export function StripeEmbeddedCheckout({clientSecret,publishableKey,onComplete,o
   // Focus events inside Stripe's cross-origin iframe do not bubble to React.
   // Observe only focus entering our iframe; never inspect payment fields.
   const inspect=()=>{if(detected||document.hidden)return;const node=document.activeElement;if(node?.tagName==='IFRAME'&&host.current?.contains(node)){detected=true;clearInterval(poll);interaction.current?.();}};
-  const focus=()=>{clearTimeout(timer);timer=setTimeout(inspect,0);};
+  const focus=()=>{inspect();clearTimeout(timer);if(!detected)timer=setTimeout(inspect,0);};
   window.addEventListener('blur',focus);
   document.addEventListener('focusin',focus);
   // Some webviews keep the outer window blurred across navigation. Observe
