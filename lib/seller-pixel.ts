@@ -1,5 +1,5 @@
 export const sellerPixelId='1315986669737891';
-export type SellerPixelRuntime={start:()=>void;registration:(eventId:string)=>void};
+export type SellerPixelRuntime={start:()=>void;registration:(eventId:string)=>void;address:(eventId:string)=>void};
 
 // Bootstrap before hydration, scoped to the public seller form only. Explicit
 // trackSingle calls keep HON conversions separate from the iCash webinar pixel.
@@ -14,12 +14,13 @@ export const sellerPixelBootstrap=String.raw`(function(w,d){
   if(!initialized){w.fbq('set','autoConfig',false,id);w.fbq('init',id);initialized=true;}
   if(!pageSent){w.fbq('trackSingle',id,'PageView',{}, {eventID:'homeoffer:page:'+w.crypto.randomUUID()});pageSent=true;}
  }
- w.homeOfferPixel={start:start,registration:function(eventId){
+ function conversion(eventId,name,custom){
   if(!page()||blocked()||!/^keypath:[a-f0-9-]{36}$/.test(eventId)||sent[eventId])return;
   try{if(w.localStorage.getItem('hon-meta:'+eventId)==='1')return;}catch(e){}
   start();if(!initialized)return;
-  w.fbq('trackSingle',id,'CompleteRegistration',{}, {eventID:eventId});sent[eventId]=true;
+  w.fbq(custom?'trackSingleCustom':'trackSingle',id,name,{}, {eventID:eventId});sent[eventId]=true;
   try{w.localStorage.setItem('hon-meta:'+eventId,'1');}catch(e){}
- }};
+ }
+ w.homeOfferPixel={start:start,registration:function(eventId){conversion(eventId,'CompleteRegistration',false);},address:function(eventId){conversion(eventId,'PropertyAddressConfirmed',true);}};
  start();
 })(window,document);`;

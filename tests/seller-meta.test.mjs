@@ -18,7 +18,13 @@ for(const url of ['https://homeoffernetwork.com/','https://www.homeoffernetwork.
  assert.equal(calls.filter(c=>c[2]==='CompleteRegistration').length,1);
  assert.deepEqual(Array.from(calls.at(-1)).slice(0,3),['trackSingle',sellerPixelId,'CompleteRegistration']);
  assert.equal(calls.at(-1)[4].eventID,id);
+ const addressId='keypath:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ b.w.homeOfferPixel.address(addressId);b.w.homeOfferPixel.address(addressId);
+ assert.equal(calls.filter(c=>c[2]==='PropertyAddressConfirmed').length,1);
+ assert.deepEqual(Array.from(calls.at(-1)).slice(0,3),['trackSingleCustom',sellerPixelId,'PropertyAddressConfirmed']);
+ assert.equal(calls.at(-1)[4].eventID,addressId);
  b.w.navigator.globalPrivacyControl=true;b.w.homeOfferPixel.registration('keypath:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');assert.equal(calls.filter(c=>c[2]==='CompleteRegistration').length,1);
+ b.w.homeOfferPixel.address('keypath:cccccccc-cccc-4ccc-8ccc-cccccccccccc');assert.equal(calls.filter(c=>c[2]==='PropertyAddressConfirmed').length,1);
 }
 for(const url of ['https://www.geticashx.com/','https://homeoffernetwork.com/sell/privacy','https://www.geticashx.com/workspace','https://homeoffernetwork.com/?preview=1','https://preview.vercel.app/sell','http://localhost:3000/sell'])assert.equal(browser(url).scripts.length,0);
 assert.equal(browser('https://homeoffernetwork.com/',true).scripts.length,0);
@@ -30,6 +36,8 @@ assert(!sellerMeasurement(req,{get:()=>undefined},{source:'google',clickId:'gcli
 const now=Date.now(),event={id:'fixture-event',leadId:'fixture-lead',token:'claim',name:'CompleteRegistration',phone:'+12145550123',occurredAt:new Date(now).toISOString(),measurement:{...m,address:'PRIVATE',equity:'PRIVATE'}};
 const payload=sellerMetaEvent(event,now);assert.equal(payload.action_source,'website');assert.equal(payload.event_source_url,'https://homeoffernetwork.com/');assert.equal(payload.event_id,'keypath:fixture-event');assert.equal(payload.user_data.fbc,m.fbc);assert(!JSON.stringify(payload).includes('PRIVATE'));assert(!JSON.stringify(payload).includes(event.phone));
 assert.equal(sellerMetaEvent({...event,name:'Contact'},now).action_source,'phone_call');assert.equal(sellerMetaEvent({...event,name:'SubmitApplication'},now).action_source,'system_generated');
+const addressPayload=sellerMetaEvent({...event,name:'PropertyAddressConfirmed',id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'},now);
+assert.equal(addressPayload.action_source,'website');assert.equal(addressPayload.event_id,'keypath:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');assert.equal(addressPayload.event_source_url,'https://homeoffernetwork.com/');assert(!JSON.stringify(addressPayload).includes('PRIVATE'));
 const calls=[],db=async(path,_method,body)=>{calls.push({path,body});return path==='rpc/icash_claim_seller_event'?event:true;};
 const env={VERCEL_ENV:'production',META_SELLER_EVENTS_ENABLED:'true',META_SELLER_DATASET_ID:sellerPixelId,META_CAPI_ACCESS_TOKEN:'fixture',META_GRAPH_VERSION:'v26.0'};
 let requestBody;

@@ -56,6 +56,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Complete feature flows
 
+- On October 20, 2026 the owner required HomeOffer Network seller address capture as a Meta funnel milestone. Use `PropertyAddressConfirmed` when the full address is saved, before research, qualification or offer preparation. Cover the website form and Meta lead call/SMS/private-link flows; keep the original Meta lead attribution, one durable event per lead/stage, matching website Pixel/CAPI event IDs, privacy opt-outs and test exclusions. Do not export the raw property address, re-time historical events or label address capture as a qualified deal. Production CRM feedback uses `META_INSTANT_CRM_EVENTS_ENABLED=true` alongside the existing seller dataset.
+
 - On October 20, 2026 the owner requested that standalone purchases (homepage, join and post-webinar checkout) go directly to their saved VIP session after verified payment, without the “Don’t leave” welcome/countdown. Preserve the bounded receipt measurement flush, safe destination validation, preview/setup/VIP guards and the playing-webinar handoff.
 
 - On October 20, 2026 the owner required active webinar checkout to remain open past the offer timer. Protect email entry, Stripe payment fields and VIP verification/upgrade until verified purchase or intentional departure. Keep the same form/session through expiry, video completion and temporary payment errors; do not infer payment or read card details. Unengaged offers still expire normally.
