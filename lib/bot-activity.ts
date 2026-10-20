@@ -6,11 +6,14 @@ export const botTaskLabels:Record<string,string>={
  title_followup:'Following up with title',customer_updates:'Sending an update',customer_attention:'Sending an update',
 };
 export type BotActivity={active:boolean;label:string;checkedAt:string};
-export function currentBotActivity(input:{paused:boolean;tickets:{kind:string;state:string;expires_at:string}[];screening:{state:string;lease_until:string|null}[]},now=Date.now()):BotActivity{
+export function currentBotActivity(input:{paused:boolean;tickets:{kind:string;state:string;expires_at:string}[];screening:{state:string;lease_until:string|null}[];progress?:{status?:string;callsBudgetHeld?:number}|null},now=Date.now()):BotActivity{
  const checkedAt=new Date(now).toISOString();
  if(input.paused)return {active:false,label:'Paused',checkedAt};
  const ticket=input.tickets.find(t=>t.state==='consumed'&&Date.parse(t.expires_at)>now&&Object.hasOwn(botTaskLabels,t.kind));
  if(ticket)return {active:true,label:botTaskLabels[ticket.kind],checkedAt};
  if(input.screening.some(s=>s.state==='running'&&s.lease_until&&Date.parse(s.lease_until)>now))return {active:true,label:'Checking property numbers',checkedAt};
+ if(input.progress?.status==='budget_reached')return {active:false,label:'New outreach allowance used',checkedAt};
+ if(input.progress?.status==='paced')return {active:false,label:'Waiting for the next spending allowance',checkedAt};
+ if((input.progress?.callsBudgetHeld??0)>0)return {active:false,label:'Calls waiting for spending allowance',checkedAt};
  return {active:false,label:'Waiting for the next task',checkedAt};
 }

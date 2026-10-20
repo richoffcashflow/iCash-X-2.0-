@@ -6,6 +6,7 @@ import {launchReadiness} from '@/lib/launch-readiness';
 import {readCourseProgress} from '@/lib/course-progress-server';
 import {courseProgressEvidence} from './course-progress';
 import type {SupportEvidence} from './support-policy';
+import {supportOutreachEvidence} from './support-outreach';
 const money=(cents:number)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(cents/100);
 const validCents=(value:number)=>Number.isSafeInteger(value)&&value>=0;
 const readinessLabels:Record<string,string>={dataProvider:'Property data access needs attention',voiceProvider:'Calling service access needs attention',emailAccess:'Email access needs attention',billing:'Billing configuration needs attention',cashReserve:'Operating reserve check needs attention',discovery:'Property search configuration needs attention',voice:'Calling configuration needs attention',productionContracts:'Production contract configuration needs review',unresolvedDispatches:'A provider action has an uncertain outcome',readiness_unavailable:'Readiness could not be checked'};
@@ -16,6 +17,7 @@ export async function collectSupportDiagnostics(accountId:string):Promise<Suppor
   try{return {key,source,observedAt,...await fn()};}catch{return {key,source,observedAt,status:'unknown',detail:`The ${key} check is temporarily unavailable. Nothing was changed.`};}
  };
  return Promise.all([
+  check('outreach','icash_support_outreach_diagnostics',async()=>supportOutreachEvidence(await db('rpc/icash_support_outreach_diagnostics','POST',{p_account:accountId}))),
   check('course','icash_course_progress',async()=>courseProgressEvidence(await readCourseProgress(accountId))),
   check('work','icash_accounts',async()=>{const [a]=await db<{bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=bot_paused`);if(!a||typeof a.bot_paused!=='boolean')throw Error();return {code:a.bot_paused?'paused':'not_paused',status:a.bot_paused?'attention':'ok',detail:a.bot_paused?'Your bot is paused. New automated work is stopped; previously authorized work may still finish. The pause flag alone does not tell us why it was paused.':'Your bot is not paused. Other safety and readiness checks still apply.'};}),
   check('credits','icash_wallets',async()=>{const [w]=await db<{balance_cents:number;reserved_cents:number}[]>(`icash_wallets?account_id=eq.${accountId}&select=balance_cents,reserved_cents`);if(!w)throw Error();if(!validCents(w.balance_cents)||!validCents(w.reserved_cents)||w.reserved_cents>w.balance_cents)throw Error();const available=w.balance_cents-w.reserved_cents;return {code:available>0?'credit_available':'no_available_credit',status:available>0?'ok':'attention',detail:`The live-work wallet has ${money(available)} available and ${money(w.reserved_cents)} held for work already reserved. Test checkout credit is separate. This is credit, not a bank balance or refund amount.`};}),

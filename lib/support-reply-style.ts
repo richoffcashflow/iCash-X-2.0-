@@ -8,7 +8,7 @@ const normalize=(text:string)=>text.toLowerCase().replace(/[’']/g,'').replace(
 /** Keep short follow-ups attached to the latest named issue, not the first issue in the thread. */
 export function currentSupportIssue(messages:Turn[]){
  const users=messages.filter(turn=>turn.role==='user');
- return [...users].reverse().find(turn=>/\b(?:card|payment|billing|bill|charge|charged|credit|balance|renewal|subscription|bot|lead|property|contract|course|sign.?in|log.?in|code|refund|cancel)\b/i.test(turn.content))?.content??users.at(-1)?.content??'';
+ return [...users].reverse().find(turn=>/\b(?:card|payment|billing|bill|charge|charged|credits?|balance|renewal|subscription|bot|leads?|propert(?:y|ies)|seller|owner|calls?|texts?|contract|course|sign.?in|log.?in|code|refund|cancel)\b/i.test(turn.content))?.content??users.at(-1)?.content??'';
 }
 
 export function supportReplyEvidence(messages:Turn[],evidence:SupportEvidence[]){

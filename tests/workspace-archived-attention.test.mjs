@@ -22,6 +22,7 @@ let onlyTable=null,unmatchedText=false,closingEnabled=true;
 const db=async(path,method='GET',body)=>{
  if(path.startsWith('rpc/')){
   assert.equal(method,'POST');assert.equal(body.p_account,account);
+  if(path==='rpc/icash_prospecting_progress')return {status:'budget_reached',callsBudgetHeld:2};
   if(path==='rpc/icash_closing_task_attention')return closingEnabled?requests.filter(r=>active(r.screening_id)).slice(body.p_offset,body.p_offset+body.p_limit):[];
   if(path==='rpc/icash_sms_route_review_items')return unmatchedText?[{message_id:uuid(800),needs_review:true,candidates:[]}]:[];
   if(path==='rpc/icash_activity_report')return {days:body.p_days,timezone:'America/Chicago',startAt:'2026-10-01T00:00:00Z',endAt:'2026-10-12T00:00:00Z',leads:0,calls:0,texts:0,contracts:0};
@@ -64,7 +65,7 @@ const db=async(path,method='GET',body)=>{
  throw Error('Unexpected read '+table);
 };
 const {GET}=await loadService('app/api/work/activity/route.ts',{instantLeadsEnabled,db,z,workspaceAttentionQuery,workAccount:async()=>({accountId:account}),attachTaskRecovery:async(_,rows)=>rows,NextResponse:{json:(body,options={})=>({body,status:options.status??200})}});
-const {workspaceAssistantContext}=await loadService('lib/workspace-assistant-context.ts',{db,workspaceAttentionQuery,workspaceAttentionTables,validActivityReport,currentBotActivity:()=>({checkedAt:'2026-10-12T00:00:00Z',label:'Ready',active:false})});
+const {workspaceAssistantContext}=await loadService('lib/workspace-assistant-context.ts',{db,workspaceAttentionQuery,workspaceAttentionTables,validActivityReport,currentBotActivity:input=>{assert.deepEqual(input.progress,{status:'budget_reached',callsBudgetHeld:2});return {checkedAt:'2026-10-12T00:00:00Z',label:'New outreach allowance used',active:false};}});
 const get=query=>GET(new Request('https://example.invalid/api/work/activity'+query));
 const attentionKeys=['textAttention','callRequests','handoffs','signatureActions','viewingRequests','sellerRecovery','closingReview','closingTasks'];
 let response=await get('');assert.equal(response.status,200);assert.equal(response.body.properties.length,6);
