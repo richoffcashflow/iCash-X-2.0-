@@ -1,10 +1,12 @@
 import {settleRecordingGateOnly} from './required-call-recording-billing.ts';
+import {recordingHandoffDiagnostic} from './recording-handoff-diagnostic.ts';
 import {object,sha,sid,type RecordingRow} from './required-call-recording.ts';
 import {RecordingProviderError,type RecordingEnv,type RecordingProviders} from './required-call-recording-provider.ts';
 import {recordingReceipt,finalRecordingPayload,recordingTransition,recordingStopToken,type RecordingDb} from './required-call-recording-service.ts';
 /** Cleanup is intentionally independent of launch flags, customer balance, and bot pause. */
 export async function maintainRecordings(db:RecordingDb,provider:RecordingProviders,env:RecordingEnv){
  const result={deleted:0,reconciled:0,held:0};
+ let handoffInspected=false;
  const finish=(row:RecordingRow,kind:string,outcome:string,payload:Record<string,unknown>)=>db<RecordingRow|null>('rpc/icash_finish_call_recording_work','POST',{p_id:row.id,p_account:row.account_id,p_operation:row.operation_key,p_kind:kind,p_lease_token:row[kind==='delete'?'deletion_lease_token':'reconcile_lease_token'],p_outcome:outcome,p_payload:payload});
  // Bound per invocation. Database leases make overlapping invocations safe.
  for(const row of await db<RecordingRow[]>('rpc/icash_claim_call_recording_work','POST',{p_kind:'delete',p_limit:5,p_lease_seconds:120})){
@@ -57,7 +59,11 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
      if(!bound)throw Error('CONVERSATION_BINDING_NOT_SAVED');row=bound;
     }
    }
-   }catch(error){console.warn('recording_reconcile_diagnostic',{stage:'conversation',recordingId:row.id,reason:'conversation_binding_pending',bindingStage,mismatches,...(error instanceof RecordingProviderError?{providerStatus:error.status}:{})});}
+   }catch(error){
+    console.warn('recording_reconcile_diagnostic',{stage:'conversation',recordingId:row.id,reason:'conversation_binding_pending',bindingStage,mismatches,...(error instanceof RecordingProviderError?{providerStatus:error.status}:{})});
+    // At most one read-only carrier inspection per maintenance invocation. No new call or retry.
+    if(bindingStage==='list_empty'&&!handoffInspected){handoffInspected=true;console.warn('recording_handoff_diagnostic',{recordingId:row.id,...await recordingHandoffDiagnostic(row,provider,env)});}
+   }
    stage='carrier';
    if(!row.start_claimed_at){
     let terminal=row;const call=await provider.getCall(row.call_sid!);
