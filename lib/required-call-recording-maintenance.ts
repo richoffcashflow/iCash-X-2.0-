@@ -1,4 +1,7 @@
 import {settleRecordingGateOnly} from './required-call-recording-billing.ts';
+import {findRecordedQuotaFailure} from './recorded-call-provider-failure.ts';
+import {liveConversationResult} from './deal-conversation.ts';
+import type {VoiceConversation} from './voice-result.ts';
 import {object,sha,sid,type RecordingRow} from './required-call-recording.ts';
 import {RecordingProviderError,type RecordingEnv,type RecordingProviders} from './required-call-recording-provider.ts';
 import {recordingReceipt,finalRecordingPayload,recordingTransition,recordingStopToken,type RecordingDb} from './required-call-recording-service.ts';
@@ -37,13 +40,13 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
    // A missing AI identity must not block independently verified call audio.
    // Keep identity discovery scheduled, with its exact provider bindings intact.
    stage='conversation';
-   let bindingStage='list_read';const mismatches:string[]=[];
+   let bindingStage='list_read',emptyIdentity=false;const mismatches:string[]=[];
    try{if(row.start_claimed_at&&row.recording_sid&&!row.conversation_id&&['recording','processing','available','expired','absent','failed'].includes(row.state)){
     const list=await provider.conversations(row),rows=list.conversations;
     bindingStage='list_shape';
     if(list.has_more!==false||!Array.isArray(rows)||rows.length>1)throw Error('CONVERSATION_BINDING_REVIEW_REQUIRED');
     bindingStage='list_empty';
-    if(rows.length===0)throw Error('CONVERSATION_BINDING_NOT_YET_AVAILABLE');
+    if(rows.length===0){emptyIdentity=true;throw Error('CONVERSATION_BINDING_NOT_YET_AVAILABLE');}
     bindingStage='conversation_read';
     if(rows.length===1){const candidate=object(rows[0]);const c=await provider.conversation(String(candidate.conversation_id));
      const phone=object(object(c.metadata).phone_call),init=object(c.conversation_initiation_client_data);
@@ -89,7 +92,25 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
    else if(receipt.status==='absent'){const ended=await provider.end(row.call_sid!);if(ended.sid!==row.call_sid||ended.account_sid!==row.provider_account_sid||ended.status!=='completed')throw Error('REQUIRED_RECORDING_END_UNCONFIRMED');outcome='absent';payload={};}
    else{outcome='processing';payload={recordingSid:receipt.sid,providerStartedAt:new Date(String(receipt.start_time)).toISOString()};}
    stage='receipt_commit';
-   if(await finish(row,'reconcile',outcome,payload))result.reconciled++;
+   const saved=await finish(row,'reconcile',outcome,payload);
+   if(saved){
+    result.reconciled++;
+    if(emptyIdentity&&typeof provider.failedConversations==='function'){
+     try{
+      const failed=await findRecordedQuotaFailure(provider,saved);
+      if(failed){
+       if(saved.party!=='seller'&&saved.party!=='buyer')throw Error('FAILED_CONVERSATION_PARTY_REQUIRED');
+       const bound=await recordingTransition(db,saved,'bind_conversation',{conversationId:failed.conversation_id,toolTokenHash:sha(recordingStopToken(saved.operation_key,env))});
+       if(!bound)throw Error('FAILED_CONVERSATION_BINDING_NOT_SAVED');
+       const calls=await db<{id:string}[]>(`icash_live_conversations?account_id=eq.${saved.account_id}&operation_key=eq.${encodeURIComponent(saved.operation_key)}&conversation_id=eq.${encodeURIComponent(String(failed.conversation_id))}&select=id`);
+       const failedResult=liveConversationResult(failed as VoiceConversation,{conversationId:String(failed.conversation_id),agentId:saved.agent_id,party:saved.party});
+       if(calls.length!==1||!failedResult)throw Error('FAILED_CONVERSATION_RESULT_REQUIRED');
+       await db('rpc/icash_save_live_result','POST',{p_call:calls[0].id,p_result:failedResult});
+      }
+     }
+     catch{console.warn('recording_reconcile_diagnostic',{stage:'provider_failure',recordingId:row.id,reason:'provider_failure_receipt_pending'});}
+    }
+   }
    else{
     // Rejected receipts previously retained their old due time and lease until
     // expiration. Those rows repeatedly occupied the small batch ahead of new calls.

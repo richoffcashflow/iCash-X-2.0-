@@ -43,6 +43,13 @@ export function createRecordingProviders(env:RecordingEnv,fetcher:typeof fetch=f
   agent:async(r:RecordingReview)=>object(JSON.parse(await eleven(`/v1/convai/agents/${r.agentId}?branch_id=${r.branchId}`))),
   tool:async(id:string)=>{if(!/^tool_[A-Za-z0-9]+$/.test(id))throw Error('TOOL_ID_REQUIRED');return object(JSON.parse(await eleven('/v1/convai/tools/'+id)));},
   conversations:async(row:RecordingRow)=>object(JSON.parse(await eleven('/v1/convai/conversations?'+new URLSearchParams({agent_id:row.agent_id,branch_id:row.branch_id,version_id:row.version_id,user_id:'icash-recorded:'+row.id,page_size:'2'})))),
+  // A rejected stream can fail before ElevenLabs applies our custom user ID.
+  // This is discovery only: the full receipt must still match the exact carrier call.
+  failedConversations:async(row:RecordingRow)=>{
+   const start=Math.floor(Date.parse(row.created_at)/1000);
+   if(!Number.isSafeInteger(start)||!/^\+[1-9]\d{7,14}$/.test(row.to_phone))throw Error('FAILED_CONVERSATION_WINDOW_REQUIRED');
+   return object(JSON.parse(await eleven('/v1/convai/conversations?'+new URLSearchParams({agent_id:row.agent_id,branch_id:row.branch_id,version_id:row.version_id,user_id:row.to_phone,call_start_after_unix:String(start-5),call_start_before_unix:String(start+1200),page_size:'2'}))));
+  },
   conversation:async(id:string)=>{if(!/^conv_[A-Za-z0-9]+$/.test(id))throw Error('CONVERSATION_ID_REQUIRED');return object(JSON.parse(await eleven('/v1/convai/conversations/'+id)));},
   register:async(row:RecordingRow,remainingSeconds:number,stopToken:string)=>{
    if(!recordingAuthorized(row)||!row.recording_sid||!row.start_claimed_at)throw Error('RECORDING_REQUIRED');
