@@ -21,14 +21,14 @@ Raw source records remain account-bound. New rollup, assignment, queue, revision
 
 ## Change notifications
 
-The existing Railway worker serves `/workspace/events`. An authenticated Next route mints a five-minute account-scoped HMAC token, domain-separated from other credentials. Browser requests carry it in the Authorization header, never the URL. The worker accepts only the production app origins, polls account revisions in batches of 100 and emits only a revision string. No account data is pushed. Stream limits, expiry, slow-consumer handling and bounded reconnects prevent unbounded resources. Paused/hidden tabs disconnect. The heavy progress and activity endpoints load on changes with a 60-second fallback, retaining saved work and unsent drafts.
+The existing authenticated Next app serves `/api/work/events`. The account comes exclusively from the signed-in session; callers cannot supply an account ID. One connection per tab reads a small private revision counter every five seconds and emits only changes. No private records, credentials or account identifiers stream. Connections end after 45 seconds and reauthenticate on reconnect. Hidden tabs disconnect. The heavy progress and activity endpoints load on changes with a 60-second fallback, retaining saved work and unsent drafts.
 
-Set the server-only `ICASH_WORKSPACE_EVENTS_URL` to the worker's HTTPS `/workspace/events` URL after the worker is deployed. If absent or unreachable, the fallback remains functional. The owner pretend/demo view does not mount the live workspace or subscribe.
+The Railway worker stays private and only refreshes shared evidence. No public worker domain or new environment secret is needed. The owner pretend/demo view does not mount the live workspace or subscribe.
 
 ## Release and rollback
 
-Apply the additive database migration before deploying the app and worker. Keep existing disabled recovery/filter variants disabled. Deploy the worker from the same reviewed commit, then set the event URL for the app build. Verify the owner report, queue health, anonymous access denial, production app health and Railway terminal SUCCESS. No paid test calls, messages, lookups or purchases are needed.
+Apply the additive database migration before deploying the app and worker. Keep existing disabled recovery/filter variants disabled. Deploy the worker and app from the same reviewed commit. Verify the owner report, queue health, anonymous access denial, production app health and Railway terminal SUCCESS. No paid test calls, messages, lookups or purchases are needed.
 
-If the event feed fails, remove the event URL and redeploy; fallback refresh continues. Rolling back the app/worker leaves additive schema and saved assignments intact. Do not delete assignments, reset cursors or replay uncertain paid operations. Database learning-policy rollback must restore the prior functions in a new reviewed migration; changing a score never authorizes mutation of past receipts.
+If the event feed fails, clients automatically back off and fallback refresh continues. Rolling back the app/worker leaves additive schema and saved assignments intact. Do not delete assignments, reset cursors or replay uncertain paid operations. Database learning-policy rollback must restore the prior functions in a new reviewed migration; changing a score never authorizes mutation of past receipts.
 
-Validation: isolated PGlite migration/receipt tests, pure policy tests, worker stream authentication/isolation tests, existing regression suites, typecheck, production build and browser rendering of the owner panel.
+Validation: isolated PGlite migration/receipt tests, pure policy tests, authenticated stream isolation/lifetime tests, existing regression suites, typecheck, production build and browser rendering of the owner panel.

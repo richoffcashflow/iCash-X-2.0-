@@ -1,21 +1,15 @@
 'use client';
 type Listener=()=>void;
 const listeners=new Set<Listener>();
-let controller:AbortController|null=null,timer:ReturnType<typeof setTimeout>|undefined,attempt=0,account='',revision:string|null=null;
+let controller:AbortController|null=null,timer:ReturnType<typeof setTimeout>|undefined,attempt=0,revision:string|null=null;
 function changed(){for(const listener of listeners)listener();}
 function stop(){controller?.abort();controller=null;clearTimeout(timer);}
 async function connect(){
  if(typeof document==='undefined'||document.hidden||!listeners.size||controller)return;
  const current=new AbortController();controller=current;let timeout:ReturnType<typeof setTimeout>|undefined;
  try{
-  const result=await fetch('/api/work/events-token',{cache:'no-store',credentials:'same-origin',signal:AbortSignal.any([current.signal,AbortSignal.timeout(15000)])});
-  if(!result.ok)throw Error('Feed unavailable');
-  const auth=await result.json();
-  if(auth.available!==true)throw Error('Feed unavailable');
-  if(typeof auth.url!=='string'||typeof auth.token!=='string'||typeof auth.accountId!=='string'||!Number.isFinite(auth.expiresAt)||auth.expiresAt<=Date.now())throw Error('Feed unavailable');
-  if(account!==auth.accountId){account=auth.accountId;revision=null;}
-  timeout=setTimeout(()=>current.abort(),Math.min(300000,auth.expiresAt-Date.now()));
-  const response=await fetch(auth.url,{headers:{Authorization:`Bearer ${auth.token}`},credentials:'omit',cache:'no-store',signal:current.signal,redirect:'error'});
+  timeout=setTimeout(()=>current.abort(),60000);
+  const response=await fetch('/api/work/events',{credentials:'same-origin',cache:'no-store',signal:current.signal,redirect:'error'});
   if(!response.ok||!response.body||!response.headers.get('content-type')?.startsWith('text/event-stream'))throw Error('Feed unavailable');
   attempt=0;
   const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='';
@@ -42,5 +36,5 @@ function visibility(){if(document.hidden)stop();else{changed();void connect();}}
 export function subscribeWorkspaceChanges(listener:Listener){
  listeners.add(listener);
  if(listeners.size===1){document.addEventListener('visibilitychange',visibility);void connect();}
- return()=>{listeners.delete(listener);if(!listeners.size){stop();document.removeEventListener('visibilitychange',visibility);account='';revision=null;}};
+ return()=>{listeners.delete(listener);if(!listeners.size){stop();document.removeEventListener('visibilitychange',visibility);revision=null;}};
 }
