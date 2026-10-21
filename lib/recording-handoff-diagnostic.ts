@@ -2,7 +2,7 @@ import {object,recordingBaseUrl,sha,sid,uuid,type RecordingRow} from './required
 import {RecordingProviderError,type RecordingEnv,type RecordingProviders} from './required-call-recording-provider.ts';
 
 /** Read-only evidence for missing AI identities. Never authorizes binding, retry or settlement. */
-export async function recordingHandoffDiagnostic(row:RecordingRow,provider:Pick<RecordingProviders,'getCall'|'getCallEventsPage'>,env:RecordingEnv,now=Date.now()){
+export async function recordingHandoffDiagnostic(row:RecordingRow,provider:Pick<RecordingProviders,'getCall'|'getCallEventsPage'|'getCallNotifications'>,env:RecordingEnv,now=Date.now()){
  const result=(status:string,extra:Record<string,unknown>={})=>({status,...extra});
  if(!uuid(row.id)||!sid(row.call_sid,'CA')||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!sid(row.provider_account_sid,'AC')||!row.start_claimed_at||row.conversation_id||!/^[a-f0-9]{64}$/.test(row.nonce_hash??''))return result('binding_unavailable');
  try{
@@ -26,6 +26,26 @@ export async function recordingHandoffDiagnostic(row:RecordingRow,provider:Pick<
    // Presence markers only: they do not assert a valid XML document or an AI connection.
    events.push({httpStatus:Number.isInteger(response.response_code)&&Number(response.response_code)>=100&&Number(response.response_code)<=599?response.response_code:null,bodyBounded:bounded,connectMarker:bounded?/<Connect\b/.test(body):null,streamMarker:bounded?/<Stream\b/.test(body):null,hangupMarker:bounded?/<Hangup\b/.test(body):null});
   }
-  return result(page.next_page_uri===null?'complete':'incomplete_page',{matchedEvents:events.length,events});
+  // Only inspect the fixed call's first notification page after full carrier and
+  // callback binding. Codes are evidence, never authorization to settle or retry.
+  let notifications:Record<string,unknown>={status:'not_inspected'};
+  if(events.length){
+   try{
+    const notes=await provider.getCallNotifications(row.call_sid);
+    if(!Array.isArray(notes.notifications)||notes.notifications.length>20)notifications={status:'invalid_page'};
+    else{
+     const codes:number[]=[];let valid=true;
+     for(const raw of notes.notifications){
+      const note=object(raw),code=note.error_code;
+      if(note.account_sid!==row.provider_account_sid||note.call_sid!==row.call_sid){valid=false;break;}
+      if(typeof code==='number'&&Number.isSafeInteger(code)&&code>=10000&&code<=99999)codes.push(code);
+      else if(typeof code==='string'&&/^[1-9]\d{4}$/.test(code))codes.push(Number(code));
+      else{valid=false;break;}
+     }
+     notifications=valid?{status:notes.next_page_uri===null?'complete':'incomplete_page',errorCodes:[...new Set(codes)].sort((a,b)=>a-b)}:{status:'binding_or_code_invalid'};
+    }
+   }catch(error){notifications={status:'provider_read_unavailable',...(error instanceof RecordingProviderError?{providerStatus:error.status}:{})};}
+  }
+  return result(page.next_page_uri===null?'complete':'incomplete_page',{matchedEvents:events.length,events,notifications});
  }catch(error){return result('provider_read_unavailable',error instanceof RecordingProviderError?{providerStatus:error.status}:{});}
 }
