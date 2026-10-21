@@ -3,6 +3,7 @@ import {workspaceActivity} from '@/lib/workspace-activity-read';
 import {currentBotActivity} from '@/lib/bot-activity';
 import {validActivityReport,type ActivityDays} from '@/lib/activity-report';
 import {dealMachinePhoto} from '@/lib/property-photo';
+import {savedPropertyPhoto} from '@/lib/persistent-property-photo';
 import {db} from '@/lib/stripe-test';
 import {ownerAccountView,ownerViewFailure,ownerViewHeaders,OwnerViewError} from '@/lib/owner-account-access';
 import {ownerLeadsSchema} from '@/lib/owner-accounts';
@@ -56,8 +57,10 @@ export async function GET(req:Request,context:{params:Promise<{viewId:string;res
   const [row]=await db<{snapshot?:{raw?:{data?:{dm_property_id?:string;images?:unknown}}};result:{property:{propertyId:string;images?:unknown}}}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=eq.${f.screeningId}&state=eq.complete&select=snapshot,result&limit=1`);
   if(!row)throw new OwnerViewError(404,'This property is not in the viewed account.');
   const property=row.result.property,raw=row.snapshot?.raw?.data;
-  // Inspection uses saved images only; never buys a provider lookup or takes a cache lease.
-  return json({photo:dealMachinePhoto(property.images)??(raw?.dm_property_id===property.propertyId?dealMachinePhoto(raw.images):null)});
+  // Include metadata already fetched by the workspace. Inspection stays read-only:
+  // no provider lookup, cache lease, customer provisioning or paid work.
+  const photo=dealMachinePhoto(property.images)??(raw?.dm_property_id===property.propertyId?dealMachinePhoto(raw.images):null)??await savedPropertyPhoto(db,accountId,f.screeningId);
+  return json({photo});
  }
  if(resource==='leads'){
   const f=z.object({q:z.string().trim().max(100).default(''),page:page.default('1').refine(n=>n>=1)}).strict().parse(query);

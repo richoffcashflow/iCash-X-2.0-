@@ -7,10 +7,17 @@ export function dealMachinePhoto(images:unknown):PropertyPhoto|null{
   const value=values[view];if(typeof value!=='string'||value.length>2048)continue;
   try{const url=new URL(value);if(url.protocol!=='https:'||url.hostname!=='img.dealmachine.com'||url.port||url.username||url.password||url.hash)continue;
    if(!url.pathname.startsWith(view==='street_view'?'/sv/':'/sat/'))continue;
-   return {url:url.href,source:'DealMachine',view};
+   const fallback=view==='street_view'?dealMachinePhoto({satellite:values.satellite}):null;
+   return {url:url.href,source:'DealMachine',view,...(fallback?{fallbackUrl:fallback.url}:{})};
   }catch{/* Missing or malformed provider imagery stays unavailable. */}
  }
  return null;
+}
+
+/** Preserve only validated imagery from the ID-matched property response. */
+export function propertyImageFields(data:Record<string,unknown>){
+ const photo=dealMachinePhoto(data.images)??coordinatePropertyPhoto(data.latitude,data.longitude);
+ return photo?{[photo.view]:photo.url,...(photo.fallbackUrl?{satellite:photo.fallbackUrl}:{})}:null;
 }
 
 /** Documented provider CDN contract; only call with ID-matched API coordinates.

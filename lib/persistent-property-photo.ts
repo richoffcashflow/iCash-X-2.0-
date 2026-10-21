@@ -1,12 +1,17 @@
 import {dealMachinePhoto,type PropertyPhoto} from './property-photo.ts';
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
-function checkedPhoto(value:unknown):PropertyPhoto|null{
+export function checkedPhoto(value:unknown):PropertyPhoto|null{
  if(!value||typeof value!=='object')return null;
  const p=value as PropertyPhoto;
  if(p.source!=='DealMachine'||!['street_view','satellite'].includes(p.view))return null;
  const photo=dealMachinePhoto({[p.view]:p.url});if(!photo)return null;
  const fallback=dealMachinePhoto({satellite:p.fallbackUrl});
  return {...photo,...(fallback?{fallbackUrl:fallback.url}:{})};
+}
+/** Display previously fetched metadata without taking a lease, buying data or
+ * changing customer work. CDN URLs remain usable after the lookup cache expires. */
+export async function savedPropertyPhoto(db:Database,accountId:string,screeningId:string){
+ return checkedPhoto(await db<unknown>('rpc/icash_read_photo_cache','POST',{p_account:accountId,p_screening:screeningId}));
 }
 /** Account + screening scoped, 15-minute metadata cache with a cross-instance lease.
  * An unavailable cache never starts uncontrolled provider requests.
