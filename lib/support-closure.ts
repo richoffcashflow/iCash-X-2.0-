@@ -15,7 +15,10 @@ export function refundOnly(text:string){
  return !rest;
 }
 function abuseOnly(text:string){return abuse.test(text)&&!/[0-9$€£@]/.test(text)&&!normalize(text).replace(filler,'').trim();}
-export function refundEvidenceNeeded(messages:Turn[]){return messages.some(m=>m.role==='user'&&/\b(?:refund|money back)\b/i.test(m.content));}
+export function refundEvidenceNeeded(messages:Turn[]){
+ const latest=messages.at(-1);
+ return latest?.role==='user'&&(/\b(?:refund|money back)\b/i.test(latest.content)||abuseOnly(latest.content)&&messages.some(m=>m.role==='user'&&/\b(?:refund|money back)\b/i.test(m.content)));
+}
 
 /** Fixed policy, never a model's decision to silence an unresolved complaint. */
 export function repeatedRefundReply(messages:Turn[],evidence:SupportEvidence[]=[]){

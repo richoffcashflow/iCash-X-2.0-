@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {prepareSupportRefundEvidence,refundDeliverySummary,savedRefundCase} from '../lib/support-refund-evidence.ts';
 import {replyToSupport} from '../lib/support-conversation.ts';
+import {supportReplyEvidence} from '../lib/support-reply-style.ts';
 import {refundEvidenceNeeded} from '../lib/support-closure.ts';
 const accountId=randomUUID(),threadId=randomUUID(),requestId=randomUUID(),membership=randomUUID(),foreign=randomUUID();
 const stamp='2026-10-20T12:00:00.000Z';
@@ -22,6 +23,8 @@ const db=async(path,method,body,signal)=>{
 };
 let evidence=await prepareSupportRefundEvidence(db,{accountId,threadId,requestId},checks,'live');
 assert.equal(evidence.refundCase.policyAcceptanceRecorded,true);
+assert(!supportReplyEvidence([{role:'user',content:'Where is the course?'}],[...checks,evidence]).some(e=>e.key==='refund_case'),'Private packet is excluded from model checks and unresolved status');
+assert.equal(refundEvidenceNeeded([{role:'user',content:'refund me'},{role:'user',content:'Where is the course?'}]),false,'Do not regenerate refund evidence for a different topic');
 assert.equal(savedRefundCase(evidence.refundCase,foreign),null);
 assert.equal(savedRefundCase(evidence.refundCase,accountId,foreign),null);
 assert.equal(savedRefundCase({version:9},accountId),null);
