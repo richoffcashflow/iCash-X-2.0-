@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import {loadService} from './helpers/simulated-journey-services.mjs';
+import {discoverPage} from '../lib/discovery-pipeline.ts';
+import {selectDiscoveryFilter,DiscoveryFilterUnavailable,discoveryStrategies} from '../lib/discovery-filters.ts';
+Object.assign(process.env,{DEALMACHINE_API_KEY:'dm_sk_live_FIXTURE_NO_NETWORK',ICASH_ACQUISITION_MODE:'outbound'});
+let events=[],rpc=[],response=200,failPaid=false,existing=false,disabled=false,empty=false;
+const svc=await loadService('lib/discovery-service.ts',{
+ discoveryWorkEnabled:()=>true,liveWorkReady:()=>true,propertyResearchMarketKnown:async()=>true,discoverPage,selectDiscoveryFilter,DiscoveryFilterUnavailable,
+ db:async(path,method,body)=>{
+  if(path.startsWith('icash_discovery_configs'))return [{enabled:true,zip:'75217',rate_id:'rate',property_credit_micros:10000,data_rights_until:'2099-01-01',per_page:5,next_page:1,revision:'revision'}];
+  if(path.startsWith('icash_bot_setups'))return [{revision:1,profile:{marketMode:'city',market:'75217'}}];
+  if(path.startsWith('icash_accounts'))return [{bot_paused:false}];
+  if(path.startsWith('icash_wallets'))return [{balance_cents:100,reserved_cents:0}];
+  if(path.startsWith('icash_operation_rates'))return [{enabled:true,operation:'property_search',expires_at:'2099-01-01',costs_micros:{dealmachine:50000}}];
+  if(path.startsWith('icash_operation_spend'))return existing?[{state:'dispatched'}]:[];
+  rpc.push({path,body});
+  if(path==='rpc/icash_discovery_filter_state')return disabled?null:discoveryStrategies.map(strategy=>({strategy,nextPage:3,exhausted:false,pages:0,matureAttempts:0,interested:0,optedOut:0,costCents:0,costsComplete:true}));
+  if(path.includes('reserve_and_claim'))events.push('claim');
+  return true;
+ }
+});
+globalThis.fetch=async(url,opt)=>{
+ assert.equal(url,'https://api.v2.dealmachine.com/v1/properties/search');const body=JSON.parse(opt.body);events.push(body.estimate_cost?'estimate':'paid');
+ if(!body.estimate_cost&&failPaid)throw Error('uncertain receipt');
+ return new Response(JSON.stringify(body.estimate_cost?{estimated_credits:{this_page:empty?0:1,breakdown:{people:0}}}:{data:[],credits:{used:0,people:0},pagination:{has_next_page:true}}),{status:response});
+};
+assert.equal((await svc.discoverForAccount('account')).status,'screening_queued');assert.deepEqual(events,['estimate','claim','paid']);
+assert.equal(rpc.find(x=>x.path==='rpc/icash_reserve_and_claim_filtered_discovery').body.p_plan.strategy,'vacant');
+assert(rpc.some(x=>x.path==='rpc/icash_save_filtered_discovery'));assert(rpc.some(x=>x.path==='rpc/icash_settle_dealmachine_usage'));
+events=[];rpc=[];response=422;assert.equal((await svc.discoverForAccount('account')).status,'empty');assert.deepEqual(events,['estimate']);assert.equal(rpc.at(-1).body.p_reason,'unavailable');
+events=[];rpc=[];response=429;await assert.rejects(svc.discoverForAccount('account'),/NO_RETRY/);assert.deepEqual(events,['estimate']);assert(!rpc.some(x=>x.path.includes('finish_empty')));
+events=[];rpc=[];response=200;empty=true;assert.equal((await svc.discoverForAccount('account')).status,'empty');assert.deepEqual(events,['estimate']);assert.equal(rpc.at(-1).body.p_reason,'empty');empty=false;
+events=[];rpc=[];failPaid=true;await assert.rejects(svc.discoverForAccount('account'),/NO_RETRY/);assert.deepEqual(events,['estimate','claim','paid']);assert(!rpc.some(x=>x.path.includes('finish_empty')));failPaid=false;
+events=[];rpc=[];existing=true;assert.equal((await svc.discoverForAccount('account')).status,'awaiting_reconciliation');assert.deepEqual(events,[]);assert.deepEqual(rpc,[]);existing=false;
+events=[];rpc=[];disabled=true;await svc.discoverForAccount('account');assert(rpc.some(x=>x.path==='rpc/icash_save_discovery'));assert(!rpc.some(x=>x.path==='rpc/icash_save_filtered_discovery'));
+console.log('Filter service: original admission, rollout switch, bounded free-estimate rejection, settlement and no replay after uncertain paid requests passed.');

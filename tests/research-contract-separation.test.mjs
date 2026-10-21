@@ -18,6 +18,7 @@ const discovery=await loadService('lib/discovery-service.ts',{
   if(path.startsWith('icash_wallets'))return [{balance_cents:300,reserved_cents:0}];
   if(path.startsWith('icash_operation_rates'))return [{enabled:true,operation:'property_search',expires_at:'2099-01-01',costs_micros:{dealmachine:100000}}];
   if(path.startsWith('icash_operation_spend'))return [];
+  if(path==='rpc/icash_discovery_filter_state')return null;
   throw Error('Unexpected database call '+path);
  },
  discoverPage:async config=>{pages++;assert.equal(config.zip,'38118');assert.equal(config.perPage,5);return {status:'screening_queued',properties:5};},

@@ -43,7 +43,10 @@ function previewAudience(raw:unknown,propertyId:string,cap:number){
   if(prior&&(JSON.stringify(prior.matchFlags)!==JSON.stringify(matchFlags)||prior.propertyContactType!==propertyContactType))throw new Error(error);
   if(!prior)owners.set(p.dm_person_id,{likelyOwner,propertyContactType,matchFlags});
  }
- const ids=Object.freeze([...owners.keys()].slice(0,cap));
+ // Exclude weak property matches BEFORE the paid lookup and its credit cap.
+ // A family member, resident, renter or unclassified person cannot displace
+ // an actual owner later in the provider's preview order.
+ const ids=Object.freeze([...owners].filter(([,match])=>match.likelyOwner).map(([id])=>id).slice(0,cap));
  return {ids,owners};
 }
 function contactsFromReceipt(raw:unknown,ids:readonly string[],owners:ReturnType<typeof previewAudience>['owners']){

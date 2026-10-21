@@ -2,6 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
+ 'discovery-filters', 'discovery-filter-service', 'discovery-filter-database', 'discovery-pipeline', 'owner-enrichment',
  'seller-work-progress', 'support-outreach', 'bot-activity',
  'legacy-customer-launch', 'legacy-launch-ad-isolation', 'checkout-customer-context',
  'first-contact-hours', 'first-contact-voice-hours', 'voice-daytime-policy', 'seller-phone-call-spacing',
