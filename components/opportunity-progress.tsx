@@ -6,7 +6,7 @@ import {subscribeWorkspaceChanges} from '@/lib/workspace-events-client';
 import styles from './opportunity-progress.module.css';
 export type OpportunityProgressData={budgetId:number;startedAt:string;limitCents:number;pacingDays?:number;pacingHours?:number;dailyPercent?:number;dailyLimitCents?:number;hourlyLimitCents?:number;releasedCents?:number;spentCents:number;pendingCents:number;remainingCents:number;queued:number;screened:number;eligible:number;contacted:number;responded:number;callsBudgetHeld?:number;status:'paused'|'membership_required'|'settling'|'paced'|'budget_reached'|'working'|'ready'|'waiting'};
 const money=(cents:number)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(cents/100);
-export function OpportunityProgress({botAvailable,paused,stale,onResponses,onActivity}:{botAvailable:boolean;paused:boolean;stale:boolean;onResponses:()=>void;onActivity:()=>void}){
+export function OpportunityProgress({apiBase='/api/work',botAvailable,paused,stale,onResponses,onActivity}:{apiBase?:string;botAvailable:boolean;paused:boolean;stale:boolean;onResponses:()=>void;onActivity:()=>void}){
  const [progress,setProgress]=useState<OpportunityProgressData|null>(null),[delayed,setDelayed]=useState(false);
  const previous=useRef<OpportunityProgressData|null>(null),activity=useRef(onActivity);activity.current=onActivity;
  useEffect(()=>{
@@ -14,17 +14,17 @@ export function OpportunityProgress({botAvailable,paused,stale,onResponses,onAct
   async function load(){
    if(document.hidden)return;if(inFlight){refreshQueued=true;return;}inFlight=true;
    try{
-    const result=await webinarRequest<{progress:OpportunityProgressData|null}>('/api/work/progress',{cache:'no-store',signal:controller.signal});
+    const result=await webinarRequest<{progress:OpportunityProgressData|null}>(`${apiBase}/progress`,{cache:'no-store',signal:controller.signal});
     if(!mounted)return;
     const next=result.progress,prior=previous.current;
     if(next&&prior&&(next.responded!==prior.responded||next.eligible!==prior.eligible))activity.current();
     previous.current=next;setProgress(next);setDelayed(false);
    }catch{if(mounted)setDelayed(true);}finally{inFlight=false;if(mounted&&refreshQueued){refreshQueued=false;void load();}}
   }
-  void load();const unsubscribe=subscribeWorkspaceChanges(load),timer=setInterval(load,60000);
+  void load();const unsubscribe=apiBase==='/api/work'?subscribeWorkspaceChanges(load):()=>{},timer=setInterval(load,60000);
   document.addEventListener('visibilitychange',load);window.addEventListener('icash:credits-funded',load);
   return()=>{mounted=false;controller.abort();unsubscribe();clearInterval(timer);document.removeEventListener('visibilitychange',load);window.removeEventListener('icash:credits-funded',load);};
- },[paused]);
+ },[paused,apiBase]);
  if(!progress)return null;
  const p=progress,unavailable=delayed||stale;
  const status=paused?'paused':p.status;

@@ -64,7 +64,9 @@ const db=async(path,method='GET',body)=>{
  if(['icash_owner_contacts','icash_seller_matches','icash_property_controls','icash_live_conversations','icash_live_callbacks','icash_automation_tickets'].includes(table))return [];
  throw Error('Unexpected read '+table);
 };
-const {GET}=await loadService('app/api/work/activity/route.ts',{instantLeadsEnabled,db,z,workspaceAttentionQuery,workAccount:async()=>({accountId:account}),attachTaskRecovery:async(_,rows)=>rows,NextResponse:{json:(body,options={})=>({body,status:options.status??200})}});
+const activityDeps={instantLeadsEnabled,db,z,workspaceAttentionQuery,workAccount:async()=>({accountId:account}),attachTaskRecovery:async(_,rows)=>rows,NextResponse:{json:(body,options={})=>({body,status:options.status??200})}};
+const {workspaceActivity}=await loadService('lib/workspace-activity-read.ts',activityDeps);
+const {GET}=await loadService('app/api/work/activity/route.ts',{...activityDeps,workspaceActivity});
 const {workspaceAssistantContext}=await loadService('lib/workspace-assistant-context.ts',{db,workspaceAttentionQuery,workspaceAttentionTables,validActivityReport,currentBotActivity:input=>{assert.deepEqual(input.progress,{status:'budget_reached',callsBudgetHeld:2});return {checkedAt:'2026-10-12T00:00:00Z',label:'New outreach allowance used',active:false};}});
 const get=query=>GET(new Request('https://example.invalid/api/work/activity'+query));
 const attentionKeys=['textAttention','callRequests','handoffs','signatureActions','viewingRequests','sellerRecovery','closingReview','closingTasks'];

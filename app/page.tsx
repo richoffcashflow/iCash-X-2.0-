@@ -18,6 +18,7 @@ import {WebinarExpressCheckout} from '@/components/webinar-express-checkout';
 import {nextWorkFunding} from '@/lib/workspace-progress';
 import type {AssistantRequest} from '@/components/workspace-assistant';
 import type {AssistantAction} from '@/lib/workspace-assistant-policy';
+import {OwnerWorkspaceTabs} from '@/components/owner-workspace-tabs';
 import {BotRunBar} from '@/components/bot-run-bar';
 import {FundingOutreachNotice} from '@/components/funding-outreach-notice';
 import {AdminPlanToggle,type AccountPlan} from '@/components/workspace-vip-banner';
@@ -189,6 +190,7 @@ export default function Home(){
     </details>
    </div>
   </header>
+  {account.isBillingOwner&&<OwnerWorkspaceTabs active="workspace"/>}
   {cancellationOpen&&<MembershipSettings cancellationOnly onClosed={()=>{setCancellationOpen(false);accountMenu.current?.querySelector('summary')?.focus();}} onChanged={membershipChanged}/>}
   <main className="console-main">
    {accountError&&<p role="alert">Could not load your account. <button onClick={()=>void refreshAccount()}>Retry</button></p>}

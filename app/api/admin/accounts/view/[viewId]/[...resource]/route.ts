@@ -1,4 +1,8 @@
 import {z} from 'zod';
+import {workspaceActivity} from '@/lib/workspace-activity-read';
+import {currentBotActivity} from '@/lib/bot-activity';
+import {validActivityReport,type ActivityDays} from '@/lib/activity-report';
+import {dealMachinePhoto} from '@/lib/property-photo';
 import {db} from '@/lib/stripe-test';
 import {ownerAccountView,ownerViewFailure,ownerViewHeaders,OwnerViewError} from '@/lib/owner-account-access';
 import {ownerLeadsSchema} from '@/lib/owner-accounts';
@@ -12,7 +16,7 @@ export const dynamic='force-dynamic';
 export const runtime='nodejs';
 export const maxDuration=30;
 const id=z.string().uuid(),page=z.string().regex(/^\d{1,5}$/).transform(Number).refine(n=>n<=10000);
-const resources=new Set(['leads','details','messages','call-history','conversation','recording','recording/audio','reception-recording','reception-recording/audio']);
+const resources=new Set(['activity','report','progress','bot-status','property-photo','leads','details','messages','call-history','conversation','recording','recording/audio','reception-recording','reception-recording/audio']);
 const json=(data:unknown)=>Response.json(data,{headers:ownerViewHeaders});
 // Deliberately explicit, read-only resources. Never forward arbitrary paths,
 // impersonate Auth users, or call the provisioning/work-starting account loader.
@@ -22,6 +26,39 @@ export async function GET(req:Request,context:{params:Promise<{viewId:string;res
  const {actor,view}=await ownerAccountView(id.parse(p.viewId)),accountId=view.account.id;
  const params=new URL(req.url).searchParams,query=Object.fromEntries(params);
  if([...params.keys()].some(k=>params.getAll(k).length!==1))throw new OwnerViewError(400,'Invalid account view request.');
+ if(resource==='activity'){
+  z.object({view:z.enum(['opportunities','responses','all']).optional(),page:page.optional(),attentionPage:page.optional(),query:z.string().max(100).optional(),screeningId:id.optional()}).strict().parse(query);
+  // Same customer data loader, with outcome refresh and all work mutations off.
+  const result=await workspaceActivity(req,accountId);
+  for(const [key,value] of Object.entries(ownerViewHeaders))result.headers.set(key,value);
+  return result;
+ }
+ if(resource==='progress'||resource==='bot-status'){
+  z.object({}).strict().parse(query);
+  const progress=await db<{status?:string;callsBudgetHeld?:number}|null>('rpc/icash_prospecting_progress','POST',{p_account:accountId});
+  if(resource==='progress')return json({progress});
+  const [tickets,screening]=await Promise.all([
+   db<{kind:string;state:string;expires_at:string}[]>(`icash_automation_tickets?account_id=eq.${accountId}&state=eq.consumed&expires_at=gt.${new Date().toISOString()}&select=kind,state,expires_at&order=created_at.desc&limit=10`),
+   db<{state:string;lease_until:string|null}[]>(`icash_screening_jobs?account_id=eq.${accountId}&state=eq.running&select=state,lease_until&limit=10`)
+  ]);
+  return json(currentBotActivity({paused:view.account.paused,tickets,screening,progress}));
+ }
+ if(resource==='report'){
+  const f=z.object({days:z.enum(['1','7','30']).default('1'),timezone:z.string().max(100).default('UTC')}).strict().parse(query);
+  try{new Intl.DateTimeFormat('en-US',{timeZone:f.timezone});}catch{throw new OwnerViewError(400,'Invalid timezone.');}
+  const days=Number(f.days) as ActivityDays;
+  const [report,savings]=await Promise.all([db<unknown>('rpc/icash_activity_report','POST',{p_account:accountId,p_days:days,p_timezone:f.timezone}),db<unknown>('rpc/icash_vip_savings','POST',{p_account:accountId}).catch(()=>null)]);
+  if(!validActivityReport(report,days))throw Error('Activity unavailable');
+  return json({...report,vipSavingsCents:typeof savings==='number'&&Number.isSafeInteger(savings)&&savings>=0?savings:null});
+ }
+ if(resource==='property-photo'){
+  const f=z.object({screeningId:id}).strict().parse(query);
+  const [row]=await db<{snapshot?:{raw?:{data?:{dm_property_id?:string;images?:unknown}}};result:{property:{propertyId:string;images?:unknown}}}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=eq.${f.screeningId}&state=eq.complete&select=snapshot,result&limit=1`);
+  if(!row)throw new OwnerViewError(404,'This property is not in the viewed account.');
+  const property=row.result.property,raw=row.snapshot?.raw?.data;
+  // Inspection uses saved images only; never buys a provider lookup or takes a cache lease.
+  return json({photo:dealMachinePhoto(property.images)??(raw?.dm_property_id===property.propertyId?dealMachinePhoto(raw.images):null)});
+ }
  if(resource==='leads'){
   const f=z.object({q:z.string().trim().max(100).default(''),page:page.default('1').refine(n=>n>=1)}).strict().parse(query);
   return json(ownerLeadsSchema.parse(await db('rpc/icash_owner_account_leads','POST',{p_actor:actor.userId,p_account:accountId,p_query:f.q,p_page:f.page},req.signal)));
