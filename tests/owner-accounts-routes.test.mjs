@@ -5,11 +5,13 @@ import {z} from 'zod';
 import {currentBotActivity} from '../lib/bot-activity.ts';
 import {validActivityReport} from '../lib/activity-report.ts';
 import {dealMachinePhoto} from '../lib/property-photo.ts';
+import {savedPropertyPhoto} from '../lib/persistent-property-photo.ts';
 import * as schemas from '../lib/owner-accounts.ts';
 const owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7',session='11111111-1111-4111-8111-111111111111',account='22222222-2222-4222-8222-222222222222',viewId='33333333-3333-4333-8333-333333333333',screen='44444444-4444-4444-8444-444444444444';
 const accountRow={id:account,name:'Fixture customer',email:'fixture@example.invalid',ownAccount:false,fundedCents:25000,balanceCents:12000,reservedCents:100,leadCount:1,paused:true,assistantName:'Bot',createdAt:new Date().toISOString(),billingModel:'membership_credits',vip:false,membership:null};
 const view={id:viewId,expiresAt:new Date(Date.now()+60000).toISOString(),account:accountRow};
 let user={id:owner},proof=true,binding={sub:owner,session_id:session},active=true,calls=[],media=[],validScreen=true;
+const cachedPhoto={url:'https://img.dealmachine.com/sv/35,-90.jpg',fallbackUrl:'https://img.dealmachine.com/sat/35,-90.jpg',view:'street_view',source:'DealMachine'};
 const load=(path,deps)=>{const code=ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const module={exports:{}};new Function('require','module','exports',code)(name=>{assert(name in deps,'Missing dependency '+name);return deps[name];},module,module.exports);return module.exports;};
 const database={db:async(path,method='GET',body)=>{
  calls.push({path,method,body});
@@ -21,6 +23,7 @@ const database={db:async(path,method='GET',body)=>{
  if(path==='rpc/icash_activity_report'){assert.equal(body.p_account,account);return {days:body.p_days,timezone:body.p_timezone,startAt:'2026-10-01T00:00:00Z',endAt:'2026-10-02T00:00:00Z',leads:1,calls:2,texts:3,contracts:0};}
  if(path==='rpc/icash_vip_savings'){assert.equal(body.p_account,account);return 100;}
  if(path==='rpc/icash_prospecting_progress'){assert.equal(body.p_account,account);return {status:'paused'};}
+ if(path==='rpc/icash_read_photo_cache'){assert.deepEqual(body,{p_account:account,p_screening:screen});return cachedPhoto;}
  assert.equal(method,'GET','Account inspection cannot send writes through arbitrary tables or RPCs');
  assert(path.includes('account_id=eq.'+account),'All nested records stay scoped to the selected account');
  if(path.startsWith('icash_screening_jobs?'))return validScreen?[{id:screen,result:{property:{propertyId:'prop_fixture1',images:null}}}]:[];
@@ -49,7 +52,7 @@ assert.equal((await scope.DELETE(request('','DELETE',undefined,'https://evil.inv
 assert.equal((await scope.DELETE(request('','DELETE'),context)).status,200);
 const recordings={recordingPresentationById:async(_,a,id)=>{assert.equal(a,account);assert.equal(id,screen);return {id,status:'available'};},recordingPresentation:async()=>null};
 const audio=()=>({audio:async(a,id,range)=>{media.push({a,id,range});return new Response(new Uint8Array([1,2]),{status:206,headers:{'Content-Type':'audio/mpeg'}});}});
-const resources=load('app/api/admin/accounts/view/[viewId]/[...resource]/route.ts',{...deps,'@/lib/workspace-activity-read':{workspaceActivity:async(req,a,options)=>{assert.equal(a,account);assert.equal(options,undefined,'Inspection cannot enable outcome mutation');return Response.json({properties:[]});}},'@/lib/bot-activity':{currentBotActivity},'@/lib/activity-report':{validActivityReport},'@/lib/property-photo':{dealMachinePhoto},'@/lib/property-call-history':{propertyCallHistory:async(_,a,s,p)=>{assert.equal(a,account);assert.equal(s,screen);return {recordings:[],next:null};}},'@/lib/required-call-recording-receipt':recordings,'@/lib/required-call-recording-server':{recordingServer:audio},'@/lib/recorded-reception-server':{recordedReceptionServer:audio},'@/lib/recorded-reception-presentation':{recordedReceptionPresentation:()=>({})}});
+const resources=load('app/api/admin/accounts/view/[viewId]/[...resource]/route.ts',{...deps,'@/lib/workspace-activity-read':{workspaceActivity:async(req,a,options)=>{assert.equal(a,account);assert.equal(options,undefined,'Inspection cannot enable outcome mutation');return Response.json({properties:[]});}},'@/lib/bot-activity':{currentBotActivity},'@/lib/activity-report':{validActivityReport},'@/lib/property-photo':{dealMachinePhoto},'@/lib/persistent-property-photo':{savedPropertyPhoto},'@/lib/property-call-history':{propertyCallHistory:async(_,a,s,p)=>{assert.equal(a,account);assert.equal(s,screen);return {recordings:[],next:null};}},'@/lib/required-call-recording-receipt':recordings,'@/lib/required-call-recording-server':{recordingServer:audio},'@/lib/recorded-reception-server':{recordedReceptionServer:audio},'@/lib/recorded-reception-presentation':{recordedReceptionPresentation:()=>({})}});
 assert.deepEqual(Object.keys(resources).sort(),['GET','dynamic','maxDuration','runtime'],'No customer mutation method is exported');
 const get=(resource,query='')=>resources.GET(request('/view/'+viewId+'/'+resource+query),{params:Promise.resolve({viewId,resource:resource.split('/')})});
 assert.equal((await get('control')).status,404);assert.equal((await get('../account')).status,404);
@@ -64,6 +67,8 @@ assert.equal((await get('messages','?screeningId='+screen+'&threadId='+session))
 validScreen=false;assert.equal((await get('messages','?screeningId='+screen)).status,404);validScreen=true;
 response=await get('recording/audio','?id='+screen);assert.equal(response.status,206);assert.equal(response.headers.get('cache-control'),'private, no-store');assert.equal(media[0].a,account);
 for(const resource of ['activity','progress','bot-status','report','property-photo?screeningId='+screen]){const [name,query]=resource.split('?');assert.equal((await get(name,query?'?'+query:'')).status,200,resource);assert.equal((await get(name,'?accountId='+session)).status,400,'Cannot override inspected account');}
+response=await get('property-photo','?screeningId='+screen);assert.deepEqual((await response.json()).photo,cachedPhoto,'Owner view reads the existing photo and aerial fallback');
+const cacheReads=calls.filter(c=>c.path==='rpc/icash_read_photo_cache').length;validScreen=false;assert.equal((await get('property-photo','?screeningId='+screen)).status,404);validScreen=true;assert.equal(calls.filter(c=>c.path==='rpc/icash_read_photo_cache').length,cacheReads,'A foreign screening cannot read photo cache');
 assert.equal((await get('report','?timezone=Invalid')).status,400);
 const readCount=calls.length;active=false;assert.equal((await get('recording/audio','?id='+screen)).status,410);assert.equal(media.length,1,'expired view cannot fetch provider media');assert.equal(calls.length,readCount+1,'only session authorization runs for expired views');
 console.log('PASS owner account routes: real owner/proof/session only, CSRF, validated inputs, private cache, audited view, no credential replacement or write dispatch, scoped messages/recordings and expiry.');

@@ -14,3 +14,12 @@ assert.equal((await discoverPage(c,{...deps,request:async()=>({estimated_credits
 await assert.rejects(discoverPage(c,{...deps,request:async()=>({estimated_credits:{this_page:1,breakdown:{people:1}}})}),{message:'DISCOVERY_ESTIMATE_INVALID'});
 assert.equal((await discoverPage(c,{...deps,request:async b=>b.estimate_cost?{estimated_credits:{this_page:1,breakdown:{people:0}}}:{...raw,credits:{used:2,people:0}}})).status,'needs_reconciliation');
 console.log('Discovery estimate/reservation order, no contacts, timeout no-retry, overrun receipt and cost holds passed');
+
+const images={street_view:'https://img.dealmachine.com/sv/35,-90.jpg',satellite:'https://img.dealmachine.com/sat/35,-90.jpg'};
+for(const photoData of [{images},{latitude:35,longitude:-90}]){
+ await discoverPage(c,{...deps,request:async b=>b.estimate_cost?{estimated_credits:{this_page:1,breakdown:{people:0}}}:{...raw,data:[{...raw.data[0],...photoData}]}});
+ assert.deepEqual(saved.rows[0].images,images,'Already-returned images survive acquisition for both workspace views');
+ assert.equal(saved.rows[0].contacts,undefined);
+}
+await discoverPage(c,{...deps,request:async b=>b.estimate_cost?{estimated_credits:{this_page:1,breakdown:{people:0}}}:{...raw,data:[{...raw.data[0],images:{street_view:'https://other.invalid/photo.jpg'}}]}});
+assert.equal(saved.rows[0].images,undefined,'Untrusted image hosts are never persisted');

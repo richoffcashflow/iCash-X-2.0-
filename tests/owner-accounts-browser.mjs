@@ -13,6 +13,7 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
  try{
   await context.route('**/*',async route=>{
    const req=route.request(),u=new URL(req.url()),path=u.pathname;
+   if(u.hostname==='img.dealmachine.com')return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="gray"/></svg>'});
    if(u.origin!==base)return route.abort();
    if(path.startsWith('/api/')){
     const method=req.method();if(method==='GET')reads.push(u);else writes.push({path,method,body:req.postData()?req.postDataJSON():null});
@@ -27,7 +28,7 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
     if(path===root+'/bot-status')return route.fulfill({json:{active:false,label:'Waiting for the next task',checkedAt:now}});
     if(path===root+'/progress')return route.fulfill({json:{progress:null}});
     if(path===root+'/report')return route.fulfill({json:report(u)});
-    if(path===root+'/property-photo')return route.fulfill({json:{photo:null}});
+    if(path===root+'/property-photo')return route.fulfill({json:{photo:{view:'street_view',source:'DealMachine',url:'https://img.dealmachine.com/sv/35,-90.jpg',fallbackUrl:'https://img.dealmachine.com/sat/35,-90.jpg'}}});
     if(path===root+'/call-history')return route.fulfill({json:{recordings:[{id:recording,source:'outbound',party:'seller',conversationId:screen,createdAt:now,status:'available',durationSeconds:60,audioExpiresAt:'2099-01-01T00:00:00Z'}],next:null}});
     if(path===root+'/recording/audio')return route.fulfill({contentType:'audio/wav',body:audioBytes});
     if(path===root+'/conversation')return route.fulfill({json:{transcript:[{role:'user',message:'Yes, I would like to discuss the property.'}],next:null}});
@@ -58,7 +59,7 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
   await page.getByText('$123.45',{exact:true}).waitFor();await page.getByRole('heading',{name:'Bot activity',exact:true}).waitFor();await page.getByRole('heading',{name:'Your leads',exact:true}).waitFor();
   await Promise.all([page.waitForResponse(r=>r.url().includes('/activity?view=responses')),page.getByRole('button',{name:'Seller responses',exact:true}).click()]);
   await Promise.all([page.waitForResponse(r=>r.url().includes('/activity?view=all')),page.getByRole('button',{name:'All activity',exact:true}).click()]);
-  const card=page.locator('#property-'+screen);await card.locator('.property-summary').click();await card.getByRole('button',{name:'Property details',exact:true}).click();await page.getByRole('dialog').getByText('Fixture Seller',{exact:true}).waitFor();await page.getByRole('button',{name:'Close Property details',exact:true}).click();
+  const card=page.locator('#property-'+screen);await card.getByRole('img',{name:'Street view of 123 Example Street, Dallas, TX'}).waitFor();assert(await card.locator('.property-thumbnail img').evaluate(img=>img.complete&&img.naturalWidth>0),'Customer-view property photo renders');await card.locator('.property-summary').click();await card.getByRole('button',{name:'Property details',exact:true}).click();await page.getByRole('dialog').getByText('Fixture Seller',{exact:true}).waitFor();await page.getByRole('button',{name:'Close Property details',exact:true}).click();
   await card.getByRole('button',{name:'Text conversation for 123 Example Street'}).click();await page.getByText('What is your offer?',{exact:true}).waitFor();
   await page.getByRole('dialog').getByRole('button',{name:'Calls',exact:true}).click();
   const audio=page.locator('audio');await audio.waitFor();assert((await audio.getAttribute('src')).startsWith('/api/admin/accounts/view/'+viewId+'/recording/audio?'));

@@ -1,5 +1,6 @@
 /** Bounded property-only acquisition. Dependencies are server-owned; never accept rates from a browser. */
 import {discoveryFilters,discoveryFilterPlanValid,type DiscoveryFilterPlan} from './discovery-filters.ts';
+import {propertyImageFields} from './property-photo.ts';
 export const discoveryFields=['dm_property_id','full_address','legal_description','address','city','state','zip','estimated_value','estimated_equity_percentage','estimated_equity_amount','total_estimated_loan_balance','has_active_lien','has_hoa_lien','num_total_active_liens','num_total_open_liens','total_open_lien_amount','is_tax_delinquent','is_free_and_clear','estimated_repair_cost','building_condition','living_area_sqft','num_bedrooms','num_bathrooms','year_built'];
 export type DiscoveryConfig={zip:string;page:number;perPage:number;unitCostMicros:number;quotedDataCostMicros:number;filterPlan?:DiscoveryFilterPlan};
 type Dependencies={request:(body:object)=>Promise<unknown>;reserveAndClaim:()=>Promise<boolean>;persist:(result:DiscoveryResult)=>Promise<void>};
@@ -24,6 +25,9 @@ export async function discoverPage(c:DiscoveryConfig,d:Dependencies){
   seen.add(row.dm_property_id);
   // Keep only requested property fields, never accidentally persist contacts.
   const clean:Record<string,unknown>={};for(const field of discoveryFields)if(field in row)clean[field]=row[field];
+  // Images/coordinates are always-included provider fields, not paid selectors.
+  // Keep their validated photo URLs instead of discarding them and looking up again.
+  const images=propertyImageFields(row);if(images)clean.images=images;
   if(typeof clean.full_address!=='string'||!clean.full_address.trim()){
    if(typeof row.address!=='string'||typeof row.city!=='string'||typeof row.state!=='string')throw new Error('DISCOVERY_RESPONSE_REQUIRES_RECONCILIATION');
    clean.full_address=[row.address,row.city,row.state,row.zip].filter(x=>typeof x==='string'&&x).join(', ');
