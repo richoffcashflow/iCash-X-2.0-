@@ -1,6 +1,6 @@
 // Isolated PostgreSQL, synthetic rows, no provider requests or production writes.
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,readdirSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const db=new PGlite(),q=(s,a=[])=>db.query(s,a),val=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
@@ -31,7 +31,10 @@ await db.exec(read('tests/fixtures/filter-discovery-dependencies.sql'));
 const admission=read('config/requested-property-zip-resolution.sql').match(/create or replace function public\.icash_reserve_and_claim_property_discovery\([\s\S]*?end \$\$;/)[0];
 await db.exec(admission);
 await db.exec(read('config/outbound-filter-experiments.sql'));
-await db.exec(read('config/adaptive-outbound-feedback.sql'));
+await db.exec(read('supabase/migrations/20261021173023_adaptive_outbound_feedback.sql'));
+const receiptMigration=readdirSync(new URL('../supabase/migrations/',import.meta.url)).find(n=>n.endsWith('_outbound_feedback_receipt_clock.sql'));
+assert(receiptMigration,'Receipt-clock correction is included in the release');
+await db.exec(read('supabase/migrations/'+receiptMigration));
 await q("insert into icash_accounts(id,owner_user_id,assistant_name,bot_paused) values($1,$1,'Fixture',false),($2,$2,'Other',false)",[account,other]);
 await db.exec("insert into icash_operating_budget(id,enabled) values(1,true);insert into icash_market_shortlist values('75217','TX');");
 await q("insert into icash_operation_rates(id,operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled) values($1,'property_search','fixture',50,'{}','SYNTHETIC',now(),now()+interval '10 days',true)",[rate]);
@@ -100,6 +103,13 @@ const sms=()=>val('select icash_filter_sms_interest($1,$2)',[account,screening])
 await q('insert into icash_sms_seller_openings values($1,$2,$3)',[thread,account,question]);assert.equal(await sms(),false);
 await q("update icash_text_messages set state='delivered',provider_id='fixture_question' where id=$1",[question]);assert.equal(await sms(),true);
 await q("update icash_text_messages set body='Yes, this is the owner' where id=$1",[reply]);assert.equal(await sms(),false);
+// A text queued four days ago but sent now is still a fresh exposure.
+await db.exec("update icash_live_conversations set created_at=now()");await refresh();
+early=await baseline();assert.deepEqual([early.matureAttempts,early.pendingAttempts],[0,1],'Queue age cannot mature newly sent outreach');
+await q("update icash_text_messages set last_delivery_at=now()-interval '4 days',updated_at=now() where id=$1",[question]);assert.equal((await baseline()).pendingAttempts,1,'A late webhook gives a conservative receipt window');
+await q("update icash_text_messages set last_delivery_at=now()-interval '4 days',updated_at=now()-interval '4 days' where id=$1",[question]);assert.equal((await baseline()).matureAttempts,1,'An actual old receipt can mature');
+await db.exec("update icash_live_conversations set created_at=now()-interval '4 days'");
+
 await q("update icash_text_messages set body='yes' where id=$1",[reply]);await refresh();assert.equal((await stats())[0].interested,1);
 assert.equal((await baseline()).interested,1);
 await q("insert into icash_text_messages(account_id,thread_id,direction,state,body,provider_id) values($1,$2,'incoming','received','STOP','fixture_stop')",[account,thread]);await refresh();assert.equal((await stats())[0].interested,0);assert.equal((await stats())[0].optedOut,1);

@@ -23,7 +23,9 @@ returns jsonb language sql stable security invoker set search_path='' as $$
   left join lateral (
    select min(at) at from (
     select c.created_at at from public.icash_live_conversations c where c.account_id=a.account_id and c.screening_id=a.screening_id and c.party='seller' and c.conversation_id is not null
-    union all select m.created_at from public.icash_deal_files d join public.icash_text_threads t on t.deal_id=d.id and t.account_id=d.account_id and t.party='seller'
+    -- Queue creation is not send time. Updated/delivery receipts deliberately
+    -- give a delayed send its full response window, including late webhooks.
+    union all select greatest(m.created_at,m.updated_at,m.last_delivery_at) from public.icash_deal_files d join public.icash_text_threads t on t.deal_id=d.id and t.account_id=d.account_id and t.party='seller'
     join public.icash_text_messages m on m.thread_id=t.id and m.account_id=t.account_id
     where d.account_id=a.account_id and d.screening_id=a.screening_id and m.direction='outgoing' and m.provider_id is not null and m.state in ('accepted','delivered')
    ) attempts where at<=now()
