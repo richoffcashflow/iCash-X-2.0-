@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {workspaceEventStream} from '../lib/workspace-event-stream.ts';
+const account='00000000-0000-4000-8000-000000000001',other='00000000-0000-4000-8000-000000000002';
+let version='1',reads=0;const controller=new AbortController();
+const stream=workspaceEventStream({accountId:account,signal:controller.signal,intervalMs:5,lifetimeMs:1000,read:async()=>{reads++;return {[account]:version};}}),reader=stream.getReader(),decode=r=>new TextDecoder().decode(r.value);
+assert(decode(await reader.read()).includes('"revision":"1"'));
+assert.equal(decode(await reader.read()),': heartbeat\n\n','Unchanged records do not request heavy refreshes');version='2';
+assert(decode(await reader.read()).includes('"revision":"2"'));controller.abort();assert.equal((await reader.read()).done,true);const stopped=reads;await new Promise(r=>setTimeout(r,15));assert.equal(reads,stopped);
+const foreign=workspaceEventStream({accountId:account,signal:new AbortController().signal,read:async()=>({[other]:'99'})});assert.equal((await foreign.getReader().read()).done,true,'Foreign scope closes without emitting data');
+const malformed=workspaceEventStream({accountId:account,signal:new AbortController().signal,read:async()=>({[account]:{private:'never emit'}})});assert.equal((await malformed.getReader().read()).done,true);
+const outage=workspaceEventStream({accountId:account,signal:new AbortController().signal,read:async()=>{throw Error('fixture outage');}});assert.equal((await outage.getReader().read()).done,true);
+const expired=workspaceEventStream({accountId:account,signal:new AbortController().signal,lifetimeMs:0,read:async()=>{throw Error('Expired streams never read');}});assert.equal((await expired.getReader().read()).done,true);
+let resolve;const slow=workspaceEventStream({accountId:account,signal:new AbortController().signal,read:()=>new Promise(r=>{resolve=r;})});await slow.cancel();resolve({[account]:'50'});await new Promise(r=>setTimeout(r,5));
+console.log('Workspace event streams: revision-only changes, scope validation, expiry, cancellation, outage and late-response cleanup passed.');

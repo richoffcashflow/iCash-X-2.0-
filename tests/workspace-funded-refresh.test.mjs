@@ -20,11 +20,11 @@ const label=n=>typeof n==='string'?n:Array.isArray(n)?n.map(label).join(''):n&&t
 let cells=[],cursor=0,dirty=true,pending=[],tree;
 const same=(a,b)=>a&&b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
 const hooks={useState(initial){const i=cursor++;if(!(i in cells))cells[i]=typeof initial==='function'?initial():initial;return[cells[i],next=>{const n=typeof next==='function'?next(cells[i]):next;if(!Object.is(n,cells[i])){cells[i]=n;dirty=true;}}];},useRef(initial){const i=cursor++;return cells[i]??={current:initial};},useEffect(fn,deps){const i=cursor++,prior=cells[i];if(!same(prior?.deps,deps)){cells[i]={deps,cleanup:prior?.cleanup};pending.push(()=>{cells[i].cleanup?.();cells[i].cleanup=fn();});}},useCallback:fn=>fn};
-const requests=[];
+const requests=[],changes=new Set();
 const workspaceRequest=(url,options)=>new Promise((resolve,reject)=>{requests.push({url,options,resolve,reject});});
 const code=ts.transpileModule(readFileSync(new URL('../components/live-workspace.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
 const mod={exports:{}};
-new Function('require','module','exports',code)(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/webinar-client'?{webinarRequest:workspaceRequest}:name==='./workspace-view'?views:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/workspace-lead-presence'?{workspaceLeadPresence}:new Proxy({},{get:(_o,key)=>String(key)}),mod,mod.exports);
+new Function('require','module','exports',code)(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/webinar-client'?{webinarRequest:workspaceRequest}:name==='@/lib/workspace-events-client'?{subscribeWorkspaceChanges:fn=>{changes.add(fn);return()=>changes.delete(fn);}}:name==='./workspace-view'?views:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/workspace-lead-presence'?{workspaceLeadPresence}:new Proxy({},{get:(_o,key)=>String(key)}),mod,mod.exports);
 function render(){cursor=0;dirty=false;tree=mod.exports.LiveWorkspace({principal:'Synthetic investor',botAvailable:true,showCoach:false});}
 async function flush(){for(let i=0;i<12;i++){if(dirty)render();const batch=pending;pending=[];for(const fn of batch)fn();await Promise.resolve();}}
 const uuid=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
@@ -51,6 +51,7 @@ try{
  for(const [id,timer] of timers)if(!timer.interval&&timer.delay===300){timers.delete(id);timer.fn();}await flush();
  requests.at(-1).resolve(work([2]));await flush();const searchIndex=requests.length;funded();await flush();assert.equal(query(searchIndex).get('query'),'2 Sample','Funding respects an explicit search');requests[searchIndex].resolve(work([2]));await flush();
  assert.equal(button('Seller responses').props['aria-pressed'],true);
- cells.forEach(cell=>cell?.cleanup?.());const stopped=requests.length;funded();await flush();assert.equal(requests.length,stopped,'Unmount removes the funding listener');
+ const beforeChange=requests.length;for(const fn of changes)fn();await flush();assert.equal(requests.length,beforeChange+1,'A revision refreshes the current view');requests.at(-1).resolve(work([2]));await flush();
+ cells.forEach(cell=>cell?.cleanup?.());assert.equal(changes.size,0,'Unmount removes the revision subscription');const stopped=requests.length;funded();await flush();assert.equal(requests.length,stopped,'Unmount removes the funding listener');
  console.log('PASS funded workspace: saved candidates visible on hydration, immediate/count-independent refresh, in-flight coalescing, explicit response/search/page choices and open drafts preserved. No provider work.');
 }finally{cells.forEach(cell=>cell?.cleanup?.());Object.assign(globalThis,saved);}

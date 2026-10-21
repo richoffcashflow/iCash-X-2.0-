@@ -1,3 +1,4 @@
+import {sharedLearningStats,sharedEvidenceReady,learningObjective,learningScore} from './shared-learning.ts';
 /** Reviewed property audiences only. Learning can allocate work, never invent filters. */
 export const discoveryFilterVersion='seller-filters-v1';
 export const discoveryStrategies=['baseline','vacant','absentee','repairs'] as const;
@@ -32,9 +33,9 @@ export function discoveryInterestScore(s:DiscoveryFilterStat){
  * Ten attempts and three interested properties can earn 40% learned slots;
  * 30 resolved attempts can earn 60%. The rest continue exploring.
  * Three settled duplicate/no-owner pages reduce an arm to periodic probes.
- * Evidence and actual settled costs remain private to one account and ZIP.
+ * Shared evidence pools comparable ZIPs; cursors, costs and permissions stay owned.
  */
-export function selectDiscoveryFilter(raw:unknown,sequence:number):DiscoveryFilterPlan|null{
+export function selectDiscoveryFilter(raw:unknown,sequence:number,shared:unknown=[]):DiscoveryFilterPlan|null{
  if(!integer(sequence)||sequence<1||!Array.isArray(raw)||raw.length!==4)throw Error('DISCOVERY_FILTER_STATE_INVALID');
  const seen=new Set<string>();
  const stats=raw.map((row):DiscoveryFilterStat=>{
@@ -54,9 +55,15 @@ export function selectDiscoveryFilter(raw:unknown,sequence:number):DiscoveryFilt
  // One in five slots probes cooled arms. Never permanently discard a market.
  const pool=sequence%5===4&&cooled.length?cooled:productive.length?productive:available;
  const explore=balanced(cold.length?cold:pool);
- const winner=cold.length?null:[...productive].filter(s=>s.attempted>=10&&s.interested>=3&&discoveryInterestScore(s)>0)
+ const localWinner=cold.length?null:[...productive].filter(s=>s.attempted>=10&&s.interested>=3&&discoveryInterestScore(s)>0)
   .sort((a,b)=>discoveryInterestScore(b)-discoveryInterestScore(a)||tie(a)-tie(b))[0];
- const learnedSlots=winner&&winner.attempted-winner.pendingAttempts>=30?3:2;
+ const evidence=sharedLearningStats(shared).filter(s=>productive.some(p=>p.strategy===s.variant)&&sharedEvidenceReady(s)&&s.costs_complete&&s.effective_cost_cents>0);
+ const objective=learningObjective(evidence);
+ const value=(s:typeof evidence[number])=>Math.max(0,learningScore(s,objective)*s.effective_attempts-0.5*s.effective_opted_out)/(s.effective_cost_cents+1000);
+ const peer=evidence.length>=2?[...evidence].sort((a,b)=>value(b)-value(a)||a.variant.localeCompare(b.variant))[0]:undefined;
+ const sharedWinner=peer&&value(peer)>0?productive.find(s=>s.strategy===peer.variant):undefined;
+ const winner=sharedWinner??localWinner;
+ const learnedSlots=sharedWinner||winner&&winner.attempted-winner.pendingAttempts>=30?3:2;
  const learned=!!winner&&sequence%5<learnedSlots;
  const chosen=learned?winner!:explore;
  return {version:discoveryFilterVersion,strategy:chosen.strategy,providerPage:chosen.nextPage,mode:learned?'learned':'explore'};

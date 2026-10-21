@@ -1,5 +1,7 @@
 import {db} from './stripe-test.ts';
 import {discoverBuyerPage,nextBuyerSearch} from './buyer-discovery.ts';
+import {assignSharedLearning} from './shared-learning.ts';
+import type {BuyerSearchStrategy} from './buyer-discovery.ts';
 type Config={enabled:boolean;rate_id:string;unit_cost_micros:number;rights_until:string;revision:string;since:string;zip:string;max_pages:number;per_page:number};
 export async function discoverBuyersForDeal(accountId:string,dealId:string){
  if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready',canContinue:false};
@@ -14,8 +16,10 @@ export async function discoverBuyersForDeal(accountId:string,dealId:string){
  const dealZip=screen.snapshot.raw?.data?.zip;
  if(typeof dealZip!=='string'||!/^\d{5}(?:-\d{4})?$/.test(dealZip))return {status:'buyer_property_zip_required',canContinue:false};
  const controls=await db<unknown[]>(`icash_property_controls?account_id=eq.${accountId}&property_id=eq.${screen.snapshot.propertyId}&manual=eq.true&select=property_id`);if(controls.length)return {status:'buyer_search_held',canContinue:false};
- const [last]=await db<{page:number;has_next_page:boolean;receipt:{strategy?:string;providerPage?:number}}[]>(`icash_buyer_search_receipts?deal_id=eq.${dealId}&revision=eq.${config.revision}&select=page,has_next_page,receipt&order=page.desc&limit=1`);
- const cursor=nextBuyerSearch(last,config.max_pages);
+ const [last]=await db<{page:number;has_next_page:boolean;receipt:{strategy?:string;providerPage?:number;learningVersion?:string;firstStrategy?:string}}[]>(`icash_buyer_search_receipts?deal_id=eq.${dealId}&revision=eq.${config.revision}&select=page,has_next_page,receipt&order=page.desc&limit=1`);
+ const assignment=await assignSharedLearning(db,{account:accountId,domain:'buyer_search',subject:`${dealId}:${config.revision}`,context:'order-v1',market:dealZip.slice(0,5)});
+ const firstStrategy=assignment?.variant as BuyerSearchStrategy|undefined;
+ const cursor=nextBuyerSearch(last,config.max_pages,firstStrategy);
  if(!cursor)return {status:'buyer_search_complete',canContinue:false};
  const {page,providerPage,strategy}=cursor,operationKey=`buyers:${dealId}:${config.revision}:${page}${strategy==='corporate_owners'?':corporate':''}`;
  const [existing]=await db<{state:string}[]>(`icash_operation_spend?operation_key=eq.${operationKey}&select=state`);
@@ -29,8 +33,8 @@ export async function discoverBuyersForDeal(accountId:string,dealId:string){
  await db('rpc/icash_reserve_operation','POST',{p_account:accountId,p_operation:operationKey,p_rate:config.rate_id,p_permission_until:config.rights_until});
  return db<boolean>('rpc/icash_claim_buyer_search','POST',{p_account:accountId,p_deal:dealId,p_revision:config.revision,p_operation:operationKey});
  },
- persist:async receipt=>{await db('rpc/icash_save_buyer_search','POST',{p_account:accountId,p_deal:dealId,p_revision:config.revision,p_page:page,p_operation:operationKey,p_receipt:{...receipt,strategy,providerPage,zip:dealZip.slice(0,5)}});await db('rpc/icash_settle_dealmachine_usage','POST',{p_operation:operationKey});},
+ persist:async receipt=>{await db('rpc/icash_save_buyer_search','POST',{p_account:accountId,p_deal:dealId,p_revision:config.revision,p_page:page,p_operation:operationKey,p_receipt:{...receipt,strategy,providerPage,zip:dealZip.slice(0,5),...(assignment?{learningVersion:assignment.version,firstStrategy}: {})}});await db('rpc/icash_settle_dealmachine_usage','POST',{p_operation:operationKey});},
  empty:async()=>{await db('rpc/icash_save_empty_buyer_search','POST',{p_account:accountId,p_deal:dealId,p_revision:config.revision,p_page:page,p_strategy:strategy,p_provider_page:providerPage,p_zip:dealZip.slice(0,5)});}
  });
- return {...result,strategy,canContinue:page<config.max_pages&&(result.canContinue||strategy==='recent_corporate'&&['no_candidates','buyers_saved'].includes(result.status))};
+ return {...result,strategy,canContinue:page<config.max_pages&&(result.canContinue||(assignment?page===1:strategy==='recent_corporate')&&['no_candidates','buyers_saved'].includes(result.status))};
 }

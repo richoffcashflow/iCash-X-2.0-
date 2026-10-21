@@ -27,7 +27,8 @@ export async function discoverForAccount(accountId:string){
  const [existing]=await db<{state:string}[]>(`icash_operation_spend?operation_key=eq.${operationKey}&select=state`);
  if(existing&&existing.state!=='reserved')return {status:'awaiting_reconciliation'};
  const state=await db<unknown>('rpc/icash_discovery_filter_state_v2','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});
- const filterPlan=state===null?undefined:selectDiscoveryFilter(state,c.next_page);
+ const shared=state===null?[]:await db('rpc/icash_discovery_shared_evidence','POST',{p_account:accountId,p_zip:c.zip}).catch(()=>[]);
+ const filterPlan=state===null?undefined:selectDiscoveryFilter(state,c.next_page,shared);
  if(filterPlan===null){await db('rpc/icash_mark_inventory_empty','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});return {status:'empty'};}
  const finishEmpty=(reason:'empty'|'unavailable')=>filterPlan
   ?db('rpc/icash_finish_empty_filter','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page,p_plan:filterPlan,p_reason:reason})

@@ -2,6 +2,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {ArrowUpRight,Search,Check,MessageCircle,Phone} from 'lucide-react';
 import {webinarRequest} from '@/lib/webinar-client';
+import {subscribeWorkspaceChanges} from '@/lib/workspace-events-client';
 import styles from './opportunity-progress.module.css';
 export type OpportunityProgressData={budgetId:number;startedAt:string;limitCents:number;pacingDays?:number;pacingHours?:number;dailyPercent?:number;dailyLimitCents?:number;hourlyLimitCents?:number;releasedCents?:number;spentCents:number;pendingCents:number;remainingCents:number;queued:number;screened:number;eligible:number;contacted:number;responded:number;callsBudgetHeld?:number;status:'paused'|'membership_required'|'settling'|'paced'|'budget_reached'|'working'|'ready'|'waiting'};
 const money=(cents:number)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(cents/100);
@@ -20,9 +21,9 @@ export function OpportunityProgress({botAvailable,paused,stale,onResponses,onAct
     previous.current=next;setProgress(next);setDelayed(false);
    }catch{if(mounted)setDelayed(true);}finally{inFlight=false;if(mounted&&refreshQueued){refreshQueued=false;void load();}}
   }
-  void load();const timer=setInterval(load,paused?15000:4000);
+  void load();const unsubscribe=subscribeWorkspaceChanges(load),timer=setInterval(load,60000);
   document.addEventListener('visibilitychange',load);window.addEventListener('icash:credits-funded',load);
-  return()=>{mounted=false;controller.abort();clearInterval(timer);document.removeEventListener('visibilitychange',load);window.removeEventListener('icash:credits-funded',load);};
+  return()=>{mounted=false;controller.abort();unsubscribe();clearInterval(timer);document.removeEventListener('visibilitychange',load);window.removeEventListener('icash:credits-funded',load);};
  },[paused]);
  if(!progress)return null;
  const p=progress,unavailable=delayed||stale;

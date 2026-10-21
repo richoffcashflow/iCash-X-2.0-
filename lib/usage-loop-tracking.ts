@@ -16,7 +16,9 @@ export async function createUsageLoopObservation(accountId:string,card:{action:z
   const db=database??(await import('./stripe-test')).db;
   const observation=await db<unknown>('rpc/icash_create_usage_loop_observation','POST',{p_account:accountId,p_action:card.action,p_reason:card.reason},AbortSignal.timeout(2000));
   const parsed=z.object({impressionId:z.string().uuid(),variant:z.enum(['control','progress'])}).strict().safeParse(observation);
-  return parsed.success&&parsed.data.variant===usageLoopVariant(accountId)?parsed.data:null;
+  // The authenticated server assigns once and persists the variant. New
+  // accounts can benefit from mature platform results; clients cannot choose it.
+  return parsed.success?parsed.data:null;
  }catch{return null;}
 }
 export async function pruneUsageLoopObservations(database:Database):Promise<void>{
