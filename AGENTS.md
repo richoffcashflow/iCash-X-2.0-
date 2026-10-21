@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 21, 2026 the owner clarified that customer views must open from a visible Accounts tab in their own workspace and reuse the actual customer workspace layout, lead filters/cards, activity and conversations. Keep a clear selected-account banner, switch-account and return-to-own-workspace controls. Preserve the audited read-only session boundaries; no customer credentials, provisioning or paid actions from inspection.
+
 - On October 21, 2026 the owner requested an owner-only customer account directory, sorted by verified live funding or actual leads, and an audited read-only customer workspace view. Keep the real admin identity and dashboard proof, bind each short-lived view to that sign-in and target account, and never grant customer credentials or start paid work from inspection. Remove the earlier pretend $5 bot display and show the owner’s actual saved balance and Pause status; preserve real credit and payment history. This supersedes the October 19 display-test instruction.
 
 - On October 21, 2026 the owner requested firm final replies for abusive refund repetition and automatic Stripe evidence preparation. After an actual policy explanation, refund-only profanity may close immediately; preserve unresolved billing/access/cancellation/software help and reopening. Mention agreement only from a saved, purchase-bound acceptance and describe only verified delivery. Keep private, case-bound evidence with the conversation and label lifetime activity separately from the disputed service period. Never submit to Stripe automatically or claim a dispute is invalid from policy/abuse alone.

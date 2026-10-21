@@ -60,10 +60,10 @@ const mocks={instantLeadsEnabled,z,workspaceAttentionQuery,attachTaskRecovery:as
  throw Error('Unexpected read '+table);
 }};
 globalThis.__activityRoute=mocks;
-let source=ts.transpileModule(readFileSync(new URL('../app/api/work/activity/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+let source=ts.transpileModule(readFileSync(new URL('../lib/workspace-activity-read.ts',import.meta.url),'utf8')+'\n'+readFileSync(new URL('../app/api/work/activity/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
 source=source.replace(/^import .* from .*;$/gm,'');
 source='const {'+Object.keys(mocks).join(',')+'}=globalThis.__activityRoute;\n'+source;
-const {GET}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const {GET,workspaceActivity}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const get=query=>GET(new Request('https://www.geticashx.com/api/work/activity'+query));
 let r=await get('');assert.equal(r.status,200);assert.equal(r.body.closingTasks.length,6);assert.equal(r.body.closingTasks[0].address,'10 Main Street');assert.equal(r.body.attentionHasMoreByKind.closingTasks,true);assert.equal(r.body.closingReview.length,6);assert.equal(r.body.closingReview[0].review_reason,'payment_change');assert.equal(r.body.attentionHasMoreByKind.closing,true);assert.equal(r.body.properties.length,6);assert.equal(r.body.hasMore,true);assert.equal(r.body.textAttention.length,6);assert.deepEqual(r.body.propertyAttentionIds,[uuid(1)]);assert.equal(r.body.attentionHasMore,true);assert.equal(r.body.textAttention[0].address,'10 Main Street');assert.equal(r.body.signatureActions[0].screening_id,uuid(10));assert.equal(r.body.signatureActions[0].address,'10 Main Street');
 assert.equal(r.body.smsRouteReviews.length,6);assert.equal(r.body.smsRouteReviews[0].needs_review,true);
@@ -97,3 +97,5 @@ paths=[];r=await get('?view=all');assert.equal(r.body.properties[0].id,uuid(1),'
 authorized=false;paths=[];r=await get('');assert.notEqual(r.status,200);assert.equal(paths.length,0,'No data access without account ownership');
 delete globalThis.__activityRoute;
 console.log('Activity route: tenant-bound purchased contacts, explicit field projection, DNC states, missing/malformed results, bounded arrays, pagination, retained views, search and authentication passed. Synthetic fixtures only.');
+
+paths=[];const inspected=await workspaceActivity(new Request("https://example.invalid/?view=all"),account);assert.equal(inspected.status,200);assert(!paths.some(p=>p.path==='rpc/icash_refresh_opportunity_outcomes'),'Customer inspection reads saved work without refreshing outcomes or starting work');

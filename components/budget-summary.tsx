@@ -1,19 +1,19 @@
 'use client';
 import {useEffect,useState} from 'react';
 import {activityPeriods,validActivityReport,type ActivityDays,type ActivityReport} from '@/lib/activity-report';
-export function BudgetSummary({vip=false}:{vip?:boolean}={}){
+export function BudgetSummary({vip=false,apiBase='/api/work'}:{vip?:boolean;apiBase?:string}={}){
  const [days,setDays]=useState<ActivityDays>(1),[report,setReport]=useState<ActivityReport|null>(null),[error,setError]=useState(''),[retry,setRetry]=useState(0);
  useEffect(()=>{
   let active=true,inFlight=false;const controller=new AbortController();const timezone=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';
   setReport(null);setError('');
   async function load(){
    if(document.hidden||inFlight)return;inFlight=true;
-   try{const params=new URLSearchParams({days:String(days),timezone});const r=await fetch(`/api/work/report?${params}`,{cache:'no-store',signal:controller.signal});if(!r.ok)throw Error();const data:unknown=await r.json();if(!validActivityReport(data,days))throw Error();if(active){setReport(data);setError('');}}
+   try{const params=new URLSearchParams({days:String(days),timezone});const r=await fetch(`${apiBase}/report?${params}`,{cache:'no-store',signal:controller.signal});if(!r.ok)throw Error();const data:unknown=await r.json();if(!validActivityReport(data,days))throw Error();if(active){setReport(data);setError('');}}
    catch{if(active)setError('Could not refresh activity.');}finally{inFlight=false;}
   }
   void load();const timer=setInterval(()=>void load(),60000);const visible=()=>void load();document.addEventListener('visibilitychange',visible);
   return()=>{active=false;controller.abort();clearInterval(timer);document.removeEventListener('visibilitychange',visible);};
- },[days,retry]);
+ },[days,retry,apiBase]);
  const current=report?.days===days?report:null;
  const metrics=[['leads','Leads','New properties added to your workspace'],['calls','Calls','Bot calls started, including unanswered calls'],['texts','Texts','Texts sent or delivered'],['contracts','Contracts','Seller contracts signed']] as const;
  return <section className="workspace-activity" aria-labelledby="workspace-activity-title">
