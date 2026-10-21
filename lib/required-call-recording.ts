@@ -75,13 +75,23 @@ function recordingEmptyAgentHashMatches(configHash:string,snapshot:Record<string
  return false;
 }
 export function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>):boolean{
- // At most four fixed representations, each with up to four empty-agent
+ // At most eight fixed representations, each with up to four empty-agent
  // variants. Never ignore arbitrary fields or rewrite a saved approval.
  const snapshots=[snapshot],withoutNoise=recordingDisabledNoiseSnapshot(snapshot);
  if(withoutNoise)snapshots.push(withoutNoise);
  for(const value of [...snapshots]){
   const renamed=recordingRenamedDisabledTtsSnapshot(value);
   if(renamed)snapshots.push(renamed);
+ }
+ // Observed on the same approved provider version on 2026-10-21. The newly
+ // serialized optional identity tool is absent in the saved fingerprint.
+ // Only its literal null can be omitted, and the entire remaining snapshot
+ // must still reproduce that SAME approval. Configured tools stay exact.
+ for(const value of [...snapshots]){
+  const config=object(value.conversation_config),agent=object(config.agent),prompt=object(agent.prompt),builtins=object(prompt.built_in_tools);
+  if(!Object.hasOwn(builtins,'identity_challenge')||builtins.identity_challenge!==null)continue;
+  const previousBuiltins={...builtins};delete previousBuiltins.identity_challenge;
+  snapshots.push({...value,conversation_config:{...config,agent:{...agent,prompt:{...prompt,built_in_tools:previousBuiltins}}}});
  }
  return snapshots.some(value=>recordingEmptyAgentHashMatches(configHash,value));
 }
