@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 export async function verifyOwnerAccounts(browser,base,options,name,fixtureCookies){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
  const id='22222222-2222-4222-8222-222222222222',viewId='33333333-3333-4333-8333-333333333333',screen='44444444-4444-4444-8444-444444444444',recording='55555555-5555-4555-8555-555555555555';
+ const audioBytes=Buffer.alloc(16044);audioBytes.write('RIFF');audioBytes.writeUInt32LE(16036,4);audioBytes.write('WAVEfmt ',8);audioBytes.writeUInt32LE(16,16);audioBytes.writeUInt16LE(1,20);audioBytes.writeUInt16LE(1,22);audioBytes.writeUInt32LE(8000,24);audioBytes.writeUInt32LE(16000,28);audioBytes.writeUInt16LE(2,32);audioBytes.writeUInt16LE(16,34);audioBytes.write('data',36);audioBytes.writeUInt32LE(16000,40);
  const now=new Date().toISOString(),account={id,name:'Example Customer',email:'customer@example.invalid',ownAccount:false,fundedCents:50000,balanceCents:12345,reservedCents:200,leadCount:27,paused:true,assistantName:'Alex',createdAt:now,billingModel:'membership_credits',vip:true,membership:{state:'active',paidThrough:'2099-01-01T00:00:00Z'}};
  const view={id:viewId,expiresAt:new Date(Date.now()+1800000).toISOString(),account};
  let expired=false,denied=false;const writes=[],reads=[],errors=[];
@@ -11,6 +12,7 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
    if(u.origin!==base)return route.abort();
    if(path.startsWith('/api/')){
     const method=req.method();if(method==='GET')reads.push(u);else writes.push({path,method,body:req.postData()?req.postDataJSON():null});
+    if(path==='/api/auth/dashboard-password'&&method==='GET')return route.fulfill({json:{allowed:true,unlocked:true}});
     if(path==='/api/admin/accounts')return route.fulfill({status:denied?403:200,json:denied?{error:'Owner access only.'}:{report:{sort:u.searchParams.get('sort'),query:u.searchParams.get('q'),page:Number(u.searchParams.get('page')),pageSize:25,total:u.searchParams.get('q')==='missing'?0:27,accounts:u.searchParams.get('q')==='missing'?[]:[account]}}});
     if(path==='/api/admin/accounts/view'&&method==='POST')return route.fulfill({json:{url:'/admin/accounts/'+viewId,expiresAt:view.expiresAt}});
     const root='/api/admin/accounts/view/'+viewId;
@@ -20,6 +22,7 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
     if(path===root+'/leads')return route.fulfill({json:{query:u.searchParams.get('q'),page:Number(u.searchParams.get('page')),pageSize:12,total:1,leads:[{id:screen,address:'123 Example Street, Dallas, TX',state:'complete',financialStatus:'eligible',responded:true,interested:true,optedOut:false,createdAt:now,dealId:screen}]}});
     if(path===root+'/details')return route.fulfill({json:{conversations:[],contacts:[{name:'Fixture Seller',phones:[{number:'+12025550123',type:'mobile'}]}]}});
     if(path===root+'/call-history')return route.fulfill({json:{recordings:[{id:recording,source:'outbound',party:'seller',conversationId:screen,createdAt:now,status:'available',durationSeconds:60,audioExpiresAt:'2099-01-01T00:00:00Z'}],next:null}});
+    if(path===root+'/recording/audio')return route.fulfill({contentType:'audio/wav',body:audioBytes});
     if(path===root+'/conversation')return route.fulfill({json:{transcript:[{role:'user',message:'Yes, I would like to discuss the property.'}],next:null}});
     if(path===root+'/messages')return route.fulfill({json:{threads:[{id:screen,recipient:'+12025550123',party:'seller'}],threadId:screen,messages:[{id:recording,direction:'incoming',body:'What is your offer?',state:'received',created_at:now}],next:null,nextThread:null}});
     throw Error('Unexpected API request: '+method+' '+path);
@@ -38,7 +41,8 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
   await page.getByRole('button',{name:'View account for Example Customer'}).click();await page.getByText('Viewing Example Customer',{exact:true}).waitFor();
   await page.getByText('$123.45',{exact:true}).waitFor();await page.getByText('123 Example Street, Dallas, TX',{exact:true}).click();await page.getByText('Fixture Seller',{exact:false}).waitFor();await page.getByText('What is your offer?',{exact:true}).waitFor();
   const audio=page.locator('audio');await audio.waitFor();assert((await audio.getAttribute('src')).startsWith('/api/admin/accounts/view/'+viewId+'/recording/audio?'));
-  await page.getByText('Call details and transcript',{exact:true}).click();await page.getByText('Yes, I would like to discuss the property.',{exact:true}).waitFor();
+  await audio.evaluate(async node=>{node.muted=true;await node.play();node.pause();});assert(reads.some(u=>u.pathname.endsWith('/recording/audio')),'Audio bytes use the scoped account view');
+  await page.getByText('Call details and transcript',{exact:true}).click();await page.getByText('Yes, I would like to discuss the property.',{exact:false}).waitFor();
   assert.equal(await page.getByRole('button',{name:/Pause bot|Run bot|Add money|Send text|Sign contract/}).count(),0,'support inspection exposes no customer work or payment controls');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'customer view fits viewport');
   if(process.env.BROWSER_SCENARIOS==='owner-accounts')await page.screenshot({path:'/tmp/owner-account-'+(name.includes('mobile')?'mobile':'desktop')+'.png',fullPage:true});
