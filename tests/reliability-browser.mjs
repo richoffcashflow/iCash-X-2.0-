@@ -9,6 +9,7 @@ import http from 'node:http';
 import https from 'node:https';
 import {chromium,webkit,devices} from 'playwright';
 import {verifyOwnerOutreach} from './owner-outreach-browser.mjs';
+import {verifyPlatformLearning} from './platform-learning-browser.mjs';
 import {ownerOutreachFixture} from './helpers/owner-outreach-fixture.mjs';
 import {verifyWorkspace} from './workspace-browser-scenarios.mjs';
 import {verifyWalkthrough} from './workspace-walkthrough-browser.mjs';
@@ -56,6 +57,7 @@ try{
   if(process.env.BROWSER_ENGINES==='chromium'&&engine!==chromium)continue;
   const browser=await engine.launch({headless:true});
   try{
+   if(process.env.BROWSER_SCENARIOS==='platform-learning'){await verifyPlatformLearning(browser,base,options,name,fixtureCookies,fixture);continue;}
    if(process.env.BROWSER_SCENARIOS==='admin-outreach'){await verifyOwnerOutreach(browser,base,options,name,fixtureCookies,fixture);continue;}
    if(process.env.BROWSER_SCENARIOS==='workspace'){await verifyWorkspace(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='access-help'){await verifyAccessHelp(browser,base,options,name,fixtureCookies);continue;}
@@ -68,6 +70,7 @@ try{
    if(process.env.BROWSER_SCENARIOS==='webinar-recovery'){await verifyWebinarRecovery(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='seller'){await verifySellerIntake(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-measurement'){await verifyWebinarMeasurement(browser,base,options,name);continue;}
+   await verifyPlatformLearning(browser,base,options,name,fixtureCookies,fixture);
    await verifyOwnerOutreach(browser,base,options,name,fixtureCookies,fixture);
    await verifyWalkthrough(browser,base,options,name);
    await verifySellerCosts(browser,base,options,name,fixtureCookies);

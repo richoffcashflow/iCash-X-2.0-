@@ -9,6 +9,7 @@ import {reliabilityIssueLabels} from '@/lib/reliability';
 import {reliabilityPriority,reliabilityItemPriority,reliabilitySeverityLabels,reliabilitySeverityGuidance} from '@/lib/reliability-priority';
 import {ExperienceHealth} from './experience-health';
 import {UsageLoopReport} from '@/components/usage-loop-report';
+import {PlatformLearningReport} from '@/components/platform-learning-report';
 import {OwnerOutreachView} from './outreach';
 
 export function OwnerOverviewView(){
@@ -105,6 +106,7 @@ export function OwnerOverviewView(){
    {usage&&usage.pendingCount>0&&<p className={styles.pending}>{usage.pendingCount} operations started in this period are still awaiting settlement. They are not included in these totals.</p>}
    {usage&&usage.completedCount===0&&!includeOwner&&<p className={styles.pending}>No customer usage in this period. Turn on “Include my account” to see your own usage.</p>}
    {report?.closing&&<ClosingOperationsView data={report.closing} chargedCents={report.usage.chargedCents}/>}
+   {report&&<PlatformLearningReport refresh={refresh}/>}
    {report&&<UsageLoopReport includeOwner={includeOwner} refresh={refresh}/>}
    <details className={styles.explanation}><summary>How these numbers work</summary><div><p>The account switch changes usage and outbound outreach totals.</p><p>Usage charged is whole cents deducted from work credits for completed operations, after subtracting platform-covered overruns. Fractional charges appear when they are posted. Credits can include promotional grants; this is not a cash-receipts report.</p><p>Usage costs include recorded provider costs and allocated overhead. Estimates are labelled. Missing costs or charges leave the margin blank. Credit top-ups, unused credits, subscriptions, standalone advertising spend and assignment proceeds are not usage earnings.</p><p>Your account is excluded unless you turn on the switch. Accounts funded only in payment test mode are excluded. Usage margin is not a withdrawable balance.</p>{usage&&usage.coveredCents>0&&<p>Platform-covered usage in this period: {overviewMoney(usage.coveredCents,'cents')}.</p>}</div></details>
   </>}

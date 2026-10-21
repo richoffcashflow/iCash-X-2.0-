@@ -1,4 +1,5 @@
 'use client';
+import {subscribeWorkspaceChanges} from '@/lib/workspace-events-client';
 import {OpportunityProgress} from './opportunity-progress';
 import {InstantLeadCard,instantLeadGroup,type InstantLeadCardData} from './instant-lead-card';
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
@@ -76,7 +77,7 @@ export function LiveWorkspace({onLeadPresenceChange,onAttentionChange,principal,
   d.propertyAttentionIds=[...(d.propertyAttentionIds??[]),...held.flatMap(item=>item.propertyAttentionIds??[])];d.retainedIds=heldIds;
  }
  if(active){setWork(d);setError('');setUpdated(new Date());}
-}}catch(e){if(active)setError(`${e instanceof Error?e.message:'Could not refresh your work.'} The last loaded records and open drafts are still here.`);}finally{inFlight=false;if(active){setLoading(false);if(refreshQueued){refreshQueued=false;void load();}}}}void load();const timer=setInterval(load,30000);document.addEventListener('visibilitychange',load);window.addEventListener('icash:credits-funded',load);return()=>{active=false;controller.abort();clearInterval(timer);document.removeEventListener('visibilitychange',load);window.removeEventListener('icash:credits-funded',load);};},[page,attentionPage,search,focusedId,refresh,view]);
+}}catch(e){if(active)setError(`${e instanceof Error?e.message:'Could not refresh your work.'} The last loaded records and open drafts are still here.`);}finally{inFlight=false;if(active){setLoading(false);if(refreshQueued){refreshQueued=false;void load();}}}}void load();const unsubscribe=subscribeWorkspaceChanges(load),timer=setInterval(load,60000);document.addEventListener('visibilitychange',load);window.addEventListener('icash:credits-funded',load);return()=>{active=false;controller.abort();unsubscribe();clearInterval(timer);document.removeEventListener('visibilitychange',load);window.removeEventListener('icash:credits-funded',load);};},[page,attentionPage,search,focusedId,refresh,view]);
  useEffect(()=>{if(focusedId&&work?.properties.some(p=>p.id===focusedId))document.getElementById(`property-${focusedId}`)?.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});},[focusedId,work?.properties[0]?.id]);
  // Account-wide attention is independent of the visible property page/search.
  const attentionPending=!!work?.instantLeads?.some(lead=>instantLeadGroup(lead)==='attention')||!work||!!error||!!work.attentionHasMore||!!work.propertyAttentionIds?.length||!!work.closingTasks?.length||!!work.closingReview?.length||!!work.sellerRecovery?.length||!!work.viewingRequests?.length||!!work.smsRouteReviews?.length||!!work.textAttention?.length||!!work.signatureActions.length||!!work.handoffs.some(h=>h.state!=='resolved')||!!work.callRequests?.some(c=>c.state==='needs_review');

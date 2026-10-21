@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import {platformLearningReportSchema} from '../lib/shared-learning.ts';
+import {mintWorkspaceEventToken,readWorkspaceEventToken} from '../lib/workspace-event-token.ts';
+const owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7',account='00000000-0000-4000-8000-000000000001';
+let user=null,reads=0;
+const report={version:'shared-v1',checkedAt:new Date().toISOString(),minimumAccounts:3,contributionCap:200,maxLearnedShare:0.6,dueAccounts:0,failedAccounts:0,lastRefresh:null,cohortsTruncated:false,recoveryEnabled:0,filterEnabled:false,cohorts:[]};
+async function load(file,mocks){globalThis.__learningRoute=mocks;const code=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');return import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(mocks).join(',')+'}=globalThis.__learningRoute;\n'+code).toString('base64'));}
+const {GET}=await load('app/api/admin/learning/route.ts',{dashboardCurrentUser:async()=>user,ownerInboundTarget:{ownerUserId:owner},platformLearningReportSchema,db:async(path,method,body)=>{reads++;assert.equal(path,'rpc/icash_platform_learning_report');assert.equal(body.p_actor,owner);return report;}});
+const request=()=>new Request('https://www.geticashx.com/api/admin/learning?accountId=foreign');
+assert.equal((await GET(request())).status,401);user={id:account};assert.equal((await GET(request())).status,403);assert.equal(reads,0);
+user={id:owner};const response=await GET(request());assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'private, no-store');assert.equal(response.headers.get('Vary'),'Cookie');assert.equal(reads,1);
+let signedIn=true;
+const events=await load('app/api/work/events-token/route.ts',{workAccount:async()=>{if(!signedIn)throw Error('Sign in');return {accountId:account};},mintWorkspaceEventToken});
+process.env.ICASH_WORKSPACE_EVENTS_URL='https://fixture.up.railway.app/workspace/events';process.env.SUPABASE_SECRET_KEY='fixture-only-key-never-a-provider-secret';
+const tokenResponse=await events.GET();const token=await tokenResponse.json();assert.equal(readWorkspaceEventToken(token.token,process.env.SUPABASE_SECRET_KEY).accountId,account);assert(!JSON.stringify(token).includes(process.env.SUPABASE_SECRET_KEY));
+signedIn=false;assert.equal((await events.GET()).status,503);signedIn=true;delete process.env.ICASH_WORKSPACE_EVENTS_URL;assert.deepEqual(await (await events.GET()).json(),{available:false});
+delete process.env.SUPABASE_SECRET_KEY;delete globalThis.__learningRoute;
+console.log('Shared learning routes: owner-only aggregates, server-owned account scope, signed read-only event tokens and unavailable-feed fallback passed.');

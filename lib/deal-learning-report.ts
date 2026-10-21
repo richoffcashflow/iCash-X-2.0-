@@ -7,7 +7,9 @@ export type ObservedCall=Owned&{id:string;screening_id:string;party:string;strat
 export type ObservedDeal=Owned&{id:string;screening_id:string;practice:string|null};
 export type ObservedSpend=Owned&{operation_key:string;state:string;actual_micros:number|null;cost_basis:string;settlement_evidence:string|null;dispatched_at:string|null;settled_at:string|null};
 export type ObservedEnvelope=Owned&{id:string;deal_id:string;kind:string;state:string;test_mode:boolean;provider_id:string|null;terms_hash:string;recipients:{id:string;email?:string|null;phone?:string|null}[];provider_evidence:ProviderDocument|null;updated_at:string};
-export type LearningReportRecords={calls:ObservedCall[];deals:ObservedDeal[];spend:ObservedSpend[];envelopes:ObservedEnvelope[]};
+export type ObservedClosing=Owned&{id:string;deal_id:string;reply_id:string;kind:string;effective_date:string|null;confirmed_by:string|null;confirmation_source:string;created_at:string};
+export type ObservedTitleReply=Owned&{id:string;deal_id:string;sender_verified:boolean;received_at:string};
+export type LearningReportRecords={calls:ObservedCall[];deals:ObservedDeal[];spend:ObservedSpend[];envelopes:ObservedEnvelope[];closings?:ObservedClosing[];titleReplies?:ObservedTitleReply[]};
 const time=(value:string|null,now:number)=>value!==null&&Number.isFinite(Date.parse(value))&&Date.parse(value)<=now;
 function unique<T>(rows:T[],key:(row:T)=>string){
  const found=new Map<string,T>();
@@ -16,7 +18,7 @@ function unique<T>(rows:T[],key:(row:T)=>string){
 }
 export function summarizeDealLearningEvidence(accountId:string,records:LearningReportRecords,now:number,complete=true){
  if(!accountId||!Number.isFinite(now))throw Error('Invalid report scope');
- for(const rows of Object.values(records))if(rows.some(r=>r.account_id!==accountId))throw Error('Mixed tenant evidence');
+ for(const rows of Object.values(records))if(rows?.some(r=>r.account_id!==accountId))throw Error('Mixed tenant evidence');
  const deals=unique(records.deals,r=>r.id).filter(d=>d.practice!== 'true');
  const dealIds=new Set(deals.map(d=>d.id)),screenings=new Set(deals.map(d=>d.screening_id));
  const spends=new Map(unique(records.spend,r=>r.operation_key).map(r=>[r.operation_key,r]));
@@ -40,20 +42,32 @@ export function summarizeDealLearningEvidence(accountId:string,records:LearningR
   }else g.unresolvedCostOperations++;
   groups.set(key,g);
  }
- const purchases=new Set<string>(),assignments=new Set<string>();
+ const purchases=new Set<string>(),assignments=new Set<string>(),signedAt=new Map<string,number>();
  for(const e of unique(records.envelopes,r=>r.id)){
   if(e.test_mode||e.state!=='completed'||!dealIds.has(e.deal_id)||!time(e.updated_at,now))continue;
   try{
    if(!e.provider_id||!e.provider_evidence||!Array.isArray(e.recipients)||e.recipients.length<2||new Set(e.recipients.map(r=>r.id)).size!==e.recipients.length||!['purchase','assignment'].includes(e.kind))throw Error('Missing receipt');
    if(verifiedSigningStatus(e.provider_evidence,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:false,recipients:e.recipients})!=='completed')throw Error('Incomplete receipt');
    (e.kind==='purchase'?purchases:assignments).add(e.deal_id);
+   const key=`${e.deal_id}:${e.kind}`;signedAt.set(key,Math.min(signedAt.get(key)??Infinity,Date.parse(e.updated_at)));
   }catch{unverifiedCompletedSignings++;}
  }
- return {version:'deal-evidence-v1',asOf:new Date(now).toISOString(),mode:'observation_only',scope:'current_persisted_records',complete,automaticPromotion:false,
+ const replies=new Map(unique(records.titleReplies??[],r=>r.id).map(r=>[r.id,r]));
+ const closed=new Set<string>();let unverifiedClosingRecords=0;
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+ for(const c of unique(records.closings??[],r=>r.id)){
+  if(c.kind!=='closed'||!dealIds.has(c.deal_id))continue;
+  const reply=replies.get(c.reply_id);
+  if(!purchases.has(c.deal_id)||!assignments.has(c.deal_id)||(signedAt.get(`${c.deal_id}:purchase`)??Infinity)>Date.parse(c.created_at)||(signedAt.get(`${c.deal_id}:assignment`)??Infinity)>Date.parse(c.created_at)
+   ||!reply?.sender_verified||reply.deal_id!==c.deal_id||!time(reply.received_at,now)||!time(c.created_at,now)||Date.parse(reply.received_at)>Date.parse(c.created_at)
+   ||!c.effective_date||!/^\d{4}-\d{2}-\d{2}$/.test(c.effective_date)||c.effective_date>today||!c.confirmed_by&&c.confirmation_source!=='verified_title_format'){unverifiedClosingRecords++;continue;}
+  closed.add(c.deal_id);
+ }
+ return {version:'deal-evidence-v2',asOf:new Date(now).toISOString(),mode:'observation_only',scope:'current_persisted_records',complete,automaticPromotion:false,
   strategyObservations:[...groups.values()].sort((a,b)=>a.party.localeCompare(b.party)||a.strategy.localeCompare(b.strategy)),
-  signedPurchaseDeals:purchases.size,signedAssignmentDeals:assignments.size,closedDeals:null,
-  excludedOrUnboundCalls,unverifiedCompletedSignings,
-  limitations:['No controlled comparison or improvement claim.','Completed conversation records are not proof of a human connection, qualification or a closing.','Calls require a non-practice current deal file and dispatched operation; earlier or unbound calls are excluded.','Signing totals are independent observations, not attributed conversion rates.','Costs cover bound call operations only; estimated costs are separate and missing receipts are unresolved.','Closing/title receipt ingestion and versioned opportunity attribution remain unconnected.',...(complete?[]:['Read limit reached; counts are partial and must not be treated as complete totals.'])]};
+  signedPurchaseDeals:purchases.size,signedAssignmentDeals:assignments.size,closedDeals:records.closings&&records.titleReplies?closed.size:null,
+  excludedOrUnboundCalls,unverifiedCompletedSignings,unverifiedClosingRecords,
+  limitations:['No controlled comparison or improvement claim.','Completed conversation records are not proof of a human connection, qualification or a closing.','Calls require a non-practice current deal file and dispatched operation; earlier or unbound calls are excluded.','Signing and closing totals are independent observations, not attributed conversion rates.','Costs cover bound call operations only; estimated costs are separate and missing receipts are unresolved.','Closings require verified live purchase and assignment signatures plus a confirmed, sender-verified title reply. A closing is not proof of proceeds received.',...(complete?[]:['Read limit reached; counts are partial and must not be treated as complete totals.'])]};
 }
 /** Keyset pages preserve tenant scope. Limits are disclosed; never silently call partial data complete. */
 export async function readDealLearningReport(db:LearningReportDb,accountId:string,now=Date.now()){
@@ -69,11 +83,13 @@ export async function readDealLearningReport(db:LearningReportDb,accountId:strin
   }
   complete=false;return rows;
  }
- const [calls,deals,spend,envelopes]=await Promise.all([
+ const [calls,deals,spend,envelopes,closings,titleReplies]=await Promise.all([
   read<ObservedCall>('icash_live_conversations','id,account_id,screening_id,party,strategy_key,conversation_id,operation_key,state,created_at,completed_at','id'),
   read<ObservedDeal>('icash_deal_files','id,account_id,screening_id,practice:terms->>practice','id'),
   read<ObservedSpend>('icash_operation_spend','account_id,operation_key,state,actual_micros,cost_basis,settlement_evidence,dispatched_at,settled_at','operation_key'),
   read<ObservedEnvelope>('icash_signing_envelopes','id,account_id,deal_id,kind,state,test_mode,provider_id,terms_hash,recipients,provider_evidence,updated_at','id'),
+  read<ObservedClosing>('icash_closing_updates','id,account_id,deal_id,reply_id,kind,effective_date,confirmed_by,confirmation_source,created_at','id'),
+  read<ObservedTitleReply>('icash_title_replies','id,account_id,deal_id,sender_verified,received_at','id'),
  ]);
- return summarizeDealLearningEvidence(accountId,{calls,deals,spend,envelopes},now,complete);
+ return summarizeDealLearningEvidence(accountId,{calls,deals,spend,envelopes,closings,titleReplies},now,complete);
 }

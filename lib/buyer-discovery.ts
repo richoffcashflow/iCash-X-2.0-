@@ -1,7 +1,16 @@
 export type BuyerSearchStrategy='recent_corporate'|'corporate_owners';
 export type BuyerSearch={zip:string;page:number;perPage:number;since:string;unitCostMicros:number;quotedCostMicros:number;strategy?:BuyerSearchStrategy};
-export function nextBuyerSearch(last:{page:number;has_next_page:boolean;receipt?:{strategy?:string;providerPage?:number}}|undefined,maxPages:number){
+export function nextBuyerSearch(last:{page:number;has_next_page:boolean;receipt?:{strategy?:string;providerPage?:number;learningVersion?:string;firstStrategy?:string}}|undefined,maxPages:number,firstStrategy?:BuyerSearchStrategy){
  if(last&&last.page>=maxPages)return null;
+ if(firstStrategy){
+  const second:BuyerSearchStrategy=firstStrategy==='recent_corporate'?'corporate_owners':'recent_corporate';
+  if(!last)return {page:1,providerPage:1,strategy:firstStrategy};
+  if(last.receipt?.learningVersion!=='shared-v1'||last.receipt.firstStrategy!==firstStrategy)throw Error('BUYER_CURSOR_REVIEW_REQUIRED');
+  if(last.page===1)return {page:2,providerPage:1,strategy:second};
+  if(!last.has_next_page)return null;
+  if(last.receipt.strategy!==second||!Number.isSafeInteger(last.receipt.providerPage)||Number(last.receipt.providerPage)<1)throw Error('BUYER_CURSOR_REVIEW_REQUIRED');
+  return {page:last.page+1,providerPage:Number(last.receipt.providerPage)+1,strategy:second};
+ }
  if(!last)return {page:1,providerPage:1,strategy:'recent_corporate' as const};
  // One focused page first, then a broader corporate-owner pool. Ownership is
  // a prospect signal, never proof of cash funds or permission to contact.

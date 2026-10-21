@@ -9,6 +9,12 @@ const spend={account_id:account,operation_key:'op1',state:'settled',actual_micro
 const recipients=[{id:'1',email:'seller@example.test'},{id:'2',email:'buyer@example.test'}];
 const envelope={account_id:account,id:'e1',deal_id:'d1',kind:'purchase',state:'completed',test_mode:false,provider_id:'101',terms_hash:'hash',recipients,updated_at:at,provider_evidence:{id:'101',test_mode:false,metadata:{icash_envelope:'e1',terms_hash:'hash'},apply_signing_order:true,status:'Completed',recipients:recipients.map((r,i)=>({...r,status:'signed',signing_order:i+1}))}};
 const records={calls:[call],deals:[deal],spend:[spend],envelopes:[envelope]};
+const assignment={...envelope,id:'e2',kind:'assignment',provider_id:'102',provider_evidence:{...envelope.provider_evidence,id:'102',metadata:{icash_envelope:'e2',terms_hash:'hash'}}};
+const closing={id:'closing1',account_id:account,deal_id:'d1',reply_id:'title1',kind:'closed',effective_date:'2026-10-06',confirmed_by:null,confirmation_source:'verified_title_format',created_at:at};
+const title={id:'title1',account_id:account,deal_id:'d1',sender_verified:true,received_at:at};
+const closure={...records,envelopes:[envelope,assignment],closings:[closing],titleReplies:[title]};
+assert.equal(summarizeDealLearningEvidence(account,closure,now).closedDeals,1);
+for(const patch of [{titleReplies:[{...title,sender_verified:false}]},{envelopes:[envelope]},{closings:[{...closing,effective_date:'2027-01-01'}]},{closings:[{...closing,confirmation_source:'user_review'}]},{titleReplies:[{...title,deal_id:'foreign'}]},{envelopes:[envelope,{...assignment,test_mode:true}]}])assert.equal(summarizeDealLearningEvidence(account,{...closure,...patch},now).closedDeals,0);
 const summary=(patch={})=>summarizeDealLearningEvidence(account,{...records,...patch},now);
 let r=summary();assert.equal(r.signedPurchaseDeals,1);assert.equal(r.closedDeals,null);assert.equal(r.automaticPromotion,false);assert.equal(r.strategyObservations[0].estimatedCostMicros,1234);assert.equal(r.strategyObservations[0].verifiedCostMicros,0);
 assert(!JSON.stringify(r).includes('seller@example.test'));assert(!JSON.stringify(r).includes('provider-1'));assert(!JSON.stringify(r).includes('op1'));
@@ -24,10 +30,10 @@ assert.equal(summary({spend:[{...spend,cost_basis:'verified'}]}).strategyObserva
 for(const patch of [{actual_micros:null},{actual_micros:-1},{settlement_evidence:null},{settled_at:null},{cost_basis:'unknown'}])assert.equal(summary({spend:[{...spend,...patch}]}).strategyObservations[0].unresolvedCostOperations,1);
 for(const patch of [{test_mode:true},{provider_id:'wrong'},{provider_evidence:null},{recipients:[]},{state:'customer_signature_needed'},{updated_at:'2027-01-01'},{provider_evidence:{...envelope.provider_evidence,recipients:envelope.provider_evidence.recipients.map(x=>({...x,status:'pending'}))}}])assert.equal(summary({envelopes:[{...envelope,...patch}]}).signedPurchaseDeals,0);
 assert.equal(summary({envelopes:[{...envelope,deal_id:'foreign'}]}).signedPurchaseDeals,0);
-const tables={icash_live_conversations:records.calls,icash_deal_files:records.deals,icash_operation_spend:records.spend,icash_signing_envelopes:records.envelopes};
+const tables={icash_live_conversations:records.calls,icash_deal_files:records.deals,icash_operation_spend:records.spend,icash_signing_envelopes:records.envelopes,icash_closing_updates:[],icash_title_replies:[]};
 let paths=[];
 r=await readDealLearningReport(async(path,method)=>{assert.equal(method,undefined);assert(path.includes(`account_id=eq.${account}`));assert(!path.includes('select=*'));paths.push(path);return tables[path.split('?')[0]];},account,now);
-assert.equal(r.signedPurchaseDeals,1);assert.equal(paths.length,4);assert.equal(r.complete,true);
+assert.equal(r.signedPurchaseDeals,1);assert.equal(paths.length,6);assert.equal(r.complete,true);
 await assert.rejects(()=>readDealLearningReport(async()=>[],"evil&account_id=neq.x",now));
 await assert.rejects(()=>readDealLearningReport(async()=>[{account_id:'foreign'}],account,now),/Invalid evidence response/);
 // A full bounded page is never silently presented as a complete total.
