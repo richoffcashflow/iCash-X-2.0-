@@ -3,6 +3,7 @@ import {db} from '@/lib/stripe-test';
 import {fundingStripe} from '@/lib/funding';
 import {fundingMode} from '@/lib/funding-policy';
 import {summarizeDispute,referenceId,disputeGuidance,disputeMoney,disputeTime,paymentIdPattern,type EvidencePacket,type EvidenceSection} from './disputes.ts';
+import {savedRefundCase} from './support-refund-evidence.ts';
 type Row=Record<string,unknown>;
 const value=(v:unknown)=>typeof v==='string'?v:typeof v==='number'||typeof v==='boolean'?String(v):'Not recorded';
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(v);
@@ -70,7 +71,7 @@ export async function prepareDisputeEvidence(id:string,signal?:AbortSignal):Prom
  const [usage,access,support,cancellations]=await Promise.all([
   rows(`icash_operation_spend?${scope}&state=eq.settled&settled_at=gte.${encodeURIComponent(from)}&settled_at=lte.${encodeURIComponent(serviceEnd)}&select=operation_key,charged_cents,dispatched_at,settled_at&order=settled_at.asc&limit=26`,signal),
   rows(`icash_software_access_receipts?${scope}&recorded_at=gte.${encodeURIComponent(from)}&recorded_at=lte.${encodeURIComponent(serviceEnd)}&select=recorded_at,request_context&order=recorded_at.asc&limit=11`,signal),
-  rows(`icash_support_messages?${scope}&${time}&select=role,content,created_at&order=created_at.desc&limit=11`,signal),
+  rows(`icash_support_messages?${scope}&${time}&select=thread_id,role,content,evidence,created_at&order=created_at.desc&limit=11`,signal),
   rows(`icash_support_cancel_requests?${scope}&mode=eq.${mode}&select=source,state,created_at,confirmed_at,updated_at,result&order=created_at.desc&limit=11`,signal)
  ]);
  sections.push({title:'Completed account usage',lines:[`Account: ${accountId}. Activity from payment through ${disputeTime(serviceEnd)}. These are account-level service records; individual work credits are pooled and are not attributed to a specific top-up.`,...usage.slice(0,25).map(u=>`${date(u.settled_at)} | ${value(u.operation_key)} | Usage charged: ${typeof u.charged_cents==='number'?disputeMoney(u.charged_cents):'Not recorded'}`)]});
@@ -79,6 +80,16 @@ export async function prepareDisputeEvidence(id:string,signal?:AbortSignal):Prom
  if(!access.length)gaps.push('No retained workspace-access receipts were found for this period.');if(access.length>10)gaps.push('Access evidence lists the first 10 hourly receipts; additional receipts exist.');
  sections.push({title:'Customer support excerpts',lines:support.slice(0,10).reverse().map(s=>`${date(s.created_at)} | ${value(s.role)}: ${value(s.content).slice(0,1200)}${value(s.content).length>1200?' [excerpt ends]':''}`)});
  if(!support.length)gaps.push('No support messages after this payment are recorded in the app. Add relevant external customer communications if available.');if(support.length>10||support.some(s=>value(s.content).length>1200))gaps.push('Support evidence contains excerpts. Review the complete conversation and attach relevant missing context before submitting.');
+ for(const message of support){
+  if(message.role!=='assistant'||!uuid(message.thread_id)||!Array.isArray(message.evidence))continue;
+  const saved=message.evidence.find((e:Row)=>e?.key==='refund_case');
+  const snapshot=savedRefundCase(saved?.refundCase,accountId,message.thread_id);
+  if(!snapshot||snapshot.mode!==mode||Date.parse(snapshot.preparedAt)>Date.parse(until))continue;
+  const delivery=snapshot.sections.find(s=>s.title==='Recorded service delivery');
+  if(delivery)sections.push({title:'Support delivery snapshot (account lifetime)',lines:[`Saved ${disputeTime(snapshot.preparedAt)} in conversation ${snapshot.threadId}. Counts and current entitlements are account-level snapshots, not proof of delivery for this specific payment or service period.`,...delivery.lines]});
+  if(snapshot.gaps.length)gaps.push('The saved refund-support evidence has missing or limited records. Review that conversation’s private evidence before submission.');
+  break;
+ }
  sections.push({title:'Recorded cancellation requests',lines:cancellations.slice(0,10).map(c=>`Requested: ${date(c.created_at)} | Source: ${value(c.source)} | State: ${value(c.state)} | Confirmed: ${date(c.confirmed_at)} | ${value(c.result)}`)});
  gaps.push('Review customer claims, external communications and any billing-portal cancellation in Stripe. Missing app records do not prove no cancellation was requested.');
  return packet;

@@ -2,10 +2,12 @@ import {createHash} from 'node:crypto';
 import {z} from 'zod';
 import {supportNextStep} from './support-self-service.ts';
 import type {SupportOutreachSnapshot} from './support-outreach.ts';
+import type {CourseProgress} from './course-progress.ts';
+import type {SupportRefundCase} from './support-refund-evidence.ts';
 export const supportId = z.string().uuid();
 export const supportTopics = ['work','billing','setup','cancel','refund','human','general'] as const;
 export type SupportTopic = typeof supportTopics[number];
-export type SupportEvidence = {key:string; source:string; status:'ok'|'attention'|'unknown'; detail:string; observedAt:string; code?:string; outreach?:SupportOutreachSnapshot};
+export type SupportEvidence = {key:string; source:string; status:'ok'|'attention'|'unknown'; detail:string; observedAt:string; code?:string; outreach?:SupportOutreachSnapshot;course?:CourseProgress;softwareAccess?:boolean;refundCase?:SupportRefundCase};
 export const supportMessageInput = z.object({requestId:supportId,threadId:supportId.optional(),message:z.string().trim().min(1).max(2000)}).strict();
 export const supportStatusInput = z.object({requestId:supportId,threadId:supportId,status:z.enum(['open','escalated','waiting_on_customer','resolved','closed']),reply:z.string().trim().min(1).max(3000).optional()}).strict();
 /** Only these literal topics influence diagnostics. Model output is never an executable instruction. */
