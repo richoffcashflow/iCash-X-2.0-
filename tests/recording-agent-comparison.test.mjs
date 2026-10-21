@@ -151,6 +151,41 @@ test('only the complete disabled noise defaults can reconstruct the unchanged ap
  assert.equal(recordingAgentMatches(reviewFor(enabled),enabled),true);
 });
 
+test('the new null identity tool reconstructs only the same complete approved snapshot',()=>{
+ const {old,current}=renamedVoiceFixture();
+ old.conversation_config.agent.prompt.built_in_tools={end_call:{type:'system',name:'end_call'},skip_turn:null};
+ current.conversation_config.agent.prompt.built_in_tools={...old.conversation_config.agent.prompt.built_in_tools,identity_challenge:null};
+ old.conversation_config.turn={turn_timeout:7};old.platform_settings.overrides.conversation_config_override.turn={turn_timeout:false};
+ current.conversation_config.turn={turn_timeout:7,noisy_environment_detection:false,noisy_environment_message:"Uhh ... sorry, I'm picking up some noise in the background. Could you move somewhere quieter?"};
+ current.platform_settings.overrides.conversation_config_override.turn={turn_timeout:false,noisy_environment_message:false};
+ const review=reviewFor(old),saved=structuredClone(current),savedReview=structuredClone(review);
+ for(const [empty,list] of representations){
+  const a=structuredClone(current);delete a.conversation_config.agent.subagents;
+  if(empty)a.conversation_config.agent.subagent_config=emptySubagents();
+  if(list)a.conversation_config.agent.subagents=[];
+  assert.equal(recordingAgentMatches(review,a),true);
+ }
+ assert.notEqual(configHash(current),review.configHash);
+ assert.deepEqual(current,saved);assert.deepEqual(review,savedReview);
+ assert.equal(recordingAgentMatches(reviewFor(current),old),false,'never invent a newly approved field');
+ for(const value of [false,true,0,'',[],{},'null',{enabled:false},{type:'system',name:'identity_challenge'}]){
+  const a=structuredClone(current);a.conversation_config.agent.prompt.built_in_tools.identity_challenge=value;
+  assert.equal(recordingAgentMatches(review,a),false,JSON.stringify(value));
+ }
+ for(const mutate of [
+  a=>a.conversation_config.agent.prompt.built_in_tools.unknown_tool=null,
+  a=>a.conversation_config.agent.prompt.built_in_tools.end_call=null,
+  a=>a.conversation_config.agent.prompt.prompt+=' changed',
+  a=>a.conversation_config.agent.prompt.tool_ids.push('tool_other'),
+  a=>a.platform_settings.privacy.record_voice=true,
+  a=>a.conversation_config.turn.noisy_environment_detection=true,
+  a=>a.version_id='agtvrsn_other',a=>a.branch_id='agtbrch_other',a=>a.agent_id='agent_other',
+ ]){const a=structuredClone(current);mutate(a);assert.equal(recordingAgentMatches(review,a),false,mutate.toString());}
+ assert.equal(recordingAgentMatches({...review,configHash:'0'.repeat(64)},current),false);
+ const explicit=structuredClone(current);explicit.conversation_config.agent.prompt.built_in_tools.identity_challenge={type:'system',name:'identity_challenge'};
+ assert.equal(recordingAgentMatches(reviewFor(explicit),explicit),true,'an explicitly approved tool still matches exactly');
+});
+
 test('nonempty, malformed and extended subagent values are not empty defaults',()=>{
  const invalid=[null,[],false,0,'',{},
   {agents:[]},{self_subagent:null},{agents:null,self_subagent:null},{agents:{},self_subagent:null},
