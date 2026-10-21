@@ -16,7 +16,14 @@ user={id:'different-account'};await assert.rejects(guard.dashboardCurrentUser(tr
 user=null;assert.equal(await guard.dashboardCurrentUser(true),null);
 // Protect all current owner route variants as well as their shared operator/studio boundaries.
 for(const dir of ['admin','owner-reception','owner-inbound-acceptance','owner-recording-test','owner-outbound-readiness','owner-voice-acceptance']){
- const root=new URL('../app/api/'+dir+'/',import.meta.url);for(const file of readdirSync(root,{recursive:true}).filter(p=>p.endsWith('route.ts'))){assert.match(readFileSync(new URL(file,root),'utf8'),/from '@\/lib\/dashboard-password'/,dir+'/'+file);}
+ const root=new URL('../app/api/'+dir+'/',import.meta.url);for(const file of readdirSync(root,{recursive:true}).filter(p=>p.endsWith('route.ts'))){
+  const source=readFileSync(new URL(file,root),'utf8');
+  if(dir==='admin'&&file.startsWith('accounts/')){
+   assert.match(source,/from '@\/lib\/owner-account-access'/,file);
+   assert.match(source,/await ownerAccount(?:Actor|View)\(/,file);
+   assert.match(readFileSync(new URL('../lib/owner-account-access.ts',import.meta.url),'utf8'),/await dashboardCurrentUser\(true\)/);
+  }else assert.match(source,/from '@\/lib\/dashboard-password'/,dir+'/'+file);
+ }
 }
 for(const file of ['webinar-account-adapter.ts','trusted-operator.ts','voice-test-server.ts'])assert.match(readFileSync(new URL('../lib/'+file,import.meta.url),'utf8'),/from '@\/lib\/dashboard-password'/);
 assert.match(contentSecurityPolicy,/frame-ancestors 'none'/);assert.match(contentSecurityPolicy,/object-src 'none'/);assert.match(contentSecurityPolicy,/base-uri 'self'/);assert(!contentSecurityPolicy.includes('unsafe-eval'));assert.match(contentSecurityPolicy,/wss:\/\/\*\.twilio\.com/);assert.match(contentSecurityPolicy,/https:\/\/js\.stripe\.com/);

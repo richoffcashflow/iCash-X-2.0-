@@ -32,10 +32,10 @@ function readHistory(value: unknown): History {
 }
 
 /** Read-only recording history; a finished transcript is never required for playback. */
-export function PropertyCallHistory({screeningId, conversations}: {screeningId: string; conversations: Conversation[]}) {
+export function PropertyCallHistory({screeningId, conversations, apiBase='/api/work'}: {screeningId: string; conversations: Conversation[]; apiBase?:string}) {
   const [pageState, setPage] = useState({screeningId, page: 0});
   const page = pageState.screeningId === screeningId ? pageState.page : 0;
-  const scope = `${screeningId}:${page}`;
+  const scope = `${apiBase}:${screeningId}:${page}`;
   const [data, setData] = useState<(History & {scope: string}) | null>(null);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -49,7 +49,7 @@ export function PropertyCallHistory({screeningId, conversations}: {screeningId: 
       if (document.hidden || inFlight) return;
       inFlight = true;
       try {
-        const response = await fetch(`/api/work/call-history?screeningId=${encodeURIComponent(screeningId)}&page=${page}`, {
+        const response = await fetch(`${apiBase}/call-history?screeningId=${encodeURIComponent(screeningId)}&page=${page}`, {
           signal: controller.signal, cache: 'no-store', credentials: 'same-origin',
         });
         if (!response.ok) throw Error('Call history unavailable');
@@ -68,7 +68,7 @@ export function PropertyCallHistory({screeningId, conversations}: {screeningId: 
     const visible = () => {if (!document.hidden && !inFlight) {clearTimeout(timer); delay = 5000; void poll();}};
     void poll(); document.addEventListener('visibilitychange', visible);
     return () => {controller.abort(); clearTimeout(timer); document.removeEventListener('visibilitychange', visible);};
-  }, [screeningId, page, scope, refresh]);
+  }, [apiBase, screeningId, page, scope, refresh]);
 
   function reload() {setRefresh(value => value + 1);}
   const recordings = current?.recordings ?? [];
@@ -86,7 +86,7 @@ export function PropertyCallHistory({screeningId, conversations}: {screeningId: 
     {error === scope && <p role="status">Call recordings could not refresh. <button type="button" className="workspace-quiet" onClick={reload}>Retry call recordings</button></p>}
     {!current && error !== scope && <p role="status">Loading call recordings…</p>}
     {current && !history.length && <div className="conversation-empty"><strong>No call recordings yet</strong><p>Recorded calls will appear here when audio is ready.</p></div>}
-    {history.map(({key, recording, conversation}) => <CallConversation key={key}
+    {history.map(({key, recording, conversation}) => <CallConversation key={key} apiBase={apiBase}
       id={conversation?.id ?? recording!.conversationId ?? recording!.id} source={recording?.source ?? conversation?.source ?? 'outbound'}
       party={conversation?.party ?? recording!.party} summary={conversation?.summary}
       completedAt={conversation?.completed_at ?? recording?.createdAt} durationSeconds={conversation?.durationSeconds ?? recording?.durationSeconds ?? undefined}

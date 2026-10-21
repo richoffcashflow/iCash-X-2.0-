@@ -4,23 +4,8 @@ import {IcashMark} from '@/components/icash-mark';
 import {Play,Pause,Plus,Crown,Coins} from 'lucide-react';
 import {creditAmount} from '@/lib/workspace-progress';
 import type {BotActivity} from '@/lib/bot-activity';
-type Props={pretend?:boolean;hasLeads?:boolean;botName?:string;vip?:boolean;running:boolean;stopped:boolean;paymentRequired:boolean;busy:boolean;stale:boolean;hasCreditHistory?:boolean;balanceCents?:number;principalKey?:string;canPause?:boolean;onVip?:()=>void;onBudget:()=>void;onResume:()=>void;onPause:()=>void};
-export function BotRunBar({pretend=false,...props}:Props){
- return pretend?<PretendBotRunBar key={props.principalKey} botName={props.botName} vip={props.vip}/>:<LiveBotRunBar {...props}/>;
-}
-
-/** Display-only controls receive no live callbacks and never mount status polling. */
-function PretendBotRunBar({botName,vip=false}:Pick<Props,'botName'|'vip'>){
- const [running,setRunning]=useState(true);
- const title=botName?.trim()?`${botName.trim()} is ${running?'running':'paused'}`:`Bot ${running?'running':'paused'}`;
- return <section id="workspace-tour-controls" className="bot-run-bar bot-run-centered" aria-label="Test bot controls">
-  <div className="bot-run-status"><IcashMark className="bot-orb"/><div><div className="bot-run-title"><h2>{title}</h2><span className="bot-live-status" data-live={running} role="status"><i aria-hidden="true"/><span className="sr-only">{running?'Test bot running · Display only':'Test bot paused · Display only'}</span></span>{vip&&<span className="workspace-vip-badge" aria-label="VIP access"><Crown size={24} strokeWidth={2} aria-hidden="true"/><span>VIP</span></span>}</div><p aria-live="polite">{running?'Looking for a deal':'Bot preview paused'}</p><small>Test mode · Display only</small></div></div>
-  <div className="bot-run-actions"><button className="bot-run-budget" type="button" onClick={()=>setRunning(value=>!value)}>{running?<Pause size={14} aria-hidden="true"/>:<Play size={14} aria-hidden="true"/>}{running?'Pause bot':'Run bot'}</button></div>
-  <div className="bot-wallet"><span className="bot-wallet-icon" aria-hidden="true"><Coins size={23}/></span><div className="bot-wallet-amount"><span>Pretend credits</span><strong>{creditAmount(500)}</strong></div></div>
- </section>;
-}
-
-function LiveBotRunBar({hasLeads,botName,vip=false,running,stopped,paymentRequired,busy,stale,balanceCents,hasCreditHistory=false,principalKey,canPause=false,onVip,onBudget,onPause,onResume}:Omit<Props,'pretend'>){
+type Props={hasLeads?:boolean;botName?:string;vip?:boolean;running:boolean;stopped:boolean;paymentRequired:boolean;busy:boolean;stale:boolean;hasCreditHistory?:boolean;balanceCents?:number;principalKey?:string;canPause?:boolean;onVip?:()=>void;onBudget:()=>void;onResume:()=>void;onPause:()=>void};
+export function BotRunBar({hasLeads,botName,vip=false,running,stopped,paymentRequired,busy,stale,balanceCents,hasCreditHistory=false,principalKey,canPause=false,onVip,onBudget,onPause,onResume}:Props){
  const [activity,setActivity]=useState<(BotActivity&{principalKey?:string})|null>(null);
  useEffect(()=>{
   if(!running||stale){setActivity(null);return;}

@@ -23,7 +23,7 @@ Raw source records remain account-bound. New rollup, assignment, queue, revision
 
 The existing authenticated Next app serves `/api/work/events`. The account comes exclusively from the signed-in session; callers cannot supply an account ID. One connection per tab reads a small private revision counter every five seconds and emits only changes. No private records, credentials or account identifiers stream. Connections end after 45 seconds and reauthenticate on reconnect. Hidden tabs disconnect. The heavy progress and activity endpoints load on changes with a 60-second fallback, retaining saved work and unsent drafts.
 
-The Railway worker stays private and only refreshes shared evidence. No public worker domain or new environment secret is needed. The owner pretend/demo view does not mount the live workspace or subscribe.
+The Railway worker stays private and only refreshes shared evidence. No public worker domain or new environment secret is needed. Public practice views do not subscribe to live work; owner inspection retains its existing read-only account boundary.
 
 ## Release and rollback
 
