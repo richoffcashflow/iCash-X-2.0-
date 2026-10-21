@@ -110,6 +110,7 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
     const consented=await transition(db,row,noticeMode?'notice_continue':'consent',{nonceHash:sha(nonce),source:'twilio_gather_speech',...yes,disclosureVersion:recordingPolicy.disclosureVersion});if(!consented){await endBound(row);return hangup();}row=consented;
     }
     const claimed=await transition(db,row,'claim_start');if(!claimed){await endBound(row);return hangup();}row=claimed;
+    let handoffStage='recording_start';
     try{
      const p=await provider.start(row.call_sid!,recordingBaseUrl+'/status?id='+row.id);
      if(!recordingReceipt(row,p)||p.status!=='in-progress'||!Number.isFinite(Date.parse(String(p.start_time))))throw Error('START_NOT_CONFIRMED');
@@ -123,8 +124,11 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
      const seconds=Math.floor((now()-Date.parse(String(call.start_time)))/1000),remaining=row.max_total_seconds-seconds;
      if(remaining<1||remaining>row.max_total_seconds)throw Error('CALL_CAP_REQUIRED');
      // Record confirmed before connecting AI; no unrecorded continuation.
+     handoffStage='ai_registration';
      return xml(await provider.register(row,remaining,recordingStopToken(row.operation_key,env)));
-    }catch{
+    }catch(error){
+     // Typed status and fixed stage only; never provider bodies, caller data or arbitrary errors.
+     console.warn('recording_connection_diagnostic',{recordingId:row.id,stage:handoffStage,reason:'handoff_not_confirmed',...(error instanceof RecordingProviderError?{providerStatus:error.status}:{})});
      if(row){if(row.state==='starting')await transition(db,row,'start_unknown').catch(()=>null);await endBound(row);}return hangup();
     }
    }catch{if(row)await endBound(row);return hangup();}

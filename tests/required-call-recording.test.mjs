@@ -46,6 +46,15 @@ await service.consent(request());assert.equal(calls.filter(x=>x.provider==='star
 for(const [text,confidence] of [['no','.99'],['yes but no recording','1'],['yes','NaN']]){reset();await service.consent(request(text,confidence));assert.equal(row.state,confidence==='NaN'?'failed':'declined');assert(!calls.some(x=>x.provider==='start'||x.provider==='register'));}
 reset();await service.consent(request('yes','.99',true));assert.equal(calls.length,0);
 reset();failedStart=true;await service.consent(request());assert(calls.some(x=>x.provider==='end'));assert(!calls.some(x=>x.provider==='register'));assert.equal(row.state,'stopping');await service.consent(request());assert.equal(calls.filter(x=>x.provider==='start').length,1);
+const savedWarn=console.warn,connectionWarnings=[];console.warn=(...args)=>connectionWarnings.push(args);
+try{
+ for(const failure of [new RecordingProviderError(422),Error('private-provider-body +15555550100')]){
+  reset();const failing=recordingService(env,{db,provider:{...provider,register:async()=>{calls.push({provider:'register'});throw failure;}},now:()=>now});
+  assert((await (await failing.consent(request())).text()).includes('<Hangup'));assert.equal(calls.filter(x=>x.provider==='register').length,1);assert(calls.some(x=>x.provider==='end'));assert.equal(row.state,'stopping');
+  const diagnostic=connectionWarnings.at(-1)[1];assert.equal(diagnostic.stage,'ai_registration');assert.equal(diagnostic.reason,'handoff_not_confirmed');assert.equal(diagnostic.providerStatus,failure instanceof RecordingProviderError?422:undefined);assert(!JSON.stringify(diagnostic).includes('private-provider-body'));assert(!JSON.stringify(diagnostic).includes('+15555550100'));
+ }
+ reset();failedStart=true;await service.consent(request());assert.equal(connectionWarnings.at(-1)[1].stage,'recording_start');assert(!calls.some(x=>x.provider==='register'));
+}finally{console.warn=savedWarn;}
 reset();failedSave=true;await service.consent(request());assert(calls.some(x=>x.provider==='end'));assert(!calls.some(x=>x.provider==='register'));
 reset();await recordingService({...env,ICASH_RECORDED_OUTBOUND_READY:'false'},{db,provider,now:()=>now}).consent(request());assert(!calls.some(x=>x.provider==='start'));
 reset();row.state='recording';row.consent_at=iso;row.recording_sid=re;row.provider_started_at=iso;row.audio_expires_at=new Date(now+1000).toISOString();failedStop=true;
