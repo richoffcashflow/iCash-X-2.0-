@@ -97,7 +97,7 @@ begin
     count(*) filter(where p.created_at<=now()-interval '60 days' and e.closed_at between p.created_at and p.created_at+interval '60 days')
    from public.icash_discovery_filter_pages p join public.icash_discovery_filter_attribution a on a.operation_key=p.operation_key and a.account_id=p.account_id
    left join public.icash_learning_deal_outcomes(p_account) e on e.screening_id=a.screening_id
-   where p.account_id=p_account and p.zip=zip_code and p.plan->>'strategy'=s->>'strategy' and p.created_at between now()-interval '90 days' and now();
+   where p.account_id=p_account and p.zip=zip_code and p.plan->>'version'='seller-filters-v1' and p.plan->>'strategy'=s->>'strategy' and p.created_at between now()-interval '90 days' and now();
   end loop;
  end loop;
  -- Market learning uses verified signatures, never an optimistic deal stage.
@@ -137,7 +137,8 @@ begin
  from public.icash_learning_assignments a join lateral(select c.* from public.icash_live_conversations c where c.account_id=a.account_id and c.screening_id::text||':'||c.contact_key=a.subject and c.strategy_key=a.variant and c.party='seller' and c.conversation_id is not null and c.created_at>=a.created_at and exists(select 1 from public.icash_call_recordings r where r.operation_key=c.operation_key and r.account_id=c.account_id and r.call_context->>'strategyKey'=a.variant and position('REVIEWED INTEREST QUESTION (shared-v1/'||a.context||'):' in r.call_context->>'prompt')>0) order by c.created_at,c.id limit 1) c on true
  join public.icash_learning_deal_outcomes(p_account) e on e.screening_id=c.screening_id
  join public.icash_operation_spend o on o.operation_key=c.operation_key and o.account_id=p_account and o.dispatched_at is not null
- where a.account_id=p_account and a.domain='seller_calls' and a.policy_version='shared-v1' and c.created_at between now()-interval '180 days' and now() group by a.context,a.variant;
+ where a.account_id=p_account and a.domain='seller_calls' and a.policy_version='shared-v1'
+ and not exists(select 1 from public.icash_live_conversations earlier join public.icash_call_recordings er on er.account_id=earlier.account_id and er.operation_key=earlier.operation_key where earlier.account_id=p_account and earlier.screening_id=c.screening_id and earlier.party='seller' and earlier.conversation_id is not null and row(earlier.created_at,earlier.id)<row(c.created_at,c.id) and position('REVIEWED INTEREST QUESTION (shared-v1/' in er.call_context->>'prompt')>0) and c.created_at between now()-interval '180 days' and now() group by a.context,a.variant;
  -- Buyer policies are assigned per deal/revision. Qualification is an explicit
  -- reviewed buyer match; an owner lookup or an email click is not qualification.
  insert into public.icash_learning_rollups(account_id,domain,context,market,variant,attempts,pending,positive,opted_out,contract_trials,contracts,closing_trials,closings,cost_cents,costs_complete)
@@ -149,7 +150,7 @@ begin
  join public.icash_learning_deal_outcomes(p_account) e on e.deal_id=d.id
  join lateral(select min(r.created_at) at from public.icash_buyer_search_receipts r where r.deal_id=d.id and a.subject=d.id::text||':'||r.revision and r.created_at>=a.created_at) first_receipt on first_receipt.at is not null
  cross join lateral(select coalesce(sum(o.charged_cents) filter(where o.state='settled'),0) cents,bool_and(case when r.operation_key is null then r.receipt->'emptyEstimate'='true'::jsonb else o.state='settled' and o.charged_cents is not null end) complete from public.icash_buyer_search_receipts r left join public.icash_operation_spend o on o.operation_key=r.operation_key and o.account_id=p_account where r.deal_id=d.id and a.subject=d.id::text||':'||r.revision) cost
- where a.account_id=p_account and a.domain='buyer_search' and first_receipt.at between now()-interval '180 days' and now() group by a.market,a.variant;
+ where a.account_id=p_account and a.domain='buyer_search' and a.policy_version='shared-v1' and a.context='order-v1' and first_receipt.at between now()-interval '180 days' and now() group by a.market,a.variant;
 end $$;
 
 -- Cap each contributor's decision weight. Display totals remain actual counts.
@@ -202,7 +203,7 @@ begin
   return jsonb_build_object('variant',existing.variant,'version',existing.policy_version,'mode',existing.mode);end if;
  -- Old conversations/cursors retain their existing behavior and are not
  -- relabelled as exposure to the prospective shared policy.
- if p_domain='seller_calls' and exists(select 1 from public.icash_live_conversations c where c.account_id=p_account and c.screening_id::text||':'||c.contact_key=p_subject) then return null;end if;
+ if p_domain='seller_calls' and exists(select 1 from public.icash_live_conversations c where c.account_id=p_account and c.screening_id::text=split_part(p_subject,':',1)) then return null;end if;
  if p_domain='buyer_search' and exists(select 1 from public.icash_buyer_search_receipts r join public.icash_deal_files d on d.id=r.deal_id where d.account_id=p_account and d.id::text||':'||r.revision=p_subject) then return null;end if;
  bucket:=('x'||substr(md5(p_account::text||p_domain||p_subject||'shared-v1'),1,8))::bit(32)::bigint%10000;
  winner:=public.icash_shared_learning_winner(p_domain,p_context,p_market,choices);
