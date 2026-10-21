@@ -3,3 +3,6 @@
 .dashboard-unlock .dashboard-remember{display:flex;align-items:center;gap:10px;margin:8px 0}.dashboard-unlock .dashboard-remember input{width:18px;height:18px;padding:0;accent-color:#171717;flex-shrink:0}.dashboard-unlock .dashboard-unlock-duration{font-size:13px;margin:4px 0 20px}
 
 .dashboard-unlock .dashboard-text-button{background:transparent;color:#555;padding:10px 0;text-decoration:underline;font-size:14px}
+
+/* Keep the owner lock action reachable without covering phone-sized controls. */
+@media(max-width:750px){.dashboard-lock{position:static;display:block;z-index:auto;margin:0 16px 18px auto}}
