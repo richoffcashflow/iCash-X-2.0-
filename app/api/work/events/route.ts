@@ -10,5 +10,10 @@ export async function GET(request:Request){
   const {accountId}=await workAccount({allowInactiveMembership:true});
   const stream=workspaceEventStream({accountId,signal:request.signal,read:()=>db('rpc/icash_workspace_revision_batch','POST',{p_accounts:[accountId]},AbortSignal.any([request.signal,AbortSignal.timeout(8000)]))});
   return new Response(stream,{headers:{...headers,'Content-Type':'text/event-stream','X-Accel-Buffering':'no'}});
- }catch{return Response.json({error:'Live updates are temporarily unavailable.'},{status:503,headers});}
+ }catch(error){
+  const reason=error instanceof Error?error.message:'';
+  if(reason==='SIGN_IN_REQUIRED')return Response.json({error:'Sign in to receive live updates.'},{status:401,headers});
+  if(['ACCOUNT_REQUIRED','WORKSPACE_ACKNOWLEDGMENT_REQUIRED','SUBSCRIPTION_REQUIRED','VIP_REQUIRED'].includes(reason))return Response.json({error:'Workspace access is required for live updates.'},{status:403,headers});
+  return Response.json({error:'Live updates are temporarily unavailable.'},{status:503,headers});
+ }
 }

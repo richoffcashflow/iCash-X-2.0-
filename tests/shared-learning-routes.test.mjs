@@ -11,12 +11,17 @@ const {GET}=await load('app/api/admin/learning/route.ts',{dashboardCurrentUser:a
 const request=()=>new Request('https://www.geticashx.com/api/admin/learning?accountId=foreign');
 assert.equal((await GET(request())).status,401);user={id:account};assert.equal((await GET(request())).status,403);assert.equal(reads,0);
 user={id:owner};const response=await GET(request());assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'private, no-store');assert.equal(response.headers.get('Vary'),'Cookie');assert.equal(reads,1);
-let signedIn=true;
-const events=await load('app/api/work/events/route.ts',{workAccount:async()=>{if(!signedIn)throw Error('Sign in');return {accountId:account};},workspaceEventStream,db:async(path,method,body)=>{assert.equal(path,'rpc/icash_workspace_revision_batch');assert.deepEqual(body.p_accounts,[account]);return {[account]:'42'};}});
+let accountFailure='',eventReads=0;
+const events=await load('app/api/work/events/route.ts',{workAccount:async()=>{if(accountFailure)throw Error(accountFailure);return {accountId:account};},workspaceEventStream,db:async(path,method,body)=>{eventReads++;assert.equal(path,'rpc/icash_workspace_revision_batch');assert.deepEqual(body.p_accounts,[account]);return {[account]:'42'};}});
 const controller=new AbortController();
 const eventResponse=await events.GET(new Request('https://www.geticashx.com/api/work/events?accountId=foreign',{signal:controller.signal}));
 assert.equal(eventResponse.status,200);assert.equal(eventResponse.headers.get('Content-Type'),'text/event-stream');assert.equal(eventResponse.headers.get('Cache-Control'),'private, no-store');
 const reader=eventResponse.body.getReader();const first=new TextDecoder().decode((await reader.read()).value);assert(first.includes('"revision":"42"'));assert(!first.includes(account));controller.abort();
-signedIn=false;assert.equal((await events.GET(new Request('https://www.geticashx.com/api/work/events'))).status,503);
+const readsBeforeDenial=eventReads;
+for(const [failure,status] of [['SIGN_IN_REQUIRED',401],['ACCOUNT_REQUIRED',403],['WORKSPACE_ACKNOWLEDGMENT_REQUIRED',403],['DATABASE_UNAVAILABLE',503]]){
+ accountFailure=failure;const denied=await events.GET(new Request('https://www.geticashx.com/api/work/events'));
+ assert.equal(denied.status,status);assert.equal(denied.headers.get('Cache-Control'),'private, no-store');assert.equal(eventReads,readsBeforeDenial,'Denied accounts never read or subscribe to revisions');
+ assert(!(await denied.text()).includes(failure),'Internal errors stay private');
+}
 delete globalThis.__learningRoute;
 console.log('Shared learning routes: owner-only aggregates, authenticated same-origin updates, server-owned account scope and private revision-only responses passed.');
