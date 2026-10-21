@@ -1,6 +1,6 @@
 # Platform learning
 
-`20261021181150_platform_shared_learning.sql` introduces private aggregate rollups and durable prospective assignments. Existing provider permission, budget, idempotency, pause, suppression, quote and contract gates still decide whether any work may run. A score only selects among existing reviewed alternatives.
+The `platform_shared_learning_*` migrations introduce private aggregate rollups and durable prospective assignments. Existing provider permission, budget, idempotency, pause, suppression, quote and contract gates still decide whether any work may run. A score only selects among existing reviewed alternatives.
 
 | Workflow | Shared evidence | Decision |
 | --- | --- | --- |
@@ -27,7 +27,7 @@ The Railway worker stays private and only refreshes shared evidence. No public w
 
 ## Release and rollback
 
-Apply the additive database migration before deploying the app and worker. Keep existing disabled recovery/filter variants disabled. Deploy the worker and app from the same reviewed commit. Verify the owner report, queue health, anonymous access denial, production app health and Railway terminal SUCCESS. No paid test calls, messages, lookups or purchases are needed.
+Apply the seven `platform_shared_learning_*` migrations in timestamp order before deploying the app and worker. Keep existing disabled recovery/filter variants disabled. Deploy the worker and app from the same reviewed commit. Verify the owner report, queue health, anonymous access denial, production app health and Railway terminal SUCCESS. No paid test calls, messages, lookups or purchases are needed.
 
 If the event feed fails, clients automatically back off and fallback refresh continues. Rolling back the app/worker leaves additive schema and saved assignments intact. Do not delete assignments, reset cursors or replay uncertain paid operations. Database learning-policy rollback must restore the prior functions in a new reviewed migration; changing a score never authorizes mutation of past receipts.
 

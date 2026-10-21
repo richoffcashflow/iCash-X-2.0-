@@ -1,6 +1,6 @@
 // Real migration against isolated PostgreSQL. All records below are synthetic.
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,readdirSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {sharedLearningWinner,sharedLearningStats} from '../lib/shared-learning.ts';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
@@ -9,6 +9,7 @@ const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 try{
  await db.exec('create role anon;create role authenticated;create role service_role;');
  await db.exec(read('tests/fixtures/shared-learning-schema.sql'));
+ await db.exec('create table icash_learning_cohorts(id uuid primary key);');
  await db.exec(`create function icash_refresh_opportunity_outcomes(uuid) returns void language sql as $$select$$;
  create function icash_discovery_filter_feedback(uuid,text) returns jsonb language sql as $$select '[]'::jsonb$$;
  create function icash_save_buyer_search(uuid,uuid,uuid,integer,text,jsonb) returns void language sql as $$select$$;
@@ -19,7 +20,7 @@ try{
  await db.exec(usage.match(/create function public\.icash_create_usage_loop_observation\([\s\S]*?end \$\$;/)[0]);
  await db.exec(usage.match(/create function public\.icash_usage_loop_report\([\s\S]*?end \$\$;/)[0]);
  await q('insert into icash_accounts(id,owner_user_id) values($1,$1)',[id(1)]);
- await db.exec(read('supabase/migrations/20261021181150_platform_shared_learning.sql'));
+ for(const migration of readdirSync(new URL('../supabase/migrations/',import.meta.url)).filter(n=>n.includes('_platform_shared_learning_')).sort())await db.exec(read('supabase/migrations/'+migration));
  assert.equal(await val("select has_table_privilege('anon','icash_learning_rollups','select')"),false);
  assert.equal(await val("select has_function_privilege('authenticated','icash_assign_shared_learning(uuid,text,text,text,text)','execute')"),false);
  await assert.rejects(val('select icash_platform_learning_report($1)',[id(1)]),/Owner required/);

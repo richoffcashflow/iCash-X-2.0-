@@ -12,7 +12,7 @@ create table public.icash_learning_rollups(
  check(attempts>=0 and pending between 0 and attempts and positive between 0 and attempts and opted_out between 0 and attempts
   and contracts between 0 and contract_trials and closings between 0 and closing_trials and cost_cents>=0)
 );
-create index icash_learning_cohorts on public.icash_learning_rollups(domain,context,market,updated_at);
+create index icash_shared_learning_rollups_cohort on public.icash_learning_rollups(domain,context,market,updated_at);
 create table public.icash_learning_queue(
  account_id uuid primary key references public.icash_accounts(id),due_at timestamptz not null default now(),last_refreshed_at timestamptz,last_error_at timestamptz
 );
@@ -154,7 +154,7 @@ begin
 end $$;
 
 -- Cap each contributor's decision weight. Display totals remain actual counts.
-create function public.icash_shared_learning_stats(p_domain text,p_context text,p_market text) returns jsonb
+create or replace function public.icash_shared_learning_stats(p_domain text,p_context text,p_market text) returns jsonb
 language sql stable security invoker set search_path='' as $$
  with samples as (select *,least(1,200.0/greatest(attempts,contract_trials,closing_trials,1)) weight from public.icash_learning_rollups
  where domain=p_domain and context=p_context and market=p_market and updated_at>now()-interval '6 hours'),
@@ -164,12 +164,12 @@ language sql stable security invoker set search_path='' as $$
  sum(contract_trials*weight) effective_contract_trials,sum(contracts*weight) effective_contracts,sum(closing_trials*weight) effective_closing_trials,sum(closings*weight) effective_closings,sum(cost_cents*weight) effective_cost_cents from samples group by variant)
  select coalesce(jsonb_agg(to_jsonb(stats) order by variant),'[]') from stats;
 $$;
-create function public.icash_learning_lower(p_wins numeric,p_trials numeric) returns numeric
+create or replace function public.icash_learning_lower(p_wins numeric,p_trials numeric) returns numeric
 language sql immutable security invoker set search_path='' as $$
  select case when p_trials<=0 or p_wins<0 or p_wins>p_trials then 0 else greatest(0,
  (p_wins/p_trials+2.706025/(2*p_trials)-1.645*sqrt((p_wins/p_trials)*(1-p_wins/p_trials)/p_trials+2.706025/(4*p_trials*p_trials)))/(1+2.706025/p_trials)) end;
 $$;
-create function public.icash_shared_learning_winner(p_domain text,p_context text,p_market text,p_choices text[]) returns text
+create or replace function public.icash_shared_learning_winner(p_domain text,p_context text,p_market text,p_choices text[]) returns text
 language plpgsql stable security invoker set search_path='' as $$
 declare s jsonb;all_stats jsonb;winner text;score numeric;best numeric:=-1;objective text:='positive';
 begin
@@ -188,7 +188,7 @@ begin
  return case when best>0 then winner end;
 end $$;
 
-create function public.icash_assign_shared_learning(p_account uuid,p_domain text,p_subject text,p_context text,p_market text) returns jsonb
+create or replace function public.icash_assign_shared_learning(p_account uuid,p_domain text,p_subject text,p_context text,p_market text) returns jsonb
 language plpgsql security invoker set search_path='' as $$
 declare existing public.icash_learning_assignments;choices text[];winner text;bucket bigint;chosen text;mode text:='explore';
 begin
@@ -414,7 +414,7 @@ end $$;
 
 do $$ declare f record;begin
  for f in select p.oid::regprocedure signature from pg_proc p join pg_namespace n on n.oid=p.pronamespace
- where n.nspname='public' and (p.proname like 'icash_learning_%' or p.proname like 'icash_shared_learning_%' or p.proname in ('icash_assign_shared_learning','icash_refresh_shared_learning','icash_refresh_learning_account','icash_workspace_revision_batch','icash_discovery_shared_evidence','icash_platform_learning_report','icash_opportunity_market_score','icash_opportunity_market_score_local','icash_choose_seller_recovery','icash_assign_seller_opener')) loop
+ where n.nspname='public' and p.proname in ('icash_learning_signature_verified','icash_learning_deal_outcomes','icash_shared_learning_stats','icash_learning_lower','icash_shared_learning_winner','icash_learning_changed','icash_learning_usage_variant','icash_assign_shared_learning','icash_refresh_shared_learning','icash_refresh_learning_account','icash_workspace_revision_batch','icash_discovery_shared_evidence','icash_platform_learning_report','icash_opportunity_market_score','icash_opportunity_market_score_local','icash_choose_seller_recovery','icash_assign_seller_opener') loop
   execute format('revoke all on function %s from public,anon,authenticated',f.signature);
   execute format('grant execute on function %s to service_role',f.signature);
  end loop;
