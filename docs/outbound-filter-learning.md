@@ -4,7 +4,7 @@ Four reviewed DealMachine property audiences retain the existing single-family,
 70% equity requirement: baseline, vacant (`is_vacant_home`), absentee owner
 (`has_absentee_owners`), and estimated repairs of at least $25,000
 (`estimated_repair_cost`). These fields follow DealMachine's property-filter
-reference at https://api.docs.dealmachine.com/api-reference/filters/property-filters.
+reference at https://api.docs.dealmachine.com/reference/property-filters.
 Every search remains property-only, uses the free estimate before admission, and
 retains the existing small page size, funding allowance and dispatch protections.
 
