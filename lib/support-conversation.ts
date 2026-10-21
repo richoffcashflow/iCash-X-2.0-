@@ -5,10 +5,12 @@ import {supportCourseAnswer,supportProductGuide} from './support-product-guide.t
 import {supportCodeDelivery} from './support-code-delivery.ts';
 import {currentSupportIssue,supportReplyEvidence,supportAskedQuestions,removeRepeatedSupportQuestions,repeatsSupportQuestion,supportReplyStyle} from './support-reply-style.ts';
 import {supportOutreachReply} from './support-outreach.ts';
+import {missingAccessCodeReply} from './support-access-reply.ts';
+import type {AccessInvestigation} from './support-access-investigation.ts';
 
 export type SupportTurn={role:string;content:string};
 export type SupportReply={reply:string;status:'open'|'waiting_on_customer'|'resolved'|'closed';ai:boolean};
-export type SupportContext={kind:'access'|'account';messages:SupportTurn[];evidence?:SupportEvidence[];handedOff?:boolean;allowAI?:boolean};
+export type SupportContext={kind:'access'|'account';messages:SupportTurn[];evidence?:SupportEvidence[];accessInvestigation?:AccessInvestigation;handedOff?:boolean;allowAI?:boolean};
 const continueHere='I’ll help you troubleshoot this here. What is still happening, and what was the last step you tried?';
 const noRefunds='All sales are final; we do not offer refunds. I can help fix an access or software issue here.';
 const resolvedGuidance='For more how-to questions, rewatch the Course in your workspace. Reply here if you still need help.';
@@ -30,6 +32,11 @@ export function supportConversationFallback(context:SupportContext):SupportReply
  }
  const closure=repeatedRefundReply(context.messages,context.evidence);
  if(closure)return closure;
+ if(context.kind==='access'&&supportCodeDelivery(context.messages)==='missing'&&['refund','cancel'].includes(supportTopic(question))){
+  const cancelled=context.messages.some(m=>m.role==='operator'&&/next renewal.{0,30}(?:stopped|cancelled|canceled)|renewals? (?:has|have) been stopped/i.test(m.content));
+  if(supportTopic(question)==='cancel')return result(cancelled?'The earlier support update confirms your next renewal was stopped. That is separate from the unresolved sign-in problem; you don’t need to sign in to repeat the cancellation.':'You’re asking to stop future renewals, and sign-in is still blocked. I’ve kept that request in this conversation, but this chat has not cancelled the subscription. You don’t need to repeat the failed sign-in steps.','open');
+  return result('Our refund policy is unchanged, but your missing sign-in code is still an unresolved access issue. You’ve already explained what went wrong; you don’t need to repeat it or request another code.','open');
+ }
  if(supportTopic(question)==='refund')return result(`${noRefunds}${/\bcancel\b/i.test(question)?' '+supportAnswer('cancel',[],false):' If there’s a payment, access or software problem, tell me what happened so I can help.'}`);
  if(supportTopic(question)==='cancel')return result(context.kind==='account'?supportAnswer('cancel',[],false):'To stop future renewals, sign in and open Cancel subscription in the workspace account menu. Confirm the cancellation there. If you cannot sign in, tell me which sign-in step fails so I can help you get access.');
  const outreach=context.kind==='account'?supportOutreachReply(context.messages,context.evidence??[]):null;
@@ -51,22 +58,7 @@ export function supportConversationFallback(context:SupportContext):SupportReply
   const channel=/email|inbox|spam/i.test(history)?'email':/text|sms|phone/i.test(history)||bothTried?'text':null;
   if(code){
    if(!channel)return result('Are you requesting the code by email or text? Please don’t share the code itself.');
-   if(delivery==='missing'){
-    const replies=context.messages.filter(m=>m.role==='assistant'||m.role==='operator').map(m=>m.content);
-    const checkedReceipt=replies.some(reply=>reply.includes('email on your iCash X payment receipt'));
-    const requestedFresh=replies.some(reply=>/request (?:one|a) fresh code/i.test(reply));
-    const phoneOnlyExplained=replies.some(reply=>reply.includes('optional receipt email blank'));
-    const noResponse=/no (?:error )?message|nothing (?:appears|happens)|doesn.t (?:say|show) anything|same page/i.test(question);
-    if(!phoneOnlyExplained&&(requestedFresh||bothTried||noResponse))return result('Phone sign-in can use your checkout mobile number without matching an email first. Choose “Use my checkout phone,” leave the optional receipt email blank, and select “Text me a code.” Does a box labeled “Text code” appear? Please do not share the code.');
-    if(phoneOnlyExplained&&(noResponse||bothTried)){
-     if(/^\s*[“"']?sign in[”"'.!\s]*$/i.test(question))return result('“Sign in” submits a code already received. Choose “Check my checkout details,” leave the optional receipt email blank, and select “Text me a code” to request one. Does the page show a resend countdown?');
-     if(!replies.some(reply=>/main button.*(?:say|right now)|(?:words|text).{0,40}main button/i.test(reply)))return result('You reported that no message appears. What does the main button say now: “Email me a code,” “Text me a code,” “Sign in,” or “One moment…”?');
-     if(!replies.some(reply=>reply.includes('private Safari or Chrome window')))return result('The page is not showing a usable result. Open the sign-in page in a private Safari or Chrome window and choose “Use my checkout phone.” Leave the optional receipt email blank. Does “Text me a code” change to “One moment…” when pressed?');
-     return result('Please copy just the visible field labels and button text from the sign-in page, leaving out their values and any code. That will identify whether the page is requesting a code or waiting for one you have not received.','open');
-    }
-    if(!checkedReceipt)return result('The code hasn’t arrived yet. Check the email on your iCash X payment receipt and use that exact email for email sign-in. Text sign-in can use your checkout phone without an email. Does the receipt email match the one you entered?');
-    return result(channel==='email'?'Choose “Use another email or resend” on the sign-in page, enter the email on your iCash X payment receipt, and request one fresh code. Check that inbox and its spam or junk folder. You can also use your checkout phone without entering an email. Does a code arrive?':'Choose “Use my checkout phone” on the sign-in page. Enter the phone used at checkout, leave the optional receipt email blank, and request one fresh code. Does the text arrive?');
-   }
+   if(delivery==='missing'){const answer=missingAccessCodeReply(context.messages,context.accessInvestigation);return result(answer.reply,answer.status);}
    if(!/safari|chrome|firefox|edge|iphone|android|ipad|desktop|laptop|browser/i.test(history))return result(`Thanks — the ${channel} code. Open the sign-in page directly in Safari or Chrome, enter the newest code, and press the sign-in button. Which device and browser are you using?`);
    if(!previous.includes('error message')&&!/invalid|expired|error|spinning|stuck|blank|no error/i.test(question))return result('What happens after you press the sign-in button: an error message, a loading spinner, or the same page? You can copy the error text, but leave out the code.');
    if(/expired|invalid/i.test(question)&&!previous.includes('Older codes may no longer work'))return result('Request one fresh code and enter that newest code in the same browser where you requested it. Older codes may no longer work. What message appears after you try that?');
