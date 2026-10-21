@@ -37,18 +37,27 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
    // A missing AI identity must not block independently verified call audio.
    // Keep identity discovery scheduled, with its exact provider bindings intact.
    stage='conversation';
+   let bindingStage='list_read';const mismatches:string[]=[];
    try{if(row.start_claimed_at&&row.recording_sid&&!row.conversation_id&&['recording','processing','available','expired','absent','failed'].includes(row.state)){
     const list=await provider.conversations(row),rows=list.conversations;
+    bindingStage='list_shape';
     if(list.has_more!==false||!Array.isArray(rows)||rows.length>1)throw Error('CONVERSATION_BINDING_REVIEW_REQUIRED');
+    bindingStage='list_empty';
     if(rows.length===0)throw Error('CONVERSATION_BINDING_NOT_YET_AVAILABLE');
+    bindingStage='conversation_read';
     if(rows.length===1){const candidate=object(rows[0]);const c=await provider.conversation(String(candidate.conversation_id));
      const phone=object(object(c.metadata).phone_call),init=object(c.conversation_initiation_client_data);
+     bindingStage='identity_match';
+     // Log only fixed field names, never provider values, phone numbers or payloads.
+     const checks={conversation:c.conversation_id===candidate.conversation_id,agent:c.agent_id===row.agent_id,branch:c.branch_id===row.branch_id,version:c.version_id===row.version_id,user:c.user_id==='icash-recorded:'+row.id,carrierCall:phone.call_sid===row.call_sid,direction:phone.direction==='outbound',recipient:phone.external_number===row.to_phone,sender:phone.agent_number===row.from_phone,initiationUser:init.user_id===c.user_id};
+     for(const [key,matched] of Object.entries(checks))if(!matched)mismatches.push(key);
      if(c.conversation_id!==candidate.conversation_id||c.agent_id!==row.agent_id||c.branch_id!==row.branch_id||c.version_id!==row.version_id||c.user_id!=='icash-recorded:'+row.id||phone.call_sid!==row.call_sid||phone.direction!=='outbound'||phone.external_number!==row.to_phone||phone.agent_number!==row.from_phone||init.user_id!==c.user_id)throw Error('CONVERSATION_BINDING_REVIEW_REQUIRED');
+     bindingStage='binding_write';
      const bound=await recordingTransition(db,row,'bind_conversation',{conversationId:c.conversation_id,toolTokenHash:sha(recordingStopToken(row.operation_key,env))});
      if(!bound)throw Error('CONVERSATION_BINDING_NOT_SAVED');row=bound;
     }
    }
-   }catch{console.warn('recording_reconcile_diagnostic',{stage:'conversation',recordingId:row.id,reason:'conversation_binding_pending'});}
+   }catch(error){console.warn('recording_reconcile_diagnostic',{stage:'conversation',recordingId:row.id,reason:'conversation_binding_pending',bindingStage,mismatches,...(error instanceof RecordingProviderError?{providerStatus:error.status}:{})});}
    stage='carrier';
    if(!row.start_claimed_at){
     let terminal=row;const call=await provider.getCall(row.call_sid!);
