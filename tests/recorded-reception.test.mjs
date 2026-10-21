@@ -54,6 +54,19 @@ test('reception accepts only exact empty provider defaults against the unchanged
 });
 const streamXml = '<Response><Connect><Stream url="wss://api.us.elevenlabs.io/fixture"/></Connect></Response>';
 
+test('incoming calls accept only the added null identity tool against the saved approval',()=>{
+ const cfg=configuration();cfg.agent.conversation_config.agent.prompt.built_in_tools={skip_turn:null};
+ cfg.c.config_hash=inspectRecordedReceptionAgent(cfg.c,cfg.agent,cfg.branch,true,cfg.tool).hash;
+ const current=clone(cfg.agent);current.conversation_config.agent.prompt.built_in_tools.identity_challenge=null;
+ const inspect=a=>inspectRecordedReceptionAgent(cfg.c,a,cfg.branch,true,cfg.tool);
+ assert.equal(inspect(current).safe,true);assert.notEqual(inspect(current).hash,cfg.c.config_hash);
+ for(const value of [{},false,true,{type:'system',name:'identity_challenge'}]){
+  const a=clone(current);a.conversation_config.agent.prompt.built_in_tools.identity_challenge=value;assert.equal(inspect(a).safe,false);
+ }
+ const wrong=clone(current);wrong.version_id='agtvrsn_unapproved';assert.equal(inspect(wrong).safe,false);
+ const extra=clone(current);extra.conversation_config.agent.prompt.built_in_tools.unreviewed=null;assert.equal(inspect(extra).safe,false);
+});
+
 test('reception reconstructs the same older fingerprint only for the observed joint disabled PVC defaults',()=>{
  const cfg=configuration(),inspect=(agent,c=cfg.c,branch=cfg.branch)=>inspectRecordedReceptionAgent(c,agent,branch,true,cfg.tool);
  cfg.agent.platform_settings.overrides.conversation_config_override.tts={voice_id:false};

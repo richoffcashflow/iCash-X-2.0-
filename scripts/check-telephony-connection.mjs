@@ -101,6 +101,10 @@ export async function saveVoiceUsagePolicyReview(env=process.env,fetcher=fetch){
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
+ // Refresh the existing read-only SMS line check alongside voice diagnostics.
+ // A stale setup check must not mask a provider rejecting the configured line.
+ // This script never sends, buys, enables a number or retries customer work.
+ await import('./check-text-connection.mjs').catch(()=>console.log('Contiguity text: diagnostic unavailable. No message sent.'));
  try{
   let agent,incomingAgent,incomingConfig;
   const result=await checkTelephonyConnection(process.env,fetch,value=>{agent=value;},(value,config)=>{incomingAgent=value;incomingConfig=config;});

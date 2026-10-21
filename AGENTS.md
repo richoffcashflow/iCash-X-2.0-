@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 21, 2026 the owner requested firm final replies for abusive refund repetition and automatic Stripe evidence preparation. After an actual policy explanation, refund-only profanity may close immediately; preserve unresolved billing/access/cancellation/software help and reopening. Mention agreement only from a saved, purchase-bound acceptance and describe only verified delivery. Keep private, case-bound evidence with the conversation and label lifetime activity separately from the disputed service period. Never submit to Stripe automatically or claim a dispute is invalid from policy/abuse alone.
+
 - On October 21, 2026 the owner reported repeated sign-in instructions without investigation. Access support must check current sign-in availability and save private, case-bound payment/delivery findings, preserve operator findings, and remember failed steps. Never treat a welcome email as an OTP receipt, disclose account existence to an unverified visitor, claim a code was sent by chat, or loop through resends. Keep unresolved access/cancellation requests open; do not require a failed sign-in step again.
 
 - On October 20, 2026 the owner reported that support ignored "my bot isn't making calls or texts" and mentioned test credits. Recognize natural negative wording on the first turn, answer from account-bound outreach receipts and holds, and keep the issue open. Never substitute generic wallet/readiness text or ask what they were trying to do when already stated. Ordinary support replies must not mention test credits, bank balances or refunds unless directly relevant. Lifetime activity is not today's activity.
