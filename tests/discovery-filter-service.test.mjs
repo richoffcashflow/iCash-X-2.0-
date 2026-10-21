@@ -14,7 +14,7 @@ const svc=await loadService('lib/discovery-service.ts',{
   if(path.startsWith('icash_operation_rates'))return [{enabled:true,operation:'property_search',expires_at:'2099-01-01',costs_micros:{dealmachine:50000}}];
   if(path.startsWith('icash_operation_spend'))return existing?[{state:'dispatched'}]:[];
   rpc.push({path,body});
-  if(path==='rpc/icash_discovery_filter_state')return disabled?null:discoveryStrategies.map(strategy=>({strategy,nextPage:3,exhausted:false,pages:0,matureAttempts:0,interested:0,optedOut:0,costCents:0,costsComplete:true}));
+  if(path==='rpc/icash_discovery_filter_state_v2')return disabled?null:discoveryStrategies.map(strategy=>({strategy,nextPage:3,exhausted:false,pages:0,attempted:0,pendingAttempts:0,recentUnproductivePages:0,matureAttempts:0,interested:0,optedOut:0,costCents:0,costsComplete:true}));
   if(path.includes('reserve_and_claim'))events.push('claim');
   return true;
  }
