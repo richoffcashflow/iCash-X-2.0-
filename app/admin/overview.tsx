@@ -50,7 +50,7 @@ export function OwnerOverviewView(){
  const usage=report?.usage,estimated=!!usage?.estimatedCount;
  const priority=report?reliabilityPriority(report.reliability??null):null;
  return <main className={styles.page}>
-  <nav className={styles.nav} aria-label="Admin navigation"><a href="/">← Workspace</a><a href="/admin/launch">Customer launch ↗</a><a href="/admin/disputes">Disputes ↗</a><a href="/seller-operations#lead-costs">Lead costs ↗</a><span>iCash X <b>Owner</b></span></nav>
+  <nav className={styles.nav} aria-label="Admin navigation"><a href="/">← Workspace</a><a href="/admin/accounts">Accounts ↗</a><a href="/admin/launch">Customer launch ↗</a><a href="/admin/disputes">Disputes ↗</a><a href="/seller-operations#lead-costs">Lead costs ↗</a><span>iCash X <b>Owner</b></span></nav>
   <header className={styles.heading}><div><h1>Overview</h1><p>Inbound leads, outbound outreach and usage earnings.</p></div>{!denied&&<button className={styles.button} onClick={reload} disabled={busy}>{busy?'Refreshing…':'Refresh'}</button>}</header>
   {denied?<section className={styles.empty}><h2>{denied===401?'Sign in to your owner account':'Owner access only'}</h2><p>{denied===401?'This overview is private.':'Your signed-in account does not have access to this overview.'}</p>{denied===401&&<AccountAccess onSignedIn={()=>{setDenied(null);reload();}}/>}</section>:<>
    <div className={styles.toolbar}>

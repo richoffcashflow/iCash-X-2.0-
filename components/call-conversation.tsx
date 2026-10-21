@@ -6,8 +6,8 @@ import {conversationDisplaySummary} from '@/lib/conversation-display';
 
 type TranscriptPage = {scope: string; before: number | null; transcript: {role: string; message: string}[]; next: number | null};
 
-export function CallConversation({id, source='outbound', recordingId, recordingReceipt, onRefreshRecording, transcriptAvailable=true, party, summary, completedAt, durationSeconds, nextAction, interested, optedOut, humanRequested}: {id: string; source?: 'outbound'|'reception'; recordingId?: string; recordingReceipt?: ReceiptResult; onRefreshRecording?: () => void; transcriptAvailable?: boolean; party: string; summary?: string; completedAt?: string;durationSeconds?:number;nextAction?:string;interested?:boolean;optedOut?:boolean;humanRequested?:boolean}) {
-  const scope = `${source}:${id}`;
+export function CallConversation({apiBase='/api/work', id, source='outbound', recordingId, recordingReceipt, onRefreshRecording, transcriptAvailable=true, party, summary, completedAt, durationSeconds, nextAction, interested, optedOut, humanRequested}: {apiBase?:string; id: string; source?: 'outbound'|'reception'; recordingId?: string; recordingReceipt?: ReceiptResult; onRefreshRecording?: () => void; transcriptAvailable?: boolean; party: string; summary?: string; completedAt?: string;durationSeconds?:number;nextAction?:string;interested?:boolean;optedOut?:boolean;humanRequested?:boolean}) {
+  const scope = `${apiBase}:${source}:${id}`;
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<TranscriptPage | null>(null);
   const [error, setError] = useState<{scope: string; before: number | null; message: string} | null>(null);
@@ -24,7 +24,7 @@ export function CallConversation({id, source='outbound', recordingId, recordingR
     running.current = true;
     setData(null);
     setError(null);
-    void fetch(`/api/work/conversation?id=${encodeURIComponent(id)}&source=${source}${before !== null ? `&before=${before}` : ''}`, {
+    void fetch(`${apiBase}/conversation?id=${encodeURIComponent(id)}&source=${source}${before !== null ? `&before=${before}` : ''}`, {
       signal: controller.signal, cache: 'no-store',
     }).then(async response => {
       if (!response.ok) throw Error();
@@ -36,9 +36,9 @@ export function CallConversation({id, source='outbound', recordingId, recordingR
       if (!controller.signal.aborted) running.current = false;
     });
     return () => {controller.abort(); running.current = false;};
-  }, [id, source, scope, open, before, attempt, transcriptAvailable]);
+  }, [apiBase, id, source, scope, open, before, attempt, transcriptAvailable]);
 
-  return <article className="call-summary-card"><header><strong>{party === 'seller' ? 'Seller' : party === 'buyer' ? 'Buyer' : 'Contact'} call{source === 'reception' ? ' · Incoming' : ''}</strong>{transcriptAvailable&&<span>{optedOut?'Do not contact':humanRequested?'Needs you':interested?'Interested':'Completed'}</span>}</header><small>{completedAt ? safeLocalTime(completedAt) : 'Time not recorded'}{typeof durationSeconds==='number'&&Number.isFinite(durationSeconds)&&durationSeconds>=0?` · ${Math.floor(durationSeconds/60)}m ${Math.floor(durationSeconds%60)}s`:''}</small><CallRecording key={`${source}:${recordingId ?? id}`} conversationId={id} recordingId={recordingId} receipt={recordingReceipt} onRefresh={onRefreshRecording} source={source}/>{nextAction&&<div className="call-next-step"><strong>Next step</strong><p>{nextAction}</p></div>}{transcriptAvailable&&<details onToggle={event => {
+  return <article className="call-summary-card"><header><strong>{party === 'seller' ? 'Seller' : party === 'buyer' ? 'Buyer' : 'Contact'} call{source === 'reception' ? ' · Incoming' : ''}</strong>{transcriptAvailable&&<span>{optedOut?'Do not contact':humanRequested?'Needs you':interested?'Interested':'Completed'}</span>}</header><small>{completedAt ? safeLocalTime(completedAt) : 'Time not recorded'}{typeof durationSeconds==='number'&&Number.isFinite(durationSeconds)&&durationSeconds>=0?` · ${Math.floor(durationSeconds/60)}m ${Math.floor(durationSeconds%60)}s`:''}</small><CallRecording apiBase={apiBase} key={`${source}:${recordingId ?? id}`} conversationId={id} recordingId={recordingId} receipt={recordingReceipt} onRefresh={onRefreshRecording} source={source}/>{nextAction&&<div className="call-next-step"><strong>Next step</strong><p>{nextAction}</p></div>}{transcriptAvailable&&<details onToggle={event => {
     if (event.target !== event.currentTarget) return;
     setOpen(event.currentTarget.open);
     if (!event.currentTarget.open) {setData(null); setError(null);}

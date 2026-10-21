@@ -76,16 +76,10 @@ tree=page({...account,identity:null,membershipActive:true,billingModel:'membersh
 
 assert.match(text(renderBar({})),/Add money to start your bot/);assert.doesNotMatch(text(renderBar({})),/Out of credits|credits left/);
 
-const forbidRealAction=()=>assert.fail('Pretend controls must not invoke a real action');
-const pretend={pretend:true,balanceCents:0,running:false,stopped:true,paymentRequired:true,busy:true,stale:true,onBudget:forbidRealAction,onPause:forbidRealAction,onResume:forbidRealAction,onVip:forbidRealAction};
-const effectsBeforePreview=barEffects;
-tree=renderBar(pretend);
-assert.match(text(tree),/Bot running/);assert.match(text(tree),/Test mode · Display only/);assert.match(text(tree),/Pretend credits\s+\$5\.00/);
-assert.doesNotMatch(text(tree),/Add money|Restore access|Switch to VIP|VIP settings/,'pretend controls expose no payment or plan actions');
-assert.equal(all(tree).find(n=>n.props?.className==='bot-live-status').props['data-live'],true);
-let previewButtons=all(tree).filter(n=>n.type==='button');assert.equal(previewButtons.length,1);assert.equal(text(previewButtons[0]).trim(),'Pause bot');previewButtons[0].props.onClick();
-tree=renderBar(pretend);assert.match(text(tree),/Bot paused/);assert.match(text(tree),/Pretend credits\s+\$5\.00/);assert.equal(all(tree).find(n=>n.props?.className==='bot-live-status').props['data-live'],false);
-previewButtons=all(tree).filter(n=>n.type==='button');assert.equal(previewButtons.length,1);assert.equal(text(previewButtons[0]).trim(),'Run bot');previewButtons[0].props.onClick();
-tree=renderBar({...pretend,botName:'Alex'});assert.match(text(tree),/Alex is running/);assert.equal(barEffects,effectsBeforePreview,'pretend mode never mounts the live status polling effect');
-assert.match(text(renderBar({pretend:false,balanceCents:0,hasCreditHistory:true})),/Out of credits/,'exiting preview restores the actual balance display');
-console.log('PASS pretend bot display: fixed test credits, local-only pause/resume, no polling or real callbacks, and actual balance restored on exit.');
+tree=renderBar({pretend:true,balanceCents:0,hasCreditHistory:true,stopped:true});
+assert.match(text(tree),/Out of credits/);
+assert.match(text(tree),/\$0\.00/);
+assert.doesNotMatch(text(tree),/Pretend credits|Test mode|Bot running/);
+assert.equal(all(tree).find(n=>n.props?.className==='bot-live-status').props['data-live'],false);
+assert.doesNotMatch(code('components/bot-run-bar.tsx'),/PretendBotRunBar|creditAmount\(500\)/);
+console.log('PASS real owner display: actual balance and stopped status, no pretend credits or activity.');
