@@ -68,11 +68,12 @@ export async function prepareDisputeEvidence(id:string,signal?:AbortSignal):Prom
  else if(accepted.length===20)gaps.push('Acceptance history reached the 20-record limit; review the complete purchase history.');
  if(!uuid(accountId)){gaps.push('Purchase has not been claimed by an account; no account activity is attached.');return packet;}
  const scope=`account_id=eq.${accountId}`,time=`created_at=gte.${encodeURIComponent(from)}&created_at=lte.${encodeURIComponent(until)}`;
- const [usage,access,support,cancellations]=await Promise.all([
+ const [usage,access,support,cancellations,refundSnapshots]=await Promise.all([
   rows(`icash_operation_spend?${scope}&state=eq.settled&settled_at=gte.${encodeURIComponent(from)}&settled_at=lte.${encodeURIComponent(serviceEnd)}&select=operation_key,charged_cents,dispatched_at,settled_at&order=settled_at.asc&limit=26`,signal),
   rows(`icash_software_access_receipts?${scope}&recorded_at=gte.${encodeURIComponent(from)}&recorded_at=lte.${encodeURIComponent(serviceEnd)}&select=recorded_at,request_context&order=recorded_at.asc&limit=11`,signal),
   rows(`icash_support_messages?${scope}&${time}&select=thread_id,role,content,evidence,created_at&order=created_at.desc&limit=11`,signal),
-  rows(`icash_support_cancel_requests?${scope}&mode=eq.${mode}&select=source,state,created_at,confirmed_at,updated_at,result&order=created_at.desc&limit=11`,signal)
+  rows(`icash_support_cancel_requests?${scope}&mode=eq.${mode}&select=source,state,created_at,confirmed_at,updated_at,result&order=created_at.desc&limit=11`,signal),
+  rows(`icash_support_messages?${scope}&${time}&role=eq.assistant&evidence=cs.${encodeURIComponent('[{"key":"refund_case"}]')}&select=thread_id,role,evidence,created_at&order=created_at.desc&limit=6`,signal)
  ]);
  sections.push({title:'Completed account usage',lines:[`Account: ${accountId}. Activity from payment through ${disputeTime(serviceEnd)}. These are account-level service records; individual work credits are pooled and are not attributed to a specific top-up.`,...usage.slice(0,25).map(u=>`${date(u.settled_at)} | ${value(u.operation_key)} | Usage charged: ${typeof u.charged_cents==='number'?disputeMoney(u.charged_cents):'Not recorded'}`)]});
  if(!usage.length)gaps.push('No completed account usage was found in this evidence period.');if(usage.length>25)gaps.push('Usage lists the first 25 completed operations; additional account activity exists.');
@@ -80,7 +81,9 @@ export async function prepareDisputeEvidence(id:string,signal?:AbortSignal):Prom
  if(!access.length)gaps.push('No retained workspace-access receipts were found for this period.');if(access.length>10)gaps.push('Access evidence lists the first 10 hourly receipts; additional receipts exist.');
  sections.push({title:'Customer support excerpts',lines:support.slice(0,10).reverse().map(s=>`${date(s.created_at)} | ${value(s.role)}: ${value(s.content).slice(0,1200)}${value(s.content).length>1200?' [excerpt ends]':''}`)});
  if(!support.length)gaps.push('No support messages after this payment are recorded in the app. Add relevant external customer communications if available.');if(support.length>10||support.some(s=>value(s.content).length>1200))gaps.push('Support evidence contains excerpts. Review the complete conversation and attach relevant missing context before submitting.');
- for(const message of support){
+ // Query saved packets separately: later support turns must not push the
+ // prepared evidence out of the bounded conversation-excerpt window.
+ for(const message of refundSnapshots){
   if(message.role!=='assistant'||!uuid(message.thread_id)||!Array.isArray(message.evidence))continue;
   const saved=message.evidence.find((e:Row)=>e?.key==='refund_case');
   const snapshot=savedRefundCase(saved?.refundCase,accountId,message.thread_id);
