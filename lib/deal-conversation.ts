@@ -1,4 +1,4 @@
-import {voiceResult,type VoiceConversation} from './voice-result.ts';
+import {voiceResult,emptyQuotaRejection,type VoiceConversation} from './voice-result.ts';
 import {isContactOptOut} from './contact-intent.ts';
 import {sellerCallDisposition} from './seller-response-policy.ts';
 import {conversationTrustInstructions} from './conversation-trust.ts';
@@ -30,6 +30,14 @@ export function dealNextStep(i:{humanRequested:boolean;optedOut:boolean;interest
 }
 /** Provider pull only, with an already persisted live conversation/agent binding. */
 export function liveConversationResult(c:VoiceConversation,expected:{conversationId:string;agentId:string;party:'seller'|'buyer'},now=Date.now()){
+ if(c.conversation_id!==expected.conversationId||c.agent_id!==expected.agentId)throw Error('VOICE_ID_MISMATCH');
+ if(emptyQuotaRejection(c))return {
+  summary:'Call ended before the AI conversation could start.',transcript:[],durationSeconds:0,
+  providerCostUsd:typeof c.metadata?.cost_fiat==='number'&&Number.isFinite(c.metadata.cost_fiat)&&c.metadata.cost_fiat>=0?c.metadata.cost_fiat:null,
+  providerFailure:'quota_exceeded',humanRequested:false,humanQuote:null,optedOut:false,interested:false,responseDisposition:null,interestQuote:null,party:expected.party,
+  callbackStatus:'not_requested',callbackDueAt:null,callbackTimezone:null,callbackQuote:null,callbackEvidence:null,
+  nextAction:'Calling needs service attention before another attempt.',underContract:false as const,
+ };
  // Seller contact decisions come from complete source turns, never a model flag.
  // Removing only that ungrounded flag also preserves an otherwise valid callback.
  const source=expected.party==='seller'&&c.analysis?{...c,analysis:{...c.analysis,data_collection_results:{...c.analysis.data_collection_results,opted_out:{value:false}}}}:c;

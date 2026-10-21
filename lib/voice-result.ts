@@ -1,6 +1,14 @@
 import {relativeCallback} from './relative-callback.ts';
 import {groundedConversationSummary} from './conversation-trust.ts';
-export type VoiceConversation={conversation_id:string;agent_id:string;status:string;has_user_audio?:boolean;has_response_audio?:boolean;transcript?:{role:string;message?:string|null;time_in_call_secs?:number}[];analysis?:{transcript_summary?:string;data_collection_results?:Record<string,{value?:unknown}>};metadata?:{start_time_unix_secs?:number;call_duration_secs?:number;cost?:number;cost_fiat?:number}};
+export type VoiceConversation={conversation_id:string;agent_id:string;status:string;has_user_audio?:boolean;has_response_audio?:boolean;transcript?:{role:string;message?:string|null;time_in_call_secs?:number}[];analysis?:{transcript_summary?:string;data_collection_results?:Record<string,{value?:unknown}>};metadata?:{start_time_unix_secs?:number;call_duration_secs?:number;cost?:number;cost_fiat?:number;termination_reason?:string;error?:{code?:number;reason?:string}}};
+export function emptyQuotaRejection(c:unknown):boolean{
+ if(!c||typeof c!=='object')return false;
+ const v=c as VoiceConversation;
+ // Current provider schema exposes structured error.reason as well as termination_reason.
+ const quota=[v.metadata?.error?.reason,v.metadata?.termination_reason].some(reason=>typeof reason==='string'&&reason.startsWith('[quota_exceeded]'));
+ return v.status==='failed'&&Array.isArray(v.transcript)&&v.transcript.length===0&&v.metadata?.call_duration_secs===0
+  &&v.has_user_audio===false&&v.has_response_audio===false&&quota;
+}
 export function voiceResult(c:VoiceConversation, expected:{conversationId:string;agentId:string}, now=Date.now()) {
  if(c.conversation_id!==expected.conversationId||c.agent_id!==expected.agentId)throw new Error('VOICE_ID_MISMATCH');
  if(c.status!=='done'||!c.analysis)return null;
