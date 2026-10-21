@@ -44,7 +44,9 @@ estimates can still exhaust an arm.
 
 Evidence is restricted to the same account and ZIP over 90 days. Confirmed interest
 and opt-outs are available immediately. An unanswered actual call/text attempt
-remains pending for 72 hours; only then does it mature. Interest requires a completed call
+remains pending for 72 hours; only then does it mature. SMS maturity starts from
+the latest saved send/delivery receipt timestamp, never queue creation. Late
+webhooks conservatively extend the window. Interest requires a completed call
 with a seller response and a saved positive interest result, or a strict affirmative
 reply directly after the receipt-backed selling-interest SMS. A YES to ownership,
 voicemail, queued message or STOP never counts as interested. Counts describe
@@ -68,7 +70,8 @@ contact permissions or customer Pause values are changed by activation.
 
 The follow-up migration `adaptive_outbound_feedback` is additive: apply it before
 deploying the new service. No flag change, cursor reset or outcome backfill is
-needed. Old applications retain the original delayed-feedback RPCs; rolling back
+needed. The additive `outbound_feedback_receipt_clock` correction supplies the SMS
+receipt clock without rewriting queued messages or charges. Old applications retain the original delayed-feedback RPCs; rolling back
 the application restores their allocation policy without discarding claimed work.
 
 `icash_discovery_filter_feedback(account_id, zip)` returns private live aggregate
