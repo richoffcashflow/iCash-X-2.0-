@@ -45,7 +45,7 @@ for(const angry of ['Give me my fucking money back','This is bullshit','Fuck you
 }
 const guest=await replyToSupport({kind:'access',messages:[...start,user('Fuck you')],evidence:[...checks,evidence],allowAI:false});
 assert.equal(guest.status,'closed');assert.doesNotMatch(guest.reply,/accepted|researched|course access|AI software/,'Guest must not receive account facts even if context accidentally contains them');
-for(const issue of ['My fucking bot is broken, refund me','Refund me you charged me twice','Fuck you cancel my subscription','Your damn sign in code never came','I want a refund under consumer rights','I never agreed to this policy refund me']){
+for(const issue of ['My fucking bot is broken, refund me','Refund me you charged me twice','Fuck you cancel my subscription','Your damn sign in code never came','I want a refund under consumer rights','I never agreed to this policy refund me',"I do not want a fucking refund",'Do not refund my damn money']){
  const answer=await replyToSupport({kind:'account',messages:[...start,user(issue)],evidence:[...checks,evidence],allowAI:false});assert.notEqual(answer.status,'closed',issue);
 }
 const unresolved=await replyToSupport({kind:'account',messages:[user('My bot never made calls'),...start,user('Fuck you')],evidence:[...checks,evidence],allowAI:false});assert.notEqual(unresolved.status,'closed');
