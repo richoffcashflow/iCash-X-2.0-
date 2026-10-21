@@ -10,7 +10,7 @@ import type {AccessInvestigation} from './support-access-investigation.ts';
 
 export type SupportTurn={role:string;content:string};
 export type SupportReply={reply:string;status:'open'|'waiting_on_customer'|'resolved'|'closed';ai:boolean};
-export type SupportContext={kind:'access'|'account';messages:SupportTurn[];evidence?:SupportEvidence[];accessInvestigation?:AccessInvestigation;handedOff?:boolean;allowAI?:boolean};
+export type SupportContext={kind:'access'|'account';messages:SupportTurn[];evidence?:SupportEvidence[];accessInvestigation?:AccessInvestigation;handedOff?:boolean;allowAI?:boolean;historyComplete?:boolean};
 const continueHere='I’ll help you troubleshoot this here. What is still happening, and what was the last step you tried?';
 const noRefunds='All sales are final; we do not offer refunds. I can help fix an access or software issue here.';
 const resolvedGuidance='For more how-to questions, rewatch the Course in your workspace. Reply here if you still need help.';
@@ -30,7 +30,7 @@ export function supportConversationFallback(context:SupportContext):SupportReply
   const checks=(context.evidence??[]).filter(e=>['membership_payments','subscription'].includes(e.key));
   return result(context.kind==='account'&&checks.length?checks.map(e=>e.detail).join('\n\n')+'\n\nDo not pay again. Do both statement entries match these recorded software payments, or is one a different amount or date?' :'Do not pay again. I can help restore access here, and a duplicate-charge report needs its own payment check. What dates and amounts appear for the two charges? Please leave out card numbers.','waiting_on_customer');
  }
- const closure=repeatedRefundReply(context.messages,context.evidence);
+ const closure=context.historyComplete===false?null:repeatedRefundReply(context.messages,context.kind==='account'?context.evidence:[]);
  if(closure)return closure;
  if(context.kind==='access'&&supportCodeDelivery(context.messages)==='missing'&&['refund','cancel'].includes(supportTopic(question))){
   const cancelled=context.messages.some(m=>m.role==='operator'&&/next renewal.{0,30}(?:stopped|cancelled|canceled)|renewals? (?:has|have) been stopped/i.test(m.content));

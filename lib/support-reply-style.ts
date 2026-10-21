@@ -12,6 +12,8 @@ export function currentSupportIssue(messages:Turn[]){
 }
 
 export function supportReplyEvidence(messages:Turn[],evidence:SupportEvidence[]){
+ // Private preparation metadata is not a customer issue or model input.
+ evidence=evidence.filter(check=>check.key!=='refund_case');
  const issue=currentSupportIssue(messages);
  const billing=/\b(?:card|payment|billing|bill|charge|charged|credit|balance|renewal|subscription)\b/i.test(issue);
  const work=/\b(?:bot|lead|property|contract|course|sign.?in|log.?in|code)\b/i.test(issue);

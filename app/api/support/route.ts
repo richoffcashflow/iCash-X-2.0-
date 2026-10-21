@@ -10,6 +10,8 @@ import {collectSupportDiagnostics} from '@/lib/support-diagnostics';
 import {replyToSupport,type SupportTurn} from '@/lib/support-conversation';
 import {supportOwnerNotificationsEnabled} from '@/lib/support-owner-notifications';
 import {scheduleSupportOwnerNotifications} from '@/lib/support-owner-dispatch';
+import {refundEvidenceNeeded} from '@/lib/support-closure';
+import {prepareSupportRefundEvidence} from '@/lib/support-refund-evidence';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const headers={'Cache-Control':'private, no-store'};
@@ -51,13 +53,14 @@ export async function POST(req:Request){
   await recoverSupportAccount(accountId,userId).catch(()=>undefined);
   const [evidence,history,threads]=await Promise.all([
    collectSupportDiagnostics(accountId),
-   db<SupportTurn[]>(`icash_support_messages?account_id=eq.${accountId}&thread_id=eq.${started.threadId}&select=role,content&order=created_at.desc,id.desc&limit=40`),
+   db<SupportTurn[]>(`icash_support_messages?account_id=eq.${accountId}&thread_id=eq.${started.threadId}&select=role,content&order=created_at.desc,id.desc&limit=201`),
    db<{status:string}[]>(`icash_support_threads?account_id=eq.${accountId}&id=eq.${started.threadId}&select=status`)
   ]);
   const messages=history.reverse();
   if(messages.at(-1)?.content!==question||messages.at(-1)?.role!=='user')messages.push({role:'user',content:question});
+  if(refundEvidenceNeeded(messages))evidence.push(await prepareSupportRefundEvidence(db,{accountId,threadId:started.threadId,requestId:i.requestId},evidence,fundingMode()));
   // Replayed receipts use the local answer; they never repeat a paid model call.
-  const answer=await replyToSupport({kind:'account',messages,evidence,handedOff:threads[0]?.status==='escalated',allowAI:!started.replay});
+  const answer=await replyToSupport({kind:'account',messages,evidence,historyComplete:history.length<201,handedOff:threads[0]?.status==='escalated',allowAI:!started.replay});
   await db('rpc/icash_support_finish_conversation','POST',{p_account:accountId,p_user:userId,p_thread:started.threadId,p_request:i.requestId,p_message:answer.reply,p_evidence:evidence,p_status:answer.status,p_notify:supportOwnerNotificationsEnabled()});
   scheduleSupportOwnerNotifications();scheduleSupportCustomerNotifications();
   return NextResponse.json({threadId:started.threadId,ai:answer.ai},{headers});
