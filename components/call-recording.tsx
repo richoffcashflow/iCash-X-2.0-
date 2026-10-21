@@ -44,12 +44,12 @@ function dateLabel(value: string | null) {
   return new Date(value).toLocaleString('en-US',{hour12:true});
 }
 
-function ReceiptDetails({receipt, source='outbound', playbackAttempt=0, onPlaybackError}: {receipt: ReceiptResult; source?: RecordingSource; playbackAttempt?: number; onPlaybackError?: () => void}) {
+function ReceiptDetails({apiBase='/api/work', receipt, source='outbound', playbackAttempt=0, onPlaybackError}: {apiBase?:string; receipt: ReceiptResult; source?: RecordingSource; playbackAttempt?: number; onPlaybackError?: () => void}) {
   return <>
     {receipt.status !== 'available' && <p>{recordingStates[receipt.status]}</p>}
     {receipt.status === 'available' && 'id' in receipt && receipt.id && <>
       <audio key={`${receipt.id}:${playbackAttempt}`} controls preload="none" aria-label="Call recording" onError={onPlaybackError}
-        src={`/api/work/${source === 'reception' ? 'reception-recording' : 'recording'}/audio?id=${encodeURIComponent(receipt.id)}`} style={{width:'100%'}}>
+        src={`${apiBase}/${source === 'reception' ? 'reception-recording' : 'recording'}/audio?id=${encodeURIComponent(receipt.id)}`} style={{width:'100%'}}>
         Your browser does not support audio playback.
       </audio>
       {receipt.audioExpiresAt && <small>Available until {dateLabel(receipt.audioExpiresAt)}.</small>}
@@ -58,11 +58,11 @@ function ReceiptDetails({receipt, source='outbound', playbackAttempt=0, onPlayba
 }
 
 /** Audio stays visible independently of the optional transcript. */
-export function CallRecording({conversationId, recordingId, source='outbound', receipt, onRefresh}: {
-  conversationId?: string; recordingId?: string; source?: RecordingSource;
+export function CallRecording({apiBase='/api/work', conversationId, recordingId, source='outbound', receipt, onRefresh}: {
+  apiBase?:string; conversationId?: string; recordingId?: string; source?: RecordingSource;
   receipt?: ReceiptResult; onRefresh?: () => void;
 }) {
-  const scope = `${source}:${recordingId ?? conversationId ?? ''}`;
+  const scope = `${apiBase}:${source}:${recordingId ?? conversationId ?? ''}`;
   const [state, setState] = useState<ReceiptState>({scope, phase: 'loading'});
   const [attempt, setAttempt] = useState(0);
   const [playbackError, setPlaybackError] = useState('');
@@ -76,7 +76,7 @@ export function CallRecording({conversationId, recordingId, source='outbound', r
     setState({scope, phase: 'loading'});
     const query = source === 'reception' ? `reception-recording?id=${encodeURIComponent(recordingId ?? conversationId ?? '')}` :
       `recording?${recordingId ? 'id' : 'conversationId'}=${encodeURIComponent(recordingId ?? conversationId ?? '')}`;
-    void fetch(`/api/work/${query}`, {
+    void fetch(`${apiBase}/${query}`, {
       signal: controller.signal, cache: 'no-store', credentials: 'same-origin',
     }).then(async response => {
       if (response.status === 404) return {status: 'not_recorded'} as const;
@@ -90,7 +90,7 @@ export function CallRecording({conversationId, recordingId, source='outbound', r
       if (!controller.signal.aborted) running.current = false;
     });
     return () => {controller.abort(); running.current = false;};
-  }, [conversationId, recordingId, source, scope, attempt, receipt]);
+  }, [apiBase, conversationId, recordingId, source, scope, attempt, receipt]);
 
   function retry() {
     if (receipt !== undefined) {onRefresh?.(); return;}
@@ -112,7 +112,7 @@ export function CallRecording({conversationId, recordingId, source='outbound', r
       <button type="button" onClick={retry}>Retry recording</button>
     </>}
     {current.phase === 'ready' && 'receipt' in current && current.receipt && <>
-      <ReceiptDetails receipt={current.receipt} source={source} playbackAttempt={playbackAttempt} onPlaybackError={() => setPlaybackError(scope)}/>
+      <ReceiptDetails apiBase={apiBase} receipt={current.receipt} source={source} playbackAttempt={playbackAttempt} onPlaybackError={() => setPlaybackError(scope)}/>
       {current.receipt.status === 'available' && playbackError === scope && <>
         <p role="alert">Audio could not play. Try loading the recording again.</p>
         <button type="button" onClick={() => {setPlaybackError(''); setPlaybackAttempt(value => value + 1); retry();}}>Retry playback</button>

@@ -33,7 +33,7 @@ for(const scenario of [
  const before=structuredClone(snapshot);
  for(const request of [core,()=>GET(new Request('https://www.geticashx.com/api/account'))]){
   paths=[];checks=0;r=await request();
-  assert.equal(r.status,200,scenario.name);assert.equal(r.body.pretendBotAvailable,scenario.available,scenario.name);
+  assert.equal(r.status,200,scenario.name);assert(!('pretendBotAvailable' in r.body),scenario.name);
   assert.equal(r.body.balanceCents,scenario.balance,'display eligibility never changes real credits');
   assert.equal(r.body.paused,scenario.paused,'display eligibility never unpauses actual work');
   assert.equal(r.body.activeWork,false,'display eligibility never invents real activity');
@@ -46,4 +46,4 @@ userId='user';Object.assign(snapshot,originalSnapshot);
 const oldLog=console.error;let diagnostic;console.error=(...args)=>{diagnostic=args};failSnapshot=true;r=await core();console.error=oldLog;assert.equal(r.status,503);assert(!JSON.stringify(r.body).includes('private database'));assert.equal(diagnostic[1].stage,'account_snapshot');assert(!JSON.stringify(diagnostic).includes('private database'));
 assert.equal(receipts[0].account,'account');assert.equal(receipts[0].user,'user');
 delete globalThis.__accountActivity;
-console.log('PASS account load: scoped reads, deferred readiness, exact saved balances, membership lock, safe errors, and owner-only pretend display without wallet or work changes.');
+console.log('PASS account load: scoped reads, deferred readiness, exact saved balances, membership lock, safe errors, and real owner balance and status without display-only credits.');
