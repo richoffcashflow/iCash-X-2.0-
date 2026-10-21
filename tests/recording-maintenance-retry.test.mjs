@@ -62,5 +62,14 @@ try{
   assert.deepEqual(Object.keys(diagnostic).sort(),['bindingStage','mismatches','reason','recordingId','stage']);
   assert(!JSON.stringify(diagnostic).includes(unbound.to_phone));assert(!JSON.stringify(diagnostic).includes('agent_fixture'));
  }
+ // A batch still processes every recording when the bounded handoff diagnostic fails.
+ const batch=[{...unbound,nonce_hash:'a'.repeat(64)},{...unbound,id:'77777777-7777-4777-8777-777777777777',nonce_hash:'a'.repeat(64)}];let carrierReads=0;
+ const batchDb=async(path,method,input)=>{
+  if(path==='rpc/icash_claim_call_recording_work')return input.p_kind==='reconcile'?batch:[];
+  if(path==='rpc/icash_finish_call_recording_work'){assert.equal(input.p_outcome,'available');return {...batch.find(x=>x.id===input.p_id),state:'available'};}
+  throw Error('Unexpected database mutation '+path);
+ };
+ assert.deepEqual(await maintainRecordings(batchDb,{...provider,conversations:async()=>({has_more:false,conversations:[]}),getCall:async()=>{carrierReads++;throw new RecordingProviderError(403);}},{TWILIO_ACCOUNT_SID:ac}),{deleted:0,reconciled:2,held:0});
+ assert.equal(carrierReads,1,'Only one diagnostic carrier read per invocation, no retry');
  console.log('PASS rejected receipt releases/requeues its lease, newer calls continue, missing AI identity does not hide verified audio, and cross-call receipts remain blocked.');
 }finally{console.warn=originalWarn;}
