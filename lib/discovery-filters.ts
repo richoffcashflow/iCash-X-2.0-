@@ -3,7 +3,7 @@ export const discoveryFilterVersion='seller-filters-v1';
 export const discoveryStrategies=['baseline','vacant','absentee','repairs'] as const;
 export type DiscoveryStrategy=typeof discoveryStrategies[number];
 export type DiscoveryFilterPlan={version:typeof discoveryFilterVersion;strategy:DiscoveryStrategy;providerPage:number;mode:'explore'|'learned'};
-export type DiscoveryFilterStat={strategy:DiscoveryStrategy;nextPage:number;exhausted:boolean;pages:number;matureAttempts:number;interested:number;optedOut:number;costCents:number;costsComplete:boolean};
+export type DiscoveryFilterStat={strategy:DiscoveryStrategy;nextPage:number;exhausted:boolean;pages:number;attempted:number;matureAttempts:number;pendingAttempts:number;interested:number;optedOut:number;costCents:number;costsComplete:boolean;recentUnproductivePages:number};
 const integer=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 export function discoveryFilterPlanValid(p:unknown):p is DiscoveryFilterPlan{
  if(!p||typeof p!=='object')return false;
@@ -18,9 +18,21 @@ export function discoveryFilters(strategy:DiscoveryStrategy='baseline'){
  else if(strategy!=='baseline')throw Error('DISCOVERY_FILTER_INVALID');
  return filters;
 }
-/** Balance cold-start batches. After 30 mature attempts per available group,
- * use 60% of batch slots for a supported winner and retain 40% exploration.
- * Samples and settled customer costs come from the same account and ZIP.
+/** Shrink small samples using the Wilson lower endpoint (z=1.645).
+ * This is an allocation heuristic, not a significance test on adaptive samples.
+ * Unanswered young attempts remain pending; only confirmed interest earns reward.
+ */
+export function discoveryInterestScore(s:DiscoveryFilterStat){
+ if(s.attempted===0||s.costCents<=0||!s.costsComplete)return 0;
+ const n=s.attempted,p=s.interested/n,z=1.645,z2=z*z;
+ const lower=(p+z2/(2*n)-z*Math.sqrt(p*(1-p)/n+z2/(4*n*n)))/(1+z2/n);
+ return Math.max(0,lower*n-0.5*s.optedOut)/(s.costCents+1000);
+}
+/** Use confirmed positives immediately, without waiting for every other arm.
+ * Ten attempts and three interested properties can earn 40% learned slots;
+ * 30 resolved attempts can earn 60%. The rest continue exploring.
+ * Three settled duplicate/no-owner pages reduce an arm to periodic probes.
+ * Evidence and actual settled costs remain private to one account and ZIP.
  */
 export function selectDiscoveryFilter(raw:unknown,sequence:number):DiscoveryFilterPlan|null{
  if(!integer(sequence)||sequence<1||!Array.isArray(raw)||raw.length!==4)throw Error('DISCOVERY_FILTER_STATE_INVALID');
@@ -28,18 +40,24 @@ export function selectDiscoveryFilter(raw:unknown,sequence:number):DiscoveryFilt
  const stats=raw.map((row):DiscoveryFilterStat=>{
   if(!row||typeof row!=='object')throw Error('DISCOVERY_FILTER_STATE_INVALID');
   const s=row as DiscoveryFilterStat;
-  if(!discoveryStrategies.includes(s.strategy)||seen.has(s.strategy)||![s.nextPage,s.pages,s.matureAttempts,s.interested,s.optedOut,s.costCents].every(integer)||s.nextPage<1||typeof s.exhausted!=='boolean'||typeof s.costsComplete!=='boolean'||s.interested>s.matureAttempts||s.optedOut>s.matureAttempts)throw Error('DISCOVERY_FILTER_STATE_INVALID');
+  if(!discoveryStrategies.includes(s.strategy)||seen.has(s.strategy)||![s.nextPage,s.pages,s.attempted,s.matureAttempts,s.pendingAttempts,s.interested,s.optedOut,s.costCents,s.recentUnproductivePages].every(integer)||s.nextPage<1||typeof s.exhausted!=='boolean'||typeof s.costsComplete!=='boolean'||s.matureAttempts>s.attempted||s.pendingAttempts>s.attempted-s.matureAttempts||s.interested+s.optedOut>s.attempted-s.pendingAttempts||s.attempted-s.pendingAttempts>s.matureAttempts+s.interested+s.optedOut||s.recentUnproductivePages>3)throw Error('DISCOVERY_FILTER_STATE_INVALID');
   seen.add(s.strategy);return s;
  });
  const available=stats.filter(s=>!s.exhausted);
  if(!available.length)return null;
  const rotation=sequence%4;
  const tie=(s:DiscoveryFilterStat)=>(discoveryStrategies.indexOf(s.strategy)-rotation+4)%4;
- const explore=[...available].sort((a,b)=>a.pages-b.pages||tie(a)-tie(b))[0];
- const ready=available.every(s=>s.matureAttempts>=30&&s.costsComplete);
- const score=(s:DiscoveryFilterStat)=>Math.max(0,s.interested+1-0.5*s.optedOut)/(s.costCents+1000);
- const winner=ready?[...available].filter(s=>s.interested>=3&&s.costCents>0).sort((a,b)=>score(b)-score(a)||tie(a)-tie(b))[0]:null;
- const learned=!!winner&&sequence%5<3;
+ const balanced=(pool:DiscoveryFilterStat[])=>[...pool].sort((a,b)=>a.pages-b.pages||tie(a)-tie(b))[0];
+ const cold=available.filter(s=>s.pages===0);
+ const productive=available.filter(s=>s.recentUnproductivePages<3);
+ const cooled=available.filter(s=>s.recentUnproductivePages===3);
+ // One in five slots probes cooled arms. Never permanently discard a market.
+ const pool=sequence%5===4&&cooled.length?cooled:productive.length?productive:available;
+ const explore=balanced(cold.length?cold:pool);
+ const winner=cold.length?null:[...productive].filter(s=>s.attempted>=10&&s.interested>=3&&discoveryInterestScore(s)>0)
+  .sort((a,b)=>discoveryInterestScore(b)-discoveryInterestScore(a)||tie(a)-tie(b))[0];
+ const learnedSlots=winner&&winner.attempted-winner.pendingAttempts>=30?3:2;
+ const learned=!!winner&&sequence%5<learnedSlots;
  const chosen=learned?winner!:explore;
  return {version:discoveryFilterVersion,strategy:chosen.strategy,providerPage:chosen.nextPage,mode:learned?'learned':'explore'};
 }

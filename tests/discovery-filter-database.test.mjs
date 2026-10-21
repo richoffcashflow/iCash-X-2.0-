@@ -31,12 +31,14 @@ await db.exec(read('tests/fixtures/filter-discovery-dependencies.sql'));
 const admission=read('config/requested-property-zip-resolution.sql').match(/create or replace function public\.icash_reserve_and_claim_property_discovery\([\s\S]*?end \$\$;/)[0];
 await db.exec(admission);
 await db.exec(read('config/outbound-filter-experiments.sql'));
+await db.exec(read('config/adaptive-outbound-feedback.sql'));
 await q("insert into icash_accounts(id,owner_user_id,assistant_name,bot_paused) values($1,$1,'Fixture',false),($2,$2,'Other',false)",[account,other]);
 await db.exec("insert into icash_operating_budget(id,enabled) values(1,true);insert into icash_market_shortlist values('75217','TX');");
 await q("insert into icash_operation_rates(id,operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled) values($1,'property_search','fixture',50,'{}','SYNTHETIC',now(),now()+interval '10 days',true)",[rate]);
 await q("insert into icash_discovery_configs(account_id,enabled,zip,rate_id,property_credit_micros,data_rights_until,seller_cost_reserve_cents,next_page,revision) values($1,true,'75217',$3,10000,'2099-01-01',0,8,$4),($2,true,'75217',$3,10000,'2099-01-01',0,1,$4)",[account,other,rate,revision]);
 const state=(a=account,r=revision,p=8)=>val('select icash_discovery_filter_state($1,$2,$3)',[a,r,p]);
 assert.equal(await state(),null,'Schema rollout does not activate experiments');
+assert.equal(await val('select icash_discovery_filter_state_v2($1,$2,8)',[account,revision]),null);
 await db.exec('update icash_discovery_filter_settings set enabled=true');
 let s=await state();assert.equal(s.find(x=>x.strategy==='baseline').nextPage,8);assert.equal(s.find(x=>x.strategy==='vacant').nextPage,1);
 await state(other,revision,1);await assert.rejects(state(other,uuid(44),1),/configuration changed/);
@@ -73,10 +75,20 @@ await q("insert into icash_live_conversations(account_id,screening_id,party,agen
 await q("insert into icash_operation_spend(operation_key,account_id,rate_id,credit_reservation_id,charge_cap_cents,reserved_micros,permission_until,state,charged_cents,actual_micros,settled_at) values('call:fixture',$1,$2,gen_random_uuid(),100,10000,'2099-01-01','settled',20,10000,now())",[account,rate]);
 const refresh=async()=>{await q('delete from icash_opportunity_refreshes where account_id=$1',[account]);await q('select icash_refresh_opportunity_outcomes($1)',[account]);};
 const stats=async()=>(await val("select icash_discovery_filter_stats($1,'75217')",[account])).sort((a,b)=>['baseline','vacant','absentee','repairs'].indexOf(a.strategy)-['baseline','vacant','absentee','repairs'].indexOf(b.strategy));
+const feedback=async(a=account,zip='75217')=>await val('select icash_discovery_filter_feedback($1,$2)',[a,zip]);
+const baseline=async()=>(await feedback()).find(x=>x.strategy==='baseline');
 await refresh();let report=await stats();
 assert.deepEqual(report.map(x=>[x.strategy,x.matureAttempts,x.interested,x.costCents]),[['baseline',1,1,25],['vacant',0,0,5],['absentee',0,0,0],['repairs',0,0,0]]);
 assert((await val("select icash_discovery_filter_stats($1,'75217')",[other])).every(x=>x.interested===0&&x.costCents===0),'Learning is account-isolated');
 await db.exec("update icash_live_conversations set created_at=now()");assert.equal((await stats())[0].matureAttempts,0,'A recent attempt is not a mature negative');
+let early=await baseline();assert.deepEqual([early.attempted,early.interested,early.matureAttempts,early.pendingAttempts],[1,1,0,0],'Confirmed interest is useful immediately');
+await db.exec("update icash_discovery_filter_pages set created_at=now()");assert.equal((await baseline()).interested,1,'Recent research is not excluded from feedback');
+assert.equal((await stats())[0].interested,0,'Old deployments keep their original delayed semantics');
+await db.exec("update icash_operation_spend set operation_key='missing:call:fixture' where operation_key='call:fixture'");assert.equal((await baseline()).costsComplete,false,'A missing required charge receipt cannot look free');
+await db.exec("update icash_operation_spend set operation_key='call:fixture' where operation_key='missing:call:fixture';update icash_live_conversations set result='{\"transcript\":[],\"interested\":false}'");await refresh();
+early=await baseline();assert.deepEqual([early.attempted,early.interested,early.matureAttempts,early.pendingAttempts],[1,0,0,1],'Unanswered recent work remains pending');
+await db.exec("update icash_live_conversations set created_at=now()+interval '1 day'");await refresh();assert.equal((await baseline()).attempted,0,'A future timestamp cannot count as an attempt');
+await db.exec("update icash_live_conversations set created_at=now();update icash_discovery_filter_pages set created_at=now()-interval '4 days'");
 await db.exec("update icash_live_conversations set created_at=now()-interval '4 days';update icash_operation_spend set state='dispatched' where operation_key='call:fixture'");assert.equal((await stats())[0].costsComplete,false);
 await db.exec("update icash_operation_spend set state='settled' where operation_key='call:fixture';update icash_live_conversations set result='{\"transcript\":[],\"interested\":false}'");
 // A YES to ownership is not a YES to selling. Unsent questions cannot authorize evidence.
@@ -89,18 +101,48 @@ await q('insert into icash_sms_seller_openings values($1,$2,$3)',[thread,account
 await q("update icash_text_messages set state='delivered',provider_id='fixture_question' where id=$1",[question]);assert.equal(await sms(),true);
 await q("update icash_text_messages set body='Yes, this is the owner' where id=$1",[reply]);assert.equal(await sms(),false);
 await q("update icash_text_messages set body='yes' where id=$1",[reply]);await refresh();assert.equal((await stats())[0].interested,1);
+assert.equal((await baseline()).interested,1);
 await q("insert into icash_text_messages(account_id,thread_id,direction,state,body,provider_id) values($1,$2,'incoming','received','STOP','fixture_stop')",[account,thread]);await refresh();assert.equal((await stats())[0].interested,0);assert.equal((await stats())[0].optedOut,1);
+early=await baseline();assert.deepEqual([early.interested,early.optedOut,early.pendingAttempts],[0,1,0],'Opt-out removes the reward');
+assert((await feedback(other)).every(x=>x.attempted===0&&x.costCents===0),'V2 isolates tenants');
+assert((await feedback(account,'10001')).every(x=>x.attempted===0&&x.costCents===0),'V2 isolates markets');
 // No-owner previews free capacity; a held preview still counts as unfinished work.
 const missing=uuid(30);await q("insert into icash_screening_jobs(id,account_id,event_key,snapshot,state,result) values($1,$2,'discovery:no-owner','{\"propertyId\":\"prop_30\"}','complete','{\"financialCheck\":{\"status\":\"eligible\"}}')",[missing,account]);
 assert.equal(await val('select icash_pending_opportunity_count($1)',[account]),1);
 await q("insert into icash_automation_tickets(account_id,kind,screening_id,state,outcome) values($1,'contacts',$2,'complete','empty')",[account,missing]);assert.equal(await val('select icash_pending_opportunity_count($1)',[account]),0);
 await q("update icash_automation_tickets set state='held' where screening_id=$1",[missing]);assert.equal(await val('select icash_pending_opportunity_count($1)',[account]),1);
+// Three settled pages with no new properties cool a group. Paid uncertainty,
+// incomplete screening and held owner lookup must never trigger cooling.
+const spare=uuid(70);
+for(let n=20;n<=22;n++){
+ const key='discovery:'+account+':'+spare+':'+n;
+ await q("insert into icash_discovery_filter_pages(operation_key,account_id,revision,sequence,zip,plan,state,created_at,completed_at) values($1,$2,$3,$4,'75217',$5,'complete',now()-($6*interval '1 minute'),now())",[key,account,spare,n,plan('repairs',n),23-n]);
+ await q("insert into icash_operation_spend(operation_key,account_id,rate_id,credit_reservation_id,charge_cap_cents,reserved_micros,permission_until,state,charged_cents,actual_micros) values($1,$2,$3,gen_random_uuid(),100,10000,'2099-01-01','settled',5,10000)",[key,account,rate]);
+}
+const repair=async()=>(await feedback()).find(x=>x.strategy==='repairs');
+assert.equal((await repair()).recentUnproductivePages,3);
+const latest='discovery:'+account+':'+spare+':22';
+await q("update icash_operation_spend set state='dispatched' where operation_key=$1",[latest]);assert.equal((await repair()).recentUnproductivePages,0);assert.equal((await repair()).costsComplete,false);
+await q("update icash_operation_spend set state='settled' where operation_key=$1",[latest]);
+await q('insert into icash_discovery_filter_attribution(screening_id,account_id,operation_key) values($1,$2,$3)',[missing,account,latest]);assert.equal((await repair()).recentUnproductivePages,0,'A held owner search is not a negative');
+await q("update icash_automation_tickets set state='complete' where screening_id=$1",[missing]);assert.equal((await repair()).recentUnproductivePages,3,'Completed empty previews are actionable without waiting for replies');
+await q("update icash_screening_jobs set state='queued' where id=$1",[missing]);assert.equal((await repair()).recentUnproductivePages,0,'Pending screening cannot look like a failed filter');
+await q("update icash_screening_jobs set state='complete' where id=$1",[missing]);
+await q("update icash_discovery_filter_pages set created_at=now()-interval '91 days' where revision=$1",[spare]);assert.equal((await repair()).recentUnproductivePages,0,'Old failures age out');
+const currentPage=await val('select next_page from icash_discovery_configs where account_id=$1',[account]);
+let v2=await val('select icash_discovery_filter_state_v2($1,$2,$3)',[account,revision,currentPage]);assert.equal(v2.length,4);assert.equal(typeof v2[0].pendingAttempts,'number');
+await assert.rejects(val('select icash_discovery_filter_state_v2($1,$2,12)',[other,revision]),/configuration changed/);
 // Over-estimate usage preserves the original disable/reconciliation behavior.
 await q('update icash_discovery_configs set revision=$2,next_page=1,exhausted=false where account_id=$1',[account,uuid(40)]);await state(account,uuid(40),1);
 assert.equal(await val("select icash_reserve_and_claim_filtered_discovery($1,'75217',$2,1,5,$3,10000,'2099-01-01',null,null,null,$4)",[account,uuid(40),rate,plan()]),true);
 const newOp='discovery:'+account+':'+uuid(40)+':1';await q('select icash_save_filtered_discovery($1,$2,$3,1,$4)',[account,newOp,uuid(40),receipt(plan(),true,2)]);
 assert.equal(await val('select enabled from icash_discovery_configs where account_id=$1',[account]),false);
 assert.equal(await val("select has_function_privilege('authenticated','icash_discovery_filter_state(uuid,uuid,integer)','execute')"),false);
+for(const fn of ['icash_discovery_filter_feedback(uuid,text)','icash_discovery_filter_state_v2(uuid,uuid,integer)']){
+ assert.equal(await val("select has_function_privilege('authenticated',$1,'execute')",[fn]),false);
+ assert.equal(await val("select has_function_privilege('anon',$1,'execute')",[fn]),false);
+ assert.equal(await val("select has_function_privilege('service_role',$1,'execute')",[fn]),true);
+}
 assert.equal(await val("select count(*)::int from pg_class where relname like 'icash_discovery_filter_%' and relkind='r' and relrowsecurity"),4);
 console.log('Filter database: real admission/save functions, cursor isolation, paid-claim idempotency, duplicate suppression, empty market handling, mature receipt-backed interest, costs, opt-outs and private permissions passed.');
 }finally{await db.close();}
