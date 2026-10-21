@@ -14,7 +14,7 @@ export async function GET(req:Request){
    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))return Response.json({error:'Invalid request.'},{status:400,headers});
    const [request]=await db<Record<string,unknown>[]>(`icash_access_help_requests?id=eq.${id}&select=id,email,phone,status,created_at,updated_at`);
    if(!request)return Response.json({error:'Request not found.'},{status:404,headers});
-   const messages=await db<Record<string,unknown>[]>(`icash_access_help_messages?request_id=eq.${id}&select=id,role,content,created_at&order=created_at.desc,id.desc&limit=100`);
+   const messages=await db<Record<string,unknown>[]>(`icash_access_help_messages?request_id=eq.${id}&select=id,role,content,created_at,access_investigation&order=created_at.desc,id.desc&limit=100`);
    const [notification]=await db<{status:string;delivery:string|null}[]>(`icash_support_customer_emails?access_request_id=eq.${id}&select=status,delivery&order=created_at.desc,id.desc&limit=1`);
    return Response.json({request,messages:messages.reverse(),notification:notification??null},{headers});
   }
