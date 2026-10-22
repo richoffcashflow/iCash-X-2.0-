@@ -202,6 +202,56 @@ try{
  await scenario('missing connector receipt',"delete from icash_make_lead_inbox");
  await scenario('changed connector phone',`update icash_make_lead_inbox set payload=jsonb_set(payload,'{field_data,1,values,0}','"+12025550124"')`);
  await scenario('changed submission receipt',`update icash_meta_leads set consent_receipt=jsonb_set(consent_receipt,'{0,submittedAt}','"2000-01-01"')`);
+ // A normal linked recovery becomes the authoritative current initial job.
+ // The original is retained for audit, and must never create a duplicate alert.
+ const linked=id(40);
+ await pg.exec(`
+ insert into icash_voice_jobs(id,account_id,permission_id,meta_retry_of,state,created_at,outcome)
+ values('${linked}','${account}','${permission}','${job}','held',now()-interval '7 minutes','production_agent_review_required');
+ update icash_meta_leads set voice_job_id='${linked}';`);
+ assert.equal((await findings()).length,0,'historical monitor reproduces the hidden current linked-call regression');
+ const beforeLinkedPatch=await scalar("select pg_get_functiondef('icash_undispatched_outreach_findings()'::regprocedure)");
+ const metadata=()=>scalar("select jsonb_build_object('securityDefiner',prosecdef,'volatility',provolatile,'acl',proacl::text,'settings',proconfig) from pg_proc where oid='icash_undispatched_outreach_findings()'::regprocedure");
+ const previousMetadata=await metadata();
+ const linkedSql=read('config/meta-current-initial-voice-monitoring.sql');
+ const linkedMigration=readFileSync(new URL('../supabase/migrations/20261019180234_meta_current_initial_voice_monitoring.sql',import.meta.url),'utf8');
+ assert.equal(linkedSql,linkedMigration);
+ await pg.exec(linkedSql);
+ assert.equal(await scalar("select pg_get_functiondef('icash_undispatched_outreach_findings()'::regprocedure)"),beforeLinkedPatch.replace(linkedSql.split('$old$')[1],linkedSql.split('$new$')[1]),'only linked-initial scope changes; every existing guard remains identical');
+ assert.deepEqual(await metadata(),previousMetadata,'preserve STABLE/INVOKER, empty search_path and exact service-only ACLs');
+ rows=await findings();assert.equal(rows.length,1,'current linked initial hold is visible exactly once');
+ assert.equal(rows[0].resource_id,screen);assert.equal(rows[0].account_id,account);assert.equal(rows[0].kind,'seller_response');
+ assert.deepEqual(rows[0].since,await scalar('select created_at from icash_voice_jobs where id=$1',[linked]),'age comes from the authoritative current job, not its predecessor');
+ for(const [label,change,expected=0] of [
+  ['linked job receives its own grace period',`update icash_voice_jobs set created_at=now() where id='${linked}'`],
+  ['future linked appointment',`update icash_voice_jobs set due_at=now()+interval '1 hour' where id='${linked}'`],
+  ['no authoritative current job',"update icash_meta_leads set voice_job_id=null"],
+  ['historical replacement is ignored when original is current',`update icash_meta_leads set voice_job_id='${job}'`,1],
+  ['missing predecessor',`update icash_voice_jobs set meta_retry_of='${id(99)}' where id='${linked}'`],
+  ['self-linked job',`update icash_voice_jobs set meta_retry_of=id where id='${linked}'`],
+  ['cross-account predecessor',`update icash_voice_jobs set account_id='${id(99)}' where id='${job}'`],
+  ['unrelated predecessor permission',`update icash_voice_jobs set permission_id='${id(99)}' where id='${job}'`],
+  ...['callback_id','sms_source_message_id','cancellation_notice_id','operational_contact_id','meta_offer_lead_id','meta_followup_lead_id'].map(field=>['linked '+field,`update icash_voice_jobs set ${field}='${id(99)}' where id='${linked}'`]),
+  ...['callback_id','sms_source_message_id','cancellation_notice_id','operational_contact_id','meta_offer_lead_id','meta_followup_lead_id','meta_retry_of'].map(field=>['non-original predecessor '+field,`update icash_voice_jobs set ${field}='${id(99)}' where id='${job}'`]),
+  ['linked source test exclusion',"update icash_make_lead_inbox set is_test=true"],
+  ['linked source disabled',"update icash_meta_lead_sources set enabled=false"],
+  ['linked revoked permission',"update icash_contact_permissions set revoked_at=now()"],
+  ['linked voice pause',"update icash_meta_leads set voice_paused=true"],
+  ['linked account pause',"update icash_accounts set bot_paused=true"],
+  ['linked opt-out',"insert into icash_text_suppressions values('+12025550123')"],
+  ['linked manual takeover',"update icash_text_threads set manual_only=true"],
+  ['linked zero credits',"update icash_wallets set balance_cents=0"],
+  ['linked membership hold',"update icash_accounts set member=false"],
+  ['linked recorded dispatch clears while original remains held',`update icash_voice_jobs set state='dispatched',provider_call_sid='SIMULATION linked dispatch' where id='${linked}'`],
+  ['unrelated replacement is ignored',`insert into icash_voice_jobs(id,account_id,permission_id,meta_retry_of,state,created_at) values('${id(41)}','${account}','${permission}','${id(42)}','held',now()-interval '1 hour')`,1],
+  ['linked uncertain provider outcome stays visible without mutation',`update icash_voice_jobs set outcome='provider_outcome_unknown_no_retry',provider_call_sid='SIMULATION unknown' where id='${linked}'`,1],
+ ])await scenario(label,change,expected);
+ for(const terminal of ['no-answer','busy','completed'])await scenario('linked bound terminal receipt clears without counting historical original: '+terminal,`
+ update icash_voice_jobs set outcome='ended_before_recording',provider_call_sid='SIMULATION linked terminal',operation_key='voice:${linked}' where id='${linked}';
+ insert into icash_call_recordings(id,account_id,voice_job_id,operation_key,call_sid,state) values('${id(43)}','${account}','${linked}','voice:${linked}','SIMULATION linked terminal','failed');
+ insert into icash_recorded_gate_terminal_receipts values('${id(43)}','${account}','SIMULATION linked terminal','{"sid":"SIMULATION linked terminal","status":"${terminal}"}');`);
+ assert.equal(await scalar('select state from icash_voice_jobs where id=$1',[job]),'held','historical original remains untouched');
+ assert.equal(await scalar('select state from icash_voice_jobs where id=$1',[linked]),'held','monitor never requeues the linked hold');
  assert.equal(await scalar('select count(*)::int from icash_operation_spend'),0,'monitor never reserves spend');
- console.log('PASS Meta initial voice monitoring: lock-free service-only observation, exact source/permission binding, manual/consent/credit guards, future appointments, genuine receipts, uncertain outcomes, original-job scope and unchanged existing monitor.');
+ console.log('PASS Meta initial voice monitoring: lock-free service-only observation, exact source/permission binding, manual/consent/credit guards, future appointments, genuine receipts, uncertain outcomes, authoritative original/linked initial scope, no duplicate historical finding and unchanged existing monitor.');
 }finally{await pg.close();}
