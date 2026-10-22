@@ -14,7 +14,7 @@ export function PropertyMessages({screeningId,active,onTakeover}:{screeningId:st
  }
  useEffect(()=>{
   if(!active||loaded)return;const abort=new AbortController();
-  void fetch(`/api/work/text-contact?screeningId=${screeningId}`,{cache:'no-store',signal:abort.signal}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error);if(abort.signal.aborted)return;setContacts(d.contacts);setLoaded(true);setError('');if(d.dealId)setDealId(d.dealId);else {const usable=d.contacts.filter((c:Contact)=>!c.blocked&&c.phone_type!=='landline');if(usable.length===1)void open(usable[0]);}}).catch(()=>{if(!abort.signal.aborted)setError('Could not load saved numbers.');});
+  void fetch(`/api/work/text-contact?screeningId=${screeningId}`,{cache:'no-store',signal:abort.signal}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error);if(abort.signal.aborted)return;setContacts(d.contacts);setLoaded(true);setError('');if(d.dealId){setDealId(d.dealId);setThreadId(d.threadId??'');}else {const usable=d.contacts.filter((c:Contact)=>!c.blocked&&c.phone_type!=='landline');if(usable.length===1)void open(usable[0]);}}).catch(()=>{if(!abort.signal.aborted)setError('Could not load saved numbers.');});
   return()=>abort.abort();
  // Opening the one available contact creates an empty conversation; it sends nothing.
  // eslint-disable-next-line react-hooks/exhaustive-deps

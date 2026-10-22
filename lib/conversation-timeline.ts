@@ -1,7 +1,9 @@
+import type {ReceiptResult} from '../components/call-recording';
 export type ConversationCall = {
   id: string; source: 'outbound'|'reception'; party: string; completedAt: string;
   summary?: string; durationSeconds?: number; nextAction?: string;
   interested?: boolean; optedOut?: boolean; humanRequested?: boolean;
+  recordingId?: string; recordingReceipt?: ReceiptResult; transcriptAvailable?: boolean;
 };
 export function conversationTimeline<T extends {id:string;created_at:string}>(messages:T[],calls:ConversationCall[]) {
   const entries = [
