@@ -4,10 +4,35 @@ const user=content=>({role:'user',content}),assistant=content=>({role:'assistant
 const check=(key,status,code)=>({key,status,code,detail:`Fixture ${key} check.`,source:'fixture',observedAt:'2026-10-17T18:00:00Z'});
 const ready=[check('work','ok','not_paused'),check('credits','ok','credit_available'),check('readiness','ok','readiness_ready')];
 const leadsContext={kind:'account',messages:[user('How do I get a client?')],evidence:ready};
+const unrelatedChecks=[check('work','attention','paused'),check('credits','attention','no_available_credit'),check('readiness','attention','readiness_blocked'),check('course','attention','course_unrecorded')];
+for(const question of [
+ 'What do I do if I want the bot to call properties in a specific city?',
+ 'How can I choose a city for my bot?',
+ 'Can I target a specific ZIP code?',
+ 'I want my bot to focus on a specific area.',
+]){
+ const answer=await replyToSupport({kind:'account',messages:[user(question)],evidence:unrelatedChecks},async()=>{throw Error('Known city guidance must not call a provider');});
+ assert.equal(answer.reply,'You can’t select a specific city in the current workspace. Your bot selects markets automatically.');
+ assert.equal(answer.status,'resolved');assert.equal(answer.ai,false);
+ assert.doesNotMatch(answer.reply,/credits|paused|Course|readiness|Settings|\?/i);
+}
+for(const [question,expected] of [
+ ['What’s the outreach?','Outreach means your bot contacting sellers by call or text.'],
+ ['What does outreach mean?','Outreach means your bot contacting sellers by call or text.'],
+ ['If I get off the app will my bot still run?','Your bot runs in the background. Closing the app doesn’t pause it.'],
+ ['Do I send a text?','Texting is automatic. You can send a text yourself if you want to take over a conversation.'],
+]){
+ const answer=await replyToSupport({kind:'account',messages:[user(question)],evidence:unrelatedChecks});
+ assert.equal(answer.reply,expected);assert.equal(answer.status,'resolved');assert.equal(answer.ai,false);
+ const sideQuestion=await replyToSupport({kind:'account',messages:[user('My bot is not working'),assistant('The call is still being checked.'),user(question)],evidence:unrelatedChecks});
+ assert.equal(sideQuestion.reply,expected);assert.equal(sideQuestion.status,'open','Answering a side question does not resolve an earlier failure');
+}
+const cityFailure=supportConversationFallback({kind:'account',messages:[user('My bot is not calling properties in my city')],evidence:unrelatedChecks});
+assert.notEqual(cityFailure.status,'resolved');assert.doesNotMatch(cityFailure.reply,/select a specific city/);
 for(const question of ['How do I get a client?','Do I need to find clients myself?','How do I get started?']){
  const response=supportConversationFallback({...leadsContext,messages:[user(question)]});
  assert.match(response.reply,/Course/);assert.match(response.reply,/running/);assert.match(response.reply,/Leads and notifications/);assert.match(response.reply,/no fixed arrival time/);
- assert.doesNotMatch(response.reply,/marketing|networking|referrals|social media|what (?:type of )?(?:service|product)/i);assert.equal(response.status,'resolved');assert.match(response.reply,/rewatch the Course/);
+ assert.doesNotMatch(response.reply,/marketing|networking|referrals|social media|what (?:type of )?(?:service|product)/i);assert.equal(response.status,'resolved');assert.doesNotMatch(response.reply,/rewatch the Course/);
 }
 for(const question of ['Where do leads come from?','No leads yet, what do I do?']){
  const response=supportConversationFallback({...leadsContext,messages:[user(question)]});
@@ -103,7 +128,7 @@ try{
  await replyToSupport({kind:'account',messages:[user('What happens after the seller signs?')],evidence:ready},async(url,init)=>{
   const body=JSON.parse(init.body),policy=body.messages[0].content;
   assert.match(policy,/automated support/);assert.match(policy,/not asking how to market a freelance service/);assert.match(policy,/After a seller signs, the customer reviews/);assert.match(policy,/no outbound AI calls to buyers/);assert.match(policy,/Automated support chat is available without VIP/);assert.match(policy,/Checks take precedence/);
-  assert.equal(JSON.parse(body.messages[1].content).verifiedChecks[0].code,'not_paused');
+  assert.deepEqual(JSON.parse(body.messages[1].content).verifiedChecks,[],'A product how-to does not need unrelated account checks');
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'Review the seller conversation, numbers and agreement in Documents, then sign if appropriate. Which step are you on?',answered:false})}}]});
  });
  const context={kind:'account',messages:[user('The bot stopped'),assistant('Which screen?'),user('The workspace, sk_live_abcdefghijkl and me@example.invalid')],evidence:[{key:'work',status:'attention',detail:'The bot is paused.',source:'fixture',observedAt:new Date().toISOString()}]};let calls=0;
@@ -116,7 +141,7 @@ try{
  }
  assert.equal((await replyToSupport({...context,messages:[user('Are my test credits usable?')]},modelReply('Test credits do not fund live work.',false))).ai,true,'An explicit test-credit question can still be answered honestly');
  const complete=await replyToSupport({...leadsContext,messages:[user('What is Take over?')]},modelReply('Take over pauses new automatic work on that property so you can handle it yourself.',true));
- assert.equal(complete.status,'resolved');assert.match(complete.reply,/rewatch the Course/);assert.match(complete.reply,/Reply here/);
+ assert.equal(complete.status,'resolved');assert.equal(complete.reply,'Take over pauses new automatic work on that property so you can handle it yourself.');
  const missing=await replyToSupport(context,modelReply('Which screen are you on?',true));assert.equal(missing.status,'waiting_on_customer','A model cannot close a reply that still asks a question');
  const pending=await replyToSupport(context,modelReply('Please tell us the exact error on screen.',false));assert.equal(pending.status,'waiting_on_customer');
  const staff=await replyToSupport(context,modelReply('A team member needs to review the account.',true,true));assert.equal(staff.status,'waiting_on_customer','Team action takes precedence over a resolution flag');
