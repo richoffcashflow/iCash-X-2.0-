@@ -142,6 +142,11 @@ try{
  assert.equal((await replyToSupport({...context,messages:[user('Are my test credits usable?')]},modelReply('Test credits do not fund live work.',false))).ai,true,'An explicit test-credit question can still be answered honestly');
  const complete=await replyToSupport({...leadsContext,messages:[user('What is Take over?')]},modelReply('Take over pauses new automatic work on that property so you can handle it yourself.',true));
  assert.equal(complete.status,'resolved');assert.equal(complete.reply,'Take over pauses new automatic work on that property so you can handle it yourself.');
+ const unresolvedSideQuestion={kind:'account',messages:[user('The bot is not working'),assistant('I haven’t confirmed a fix.'),user('What is Take over?')],evidence:unrelatedChecks};
+ const sideAnswer=await replyToSupport(unresolvedSideQuestion,modelReply('Take over pauses new automatic work on that property so you can handle it yourself.',true));
+ assert.equal(sideAnswer.reply,complete.reply);assert.equal(sideAnswer.status,'open','A model answer to a side question must not close the earlier problem');
+ const thanks=await replyToSupport({...unresolvedSideQuestion,messages:[...unresolvedSideQuestion.messages,assistant(sideAnswer.reply),user('Thanks')]},modelReply('You’re welcome.',true));
+ assert.equal(thanks.status,'open','Thanks for a side answer is not confirmation that the original problem is fixed');
  const missing=await replyToSupport(context,modelReply('Which screen are you on?',true));assert.equal(missing.status,'waiting_on_customer','A model cannot close a reply that still asks a question');
  const pending=await replyToSupport(context,modelReply('Please tell us the exact error on screen.',false));assert.equal(pending.status,'waiting_on_customer');
  const staff=await replyToSupport(context,modelReply('A team member needs to review the account.',true,true));assert.equal(staff.status,'waiting_on_customer','Team action takes precedence over a resolution flag');
