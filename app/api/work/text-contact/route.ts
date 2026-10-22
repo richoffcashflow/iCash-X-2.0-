@@ -13,8 +13,8 @@ export async function GET(req:Request){
    db<{phone:string;name:string;phone_type:string;blocked:boolean}[]>('rpc/icash_manual_contacts','POST',{p_account:accountId,p_screening:screeningId}),
    db<{id:string}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${screeningId}&select=id&limit=1`)
   ]);
-  const threads=deals[0]?await db<{id:string}[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${deals[0].id}&retired_at=is.null&select=id&limit=1`):[];
-  return NextResponse.json({contacts,dealId:threads.length?deals[0].id:null},{headers});
+  const threads=deals[0]?await db<{id:string}[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${deals[0].id}&party=eq.seller&retired_at=is.null&select=id&order=id.desc&limit=1`):[];
+  return NextResponse.json({contacts,dealId:threads.length?deals[0].id:null,threadId:threads[0]?.id??null},{headers});
  }catch{return NextResponse.json({error:'Could not load contacts.'},{status:503,headers});}
 }
 export async function POST(req:Request){

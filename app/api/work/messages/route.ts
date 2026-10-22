@@ -5,25 +5,34 @@ import {allowedOrigin} from '@/lib/funding-policy';
 import {db} from '@/lib/stripe-test';
 import {dispatchTextMessage} from '@/lib/text-message-service';
 import {customerTextStatus} from '@/lib/customer-text-status';
+import {threadConversationCalls} from '@/lib/thread-conversation-calls';
+type Thread={id:string;recipient:string;paused:boolean;party:string};
+type Message={id:string;created_at:string;state:string;direction:string;request_key:string|null;customer_author_id:string|null};
+const messageFields='id,thread_id,direction,body,state,attachments,created_at,request_key,customer_author_id';
 export const dynamic='force-dynamic';
 export async function GET(req:Request){
  const headers={'Cache-Control':'private, no-store'};
  try{const {accountId,userId}=await workAccount();const params=new URL(req.url).searchParams;const dealId=z.string().uuid().parse(params.get('dealId'));
  const afterThread=params.get('afterThread');if(afterThread)z.string().uuid().parse(afterThread);
- const threadRows=await db<{id:string;recipient:string;paused:boolean;party:string}[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${dealId}&retired_at=is.null&select=id,recipient,paused,party&order=id.desc&limit=21${afterThread?`&id=lt.${afterThread}`:''}`);
+ const threadRows=await db<Thread[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${dealId}&retired_at=is.null&select=id,recipient,paused,party&order=id.desc&limit=21${afterThread?`&id=lt.${afterThread}`:''}`);
  const threads=threadRows.slice(0,20);
- const threadId=params.get('threadId')?z.string().uuid().parse(params.get('threadId')):threads[0]?.id;
- if(threadId&&!threads.some(t=>t.id===threadId))throw Error();
+ const threadId=params.get('threadId')?z.string().uuid().parse(params.get('threadId')):(threads.find(t=>t.party==='seller')??threads[0])?.id;
+ if(threadId&&!threads.some(t=>t.id===threadId)){
+  const selected=await db<Thread[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${dealId}&id=eq.${threadId}&retired_at=is.null&select=id,recipient,paused,party&limit=1`);
+  if(selected.length!==1||selected[0].id!==threadId)throw Error();threads.push(selected[0]);
+ }
  const before=params.get('before');if(before)z.string().datetime({offset:true}).parse(before);const beforeId=before?z.string().uuid().parse(params.get('beforeId')):null;
  const requestKey=params.get('requestKey');if(requestKey)z.string().uuid().parse(requestKey);
- const [rows,receipts]=threadId?await Promise.all([
- db<{id:string;created_at:string;state:string;request_key:string|null;customer_author_id:string|null}[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threadId}&select=id,thread_id,direction,body,state,attachments,created_at,request_key,customer_author_id&order=created_at.desc,id.desc&limit=21${before?`&or=(created_at.lt.${encodeURIComponent(before)},and(created_at.eq.${encodeURIComponent(before)},id.lt.${beforeId}))`:''}`),
- requestKey?db<{state:string;request_key:string}[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threadId}&customer_author_id=eq.${userId}&request_key=eq.${requestKey}&select=state,request_key&limit=1`):Promise.resolve([])
- ]):[[],[]];
- const messages=rows.slice(0,20).map(({customer_author_id,request_key,...message})=>({...message,retryKey:customer_author_id===userId&&message.state==='ready'?request_key:null})),last=messages.at(-1);
- const callsResult=threadId?db<unknown[]>('rpc/icash_thread_calls','POST',{p_account:accountId,p_thread:threadId,p_before:before??null,p_after:rows.length>20&&last?last.created_at:null}).then(calls=>({calls,callsUnavailable:false})).catch(()=>({calls:[],callsUnavailable:true})):Promise.resolve({calls:[],callsUnavailable:false});
+ const [rows,receipts,firstRows]=threadId?await Promise.all([
+ db<Message[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threadId}&select=${messageFields}&order=created_at.desc,id.desc&limit=21${before?`&or=(created_at.lt.${encodeURIComponent(before)},and(created_at.eq.${encodeURIComponent(before)},id.lt.${beforeId}))`:''}`),
+ requestKey?db<{state:string;request_key:string}[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threadId}&customer_author_id=eq.${userId}&request_key=eq.${requestKey}&select=state,request_key&limit=1`):Promise.resolve([]),
+ db<Message[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threadId}&select=${messageFields}&order=created_at.asc,id.asc&limit=1`)
+ ]):[[],[],[]];
+ const present=({customer_author_id,request_key,...message}:Message)=>({...message,author:message.direction==='incoming'?'contact':customer_author_id?'you':'bot',retryKey:customer_author_id===userId&&message.state==='ready'?request_key:null});
+ const messages=rows.slice(0,20).map(present),last=messages.at(-1),current=threads.find(t=>t.id===threadId);
+ const callsResult=current?threadConversationCalls(db,accountId,{...current,dealId},before??null,rows.length>20&&last?last.created_at:null,process.env.ICASH_RECORDING_RECEIPTS_READY==='true'):Promise.resolve({calls:[],callsUnavailable:false});
  const sendReason=threadId?await db<string|null>('rpc/icash_manual_text_reason','POST',{p_account:accountId,p_thread:threadId}):null;
- return NextResponse.json({...await callsResult,threads:threads.map(t=>({...t,manualReply:true,sendReason:t.id===threadId?sendReason:null})),threadId,messages,receipt:requestKey?(receipts[0]??{state:'not_found',request_key:requestKey}):null,nextThread:threadRows.length>20?threads.at(-1)!.id:null,next:rows.length>20&&last?{before:last.created_at,beforeId:last.id}:null},{headers});
+ return NextResponse.json({...await callsResult,threads:threads.map(t=>({...t,manualReply:true,sendReason:t.id===threadId?sendReason:null})),threadId,messages,firstMessage:firstRows[0]?present(firstRows[0]):null,receipt:requestKey?(receipts[0]??{state:'not_found',request_key:requestKey}):null,nextThread:threadRows.length>20?threadRows[19].id:null,next:rows.length>20&&last?{before:last.created_at,beforeId:last.id}:null},{headers});
  }catch{return NextResponse.json({error:'Messages unavailable'},{status:400,headers});}
 }
 export async function POST(req:Request){

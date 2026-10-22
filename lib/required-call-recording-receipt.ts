@@ -6,7 +6,7 @@ const eq=encodeURIComponent;
 export {recordingAddonCosts} from './required-call-recording-cost.ts';
 import {recordingAddonCosts} from './required-call-recording-cost.ts';
 /** Only playback metadata leaves the server. A transcript is not an audio receipt. */
-export function recordingAudioPresentation(row:RecordingRow,now=Date.now()){
+export function recordingAudioPresentation(row:RecordingRow,now=Date.now()):{id:string;status:RecordingRow['state'];createdAt:string;durationSeconds:number|null;audioAvailable:boolean;audioExpiresAt:string|null}{
  const available=audioAvailable(row,now),expired=!!row.audio_expires_at&&Date.parse(row.audio_expires_at)<=now;
  const status=row.state==='deleted'?'deleted':row.state==='deletion_pending'?'deletion_pending':expired?'expired':row.state==='available'&&!available?'processing':row.state;
  return {id:row.id,status,createdAt:row.created_at,durationSeconds:row.duration_seconds,audioAvailable:available,audioExpiresAt:row.audio_expires_at};

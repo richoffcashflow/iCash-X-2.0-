@@ -12,6 +12,7 @@ import {verifyOwnerAccounts} from './owner-accounts-browser.mjs';
 import {verifyOwnerOutreach} from './owner-outreach-browser.mjs';
 import {verifyPlatformLearning} from './platform-learning-browser.mjs';
 import {ownerOutreachFixture} from './helpers/owner-outreach-fixture.mjs';
+import {verifyConversationInbox} from './conversation-inbox-browser.mjs';
 import {verifyWorkspace} from './workspace-browser-scenarios.mjs';
 import {verifyWalkthrough} from './workspace-walkthrough-browser.mjs';
 import {verifyPurchaseAccess} from './purchase-access-browser.mjs';
@@ -61,6 +62,7 @@ try{
    if(process.env.BROWSER_SCENARIOS==='platform-learning'){await verifyPlatformLearning(browser,base,options,name,fixtureCookies,fixture);continue;}
    if(process.env.BROWSER_SCENARIOS==='owner-accounts'){await verifyOwnerAccounts(browser,base,options,name,fixtureCookies);continue;}
    if(process.env.BROWSER_SCENARIOS==='admin-outreach'){await verifyOwnerOutreach(browser,base,options,name,fixtureCookies,fixture);continue;}
+   if(process.env.BROWSER_SCENARIOS==='conversation'){await verifyConversationInbox(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='workspace'){await verifyWorkspace(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='access-help'){await verifyAccessHelp(browser,base,options,name,fixtureCookies);continue;}
    if(process.env.BROWSER_SCENARIOS==='walkthrough'){await verifyWalkthrough(browser,base,options,name);continue;}
@@ -132,6 +134,7 @@ try{
    console.log(`PASS ${name}: owner reports and aggregate experience → incident detail → refresh failure → recovery → private data cleared on denied access.`);
    await context.close();
    await verifyWorkspace(browser,base,options,name);
+   await verifyConversationInbox(browser,base,options,name);
    await verifyCourse(browser,base,options,name);
   }finally{await browser.close();}
  }
