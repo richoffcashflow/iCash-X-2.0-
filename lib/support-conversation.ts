@@ -15,6 +15,12 @@ const continueHere='I’ll help you troubleshoot this here. What is still happen
 const noRefunds='All sales are final; we do not offer refunds. I can help fix an access or software issue here.';
 const clean=(text:string)=>redactSupportQuestion(text).replace(/\b\d{6,10}\b/g,'[code removed]');
 
+function earlierSupportProblem(context:SupportContext){
+ const users=context.messages.filter(m=>m.role==='user');
+ const lastConfirmed=users.findLastIndex(m=>/\b(?:that worked|it worked|working now|fixed now|all fixed|problem solved)\b/i.test(m.content)&&!/(?:not|still|but)\b/i.test(m.content));
+ return context.historyComplete===false||users.slice(lastConfirmed+1,-1).some(m=>/\b(?:bug|error|broken|blocked|stuck|missing|failed|not working|not calling|not texting|no calls|no texts|no leads|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
+}
+
 /** Local replies also work during provider outages and interruption recovery. */
 export function supportConversationFallback(context:SupportContext):SupportReply{
  const users=context.messages.filter(m=>m.role==='user'),question=users.at(-1)?.content??'';
@@ -27,9 +33,7 @@ export function supportConversationFallback(context:SupportContext):SupportReply
  const productAnswer=supportSimpleProductAnswer(question);
  if(productAnswer){
   // A side question can be answered without claiming an earlier fault is fixed.
-  const lastConfirmed=users.findLastIndex(m=>/\b(?:that worked|it worked|working now|fixed now|all fixed|problem solved)\b/i.test(m.content)&&!/(?:not|still|but)\b/i.test(m.content));
-  const earlierProblem=users.slice(lastConfirmed+1,-1).some(m=>/\b(?:bug|error|broken|blocked|stuck|missing|failed|not working|not calling|not texting|no calls|no texts|no leads|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
-  return result(productAnswer,earlierProblem?'open':'resolved');
+  return result(productAnswer,earlierSupportProblem(context)?'open':'resolved');
  }
  if(supportDuplicateCharge(currentSupportIssue(context.messages))){
   const checks=(context.evidence??[]).filter(e=>['membership_payments','subscription'].includes(e.key));
@@ -53,7 +57,7 @@ export function supportConversationFallback(context:SupportContext):SupportReply
   if(alreadyAsked)return result('I have the card details you described. These account checks don’t show which card is selected for billing, so I can’t confirm the change yet. You don’t need to add the same card again.','open');
   return result('I can help with changing your card. These account checks don’t show whether the new card saved. What does the button beside the new card say? Please leave out card numbers.');
  }
- if(previous&&!previous.includes('?')&&!context.handedOff&&!/(?:still|not yet|pending|checking|troubleshoot)/i.test(previous)&&/^(?:thanks|thank you|got it|understood|that answers (?:it|my question)|that(?:’|')?s all)[.!\s]*(?:(?:thanks|thank you|that(?:’|')?s all)[.!\s]*)?$/i.test(question.trim()))return result('You’re welcome.','resolved');
+ if(previous&&!previous.includes('?')&&!context.handedOff&&!/(?:still|not yet|pending|checking|troubleshoot)/i.test(previous)&&/^(?:thanks|thank you|got it|understood|that answers (?:it|my question)|that(?:’|')?s all)[.!\s]*(?:(?:thanks|thank you|that(?:’|')?s all)[.!\s]*)?$/i.test(question.trim()))return result('You’re welcome.',earlierSupportProblem(context)?'open':'resolved');
  const course=supportCourseAnswer(context.messages,context.kind==='account'?context.evidence:[]);
  if(course)return result(course.reply,course.needsRecovery?'open':course.answered?'resolved':'waiting_on_customer');
  if(context.kind==='access'){
@@ -106,6 +110,6 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
   const unresolved=relevantEvidence.some(e=>e.status!=='ok'&&e.key!=='course');
   const failure=/not working|stopped|stuck|missing|no code|didn.t|doesn.t|can.t|cannot|failed|error|problem/i.test(context.messages.filter(m=>m.role==='user').at(-1)?.content??'');
   const answered=answer.answered&&!answer.reply.includes('?')&&!unresolved&&!failure;
-  return {reply:answer.reply,status:fallback.status==='open'?'open':answered?'resolved':'waiting_on_customer',ai:true};
+  return {reply:answer.reply,status:fallback.status==='open'||earlierSupportProblem(context)?'open':answered?'resolved':'waiting_on_customer',ai:true};
  }catch{return fallback;}
 }
