@@ -19,6 +19,7 @@ export function supportOutreachEvidence(value:unknown):Omit<SupportEvidence,'key
 /** Verified account evidence wins over guesses from a passing setup check. */
 export function supportOutreachReply(messages:{role:string;content:string}[],evidence:SupportEvidence[]){
  const question=messages.filter(m=>m.role==='user').at(-1)?.content??'';
+ const textDelivery=/\b(?:texts?|messages?|sms)\b.{0,60}\b(?:deliver(?:ed|ing|y)?|receiv(?:e|ed|ing))\b|\b(?:deliver(?:ed|ing|y)?|receiv(?:e|ed|ing))\b.{0,60}\b(?:texts?|messages?|sms)\b/i.test(question);
  const source=/\b(?:cold|motivated)\b.{0,35}\b(?:leads?|sellers?)\b|\bwhere\b.{0,50}\b(?:properties|leads?)\b.{0,30}\b(?:from|coming)\b/i.test(question);
  const problemPattern=/\b(?:seller|owner)\b.{0,50}\b(?:info|information|details|contact)\b|\b(?:leads?|propert(?:y|ies)|calls?|called|calling|texts?|texting)\b.{0,60}\b(?:not|no|missing|stuck|waiting|communication)\b|\b(?:no|missing|not|never|isn[’']?t|doesn[’']?t|hasn[’']?t|aren[’']?t|didn[’']?t|won[’']?t)\b.{0,60}\b(?:leads?|seller|owner|calls?|called|calling|texts?|texting|conversations?)\b/i;
  let issue=currentSupportIssue(messages);
@@ -29,8 +30,13 @@ export function supportOutreachReply(messages:{role:string;content:string}[],evi
   issue=messages.slice(lastConfirmed+1).filter(m=>m.role==='user').findLast(m=>problemPattern.test(m.content))?.content??issue;
  }
  const problem=problemPattern.test(issue);
- if(!source&&!problem)return null;
+ if(!source&&!problem&&!textDelivery)return null;
  const check=evidence.find(e=>e.key==='outreach');
+ if(textDelivery){
+  const o=check?.outreach;
+  const reply=!o?'I can’t verify text delivery right now, so I can’t confirm why those messages aren’t showing as delivered.':o.textsSent===0?'No sent texts are recorded for your account yet. I haven’t confirmed what is stopping them.':o.textsDelivered===0?`${o.textsSent} ${o.textsSent===1?'text was':'texts were'} accepted for sending, but none has a delivery confirmation yet. I can’t confirm that they reached the sellers or why delivery hasn’t been confirmed.`:`${o.textsDelivered} of ${o.textsSent} sent texts have a delivery confirmation. ${o.textsDelivered<o.textsSent?'I can’t confirm delivery or the reason for the missing confirmations on the others yet.':'Which message isn’t showing as delivered for you?'}`;
+  return {reply,status:'open' as const,ai:false};
+ }
  if(!check?.outreach)return {reply:'I can’t verify the seller details, calls, or texts right now. A running bot and available credits alone do not confirm that outreach has started. This issue is still open.',status:'open' as const,ai:false};
  const o=check.outreach;
  if(source){
@@ -40,7 +46,7 @@ export function supportOutreachReply(messages:{role:string;content:string}[],evi
  const contacts=o.contactProperties>0?`Owner details are saved for ${o.contactProperties} ${o.contactProperties===1?'property':'properties'}.`:`${o.screened} ${o.screened===1?'property has':'properties have'} been checked, but no saved owner details are recorded yet.`;
  const activity=`Your account has ${o.callsStarted} recorded call ${o.callsStarted===1?'attempt':'attempts'} and ${o.textsSent} ${o.textsSent===1?'text':'texts'} (${o.textsDelivered} delivered) so far${o.textReplies===0?'; no text replies yet':`; ${o.textReplies} text ${o.textReplies===1?'reply':'replies'} recorded`}.`;
  const paused=evidence.some(e=>e.key==='work'&&e.code==='paused')||o.progress?.status==='paused';
- const hold=paused?'Your bot is paused, so queued outreach will stay paused.':o.callsBudgetHeld>0?(o.progress?.status==='paced'?'Calls are waiting for the next spending allowance.':o.progress?.status==='budget_reached'?'Calls are waiting because the allowance for new outreach is used up. The remaining credits are kept for replies and active deals.':'Calls are waiting on the spending limit for new outreach. Having credits left doesn’t mean they’re all available to spend at once.') :'';
+ const hold=paused?'Your bot is paused, so queued outreach will stay paused.':o.callsBudgetHeld>0?(o.progress?.status==='settling'?'Calls are waiting for earlier work costs to be confirmed.':o.progress?.status==='paced'?'Calls are waiting for the next spending allowance.':o.progress?.status==='budget_reached'?'Calls are waiting because the allowance for new outreach is used up. The remaining credits are kept for replies and active deals.':'Calls are waiting on the spending limit for new outreach. Having credits left doesn’t mean they’re all available to spend at once.') :'';
  const alreadyDirected=messages.some(m=>m.role!=='user'&&/open a property with an owner name/i.test(m.content))||/\b(?:already|tried|still)\b.{0,60}\b(?:Leads|Texts|open|show)/i.test(question);
  const next=o.contactProperties>0?(alreadyDirected?'The saved activity does not confirm it is displaying correctly for you; this issue remains open.':'In Leads, open a property with an owner name and tap Texts.'):'I haven’t confirmed why owner details are missing, so this issue remains open.';
  // Answer a calling/texting complaint directly. Lifetime counts must not be

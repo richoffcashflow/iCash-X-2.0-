@@ -11,6 +11,10 @@ Getting started: open Course in the workspace and watch the training. The course
 
 Getting leads: with access, credits, required setup and checks ready, keep the bot running. iCash X automatically looks for eligible seller opportunities and works incoming/assigned leads; customers do not add listings, upload properties, manually find clients, or add a test property to start. If asked "How do I add a listing?", explain that leads come in automatically and appear in Leads; do not invent an Add listing button, listing form, MLS upload, or manual-listing setup step. New leads appear in Leads. "Looking for a deal" with no leads can mean the running bot is waiting for an eligible opportunity, not an error. Watch Leads and notifications while it runs. There is no fixed lead-arrival time, guaranteed lead count per credit amount, guaranteed deal, or guaranteed income. More credits allow more eligible usage; they do not guarantee an outcome. Never tell someone to just wait when verified checks show a pause, missing credit, access problem, or service blocker. Unknown checks are not proof everything is running. Missing purchased credit is checked against the recorded payment automatically; never ask for another payment to replace it.
 
+City selection: the current customer workspace has no city, ZIP-code or target-market selector. Customize bot offers the bot name and custom voice, not a market setting. Answer a city-targeting question directly: customers cannot select a specific city in the current workspace; the bot selects markets automatically. Do not invent a city-setting button or claim support has changed their market. Older saved market preferences do not mean a control exists in the current interface.
+
+Simple questions: outreach means the bot contacting sellers by call or text. Texting is automatic; customers can take over a conversation if they want to send a message themselves. The bot runs in the background, so closing the app does not pause it. These describe features, not proof that a particular call or text has been sent. Answer the question without adding unrelated credit, billing, pause or course checks.
+
 Monitoring: the workspace shows leads, calls, texts, contracts and notifications. Open a property for its latest update, call recordings/transcripts, and texts. Notifications flag items needing the customer's attention. Take over pauses new automatic work on that property so the customer can handle calls/texts themselves; already-started work may finish. Return to bot resumes eligible automation. The overall Pause bot control stops new work; it does not cancel a subscription or signed contract.
 
 Agreements: the bot can speak/text with eligible sellers and prepare agreements. After a seller signs, the customer reviews the conversation, numbers, owners and actual agreement, then signs if appropriate. Never say the AI guarantees that the numbers work or that review is unnecessary. Documents contains agreement review/signing and available document controls. Contract cancellation is a separate property-document flow, not subscription cancellation; do not give blanket promises of cancellation rights or legal/tax advice.
@@ -21,12 +25,31 @@ Sales policy: all sales are final. Do not offer or promise refunds. Troubleshoot
 
 Plans: Standard includes ordinary automated bot work and bot-name customization. VIP includes Ask AI Bot about the workspace/properties, buyer-network access, lead priority, custom voice and eligible usage savings. Automated support chat is available without VIP, including help getting into an account. Do not require a VIP upgrade to get ordinary bot leads or support. Use current verified plan/pricing details; do not invent a plan, price, discount or entitlement from the conversation.
 
-Course viewing: use the verified course check to see recorded playback for the current video. course_unrecorded means no playback is recorded, not proof they never watched; earlier or offline viewing can be missing. For setup/how-to questions, tell them to watch Course. course_in_progress means they should finish it; use only the recorded percentage. course_completed means at least 95% was played, so acknowledge that and point to a relevant section if needed. Unknown progress is not unviewed. Never withhold help or mark an actual problem resolved just because the course is unfinished.
+Course viewing: use the verified course check when the customer asks about training or getting started. course_unrecorded means no playback is recorded, not proof they never watched; earlier or offline viewing can be missing. Answer specific how-to questions directly; do not redirect them to Course or append a course reminder to every answer. Use only the recorded percentage when discussing progress. course_completed means at least 95% was played. Unknown progress is not unviewed. Never withhold help or mark an actual problem resolved just because the course is unfinished.
 
 Stay with the customer's current step. If they already watched the course, do not tell them to watch it again as the solution. Ask one useful missing question such as the exact bot status or where they are stuck. If product knowledge cannot answer the question, say what is unknown and ask for relevant details and keep troubleshooting in the same conversation; do not invent features or substitute general business coaching.
 `.trim();
 
 type Turn={role:string;content:string};
+
+/** Feature instructions do not need a wallet/health report. Failures still do. */
+export function supportHowToQuestion(question:string){
+ return /^(?:what\b|how (?:do|can|should|does|to)\b|where (?:do|can|is|are)\b|do i (?:need|have)\b|can i\b|will (?:my|the) bot\b|if i\b)/i.test(question.trim())
+  && !/\b(?:why|bug|error|broken|blocked|stuck|missing|failed|not|never|no|not working|not calling|not texting|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot|credits?|balance|billing|payments?|charged|refund|cancel|sign.?in|log.?in|code)\b/i.test(question)
+  && !/\b(?:get started|first steps|no leads|no calls|no texts|how long|fixed|ready|working yet)\b/i.test(question);
+}
+
+/** Known, small product answers remain useful without a model or account checks. */
+export function supportSimpleProductAnswer(question:string):string|null{
+ const q=question.trim();
+ if(/\b(?:refund|cancel|charge(?:d|s)?|payments?|card|billing|bug|error|not working|not calling|not texting)\b|\b(?:isn[’']?t|doesn[’']?t|won[’']?t|cannot|can[’']?t)\b.{0,30}\b(?:call|text|send|run)\b/i.test(q))return null;
+ if(/\b(?:city|cities|zip(?: code)?|market|area)\b/i.test(q)&&/\b(?:specific|choose|select|target|change|set|switch|limit|focus)\b/i.test(q)&&/\b(?:bot|call|calling|leads?|properties|target|market|search)\b/i.test(q))return 'You can’t select a specific city in the current workspace. Your bot selects markets automatically.';
+ if(/^(?:what(?:[’']s| is)(?: the| my bot[’']s)? outreach|what does outreach mean)[?!.\s]*$/i.test(q))return 'Outreach means your bot contacting sellers by call or text.';
+ if(/\b(?:bot|automation)\b/i.test(q)&&/\b(?:close|closing|leave|exit|get off|logged out|log out|sign out|background|keep.{0,12}open)\b/i.test(q)&&/\b(?:app|browser|website|tab|page|background|logged out)\b/i.test(q))return 'Your bot runs in the background. Closing the app doesn’t pause it.';
+ if(/^do i (?:need to |have to )?send (?:a |the )?text[?!.\s]*$/i.test(q))return 'Texting is automatic. You can send a text yourself if you want to take over a conversation.';
+ return null;
+}
+
 type CourseTopic='leads'|'start'|'course';
 function courseTopic(question:string):CourseTopic|null{
  if(/\b(?:billing|charged|refund|cancel|password|sign.?in|log.?in|code|card)\b/i.test(question))return null;

@@ -8,6 +8,16 @@ const env={...process.env};process.env.ICASH_SUPPORT_AI_ENABLED='true';process.e
 let calls=0;
 const forbidden=async()=>{calls++;throw Error('Known account evidence must not need a model call');};
 try{
+ for(const question of ['Why are the texts not delivering','Why are my messages not delivered?','Why have sellers not received my texts?']){
+  const response=await replyToSupport({kind:'account',messages:[user('Calls are waiting for spending allowance'),user(question)],evidence:[{...evidence[0],...supportOutreachEvidence({...facts,textsSent:3,textsDelivered:0})}]},forbidden);
+  assert.equal(response.status,'open');assert.equal(response.ai,false);
+  assert.match(response.reply,/3 texts were accepted for sending/);assert.match(response.reply,/none has a delivery confirmation/);
+  assert.doesNotMatch(response.reply,/Calls are waiting|credit|balance|spending|Course|delivered successfully/i);
+ }
+ const deliveryUnknown=await replyToSupport({kind:'account',messages:[user('Why are texts not delivering?')],evidence:[]},forbidden);
+ assert.match(deliveryUnknown.reply,/can’t verify text delivery/);assert.doesNotMatch(deliveryUnknown.reply,/credit|running bot/i);
+ const settling=await replyToSupport({kind:'account',messages:[user('Calls not starting')],evidence:[{...evidence[0],...supportOutreachEvidence({...facts,progress:{...facts.progress,status:'settling'}})}]},forbidden);
+ assert.match(settling.reply,/earlier work costs to be confirmed/);assert.doesNotMatch(settling.reply,/used up|nearly used up/);
  // Exact customer wording must use the real outreach evidence on the first turn.
  for(const question of ["hi my bot isn't making any calls or texts and it's been running all day",'my bot isn’t making calls','my bot isnt making any calls','It does not make calls or send texts','It has not called anyone','It hasn’t been calling sellers','No calls are being made','Why are calls not starting?',"I'm just trying to figure out why its not making calls or texts"]){
   const response=await replyToSupport({kind:'account',messages:[user(question)],evidence:[{...evidence[0],...supportOutreachEvidence({...facts,callsStarted:4,progress:{...facts.progress,status:'ready',remainingCents:121}})}]},forbidden);

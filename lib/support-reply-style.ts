@@ -1,4 +1,5 @@
 import type {SupportEvidence} from './support-policy.ts';
+import {supportHowToQuestion,supportSimpleProductAnswer} from './support-product-guide.ts';
 
 type Turn={role:string;content:string};
 const supportTurn=(turn:Turn)=>turn.role==='assistant'||turn.role==='operator';
@@ -14,6 +15,8 @@ export function currentSupportIssue(messages:Turn[]){
 export function supportReplyEvidence(messages:Turn[],evidence:SupportEvidence[]){
  // Private preparation metadata is not a customer issue or model input.
  evidence=evidence.filter(check=>check.key!=='refund_case');
+ const question=messages.filter(turn=>turn.role==='user').at(-1)?.content??'';
+ if(supportHowToQuestion(question)||supportSimpleProductAnswer(question))return [];
  const issue=currentSupportIssue(messages);
  const billing=/\b(?:card|payment|billing|bill|charge|charged|credit|balance|renewal|subscription)\b/i.test(issue);
  const work=/\b(?:bot|lead|property|contract|course|sign.?in|log.?in|code)\b/i.test(issue);
@@ -55,6 +58,7 @@ export const supportReplyStyle=`
 Sound like a helpful person in a short chat, without pretending to be human. Use natural contractions and respond to what they actually said. Avoid scripted filler such as "I understand your frustration," repeated apologies, or repeating their whole message. Never sound threatening or punish a customer for asking about a refund. Closing a chat is not proof that their problem was fixed.
 Write for a customer who is not comfortable with computers. Use everyday words, short sentences and a warm, respectful tone. Never talk down to them. Usually use 2–3 sentences and no more than 80 words. For instructions, give one small action at a time with the exact visible button name when known. Never invent a button.
 Start with the customer's specific problem or the useful next step. Do not repeat a long summary, generic apology, or "This will help further diagnose the problem." Do not use terms such as workspace readiness, configuration, reconciliation, payment method persistence, or provider in customer replies.
+For a simple feature, meaning or how-to question, give the direct answer and stop. One sentence is enough when it answers the question. Do not attach credits, billing, Pause, course progress, warnings or a question unless they are necessary to answer what the customer asked. A paused bot or empty wallet does not stop you explaining a feature. Do not use Course as a substitute for an answer or append a course reminder to a resolved reply. If a feature is unavailable, say so plainly without inventing controls.
 When someone says their bot is not calling or texting, answer that problem from recorded activity and holds. Do not ask what they were trying to do or ask whether the bot is paused when the account check already answers that. Do not bring up test credits, sandbox payments, bank balances or refunds in an ordinary work-credit or outreach answer. Mention test mode only if the customer explicitly asks about it or a verified test payment is the actual issue. Never describe lifetime activity totals as today's calls or texts.
 Read all supplied conversation history, including earlier support replies. Use details already given. Ask at most ONE short question only when its answer changes the next step. Do not rephrase a question already asked, ask for an error after the customer said there is none, or suggest a step they already tried. Do not end every reply with a question. If no useful new step is supported, plainly say what cannot be confirmed yet and keep the issue open; do not invent progress.
 Stay on the current issue. A calling, property-search or contract check does not establish why a card update failed. Never link unrelated checks or speculate that one issue "might indirectly affect" another. A repeated saved-card row is not proof of a duplicate charge. Do not claim a new card failed to save or became the billing card without direct evidence. Current account checks do not list saved cards or the default card.
