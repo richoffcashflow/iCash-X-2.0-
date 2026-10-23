@@ -12,7 +12,7 @@ let row,parent,admission,logs,claims,reads,patches,settlements,providerError;
 function reset(){row={...base};parent={...parentBase};admission=true;logs=[];claims=0;reads=0;patches=[];settlements=0;providerError=false;}
 const db=async(path,method='GET',body)=>{
  if(path.startsWith('icash_customer_phone_calls?')){if(method==='PATCH'){patches.push(body);Object.assign(row,body);}return [{...row}];}
- if(path==='rpc/icash_connect_customer_phone_call'){claims++;if(admission==='throw')throw Error(secret+' '+base.recipient_phone);return admission;}
+ if(path==='rpc/icash_connect_customer_phone_call'){claims++;if(admission==='throw')throw Error(secret+' '+base.recipient_phone);return admission&&row.state==='ringing'&&!row.connected_at&&!row.ended_at&&Date.parse(row.created_at)>=Date.now()-120000;}
  if(path==='rpc/icash_settle_customer_phone_call'){settlements++;return true;}
  throw Error('Unexpected fixture database action');
 };
@@ -38,6 +38,14 @@ try{
  reset();parent.to='+12025550999';assert.doesNotMatch(await run(),/<Dial/);rejected('parent_binding','invalid_parent_binding');
  reset();row.parent_sid='CA'+'f'.repeat(32);assert.doesNotMatch(await run(),/<Dial/);rejected('parent_binding','invalid_parent_binding');
  reset();providerError=true;assert.doesNotMatch(await run(),/<Dial/);rejected('provider_call_read','exception');
+ for(const state of ['dispatching','needs_review']){
+  reset();row.state=state;assert.match(await run(),/<Dial/);assert.equal(claims,1);
+  assert.equal(patches[0].state,'ringing','A canonical live signed callback recovers an incomplete dispatch receipt');
+  assert.equal(logs.length,0);
+ }
+ reset();row.state='needs_review';row.created_at=new Date(Date.now()-180000).toISOString();parent.date_created=row.created_at;
+ assert.doesNotMatch(await run(),/<Dial/);assert.equal(patches.length,0,'An expired parent cannot resume');
+ reset();row.state='needs_review';row.ended_at=created;assert.doesNotMatch(await run(),/<Dial/);assert.equal(patches.length,0,'Ended calls cannot resume');
  reset();assert.doesNotMatch(await run('connect',{params:{Digits:'1'}}),/<Dial/);rejected('transition','unexpected_transition');
  reset();row.ended_at=created;assert.doesNotMatch(await run(),/<Dial/);assert.equal(logs.length,0);
  reset();row.connection_type='phone';assert.doesNotMatch(await run('connect',{params:{Digits:'2'}}),/<Dial/);assert.equal(logs.length,0);

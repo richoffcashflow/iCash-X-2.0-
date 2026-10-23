@@ -117,5 +117,25 @@ assert.equal(Number(await val('select icash_opportunity_market_score($1,$2)',[ot
 await q("update icash_opportunity_outcomes set attempted=false where account_id=$1 and zip='75216'",[account]);
 const sellerInitiatedScore=Number(await val('select icash_opportunity_market_score($1,$2)',[account,'75216']));assert(sellerInitiatedScore>0&&sellerInitiatedScore<=1,'Seller-initiated responses cannot inflate market influence beyond its bound');
 for(const role of ['anon','authenticated'])assert.equal(await val("select has_function_privilege($1,'icash_workspace_opportunities(uuid,text,integer,integer,boolean)','execute')",[role]),false);
+// Apply the new evidence migration against the actual aggregation function.
+await db.exec(read('config/seller-response-policy.sql'));
+await db.exec(read('config/seller-optout-base-verbs.sql'));
+await db.exec('create table icash_sms_seller_openings(thread_id uuid primary key,account_id uuid,interest_message_id uuid)');
+await db.exec(read('config/outbound-filter-experiments.sql').match(/create function public\.icash_filter_sms_interest[\s\S]*?\$\$;/)[0]);
+await call(99,voicemail,[{role:'user',message:'At the tone, please record your message.'},{role:'user',message:'...'}],true);
+await db.exec(read('supabase/migrations/20261023175907_seller_call_contact_evidence.sql'));
+await q('select icash_refresh_opportunity_outcomes($1)',[account]);
+assert.equal(await val('select responded from icash_opportunity_outcomes where screening_id=$1',[voicemail]),false,'Historical automated audio stops counting as a response after derived refresh');
+assert.equal(await val('select interested from icash_opportunity_outcomes where screening_id=$1',[voicemail]),false,'A model interest flag cannot override automated audio');
+const smsYes=await screen(50),yesDeal=uuid(350),yesThread=uuid(351),questionId=uuid(352);
+await q("insert into icash_deal_files(id,account_id,screening_id,terms) values($1,$2,$3,'{}')",[yesDeal,account,smsYes]);
+await q("insert into icash_text_threads(id,account_id,deal_id,sender,recipient) values($1,$2,$3,'+12145550100','+12145550102')",[yesThread,account,yesDeal]);
+await q("insert into icash_text_messages(id,account_id,thread_id,direction,state,body,provider_id,created_at) values($1,$2,$3,'outgoing','delivered','Would you consider selling?','fixture-selling-question',now()-interval '1 minute')",[questionId,account,yesThread]);
+await q('insert into icash_sms_seller_openings values($1,$2,$3)',[yesThread,account,questionId]);
+await q("insert into icash_text_messages(account_id,thread_id,direction,state,body,provider_id) values($1,$2,'incoming','received','Yes','fixture-selling-reply')",[account,yesThread]);
+await db.exec("update icash_opportunity_refreshes set refreshed_at='-infinity'");
+await q('select icash_refresh_opportunity_outcomes($1)',[account]);
+assert.equal(await val('select interested from icash_opportunity_outcomes where screening_id=$1',[smsYes]),true,'Receipt-backed SMS selling interest reaches the same opportunity aggregate');
+assert.equal(await val('select icash_filter_sms_interest($1,$2)',[other,smsYes]),false,'Another account cannot inherit that response');
 console.log('Opportunity engine: mixed 3×/2× actual-usage settlement, VIP, idempotency, historical prices, funding wake, response pagination, no-answer/voicemail exclusion, bounded queue and tenant-isolated learning passed. Synthetic local fixtures only.');
 }catch(error){console.error(error.message);console.error(error.query??'');process.exitCode=1;}finally{await db.close();}

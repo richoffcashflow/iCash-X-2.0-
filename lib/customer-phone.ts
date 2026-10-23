@@ -3,6 +3,7 @@ import {db} from '@/lib/stripe-test';
 import {boundedBytes,createRecordingProviders} from '@/lib/required-call-recording-provider';
 import {verifiedTwilioForm,object,sid,uuid} from '@/lib/required-call-recording';
 import {twilioUsdChargeMicros} from '@/lib/twilio-usd-cost';
+import {reconcilePendingCustomerPhoneCalls} from './customer-phone-maintenance.ts';
 export const customerPhoneBase='https://www.geticashx.com/api/customer-phone';
 export const customerPhoneRecordingPolicy='customer-phone-recorded-v1';
 const terminal=new Set(['completed','failed','busy','no-answer','canceled']);
@@ -143,7 +144,16 @@ export async function customerPhoneWebhook(request:Request,part:string){
   if(part==='notice'&&c.connection_type==='browser'&&!c.ended_at&&bound(c,providerCall,true))return new Response('<Response><Say>This call is being recorded.</Say></Response>',{headers:{'Content-Type':'application/xml'}});
   if(part==='child'){if(!bound(c,providerCall,true))return reject('invalid_child_binding');stage='reconciliation';await reconcileCustomerPhoneCall(c,p);return hangup();}
   if(!bound(c,providerCall)||c.parent_sid&&c.parent_sid!==providerCall.sid)return reject('invalid_parent_binding');
-  if(!c.parent_sid){await db(`icash_customer_phone_calls?id=eq.${id}&parent_sid=is.null`,'PATCH',{parent_sid:providerCall.sid,state:'ringing',updated_at:new Date().toISOString()});c=(await getCustomerPhoneCall(id))!;}
+  if(!c.parent_sid){await db(`icash_customer_phone_calls?id=eq.${id}&account_id=eq.${c.account_id}&parent_sid=is.null`,'PATCH',{parent_sid:providerCall.sid,updated_at:new Date().toISOString()});c=(await getCustomerPhoneCall(id))!;}
+  // The initial dial response may be incomplete or lost while the canonical
+  // signed callback is already arriving. Parent discovery alone used to leave
+  // that proven live call in dispatching/needs_review, so the bridge rejected it.
+  // Recover only this fresh, bound parent; never redial or reopen ended work.
+  if(c.parent_sid===providerCall.sid&&!c.ended_at&&!c.connected_at&&['dispatching','needs_review'].includes(c.state)
+   &&['ringing','in-progress'].includes(String(providerCall.status))&&Date.parse(c.created_at)>=Date.now()-120000){
+   await db(`icash_customer_phone_calls?id=eq.${id}&account_id=eq.${c.account_id}&parent_sid=eq.${c.parent_sid}&state=eq.${c.state}&connected_at=is.null&ended_at=is.null&created_at=gte.${encodeURIComponent(new Date(Date.now()-120000).toISOString())}`,'PATCH',{state:'ringing',updated_at:new Date().toISOString()});
+   c=(await getCustomerPhoneCall(id))!;
+  }
   if(part==='status'||part==='done'||part==='recording'){stage='reconciliation';await reconcileCustomerPhoneCall(c,p);return hangup();}
   // Completed callbacks and a phone caller declining the DTMF prompt are normal.
   if(c.ended_at||!['in-progress','ringing'].includes(String(providerCall.status)))return hangup();
@@ -159,8 +169,7 @@ export async function customerPhoneWebhook(request:Request,part:string){
 }
 
 export async function maintainCustomerPhoneCalls(){
- const rows=await db<CustomerPhoneCall[]>(`icash_customer_phone_calls?settled_at=is.null&or=(parent_sid.not.is.null,connection_type.eq.browser)&order=updated_at.asc&limit=3&select=*`);
- const outcomes=await Promise.allSettled(rows.map(c=>reconcileCustomerPhoneCall(c)));
+ const reconciliation=await reconcilePendingCustomerPhoneCalls(db,reconcileCustomerPhoneCall);
  const expired=await db<CustomerPhoneCall[]>(`icash_customer_phone_calls?recording_sid=not.is.null&recording_deleted_at=is.null&recording_expires_at=lt.${encodeURIComponent(new Date().toISOString())}&order=recording_expires_at.asc&limit=3&select=*`);
  const deletions=await Promise.allSettled(expired.map(async c=>{
   const p=customerPhoneProvider();if(p.account!==c.provider_account_sid||!c.recording_sid)return false;
@@ -169,7 +178,7 @@ export async function maintainCustomerPhoneCalls(){
   if(r.status!=='deleted')await p.recordings.deleteRecording(c.recording_sid);
   await db(`icash_customer_phone_calls?id=eq.${c.id}&account_id=eq.${c.account_id}&recording_sid=eq.${c.recording_sid}`,'PATCH',{recording_state:'deleted',recording_deleted_at:new Date().toISOString()});
   return true;
- }));return {checked:outcomes.length,deleted:deletions.filter(x=>x.status==='fulfilled'&&x.value===true).length};
+ }));return {...reconciliation,deleted:deletions.filter(x=>x.status==='fulfilled'&&x.value===true).length};
 }
 
 export async function customerPhoneReadiness(accountId:string,screeningId:string){
