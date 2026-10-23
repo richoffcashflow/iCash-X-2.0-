@@ -17,6 +17,8 @@ empty pages receive platform coverage in the settlement transaction, preserving
 the real cost manifest, original debit and paired credit. Covered duplicates do
 not consume the customer's prospecting allowance. A separate idempotent correction
 RPC can restore an evidenced historical duplicate charge without changing history.
+Budget aggregates join the private coverage view once, avoiding repeated receipt
+function execution for every historical operation during scheduler selection.
 
 Nationwide accounts gain up to 200 additional ZIPs from fresh provider geography
 metadata. Existing positive-equity market count receipts seed the pool; one free
