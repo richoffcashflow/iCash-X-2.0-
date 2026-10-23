@@ -1,6 +1,6 @@
+begin;
 -- Shared admission for normal production calls. Existing call identities,
 -- recording approvals, credit settlement and unknown-outcome holds stay intact.
-begin;
 set local lock_timeout='5s';
 create table public.icash_voice_capacity_policy(
  id integer primary key check(id=1), workspace_limit integer not null check(workspace_limit between 1 and 40),
@@ -114,9 +114,7 @@ begin
  d:=replace(d,needle,needle||E'\n if (c.call_profile=''normal'' and not public.icash_voice_capacity_available(c.account_id,c.agent_id,''recorded-reception:''||p_call_sid,encode(sha256(convert_to(p_from_phone,''UTF8'')),''hex''),true)) or (c.call_profile<>''normal'' and exists(select 1 from icash_recorded_reception_private.sessions where call_ended_at is null)) then return jsonb_build_object(''allowed'',false,''reason'',''concurrency_limit'');end if;');
  execute d;
 end $patch$;
-commit;
 
-begin;
 set local lock_timeout='5s';
 -- Unknown capacity stays unknown until the buyer explicitly supplies it.
 alter table public.icash_network_buyers add column available_deals integer check(available_deals between 0 and 100);
@@ -203,9 +201,7 @@ begin
 end $$;
 revoke all on function public.icash_network_save_buyer(uuid,jsonb),public.icash_network_profile(uuid),public.icash_current_buyer_demand(text,bigint,bigint),public.icash_opportunity_market_score(uuid,text),public.icash_opportunity_score(uuid,jsonb,text),public.icash_network_demand(uuid),public.icash_network_feedback(uuid,uuid,text,uuid,text,bigint) from public,anon,authenticated;
 grant execute on function public.icash_network_save_buyer(uuid,jsonb),public.icash_network_profile(uuid),public.icash_current_buyer_demand(text,bigint,bigint),public.icash_opportunity_market_score(uuid,text),public.icash_opportunity_score(uuid,jsonb,text),public.icash_network_demand(uuid),public.icash_network_feedback(uuid,uuid,text,uuid,text,bigint) to service_role;
-commit;
 
-begin;
 set local lock_timeout='5s';
 create table public.icash_deal_recovery_authorizations(
  id uuid primary key,account_id uuid not null references public.icash_accounts(id),deal_id uuid not null references public.icash_deal_files(id),
