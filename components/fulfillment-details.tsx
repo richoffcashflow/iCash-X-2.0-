@@ -1,6 +1,8 @@
 'use client';
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
+import {DealRecoveryPanel} from './deal-recovery';
+import type {DealRecovery} from '@/lib/deal-recovery';
 import {BuyerOverview,type BuyerNetworkProgress,type BuyerSelection} from './buyer-overview';
 import {buyerOutreachMessage,type BuyerOutreachStatus} from '@/lib/buyer-outreach-status';
 import {ClosingSetup} from './closing-setup';
@@ -18,7 +20,7 @@ import {WorkspaceLoadStatus} from './workspace-load-status';
 import {TitleCompanyMessages} from './title-company-messages';
 import {recordWorkspaceExperience,type WorkspaceExperienceStage} from '@/lib/workspace-experience-client';
 type Progress={buyerOutreach?:BuyerOutreachStatus|null;proceedsReceipt?:ProceedsReceipt|null;dealStage?:string;buyerPricingReview?:string|null;buyerOutreachHeld?:boolean;closingSetup?:ClosingSetupView;buyerPackage?:{url:string;askingPriceCents:number;purchasePriceCents:number;assignmentFeeCents:number}|null;closingUpdates?:ClosingUpdate[];titleTasks?:TitleTask[];titleReplies?:{id:string;sender:string;subject:string;body_text:string;received_at:string;needs_review:boolean}[];title?:string|null;titleReady?:boolean;candidates?:{id:string;name:string}[];job?:{state:string;updated_at:string;result?:{buyerStatus:string;buyerCount:number;buyerDiscovery?:{status:string;canContinue:boolean};buyerTexts?:{status:string;accepted:number;held?:number};buyerEmail?:{status:string;accepted:number}}};documents:{id:string;kind:string}[];buyers:{buyer_id:string;name:string;rank:number;ready:boolean}[]};
-type FulfillmentProgress=Progress&{buyerNetwork?:BuyerNetworkProgress|null};
+type FulfillmentProgress=Progress&{buyerRecovery?:DealRecovery|null;buyerNetwork?:BuyerNetworkProgress|null};
 export function FulfillmentDetails({dealId,buyerReviewAvailable=false,coordination,propertyResult}:{dealId:string;buyerReviewAvailable?:boolean;coordination?:ReactNode;propertyResult?:unknown}){
  const [refresh,setRefresh]=useState(0),[selected,setSelected]=useState<BuyerSelection|null>(null);
  const [data,setData]=useState<FulfillmentProgress|null>(null),[error,setError]=useState(''),[sending,setSending]=useState(false),[titleMessage,setTitleMessage]=useState('');
@@ -45,6 +47,7 @@ export function FulfillmentDetails({dealId,buyerReviewAvailable=false,coordinati
    {!data.buyerPackage&&data.documents.filter(doc=>doc.kind==='buyer_package').map(doc=><button key={doc.id} type="button" onClick={()=>void download(doc)}>View prepared buyer package</button>)}
    {!!data.job?.result?.buyerTexts?.held&&<p>Some buyer texts are waiting for current contact eligibility or their contact hours.</p>}
   </>}
+  {data?.buyerRecovery&&<DealRecoveryPanel key={dealId+data.buyerRecovery.termsHash} dealId={dealId} data={data.buyerRecovery} onSaved={()=>setRefresh(v=>v+1)}/>}
   <WorkspacePanel id={`buyer-details-${dealId}`} title={selected?.buyer.name??'Buyers'} section="fulfillment" onOpenChange={refreshBuyerOnOpen}>
    {loadStatus('buyer')}
    {data&&<>

@@ -9,9 +9,11 @@ export const networkProfileSchema=z.object({
  maxPriceCents:z.number().int().min(100000).max(10000000000),
  maxRepairsCents:z.number().int().min(0).max(10000000000),
  dailyEmails:z.number().int().min(1).max(3),
+ availableDeals:z.number().int().min(0).max(100).nullable().optional(),
  accepted:z.literal(true),consentVersion:z.literal(networkConsentVersion),
 }).strict();
-export type NetworkProfile={name:string;email:string;zips:string[];propertyTypes:('house'|'land')[];maxPriceCents:number;maxRepairsCents:number;dailyEmails:number;paused:boolean;expiresAt:string};
+export type NetworkProfile={name:string;email:string;zips:string[];propertyTypes:('house'|'land')[];maxPriceCents:number;maxRepairsCents:number;dailyEmails:number;availableDeals?:number|null;paused:boolean;expiresAt:string};
+export const networkResponseSchema=z.object({matchId:z.string().uuid(),state:z.enum(['interested','passed']),key:z.string().uuid().optional(),reason:z.enum(['price','repairs','timing','location','capacity','other']).optional(),counterofferCents:z.number().int().min(100000).max(10000000000).multipleOf(100000).optional()}).strict().refine(v=>!v.reason||!!v.key).refine(v=>v.counterofferCents===undefined||v.reason==='price');
 export type NetworkMatch={id:string;state:'matched'|'interested'|'replied';address:string;askingPriceCents:number;url:string;createdAt:string};
 export type NetworkWorkspace={vip:boolean;hasActiveDeal?:boolean;enrolledBuyers:number;settings:{enabled:boolean;mailingAddress:string}|null;matches:number;emailed:number;interested:number;responses:number;buyers:{id:string;dealId:string;name:string;email:string;address:string;respondedAt:string;state:'interested'|'replied';reply:string|null}[]};
 export function networkError(error:unknown){

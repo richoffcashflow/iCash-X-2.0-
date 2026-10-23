@@ -13,6 +13,7 @@ const {GET}=await loadService('app/api/work/fulfillment/route.ts',{
   if(path==='rpc/icash_buyer_package_data')return null;
   if(path==='rpc/icash_buyer_outreach_status'){assert.deepEqual(body,{p_account:accountId,p_deal:dealId});return outreach;}
   if(path==='rpc/icash_unreleased_buyer_pricing')return null;
+  if(path==='rpc/icash_deal_recovery'){assert.deepEqual(body,{p_account:accountId,p_deal:dealId});return null;}
   if(path==='rpc/icash_saved_closers')return [];
   if(path==='rpc/icash_network_workspace'){assert.deepEqual(body,{p_account:accountId,p_deal:dealId});return {vip:true,matches:2,emailed:1,responses:1,buyers:[{id:'response-1',name:'Fixture Buyer',state:'replied',reply:'Is a visit possible?',email:'private-fixture@example.invalid'}]};}
   assert.equal(method,'GET','loading guidance never changes work controls or sends messages');return [];
