@@ -41,10 +41,12 @@ try{
  for(const role of ['anon','authenticated']){await pg.exec('reset role;set role '+role);await assert.rejects(()=>q('select * from icash_course_progress'));await assert.rejects(()=>rpc('icash_read_course_progress',{p_account:account}));await assert.rejects(()=>rpc('icash_record_course_progress',input));}
 }finally{await pg.close();}
 const ready=['work','credits','readiness'].map(key=>({key,status:'ok',detail:'Ready',source:'fixture',observedAt:'2026-10-17T23:00:00Z'}));
-for(const [state,percent,expected] of [['unrecorded',null,/don’t see playback recorded/],['in_progress',25,/Finish the Course/],['completed',100,/Keep it running/]]){
+for(const [state,percent] of [['unrecorded',null],['in_progress',25],['completed',100]]){
  const course=courseProgressEvidence({state,percent,revision:2});
  const answer=supportConversationFallback({kind:'account',messages:[{role:'user',content:'How do I get clients?'}],evidence:[...ready,{key:'course',source:'fixture',observedAt:'2026-10-17T23:00:00Z',...course}]});
- assert.match(answer.reply,expected);if(state==='completed')assert.doesNotMatch(answer.reply,/haven.t watched|Finish the Course|Watch the Course/);
+ assert.match(answer.reply,/bot finds and works eligible seller leads automatically/);
+ assert.doesNotMatch(answer.reply,/playback|Course|credits?|readiness|Keep it running/i,'A question about how leads arrive does not request a course or account-check report');
+ assert.equal(answer.status,'resolved');
 }
 assert.match(courseProgressEvidence({state:'unavailable',percent:null,revision:null}).detail,/Do not infer/);
 console.log('PASS course progress: played ranges, seeking, deduplicated cross-device coverage, current-video binding, tenant/auth/CSRF/rate boundaries, private grants and grounded support guidance. No external calls.');
