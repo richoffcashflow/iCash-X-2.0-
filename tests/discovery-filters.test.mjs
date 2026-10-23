@@ -42,7 +42,7 @@ for(const [strategy,extra] of [['baseline',null],['vacant','is_vacant_home'],['a
  const filters=discoveryFilters(strategy);assert.equal(filters[0].filter_id,'property_type');assert.equal(filters[1].value,70);assert.equal(filters.at(-1).filter_id,extra??'estimated_equity_percentage');
  const plan={version:discoveryFilterVersion,strategy,providerPage:7,mode:'explore'},calls=[];let saved;
  await discoverPage({zip:'75217',page:40,perPage:5,unitCostMicros:10000,quotedDataCostMicros:50000,filterPlan:plan},{
- request:async body=>{calls.push(body);return body.estimate_cost?{estimated_credits:{this_page:1,breakdown:{people:0}}}:{data:[],credits:{used:0,people:0},pagination:{has_next_page:true}};},reserveAndClaim:async()=>true,persist:async r=>{saved=r;}});
+ request:async body=>{calls.push(body);return body.estimate_cost?{estimated_credits:{this_page:1,breakdown:{people:0}}}:{data:[],credits:{used:0,people:0},pagination:{has_next_page:true}};},reserveAndClaim:async()=>true,persist:async r=>{saved=r;return r.rows.length;}});
  assert.equal(calls[0].page,7,'Provider cursor is independent of operation sequence');assert.deepEqual({...calls[0],estimate_cost:false},calls[1]);assert.deepEqual(saved.filterPlan,plan);
 }
 console.log('Filter cohorts: balanced exploration, same-day learning, delayed outcomes, cost/opt-out scoring, bounded cooling, independent cursors and identical estimated/paid inputs passed.');

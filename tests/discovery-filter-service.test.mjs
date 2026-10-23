@@ -14,6 +14,8 @@ const svc=await loadService('lib/discovery-service.ts',{
   if(path.startsWith('icash_operation_rates'))return [{enabled:true,operation:'property_search',expires_at:'2099-01-01',costs_micros:{dealmachine:50000}}];
   if(path.startsWith('icash_operation_spend'))return existing?[{state:'dispatched'}]:[];
   rpc.push({path,body});
+  if(path==='rpc/icash_prepare_discovery_inventory')return 'ready';
+  if(path==='rpc/icash_save_filtered_discovery'||path==='rpc/icash_save_discovery')return 0;
   if(path==='rpc/icash_discovery_filter_state_v2')return disabled?null:discoveryStrategies.map(strategy=>({strategy,nextPage:3,exhausted:false,pages:0,attempted:0,pendingAttempts:0,recentUnproductivePages:0,matureAttempts:0,interested:0,optedOut:0,costCents:0,costsComplete:true}));
   if(path.includes('reserve_and_claim'))events.push('claim');
   return true;
@@ -24,7 +26,7 @@ globalThis.fetch=async(url,opt)=>{
  if(!body.estimate_cost&&failPaid)throw Error('uncertain receipt');
  return new Response(JSON.stringify(body.estimate_cost?{estimated_credits:{this_page:empty?0:1,breakdown:{people:0}}}:{data:[],credits:{used:0,people:0},pagination:{has_next_page:true}}),{status:response});
 };
-assert.equal((await svc.discoverForAccount('account')).status,'screening_queued');assert.deepEqual(events,['estimate','claim','paid']);
+assert.equal((await svc.discoverForAccount('account')).status,'no_new_properties');assert.deepEqual(events,['estimate','claim','paid']);
 assert.equal(rpc.find(x=>x.path==='rpc/icash_reserve_and_claim_filtered_discovery').body.p_plan.strategy,'vacant');
 assert(rpc.some(x=>x.path==='rpc/icash_save_filtered_discovery'));assert(rpc.some(x=>x.path==='rpc/icash_settle_dealmachine_usage'));
 events=[];rpc=[];response=422;assert.equal((await svc.discoverForAccount('account')).status,'empty');assert.deepEqual(events,['estimate']);assert.equal(rpc.at(-1).body.p_reason,'unavailable');

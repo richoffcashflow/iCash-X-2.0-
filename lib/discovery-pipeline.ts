@@ -3,7 +3,7 @@ import {discoveryFilters,discoveryFilterPlanValid,type DiscoveryFilterPlan} from
 import {propertyImageFields} from './property-photo.ts';
 export const discoveryFields=['dm_property_id','full_address','legal_description','address','city','state','zip','estimated_value','estimated_equity_percentage','estimated_equity_amount','total_estimated_loan_balance','has_active_lien','has_hoa_lien','num_total_active_liens','num_total_open_liens','total_open_lien_amount','is_tax_delinquent','is_free_and_clear','estimated_repair_cost','building_condition','living_area_sqft','num_bedrooms','num_bathrooms','year_built'];
 export type DiscoveryConfig={zip:string;page:number;perPage:number;unitCostMicros:number;quotedDataCostMicros:number;filterPlan?:DiscoveryFilterPlan};
-type Dependencies={request:(body:object)=>Promise<unknown>;reserveAndClaim:()=>Promise<boolean>;persist:(result:DiscoveryResult)=>Promise<void>};
+type Dependencies={request:(body:object)=>Promise<unknown>;reserveAndClaim:()=>Promise<boolean>;persist:(result:DiscoveryResult)=>Promise<number>};
 export type DiscoveryResult={creditsUsed:number;peopleCredits:number;estimatedCredits:number;hasNextPage:boolean;fetchedAt:string;rows:Record<string,unknown>[];filterPlan?:DiscoveryFilterPlan};
 const integer=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 export async function discoverPage(c:DiscoveryConfig,d:Dependencies){
@@ -36,6 +36,7 @@ export async function discoverPage(c:DiscoveryConfig,d:Dependencies){
  });
  // Persist reported spend even if the provider exceeded its estimate; reconciliation handles overrun.
  const result:DiscoveryResult={creditsUsed:raw.credits.used,peopleCredits:0,estimatedCredits:credits,hasNextPage:raw.pagination.has_next_page,fetchedAt:new Date().toISOString(),rows,...(c.filterPlan?{filterPlan:c.filterPlan}:{})};
- await d.persist(result);
- return {status:raw.credits.used>credits?'needs_reconciliation' as const:'screening_queued' as const,properties:rows.length};
+ const queued=await d.persist(result);
+ if(!integer(queued)||queued>rows.length)throw Error('DISCOVERY_DELIVERY_REQUIRES_RECONCILIATION');
+ return {status:raw.credits.used>credits?'needs_reconciliation' as const:queued>0?'screening_queued' as const:'no_new_properties' as const,properties:queued,returnedProperties:rows.length};
 }

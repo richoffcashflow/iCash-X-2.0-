@@ -12,6 +12,7 @@ const discovery=await loadService('lib/discovery-service.ts',{
  acquisitionContractCoverage:async()=>{throw Error('Property research must not query contract coverage');},
  db:async path=>{
   calls.push(path);
+  if(path==='rpc/icash_prepare_discovery_inventory')return 'ready';
   if(path.startsWith('icash_discovery_configs'))return [{enabled:true,exhausted:false,zip:'38118',data_rights_until:rights,per_page:5,rate_id:'rate',property_credit_micros:10000,next_page:1,revision:'revision'}];
   if(path.startsWith('icash_bot_setups'))return [];
   if(path.startsWith('icash_accounts'))return [{bot_paused:paused}];
