@@ -9,6 +9,7 @@ const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,account=id(1
 try{
  await pg.exec(`create role anon;create role authenticated;create role service_role;
  create schema icash_recorded_reception_private;
+ create schema icash_recording_private;
  create table icash_operating_budget(id integer primary key,enabled boolean);insert into icash_operating_budget values(1,true);
  create table icash_accounts(id uuid primary key,bot_paused boolean default false);
  create table icash_wallets(account_id uuid primary key,balance_cents bigint);
@@ -17,7 +18,9 @@ try{
  create table icash_contact_permissions(id uuid,account_id uuid);
  create table icash_voice_contact_targets(id uuid,account_id uuid,screening_id uuid,contact_key text,phone text,party text default 'seller',eligibility_source text default 'operational_checks_only',revoked_at timestamptz,permission_until timestamptz default now()+interval '1 day',dnc_clear boolean default true,dnc_checked_at timestamptz default now(),timezone text default 'America/Chicago');
  create table icash_live_conversations(id uuid,account_id uuid,operation_key text,agent_id text,contact_key text,state text);
- create table icash_call_recordings(id uuid,account_id uuid,operation_key text,agent_id text,contact_key text,call_ended_at timestamptz,voice_job_id uuid);
+ create table icash_call_recordings(id uuid,account_id uuid,operation_key text,agent_id text,contact_key text,call_ended_at timestamptz,voice_job_id uuid,call_sid text);
+ create table icash_recorded_gate_terminal_receipts(recording_id uuid,account_id uuid,call_sid text,receipt jsonb);
+ create table icash_recording_private.terminal_cost_receipts(recording_id uuid,receipt jsonb);
  create table icash_recorded_reception_private.configs(id uuid,account_id uuid,agent_id text,branch_id text,enabled boolean,call_profile text);
  create table icash_recorded_reception_private.sessions(id uuid,account_id uuid,operation_key text,agent_id text,contact_key text,call_ended_at timestamptz);
  create table icash_recorded_reception_private.cost_policies(id uuid);
@@ -44,6 +47,20 @@ try{
  }
  await q("insert into icash_operation_rates values($1,'seller_call',600)",[rate]);
  await val("select icash_save_voice_capacity(4,'[{\"agentId\":\"agent_fixture\",\"limit\":4}]','LOCAL fixture')");
+ // Historical gate-only calls may have no call_ended_at. Only bound terminal
+ // receipts release their capacity; neither age nor a failed state does so.
+ await q("insert into icash_call_recordings(id,account_id,operation_key,agent_id,contact_key,call_sid) values($1,$2,'historical:gate','agent_fixture','old-contact','CAfixture')",[id(91),account]);
+ assert.equal(await val("select count(*) from icash_active_voice_slots() where operation_key='historical:gate'"),1);
+ await q("insert into icash_recorded_gate_terminal_receipts values($1,$2,'wrong-call','{\"status\":\"completed\"}')",[id(91),account]);
+ assert.equal(await val("select count(*) from icash_active_voice_slots() where operation_key='historical:gate'"),1,'mismatched receipt retains capacity');
+ await pg.exec("update icash_recorded_gate_terminal_receipts set call_sid='CAfixture'");
+ assert.equal(await val("select count(*) from icash_active_voice_slots() where operation_key='historical:gate'"),0,'terminal receipt works before cost settlement');
+ await pg.exec('delete from icash_recorded_gate_terminal_receipts');
+ await q("insert into icash_recording_private.terminal_cost_receipts values($1,'{\"callSid\":\"CAfixture\",\"status\":\"completed\"}')",[id(91)]);
+ assert.equal(await val("select count(*) from icash_active_voice_slots() where operation_key='historical:gate'"),0,'historical settled receipts also release capacity');
+ await q("insert into icash_live_conversations values($1,$2,'historical:ended','agent_fixture','old-contact','review')",[id(92),account]);
+ await q("insert into icash_call_recordings(id,account_id,operation_key,agent_id,contact_key,call_ended_at) values($1,$2,'historical:ended','agent_fixture','old-contact',now())",[id(92),account]);
+ assert.equal(await val("select count(*) from icash_active_voice_slots() where operation_key='historical:ended'"),0,'ended calls awaiting analysis do not reserve a call slot');
  const add=async(n,a=account,state='ready',contact='contact-'+n)=>{
   await q('insert into icash_voice_contact_targets(id,account_id,screening_id,contact_key,phone) values($1,$2,$1,$3,$4)',[id(n),a,contact,'+1214555'+String(n).padStart(4,'0')]);
   await q("insert into icash_screening_jobs values($1,$2,'complete',jsonb_build_object('propertyId',$3::text))",[id(n),a,'prop_'+n]);
