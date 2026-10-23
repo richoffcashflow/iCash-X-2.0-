@@ -29,6 +29,7 @@ try{
  create function icash_webinar_report_with_funnel(text,text) returns jsonb language sql as $$select to_jsonb(count(*)) from public.icash_webinar_sessions$$;`);
  const sql=readFileSync(new URL('../config/legacy-customer-launch.sql',import.meta.url),'utf8');
  await pg.exec(sql);await pg.exec(readFileSync(new URL('../config/legacy-customer-phone-stop.sql',import.meta.url),'utf8'));await pg.exec(readFileSync(new URL('../config/legacy-launch-checkout-binding.sql',import.meta.url),'utf8'));
+ await pg.exec(readFileSync(new URL('../config/legacy-enqueue-bounded.sql',import.meta.url),'utf8'));
  const q=(s,a=[])=>pg.query(s,a),v=async(s,a=[])=>(await q(s,a)).rows[0].value;
  await q("insert into icash_legacy_launches(id,slug,title,steps) values($1,'launch','Launch',$2)",[id(1),JSON.stringify(launchSteps)]);
  const customer=(n,extra={})=>({email:`person${n}@example.invalid`,phone:null,name:'Customer',source:'whop',sourceIds:[`payment${n}`],products:['Any course'],lastPurchaseAt:'2026-01-01T12:00:00Z',emailPermission:true,smsPermission:false,...extra});
@@ -64,8 +65,25 @@ try{
  await imp([customer(8)]);await q("insert into icash_memberships(id,mode,payer_email) values($1,'live','different-receipt@example.invalid')",[id(13)]);await v('select icash_legacy_checkout_bind($1,$2) as value',[await cid(8),id(13)]);
  await q("insert into icash_membership_invoices values('in_bound',$1,'pi_bound',now())",[id(13)]);assert.equal(await admit(8),false,'Personal checkout stops follow-ups even when receipt email changes');
  await v('select icash_legacy_save($1,1,$2) as value',[id(1),JSON.stringify(launchSteps)]);assert.equal(await v('select state as value from icash_legacy_launches'),'draft');
+ // LOCAL pagination regression: all suppressed first-page contacts must not starve
+ // eligible later contacts; final payment/opt-out checks stay authoritative.
+ await q("update icash_legacy_launches set state='active',approved_revision=revision,approved_at=now(),history_reviewed_at=now(),started_at=now()-interval '1 day',steps='[{\"id\":\"batch\",\"day\":0,\"channel\":\"email\",\"body\":\"fixture\"}]'");
+ await q('delete from icash_legacy_enqueue_cursors');
+ await imp(Array.from({length:500},(_,i)=>customer(1000+i)));
+ await imp(Array.from({length:20},(_,i)=>customer(1500+i)));
+ await q("update icash_legacy_contacts set created_at=now()-interval '10 days' where email like 'person1%@example.invalid'");
+ await q("update icash_legacy_contacts set suppressed_reason='fixture stop' where id in(select id from icash_legacy_contacts order by id limit 250)");
+ assert.equal(await v('select icash_legacy_enqueue() as value'),0,'Empty eligible page still advances cursor');
+ const cursor1=await v('select after_contact::text as value from icash_legacy_enqueue_cursors');
+ assert(await v('select icash_legacy_enqueue() as value')>0,'Later eligible contacts are reached');
+ assert.notEqual(await v('select after_contact::text as value from icash_legacy_enqueue_cursors'),cursor1);
+ await v('select icash_legacy_enqueue() as value');
+ const expected=await v("select count(*) as value from icash_legacy_contacts where icash_legacy_admit(id,'email')");
+ assert.equal(await v("select count(*) as value from icash_legacy_outbox where step_id='batch'"),expected);
+ for(let i=0;i<3;i++)await v('select icash_legacy_enqueue() as value');
+ assert.equal(await v("select count(*) as value from icash_legacy_outbox where step_id='batch'"),expected,'Cursor wrap never duplicates jobs');
  for(const role of ['anon','authenticated']){
-  for(const table of ['icash_legacy_launches','icash_legacy_contacts','icash_legacy_outbox','icash_legacy_visitors'])assert.equal(await v('select has_table_privilege($1,$2,\'select,insert,update\') as value',[role,table]),false);
+  for(const table of ['icash_legacy_launches','icash_legacy_contacts','icash_legacy_outbox','icash_legacy_visitors','icash_legacy_enqueue_cursors'])assert.equal(await v('select has_table_privilege($1,$2,\'select,insert,update\') as value',[role,table]),false);
   assert.equal(await v("select has_function_privilege($1,'icash_legacy_import(uuid,jsonb)','execute') as value",[role]),false);
  }
 }finally{await pg.close();}

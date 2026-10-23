@@ -89,7 +89,8 @@ try{
  await pg.exec(fn('config/fulfillment-completion.sql','icash_settle_complete_costs'));
  await pg.exec(read('config/required-call-recording.sql'));await pg.exec(read('config/recording-consent-evidence-v4.sql'));await pg.exec(read('config/required-call-recording-consent-v4.sql'));
  await pg.exec(read('tests/required-call-recording-database.sql'));
- if(process.env.RECORDING_GATE_SETTLEMENT_ONLY==='1'){await (await import('../tests/helpers/recording-gate-settlement-fixture.mjs')).testRecordingGateSettlement({pg,q,rpc,read,scenario,trans,get,bound,createArgs,context,account,permission,operation,ac,call,admin});}
+ if(process.env.RECORDING_BACKOFF_ONLY==='1'){await (await import('../tests/helpers/recording-backoff-fixture.mjs')).testRecordingBackoff({pg,q,rpc,read,scenario,trans,get,bound,account,operation,ac,call,rec,nonce,stop,admin,claim,finish});}
+ else if(process.env.RECORDING_GATE_SETTLEMENT_ONLY==='1'){await (await import('../tests/helpers/recording-gate-settlement-fixture.mjs')).testRecordingGateSettlement({pg,q,rpc,read,scenario,trans,get,bound,createArgs,context,account,permission,operation,ac,call,admin});}
  else if(process.env.RECORDING_FINAL_CLOCK_ONLY==='1'){await (await import('../tests/helpers/outbound-final-clock-fixture.mjs')).testOutboundFinalClock({pg,q,rpc,read,scenario,trans,get,context,account,operation,ac,call,rec,nonce,stop,policy,admin,claim,finish});}
  else if(process.env.RECORDING_DIRECT_ONLY==='1'){await (await import('../tests/helpers/direct-recorded-outbound-fixture.mjs')).testDirectRecordedOutbound({pg,q,rpc,read,scenario,trans,get,context,account,permission,operation,ac,call,rec,admin});}else{
  await scenario('service-only ACL and actual anon/auth/public denials',async()=>{
