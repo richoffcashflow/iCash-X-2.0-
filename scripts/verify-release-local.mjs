@@ -7,7 +7,7 @@ const suites = [
  'owner-accounts-database', 'owner-accounts-routes',
  'seller-interest-experiments', 'shared-learning-policy', 'shared-learning-database', 'shared-learning-routes',
  'discovery-filters', 'discovery-filter-service', 'discovery-filter-database', 'discovery-pipeline', 'unique-outbound-inventory', 'inventory-geographies', 'inventory-scheduler-budget-cache', 'owner-enrichment',
- 'seller-work-progress', 'outreach-research-liveness', 'account-bound-inbound-priority', 'support-outreach', 'bot-activity',
+ 'seller-work-progress', 'outreach-research-liveness', 'account-bound-inbound-priority', 'sms-opener-recovery-liveness', 'sms-reconciliation-research-liveness', 'support-outreach', 'bot-activity',
  'legacy-customer-launch', 'legacy-launch-ad-isolation', 'checkout-customer-context',
  'first-contact-hours', 'first-contact-voice-hours', 'voice-daytime-policy', 'seller-phone-call-spacing',
  'voice-queue-candidate-fence', 'voice-queue-candidate-validation', 'voice-queue-prior-route-scan', 'voice-channel-candidate-fence', 'voice-account-fairness', 'operational-preparation-candidate-fence',
