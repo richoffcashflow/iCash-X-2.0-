@@ -4,6 +4,7 @@ import {spawnSync} from 'node:child_process';
 const suites = [
  'close-capacity', 'close-conversion-database', 'close-conversion-routes',
  'owner-accounts-database', 'owner-accounts-routes',
+ 'seller-interest-experiments', 'shared-learning-policy', 'shared-learning-database', 'shared-learning-routes',
  'discovery-filters', 'discovery-filter-service', 'discovery-filter-database', 'discovery-pipeline', 'owner-enrichment',
  'seller-work-progress', 'support-outreach', 'bot-activity',
  'legacy-customer-launch', 'legacy-launch-ad-isolation', 'checkout-customer-context',

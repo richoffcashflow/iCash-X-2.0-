@@ -36,6 +36,19 @@ export function sharedLearningWinner(raw:unknown,choices:readonly string[],requi
  const ranked=[...stats].sort((a,b)=>learningScore(b,objective)-learningScore(a,objective)||a.variant.localeCompare(b.variant));
  return learningScore(ranked[0],objective)>0?{variant:ranked[0].variant,objective}:null;
 }
+export const sellerInterestVariants=['ownership_as_is_v2','ownership_cash_v2','ownership_timing_v2'] as const;
+/** Mirrors the SQL seller text allocator; pending observations never inflate yield. */
+export function sellerInterestWinner(raw:unknown,choices:readonly string[]=sellerInterestVariants){
+ const stats=sharedLearningStats(raw).filter(s=>choices.includes(s.variant));
+ if(choices.length<2||stats.length!==choices.length||!stats.every(s=>sharedEvidenceReady(s)&&s.costs_complete&&s.effective_cost_cents>0))return null;
+ const objective=learningObjective(stats);
+ const score=(s:SharedLearningStat)=>{
+  const trials=objective==='closings'?s.effective_closing_trials:objective==='contracts'?s.effective_contract_trials:s.effective_attempts;
+  return Math.max(0,learningLower(s[`effective_${objective}`],trials)*trials-0.5*s.effective_opted_out)/(s.effective_cost_cents+1000);
+ };
+ const ranked=[...stats].sort((a,b)=>score(b)-score(a)||a.variant.localeCompare(b.variant));
+ return score(ranked[0])>0?{variant:ranked[0].variant,objective}:null;
+}
 export const platformLearningReportSchema=z.object({
  version:z.literal('shared-v1'),checkedAt:z.string(),minimumAccounts:z.literal(3),contributionCap:z.literal(200),maxLearnedShare:z.literal(0.6),
  dueAccounts:count.int(),failedAccounts:count.int(),lastRefresh:z.string().nullable(),cohortsTruncated:z.boolean(),recoveryEnabled:count.int(),filterEnabled:z.boolean(),
