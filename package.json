@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "node --experimental-strip-types scripts/check-owner-recording-audio-20261016.mjs && node scripts/prepare-reception-prompts.mjs && node --experimental-strip-types scripts/prepare-browser-calling.mjs && node scripts/check-contact-rpcs.mjs && next build && node --experimental-strip-types scripts/check-seller-meta-connection.mjs && node --experimental-strip-types scripts/check-meta-lead-connection.mjs",
+    "build": "node --experimental-strip-types scripts/check-call-receipts-20261023.mjs && node --experimental-strip-types scripts/check-owner-recording-audio-20261016.mjs && node scripts/prepare-reception-prompts.mjs && node --experimental-strip-types scripts/prepare-browser-calling.mjs && node scripts/check-contact-rpcs.mjs && next build && node --experimental-strip-types scripts/check-seller-meta-connection.mjs && node --experimental-strip-types scripts/check-meta-lead-connection.mjs",
     "start": "next start",
     "test": "node scripts/test-all.mjs",
     "dealmachine:preflight": "node --experimental-strip-types scripts/dealmachine-preflight.mjs",

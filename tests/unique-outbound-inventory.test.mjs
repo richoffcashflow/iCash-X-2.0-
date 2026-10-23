@@ -73,6 +73,16 @@ const settle=async(a,p)=>{await reserveCredit(a,p);await q("select icash_finish_
 assert.equal(await claim(account,1,1),true);
 assert.equal(await claim(other,1,1),false,'Identical unknown provider page cannot dispatch twice');
 assert.equal(await save(account,1,1),5);await settle(account,1);
+assert.equal(Number(await val('select duplicate_properties from icash_discovery_inventory_receipts where operation_key=$1',[op(account,1)])),5,'Reproduce the correlated id counter bug before the forward migration');
+await db.exec(`
+ create function icash_research_admission_quote(uuid,text,bigint) returns bigint language sql as $$select $3$$;
+ create function icash_research_waiting_on_outreach(uuid) returns boolean language sql as $$select false$$;
+ create function icash_enrichment_before_prospecting_budget(uuid) returns uuid language sql as $$select null::uuid$$;
+ create function icash_search_due_before_prospecting_budget(uuid) returns boolean language sql as $$select true$$;
+`);
+const correction=read('supabase/migrations/20261023174128_discovery_receipt_reliability.sql');
+await db.exec(correction);
+assert.equal(Number(await val('select duplicate_properties from icash_discovery_inventory_receipts where operation_key=$1',[op(account,1)])),0,'Forward migration repairs productive historical counters');
 assert.equal(Number(await val('select balance_cents from icash_wallets where account_id=$1',[account])),2494,'New property work keeps its normal charge');
 await q("insert into icash_usage_coverage(operation_key,account_id,gross_cents,customer_cents,covered_cents,evidence_ref) values($1,$2,6,4,2,'Synthetic unrelated coverage')",[op(account,1),account]);
 assert.equal(Number(await val('select icash_prospecting_available($1)',[account])),494,'Unrelated coverage does not alter the established search allowance');
@@ -82,7 +92,11 @@ assert.equal(Number(await val('select count(*) from icash_operation_spend where 
 assert.equal(Number(await val('select count(*) from icash_screening_jobs where account_id=$1',[other])),0,'Other customer gets no copied leads');
 assert.equal(await claim(other,1,1),false,'Final claim repeats the occupied-page check');
 assert.equal(await claim(other,1,2),true);
+assert.equal(await val('select icash_outbound_search_due($1)',[other]),false,'An unresolved dispatched page cannot mint more discovery tickets');
+assert.equal(await val('select icash_outbound_search_due($1)',[account]),true,'One unresolved account does not block another account');
 assert.equal(await save(other,1,2),0,'Overlapping unknown page produces no fake research');
+assert.equal(Number(await val('select duplicate_properties from icash_discovery_inventory_receipts where operation_key=$1',[op(other,1)])),5,'All-duplicate page remains eligible for platform coverage');
+assert.equal(await val('select icash_outbound_search_due($1)',[other]),true,'A saved result advances the page and resumes discovery');
 await settle(other,1);
 assert.equal(Number(await val('select balance_cents from icash_wallets where account_id=$1',[other])),2500,'Duplicate page costs are covered in the settlement transaction');
 assert.equal(Number(await val('select sum(delta_cents) from icash_credit_ledger where account_id=$1',[other])),0);
@@ -114,6 +128,15 @@ assert.equal(Number(await val('select icash_credit_duplicate_discovery($1,$2)',[
 assert.equal(Number(await val('select actual_micros from icash_operation_spend where operation_key=$1',[legacy])),40000,'Historical cost preserved');
 assert.equal(Number(await val('select delta_cents from icash_credit_ledger where event_key=$1',['usage:'+legacy])),-6);
 assert.equal(Number(await val('select balance_cents from icash_wallets where account_id=$1',[uuid(5)])),2500);
+// Mixed pages count only the genuinely new assignments as delivered inventory.
+const mixed=[rows[0],rows[1],...rows.slice(2).map(r=>({...r,dm_property_id:r.dm_property_id+'_new'}))];
+await q("update icash_discovery_filter_cursors set next_page=9 where account_id=$1 and strategy='baseline'",[uuid(5)]);
+assert.equal(await claim(uuid(5),2,9),true);assert.equal(await save(uuid(5),2,9,mixed),3);
+const receipt=(await q('select returned_properties,queued_properties,duplicate_properties from icash_discovery_inventory_receipts where operation_key=$1',[op(uuid(5),2)])).rows[0];
+assert.deepEqual(receipt,{returned_properties:5,queued_properties:3,duplicate_properties:2});
+assert.equal(await val('select icash_discovery_no_new_inventory($1,$2)',[uuid(5),op(uuid(5),2)]),false,'A productive mixed page cannot be treated as entirely duplicated');
+await db.exec(correction);
+assert.deepEqual((await q('select returned_properties,queued_properties,duplicate_properties from icash_discovery_inventory_receipts where operation_key=$1',[op(uuid(5),2)])).rows[0],receipt,'Reapplying correction cannot damage accurate mixed counters');
 // Metadata changes cannot widen a saved explicit customer ZIP.
 await q("insert into icash_bot_setups(account_id,guest_hash,variant,profile) values($1,repeat('e',64),'ownership','{\"marketMode\":\"city\",\"market\":\"75217\"}')",[uuid(5)]);
 assert.equal(Number(await val('select icash_expand_inventory_markets($1)',[uuid(5)])),0);

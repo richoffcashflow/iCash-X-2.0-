@@ -2,6 +2,7 @@ import {voiceResult,emptyQuotaRejection,type VoiceConversation} from './voice-re
 import {isContactOptOut} from './contact-intent.ts';
 import {sellerCallDisposition} from './seller-response-policy.ts';
 import {conversationTrustInstructions} from './conversation-trust.ts';
+import {callContactEvidence,hasHumanCallWords,automatedAnswerInstructions} from './call-contact-evidence.ts';
 
 /** Stable variants are assigned before contact; never rotate an opener mid-conversation. */
 export const acquisitionOpeners={
@@ -42,29 +43,30 @@ export function liveConversationResult(c:VoiceConversation,expected:{conversatio
  // Removing only that ungrounded flag also preserves an otherwise valid callback.
  const source=expected.party==='seller'&&c.analysis?{...c,analysis:{...c.analysis,data_collection_results:{...c.analysis.data_collection_results,opted_out:{value:false}}}}:c;
  const r=voiceResult(source,expected,now);if(!r)return null;
+ const contactEvidence=callContactEvidence(r.transcript),humanResponse=contactEvidence==='human_response';
  const fields=c.analysis?.data_collection_results??{};
  const quote=(name:string)=>{
   const v=fields[name]?.value;
-  return typeof v==='string'&&v.trim().length>=3&&r.transcript.some(t=>t.role==='user'&&t.message.includes(v))?v:null;
+  return typeof v==='string'&&v.trim().length>=3&&r.transcript.some(t=>t.role==='user'&&hasHumanCallWords(t.message)&&t.message.includes(v))?v:null;
  };
  const humanQuote=quote('human_request_quote');
  // A conservative pause is preferable to ignoring an explicit request, even if extraction omitted a quote.
- const humanRequested=fields.human_requested?.value===true||r.transcript.some(t=>t.role==='user'&&/\b(speak|talk) (?:to|with) (?:a |an |the |your )?(?:human|person|manager|owner|supervisor|representative)\b|\breal person\b|\bhave (?:someone|a person) call me\b/i.test(t.message));
+ const humanRequested=humanResponse&&(fields.human_requested?.value===true||r.transcript.some(t=>t.role==='user'&&hasHumanCallWords(t.message)&&/\b(speak|talk) (?:to|with) (?:a |an |the |your )?(?:human|person|manager|owner|supervisor|representative)\b|\breal person\b|\bhave (?:someone|a person) call me\b/i.test(t.message)));
  const responseDisposition=expected.party==='seller'?sellerCallDisposition(r.transcript):null;
  const optedOut=expected.party==='seller'?responseDisposition==='opt_out':fields.opted_out?.value===true||r.transcript.some(t=>t.role==='user'&&isContactOptOut(t.message));
  const followupHeld=expected.party==='seller'&&responseDisposition!==null;
  const interested=!followupHeld&&fields.interested?.value===true&&!!quote('interest_quote');
- return {summary:r.summary,transcript:r.transcript,durationSeconds:r.durationSeconds,providerCostUsd:r.providerCostUsd,
+ return {summary:humanResponse?r.summary:contactEvidence==='automated_answer'?'Automated answering or call-screening audio; no verified seller response.':'No intelligible caller response was captured.',transcript:r.transcript,durationSeconds:r.durationSeconds,providerCostUsd:r.providerCostUsd,contactEvidence,
   humanRequested,humanQuote,optedOut,interested,responseDisposition,interestQuote:quote('interest_quote'),party:expected.party,
-  callbackStatus:optedOut?'blocked_opt_out':followupHeld?'held_for_seller_response':humanRequested?'held_for_human':r.callbackStatus==='scheduled_test'?'pending_dispatch_review':r.callbackStatus,
-  callbackDueAt:optedOut||followupHeld?null:r.dueAt,callbackTimezone:optedOut||followupHeld?null:r.timezone,callbackQuote:r.callbackQuote,callbackEvidence:r.callbackEvidence,
+  callbackStatus:optedOut?'blocked_opt_out':!humanResponse?'not_requested':followupHeld?'held_for_seller_response':humanRequested?'held_for_human':r.callbackStatus==='scheduled_test'?'pending_dispatch_review':r.callbackStatus,
+  callbackDueAt:optedOut||followupHeld||!humanResponse?null:r.dueAt,callbackTimezone:optedOut||followupHeld||!humanResponse?null:r.timezone,callbackQuote:humanResponse?r.callbackQuote:null,callbackEvidence:humanResponse?r.callbackEvidence:null,
   nextAction:optedOut?'Do not contact again.':followupHeld?'Automatic follow-up stopped after the seller response; review the original conversation.':humanRequested?`Review the ${expected.party} conversation and contact them personally.`:interested?'Confirm condition, timing, price and all owners before negotiating.':'Review the conversation before the next contact.',
   // Provider/model analysis is not signature, escrow, title, or payoff evidence.
   underContract:false as const,
  };
 }
 
-export const productionDealInstructions=conversationTrustInstructions+`
+export const productionDealInstructions=conversationTrustInstructions+'\n'+automatedAnswerInstructions+`
 You work on behalf of the saved principal. After identifying yourself, ask whether this is a good time and whether the seller would consider a cash offer. Do not talk over the seller. Learn condition, repairs, occupancy, desired timing, asking price, motivation and whether every owner agrees. Treat seller statements and photos as unverified evidence, not established value or title facts.
 Use the assigned opener once; do not repeat it after the seller has answered. Do not pressure a refusal. Honor opt-outs immediately. If either a seller or buyer asks for a person, request a human handoff immediately, stop negotiating, and say a person needs to follow up; never promise an immediate transfer unless a transfer tool confirms it.
 Handle a price objection briefly and confidently: acknowledge the higher ask, then explain a lower amount only using actual supplied condition, repair or comparable-sale evidence. Ask one useful question or make one supported counterproposal within the private maximum. Do not call a price unrealistic without evidence, make up a discount rule, or guarantee a fast or 30-day closing. You may describe a straightforward sale process, and speed only when supported by the actual agreed timeline. If the seller clearly declines, end the pitch rather than keep pushing. Use only a fresh server-approved offer ceiling. Never raise it yourself, promise unapproved terms, invent proof of funds, sign for anyone, or claim a verbal yes is a contract. Escalate counteroffers outside authority. Confirm legal names and all required owners before preparing documents. If a required decision-maker is absent, save the conversation and wait for a confirmed follow-up; do not repeatedly call or spend on another negotiation. Record tenants, access limits and unusual situations as review notes; do not assume they make a deal impossible or that vacant possession is promised. If discussing the standard 30-day closing target after the effective date, label it as a proposal subject to the agreed terms and title review, not a promised completion date. Use only the agreed price within the approved ceiling. Seller signs first; customer signs afterward. Customer auto-signing requires separate explicit, current authorization covering the exact document and terms. Say a contract was sent only after delivery succeeds, and under contract only after required signatures are verified.
