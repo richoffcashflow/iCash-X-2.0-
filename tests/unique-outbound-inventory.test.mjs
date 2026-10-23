@@ -80,7 +80,7 @@ await db.exec(`
  create function icash_enrichment_before_prospecting_budget(uuid) returns uuid language sql as $$select null::uuid$$;
  create function icash_search_due_before_prospecting_budget(uuid) returns boolean language sql as $$select true$$;
 `);
-const correction=read('supabase/migrations/20261023174128_discovery_receipt_reliability.sql');
+const correction=read('supabase/migrations/20261023175906_discovery_receipt_reliability.sql');
 await db.exec(correction);
 assert.equal(Number(await val('select duplicate_properties from icash_discovery_inventory_receipts where operation_key=$1',[op(account,1)])),0,'Forward migration repairs productive historical counters');
 assert.equal(Number(await val('select balance_cents from icash_wallets where account_id=$1',[account])),2494,'New property work keeps its normal charge');

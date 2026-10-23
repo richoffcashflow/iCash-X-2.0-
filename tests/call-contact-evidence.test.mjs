@@ -22,7 +22,7 @@ try{
  await db.exec(read('config/seller-response-policy.sql'));
  await db.exec(read('config/seller-optout-base-verbs.sql'));
  // Run the exact shipped predicate, independent of unrelated schema fixtures.
- const migration=read('supabase/migrations/20261023174331_seller_call_contact_evidence.sql');
+ const migration=read('supabase/migrations/20261023175907_seller_call_contact_evidence.sql');
  await db.exec(migration.match(/create or replace function public\.icash_call_has_seller_response[\s\S]*?\$\$;/)[0]);
  for(const [message,expected] of fixtures){
   assert.equal(hasHumanCallWords(message),expected,message);

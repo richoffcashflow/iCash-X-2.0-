@@ -123,7 +123,7 @@ await db.exec(read('config/seller-optout-base-verbs.sql'));
 await db.exec('create table icash_sms_seller_openings(thread_id uuid primary key,account_id uuid,interest_message_id uuid)');
 await db.exec(read('config/outbound-filter-experiments.sql').match(/create function public\.icash_filter_sms_interest[\s\S]*?\$\$;/)[0]);
 await call(99,voicemail,[{role:'user',message:'At the tone, please record your message.'},{role:'user',message:'...'}],true);
-await db.exec(read('supabase/migrations/20261023174331_seller_call_contact_evidence.sql'));
+await db.exec(read('supabase/migrations/20261023175907_seller_call_contact_evidence.sql'));
 await q('select icash_refresh_opportunity_outcomes($1)',[account]);
 assert.equal(await val('select responded from icash_opportunity_outcomes where screening_id=$1',[voicemail]),false,'Historical automated audio stops counting as a response after derived refresh');
 assert.equal(await val('select interested from icash_opportunity_outcomes where screening_id=$1',[voicemail]),false,'A model interest flag cannot override automated audio');
