@@ -122,6 +122,9 @@ try{
  assert.equal((await stats()).positive,0,'Other phone call cannot reward this text');
  await q("update icash_call_recordings set to_phone='+12125550100' where operation_key='fixture-call'");s=await stats();assert.equal(s.positive,1);assert.equal(s.costs_complete,false);
  await q("insert into icash_operation_spend(operation_key,account_id,state,charged_cents) values('fixture-call',$1,'settled',25)",[id(1)]);s=await stats();assert.deepEqual([s.positive,s.cost_cents,s.costs_complete],[1,29,true]);
+ await q("update icash_text_messages set body='yes' where id=$1",[id(812)]);
+ await q("update icash_live_conversations set result='{\"interested\":true,\"optedOut\":true}' where operation_key='fixture-call'");
+ s=await stats();assert.deepEqual([s.positive,s.opted_out,s.pending],[0,1,0],'A matched call refusal overrides earlier text interest');
  await q("update icash_live_conversations set result='{\"interested\":false}' where operation_key='fixture-call'");
  await q("update icash_seller_opener_assignments set delivered_at=now()-interval '4 days' where thread_id=$1",[thread]);
  await q("update icash_text_messages set created_at=now()-interval '4 days',last_delivery_at=now()-interval '4 days' where id=$1",[message]);

@@ -101,17 +101,22 @@ create function public.icash_refresh_seller_interest(p_account uuid) returns voi
 language sql security invoker set search_path='' as $$
  with exposures as materialized (
   select a.*,m.created_at started_at,greatest(a.delivered_at,m.last_delivery_at,m.created_at) receipt_at,t.recipient,e.*,
+   a.opted_out or coalesce(call_feedback.opted_out,false) contact_opted_out,
    least(public.icash_seller_sms_interest_at(p_account,t.id,m.created_at,greatest(a.delivered_at,m.last_delivery_at,m.created_at)+interval '72 hours'),
-    (select min(c.completed_at) from public.icash_call_recordings r join public.icash_live_conversations c on c.account_id=r.account_id and c.operation_key=r.operation_key
-     where r.account_id=p_account and r.screening_id=e.screening_id and r.party='seller' and r.to_phone=t.recipient and r.call_sid is not null
-      and c.screening_id=e.screening_id and c.party='seller' and c.state='complete' and c.conversation_id is not null
-      and c.result->'interested'='true'::jsonb and coalesce(c.result->>'optedOut','false')<>'true'
-      and c.created_at>=m.created_at and c.completed_at between c.created_at and least(greatest(a.delivered_at,m.last_delivery_at,m.created_at)+interval '72 hours',now()))) interest_at
+    call_feedback.interest_at) interest_at
   from public.icash_seller_opener_assignments a
   join public.icash_text_messages m on m.id=a.message_id and m.account_id=a.account_id and m.thread_id=a.thread_id and m.body=a.body
    and m.direction='outgoing' and m.state='delivered' and m.provider_id is not null
   join public.icash_text_threads t on t.id=a.thread_id and t.account_id=a.account_id and t.party='seller' and t.seller_intake_id is null
   join public.icash_learning_deal_outcomes(p_account) e on e.deal_id=t.deal_id
+  left join lateral (
+   select min(c.completed_at) filter(where c.result->'interested'='true'::jsonb and coalesce(c.result->>'optedOut','false')<>'true') interest_at,
+    bool_or(c.result->'optedOut'='true'::jsonb) opted_out
+   from public.icash_call_recordings r join public.icash_live_conversations c on c.account_id=r.account_id and c.operation_key=r.operation_key
+   where r.account_id=p_account and r.screening_id=e.screening_id and r.party='seller' and r.to_phone=t.recipient and r.call_sid is not null
+    and c.screening_id=e.screening_id and c.party='seller' and c.state='complete' and c.conversation_id is not null
+    and c.created_at>=m.created_at and c.completed_at between c.created_at and least(greatest(a.delivered_at,m.last_delivery_at,m.created_at)+interval '72 hours',now())
+  ) call_feedback on true
   where a.account_id=p_account and a.learning_context='interest-v2'
    and a.delivered_at between now()-interval '90 days' and now() and greatest(a.delivered_at,m.last_delivery_at,m.created_at)<=now()
  ), keys as (
@@ -130,8 +135,8 @@ language sql security invoker set search_path='' as $$
  insert into public.icash_learning_rollups(account_id,domain,context,market,variant,attempts,pending,positive,opted_out,
   contract_trials,contracts,closing_trials,closings,cost_cents,costs_complete)
  select p_account,'seller_sms','interest-v2','*',e.variant,count(*),
-  count(*) filter(where e.receipt_at>now()-interval '72 hours' and e.interest_at is null and not e.opted_out),
-  count(*) filter(where e.interest_at is not null and not e.opted_out),count(*) filter(where e.opted_out),
+  count(*) filter(where e.receipt_at>now()-interval '72 hours' and e.interest_at is null and not e.contact_opted_out),
+  count(*) filter(where e.interest_at is not null and not e.contact_opted_out),count(*) filter(where e.contact_opted_out),
   count(*) filter(where e.receipt_at<=now()-interval '30 days'),count(*) filter(where e.receipt_at<=now()-interval '30 days' and e.purchase_at between e.started_at and e.receipt_at+interval '30 days'),
   count(*) filter(where e.receipt_at<=now()-interval '60 days'),count(*) filter(where e.receipt_at<=now()-interval '60 days' and e.closed_at between e.started_at and e.receipt_at+interval '60 days'),
   coalesce(sum(c.cents),0),bool_and(c.complete) is true
