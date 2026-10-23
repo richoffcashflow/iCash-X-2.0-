@@ -51,7 +51,7 @@ await db.exec(`
 for(const row of JSON.parse(read('tests/fixtures/outreach-research-baseline.json')))await db.exec(row.definition);
 await db.exec('set check_function_bodies=on');
 const sql=read('config/outreach-research-liveness.sql');
-assert.equal(sql,read('supabase/migrations/20261023175802_outreach_research_liveness.sql'));
+assert.equal(sql,read('supabase/migrations/20261023180125_outreach_research_liveness.sql'));
 const beforeTimezone=await val("select pg_get_functiondef('icash_next_before_closing_gaps()'::regprocedure)");
 await db.exec(sql);
 assert.equal(await val("select pg_get_functiondef('icash_next_before_closing_gaps()'::regprocedure)"),beforeTimezone.replaceAll('join pg_timezone_names tz','join public.icash_timezone_names tz'),'only the timezone name source changes');
