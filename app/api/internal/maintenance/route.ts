@@ -1,6 +1,5 @@
 import {processSupportCustomerNotifications} from '@/lib/support-customer-notifications';
-import {refreshVoiceCapacity} from '@/lib/voice-capacity';
-import {elevenRequest} from '@/lib/elevenlabs';
+import {refreshVoiceCapacity,readVoiceCapacityProvider} from '@/lib/voice-capacity';
 import {readRecordingReview} from '@/lib/required-call-recording';
 import {processPurchaseAccessEmails} from '@/lib/purchase-access-email';
 import {recoverAccessHelpReplies} from '@/lib/access-help-replies';
@@ -21,7 +20,7 @@ export const maxDuration=180;
 export async function GET(request:Request){
  const headers={'Cache-Control':'private, no-store'};
  if(!authorizeOutboundBilling(request,process.env.CRON_SECRET))return Response.json({error:'Unauthorized'},{status:401,headers});
- const capacity=refreshVoiceCapacity(db,path=>elevenRequest(path,undefined,fetch,AbortSignal.timeout(8000)),readRecordingReview(process.env.RECORDED_OUTBOUND_REVIEW_JSON)).catch(()=>({status:'verification_unavailable'}));
+ const capacity=refreshVoiceCapacity(db,readVoiceCapacityProvider,readRecordingReview(process.env.RECORDED_OUTBOUND_REVIEW_JSON)).catch(error=>{console.error('Voice capacity verification unavailable',error instanceof Error&&/^VOICE_CAPACITY_[A-Z0-9_]+$/.test(error.message)?error.message:'read_unavailable');return {status:'verification_unavailable'};});
  const pruning=pruneUsageLoopObservations(db);
  const result=await maintenanceBatch({supportCustomerEmail:async()=>{const result=await processSupportCustomerNotifications({db});return Response.json(result,{status:result.failed===0?200:503});},supportCopies:async()=>{const closed=await db('rpc/icash_close_inactive_support','POST',{}).catch(()=>null);const recovered=await recoverAccessHelpReplies(db).catch(()=>null);const result=await processSupportOwnerNotifications({db,monitorAccess:true});return Response.json({...result,recovered,closed},{status:result.failed===0&&recovered!==null&&closed!==null?200:503});},purchaseEmail:async()=>{const result=await processPurchaseAccessEmails({db,reconcile:true});return Response.json(result,{status:result.ready&&result.failed===0?200:503});},purchaseFollowups:async()=>{const result=await processPurchaseAccessFollowups({db});return Response.json(result,{status:result.ready&&result.failed===0?200:503});},outbound:()=>outbound(request),recording:()=>recording(request),ownerRecording:()=>ownerRecording(request),reception:()=>reception(request)});
  const monitored=await refreshReliability(db,result.ok);

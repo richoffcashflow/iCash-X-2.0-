@@ -69,7 +69,8 @@ begin
  if contact_busy or busy>=total_limit or agent_busy>=agent_limit then return false;end if;
  if p_incoming then return true;end if;
  -- Leave one workspace slot for incoming callbacks; never enable provider burst.
- if (total_limit>1 and busy>=total_limit-1) or (agent_limit>1 and agent_busy>=agent_limit-1) then return false;end if;
+ if (total_limit>1 and busy>=total_limit-1) or (agent_limit>1 and agent_busy>=agent_limit-1
+  and exists(select 1 from jsonb_array_elements(public.icash_voice_capacity_targets()) t where t->>'agentId'=p_agent and t->>'branchId' is not null)) then return false;end if;
  select least(3,greatest(1,floor(greatest(0,least(w.balance_cents,
  coalesce((public.icash_daily_allowance(p_account)->>'remainingCents')::bigint,0)))::numeric/1000)))::integer
  into account_limit from public.icash_wallets w where w.account_id=p_account and w.balance_cents>0;
