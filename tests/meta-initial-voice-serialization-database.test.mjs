@@ -297,5 +297,37 @@ try{
  assert.equal(await scalar('select count(*)::int from icash_voice_jobs'),3);
  assert.equal(await scalar('select count(*)::int from icash_operation_spend'),1);
  assert.equal((await row('icash_operation_spend','operation_key','voice:SIMULATION-cancelled')).state,'cancelled');
+ // Regression for the later verified-capacity policy. Real queue recipient guards
+ // run with a controlled capacity result; close-capacity.test exercises the full
+ // policy, receipt binding, financial caps and active-slot counting separately.
+ await pg.exec(`alter table icash_voice_configs add agent_id text default 'agent_fixture';
+ drop view icash_voice_contact_targets;
+ create view icash_voice_contact_targets as
+ select id,account_id,contact_key,'seller'::text party,'operator_record'::text eligibility_source from icash_contact_permissions
+ union all select id,account_id,contact_key,'seller','operational_checks_only' from icash_operational_contacts;
+ create table fixture_capacity(open boolean);insert into fixture_capacity values(true);
+ create function icash_voice_capacity_available(uuid,text,text,text,boolean) returns boolean language sql as $$select open from public.fixture_capacity$$;`);
+ let queue=definition('voice-queue-active-call-wait','icash_voice_queue_slot_open');
+ queue=queue.replace('busy.account_id=j.account_id or ','').replace('live.account_id=j.account_id or ','').replace("j.state='ready'", "j.state='ready' and public.icash_voice_capacity_available(j.account_id,(select agent_id from public.icash_voice_configs where account_id=j.account_id),'voice:'||j.id,target.contact_key,false)");
+ await pg.exec(queue);
+ await pg.exec(read('config/meta-voice-capacity-recovery.sql'));
+ await scenario('shared capacity releases unrelated recipient without resetting old call',async()=>{
+  await pg.exec(`update icash_voice_jobs set state='dispatching',outcome='provider_outcome_unknown_no_retry' where id='${first.job}'`);
+  const before=await row('icash_voice_jobs','id',first.job);
+  assert.equal((await prepare(second.lead)).voiceJobId,second.job);
+  assert.deepEqual(await row('icash_voice_jobs','id',first.job),before);
+  assert.equal(await prepare(second.lead),null,'never issues the same job twice');
+ });
+ await scenario('closed capacity cannot issue or reserve',async()=>{
+  await pg.exec('update fixture_capacity set open=false');await unchangedWait();
+ });
+ await scenario('same recipient uncertainty still blocks',async()=>{
+  await pg.exec(`update icash_voice_jobs set state='dispatching' where id='${first.job}';
+   update icash_contact_permissions set contact_key=(select contact_key from icash_contact_permissions where id='${second.permission}') where id='${first.permission}'`);
+  await unchangedWait();
+ });
+ for(const control of ["update icash_accounts set bot_paused=true", "update icash_wallets set balance_cents=0", "update icash_meta_leads set voice_paused=true", "update icash_contact_permissions set revoked_at=now()"])
+  await scenario('recovered queue preserves '+control,async()=>{await pg.exec(control);await unchangedWait();});
+ for(const role of ['anon','authenticated'])assert.equal(await scalar("select has_function_privilege($1,'icash_meta_prepare_voice(uuid)','execute')",[role]),false);
  console.log('PASS Meta initial voice serialization: reproduced double issuance, pre-reservation account/contact waiting, unknown-outcome protection, generic-route exclusion and non-Meta continuity, independent accounts, completion release, real consent/binding guards, unchanged pre/post business-hours final claim and cancelled spend, no replacements or provider calls.');
 }finally{await pg.close();}
