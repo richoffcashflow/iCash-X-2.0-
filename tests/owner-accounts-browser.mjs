@@ -13,7 +13,12 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
  try{
   await context.route('**/*',async route=>{
    const req=route.request(),u=new URL(req.url()),path=u.pathname;
-   if(u.hostname==='img.dealmachine.com')return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="gray"/></svg>'});
+   if(u.hostname==='img.dealmachine.com'){
+    // Rendering the img element does not mean its bytes have arrived. Exercise
+    // a delayed response so the check below observes actual image completion.
+    await new Promise(resolve=>setTimeout(resolve,150));
+    return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="gray"/></svg>'});
+   }
    if(u.origin!==base)return route.abort();
    if(path.startsWith('/api/')){
     const method=req.method();if(method==='GET')reads.push(u);else writes.push({path,method,body:req.postData()?req.postDataJSON():null});
@@ -59,7 +64,9 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
   await page.getByText('$123.45',{exact:true}).waitFor();await page.getByRole('heading',{name:'Bot activity',exact:true}).waitFor();await page.getByRole('heading',{name:'Your leads',exact:true}).waitFor();
   await Promise.all([page.waitForResponse(r=>r.url().includes('/activity?view=responses')),page.getByRole('button',{name:'Seller responses',exact:true}).click()]);
   await Promise.all([page.waitForResponse(r=>r.url().includes('/activity?view=all')),page.getByRole('button',{name:'All activity',exact:true}).click()]);
-  const card=page.locator('#property-'+screen);await card.getByRole('img',{name:'Street view of 123 Example Street, Dallas, TX'}).waitFor();assert(await card.locator('.property-thumbnail img').evaluate(img=>img.complete&&img.naturalWidth>0),'Customer-view property photo renders');await card.locator('.property-summary').click();await card.getByRole('button',{name:'Property details',exact:true}).click();await page.getByRole('dialog').getByText('Fixture Seller',{exact:true}).waitFor();await page.getByRole('button',{name:'Close Property details',exact:true}).click();
+  const card=page.locator('#property-'+screen);await card.getByRole('img',{name:'Street view of 123 Example Street, Dallas, TX'}).waitFor();
+  await page.waitForFunction(selector=>{const img=document.querySelector(selector);return img instanceof HTMLImageElement&&img.complete&&img.naturalWidth>0;},'#property-'+screen+' .property-thumbnail img',{timeout:5000});
+  assert(await card.locator('.property-thumbnail img').evaluate(img=>img.complete&&img.naturalWidth>0),'Customer-view property photo renders');await card.locator('.property-summary').click();await card.getByRole('button',{name:'Property details',exact:true}).click();await page.getByRole('dialog').getByText('Fixture Seller',{exact:true}).waitFor();await page.getByRole('button',{name:'Close Property details',exact:true}).click();
   await card.getByRole('button',{name:'Text conversation for 123 Example Street'}).click();await page.getByText('What is your offer?',{exact:true}).waitFor();
   await page.getByRole('dialog').getByRole('button',{name:'Calls',exact:true}).click();
   const audio=page.locator('audio');await audio.waitFor();assert((await audio.getAttribute('src')).startsWith('/api/admin/accounts/view/'+viewId+'/recording/audio?'));
