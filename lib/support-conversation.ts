@@ -1,9 +1,9 @@
 import {repeatedRefundReply} from './support-closure.ts';
 import {z} from 'zod';
 import {redactSupportQuestion,supportAnswer,supportTopic,supportDuplicateCharge,type SupportEvidence} from './support-policy.ts';
-import {supportCourseAnswer,supportProductGuide,supportSimpleProductAnswer,supportHowToQuestion} from './support-product-guide.ts';
+import {supportCourseAnswer,supportProductGuide,supportSimpleProductAnswer,supportHowToQuestion,supportListingQuestion} from './support-product-guide.ts';
 import {supportCodeDelivery} from './support-code-delivery.ts';
-import {currentSupportIssue,supportReplyEvidence,supportAskedQuestions,removeRepeatedSupportQuestions,repeatsSupportQuestion,supportReplyStyle} from './support-reply-style.ts';
+import {currentSupportIssue,supportReplyEvidence,supportCreditRelevant,supportAskedQuestions,removeRepeatedSupportQuestions,repeatsSupportQuestion,supportReplyStyle} from './support-reply-style.ts';
 import {supportOutreachReply} from './support-outreach.ts';
 import {missingAccessCodeReply} from './support-access-reply.ts';
 import type {AccessInvestigation} from './support-access-investigation.ts';
@@ -18,7 +18,7 @@ const clean=(text:string)=>redactSupportQuestion(text).replace(/\b\d{6,10}\b/g,'
 function earlierSupportProblem(context:SupportContext){
  const users=context.messages.filter(m=>m.role==='user');
  const lastConfirmed=users.findLastIndex(m=>/\b(?:that worked|it worked|working now|fixed now|all fixed|problem solved)\b/i.test(m.content)&&!/(?:not|still|but)\b/i.test(m.content));
- return context.historyComplete===false||users.slice(lastConfirmed+1,-1).some(m=>/\b(?:bug|error|broken|blocked|stuck|missing|failed|not working|not calling|not texting|no calls|no texts|no leads|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
+ return context.historyComplete===false||users.slice(lastConfirmed+1,-1).some(m=>/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|not working|not calling|not texting|no calls|no texts|no leads|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
 }
 
 /** Local replies also work during provider outages and interruption recovery. */
@@ -48,6 +48,8 @@ export function supportConversationFallback(context:SupportContext):SupportReply
  }
  if(supportTopic(question)==='refund')return result(`${noRefunds}${/\bcancel\b/i.test(question)?' '+supportAnswer('cancel',[],false):' If there’s a payment, access or software problem, tell me what happened so I can help.'}`);
  if(supportTopic(question)==='cancel')return result(context.kind==='account'?supportAnswer('cancel',[],false):'To stop future renewals, sign in and open Cancel subscription in the workspace account menu. Confirm the cancellation there. If you cannot sign in, tell me which sign-in step fails so I can help you get access.');
+ const course=supportCourseAnswer(context.messages,context.kind==='account'?supportReplyEvidence(context.messages,context.evidence??[]):[]);
+ if(course?.answered&&supportListingQuestion(question))return result(course.reply,earlierSupportProblem(context)?'open':'resolved');
  const outreach=context.kind==='account'?supportOutreachReply(context.messages,context.evidence??[]):null;
  if(outreach)return outreach;
  if(supportTopic(question)==='human')return result(continueHere);
@@ -58,8 +60,7 @@ export function supportConversationFallback(context:SupportContext):SupportReply
   return result('I can help with changing your card. These account checks don’t show whether the new card saved. What does the button beside the new card say? Please leave out card numbers.');
  }
  if(previous&&!previous.includes('?')&&!context.handedOff&&!/(?:still|not yet|pending|checking|troubleshoot)/i.test(previous)&&/^(?:thanks|thank you|got it|understood|that answers (?:it|my question)|that(?:’|')?s all)[.!\s]*(?:(?:thanks|thank you|that(?:’|')?s all)[.!\s]*)?$/i.test(question.trim()))return result('You’re welcome.',earlierSupportProblem(context)?'open':'resolved');
- const course=supportCourseAnswer(context.messages,context.kind==='account'?context.evidence:[]);
- if(course)return result(course.reply,course.needsRecovery?'open':course.answered?'resolved':'waiting_on_customer');
+ if(course)return result(course.reply,course.needsRecovery?'open':course.answered?(earlierSupportProblem(context)?'open':'resolved'):'waiting_on_customer');
  if(context.kind==='access'){
   const delivery=supportCodeDelivery(context.messages);
   const code=delivery!=='unknown'||/code|sign.?in|log.?in|nothing happened|getting in|access/i.test(history);
@@ -76,8 +77,7 @@ export function supportConversationFallback(context:SupportContext):SupportReply
   if(users.length>2)return result('I’ll keep troubleshooting this here. Which part is failing now: requesting the code, entering it, or opening your workspace after sign-in?');
   return result('What happens when you try to sign in: no code arrives, the code is rejected, or you get stuck after entering it?');
  }
- const substantive=users.filter(m=>!/^\s*(?:hi|hello|hey|thanks|thank you)[.!?\s]*$/i.test(m.content));
- const topic=supportTopic(substantive.length?substantive.map(m=>m.content).join('\n'):question);
+ const topic=supportTopic(issue);
  if(topic==='general')return result('Hi! What do you need help with — signing in, billing, or your bot?');
  if(supportReplyEvidence(context.messages,context.evidence??[]).some(e=>e.status!=='ok'&&['payment_uncredited','checkout_pending','readiness_blocked','renewal_payment_failed'].includes(e.code??'')))return result(`${supportAnswer(topic,supportReplyEvidence(context.messages,context.evidence??[]),false)}\n\nI can’t confirm a fix yet. What message do you see on that page?`,'open');
  if(previous.includes('exact message'))return result(`${supportAnswer(topic,supportReplyEvidence(context.messages,context.evidence??[]),false)}\n\nDoes this happen every time on that screen, or did it start after a particular step?`);
@@ -104,11 +104,13 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
   if(/closing (?:this|your|the) chat|chat (?:is|has been) closed/i.test(answer.reply))return fallback;
   if(answer.reply.split(/\s+/).length>100||(answer.reply.match(/\?/g)?.length??0)>1||/\b(?:workspace readiness|configuration|reconciliation|payment method persistence)\b/i.test(answer.reply))return fallback;
   if(repeatsSupportQuestion(answer.reply,context.messages))return fallback;
+  if(/\bcredits?\b(?![\s-]+cards?\b)|\b(?:balance|add(?:ing)? money|top.?up|fund (?:the|your) account)\b/i.test(answer.reply)&&!supportCreditRelevant(context.messages,context.evidence??[]))return fallback;
+  if(/\b(?:readiness|service checks?|launch checks?)\b|\b(?:your|the) (?:bot|account|workspace) (?:is|looks|appears) (?:ready|healthy)\b|\b(?:all |your )?checks (?:have )?passed\b/i.test(answer.reply)&&!relevantEvidence.some(e=>e.key==='readiness'))return fallback;
   const question=context.messages.filter(m=>m.role==='user').at(-1)?.content??'';
   if(supportHowToQuestion(question)&&/\b(?:credits?|balance|course|training)\b/i.test(answer.reply)&&!/\b(?:credits?|balance|course|training|getting started|setup)\b/i.test(question))return fallback;
   if(/\b(?:test (?:checkout |work )?credits?|test payments?|sandbox|bank balance|refund amount)\b/i.test(answer.reply)&&!context.messages.some(m=>m.role==='user'&&/\b(?:test|sandbox|refund|bank)\b/i.test(m.content))&&!relevantEvidence.some(e=>e.key==='payments'&&/Test payments do not fund/i.test(e.detail)))return fallback;
   const unresolved=relevantEvidence.some(e=>e.status!=='ok'&&e.key!=='course');
-  const failure=/not working|stopped|stuck|missing|no code|didn.t|doesn.t|can.t|cannot|failed|error|problem/i.test(context.messages.filter(m=>m.role==='user').at(-1)?.content??'');
+ const failure=/not working|stopped|stuck|blank|broken|missing|no code|didn.t|doesn.t|can.t|cannot|\bfails?\b|failed|error|problem/i.test(context.messages.filter(m=>m.role==='user').at(-1)?.content??'');
   const answered=answer.answered&&!answer.reply.includes('?')&&!unresolved&&!failure;
   return {reply:answer.reply,status:fallback.status==='open'||earlierSupportProblem(context)?'open':answered?'resolved':'waiting_on_customer',ai:true};
  }catch{return fallback;}

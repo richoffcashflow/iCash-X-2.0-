@@ -31,7 +31,8 @@ const cityFailure=supportConversationFallback({kind:'account',messages:[user('My
 assert.notEqual(cityFailure.status,'resolved');assert.doesNotMatch(cityFailure.reply,/select a specific city/);
 for(const question of ['How do I get a client?','Do I need to find clients myself?','How do I get started?']){
  const response=supportConversationFallback({...leadsContext,messages:[user(question)]});
- assert.match(response.reply,/Course/);assert.match(response.reply,/running/);assert.match(response.reply,/Leads and notifications/);assert.match(response.reply,/no fixed arrival time/);
+ if(question==='How do I get started?')assert.match(response.reply,/Course/);
+ assert.match(response.reply,/Leads/);assert.doesNotMatch(response.reply,/credits?|readiness|service checks|available balance/i);
  assert.doesNotMatch(response.reply,/marketing|networking|referrals|social media|what (?:type of )?(?:service|product)/i);assert.equal(response.status,'resolved');assert.doesNotMatch(response.reply,/rewatch the Course/);
 }
 for(const question of ['Where do leads come from?','No leads yet, what do I do?']){
@@ -42,27 +43,22 @@ for(const question of ['How do I add the listing for this?','Where do I add list
  const response=await replyToSupport({...leadsContext,messages:[user(question)]},async()=>{throw Error('Listing guidance must not need the model');});
  assert.match(response.reply,/don’t need to add listings or upload properties/);assert.match(response.reply,/incoming leads appear in Leads/);assert.equal(response.ai,false);
  const held=supportConversationFallback({...leadsContext,messages:[user(question)],evidence:[check('readiness','attention','readiness_blocked')]});
- assert.equal(held.status,'open');assert.doesNotMatch(held.reply,/Keep it running/);
+ assert.equal(held.status,'resolved','A feature question needs an answer, not unrelated account troubleshooting');assert.doesNotMatch(held.reply,/Keep it running|readiness|credits/i);
 }
-const paused=supportConversationFallback({...leadsContext,evidence:[...ready.filter(c=>c.key!=='work'),check('work','attention','paused')]});
-assert.match(paused.reply,/currently paused/);assert.match(paused.reply,/Run bot/);assert.doesNotMatch(paused.reply,/Keep it running/);
-assert.equal(paused.status,'waiting_on_customer','A suggested action alone does not confirm an actual problem is resolved');
-const empty=supportConversationFallback({...leadsContext,evidence:[...ready.filter(c=>c.key!=='credits'),check('credits','attention','no_available_credit')]});
-assert.match(empty.reply,/no available work credits/);assert.match(empty.reply,/already paid/);
-const blocked=supportConversationFallback({...leadsContext,evidence:[...ready.filter(c=>c.key!=='readiness'),check('readiness','attention','readiness_blocked')]});
-assert.equal(blocked.status,'open');assert.match(blocked.reply,/adding credits will not clear/);assert.doesNotMatch(blocked.reply,/Keep it running/);
-const missingCredit=supportConversationFallback({...leadsContext,evidence:[...ready,check('payments','attention','payment_uncredited')]});
-assert.equal(missingCredit.status,'open');assert.match(missingCredit.reply,/do not pay again/);
-assert.match(supportConversationFallback({...leadsContext,evidence:[...ready,check('subscription','attention','renewal_payment_failed')]}).reply,/software access needs attention/);
-assert.match(supportConversationFallback({...leadsContext,evidence:[]}).reply,/can’t confirm.*checks.*What status/s);
-assert.equal(supportConversationFallback({...leadsContext,evidence:[]}).status,'waiting_on_customer');
+for(const evidence of [unrelatedChecks,ready,[],[check('payments','attention','payment_uncredited')],[check('subscription','attention','renewal_payment_failed')]]){
+ const answer=supportConversationFallback({...leadsContext,evidence});
+ assert.match(answer.reply,/bot finds and works eligible seller leads automatically/);
+ assert.doesNotMatch(answer.reply,/credits?|readiness|service checks|paid|subscription|paused/i);
+ assert.equal(answer.status,'resolved');
+}
 const watched=[user('I watched the course. How do I get my first lead?')];
 let courseAnswer=supportConversationFallback({...leadsContext,messages:watched});assert.doesNotMatch(courseAnswer.reply,/Watch the Course/);
 watched.push(assistant(courseAnswer.reply),user('Still waiting'));
-assert.match(supportConversationFallback({...leadsContext,messages:watched}).reply,/eligible opportunity/);
+assert.match(supportConversationFallback({...leadsContext,messages:watched}).reply,/new lead/i);
+assert.doesNotMatch(supportConversationFallback({...leadsContext,messages:watched}).reply,/credits?|readiness/i);
 assert.doesNotMatch(supportConversationFallback({...leadsContext,messages:[user('How do I get clients?'),assistant('Watch the Course in your workspace.'),user('I already watched it')]}).reply,/Watch the Course/);
 assert.match(supportConversationFallback({...leadsContext,messages:[user('Where is the course?')]}).reply,/PDF download and practice workspace/);
-assert.match(supportConversationFallback({kind:'access',messages:[user('How do I get clients?')],evidence:ready}).reply,/can’t confirm/,'Guest guidance cannot use account checks');
+assert.match(supportConversationFallback({kind:'access',messages:[user('How do I get clients?')],evidence:ready}).reply,/bot finds and works eligible seller leads/,'Guests can get feature guidance without account checks');
 assert.match(supportConversationFallback({...leadsContext,messages:[user('How do I get clients?'),assistant('Watch the course.'),user('Cancel my subscription')]}).reply,/do not cancel/);
 let history=[user('Filled out the code & nothing happened.')];
 let answer=supportConversationFallback({kind:'access',messages:history});assert.match(answer.reply,/email or text/);
