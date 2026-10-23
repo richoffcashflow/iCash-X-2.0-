@@ -42,7 +42,7 @@ const suites = [
  'seller-callback-route', 'seller-callback-database', 'owner-outreach-route', 'owner-outreach-ui', 'owner-outreach-database', 'owner-overview-route', 'owner-overview-ui', 'lead-supply', 'lead-supply-database', 'admin-experience-route', 'admin-experience-ui',
  'workspace-panel-content', 'production-release-gate', 'production-health',
  'workspace-experience', 'workspace-experience-database', 'reliability-alerts', 'reliability-stable-recovery', 'operational-sms-candidate-fence',
- 'workspace-request-recovery', 'durable-work-billing-stop',
+ 'workspace-request-recovery', 'server-request-deadlines', 'workspace-event-stream', 'scheduler-nonblocking-poll', 'durable-work-billing-stop',
  'usage-loop-policy', 'usage-loop-route', 'usage-loop-context-database',
  'usage-loop-tracking', 'usage-loop-tracking-routes', 'workspace-conversion-ui',
  'credit-refill-context', 'credit-refill-recommendation',

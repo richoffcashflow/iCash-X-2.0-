@@ -12,3 +12,11 @@ const outage=workspaceEventStream({accountId:account,signal:new AbortController(
 const expired=workspaceEventStream({accountId:account,signal:new AbortController().signal,lifetimeMs:0,read:async()=>{throw Error('Expired streams never read');}});assert.equal((await expired.getReader().read()).done,true);
 let resolve;const slow=workspaceEventStream({accountId:account,signal:new AbortController().signal,read:()=>new Promise(r=>{resolve=r;})});await slow.cancel();resolve({[account]:'50'});await new Promise(r=>setTimeout(r,5));
 console.log('Workspace event streams: revision-only changes, scope validation, expiry, cancellation, outage and late-response cleanup passed.');
+
+let hangingSignal,late;
+const hanging=workspaceEventStream({accountId:account,signal:new AbortController().signal,lifetimeMs:15,read:signal=>{hangingSignal=signal;return new Promise(resolve=>{late=resolve;});}});
+const hangReader=hanging.getReader();
+assert.equal((await hangReader.read()).done,true,'A hung database poll cannot outlive the stream');
+assert(hangingSignal.aborted,'Closing the stream cancels its database request');
+late({[account]:'100'});await new Promise(r=>setTimeout(r,5));
+assert.equal((await hangReader.read()).done,true,'Late revisions never reopen an expired stream');
