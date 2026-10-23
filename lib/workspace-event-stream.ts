@@ -1,16 +1,18 @@
 /** Authenticated routes provide a single server-owned account, never client IDs. */
-export function workspaceEventStream({accountId,read,signal,intervalMs=5000,lifetimeMs=45000}:{accountId:string;read:()=>Promise<unknown>;signal:AbortSignal;intervalMs?:number;lifetimeMs?:number}){
- let timer:ReturnType<typeof setTimeout>|undefined,ended=false,cleanup=()=>{};
+export function workspaceEventStream({accountId,read,signal,intervalMs=5000,lifetimeMs=45000}:{accountId:string;read:(signal:AbortSignal)=>Promise<unknown>;signal:AbortSignal;intervalMs?:number;lifetimeMs?:number}){
+ let timer:ReturnType<typeof setTimeout>|undefined,deadline:ReturnType<typeof setTimeout>|undefined,ended=false,cleanup=()=>{};
+ const pending=new AbortController();
  const encoder=new TextEncoder(),started=Date.now();let revision:string|null=null;
  return new ReadableStream<Uint8Array>({
   start(controller){
-   const close=()=>{if(ended)return;ended=true;clearTimeout(timer);signal.removeEventListener('abort',close);controller.close();};
-   cleanup=()=>{ended=true;clearTimeout(timer);signal.removeEventListener('abort',close);};
+   const close=()=>{if(ended)return;ended=true;clearTimeout(timer);clearTimeout(deadline);pending.abort();signal.removeEventListener('abort',close);controller.close();};
+   cleanup=()=>{ended=true;clearTimeout(timer);clearTimeout(deadline);pending.abort();signal.removeEventListener('abort',close);};
    signal.addEventListener('abort',close,{once:true});
+   deadline=setTimeout(close,Math.max(0,lifetimeMs));
    async function poll(){
     if(ended)return;if(signal.aborted||Date.now()-started>=lifetimeMs){close();return;}
     try{
-     const versions=await read();if(ended)return;
+     const versions=await read(pending.signal);if(ended)return;
      if(!versions||typeof versions!=='object'||Array.isArray(versions)||Object.keys(versions).some(id=>id!==accountId))throw Error('Invalid revision scope');
      const next=(versions as Record<string,unknown>)[accountId]??'0';
      if(typeof next!=='string'||!/^\d{1,20}$/.test(next))throw Error('Invalid revision');

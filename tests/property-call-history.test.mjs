@@ -64,8 +64,10 @@ test('independent receipt and media endpoints keep authenticated account binding
  assert.equal((await receiptRoute.GET(request('?conversationId='+conversation))).status,200);assert.deepEqual(events[1],['conversation',account,conversation]);
  for(const query of ['?id='+id+'&accountId='+foreign,'?id='+id+'&id='+foreign,'?id='+id+'&conversationId='+conversation])assert.equal((await receiptRoute.GET(request(query))).status,400);
  const audioRoute=await loadService('app/api/work/recording/audio/route.ts',{uuid,privateHeaders,workAccount,recordingServer:signal=>({audio:async(...args)=>{events.push({signal,args});return new Response('audi',{status:206,headers:privateHeaders});}})});
- const mediaRequest=new Request('https://www.geticashx.com/api/work/recording/audio?id='+id,{headers:{range:'bytes=0-3'}});
- assert.equal((await audioRoute.GET(mediaRequest)).status,206);assert.deepEqual(events.at(-1).args,[account,id,'bytes=0-3']);assert.equal(events.at(-1).signal,mediaRequest.signal);
+ const cancel=new AbortController();
+ const mediaRequest=new Request('https://www.geticashx.com/api/work/recording/audio?id='+id,{headers:{range:'bytes=0-3'},signal:cancel.signal});
+ assert.equal((await audioRoute.GET(mediaRequest)).status,206);assert.deepEqual(events.at(-1).args,[account,id,'bytes=0-3']);assert.equal(events.at(-1).signal.aborted,false);
+ cancel.abort();assert.equal(events.at(-1).signal.aborted,true,'Client disconnect cancels the shared media deadline');
  assert.equal((await audioRoute.GET(new Request(mediaRequest.url+'&accountId='+foreign))).status,404);
 });
 
