@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 23, 2026 the owner reiterated that support must not bring up readiness or credits when the customer has not raised them. Keep every reply focused on the current question, including complaints and follow-ups. Use credit details only for an explicit funding/usage question or a verified credit blocker directly explaining stopped work. Do not append passing account checks, funding prompts or unrelated setup reminders; a new topic must not inherit an old billing issue. Keep unresolved problems open without inventing a repair.
+
 - On October 23, 2026 the owner requested faster results through parallel AI seller calls and nationwide research. Keep bounded concurrent dispatch, fresh one-use capabilities, fair account service and actual receipt-backed progress. Expand nationwide accounts through current eligible US ZIP metadata while preserving explicit saved scope, state restrictions, duplicate coverage, contact rules, funding limits and unknown-outcome holds. Do not equate configured capacity, queued calls or attempts with interested sellers or signed contracts.
 
 - On October 21, 2026 the owner required support to answer simple product questions directly, without unrelated credit, Pause, readiness or course reminders. Explain the current interface accurately: there is no customer city selector in the workspace. Never invent a setting or claim a market was changed. Keep actual troubleshooting and unresolved earlier problems open; a simple side question is not proof of a repair. Notify an affected customer only from their own verified activity, distinguishing a repaired platform issue from remaining account holds.

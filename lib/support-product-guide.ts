@@ -60,6 +60,10 @@ function courseTopic(question:string):CourseTopic|null{
  return null;
 }
 
+export function supportListingQuestion(question:string){
+ return courseTopic(question)==='leads'&&/\b(?:add|adding|upload|uploading|create|creating|post|posting|import|importing|enter|entering)\b/i.test(question)&&!/\b(?:credits?|balance|paid|payment)\b/i.test(question);
+}
+
 /** Core onboarding answers are local so outages/replays cannot turn them into generic sales advice. */
 export function supportCourseAnswer(messages:Turn[],evidence:SupportEvidence[]=[]):{reply:string;needsRecovery:boolean;answered:boolean}|null{
  const users=messages.filter(m=>m.role==='user'),question=users.at(-1)?.content??'';
@@ -67,6 +71,11 @@ export function supportCourseAnswer(messages:Turn[],evidence:SupportEvidence[]=[
  if(!topic&&/^(?:i(?:'ve| have)? )?(?:already (?:watched|finished)|watched|finished|it(?:'s| is) running|my bot is running|i have credits|done|now what|what next|how long|still waiting)\b/i.test(question)&&users.slice(0,-1).some(m=>['leads','start'].includes(courseTopic(m.content)??'')))topic='leads';
  if(!topic)return null;
  if(topic==='course')return {reply:'Open Course in your workspace to watch the training video. The PDF download and practice workspace are there too, so you can follow the steps and explore sample deals. If it won’t open, tell us what you see on the screen.',needsRecovery:false,answered:true};
+ // Explaining how leads arrive does not require a wallet or service report.
+ // Actual stopped-work reports are handled by account-bound outreach evidence.
+ if(supportListingQuestion(question)||!/\b(?:no|none|zero|not|never|still|waiting|missing|stuck|failed|credits?|balance|paid|payment|isn[’']?t|doesn[’']?t|can[’']?t|cannot)\b/i.test(question)){
+  return {reply:topic==='start'?'Open Course in your workspace for the first steps, then save your contact information and individual or company name in Settings. Your bot works eligible seller opportunities automatically; follow their progress in Leads and notifications.':'You don’t need to add listings or upload properties. Your bot finds and works eligible seller leads automatically, and incoming leads appear in Leads. Open a lead to see its calls, texts and latest updates.',needsRecovery:false,answered:true};
+ }
  const viewing=evidence.find(e=>e.key==='course');
  const watched=viewing?.code==='course_completed'||messages.some((m,index)=>m.role==='user'&&!/(?:not|haven.t|didn.t|never)\b/i.test(m.content)&&(/\b(?:watched|finished|completed)\b.{0,35}\b(?:course|training|video)\b|\b(?:course|training|video)\b.{0,25}\b(?:done|finished|completed)\b/i.test(m.content)||/^(?:i(?:'ve| have)? )?(?:already )?(?:watched|finished|completed) (?:it|that)[.!?\s]*$/i.test(m.content)&&messages.slice(0,index).some(turn=>turn.role==='assistant'&&/\b(?:course|training|video)\b/i.test(turn.content))));
  const courseStep=watched?'With the course finished, check that your contact information and individual or company name are saved in Settings.':viewing?.code==='course_in_progress'?'Your course viewing is still in progress. Finish the Course in your workspace, including the Settings steps.':viewing?.code==='course_unrecorded'?'I don’t see playback recorded for the current course yet; earlier viewing may not be recorded. Watch the Course in your workspace and complete its Settings steps.':'Watch the Course in your workspace and finish the Settings steps for your contact information and individual or company name.';
@@ -78,20 +87,20 @@ export function supportCourseAnswer(messages:Turn[],evidence:SupportEvidence[]=[
  if(payment?.status==='attention'&&payment.code==='payment_uncredited'){
   next='Your checks show a recorded payment has not been added to your credits yet. The latest recovery check has not confirmed the credit yet; do not pay again.';needsRecovery=true;
  }else if(readiness?.status==='attention'){
-  next='Your service checks show something needs attention before eligible work can run. Describe the failed step here; adding credits will not clear that service issue.';needsRecovery=true;
+  next='I haven’t confirmed why new work is blocked. What is the bot status shown in your workspace?';needsRecovery=true;
  }else if(subscription?.status==='attention'){
   next='Your software access needs attention. Open your subscription settings to review the status, and tell us what message appears.';
  }else if(payment?.status==='attention'&&payment.code==='checkout_pending'){
   next='A checkout is still pending. Return from checkout and refresh the status before paying again; tell us if it does not update.';
  }else if(work?.status==='attention'&&work.code==='paused'){
-  next='Your bot is currently paused. Review the pause in your workspace, check your credits, and choose Run bot when you want it to resume. If you did not pause it, tell us before resuming.';
+  next='Your bot is currently paused. Choose Run bot when you want it to resume. If you did not pause it, tell us before resuming.';
  }else if(credits?.status==='attention'&&credits.code==='no_available_credit'){
   next='Your bot has no available work credits. Review Credits left and use Add money if you want more eligible work to run; if you already paid and the credit is missing, tell us before paying again.';
  }else if(work?.status==='ok'&&credits?.status==='ok'&&readiness?.status==='ok'){
-  next='Your checks show the bot is not paused, credit is available, and service readiness passed. Keep it running and watch Leads and notifications for incoming leads and the next step for each deal. “Looking for a deal” can mean it is waiting for an eligible opportunity; there is no fixed arrival time.';
-  answered=true;
+  next='New leads appear in Leads. I haven’t confirmed why you’re still waiting; a running bot alone does not show that a new lead has arrived.';
+  needsRecovery=true;
  }else{
-  next='Once setup, access and credits are ready, keep the bot running; new leads appear in Leads and notifications show the next step for each deal. I can’t confirm that all your bot checks are ready here. What status does your bot show right now?';
+  next='I can’t confirm what is stopping new leads from the information available here. What status does your bot show right now?';
  }
  return {reply:`${intro}${course}\n\n${next}`,needsRecovery,answered};
 }
