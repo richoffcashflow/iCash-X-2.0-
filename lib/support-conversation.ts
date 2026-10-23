@@ -104,7 +104,7 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
   if(/closing (?:this|your|the) chat|chat (?:is|has been) closed/i.test(answer.reply))return fallback;
   if(answer.reply.split(/\s+/).length>100||(answer.reply.match(/\?/g)?.length??0)>1||/\b(?:workspace readiness|configuration|reconciliation|payment method persistence)\b/i.test(answer.reply))return fallback;
   if(repeatsSupportQuestion(answer.reply,context.messages))return fallback;
-  if(/\b(?:credits?|balance|add(?:ing)? money|top.?up|fund (?:the|your) account)\b/i.test(answer.reply)&&!supportCreditRelevant(context.messages,context.evidence??[]))return fallback;
+  if(/\bcredits?\b(?![\s-]+cards?\b)|\b(?:balance|add(?:ing)? money|top.?up|fund (?:the|your) account)\b/i.test(answer.reply)&&!supportCreditRelevant(context.messages,context.evidence??[]))return fallback;
   if(/\b(?:readiness|service checks?|launch checks?)\b|\b(?:your|the) (?:bot|account|workspace) (?:is|looks|appears) (?:ready|healthy)\b|\b(?:all |your )?checks (?:have )?passed\b/i.test(answer.reply)&&!relevantEvidence.some(e=>e.key==='readiness'))return fallback;
   const question=context.messages.filter(m=>m.role==='user').at(-1)?.content??'';
   if(supportHowToQuestion(question)&&/\b(?:credits?|balance|course|training)\b/i.test(answer.reply)&&!/\b(?:credits?|balance|course|training|getting started|setup)\b/i.test(question))return fallback;

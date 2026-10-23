@@ -22,7 +22,7 @@ const workFailure=(issue:string)=>/\b(?:bot|automation|outreach|calls?|calling|t
 
 export function supportCreditRelevant(messages:Turn[],evidence:SupportEvidence[]){
  const issue=currentSupportIssue(messages);
- if(/\b(?:credits?|balance|funds?|funding|spend(?:ing)?|usage|add(?:ing)? money|top.?up)\b/i.test(issue))return true;
+ if(/\bcredits?\b(?![\s-]+cards?\b)|\b(?:balance|funds?|funding|spend(?:ing)?|usage|add(?:ing)? money|top.?up)\b/i.test(issue))return true;
  if(supportHowToQuestion(issue)||supportSimpleProductAnswer(issue))return false;
  const stopped=workFailure(issue),payment=/\b(?:payments?|paid|checkout)\b/i.test(issue);
  return evidence.some(e=>e.status==='attention'&&((stopped&&e.key==='credits'&&e.code==='no_available_credit')||((stopped||payment)&&e.key==='payments'&&e.code==='payment_uncredited')));

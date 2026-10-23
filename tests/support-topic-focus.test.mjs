@@ -10,7 +10,7 @@ const env={...process.env};
 process.env.ICASH_SUPPORT_AI_ENABLED='true';process.env.OPENAI_API_KEY='offline-fixture';process.env.ICASH_SUPPORT_AI_MODEL='fixture';
 const model=(reply,answered=false)=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply,answered})}}]});
 try{
- for(const question of ['The photos are blank.','My document download fails.','Please explain the notification bell.','Where can I change my display name?','No, the settings panel freezes.']){
+ for(const question of ['The photos are blank.','My document download fails.','Please explain the notification bell.','Where can I change my display name?','No, the settings panel freezes.','The new credit card won’t save.']){
   for(const prior of [[],[user('Why are my credits missing?'),{role:'assistant',content:'Your readiness needs attention and your credits are missing.'}]]){
    const context={kind:'account',messages:[...prior,user(question)],evidence};
    assert.equal(currentSupportIssue(context.messages),question,'A new subject replaces the old billing topic');
@@ -41,6 +41,7 @@ try{
  const paid={kind:'account',messages:[user('I paid but the payment is missing.')],evidence};
  assert.deepEqual(supportReplyEvidence(paid.messages,evidence).map(e=>e.key),['credits','payments']);
  assert.equal((await replyToSupport(paid,async()=>model('Your recorded payment has not been added to your credits yet. Please do not pay again.'))).ai,true);
+ assert.equal((await replyToSupport({kind:'account',messages:[user('My credit card won’t save.')],evidence},async()=>model('I can’t confirm whether the new credit card saved. What does the button beside it say?'))).ai,true,'A credit-card question is not a work-credit question');
  const creditContext={kind:'account',messages:[user('Why are my credits missing?'),{role:'assistant',content:'What happened after checkout?'},user('Still the same.')],evidence};
  assert.match(currentSupportIssue(creditContext.messages),/credits/,'A short continuation retains the actual funding issue');
  assert.deepEqual(supportReplyEvidence(creditContext.messages,evidence).map(e=>e.key),['credits','payments']);
