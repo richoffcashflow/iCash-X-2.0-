@@ -92,15 +92,17 @@ export async function reconcileCustomerPhoneCall(c:CustomerPhoneCall,p=customerP
  }
  if(!c.parent_sid)return c;
  const parent=await p.call(c.parent_sid);if(!bound(c,parent))return c;
+ // A delayed bridge receipt is not proof that no seller leg exists. Discover
+ // canonical children before terminalizing, including when connected_at is absent.
  let child:Record<string,unknown>|null=null,noChildReceipt:Record<string,unknown>|null=null;
- if(c.connected_at){const list=await p.children(c.parent_sid);if(!Array.isArray(list.calls)||list.next_page_uri||list.calls.length>1)return c;
+ {const list=await p.children(c.parent_sid);if(!Array.isArray(list.calls)||list.next_page_uri||list.calls.length>1)return c;
   if(list.calls.length){child=object(list.calls[0]);if(!bound(c,child,true))return c;}else if(terminal.has(String(parent.status))&&Date.now()-Date.parse(String(parent.end_time))>30000){noChildReceipt={currency:'USD',costMicros:0,kind:'verified_empty_child_list_after_parent_end',receiptHash:hash(JSON.stringify(list))};}
  }
  const parentEnded=terminal.has(String(parent.status)),childEnded=child&&terminal.has(String(child.status));
  const patch:Record<string,unknown>={updated_at:new Date().toISOString()};
  if(noChildReceipt)patch.child_receipt=noChildReceipt;
  if(child){patch.child_sid=child.sid;if(child.status==='in-progress'||child.status==='completed'&&Number(child.duration)>0)patch.recipient_answered_at=c.recipient_answered_at??new Date().toISOString();if(childEnded)patch.child_receipt=receipt(child);}
- if(parentEnded){patch.parent_receipt=receipt(parent);if(!c.connected_at||childEnded||noChildReceipt){patch.ended_at=c.ended_at??new Date().toISOString();patch.state=child?.status==='completed'?'completed':'failed';}}
+ if(parentEnded){patch.parent_receipt=receipt(parent);if(childEnded||noChildReceipt){patch.ended_at=c.ended_at??new Date().toISOString();patch.state=child?.status==='completed'?'completed':'failed';}}
  if(parentEnded&&c.recording_required&&!c.recording_receipt&&!c.recording_deleted_at){
   const list=object(await p.recordings.listRecordings(c.parent_sid).catch(()=>null));
   if(Array.isArray(list.recordings)&&!list.next_page_uri&&list.recordings.length===1){
@@ -116,25 +118,44 @@ export async function reconcileCustomerPhoneCall(c:CustomerPhoneCall,p=customerP
 }
 export async function customerPhoneWebhook(request:Request,part:string){
  const hangup=()=>new Response('<Response><Hangup/></Response>',{headers:{'Content-Type':'application/xml','Cache-Control':'no-store'}});
+ // Only static categories and a database-bound ID may reach logs. Never log a
+ // request, provider response, exception, URL, signature, nonce or phone number.
+ let stage:'validation'|'signature'|'binding'|'provider_call_read'|'parent_binding'|'reconciliation'|'bridge_admission'|'transition'='validation';
+ let callId:string|undefined;
+ const reject=(reason:'invalid_request'|'invalid_signature'|'invalid_provider_identity'|'invalid_call_binding'|'invalid_child_binding'|'invalid_parent_binding'|'bridge_not_admitted'|'unexpected_transition'|'exception')=>{
+  console.warn('customer_phone_webhook_rejected',{stage,reason,...callId?{callId}:{}});
+  return hangup();
+ };
  try{
   const url=new URL(request.url),id=url.searchParams.get('id'),nonce=url.searchParams.get('nonce');
-  if(!uuid(id)||!nonce||!/^[a-f0-9]{64}$/.test(nonce)||url.searchParams.size!==2||url.pathname!==`/api/customer-phone/${part}`||request.headers.get('content-type')?.split(';')[0]!=='application/x-www-form-urlencoded')return hangup();
+  if(!uuid(id)||!nonce||!/^[a-f0-9]{64}$/.test(nonce)||url.searchParams.size!==2||url.pathname!==`/api/customer-phone/${part}`||request.headers.get('content-type')?.split(';')[0]!=='application/x-www-form-urlencoded')return reject('invalid_request');
   const p=customerPhoneProvider(),target=`${customerPhoneBase}/${part}?id=${id}&nonce=${nonce}`;
+  stage='signature';
   const form=verifiedTwilioForm((await boundedBytes(request,16384)).toString('utf8'),request.headers.get('x-twilio-signature'),p.secret,target);
-  if(!form||form.get('AccountSid')!==p.account||!sid(form.get('CallSid'),'CA'))return hangup();
-  let c=await getCustomerPhoneCall(id);if(!c||c.provider_account_sid!==p.account||c.nonce_hash!==hash(nonce))return hangup();
+  if(!form)return reject('invalid_signature');
+  stage='binding';
+  if(form.get('AccountSid')!==p.account||!sid(form.get('CallSid'),'CA'))return reject('invalid_provider_identity');
+  let c=await getCustomerPhoneCall(id);if(!c||c.provider_account_sid!==p.account||c.nonce_hash!==hash(nonce))return reject('invalid_call_binding');
+  callId=c.id;
+  stage='provider_call_read';
   const providerCall=await p.call(form.get('CallSid')!);
+  stage='parent_binding';
   if(part==='notice'&&c.connection_type==='browser'&&!c.ended_at&&bound(c,providerCall,true))return new Response('<Response><Say>This call is being recorded.</Say></Response>',{headers:{'Content-Type':'application/xml'}});
-  if(part==='child'){if(!bound(c,providerCall,true))return hangup();await reconcileCustomerPhoneCall(c,p);return hangup();}
-  if(!bound(c,providerCall)||c.parent_sid&&c.parent_sid!==providerCall.sid)return hangup();
+  if(part==='child'){if(!bound(c,providerCall,true))return reject('invalid_child_binding');stage='reconciliation';await reconcileCustomerPhoneCall(c,p);return hangup();}
+  if(!bound(c,providerCall)||c.parent_sid&&c.parent_sid!==providerCall.sid)return reject('invalid_parent_binding');
   if(!c.parent_sid){await db(`icash_customer_phone_calls?id=eq.${id}&parent_sid=is.null`,'PATCH',{parent_sid:providerCall.sid,state:'ringing',updated_at:new Date().toISOString()});c=(await getCustomerPhoneCall(id))!;}
-  if(part==='status'||part==='done'||part==='recording'){await reconcileCustomerPhoneCall(c,p);return hangup();}
+  if(part==='status'||part==='done'||part==='recording'){stage='reconciliation';await reconcileCustomerPhoneCall(c,p);return hangup();}
+  // Completed callbacks and a phone caller declining the DTMF prompt are normal.
   if(c.ended_at||!['in-progress','ringing'].includes(String(providerCall.status)))return hangup();
-  if(part==='answer'&&c.connection_type==='browser'&&await db<boolean>('rpc/icash_connect_customer_phone_call','POST',{p_id:id,p_parent:c.parent_sid}))return new Response(customerPhoneTwiml(c,'connect',nonce),{headers:{'Content-Type':'application/xml'}});
   if(part==='answer'&&c.connection_type!=='browser'&&c.state==='ringing'&&!c.connected_at)return new Response(customerPhoneTwiml(c,'answer',nonce),{headers:{'Content-Type':'application/xml'}});
-  if(part==='connect'&&c.connection_type!=='browser'&&form.get('Digits')==='1'&&await db<boolean>('rpc/icash_connect_customer_phone_call','POST',{p_id:id,p_parent:c.parent_sid}))return new Response(customerPhoneTwiml(c,'connect',nonce),{headers:{'Content-Type':'application/xml'}});
-  return hangup();
- }catch{return hangup();}
+  if(part==='connect'&&c.connection_type!=='browser'&&form.get('Digits')!=='1')return hangup();
+  if(part==='answer'&&c.connection_type==='browser'||part==='connect'&&c.connection_type!=='browser'&&form.get('Digits')==='1'){
+   stage='bridge_admission';
+   if(!await db<boolean>('rpc/icash_connect_customer_phone_call','POST',{p_id:id,p_parent:c.parent_sid}))return reject('bridge_not_admitted');
+   return new Response(customerPhoneTwiml(c,'connect',nonce),{headers:{'Content-Type':'application/xml'}});
+  }
+  stage='transition';return reject('unexpected_transition');
+ }catch{return reject('exception');}
 }
 
 export async function maintainCustomerPhoneCalls(){
