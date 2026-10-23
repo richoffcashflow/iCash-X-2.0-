@@ -7,8 +7,8 @@ const beat=createHeartbeat({now:()=>time,health:()=>({body:{status}}),rpc:async(
 await Promise.all([beat(),beat()]);assert.equal(calls,1);time=59999;await beat();assert.equal(calls,1);
 time=60000;fail=true;await beat();assert.equal(calls,2);time=120000;fail=false;status='degraded';await beat();assert.equal(calls,3);
 const scheduler=createScheduler({now:()=>time,screening:async()=>false,automation:async()=>false});
-await scheduler.run();assert.equal(scheduler.health().code,200);time+=180001;assert.equal(scheduler.health().code,503);assert.equal(scheduler.health().body.automation,'held');
-await scheduler.run();assert.equal(scheduler.health().code,200);
+await scheduler.run();await new Promise(resolve=>setImmediate(resolve));assert.equal(scheduler.health().code,200);time+=180001;assert.equal(scheduler.health().code,503);assert.equal(scheduler.health().body.automation,'held');
+await scheduler.run();await new Promise(resolve=>setImmediate(resolve));assert.equal(scheduler.health().code,200);
 // Exercise the actual worker RPC client, including its operation allowlist.
 const requests=[];let heartbeatFailures=0;
 const client=createRpc('https://fixture.supabase.co','fixture-key',async(url,options)=>{

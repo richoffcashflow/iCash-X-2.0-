@@ -21,7 +21,8 @@ const server=http.createServer((req,res)=>{
 });
 const heartbeat=rpc?createHeartbeat({rpc,health:()=>scheduler.health(active),onFailure:()=>console.error('Worker heartbeat unavailable')}):null;
 server.listen(Number(process.env.PORT||3001),'0.0.0.0',()=>{
+ console.info('Worker started',{active,automationConcurrency:scheduler.health(active).body.automationConcurrency});
  if(active)void loop();
  if(heartbeat){void heartbeat();heartbeatTimer=setInterval(()=>void heartbeat(),60000);}
 });
-for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{stopping=true;clearTimeout(timer);clearInterval(heartbeatTimer);server.close();});
+for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{stopping=true;clearTimeout(timer);clearInterval(heartbeatTimer);server.close();void scheduler.stop();});

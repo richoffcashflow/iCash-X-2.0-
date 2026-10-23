@@ -12,8 +12,8 @@ const migration=read('config/voice-account-fairness.sql');
 let scenarios=0;
 const scenario=async(name,fn)=>{await pg.exec('begin');try{await fn();scenarios++;}catch(e){throw new Error(name+': '+e.message,{cause:e});}finally{await pg.exec('rollback');}};
 // A scenario is one transaction, so now() is fixed. Age ticket history with the
-// scheduler clock to model another ordinary 31-second dispatch interval.
-const releaseSlot=()=>pg.exec("update icash_voice_scheduler set last_dispatch_at=now()-interval '31 seconds';update icash_automation_tickets set created_at=created_at-interval '31 seconds'");
+// scheduler clock to model another ordinary four-second dispatch interval.
+const releaseSlot=()=>pg.exec("update icash_voice_scheduler set last_dispatch_at=now()-interval '4 seconds';update icash_automation_tickets set created_at=created_at-interval '4 seconds'");
 const next=async()=>{const r=await value('select icash_next_before_fulfillment()');return r?.token?value('select voice_job_id from icash_automation_tickets where token=$1',[r.token]):null;};
 const add=async(n,account=a,age=3600,more={})=>{
  const id=uid(n);await q('insert into icash_voice_jobs(id,account_id,due_at) values($1,$2,now()-$3*interval \'1 second\')',[id,account,age]);
@@ -73,6 +73,27 @@ try{
  const oldSelection=migration.split('$original$')[1],newSelection=migration.split('$replacement$')[1];
  assert.equal(after.replace(newSelection,oldSelection),before,'only candidate selection changes; queueing, 30s gate, locking, issued transition, new ticket and fallback are exact');
  assert.deepEqual(await Promise.all(invariantNames.map(n=>value('select pg_get_functiondef($1::regprocedure)',[n]))),preserved);
+ // Run the actual new launch-spacing patch against the real layered issuer.
+ await pg.exec(`create table fixture_call_holds(account_id uuid,job_id uuid,kind text);
+ create function icash_voice_queue_slot_open(uuid,uuid) returns boolean language sql stable as $$select not exists(select 1 from public.fixture_call_holds where account_id=$1 and job_id=$2 and kind='capacity')$$;
+ create function icash_seller_phone_call_current(uuid,uuid) returns boolean language sql stable as $$select not exists(select 1 from public.fixture_call_holds where account_id=$1 and job_id=$2 and kind='recipient')$$;`);
+ await pg.exec(read('tests/fixtures/parallel-voice-issuer.sql'));
+ const currentIssuer=await value("select pg_get_functiondef('icash_next_before_fulfillment()'::regprocedure)");
+ const parallelPatch=read('config/nationwide-parallel-dispatch.sql').match(/do \$patch\$[\s\S]*?end \$patch\$;/)[0];
+ await pg.exec(parallelPatch);
+ const parallelIssuer=await value("select pg_get_functiondef('icash_next_before_fulfillment()'::regprocedure)");
+ assert.equal(parallelIssuer.replace("last_voice<now()-interval '3 seconds'","last_voice<now()-interval '30 seconds'"),currentIssuer,'only global launch spacing changes');
+ await scenario('new launch spacing admits after three seconds while preserving the gap',async()=>{
+  const first=await add(900,a),second=await add(901,b);
+  assert.equal(await next(),first);
+  await pg.exec("update icash_voice_scheduler set last_dispatch_at=now()-interval '2.99 seconds'");
+  assert.equal(await next(),null);
+  await pg.exec("update icash_voice_scheduler set last_dispatch_at=now()-interval '3.01 seconds'");
+  assert.equal(await next(),second);
+ });
+ for(const kind of ['capacity','recipient'])await scenario('faster dispatch respects '+kind+' hold',async()=>{
+  const job=await add(902,a);await q('insert into fixture_call_holds values($1,$2,$3)',[a,job,kind]);assert.equal(await next(),null);
+ });
  const financialBefore=await value('select jsonb_build_object(\'wallets\',(select jsonb_agg(to_jsonb(w) order by account_id) from icash_wallets w),\'spend\',(select jsonb_agg(to_jsonb(s) order by operation_key) from icash_operation_spend s))');
  await scenario('never served funded account beats hundreds of older jobs',async()=>{
   for(let i=100;i<500;i++)await add(i,a,7200+i);
@@ -180,6 +201,6 @@ try{
  // Unknown prerequisite versions fail without partially applying a new selector.
  await pg.exec('drop index icash_automation_voice_account_recent');
  await assert.rejects(pg.exec(migration),/Voice account fairness prerequisite changed/);await pg.exec('rollback');
- assert.equal(await value("select pg_get_functiondef('icash_next_before_fulfillment()'::regprocedure)"),after);
- console.log(`Voice account fairness: ${scenarios} local scenarios pass; never-served/least-recent/FIFO, failing-account rotation, receipt-bound urgency,30sec global gate, Meta path, Pause/wallet/holds and unchanged financial state/private ACLs.`);
+ assert.equal(await value("select pg_get_functiondef('icash_next_before_fulfillment()'::regprocedure)"),parallelIssuer);
+ console.log(`Voice account fairness: ${scenarios} local scenarios pass; never-served/least-recent/FIFO, failing-account rotation, receipt-bound urgency, three-second global spacing, capacity/recipient gates, Meta path, Pause/wallet/holds and unchanged financial state/private ACLs.`);
 }catch(e){console.error(e.message,e.cause?.where??e.where??'');process.exitCode=1;}finally{await pg.close();}
