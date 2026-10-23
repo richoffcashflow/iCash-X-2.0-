@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useEffectEvent,useRef,useState} from 'react';
 import {Mic,MicOff,Phone,PhoneOff} from 'lucide-react';
-import {BrowserCallSession,type BrowserCallPhase} from '@/lib/browser-call-session';
+import {BrowserCallSession,guardBrowserCallCallbacks,type BrowserCallPhase} from '@/lib/browser-call-session';
 type Contact={phone:string;name?:string;available:boolean;businessNumber?:string|null};
 export function BrowserCallControls({screeningId,contacts,activeCall,onStarted,onFinished,autoStart=false,onAutoStartHandled}:{screeningId:string;contacts:Contact[];activeCall?:{id:string;connection_type?:string;ended_at:string|null};onStarted?:()=>void;onFinished:()=>void;autoStart?:boolean;onAutoStartHandled?:()=>void}){
  const session=useRef<BrowserCallSession|null>(null),mounted=useRef(true),finishing=useRef(false),busy=useRef(false);
@@ -17,18 +17,22 @@ export function BrowserCallControls({screeningId,contacts,activeCall,onStarted,o
   if(busy.current||finishing.current||previous)return;
   busy.current=true;
   setError('');setMuted(false);setSeconds(0);setContact(contacts.find(c=>c.phone===phone)??{phone,available:true});
-  const call=new BrowserCallSession(crypto.randomUUID(),{
+  const callbacks=guardBrowserCallCallbacks(()=>mounted.current&&session.current===call,{
+   onState:(next:BrowserCallPhase,message?:string)=>{busy.current=['connecting','ringing','connected'].includes(next);setPhase(next);setError(message??'');if(next==='ended'||next==='error')onFinished();},
+   onStarted:()=>onStarted?.(),
+  });
+  const call:BrowserCallSession=new BrowserCallSession(crypto.randomUUID(),{
    microphone:async()=>{if(!navigator.mediaDevices?.getUserMedia)throw Error('Open iCash X in a browser with microphone access to call.');const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(track=>track.stop());},
    createDevice:async(token)=>{const {Device}=await import('@twilio/voice-sdk');return new Device(token,{closeProtection:true,logLevel:0});},
-   request:async(action,id)=>{const result=await post(action==='end'?{action,id}:{action,requestKey:id,screeningId,phone});if(action==='end'&&mounted.current)onFinished();return result;},
+   request:async(action,id)=>post(action==='end'?{action,id}:{action,requestKey:id,screeningId,phone}),
    status:async(id)=>{const r=await fetch('/api/work/business-call?id='+id,{cache:'no-store'});if(!r.ok)throw Error();return r.json();},
-   onState:(next,message)=>{busy.current=['connecting','ringing','connected'].includes(next);if(!mounted.current)return;setPhase(next);if(message)setError(message);if(next==='ended')onFinished();},
-   onStarted:()=>onStarted?.(),
+   onState:callbacks.onState,
+   onStarted:callbacks.onStarted,
   });session.current=call;await call.start();
  }
  const startRequestedCall=useEffectEvent(()=>{onAutoStartHandled?.();const available=contacts.filter(c=>c.available);if(available.length===1)void start(available[0].phone);});
  useEffect(()=>{if(!autoStart){autoConsumed.current=false;return;}if(autoConsumed.current)return;autoConsumed.current=true;startRequestedCall();},[autoStart]);
- async function end(){finishing.current=true;try{if(previous)await post({action:'end',id:previous.id});else await session.current?.stop();onFinished();}catch{setError('Could not confirm the call ended. Try End call again.');}finally{finishing.current=false;}}
+ async function end(){finishing.current=true;try{if(previous){await post({action:'end',id:previous.id});if(mounted.current)onFinished();}else await session.current?.stop();}catch{setError('Could not confirm the call ended. Try End call again.');}finally{finishing.current=false;}}
  return <div className="browser-call-controls">
   <p className="contact-help">Keep this window open while you talk.</p>
   {previous&&<p role="status" className="contact-feedback">{previous.connection_type==='browser'?'A browser call is still open. End it before starting another.':'A phone call is already in progress.'}</p>}
