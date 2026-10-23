@@ -68,7 +68,7 @@ let providerReads=0,flipAt=null,flip=()=>{},legacyRate=false,recordingStatus='re
 let outboundBody,contextOverrides=true,operational=false,operationalCurrent=true;
 let smsSource=null,ackFails=false;const dispatchTextMessage=async()=>{if(ackFails)throw Error("Synthetic SMS failure");records.push({smsAck:true});return {status:"message_accepted"};};
 let buyerApproved=true,callbackId=null,providerNumber='+14243948384',suppressed=false,paced=true;let records=[],postCount=0,allowClaim=true,paused=false,timeout=false,jobState='issued',practice=false,quoteSeconds=600;
-let priorSellerCalls=[],cancellationId=null,cancellationContext=null;
+let priorSellerCalls=[],cancellationId=null,cancellationContext=null,inventoryDenied=false;
 const db=async(path,method,body)=>{
  records.push({path,method,body});
  if(flipAt===path||flipAt==='final-patch'&&method==='PATCH'&&body.sms_context!==undefined)flip();
@@ -89,11 +89,11 @@ const db=async(path,method,body)=>{
  if(path==='rpc/icash_seller_voice_permission_current')return sellerConsentCurrent;
  if(path==='rpc/icash_voice_outreach_context'){assert.equal(body.p_account,'account');assert.equal(body.p_job,'job');return outreachContextOverride===undefined?outreachContext(permission.timezone,activeConversation||!!cancellationContext&&cancellationCurrent):outreachContextOverride;}
  if(path==='rpc/icash_operational_contact_current'){assert.equal(body.p_account,'account');assert.equal(body.p_contact,'operational');assert.equal(body.p_channel,'voice');return operationalCurrent;}
- if(path==='rpc/icash_reserve_flexible_voice')return flexibleFunding;
+ if(path==='rpc/icash_reserve_flexible_voice'){if(flexibleFunding===null&&inventoryDenied)jobState='held';return flexibleFunding;}
  if(path==='rpc/icash_reserve_paced_voice'){if(reservationError)throw reservationError;return paced;}
  if(path==='rpc/icash_hold_voice_activation_budget'){if(budgetHoldAccepted)jobState='held';return budgetHoldAccepted;}
  if(method==='PATCH'){if(body.state==='held'&&path.includes(`state=eq.${jobState}`))jobState='held';return [];}
- if(path.startsWith('icash_voice_jobs'))return [{id:'job',account_id:'account',permission_id:operational?null:'permission',operational_contact_id:operational?'operational':null,callback_id:callbackId,sms_source_message_id:smsSource,cancellation_notice_id:cancellationId,state:jobState}];
+ if(path.startsWith('icash_voice_jobs'))return [{id:'job',account_id:'account',permission_id:operational?null:'permission',operational_contact_id:operational?'operational':null,callback_id:callbackId,sms_source_message_id:smsSource,cancellation_notice_id:cancellationId,state:jobState,outcome:inventoryDenied?'seller_inventory_unavailable':null}];
  if(path.startsWith('icash_voice_configs'))return [c];
  if(path.startsWith('icash_contact_permissions')||path.startsWith('icash_voice_contact_targets'))return [{...permission,id:operational?'operational':permission.id}];
  if(path.startsWith('icash_deal_files'))return [];
@@ -158,6 +158,7 @@ assert(!records.some(r=>r.path==='icash_live_conversations'&&r.method==='POST'),
 assert.deepEqual(providerPaths,[`/v1/convai/phone-numbers/${c.phone_number_id}`,`/v1/convai/agents/${review.agentId}?branch_id=${review.branchId}`]);
 reset();process.env.ICASH_FLEXIBLE_VOICE_READY='true';assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(outboundBody.maxTotalSeconds,120,'funded duration reaches carrier dispatch');assert(!records.some(r=>r.path==='rpc/icash_reserve_paced_voice'));
 reset();process.env.ICASH_FLEXIBLE_VOICE_READY='true';flexibleFunding=null;assert.equal((await dispatchLiveVoice('account','job')).status,'waiting_for_available_credits');assert.equal(postCount,0);
+reset();process.env.ICASH_FLEXIBLE_VOICE_READY='true';flexibleFunding=null;inventoryDenied=true;assert.equal((await dispatchLiveVoice('account','job')).status,'seller_inventory_unavailable');assert.equal(postCount,0);assert.equal(jobState,'held');inventoryDenied=false;
 const noAdmission=()=>{assert.equal(postCount,0);assert(!records.some(r=>['rpc/icash_reserve_paced_voice','rpc/icash_claim_reviewed_voice_job','rpc/icash_claim_automatic_offer_voice_job'].includes(r.path)));assert.equal(jobState,'held');};
 // Recorded account configs must match the review, including exact tool set and cap.
 // Legacy conversation hashes and two-tool configs stay fail-closed in this lane.
