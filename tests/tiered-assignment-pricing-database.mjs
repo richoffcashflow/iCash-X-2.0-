@@ -97,5 +97,32 @@ try{
  assert.equal((await pricing(15000000,300000,40000)).targetFeeCents,2000000);
  assert.equal((await pricing(30000000,600000,50000,100000000001)).ready,false);
  for(const role of ['anon','authenticated'])assert.equal((await one("select has_function_privilege($1,'public.icash_buyer_assignment_pricing(bigint,jsonb,bigint)','execute') allowed",[role])).allowed,false);
+ // New owner-authorized floor; old signed/published terms remain immutable.
+ await pg.exec(`create table icash_network_matches(id uuid primary key,account_id uuid,deal_id uuid);
+ create table icash_buyer_deal_feedback(id uuid,match_id uuid,reason text,counteroffer_cents bigint,created_at timestamptz);
+ create table icash_seller_recovery_variants(key text primary key,enabled boolean default false);
+ insert into icash_seller_recovery_variants(key) values('unanswered-v1'),('unanswered-v2'),('repeat-v1'),('no-response-v1'),('no-response-v2'),('viewing-v1'),('viewing-v2'),('unreviewed-experiment');`);
+ await pg.exec(readFileSync('config/close-deal-recovery.sql','utf8'));
+ const rescue=await make(20200000,350000,50000);
+ assert.equal(await prep(rescue.deal),false);
+ const beforeRecovery=await rpc('icash_deal_recovery',{p_account:account,p_deal:rescue.deal});
+ assert.equal(beforeRecovery.editable,true);assert.equal(beforeRecovery.proposal.assignmentFeeCents,800000);
+ const approve={p_account:account,p_actor:user,p_deal:rescue.deal,p_key:randomUUID(),p_terms_hash:beforeRecovery.termsHash,p_minimum:800000};
+ await assert.rejects(()=>rpc('icash_authorize_deal_recovery',{...approve,p_actor:randomUUID()}));
+ await assert.rejects(()=>rpc('icash_authorize_deal_recovery',{...approve,p_terms_hash:'0'.repeat(32)}));
+ await assert.rejects(()=>rpc('icash_authorize_deal_recovery',{...approve,p_minimum:900000}));
+ await assert.rejects(()=>rpc('icash_authorize_deal_recovery',{...approve,p_minimum:100000}));
+ await rpc('icash_authorize_deal_recovery',approve);await rpc('icash_authorize_deal_recovery',approve);
+ assert.equal((await one('select count(*) n from icash_deal_recovery_authorizations')).n,1,'idempotent explicit receipt');
+ assert.equal((await saved(rescue.deal)).terms.assignmentFeeCents,800000);
+ assert.equal((await saved(rescue.deal)).terms.assignmentDepositCents,160000);
+ assert.equal((await one('select terms from icash_signing_envelopes where id=$1',[rescue.envelope])).terms.assignmentFeeCents,null,'signed purchase untouched');
+ assert.equal(await prep(rescue.deal),true,'authorized floor reaches real disposition preparation');
+ const rescuedPackage=await rpc('icash_ensure_buyer_package',{p_account:account,p_deal:rescue.deal});assert.equal(rescuedPackage.askingPriceCents,21000000);
+ await assert.rejects(async()=>rpc('icash_authorize_deal_recovery',{...approve,p_key:randomUUID(),p_terms_hash:(await rpc('icash_deal_recovery',{p_account:account,p_deal:rescue.deal})).termsHash,p_minimum:500000}));
+ assert.equal((await one('select count(*) n from icash_seller_recovery_variants where enabled')).n,7,'only approved variants activated');
+ assert.equal(await rpc('icash_deal_recovery',{p_account:other,p_deal:rescue.deal}),null);
+ for(const role of ['anon','authenticated'])assert.equal((await one("select has_function_privilege($1,'public.icash_authorize_deal_recovery(uuid,uuid,uuid,uuid,text,bigint)','execute') allowed",[role])).allowed,false);
+ console.log('PASS explicit fee recovery, owner isolation, stale-term rejection, replay, signed/released price preservation and seven reviewed follow-ups.');
  console.log('Tiered pricing passed: supported larger fee, step-down, minimum-margin hold, rounded totals/deposits, $5k deposit cap, legacy preservation, immutable purchase, owner guidance and access isolation. No provider spend.');
 }catch(error){console.error(error.message,error.detail??'',error.where??'',error.stack?.split('\n').filter(line=>line.includes('tiered-assignment')).join('\n')??'');process.exitCode=1;}finally{await pg.close();globalThis.fetch=originalFetch;}

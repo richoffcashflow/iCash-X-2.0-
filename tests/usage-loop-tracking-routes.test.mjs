@@ -31,13 +31,15 @@ assert.equal((await adminRoute.GET(adminReq)).status,503);assert.equal(reportRea
 // healthy status into a failed maintenance tick.
 let lanesRan=false,monitorRan=false,pruneTried=false;
 const maintenance=await load('app/api/internal/maintenance/route.ts','usageMaintenanceTest',{
+ refreshVoiceCapacity:async()=>{throw Error('Provider unavailable');},readRecordingReview:()=>null,readVoiceCapacityProvider:async()=>{throw Error('Unexpected provider request');},
  authorizeOutboundBilling:()=>true,pruneUsageLoopObservations,
  db:async path=>{assert.equal(path,'rpc/icash_prune_usage_loop_observations');pruneTried=true;throw Error('telemetry unavailable');},
  maintenanceBatch:async lanes=>{assert.deepEqual(Object.keys(lanes),['supportCustomerEmail','supportCopies','purchaseEmail','purchaseFollowups','outbound','recording','ownerRecording','reception']);lanesRan=true;return {ok:true};},
  refreshReliability:async(_db,ok)=>{assert.equal(ok,true);monitorRan=true;return true;},
  outbound:async()=>{},recording:async()=>{},ownerRecording:async()=>{},reception:async()=>{},
 });
-assert.equal((await maintenance.GET(new Request('https://example.test/api/internal/maintenance'))).status,200);
+const maintenanceResult=await maintenance.GET(new Request('https://example.test/api/internal/maintenance'));
+assert.equal(maintenanceResult.status,200);assert.equal((await maintenanceResult.json()).capacity.status,'verification_unavailable');
 assert(pruneTried&&lanesRan&&monitorRan);
 for(const key of ['usageEventTest','usageAdminTest','usageMaintenanceTest'])delete globalThis[key];
 console.log('PASS usage tracking routes: same-origin/session/mode checks, no client account or conversion fields, owner-only report, and telemetry failure isolated from maintenance.');

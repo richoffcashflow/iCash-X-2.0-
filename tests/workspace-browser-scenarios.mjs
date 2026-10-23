@@ -10,6 +10,7 @@ export async function verifyWorkspace(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});
  const page=await context.newPage(),errors=[],writes=[],external=[],diagnostics=[];
  page.setDefaultTimeout(12000);page.setDefaultNavigationTimeout(20000);page.on('dialog',dialog=>void dialog.accept());
+ let recoveryFixture=null;const recoveryWrites=[];
  let contractFlow=false;const contractWrites=[];
  let acknowledged=true,ackFail=false,manual=false,controlFail=false,vip=true;const acceptedWrites=[],controlWrites=[],assistantWrites=[],apiReads=[];
  let instantVariant=null,inboundLead=false,callOutcome=null;
@@ -70,6 +71,9 @@ export async function verifyWorkspace(browser,base,options,name){
    assert(vip,'Only verified VIP can submit an assistant question');const body=request.postDataJSON();assistantWrites.push(body);
    return route.fulfill({json:{id:`fixture-reply-${assistantWrites.length}`,question:body.question,state:'completed',created_at:new Date().toISOString(),answer:{text:'Fixture reply for this property.',actions:[],checkedAt:new Date().toISOString()}}});
   }
+  if(url.pathname==='/api/work/deal-recovery'&&request.method()==='POST'){
+   const body=request.postDataJSON();recoveryWrites.push(body);assert.equal(body.confirmed,true);assert.equal(body.minimumFeeCents,800000);assert.equal(body.termsHash,'a'.repeat(32));return route.fulfill({json:{saved:true,recovery:recoveryFixture}});
+  }
   if(request.method()!=='GET'){writes.push(url.pathname);return route.fulfill({status:403,json:{error:'Read-only fixture'}});}
   const p=url.pathname;apiReads.push(p);
   if(p==='/api/account')return route.fulfill({json:{...fixtureAccount,...(fundingFixture?{paused:fundingFixture.paused,workReady:true}:{}),...(instantVariant?{paused:false}:{}),...(opportunityProgress?{paused:opportunityProgress.status==='paused'}:{}),workspaceAcknowledged:acknowledged,mode:'live',vip,vipFeatures:vip,billingModel:'membership_credits',membershipActive:true}});
@@ -88,7 +92,7 @@ export async function verifyWorkspace(browser,base,options,name){
   if(p==='/api/work/fulfillment'){
    if(fulfillmentMode==='hold')await new Promise(resolve=>fulfillmentHolds.add(resolve));
    if(fulfillmentMode==='fail')return route.fulfill({status:503,json:{error:'Fixture unavailable'}});
-   return route.fulfill({json:{dealStage:scenario.startsWith('closing')?'closing':'under_contract',documents:[],buyers:[{buyer_id:'sample-buyer',name:'Cedar Ridge Homes',rank:1,ready:true}],buyerNetwork:network,buyerPackage:{url:base+'/preview/workspace?preview=1',askingPriceCents:10000000,purchasePriceCents:9000000,assignmentFeeCents:1000000},closingUpdates:[],titleReplies:['closing_waiting','closing_recovery'].includes(scenario)?titleReplies:[],titleTasks:[],...(scenario==='closing_recovery'?{closingSetup:{setup:null,verifiedContact:null,directory:[],buyerSuggestions:[],titleEmailInAgreement:null}}:{})}});
+   return route.fulfill({json:{buyerRecovery:recoveryFixture,dealStage:scenario.startsWith('closing')?'closing':'under_contract',documents:[],buyers:[{buyer_id:'sample-buyer',name:'Cedar Ridge Homes',rank:1,ready:true}],buyerNetwork:network,buyerPackage:{url:base+'/preview/workspace?preview=1',askingPriceCents:10000000,purchasePriceCents:9000000,assignmentFeeCents:1000000},closingUpdates:[],titleReplies:['closing_waiting','closing_recovery'].includes(scenario)?titleReplies:[],titleTasks:[],...(scenario==='closing_recovery'?{closingSetup:{setup:null,verifiedContact:null,directory:[],buyerSuggestions:[],titleEmailInAgreement:null}}:{})}});
   }
   if(p==='/api/work/text-contact')return route.fulfill({json:{contacts:[]}});
   if(p==='/api/work/manual-call')return route.fulfill({json:{businessNumber:'+12025550199',contacts:[{phone:'+12025550101',name:'Example Seller',available:callMode!=='blocked',reason:callMode==='blocked'?'This contact asked not to be called.':''},...(callMode==='multiple'?[{phone:'+12025550102',name:'Other Seller',available:true}]:[])],personalCalls:[]}});
@@ -437,6 +441,17 @@ export async function verifyWorkspace(browser,base,options,name){
    }
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'workspace fits the viewport');
   }
+  recoveryFixture={editable:true,termsHash:'a'.repeat(32),minimumFeeCents:1000000,proposal:{ready:true,assignmentFeeCents:800000,askingPriceCents:21000000},feedback:[]};
+  await openProperty('buyers');
+  await page.getByRole('button',{name:'Ways to move this deal forward',exact:true}).click();
+  const feeRecovery=page.getByRole('dialog',{name:'Ways to move this deal forward',exact:true});await feeRecovery.waitFor();
+  const approval=feeRecovery.getByRole('button',{name:'Approve fee for this deal',exact:true});assert(await approval.isDisabled());
+  await feeRecovery.getByRole('combobox',{name:/^My minimum fee/}).selectOption('800000');assert(await approval.isDisabled());
+  await feeRecovery.getByRole('checkbox',{name:/I approve preparing buyer terms/}).check();await approval.click();
+  await feeRecovery.getByText('Your fee approval is saved.',{exact:false}).waitFor();assert.equal(recoveryWrites.length,1);
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  await page.screenshot({path:`/tmp/icash-close-recovery-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
+  await page.keyboard.press('Escape');await feeRecovery.waitFor({state:'hidden'});recoveryFixture=null;
   fulfillmentMode='hold';
   const closingCard=await openProperty('closing_recovery');
   await (await checkClosingButton(closingCard)).click();

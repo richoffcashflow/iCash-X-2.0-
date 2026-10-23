@@ -6,6 +6,7 @@ import type {ClosingSetupRecord,ClosingDirectoryOption} from '@/lib/closing-setu
 import type {SavedCloser,ProceedsReceipt} from '@/lib/deal-completion';
 import type {ClosingUpdate} from '@/lib/closing-progress';
 import {buyerPricingReviewMessage,type BuyerAssignmentPricing} from '@/lib/buyer-assignment-pricing';
+import type {DealRecovery} from '@/lib/deal-recovery';
 import type {NetworkWorkspace} from '@/lib/buyer-network';
 export const dynamic='force-dynamic';
 export async function GET(req:Request){
@@ -28,7 +29,7 @@ export async function GET(req:Request){
  db('rpc/icash_buyer_outreach_status','POST',{p_account:accountId,p_deal:deal.id})
  ]);
  const job=jobs[0],title=titles[0],titleContact=titleContacts.find(c=>deal.terms.titleEmail?.trim()?c.email.toLowerCase()===deal.terms.titleEmail.toLowerCase():c.evidence_ref.startsWith('owner-closing-verification:')),ids=matches.map(m=>m.buyer_id).join(','),candidateIds=candidates.map(c=>c.buyer_id).join(',');
- const [documents,buyers,candidateNames,packageData,packageLinks,pricing,network,savedClosers,proceeds]=await Promise.all([
+ const [documents,buyers,candidateNames,packageData,packageLinks,pricing,network,savedClosers,proceeds,buyerRecovery]=await Promise.all([
  job?db<unknown[]>(`icash_deal_documents?deal_id=eq.${deal.id}&fulfillment_job_id=eq.${job.id}&select=id,kind&limit=2`):Promise.resolve([]),
  ids?db<{id:string;display_name:string}[]>(`icash_buyer_profiles?account_id=eq.${accountId}&id=in.(${ids})&select=id,display_name`):Promise.resolve([]),
  candidateIds?db<{id:string;display_name:string}[]>(`icash_buyer_profiles?account_id=eq.${accountId}&id=in.(${candidateIds})&select=id,display_name`):Promise.resolve([]),
@@ -37,11 +38,12 @@ export async function GET(req:Request){
  db<BuyerAssignmentPricing|null>('rpc/icash_unreleased_buyer_pricing','POST',{p_account:accountId,p_deal:deal.id}),
  db<NetworkWorkspace>('rpc/icash_network_workspace','POST',{p_account:accountId,p_deal:deal.id}),
  db<SavedCloser[]>('rpc/icash_saved_closers','POST',{p_account:accountId}),
- db<ProceedsReceipt[]>(`icash_proceeds_receipts?account_id=eq.${accountId}&deal_id=eq.${deal.id}&select=id,amount_cents,received_date,created_at&limit=1`)
+ db<ProceedsReceipt[]>(`icash_proceeds_receipts?account_id=eq.${accountId}&deal_id=eq.${deal.id}&select=id,amount_cents,received_date,created_at&limit=1`),
+ db<DealRecovery|null>('rpc/icash_deal_recovery','POST',{p_account:accountId,p_deal:deal.id})
  ]);
  const link=packageLinks[0];
  const buyerPackage=packageData&&link?.asking_price_cents===packageData.askingPriceCents?{...packageData,url:`https://propertymsgs.com/d/${link.token}`}:null;
  const buyerNetwork=network?.vip?{matches:network.matches,emailed:network.emailed,responses:network.responses,buyers:network.buyers.map(({id,name,state,reply})=>({id,name,state,reply}))}:null;
- return NextResponse.json({dealStage:deal.stage,buyerNetwork,buyerPricingReview:buyerPricingReviewMessage(pricing),buyerOutreachHeld,buyerOutreach,proceedsReceipt:proceeds[0]??null,closingSetup:{savedClosers,setup:closingSetups[0]??null,verifiedContact:titleContact?{email:titleContact.email}:null,directory:titleDirectory,buyerSuggestions:buyerTitleSuggestions,titleEmailInAgreement:deal.terms.titleEmail??null},buyerPackage,closingUpdates,titleTasks:await attachTaskRecovery(accountId,titleTasks),titleReplies,title:title?.state??null,titleReady:!!titleContact&&!!process.env.RESEND_API_KEY&&!!process.env.RESEND_RECEIVING_WEBHOOK_SECRET&&!!process.env.ICASH_TITLE_FROM_EMAIL&&!!process.env.ICASH_TITLE_REPLY_EMAIL,candidates:candidateNames.map(c=>({id:c.id,name:c.display_name})),job,documents,buyers:matches.map(m=>({...m,name:buyers.find(b=>b.id===m.buyer_id)?.display_name??'Buyer'}))},{headers:{'Cache-Control':'private, no-store'}});
+ return NextResponse.json({dealStage:deal.stage,buyerRecovery,buyerNetwork,buyerPricingReview:buyerPricingReviewMessage(pricing),buyerOutreachHeld,buyerOutreach,proceedsReceipt:proceeds[0]??null,closingSetup:{savedClosers,setup:closingSetups[0]??null,verifiedContact:titleContact?{email:titleContact.email}:null,directory:titleDirectory,buyerSuggestions:buyerTitleSuggestions,titleEmailInAgreement:deal.terms.titleEmail??null},buyerPackage,closingUpdates,titleTasks:await attachTaskRecovery(accountId,titleTasks),titleReplies,title:title?.state??null,titleReady:!!titleContact&&!!process.env.RESEND_API_KEY&&!!process.env.RESEND_RECEIVING_WEBHOOK_SECRET&&!!process.env.ICASH_TITLE_FROM_EMAIL&&!!process.env.ICASH_TITLE_REPLY_EMAIL,candidates:candidateNames.map(c=>({id:c.id,name:c.display_name})),job,documents,buyers:matches.map(m=>({...m,name:buyers.find(b=>b.id===m.buyer_id)?.display_name??'Buyer'}))},{headers:{'Cache-Control':'private, no-store'}});
  }catch{return NextResponse.json({error:'Could not load deal progress.'},{status:503});}
 }

@@ -138,6 +138,31 @@ try{
    assert.equal((await one('select relrowsecurity enabled from pg_class where oid=$1::regclass',[table])).enabled,true);
   }
  }checked();
+ await pg.exec(`create function icash_opportunity_market_score(uuid,text) returns numeric language sql stable as $$select 0.5::numeric$$;
+ create function icash_opportunity_score(uuid,jsonb,text) returns numeric language sql stable as $$select 0.5::numeric$$;
+ create function icash_network_demand(uuid) returns jsonb language sql stable as $$select '{"markets":[{"zip":"75201","buyers":3,"houseBuyers":3,"landBuyers":0}]}'::jsonb$$;`);
+ await pg.exec(readFileSync('config/close-buyer-demand.sql','utf8'));
+ await rpc('icash_network_save_buyer',{p_user:buyerUser,p_profile:{...profile,availableDeals:2}});
+ assert.equal((await rpc('icash_network_profile',{p_user:buyerUser})).availableDeals,2);
+ for(let i=0;i<2;i++){const u=id();await q('insert into auth.users values($1,$2,now())',[u,`buyer${i}@example.invalid`]);await rpc('icash_network_save_buyer',{p_user:u,p_profile:{...profile,availableDeals:1}});}
+ const demand=async(price=10000000,repairs=2000000)=>rpc('icash_current_buyer_demand',{p_zip:'75201',p_price:price,p_repairs:repairs});
+ assert.equal((await demand()).buyers,3);assert.equal((await demand()).capacityBuyers,3);
+ assert.equal((await demand(16000000)).buyers,0,'budget mismatch cannot drive sourcing');
+ assert.equal((await demand(10000000,4000000)).buyers,0,'repair tolerance is real');
+ const eligible={financialCheck:{status:'eligible'},property:{offerCalculation:{buyerCeilingCents:10000000,repairCents:2000000}}};
+ const score=await rpc('icash_opportunity_score',{p_account:account,p_result:eligible,p_zip:'75201'});
+ assert(score>await rpc('icash_opportunity_score',{p_account:account,p_result:eligible,p_zip:'75202'}));
+ assert.equal((await rpc('icash_network_demand',{p_account:account})).markets[0].capacityBuyers,3);
+ await isolated(async()=>{await q('update icash_network_buyers set available_deals=0 where user_id=$1',[buyerUser]);assert.equal((await demand()).buyers,0,'fewer than three qualifying buyers suppressed');});
+ await isolated(async()=>{await q("update icash_network_buyers set expires_at=now()-interval '1 second' where user_id=$1",[buyerUser]);assert.equal((await demand()).buyers,0);});
+ await q("update icash_network_matches set state='matched' where id=$1",[match]);
+ const feedback={p_user:buyerUser,p_match:match,p_state:'interested',p_key:id(),p_reason:'price',p_price:9500000};
+ await rpc('icash_network_feedback',feedback);await rpc('icash_network_feedback',feedback);
+ assert.equal((await one('select count(*) n from icash_buyer_deal_feedback')).n,1);
+ await assert.rejects(()=>rpc('icash_network_feedback',{...feedback,p_user:owner,p_key:id()}));
+ await assert.rejects(()=>rpc('icash_network_feedback',{...feedback,p_price:9500001,p_key:id()}));
+ assert.equal((await one('select asking_price_cents from icash_buyer_package_links where deal_id=$1',[deal])).asking_price_cents,10000000,'counteroffer is not repricing');
+ console.log('PASS budget/repair/capacity sourcing, expiry, aggregate privacy, recorded buyer counteroffers and tenant isolation.');
  console.log(`PASS ${checks} buyer-network SQL scenarios: enrollment, criteria, VIP, signed deals, privacy, consent, shared suppression, deduplication, daily limits, receipts, replies and tenant isolation. No provider calls.`);
 }catch(error){console.error('FAIL buyer network:',error.message,error.where??'',error.stack?.split('\n').find(line=>line.includes('test-buyer-network-pglite'))??'');process.exitCode=1;}
 finally{await pg.close();globalThis.fetch=originalFetch;}
