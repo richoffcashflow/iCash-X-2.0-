@@ -14,9 +14,9 @@ export async function membershipOffer():Promise<MembershipOffer>{const [row]=awa
 export async function accountMembership(accountId:string,signal?:AbortSignal){
  const mode=fundingMode();if(!mode)throw Error('Billing mode unavailable');
  const scope=`icash_memberships?account_id=eq.${accountId}&mode=eq.${mode}`;
- const [current]=await db<Membership[]>(`${scope}&state=neq.cancelled&order=created_at.desc&limit=1&select=*`,'GET',undefined,signal);
+ const [current]=await db<Membership[]>(`${scope}&state=neq.cancelled&order=created_at.desc&limit=1&select=*`,undefined,undefined,signal);
  if(current)return current;
- const [previous]=await db<Membership[]>(`${scope}&state=eq.cancelled&order=created_at.desc&limit=1&select=*`,'GET',undefined,signal);
+ const [previous]=await db<Membership[]>(`${scope}&state=eq.cancelled&order=created_at.desc&limit=1&select=*`,undefined,undefined,signal);
  return previous??null;
 }
 export function publicMembership(m:Membership|null){return m?{complimentary:!!m.private_invite_id,state:m.state,priceCents:m.price_cents,vip:vipActive(m),vipUntil:m.vip_until??null,vipRetained:!!m.vip_retained_at,pendingDowngrade:vipActive(m)&&m.price_cents===5000&&!m.vip_retained_at,paidThrough:m.paid_through,cancelAtPeriodEnd:m.cancel_at_period_end,accessible:membershipAccessible(m),retentionEndsAt:m.vip_retained_at?null:m.retention_ends_at??null}:null;}
