@@ -22,3 +22,11 @@ export async function refreshInventoryGeographies(db:Database,request:typeof fet
   return {status:'metadata_unavailable'};
  }
 }
+
+/** Four independently leased pages per minute: at most 400 free ZIP metadata
+ * rows. The shared API limiter leaves paid research and contact checks in control.
+ */
+export async function refreshInventoryGeographyBatch(db:Database,request:typeof fetch=fetch){
+ const results=await Promise.allSettled(Array.from({length:4},()=>refreshInventoryGeographies(db,request)));
+ return {pages:results.map(result=>result.status==='fulfilled'?result.value:{status:'metadata_unavailable'})};
+}

@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 23, 2026 the owner requested faster results through parallel AI seller calls and nationwide research. Keep bounded concurrent dispatch, fresh one-use capabilities, fair account service and actual receipt-backed progress. Expand nationwide accounts through current eligible US ZIP metadata while preserving explicit saved scope, state restrictions, duplicate coverage, contact rules, funding limits and unknown-outcome holds. Do not equate configured capacity, queued calls or attempts with interested sellers or signed contracts.
+
 - On October 21, 2026 the owner required support to answer simple product questions directly, without unrelated credit, Pause, readiness or course reminders. Explain the current interface accurately: there is no customer city selector in the workspace. Never invent a setting or claim a market was changed. Keep actual troubleshooting and unresolved earlier problems open; a simple side question is not proof of a repair. Notify an affected customer only from their own verified activity, distinguishing a repaired platform issue from remaining account holds.
 
 - On October 21, 2026 the owner clarified that customer views must open from a visible Accounts tab in their own workspace and reuse the actual customer workspace layout, lead filters/cards, activity and conversations. Keep a clear selected-account banner, switch-account and return-to-own-workspace controls. Preserve the audited read-only session boundaries; no customer credentials, provisioning or paid actions from inspection.

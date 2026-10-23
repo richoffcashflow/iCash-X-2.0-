@@ -31,7 +31,7 @@ assert.equal((await adminRoute.GET(adminReq)).status,503);assert.equal(reportRea
 // healthy status into a failed maintenance tick.
 let lanesRan=false,monitorRan=false,pruneTried=false;
 const maintenance=await load('app/api/internal/maintenance/route.ts','usageMaintenanceTest',{
- refreshInventoryGeographies:async()=>({status:'not_due'}),refreshVoiceCapacity:async()=>{throw Error('Provider unavailable');},readRecordingReview:()=>null,readVoiceCapacityProvider:async()=>{throw Error('Unexpected provider request');},
+ refreshInventoryGeographyBatch:async()=>({status:'not_due'}),refreshVoiceCapacity:async()=>{throw Error('Provider unavailable');},readRecordingReview:()=>null,readVoiceCapacityProvider:async()=>{throw Error('Unexpected provider request');},
  authorizeOutboundBilling:()=>true,pruneUsageLoopObservations,
  db:async path=>{assert.equal(path,'rpc/icash_prune_usage_loop_observations');pruneTried=true;throw Error('telemetry unavailable');},
  maintenanceBatch:async lanes=>{assert.deepEqual(Object.keys(lanes),['supportCustomerEmail','supportCopies','purchaseEmail','purchaseFollowups','outbound','recording','ownerRecording','reception']);lanesRan=true;return {ok:true};},
