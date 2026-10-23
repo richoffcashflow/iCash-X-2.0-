@@ -190,7 +190,13 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
   if(!held)throw error;
   return {status:'activation_budget_held'};
  }
- if(!fundedCall)return {status:cancellation?'cancellation_notice_waiting':process.env.ICASH_FLEXIBLE_VOICE_READY==='true'?'waiting_for_available_credits':'waiting_for_daytime_budget'};
+ if(!fundedCall){
+  // Inventory admission can reject an already assigned seller before spending.
+  // Preserve that saved reason instead of reporting a false credit shortage.
+  const [current]=await db<{state:string;outcome:string|null}[]>(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&select=state,outcome`);
+  if(current?.state==='held'&&current.outcome==='seller_inventory_unavailable')return {status:'seller_inventory_unavailable'};
+  return {status:cancellation?'cancellation_notice_waiting':process.env.ICASH_FLEXIBLE_VOICE_READY==='true'?'waiting_for_available_credits':'waiting_for_daytime_budget'};
+ }
  const claimHold=recordingReleaseHold();if(claimHold)return hold(claimHold);
  const metaClaim=intake?await db<'claimed'|'deferred'|'held'|'unavailable'>('rpc/icash_meta_claim_or_defer_voice','POST',{p_account:accountId,p_job:j.id}):null;
  // Deferral retains the unattempted reservation. Never send a later generic
