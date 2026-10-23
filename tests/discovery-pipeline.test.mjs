@@ -3,7 +3,7 @@ import {discoverPage} from '../lib/discovery-pipeline.ts';
 const c={zip:'75201',page:1,perPage:5,unitCostMicros:10000,quotedDataCostMicros:50000};
 const raw={data:[{dm_property_id:'prop_123',address:'Fixture only',city:'Example',state:'TX',estimated_value:200000,contacts:[{private:'omit'}]}],credits:{used:1,people:0},pagination:{has_next_page:false}};
 let calls=[],saved,claimed=false;
-const deps={request:async b=>{calls.push(b);if(b.estimate_cost)return {estimated_credits:{this_page:5,breakdown:{people:0}}};assert.equal(claimed,true);return raw;},reserveAndClaim:async()=>{claimed=true;return true;},persist:async r=>{saved=r;}};
+const deps={request:async b=>{calls.push(b);if(b.estimate_cost)return {estimated_credits:{this_page:5,breakdown:{people:0}}};assert.equal(claimed,true);return raw;},reserveAndClaim:async()=>{claimed=true;return true;},persist:async r=>{saved=r;return r.rows.length;}};
 assert.equal((await discoverPage(c,deps)).status,'screening_queued');
 assert.deepEqual(calls[0].filters.find(f=>f.filter_id==='estimated_equity_percentage'),{filter_id:'estimated_equity_percentage',operator:'greater_than_or_equal',value:70});
 assert.equal(calls.length,2);assert.equal(calls[0].contact_audience,'none');assert.deepEqual({...calls[0],estimate_cost:false},calls[1]);assert.equal(saved.rows[0].contacts,undefined);assert.equal(saved.creditsUsed,1);
@@ -23,3 +23,6 @@ for(const photoData of [{images},{latitude:35,longitude:-90}]){
 }
 await discoverPage(c,{...deps,request:async b=>b.estimate_cost?{estimated_credits:{this_page:1,breakdown:{people:0}}}:{...raw,data:[{...raw.data[0],images:{street_view:'https://other.invalid/photo.jpg'}}]}});
 assert.equal(saved.rows[0].images,undefined,'Untrusted image hosts are never persisted');
+const duplicate=await discoverPage(c,{...deps,persist:async()=>0});
+assert.equal(duplicate.status,'no_new_properties');assert.equal(duplicate.properties,0);assert.equal(duplicate.returnedProperties,1);
+await assert.rejects(discoverPage(c,{...deps,persist:async()=>undefined}),/DELIVERY_REQUIRES_RECONCILIATION/,'Missing delivery acknowledgement must never be counted as queued work');

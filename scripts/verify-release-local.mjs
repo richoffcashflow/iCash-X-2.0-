@@ -5,7 +5,7 @@ const suites = [
  'close-capacity', 'parallel-capacity-provider', 'close-conversion-database', 'close-conversion-routes',
  'owner-accounts-database', 'owner-accounts-routes',
  'seller-interest-experiments', 'shared-learning-policy', 'shared-learning-database', 'shared-learning-routes',
- 'discovery-filters', 'discovery-filter-service', 'discovery-filter-database', 'discovery-pipeline', 'owner-enrichment',
+ 'discovery-filters', 'discovery-filter-service', 'discovery-filter-database', 'discovery-pipeline', 'unique-outbound-inventory', 'inventory-geographies', 'owner-enrichment',
  'seller-work-progress', 'support-outreach', 'bot-activity',
  'legacy-customer-launch', 'legacy-launch-ad-isolation', 'checkout-customer-context',
  'first-contact-hours', 'first-contact-voice-hours', 'voice-daytime-policy', 'seller-phone-call-spacing',

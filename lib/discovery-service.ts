@@ -26,6 +26,8 @@ export async function discoverForAccount(accountId:string){
  const operationKey=`discovery:${accountId}:${c.revision}:${c.next_page}`;
  const [existing]=await db<{state:string}[]>(`icash_operation_spend?operation_key=eq.${operationKey}&select=state`);
  if(existing&&existing.state!=='reserved')return {status:'awaiting_reconciliation'};
+ const inventory=await db<string>('rpc/icash_prepare_discovery_inventory','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});
+ if(inventory!=='ready')return {status:inventory};
  const state=await db<unknown>('rpc/icash_discovery_filter_state_v2','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});
  const shared=state===null?[]:await db('rpc/icash_discovery_shared_evidence','POST',{p_account:accountId,p_zip:c.zip}).catch(()=>[]);
  const filterPlan=state===null?undefined:selectDiscoveryFilter(state,c.next_page,shared);
@@ -49,7 +51,7 @@ export async function discoverForAccount(accountId:string){
   },
   // Scope validation, reservation and one-use claim share one locked DB transaction.
   reserveAndClaim:()=>db<boolean>(filterPlan?'rpc/icash_reserve_and_claim_filtered_discovery':'rpc/icash_reserve_and_claim_property_discovery','POST',{p_account:accountId,p_zip:c.zip,p_revision:c.revision,p_page:c.next_page,p_per_page:c.per_page,p_rate:c.rate_id,p_unit:c.property_credit_micros,p_permission_until:c.data_rights_until,p_setup_revision:setup?.revision??null,p_market_mode:setup?.profile?.marketMode??null,p_market:setup?.profile?.market??null,...(filterPlan?{p_plan:filterPlan}:{})}),
-  persist:async result=>{await db(filterPlan?'rpc/icash_save_filtered_discovery':'rpc/icash_save_discovery','POST',{p_account:accountId,p_operation:operationKey,p_revision:c.revision,p_page:c.next_page,p_result:result});await db('rpc/icash_settle_dealmachine_usage','POST',{p_operation:operationKey});},
+  persist:async result=>{const queued=await db<number>(filterPlan?'rpc/icash_save_filtered_discovery':'rpc/icash_save_discovery','POST',{p_account:accountId,p_operation:operationKey,p_revision:c.revision,p_page:c.next_page,p_result:result});await db('rpc/icash_settle_dealmachine_usage','POST',{p_operation:operationKey});return queued;},
  });
  if(result.status==='empty')await finishEmpty('empty');
  return result;
