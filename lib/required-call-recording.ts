@@ -3,6 +3,7 @@ import {automaticOfferGuardrailMatches,automaticOfferPolicy} from './automatic-o
 import {type NetworkBuyerKind} from './homeoffer-buyer-identity.ts';
 import {finalAffirmativeSpeech,recordingConsentEvidenceVersion,recordingContactOptOut} from './recording-consent-evidence.ts';
 import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
+import {outboundParallelApproval} from './outbound-parallel-approval.ts';
 /** Default-off outbound foundation. Spoken-consent977-cent quote approved; activation still requires release review. */
 export const recordingPolicy=Object.freeze({version:'required-audio-30d-speech-v1',disclosureVersion:'required-audio-30d-speech-2026-10-03',retentionDays:30,maxTotalSeconds:600,consentWindowSeconds:45,recordingMicrosPerMinute:2500,storageMicrosPerMinuteMonth:500,speechGatherMicros:20000,recordingAllowanceMicros:31000,minimumHoldCents:977,previousApprovedHoldCents:965});
 export const recordingPricing={version:recordingPolicy.version,retentionDays:30,recordingMicrosPerMinute:2500,storageMicrosPerMinuteMonth:500,recordingAllowanceMicros:31000,speechGatherMicros:20000,estimate:true};
@@ -99,7 +100,14 @@ export function recordingAgentMatches(review:RecordingReview,raw:unknown){
  const a=object(raw),config=object(a.conversation_config),platform=object(a.platform_settings),prompt=object(object(config.agent).prompt),overrides=object(object(platform.overrides).conversation_config_override);
  const snapshot={conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null};
  if(review.offerPolicy!==undefined&&(!automaticOfferPolicy(review.offerPolicy)||!automaticOfferGuardrailMatches(platform.guardrails,review.offerPolicy)))return false;
- return a.agent_id===review.agentId&&a.branch_id===review.branchId&&typeof a.main_branch_id==='string'&&/^agtbrch_[A-Za-z0-9]+$/.test(a.main_branch_id)&&a.main_branch_id!==review.branchId&&a.version_id===review.versionId&&object(platform.privacy).record_voice===false&&object(platform.auth).enable_auth===true&&object(config.asr).user_input_audio_format==='ulaw_8000'&&object(config.tts).agent_output_audio_format==='ulaw_8000'&&object(config.conversation).max_duration_seconds===600&&object(platform.call_limits).bursting_enabled===false&&object(platform.queueing_config).enabled===false&&object(overrides.conversation).max_duration_seconds===true&&object(overrides.agent).first_message===true&&object(object(overrides.agent).prompt).prompt===true&&object(overrides.tts).voice_id===true&&Array.isArray(prompt.tool_ids)&&prompt.tool_ids.length===review.toolIds.length&&review.toolIds.every(id=>(prompt.tool_ids as unknown[]).includes(id))&&recordingConfigHashMatches(review.configHash,snapshot);
+ const approval=outboundParallelApproval,limits=object(platform.call_limits);
+ // Only this separately approved 2 -> 8 capacity change may reproduce the
+ // existing outgoing fingerprint. Every other field must still match it.
+ // Incoming comparisons and historical approvals remain exact and untouched.
+ const approvedCapacity=review.agentId===approval.agentId&&review.branchId===approval.branchId&&review.versionId===approval.versionId
+  &&limits.agent_concurrency_limit===approval.limit&&limits.bursting_enabled===false
+  &&recordingConfigHashMatches(review.configHash,{...snapshot,platform_settings:{...platform,call_limits:{...limits,agent_concurrency_limit:approval.previousLimit}}});
+ return a.agent_id===review.agentId&&a.branch_id===review.branchId&&typeof a.main_branch_id==='string'&&/^agtbrch_[A-Za-z0-9]+$/.test(a.main_branch_id)&&a.main_branch_id!==review.branchId&&a.version_id===review.versionId&&object(platform.privacy).record_voice===false&&object(platform.auth).enable_auth===true&&object(config.asr).user_input_audio_format==='ulaw_8000'&&object(config.tts).agent_output_audio_format==='ulaw_8000'&&object(config.conversation).max_duration_seconds===600&&limits.bursting_enabled===false&&object(platform.queueing_config).enabled===false&&object(overrides.conversation).max_duration_seconds===true&&object(overrides.agent).first_message===true&&object(object(overrides.agent).prompt).prompt===true&&object(overrides.tts).voice_id===true&&Array.isArray(prompt.tool_ids)&&prompt.tool_ids.length===review.toolIds.length&&review.toolIds.every(id=>(prompt.tool_ids as unknown[]).includes(id))&&(recordingConfigHashMatches(review.configHash,snapshot)||approvedCapacity);
 }
 export function recordingDisclosure(principal:string,assistantName:string,buyerKind?:NetworkBuyerKind){
  const valid=(s:string)=>typeof s==='string'&&s.trim().length>0&&s.length<=160&&!/[<>\x00-\x1f]/.test(s);

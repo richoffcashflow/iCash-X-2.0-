@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {automaticOfferGuardrails} from '../lib/automatic-offer-policy.ts';
-import {canonical,sha,recordingAgentMatches,recordingPolicy,readRecordingReview} from '../lib/required-call-recording.ts';
+import {canonical,sha,recordingAgentMatches,recordingConfigHashMatches,recordingPolicy,readRecordingReview} from '../lib/required-call-recording.ts';
+import {outboundParallelApproval as parallel} from '../lib/outbound-parallel-approval.ts';
 
 // Synthetic, offline fixtures only. Keep all historical hash representations
 // pinned independently of the comparison so this never changes stored reviews.
@@ -35,6 +36,22 @@ const listHash='5c5b0c31aad194adca4b9c67786f1bfb21764ad75d7d6ea023ad8c3a0d71bc54
 const bothHash='875eb33f2156f6a7e6305606b6ea3dd2868cadbc336c4a269b7497d3a9d3ec82';
 const representations=[[false,false],[true,false],[false,true],[true,true]];
 const reviews=representations.map(([empty,list])=>reviewFor(fixture(empty,list)));
+
+test('only the approved outgoing identity permits the exact two-to-eight capacity change',()=>{
+ const before=fixture();Object.assign(before,{agent_id:parallel.agentId,branch_id:parallel.branchId,version_id:parallel.versionId});
+ Object.assign(before.platform_settings.call_limits,{agent_concurrency_limit:2,daily_limit:1000});
+ const review=reviewFor(before),after=structuredClone(before);after.platform_settings.call_limits.agent_concurrency_limit=8;
+ const saved=JSON.stringify({review,before,after});
+ assert.equal(recordingAgentMatches(review,after),true);
+ assert.equal(recordingConfigHashMatches(review.configHash,{conversation_config:after.conversation_config,platform_settings:after.platform_settings,workflow:null,procedures:null}),false,'generic incoming hash comparison is unchanged');
+ assert.equal(JSON.stringify({review,before,after}),saved);
+ for(const limit of [1,3,7,9,10,-1]){const changed=structuredClone(after);changed.platform_settings.call_limits.agent_concurrency_limit=limit;assert.equal(recordingAgentMatches(review,changed),false);}
+ for(const change of [a=>a.platform_settings.call_limits.bursting_enabled=true,a=>a.platform_settings.call_limits.daily_limit++,a=>a.conversation_config.agent.prompt.prompt+=' unapproved',a=>a.version_id='agtvrsn_other',a=>a.agent_id='agent_other']){
+  const changed=structuredClone(after);change(changed);assert.equal(recordingAgentMatches(review,changed),false);
+ }
+ const other=structuredClone(before);other.agent_id='agent_other';const otherReview=reviewFor(other);other.platform_settings.call_limits.agent_concurrency_limit=8;
+ assert.equal(recordingAgentMatches(otherReview,other),false,'approval never applies to another agent');
+});
 
 test('all four approved empty-default representations match without changing saved hashes',()=>{
  assert.equal(configHash(fixture()),legacyHash);
