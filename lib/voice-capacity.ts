@@ -12,14 +12,14 @@ export async function readVoiceCapacityProvider(path:string,region:'global'|'us'
  return JSON.parse((await boundedBytes(response,262144)).toString('utf8')) as unknown;
 }
 // Verified against https://elevenlabs.io/pricing/agents on 2026-10-23.
-// Launch conservatively at four total calls, even on larger subscriptions.
+// Owner approved ten total calls on 2026-10-23; SQL reserves two for incoming.
 const planLimits:Record<string,number>={free:4,starter:6,creator:10,pro:20,scale:30,business:40};
 export function voiceCapacitySnapshot(subscription:unknown,agent:unknown){
  const s=object(subscription),a=object(agent),limits=object(object(a.platform_settings).call_limits);
  const workspace=typeof s.tier==='string'?planLimits[s.tier]:undefined;
  const limit=limits.agent_concurrency_limit;
  if(!workspace||!Number.isInteger(limit)||Number(limit)<-1||limit===0||limits.bursting_enabled!==false)return null;
- return {workspaceLimit:Math.min(4,workspace),agentLimit:limit===-1?Math.min(4,workspace):Math.min(4,workspace,Number(limit)),tier:s.tier};
+ return {workspaceLimit:Math.min(10,workspace),agentLimit:limit===-1?Math.min(10,workspace):Math.min(10,workspace,Number(limit)),tier:s.tier};
 }
 /** Read-only provider checks. No calls, simulations, plan changes or burst mode. */
 export async function refreshVoiceCapacity(db:Db,read:Reader,review?:{agentId:string;branchId:string}|null){
@@ -37,6 +37,6 @@ export async function refreshVoiceCapacity(db:Db,read:Reader,review?:{agentId:st
   if(existing)existing.limit=Math.min(existing.limit,snapshot.agentLimit);else capacities.push({agentId:target.agentId,limit:snapshot.agentLimit});
  }
  if(targets.length>12)throw Error('VOICE_CAPACITY_TARGET_LIMIT');
- await db('rpc/icash_save_voice_capacity','POST',{p_limit:workspaceLimit,p_agents:capacities,p_source:`provider subscription ${tier}; published plan limits 2026-10-23; launch ceiling 4`});
+ await db('rpc/icash_save_voice_capacity','POST',{p_limit:workspaceLimit,p_agents:capacities,p_source:`provider subscription ${tier}; published plan limits 2026-10-23; approved ceiling 10; incoming reserve 2`});
  return {status:'verified',workspaceLimit,agents:capacities.length};
 }

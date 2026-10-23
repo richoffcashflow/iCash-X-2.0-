@@ -1,6 +1,6 @@
 // Local synthetic PostgreSQL only; never contacts a provider.
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,readdirSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {voiceCapacitySnapshot,refreshVoiceCapacity,readVoiceCapacityProvider} from '../lib/voice-capacity.ts';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
@@ -101,12 +101,14 @@ try{
  assert(inbound.indexOf('icash_operating_budget where id=1 for update')<inbound.indexOf('icash_voice_capacity_available'));
  assert(inbound.includes("c.call_profile<>'normal'"),'quick tests retain singleton guard');
  const agent={agent_id:'agent_fixture',platform_settings:{call_limits:{agent_concurrency_limit:-1,bursting_enabled:false}}};
- assert.deepEqual(voiceCapacitySnapshot({tier:'pro'},agent),{workspaceLimit:4,agentLimit:4,tier:'pro'});
+ assert.deepEqual(voiceCapacitySnapshot({tier:'pro'},agent),{workspaceLimit:10,agentLimit:10,tier:'pro'});
+ assert.deepEqual(voiceCapacitySnapshot({tier:'creator'},agent),{workspaceLimit:10,agentLimit:10,tier:'creator'});
+ assert.deepEqual(voiceCapacitySnapshot({tier:'free'},agent),{workspaceLimit:4,agentLimit:4,tier:'free'});
  for(const bad of [0,-2,1.5,'4',null])assert.equal(voiceCapacitySnapshot({tier:'pro'},{platform_settings:{call_limits:{agent_concurrency_limit:bad,bursting_enabled:false}}}),null);
  assert.equal(voiceCapacitySnapshot({tier:'enterprise'},agent),null);assert.equal(voiceCapacitySnapshot({tier:'pro'},{...agent,platform_settings:{call_limits:{agent_concurrency_limit:4,bursting_enabled:true}}}),null);
  const writes=[],reads=[];
  await refreshVoiceCapacity(async(path,method,body)=>path.includes('targets')?[{agentId:'agent_fixture',branchId:null},{agentId:'agent_incoming',branchId:'agtbrch_incoming'}]:(writes.push(body),null),async(path,region)=>{reads.push({path,region});return path.includes('subscription')?{tier:'pro'}:{...agent,agent_id:path.includes('agent_incoming')?'agent_incoming':'agent_fixture'};},{agentId:'agent_fixture',branchId:'agtbrch_fixture'});
- assert.equal(writes[0].p_limit,4);
+ assert.equal(writes[0].p_limit,10);
  assert.deepEqual(reads.slice(1),[{path:'/v1/convai/agents/agent_fixture?branch_id=agtbrch_fixture',region:'global'},{path:'/v1/convai/agents/agent_incoming?branch_id=agtbrch_incoming',region:'us'}]);
  const providerReads=[];const fetcher=async(url,options)=>{providerReads.push({url,options});return new Response(JSON.stringify(agent));};
  await readVoiceCapacityProvider(reads[1].path,'global',{ELEVENLABS_API_KEY:'fixture-only'},fetcher);
@@ -118,5 +120,56 @@ try{
  await pg.exec('grant usage on schema public to service_role;grant select on all tables in schema public to service_role;set role service_role;');
  assert.equal(await val("select icash_voice_capacity_available($1,'agent_fixture','fresh','fresh',false)",[account]),false,'service role may evaluate capacity without direct private-schema access');
  await pg.exec('reset role;');
+ const expanded=read('config/expanded-call-capacity.sql');
+ const migration=readdirSync(new URL('../supabase/migrations/',import.meta.url)).filter(p=>p.endsWith('_expanded_call_capacity.sql'));
+ assert.equal(migration.length,1);assert.equal(read('supabase/migrations/'+migration[0]),expanded);
+ await pg.exec(expanded);
+ await pg.exec(`truncate icash_voice_jobs,icash_live_conversations,icash_call_recordings,icash_recorded_reception_private.sessions,icash_recorded_reception_private.configs;
+ update icash_accounts set bot_paused=false;`);
+ const thirdAccount=id(4);
+ await q('insert into icash_accounts values($1,false)',[thirdAccount]);await q('insert into icash_wallets values($1,3000)',[thirdAccount]);
+ await q("insert into icash_voice_configs values($1,true,'agent_fixture',now()+interval '1 day',$2,null,600)",[thirdAccount,rate]);
+ const save=(total=10,limit=8)=>val('select icash_save_voice_capacity($1,$2::jsonb,$3)',[total,JSON.stringify([{agentId:'agent_fixture',limit},{agentId:'agent_incoming',limit:2}]),'LOCAL expanded fixture']);
+ await save();
+ const available=(a=thirdAccount,incoming=false,agentId=incoming?'agent_incoming':'agent_fixture')=>val('select icash_voice_capacity_available($1,$2,$3,$4,$5)',[a,agentId,'new-operation','new-contact',incoming]);
+ await q("insert into icash_recorded_reception_private.configs values($1,$2,'agent_incoming','agtbrch_incoming',true,'normal')",[id(99),account]);
+ // Incoming calls consume their reserved slots without reducing eight outgoing
+ // slots again. Check both arrival orders with real final-claim/queue logic.
+ const addIncoming=async n=>q("insert into icash_recorded_reception_private.sessions values($1,$2,$3,'agent_incoming',$4,null)",[id(n),id(5),'recorded-reception:CA'+n,'incoming-'+n]);
+ await addIncoming(200);await addIncoming(201);
+ for(let n=0;n<8;n++){
+  const a=n<3?account:n<6?other:thirdAccount;
+  const job=await add(100+n,a);assert.equal(await slot(a,job),true,'eight outgoing slots with two incoming');
+  await q("update icash_voice_jobs set state='issued' where id=$1",[job]);
+  assert.equal(await val('select icash_claim_voice_job($1)',[job]),true,'final claim fits verified capacity');
+  await q("update icash_voice_jobs set state='dispatching' where id=$1",[job]);
+ }
+ assert.equal(await available(),false);assert.equal(await available(other,true),false,'ten total is full');
+ await pg.exec('truncate icash_recorded_reception_private.sessions');
+ assert.equal(await available(),false,'ninth outgoing cannot consume callback reserve');
+ assert.equal(await available(other,true),true);await addIncoming(202);
+ assert.equal(await available(other,true),true);await addIncoming(203);
+ assert.equal(await available(other,true),false,'dedicated incoming agent remains limited to two');
+ await pg.exec("update icash_voice_jobs set state='held',outcome='provider_outcome_unknown_no_retry' where id='"+id(107)+"'");
+ assert.equal(await available(),false,'unknown outcome retains the eighth outgoing slot');
+ await pg.exec('truncate icash_voice_jobs,icash_recorded_reception_private.sessions');
+ await q("update icash_recorded_reception_private.configs set agent_id='agent_fixture'");await save(10,10);
+ for(let n=0;n<8;n++)await add(120+n,n<3?account:n<6?other:thirdAccount,'dispatching');
+ assert.equal(await available(),false,'shared agent protects its two incoming slots');
+ assert.equal(await available(other,true,'agent_fixture'),true);
+ await pg.exec('truncate icash_voice_jobs');await save(4,4);
+ await add(140,account,'dispatching');await add(141,other,'dispatching');
+ assert.equal(await available(),false,'lower verified plans retain two callback slots');
+ await pg.exec('truncate icash_voice_jobs');await save();
+ for(let n=0;n<3;n++)await add(150+n,account,'dispatching');
+ assert.equal(await available(account),false,'funded per-account fairness stays at three');
+ assert.equal(await available(other),true);
+ await pg.exec("update icash_voice_capacity_policy set verified_at=now()-interval '25 hours'");
+ assert.equal(await available(other),false,'expired capacity remains conservative');
+ await pg.exec('truncate icash_voice_jobs');assert.equal(await available(other),true,'single-slot fallback remains usable');
+ await assert.rejects(()=>save(11,8));
+ await pg.exec('set role service_role;');assert.equal(await available(other),true);
+ await pg.exec('reset role;');
+ for(const role of ['anon','authenticated'])for(const name of ['icash_save_voice_capacity(integer,jsonb,text)','icash_voice_capacity_available(uuid,text,text,text,boolean)'])assert.equal(await val('select has_function_privilege($1,$2,\'execute\')',[role,name]),false);
  console.log('PASS adaptive funded calls, incoming reserve, final Pause, recipient deduplication, unknown holds and verified non-burst provider limits.');
 }catch(e){console.error('FAIL call capacity:',e.message,e.where??'');process.exitCode=1;}finally{await pg.close();}
