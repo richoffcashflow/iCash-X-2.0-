@@ -159,6 +159,12 @@ const consumedBefore=await val('select to_jsonb(t) from icash_automation_tickets
 const staleSql=read('config/stale-sms-research-priority.sql');
 assert.equal(staleSql,read('supabase/migrations/20261024171453_stale_sms_research_priority.sql'));
 await db.exec(staleSql);
+await db.exec('revoke all on function icash_research_waiting_on_outreach(uuid) from public,anon,authenticated;grant execute on function icash_research_waiting_on_outreach(uuid) to service_role');
+const beforeSelection=await val("select pg_get_functiondef('icash_research_waiting_on_outreach(uuid)'::regprocedure)");
+await db.exec(beforeSelection.replace('public.icash_research_waiting_on_outreach','public.fixture_original_research_waiting'));
+const selectionSql=read('config/research-waiting-selection.sql');
+await db.exec(selectionSql);
+const selectedDefinition=await val("select pg_get_functiondef('icash_research_waiting_on_outreach(uuid)'::regprocedure)");
 assert.equal(await waiting(),false,'an abandoned consumed capability cannot block unrelated research');
 assert.deepEqual(await val('select to_jsonb(t) from icash_automation_tickets t where id=$1',[id(12)]),consumedBefore,'never reset, retry, finish or relabel the original unknown attempt');
 for(const age of ['1 minute','4 minutes']){
@@ -177,5 +183,61 @@ await q("update icash_voice_jobs set state='issued',outcome=null where id=$1",[j
 assert.equal(await waiting(),true,'eligible voice still takes priority');
 assert.deepEqual((await q('select balance_cents from icash_wallets order by account_id')).rows.map(x=>Number(x.balance_cents)),[7437,24656]);
 assert.equal(await val('select reservations from fixture_policy'),0,'the fix creates no spending authorization');
+const equivalent=async(name,change,expected)=>{
+ await db.exec('begin');
+ try{
+  await change();
+  const before=await val('select fixture_original_research_waiting($1)',[account]);
+  assert.equal(await waiting(),before,'candidate reordering preserves '+name);
+  assert.equal(before,expected,name);
+ }finally{await db.exec('rollback');}
+};
+for(const [name,change,expected] of [
+ ['eligible voice',()=>Promise.resolve(),true],
+ ['voice hours',()=>db.exec('update fixture_policy set hours=false'),false],
+ ['voice repeat limit',()=>db.exec('update fixture_policy set spacing=false'),false],
+ ['revoked contact',()=>db.exec('update icash_voice_contact_targets set revoked_at=now()'),false],
+ ['expired contact',()=>db.exec("update icash_voice_contact_targets set permission_until=now()-interval '1 second'"),false],
+ ['DNC not clear',()=>db.exec('update icash_voice_contact_targets set dnc_clear=false'),false],
+ ['future voice',()=>db.exec("update icash_voice_jobs set due_at=now()+interval '1 hour'"),false],
+ ['provider receipt',()=>db.exec("update icash_voice_jobs set provider_call_sid='existing-receipt'"),false],
+ ['reserved voice',()=>db.exec("update icash_voice_jobs set operation_key='existing-operation'"),false],
+ ['manual property',()=>q("insert into icash_property_controls values($1,'prop_fixture1',true)",[account]),false],
+ ['suppressed phone',()=>db.exec("insert into icash_text_suppressions values('+12125550101')"),false],
+ ['ineligible property',()=>db.exec("update icash_screening_jobs set result='{}'"),false],
+])await equivalent(name,change,expected);
+const smsOnly=async()=>{
+ await db.exec("update icash_voice_jobs set state='held',outcome='contact_operating_checks_required'");
+ await q("update icash_automation_tickets set state='held',outcome='expired' where id=$1",[id(12)]);
+};
+for(const [name,change,expected] of [
+ ['eligible SMS',()=>Promise.resolve(),true],
+ ['SMS hours',()=>db.exec('update fixture_policy set hours=false'),false],
+ ['paused thread',()=>db.exec('update icash_text_threads set paused=true'),false],
+ ['manual thread',()=>db.exec('update icash_text_threads set manual_only=true'),false],
+ ['retired thread',()=>db.exec('update icash_text_threads set retired_at=now()'),false],
+ ['expired SMS permission',()=>db.exec("update icash_text_threads set permission_until=now()-interval '1 second'"),false],
+ ['SMS provider receipt',()=>db.exec("update icash_text_messages set provider_id='existing-receipt'"),false],
+ ['unknown SMS',()=>db.exec("update icash_automation_tickets set state='held',outcome='held_for_reconciliation'"),false],
+ ['abandoned consumed SMS',()=>db.exec("update icash_automation_tickets set state='consumed',expires_at=now()-interval '1 day'"),false],
+ ['recent consumed SMS',()=>db.exec("update icash_automation_tickets set state='consumed',expires_at=now()-interval '1 minute'"),true],
+])await equivalent(name,async()=>{await smsOnly();await change();},expected);
+// A backlog excluded by contact/history evidence must not repeatedly invoke
+// the expensive conversation/window predicates before discovering that fact.
+await db.exec(`create sequence fixture_waiting_gates;
+ create or replace function icash_voice_outreach_hours_current(uuid,uuid) returns boolean language plpgsql as $$begin perform nextval('public.fixture_waiting_gates');return(select hours from public.fixture_policy);end$$;
+ create or replace function icash_sms_outreach_window_current(uuid,uuid) returns boolean language plpgsql as $$begin perform nextval('public.fixture_waiting_gates');return(select hours from public.fixture_policy);end$$;`);
+await db.exec('begin');
+try{
+ await db.exec('update icash_voice_contact_targets set revoked_at=now()');
+ await q("insert into icash_voice_jobs(id,account_id,operational_contact_id,state) select ('10000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,$1,$2,'ready' from generate_series(1000,1199)n",[account,target]);
+ await db.exec('alter sequence fixture_waiting_gates restart with 1');
+ assert.equal(await waiting(),false,'revoked contacts and abandoned SMS still cannot block research');
+ assert.equal(await val('select is_called from fixture_waiting_gates'),false,'no expensive gates run for200 revoked candidates or abandoned SMS');
+}finally{await db.exec('rollback');}
+for(const role of ['anon','authenticated'])assert.equal(await val("select has_function_privilege($1,'icash_research_waiting_on_outreach(uuid)','execute')",[role]),false);
+assert.equal(await val("select has_function_privilege('service_role','icash_research_waiting_on_outreach(uuid)','execute')"),true);
+await assert.rejects(db.exec(selectionSql),/Research waiting selection prerequisite changed/);await db.exec('rollback');
+assert.equal(await val("select pg_get_functiondef('icash_research_waiting_on_outreach(uuid)'::regprocedure)"),selectedDefinition,'unexpected prerequisite fails atomically');
 console.log('PASS: unresolved SMS capability does not freeze unrelated research; hold and wallets unchanged; safe/active/budget-held work and tenant/message binding retain priority; original 428 invariants pass.');
-}catch(error){console.error(error.message);console.error(error.query??'');process.exitCode=1;}finally{await db.close();}
+}catch(error){console.error(error.stack??error.message);console.error(error.query??'');process.exitCode=1;}finally{await db.close();}
