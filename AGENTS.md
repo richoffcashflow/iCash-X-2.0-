@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
-- On October 24, 2026 the owner required faster funded research and text delivery. The shared seller-opener scheduler permits one new opener every five seconds across the platform, superseding the one-per-minute throttle. Keep the 25% rolling daily work target, recipient frequency/consent/hours, duplicate and unknown-outcome holds, actual-cost billing and the existing 50% prospecting allowance. Measure delivered texts and completed research separately from scheduling capacity.
+- On October 24, 2026 the owner required faster funded research and text delivery. The shared seller-opener scheduler permits one new opener every five seconds across the platform, superseding the one-per-minute throttle. Attribute pending reservations to their reservation/dispatch hour for the hourly batch calculation; old unresolved caps still count against total, cumulative, daily and protected-wallet capacity. Keep the 25% rolling daily work target, recipient frequency/consent/hours, duplicate and unknown-outcome holds, actual-cost billing and the existing 50% prospecting allowance. Measure delivered texts and completed research separately from scheduling capacity.
 
 - On October 24, 2026 the owner removed the spending-allowance dollar amount from the bot’s opportunity-progress panel. Do not show the per-24-hour amount or total-search-allowance fallback there. Preserve actual progress, status, wallet balances, explicit spending controls and server spending limits.
 
