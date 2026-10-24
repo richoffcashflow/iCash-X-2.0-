@@ -71,5 +71,52 @@ try{
  };
  assert.deepEqual(await maintainRecordings(batchDb,{...provider,conversations:async()=>({has_more:false,conversations:[]}),getCall:async()=>{carrierReads++;throw new RecordingProviderError(403);}},{TWILIO_ACCOUNT_SID:ac}),{deleted:0,reconciled:2,held:0});
  assert.equal(carrierReads,1,'Only one diagnostic carrier read per invocation, no retry');
+ // A lost recording-start receipt cannot hide an independently ended carrier.
+ // These are synthetic reads/transitions only: never dial, start, end or charge.
+ const terminalRecovery=async({call={},rowChanges={},list={recordings:[],next_page_uri:null},providerError=null,rejectAction=null}={})=>{
+  let row={...base,state:'starting',recording_sid:null,conversation_id:null,provider_started_at:null,end_requested_at:null,call_ended_at:null,
+   from_phone:'+15555550101',to_phone:'+15555550102',stop_token_hash:'e'.repeat(64),...rowChanges};
+  const transitions=[],finishes=[],reads=[],mutations=[];
+  const fixtureDb=async(path,method,input)=>{
+   if(path==='rpc/icash_claim_call_recording_work')return input.p_kind==='reconcile'?[structuredClone(row)]:[];
+   if(path==='rpc/icash_call_credit_available')return true;
+   if(path==='rpc/icash_transition_call_recording'){
+    assert.equal(input.p_id,row.id);assert.equal(input.p_account,row.account_id);assert.equal(input.p_operation,row.operation_key);
+    transitions.push(input.p_action);if(input.p_action===rejectAction)return null;
+    if(input.p_action==='stop'){assert.deepEqual(input.p_payload,{stopTokenHash:row.stop_token_hash});row={...row,state:'stopping',end_requested_at:ended};}
+    else if(input.p_action==='call_ended'){assert(row.end_requested_at);assert.deepEqual(input.p_payload,{callSid:ca,providerAccountSid:ac,status:call.status??'completed'});row={...row,call_ended_at:ended};}
+    else throw Error('Unexpected transition');
+    return {...row};
+   }
+   if(path==='rpc/icash_finish_call_recording_work'){finishes.push(input);return {...row};}
+   throw Error('Unexpected recovery mutation '+path);
+  };
+  const deny=async()=>{mutations.push('forbidden');throw Error('No provider mutations permitted');};
+  const fixtureProvider={getCall:async id=>{assert.equal(id,row.call_sid);reads.push('call');if(providerError)throw providerError;return {sid:ca,account_sid:ac,from:row.from_phone,to:row.to_phone,direction:'outbound-api',status:'completed',...call};},
+   listRecordings:async id=>{assert.equal(id,ca);reads.push('recordings');return list;},dial:deny,start:deny,end:deny,register:deny};
+  const result=await maintainRecordings(fixtureDb,fixtureProvider,{TWILIO_ACCOUNT_SID:ac});
+  assert.deepEqual(mutations,[]);assert(finishes.every(x=>['retry','available'].includes(x.p_outcome)));
+  return {row,result,transitions,finishes,reads};
+ };
+ for(const status of ['completed','failed','busy','no-answer','canceled']){
+  const r=await terminalRecovery({call:{status}});
+  assert.deepEqual(r.transitions,['stop','call_ended']);assert.equal(r.row.call_ended_at,ended);
+  assert.deepEqual(r.reads,['call','recordings']);assert.deepEqual(r.result,{deleted:0,reconciled:0,held:1});
+  assert.equal(r.finishes[0].p_outcome,'retry','Missing audio remains unresolved without retaining ended-call capacity');
+  assert.equal(r.row.recording_sid,null);assert.equal(r.row.conversation_id,null);
+ }
+ for(const call of [{status:'in-progress'},{status:'ringing'},{status:'queued'},{status:undefined},
+  {sid:'CA'+'f'.repeat(32)},{account_sid:'AC'+'f'.repeat(32)},{from:'+15555550199'},{to:'+15555550199'},{direction:'inbound'},
+  {from:undefined},{to:undefined}]){
+  const r=await terminalRecovery({call});assert.deepEqual(r.transitions,[]);assert.equal(r.row.call_ended_at,null);
+ }
+ const missingSid=await terminalRecovery({rowChanges:{call_sid:null}});assert.deepEqual(missingSid.reads,[]);assert.deepEqual(missingSid.transitions,[]);
+ const unavailableCall=await terminalRecovery({providerError:new RecordingProviderError(503)});assert.deepEqual(unavailableCall.transitions,[]);assert.deepEqual(unavailableCall.reads,['call']);
+ for(const rejectAction of ['stop','call_ended']){
+  const r=await terminalRecovery({rejectAction});assert.equal(r.row.call_ended_at,null);assert.deepEqual(r.reads,['call']);assert.equal(r.finishes[0].p_outcome,'retry');
+ }
+ const recoveredAudio=await terminalRecovery({list:{recordings:[receipt],next_page_uri:null}});
+ assert.deepEqual(recoveredAudio.transitions,['stop','call_ended']);assert.equal(recoveredAudio.finishes[0].p_outcome,'available');assert.equal(recoveredAudio.finishes[0].p_payload.durationSeconds,30);
+ assert.equal(recoveredAudio.result.reconciled,1,'A later verified audio receipt remains recoverable');
  console.log('PASS rejected receipt releases/requeues its lease, newer calls continue, missing AI identity does not hide verified audio, and cross-call receipts remain blocked.');
 }finally{console.warn=originalWarn;}
