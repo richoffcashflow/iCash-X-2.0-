@@ -6,7 +6,7 @@ export const exceptionQuery = z.object({source:z.enum(exceptionSources).optional
 export type ExceptionDb = <T>(path:string,method?:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;
 const id=z.string().uuid(),stamp=z.string().refine(s=>Number.isFinite(Date.parse(s)),'Invalid recorded time');
 const base={id,account_id:id,created_at:stamp};
-const schemas:Record<ExceptionSource,z.ZodTypeAny>={
+const schemas:Record<ExceptionSource,z.ZodType<any>>={
  billing:z.object({...base,state:z.enum(['pending','active','payment_failed','stop_requested','stopped']),mode:z.enum(['live','test']),reconciled_at:stamp.nullable()}),
  costs:z.object({account_id:id,operation_key:z.string().min(1).max(500),state:z.enum(['reserved','dispatched','settled','cancelled']),cost_basis:z.enum(['unreconciled','estimated','verified']),created_at:stamp}),
  texts:z.object({...base,state:z.enum(['ready','dispatching','accepted','delivered','needs_review','received','cancelled']),direction:z.enum(['incoming','outgoing']),updated_at:stamp}),

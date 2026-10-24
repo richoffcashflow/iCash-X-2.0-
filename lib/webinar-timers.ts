@@ -16,8 +16,8 @@ export const webinarTimerSchema = z.object({
 });
 export type WebinarTimer = z.infer<typeof webinarTimerSchema>;
 export const timerResponseSchema = z.object({
-  deadlines: z.record(z.string().datetime({offset: true})),
-  offerDeadlines: z.record(z.string().datetime({offset: true})).default({}),
+  deadlines: z.record(z.string(),z.string().datetime({offset: true})),
+  offerDeadlines: z.record(z.string(),z.string().datetime({offset: true})).default({}),
   serverNow: z.number().finite(),
 });
 export function newWebinarTimer(id: string, at: number): WebinarTimer {
