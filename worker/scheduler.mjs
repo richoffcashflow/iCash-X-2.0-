@@ -15,10 +15,10 @@ export function createScheduler({screening,automation,automationConcurrency=4,no
    lane.failures=0;lane.idle=worked?0:Math.min(lane.idle+1,3);
    const delay=worked?(lane.name==='screening'?250:1000):Math.min(lane.name==='automation'?15000:60000,(lane.name==='automation'?5000:15000)*2**(lane.idle-1));
    lane.nextAt=now()+delay;
-  },()=>{
+  },error=>{
    lane.failures=Math.min(lane.failures+1,6);
    lane.nextAt=now()+(lane.name==='screening'?Math.min(60000,1000*2**lane.failures):Math.min(300000,15000*2**lane.failures));
-   try{onFailure(lane.name);}catch{/* Reporting must never poison the scheduler. */}
+   try{onFailure(lane.name,error);}catch{/* Reporting must never poison the scheduler. */}
   }).finally(()=>{lane.pending=null;});
  };
  return {

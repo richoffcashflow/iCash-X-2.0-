@@ -1,4 +1,13 @@
 import {runScreeningJob} from '../lib/screening-job.ts';
+// Deliberately exclude provider bodies, URLs, tokens and customer data from logs.
+export class WorkerOperationError extends Error{
+ constructor(code,operation,httpStatus=null){super(code);this.code=code;this.operation=operation;this.httpStatus=httpStatus;}
+}
+export function workerFailureDetails(error){
+ return error instanceof WorkerOperationError
+  ?{code:error.code,operation:error.operation,httpStatus:error.httpStatus}
+  :{code:error?.name==='TimeoutError'||error?.name==='AbortError'?'REQUEST_TIMEOUT':'REQUEST_FAILED'};
+}
 export async function tick(rpc, screen=runScreeningJob){
  const job=await rpc('icash_claim_screening',{});
  if(!job)return false;
@@ -14,7 +23,7 @@ export function createRpc(url,key,transport=fetch){
  return async(name,args)=>{
   if(!['icash_claim_screening','icash_finish_screening','icash_next_automation','icash_record_service_heartbeat'].includes(name))throw new Error('Unsupported worker operation');
   const response=await transport(new URL('/rest/v1/rpc/'+name,base),{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify(args),redirect:'error',signal:AbortSignal.timeout(15000)});
-  if(!response.ok)throw new Error('SCREENING_DATABASE_UNAVAILABLE');
+  if(!response.ok){await response.body?.cancel();throw new WorkerOperationError('SCREENING_DATABASE_UNAVAILABLE',name,response.status);}
   const body=await response.text();return body?JSON.parse(body):null;
  };
 }
@@ -25,6 +34,6 @@ export async function automationTick(rpc,transport=fetch){
  if(!ticket)return false;
  if(typeof ticket.token!=='string'||!/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}){2}$/.test(ticket.token))throw new Error('INVALID_AUTOMATION_TICKET');
  const r=await transport('https://www.geticashx.com/api/internal/automation',{method:'POST',headers:{Authorization:'Bearer '+ticket.token},redirect:'error',signal:AbortSignal.timeout(55000)});
- if(!r.ok)throw new Error('AUTOMATION_HELD');
+ if(!r.ok){await r.body?.cancel();throw new WorkerOperationError('AUTOMATION_HELD','automation_dispatch',r.status);}
  return true;
 }

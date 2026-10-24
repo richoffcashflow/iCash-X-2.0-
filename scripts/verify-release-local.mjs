@@ -2,6 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
+ 'daily-work-target',
  'validation-compatibility',
  'call-contact-evidence', 'customer-phone-maintenance',
  'close-capacity', 'parallel-capacity-provider', 'nationwide-inventory', 'close-conversion-database', 'close-conversion-routes',
