@@ -36,6 +36,35 @@ try {
   const changed=await one("select pg_get_functiondef('icash_recover_unstarted_seller_opener()'::regprocedure) body");
   const candidateQuery=body=>body.slice(body.indexOf(' select th.account_id'),body.indexOf(' if not found then return'));
   assert.equal(candidateQuery(changed.body),candidateQuery(original.body),'every candidate, contact, retry-limit and evidence predicate stays byte-for-byte unchanged');
+  const selectionSql=readFileSync(new URL('../config/unstarted-opener-selection.sql',import.meta.url),'utf8');
+  const oldSelection=selectionSql.split('$original$')[1];
+  await pg.exec(selectionSql);
+  const orderedBody=(await one("select pg_get_functiondef('icash_recover_unstarted_seller_opener()'::regprocedure) body")).body;
+  const newSelection=orderedBody.slice(orderedBody.indexOf(' select ordered.account_id'),orderedBody.indexOf('\n if not found then return null;end if;'));
+  assert.equal(orderedBody.replace(newSelection,oldSelection),changed.body,'only selection changes; scheduler locks, throttle, ticket issuance and capability handling remain exact');
+  const oldSelect=oldSelection.replace(' into candidate',''),orderedSelect=newSelection.replace(' into candidate','');
+  await q('begin');
+  try{
+   const oldRows=(await q(oldSelect)).rows,newRows=(await q(orderedSelect)).rows;
+   assert.equal(oldRows.length,1,'fixture contains an admissible unattempted opener');
+   assert.deepEqual(newRows,oldRows,'ordered selector chooses the same account, message and attempt');
+  }finally{await q('rollback');}
+  // Count real review calls rather than wall-clock time. The same review helper
+  // still runs for admitted jobs; unrecoverable history must be excluded first.
+  await pg.exec(`create sequence fixture_opener_reviews;
+   alter function icash_sms_thread_review_current(uuid,uuid,boolean) rename to fixture_original_sms_review;
+   create function icash_sms_thread_review_current(p_account uuid,p_thread uuid,p_check_hour boolean default true) returns boolean language plpgsql as $$
+   begin perform nextval('public.fixture_opener_reviews');return public.fixture_original_sms_review(p_account,p_thread,p_check_hour);end$$;`);
+  await q('begin');
+  try{
+   await q("insert into icash_automation_tickets(account_id,kind,opener_message_id,state,issue_attempts,created_at,expires_at) select $1,'seller_opener',$2,'consumed',1,now()-interval '45 minutes',now()-interval '43 minutes' from generate_series(1,200)",[account,message]);
+   assert.equal((await q(oldSelect)).rows.length,0);
+   assert.equal((await one('select is_called from fixture_opener_reviews')).is_called,true,'old selector checks recipient admission before excluding consumed history');
+   await pg.exec('alter sequence fixture_opener_reviews restart with 1');
+   assert.equal((await q(orderedSelect)).rows.length,0,'same unrecoverable backlog remains excluded');
+   assert.equal(await rpc('icash_recover_unstarted_seller_opener',{}),null);
+   assert.equal((await one('select is_called from fixture_opener_reviews')).is_called,false,'ineligible history makes no expensive recipient review calls');
+  }finally{await q('rollback');}
   const root=(await one("select pg_get_functiondef('icash_next_automation()'::regprocedure) body")).body;
   assert(root.indexOf('pg_try_advisory_xact_lock')<root.indexOf('icash_recover_unstarted_seller_opener()'));
   assert(root.indexOf('icash_recover_unstarted_seller_opener()')<root.indexOf('icash_resume_prospecting_ticket()'));
@@ -90,5 +119,7 @@ try {
   assert(oldWrapperRecovery?.token&&oldWrapperRecovery.token!=='prior-new-work','legacy wrapper reuses helper');
   assert.equal((await one('select balance_cents from icash_wallets where account_id=$1',[account])).balance_cents,100000,'no charge occurs in scheduling tests');
   assert.equal((await one('select state from icash_text_messages where id=$1',[message])).state,'ready','no provider receipt invented');
+  await assert.rejects(pg.exec(selectionSql),/Unstarted opener selection prerequisite changed/);await q('rollback');
+  assert.equal((await one("select pg_get_functiondef('icash_recover_unstarted_seller_opener()'::regprocedure) body")).body,orderedBody,'unexpected prerequisite fails atomically');
   console.log('PASS: expired original SMS recovery beats continuous actual root budget-resume and outer/lower work; all candidate predicates unchanged; throttle, three-attempt limit, live/consumed/unknown holds, Pause, credits, contact/sender/evidence and operation protections retained.');
 } finally {await pg.close();}

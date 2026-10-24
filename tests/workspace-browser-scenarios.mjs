@@ -76,7 +76,9 @@ export async function verifyWorkspace(browser,base,options,name){
   }
   if(request.method()!=='GET'){writes.push(url.pathname);return route.fulfill({status:403,json:{error:'Read-only fixture'}});}
   const p=url.pathname;apiReads.push(p);
-  if(p==='/api/work/events')return route.fulfill({contentType:'text/event-stream',headers:{'Cache-Control':'no-store'},body:': fixture heartbeat\n\n'});
+  // The local HTTPS proxy serves the inert heartbeat without WebKit's mocked
+  // stream transport. Origin, preview and GET checks above still apply.
+  if(p==='/api/work/events')return route.continue();
   if(p==='/api/account')return route.fulfill({json:{...fixtureAccount,...(fundingFixture?{paused:fundingFixture.paused,workReady:true}:{}),...(instantVariant?{paused:false}:{}),...(opportunityProgress?{paused:opportunityProgress.status==='paused'}:{}),workspaceAcknowledged:acknowledged,mode:'live',vip,vipFeatures:vip,billingModel:'membership_credits',membershipActive:true}});
   if(p==='/api/funding/status')return route.fulfill({json:{enabled:true,mode:'live',paidCents:fundingFixture?.paidCents??0,needsClaim:false,packs:[]}});
   if(p==='/api/work/progress')return route.fulfill({json:{progress:opportunityProgress}});

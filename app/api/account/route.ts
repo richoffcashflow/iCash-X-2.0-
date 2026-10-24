@@ -14,23 +14,23 @@ import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {workspaceAcknowledgmentCurrent,type WorkspaceAcknowledgmentRecord} from '@/lib/workspace-acknowledgment';
 export const dynamic='force-dynamic';
 export const maxDuration=60;
-type Snapshot={accountId:string;account:{billingModel:string;membership:{state:string;paid_through:string|null}|null;balanceCents:number;billingReview:boolean;[key:string]:unknown}};
+type Snapshot={accountId:string;account:{billingModel:string;membership:{state:string;paid_through:string|null}|null;balanceCents:number;billingReview:boolean;[key:string]:unknown};access:{vip:boolean;vipFeatures:boolean;adminPlan:'standard'|'vip'|null};workspaceAcknowledgment:WorkspaceAcknowledgmentRecord};
 export async function GET(req:Request){
  const headers={'Cache-Control':'private, no-store'},started=Date.now();let stage='authentication';
  try{
-  const mode=accountMode(),user=await currentUser(true);
+  const mode=accountMode(),user=await currentUser(true,req?.signal);
   if(!user||!mode)return NextResponse.json({signedIn:false,signInReady:process.env.ICASH_AUTH_EMAIL_READY==='true'},{headers});
   stage='account_snapshot';
-  const snapshot=await db<Snapshot>('rpc/icash_load_workspace_account','POST',{p_user:user.id,p_mode:mode});
+  const snapshot=await db<Snapshot>('rpc/icash_load_workspace_account','POST',{p_user:user.id,p_mode:mode},req?.signal);
   if(!snapshot?.accountId||!snapshot.account||!Number.isSafeInteger(snapshot.account.balanceCents))throw Error('Invalid account snapshot');
+  stage='account_access';
+  const access=snapshot.access,acknowledgment=snapshot.workspaceAcknowledgment;
+  if(!access||typeof access!=='object'||Array.isArray(access)||typeof access.vip!=='boolean'||typeof access.vipFeatures!=='boolean'||!['standard','vip',null].includes(access.adminPlan)
+   ||!acknowledgment||typeof acknowledgment!=='object'||Array.isArray(acknowledgment)||!['workspace_ack_version','workspace_ack_user_id','workspace_ack_hash'].every(key=>acknowledgment[key as keyof WorkspaceAcknowledgmentRecord]===null||typeof acknowledgment[key as keyof WorkspaceAcknowledgmentRecord]==='string'))throw Error('Invalid account access snapshot');
   const {membership,...account}=snapshot.account;
   const membershipActive=membershipAccessible(membership);
-  const [access,acknowledgments]=await Promise.all([
-   db<{vip:boolean;vipFeatures:boolean;adminPlan:'standard'|'vip'|null}>('rpc/icash_workspace_vip_access','POST',{p_account:snapshot.accountId}),
-   db<WorkspaceAcknowledgmentRecord[]>(`icash_accounts?id=eq.${snapshot.accountId}&owner_user_id=eq.${user.id}&select=workspace_ack_version,workspace_ack_user_id,workspace_ack_hash&limit=1`)
-  ]);
-  const workspaceAcknowledged=!!acknowledgments[0]&&workspaceAcknowledgmentCurrent(acknowledgments[0],user.id);
-  const base={...account,...access,workspaceAcknowledged,signedIn:true,mode,email:user.email,pendingEmail:user.new_email&&user.new_email!==user.email?user.new_email:null,membershipActive,isBillingOwner:user.id===ownerInboundTarget.ownerUserId};
+  const workspaceAcknowledged=workspaceAcknowledgmentCurrent(acknowledgment,user.id);
+  const base={...account,vip:access.vip,vipFeatures:access.vipFeatures,adminPlan:access.adminPlan,workspaceAcknowledged,signedIn:true,mode,email:user.email,pendingEmail:user.new_email&&user.new_email!==user.email?user.new_email:null,membershipActive,isBillingOwner:user.id===ownerInboundTarget.ownerUserId};
   const canCheck=workspaceAcknowledged&&mode==='live'&&account.balanceCents>0&&!account.billingReview&&(account.billingModel!=='membership_credits'||membershipActive);
   const core=req&&new URL(req.url).searchParams.get('view')==='core';
   const held={workReady:false,smsWorkReady:false,discoveryWorkReady:false,contactWorkReady:false,discoveryQuote:null,contactQuote:null,discoveryBlocker:account.balanceCents<=0?'available_credits_required':null};
