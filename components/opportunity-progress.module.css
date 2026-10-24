@@ -1,7 +1,6 @@
 .panel{border:1px solid #dedede;border-radius:20px;background:#fff;padding:24px;margin-bottom:20px;color:#161616;box-shadow:0 4px 18px #00000004}
 .top{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}
 .eyebrow{display:inline-flex;align-items:center;gap:8px;text-transform:uppercase;letter-spacing:.1em;font-size:10px;font-weight:750}
-.allowance{color:#666;font-size:11px}
 .panel h3{font-size:24px;line-height:1.2;letter-spacing:-.035em;margin:0 0 8px;font-weight:650}
 .description{font-size:13px;line-height:1.6;color:#666;margin:0;max-width:620px}
 .metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:24px 0}
