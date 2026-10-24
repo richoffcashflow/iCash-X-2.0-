@@ -39,6 +39,20 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
     if(call.sid!==row.call_sid||call.account_sid!==row.provider_account_sid||!['completed','failed','busy','no-answer','canceled'].includes(String(call.status)))throw Error('CALL_TERMINATION_UNCONFIRMED');
     const ended=await recordingTransition(db,row,'call_ended',{callSid:row.call_sid,providerAccountSid:row.provider_account_sid,status:call.status});if(!ended)throw Error('CALL_TERMINATION_SAVE_REQUIRED');row=ended;
    }
+   // A lost recording-start receipt must not reserve call capacity forever.
+   // Confirm the exact carrier call ended before inspecting missing audio;
+   // retain recording/billing reconciliation and never end or redial an active call.
+   if(row.state==='starting'&&row.start_claimed_at&&!row.recording_sid&&!row.call_ended_at){
+    stage='carrier_terminal';
+    const call=await provider.getCall(row.call_sid!);
+    if(call.sid!==row.call_sid||call.account_sid!==row.provider_account_sid
+     ||typeof row.from_phone!=='string'||typeof row.to_phone!=='string'
+     ||call.from!==row.from_phone||call.to!==row.to_phone||call.direction!=='outbound-api')throw Error('CALL_BINDING_REVIEW_REQUIRED');
+    if(['completed','failed','busy','no-answer','canceled'].includes(String(call.status))){
+     const requested=await recordingTransition(db,row,'stop',{stopTokenHash:row.stop_token_hash});if(!requested)throw Error('CALL_TERMINATION_REQUEST_REQUIRED');row=requested;
+     const ended=await recordingTransition(db,row,'call_ended',{callSid:row.call_sid,providerAccountSid:row.provider_account_sid,status:call.status});if(!ended)throw Error('CALL_TERMINATION_SAVE_REQUIRED');row=ended;
+    }
+   }
    // A missing AI identity must not block independently verified call audio.
    // Keep identity discovery scheduled, with its exact provider bindings intact.
    stage='conversation';
