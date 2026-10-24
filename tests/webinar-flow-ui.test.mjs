@@ -319,7 +319,7 @@ const denied=()=>new DOMException('Autoplay requires a gesture','NotAllowedError
 {
  const p=await audioPlayer(async(_media,call)=>{if(call===1)throw denied();});p.start();await flush();
  assert.deepEqual(p.calls,[false,true],'Sound denial tries muted playback once');assert.equal(p.media.currentTime,40);
- assert.ok(all(p.overlay()).some(n=>n.props?.children==='Tap to listen'));
+ assert.ok(all(p.overlay()).some(n=>n.props?.children==='Tap for sound'));
  p.overlay().props.onClick();assert.equal(p.media.muted,false,'The tap enables audio before awaiting playback');await flush();
  assert.deepEqual(p.calls,[false,true,false]);assert.equal(p.overlay(),undefined);
  assert.equal(all(p.render()).some(n=>n.props?.className==='wb-player-actions'),false,'No persistent player controls');p.close();
@@ -340,8 +340,20 @@ const denied=()=>new DOMException('Autoplay requires a gesture','NotAllowedError
 }
 {
  let reject;const p=await audioPlayer(async(_media,call)=>{if(call===1)await new Promise((_resolve,no)=>{reject=no;});});
- p.start();p.overlay().props.onClick();await flush();reject(denied());await flush();
- assert.deepEqual(p.calls,[false,false],'An older denied autoplay cannot mute a newer successful tap');assert.equal(p.media.muted,false);assert.equal(p.overlay(),undefined);p.close();
+ p.start();assert.equal(p.overlay(),undefined,'A pending start never asks the viewer to play');
+ document.hidden=true;listeners.get('visibilitychange')();document.hidden=false;listeners.get('visibilitychange')();
+ await flush();reject(denied());await flush();
+ assert.deepEqual(p.calls,[false,false],'An older denied autoplay cannot mute a newer successful return');assert.equal(p.media.muted,false);assert.equal(p.overlay(),undefined);p.close();
+}
+{
+ const p=await audioPlayer(async()=>{});
+ assert.equal(find(p.render(),'video').props.autoPlay,true,'Native autoplay supports the scripted sound-first attempt');
+ assert.equal(p.overlay(),undefined,'Loading is not a request to tap Play');
+ document.hidden=true;p.start();await flush();assert.deepEqual(p.calls,[]);
+ document.hidden=false;listeners.get('visibilitychange')();await flush();
+ assert.deepEqual(p.calls,[false],'A webinar first opened in the background starts on return without a tap');
+ const before=p.media.currentTime;p.render();p.render();
+ assert.equal(p.media.currentTime,before,'Parent rerenders do not restart the video');assert.deepEqual(p.calls,[false]);p.close();
 }
 for(const name of ['AbortError','NotSupportedError']){
  const p=await audioPlayer(async()=>{throw new DOMException('Playback interrupted',name);});p.start();await flush();

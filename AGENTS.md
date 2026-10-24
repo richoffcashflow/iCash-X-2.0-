@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 24, 2026 the owner required webinar autoplay with sound when permitted, then muted autoplay with a “Tap for sound” control. Never show a Play gate while media is loading. Preserve remembered mute choices and resume background-tab starts on visibility. Browsers that block all autoplay still need an honest recovery control. Player-only releases must not reload open viewers, change their session snapshots or reset playback/checkout.
+
 - On October 23, 2026 the owner reiterated that support must not bring up readiness or credits when the customer has not raised them. Keep every reply focused on the current question, including complaints and follow-ups. Use credit details only for an explicit funding/usage question or a verified credit blocker directly explaining stopped work. Do not append passing account checks, funding prompts or unrelated setup reminders; a new topic must not inherit an old billing issue. Keep unresolved problems open without inventing a repair.
 
 - On October 23, 2026 the owner requested faster results through parallel AI seller calls and nationwide research. Keep bounded concurrent dispatch, fresh one-use capabilities, fair account service and actual receipt-backed progress. Expand nationwide accounts through current eligible US ZIP metadata while preserving explicit saved scope, state restrictions, duplicate coverage, contact rules, funding limits and unknown-outcome holds. Do not equate configured capacity, queued calls or attempts with interested sellers or signed contracts.
