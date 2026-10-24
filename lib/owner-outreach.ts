@@ -6,7 +6,7 @@ export type OutreachFilters={days:1|7|30;includeOwner:boolean;query:string;page:
 const count=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const stamp=z.string().refine(value=>Number.isFinite(Date.parse(value)));
 const activity={calls:count,conversations:count,callResponses:count,unanswered:count,busy:count,failed:count,textsAccepted:count,textsDelivered:count,textReplies:count,queuedCalls:count,queuedTexts:count,heldCalls:count,heldTexts:count};
-const leadSchema=z.object({id:z.string().uuid(),accountId:z.string().uuid(),account:z.string().min(1),address:z.string().min(1),paused:z.boolean(),eligible:z.boolean(),responded:z.boolean(),interested:z.boolean(),optedOut:z.boolean(),latestAt:stamp,...activity});
+const leadSchema=z.object({id:z.guid(),accountId:z.guid(),account:z.string().min(1),address:z.string().min(1),paused:z.boolean(),eligible:z.boolean(),responded:z.boolean(),interested:z.boolean(),optedOut:z.boolean(),latestAt:stamp,...activity});
 const reportSchema=z.object({days:z.union([z.literal(1),z.literal(7),z.literal(30)]),includeOwner:z.boolean(),query:z.string().max(100),page:z.number().int().min(1).max(100000),status:z.enum(outreachStatuses),pageSize:z.literal(25),timezone:z.literal('America/Chicago'),startAt:stamp,endAt:stamp,matchedCount:count,totals:z.object({researched:count,eligible:count,accounts:count,respondedProperties:count,interestedProperties:count,...activity}),leads:z.array(leadSchema).max(25)});
 export type OwnerOutreach=z.infer<typeof reportSchema>;
 export type OutreachLead=OwnerOutreach['leads'][number];

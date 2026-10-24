@@ -12,7 +12,7 @@ export const runtime='nodejs';
 export const dynamic='force-dynamic';
 export const maxDuration=60;
 const headers={'Cache-Control':'private, no-store'};
-const input=z.object({requestId:z.string().uuid(),question:z.string().trim().min(1).max(1500),timezone:z.string().max(100),screeningId:z.string().uuid().optional()}).strict();
+const input=z.object({requestId:z.guid(),question:z.string().trim().min(1).max(1500),timezone:z.string().max(100),screeningId:z.guid().optional()}).strict();
 type Row={id:string;question:string;answer:AssistantAnswer|null;state:string;created_at:string};
 function error(e:unknown){
  const message=e instanceof Error?e.message:'';
@@ -20,7 +20,7 @@ function error(e:unknown){
  return NextResponse.json({error:message==='VIP_REQUIRED'?'Ask AI Bot is a VIP feature. Upgrade to VIP to use it.':message==='QUESTION_CREDITS_REQUIRED'?'Add credits or allow more spending today to ask your bot.':status===402?'Restore your subscription to ask your bot.':status===401?'Sign in to ask your bot.':status===404?'This property is not available in your workspace.':status===400?'Check your question and try again.':'Could not finish your reply. Your work is unchanged. Try again.',...(message==='VIP_REQUIRED'?{code:'VIP_REQUIRED'}:{})},{status,headers});
 }
 export async function GET(req:Request){try{
- const {accountId}=await workAccount({requireVip:true}),id=new URL(req.url).searchParams.get('id');if(id)z.string().uuid().parse(id);
+ const {accountId}=await workAccount({requireVip:true}),id=new URL(req.url).searchParams.get('id');if(id)z.guid().parse(id);
  const items=await db<Row[]>(`icash_workspace_questions?account_id=eq.${accountId}${id?'&id=eq.'+id:''}&select=id,question,answer,state,created_at&order=created_at.desc&limit=${id?1:20}`);
  if(id&&!items.length)return NextResponse.json({error:'Reply not found.'},{status:404,headers});
  return NextResponse.json({items:items.reverse()},{headers});

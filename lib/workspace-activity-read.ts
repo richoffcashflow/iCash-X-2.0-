@@ -33,7 +33,7 @@ export async function workspaceActivity(req:Request,accountId:string,{refreshOut
  try{
   const params=new URL(req.url).searchParams;
   const page=pageNumber(params.get('page')),attentionPage=pageNumber(params.get('attentionPage'));
-  const screeningId=params.get('screeningId');if(screeningId)z.string().uuid().parse(screeningId);
+  const screeningId=params.get('screeningId');if(screeningId)z.guid().parse(screeningId);
   const query=(params.get('query')??'').trim();
   const responsesOnly=params.get('view')==='responses',opportunitiesOnly=params.get('view')==='opportunities';
   // A literal address fragment, never a caller-supplied PostgREST expression or wildcard.

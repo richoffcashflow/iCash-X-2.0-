@@ -6,7 +6,7 @@ import {mergeStoredDealTerms} from '@/lib/deal-term-update';
 import {buyerDepositCents} from '@/lib/buyer-purchase-terms';
 import type {BuyerAssignmentPricing} from '@/lib/buyer-assignment-pricing';
 import {z} from 'zod';
-const input=z.object({screeningId:z.string().uuid(),terms:z.record(z.unknown())}).strict();
+const input=z.object({screeningId:z.guid(),terms:z.record(z.string(),z.unknown())}).strict();
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403});
  try{

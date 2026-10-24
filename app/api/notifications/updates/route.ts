@@ -16,7 +16,7 @@ export async function GET(){
    db<BotUpdatePreferences>('rpc/icash_customer_update_preferences_get','POST',{p_account:accountId,p_user:userId}),
    db<{enabled:boolean}[]>('icash_customer_update_settings?id=eq.1&select=enabled')
   ]);
-  const ids=[...new Set(sources.map(item=>item.screening_id))].filter(id=>z.string().uuid().safeParse(id).success);
+  const ids=[...new Set(sources.map(item=>item.screening_id))].filter(id=>z.guid().safeParse(id).success);
   const properties=ids.length?await db<{id:string;home:{address?:string}}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=in.(${ids.join(',')})&select=id,home:result->property`):[];
   const {settings:messaging}=await readCampaignSettings(db),config=customerUpdateConfiguration(process.env,messaging.fromEmail);
   const items=sources.filter(item=>Object.hasOwn(updateCopy,item.kind)&&(item.kind==='credits_low'||properties.some(p=>p.id===item.screening_id))).map(item=>({id:item.source_key,kind:item.kind,screeningId:item.screening_id,createdAt:item.event_at,...updateCopy[item.kind],address:properties.find(p=>p.id===item.screening_id)?.home?.address??null}));

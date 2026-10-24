@@ -4,7 +4,7 @@ import {db} from '@/lib/stripe-test';
 import {allowedOrigin} from '@/lib/funding-policy';
 import {renderDealDocument} from '@/lib/deal-documents';
 import {z} from 'zod';
-const input=z.object({dealId:z.string().uuid(),kind:z.enum(['purchase','assignment','buyer_package','title_packet'])}).strict();
+const input=z.object({dealId:z.guid(),kind:z.enum(['purchase','assignment','buyer_package','title_packet'])}).strict();
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403});
  try{
@@ -18,7 +18,7 @@ export async function POST(req:Request){
 
 export async function GET(req:Request){
  const headers={'Cache-Control':'private, no-store'};
- try{const {accountId}=await workAccount();const id=z.string().uuid().parse(new URL(req.url).searchParams.get('id'));
+ try{const {accountId}=await workAccount();const id=z.guid().parse(new URL(req.url).searchParams.get('id'));
  const [meta]=await db<{deal_id:string}[]>(`icash_deal_documents?id=eq.${id}&select=deal_id`);if(!meta)throw Error();
  const [deal]=await db<{id:string}[]>(`icash_deal_files?id=eq.${meta.deal_id}&account_id=eq.${accountId}&select=id`);if(!deal)throw Error();
  const [doc]=await db<{html:string;kind:string}[]>(`icash_deal_documents?id=eq.${id}&deal_id=eq.${deal.id}&select=html,kind`);if(!doc)throw Error();

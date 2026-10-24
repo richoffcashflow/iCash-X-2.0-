@@ -6,7 +6,7 @@ import {webinarBody, webinarError, webinarHeaders, webinarLimit, webinarOrigin, 
 export async function POST(req: Request) {
   try {
     webinarOrigin(req);
-    const input = z.object({sessionId: z.string().uuid(), seconds: z.number().int().min(0).max(14400)}).strict().parse(await webinarBody(req, 1000));
+    const input = z.object({sessionId: z.guid(), seconds: z.number().int().min(0).max(14400)}).strict().parse(await webinarBody(req, 1000));
     const {v, s} = await webinarSession(input.sessionId);
     await webinarLimit(req, v.id, 'timers', 30, 60);
     if (s.is_preview || s.superseded_at) return Response.json({deadlines: {}, offerDeadlines: {}, serverNow: Date.now()}, {headers: webinarHeaders});

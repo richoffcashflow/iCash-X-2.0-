@@ -18,12 +18,12 @@ export const titleProposalSchema=z.object({
  phone:z.union([z.literal(''),z.string().regex(/^\+[1-9]\d{7,14}$/,'Use the country code, for example +12145551234.')]),
 }).strict();
 export const closingSetupInput=z.discriminatedUnion('action',[
- z.object({action:z.literal('use_closer'),dealId:z.string().uuid(),data:z.object({sourceDealId:z.string().uuid()}).strict()}).strict(),
- z.object({action:z.literal('use_profile'),dealId:z.string().uuid(),data:z.object({}).strict()}).strict(),
- z.object({action:z.literal('payout'),dealId:z.string().uuid(),data:payoutPreferenceSchema}).strict(),
- z.object({action:z.literal('title_preference'),dealId:z.string().uuid(),data:titleProposalSchema}).strict(),
- z.object({action:z.literal('confirm_title'),dealId:z.string().uuid(),data:z.object({revision:z.string().min(1),independentContact:z.literal(true),assignmentsAndCoverage:z.literal(true),agreedByParties:z.literal(true)}).strict()}).strict(),
- z.object({action:z.literal('takeover'),dealId:z.string().uuid(),data:z.object({reason:z.enum(['human_requested','title_declined','payment_change','title_issue'])}).strict()}).strict(),
+ z.object({action:z.literal('use_closer'),dealId:z.guid(),data:z.object({sourceDealId:z.guid()}).strict()}).strict(),
+ z.object({action:z.literal('use_profile'),dealId:z.guid(),data:z.object({}).strict()}).strict(),
+ z.object({action:z.literal('payout'),dealId:z.guid(),data:payoutPreferenceSchema}).strict(),
+ z.object({action:z.literal('title_preference'),dealId:z.guid(),data:titleProposalSchema}).strict(),
+ z.object({action:z.literal('confirm_title'),dealId:z.guid(),data:z.object({revision:z.string().min(1),independentContact:z.literal(true),assignmentsAndCoverage:z.literal(true),agreedByParties:z.literal(true)}).strict()}).strict(),
+ z.object({action:z.literal('takeover'),dealId:z.guid(),data:z.object({reason:z.enum(['human_requested','title_declined','payment_change','title_issue'])}).strict()}).strict(),
 ]);
 export type PayoutPreference=z.infer<typeof payoutPreferenceSchema>;
 export type TitleProposal=z.infer<typeof titleProposalSchema>;

@@ -16,7 +16,7 @@ import type {RecordedReceptionRow} from '@/lib/recorded-reception';
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
 export const maxDuration=30;
-const id=z.string().uuid(),page=z.string().regex(/^\d{1,5}$/).transform(Number).refine(n=>n<=10000);
+const id=z.guid(),page=z.string().regex(/^\d{1,5}$/).transform(Number).refine(n=>n<=10000);
 const resources=new Set(['activity','report','progress','bot-status','property-photo','leads','details','messages','call-history','conversation','recording','recording/audio','reception-recording','reception-recording/audio']);
 const json=(data:unknown)=>Response.json(data,{headers:ownerViewHeaders});
 // Deliberately explicit, read-only resources. Never forward arbitrary paths,
@@ -63,11 +63,11 @@ export async function GET(req:Request,context:{params:Promise<{viewId:string;res
   return json({photo});
  }
  if(resource==='leads'){
-  const f=z.object({q:z.string().trim().max(100).default(''),page:page.default('1').refine(n=>n>=1)}).strict().parse(query);
+  const f=z.object({q:z.string().trim().max(100).default(''),page:page.prefault('1').refine(n=>n>=1)}).strict().parse(query);
   return json(ownerLeadsSchema.parse(await db('rpc/icash_owner_account_leads','POST',{p_actor:actor.userId,p_account:accountId,p_query:f.q,p_page:f.page},req.signal)));
  }
  if(resource==='call-history'){
-  const f=z.object({screeningId:id,page:page.default('0')}).strict().parse(query);
+  const f=z.object({screeningId:id,page:page.prefault('0')}).strict().parse(query);
   const history=await propertyCallHistory(db,accountId,f.screeningId,f.page);
   if(!history)throw new OwnerViewError(404,'This property is not in the viewed account.');
   return json(history);

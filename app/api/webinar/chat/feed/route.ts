@@ -5,7 +5,7 @@ import {webinarChatScope,sharedChatFields,publicChatMessage,type SharedChatRow} 
 
 export async function POST(req:Request){try{
  webinarOrigin(req);
- const input=z.object({sessionId:z.string().uuid()}).strict().safeParse(await webinarBody(req,200));
+ const input=z.object({sessionId:z.guid()}).strict().safeParse(await webinarBody(req,200));
  if(!input.success)throw new WebinarError(400,'A valid session is required.');
  const {v,s}=await webinarSession(input.data.sessionId);
  await webinarLimit(req,v.id,'chat-feed',30,60);

@@ -7,8 +7,8 @@ import {allowedOrigin} from '@/lib/funding-policy';
 import {sendForSignatures,refreshSigning,completedSigningPdf,customerSigningLink} from '@/lib/signing-service';
 import {signerSchema} from '@/lib/signing-policy';
 const input=z.discriminatedUnion('action',[
- z.object({action:z.literal('send'),dealId:z.string().uuid(),kind:z.enum(['purchase','assignment']),signers:z.array(signerSchema).min(1).max(8),confirmed:z.literal(true),autoSignature:z.string().trim().min(2).max(200).optional()}).strict(),
- z.object({action:z.enum(['refresh','link','revoke_auto']),id:z.string().uuid()}).strict(),
+ z.object({action:z.literal('send'),dealId:z.guid(),kind:z.enum(['purchase','assignment']),signers:z.array(signerSchema).min(1).max(8),confirmed:z.literal(true),autoSignature:z.string().trim().min(2).max(200).optional()}).strict(),
+ z.object({action:z.enum(['refresh','link','revoke_auto']),id:z.guid()}).strict(),
 ]);
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403});
@@ -20,6 +20,6 @@ export async function POST(req:Request){
  }catch(e){const message=e instanceof Error?e.message:'';return NextResponse.json({error:message.startsWith('[')||message==='Database request failed'?'Could not prepare signing. An existing request may need review before another can be sent.':message||'Signing unavailable.'},{status:409});}
 }
 export async function GET(req:Request){
- try{const {accountId}=await workAccount({allowInactiveMembership:true,allowUnacknowledged:true});const id=z.string().uuid().parse(new URL(req.url).searchParams.get('id'));const bytes=await completedSigningPdf(accountId,id,new URL(req.url).searchParams.get('audit')==='true');return new Response(bytes,{headers:{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="icash-signed-contract.pdf"','Cache-Control':'private, no-store'}});
+ try{const {accountId}=await workAccount({allowInactiveMembership:true,allowUnacknowledged:true});const id=z.guid().parse(new URL(req.url).searchParams.get('id'));const bytes=await completedSigningPdf(accountId,id,new URL(req.url).searchParams.get('audit')==='true');return new Response(bytes,{headers:{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="icash-signed-contract.pdf"','Cache-Control':'private, no-store'}});
  }catch{return NextResponse.json({error:'Signed PDF unavailable.'},{status:409});}
 }

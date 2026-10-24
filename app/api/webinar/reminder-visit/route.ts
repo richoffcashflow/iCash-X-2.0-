@@ -7,7 +7,7 @@ export async function POST(req:Request){try{
  webinarOrigin(req);
  const input=z.discriminatedUnion('action',[
   z.object({action:z.literal('visit')}).strict(),
-  z.object({action:z.literal('watch'),sessionId:z.string().uuid()}).strict(),
+  z.object({action:z.literal('watch'),sessionId:z.guid()}).strict(),
  ]).parse(await webinarBody(req,500));
  const visit=await reminderVisitId(req);if(!visit)return new Response(null,{status:204,headers:webinarHeaders});
  const visitor=await webinarVisitor();await webinarLimit(req,visitor.id,'reminder-visit',30,60);

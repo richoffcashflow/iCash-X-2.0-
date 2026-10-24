@@ -13,8 +13,8 @@ export const blockerNext:Record<BlockerKind,{title:string;detail:string}>={
 };
 export type JourneyBlocker={kind:BlockerKind;note:string;revision:number;updatedAt:string};
 export const blockerInput=z.object({kind:z.enum(blockerKinds),note:z.string().trim().max(1000).refine(v=>!/(?:\b(?:routing|account|ssn|social security)\s*(?:number|#|:)|\b\d{9,}\b)/i.test(v),'Share bank details directly with your verified closing contact.')}).strict();
-export const recoveryInput=z.object({journeyId:z.string().uuid(),revision:z.number().int().positive(),resolution:z.string().trim().min(5).max(1000),confirmed:z.literal(true)}).strict();
-export const proceedsInput=z.object({dealId:z.string().uuid(),updateId:z.string().uuid(),receivedDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),confirmed:z.literal(true)}).strict();
+export const recoveryInput=z.object({journeyId:z.guid(),revision:z.number().int().positive(),resolution:z.string().trim().min(5).max(1000),confirmed:z.literal(true)}).strict();
+export const proceedsInput=z.object({dealId:z.guid(),updateId:z.guid(),receivedDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),confirmed:z.literal(true)}).strict();
 export type ProceedsReceipt={id:string;amount_cents:number;received_date:string;created_at:string};
 export type SavedCloser={dealId:string;company:string;closer:string;email:string;phone:string;lastProperty:string;verifiedUntil:string};
 export type BuyerDemand={markets:{zip:string;buyers:number;houseBuyers:number;landBuyers:number;matchingHouses?:number;capacityBuyers?:number;budgetCents?:number;repairBudgetCents?:number}[];checkedAt:string};
@@ -22,5 +22,5 @@ export type ClosingOperations={signedContracts:number;closedDeals:number;deposit
 const count=z.number().int().nonnegative().safe();
 export const closingOperationsSchema=z.object({signedContracts:count,closedDeals:count,deposits:count,receivedCents:count,receivedDeals:count,issueCount:count,
  stages:z.array(z.object({key:z.enum(['buyer','deposit','title','payment']),count,averageDays:z.number().finite().nonnegative()}).strict()).max(4),
- issues:z.array(z.object({dealId:z.string().uuid(),accountId:z.string().uuid(),address:z.string(),reason:z.string(),since:z.string().datetime({offset:true})}).strict()).max(20),
+ issues:z.array(z.object({dealId:z.guid(),accountId:z.guid(),address:z.string(),reason:z.string(),since:z.string().datetime({offset:true})}).strict()).max(20),
 }).strict();

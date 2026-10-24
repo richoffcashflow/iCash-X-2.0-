@@ -18,7 +18,7 @@ export async function POST(req:Request){try{
   z.object({action:z.literal('import'),source:z.enum(['whop','highlevel']),csv:z.string().max(12_000_000)}).strict(),
   z.object({action:z.literal('save'),revision:z.number().int().positive(),steps:z.array(step).min(1).max(60)}).strict(),
   z.object({action:z.literal('pause')}).strict(),
-  z.object({action:z.literal('link'),contactId:z.string().uuid()}).strict()
+  z.object({action:z.literal('link'),contactId:z.guid()}).strict()
  ]).parse(raw);
  if(i.action==='pause'){await db(`icash_legacy_launches?id=eq.${l.id}`,'PATCH',{state:'paused',updated_at:new Date().toISOString()});return Response.json({saved:true},{headers:webinarHeaders});}
  if(i.action==='link'){

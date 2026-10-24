@@ -10,7 +10,7 @@ export const courseUploadInput=uploadFields.superRefine((v,ctx)=>{
 export type CourseKind='video'|'pdf';
 export type CourseAsset={kind:CourseKind;path:string|null;name:string|null;size:number|null;mime_type:string|null;revision:number};
 export type CourseOverview={owner:boolean;canUpload:boolean;vip:boolean;progress?:CourseProgress|null;assets:Record<CourseKind,{ready:boolean;name:string|null;revision:number}>};
-const ticketInput=uploadFields.extend({owner:z.string().uuid(),path:z.string().regex(/^[a-f0-9-]{36}\/[a-f0-9-]{36}\.(mp4|webm|pdf)$/),expires:z.number().int()});
+const ticketInput=uploadFields.extend({owner:z.guid(),path:z.string().regex(/^[a-f0-9-]{36}\/[a-f0-9-]{36}\.(mp4|webm|pdf)$/),expires:z.number().int()});
 type Ticket=z.infer<typeof ticketInput>;
 function signature(body:string,key:string){if(key.length<32)throw Error('Course signing unavailable');return createHmac('sha256',key).update('icash-course-upload-v1:'+body).digest('base64url');}
 export function issueCourseTicket(ticket:Ticket,key:string){const body=Buffer.from(JSON.stringify(ticketInput.parse(ticket))).toString('base64url');return body+'.'+signature(body,key);}

@@ -30,7 +30,7 @@ export async function POST(req:Request){try{
  if(config.meta.enabled&&!config.meta.pixelId)throw new WebinarError(400,'Add your Meta Pixel ID before enabling measurement.');
  await db('icash_webinar_settings?id=eq.1','PATCH',{config,updated_at:new Date().toISOString()});return Response.json({saved:true,followupReadiness:webinarFollowupReadiness(config)},{headers:webinarHeaders});}
  if(body.action==='create_vip'){
-  const input=z.object({action:z.literal('create_vip'),parentId:z.string().uuid()}).strict().parse(body);
+  const input=z.object({action:z.literal('create_vip'),parentId:z.guid()}).strict().parse(body);
   const [row]=await db<WebinarRow[]>(`icash_webinars?id=eq.${input.parentId}&parent_webinar_id=is.null&select=config,public_code,parent_webinar_id&limit=1`);
   if(!row)throw new WebinarError(404,'Choose a main webinar first.');
   const parent=webinarFromRow(row),pair=await db<WebinarRow[]>('rpc/icash_webinar_create_pair','POST',{p_main:parent,p_vip:newVipWebinar(randomUUID(),parent)});

@@ -7,7 +7,7 @@ import {allowedOrigin} from '@/lib/funding-policy';
 import {stopDaily,type DailyPlan} from '@/lib/daily-billing';
 import {fundingMode} from '@/lib/funding-policy';
 import {z} from 'zod';
-const input=z.object({action:z.enum(['pause','resume','takeover','return_to_bot']),screeningId:z.string().uuid().optional()}).strict();
+const input=z.object({action:z.enum(['pause','resume','takeover','return_to_bot']),screeningId:z.guid().optional()}).strict();
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403});
  try{const raw=await req.text();if(raw.length>512)throw new Error();const i=input.parse(JSON.parse(raw));const {accountId,userId}=await workAccount({allowInactiveMembership:i.action==='pause',allowUnacknowledged:i.action==='pause'});

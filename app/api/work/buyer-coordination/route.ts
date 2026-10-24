@@ -4,7 +4,7 @@ import {workAccount} from '@/lib/work-account';
 import {allowedOrigin} from '@/lib/funding-policy';
 import {db} from '@/lib/stripe-test';
 const headers={'Cache-Control':'private, no-store'};
-const id=z.string().uuid();
+const id=z.guid();
 const input=z.discriminatedUnion('action',[
  z.object({action:z.literal('availability'),dealId:id,key:id,statement:z.string().trim().min(1).max(4000),windows:z.array(z.string().min(1).max(200)).max(8),timezone:z.enum(['America/Chicago','America/New_York','America/Denver','America/Los_Angeles','UTC'])}).strict(),
  z.object({action:z.literal('deposit'),dealId:id,envelopeId:id,key:id,amountCents:z.number().int().min(1).max(500000),method:z.enum(['check','wire','cash_app','zelle']),reference:z.string().trim().min(3).max(120),cleared:z.literal(true)}).strict()

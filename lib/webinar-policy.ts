@@ -24,18 +24,18 @@ export function webinarOfferImage(offer:Pick<WebinarOffer,'imageUrl'>){return of
 export const audienceDisplaySchema=z.object({mode:z.enum(['actual','fixed','simulated']).default('actual'),fixedCount:z.number().int().min(0).max(100000).default(125),minimum:z.number().int().min(0).max(100000).default(80),maximum:z.number().int().min(0).max(100000).default(160)}).strict().refine(v=>v.minimum<=v.maximum,'The maximum must be at least the minimum.');
 export const purchaseNotificationsSchema=z.object({enabled:z.boolean().default(true),includeRegion:z.boolean().default(true),startAt:z.number().int().min(0).max(14400).nullable().default(null),intervalSeconds:z.number().int().min(15).max(120).default(30)}).strict();
 const webinarBaseSchema=z.object({
- publicCode:z.string().regex(/^\d{6,12}$/).nullable().default(null),parentWebinarId:z.string().uuid().nullable().default(null),id:z.string().uuid(),revision:z.number().int().positive(),title:z.string().trim().min(1).max(150),description:z.string().max(600),
- adEntryWebinarId:z.string().uuid().optional(),legacyCampaignId:z.string().uuid().optional(),intelligenceEnabled:z.boolean().default(false),status:z.enum(['draft','published']),audience:z.enum(['all','day','night','returning']),priority:z.number().int().min(0).max(100),
+ publicCode:z.string().regex(/^\d{6,12}$/).nullable().default(null),parentWebinarId:z.guid().nullable().default(null),id:z.guid(),revision:z.number().int().positive(),title:z.string().trim().min(1).max(150),description:z.string().max(600),
+ adEntryWebinarId:z.guid().optional(),legacyCampaignId:z.guid().optional(),intelligenceEnabled:z.boolean().default(false),status:z.enum(['draft','published']),audience:z.enum(['all','day','night','returning']),priority:z.number().int().min(0).max(100),
  videoUrl:httpsUrl,posterUrl:httpsUrl,durationSeconds:z.number().int().min(10).max(14400),
  nameAt:z.number().int().min(0).max(14400),contactAt:z.number().int().min(0).max(14400),pitchAt:z.number().int().min(0).max(14400),
  offerTitle:z.string().trim().min(1).max(150),ctaLabel:z.string().trim().min(1).max(60),offerEndsAt:z.string().datetime().nullable(),
  checkoutMode:z.enum(['daily','membership']),redirectAtEnd:z.boolean(),chat:z.array(chatCueSchema).max(500),transcript:z.string().max(100000).default(''),faq:z.string().max(24000),aiEnabled:z.boolean(),
  variationEnabled:z.boolean().default(false),chatStyle:z.string().max(2500).default(defaultChatStyle),
  timers:z.array(webinarTimerSchema).max(8).default([]),offers:z.array(webinarOfferSchema).max(12).default([]),endOfferId:z.string().max(80).nullable().default(null),showAudienceCount:z.boolean().default(true),
- audienceDisplay:audienceDisplaySchema.default({}),purchaseNotifications:purchaseNotificationsSchema.default({}),
+ audienceDisplay:audienceDisplaySchema.prefault({}),purchaseNotifications:purchaseNotificationsSchema.prefault({}),
 }).strict();
 export function hasWebinarVideo(w:{videoUrl?:string;nightVersion?:{videoUrl?:string}|null}){return !!(w.videoUrl||w.nightVersion?.videoUrl);}
-function validateRecording(w:z.infer<typeof webinarBaseSchema>,c:z.RefinementCtx){
+function validateRecording(w:z.infer<typeof webinarBaseSchema>,c:{addIssue:(issue:{code:'custom';path:string[];message:string})=>void}){
  for(const k of ['nameAt','contactAt','pitchAt'] as const)if(w[k]>w.durationSeconds)c.addIssue({code:z.ZodIssueCode.custom,path:[k],message:'Must be within the video duration.'});
  if(w.timers.some(t=>t.at>w.durationSeconds))c.addIssue({code:z.ZodIssueCode.custom,path:['timers'],message:'Timer times must be within the video.'});
  if(new Set(w.timers.map(t=>t.id)).size!==w.timers.length)c.addIssue({code:z.ZodIssueCode.custom,path:['timers'],message:'Timer IDs must be unique.'});
@@ -53,7 +53,7 @@ export const webinarSchema=webinarBaseSchema.extend({nightVersion:webinarRecordi
  if(w.status==='published'&&!hasWebinarVideo(w))c.addIssue({code:z.ZodIssueCode.custom,path:['videoUrl'],message:'Add a Daytime or Nighttime video before publishing.'});
  validateRecording(w,c);
  if(w.nightEnabled&&!w.nightVersion)c.addIssue({code:z.ZodIssueCode.custom,path:['nightVersion'],message:'Add a night recording first.'});
- if(w.nightVersion)validateRecording({...w,...w.nightVersion,purchaseNotifications:w.nightVersion.purchaseNotifications??w.purchaseNotifications,status:w.nightEnabled&&w.nightVersion.videoUrl?w.status:'draft'}, {...c,path:[...c.path,'nightVersion'],addIssue:issue=>c.addIssue({...issue,path:['nightVersion',...(issue.path??[])]})});
+ if(w.nightVersion)validateRecording({...w,...w.nightVersion,purchaseNotifications:w.nightVersion.purchaseNotifications??w.purchaseNotifications,status:w.nightEnabled&&w.nightVersion.videoUrl?w.status:'draft'}, {addIssue:issue=>c.addIssue({...issue,path:['nightVersion',...issue.path]})});
 });
 export type Webinar=z.infer<typeof webinarSchema>;
 /** A single recording covers all hours; the switch applies when both videos exist. */
@@ -93,5 +93,5 @@ export type WebinarEvent=typeof eventNames[number];
 export const optimizerSchema=z.object({enabled:z.boolean().default(false),explorationPercent:z.number().int().min(10).max(50).default(20),minVisitors:z.number().int().min(20).max(5000).default(100)}).strict();
 export const metaSchema=z.object({enabled:z.boolean().default(false),pixelId:z.string().regex(/^\d{5,30}$/).or(z.literal('')).default('')}).strict();
 export const routingSchema=z.object({nightStartsAt:z.number().int().min(0).max(23),nightEndsAt:z.number().int().min(0).max(23),checkoutWindowHours:z.number().min(0).max(72).default(8)}).strict().refine(r=>r.nightStartsAt!==r.nightEndsAt,'Day and night need different start times.');
-export const settingsSchema=z.object({homepageVipId:z.string().uuid().nullable().default(null),homepageVipNightId:z.string().uuid().nullable().default(null),homepageVipMode:z.enum(['selected','best-converting']).default('selected'),enabled:z.boolean(),smsEnabled:z.boolean().default(false),smartFollowups:z.boolean().default(true),fromEmail:z.string().email().or(z.literal('')),postalAddress:z.string().max(500),subjects:z.array(z.string().min(1).max(150)).length(3),messages:z.array(z.string().min(1).max(2000)).length(3),optimizer:optimizerSchema.default({enabled:false,explorationPercent:20,minVisitors:100}),meta:metaSchema.default({enabled:false,pixelId:''}),routing:routingSchema.default({nightStartsAt:18,nightEndsAt:6})}).strict();
+export const settingsSchema=z.object({homepageVipId:z.guid().nullable().default(null),homepageVipNightId:z.guid().nullable().default(null),homepageVipMode:z.enum(['selected','best-converting']).default('selected'),enabled:z.boolean(),smsEnabled:z.boolean().default(false),smartFollowups:z.boolean().default(true),fromEmail:z.string().email().or(z.literal('')),postalAddress:z.string().max(500),subjects:z.array(z.string().min(1).max(150)).length(3),messages:z.array(z.string().min(1).max(2000)).length(3),optimizer:optimizerSchema.default({enabled:false,explorationPercent:20,minVisitors:100}),meta:metaSchema.default({enabled:false,pixelId:''}),routing:routingSchema.prefault({nightStartsAt:18,nightEndsAt:6})}).strict();
 export type WebinarSettings=z.infer<typeof settingsSchema>;

@@ -8,7 +8,7 @@ export async function GET(req:Request){
  const headers={'Cache-Control':'private, no-store'};
  try{
  const {accountId}=await workAccount(),params=new URL(req.url).searchParams;
- const screeningId=params.has('screeningId')?z.string().uuid().parse(params.get('screeningId')):null;
+ const screeningId=params.has('screeningId')?z.guid().parse(params.get('screeningId')):null;
  if(screeningId){
  const [deal]=await db<{id:string;terms:{priceCents:number|null;assignmentFeeCents:number|null;state:string}}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${screeningId}&select=id,terms`);
  const envelopes=deal?await db<{id:string;terms_hash:string}[]>(`icash_signing_envelopes?account_id=eq.${accountId}&deal_id=eq.${deal.id}&kind=eq.purchase&state=eq.completed&test_mode=eq.false&select=id,terms_hash`):[];

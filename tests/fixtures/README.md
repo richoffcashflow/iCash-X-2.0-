@@ -27,3 +27,7 @@ Verification checklist:
 - Guest setup: name → saved creation → funding order remains; unsigned preview copy does not promise nationwide signing
 
 Automated coverage is in `tests/workspace-view.test.mjs` and `tests/workspace-activity-route.test.mjs`. Browser visual checks are separate from those tests and must be recorded explicitly; test success is not proof that screenshots were inspected.
+
+# Webinar autoplay media
+
+`webinar-autoplay.mp4` and `webinar-autoplay.webm` are synthetic 30-second black videos with a 440 Hz audio track for native autoplay checks. They contain no customer footage. Generated with FFmpeg's `color` and `sine` sources: H.264/AAC for WebKit and VP9/Opus for Chromium, which ships without proprietary codecs in the test environment.

@@ -21,7 +21,7 @@ import {vipActive} from '@/lib/vip-policy';
 import {webinarBody,webinarError,WebinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarOwner,webinarVisitor,webinarPaid,type WebinarSession} from '@/lib/webinar-server';
 export const dynamic='force-dynamic';
 export async function POST(req:Request){try{
- webinarOrigin(req);const i=z.object({timezone:z.string().max(80),code:z.string().regex(/^\d{6,12}$/).optional(),variant:z.enum(['day','night']).optional(),resume:z.string().max(600).optional(),returnToWebinar:z.boolean().optional(),preview:z.string().uuid().optional(),attribution:z.record(z.string().max(250)).optional()}).strict().parse(await webinarBody(req,3000));
+ webinarOrigin(req);const i=z.object({timezone:z.string().max(80),code:z.string().regex(/^\d{6,12}$/).optional(),variant:z.enum(['day','night']).optional(),resume:z.string().max(600).optional(),returnToWebinar:z.boolean().optional(),preview:z.guid().optional(),attribution:z.record(z.string(),z.string().max(250)).optional()}).strict().parse(await webinarBody(req,3000));
  await webinarLimit(req,'entry','entry',120,60);
  if(i.preview){try{await webinarOwner();}catch(e){
   if(!(e instanceof Error&&e.message==='DASHBOARD_PASSWORD_REQUIRED')&&(!(e instanceof WebinarError)||![401,403].includes(e.status)))throw e;
