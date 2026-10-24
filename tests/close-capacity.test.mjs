@@ -121,6 +121,10 @@ try{
  assert.equal(await val("select icash_voice_capacity_available($1,'agent_fixture','fresh','fresh',false)",[account]),false,'service role may evaluate capacity without direct private-schema access');
  await pg.exec('reset role;');
  const expanded=read('config/expanded-call-capacity.sql');
+ const shortcut=read('config/outgoing-capacity-shortcut.sql');
+ await pg.exec(shortcut.match(/create function public\.icash_outgoing_voice_capacity_open\(\)[\s\S]*?\$\$;/)[0]);
+ await pg.exec(shortcut.match(/revoke all on function public\.icash_outgoing_voice_capacity_open[\s\S]*?to service_role;/)[0]);
+ const globalOpen=()=>val('select icash_outgoing_voice_capacity_open()');
  const migration=readdirSync(new URL('../supabase/migrations/',import.meta.url)).filter(p=>p.endsWith('_expanded_call_capacity.sql'));
  assert.equal(migration.length,1);assert.equal(read('supabase/migrations/'+migration[0]),expanded);
  await pg.exec(expanded);
@@ -131,7 +135,12 @@ try{
  await q("insert into icash_voice_configs values($1,true,'agent_fixture',now()+interval '1 day',$2,null,600)",[thirdAccount,rate]);
  const save=(total=10,limit=8)=>val('select icash_save_voice_capacity($1,$2::jsonb,$3)',[total,JSON.stringify([{agentId:'agent_fixture',limit},{agentId:'agent_incoming',limit:2}]),'LOCAL expanded fixture']);
  await save();
- const available=(a=thirdAccount,incoming=false,agentId=incoming?'agent_incoming':'agent_fixture')=>val('select icash_voice_capacity_available($1,$2,$3,$4,$5)',[a,agentId,'new-operation','new-contact',incoming]);
+ const available=async(a=thirdAccount,incoming=false,agentId=incoming?'agent_incoming':'agent_fixture')=>{
+  const allowed=await val('select icash_voice_capacity_available($1,$2,$3,$4,$5)',[a,agentId,'new-operation','new-contact',incoming]);
+  if(allowed&&!incoming)assert.equal(await globalOpen(),true,'The shortcut never rejects a call allowed by exact final admission');
+  return allowed;
+ };
+ assert.equal(await globalOpen(),true,'Empty verified capacity stays usable');
  await q("insert into icash_recorded_reception_private.configs values($1,$2,'agent_incoming','agtbrch_incoming',true,'normal')",[id(99),account]);
  // Incoming calls consume their reserved slots without reducing eight outgoing
  // slots again. Check both arrival orders with real final-claim/queue logic.
@@ -145,8 +154,10 @@ try{
   await q("update icash_voice_jobs set state='dispatching' where id=$1",[job]);
  }
  assert.equal(await available(),false);assert.equal(await available(other,true),false,'ten total is full');
+ assert.equal(await globalOpen(),false,'Full total capacity skips queued recipient scans');
  await pg.exec('truncate icash_recorded_reception_private.sessions');
  assert.equal(await available(),false,'ninth outgoing cannot consume callback reserve');
+ assert.equal(await globalOpen(),false,'Outgoing reserve remains closed even with incoming slots empty');
  assert.equal(await available(other,true),true);await addIncoming(202);
  assert.equal(await available(other,true),true);await addIncoming(203);
  assert.equal(await available(other,true),false,'dedicated incoming agent remains limited to two');
@@ -156,20 +167,41 @@ try{
  await q("update icash_recorded_reception_private.configs set agent_id='agent_fixture'");await save(10,10);
  for(let n=0;n<8;n++)await add(120+n,n<3?account:n<6?other:thirdAccount,'dispatching');
  assert.equal(await available(),false,'shared agent protects its two incoming slots');
+ assert.equal(await globalOpen(),false,'Shared-agent callback reserve is preserved');
  assert.equal(await available(other,true,'agent_fixture'),true);
  await pg.exec('truncate icash_voice_jobs');await save(4,4);
  await add(140,account,'dispatching');await add(141,other,'dispatching');
  assert.equal(await available(),false,'lower verified plans retain two callback slots');
+ assert.equal(await globalOpen(),false);
  await pg.exec('truncate icash_voice_jobs');await save();
  for(let n=0;n<3;n++)await add(150+n,account,'dispatching');
  assert.equal(await available(account),false,'funded per-account fairness stays at three');
+ assert.equal(await globalOpen(),true,'Per-account limits remain the exact gate responsibility');
  assert.equal(await available(other),true);
  await pg.exec("update icash_voice_capacity_policy set verified_at=now()-interval '25 hours'");
  assert.equal(await available(other),false,'expired capacity remains conservative');
  await pg.exec('truncate icash_voice_jobs');assert.equal(await available(other),true,'single-slot fallback remains usable');
+ assert.equal(await globalOpen(),true,'Stale evidence falls back to one usable slot');
+ await add(180,account,'dispatching');assert.equal(await globalOpen(),false,'Stale single-slot evidence stays conservative');
+ await pg.exec('truncate icash_voice_jobs');await save(10,2);
+ await pg.exec('truncate icash_recorded_reception_private.configs');
+ await add(181,account,'dispatching');await add(182,other,'dispatching');
+ assert.equal(await globalOpen(),false,'Full enabled agent skips the queue below workspace capacity');
+ await q("update icash_voice_configs set agent_id='agent_unrelated' where account_id=$1",[thirdAccount]);
+ assert.equal(await globalOpen(),true,'An unrelated enabled agent retains its own fresh/fallback slot');
+ await q('update icash_voice_configs set enabled=false where account_id=$1',[thirdAccount]);assert.equal(await globalOpen(),false,'A disabled alternative agent cannot open the shortcut');
+ await q("update icash_voice_configs set agent_id='agent_fixture',enabled=true where account_id=$1",[thirdAccount]);
+ await pg.exec("update icash_voice_agent_capacity set verified_at=now()-interval '25 hours'");assert.equal(await globalOpen(),false,'Stale agent evidence defaults to one');
+ await pg.exec('truncate icash_voice_jobs');assert.equal(await globalOpen(),true);
+ const self=await add(183,account,'ready');
+ await q("insert into icash_call_recordings(id,account_id,operation_key,agent_id,contact_key,call_sid) values($1,$2,$3,'agent_fixture','self','CAfixture')",[id(183),account,'voice:'+self]);
+ assert.equal(await globalOpen(),true,'Ready jobs with an existing own-operation slot retain exact per-job exclusion');
+ await pg.exec('truncate icash_voice_jobs,icash_call_recordings');
  await assert.rejects(()=>save(11,8));
- await pg.exec('set role service_role;');assert.equal(await available(other),true);
+ await pg.exec('set role service_role;');assert.equal(await available(other),true);assert.equal(await globalOpen(),true,'Service role can use the shortcut without private-schema grants');
  await pg.exec('reset role;');
  for(const role of ['anon','authenticated'])for(const name of ['icash_save_voice_capacity(integer,jsonb,text)','icash_voice_capacity_available(uuid,text,text,text,boolean)'])assert.equal(await val('select has_function_privilege($1,$2,\'execute\')',[role,name]),false);
+ for(const role of ['anon','authenticated'])assert.equal(await val("select has_function_privilege($1,'icash_outgoing_voice_capacity_open()','execute')",[role]),false);
+ assert.equal(await val("select has_function_privilege('service_role','icash_outgoing_voice_capacity_open()','execute')"),true);
  console.log('PASS adaptive funded calls, incoming reserve, final Pause, recipient deduplication, unknown holds and verified non-burst provider limits.');
 }catch(e){console.error('FAIL call capacity:',e.message,e.where??'');process.exitCode=1;}finally{await pg.close();}

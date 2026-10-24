@@ -98,6 +98,27 @@ try{
   restoredIssuer=restoredIssuer.replace(replacement,selection);
  }
  assert.equal(restoredIssuer,parallelIssuer,'only candidate evaluation order changes; queueing, priority, locking, spacing, tickets and fallback remain exact');
+ await pg.exec(`alter table icash_voice_configs add column agent_id text default 'agent_fixture';
+ create table icash_voice_capacity_policy(id integer primary key,workspace_limit integer,verified_at timestamptz);
+ create table icash_voice_agent_capacity(agent_id text primary key,concurrent_limit integer,verified_at timestamptz);
+ create table fixture_active_voice_slots(operation_key text,account_id uuid,agent_id text,contact_key text);
+ create function icash_active_voice_slots() returns table(operation_key text,account_id uuid,agent_id text,contact_key text) language sql stable as $$select * from public.fixture_active_voice_slots$$;
+ create function icash_voice_capacity_targets() returns jsonb language sql stable as $$select '[]'::jsonb$$;
+ insert into icash_voice_capacity_policy values(1,10,now());
+ insert into icash_voice_agent_capacity values('agent_fixture',8,now());`);
+ const shortcut=read('config/outgoing-capacity-shortcut.sql');await pg.exec(shortcut);
+ const shortcutIssuer=await value("select pg_get_functiondef('icash_next_before_fulfillment()'::regprocedure)");
+ assert.equal(shortcutIssuer.replace(shortcut.split('$after$')[1],shortcut.split('$before$')[1]),orderedIssuer,'Only the necessary global capacity guard changes');
+ await scenario('full provider capacity falls through without checking queued recipients or issuing tickets',async()=>{
+  for(let i=1000;i<1200;i++)await add(i,a,7200+i);
+  for(let i=0;i<8;i++)await q("insert into fixture_active_voice_slots values($1,$2,'agent_fixture',$3)",['voice:occupied-'+i,a,'contact-'+i]);
+  await pg.exec('alter sequence fixture_capacity_checks restart with 1;alter sequence fixture_recipient_checks restart with 1');
+  assert.equal(await next(),null);
+  assert.equal(await value('select is_called from fixture_capacity_checks'),false);
+  assert.equal(await value('select is_called from fixture_recipient_checks'),false);
+  assert.equal(Number(await value('select count(*) from icash_automation_tickets')),0);
+  assert.equal(Number(await value("select count(*) from icash_voice_jobs where state='ready'")),200);
+ });
  await scenario('large ready queue stops admission checks at its first fair eligible job',async()=>{
   for(let i=1000;i<1200;i++)await add(i,a,7200+i);
   await pastTicket(a);const first=await add(1300,b,1);
@@ -234,8 +255,10 @@ try{
  // Unknown prerequisite versions fail without partially applying a new selector.
  await pg.exec('drop index icash_automation_voice_account_recent');
  await assert.rejects(pg.exec(migration),/Voice account fairness prerequisite changed/);await pg.exec('rollback');
- assert.equal(await value("select pg_get_functiondef('icash_next_before_fulfillment()'::regprocedure)"),orderedIssuer);
+ assert.equal(await value("select pg_get_functiondef('icash_next_before_fulfillment()'::regprocedure)"),shortcutIssuer);
  await assert.rejects(pg.exec(orderedMigration),/Ordered voice admission prerequisite changed/);await pg.exec('rollback');
- assert.equal(await value("select pg_get_functiondef('icash_next_before_fulfillment()'::regprocedure)"),orderedIssuer);
+ assert.equal(await value("select pg_get_functiondef('icash_next_before_fulfillment()'::regprocedure)"),shortcutIssuer);
+ const shortcutPatch=shortcut.match(/do \$migration\$[\s\S]*?end \$migration\$;/)[0];
+ await assert.rejects(pg.exec('begin;'+shortcutPatch),/Outgoing capacity shortcut prerequisite changed/);await pg.exec('rollback');
  console.log(`Voice account fairness: ${scenarios} local scenarios pass; never-served/least-recent/FIFO, failing-account rotation, receipt-bound urgency, three-second global spacing, capacity/recipient gates, Meta path, Pause/wallet/holds and unchanged financial state/private ACLs.`);
 }catch(e){console.error(e.message,e.cause?.where??e.where??'');process.exitCode=1;}finally{await pg.close();}
