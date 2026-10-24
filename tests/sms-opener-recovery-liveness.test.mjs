@@ -7,6 +7,7 @@ const require=createRequire(import.meta.url);
 const f=await createOperationalContactFixture(require.resolve('@electric-sql/pglite'),{automaticChannels:true});
 const {pg,q,rpc,one,account,prepare,project}=f;
 try {
+  const originalUnstarted=(await one("select pg_get_functiondef('icash_next_before_unstarted_sms_recovery()'::regprocedure) body")).body;
   await pg.exec(`create table icash_timezone_names(name text primary key);insert into icash_timezone_names select name from pg_timezone_names;
   create or replace function icash_next_before_unstarted_sms_recovery() returns jsonb language sql as $$select '{"token":"prior-new-work"}'::jsonb$$;`);
   const baseline=JSON.parse(readFileSync(new URL('./fixtures/sms-recovery-scheduler-baseline.json',import.meta.url),'utf8'));
@@ -69,13 +70,39 @@ try {
   assert(root.indexOf('pg_try_advisory_xact_lock')<root.indexOf('icash_recover_unstarted_seller_opener()'));
   assert(root.indexOf('icash_recover_unstarted_seller_opener()')<root.indexOf('icash_resume_prospecting_ticket()'));
   assert.match(changed.body,/kind='seller_opener' and created_at>now\(\)-interval '1 minute'/);
+  // Apply the faster global cadence to all four real entry points. Keep the
+  // unrelated fallback stub below so the existing guard scenarios remain local.
+  await pg.exec(originalUnstarted);
+  const cadenceSql=readFileSync(new URL('../config/seller-opener-cadence.sql',import.meta.url),'utf8');
+  const cadenceNames=['icash_recover_unstarted_seller_opener','icash_next_before_operational_sms','icash_next_before_unstarted_sms_recovery','icash_next_before_sms_inbound_campaign'];
+  const definitions=new Map();
+  for(const fn of cadenceNames) definitions.set(fn,await one("select pg_get_functiondef(p.oid) body,proacl::text acl,prosecdef,proconfig from pg_proc p where p.oid=$1::regprocedure",[fn+'()']));
+  await pg.exec(cadenceSql);
+  for(const fn of cadenceNames){
+    const before=definitions.get(fn),after=await one("select pg_get_functiondef(p.oid) body,proacl::text acl,prosecdef,proconfig from pg_proc p where p.oid=$1::regprocedure",[fn+'()']);
+    assert.deepEqual(after,{...before,body:before.body.replace("kind='seller_opener' and created_at>now()-interval '1 minute'","kind='seller_opener' and created_at>now()-interval '5 seconds'")},fn+' preserves every admission predicate, lock, ACL and outcome');
+  }
+  const fastOrderedBody=(await one("select pg_get_functiondef('icash_recover_unstarted_seller_opener()'::regprocedure) body")).body;
+  await pg.exec(`create or replace function icash_next_before_unstarted_sms_recovery() returns jsonb language sql as $$select '{"token":"prior-new-work"}'::jsonb$$;`);
+  // An unrelated account's opener shares the global cadence. At five seconds
+  // a distinct unattempted message can proceed; the same message cannot replay.
+  for(const seconds of [0,4,5,30,60]){
+    await q('begin');
+    try{
+      const unrelated=(await one("insert into icash_text_messages(account_id,direction,body,state,request_key) values($1,'outgoing','SIMULATION unrelated opener','ready',gen_random_uuid()) returning id",[f.other])).id;
+      await q("insert into icash_automation_tickets(account_id,kind,opener_message_id,state,outcome,created_at,expires_at) values($1,'seller_opener',$2,'held','message_held',now()-$3*interval '1 second',now()+interval '1 minute')",[f.other,unrelated,seconds]);
+      const result=await rpc('icash_recover_unstarted_seller_opener',{});
+      assert.equal(!!result?.token,seconds>=5,'global five-second boundary: '+seconds);
+      if(result?.token) assert.equal(await rpc('icash_recover_unstarted_seller_opener',{}),null,'immediate claim cannot duplicate or exceed cadence');
+    }finally{await q('rollback');}
+  }
   const recovered=await rpc('icash_next_automation',{});assert(recovered?.token&&recovered.token!=='prior-new-work','unchanged eligible opener now recovers even while the prior lane has work');
   const issued=await one('select state,issue_attempts from icash_automation_tickets where token=$1',[recovered.token]);
   assert.deepEqual(issued,{state:'issued',issue_attempts:2});
   assert.equal((await one('select state,provider_id from icash_text_messages where id=$1',[message])).state,'ready');
   assert.equal((await one('select count(*)::int n from icash_operation_spend where operation_key=$1',['text:'+message])).n,0);
   assert.deepEqual(await rpc('icash_next_before_owner_question',{}),{token:'prior-new-work'},'live recovery ticket is not duplicated and other work keeps its path');
-  assert.deepEqual(await rpc('icash_next_automation',{}),{token:'budget-resume-voice'},'one-minute SMS throttle leaves ordinary budget-resume work available');
+  assert.deepEqual(await rpc('icash_next_automation',{}),{token:'budget-resume-voice'},'five-second SMS throttle leaves ordinary budget-resume work available');
   const helperAcl=await one(`select prosecdef,proconfig,
    has_function_privilege('anon','icash_recover_unstarted_seller_opener()','execute') anon,
    has_function_privilege('authenticated','icash_recover_unstarted_seller_opener()','execute') authenticated,
@@ -120,6 +147,8 @@ try {
   assert.equal((await one('select balance_cents from icash_wallets where account_id=$1',[account])).balance_cents,100000,'no charge occurs in scheduling tests');
   assert.equal((await one('select state from icash_text_messages where id=$1',[message])).state,'ready','no provider receipt invented');
   await assert.rejects(pg.exec(selectionSql),/Unstarted opener selection prerequisite changed/);await q('rollback');
-  assert.equal((await one("select pg_get_functiondef('icash_recover_unstarted_seller_opener()'::regprocedure) body")).body,orderedBody,'unexpected prerequisite fails atomically');
+  assert.equal((await one("select pg_get_functiondef('icash_recover_unstarted_seller_opener()'::regprocedure) body")).body,fastOrderedBody,'unexpected prerequisite fails atomically');
+  await assert.rejects(pg.exec(cadenceSql),/Seller opener cadence prerequisite changed/);await q('rollback');
+  assert.equal((await one("select pg_get_functiondef('icash_recover_unstarted_seller_opener()'::regprocedure) body")).body,fastOrderedBody,'cadence fails atomically when prerequisites drift');
   console.log('PASS: expired original SMS recovery beats continuous actual root budget-resume and outer/lower work; all candidate predicates unchanged; throttle, three-attempt limit, live/consumed/unknown holds, Pause, credits, contact/sender/evidence and operation protections retained.');
 } finally {await pg.close();}
