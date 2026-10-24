@@ -6,7 +6,10 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: reliability-${{ github.ref }}
+  # A production deployment verifies its exact main commit. A newer push must
+  # not cancel the checks that can restore that deployment during an outage.
+  # Superseded PR checks can still be cancelled to avoid redundant work.
+  group: reliability-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: true
 jobs:
   dependency-audit:
