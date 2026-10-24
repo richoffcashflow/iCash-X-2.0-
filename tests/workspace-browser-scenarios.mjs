@@ -76,8 +76,8 @@ export async function verifyWorkspace(browser,base,options,name){
   }
   if(request.method()!=='GET'){writes.push(url.pathname);return route.fulfill({status:403,json:{error:'Read-only fixture'}});}
   const p=url.pathname;apiReads.push(p);
-  // The local HTTPS proxy serves the inert heartbeat without WebKit's mocked
-  // stream transport. Origin, preview and GET checks above still apply.
+  // The local HTTPS proxy returns a bodyless unavailable event feed so these
+  // scenarios verify fallback reads. Origin, preview and GET checks still apply.
   if(p==='/api/work/events')return route.continue();
   if(p==='/api/account')return route.fulfill({json:{...fixtureAccount,...(fundingFixture?{paused:fundingFixture.paused,workReady:true}:{}),...(instantVariant?{paused:false}:{}),...(opportunityProgress?{paused:opportunityProgress.status==='paused'}:{}),workspaceAcknowledged:acknowledged,mode:'live',vip,vipFeatures:vip,billingModel:'membership_credits',membershipActive:true}});
   if(p==='/api/funding/status')return route.fulfill({json:{enabled:true,mode:'live',paidCents:fundingFixture?.paidCents??0,needsClaim:false,packs:[]}});
@@ -544,6 +544,7 @@ export async function verifyWorkspace(browser,base,options,name){
   await visit(base+'/?payment=funded&session_id=cs_live_pending#funding');
   await page.getByText('Confirming your credits',{exact:true}).waitFor();
   assert.equal(await page.getByRole('region',{name:'Credits added',exact:true}).count(),0,'pending payment is never described as funded');
+  assert(apiReads.includes('/api/work/events'),'workspace attempts its optional update feed while fallback reads remain usable');
   assert.deepEqual(errors,[]);assert.deepEqual(writes,[],'navigation never signs, sends, charges or changes controls');assert.deepEqual(external,[]);
   console.log(`PASS ${name}: staged access, title messages, in-panel loading/failure/recovery, preserved drafts, crash containment, cancellation and search; required acknowledgment, takeover recovery and inert contract previews. No live work or provider requests.`);
  }catch(error){console.error({name,scenario,errors,writes,body:(await page.locator('body').innerText()).slice(-7000)});throw error;}

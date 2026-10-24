@@ -37,13 +37,13 @@ const proxy=https.createServer({key:readFileSync(join(tlsDir,'key.pem')),cert:re
  // Serve the fixture through HTTP instead of WebKit's mocked-download transport.
  if(new URL(request.url,upstream).pathname==='/api/course/assets/pdf'){response.writeHead(200,{'Content-Type':'application/pdf','Content-Length':String(coursePdf.length),'Content-Disposition':'attachment; filename="iCash-X-Course-Guide.pdf"','Cache-Control':'no-store'});response.end(coursePdf);return;}
  if(new URL(request.url,upstream).pathname==='/api/fixture-course-upload'){serveCourseUpload(request,response);return;}
- // WebKit can report an abandoned Playwright SSE fulfillment as an uncaught
- // access-control error during navigation. Keep the identical inert heartbeat
- // on this local HTTPS transport; it never reaches an application/provider API.
+ // Workspace navigation exercises the fallback reads while the optional event
+ // feed is unavailable. A bodyless response avoids WebKit's closed-stream abort
+ // race; live revision delivery/cancellation has its own focused client tests.
+ // This local endpoint never reaches an application or provider API.
  if(request.method==='GET'&&new URL(request.url,upstream).pathname==='/api/work/events'){
-  const heartbeat=': fixture heartbeat\n\n';
-  response.writeHead(200,{'Content-Type':'text/event-stream','Content-Length':String(Buffer.byteLength(heartbeat)),'Cache-Control':'no-store'});
-  response.end(heartbeat);return;
+  response.writeHead(204,{'Cache-Control':'no-store'});
+  response.end();return;
  }
  const forwarded=http.request(new URL(request.url,upstream),{method:request.method,headers:request.headers},incoming=>{response.writeHead(incoming.statusCode,incoming.headers);incoming.pipe(response);});
  forwarded.on('error',()=>{response.writeHead(502);response.end();});request.pipe(forwarded);
