@@ -5,6 +5,7 @@ import {elevenRequest} from './elevenlabs.ts';
 import {db} from './stripe-test.ts';
 import {sendContiguityText,textPayload} from './contiguity.ts';
 import {saveTextReceipt} from './text-receipt.ts';
+import {SellerInventoryUnavailableError} from './voice-budget-failure.ts';
 export async function dispatchTextMessage(accountId:string,messageId:string,manual=false){
  if(!smsWorkEnabled())return {status:'live_work_not_ready'};
  const key=process.env.CONTIGUITY_API_KEY;
@@ -31,7 +32,15 @@ export async function dispatchTextMessage(accountId:string,messageId:string,manu
  }
  textPayload({from,to:thread.recipient,message:m.body,attachments:m.attachments});
  const metaMessage=!manual&&instantLeadsEnabled(process.env)?await db<{message_id:string}[]>(`icash_meta_lead_messages?message_id=eq.${messageId}&select=message_id&limit=1`):[];
- const job=await db<unknown>(metaMessage.length?'rpc/icash_meta_claim_text':manual?'rpc/icash_claim_customer_text':'rpc/icash_claim_text','POST',{p_account:accountId,p_message:messageId,p_sender:from});if(!job)return {status:'message_held'};
+ let job:unknown;
+ try{job=await db<unknown>(metaMessage.length?'rpc/icash_meta_claim_text':manual?'rpc/icash_claim_customer_text':'rpc/icash_claim_text','POST',{p_account:accountId,p_message:messageId,p_sender:from});}
+ catch(error){
+  // Only the exact atomic inventory rejection is an expected pre-send hold.
+  // Unknown database/provider outcomes still propagate to reconciliation.
+  if(error instanceof SellerInventoryUnavailableError)return {status:'seller_inventory_unavailable'};
+  throw error;
+ }
+ if(!job)return {status:'message_held'};
  try{
  const result=await sendContiguityText(job,key);
  return await saveTextReceipt(db,accountId,messageId,result.messageId);
