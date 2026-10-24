@@ -44,7 +44,7 @@ const suites = [
  'text-sender-routing', 'sms-channel-admission', 'contiguity-service-webhook', 'carrier-blocked-sms', 'seller-text-replies', 'contract-text', 'contract-text-resend',
  'seller-callback-route', 'seller-callback-database', 'owner-outreach-route', 'owner-outreach-ui', 'owner-outreach-database', 'owner-overview-route', 'owner-overview-ui', 'lead-supply', 'lead-supply-database', 'admin-experience-route', 'admin-experience-ui',
  'workspace-panel-content', 'production-release-gate', 'production-health',
- 'workspace-experience', 'workspace-experience-database', 'reliability-alerts', 'reliability-stable-recovery', 'operational-sms-candidate-fence',
+ 'workspace-experience', 'workspace-experience-database', 'reliability-alerts', 'reliability-stable-recovery', 'reliability-component-outages', 'operational-sms-candidate-fence',
  'workspace-request-recovery', 'server-request-deadlines', 'workspace-event-stream', 'scheduler-nonblocking-poll', 'durable-work-billing-stop',
  'usage-loop-policy', 'usage-loop-route', 'usage-loop-context-database',
  'usage-loop-tracking', 'usage-loop-tracking-routes', 'workspace-conversion-ui',
