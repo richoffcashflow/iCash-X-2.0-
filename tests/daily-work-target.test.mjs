@@ -38,12 +38,26 @@ try{
  }
  const target=account=>value('select icash_daily_work_target($1)',[account]);
  assert.equal((await target(a)).targetCents,7500);
- assert.equal((await target(b)).targetCents,3000);
+ const previousTarget=await value("select pg_get_functiondef('icash_daily_work_target(uuid)'::regprocedure)");
+ const previousIssuer=await value("select pg_get_functiondef('icash_next_acquisition()'::regprocedure)");
+ await db.exec(read('config/daily-work-target-25.sql'));
+ const revisedTarget=await value("select pg_get_functiondef('icash_daily_work_target(uuid)'::regprocedure)");
+ assert.equal(revisedTarget.replace('baseline_cents::numeric*0.25','baseline_cents::numeric*0.30').replace("'percent',25","'percent',30"),previousTarget,'Revision changes only the target percentage; prior migration remains intact');
+ assert.equal(await value("select pg_get_functiondef('icash_next_acquisition()'::regprocedure)"),previousIssuer,'The existing fair scheduler is unchanged');
+ assert.equal((await target(a)).targetCents,6250);
+ assert.equal((await target(b)).targetCents,2500);
+ assert.equal((await target(b)).percent,25);
  assert.equal((await target(empty)).priorityRatio,1);
  assert.equal(await target(id(99)),null);
  await q("insert into icash_operation_spend values('settled-a',$1,'settled',1500,3000,now()),('old-a',$1,'settled',9000,9000,now()-interval '25 hours'),('held-a',$1,'dispatched',null,750,null),('released-a',$1,'released',null,9000,null)",[a]);
  await q("insert into icash_duplicate_discovery_coverage values('settled-a',$1,750)",[a]);
- assert.deepEqual(await target(a),{percent:30,windowHours:24,baselineCents:25000,targetCents:7500,spentCents:750,pendingCents:750,remainingCents:6000,priorityRatio:0.2});
+ assert.deepEqual(await target(a),{percent:25,windowHours:24,baselineCents:25000,targetCents:6250,spentCents:750,pendingCents:750,remainingCents:4750,priorityRatio:0.24});
+ await q('insert into icash_prospecting_budgets(account_id,baseline_cents) values($1,999),($2,3),($3,10000)',[id(96),id(97),id(98)]);
+ assert.equal((await target(id(96))).targetCents,249,'Fractional cents round down at 25%');
+ assert.equal((await target(id(97))).targetCents,0);assert.equal((await target(id(97))).priorityRatio,1,'Sub-cent target does not divide by zero');
+ await q("insert into icash_operation_spend values('above-target',$1,'settled',3000,3000,now())",[id(98)]);
+ assert.equal((await target(id(98))).spentCents,3000,'A lower target never rewrites historical actual usage');
+ assert.equal((await target(id(98))).remainingCents,0);assert.equal((await target(id(98))).priorityRatio,1);
  const claim=async()=>{
   const result=await value('select icash_next_acquisition()');
   return result?value('select account_id from icash_automation_tickets where token=$1',[result.token]):null;
@@ -55,12 +69,12 @@ try{
  await q("update icash_discovery_configs set next_run_at=now()-interval '6 minutes' where account_id=$1",[a]);
  assert.equal(await claim(),a,'overdue account cannot starve behind new low-spend accounts');
  await q('insert into icash_prospecting_budgets(account_id,baseline_cents) values($1,30000)',[a]);
- assert.equal((await target(a)).targetCents,9000);
+ assert.equal((await target(a)).targetCents,7500);
  assert.equal((await target(a)).pendingCents,750,'top-ups retain unknown outcomes');
  assert.equal((await target(a)).spentCents,750,'top-ups retain recent completed work');
  assert.equal(await value("select pg_get_functiondef('icash_prospecting_available(uuid)'::regprocedure)"),admission,'target does not alter admission or debit funds');
  assert.equal(Number(await value('select balance_cents from icash_wallets where account_id=$1',[a])),25000);
  for(const role of ['anon','authenticated'])assert.equal(await value("select has_function_privilege($1,'icash_daily_work_target(uuid)'::regprocedure,'execute')",[role]),false);
  assert.equal(await value("select has_function_privilege('service_role','icash_daily_work_target(uuid)'::regprocedure,'execute')"),true);
- console.log('PASS 30% rolling daily target, actual usage and pending holds, coverage, top-ups, fair scheduling, overdue recovery, Pause, positive balance and private access.');
+ console.log('PASS 30%→25% rolling daily target migration, cent boundaries, actual usage and pending holds, coverage, top-ups, fair scheduling, overdue recovery, Pause, positive balance and private access.');
 }finally{await db.close();}
