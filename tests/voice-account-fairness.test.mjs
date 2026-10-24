@@ -75,14 +75,47 @@ try{
  assert.deepEqual(await Promise.all(invariantNames.map(n=>value('select pg_get_functiondef($1::regprocedure)',[n]))),preserved);
  // Run the actual new launch-spacing patch against the real layered issuer.
  await pg.exec(`create table fixture_call_holds(account_id uuid,job_id uuid,kind text);
- create function icash_voice_queue_slot_open(uuid,uuid) returns boolean language sql stable as $$select not exists(select 1 from public.fixture_call_holds where account_id=$1 and job_id=$2 and kind='capacity')$$;
- create function icash_seller_phone_call_current(uuid,uuid) returns boolean language sql stable as $$select not exists(select 1 from public.fixture_call_holds where account_id=$1 and job_id=$2 and kind='recipient')$$;`);
+ create sequence fixture_capacity_checks;
+ create sequence fixture_recipient_checks;
+ create function icash_voice_queue_slot_open(uuid,uuid) returns boolean language plpgsql as $$begin perform nextval('public.fixture_capacity_checks');return not exists(select 1 from public.fixture_call_holds where account_id=$1 and job_id=$2 and kind='capacity');end$$;
+ create function icash_seller_phone_call_current(uuid,uuid) returns boolean language plpgsql as $$begin perform nextval('public.fixture_recipient_checks');return not exists(select 1 from public.fixture_call_holds where account_id=$1 and job_id=$2 and kind='recipient');end$$;`);
  await pg.exec(read('tests/fixtures/parallel-voice-issuer.sql'));
  const currentIssuer=await value("select pg_get_functiondef('icash_next_before_fulfillment()'::regprocedure)");
  const parallelPatch=read('config/nationwide-parallel-dispatch.sql').match(/do \$patch\$[\s\S]*?end \$patch\$;/)[0];
  await pg.exec(parallelPatch);
  const parallelIssuer=await value("select pg_get_functiondef('icash_next_before_fulfillment()'::regprocedure)");
  assert.equal(parallelIssuer.replace("last_voice<now()-interval '3 seconds'","last_voice<now()-interval '30 seconds'"),currentIssuer,'only global launch spacing changes');
+ const orderedMigration=read('config/ordered-voice-admission.sql');
+ assert.equal(orderedMigration,read('supabase/migrations/20261024180528_ordered_voice_admission.sql'));
+ await pg.exec(orderedMigration);
+ const orderedIssuer=await value("select pg_get_functiondef('icash_next_before_fulfillment()'::regprocedure)");
+ const orderedSelections=[orderedMigration.split('$requested$')[1],orderedMigration.split('$ordinary$')[1]];
+ let restoredIssuer=orderedIssuer;
+ for(const selection of orderedSelections){
+  const replacement=' select candidate.* into j from (\n'+selection.replace(' select v.* into j',' select v.*')
+   .replace('\n and public.icash_voice_queue_slot_open(v.account_id,v.id)\n and public.icash_seller_phone_call_current(v.account_id,v.id)','')
+   .replace('for update of v skip locked limit 1;','for update of v skip locked offset 0\n ) candidate\n where public.icash_voice_queue_slot_open(candidate.account_id,candidate.id)\n and public.icash_seller_phone_call_current(candidate.account_id,candidate.id)\n limit 1;');
+  restoredIssuer=restoredIssuer.replace(replacement,selection);
+ }
+ assert.equal(restoredIssuer,parallelIssuer,'only candidate evaluation order changes; queueing, priority, locking, spacing, tickets and fallback remain exact');
+ await scenario('large ready queue stops admission checks at its first fair eligible job',async()=>{
+  for(let i=1000;i<1200;i++)await add(i,a,7200+i);
+  await pastTicket(a);const first=await add(1300,b,1);
+  await pg.exec('alter sequence fixture_capacity_checks restart with 1;alter sequence fixture_recipient_checks restart with 1');
+  assert.equal(await next(),first);
+  assert.equal(Number(await value('select last_value from fixture_capacity_checks')),1);
+  assert.equal(Number(await value('select last_value from fixture_recipient_checks')),1);
+ });
+ await scenario('ordered admission skips a blocked head without checking the remaining backlog',async()=>{
+  for(let i=1000;i<1200;i++)await add(i,a,7200+i);
+  await pastTicket(a);const blocked=await add(1300,b,2),eligible=await add(1301,b,1);
+  await q("insert into fixture_call_holds values($1,$2,'recipient')",[b,blocked]);
+  await pg.exec('alter sequence fixture_capacity_checks restart with 1;alter sequence fixture_recipient_checks restart with 1');
+  assert.equal(await next(),eligible);
+  assert.equal(Number(await value('select last_value from fixture_capacity_checks')),2);
+  assert.equal(Number(await value('select last_value from fixture_recipient_checks')),2);
+  assert.equal(await value('select state from icash_voice_jobs where id=$1',[blocked]),'ready');
+ });
  await scenario('new launch spacing admits after three seconds while preserving the gap',async()=>{
   const first=await add(900,a),second=await add(901,b);
   assert.equal(await next(),first);
@@ -201,6 +234,8 @@ try{
  // Unknown prerequisite versions fail without partially applying a new selector.
  await pg.exec('drop index icash_automation_voice_account_recent');
  await assert.rejects(pg.exec(migration),/Voice account fairness prerequisite changed/);await pg.exec('rollback');
- assert.equal(await value("select pg_get_functiondef('icash_next_before_fulfillment()'::regprocedure)"),parallelIssuer);
+ assert.equal(await value("select pg_get_functiondef('icash_next_before_fulfillment()'::regprocedure)"),orderedIssuer);
+ await assert.rejects(pg.exec(orderedMigration),/Ordered voice admission prerequisite changed/);await pg.exec('rollback');
+ assert.equal(await value("select pg_get_functiondef('icash_next_before_fulfillment()'::regprocedure)"),orderedIssuer);
  console.log(`Voice account fairness: ${scenarios} local scenarios pass; never-served/least-recent/FIFO, failing-account rotation, receipt-bound urgency, three-second global spacing, capacity/recipient gates, Meta path, Pause/wallet/holds and unchanged financial state/private ACLs.`);
 }catch(e){console.error(e.message,e.cause?.where??e.where??'');process.exitCode=1;}finally{await pg.close();}
