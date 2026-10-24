@@ -15,9 +15,7 @@ const deps={
  discoveryAccountReadiness:async()=>({ready:!state.discovery,reason:state.discovery,quote:null}),
  db:async(path,method,body)=>{
   state.paths.push(path);
-  if(path==='rpc/icash_load_workspace_account')return {accountId:'customer-account',account:{billingModel:'membership_credits',membership:{},balanceCents:state.credits,billingReview:state.review,paused:state.paused}};
-  if(path==='rpc/icash_workspace_vip_access')return {vip:false};
-  if(path.startsWith('icash_accounts?')){assert(path.includes('id=eq.customer-account&owner_user_id=eq.customer'));return [{}];}
+  if(path==='rpc/icash_load_workspace_account')return {accountId:'customer-account',access:{vip:false,vipFeatures:false,adminPlan:null},workspaceAcknowledgment:{workspace_ack_version:null,workspace_ack_user_id:null,workspace_ack_hash:null},account:{billingModel:'membership_credits',membership:{},balanceCents:state.credits,billingReview:state.review,paused:state.paused}};
   if(path.startsWith('icash_voice_configs?')){assert.equal(path,'icash_voice_configs?account_id=eq.customer-account&select=account_id&limit=1');return state.voice?[{account_id:'customer-account'}]:[];}
   assert.equal(path,'rpc/icash_provision_funded_account');assert.equal(method,'POST');assert.deepEqual(body,{p_account:'customer-account'});state.provision++;
   if(state.fail)throw Error('Private provider configuration');
