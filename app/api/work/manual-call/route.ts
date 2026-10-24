@@ -10,7 +10,7 @@ const headers={'Cache-Control':'private, no-store'};
 /** Saved numbers are available to the customer independently of bot readiness. */
 export async function GET(req:Request){
  try{
-  const {accountId}=await workAccount();const screeningId=z.string().uuid().parse(new URL(req.url).searchParams.get('screeningId'));
+  const {accountId}=await workAccount();const screeningId=z.guid().parse(new URL(req.url).searchParams.get('screeningId'));
   const contacts=await db<{phone:string;name:string;phone_type:string;blocked:boolean}[]>('rpc/icash_manual_contacts','POST',{p_account:accountId,p_screening:screeningId});
   const choices=await Promise.all(contacts.map(async c=>{
    const reason=await db<string|null>('rpc/icash_manual_contact_reason','POST',{p_account:accountId,p_screening:screeningId,p_phone:c.phone,p_channel:'voice'});

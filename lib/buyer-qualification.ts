@@ -3,16 +3,16 @@ const reference=z.string().trim().min(12).max(1000);
 const date=z.string().datetime({offset:true});
 const cents=z.number().int().nonnegative().max(100000000000);
 export const buyerQualificationPayloadSchema=z.object({
- buyerId:z.string().uuid(),dealId:z.string().uuid(),
+ buyerId:z.guid(),dealId:z.guid(),
  markets:z.array(z.string().trim().min(2).max(100)).min(1).max(10),
  propertyTypes:z.array(z.enum(['house','land'])).min(1).max(2),
  maxPriceCents:cents.refine(n=>n>0),maxRepairCents:cents,
  criteriaObservedAt:date,expiresAt:date,sourceName:z.string().trim().min(3).max(120),
  sourceReference:reference,buyerStatement:z.string().trim().min(12).max(4000),
 }).strict();
-export const buyerQualificationSubmitSchema=z.object({idempotencyKey:z.string().uuid(),payload:buyerQualificationPayloadSchema}).strict();
+export const buyerQualificationSubmitSchema=z.object({idempotencyKey:z.guid(),payload:buyerQualificationPayloadSchema}).strict();
 export const buyerQualificationDecisionSchema=z.object({
- requestId:z.string().uuid(),decision:z.enum(['approved','needs_information','declined','revoked']),note:reference,
+ requestId:z.guid(),decision:z.enum(['approved','needs_information','declined','revoked']),note:reference,
  verification:z.object({criteriaConfirmed:z.literal(true),fundsVerified:z.literal(true),signatoryVerified:z.literal(true),
   reviewReference:reference,validUntil:date,fundsReference:reference,fundsObservedAt:date,fundsAmountCents:cents.refine(n=>n>0),currency:z.literal('USD'),
   signatoryName:z.string().trim().min(2).max(200),authorityReference:reference,authorityObservedAt:date,

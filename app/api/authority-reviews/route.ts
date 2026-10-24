@@ -9,7 +9,7 @@ export async function GET(req:Request){
  try{
  const {accountId}=await workAccount(),params=new URL(req.url).searchParams;
  const page=z.coerce.number().int().min(0).max(10000).parse(params.get('page')??0);
- const screeningId=params.has('screeningId')?z.string().uuid().parse(params.get('screeningId')):null;
+ const screeningId=params.has('screeningId')?z.guid().parse(params.get('screeningId')):null;
  const rows=await db<AuthorityReviewRow[]>(`icash_authority_review_requests?account_id=eq.${accountId}${screeningId?`&screening_id=eq.${screeningId}`:''}&select=id,kind,screening_id,state,expires_at,created_at,decision_note,payload&order=created_at.desc,id.desc&limit=21&offset=${page*20}`);
  return NextResponse.json({requests:rows.slice(0,20).map(customerAuthorityReview),hasMore:rows.length>20,notice:'Submitting evidence does not authorize outreach, an offer or marketing. No external do-not-call check is performed by this form.'},{headers});
  }catch(error){const e=authorityError(error);return NextResponse.json({error:e.error},{status:e.status,headers});}
@@ -27,7 +27,7 @@ export async function POST(req:Request){
 export async function DELETE(req:Request){
  try{
  if(req.headers.get('origin')!==new URL(req.url).origin)return NextResponse.json({error:'Same-origin session required.'},{status:403,headers});
- const {accountId,userId}=await workAccount();const {requestId}=z.object({requestId:z.string().uuid()}).strict().parse(await req.json());
+ const {accountId,userId}=await workAccount();const {requestId}=z.object({requestId:z.guid()}).strict().parse(await req.json());
  await db('rpc/icash_withdraw_authority_review','POST',{p_account:accountId,p_user:userId,p_request:requestId});
  return NextResponse.json({message:'Request withdrawn. Any authority issued from it has been revoked.'},{headers});
  }catch(error){const e=authorityError(error);return NextResponse.json({error:e.error},{status:e.status,headers});}

@@ -4,7 +4,7 @@ import {z} from 'zod';
 import {exceptionSources,exceptionLabels,exceptionPageSize,exceptionMaxPage,type ExceptionSource,type ExceptionItem,type ExceptionSection,type ExceptionSnapshot} from './operator-exception-types.ts';
 export const exceptionQuery = z.object({source:z.enum(exceptionSources).optional(),page:z.coerce.number().int().min(0).max(exceptionMaxPage).default(0)}).strict();
 export type ExceptionDb = <T>(path:string,method?:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;
-const id=z.string().uuid(),stamp=z.string().refine(s=>Number.isFinite(Date.parse(s)),'Invalid recorded time');
+const id=z.guid(),stamp=z.string().refine(s=>Number.isFinite(Date.parse(s)),'Invalid recorded time');
 const base={id,account_id:id,created_at:stamp};
 const schemas:Record<ExceptionSource,z.ZodType<any>>={
  billing:z.object({...base,state:z.enum(['pending','active','payment_failed','stop_requested','stopped']),mode:z.enum(['live','test']),reconciled_at:stamp.nullable()}),

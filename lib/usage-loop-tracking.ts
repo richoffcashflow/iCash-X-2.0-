@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {z} from 'zod';
 export const usageLoopAction=z.enum(['funding','resume','vip','work','none']);
 export const usageLoopReason=z.enum(['start','refill','resume','progress','review','waiting','vip']);
-export const usageLoopEventSchema=z.object({impressionId:z.string().uuid(),event:z.enum(['shown','clicked','dismissed']),action:usageLoopAction,reason:usageLoopReason}).strict();
+export const usageLoopEventSchema=z.object({impressionId:z.guid(),event:z.enum(['shown','clicked','dismissed']),action:usageLoopAction,reason:usageLoopReason}).strict();
 export type UsageLoopEvent=z.infer<typeof usageLoopEventSchema>;
 export type UsageLoopObservation={impressionId:string;variant:'control'|'progress'};
 type Database=<T>(path:string,method?:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;
@@ -15,7 +15,7 @@ export async function createUsageLoopObservation(accountId:string,card:{action:z
  try{
   const db=database??(await import('./stripe-test')).db;
   const observation=await db<unknown>('rpc/icash_create_usage_loop_observation','POST',{p_account:accountId,p_action:card.action,p_reason:card.reason},AbortSignal.timeout(2000));
-  const parsed=z.object({impressionId:z.string().uuid(),variant:z.enum(['control','progress'])}).strict().safeParse(observation);
+  const parsed=z.object({impressionId:z.guid(),variant:z.enum(['control','progress'])}).strict().safeParse(observation);
   // The authenticated server assigns once and persists the variant. New
   // accounts can benefit from mature platform results; clients cannot choose it.
   return parsed.success?parsed.data:null;

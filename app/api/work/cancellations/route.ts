@@ -8,7 +8,7 @@ import {cancellationView,reconcileCancellation} from '@/lib/agreement-cancellati
 export const dynamic='force-dynamic';
 export const maxDuration=120;
 const headers={'Cache-Control':'private, no-store'};
-const uuid=z.string().uuid();
+const uuid=z.guid();
 const input=z.discriminatedUnion('action',[
  z.object({action:z.literal('notice_email'),id:uuid,email:z.string().trim().email().max(254),confirmed:z.literal(true)}).strict(),
  z.object({action:z.literal('request'),dealId:uuid,kind:z.enum(['purchase','assignment']),reason:z.string().trim().min(3).max(1000),key:uuid,revision:z.string().regex(/^[a-f0-9]{32}$/),confirmed:z.literal(true)}).strict(),

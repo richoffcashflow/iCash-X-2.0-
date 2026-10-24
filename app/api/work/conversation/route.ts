@@ -5,7 +5,7 @@ import {db} from '@/lib/stripe-test';
 export const dynamic='force-dynamic';
 export async function GET(req:Request){
  const headers={'Cache-Control':'private, no-store'};
- try{const {accountId}=await workAccount();const params=new URL(req.url).searchParams;const id=z.string().uuid().parse(params.get('id'));const before=params.get('before')===null?null:z.coerce.number().int().min(0).max(100000).parse(params.get('before'));
+ try{const {accountId}=await workAccount();const params=new URL(req.url).searchParams;const id=z.guid().parse(params.get('id'));const before=params.get('before')===null?null:z.coerce.number().int().min(0).max(100000).parse(params.get('before'));
  const source=z.enum(['outbound','reception']).parse(params.get('source')??'outbound');
  if(source==='reception'){const call=await db<unknown>('rpc/icash_reception_conversation','POST',{p_account:accountId,p_session:id,p_before:before});if(!call)throw Error();return NextResponse.json(call,{headers});}
  const [call]=await db<{party:string;result:{summary?:string;transcript?:{role:string;message:string}[]}}[]>(`icash_live_conversations?account_id=eq.${accountId}&id=eq.${id}&state=eq.complete&select=party,result`);if(!call)throw Error();

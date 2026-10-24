@@ -10,7 +10,7 @@ export const dynamic='force-dynamic';
 export async function GET(req:Request){
  const headers={'Cache-Control':'private, no-store'};
  try{
-  const {accountId}=await workAccount();const screeningId=z.string().uuid().parse(new URL(req.url).searchParams.get('screeningId'));
+  const {accountId}=await workAccount();const screeningId=z.guid().parse(new URL(req.url).searchParams.get('screeningId'));
   const [property]=await db<{id:string;snapshot:unknown}[]>(`icash_screening_jobs?id=eq.${screeningId}&account_id=eq.${accountId}&state=eq.complete&select=id,snapshot`);if(!property)throw Error();
   const [deal]=await db<{id:string;stage:string;terms:unknown}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${screeningId}&select=id,stage,terms`);
   const calls=await db<{id:string;contact_key:string;party:'seller'|'buyer';result:{transcript?:{role:string;message:string}[]}}[]>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=eq.${screeningId}&state=eq.complete&select=id,contact_key,party,result&order=completed_at.desc&limit=4`);

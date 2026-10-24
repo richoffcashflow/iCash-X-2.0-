@@ -10,7 +10,7 @@ export const dynamic='force-dynamic';
 export async function GET(req:Request){
  const headers={'Cache-Control':'private, no-store'};
  try{
- const {accountId}=await workAccount(),screeningId=z.string().uuid().parse(new URL(req.url).searchParams.get('screeningId'));
+ const {accountId}=await workAccount(),screeningId=z.guid().parse(new URL(req.url).searchParams.get('screeningId'));
  const [screening]=await db<{id:string;snapshot:unknown}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=eq.${screeningId}&state=eq.complete&select=id,snapshot`);
  if(!screening)return NextResponse.json({error:'Property not found.'},{status:404,headers});
  const [identities,accounts,wallets,permissions,deals]=await Promise.all([

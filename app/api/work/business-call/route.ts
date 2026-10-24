@@ -12,8 +12,8 @@ export async function POST(req:Request){
 }
 export async function GET(req:Request){try{
  const owner=await workAccount(),params=new URL(req.url).searchParams;
- if(params.has('screeningId'))return Response.json(await customerPhoneReadiness(owner.accountId,z.string().uuid().parse(params.get('screeningId'))),{headers});
- const id=z.string().uuid().parse(params.get('id')),row=await getCustomerPhoneCall(id,owner.accountId);
+ if(params.has('screeningId'))return Response.json(await customerPhoneReadiness(owner.accountId,z.guid().parse(params.get('screeningId'))),{headers});
+ const id=z.guid().parse(params.get('id')),row=await getCustomerPhoneCall(id,owner.accountId);
  if(!row)return new Response(null,{status:404,headers});
  if(params.get('audio')==='1'){
   if(!customerPhoneAudioAvailable(row))return new Response(null,{status:404,headers});

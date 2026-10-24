@@ -16,7 +16,7 @@ import type {RecordedReceptionRow} from '@/lib/recorded-reception';
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
 export const maxDuration=30;
-const id=z.string().uuid(),page=z.string().regex(/^\d{1,5}$/).transform(Number).refine(n=>n<=10000);
+const id=z.guid(),page=z.string().regex(/^\d{1,5}$/).transform(Number).refine(n=>n<=10000);
 const resources=new Set(['activity','report','progress','bot-status','property-photo','leads','details','messages','call-history','conversation','recording','recording/audio','reception-recording','reception-recording/audio']);
 const json=(data:unknown)=>Response.json(data,{headers:ownerViewHeaders});
 // Deliberately explicit, read-only resources. Never forward arbitrary paths,

@@ -11,9 +11,9 @@ const headers={'Cache-Control':'private, no-store'};
 export async function GET(req:Request){
  try{
  const {accountId}=await workAccount(),params=new URL(req.url).searchParams;
- const dealId=z.string().uuid().parse(params.get('dealId'));
+ const dealId=z.guid().parse(params.get('dealId'));
  const before=params.get('before');if(before)z.string().datetime({offset:true}).parse(before);
- const beforeId=before?z.string().uuid().parse(params.get('beforeId')):null;
+ const beforeId=before?z.guid().parse(params.get('beforeId')):null;
  const [deal]=await db<{id:string}[]>(`icash_deal_files?account_id=eq.${accountId}&id=eq.${dealId}&select=id`);if(!deal)throw Error();
  const [contacts,rows,rates]=await Promise.all([
  db<unknown[]>('rpc/icash_deal_email_contacts','POST',{p_account:accountId,p_deal:dealId}),

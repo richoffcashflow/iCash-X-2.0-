@@ -12,17 +12,17 @@ const messageFields='id,thread_id,direction,body,state,attachments,created_at,re
 export const dynamic='force-dynamic';
 export async function GET(req:Request){
  const headers={'Cache-Control':'private, no-store'};
- try{const {accountId,userId}=await workAccount();const params=new URL(req.url).searchParams;const dealId=z.string().uuid().parse(params.get('dealId'));
- const afterThread=params.get('afterThread');if(afterThread)z.string().uuid().parse(afterThread);
+ try{const {accountId,userId}=await workAccount();const params=new URL(req.url).searchParams;const dealId=z.guid().parse(params.get('dealId'));
+ const afterThread=params.get('afterThread');if(afterThread)z.guid().parse(afterThread);
  const threadRows=await db<Thread[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${dealId}&retired_at=is.null&select=id,recipient,paused,party&order=id.desc&limit=21${afterThread?`&id=lt.${afterThread}`:''}`);
  const threads=threadRows.slice(0,20);
- const threadId=params.get('threadId')?z.string().uuid().parse(params.get('threadId')):(threads.find(t=>t.party==='seller')??threads[0])?.id;
+ const threadId=params.get('threadId')?z.guid().parse(params.get('threadId')):(threads.find(t=>t.party==='seller')??threads[0])?.id;
  if(threadId&&!threads.some(t=>t.id===threadId)){
   const selected=await db<Thread[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${dealId}&id=eq.${threadId}&retired_at=is.null&select=id,recipient,paused,party&limit=1`);
   if(selected.length!==1||selected[0].id!==threadId)throw Error();threads.push(selected[0]);
  }
- const before=params.get('before');if(before)z.string().datetime({offset:true}).parse(before);const beforeId=before?z.string().uuid().parse(params.get('beforeId')):null;
- const requestKey=params.get('requestKey');if(requestKey)z.string().uuid().parse(requestKey);
+ const before=params.get('before');if(before)z.string().datetime({offset:true}).parse(before);const beforeId=before?z.guid().parse(params.get('beforeId')):null;
+ const requestKey=params.get('requestKey');if(requestKey)z.guid().parse(requestKey);
  const [rows,receipts,firstRows]=threadId?await Promise.all([
  db<Message[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threadId}&select=${messageFields}&order=created_at.desc,id.desc&limit=21${before?`&or=(created_at.lt.${encodeURIComponent(before)},and(created_at.eq.${encodeURIComponent(before)},id.lt.${beforeId}))`:''}`),
  requestKey?db<{state:string;request_key:string}[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threadId}&customer_author_id=eq.${userId}&request_key=eq.${requestKey}&select=state,request_key&limit=1`):Promise.resolve([]),
@@ -38,7 +38,7 @@ export async function GET(req:Request){
 export async function POST(req:Request){
  if(!allowedOrigin(req))return new Response(null,{status:403});
  try{const {accountId,userId}=await workAccount();const raw=await req.text();if(raw.length>10000)throw Error();
- const b=z.object({threadId:z.string().uuid(),requestKey:z.string().uuid(),message:z.string().trim().max(1000),assetIds:z.array(z.string().uuid()).max(3).default([])}).strict().parse(JSON.parse(raw));
+ const b=z.object({threadId:z.guid(),requestKey:z.guid(),message:z.string().trim().max(1000),assetIds:z.array(z.guid()).max(3).default([])}).strict().parse(JSON.parse(raw));
  const queued=await db<{id:string;manual:boolean;error?:string}>('rpc/icash_queue_customer_text','POST',{p_actor:userId,p_account:accountId,p_thread:b.threadId,p_key:b.requestKey,p_body:b.message,p_assets:b.assetIds});
  if(queued.error)return NextResponse.json({error:queued.error,notSent:true},{status:409});
  let dispatched:{status:string}|undefined;

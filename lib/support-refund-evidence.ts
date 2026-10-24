@@ -10,7 +10,7 @@ const reference=z.string().min(1).max(250).regex(/^[a-zA-Z0-9_-]+$/);
 const money=z.number().int().nonnegative().safe();
 const section=z.object({title:z.string().max(120),lines:z.array(z.string().max(2000)).max(15)});
 export const refundCaseSchema=z.object({
- version:z.literal(1),accountId:z.string().uuid(),threadId:z.string().uuid(),requestId:z.string().uuid(),
+ version:z.literal(1),accountId:z.guid(),threadId:z.guid(),requestId:z.guid(),
  preparedAt:timestamp,mode:z.enum(['live','test']).nullable(),policyAcceptanceRecorded:z.boolean(),
  sections:z.array(section).max(12),gaps:z.array(z.string().max(300)).max(20),
 });
@@ -35,7 +35,7 @@ export function refundDeliverySummary(evidence:SupportEvidence[]){
 
 /** Private, bounded snapshot. No Stripe write, provider call, customer identity guess or new charge. */
 export async function prepareSupportRefundEvidence(db:Database,binding:{accountId:string;threadId:string;requestId:string},evidence:SupportEvidence[],mode:'live'|'test'|null):Promise<SupportEvidence>{
- const ids=z.object({accountId:z.string().uuid(),threadId:z.string().uuid(),requestId:z.string().uuid()}).parse(binding);
+ const ids=z.object({accountId:z.guid(),threadId:z.guid(),requestId:z.guid()}).parse(binding);
  const preparedAt=new Date().toISOString(),gaps:string[]=[],sections:EvidenceSection[]=[];
  const scope=`account_id=eq.${ids.accountId}`,signal=AbortSignal.timeout(6000);
  async function read<T>(title:string,path:string,schema:z.ZodType<T>):Promise<T[]>{
@@ -46,8 +46,8 @@ export async function prepareSupportRefundEvidence(db:Database,binding:{accountI
    return values.slice(0,5);
   }catch{gaps.push(`${title}: records could not be verified.`);return [];}
  }
- const membership=z.object({id:z.string().uuid(),account_id:z.literal(ids.accountId),mode:z.literal(mode??'live')});
- const order=z.object({id:z.string().uuid(),account_id:z.literal(ids.accountId),mode:z.literal(mode??'live'),stripe_payment_id:reference.nullable(),price_cents:money,paid_at:timestamp,credited_at:timestamp.nullable()});
+ const membership=z.object({id:z.guid(),account_id:z.literal(ids.accountId),mode:z.literal(mode??'live')});
+ const order=z.object({id:z.guid(),account_id:z.literal(ids.accountId),mode:z.literal(mode??'live'),stripe_payment_id:reference.nullable(),price_cents:money,paid_at:timestamp,credited_at:timestamp.nullable()});
  const [members,orders,access,usage]=await Promise.all([
   mode?read('Membership links',`icash_memberships?${scope}&mode=eq.${mode}&select=id,account_id,mode&order=created_at.desc&limit=6`,membership):[],
   mode?read('Credit purchases',`icash_funding_orders?${scope}&mode=eq.${mode}&state=eq.paid&select=id,account_id,mode,stripe_payment_id,price_cents,paid_at,credited_at&order=paid_at.desc&limit=6`,order):[],

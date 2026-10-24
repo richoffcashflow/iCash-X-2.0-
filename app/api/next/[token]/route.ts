@@ -11,7 +11,7 @@ const input=z.discriminatedUnion('action',[
  z.object({action:z.literal('blocker'),data:blockerInput}).strict(),
  z.object({action:z.literal('details'),data:z.object({legalName:line,signerName:line,email:z.string().trim().email().max(254),askingPriceCents:z.number().int().positive().safe(),depositCents:z.number().int().min(1).max(500000),fundsReady:z.literal(true),authorized:z.literal(true),titleCompany:z.string().trim().max(200)}).strict()}).strict(),
  z.object({action:z.literal('choose_time'),data:z.object({startsAt:z.string().min(10).max(60)}).strict()}).strict(),
- z.object({action:z.enum(['confirm','cancel']),data:z.object({id:z.string().uuid(),version:z.number().int().positive()}).strict()}).strict(),
+ z.object({action:z.enum(['confirm','cancel']),data:z.object({id:z.guid(),version:z.number().int().positive()}).strict()}).strict(),
  z.object({action:z.literal('availability'),data:z.object({windows:z.array(z.string().min(10).max(200)).min(1).max(8)}).strict()}).strict()
 ]);
 const headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow'};

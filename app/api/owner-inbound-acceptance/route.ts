@@ -8,9 +8,9 @@ export const dynamic='force-dynamic';
 export const maxDuration=30;
 const headers={'Cache-Control':'private, no-store, max-age=0','Pragma':'no-cache','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'};
 const bodySchema=z.discriminatedUnion('action',[
- z.object({action:z.literal('arm'),confirmation:z.literal(ownerInboundConfirmation),configId:z.string().uuid(),quoteCapCents:z.number().int().positive().max(10000),rateEvidenceHash:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),
- z.object({action:z.literal('cancel'),runId:z.string().uuid()}).strict(),
- z.object({action:z.literal('reconcile'),runId:z.string().uuid()}).strict(),
+ z.object({action:z.literal('arm'),confirmation:z.literal(ownerInboundConfirmation),configId:z.guid(),quoteCapCents:z.number().int().positive().max(10000),rateEvidenceHash:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),
+ z.object({action:z.literal('cancel'),runId:z.guid()}).strict(),
+ z.object({action:z.literal('reconcile'),runId:z.guid()}).strict(),
 ]);
 function failure(error:unknown){return NextResponse.json({error:'Owner inbound test is held. Check status before any further action; do not re-arm an uncertain request.'},{status:error instanceof Error&&['SIGN_IN_REQUIRED','ACCOUNT_REQUIRED'].includes(error.message)?401:503,headers});}
 export async function GET(){try{return NextResponse.json(await ownerInboundStatus(await workAccount()),{headers});}catch(error){return failure(error);}}

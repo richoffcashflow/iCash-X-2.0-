@@ -14,8 +14,8 @@ export async function POST(req:Request){
   if(process.env.VERCEL_ENV==='preview')throw Error('BROWSER_PHONE_SETUP_REQUIRED');
   const raw=await req.text();if(raw.length>1024)throw Error('INVALID_REQUEST');
   const body=z.discriminatedUnion('action',[
-   z.object({action:z.literal('end'),id:z.string().uuid()}).strict(),
-   z.object({action:z.enum(['prepare','start']),screeningId:z.string().uuid(),phone:z.string().regex(/^\+1[2-9][0-9]{9}$/),requestKey:z.string().uuid()}).strict(),
+   z.object({action:z.literal('end'),id:z.guid()}).strict(),
+   z.object({action:z.enum(['prepare','start']),screeningId:z.guid(),phone:z.string().regex(/^\+1[2-9][0-9]{9}$/),requestKey:z.guid()}).strict(),
   ]).parse(JSON.parse(raw));
   const owner=await workAccount({allowInactiveMembership:body.action==='end',allowUnacknowledged:body.action==='end'});
   if(body.action==='end')return Response.json(await endCustomerBrowserCall(body.id,owner.accountId),{headers});

@@ -15,7 +15,7 @@ export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
  try{
   const {accountId,userId}=await workAccount();const raw=await req.text();if(raw.length>6000)throw Error('Invalid request');
-  const input=z.object({id:z.string().uuid(),version:z.string().datetime({offset:true}),resolution:z.string().trim().min(10).max(2000)}).strict().parse(JSON.parse(raw));
+  const input=z.object({id:z.guid(),version:z.string().datetime({offset:true}),resolution:z.string().trim().min(10).max(2000)}).strict().parse(JSON.parse(raw));
   const saved=await db<boolean>('rpc/icash_review_seller_gap','POST',{p_account:accountId,p_actor:userId,p_gap:input.id,p_version:input.version,p_resolution:input.resolution});
   return NextResponse.json(saved?{saved:true}:{error:'The seller case changed. Refresh before resolving it.'},{status:saved?200:409,headers});
  }catch{return NextResponse.json({error:'Could not resolve this seller follow-up.'},{status:400,headers});}

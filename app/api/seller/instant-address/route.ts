@@ -15,7 +15,7 @@ const token=z.string().max(160);
 const input=z.discriminatedUnion('action',[
  z.object({action:z.literal('session'),token}).strict(),
  z.object({action:z.literal('save'),token,address:instantAddress}).strict(),
- z.object({action:z.literal('request_link'),requestId:z.string().uuid(),form:z.string().regex(/^[a-z0-9_-]{3,80}$/),phone:z.string().max(30).transform(sellerPhone).refine((p):p is string=>p!==null),address:instantAddress}).strict(),
+ z.object({action:z.literal('request_link'),requestId:z.guid(),form:z.string().regex(/^[a-z0-9_-]{3,80}$/),phone:z.string().max(30).transform(sellerPhone).refine((p):p is string=>p!==null),address:instantAddress}).strict(),
 ]);
 const deps=()=>({db,sms:dispatchTextMessage,voice:dispatchLiveVoice,env:process.env});
 export async function POST(req:Request){

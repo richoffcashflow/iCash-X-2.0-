@@ -5,7 +5,7 @@ import {webinarBody,webinarError,webinarHeaders,webinarLimit,webinarOrigin,webin
 
 export async function POST(req:Request){try{
  webinarOrigin(req);
- const parsed=z.object({sessionId:z.string().uuid()}).strict().safeParse(await webinarBody(req,200));
+ const parsed=z.object({sessionId:z.guid()}).strict().safeParse(await webinarBody(req,200));
  if(!parsed.success)throw new WebinarError(400,'A valid session is required.');
  const {v,s}=await webinarSession(parsed.data.sessionId);
  await webinarLimit(req,v.id,'activity',12,60);

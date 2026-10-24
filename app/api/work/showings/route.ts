@@ -4,7 +4,7 @@ import {db} from '@/lib/stripe-test';
 import {allowedOrigin} from '@/lib/funding-policy';
 import {z} from 'zod';
 const localTime=z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
-const input=z.object({dealId:z.string().uuid(),action:z.enum(['propose','confirm_seller','confirm_buyer','reschedule','cancel','complete']),id:z.string().uuid().optional(),version:z.number().int().positive().optional(),data:z.object({requestId:z.string().uuid().optional(),buyer:z.string().trim().min(1).max(200).optional(),start:localTime.optional(),end:localTime.optional(),timezone:z.string().min(1).max(80).optional(),note:z.string().trim().max(1000).optional()}).strict()}).strict();
+const input=z.object({dealId:z.guid(),action:z.enum(['propose','confirm_seller','confirm_buyer','reschedule','cancel','complete']),id:z.guid().optional(),version:z.number().int().positive().optional(),data:z.object({requestId:z.guid().optional(),buyer:z.string().trim().min(1).max(200).optional(),start:localTime.optional(),end:localTime.optional(),timezone:z.string().min(1).max(80).optional(),note:z.string().trim().max(1000).optional()}).strict()}).strict();
 const headers={'Cache-Control':'private, no-store'};
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
@@ -16,7 +16,7 @@ export async function POST(req:Request){
 }
 export async function GET(req:Request){
  try{
-  const {accountId}=await workAccount();const dealId=z.string().uuid().parse(new URL(req.url).searchParams.get('dealId'));
+  const {accountId}=await workAccount();const dealId=z.guid().parse(new URL(req.url).searchParams.get('dealId'));
   const [deal]=await db<{id:string}[]>(`icash_deal_files?id=eq.${dealId}&account_id=eq.${accountId}&select=id`);if(!deal)throw Error();
   const [showings,requests]=await Promise.all([
    db(`icash_showing_requests?deal_id=eq.${deal.id}&select=id,buyer_name,starts_at,ends_at,timezone,state,version,seller_confirmed_at,buyer_confirmed_at,seller_note,buyer_note,change_note,buyer_request_id&order=starts_at.desc&limit=50`),
