@@ -131,11 +131,21 @@ export async function verifyWorkspace(browser,base,options,name){
   const debt=panel.locator('.property-debt-summary');
   if(await debt.count())assert(await messages.evaluate(node=>!!(node.compareDocumentPosition(node.closest('dialog').querySelector('.property-debt-summary'))&Node.DOCUMENT_POSITION_FOLLOWING)),'title messages appear before optional mortgage details');
  }
- async function visit(url){
-  // Drain mocked fetches before discarding their document. Otherwise WebKit can
-  // report an abandoned fulfillment as an uncaught access-control error.
+ async function prepareNavigation(){
+  // Stop the optional feed's retry timer through its real hidden-tab lifecycle
+  // before a hard fixture navigation. Network-idle alone leaves a retry able to
+  // start after WebKit begins replacing the document (playwright#43120).
+  // The next document has its normal visibility; no page errors are filtered.
+  await page.evaluate(()=>{
+   Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});
+   document.dispatchEvent(new Event('visibilitychange'));
+  });
   await page.waitForLoadState('networkidle');
+ }
+ async function visit(url){
+  await prepareNavigation();
   await page.goto(url);
+  assert.equal(await page.evaluate(()=>document.hidden),false,'The next document restores real visible-tab behavior');
  }
  async function openProperty(state){
   // Finish the previous document's mocked reads before changing their fixture
@@ -258,7 +268,7 @@ export async function verifyWorkspace(browser,base,options,name){
   await page.getByRole('checkbox').check();await accept.click();await page.getByRole('alert').getByText('Fixture save failed. Please try again.',{exact:true}).waitFor();
   assert.equal(await page.locator('.live-property').count(),0);assert.equal(acceptedWrites.length,1);
   ackFail=false;await accept.click();await page.locator('.live-property').first().waitFor();assert.equal(acceptedWrites.length,2);
-  await page.waitForLoadState('networkidle');await page.reload();await page.locator('.live-property').first().waitFor();assert.equal(await page.getByRole('heading',{name:'Before you use iCash X'}).count(),0);
+  await prepareNavigation();await page.reload();assert.equal(await page.evaluate(()=>document.hidden),false);await page.locator('.live-property').first().waitFor();assert.equal(await page.getByRole('heading',{name:'Before you use iCash X'}).count(),0);
   opportunityProgress={budgetId:1,startedAt:new Date().toISOString(),limitCents:5000,spentCents:120,pendingCents:977,remainingCents:3903,queued:2,screened:40,eligible:3,contacted:2,responded:0,status:'working'};
   await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
   const momentum=page.getByRole('region',{name:'Opportunity progress'});await momentum.getByRole('heading',{name:'Finding your next opportunity'}).waitFor();
