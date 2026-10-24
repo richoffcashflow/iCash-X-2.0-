@@ -1,0 +1,66 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {PGlite} from '@electric-sql/pglite';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const db=new PGlite();
+const q=(s,a=[])=>db.query(s,a);
+const value=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
+const id=n=>`10000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+const a=id(1),b=id(2),paused=id(3),empty=id(4);
+try{
+ await db.exec(`create role anon;create role authenticated;create role service_role;
+ create table icash_accounts(id uuid primary key,bot_paused boolean default false);
+ create table icash_wallets(account_id uuid primary key,balance_cents bigint,reserved_cents bigint default 0);
+ create table icash_prospecting_budgets(id bigint generated always as identity,account_id uuid,baseline_cents bigint);
+ create table icash_operation_spend(operation_key text primary key,account_id uuid,state text,charged_cents bigint,charge_cap_cents bigint,settled_at timestamptz);
+ create table icash_duplicate_discovery_coverage(operation_key text primary key,account_id uuid,covered_cents bigint);
+ create table icash_operating_budget(id int primary key,enabled boolean);
+ create table icash_discovery_configs(account_id uuid primary key,enabled boolean default true,auto_enabled boolean default true,next_run_at timestamptz default now(),data_rights_until timestamptz default now()+interval '1 day',contacts_enabled boolean default false,contact_rate_id uuid,exhausted boolean default false,max_open_prospects int default 20);
+ create table icash_automation_tickets(id uuid default gen_random_uuid(),token text default gen_random_uuid()::text,account_id uuid,kind text,screening_id uuid unique,state text default 'issued',outcome text,expires_at timestamptz default now()+interval '2 minutes',created_at timestamptz default now(),completed_at timestamptz,issue_attempts int default 1,owner_preview_deferrals int default 0,owner_preview_retry_until timestamptz);
+ create function icash_settle_pending_dealmachine() returns void language sql as $$select$$;
+ create function icash_owner_enrichment_unstarted(uuid,uuid,text) returns boolean language sql as $$select false$$;
+ create function icash_refresh_opportunity_outcomes(uuid) returns void language sql as $$select$$;
+ create function icash_enrichment_candidate(uuid) returns uuid language sql as $$select null::uuid$$;
+ create function icash_pending_opportunity_count(uuid) returns int language sql as $$select 0$$;
+ create function icash_prospecting_available(uuid) returns bigint language sql as $$select 500::bigint$$;
+ create function icash_outbound_search_due(uuid) returns boolean language sql as $$select true$$;
+ insert into icash_operating_budget values(1,true);`);
+ const baseline=JSON.parse(read('tests/fixtures/daily-work-target-baseline.json'))[0];
+ await db.exec(baseline.definition);
+ const sql=read('config/daily-work-target.sql');
+ const admission=await value("select pg_get_functiondef('icash_prospecting_available(uuid)'::regprocedure)");
+ await db.exec(sql);
+ for(const [account,balance,isPaused] of [[a,25000,false],[b,10000,false],[paused,10000,true],[empty,0,false]]){
+  await q('insert into icash_accounts values($1,$2)',[account,isPaused]);
+  await q('insert into icash_wallets(account_id,balance_cents) values($1,$2)',[account,balance]);
+  await q('insert into icash_prospecting_budgets(account_id,baseline_cents) values($1,$2)',[account,balance]);
+  await q('insert into icash_discovery_configs(account_id) values($1)',[account]);
+ }
+ const target=account=>value('select icash_daily_work_target($1)',[account]);
+ assert.equal((await target(a)).targetCents,7500);
+ assert.equal((await target(b)).targetCents,3000);
+ assert.equal((await target(empty)).priorityRatio,1);
+ assert.equal(await target(id(99)),null);
+ await q("insert into icash_operation_spend values('settled-a',$1,'settled',1500,3000,now()),('old-a',$1,'settled',9000,9000,now()-interval '25 hours'),('held-a',$1,'dispatched',null,750,null),('released-a',$1,'released',null,9000,null)",[a]);
+ await q("insert into icash_duplicate_discovery_coverage values('settled-a',$1,750)",[a]);
+ assert.deepEqual(await target(a),{percent:30,windowHours:24,baselineCents:25000,targetCents:7500,spentCents:750,pendingCents:750,remainingCents:6000,priorityRatio:0.2});
+ const claim=async()=>{
+  const result=await value('select icash_next_acquisition()');
+  return result?value('select account_id from icash_automation_tickets where token=$1',[result.token]):null;
+ };
+ assert.equal(await claim(),b,'less-served percentage wins even with a smaller funded balance');
+ assert.equal(await claim(),a,'an outstanding capability cannot issue twice');
+ assert.equal(await claim(),null,'paused and zero-balance accounts remain skipped');
+ await db.exec("update icash_automation_tickets set state='complete'; update icash_discovery_configs set next_run_at=now();");
+ await q("update icash_discovery_configs set next_run_at=now()-interval '6 minutes' where account_id=$1",[a]);
+ assert.equal(await claim(),a,'overdue account cannot starve behind new low-spend accounts');
+ await q('insert into icash_prospecting_budgets(account_id,baseline_cents) values($1,30000)',[a]);
+ assert.equal((await target(a)).targetCents,9000);
+ assert.equal((await target(a)).pendingCents,750,'top-ups retain unknown outcomes');
+ assert.equal((await target(a)).spentCents,750,'top-ups retain recent completed work');
+ assert.equal(await value("select pg_get_functiondef('icash_prospecting_available(uuid)'::regprocedure)"),admission,'target does not alter admission or debit funds');
+ assert.equal(Number(await value('select balance_cents from icash_wallets where account_id=$1',[a])),25000);
+ for(const role of ['anon','authenticated'])assert.equal(await value("select has_function_privilege($1,'icash_daily_work_target(uuid)'::regprocedure,'execute')",[role]),false);
+ assert.equal(await value("select has_function_privilege('service_role','icash_daily_work_target(uuid)'::regprocedure,'execute')"),true);
+ console.log('PASS 30% rolling daily target, actual usage and pending holds, coverage, top-ups, fair scheduling, overdue recovery, Pause, positive balance and private access.');
+}finally{await db.close();}

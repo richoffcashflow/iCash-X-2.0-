@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {createScheduler} from '../worker/scheduler.mjs';
-import {automationTick} from '../worker/runner.mjs';
+import {automationTick,createRpc,workerFailureDetails} from '../worker/runner.mjs';
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 const step=async scheduler=>{scheduler.run();await flush();return scheduler.run();};
 let time=0,screenCalls=0,autoCalls=0,screenFails=true,autoFails=true;
@@ -59,3 +59,14 @@ assert.equal(await step(idle),5000);idleTime=15000;assert.equal(await step(idle)
 idleTime=45000;assert.equal(await step(idle),15000);idleTime=105000;assert.equal(await step(idle),15000);
 assert.deepEqual(idleCalls,[0,15000,45000,105000]);
 console.log('Worker: four bounded concurrent attempts, independent screening, staggering, draining, health, backoff and no provider replay passed.');
+// Operational failures identify the failing lane/HTTP status without disclosing
+// a capability, response body, request URL or arbitrary exception text.
+const unavailable=createRpc('https://fixture.supabase.co','secret-fixture',async()=>new Response('private database detail',{status:503}));
+await assert.rejects(unavailable('icash_next_automation',{}),error=>{
+ assert.deepEqual(workerFailureDetails(error),{code:'SCREENING_DATABASE_UNAVAILABLE',operation:'icash_next_automation',httpStatus:503});return true;
+});
+await assert.rejects(automationTick(async()=>({token:tokens[0]}),async()=>new Response('private customer detail',{status:401})),error=>{
+ assert.deepEqual(workerFailureDetails(error),{code:'AUTOMATION_HELD',operation:'automation_dispatch',httpStatus:401});return true;
+});
+assert.deepEqual(workerFailureDetails(Error('secret-token-and-customer-data')),{code:'REQUEST_FAILED'});
+assert.deepEqual(workerFailureDetails(new DOMException('private timeout URL','TimeoutError')),{code:'REQUEST_TIMEOUT'});

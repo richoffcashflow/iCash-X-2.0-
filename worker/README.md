@@ -1,5 +1,15 @@
 # Railway screening worker
 
+This is a continuously running production service. Verify an active Railway
+deployment and a fresh database `worker` heartbeat after every recovery. A
+removed deployment or a skipped source change does not mean the service is
+running. Failed work logs a fixed operation name and HTTP status without
+customer data, credentials or response bodies. Four independent automation
+lanes continue to claim fresh one-use capabilities; uncertain attempts are
+never replayed. Research scheduling prioritizes accounts behind the owner's
+30% rolling daily work target, while overdue accounts keep fair service and
+every existing spending/contact/provider gate remains authoritative.
+
 Build from repository root `/`, Dockerfile `/worker/Dockerfile`, start `node --experimental-strip-types worker/index.mjs`. No dependency installation is needed. Image includes deterministic underwriting modules from `lib`.
 
 Set server-only `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `SCREENING_WORKER_ENABLED=true`. Without these, health reports standby. Never put secrets in the repo. `/health` returns 503 after three consecutive failures in either screening or automation, and recovers when that lane succeeds. Screening and automation have independent bounded exponential backoff (up to one minute and five minutes respectively); a screening failure does not suppress automation. A successful empty claim resets that lane. Automation failure only schedules a fresh database ticket claim, never a replay of the consumed ticket or an ambiguous provider operation. No property data or keys are logged.
