@@ -76,7 +76,7 @@ function recordingEmptyAgentHashMatches(configHash:string,snapshot:Record<string
  return false;
 }
 export function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>):boolean{
- // At most eight fixed representations, each with up to four empty-agent
+ // At most sixteen fixed representations, each with up to four empty-agent
  // variants. Never ignore arbitrary fields or rewrite a saved approval.
  const snapshots=[snapshot],withoutNoise=recordingDisabledNoiseSnapshot(snapshot);
  if(withoutNoise)snapshots.push(withoutNoise);
@@ -93,6 +93,19 @@ export function recordingConfigHashMatches(configHash:string,snapshot:Record<str
   if(!Object.hasOwn(builtins,'identity_challenge')||builtins.identity_challenge!==null)continue;
   const previousBuiltins={...builtins};delete previousBuiltins.identity_challenge;
   snapshots.push({...value,conversation_config:{...config,agent:{...agent,prompt:{...prompt,built_in_tools:previousBuiltins}}}});
+ }
+ // Observed together on the unchanged approved version on 2026-10-24. Only
+ // this exact new representation can reconstruct the saved full fingerprint:
+ // fullscreen widget, no unverified memory identities, and no summary schedule.
+ // Keep every other setting, and never change or synthesize an approval.
+ for(const value of [...snapshots]){
+  const platform=object(value.platform_settings),widget=object(platform.widget),privacy=object(platform.privacy),memory=object(privacy.user_memory);
+  if(!Object.hasOwn(widget,'mobile_fullscreen')||widget.mobile_fullscreen!==true
+   ||!Object.hasOwn(memory,'accept_unverified_identities')||memory.accept_unverified_identities!==false
+   ||!Object.hasOwn(platform,'summary_schedule')||platform.summary_schedule!==null)continue;
+  const previousWidget={...widget},previousMemory={...memory},previousPlatform={...platform};
+  delete previousWidget.mobile_fullscreen;delete previousMemory.accept_unverified_identities;delete previousPlatform.summary_schedule;
+  snapshots.push({...value,platform_settings:{...previousPlatform,widget:previousWidget,privacy:{...privacy,user_memory:previousMemory}}});
  }
  return snapshots.some(value=>recordingEmptyAgentHashMatches(configHash,value));
 }

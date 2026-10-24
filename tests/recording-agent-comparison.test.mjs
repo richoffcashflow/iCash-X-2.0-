@@ -203,6 +203,54 @@ test('the new null identity tool reconstructs only the same complete approved sn
  assert.equal(recordingAgentMatches(reviewFor(explicit),explicit),true,'an explicitly approved tool still matches exactly');
 });
 
+test('only the exact observed platform defaults reconstruct an existing complete approval',()=>{
+ const {old,current}=renamedVoiceFixture();
+ for(const a of [old,current]){
+  a.platform_settings.widget={variant:'fixture'};
+  a.platform_settings.privacy.user_memory={enabled:false};
+  a.conversation_config.agent.prompt.built_in_tools={end_call:null};
+ }
+ current.conversation_config.agent.prompt.built_in_tools.identity_challenge=null;
+ current.platform_settings.widget.mobile_fullscreen=true;
+ current.platform_settings.privacy.user_memory.accept_unverified_identities=false;
+ current.platform_settings.summary_schedule=null;
+ const review=reviewFor(old),saved=structuredClone(current),savedReview=structuredClone(review);
+ for(const [empty,list] of representations){
+  const a=structuredClone(current);delete a.conversation_config.agent.subagents;
+  if(empty)a.conversation_config.agent.subagent_config=emptySubagents();
+  if(list)a.conversation_config.agent.subagents=[];
+  assert.equal(recordingAgentMatches(review,a),true);
+ }
+ assert.deepEqual(current,saved);assert.deepEqual(review,savedReview);
+ assert.equal(recordingAgentMatches(reviewFor(current),old),false,'new settings are never invented for an old response');
+ for(const change of [
+  a=>delete a.platform_settings.widget.mobile_fullscreen,
+  a=>delete a.platform_settings.privacy.user_memory.accept_unverified_identities,
+  a=>delete a.platform_settings.summary_schedule,
+  ...[false,null,0,'true',{},[]].map(value=>a=>a.platform_settings.widget.mobile_fullscreen=value),
+  ...[true,null,0,'false',{},[]].map(value=>a=>a.platform_settings.privacy.user_memory.accept_unverified_identities=value),
+  ...[false,0,'',{},[],{enabled:false}].map(value=>a=>a.platform_settings.summary_schedule=value),
+  a=>a.platform_settings.widget.variant='changed',
+  a=>a.platform_settings.privacy.user_memory.enabled=true,
+  a=>a.platform_settings.privacy.user_memory.unknown=false,
+  a=>a.platform_settings.widget.unknown=null,
+  a=>a.platform_settings.privacy.record_voice=true,
+  a=>a.platform_settings.auth.enable_auth=false,
+  a=>a.conversation_config.agent.prompt.prompt+=' changed',
+  a=>a.conversation_config.agent.prompt.tool_ids.push('tool_other'),
+  a=>a.version_id='agtvrsn_other',a=>a.branch_id='agtbrch_other',a=>a.agent_id='agent_other',
+ ]){const a=structuredClone(current);change(a);assert.equal(recordingAgentMatches(review,a),false,change.toString());}
+ assert.equal(recordingAgentMatches({...review,configHash:'0'.repeat(64)},current),false);
+ // Compose with the already approved outgoing capacity change; another agent
+ // or any other capacity still requires its own exact review.
+ Object.assign(old,{agent_id:parallel.agentId,branch_id:parallel.branchId,version_id:parallel.versionId});
+ Object.assign(current,{agent_id:parallel.agentId,branch_id:parallel.branchId,version_id:parallel.versionId});
+ old.platform_settings.call_limits.agent_concurrency_limit=2;
+ current.platform_settings.call_limits.agent_concurrency_limit=8;
+ const parallelReview=reviewFor(old);assert.equal(recordingAgentMatches(parallelReview,current),true);
+ for(const limit of [3,7,9,10]){const a=structuredClone(current);a.platform_settings.call_limits.agent_concurrency_limit=limit;assert.equal(recordingAgentMatches(parallelReview,a),false);}
+});
+
 test('nonempty, malformed and extended subagent values are not empty defaults',()=>{
  const invalid=[null,[],false,0,'',{},
   {agents:[]},{self_subagent:null},{agents:null,self_subagent:null},{agents:{},self_subagent:null},
