@@ -149,5 +149,33 @@ assert.equal(await waiting(),false);
 await q("update icash_voice_jobs set state='issued',outcome=null where id=$1",[job]);
 assert.equal(await waiting(),true,'actionable voice priority survives a separate SMS reconciliation hold');
 assert.deepEqual((await q('select balance_cents from icash_wallets order by account_id')).rows.map(x=>Number(x.balance_cents)),[7437,24656]);
+// A process can disappear after consuming a ticket but before marking its
+// outcome. Keep the original unknown work; release only unrelated research.
+await db.exec('alter table icash_automation_tickets add column kind text,add column expires_at timestamptz');
+await q("update icash_voice_jobs set state='held',outcome='contact_operating_checks_required' where id=$1",[job]);
+await q("update icash_automation_tickets set state='consumed',kind='seller_opener',outcome=null,expires_at=now()-interval '23 hours' where id=$1",[id(12)]);
+assert.equal(await waiting(),true,'the old consumed ticket reproduces the account-wide freeze');
+const consumedBefore=await val('select to_jsonb(t) from icash_automation_tickets t where id=$1',[id(12)]);
+const staleSql=read('config/stale-sms-research-priority.sql');
+assert.equal(staleSql,read('supabase/migrations/20261024171453_stale_sms_research_priority.sql'));
+await db.exec(staleSql);
+assert.equal(await waiting(),false,'an abandoned consumed capability cannot block unrelated research');
+assert.deepEqual(await val('select to_jsonb(t) from icash_automation_tickets t where id=$1',[id(12)]),consumedBefore,'never reset, retry, finish or relabel the original unknown attempt');
+for(const age of ['1 minute','4 minutes']){
+ await q('update icash_automation_tickets set expires_at=now()-$2::interval where id=$1',[id(12),age]);
+ assert.equal(await waiting(),true,'recent processing retains priority');
+}
+await q("update icash_automation_tickets set expires_at=now()+interval '1 minute' where id=$1",[id(12)]);
+assert.equal(await waiting(),true,'a live capability retains priority');
+await q("update icash_automation_tickets set expires_at=now()-interval '23 hours',account_id=$2 where id=$1",[id(12),other]);
+assert.equal(await waiting(),true,'another tenant cannot suppress priority');
+await q('update icash_automation_tickets set account_id=$2,opener_message_id=$3 where id=$1',[id(12),account,id(99)]);
+assert.equal(await waiting(),true,'another message cannot suppress priority');
+await q('update icash_automation_tickets set opener_message_id=$2 where id=$1',[id(12),id(11)]);
+assert.equal(await waiting(),false);
+await q("update icash_voice_jobs set state='issued',outcome=null where id=$1",[job]);
+assert.equal(await waiting(),true,'eligible voice still takes priority');
+assert.deepEqual((await q('select balance_cents from icash_wallets order by account_id')).rows.map(x=>Number(x.balance_cents)),[7437,24656]);
+assert.equal(await val('select reservations from fixture_policy'),0,'the fix creates no spending authorization');
 console.log('PASS: unresolved SMS capability does not freeze unrelated research; hold and wallets unchanged; safe/active/budget-held work and tenant/message binding retain priority; original 428 invariants pass.');
 }catch(error){console.error(error.message);console.error(error.query??'');process.exitCode=1;}finally{await db.close();}
