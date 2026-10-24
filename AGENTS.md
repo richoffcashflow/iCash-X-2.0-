@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 24, 2026 the owner required continuous background operation and prompt visibility of complete outages. Keep the production worker awake with automatic restart. Track core-service recovery separately from unresolved workflow receipts, alert on a new outage or a missing-heartbeat escalation, and use bounded hourly status reminders for sustained outages. Preserve the 15-minute observed-health rule, uncertain-send protection and actual receipt-backed recovery checks.
+
 - On October 24, 2026 the owner requested about 30% of each funded account's budget per day in actual work across the platform. Use the latest verified funding baseline for a rolling 24-hour scheduling target; prioritize accounts behind that target with overdue-account fairness. A target never fabricates usage, retries uncertain provider work, unpauses customers or overrides existing admission limits. Preserve actual-cost settlement and report completed usage separately from queued work.
 
 - On October 24, 2026 the owner required webinar autoplay with sound when permitted, then muted autoplay with a “Tap for sound” control. Never show a Play gate while media is loading. Preserve remembered mute choices and resume background-tab starts on visibility. Browsers that block all autoplay still need an honest recovery control. Player-only releases must not reload open viewers, change their session snapshots or reset playback/checkout.
