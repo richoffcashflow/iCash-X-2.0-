@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 24, 2026 the owner removed the spending-allowance dollar amount from the bot’s opportunity-progress panel. Do not show the per-24-hour amount or total-search-allowance fallback there. Preserve actual progress, status, wallet balances, explicit spending controls and server spending limits.
+
 - On October 24, 2026 the owner required continuous background operation and prompt visibility of complete outages. Keep the production worker awake with automatic restart. Track core-service recovery separately from unresolved workflow receipts, alert on a new outage or a missing-heartbeat escalation, and use bounded hourly status reminders for sustained outages. Preserve the 15-minute observed-health rule, uncertain-send protection and actual receipt-backed recovery checks.
 
 - On October 24, 2026 the owner revised the platform-wide daily work target from 30% to 25% of each funded Run account's budget in actual work. Use the latest verified funding baseline for a rolling 24-hour scheduling target; prioritize accounts behind that target with overdue-account fairness. A target never fabricates usage, retries uncertain provider work, unpauses customers or overrides existing admission limits. Preserve actual-cost settlement and report completed usage separately from queued work. This supersedes the earlier 30% target; the fixed 50% prospecting allowance remains unchanged.
