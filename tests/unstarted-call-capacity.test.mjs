@@ -1,9 +1,17 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,readdirSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8'),patch=read('config/unstarted-call-capacity.sql');
 assert.equal(patch,read('supabase/migrations/20261025163344_unstarted_call_capacity.sql'));
-const db=new PGlite(),one=async s=>(await db.query(s)).rows[0],slots=async()=>Number((await one('select count(*) n from icash_active_voice_slots()')).n);
+const narrow=read('config/narrow-voice-capacity.sql');
+const migration=readdirSync(new URL('../supabase/migrations/',import.meta.url)).filter(p=>p.endsWith('_narrow_voice_capacity.sql'));
+assert.equal(migration.length,1);assert.equal(narrow,read('supabase/migrations/'+migration[0]));
+const db=new PGlite(),one=async s=>(await db.query(s)).rows[0];let compareOriginal=false;
+const slots=async()=>{
+ const current=(await db.query('select * from icash_active_voice_slots() order by operation_key,account_id,agent_id,contact_key nulls first')).rows;
+ if(compareOriginal)assert.deepEqual(current,(await db.query('select * from icash_active_voice_slots_before_narrowing() order by operation_key,account_id,agent_id,contact_key nulls first')).rows,'Narrow contact lookup preserves every operation, account, agent and contact');
+ return current.length;
+};
 try{
  await db.exec(`create role anon;create role authenticated;create role service_role;
  create schema icash_recording_private;create schema icash_recorded_reception_private;
@@ -28,6 +36,9 @@ try{
  assert.equal(await slots(),1,'The old query counts the closed unstarted handler until its later job reset');
  const snapshot=await one('select (select to_jsonb(j) from icash_voice_jobs j) job,(select to_jsonb(t) from icash_automation_tickets t) ticket');
  await db.exec(patch);
+ const original=(await one("select pg_get_functiondef('icash_active_voice_slots()'::regprocedure) definition")).definition;
+ await db.exec(original.replace('public.icash_active_voice_slots()','public.icash_active_voice_slots_before_narrowing()'));
+ await db.exec(narrow);compareOriginal=true;
  assert.equal(await slots(),0);
  assert.deepEqual(await one('select (select to_jsonb(j) from icash_voice_jobs j) job,(select to_jsonb(t) from icash_automation_tickets t) ticket'),snapshot,'No ticket retry, state rewrite, recipient change or charge');
  for(const role of ['anon','authenticated','service_role'])assert.equal((await one(`select has_function_privilege('${role}','icash_active_voice_slots()','execute') allowed`)).allowed,role==='service_role');
@@ -51,5 +62,10 @@ try{
  }
  await reset();await db.exec("insert into icash_live_conversations values('voice:'||md5('job')::uuid,md5('account')::uuid,'agent_fixture','contact','complete');");assert.equal(await slots(),1,'Even a completed conversation prevents the unstarted exception');
  await reset();await db.exec("insert into icash_recorded_reception_private.sessions values('incoming:fixture',md5('account')::uuid,'agent_fixture','contact',null);");assert.equal(await slots(),1,'Inbound calls retain their slot');
+ await reset();await db.exec("update icash_voice_jobs set state='held',outcome='provider_outcome_unknown_no_retry',permission_id=md5('target')::uuid;insert into icash_voice_contact_targets values(md5('target')::uuid,md5('foreign')::uuid,'foreign');");
+ assert.equal(await slots(),1,'Missing account-bound target retains a null contact slot');
+ await db.exec("insert into icash_voice_contact_targets values(md5('target')::uuid,md5('account')::uuid,'same-contact'),(md5('target')::uuid,md5('account')::uuid,'same-contact'),(md5('target')::uuid,md5('account')::uuid,'second-contact');");
+ assert.equal(await slots(),2,'All matching contacts survive, with existing union deduplication');
+ await db.exec("update icash_voice_jobs set permission_id=null,operational_contact_id=md5('target')::uuid;");assert.equal(await slots(),2,'Operational contact binding preserves identical slots');
  console.log('Unstarted capacity: completed failed handler only; in-flight, unknown, financial, recording, conversation, multiple-attempt and missing-evidence cases stay held; no retries, writes or changed grants.');
 }finally{await db.close();}
