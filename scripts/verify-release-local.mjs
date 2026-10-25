@@ -2,7 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
- 'daily-work-target',
+ 'daily-work-target', 'provider-quota-scheduling',
  'validation-compatibility',
  'call-contact-evidence', 'customer-phone-maintenance',
  'close-capacity', 'parallel-capacity-provider', 'nationwide-inventory', 'close-conversion-database', 'close-conversion-routes',
@@ -22,7 +22,7 @@ const suites = [
  'workspace-acknowledgment', 'work-account-membership', 'account-activity-route', 'customer-provisioning-recovery', 'stripe-invoice-webhook', 'stripe-dispute-webhooks', 'manual-funding-route', 'early-access-funding', 'course-preview-contracts', 'course-preview-access', 'course-portal',
  'consented-browser-calling-database', 'contact-rpc-readback', 'manual-call-options', 'browser-phone-route', 'browser-phone-service', 'customer-phone-diagnostics', 'browser-call-session', 'authority-review-status', 'sms-review-status-route',
  'dashboard-password', 'dashboard-boundaries', 'webinar-offer-save', 'webinar-flow-ui',
- 'webinar-entry-route', 'webinar-intelligence-route', 'webinar-vip', 'vip-billing-route', 'vip-billing', 'webinar-growth', 'webinar-recovery', 'webinar-return-database',
+ 'webinar-entry-route', 'webinar-session-summary', 'webinar-delivery', 'webinar-intelligence-route', 'webinar-vip', 'vip-billing-route', 'vip-billing', 'webinar-growth', 'webinar-recovery', 'webinar-return-database',
  'webinar-reminder-attribution-database', 'webinar-reminder-client', 'webinar-reminder-routes', 'webinar-reminder-results', 'checkout-measurement',
  'webinar-recovery-client', 'webinar-recovery-route', 'webinar-followups', 'webinar-purchase-flow', 'webinar-exit-reminder', 'webinar-chat-no-assistant', 'webinar-followup-routes', 'webinar-replay-spots',
  'workspace-simplification', 'workspace-stage-summary', 'buyer-network-workspace', 'fulfillment-guidance', 'workspace-next-actions', 'deal-tools-disclosure',
