@@ -23,7 +23,7 @@ export async function verifyLegacyTrial(browser,base,options,name){
   await page.goto(base+'/legacy-offer');await page.getByRole('heading',{name:'$0 now. Then $50/month.'}).waitFor();
   assert(await page.getByRole('button',{name:'Continue to secure checkout',exact:true}).isDisabled());
   await page.getByLabel('Original purchase email',{exact:true}).fill('returning@example.invalid');await page.getByRole('checkbox').check();
-  await page.getByRole('button',{name:'Continue to secure checkout',exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(posts,1);
+  await page.getByRole('button',{name:'Continue to secure checkout',exact:true}).click();await page.getByText('Verify your email to resume your unfinished checkout.',{exact:true}).waitFor();assert.equal(posts,1);
   await page.getByRole('button',{name:'Resume a checkout from another device',exact:true}).click();
   await page.getByText('This verifies your email only',{exact:false}).waitFor();assert.equal(await page.getByRole('button',{name:'Use my checkout phone',exact:true}).count(),0);
   await page.getByRole('button',{name:'Email me a code',exact:true}).click();await page.getByLabel('Email code',{exact:true}).fill('123456');await page.getByRole('button',{name:'Sign in',exact:true}).click();
