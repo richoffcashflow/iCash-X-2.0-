@@ -30,6 +30,61 @@ const changed=await fixture('tool',env=>env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.s
 const invalid=await fixture(null,undefined,true);assert.equal(invalid.result.status,'recording_review_required');assert(!invalid.events.includes('create'));assert(!invalid.events.includes('dial'));
 const ready=await fixture(null);assert.equal(ready.result.status,'recording_consent_pending');assert.deepEqual(ready.events,['agent','tool','create','claim_dial','dial','bind_call']);
 console.log('PASS actual server/service: final live/capture/receipts/review races stop before carrier dial, stop-tool review fails closed, ready direct-entry path dials once and leaves recording authorization to its bound callback');
+// Abort the real server's provider deadline at exact boundaries. No sleeps,
+// provider traffic or production data: only receipt writes may outlive it.
+async function deadlineFixture(scenario){
+ const env={ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:ac,TWILIO_AUTH_TOKEN:'synthetic-provider-token-only',ELEVENLABS_API_KEY:'synthetic-only'};
+ const caller=new AbortController(),timers=[],events=[],diagnostics=[];let providerSignal,dialCount=0,claimed=false;
+ const row={id,account_id:accountId,operation_key:operationKey,provider_account_sid:ac,call_sid:null,state:'consent_pending',to_phone:'+12125550102',from_phone:review.fromPhone,max_total_seconds:600};
+ const timerApi={any:signals=>AbortSignal.any(signals),timeout:ms=>{const controller=new AbortController();timers.push({ms,controller});return controller.signal;}};
+ const expire=()=>timers[0].controller.abort(new DOMException('Synthetic timeout','TimeoutError'));
+ const db=async(path,_method,body,signal)=>{
+  signal.throwIfAborted();const action=path==='rpc/icash_create_direct_recorded_call'?'create':body.p_action;events.push(action);
+  if(action==='create'){assert.equal(signal,providerSignal);if(scenario==='after_create')expire();return structuredClone(row);}
+  if(action==='claim_dial'){
+   assert.equal(signal,providerSignal);claimed=true;
+   if(['after_claim','claim_response_lost'].includes(scenario))expire();
+   if(scenario==='claim_response_lost')throw providerSignal.reason;
+   return structuredClone(row);
+  }
+  assert(['bind_call','dial_unknown'].includes(action),'Independent writer cannot admit or start work');
+  assert.notEqual(signal,providerSignal);assert.equal(signal.aborted,false);assert.equal(timers.at(-1).ms,8000);
+  if(scenario==='receipt_write_failed')throw Error('Synthetic receipt database unavailable');
+  if(action==='bind_call')row.call_sid=body.p_payload.callSid;
+  if(action==='dial_unknown')assert.equal(claimed,true);
+  return structuredClone(row);
+ };
+ const provider={agent:async()=>{providerSignal.throwIfAborted();events.push('agent');return agent;},tool:async()=>{providerSignal.throwIfAborted();events.push('tool');return tool;},dial:async()=>{
+  providerSignal.throwIfAborted();events.push('dial');dialCount++;
+  if(['dial_timeout','result_after_deadline'].includes(scenario))expire();
+  if(scenario==='dial_timeout')throw providerSignal.reason;
+  if(scenario==='result_after_disconnect')caller.abort();
+  return {sid:ca,account_sid:ac,from:row.from_phone,to:row.to_phone,direction:'outbound-api',date_created:new Date().toISOString()};
+ }};
+ if(scenario==='already_aborted')caller.abort();
+ const {recordingServer}=await loadService('lib/required-call-recording-server.ts',{db,createRecordingProviders:(_env,_fetch,signal)=>{providerSignal=signal;return provider;},readRecordingReview,recordingService,process:{env},AbortSignal:timerApi});
+ const warn=console.warn;console.warn=(name,payload)=>diagnostics.push({name,payload});
+ let result;try{result=await recordingServer(caller.signal).dispatch({accountId,operationKey,principal:'Synthetic Principal',assistantName:'Alex',firstMessage:'Synthetic greeting',prompt:'Synthetic prompt',strategyKey:'cash_interest'});}finally{console.warn=warn;}
+ assert.equal(timers[0].ms,12000);assert(timers.slice(1).every(t=>t.ms===8000));
+ assert(dialCount<=1,'No provider retry after any timeout or failed receipt write');
+ assert(!JSON.stringify(diagnostics).includes(row.to_phone));assert(!JSON.stringify(diagnostics).includes(env.TWILIO_AUTH_TOKEN));
+ return {result,events,diagnostics,dialCount,row};
+}
+for(const scenario of ['already_aborted','after_create','after_claim']){
+ const f=await deadlineFixture(scenario);assert.equal(f.result.status,'recording_release_required');assert.equal(f.dialCount,0);
+ if(scenario==='already_aborted')assert.deepEqual(f.events,[]);
+ if(scenario==='after_create')assert(!f.events.includes('claim_dial'));
+}
+for(const scenario of ['claim_response_lost','dial_timeout']){
+ const f=await deadlineFixture(scenario);assert.equal(f.result.status,'recording_dial_unknown_no_retry');assert.equal(f.events.at(-1),'dial_unknown');
+ assert.equal(f.dialCount,scenario==='dial_timeout'?1:0);assert.equal(f.row.call_sid,null);
+ assert.deepEqual(f.diagnostics,[{name:'recording_dispatch_held',payload:{stage:scenario==='dial_timeout'?'dial':'dial_claim',recordingId:id,reason:'deadline_exceeded',holdSaved:true}}]);
+}
+for(const scenario of ['result_after_deadline','result_after_disconnect']){
+ const f=await deadlineFixture(scenario);assert.equal(f.result.status,'recording_consent_pending');assert.equal(f.events.at(-1),'bind_call');assert.equal(f.row.call_sid,ca);assert.equal(f.dialCount,1);assert.deepEqual(f.diagnostics,[]);
+}
+const failedReceipt=await deadlineFixture('receipt_write_failed');assert.equal(failedReceipt.result.status,'recording_dial_unknown_no_retry');assert.equal(failedReceipt.dialCount,1);assert.equal(failedReceipt.row.call_sid,null);assert.equal(failedReceipt.diagnostics[0].payload.holdSaved,false);assert.equal(failedReceipt.diagnostics[0].payload.stage,'bind_call');
+console.log('PASS actual server/service: expired admission never dials, ambiguous claim retains hold, confirmed results and timeout holds use bounded independent writes, failed writes never retry the provider');
 // Admission-only guards must not disable receipt settlement for past calls.
 const {settleReviewedReception}=await import('../lib/general-reception-settlement.ts');
 const {receptionProfiles}=await import('../lib/general-reception.ts');
