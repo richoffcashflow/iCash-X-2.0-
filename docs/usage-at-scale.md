@@ -14,6 +14,14 @@ snapshots remain unchanged. Private course files and externally hosted media
 are excluded. First-time viewers still download video bytes; this change reduces
 repeat downloads, without altering playback, quality or checkout.
 
+Delivery verification uses `GET` with `Range: bytes=0-0`, checks the full file
+length from `Content-Range`, and cancels the response body. Supabase deliberately
+returns `no-cache` for `HEAD`, so metadata-only checks cannot verify browser cache
+policy: https://github.com/supabase/storage/issues/1290.
+An ignored range or unverifiable response stops publication instead of fetching
+the full video. The October 25 live check confirmed a one-byte `206` response
+with `public, max-age=2592000` for the copied main recording.
+
 The shared DealMachine counter showed 4,500 of 4,500 at 2:07 PM Central on
 October 25. Local quota refusals then generated failed research capabilities and
 worker backoff. The provider's published default is 60 requests/minute and 5,000
