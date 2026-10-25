@@ -42,7 +42,7 @@ assert.equal(callEligibility({...permission,revoked_at:new Date(now).toISOString
 assert.equal(callEligibility({...permission,dnc_checked_at:new Date(now+1000).toISOString()},snapshot,now,outreachContext()).ready,false);
 assert.equal(callEligibility(permission,snapshot,now,outreachContext('bogus')).ready,false);
 assert.equal(callEligibility(permission,snapshot,now,outreachContext('Pacific/Honolulu')).reason,'outside_contact_hours');
-assert.equal(callEligibility({...permission,sellerConsentVerified:true},snapshot,now,outreachContext('Pacific/Honolulu',true)).ready,true);
+assert.equal(callEligibility({...permission,sellerConsentVerified:true},snapshot,now,outreachContext('Pacific/Honolulu',true)).ready,false,'Prior response cannot bypass outbound hours');
 assert.equal(callEligibility({...permission,sellerConsentVerified:true,sellerCallbackVerified:true},snapshot,now,outreachContext('Pacific/Honolulu')).reason,'outside_contact_hours','Consent and a stored callback flag do not bypass the server outreach policy');
 assert.equal(callEligibility({...permission,revoked_at:new Date(now).toISOString(),sellerConsentVerified:true},snapshot,now,outreachContext('Pacific/Honolulu',true)).ready,false);
 assert.equal(callEligibility(permission,{...snapshot,fetchedAt:new Date(now-86400001).toISOString()},now,outreachContext()).reason,'fresh_screening_required');
@@ -124,8 +124,8 @@ assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');
 assert.equal(outboundBody.maxTotalSeconds,120);assert.match(outboundBody.prompt,/sole task is one brief cancellation update/);assert(!outboundBody.firstMessage.includes('128 Sample Lane'));assert(!outboundBody.prompt.includes('get_offer'));assert(!records.some(r=>r.path==='rpc/icash_claim_automatic_offer_voice_job'));assert(!records.some(r=>r.path==='rpc/icash_seller_prior_call_context'));
 const beforeCancellationPermission={...permission};
 reset();permission={...permission,timezone:'Pacific/Honolulu',seller_intake_id:'saved-intake'};cancellationId='notice';cancellationContext={address:'Sample property',body:'Cancellation requested',completed:false};
-assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1,'An existing permitted cancellation does not need a recent seller reply');
-assert(records.some(r=>r.path==='rpc/icash_reserve_cancellation_voice'));assert(records.some(r=>r.path==='rpc/icash_claim_cancellation_voice'));
+assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');assert.equal(postCount,0,'A permitted cancellation cannot start an overnight call');
+assert(!records.some(r=>r.path==='rpc/icash_reserve_cancellation_voice'));assert(!records.some(r=>r.path==='rpc/icash_claim_cancellation_voice'));
 assert(!records.some(r=>r.path==='rpc/icash_reserve_paced_voice'),'Cancellation keeps its own admission path');
 reset();cancellationId='notice';cancellationContext={address:'Sample property',body:'Cancellation requested',completed:false};cancellationCurrent=false;
 assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');assert.equal(postCount,0,'A mere cancellation ID is not a verified exception');
@@ -240,7 +240,7 @@ reset();paced=false;buyerApproved=true;assert.equal((await dispatchLiveVoice('ac
 reset();permission={...permission,timezone:'Pacific/Honolulu'};const scheduled=await dispatchLiveVoice('account','job');assert.equal(scheduled.dueAt,'2026-09-29T19:00:00.000Z');assert(records.some(r=>r.method==='PATCH'&&r.body?.outcome==='Waiting for calling hours'));assert.equal(postCount,0);
 reset();callbackId='callback';permission={...permission,timezone:'Pacific/Honolulu'};assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');assert.equal(jobState,'held');assert(!records.some(r=>r.method==='PATCH'&&r.body?.due_at),'Do not silently move an agreed callback');
 reset();permission={...permission,party:'seller',timezone:'Pacific/Honolulu',seller_intake_id:'lead'};smsSource='requested-message';activeConversation=true;
-assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);assert(records.some(r=>r.path==='rpc/icash_voice_outreach_context'));
+assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');assert.equal(postCount,0);assert(records.some(r=>r.path==='rpc/icash_voice_outreach_context'));
 reset();permission={...permission,party:'seller',timezone:'Pacific/Honolulu',seller_intake_id:'lead'};
 const firstOptin=await dispatchLiveVoice('account','job');
 assert.equal(firstOptin.status,'outside_contact_hours');assert.equal(firstOptin.dueAt,'2026-09-29T19:00:00.000Z');assert.equal(postCount,0,'A first consented form honors outreach hours');
@@ -251,7 +251,7 @@ assert.equal((await dispatchLiveVoice('account','job')).status,'contact_opted_ou
 reset();smsSource='requested-message';
 assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');assert.equal(postCount,0,'An unverified or expired callback job never bypasses hours');
 reset();callbackId='callback';activeConversation=true;
-assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1,'Server-verified agreed callback retains its requested time');
+assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');assert.equal(postCount,0,'A callback does not bypass the outbound calling window');
 reset();permission={...permission,sellerConsentVerified:true,sellerCallbackVerified:true};
 assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');assert.equal(postCount,0,'Stored client flags never establish a timing exception');
 for(const context of [null,{...outreachContext(),activeConversation:'true'},{...outreachContext(),startHour:0},{...outreachContext(),policyVersion:'old-policy'},{...outreachContext(),timezone:'invalid'}]){

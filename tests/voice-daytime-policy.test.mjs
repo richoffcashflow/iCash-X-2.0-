@@ -25,15 +25,15 @@ assert.deepEqual(original,unchanged,'Current timing policy never rewrites histor
 assert.equal(nextContactWindow({...original,permission_until:'2026-11-01T14:59:59Z'},overnight,context('America/Chicago')),null,'Do not schedule past permission expiry');
 assert.equal(nextContactWindow(original,overnight),null,'Missing server context cannot schedule outreach');
 
-// New consented forms honor the same window. Conversation/callback exceptions
-// require server-bound evidence and never override suppression or DNC checks.
+// New consented forms, existing conversations and callbacks all honor the
+// outbound calling window, including an older server's active flag.
 for(const [when,ready] of [['2026-10-06T13:59:59Z',false],['2026-10-06T14:00:00Z',true],['2026-10-07T01:59:59Z',true],['2026-10-07T02:00:00Z',false]]){
  const consent={sellerConsentVerified:true,sellerCallbackVerified:true,dnc_checked_at:null,dnc_clear:false};
  assert.equal(check(when,'America/Chicago',false,consent).ready,ready,'A first consented inbound contact is still timed');
- assert.equal(check(when,'America/Chicago',true,consent).ready,true,'A server-verified active conversation can continue');
+ assert.equal(check(when,'America/Chicago',true,consent).ready,ready,'Prior conversation cannot bypass the outbound call window');
  assert.equal(check(when,'America/Chicago',true,{...consent,revoked_at:when}).ready,false);
  assert.equal(check(when,'America/Chicago',true,{...consent,sellerConsentVerified:false}).ready,false);
 }
 for(const value of [null,{},context('invalid'),{...context(),activeConversation:'true'},{...context(),endHour:24},{...context(),policyVersion:'old'}])assert.equal(readVoiceOutreachContext(value),null);
 assert.deepEqual(readVoiceOutreachContext(context('America/Chicago')),context('America/Chicago'));
-console.log('Voice outreach: server-derived 9 AM–9 PM, first-form timing, recipient/Central clocks, DST, verified conversation exceptions, preserved evidence and fail-closed malformed context. No provider traffic.');
+console.log('Voice outreach: strict server-derived 9 AM–9 PM, recipient/Central clocks, DST, no conversation bypass, preserved evidence and fail-closed malformed context. No provider traffic.');
