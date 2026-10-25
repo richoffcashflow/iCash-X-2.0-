@@ -33,7 +33,14 @@ try{
  for(const definition of Object.values(baseline))await pg.exec(definition);
  const sql=readFileSync(new URL('../config/first-contact-voice-hours.sql',import.meta.url),'utf8');
  await pg.exec(sql);
+ const originalContext=(await one("select pg_get_functiondef('public.icash_voice_outreach_context(uuid,uuid)'::regprocedure) definition")).definition;
  await pg.exec(readFileSync(new URL('../config/strict-outbound-call-hours.sql',import.meta.url),'utf8'));
+ const strictHours=(await one("select pg_get_functiondef('public.icash_voice_outreach_hours_current(uuid,uuid)'::regprocedure) definition")).definition;
+ const restore=readFileSync(new URL('../config/preserve-daytime-followup-context.sql',import.meta.url),'utf8');
+ assert.equal(restore,readFileSync(new URL('../supabase/migrations/20261025022649_preserve_daytime_followup_context.sql',import.meta.url),'utf8'));
+ await pg.exec(restore);
+ assert.equal((await one("select pg_get_functiondef('public.icash_voice_outreach_context(uuid,uuid)'::regprocedure) definition")).definition,originalContext,'conversation context remains exactly the original receipt-backed evidence');
+ assert.equal((await one("select pg_get_functiondef('public.icash_voice_outreach_hours_current(uuid,uuid)'::regprocedure) definition")).definition,strictHours,'restoring follow-up evidence leaves the strict final hours gate unchanged');
  await pg.exec('set check_function_bodies=on');
  const cancellationPatched=(await one("select pg_get_functiondef('public.icash_cancellation_voice_current(uuid,text)'::regprocedure) definition")).definition;
  assert.match(cancellationPatched,/icash_operational_contact_current\(p_account,j.operational_contact_id,'voice',false\)/);
@@ -64,6 +71,7 @@ try{
   await q('update icash_voice_jobs set cancellation_notice_id=gen_random_uuid() where id=$1',[job]);
   assert.equal(await allowed(),false,'a cancellation flag alone cannot bypass business hours');
   await q('update voice_hours_fixture set cancellation_ok=true');
+  assert.equal((await context()).activeConversation,true,'verified cancellation evidence remains available to daytime spacing');
   assert.equal(await allowed(),false,'even a verified cancellation cannot start an overnight call');
   await q('update icash_voice_jobs set cancellation_notice_id=null where id=$1',[job]);
   assert.equal(await allowed(),false,'ordinary first calls do not inherit cancellation admission');
@@ -74,6 +82,7 @@ try{
  });
  await isolated(async()=>{
   await q('update voice_hours_fixture set active_phone=$1',[phone]);
+  assert.equal((await context()).activeConversation,true,'real conversation evidence remains truthful for recipient follow-up spacing');
   assert.equal(await allowed(),false,'actual target conversation does not permit an overnight outbound call');
   assert.equal(await reserve(),false,'no new overnight call reservation after a response');
   assert.equal(await rpc('icash_claim_voice_job',{p_job:job}),false,'normal claim rejects a prior-conversation exception');
@@ -122,6 +131,7 @@ try{
   const callback=(await one("insert into icash_live_callbacks(account_id,screening_id,conversation_id,due_at,timezone,evidence) values($1,$2,$3,$4,$5,'{\"source\":\"SIMULATION actual callback request\"}') returning id",[account,screening,call,due,original.timezone])).id;
   const callbackJob=(await one("insert into icash_voice_jobs(account_id,operational_contact_id,callback_id,due_at,state) values($1,$2,$3,$4,'issued') returning id",[account,original.id,callback,due])).id;
   const callbackHours=()=>rpc('icash_voice_outreach_hours_current',{p_account:account,p_job:callbackJob});
+  assert.equal((await rpc('icash_voice_outreach_context',{p_account:account,p_job:callbackJob})).activeConversation,true,'receipt-bound due callbacks retain their follow-up context');
   assert.equal(await callbackHours(),false,'verified due callback must still be inside the outbound window');
   await q("update icash_live_conversations set result=jsonb_set(result,'{callbackDueAt}','\"not a timestamp\"') where id=$1",[call]);
   assert.equal(await callbackHours(),false,'malformed callback evidence fails closed');
