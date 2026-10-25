@@ -1,23 +1,24 @@
 // Synthetic-only dispatch race tests. No provider traffic, credentials, or live state.
 import assert from 'node:assert/strict';
 import {loadService} from './helpers/simulated-journey-services.mjs';
-import {recordingService} from '../lib/required-call-recording-service.ts';
+import {recordingService,canonicalCall} from '../lib/required-call-recording-service.ts';
 import {readRecordingReview,recordingPolicy,recordingBaseUrl,canonical,sha} from '../lib/required-call-recording.ts';
 const now=Date.now(),iso=new Date(now).toISOString(),accountId='11111111-1111-4111-8111-111111111111',operationKey='voice:22222222-2222-4222-8222-222222222222',id='33333333-3333-4333-8333-333333333333',ac='AC'+'a'.repeat(32),ca='CA'+'b'.repeat(32);
 const agent={agent_id:'agent_fixture',branch_id:'agtbrch_recorded',main_branch_id:'agtbrch_main',version_id:'agtvrsn_reviewed',conversation_config:{asr:{user_input_audio_format:'ulaw_8000'},tts:{agent_output_audio_format:'ulaw_8000'},conversation:{max_duration_seconds:600},agent:{prompt:{tool_ids:['tool_callback','tool_handoff','tool_stop']}}},platform_settings:{privacy:{record_voice:false},auth:{enable_auth:true},call_limits:{bursting_enabled:false},queueing_config:{enabled:false},overrides:{conversation_config_override:{conversation:{max_duration_seconds:true},agent:{first_message:true,prompt:{prompt:true}},tts:{voice_id:true}}}}};
 const review={enabled:true,reviewedAt:new Date(now-1000).toISOString(),reviewedUntil:new Date(now+3600000).toISOString(),agentId:agent.agent_id,branchId:agent.branch_id,versionId:agent.version_id,configHash:sha(JSON.stringify(canonical({conversation_config:agent.conversation_config,platform_settings:agent.platform_settings,workflow:null,procedures:null}))),fromPhone:'+12125550101',providerAccountSid:ac,stopToolId:'tool_stop',toolIds:['tool_callback','tool_handoff','tool_stop'],approvedHoldCents:977,retentionDays:30,maxTotalSeconds:600,policyVersion:recordingPolicy.version};
 const tool={id:'tool_stop',tool_config:{type:'webhook',name:'icash_stop_recording',api_schema:{url:recordingBaseUrl+'/stop',method:'POST',request_headers:{Authorization:{variable_name:'secret__icash_recording_stop_token'}},request_body_schema:{type:'object',required:['recordingId'],properties:{recordingId:{type:'string',dynamic_variable:'icash_recording_id'}}}}}};
-async function fixture(changeAt,change=env=>env.ICASH_RECORDED_OUTBOUND_READY='false',invalidTool=false){
+async function fixture(changeAt,change=env=>env.ICASH_RECORDED_OUTBOUND_READY='false',invalidTool=false,receiptPatch={},callbackWins=false){
  const env={ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:ac,TWILIO_AUTH_TOKEN:'synthetic-provider-token-only',ELEVENLABS_API_KEY:'synthetic-only'},events=[];
  const row={id,account_id:accountId,operation_key:operationKey,provider_account_sid:ac,call_sid:null,state:'consent_pending',to_phone:'+12125550102',from_phone:review.fromPhone};
  const event=name=>{events.push(name);if(changeAt===name)change(env);};
  const db=async(path,method,body)=>{
+  if(path.startsWith('icash_call_recordings?')){event('read_binding');return [structuredClone(row)];}
   if(path==='rpc/icash_create_direct_recorded_call'){event('create');return structuredClone(row);}
   assert.equal(path,'rpc/icash_transition_call_recording');event(body.p_action);
-  if(body.p_action==='bind_call')row.call_sid=ca;
+  if(body.p_action==='bind_call'){row.call_sid=callbackWins==='wrong_identity'?'CA'+'c'.repeat(32):ca;if(callbackWins)return null;}
   return structuredClone(row);
  };
- const provider={agent:async()=>{event('agent');return agent;},tool:async()=>{event('tool');return invalidTool?{...tool,id:'tool_wrong'}:tool;},dial:async(_from,_to,twiml)=>{event('dial');assert(!twiml.includes('<Record'));assert(twiml.includes('<Redirect method="POST">'));assert(twiml.includes('/recording/connect?id='));assert(!twiml.includes('<Gather'));return {sid:ca,account_sid:ac,from:row.from_phone,to:row.to_phone,direction:'outbound-api',date_created:iso};},start:async()=>{throw Error('Never capture before affirmative consent');},register:async()=>{throw Error('Never connect the AI before affirmative consent');}};
+ const provider={agent:async()=>{event('agent');return agent;},tool:async()=>{event('tool');return invalidTool?{...tool,id:'tool_wrong'}:tool;},dial:async(_from,_to,twiml)=>{event('dial');assert(!twiml.includes('<Record'));assert(twiml.includes('<Redirect method="POST">'));assert(twiml.includes('/recording/connect?id='));assert(!twiml.includes('<Gather'));return {sid:ca,account_sid:ac,from:row.from_phone,to:row.to_phone,direction:'outbound-api',date_created:iso,...receiptPatch};},start:async()=>{throw Error('Never capture before affirmative consent');},register:async()=>{throw Error('Never connect the AI before affirmative consent');}};
  const {recordingServer}=await loadService('lib/required-call-recording-server.ts',{db,createRecordingProviders:()=>provider,readRecordingReview,recordingService,process:{env}});
  if(changeAt==='before')change(env);
  const result=await recordingServer().dispatch({accountId,operationKey,principal:'Synthetic Principal',assistantName:'Alex',firstMessage:'Synthetic greeting',prompt:'Synthetic prompt',strategyKey:'cash_interest'});
@@ -29,6 +30,16 @@ for(const stage of ['before','agent','tool','create','claim_dial'])for(const cha
 const changed=await fixture('tool',env=>env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify({...review,versionId:'agtvrsn_changed'}));assert.equal(changed.result.status,'recording_release_required');assert(!changed.events.includes('create'));
 const invalid=await fixture(null,undefined,true);assert.equal(invalid.result.status,'recording_review_required');assert(!invalid.events.includes('create'));assert(!invalid.events.includes('dial'));
 const ready=await fixture(null);assert.equal(ready.result.status,'recording_consent_pending');assert.deepEqual(ready.events,['agent','tool','create','claim_dial','dial','bind_call']);
+for(const date_created of [null,undefined,new Date(now+2000).toUTCString()]){
+ const f=await fixture(null,undefined,false,{date_created});assert.equal(f.result.status,'recording_consent_pending');assert.equal(f.events.filter(x=>x==='dial').length,1);assert(!f.events.includes('dial_unknown'));
+ assert.equal(canonicalCall({call_sid:null,provider_account_sid:ac,from_phone:review.fromPhone,to_phone:'+12125550102'},
+  {sid:ca,account_sid:ac,from:review.fromPhone,to:'+12125550102',direction:'outbound-api',date_created},now),false,'Discovered GET/callback evidence retains freshness checks');
+}
+for(const patch of [{sid:'invalid'},{account_sid:'AC'+'b'.repeat(32)},{from:'+12125550999'},{to:'+12125550999'},{direction:'inbound'}]){
+ const f=await fixture(null,undefined,false,patch);assert.equal(f.result.status,'recording_dial_unknown_no_retry');assert.equal(f.events.filter(x=>x==='dial').length,1);assert(!f.events.includes('bind_call'));
+}
+const callbackFirst=await fixture(null,undefined,false,{},true);assert.equal(callbackFirst.result.status,'recording_consent_pending');assert(callbackFirst.events.includes('read_binding'));assert(!callbackFirst.events.includes('dial_unknown'));
+assert.equal((await fixture(null,undefined,false,{},'wrong_identity')).result.status,'recording_dial_unknown_no_retry');
 console.log('PASS actual server/service: final live/capture/receipts/review races stop before carrier dial, stop-tool review fails closed, ready direct-entry path dials once and leaves recording authorization to its bound callback');
 // Abort the real server's provider deadline at exact boundaries. No sleeps,
 // provider traffic or production data: only receipt writes may outlive it.
