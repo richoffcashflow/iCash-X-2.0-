@@ -4,6 +4,9 @@ import {db} from '@/lib/stripe-test';
 import {discoverPage} from './discovery-pipeline.ts';
 import {selectDiscoveryFilter,DiscoveryFilterUnavailable} from './discovery-filters.ts';
 type Config={account_id:string;enabled:boolean;zip:string;rate_id:string;property_credit_micros:number;data_rights_until:string;per_page:number;next_page:number;revision:string;exhausted:boolean};
+class DiscoveryProviderRequestError extends Error{
+ constructor(readonly stage:'estimate'|'paid',readonly httpStatus:number|null){super('DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY');}
+}
 /** Called only with a server-resolved authenticated account. All policy lives in service-only DB rows. */
 export async function discoverForAccount(accountId:string){
  if(!discoveryWorkEnabled())return {status:'live_work_not_ready'};
@@ -39,15 +42,17 @@ export async function discoverForAccount(accountId:string){
  const result=await discoverPage({zip:c.zip,page:c.next_page,perPage:c.per_page,unitCostMicros:c.property_credit_micros,quotedDataCostMicros:rate.costs_micros.dealmachine,...(filterPlan?{filterPlan}:{})},{
   request:async body=>{
    if(!await db<boolean>('rpc/icash_take_dealmachine_request','POST',{}))throw new Error('DISCOVERY_RATE_LIMIT');
+   const stage=(body as {estimate_cost?:boolean}).estimate_cost===true?'estimate':'paid';let httpStatus:number|null=null;
    try{
     const r=await fetch('https://api.v2.dealmachine.com/v1/properties/search',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
+    httpStatus=r.status;
     if(!r.ok){
      // An unsupported FREE estimate may retire a test arm. A paid request,
      // authentication error, rate limit or timeout must never trigger a replay.
      if(filterPlan&&filterPlan.strategy!=='baseline'&&(body as {estimate_cost?:boolean}).estimate_cost===true&&[400,422].includes(r.status))throw new DiscoveryFilterUnavailable();
      throw new Error();
     }return await r.json();
-   }catch(error){if(error instanceof DiscoveryFilterUnavailable)throw error;throw new Error('DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY');}
+   }catch(error){if(error instanceof DiscoveryFilterUnavailable)throw error;throw new DiscoveryProviderRequestError(stage,httpStatus);}
   },
   // Scope validation, reservation and one-use claim share one locked DB transaction.
   reserveAndClaim:()=>db<boolean>(filterPlan?'rpc/icash_reserve_and_claim_filtered_discovery':'rpc/icash_reserve_and_claim_property_discovery','POST',{p_account:accountId,p_zip:c.zip,p_revision:c.revision,p_page:c.next_page,p_per_page:c.per_page,p_rate:c.rate_id,p_unit:c.property_credit_micros,p_permission_until:c.data_rights_until,p_setup_revision:setup?.revision??null,p_market_mode:setup?.profile?.marketMode??null,p_market:setup?.profile?.market??null,...(filterPlan?{p_plan:filterPlan}:{})}),

@@ -13,7 +13,7 @@ export class SellerInventoryUnavailableError extends Error {
 }
 export async function voiceReservationFailure(path:string,status:number,response:Response):Promise<Error>{
  const voice=['rpc/icash_reserve_paced_voice','rpc/icash_reserve_flexible_voice'].includes(path);
- if(status===400&&(voice||['rpc/icash_reserve_operation','rpc/icash_reserve_and_claim_property_discovery','rpc/icash_claim_text','rpc/icash_claim_customer_text'].includes(path))){
+ if(status===400&&(voice||['rpc/icash_reserve_operation','rpc/icash_reserve_and_claim_property_discovery','rpc/icash_reserve_and_claim_filtered_discovery','rpc/icash_claim_text','rpc/icash_claim_customer_text'].includes(path))){
   try{const body=await response.json();
    if(['rpc/icash_claim_text','rpc/icash_claim_customer_text'].includes(path)&&body?.code==='P0001'&&body?.message==='Seller inventory assigned or suppressed')return new SellerInventoryUnavailableError();
    if(voice&&body?.code==='P0001'&&body?.message==='Activation spending cap reached')return new VoiceActivationBudgetError();

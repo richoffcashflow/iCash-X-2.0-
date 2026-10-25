@@ -5,9 +5,10 @@ import {ProspectingBudgetError,voiceReservationFailure} from '../lib/voice-budge
 import {automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '../lib/live-work-admission.ts';
 process.env.ICASH_LIVE_WORK_READY='true';
 const rejection={code:'P0001',message:'Prospecting budget reached',details:JSON.stringify({quoteCents:977})};
-for(const path of ['rpc/icash_reserve_operation','rpc/icash_reserve_and_claim_property_discovery','rpc/icash_reserve_paced_voice','rpc/icash_reserve_flexible_voice','rpc/icash_claim_text','rpc/icash_claim_customer_text']){
+for(const path of ['rpc/icash_reserve_operation','rpc/icash_reserve_and_claim_property_discovery','rpc/icash_reserve_and_claim_filtered_discovery','rpc/icash_reserve_paced_voice','rpc/icash_reserve_flexible_voice','rpc/icash_claim_text','rpc/icash_claim_customer_text']){
  const result=await voiceReservationFailure(path,400,Response.json(rejection));assert(result instanceof ProspectingBudgetError);assert.equal(result.quoteCents,977);
 }
+for(const [status,body] of [[503,rejection],[400,{...rejection,code:'XX000'}],[400,{...rejection,message:'Provider outcome unknown'}],[400,{...rejection,details:'bad'}],[400,{...rejection,details:'{"quoteCents":0}'}]])assert(!(await voiceReservationFailure('rpc/icash_reserve_and_claim_filtered_discovery',status,Response.json(body)) instanceof ProspectingBudgetError));
 for(const [path,status,body] of [['rpc/other',400,rejection],['rpc/icash_reserve_operation',503,rejection],['rpc/icash_reserve_operation',400,{...rejection,code:'XX000'}],['rpc/icash_reserve_operation',400,{...rejection,details:'bad'}],['rpc/icash_reserve_operation',400,{...rejection,details:'{"quoteCents":0}'}]])assert(!(await voiceReservationFailure(path,status,Response.json(body)) instanceof ProspectingBudgetError));
 let failure=new ProspectingBudgetError(977),safe=true,authorized=true;const calls=[];
 const mocks={ProspectingBudgetError,automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation,

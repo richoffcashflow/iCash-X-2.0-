@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 25, 2026 the owner requested lower bandwidth and efficient operation at scale. Keep webinar polling reads narrow with fresh visitor ownership and session-state checks. Public uploads use versioned paths and 30-day browser caching; optimize existing saved recordings through verified immutable copies, preserving current viewer snapshots and private course access. An exhausted DealMachine quota must skip acquisition scans and leave unrelated work available. Keep actual counters, the 50/minute and 4,900/day application bounds, provider limits, customer budgets and unknown-outcome holds; higher provider capacity requires verified entitlement.
+
 - Keep repeated active-call capacity checks narrow: look up only the active job's account-bound contact targets before joining their union. Preserve identical operation/contact rows, unknown holds, terminal-receipt exclusions and service-role-only access.
 
 - Release active-call capacity promptly for an expired issued voice ticket with one completed failed handler, no admitted operation, no recording claim, no provider identity and no conversation. Keep its ticket held and preserve all uncertain provider outcomes; this capacity correction never authorizes a retry or changes spending. The existing five-minute job reset remains separate.

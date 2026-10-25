@@ -7,7 +7,7 @@ export async function POST(req:Request){try{
  webinarOrigin(req);
  const parsed=z.object({sessionId:z.guid()}).strict().safeParse(await webinarBody(req,200));
  if(!parsed.success)throw new WebinarError(400,'A valid session is required.');
- const {v,s}=await webinarSession(parsed.data.sessionId);
+ const {v,s}=await webinarSession(parsed.data.sessionId,true);
  await webinarLimit(req,v.id,'activity',12,60);
  const serverNow=Date.now();
  if(s.is_preview||s.superseded_at)return Response.json({events:[],serverNow},{headers:webinarHeaders});
