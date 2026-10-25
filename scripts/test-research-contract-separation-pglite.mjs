@@ -1,9 +1,11 @@
+import {dealMachineRequest,DealMachineQuotaError} from '../lib/dealmachine-request.ts';
+import {syncResearchExclusions} from '../lib/research-exclusions.ts';
 /** SIMULATION ONLY. Actual SQL/services in ephemeral PostgreSQL; synthetic provider requests only. */
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import {createJourneyDb,read} from '../tests/helpers/simulated-journey-db.mjs';
-import {databaseAdapter,loadService} from '../tests/helpers/simulated-journey-services.mjs';
+import {databaseAdapter,loadService,legacyResearchFixtureDb} from '../tests/helpers/simulated-journey-services.mjs';
 import {discoveryWorkEnabled,contactWorkEnabled,liveWorkReady} from '../lib/live-work-admission.ts';
 import {discoverPage} from '../lib/discovery-pipeline.ts';
 import {validateCostManifest} from '../lib/cost-manifest.ts';
@@ -51,7 +53,7 @@ try{
  await q('insert into icash_spend_activations(account_id,enabled,customer_cap_cents) values($1,true,300)',[account]);
  const costs=await loadService('lib/operating-costs.ts',{db,validateCostManifest,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady});
  const market=await loadService('lib/contract-coverage-service.ts',{db});
- const discovery=await loadService('lib/discovery-service.ts',{db,discoveryWorkEnabled,liveWorkReady,dispatchReservedOperation:costs.dispatchReservedOperation,discoverPage,propertyResearchMarketKnown:market.propertyResearchMarketKnown});
+ const discovery=await loadService('lib/discovery-service.ts',{db:legacyResearchFixtureDb(db),dealMachineRequest,DealMachineQuotaError,syncResearchExclusions,discoveryWorkEnabled,liveWorkReady,dispatchReservedOperation:costs.dispatchReservedOperation,discoverPage,propertyResearchMarketKnown:market.propertyResearchMarketKnown});
  globalThis.fetch=async(url,options)=>{
   assert.equal(url,'https://api.v2.dealmachine.com/v1/properties/search');const body=JSON.parse(options.body);
   assert.equal(body.per_page,5);assert.equal(body.contact_audience,'none');assert.equal(body.anchor,'properties');

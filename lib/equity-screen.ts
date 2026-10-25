@@ -1,6 +1,8 @@
 /** Preliminary screening, never a payoff statement, title clearance or authority to close. */
 function money(v:unknown,signed=false){if(typeof v!=='number'||!Number.isFinite(v)||(!signed&&v<0))return null;const n=Math.round(v*100);return Number.isSafeInteger(n)?n:null;}
-function bool(v:unknown){return typeof v==='boolean'?v:null;}
+// DealMachine returns both JSON booleans and observed Yes/No string flags.
+// Unknown values stay unknown; a string "No" must never become truthy.
+function bool(v:unknown){return typeof v==='boolean'?v:v==='Yes'?true:v==='No'?false:null;}
 function count(v:unknown){return typeof v==='number'&&Number.isSafeInteger(v)&&v>=0?v:null;}
 /** Use the lowest available estimate; never round a sub-70% value up to eligibility. */
 export function minimumEquityGate(d:Record<string,unknown>){

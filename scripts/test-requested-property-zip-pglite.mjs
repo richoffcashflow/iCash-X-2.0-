@@ -1,8 +1,10 @@
+import {dealMachineRequest,DealMachineQuotaError} from '../lib/dealmachine-request.ts';
+import {syncResearchExclusions} from '../lib/research-exclusions.ts';
 /** SIMULATION ONLY. Exact requested ZIP lookup; actual SQL/services, no external requests. */
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createJourneyDb,read} from '../tests/helpers/simulated-journey-db.mjs';
-import {databaseAdapter,loadService} from '../tests/helpers/simulated-journey-services.mjs';
+import {databaseAdapter,loadService,legacyResearchFixtureDb} from '../tests/helpers/simulated-journey-services.mjs';
 import {discoveryWorkEnabled,contactWorkEnabled,liveWorkReady} from '../lib/live-work-admission.ts';
 import {discoverPage} from '../lib/discovery-pipeline.ts';
 import {validateCostManifest} from '../lib/cost-manifest.ts';
@@ -76,7 +78,7 @@ try{
   assert.equal(await market.propertyResearchMarketKnown('94103',account),false);
  }finally{await q('rollback');}
  const costs=await loadService('lib/operating-costs.ts',{db,validateCostManifest,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady});
- const discovery=await loadService('lib/discovery-service.ts',{db,discoveryWorkEnabled,liveWorkReady,dispatchReservedOperation:costs.dispatchReservedOperation,discoverPage,propertyResearchMarketKnown:market.propertyResearchMarketKnown});
+ const discovery=await loadService('lib/discovery-service.ts',{db:legacyResearchFixtureDb(db),dealMachineRequest,DealMachineQuotaError,syncResearchExclusions,discoveryWorkEnabled,liveWorkReady,dispatchReservedOperation:costs.dispatchReservedOperation,discoverPage,propertyResearchMarketKnown:market.propertyResearchMarketKnown});
  assert.equal((await discovery.discoverForAccount(account)).status,'paused');assert.equal(paid,0);
  await q('update icash_operating_budget set enabled=true,require_company_reserve=false');
  await q('update icash_accounts set daily_limit_cents=300 where id=$1',[account]);
