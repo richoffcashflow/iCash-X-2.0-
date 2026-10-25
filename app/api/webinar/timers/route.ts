@@ -7,7 +7,7 @@ export async function POST(req: Request) {
   try {
     webinarOrigin(req);
     const input = z.object({sessionId: z.guid(), seconds: z.number().int().min(0).max(14400)}).strict().parse(await webinarBody(req, 1000));
-    const {v, s} = await webinarSession(input.sessionId);
+    const {v, s} = await webinarSession(input.sessionId,true);
     await webinarLimit(req, v.id, 'timers', 30, 60);
     if (s.is_preview || s.superseded_at) return Response.json({deadlines: {}, offerDeadlines: {}, serverNow: Date.now()}, {headers: webinarHeaders});
     const result = timerResponseSchema.parse(await db('rpc/icash_webinar_timers', 'POST', {p_visitor: v.id, p_session: s.id, p_seconds: input.seconds}));

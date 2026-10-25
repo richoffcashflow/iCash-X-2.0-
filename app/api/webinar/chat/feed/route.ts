@@ -7,7 +7,7 @@ export async function POST(req:Request){try{
  webinarOrigin(req);
  const input=z.object({sessionId:z.guid()}).strict().safeParse(await webinarBody(req,200));
  if(!input.success)throw new WebinarError(400,'A valid session is required.');
- const {v,s}=await webinarSession(input.data.sessionId);
+ const {v,s}=await webinarSession(input.data.sessionId,true);
  await webinarLimit(req,v.id,'chat-feed',30,60);
  if(s.superseded_at)return Response.json({messages:[],statuses:[]},{headers:webinarHeaders});
  const [shared,own]=await Promise.all([

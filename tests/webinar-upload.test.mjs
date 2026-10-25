@@ -14,7 +14,9 @@ try{
  globalThis.fetch=async(url,init)=>{
   if(String(url).includes('/object/upload/sign/'))return Response.json({url:'/object/upload/sign/icash-webinars/owner/upload-id.mp4?token=test.signed.token'});
   assert.equal(url,'https://upload-test.storage.supabase.co/storage/v1/upload/resumable/sign');
-  assert.equal(init.headers['x-signature'],'test.signed.token');assert.equal(init.headers['Upload-Length'],'259737057');initialized=true;
+  assert.equal(init.headers['x-signature'],'test.signed.token');assert.equal(init.headers['Upload-Length'],'259737057');
+  const metadata=Object.fromEntries(init.headers['Upload-Metadata'].split(',').map(entry=>{const [name,value]=entry.split(' ');return [name,Buffer.from(value,'base64').toString()];}));
+  assert.equal(metadata.cacheControl,'2592000');assert.equal(metadata.objectName,'owner/upload-id.mp4');initialized=true;
   return new Response(null,{status:201,headers:{Location:url+'/upload-id'}});
  };
  const response=await POST(new Request('https://app.test/api/webinar/studio/upload',{method:'POST',body:JSON.stringify({type:'video/mp4',size:259737057})}));

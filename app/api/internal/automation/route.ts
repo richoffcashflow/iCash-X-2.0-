@@ -60,6 +60,10 @@ export async function POST(request:Request){
   if(ticket&&error instanceof ProspectingBudgetError){
    try{if(await db<boolean>('rpc/icash_hold_prospecting_ticket','POST',{p_id:ticket.id,p_account:ticket.accountId,p_quote:error.quoteCents}))return NextResponse.json({status:'prospecting_budget_held'},{headers});}catch{/* Unknown outcomes retain reconciliation. */}
   }
+  // Fixed codes only: never log provider bodies, account details or capabilities.
+  const reason=error instanceof Error&&['Database request failed','DISCOVERY_RATE_LIMIT','DISCOVERY_CONFIGURATION_INVALID','DISCOVERY_FILTER_INVALID','DISCOVERY_ESTIMATE_INVALID','DISCOVERY_RATE_TOO_LOW','DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY','DISCOVERY_RESPONSE_REQUIRES_RECONCILIATION','DISCOVERY_DELIVERY_REQUIRES_RECONCILIATION'].includes(error.message)?error.message:'unclassified';
+  const provider=error as {stage?:unknown;httpStatus?:unknown}|null;
+  console.error('automation_held',{kind:ticket?.kind??'unclaimed',reason,...(reason==='DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY'?{stage:provider?.stage==='estimate'?'estimate':provider?.stage==='paid'?'paid':'unknown',httpStatus:typeof provider?.httpStatus==='number'&&Number.isInteger(provider.httpStatus)&&provider.httpStatus>=100&&provider.httpStatus<=599?provider.httpStatus:null}:{})});
   if(ticket)try{
    if(ticket.kind==='contacts')await db('rpc/icash_finish_owner_enrichment','POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_success:false,p_outcome:'held_for_reconciliation'});
    else await db('rpc/icash_finish_automation','POST',{p_id:ticket.id,p_success:false,p_outcome:'held_for_reconciliation'});
