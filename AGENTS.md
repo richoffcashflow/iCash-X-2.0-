@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- Save a dial result or uncertainty hold with a separate bounded database deadline, even when provider work times out or its caller disconnects. Never use that writer to start provider work, retry a dial, release an unknown hold or bypass a changed release. Log only the fixed dispatch stage/reason and whether the hold was saved.
+
 - Recover a call-creation rejection only from the original carrier alert, exact account/recipient/request nonce and documented pre-creation error. Settle confirmed rejected requests at zero, keep their jobs and tickets closed to retries, and exclude their slots only while no contradictory call or conversation identity exists. Missing or ambiguous original receipts remain held; never infer failure from age or an empty call search.
 
 - On October 25, 2026 the owner requested lower bandwidth and efficient operation at scale. Keep webinar polling reads narrow with fresh visitor ownership and session-state checks. Public uploads use versioned paths and 30-day browser caching; optimize existing saved recordings through verified immutable copies, preserving current viewer snapshots and private course access. An exhausted DealMachine quota must skip acquisition scans and leave unrelated work available. Keep actual counters, the 50/minute and 4,900/day application bounds, provider limits, customer budgets and unknown-outcome holds; higher provider capacity requires verified entitlement.

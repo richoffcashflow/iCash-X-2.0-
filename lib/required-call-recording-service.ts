@@ -9,7 +9,7 @@ import {usdMicros} from './voice-usage-service.ts';
 import {affirmativeSpeech,recordingGateOptOut,audioAvailable,endTwiml,object,privateHeaders,readRecordingReview,recordingAgentMatches,recordingBaseUrl,recordingDisclosure,recordingPolicy,recordingPricing,sha,sid,uuid,verifiedTwilioForm,consentTwiml,type RecordingRow,type RecordingReview} from './required-call-recording.ts';
 import {boundedBytes,RecordingProviderError,type RecordingEnv,type RecordingProviders} from './required-call-recording-provider.ts';
 export type RecordingDb=<T=unknown>(path:string,method?:string,body?:unknown)=>Promise<T>;
-export type RecordingDeps={db:RecordingDb;provider:RecordingProviders;now?:()=>number;dispatchAllowed?:()=>boolean};
+export type RecordingDeps={db:RecordingDb;receiptDb?:RecordingDb;provider:RecordingProviders;now?:()=>number;dispatchAllowed?:()=>boolean};
 const hangup=()=>new Response('<Response><Hangup/></Response>',{headers:{...privateHeaders,'Content-Type':'text/xml'}});
 const xml=(s:string)=>new Response(s,{headers:{...privateHeaders,'Content-Type':'text/xml'}});
 const eq=encodeURIComponent;
@@ -27,7 +27,7 @@ function finalRecordingPayload(p:Record<string,unknown>){
  const price=typeof p.price==='string'&&/^-?\d+(?:\.\d{1,6})?$/.test(p.price)&&p.price_unit==='USD'?usdMicros(p.price.replace(/^-/,'') ):null;
  return {recordingSid:p.sid,providerStartedAt:new Date(start).toISOString(),endedAt:new Date(start+duration*1000).toISOString(),durationSeconds:duration,...(price===null?{}:{providerRecordingPriceMicros:price})};
 }
-export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,dispatchAllowed=()=>true}:RecordingDeps){
+export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=Date.now,dispatchAllowed=()=>true}:RecordingDeps){
  async function endBound(row:RecordingRow){
   if(!row.call_sid)return false;
   if(row.start_claimed_at&&!row.end_requested_at){const requested=await transition(db,row,'stop',{stopTokenHash:row.stop_token_hash}).catch(()=>null);if(requested)Object.assign(row,requested);}
@@ -43,9 +43,9 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
   const tool=await provider.tool(review.stopToolId),config=object(tool.tool_config),api=object(config.api_schema),body=object(api.request_body_schema),props=object(body.properties),id=object(props.recordingId),auth=object(object(api.request_headers).Authorization);
   return tool.id===review.stopToolId&&config.type==='webhook'&&config.name==='icash_stop_recording'&&api.url===recordingBaseUrl+'/stop'&&api.method==='POST'&&Object.keys(auth).length===1&&auth.variable_name==='secret__icash_recording_stop_token'&&body.type==='object'&&Array.isArray(body.required)&&body.required.length===1&&body.required[0]==='recordingId'&&Object.keys(props).length===1&&id.type==='string'&&id.dynamic_variable==='icash_recording_id'&&(api.auth_connection===null||api.auth_connection===undefined)&&(!tool.response_mocks||Array.isArray(tool.response_mocks)&&tool.response_mocks.length===0);
  }
- async function bindCall(row:RecordingRow,call:Record<string,unknown>){
+ async function bindCall(row:RecordingRow,call:Record<string,unknown>,writer:RecordingDb=db){
   if(!canonicalCall(row,call,now()))return null;
-  return row.call_sid?row:transition(db,row,'bind_call',{callSid:call.sid,providerAccountSid:call.account_sid,fromPhone:call.from,toPhone:call.to});
+  return row.call_sid?row:transition(writer,row,'bind_call',{callSid:call.sid,providerAccountSid:call.account_sid,fromPhone:call.from,toPhone:call.to});
  }
  return {
   /** Internal adapter only. SQL requires already-reserved/dispatched operation and reviewed contact gates.
@@ -65,14 +65,22 @@ export function recordingService(env:RecordingEnv,{db,provider,now=Date.now,disp
    let row=await db<RecordingRow|null>('rpc/icash_create_direct_recorded_call','POST',{p_account:input.accountId,p_operation:input.operationKey,p_provider_account_sid:review.providerAccountSid,p_call_sid:null,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(stop),p_disclosure_version:recordingPolicy.disclosureVersion,p_pricing_policy:recordingPricing,p_context:{fromPhone,branchId:review.branchId,versionId:review.versionId,maxTotalSeconds:maxSeconds,callContext:{principal:input.principal,assistantName:input.assistantName,firstMessage:input.firstMessage,prompt:input.prompt,strategyKey:input.strategyKey,...(input.voiceId?{voiceId:input.voiceId}:{})}}});
    if(!row)return {status:'recording_admission_held'};
    if(!dispatchAllowed())return {status:'recording_release_required'};
-   row=await transition(db,row,'claim_dial');if(!row)return {status:'recording_dial_already_claimed'};
-   // A changed release after any asynchronous preflight/admission cannot start a call.
-   if(!dispatchAllowed())return {status:'recording_release_required'};
+   let stage='dial_claim';
    try{
+    const claimed=await transition(db,row,'claim_dial');if(!claimed)return {status:'recording_dial_already_claimed'};row=claimed;
+    // A changed release or expired deadline after admission cannot start a call.
+    if(!dispatchAllowed())return {status:'recording_release_required'};
+    stage='dial';
     const call=await provider.dial(row.from_phone,row.to_phone,directCallTwiml(recordingBaseUrl+'/connect',row.id,nonce),recordingBaseUrl+'/terminal?id='+row.id,row.max_total_seconds);
-    const bound=await bindCall(row,call);if(!bound)throw Error('CALL_BINDING_UNCERTAIN');
+    stage='bind_call';
+    const bound=await bindCall(row,call,receiptDb);if(!bound)throw Error('CALL_BINDING_UNCERTAIN');
     return {status:'recording_consent_pending',recordingId:row.id};
-   }catch{await transition(db,row,'dial_unknown').catch(()=>null);return {status:'recording_dial_unknown_no_retry'};}
+   }catch(error){
+    const saved=await transition(receiptDb,row,'dial_unknown').catch(()=>null);
+    const reason=error instanceof Error&&['AbortError','TimeoutError'].includes(error.name)?'deadline_exceeded':'provider_or_database_outcome_unknown';
+    console.warn('recording_dispatch_held',{stage,recordingId:row.id,reason,holdSaved:!!saved});
+    return {status:'recording_dial_unknown_no_retry'};
+   }
   },
   async consent(request:Request,noticeMode=false,directMode=false){
    let row:RecordingRow|null=null;
