@@ -22,7 +22,7 @@ export async function POST(req:Request) {
  if(event.type.startsWith('charge.dispute.'))await recordDisputeEvent(event);
  if(event.type==="checkout.session.completed"||event.type==="checkout.session.async_payment_succeeded"){
   const s=event.data.object;
-  if(s.payment_status==="paid"){
+  if(s.payment_status==="paid"||(s.payment_status==="no_payment_required"&&s.metadata?.icash_legacy_trial==='legacy-trial-2026-10-25.1')){
    if(s.metadata?.icash_private_vip)await reconcilePrivateVipCheckout(s.id);
    else if(s.metadata?.icash_vip_change)await reconcileVipCheckout(s.id);
    else if(s.metadata?.icash_membership)await reconcileMembershipSession(s.id);

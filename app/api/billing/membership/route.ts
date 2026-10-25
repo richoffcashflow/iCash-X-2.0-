@@ -81,6 +81,7 @@ export async function POST(req:Request){
  if(!paymentEmail&&i.action!=='prepare')return NextResponse.json({error:'Enter your payment email to check for an existing purchase before opening checkout.'},{status:422,headers});
  const filter=account?`account_id=eq.${account.id}`:`guest_hash=eq.${hash}`;const [prior]=await db<Membership[]>(`icash_memberships?${filter}&mode=eq.${mode}&state=neq.cancelled&select=*&limit=1`);
  if(prior){
+  if(prior.legacy_trial_offer&&prior.state==='pending')return NextResponse.json({error:'Your returning-customer checkout already exists. Return to /legacy-offer to continue without starting another subscription.'},{status:409,headers});
   if(prior.account_id!==(account?.id??null))return NextResponse.json({error:'This browser has another account’s checkout. Sign in to that account to continue.'},{status:409,headers});
   paymentEmail??=normalizeEmail(prior.checkout_email);
   if(prior.state!=='pending')return NextResponse.json({error:'Your software subscription already exists. Open your workspace or manage your payment.'},{status:409,headers});

@@ -14,13 +14,13 @@ export function PurchaseAccountAccess(){
    const response=await fetch('/api/account/access?'+query,{cache:'no-store',signal:AbortSignal.timeout(20000)}),data=await response.json();
    if(!alive.current)return;
    setSignedIn(data.signedIn===true);setReady(data.signInReady!==false);
-   if(!response.ok)throw Error(data.error||'Please try again. Your payment is saved.');
+   if(!response.ok)throw Error(data.error||'Please try again. Your checkout is saved.');
    if(data.signedIn){
     // Only app-owned destinations can leave this page. Query input is never a redirect.
     if(data.destination!=='/'&&!/^\/live\/\d{6,12}$/.test(data.destination??''))throw Error('Your access link could not be opened. Please contact support.');
     window.location.assign(data.destination);return;
    }
-  }catch(e){if(alive.current)setError(e instanceof Error?e.message:'Please try again. Your payment is saved.');}
+  }catch(e){if(alive.current)setError(e instanceof Error?e.message:'Please try again. Your checkout is saved.');}
   finally{busy.current=false;if(alive.current)setLoading(false);}
  }
  async function switchEmail(){
@@ -29,5 +29,5 @@ export function PurchaseAccountAccess(){
   catch(e){setError(e instanceof Error?e.message:'Please retry.');setLoading(false);}
  }
  useEffect(()=>{alive.current=true;void restore();return()=>{alive.current=false;};},[]);
- return <main className="purchase-access-shell"><a className="purchase-access-logo" href="/access" aria-label="iCash X account access"><IcashMark/></a><section className="purchase-access-card"><h1>Open your iCash X account.</h1><p>Use the same email you paid with to create your account or sign back in.</p><p className="purchase-access-note">Already paid? You do not need to pay again.</p>{loading?<p role="status">Checking your account…</p>:<>{error&&<p role="alert">{error}</p>}{signedIn?<><button className="fund-button full" onClick={()=>void restore()}>Try again</button><button className="demo-button" onClick={()=>void switchEmail()}>Sign in with a different email</button><a className="purchase-access-workspace" href="/">Open my workspace</a></>:<><AccountAccess ready={ready} onSignedIn={()=>void restore()}/>{error&&<button className="demo-button" onClick={()=>void restore()}>Check again</button>}</>}</>}</section><a className="purchase-access-help" href="/access/help">Need help with your purchase?</a></main>;
+ return <main className="purchase-access-shell"><a className="purchase-access-logo" href="/access" aria-label="iCash X account access"><IcashMark/></a><section className="purchase-access-card"><h1>Open your iCash X account.</h1><p>Use the same email you used at checkout to create your account or sign back in.</p><p className="purchase-access-note">Already completed checkout? You do not need to start another checkout.</p>{loading?<p role="status">Checking your account…</p>:<>{error&&<p role="alert">{error}</p>}{signedIn?<><button className="fund-button full" onClick={()=>void restore()}>Try again</button><button className="demo-button" onClick={()=>void switchEmail()}>Sign in with a different email</button><a className="purchase-access-workspace" href="/">Open my workspace</a></>:<><AccountAccess ready={ready} onSignedIn={()=>void restore()}/>{error&&<button className="demo-button" onClick={()=>void restore()}>Check again</button>}</>}</>}</section><a className="purchase-access-help" href="/access/help">Need help with your account?</a></main>;
 }
