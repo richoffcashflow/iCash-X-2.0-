@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {supportWorkspaceUrl,supportVipUpgradeUrl} from '../lib/support-coaching.ts';
+const source=ts.transpileModule(readFileSync(new URL('../components/support-message-content.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.React}}).outputText.replace(/^import .*;\s*$/gm,'');
+globalThis.__supportMessage={React,supportWorkspaceUrl,supportVipUpgradeUrl};
+const {SupportMessageContent}=await import('data:text/javascript;base64,'+Buffer.from('const {React,supportWorkspaceUrl,supportVipUpgradeUrl}=globalThis.__supportMessage;'+source).toString('base64'));
+const render=(content,role='assistant')=>renderToStaticMarkup(React.createElement(SupportMessageContent,{content,role}));
+assert.match(render(supportVipUpgradeUrl+'.'),/href="https:\/\/www.geticashx.com\/\?upgrade=vip"/);
+assert.match(render(supportWorkspaceUrl),/>Open workspace<\/a>/);
+assert.doesNotMatch(render(supportVipUpgradeUrl,'user'),/<a/);
+for(const url of ['https://evil.example/',supportWorkspaceUrl+'evil',supportVipUpgradeUrl+'&redirect=evil',supportWorkspaceUrl+'?redirect=evil',supportVipUpgradeUrl+'x'])assert.doesNotMatch(render(url),/<a/,url);
+assert.doesNotMatch(render('<script>alert(1)</script>'),/<script>/);
+for(const file of ['support-chat.tsx','access-help.tsx'])assert.match(readFileSync(new URL('../components/'+file,import.meta.url),'utf8'),/<SupportMessageContent content=/);
+console.log('Support links: exact allowlist, assistant-only links, spoof suffix rejection, escaped text and both customer surfaces passed.');

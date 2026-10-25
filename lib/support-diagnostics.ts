@@ -17,6 +17,7 @@ export async function collectSupportDiagnostics(accountId:string):Promise<Suppor
   try{return {key,source,observedAt,...await fn()};}catch{return {key,source,observedAt,status:'unknown',detail:`The ${key} check is temporarily unavailable. Nothing was changed.`};}
  };
  return Promise.all([
+  check('vip','icash_vip_features_active',async()=>{const active=await db<unknown>('rpc/icash_vip_features_active','POST',{p_account:accountId});if(typeof active!=='boolean')throw Error('VIP_UNKNOWN');return {status:'ok',code:active?'vip_active':'vip_inactive',detail:active?'VIP features are active.':'VIP features are not active.'};}),
   check('outreach','icash_support_outreach_diagnostics',async()=>supportOutreachEvidence(await db('rpc/icash_support_outreach_diagnostics','POST',{p_account:accountId}))),
   check('course','icash_course_progress',async()=>{const course=await readCourseProgress(accountId);return {...courseProgressEvidence(course),course};}),
   check('work','icash_accounts',async()=>{const [a]=await db<{bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=bot_paused`);if(!a||typeof a.bot_paused!=='boolean')throw Error();return {code:a.bot_paused?'paused':'not_paused',status:a.bot_paused?'attention':'ok',detail:a.bot_paused?'Your bot is paused. New automated work is stopped; previously authorized work may still finish. The pause flag alone does not tell us why it was paused.':'Your bot is not paused. Other safety and readiness checks still apply.'};}),

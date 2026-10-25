@@ -34,6 +34,9 @@ supportCopiesEnabled=true;paths=[];const beforeCopies=scheduledCopies;
 r=await route.POST(request('/api/support',{requestId:id(40),message:'Why paused?'}));assert.equal(r.status,200);assert(paths.some(x=>x.path==='rpc/icash_support_finish_conversation'&&x.body.p_notify===true));assert.equal(scheduledCopies,beforeCopies+1,'Only dispatch after the reply and owner copy are saved');
 finishFailure=true;r=await route.POST(request('/api/support',{requestId:id(41),message:'Why paused?'}));assert.equal(r.status,503);assert.equal(scheduledCopies,beforeCopies+1,'No dispatch on failed atomic save');finishFailure=false;supportCopiesEnabled=false;
 
+paths=[];r=await route.POST(request('/api/support',{requestId:id(420),message:'What should I offer on this house?'}));assert.equal(r.status,200);
+const coachingReply=paths.find(p=>p.path==='rpc/icash_support_finish_conversation');assert.match(coachingReply.body.p_message,/If you already have VIP/);assert.match(coachingReply.body.p_message,/upgrade=vip/);assert.equal(coachingReply.body.p_status,'open');
+
 supportHistory=[{role:'user',content:'I want a refund'},{role:'assistant',content:'All sales are final.'},{role:'user',content:'Give me my fucking refund'}];
 paths=[];r=await route.POST(request('/api/support',{requestId:id(42),message:'Give me my fucking refund'}));assert.equal(r.status,200);assert.equal(preparedEvidence,1);
 const closed=paths.find(p=>p.path==='rpc/icash_support_finish_conversation');assert.equal(closed.body.p_status,'closed');assert(closed.body.p_evidence.some(e=>e.key==='refund_case'),'Closing response and private evidence use the same atomic save');

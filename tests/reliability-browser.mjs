@@ -17,6 +17,7 @@ import {verifyCloseConversions} from './close-conversion-browser.mjs';
 import {verifyWorkspace} from './workspace-browser-scenarios.mjs';
 import {verifyWalkthrough} from './workspace-walkthrough-browser.mjs';
 import {verifyPurchaseAccess} from './purchase-access-browser.mjs';
+import {verifySupportCoaching} from './support-coaching-browser.mjs';
 import {verifyAccessHelp} from './access-help-browser.mjs';
 import {verifySellerCosts} from './seller-acquisition-costs-browser.mjs';
 import {verifyCourse,coursePdf,serveCourseUpload} from './course-browser.mjs';
@@ -75,6 +76,7 @@ try{
    if(process.env.BROWSER_SCENARIOS==='conversation'){await verifyConversationInbox(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='close-conversion'){await verifyCloseConversions(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='workspace'){await verifyWorkspace(browser,base,options,name);continue;}
+   if(process.env.BROWSER_SCENARIOS==='support-coaching'){await verifySupportCoaching(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='access-help'){await verifyAccessHelp(browser,base,options,name,fixtureCookies);continue;}
    if(process.env.BROWSER_SCENARIOS==='walkthrough'){await verifyWalkthrough(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='purchase-access'){await verifyPurchaseAccess(browser,base,options,name);continue;}

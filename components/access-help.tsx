@@ -1,4 +1,5 @@
 'use client';
+import {SupportMessageContent} from '@/components/support-message-content';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import type {AccessHelpConversation} from '@/lib/access-help';
 import {supportRequest} from '@/lib/support-client';
@@ -26,7 +27,7 @@ export function AccessHelp(){
   {error&&<p role="alert">{error} <button type="button" disabled={busy} onClick={()=>void load()}>Refresh support</button></p>}
   {notice&&<p role="status">{notice}</p>}
   {loading?<p role="status">Opening support…</p>:<>
-   {conversation&&<><p><strong>{conversation.status==='waiting_on_customer'?'Support replied':conversation.status==='closed'?'Chat closed — reply below to reopen':conversation.status==='resolved'?'Marked resolved — reply below if you still need help':'Request saved'}</strong></p><div className="access-help-messages" role="log" aria-label="Access support messages">{conversation.messages.map(message=><article key={message.id}><strong>{message.role==='user'?'You':'Support'}</strong><p>{message.content}</p></article>)}</div><p className="sign-in-help">We’ll email {conversation.email} when support replies. Use the private link in that email to return on any device. You can also return in this browser within 7 days. Reference: {conversation.id.slice(0,8)}</p></>}
+   {conversation&&<><p><strong>{conversation.status==='waiting_on_customer'?'Support replied':conversation.status==='closed'?'Chat closed — reply below to reopen':conversation.status==='resolved'?'Marked resolved — reply below if you still need help':'Request saved'}</strong></p><div className="access-help-messages" role="log" aria-label="Access support messages">{conversation.messages.map(message=><article key={message.id}><strong>{message.role==='user'?'You':'Support'}</strong><p><SupportMessageContent content={message.content} role={message.role}/></p></article>)}</div><p className="sign-in-help">We’ll email {conversation.email} when support replies. Use the private link in that email to return on any device. You can also return in this browser within 7 days. Reference: {conversation.id.slice(0,8)}</p></>}
    {conversation?.notification&&(conversation.notification.status==='needs_review'||['bounced','complained','failed','suppressed'].includes(conversation.notification.delivery??''))&&<p role="status">We couldn’t confirm email delivery. Your replies are saved here; keep this page so you can continue the conversation.</p>}
    {ready?<form onSubmit={send} className="account-access">
     <label>Payment email<input type="email" autoComplete="email" required maxLength={254} disabled={busy||!!conversation} value={email} onChange={event=>setEmail(event.target.value)}/></label>
