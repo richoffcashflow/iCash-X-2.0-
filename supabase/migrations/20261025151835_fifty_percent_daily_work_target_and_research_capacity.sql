@@ -1,0 +1,33 @@
+-- The latest daily work goal is 50% of the verified funding baseline.
+-- Preserve actual usage, reservations, fair scheduling and admission limits.
+begin;
+set local lock_timeout='5s';
+set local statement_timeout='30s';
+do $patch$
+declare definition text;
+ baseline text:='baseline_cents::numeric*0.30';
+ percent text:='''percent'',30';
+begin
+ definition:=pg_get_functiondef('public.icash_daily_work_target(uuid)'::regprocedure);
+ if (length(definition)-length(replace(definition,baseline,'')))<>length(baseline)
+  or (length(definition)-length(replace(definition,percent,'')))<>length(percent) then
+  raise exception 'Daily work target prerequisite changed';
+ end if;
+ execute replace(replace(definition,baseline,'baseline_cents::numeric*0.50'),percent,'''percent'',50');
+end $patch$;
+
+do $patch$
+declare definition text;
+ old_start text:=' select (public.icash_outreach_voice_current(p_account) and exists(';
+ new_start text:=' select (case when public.icash_outgoing_voice_capacity_open() then public.icash_outreach_voice_current(p_account) and exists(';
+ old_end text:=' )) or (public.icash_outreach_sms_current(p_account) and exists(';
+ new_end text:=' ) else false end) or (public.icash_outreach_sms_current(p_account) and exists(';
+begin
+ definition:=pg_get_functiondef('public.icash_research_waiting_on_outreach(uuid)'::regprocedure);
+ if (length(definition)-length(replace(definition,old_start,'')))<>length(old_start)
+  or (length(definition)-length(replace(definition,old_end,'')))<>length(old_end) then
+  raise exception 'Research voice-capacity priority prerequisite changed';
+ end if;
+ execute replace(replace(definition,old_start,new_start),old_end,new_end);
+end $patch$;
+commit;

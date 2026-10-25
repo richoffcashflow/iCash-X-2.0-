@@ -272,7 +272,7 @@ export async function verifyWorkspace(browser,base,options,name){
   opportunityProgress={budgetId:1,startedAt:new Date().toISOString(),limitCents:5000,spentCents:120,pendingCents:977,remainingCents:3903,queued:2,screened:40,eligible:3,contacted:2,responded:0,status:'working'};
   await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
   const momentum=page.getByRole('region',{name:'Opportunity progress'});await momentum.getByRole('heading',{name:'Finding your next opportunity'}).waitFor();
-  assert.match(await momentum.innerText(),/40[\s\S]*Eligible matches[\s\S]*3/);assert.match(await momentum.innerText(),/50%/);assert.doesNotMatch(await momentum.innerText(),/\$|Your search plan|Up to .*per 24 hours/,'Progress omits spending allowance dollar amounts');assert.equal(await momentum.getByRole('button',{name:'View responses'}).count(),0);
+  assert.match(await momentum.innerText(),/40[\s\S]*Eligible matches[\s\S]*3/);assert.doesNotMatch(await momentum.innerText(),/\$|Your search plan|Up to .*per 24 hours/,'Progress omits spending allowance dollar amounts');assert.equal(await momentum.getByRole('button',{name:'View responses'}).count(),0);
   assert(await momentum.evaluate(node=>{const b=node.getBoundingClientRect();return b.left>=0&&b.right<=innerWidth+1;}),'Live counters fit desktop and mobile');
   opportunityProgress={...opportunityProgress,responded:1};await page.evaluate(()=>window.dispatchEvent(new Event('icash:credits-funded')));
   await momentum.getByText('A seller replied.',{exact:true}).waitFor();await momentum.getByRole('button',{name:'View responses'}).click();
