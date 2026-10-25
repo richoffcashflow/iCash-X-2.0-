@@ -4,6 +4,7 @@ import {liveConversationResult} from './deal-conversation.ts';
 import type {VoiceConversation} from './voice-result.ts';
 import {recordingHandoffDiagnostic} from './recording-handoff-diagnostic.ts';
 import {findMissingRecordedCall} from './missing-recorded-call-receipt.ts';
+import {findRejectedRecordedCall} from './rejected-recorded-call-receipt.ts';
 import {object,sha,sid,type RecordingRow} from './required-call-recording.ts';
 import {RecordingProviderError,type RecordingEnv,type RecordingProviders} from './required-call-recording-provider.ts';
 import {recordingReceipt,finalRecordingPayload,recordingTransition,recordingStopToken,type RecordingDb} from './required-call-recording-service.ts';
@@ -47,6 +48,18 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
      if(settled.settled)result.reconciled++;
      else{await finish(row,'reconcile','retry',{reason:settled.reason});result.held++;}
      continue;
+    }
+    if(['original_call_not_found','binding_not_eligible'].includes(recovery.status)&&typeof provider.listCallCreationAlerts==='function'){
+     const rejected=await findRejectedRecordedCall(row,provider,env);
+     if(rejected.status!=='binding_not_eligible')missingCallInspected=true;
+     console.warn('recording_reconcile_diagnostic',{stage:'creation_rejection',recordingId:row.id,reason:rejected.status,
+      ...(rejected.errorCode?{errorCode:rejected.errorCode}:{}),...(rejected.providerStatus?{providerStatus:rejected.providerStatus}:{}),
+      ...(rejected.alertCount!==undefined?{alertCount:rejected.alertCount,candidateCount:rejected.candidateCount,errorCodes:rejected.errorCodes}:{})});
+     if(rejected.proof){
+      stage='creation_rejection_commit';
+      const saved=await db<{settled:boolean}>('rpc/icash_note_call_creation_rejection','POST',{p_id:row.id,p_account:row.account_id,p_operation:row.operation_key,p_receipt:rejected.proof});
+      if(saved?.settled){result.reconciled++;continue;}
+     }
     }
    }
    if(row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!sid(row.call_sid,'CA'))throw Error('CALL_BINDING_REVIEW_REQUIRED');
