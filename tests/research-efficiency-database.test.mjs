@@ -69,6 +69,7 @@ await db.exec(`
  create function icash_settle_dealmachine_usage(text) returns boolean language plpgsql as $$begin update public.icash_operation_spend set state='settled',settled_at=now(),charged_cents=0 where operation_key=$1 and state='dispatched';return found;end$$;
 `);
 await db.exec(read('config/research-request-efficiency.sql'));
+await db.exec(read('config/research-request-indexes.sql'));
 await q("insert into icash_accounts(id,owner_user_id,assistant_name,bot_paused) values($1,$1,'Fixture',false),($2,$2,'Other',false)",[account,other]);
 await db.exec("insert into icash_operating_budget(id,enabled) values(1,true);insert into icash_market_shortlist values('75217','TX','Dallas');update icash_discovery_filter_settings set enabled=true;");
 const ownerRate=uuid(9);
