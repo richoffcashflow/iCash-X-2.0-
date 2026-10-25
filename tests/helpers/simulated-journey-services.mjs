@@ -45,6 +45,17 @@ export function databaseAdapter(pg){
  return {db,rpc,q,calls};
 }
 let seq=0;
+// The original journey schema predates request diagnostics and query-policy
+// rollout. Preserve its real limiter/admission while modeling those new, inert
+// metadata calls explicitly. research-efficiency-database exercises the new SQL.
+export function legacyResearchFixtureDb(db){
+ return (path,method,body)=>{
+  if(path==='rpc/icash_prepare_research_efficiency')return Promise.resolve(false);
+  if(path==='rpc/icash_claim_research_exclusions')return Promise.resolve(null);
+  if(path==='rpc/icash_finish_dealmachine_request')return Promise.resolve(true);
+  return db(path,method,path==='rpc/icash_take_dealmachine_request'?{}:body);
+ };
+}
 export async function loadService(file,deps){
  const key='__isolatedJourney'+seq++;globalThis[key]=deps;
  let code=ts.transpileModule(read(file),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;

@@ -1,9 +1,11 @@
+import {dealMachineRequest,DealMachineQuotaError} from '../lib/dealmachine-request.ts';
+import {syncResearchExclusions} from '../lib/research-exclusions.ts';
 // SIMULATION ONLY: isolated PostgreSQL functions and provider fixtures. No network.
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {createJourneyDb} from '../tests/helpers/simulated-journey-db.mjs';
-import {databaseAdapter,loadService} from '../tests/helpers/simulated-journey-services.mjs';
+import {databaseAdapter,loadService,legacyResearchFixtureDb} from '../tests/helpers/simulated-journey-services.mjs';
 import {enrichOwners} from '../lib/owner-enrichment.ts';
 import {runScreeningJob} from '../lib/screening-job.ts';
 import * as liveWorkAdmission from '../lib/live-work-admission.ts';
@@ -105,7 +107,7 @@ try{
   return adapter.db(path,method,body);
  };
  const {reserveOperation}=await loadService('lib/operating-costs.ts',{db,...liveWorkAdmission});
- const {enrichForAccount}=await loadService('lib/owner-enrichment-service.ts',{db,reserveOperation,enrichOwners,runScreeningJob,...liveWorkAdmission});
+ const {enrichForAccount}=await loadService('lib/owner-enrichment-service.ts',{db:legacyResearchFixtureDb(db),dealMachineRequest,DealMachineQuotaError,syncResearchExclusions,reserveOperation,enrichOwners,runScreeningJob,...liveWorkAdmission});
  process.env.ICASH_LIVE_WORK_READY='false';process.env.ICASH_CONTACT_WORK_READY='true';process.env.DEALMACHINE_API_KEY='dm_sk_live_fixture';
  globalThis.fetch=async(url,options)=>{
   if(options.method==='GET'){

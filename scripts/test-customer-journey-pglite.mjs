@@ -1,3 +1,5 @@
+import {dealMachineRequest,DealMachineQuotaError} from '../lib/dealmachine-request.ts';
+import {syncResearchExclusions} from '../lib/research-exclusions.ts';
 import {instantLeadsEnabled} from '../lib/meta-instant-lead-service.ts';
 import {instantLeadPrompt} from '../lib/meta-instant-leads.ts';
 import {signatureRequestMessage} from '../lib/signing-invitation.ts';
@@ -11,7 +13,7 @@ import assert from 'node:assert/strict';
 import {createHash,randomBytes,randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import {createJourneyDb} from '../tests/helpers/simulated-journey-db.mjs';
-import {databaseAdapter,loadService} from '../tests/helpers/simulated-journey-services.mjs';
+import {databaseAdapter,loadService,legacyResearchFixtureDb} from '../tests/helpers/simulated-journey-services.mjs';
 import {discoveryWorkEnabled,contactWorkEnabled,liveWorkReady} from '../lib/live-work-admission.ts';
 import {discoverPage} from '../lib/discovery-pipeline.ts';
 import {runScreeningJob} from '../lib/screening-job.ts';
@@ -137,7 +139,7 @@ try{await (async()=>{
  note('External sign-in and payment','NOT RUN','Supabase OTP/session verification and Stripe charge are fixture boundaries; auth.users is synthetic and funding receipt is not a real payment');
  const operating=await loadService('lib/operating-costs.ts',{db,validateCostManifest,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady});
  const coverage=await loadService('lib/contract-coverage-service.ts',{db,contractCapability,reviewedContractCoverage});
- const discovery=await loadService('lib/discovery-service.ts',{db,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady,dispatchReservedOperation:operating.dispatchReservedOperation,discoverPage,propertyResearchMarketKnown:coverage.propertyResearchMarketKnown});
+ const discovery=await loadService('lib/discovery-service.ts',{db:legacyResearchFixtureDb(db),dealMachineRequest,DealMachineQuotaError,syncResearchExclusions,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady,dispatchReservedOperation:operating.dispatchReservedOperation,discoverPage,propertyResearchMarketKnown:coverage.propertyResearchMarketKnown});
  assert.equal((await coverage.acquisitionContractCoverage('38118')).supported,false);
  assert.equal((await discovery.discoverForAccount(account)).status,'screening_queued');assert.equal(propertyRequests,1);
  assert.equal(await tick(rpc),true);
