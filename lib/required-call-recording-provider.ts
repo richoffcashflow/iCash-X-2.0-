@@ -26,6 +26,11 @@ export function createRecordingProviders(env:RecordingEnv,fetcher:typeof fetch=f
  const recordPath=(id:string)=>{if(!sid(id,'RE'))throw Error('RECORDING_ID_REQUIRED');return `/Recordings/${id}`;};
  return {
   getCall:(id:string)=>json(callPath(id)+'.json'),
+  // Discovery only. A number/time match never authorizes binding or a retry.
+  listCallCandidates:(from:string,to:string)=>{
+   if(!/^\+[1-9]\d{7,14}$/.test(from)||!/^\+[1-9]\d{7,14}$/.test(to))throw Error('CALL_PARTIES_REQUIRED');
+   return json('/Calls.json?'+new URLSearchParams({From:from,To:to,PageSize:'25',Page:'0'}));
+  },
   getCallNotifications:(id:string)=>json(callPath(id)+'/Notifications.json?PageSize=20'),
   // Read-only call diagnostics. Reconstruct the fixed resource path; never fetch a provider pagination URL.
   getCallEventsPage:(id:string,page=0,pageToken?:string)=>{

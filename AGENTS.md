@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- Keep funded work moving by bounding each new-research scheduler scan and skipping expensive eligibility checks when no current admission quote fits. Preserve overdue-account fairness and verified-funding wakeups. Missing recorded-call IDs may be recovered only from exact original provider requests and terminal receipts; phone/time matches alone never release a hold or authorize a replay.
+
 - On October 25, 2026 the owner raised the rolling daily work target to 50% of the verified funding baseline and removed both the "Start fast, then pace" allowance explanation and the outreach-hours paragraph from the opportunity-progress UI. Preserve actual progress, spending controls, recipient hours, fair account scheduling and the existing 50% prospecting allowance. Increase useful throughput by fixing measured bottlenecks; do not count queued work as completed usage or replay uncertain provider actions.
 - A full provider call queue must not freeze research and new text opportunities. Give first calls research priority only while verified outgoing capacity is open; keep ready SMS priority and all financial/recipient gates. Uncertain calls retain their capacity, recipient and billing holds until original provider receipts resolve them.
 
