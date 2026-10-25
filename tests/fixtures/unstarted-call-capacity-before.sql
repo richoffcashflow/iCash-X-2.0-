@@ -25,4 +25,3 @@ AS $function$
   )
  )
 $function$;
-
