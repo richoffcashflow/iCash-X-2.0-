@@ -43,9 +43,15 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
   const tool=await provider.tool(review.stopToolId),config=object(tool.tool_config),api=object(config.api_schema),body=object(api.request_body_schema),props=object(body.properties),id=object(props.recordingId),auth=object(object(api.request_headers).Authorization);
   return tool.id===review.stopToolId&&config.type==='webhook'&&config.name==='icash_stop_recording'&&api.url===recordingBaseUrl+'/stop'&&api.method==='POST'&&Object.keys(auth).length===1&&auth.variable_name==='secret__icash_recording_stop_token'&&body.type==='object'&&Array.isArray(body.required)&&body.required.length===1&&body.required[0]==='recordingId'&&Object.keys(props).length===1&&id.type==='string'&&id.dynamic_variable==='icash_recording_id'&&(api.auth_connection===null||api.auth_connection===undefined)&&(!tool.response_mocks||Array.isArray(tool.response_mocks)&&tool.response_mocks.length===0);
  }
- async function bindCall(row:RecordingRow,call:Record<string,unknown>,writer:RecordingDb=db){
-  if(!canonicalCall(row,call,now()))return null;
-  return row.call_sid?row:transition(writer,row,'bind_call',{callSid:call.sid,providerAccountSid:call.account_sid,fromPhone:call.from,toPhone:call.to});
+ async function bindCall(row:RecordingRow,call:Record<string,unknown>,writer:RecordingDb=db,fresh=true){
+  if(!canonicalCall(row,call,now(),false,fresh))return null;
+  if(row.call_sid)return row;
+  const bound=await transition(writer,row,'bind_call',{callSid:call.sid,providerAccountSid:call.account_sid,fromPhone:call.from,toPhone:call.to});
+  if(bound)return bound;
+  // A signed provider callback can bind the same call before the POST returns.
+  // Read that exact immutable binding; never issue a second provider request.
+  const current=await getRow(writer,row.id,row.account_id);
+  return current?.operation_key===row.operation_key&&current.call_sid===call.sid&&canonicalCall(current,call,now(),false,fresh)?current:null;
  }
  return {
   /** Internal adapter only. SQL requires already-reserved/dispatched operation and reviewed contact gates.
@@ -73,7 +79,11 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
     stage='dial';
     const call=await provider.dial(row.from_phone,row.to_phone,directCallTwiml(recordingBaseUrl+'/connect',row.id,nonce),recordingBaseUrl+'/terminal?id='+row.id,row.max_total_seconds);
     stage='bind_call';
-    const bound=await bindCall(row,call,receiptDb);if(!bound)throw Error('CALL_BINDING_UNCERTAIN');
+    // This is the authenticated response to this one-use dial claim, not a
+    // discovered call. Bind its exact identity without depending on an optional
+    // provider creation timestamp or synchronized clocks. GET/callback freshness
+    // checks remain unchanged, as do account, caller, recipient and direction.
+    const bound=await bindCall(row,call,receiptDb,false);if(!bound)throw Error('CALL_BINDING_UNCERTAIN');
     return {status:'recording_consent_pending',recordingId:row.id};
    }catch(error){
     const saved=await transition(receiptDb,row,'dial_unknown').catch(()=>null);
