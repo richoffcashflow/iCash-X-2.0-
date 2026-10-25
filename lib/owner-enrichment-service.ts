@@ -4,10 +4,12 @@ import {reserveOperation} from '@/lib/operating-costs';
 import {enrichOwners} from './owner-enrichment.ts';
 import {runScreeningJob} from './screening-job.ts';
 import {OwnerPreviewRateLimitError} from './owner-enrichment-deferral.ts';
+import {enrichOwnerBatch} from './owner-batch.ts';
+import {dealMachineRequest,DealMachineQuotaError} from './dealmachine-request.ts';
 const future=(value:string)=>Number.isFinite(Date.parse(value))&&Date.parse(value)>Date.now();
 export async function enrichForAccount(accountId:string,screeningId:string){
  if(!contactWorkEnabled())return {status:'live_work_not_ready'};
- const [c]=await db<{enabled:boolean;contacts_enabled:boolean;contact_rate_id:string;contact_credit_cap:number;property_credit_micros:number;data_rights_until:string}[]>(`icash_discovery_configs?account_id=eq.${accountId}&select=*`);
+ const [c]=await db<{enabled:boolean;contacts_enabled:boolean;contact_rate_id:string;contact_credit_cap:number;property_credit_micros:number;data_rights_until:string;research_version?:number}[]>(`icash_discovery_configs?account_id=eq.${accountId}&select=*`);
  if(!c?.enabled||!c.contacts_enabled||!c.contact_rate_id||!future(c.data_rights_until))return {status:'not_ready'};
  const jobPath=`icash_screening_jobs?id=eq.${screeningId}&account_id=eq.${accountId}&select=snapshot,state`;
  const [job]=await db<{snapshot:unknown;state:string}[]>(jobPath);
@@ -23,23 +25,18 @@ export async function enrichForAccount(accountId:string,screeningId:string){
  const [rate]=await db<{operation:string;enabled:boolean;expires_at:string;costs_micros:{dealmachine:number}}[]>(`icash_operation_rates?id=eq.${c.contact_rate_id}&select=operation,enabled,expires_at,costs_micros`);
  if(!rate?.enabled||rate.operation!=='owner_enrichment'||!future(rate.expires_at))return {status:'rate_required'};
  const key=process.env.DEALMACHINE_API_KEY;if(!key||!/^dm_sk_live_[A-Za-z0-9_-]+$/.test(key))return {status:'provider_not_configured'};
+ if(c.research_version===1)return enrichOwnerBatch(db,accountId,screeningId,c,rate.costs_micros.dealmachine);
  const operationKey=`owners:${accountId}:${screeningId}`;
  const frozenSnapshot=JSON.stringify(job.snapshot);
  let stage='validation',providerStatus:number|null=null;
  const request=async(url:string,init:RequestInit,error:string)=>{
   stage=init.method==='GET'?'free_preview':'paid_lookup';providerStatus=null;
-  const admitted=await db<boolean>('rpc/icash_take_dealmachine_request','POST',{});
-  if(admitted!==true){
-   // A local limiter refusal is safe to defer only before ANY provider request
-   // or reservation. A paid-stage refusal retains its already-claimed operation.
-   if(admitted===false&&stage==='free_preview')throw new OwnerPreviewRateLimitError(accountId,screeningId);
-   throw new Error('PROVIDER_RATE_LIMIT');
-  }
+  let started=false;
   try{
-   const r=await fetch(url,{...init,headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
+   const r=await dealMachineRequest(db,stage==='free_preview'?'owner_preview':'owner_lookup',()=>{started=true;return fetch(url,{...init,headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});},{accountId,operationKey});
    providerStatus=r.status;
-   if(!r.ok)throw new Error();return await r.json();
-  }catch{throw new Error(error);}
+   if(!r.ok)throw new Error();return r.raw;
+  }catch(cause){if(cause instanceof DealMachineQuotaError){if(stage==='free_preview')throw new OwnerPreviewRateLimitError(accountId,screeningId);throw Error('PROVIDER_RATE_LIMIT');}if(!started)throw cause;throw new Error(error);}
  };
  try{return await enrichOwners({snapshot:job.snapshot,creditCap:c.contact_credit_cap,unitCostMicros:c.property_credit_micros,quotedDataCostMicros:rate.costs_micros?.dealmachine},{
   previewOwners:id=>request(`https://api.v2.dealmachine.com/v1/properties/${id}?enrich=false&contact_audience=owners`,{method:'GET'},'OWNER_PREVIEW_FAILED_NO_RETRY'),

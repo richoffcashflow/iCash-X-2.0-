@@ -14,7 +14,7 @@ const record=(v:unknown):v is Record<string,unknown>=>v!==null&&typeof v==='obje
 const integer=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 const personId=(v:unknown):v is string=>typeof v==='string'&&/^per_[a-zA-Z0-9]{1,100}$/.test(v);
 const flag=(v:unknown)=>typeof v==='boolean'?v:null;
-function creditObservation(raw:unknown):OwnerCreditObservation{
+export function creditObservation(raw:unknown):OwnerCreditObservation{
  const credits=record(raw)&&record(raw.credits)?raw.credits:{};
  return {used:integer(credits.used)?credits.used:null,people:integer(credits.people)?credits.people:null,
   properties:integer(credits.properties)?credits.properties:null,deduplicated:integer(credits.deduplicated)?credits.deduplicated:null};
@@ -25,7 +25,7 @@ function requireCredits(raw:unknown,error:string):Credits{
  return c as Credits;
 }
 /** Free preview IDs are the only allowable paid audience; names are never rematched. */
-function previewAudience(raw:unknown,propertyId:string,cap:number){
+export function previewAudience(raw:unknown,propertyId:string,cap:number){
  const error='CONTACT_PREVIEW_INVALID';
  const credits=requireCredits(raw,error);
  if(credits.used!==0||credits.properties!==0||credits.people!==0||credits.deduplicated!==0||!record(raw)||!record(raw.data)||raw.data.dm_property_id!==propertyId||!Array.isArray(raw.data.contacts))throw new Error(error);
@@ -49,7 +49,7 @@ function previewAudience(raw:unknown,propertyId:string,cap:number){
  const ids=Object.freeze([...owners].filter(([,match])=>match.likelyOwner).map(([id])=>id).slice(0,cap));
  return {ids,owners};
 }
-function contactsFromReceipt(raw:unknown,ids:readonly string[],owners:ReturnType<typeof previewAudience>['owners']){
+export function contactsFromReceipt(raw:unknown,ids:readonly string[],owners:ReturnType<typeof previewAudience>['owners']){
  const error='CONTACT_RECEIPT_REQUIRES_RECONCILIATION';
  const credits=requireCredits(raw,error);
  if(!record(raw)||!Array.isArray(raw.data)||raw.data.length!==ids.length||!record(raw.totals))throw new Error(error);

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {dealMachineRequest,DealMachineQuotaError} from '../lib/dealmachine-request.ts';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {enrichOwners} from '../lib/owner-enrichment.ts';
@@ -19,6 +20,7 @@ function reset(){
 }
 const db=async(path,method,body)=>{
  state.dbCalls.push({path,method,body});
+ if(path==='rpc/icash_finish_dealmachine_request')return true;
  if(path==='rpc/icash_settle_dealmachine_usage'){assert.equal(body.p_operation,operationKey);assert.equal(state.saved.length,1,'Usage settlement follows the persisted receipt');return true;}
  if(path.startsWith(`icash_discovery_configs?account_id=eq.${accountId}&select=`))return [structuredClone(state.config)];
  if(path.startsWith(`icash_screening_jobs?id=eq.${screeningId}&account_id=eq.${accountId}&select=`))return state.job?[structuredClone(state.job)]:[];
@@ -92,7 +94,7 @@ console.warn=(...args)=>diagnostics.push(args);
 process.env.DEALMACHINE_API_KEY='dm_sk_live_fixture';process.env.ICASH_LIVE_WORK_READY='true';globalThis.fetch=transport;
 try{
  const {reserveOperation,dispatchReservedOperation}=await loadActual('../lib/operating-costs.ts',{db,...liveWorkAdmission},'__ownerCostsFixture');
- const {enrichForAccount}=await loadActual('../lib/owner-enrichment-service.ts',{db,enrichOwners,runScreeningJob,reserveOperation,OwnerPreviewRateLimitError,...liveWorkAdmission},'__ownerServiceFixture');
+ const {enrichForAccount}=await loadActual('../lib/owner-enrichment-service.ts',{db,dealMachineRequest,DealMachineQuotaError,enrichOwners,runScreeningJob,reserveOperation,OwnerPreviewRateLimitError,...liveWorkAdmission},'__ownerServiceFixture');
  const run=()=>enrichForAccount(accountId,screeningId);
  for(const sellerRequest of [{phone:'+12145550123',ownerName:null},null]){
   reset();state.job.snapshot.sellerRequest=sellerRequest;assert.equal((await run()).status,'seller_contact_supplied');

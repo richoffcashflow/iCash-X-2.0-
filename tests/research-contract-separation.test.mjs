@@ -8,10 +8,11 @@ import {signingReadiness} from '../lib/signing-policy.ts';
 Object.assign(process.env,{ICASH_LIVE_WORK_READY:'true',DEALMACHINE_API_KEY:'dm_sk_live_SIMULATION_NO_NETWORK',DOCUSEAL_MODE:'live',DOCUSEAL_API_KEY:'SIMULATION_NO_NETWORK'});
 let marketKnown=true,paused=false,rights='2099-01-01',calls=[],pages=0;
 const discovery=await loadService('lib/discovery-service.ts',{
- discoveryWorkEnabled,liveWorkReady,propertyResearchMarketKnown:async()=>marketKnown,
+ syncResearchExclusions:async()=>null,discoveryWorkEnabled,liveWorkReady,propertyResearchMarketKnown:async()=>marketKnown,
  acquisitionContractCoverage:async()=>{throw Error('Property research must not query contract coverage');},
  db:async path=>{
   calls.push(path);
+  if(path==='rpc/icash_prepare_research_efficiency')return false;
   if(path==='rpc/icash_prepare_discovery_inventory')return 'ready';
   if(path.startsWith('icash_discovery_configs'))return [{enabled:true,exhausted:false,zip:'38118',data_rights_until:rights,per_page:5,rate_id:'rate',property_credit_micros:10000,next_page:1,revision:'revision'}];
   if(path.startsWith('icash_bot_setups'))return [];

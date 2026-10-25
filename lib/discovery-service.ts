@@ -3,7 +3,9 @@ import {propertyResearchMarketKnown} from '@/lib/contract-coverage-service';
 import {db} from '@/lib/stripe-test';
 import {discoverPage} from './discovery-pipeline.ts';
 import {selectDiscoveryFilter,DiscoveryFilterUnavailable} from './discovery-filters.ts';
-type Config={account_id:string;enabled:boolean;zip:string;rate_id:string;property_credit_micros:number;data_rights_until:string;per_page:number;next_page:number;revision:string;exhausted:boolean};
+import {dealMachineRequest} from './dealmachine-request.ts';
+import {syncResearchExclusions} from './research-exclusions.ts';
+type Config={account_id:string;enabled:boolean;zip:string;rate_id:string;property_credit_micros:number;data_rights_until:string;per_page:number;next_page:number;revision:string;exhausted:boolean;research_version?:number;research_list_id?:string|null};
 class DiscoveryProviderRequestError extends Error{
  constructor(readonly stage:'estimate'|'paid',readonly httpStatus:number|null){super('DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY');}
 }
@@ -11,6 +13,8 @@ class DiscoveryProviderRequestError extends Error{
 export async function discoverForAccount(accountId:string){
  if(!discoveryWorkEnabled())return {status:'live_work_not_ready'};
  if(process.env.ICASH_ACQUISITION_MODE==='hybrid'&&!await db<boolean>('rpc/icash_outbound_search_due','POST',{p_account:accountId}))return {status:'supply_target_met'};
+ await syncResearchExclusions(db).catch(()=>null);
+ await db('rpc/icash_prepare_research_efficiency','POST',{p_account:accountId});
  const [c]=await db<Config[]>(`icash_discovery_configs?account_id=eq.${accountId}&select=*`);
  if(!c?.enabled||c.exhausted||!(Date.parse(c.data_rights_until)>Date.now()))return {status:'not_ready'};
  // The independent release is limited to the supported property-only five-record page.
@@ -38,25 +42,26 @@ export async function discoverForAccount(accountId:string){
  const finishEmpty=(reason:'empty'|'unavailable')=>filterPlan
   ?db('rpc/icash_finish_empty_filter','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page,p_plan:filterPlan,p_reason:reason})
   :db('rpc/icash_mark_inventory_empty','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});
+ const queryPolicy=c.research_version===1?{version:'research-efficiency-v1' as const,exclusionListId:c.research_list_id??null}:undefined;
+ const scope={p_account:accountId,p_zip:c.zip,p_revision:c.revision,p_page:c.next_page,p_per_page:c.per_page,p_rate:c.rate_id,p_unit:c.property_credit_micros,p_permission_until:c.data_rights_until,p_setup_revision:setup?.revision??null,p_market_mode:setup?.profile?.marketMode??null,p_market:setup?.profile?.market??null};
  try{
- const result=await discoverPage({zip:c.zip,page:c.next_page,perPage:c.per_page,unitCostMicros:c.property_credit_micros,quotedDataCostMicros:rate.costs_micros.dealmachine,...(filterPlan?{filterPlan}:{})},{
+ const result=await discoverPage({zip:c.zip,page:c.next_page,perPage:c.per_page,unitCostMicros:c.property_credit_micros,quotedDataCostMicros:rate.costs_micros.dealmachine,...(filterPlan?{filterPlan}:{}),...(c.research_version===1?{queryPolicy:{version:'research-efficiency-v1' as const,exclusionListId:c.research_list_id??null}}:{})},{
   request:async body=>{
-   if(!await db<boolean>('rpc/icash_take_dealmachine_request','POST',{}))throw new Error('DISCOVERY_RATE_LIMIT');
    const stage=(body as {estimate_cost?:boolean}).estimate_cost===true?'estimate':'paid';let httpStatus:number|null=null;
    try{
-    const r=await fetch('https://api.v2.dealmachine.com/v1/properties/search',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
+    const r=await dealMachineRequest(db,stage==='estimate'?'search_estimate':'property_search',()=>fetch('https://api.v2.dealmachine.com/v1/properties/search',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)}),{accountId,operationKey});
     httpStatus=r.status;
     if(!r.ok){
      // An unsupported FREE estimate may retire a test arm. A paid request,
      // authentication error, rate limit or timeout must never trigger a replay.
      if(filterPlan&&filterPlan.strategy!=='baseline'&&(body as {estimate_cost?:boolean}).estimate_cost===true&&[400,422].includes(r.status))throw new DiscoveryFilterUnavailable();
      throw new Error();
-    }return await r.json();
+    }return r.raw;
    }catch(error){if(error instanceof DiscoveryFilterUnavailable)throw error;throw new DiscoveryProviderRequestError(stage,httpStatus);}
   },
   // Scope validation, reservation and one-use claim share one locked DB transaction.
-  reserveAndClaim:()=>db<boolean>(filterPlan?'rpc/icash_reserve_and_claim_filtered_discovery':'rpc/icash_reserve_and_claim_property_discovery','POST',{p_account:accountId,p_zip:c.zip,p_revision:c.revision,p_page:c.next_page,p_per_page:c.per_page,p_rate:c.rate_id,p_unit:c.property_credit_micros,p_permission_until:c.data_rights_until,p_setup_revision:setup?.revision??null,p_market_mode:setup?.profile?.marketMode??null,p_market:setup?.profile?.market??null,...(filterPlan?{p_plan:filterPlan}:{})}),
-  persist:async result=>{const queued=await db<number>(filterPlan?'rpc/icash_save_filtered_discovery':'rpc/icash_save_discovery','POST',{p_account:accountId,p_operation:operationKey,p_revision:c.revision,p_page:c.next_page,p_result:result});await db('rpc/icash_settle_dealmachine_usage','POST',{p_operation:operationKey});return queued;},
+  reserveAndClaim:()=>queryPolicy?db<boolean>('rpc/icash_reserve_research_discovery','POST',{p_account:accountId,p_scope:scope,p_plan:filterPlan??null,p_policy:queryPolicy}):db<boolean>(filterPlan?'rpc/icash_reserve_and_claim_filtered_discovery':'rpc/icash_reserve_and_claim_property_discovery','POST',{...scope,...(filterPlan?{p_plan:filterPlan}:{})}),
+  persist:async result=>{const queued=await db<number>(queryPolicy?'rpc/icash_save_research_discovery':filterPlan?'rpc/icash_save_filtered_discovery':'rpc/icash_save_discovery','POST',{p_account:accountId,p_operation:operationKey,p_revision:c.revision,p_page:c.next_page,p_result:result});await db('rpc/icash_settle_dealmachine_usage','POST',{p_operation:operationKey});return queued;},
  });
  if(result.status==='empty')await finishEmpty('empty');
  return result;
