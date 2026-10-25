@@ -73,7 +73,11 @@ export async function syncMembershipSubscription(sub:Stripe.Subscription){
 /** A free introductory period is access, not a fabricated payment or wallet credit. */
 async function activateLegacyTrial(m:Membership,sub:Stripe.Subscription,s:Stripe.Checkout.Session){
  const end=m.legacy_trial_end?Date.parse(m.legacy_trial_end)/1000:0;
- if(m.legacy_trial_offer!=='legacy-trial-2026-10-25.1'||m.consent_version!=='legacy-trial-2026-10-25.1'||m.price_cents!==5000||m.initial_price_cents!==0||!Number.isSafeInteger(end)||sub.trial_end!==end||!sub.trial_start||end<=sub.trial_start||end-sub.trial_start>62*86400||sub.metadata.icash_legacy_trial!=='legacy-trial-2026-10-25.1'||s.metadata?.icash_legacy_trial!=='legacy-trial-2026-10-25.1'||s.metadata?.icash_membership!==m.id||s.id!==m.stripe_session_id||s.status!=='complete'||!['paid','no_payment_required'].includes(s.payment_status)||s.mode!=='subscription'||s.amount_total!==0||s.currency!=='usd'||s.livemode!==(m.mode==='live')||ref(s.subscription)!==sub.id||ref(s.customer)!==ref(sub.customer)||(s.total_details?.amount_discount??0)!==0||!s.customer_details?.email||s.customer_details.email.toLowerCase()!==m.checkout_email?.toLowerCase())throw Error('Legacy trial binding mismatch');
+ if(m.legacy_trial_offer!=='legacy-trial-2026-10-25.1'||m.consent_version!=='legacy-trial-2026-10-25.1'||m.initial_price_cents!==0||!Number.isSafeInteger(end)||sub.metadata.icash_legacy_trial!=='legacy-trial-2026-10-25.1'||s.metadata?.icash_legacy_trial!=='legacy-trial-2026-10-25.1'||s.metadata?.icash_membership!==m.id||s.id!==m.stripe_session_id||s.status!=='complete'||!['paid','no_payment_required'].includes(s.payment_status)||s.mode!=='subscription'||s.amount_total!==0||s.currency!=='usd'||s.livemode!==(m.mode==='live')||ref(s.subscription)!==sub.id||ref(s.customer)!==ref(sub.customer)||(s.total_details?.amount_discount??0)!==0||!s.customer_details?.email||s.customer_details.email.toLowerCase()!==m.checkout_email?.toLowerCase())throw Error('Legacy trial binding mismatch');
+ // A confirmed introductory period is immutable history, not a permanent $50
+ // restriction on later explicitly authorized paid plans. Validate identity above.
+ if((m.legacy_trial_started_at||m.stripe_subscription_id===sub.id)&&sub.status!=='trialing')return;
+ if(m.price_cents!==5000||sub.trial_end!==end||!sub.trial_start||end<=sub.trial_start||end-sub.trial_start>62*86400)throw Error('Legacy trial period mismatch');
  // Canonical cancellation/failure must never be revived by an old free invoice.
  if(sub.status!=='trialing'||end<=Date.now()/1000)return;
  await db('rpc/icash_activate_legacy_trial','POST',{p_membership:m.id,p_session:s.id,p_subscription:sub.id,p_customer:ref(sub.customer),p_email:s.customer_details.email,p_phone:s.customer_details.phone??null,p_trial_end:new Date(end*1000).toISOString()});
@@ -84,6 +88,11 @@ export async function settleMembershipInvoice(invoiceId:string){
  if(!subId)return false;const sub=await stripe.subscriptions.retrieve(subId);let m=await matchingMembership(sub);if(!m)return false;
  if(m.legacy_trial_offer&&invoice.total===0){
   if(invoice.id!==invoiceId||invoice.status!=='paid'||invoice.livemode!==sub.livemode||invoice.currency!=='usd'||invoice.amount_remaining!==0||invoice.amount_paid!==0||invoice.subtotal!==0||invoice.billing_reason!=='subscription_create'||ref(invoice.customer)!==ref(sub.customer)||(invoice.total_discount_amounts??[]).some(d=>d.amount!==0)||(invoice.total_taxes??[]).some(t=>t.amount!==0)||!m.stripe_session_id)throw Error('Legacy trial invoice mismatch');
+  if((m.legacy_trial_started_at||m.stripe_subscription_id===sub.id)&&sub.status!=='trialing'){
+   // Replay of the original subscription-create $0 invoice after a paid plan
+   // change: canonical identity is checked, but no access boundary is extended.
+   await activateLegacyTrial(m,sub,await stripe.checkout.sessions.retrieve(m.stripe_session_id));await syncMembershipSubscription(sub);return true;
+  }
   const lines=await stripe.invoices.listLineItems(invoice.id,{limit:2}),line=lines.data[0];
   if(lines.has_more||lines.data.length!==1||line.amount!==0||line.quantity!==1||line.pricing?.price_details?.price!==sub.items.data[0].price.id||line.period.end!==sub.trial_end||line.period.start!==sub.trial_start)throw Error('Legacy trial invoice line mismatch');
   await activateLegacyTrial(m,sub,await stripe.checkout.sessions.retrieve(m.stripe_session_id));await syncMembershipSubscription(sub);return true;

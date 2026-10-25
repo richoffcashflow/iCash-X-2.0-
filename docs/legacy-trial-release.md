@@ -1,4 +1,4 @@
-# Returning-customer introductory checkout — LOCAL CANDIDATE ONLY
+# Returning-customer introductory checkout — gated release candidate
 
 Offer: software access at $0 for two calendar months, then USD $50 per month until cancellation. Paid AI work credits are separate. Payment method collected in Stripe; no automatic work-credit funding. Shareable candidate path `/legacy-offer` is not a functioning production offer until released.
 
@@ -14,11 +14,11 @@ Offer: software access at $0 for two calendar months, then USD $50 per month unt
 
 ## Required before publication
 
-1. Approval for code deployment and database migration; neither has occurred.
-2. Apply `20261025231000_legacy_two_month_trial.sql` and deploy matching code together, flag disabled until verification.
+1. Publication and additive database migrations are approved. Production offer activation remains gated on verification; deployment does not by itself open the offer.
+2. Initial `20261025231000_legacy_two_month_trial.sql` was applied separately. Apply the additive `20261025234000_legacy_trial_pending_signin.sql`, `20261025234100_legacy_trial_subscription_consumption.sql`, and `20261025234206_legacy_trial_ending_reminders.sql`, then deploy matching code with production flag disabled until verification. Never edit an already-applied migration.
 3. Validate in a separate Stripe sandbox: $0 checkout, access claim, missed/duplicate/out-of-order webhooks, exact date display, required payment method, paid renewal, failed renewal, cancellation, and timezone/month-end boundaries. No sandbox connector was available; mocks are not this test.
-4. Review Stripe trial-reminder/customer-notice settings and actual hosted checkout cancellation disclosures. No settings changed.
+4. Enable `customer.subscription.trial_will_end` on the existing endpoint only after the reminder migration and matching code are deployed. The transactional reminder uses canonical live Stripe state, exact end date/$50/cancellation instructions, and a private deduplicated outbox; preview never sends. Verify actual hosted checkout cancellation disclosures. No marketing is sent by this feature.
 5. Verify cross-device recovery in sandbox: a verified-email owner can recover completed checkout, or expire an open checkout and replace only after canonical expiry. The old row and immutable acceptance remain preserved; a fresh member/acceptance belongs to the new browser. Unknown/null-session provider outcomes remain held for guarded support investigation. No anonymous email-only takeover.
 6. Run real browser interaction checks. Chromium execution was blocked by sandbox restrictions, so interaction assertions were not run. Production HTML render passed independently; this is not interaction coverage.
 
-No live Stripe objects, customer subscriptions, access grants, payments, campaigns, or provider settings were changed by this work.
+The implementation does not alter existing Stripe subscriptions/prices, grant work credits, unpause bots, or send marketing. Synthetic provider checks must use test mode, unique example.invalid identities, no real customer/account reuse, and disabled mail transport. Shared Auth/account rows are not physically mode-partitioned; production entitlement and notification gates still require live mode. Existing legacy acquisition conversion logic remains paid-invoice-backed, so suppress trial customers before any acquisition campaign sends.

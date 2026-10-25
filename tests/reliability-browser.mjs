@@ -17,6 +17,7 @@ import {verifyCloseConversions} from './close-conversion-browser.mjs';
 import {verifyWorkspace} from './workspace-browser-scenarios.mjs';
 import {verifyWalkthrough} from './workspace-walkthrough-browser.mjs';
 import {verifyPurchaseAccess} from './purchase-access-browser.mjs';
+import {verifyLegacyTrial} from './legacy-trial-browser.mjs';
 import {verifySupportCoaching} from './support-coaching-browser.mjs';
 import {verifyAccessHelp} from './access-help-browser.mjs';
 import {verifySellerCosts} from './seller-acquisition-costs-browser.mjs';
@@ -79,6 +80,7 @@ try{
    if(process.env.BROWSER_SCENARIOS==='support-coaching'){await verifySupportCoaching(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='access-help'){await verifyAccessHelp(browser,base,options,name,fixtureCookies);continue;}
    if(process.env.BROWSER_SCENARIOS==='walkthrough'){await verifyWalkthrough(browser,base,options,name);continue;}
+   if(process.env.BROWSER_SCENARIOS==='legacy-trial'){await verifyLegacyTrial(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='purchase-access'){await verifyPurchaseAccess(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='lead-costs'){await verifySellerCosts(browser,base,options,name,fixtureCookies);continue;}
    if(process.env.BROWSER_SCENARIOS==='course'){await verifyCourse(browser,base,options,name);continue;}
@@ -95,6 +97,7 @@ try{
    await verifyWalkthrough(browser,base,options,name);
    await verifySellerCosts(browser,base,options,name,fixtureCookies);
    await verifyPurchaseAccess(browser,base,options,name);
+   await verifyLegacyTrial(browser,base,options,name);
    await verifyDirectVipCheckout(browser,base,options,name);
    await verifyAccessHelp(browser,base,options,name,fixtureCookies);
    await verifyWebinarMeasurement(browser,base,options,name);

@@ -71,7 +71,7 @@ export async function verifyPurchaseAccess(browser,base,options,name){
   const beforeRecovery=codeRequests;
   paidView='setup';signedIn=false;
   await page.goto(base+'/join?setup=1');
-  await page.getByText('Could not restore your setup. Your checkout is saved.',{exact:false}).waitFor();
+  await page.getByText('Could not restore your setup. Your payment is saved.',{exact:false}).waitFor();
   await page.getByRole('link',{name:'Skip naming — open my workspace',exact:true}).click();
   await page.waitForURL(base+'/access');await page.getByRole('button',{name:'Email me a code',exact:true}).waitFor();
   assert.equal(codeRequests,beforeRecovery,'Skipping optional setup still uses verified sign-in and does not send a code automatically');

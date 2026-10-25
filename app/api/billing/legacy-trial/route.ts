@@ -29,7 +29,7 @@ export async function POST(req:Request){
   const stripe=fundingStripe(),origin=req.headers.get('origin')!;
   if(user?.email_confirmed_at){
    const old=await db<Membership|null>('rpc/icash_legacy_trial_recovery','POST',{p_user:user.id,p_mode:mode,p_email:email});
-   if(old?.legacy_trial_started_at)return NextResponse.json({url:origin+'/access?purchase='+old.id},{headers});
+   if(old?.legacy_trial_started_at||old?.stripe_subscription_id)return NextResponse.json({url:origin+'/access?purchase='+old.id},{headers});
    if(old&&old.state==='pending'&&!old.legacy_trial_started_at&&(old.guest_hash!==guestHash(token!)||old.account_id!==(account?.id??null))){
     if(!old.stripe_session_id)return NextResponse.json({error:'Your earlier checkout is still being checked. Contact support to recover it safely; do not start another subscription.'},{status:409,headers});
     let prior=await stripe.checkout.sessions.retrieve(old.stripe_session_id);
