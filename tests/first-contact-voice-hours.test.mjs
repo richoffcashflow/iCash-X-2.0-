@@ -33,6 +33,7 @@ try{
  for(const definition of Object.values(baseline))await pg.exec(definition);
  const sql=readFileSync(new URL('../config/first-contact-voice-hours.sql',import.meta.url),'utf8');
  await pg.exec(sql);
+ await pg.exec(readFileSync(new URL('../config/strict-outbound-call-hours.sql',import.meta.url),'utf8'));
  await pg.exec('set check_function_bodies=on');
  const cancellationPatched=(await one("select pg_get_functiondef('public.icash_cancellation_voice_current(uuid,text)'::regprocedure) definition")).definition;
  assert.match(cancellationPatched,/icash_operational_contact_current\(p_account,j.operational_contact_id,'voice',false\)/);
@@ -63,7 +64,7 @@ try{
   await q('update icash_voice_jobs set cancellation_notice_id=gen_random_uuid() where id=$1',[job]);
   assert.equal(await allowed(),false,'a cancellation flag alone cannot bypass business hours');
   await q('update voice_hours_fixture set cancellation_ok=true');
-  assert.equal(await allowed(),true,'exact existing cancellation admission preserves active-deal notices');
+  assert.equal(await allowed(),false,'even a verified cancellation cannot start an overnight call');
   await q('update icash_voice_jobs set cancellation_notice_id=null where id=$1',[job]);
   assert.equal(await allowed(),false,'ordinary first calls do not inherit cancellation admission');
  });
@@ -73,8 +74,12 @@ try{
  });
  await isolated(async()=>{
   await q('update voice_hours_fixture set active_phone=$1',[phone]);
-  assert.equal(await allowed(),true,'actual target conversation can continue overnight');
-  assert.equal(await reserve(),true,'existing operational window is not reimposed on a response');
+  assert.equal(await allowed(),false,'actual target conversation does not permit an overnight outbound call');
+  assert.equal(await reserve(),false,'no new overnight call reservation after a response');
+  assert.equal(await rpc('icash_claim_voice_job',{p_job:job}),false,'normal claim rejects a prior-conversation exception');
+  assert.equal(await rpc('icash_meta_claim_voice',{p_account:account,p_job:job}),false,'Meta claim rejects a prior-conversation exception');
+  await q('update voice_hours_fixture set open=true');
+  assert.equal(await reserve(),true,'a reply still permits eligible calls inside the window');
   await q('update icash_dnc_verification_receipts set clear=false where id=$1',[dnc]);
   assert.equal(await reserve(),false,'conversation exemption never bypasses DNC');
   assert.equal(await rpc('icash_claim_voice_job',{p_job:job}),false,'final claim still checks recipient evidence');
@@ -117,7 +122,7 @@ try{
   const callback=(await one("insert into icash_live_callbacks(account_id,screening_id,conversation_id,due_at,timezone,evidence) values($1,$2,$3,$4,$5,'{\"source\":\"SIMULATION actual callback request\"}') returning id",[account,screening,call,due,original.timezone])).id;
   const callbackJob=(await one("insert into icash_voice_jobs(account_id,operational_contact_id,callback_id,due_at,state) values($1,$2,$3,$4,'issued') returning id",[account,original.id,callback,due])).id;
   const callbackHours=()=>rpc('icash_voice_outreach_hours_current',{p_account:account,p_job:callbackJob});
-  assert.equal(await callbackHours(),true,'verified due callback remains exempt even after the ordinary response window');
+  assert.equal(await callbackHours(),false,'verified due callback must still be inside the outbound window');
   await q("update icash_live_conversations set result=jsonb_set(result,'{callbackDueAt}','\"not a timestamp\"') where id=$1",[call]);
   assert.equal(await callbackHours(),false,'malformed callback evidence fails closed');
   await q('update icash_live_conversations set result=$2 where id=$1',[call,result]);
@@ -153,5 +158,5 @@ try{
  for(const row of definitions.rows)assert.match(row.definition,/icash_voice_outreach_hours_current/);
  const recordingDefinition=definitions.rows.find(row=>row.proname==='icash_transition_call_recording').definition;
  assert.match(recordingDefinition,/final_provider_started_at/,'prior recording clock reconciliation remains intact');
- console.log('Voice business hours: normal/Meta first-call final gates, no overnight reservation, phone-bound conversation exemption, retained DNC, immutable metadata and private helpers passed locally.');
+ console.log('Voice business hours: normal/Meta/final provider gates, no overnight calls or reservations after replies/callbacks, ongoing calls continue, retained DNC, immutable metadata and private helpers passed locally.');
 }finally{await pg.close();}
