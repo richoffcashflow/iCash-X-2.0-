@@ -37,6 +37,8 @@ await db.exec(`
  create table icash_seller_viewing_followups(id uuid);
  create table fixture_policy(hours boolean,spacing boolean,contact_current boolean,reservations integer default 0);
  insert into fixture_policy values(true,true,true,0);
+ alter table fixture_policy add column voice_capacity boolean default true;
+ create function icash_outgoing_voice_capacity_open() returns boolean language sql stable as $$select voice_capacity from public.fixture_policy$$;
  create function icash_outreach_voice_current(uuid) returns boolean language sql as $$select true$$;
  create function icash_outreach_sms_current(uuid) returns boolean language sql as $$select true$$;
  create function icash_voice_outreach_hours_current(uuid,uuid) returns boolean language sql as $$select hours from public.fixture_policy$$;
@@ -54,6 +56,11 @@ const sql=read('config/outreach-research-liveness.sql');
 assert.equal(sql,read('supabase/migrations/20261023180125_outreach_research_liveness.sql'));
 const beforeTimezone=await val("select pg_get_functiondef('icash_next_before_closing_gaps()'::regprocedure)");
 await db.exec(sql);
+ const priorWaiting=await val("select pg_get_functiondef('icash_research_waiting_on_outreach(uuid)'::regprocedure)");
+ const capacitySql=read('config/research-during-call-capacity-holds.sql');
+ await db.exec(capacitySql);
+ const capacityWaiting=await val("select pg_get_functiondef('icash_research_waiting_on_outreach(uuid)'::regprocedure)");
+ assert.equal(capacityWaiting.replace('select (case when public.icash_outgoing_voice_capacity_open() then public.icash_outreach_voice_current','select (public.icash_outreach_voice_current').replace(') else false end) or (public.icash_outreach_sms_current',')) or (public.icash_outreach_sms_current'),priorWaiting,'Only call-capacity priority changes; every recipient and SMS predicate remains exact');
 assert.equal(await val("select pg_get_functiondef('icash_next_before_closing_gaps()'::regprocedure)"),beforeTimezone.replaceAll('join pg_timezone_names tz','join public.icash_timezone_names tz'),'only the timezone name source changes');
 await q('insert into icash_accounts values($1,false),($2,false)',[account,other]);
 await q('insert into icash_wallets values($1,7437),($2,24656)',[account,other]);
@@ -67,6 +74,13 @@ const available=()=>val('select icash_cold_inventory_available($1,$2,$3)',[accou
 const waiting=()=>val('select icash_research_waiting_on_outreach($1)',[account]);
 const reserve=()=>val("select icash_reserve_paced_voice($1,$2,$3,now()+interval '1 day',now(),true)",[account,job,rate]);
 assert.equal(await available(),true);assert.equal(await waiting(),true,'a usable first introduction still gets priority');
+ const unchangedJob=(await q('select * from icash_voice_jobs where id=$1',[job])).rows[0];
+ await db.exec('update fixture_policy set voice_capacity=false');
+ assert.equal(await waiting(),false,'full provider capacity does not freeze research behind an unstartable call');
+ assert.deepEqual((await q('select * from icash_voice_jobs where id=$1',[job])).rows[0],unchangedJob,'capacity checks never reset or replay a voice job');
+ assert.equal(await val('select reservations from fixture_policy'),0,'research eligibility does not authorize a call or charge');
+ await db.exec('update fixture_policy set voice_capacity=true');
+ assert.equal(await waiting(),true,'a dispatchable first call regains priority when capacity returns');
 await db.exec('update fixture_policy set spacing=false');
 assert.equal(await waiting(),false,'a prior call to the seller cannot block fresh research');
 assert.equal(await reserve(),false,'spacing still blocks the repeated call');
@@ -115,10 +129,11 @@ await q("update icash_voice_jobs set state='held',outcome='seller_inventory_unav
 await q("insert into icash_deal_files values($1,$2,$3,'draft')",[id(9),account,screen]);
 await q("insert into icash_text_threads(id,account_id,deal_id,party,permission_until,recipient) values($1,$2,$3,'seller',now()+interval '1 day','+12125550101')",[id(10),account,id(9)]);
 await q("insert into icash_text_messages(id,thread_id,account_id,direction,state) values($1,$2,$3,'outgoing','ready')",[id(11),id(10),account]);
+ await db.exec('update fixture_policy set voice_capacity=false');
 assert.equal(await waiting(),true);
 await q('update icash_inventory_claims set account_id=$1',[other]);
 assert.equal(await waiting(),false,'blocked texts cannot freeze research either');
 assert.deepEqual((await q('select balance_cents from icash_wallets order by account_id')).rows.map(x=>Number(x.balance_cents)),[7437,24656],'no wallet or historical charges change');
 for(const role of ['anon','authenticated'])assert.equal(await val("select has_function_privilege($1,'icash_cold_inventory_available(uuid,uuid,text)','execute')",[role]),false);
-console.log('PASS: funded-account research, seller-phone/property ownership, blocked-call parking, hours/spacing, SMS priority, active-work/unknown holds, tenant isolation, unchanged wallets and timezone cache.');
+console.log('PASS: funded-account research continues through full voice capacity; available calls and SMS retain priority, with ownership, hours/spacing, unknown holds, tenant isolation and wallets unchanged.');
 }catch(error){console.error(error.message);console.error(error.query??'');process.exitCode=1;}finally{await db.close();}
