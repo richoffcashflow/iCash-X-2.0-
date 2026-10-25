@@ -17,6 +17,12 @@ export function createRecordingProviders(env:RecordingEnv,fetcher:typeof fetch=f
   if(!r.ok||r.redirected||(r.url&&r.url!==url))throw new RecordingProviderError(r.status);return r;
  }
  async function json(path:string,method='GET',body?:URLSearchParams,safety=false){return object(JSON.parse((await boundedBytes(await twilio(path,method,body,safety),262144)).toString('utf8')));}
+ async function monitor(path:string){
+  const url='https://monitor.twilio.com/v1'+path;
+  const r=await fetcher(url,{method:'GET',headers:{Authorization:auth,Accept:'application/json'},redirect:'error',cache:'no-store',credentials:'omit',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000)});
+  if(!r.ok||r.redirected||r.url&&r.url!==url)throw new RecordingProviderError(r.status);
+  return object(JSON.parse((await boundedBytes(r,262144)).toString('utf8')));
+ }
  async function eleven(path:string,body?:unknown){
   if(!env.ELEVENLABS_API_KEY)throw Error('RECORDING_PROVIDER_CONFIGURATION_REQUIRED');const url='https://api.elevenlabs.io'+path;
   const r=await fetcher(url,{method:body===undefined?'GET':'POST',headers:{'xi-api-key':env.ELEVENLABS_API_KEY,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),redirect:'error',cache:'no-store',credentials:'omit',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000)});
@@ -26,6 +32,12 @@ export function createRecordingProviders(env:RecordingEnv,fetcher:typeof fetch=f
  const recordPath=(id:string)=>{if(!sid(id,'RE'))throw Error('RECORDING_ID_REQUIRED');return `/Recordings/${id}`;};
  return {
   getCall:(id:string)=>json(callPath(id)+'.json'),
+  listCallCreationAlerts:(claimedAt:string)=>{
+   const time=Date.parse(claimedAt);if(!Number.isFinite(time))throw Error('CALL_ALERT_WINDOW_REQUIRED');
+   const stamp=(n:number)=>new Date(n).toISOString().replace(/\.\d{3}Z$/,'Z');
+   return monitor('/Alerts?'+new URLSearchParams({StartDate:stamp(time-2000),EndDate:stamp(time+60000),LogLevel:'error',PageSize:'20',Page:'0'}));
+  },
+  getCallCreationAlert:(id:string)=>{if(!sid(id,'NO'))throw Error('CALL_ALERT_ID_REQUIRED');return monitor('/Alerts/'+id);},
   // Discovery only. A number/time match never authorizes binding or a retry.
   listCallCandidates:(from:string,to:string)=>{
    if(!/^\+[1-9]\d{7,14}$/.test(from)||!/^\+[1-9]\d{7,14}$/.test(to))throw Error('CALL_PARTIES_REQUIRED');
