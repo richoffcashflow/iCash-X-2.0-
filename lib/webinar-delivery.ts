@@ -13,6 +13,16 @@ export async function optimizeWebinarDelivery(id:string,revision:number,ownerId:
  const storageHeaders={apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'};
  const signal=AbortSignal.timeout(45000),prefix=`/storage/v1/object/public/${bucket}/`;
  let changed=0;
+ async function inspect(url:URL){
+  // Supabase deliberately returns no-cache for HEAD. A one-byte GET verifies
+  // the same delivery headers a video player receives without downloading it.
+  const response=await fetch(url,{method:'GET',headers:{Range:'bytes=0-0'},redirect:'error',cache:'no-store',signal});
+  await response.body?.cancel();
+  const range=response.headers.get('content-range')?.match(/^bytes 0-0\/([1-9]\d*)$/),type=response.headers.get('content-type');
+  return {ok:response.ok,status:response.status,length:range?.[1],type,
+   valid:response.status===206&&!!range&&response.headers.get('content-length')==='1'&&!!type?.startsWith('video/'),
+   maxAge:Number(response.headers.get('cache-control')?.match(/(?:^|,)\s*max-age=(\d+)/i)?.[1]??0)};
+ }
  async function optimize(url:string){
   if(!url)return url;
   const source=new URL(url);
@@ -20,22 +30,21 @@ export async function optimizeWebinarDelivery(id:string,revision:number,ownerId:
   if(source.origin!==base.origin||source.search||source.hash||!source.pathname.startsWith(prefix))return url;
   const object=source.pathname.slice(prefix.length),[owner,file,...rest]=object.split('/');
   if(owner!==ownerId||rest.length||!file||!/^[0-9a-f-]{36}(?:-cache30d)?\.(mp4|webm|mov)$/i.test(file))return url;
-  const head=await fetch(source,{method:'HEAD',redirect:'error',cache:'no-store',signal});
-  const length=head.headers.get('content-length'),type=head.headers.get('content-type');
-  if(!head.ok||!length||!/^\d+$/.test(length)||Number(length)<1||!type?.startsWith('video/'))throw new WebinarError(502,'Could not verify the saved video. No session changes were published.');
-  if(Number(head.headers.get('cache-control')?.match(/(?:^|,)\s*max-age=(\d+)/i)?.[1]??0)>=cacheSeconds)return url;
+  const original=await inspect(source);
+  if(!original.valid)throw new WebinarError(502,'Could not verify the saved video. No session changes were published.');
+  if(original.maxAge>=cacheSeconds)return url;
   const destination=`${owner}/${file.replace(/(?:-cache30d)?\.(mp4|webm|mov)$/i,'-cache30d.$1')}`;
   if(destination===object)throw new WebinarError(502,'The optimized file needs review. No session changes were published.');
   const publicUrl=new URL(prefix+destination,base).href;
-  const existing=await fetch(publicUrl,{method:'HEAD',redirect:'error',cache:'no-store',signal});
+  const existing=await inspect(new URL(publicUrl));
   if(!existing.ok){
    if(existing.status!==404&&existing.status!==400)throw new WebinarError(502,'Could not check video storage. Please retry.');
-   const copied=await fetch(new URL('/storage/v1/object/copy',base),{method:'POST',headers:storageHeaders,body:JSON.stringify({bucketId:bucket,sourceKey:object,destinationKey:destination,copyMetadata:false,metadata:{cacheControl:`max-age=${cacheSeconds}`,mimetype:type}}),redirect:'error',signal});
+   const copied=await fetch(new URL('/storage/v1/object/copy',base),{method:'POST',headers:storageHeaders,body:JSON.stringify({bucketId:bucket,sourceKey:object,destinationKey:destination,copyMetadata:false,metadata:{cacheControl:`max-age=${cacheSeconds}`,mimetype:original.type}}),redirect:'error',signal});
    // A concurrent request may have created the same immutable destination.
    if(!copied.ok&&copied.status!==409)throw new WebinarError(502,'Could not optimize video storage. No session changes were published.');
   }
-  const verified=existing.ok?existing:await fetch(publicUrl,{method:'HEAD',redirect:'error',cache:'no-store',signal});
-  if(!verified.ok||verified.headers.get('content-length')!==length||verified.headers.get('content-type')!==type||Number(verified.headers.get('cache-control')?.match(/(?:^|,)\s*max-age=(\d+)/i)?.[1]??0)<cacheSeconds)throw new WebinarError(502,'The optimized video could not be verified. No session changes were published.');
+  const verified=existing.ok?existing:await inspect(new URL(publicUrl));
+  if(!verified.valid||verified.length!==original.length||verified.type!==original.type||verified.maxAge<cacheSeconds)throw new WebinarError(502,'The optimized video could not be verified. No session changes were published.');
   changed++;return publicUrl;
  }
  const config={...row.config,videoUrl:await optimize(row.config.videoUrl)};
