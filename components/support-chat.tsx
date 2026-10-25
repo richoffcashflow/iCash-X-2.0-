@@ -1,4 +1,5 @@
 'use client';
+import {SupportMessageContent} from '@/components/support-message-content';
 import {supportRequest} from '@/lib/support-client';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {ArrowDown,ArrowLeft,ArrowUp,LifeBuoy,MoreHorizontal,X} from 'lucide-react';
@@ -86,7 +87,7 @@ export function SupportChat({onClose,active=true,onMembershipChanged,initialThre
   </div>
   <section className="support-conversation-section" aria-label="Messages">
    <div ref={historyLog} className="support-messages" role="log" aria-label="Support messages" aria-live="polite" aria-busy={busy||loading} onScroll={()=>{const log=historyLog.current;if(log){nearLatest.current=log.scrollHeight-log.clientHeight-log.scrollTop<72;setShowLatest(!nearLatest.current);}}}>
-    {loading&&!messages.length?<p className="support-loading" role="status">Opening your conversation…</p>:!messages.length?<div className="support-empty"><div className="support-welcome-icon"><LifeBuoy size={25}/></div><h2>How can we help?</h2><p>Send a message below.</p></div>:messages.map(m=><article key={m.id} className={`support-message support-message-${m.role}`}><strong>{m.role==='user'?'You':m.role==='system'?'Update':'Support'}</strong><p>{m.content}</p></article>)}
+    {loading&&!messages.length?<p className="support-loading" role="status">Opening your conversation…</p>:!messages.length?<div className="support-empty"><div className="support-welcome-icon"><LifeBuoy size={25}/></div><h2>How can we help?</h2><p>Send a message below.</p></div>:messages.map(m=><article key={m.id} className={`support-message support-message-${m.role}`}><strong>{m.role==='user'?'You':m.role==='system'?'Update':'Support'}</strong><p><SupportMessageContent content={m.content} role={m.role}/></p></article>)}
     {busy&&<div className="support-working" role="status"><span aria-hidden="true">•••</span> Replying…</div>}
    </div>
    {showLatest&&<button className="support-latest" type="button" onClick={latest}><ArrowDown size={14}/>Back to latest</button>}
