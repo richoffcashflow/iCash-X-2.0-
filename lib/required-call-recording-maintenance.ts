@@ -3,13 +3,14 @@ import {findRecordedQuotaFailure} from './recorded-call-provider-failure.ts';
 import {liveConversationResult} from './deal-conversation.ts';
 import type {VoiceConversation} from './voice-result.ts';
 import {recordingHandoffDiagnostic} from './recording-handoff-diagnostic.ts';
+import {findMissingRecordedCall} from './missing-recorded-call-receipt.ts';
 import {object,sha,sid,type RecordingRow} from './required-call-recording.ts';
 import {RecordingProviderError,type RecordingEnv,type RecordingProviders} from './required-call-recording-provider.ts';
 import {recordingReceipt,finalRecordingPayload,recordingTransition,recordingStopToken,type RecordingDb} from './required-call-recording-service.ts';
 /** Cleanup is intentionally independent of launch flags, customer balance, and bot pause. */
 export async function maintainRecordings(db:RecordingDb,provider:RecordingProviders,env:RecordingEnv){
  const result={deleted:0,reconciled:0,held:0};
- let handoffInspected=false;
+ let handoffInspected=false,missingCallInspected=false;
  const finish=(row:RecordingRow,kind:string,outcome:string,payload:Record<string,unknown>)=>db<RecordingRow|null>('rpc/icash_finish_call_recording_work','POST',{p_id:row.id,p_account:row.account_id,p_operation:row.operation_key,p_kind:kind,p_lease_token:row[kind==='delete'?'deletion_lease_token':'reconcile_lease_token'],p_outcome:outcome,p_payload:payload});
  // Bound per invocation. Database leases make overlapping invocations safe.
  for(const row of await db<RecordingRow[]>('rpc/icash_claim_call_recording_work','POST',{p_kind:'delete',p_limit:5,p_lease_seconds:120})){
@@ -29,6 +30,25 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
  for(let row of await db<RecordingRow[]>('rpc/icash_claim_call_recording_work','POST',{p_kind:'reconcile',p_limit:3,p_lease_seconds:120})){
   let stage='binding';
   try{
+   if(row.call_sid===null&&!missingCallInspected&&typeof provider.listCallCandidates==='function'){
+    const recovery=await findMissingRecordedCall(row,provider,env);
+    if(recovery.status!=='binding_not_eligible')missingCallInspected=true;
+    console.warn('recording_reconcile_diagnostic',{stage:'missing_call',recordingId:row.id,reason:recovery.status,
+     ...(recovery.evidenceHash?{evidenceHash:recovery.evidenceHash}:{}),...(recovery.providerStatus?{providerStatus:recovery.providerStatus}:{})});
+    if(recovery.call){
+     const call=recovery.call;
+     const bound=await recordingTransition(db,row,'bind_call',{callSid:call.sid,providerAccountSid:call.account_sid,fromPhone:call.from,toPhone:call.to});
+     if(!bound)throw Error('ORIGINAL_CALL_BINDING_NOT_SAVED');row=bound;
+     const failed=await recordingTransition(db,row,'fail',{reason:'call_ended_before_recording'});
+     if(!failed)throw Error('ORIGINAL_CALL_TERMINAL_STATE_NOT_SAVED');row=failed;
+     // The original carrier already ended this unstarted recording. Reuse its
+     // exact terminal/cost receipt path without a credit check or provider POST.
+     const settled=await settleRecordingGateOnly(db,provider,row);
+     if(settled.settled)result.reconciled++;
+     else{await finish(row,'reconcile','retry',{reason:settled.reason});result.held++;}
+     continue;
+    }
+   }
    if(row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!sid(row.call_sid,'CA'))throw Error('CALL_BINDING_REVIEW_REQUIRED');
    if(!row.call_ended_at&&!row.end_requested_at&&await db<boolean>('rpc/icash_call_credit_available','POST',{p_account:row.account_id,p_operation:row.operation_key})===false){
     const requested=await recordingTransition(db,row,'stop',{stopTokenHash:row.stop_token_hash});if(!requested)throw Error('CALL_TERMINATION_REQUEST_REQUIRED');row=requested;
