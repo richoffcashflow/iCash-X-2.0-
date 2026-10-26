@@ -13,7 +13,7 @@ const db=async(path,method,body)=>{
 };
 const fetch=async(url,init)=>{
  calls.push({url,init});assert.equal(init.redirect,'error');if(timeout)throw Error('timeout');
- if(claim.action==='sync'){assert.deepEqual(JSON.parse(init.body),{ids:['prop_1'],id_type:'internal_property_id',add_as_prospects:false});return Response.json({data:{added:0}});}
+ if(claim.action==='sync'){assert.deepEqual(JSON.parse(init.body),{ids:claim.ids.map(id=>Number(id.slice(5))),id_type:'internal_property_id',add_as_prospects:false});return Response.json({data:{added:0}});}
  const data={list_id:providerId,name:wrongName?'foreign':name,source_type:'properties',status:providerStatus,total_count:0};
  if(claim.action==='recover'){assert.equal(init.method,'GET');assert.equal(init.body,undefined);return Response.json({data:[data]});}
  assert.deepEqual(JSON.parse(init.body),{name,source_type:'properties',add_as_prospects:false});return Response.json({data});
@@ -25,6 +25,8 @@ providerId=42;providerStatus='pending';assert.equal((await syncResearchExclusion
 wrongName=true;assert.equal((await syncResearchExclusions(db,fetch)).status,'pending','A different list cannot be adopted');wrongName=false;
 providerId=-1;assert.equal((await syncResearchExclusions(db,fetch)).status,'pending','Invalid IDs cannot attach a list');providerId='fixture-list';
 claim={...claim,action:'sync',listId:'fixture-list',ids:['prop_1']};assert.equal((await syncResearchExclusions(db,fetch)).status,'synced');assert.deepEqual(writes.at(-1).p_result.ids,['prop_1']);
+claim={...claim,ids:['prop_9007199254740991']};assert.equal((await syncResearchExclusions(db,fetch)).status,'synced');assert.deepEqual(JSON.parse(calls.at(-1).init.body).ids,[9007199254740991]);assert.deepEqual(writes.at(-1).p_result.ids,claim.ids,'Persist original prefixed property identities');
+for(const id of ['prop_9007199254740992','prop_0','prop_01']){claim={...claim,ids:[id]};const before=calls.length;assert.equal((await syncResearchExclusions(db,fetch)).status,'pending');assert.equal(calls.length,before,'Unsafe or ambiguous IDs never reach the provider');assert.equal(writes.at(-1).p_result.ok,false);}
 claim=null;assert.equal((await syncResearchExclusions(db,fetch)).status,'not_due');
 console.log('Exclusions: numeric/string list IDs, empty containers, exact identity, proven-unstarted quota deferral, unknown-create recovery and idempotent add passed.');
 

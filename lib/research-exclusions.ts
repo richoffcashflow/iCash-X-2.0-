@@ -2,6 +2,9 @@ import {dealMachineRequest,DealMachineQuotaError,type ResearchDb} from './dealma
 type Claim={action:'create'|'recover'|'sync';token:string;name:string;listId:string|null;ids:string[]};
 const listId=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9_-]{1,100}$/.test(v);
 const providerListId=(v:unknown)=>listId(v)?v:typeof v==='number'&&Number.isSafeInteger(v)&&v>0?String(v):null;
+// List membership uses numeric internal IDs, while property lookups and our
+// durable receipts retain the prop_ form. Never round an identifier.
+const internalPropertyId=(v:string)=>{const id=Number(v.slice(5));if(!/^prop_[1-9][0-9]*$/.test(v)||!Number.isSafeInteger(id)||id<=0||String(id)!==v.slice(5))throw Error('RESEARCH_EXCLUSION_ID_FORMAT');return id;};
 const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 /** Only provider property IDs are filed; no customer identity, conversations or
  * prospect creation. Adding an existing ID is documented as free/idempotent. */
@@ -14,7 +17,7 @@ export async function syncResearchExclusions(db:ResearchDb,request:typeof fetch=
  let stage='request';
  try{
   const endpoint=c.action==='sync'?`/lists/${c.listId}/items`:c.action==='recover'?'/lists?page=1&per_page=100':'/lists';
-  const body=c.action==='create'?{name:c.name,source_type:'properties',add_as_prospects:false}:c.action==='sync'?{ids:c.ids,id_type:'internal_property_id',add_as_prospects:false}:null;
+  const body=c.action==='create'?{name:c.name,source_type:'properties',add_as_prospects:false}:c.action==='sync'?{ids:c.ids.map(internalPropertyId),id_type:'internal_property_id',add_as_prospects:false}:null;
   const r=await dealMachineRequest(db,c.action==='create'?'exclusion_create':'exclusion_sync',()=>request('https://api.v2.dealmachine.com/v1'+endpoint,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(10000)}));
   if(!r.ok)throw Error('RESEARCH_EXCLUSION_RESPONSE');
   stage='identity';const raw=object(r.raw);let data=object(raw.data);
