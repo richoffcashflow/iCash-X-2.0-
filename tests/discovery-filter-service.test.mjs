@@ -38,4 +38,33 @@ events=[];rpc=[];response=200;empty=true;assert.equal((await svc.discoverForAcco
 events=[];rpc=[];failPaid=true;await assert.rejects(svc.discoverForAccount('account'),e=>/NO_RETRY/.test(e.message)&&e.stage==='paid'&&e.httpStatus===null);assert.deepEqual(events,['estimate','claim','paid']);assert(!rpc.some(x=>x.path.includes('finish_empty')));failPaid=false;
 events=[];rpc=[];existing=true;assert.equal((await svc.discoverForAccount('account')).status,'awaiting_reconciliation');assert.deepEqual(events,[]);assert.deepEqual(rpc.map(x=>x.path),['rpc/icash_prepare_research_efficiency']);existing=false;
 events=[];rpc=[];disabled=true;await svc.discoverForAccount('account');assert(rpc.some(x=>x.path==='rpc/icash_save_discovery'));assert(!rpc.some(x=>x.path==='rpc/icash_save_filtered_discovery'));
-console.log('Filter service: original admission, rollout switch, bounded free-estimate rejection, settlement and no replay after uncertain paid requests passed.');
+// Virtual deadlines exercise slow ordinary provider responses without spending
+// credits or waiting on wall-clock timers. The original operation is never retried.
+const originalTimeout=AbortSignal.timeout,originalFetch=globalThis.fetch,clocks=new Map();
+try{
+ AbortSignal.timeout=ms=>{const c=new AbortController();clocks.set(ms,c);return c.signal;};
+ let paidSignal,finishPaid;
+ events=[];rpc=[];
+ globalThis.fetch=async(url,opt)=>{
+  const body=JSON.parse(opt.body);
+  if(body.estimate_cost)return originalFetch(url,opt);
+  events.push('paid');paidSignal=opt.signal;
+  return new Promise((resolve,reject)=>{finishPaid=()=>resolve(Response.json({data:[],credits:{used:0,people:0},pagination:{has_next_page:true}}));opt.signal.addEventListener('abort',()=>reject(opt.signal.reason),{once:true});});
+ };
+ const pending=svc.discoverForAccount('account');
+ while(!paidSignal)await new Promise(r=>setImmediate(r));
+ assert(clocks.has(60000));assert(clocks.has(90000));assert(!clocks.has(15000));
+ clocks.get(20000).abort();assert.equal(paidSignal.aborted,false,'The completed estimate deadline cannot cancel the paid request');
+ finishPaid();assert.equal((await pending).status,'no_new_properties');
+ assert.deepEqual(events,['estimate','claim','paid']);assert(rpc.some(x=>x.path==='rpc/icash_save_discovery'));
+ paidSignal=null;events=[];rpc=[];clocks.clear();
+ const timeout=assert.rejects(svc.discoverForAccount('account'),e=>e.stage==='paid'&&e.httpStatus===null);
+ while(!paidSignal)await new Promise(r=>setImmediate(r));
+ clocks.get(60000).abort(new DOMException('Fixture timeout','TimeoutError'));await timeout;
+ assert.deepEqual(events,['estimate','claim','paid']);assert(!rpc.some(x=>x.path==='rpc/icash_save_discovery'));
+ events=[];rpc=[];clocks.clear();
+ globalThis.fetch=async(url,opt)=>{const response=await originalFetch(url,opt);clocks.get(90000).abort(new DOMException('Fixture deadline','TimeoutError'));return response;};
+ await assert.rejects(svc.discoverForAccount('account'),e=>e.name==='TimeoutError');
+ assert.deepEqual(events,['estimate'],'An expired total deadline cannot reserve or start a paid request');
+}finally{AbortSignal.timeout=originalTimeout;globalThis.fetch=originalFetch;}
+console.log('Filter service: bounded longer search, deadline admission, settlement and no replay after uncertain paid requests passed.');

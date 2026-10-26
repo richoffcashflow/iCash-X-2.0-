@@ -18,7 +18,7 @@ import {reconcileLiveConversation} from '@/lib/live-conversation-service';
 import {dispatchLiveVoice} from '@/lib/live-dispatch-service';
 import {enrichForAccount} from '@/lib/owner-enrichment-service';
 export const dynamic='force-dynamic';
-export const maxDuration=60;
+export const maxDuration=120;
 /** Short-lived, one-use DB capabilities; no credentials or account IDs accepted from requests. */
 export async function POST(request:Request){
  const billingDeadline=AbortSignal.timeout(45000);
