@@ -22,7 +22,7 @@ try{
  for(const question of ["hi my bot isn't making any calls or texts and it's been running all day",'my bot isn’t making calls','my bot isnt making any calls','It does not make calls or send texts','It has not called anyone','It hasn’t been calling sellers','No calls are being made','Why are calls not starting?',"I'm just trying to figure out why its not making calls or texts"]){
   const response=await replyToSupport({kind:'account',messages:[user(question)],evidence:[{...evidence[0],...supportOutreachEvidence({...facts,callsStarted:4,progress:{...facts.progress,status:'ready',remainingCents:121}})}]},forbidden);
   assert.equal(response.status,'open');assert.equal(response.ai,false,question);
-  assert.match(response.reply,/4 recorded call attempts/);assert.match(response.reply,/11 texts \(6 delivered\) so far/);assert.match(response.reply,/Calls are waiting on the spending limit/);
+  assert.match(response.reply,/4 recorded call attempts/);assert.match(response.reply,/11 texts \(6 delivered\) so far/);assert.match(response.reply,/saved credit hold/);assert.match(response.reply,/haven’t confirmed whether that hold still blocks new calls/);
   assert.doesNotMatch(response.reply,/test|sandbox|bank balance|refund|What were you trying|\?|tap Texts|used up/i);
   if(question.includes('all day'))assert.match(response.reply,/aren’t limited to today/);
  }
@@ -44,7 +44,14 @@ try{
  const paused=await replyToSupport({kind:'account',messages:[user('No seller info')],evidence:[...evidence,{key:'work',code:'paused',status:'attention',detail:'Paused',source:'fixture',observedAt:new Date().toISOString()}]},forbidden);
  assert.match(paused.reply,/bot is paused/);assert.doesNotMatch(paused.reply,/nearly used up/);
  const pacing=[{...evidence[0],...supportOutreachEvidence({...facts,progress:{...facts.progress,status:'paced'}})}];
- assert.match((await replyToSupport({kind:'account',messages:[user('Calls not starting')],evidence:pacing},forbidden)).reply,/next spending allowance/);
+ const legacyHold=(await replyToSupport({kind:'account',messages:[user('Calls not starting')],evidence:pacing},forbidden)).reply;
+ assert.match(legacyHold,/saved credit hold/);assert.doesNotMatch(legacyHold,/next spending allowance|protected|kept for replies|spending limit/);
+ const currentProgress={status:'ready',spendingMode:'available_balance',fundedBaselineCents:25000,remainingCents:13371,pendingCents:7894,spentCents:3735};
+ const current=supportOutreachEvidence({...facts,progress:currentProgress});
+ assert.equal(current.outreach.progress.limitCents,undefined);assert.equal(current.outreach.progress.remainingCents,13371);
+ const currentReply=(await replyToSupport({kind:'account',messages:[user('Calls not starting')],evidence:[{...evidence[0],...current}]},forbidden)).reply;
+ assert.match(currentReply,/haven’t confirmed whether that hold still blocks new calls/);assert.doesNotMatch(currentReply,/allowance|protected|kept for replies|spending limit/);
+ assert.throws(()=>supportOutreachEvidence({...facts,progress:{...currentProgress,pendingCents:-1}}));
  const confirmed=await replyToSupport({kind:'account',messages:[...messages,user('That worked, all fixed!')],evidence},forbidden);
  assert.equal(confirmed.status,'resolved');
  assert.equal(calls,0);
