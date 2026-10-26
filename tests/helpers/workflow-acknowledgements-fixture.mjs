@@ -5,7 +5,7 @@ import {reliabilityPriority} from '../../lib/reliability-priority.ts';
 
 export async function verifyWorkflowAcknowledgements({pg,one,id}){
  const sql=readFileSync(new URL('../../config/workflow-acknowledgements.sql',import.meta.url),'utf8');
- assert.equal(sql,readFileSync(new URL('../../supabase/migrations/20261026221156_workflow_acknowledgements.sql',import.meta.url),'utf8'));
+ assert.equal(sql,readFileSync(new URL('../../supabase/migrations/20261026221446_workflow_acknowledgements.sql',import.meta.url),'utf8'));
  await pg.exec(sql);
  const refresh=async(name='icash_refresh_reviewed_workflow_snapshot')=>{
   await pg.exec("update icash_reliability_private.snapshots set checked_at=now()-interval '1 minute';select public."+name+'()');
