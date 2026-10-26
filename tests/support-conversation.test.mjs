@@ -143,9 +143,9 @@ try{
  assert.equal(sideAnswer.reply,complete.reply);assert.equal(sideAnswer.status,'open','A model answer to a side question must not close the earlier problem');
  const thanks=await replyToSupport({...unresolvedSideQuestion,messages:[...unresolvedSideQuestion.messages,assistant(sideAnswer.reply),user('Thanks')]},modelReply('You’re welcome.',true));
  assert.equal(thanks.status,'open','Thanks for a side answer is not confirmation that the original problem is fixed');
- const missing=await replyToSupport(context,modelReply('Which screen are you on?',true));assert.equal(missing.status,'waiting_on_customer','A model cannot close a reply that still asks a question');
- const pending=await replyToSupport(context,modelReply('Please tell us the exact error on screen.',false));assert.equal(pending.status,'waiting_on_customer');
- const staff=await replyToSupport(context,modelReply('A team member needs to review the account.',true,true));assert.equal(staff.status,'waiting_on_customer','Team action takes precedence over a resolution flag');
+ const missing=await replyToSupport(context,modelReply('Which screen are you on?',true));assert.equal(missing.status,'open','A repeated screen question is removed and the existing issue remains open');
+ const pending=await replyToSupport(context,modelReply('Please tell us the exact error on screen.',false));assert.equal(pending.status,'open');
+ const staff=await replyToSupport(context,modelReply('A team member needs to review the account.',true,true));assert.equal(staff.status,'open','An invented handoff is rejected and the existing issue remains open');
  await replyToSupport({...context,allowAI:false},fetcher);assert.equal(calls,1,'Replay recovery never repeats a paid call');
  await replyToSupport({kind:'access',messages:[user('code does nothing')]},fetcher);assert.equal(calls,1,'Access recovery has no paid provider dependency');
  for(const bad of [{choices:[{finish_reason:'length',message:{content:'{}'}}]},{choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'I have refunded your payment.',answered:false})}}]},{choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'Open https://attacker.invalid',answered:false})}}]}])assert.equal((await replyToSupport(context,async()=>Response.json(bad))).ai,false);
