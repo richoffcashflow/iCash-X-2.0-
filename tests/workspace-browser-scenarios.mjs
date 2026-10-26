@@ -278,7 +278,7 @@ export async function verifyWorkspace(browser,base,options,name){
   await momentum.getByText('A seller replied.',{exact:true}).waitFor();await momentum.getByRole('button',{name:'View responses'}).click();
   assert.equal(await page.getByRole('button',{name:'Seller responses',exact:true}).getAttribute('aria-pressed'),'true');
   await page.screenshot({path:`/tmp/icash-opportunity-progress-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
-  opportunityProgress={...opportunityProgress,status:'paced'};await page.evaluate(()=>window.dispatchEvent(new Event('icash:credits-funded')));await momentum.getByRole('heading',{name:'Your search continues automatically'}).waitFor();assert.match(await momentum.innerText(),/next search allowance is building/);
+  opportunityProgress={...opportunityProgress,status:'paced'};await page.evaluate(()=>window.dispatchEvent(new Event('icash:credits-funded')));await momentum.getByRole('heading',{name:'Your search continues automatically'}).waitFor();assert.match(await momentum.innerText(),/continues automatically as eligible work becomes available/);
   opportunityProgress={...opportunityProgress,status:'paused'};await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await momentum.getByRole('heading',{name:'Your search is paused'}).waitFor();
   opportunityProgress=null;await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await momentum.waitFor({state:'hidden'});
   const collapsed=page.locator('.live-property').first();assert.equal(await collapsed.locator('.property-summary').getAttribute('aria-expanded'),'false');

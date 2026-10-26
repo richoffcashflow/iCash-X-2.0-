@@ -10,7 +10,7 @@ assert.equal(currentBotActivity({paused:false,tickets:[{...ticket,expires_at:new
 assert.equal(currentBotActivity({paused:false,tickets:[{...ticket,kind:'toString'}],screening:[]},now).active,false,'unknown labels are ignored');
 assert.equal(currentBotActivity({paused:false,tickets:[],screening:[{state:'running',lease_until:expires_at}]},now).label,'Checking property numbers');
 assert.equal(currentBotActivity({paused:false,tickets:[],screening:[{state:'queued',lease_until:expires_at}]},now).label,'Waiting for the next task');
-for(const [progress,label] of [[{status:'budget_reached'},'New outreach allowance used'],[{status:'paced'},'Waiting for the next spending allowance'],[{status:'ready',callsBudgetHeld:25},'Calls waiting for spending allowance']]){
+for(const [progress,label] of [[{status:'budget_reached'},'Waiting for available credits'],[{status:'paced'},'Waiting for eligible work'],[{status:'ready',callsBudgetHeld:25},'Calls waiting for available credits']]){
  const input={paused:false,tickets:[],screening:[],progress};assert.equal(currentBotActivity(input,now).label,label);assert.equal(currentBotActivity(input,now).active,false);
  assert.equal(currentBotActivity({...input,paused:true},now).label,'Paused');
 }
