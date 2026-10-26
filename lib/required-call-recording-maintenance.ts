@@ -9,12 +9,11 @@ import {object,sha,sid,type RecordingRow} from './required-call-recording.ts';
 import {RecordingProviderError,type RecordingEnv,type RecordingProviders} from './required-call-recording-provider.ts';
 import {recordingReceipt,finalRecordingPayload,recordingTransition,recordingStopToken,type RecordingDb} from './required-call-recording-service.ts';
 /** Cleanup is intentionally independent of launch flags, customer balance, and bot pause. */
-export async function maintainRecordings(db:RecordingDb,provider:RecordingProviders,env:RecordingEnv){
+export async function maintainRecordings(db:RecordingDb,provider:RecordingProviders,env:RecordingEnv,options:{signal?:AbortSignal}={}){
  const result={deleted:0,reconciled:0,held:0};
- let handoffInspected=false,missingCallInspected=false;
+ let handoffInspected=false,missingCallInspected=false,failed=false;
  const finish=(row:RecordingRow,kind:string,outcome:string,payload:Record<string,unknown>)=>db<RecordingRow|null>('rpc/icash_finish_call_recording_work','POST',{p_id:row.id,p_account:row.account_id,p_operation:row.operation_key,p_kind:kind,p_lease_token:row[kind==='delete'?'deletion_lease_token':'reconcile_lease_token'],p_outcome:outcome,p_payload:payload});
- // Bound per invocation. Database leases make overlapping invocations safe.
- for(const row of await db<RecordingRow[]>('rpc/icash_claim_call_recording_work','POST',{p_kind:'delete',p_limit:5,p_lease_seconds:120})){
+ const remove=async(row:RecordingRow)=>{
   try{
    if(row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!sid(row.recording_sid,'RE'))throw Error('BINDING_REQUIRED');
    let before:Record<string,unknown>|null=null;
@@ -27,11 +26,15 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
    if(!gone)throw Error('DELETE_UNCONFIRMED');
    if(await finish(row,'delete','deleted',{}))result.deleted++;else result.held++;
   }catch{await finish(row,'delete','retry',{reason:'provider_deletion_unconfirmed'});result.held++;}
- }
- for(let row of await db<RecordingRow[]>('rpc/icash_claim_call_recording_work','POST',{p_kind:'reconcile',p_limit:3,p_lease_seconds:120})){
+ };
+ const reconcile=async(initial:RecordingRow)=>{
+  let row=initial;
   let stage='binding';
   try{
    if(row.call_sid===null&&!missingCallInspected&&typeof provider.listCallCandidates==='function'){
+    // Claim the single discovery slot before awaiting provider work. Concurrent
+    // rows must not multiply unknown-call searches or authorize a replay.
+    missingCallInspected=true;
     const recovery=await findMissingRecordedCall(row,provider,env);
     if(recovery.status!=='binding_not_eligible')missingCallInspected=true;
     console.warn('recording_reconcile_diagnostic',{stage:'missing_call',recordingId:row.id,reason:recovery.status,
@@ -47,7 +50,7 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
      const settled=await settleRecordingGateOnly(db,provider,row);
      if(settled.settled)result.reconciled++;
      else{await finish(row,'reconcile','retry',{reason:settled.reason});result.held++;}
-     continue;
+     return;
     }
     if(['original_call_not_found','binding_not_eligible'].includes(recovery.status)&&typeof provider.listCallCreationAlerts==='function'){
      const rejected=await findRejectedRecordedCall(row,provider,env);
@@ -58,7 +61,7 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
      if(rejected.proof){
       stage='creation_rejection_commit';
       const saved=await db<{settled:boolean}>('rpc/icash_note_call_creation_rejection','POST',{p_id:row.id,p_account:row.account_id,p_operation:row.operation_key,p_receipt:rejected.proof});
-      if(saved?.settled){result.reconciled++;continue;}
+      if(saved?.settled){result.reconciled++;return;}
      }
     }
    }
@@ -125,7 +128,7 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
      console.warn('recording_reconcile_diagnostic',{stage:'carrier',recordingId:row.id,reason:settled.reason});
      if(!await finish(terminal,'reconcile','retry',{reason:settled.reason}))console.warn('recording_reconcile_diagnostic',{stage:'retry_commit',recordingId:row.id,reason:'recording_retry_not_saved'});
      result.held++;
-    }continue;
+    }return;
    }
    stage='recording_receipt';
    let receipt:Record<string,unknown>;
@@ -174,9 +177,30 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
    const reason=error instanceof Error&&error.message==='RECORDING_RECEIPT_NOT_SAVED'?'recording_receipt_not_saved':'provider_recording_reconciliation_required';
    console.warn('recording_reconcile_diagnostic',{stage,recordingId:row.id,reason,...(error instanceof RecordingProviderError?{providerStatus:error.status}:{})});
    try{if(!await finish(row,'reconcile','retry',{reason}))console.warn('recording_reconcile_diagnostic',{stage:'retry_commit',recordingId:row.id,reason:'recording_retry_not_saved'});}
-   catch{console.warn('recording_reconcile_diagnostic',{stage:'retry_commit',recordingId:row.id,reason:'recording_retry_failed'});}
+   catch{failed=true;console.warn('recording_reconcile_diagnostic',{stage:'retry_commit',recordingId:row.id,reason:'recording_retry_failed'});}
    result.held++;
   }
- }
+ };
+ // The former serial three-row batch fell behind ordinary call volume. Keep
+ // the original per-row handling and leases, with at most three active rows.
+ // A shared provider deadline stops new reads; independent DB writes preserve
+ // receipts/retry holds, and already-required call termination remains bounded.
+ if(options.signal?.aborted)return result;
+ const deletions=await db<RecordingRow[]>('rpc/icash_claim_call_recording_work','POST',{p_kind:'delete',p_limit:5,p_lease_seconds:120});
+ const recordings=options.signal?.aborted?[]:await db<RecordingRow[]>('rpc/icash_claim_call_recording_work','POST',{p_kind:'reconcile',p_limit:12,p_lease_seconds:120});
+ const work=[...deletions.map(row=>({row,kind:'delete',run:remove})),...recordings.map(row=>({row,kind:'reconcile',run:reconcile}))];
+ let cursor=0;
+ await Promise.all(Array.from({length:Math.min(3,work.length)},async()=>{
+  while(cursor<work.length){
+   const task=work[cursor++];
+   try{
+    if(options.signal?.aborted){
+     await finish(task.row,task.kind,'retry',{reason:'maintenance_deadline_reached'});result.held++;
+    }else await task.run(task.row);
+   }catch{failed=true;}
+  }
+ }));
+ // An infrastructure failure remains visible after unrelated leased rows finish.
+ if(failed)throw Error('RECORDING_MAINTENANCE_INCOMPLETE');
  return result;
 }
