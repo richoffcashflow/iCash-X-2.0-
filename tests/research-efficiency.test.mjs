@@ -4,6 +4,7 @@ import {ownerBatchAudience,allocateOwnerBatch,enrichOwnerBatch} from '../lib/own
 import {dealMachineRequest,DealMachineQuotaError} from '../lib/dealmachine-request.ts';
 import {discoverPage} from '../lib/discovery-pipeline.ts';
 import {screenEquity} from '../lib/equity-screen.ts';
+import {OwnerPreviewRateLimitError} from '../lib/owner-enrichment-deferral.ts';
 const snapshot=id=>({propertyId:id,propertyType:'house',fetchedAt:new Date().toISOString(),sellerCostReserveCents:100000,raw:{data:{dm_property_id:id,full_address:'Synthetic',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}}});
 const candidates=[1,2,3].map(i=>({screeningId:String(i),snapshot:snapshot('prop_'+i)}));
 const zero={used:0,people:0,properties:0,deduplicated:0};
@@ -40,19 +41,21 @@ metrics=[];await dealMachineRequest(metricDb,'owner_lookup',async()=>Response.js
 // End-to-end service: one preview and one paid request for three properties;
 // an uncertain paid request cannot be replayed because the durable claim exists.
 process.env.DEALMACHINE_API_KEY='dm_sk_live_LOCAL_FIXTURE';
-let claimed=false,paid=0,saved=0,original=0,timeout=false;
+let claimed=false,paid=0,saved=0,original=0,timeout=false,admissions=0,denyBatch=false;
 const db=async(path,method,body)=>{
  if(path==='rpc/icash_owner_batch_candidates')return claimed?[]:candidates;
- if(path==='rpc/icash_take_dealmachine_request')return true;
+ if(path==='rpc/icash_take_dealmachine_request'){admissions++;assert.equal(body.p_kind,'owner_preview','Paid capacity belongs to the atomic SQL batch claim');return true;}
  if(path==='rpc/icash_finish_dealmachine_request')return true;
- if(path==='rpc/icash_claim_owner_batch'){assert.equal(body.p_items.length,3);assert.deepEqual(body.p_preview,preview);claimed=true;return true;}
+ if(path==='rpc/icash_admit_owner_batch'){assert.equal(body.p_items.length,3);assert.deepEqual(body.p_preview,preview);if(denyBatch)return 'quota_wait';claimed=true;return 'claimed';}
  if(path==='rpc/icash_record_owner_batch_receipt'){original++;assert.deepEqual(body.p_receipt,receipt);return true;}
  if(path==='rpc/icash_save_owner_batch'){assert.equal(original,1);saved++;return true;}
  throw Error('Unexpected RPC '+path);
 };
 const transport=async(url,init)=>{const b=JSON.parse(init.body);if(url.endsWith('/properties/ids')){assert.equal(b.enrich,false);return Response.json(preview);}assert(claimed);paid++;assert.deepEqual(b.ids,ids);if(timeout)throw Error('timeout');return Response.json(receipt);};
 const config={contact_rate_id:'rate',contact_credit_cap:25,property_credit_micros:10000,data_rights_until:'2099-01-01'};
+denyBatch=true;await assert.rejects(enrichOwnerBatch(db,'account','1',config,250000,transport),OwnerPreviewRateLimitError);assert.equal(paid,0);assert.equal(claimed,false);denyBatch=false;admissions=0;
 assert.equal((await enrichOwnerBatch(db,'account','1',config,250000,transport)).batchProperties,3);assert.equal(paid,1);assert.equal(saved,1);
+assert.equal(admissions,1,'There is no second limiter call after financial admission');
 assert.equal((await enrichOwnerBatch(db,'account','1',config,250000,transport)).status,'held');assert.equal(paid,1);
 claimed=false;timeout=true;await assert.rejects(enrichOwnerBatch(db,'account','1',config,250000,transport),/timeout/);assert.equal(paid,2);
 assert.equal((await enrichOwnerBatch(db,'account','1',config,250000,transport)).status,'held');assert.equal(paid,2);

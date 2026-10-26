@@ -70,6 +70,7 @@ await db.exec(`
 `);
 await db.exec(read('config/research-request-efficiency.sql'));
 await db.exec(read('config/research-request-indexes.sql'));
+await db.exec(read('config/owner-batch-quota-admission.sql'));
 await q("insert into icash_accounts(id,owner_user_id,assistant_name,bot_paused) values($1,$1,'Fixture',false),($2,$2,'Other',false)",[account,other]);
 await db.exec("insert into icash_operating_budget(id,enabled) values(1,true);insert into icash_market_shortlist values('75217','TX','Dallas');update icash_discovery_filter_settings set enabled=true;");
 const ownerRate=uuid(9);
@@ -126,7 +127,8 @@ assert.equal(await val('select provider_page from icash_discovery_inventory_rece
 assert.equal(await val("select icash_known_assigned_discovery_page('75217','baseline',1,25)"),null,'New query receipts cannot contaminate old-query cache');
 assert.equal(await val('select count(*)::int from icash_research_private.exclusion_items where synced_at is null'),25);
 // Same-account batch reservations are atomic and preserve the original paid receipt.
-const rights='2099-01-01T00:00:00Z',batch=uuid(80),jobs=[101,102,103].map(n=>({screeningId:uuid(n),snapshot:{propertyId:'prop_'+n,propertyType:'house',fetchedAt:new Date().toISOString(),sellerCostReserveCents:100000,raw:{data:{dm_property_id:'prop_'+n,full_address:'Synthetic',state:'TX',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}}}}));
+let batch=uuid(80);
+const rights='2099-01-01T00:00:00Z',jobs=[101,102,103].map(n=>({screeningId:uuid(n),snapshot:{propertyId:'prop_'+n,propertyType:'house',fetchedAt:new Date().toISOString(),sellerCostReserveCents:100000,raw:{data:{dm_property_id:'prop_'+n,full_address:'Synthetic',state:'TX',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}}}}));
 for(const j of jobs)await q("insert into icash_screening_jobs(id,account_id,event_key,snapshot,result,state,completed_at) values($1,$2,$3,$4,$5,'complete',now())",[j.screeningId,account,'batch-fixture:'+j.screeningId,j.snapshot,runScreeningJob(j.snapshot)]);
 assert.equal((await val('select icash_owner_batch_candidates($1,$2)',[account,jobs[0].screeningId])).length,3);
 const preview={data:jobs.map((j,i)=>({dm_property_id:j.snapshot.propertyId,found:true,contacts:[{dm_person_id:'per_shared',contact_type:'owner'},{dm_person_id:'per_'+i,contact_type:'owner'}]})),totals:{submitted:3,found:3,not_found:0},credits:{used:0,people:0,properties:0,deduplicated:0}};
@@ -138,7 +140,15 @@ await q("insert into icash_property_controls(account_id,property_id,manual) valu
 await assert.rejects(claimBatch(),/admission held/);
 assert.equal(await val("select count(*)::int from icash_operation_spend where operation_key like 'owners:%'"),0,'Failed sibling admission rolls back every reservation');
 await q("update icash_property_controls set manual=false where account_id=$1 and property_id='prop_102'",[account]);
+assert.equal(await val('select used from icash_dealmachine_request_budget where id=1'),1,'A failed claim rolls back its request slot too');
+await db.exec('update icash_dealmachine_request_budget set used=2 where id=1');
+assert.equal(await val('select icash_admit_owner_batch($1,$2,$3,$4,$5,$6)',[account,jobs[0].screeningId,batch,items,preview,conf]),'quota_wait','Exhausted capacity is a proven unstarted deferral');
+assert.equal(await val("select count(*)::int from icash_operation_spend where operation_key like 'owners:%'"),0,'A definite quota refusal preserves all budgets');
+// A fresh invocation receives a fresh one-use UUID; the original diagnostic stays.
+batch=uuid(81);
+await db.exec('update icash_dealmachine_request_budget set used=1 where id=1');
 assert.equal(await claimBatch(),true);assert.equal(await claimBatch(),false,'Batch is one-use');
+assert.equal(await val('select used from icash_dealmachine_request_budget where id=1'),2,'A successful batch owns exactly one paid request slot');
 assert.deepEqual(await val('select icash_owner_batch_candidates($1,$2)',[account,jobs[0].screeningId]),[],'Claimed/unknown work never reaches another purchase');
 const ids=[...new Set(audience.flatMap(a=>a.ids))],paid={data:ids.map(id=>({dm_person_id:id,found:true,phones:[]})),totals:{submitted:4,found:4,not_found:0},credits:{used:2,people:4,properties:0,deduplicated:2}};
 assert.equal(await val('select icash_record_owner_batch_receipt($1,$2,$3)',[other,batch,paid]),false);
