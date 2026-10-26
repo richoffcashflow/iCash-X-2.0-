@@ -2,6 +2,14 @@
 
 Offer: software access at $0 for two calendar months, then USD $50 per month until cancellation. Paid AI work credits are separate. Payment method collected in Stripe; no automatic work-credit funding. Shareable candidate path `/legacy-offer` is not a functioning production offer until released.
 
+## Verification update — October 26, 2026
+
+- Exact candidate `661fba1fcbacf22fc3548fcba52c163df7d94f02` passed GitHub Actions run `40247028722`: all-tests, dependency audit, verified build, bounded concurrency, and browser tests.
+- Hosted Stripe sandbox checkout completed from the preview using only a synthetic `example.invalid` email and Stripe's test card. Checkout displayed $0 now, a payment method requirement, and $50/month after the two-calendar-month period. The browser returned through confirmation to `/access`, without webinar or VIP handoff.
+- The matching test-mode membership became active with initial price 0, recurring price 5000, and identical trial-end/access-until timestamps. No live customer or live payment was used.
+- The welcome-back page has its own scoped styles and no-index metadata. Public standalone separate-credit copy was removed; the saved offer terms are unchanged. Reminder clock times use explicit AM/PM in UTC.
+- Hosted paid-renewal, failed-renewal, cancellation and cross-device authenticated sandbox checks are still pending. The connected Stripe account exposes live mode only, and the sandbox dashboard requires sign-in. Keep production activation disabled until the remaining provider checks pass. Synthetic lifecycle tests do not replace those checks.
+
 ## Isolation
 
 - `ICASH_LEGACY_TRIAL_ENABLED=true` enables only the new route; absent/false is closed.
@@ -19,6 +27,6 @@ Offer: software access at $0 for two calendar months, then USD $50 per month unt
 3. Validate in a separate Stripe sandbox: $0 checkout, access claim, missed/duplicate/out-of-order webhooks, exact date display, required payment method, paid renewal, failed renewal, cancellation, and timezone/month-end boundaries. No sandbox connector was available; mocks are not this test.
 4. Enable `customer.subscription.trial_will_end` on the existing endpoint only after the reminder migration and matching code are deployed. The transactional reminder uses canonical live Stripe state, exact end date/$50/cancellation instructions, and a private deduplicated outbox; preview never sends. Verify actual hosted checkout cancellation disclosures. No marketing is sent by this feature.
 5. Verify cross-device recovery in sandbox: a verified-email owner can recover completed checkout, or expire an open checkout and replace only after canonical expiry. The old row and immutable acceptance remain preserved; a fresh member/acceptance belongs to the new browser. Unknown/null-session provider outcomes remain held for guarded support investigation. No anonymous email-only takeover.
-6. Run real browser interaction checks. Chromium execution was blocked by sandbox restrictions, so interaction assertions were not run. Production HTML render passed independently; this is not interaction coverage.
+6. Real browser interaction checks passed in GitHub Actions run `40247028722` on candidate `661fba1`; rerun them after changes. The hosted sandbox checkout and access handoff also passed as recorded above.
 
 The implementation does not alter existing Stripe subscriptions/prices, grant work credits, unpause bots, or send marketing. Synthetic provider checks must use test mode, unique example.invalid identities, no real customer/account reuse, and disabled mail transport. Shared Auth/account rows are not physically mode-partitioned; production entitlement and notification gates still require live mode. Existing legacy acquisition conversion logic remains paid-invoice-backed, so suppress trial customers before any acquisition campaign sends.

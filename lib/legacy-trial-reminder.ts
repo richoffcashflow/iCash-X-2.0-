@@ -11,7 +11,7 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ref=(v:string|{id:string}|null|undefined)=>typeof v==='string'?v:v?.id;
 export function legacyTrialReminderMessage(email:string,end:number):Message{
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254||!Number.isSafeInteger(end))throw Error('Invalid trial reminder');
- const date=new Date(end*1000).toISOString().replace('T',' ').replace('.000Z',' UTC');
+ const date=new Intl.DateTimeFormat('en-US',{dateStyle:'long',timeStyle:'long',timeZone:'UTC',hour12:true}).format(new Date(end*1000));
  return {from:'iCash X <signin@geticashx.com>',to:[email],reply_to:'support@geticashx.com',subject:'Your iCash X free period ends soon',text:`Your iCash X free software-access period ends on ${date}.\n\nAfter that time, your software subscription will renew at $50 USD per month until cancelled. Paid AI work credits are separate and are not included in this subscription.\n\nTo avoid the first $50 charge, cancel before ${date}. Sign in with your checkout email at https://www.geticashx.com/access, then open Settings → Billing and cancel your subscription. Cancellation ends software access immediately.\n\nNeed help cancelling or signing in? https://www.geticashx.com/access/help\n\nThis is a billing reminder, not a receipt or a request to purchase again.\n\niCash X`};
 }
 /** Only the signature-verified Stripe trial_will_end handler calls this. Provider
