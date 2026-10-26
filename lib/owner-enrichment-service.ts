@@ -25,7 +25,7 @@ export async function enrichForAccount(accountId:string,screeningId:string){
  const [rate]=await db<{operation:string;enabled:boolean;expires_at:string;costs_micros:{dealmachine:number}}[]>(`icash_operation_rates?id=eq.${c.contact_rate_id}&select=operation,enabled,expires_at,costs_micros`);
  if(!rate?.enabled||rate.operation!=='owner_enrichment'||!future(rate.expires_at))return {status:'rate_required'};
  const key=process.env.DEALMACHINE_API_KEY;if(!key||!/^dm_sk_live_[A-Za-z0-9_-]+$/.test(key))return {status:'provider_not_configured'};
- if(c.research_version===1)return enrichOwnerBatch(db,accountId,screeningId,c,rate.costs_micros.dealmachine);
+ if(c.research_version===1||c.research_version===2)return enrichOwnerBatch(db,accountId,screeningId,c,rate.costs_micros.dealmachine);
  const operationKey=`owners:${accountId}:${screeningId}`;
  const frozenSnapshot=JSON.stringify(job.snapshot);
  let stage='validation',providerStatus:number|null=null;

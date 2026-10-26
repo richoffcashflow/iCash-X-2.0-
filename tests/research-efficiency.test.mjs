@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {ownerBatchAudience,allocateOwnerBatch,enrichOwnerBatch} from '../lib/owner-batch.ts';
 import {dealMachineRequest,DealMachineQuotaError} from '../lib/dealmachine-request.ts';
 import {discoverPage} from '../lib/discovery-pipeline.ts';
-import {screenEquity} from '../lib/equity-screen.ts';
+import {screenEquity,sellerCallFinancialGate} from '../lib/equity-screen.ts';
+import {researchEligibilityFilters} from '../lib/research-query-policy.ts';
 import {OwnerPreviewRateLimitError} from '../lib/owner-enrichment-deferral.ts';
 const snapshot=id=>({propertyId:id,propertyType:'house',fetchedAt:new Date().toISOString(),sellerCostReserveCents:100000,raw:{data:{dm_property_id:id,full_address:'Synthetic',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}}});
 const candidates=[1,2,3].map(i=>({screeningId:String(i),snapshot:snapshot('prop_'+i)}));
@@ -31,6 +32,19 @@ const calls=[],policy={version:'research-efficiency-v1',exclusionListId:'fixture
 await discoverPage({zip:'75217',page:9,perPage:25,unitCostMicros:10000,quotedDataCostMicros:250000,queryPolicy:policy},{request:async body=>{calls.push(body);return body.estimate_cost?{estimated_credits:{this_page:25,breakdown:{people:0}}}:{data:[{dm_property_id:'prop_1',full_address:'Synthetic'}],credits:{used:1,people:0},pagination:{has_next_page:true}};},reserveAndClaim:async()=>true,persist:async r=>{assert.deepEqual(r.queryPolicy,policy);return 1;}});
 assert(calls.every(c=>c.page===1&&c.per_page===25&&c.exclude_lists.property_list_ids[0]==='fixture-list'&&c.contact_audience==='none'));
 assert(calls[0].filters.some(f=>f.filter_id==='num_total_open_liens'&&f.value===0));
+const policyV2={...policy,version:'research-efficiency-v2'},v2Calls=[];
+await discoverPage({zip:'75217',page:3,perPage:25,unitCostMicros:10000,quotedDataCostMicros:250000,queryPolicy:policyV2},{request:async body=>{v2Calls.push(body);return body.estimate_cost?{estimated_credits:{this_page:25,breakdown:{people:0}}}:{data:[{dm_property_id:'prop_2',full_address:'Synthetic'}],credits:{used:1,people:0},pagination:{has_next_page:true}};},reserveAndClaim:async()=>true,persist:async r=>{assert.deepEqual(r.queryPolicy,policyV2);return 1;}});
+assert(v2Calls.every(c=>c.page===1&&c.per_page===25&&!c.filters.some(f=>['num_total_active_liens','num_total_open_liens','total_open_lien_amount'].includes(f.filter_id))));
+assert.equal(researchEligibilityFilters('research-efficiency-v2').length,3);
+// Reproduce observed optional-field shapes without any real property/customer.
+// They remain preliminarily eligible; positive numeric evidence still holds.
+for(const amount of [null,'$0.00']){
+ const property={estimated_value:200000,estimated_equity_percentage:75,total_estimated_loan_balance:50000,has_active_lien:'No',has_hoa_lien:'No',is_tax_delinquent:'No',num_total_active_liens:0,num_total_open_liens:null,total_open_lien_amount:amount};
+ const gate=p=>sellerCallFinancialGate(screenEquity(p,10000000),{sellerOfferCents:10000000,sellerCostReserveCents:100000,checkedAt:Date.now()});
+ assert.equal(gate(property).status,'eligible');
+ for(const positive of [{num_total_active_liens:1},{num_total_open_liens:1},{total_open_lien_amount:100},{has_active_lien:'Yes'},{has_hoa_lien:'Yes'},{is_tax_delinquent:'Yes'}])assert.equal(gate({...property,...positive}).status,'hold');
+ assert.equal(screenEquity(property,10000000).titleStatus,'unverified');
+}
 await assert.rejects(discoverPage({zip:'75217',page:1,perPage:25,unitCostMicros:10000,quotedDataCostMicros:250000},{}),/CONFIGURATION_INVALID/);
 let admitted=false,network=0,metrics=[];
 const metricDb=async(path,method,body)=>path.includes('finish_')?metrics.push(body.p_result):admitted;
