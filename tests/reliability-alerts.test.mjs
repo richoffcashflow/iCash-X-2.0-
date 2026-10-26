@@ -18,6 +18,7 @@ const transport=async(url,options)=>{
  assert.equal(url,'https://api.resend.com/emails');providerCalls++;
  const payload=JSON.parse(options.body);assert.deepEqual(payload.to,[owner.email]);assert.equal(options.headers['Idempotency-Key'],'reliability-'+claim.id);
  if(event==='detected'){assert.equal(payload.subject,'iCash X · Minor priority');assert.match(payload.text,/Minor priority/);assert.match(payload.text,/Core background checks are healthy/);}
+ else{assert.match(payload.text,/Reviewed historical alerts may still have unresolved provider receipts or blocked work/);assert.match(payload.text,/does not confirm every message was delivered/);}
  assert(!JSON.stringify(payload).includes('customer'));assert(!JSON.stringify(payload).includes('server-account'));assert(payload.text.includes('https://www.geticashx.com/admin'));
  if(failProvider)throw Error('fixture ambiguous provider timeout');
  return Response.json({id:id(3)});

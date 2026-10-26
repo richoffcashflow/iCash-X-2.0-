@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {reliabilitySchema} from '../lib/reliability.ts';
 import {verifyUndispatchedMonitoring} from './helpers/undispatched-monitor-fixture.mjs';
+import {verifyWorkflowAcknowledgements} from './helpers/workflow-acknowledgements-fixture.mjs';
 const pg=await PGlite.create();
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 try{
@@ -59,6 +60,7 @@ try{
  assert.equal((await status()).fresh,false);assert.equal((await status()).status,'degraded');
  refreshFunction='icash_refresh_outreach_reliability_snapshot';
  await verifyUndispatchedMonitoring({pg,one,refresh,id});
+ await verifyWorkflowAcknowledgements({pg,one,id});
  for(const role of ['anon','authenticated']){
   await pg.exec(`set role ${role}`);
   await assert.rejects(pg.query('select public.icash_reliability_status()'),/permission denied/);

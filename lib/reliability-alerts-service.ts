@@ -40,7 +40,7 @@ export async function dispatchReliabilityAlerts(dependencies:Dependencies){
  const message={from:`iCash X <${config.from}>`,to:[recipient],
   subject:detected?`iCash X · ${reliabilitySeverityLabels[claim.severity]} priority`:'iCash X monitoring recovered',
   text:detected?`${reliabilitySeverityLabels[claim.severity]} priority — ${summary}. ${claim.issueCount} workflow item${claim.issueCount===1?'':'s'} flagged.\n\n${reliabilitySeverityGuidance[claim.severity]}\n\nReview the current state: https://www.geticashx.com/admin\n\nCheck original provider receipts before repeating any send or payment. Incident reference: ${claim.incidentId}`:
-   `The latest monitored checks are passing again for incident ${claim.incidentId}. This confirms the monitored checks recovered; it does not confirm every message was delivered or every deal completed.\n\nReview the current state: https://www.geticashx.com/admin`,
+   `No active workflow alerts or core-service failures were observed during the recovery window for incident ${claim.incidentId}. Reviewed historical alerts may still have unresolved provider receipts or blocked work. This does not confirm every message was delivered or every deal completed.\n\nReview the current state and acknowledged history: https://www.geticashx.com/admin`,
  };
  let provider:string|null=null;
  try{
