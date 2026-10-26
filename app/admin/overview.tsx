@@ -5,7 +5,7 @@ import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {overviewMoney,overviewTime,overviewLeadStatus,validOwnerOverview,type OwnerOverview,type OverviewFilters} from '@/lib/owner-overview';
 import styles from './overview.module.css';
 import {ClosingOperationsView} from './closing-operations';
-import {reliabilityIssueLabels} from '@/lib/reliability';
+import {reliabilityIssueLabels,reliabilityAcknowledgementLabels} from '@/lib/reliability';
 import {reliabilityPriority,reliabilityItemPriority,reliabilitySeverityLabels,reliabilitySeverityGuidance} from '@/lib/reliability-priority';
 import {ExperienceHealth} from './experience-health';
 import {UsageLoopReport} from '@/components/usage-loop-report';
@@ -82,15 +82,16 @@ export function OwnerOverviewView(){
     <p className={styles.inboundNote}>Inbound describes where the seller request started, not the direction of every call or text. These platform-wide requests are separate from DealMachine properties. Search changes this list only; the account switch changes usage and outbound totals. A request or assignment does not mean the seller is interested or a deal is ready.</p>
    </section>
    {report&&<section className={styles.notice} aria-label="Workflow reliability" role="status">
-    <strong>Workflow reliability · {priority?`${reliabilitySeverityLabels[priority]} priority`:'Checks passing'}</strong>
+    <strong>Workflow reliability · {priority?`${reliabilitySeverityLabels[priority]} priority`:(report.reliability?.snapshot?.acknowledgedCount??0)>0?'No new alerts':'Checks passing'}</strong>
     {priority&&<span>{reliabilitySeverityGuidance[priority]}</span>}
     {report.reliability?<>
      <span>Background worker: {report.reliability.components.worker.status} · Maintenance: {report.reliability.components.maintenance.status}</span>
      {!report.reliability.fresh&&<span>Monitoring is overdue. The saved results do not confirm current health.</span>}
      {report.reliability.snapshot&&<>
-      <span>{report.reliability.snapshot.issueCount} items need review · Checked {overviewTime(report.reliability.snapshot.checkedAt)} CT</span>
+      <span>{report.reliability.snapshot.issueCount} active alerts · Checked {overviewTime(report.reliability.snapshot.checkedAt)} CT</span>
       <span>Past 24 hours: {report.reliability.snapshot.texts.accepted} texts accepted, {report.reliability.snapshot.texts.delivered} delivery confirmations · {report.reliability.snapshot.contracts.created} contracts created, {report.reliability.snapshot.contracts.completed} signed.</span>
       {report.reliability.snapshot.issues.length>0&&<details><summary>Review stalled work</summary><ul>{report.reliability.snapshot.issues.map(issue=><li key={`${issue.kind}:${issue.resourceId}`}><strong>{reliabilitySeverityLabels[reliabilityItemPriority(issue)]} · {reliabilityIssueLabels[issue.kind]}</strong> · {overviewTime(issue.since)} CT · Reference {issue.resourceId}<br/>Check the saved provider receipt before repeating any action.</li>)}</ul>{report.reliability.snapshot.issueCount>25&&<p>Showing the 25 oldest items.</p>}</details>}
+      {(report.reliability.snapshot.acknowledgedCount??0)>0&&<details><summary>Reviewed history · {report.reliability.snapshot.acknowledgedCount} acknowledged alert{report.reliability.snapshot.acknowledgedCount===1?'':'s'}</summary><p>These alerts were removed from the active list after owner review. Unresolved receipts, budget holds and blocked work remain recorded. Receipt checks continue; acknowledgment does not retry work or confirm completion.</p><ul>{report.reliability.snapshot.acknowledgedIssues?.map(issue=><li key={`${issue.kind}:${issue.resourceId}`}><strong>{reliabilityAcknowledgementLabels[issue.disposition]}</strong> · {overviewTime(issue.since)} CT · Reference {issue.resourceId}<br/>Acknowledged {overviewTime(issue.acknowledgedAt)} CT</li>)}</ul>{(report.reliability.snapshot.acknowledgedCount??0)>25&&<p>Showing the 25 oldest acknowledged items. Full history is retained.</p>}</details>}
      </>}
     </>:<span>Monitoring could not be loaded. Refresh to try again.</span>}
    </section>}

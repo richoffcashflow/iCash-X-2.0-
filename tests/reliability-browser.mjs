@@ -59,7 +59,7 @@ const fixtureCookies=`icash_access=${access}; ${dashboardCookie}=${issueDashboar
 const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port',String(port)],{env:{PATH:process.env.PATH,NODE_ENV:'production',VERCEL_ENV:'preview',NEXT_TELEMETRY_DISABLED:'1',SUPABASE_SECRET_KEY:fixtureKey},stdio:['ignore','pipe','pipe']});
 let serverLog='';server.stdout.on('data',d=>{serverLog+=d});server.stderr.on('data',d=>{serverLog+=d});
 const now=new Date().toISOString(),part={status:'ok',checkedAt:now};
-const reliability={status:'degraded',fresh:true,components:{worker:part,maintenance:part},snapshot:{checkedAt:now,issueCount:1,issues:[{kind:'contract_delivery',resourceId:'00000000-0000-4000-8000-000000000003',accountId:'00000000-0000-4000-8000-000000000002',since:now}],texts:{accepted:1,delivered:0,review:0},contracts:{created:1,completed:0,review:0}}};
+const reliability={status:'degraded',fresh:true,components:{worker:part,maintenance:part},snapshot:{checkedAt:now,issueCount:1,issues:[{kind:'contract_delivery',resourceId:'00000000-0000-4000-8000-000000000003',accountId:'00000000-0000-4000-8000-000000000002',since:now}],acknowledgedCount:1,acknowledgedIssues:[{kind:'call_receipt',resourceId:'00000000-0000-4000-8000-000000000005',accountId:'00000000-0000-4000-8000-000000000002',since:now,disposition:'provider_outcome_unknown',acknowledgedAt:now}],texts:{accepted:1,delivered:0,review:0},contracts:{created:1,completed:0,review:0}}};
 const experienceFixture={experience:{days:7,lastObservedAt:now,counts:[{event:'panel_open',stage:'closing',count:12,accounts:3},{event:'panel_error',stage:'closing',count:2,accounts:1},{event:'panel_retry',stage:'closing',count:1,accounts:1}]},alerts:{configuration:'ready',checkedAt:now,active:{id:'00000000-0000-4000-8000-000000000004',openedAt:now,issueCount:1,reasons:['workflows'],severity:'high'},notifications:{pending:0,accepted:1,needsReview:0},lastNotificationAt:now}};
 function fixture(url){const p=new URL(url).searchParams;return {report:{days:Number(p.get('days')),includeOwner:p.get('includeOwner')==='true',query:p.get('q'),page:Number(p.get('page')),pageSize:25,timezone:'America/Chicago',startAt:now,endAt:now,leadCount:0,matchedCount:0,reviewCount:0,leads:[],funnel:sellerFunnelStages.map(s=>({key:s.key,count:0})),reliability,usage:{completedCount:0,missingChargeCount:0,chargedCents:0,coveredCents:0,knownCostMicros:0,costMicros:0,marginMicros:0,missingCostCount:0,estimatedCount:0,pendingCount:0}}};}
 try{
@@ -128,6 +128,18 @@ try{
    await panel.getByText('High · Contract text awaiting delivery',{exact:true}).waitFor();
    assert.match(await panel.innerText(),/1 texts accepted, 0 delivery confirmations/);
    assert.match(await panel.innerText(),/AM|PM/);
+   await panel.getByText('Reviewed history · 1 acknowledged alert',{exact:true}).click();
+   await panel.getByText('Provider outcome still unknown',{exact:true}).waitFor();
+   assert.match(await panel.innerText(),/acknowledgment does not retry work or confirm completion/);
+   const activeIssues=reliability.snapshot.issues;
+   reliability.status='ok';reliability.snapshot.issueCount=0;reliability.snapshot.issues=[];
+   await page.getByRole('button',{name:'Refresh',exact:true}).click();
+   await panel.getByText('Workflow reliability · No new alerts',{exact:true}).waitFor();
+   assert.match(await panel.innerText(),/0 active alerts/);
+   assert.equal(await panel.getByText('Checks passing',{exact:false}).count(),0,'acknowledged work is not presented as all work completed');
+   reliability.status='degraded';reliability.snapshot.issueCount=1;reliability.snapshot.issues=activeIssues;
+   await page.getByRole('button',{name:'Refresh',exact:true}).click();
+   await panel.getByText('Workflow reliability · High priority',{exact:true}).waitFor();
    const experience=page.locator('section[aria-label="Workspace experience"]');
    await experience.getByText('12 panel opens · 2 panel errors · 1 retries',{exact:true}).waitFor();
    await experience.getByText('Review experience and alerts',{exact:true}).click();
