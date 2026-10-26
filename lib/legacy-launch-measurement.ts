@@ -10,6 +10,7 @@ export async function legacyAdMeasurementExcluded(req:Request,visitorId?:string)
  if(source&&source.length<=2000){
   let page:URL|null=null;try{page=new URL(source,requestUrl);}catch{/* Ignore malformed page context. */}
   if(page?.origin===requestUrl.origin){
+   if(/^\/legacy-offer\/?$/.test(page.pathname))return true;
    const code=page.pathname.match(/^\/live\/(\d{6,12})\/?$/)?.[1];
    if(code){
     const [row]=await db<{config:{legacyCampaignId?:string}}[]>(`icash_webinars?public_code=eq.${code}&select=config&limit=1`);
