@@ -10,7 +10,7 @@ export async function verifyPurchaseAccess(browser,base,options,name){
    const url=new URL(route.request().url());
    if(url.origin!==base){external++;return route.abort();}
    const json=(body,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
-   if(url.pathname==='/api/account/access')return wrongAccount?json({signedIn:true,error:'Sign in with the same email you used for this purchase. Your payment is saved; do not pay again.'},403):json(signedIn?{signedIn:true,destination:url.searchParams.get('destination')==='vip'?'/live/100002':'/'}:{signedIn:false,signInReady:true});
+   if(url.pathname==='/api/account/access')return wrongAccount?json({signedIn:true,error:'Sign in with the same email you used for this purchase. Your checkout is saved; do not start another checkout.'},403):json(signedIn?{signedIn:true,destination:url.searchParams.get('destination')==='vip'?'/live/100002':'/'}:{signedIn:false,signInReady:true});
    if(url.pathname==='/api/auth/email'){codeRequests++;assert.deepEqual(route.request().postDataJSON().email,'buyer@example.invalid');if(failEmail)return json({error:'Email could not be sent right now. Enter a code you already received or use your checkout phone.'},503);return json({sent:true,message:'A sign-in code is on its way.'});}
    if(url.pathname==='/api/auth/phone'){
     const body=route.request().postDataJSON();assert.equal(body.email,'');assert.equal(body.phone,'2125551234');
@@ -35,7 +35,7 @@ export async function verifyPurchaseAccess(browser,base,options,name){
   const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base+'/access');await page.getByRole('button',{name:'Email me a code',exact:true}).waitFor();
   assert.equal(codeRequests,0,'Opening an emailed link never sends a code automatically');
-  assert(await page.getByText('Already paid? You do not need to pay again.',{exact:true}).isVisible());
+  assert(await page.getByText('Already completed checkout? You do not need to start another checkout.',{exact:true}).isVisible());
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'No horizontal overflow');
   if(process.env.PURCHASE_ACCESS_SCREENSHOT)await page.screenshot({path:process.env.PURCHASE_ACCESS_SCREENSHOT,fullPage:true});
   await page.getByLabel('Email',{exact:true}).fill('buyer@example.invalid');

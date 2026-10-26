@@ -1,0 +1,55 @@
+
+.returning-offer{min-height:100vh;background:#f6f6f5;color:#161616;font-family:Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased;padding:0 32px}
+.returning-offer *{box-sizing:border-box}
+.returning-offer a{color:inherit;text-underline-offset:4px}
+.returning-header{max-width:1120px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:28px 0;border-bottom:1px solid #dededb}
+.returning-brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-size:21px;font-weight:700;letter-spacing:-.7px}
+.returning-brand>span>span{font-size:13px;color:#666;margin-left:4px;letter-spacing:0}
+.returning-help{font-size:13px;text-decoration:underline;padding:12px 0}
+.returning-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);gap:88px;max-width:1120px;margin:0 auto;padding:76px 0 64px;align-items:start}
+.returning-intro{padding-top:20px}
+.returning-eyebrow{font-size:10px;font-weight:700;letter-spacing:1.7px;line-height:1.6;margin:0 0 24px;color:#5b5b57}
+.returning-intro h1{font-size:clamp(38px,4.1vw,58px);line-height:1.06;letter-spacing:-2.5px;font-weight:600;margin:0 0 24px}
+.returning-intro h1 span{display:block;color:#777772}
+.returning-lead{font-size:17px;line-height:1.65;color:#565652;max-width:430px;margin:0}
+.returning-features{display:grid;gap:23px;list-style:none;padding:0;margin:40px 0}
+.returning-features li{display:flex;gap:16px;align-items:start}
+.returning-features li>span{font-size:11px;color:#797974;padding-top:4px;font-variant-numeric:tabular-nums}
+.returning-features strong{font-size:15px;font-weight:600}
+.returning-features p{font-size:13px;line-height:1.6;color:#65655f;margin:4px 0 0}
+.returning-note{font-size:12px;line-height:1.65;color:#70706a;max-width:340px;padding-top:22px;border-top:1px solid #dededb;margin:0}
+.returning-card{background:white;border:1px solid #dfdfdc;border-radius:20px;padding:32px;box-shadow:0 10px 35px #00000004}
+.returning-card .returning-eyebrow{margin-bottom:16px}
+.returning-card h2{font-size:25px;letter-spacing:-1px;line-height:1.25;font-weight:650;margin:0 0 8px}
+.returning-card-intro{font-size:13px;color:#70706a;margin:0 0 24px;line-height:1.5}
+.returning-schedule{border-top:1px solid #e9e9e6;border-bottom:1px solid #e9e9e6;padding:9px 0;margin-bottom:18px}
+.returning-schedule>div{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;font-size:12px;color:#60605a}
+.returning-schedule strong{font-size:18px;font-weight:600;color:#161616;white-space:nowrap}
+.returning-schedule small{font-size:11px;font-weight:400;color:#70706a}
+.returning-billing{font-size:12px;color:#66665f;line-height:1.65;margin:0 0 24px}
+.returning-email{display:block;font-size:12px;font-weight:600}
+.returning-email input{display:block;width:100%;min-height:48px;padding:12px 14px;margin:8px 0 18px;background:white;border:1px solid #cfcfca;border-radius:8px;font-size:15px;color:#111;font-weight:400}
+.returning-offer input:focus-visible,.returning-offer button:focus-visible,.returning-offer a:focus-visible,.returning-offer summary:focus-visible{outline:2px solid #111;outline-offset:4px}
+.returning-terms{font-size:12px;line-height:1.6;margin-bottom:16px;color:#5c5c56}
+.returning-terms summary{cursor:pointer;padding:4px 0;text-decoration:underline;text-underline-offset:3px}
+.returning-terms p{margin:10px 0 4px;padding:12px;background:#f6f6f5;border-radius:8px}
+.returning-consent{display:flex;gap:10px;align-items:flex-start;font-size:11px;color:#5c5c56;line-height:1.6}
+.returning-consent input{flex:0 0 17px;width:17px;height:17px;margin-top:2px;accent-color:#111}
+.returning-primary{display:block;width:100%;min-height:49px;padding:14px 18px;margin-top:22px;border:0;border-radius:8px;background:#111;color:white;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s}
+.returning-primary:hover:not(:disabled){background:#333}
+.returning-primary:disabled{background:#e3e3df;color:#76766f;cursor:not-allowed}
+.returning-secure{font-size:10px;text-align:center;color:#777770;margin:12px 0 0}
+.returning-alert{font-size:12px;line-height:1.6;padding:12px;border:1px solid #d5d5ce;border-radius:8px;margin:16px 0 0;background:#fafaf8}
+.returning-recovery{padding-top:20px;margin-top:20px;border-top:1px solid #e9e9e6;text-align:center}
+.returning-recovery>button{font-size:11px;line-height:1.6;background:none;border:0;text-decoration:underline;text-underline-offset:3px;color:#686862;cursor:pointer;min-height:28px}
+.returning-recovery>section{text-align:left;margin-top:22px}
+.returning-footer{max-width:1120px;margin:0 auto;display:flex;justify-content:space-between;gap:16px;padding:24px 0 30px;border-top:1px solid #dededb;font-size:11px;line-height:1.7;color:#70706a}
+.returning-footer a{text-decoration:underline}
+.returning-confirm{padding-top:48px;padding-bottom:48px}
+.returning-confirm>.returning-brand{max-width:520px;margin:0 auto 24px}
+.returning-confirm>.returning-card{max-width:520px;margin:0 auto}
+.returning-confirm h1{font-size:28px;font-weight:600;letter-spacing:-1px;line-height:1.2;margin:0 0 18px}
+.returning-confirm .returning-card>p:not(.returning-eyebrow){font-size:14px;line-height:1.65;margin:16px 0}
+.returning-confirm .returning-card>a{font-size:13px;text-decoration:underline}
+@media(max-width:900px){.returning-grid{gap:40px;grid-template-columns:minmax(0,1fr) minmax(0,400px);padding-top:48px}.returning-intro h1{font-size:42px;letter-spacing:-1.8px}.returning-card{padding:26px}}
+@media(max-width:720px){.returning-offer{padding-left:22px;padding-right:22px}.returning-header{padding:20px 0}.returning-grid{grid-template-columns:1fr;gap:32px;max-width:480px;padding:36px 0}.returning-intro{padding-top:0}.returning-intro h1{font-size:43px;letter-spacing:-1.7px}.returning-eyebrow{margin-bottom:18px}.returning-lead{font-size:15px}.returning-features{gap:16px;margin:28px 0}.returning-note{max-width:none;padding-top:18px}.returning-card{padding:25px 23px;border-radius:16px}.returning-card h2{font-size:25px}.returning-footer{font-size:10px}.returning-confirm{padding-top:32px}}

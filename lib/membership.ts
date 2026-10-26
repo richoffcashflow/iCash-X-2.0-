@@ -5,7 +5,7 @@ import {db} from '@/lib/stripe-test';
 import {fundingStripe} from '@/lib/funding';
 import {fundingMode} from '@/lib/funding-policy';
 import {membershipAccessible,validOffer,purchaseAccessSmsVersion,type MembershipOffer} from './membership-policy';
-export type Membership={checkout_email?:string|null;private_invite_id?:string|null;vip_retained_at?:string|null;post_purchase_webinar_id?:string|null;vip_until?:string|null;initial_price_cents?:number|null;id:string;mode:'live'|'test';account_id:string|null;guest_hash:string;price_cents:number;offer_revision:number;state:string;stripe_session_id:string|null;stripe_subscription_id:string|null;stripe_customer_id:string|null;paid_through:string|null;cancel_at_period_end:boolean;payer_email:string|null;payer_phone?:string|null;checkout_url:string|null;consent_version?:string;retention_requested_at?:string|null;retention_started_at?:string|null;retention_ends_at?:string|null;retention_discount_id?:string|null};
+export type Membership={legacy_trial_attempt?:number;legacy_trial_offer?:string|null;legacy_trial_end?:string|null;legacy_trial_started_at?:string|null;checkout_email?:string|null;private_invite_id?:string|null;vip_retained_at?:string|null;post_purchase_webinar_id?:string|null;vip_until?:string|null;initial_price_cents?:number|null;id:string;mode:'live'|'test';account_id:string|null;guest_hash:string;price_cents:number;offer_revision:number;state:string;stripe_session_id:string|null;stripe_subscription_id:string|null;stripe_customer_id:string|null;paid_through:string|null;cancel_at_period_end:boolean;payer_email:string|null;payer_phone?:string|null;checkout_url:string|null;consent_version?:string;retention_requested_at?:string|null;retention_started_at?:string|null;retention_ends_at?:string|null;retention_discount_id?:string|null};
 export const retentionVersion='retention-50-six-months-v1';
 const retentionCoupon='icash-retention-50-six-months-v1';
 const identifier=(value:unknown,prefix:string)=>typeof value==='string'&&new RegExp(`^${prefix}_[A-Za-z0-9]+$`).test(value);
@@ -64,16 +64,39 @@ async function matchingMembership(sub:Stripe.Subscription){
 /** Canonical Stripe reads prevent out-of-order webhook payloads from reviving old state. */
 export async function syncMembershipSubscription(sub:Stripe.Subscription){
  const m=await matchingMembership(sub);if(!m)return false;
- const state=m.state==='cancelled'||sub.status==='canceled'?'cancelled':m.state==='cancel_requested'?'cancel_requested':m.state==='needs_review'?'needs_review':sub.status==='active'?'active':['past_due','unpaid','incomplete_expired','paused'].includes(sub.status)?'payment_failed':'pending';
+ const state=m.state==='cancelled'||sub.status==='canceled'?'cancelled':m.state==='cancel_requested'?'cancel_requested':m.state==='needs_review'?'needs_review':sub.status==='active'||(sub.status==='trialing'&&!!m.legacy_trial_started_at&&!!m.legacy_trial_end&&sub.trial_end===Date.parse(m.legacy_trial_end)/1000)?'active':['past_due','unpaid','incomplete_expired','paused'].includes(sub.status)?'payment_failed':'pending';
  // Compare-and-set prevents a stale provider read from overwriting a newer
  // cancellation or review decision, independently of the database trigger.
  await db(`icash_memberships?id=eq.${m.id}&state=eq.${m.state}${state==='needs_review'?'':'&state=neq.needs_review'}`,'PATCH',{stripe_subscription_id:sub.id,stripe_customer_id:ref(sub.customer),state,cancel_at_period_end:sub.cancel_at_period_end,updated_at:new Date().toISOString()});
  return true;
 }
+/** A free introductory period is access, not a fabricated payment or wallet credit. */
+async function activateLegacyTrial(m:Membership,sub:Stripe.Subscription,s:Stripe.Checkout.Session){
+ const end=m.legacy_trial_end?Date.parse(m.legacy_trial_end)/1000:0;
+ if(m.legacy_trial_offer!=='legacy-trial-2026-10-25.1'||m.consent_version!=='legacy-trial-2026-10-25.1'||m.initial_price_cents!==0||!Number.isSafeInteger(end)||sub.metadata.icash_legacy_trial!=='legacy-trial-2026-10-25.1'||s.metadata?.icash_legacy_trial!=='legacy-trial-2026-10-25.1'||s.metadata?.icash_membership!==m.id||s.id!==m.stripe_session_id||s.status!=='complete'||!['paid','no_payment_required'].includes(s.payment_status)||s.mode!=='subscription'||s.amount_total!==0||s.currency!=='usd'||s.livemode!==(m.mode==='live')||ref(s.subscription)!==sub.id||ref(s.customer)!==ref(sub.customer)||(s.total_details?.amount_discount??0)!==0||!s.customer_details?.email||s.customer_details.email.toLowerCase()!==m.checkout_email?.toLowerCase())throw Error('Legacy trial binding mismatch');
+ // A confirmed introductory period is immutable history, not a permanent $50
+ // restriction on later explicitly authorized paid plans. Validate identity above.
+ if((m.legacy_trial_started_at||m.stripe_subscription_id===sub.id)&&sub.status!=='trialing')return;
+ if(m.price_cents!==5000||sub.trial_end!==end||!sub.trial_start||end<=sub.trial_start||end-sub.trial_start>62*86400)throw Error('Legacy trial period mismatch');
+ // Canonical cancellation/failure must never be revived by an old free invoice.
+ if(sub.status!=='trialing'||end<=Date.now()/1000)return;
+ await db('rpc/icash_activate_legacy_trial','POST',{p_membership:m.id,p_session:s.id,p_subscription:sub.id,p_customer:ref(sub.customer),p_email:s.customer_details.email,p_phone:s.customer_details.phone??null,p_trial_end:new Date(end*1000).toISOString()});
+}
 export async function settleMembershipInvoice(invoiceId:string){
  if(!identifier(invoiceId,'in'))throw Error('Invalid invoice');
  const stripe=fundingStripe(),invoice=await stripe.invoices.retrieve(invoiceId,{expand:['discounts.source.coupon']}),subId=ref(invoice.parent?.subscription_details?.subscription);
  if(!subId)return false;const sub=await stripe.subscriptions.retrieve(subId);let m=await matchingMembership(sub);if(!m)return false;
+ if(m.legacy_trial_offer&&invoice.total===0){
+  if(invoice.id!==invoiceId||invoice.status!=='paid'||invoice.livemode!==sub.livemode||invoice.currency!=='usd'||invoice.amount_remaining!==0||invoice.amount_paid!==0||invoice.subtotal!==0||invoice.billing_reason!=='subscription_create'||ref(invoice.customer)!==ref(sub.customer)||(invoice.total_discount_amounts??[]).some(d=>d.amount!==0)||(invoice.total_taxes??[]).some(t=>t.amount!==0)||!m.stripe_session_id)throw Error('Legacy trial invoice mismatch');
+  if((m.legacy_trial_started_at||m.stripe_subscription_id===sub.id)&&sub.status!=='trialing'){
+   // Replay of the original subscription-create $0 invoice after a paid plan
+   // change: canonical identity is checked, but no access boundary is extended.
+   await activateLegacyTrial(m,sub,await stripe.checkout.sessions.retrieve(m.stripe_session_id));await syncMembershipSubscription(sub);return true;
+  }
+  const lines=await stripe.invoices.listLineItems(invoice.id,{limit:2}),line=lines.data[0];
+  if(lines.has_more||lines.data.length!==1||line.amount!==0||line.quantity!==1||line.pricing?.price_details?.price!==sub.items.data[0].price.id||line.period.end!==sub.trial_end||line.period.start!==sub.trial_start)throw Error('Legacy trial invoice line mismatch');
+  await activateLegacyTrial(m,sub,await stripe.checkout.sessions.retrieve(m.stripe_session_id));await syncMembershipSubscription(sub);return true;
+ }
  const [settled]=await db<{membership_id:string;stripe_payment_id:string;amount_cents:number;period_end:string}[]>(`icash_membership_invoices?stripe_invoice_id=eq.${invoice.id}&select=membership_id,stripe_payment_id,amount_cents,period_end`);if(settled){if(settled.membership_id!==m.id||invoice.status!=='paid'||invoice.total!==settled.amount_cents||ref(invoice.customer)!==m.stripe_customer_id||invoice.livemode!==(m.mode==='live'))throw Error('Settled invoice changed');return true;}
  const discounts=(invoice.total_discount_amounts??[]).filter(d=>d.amount!==0);let discountId:string|null=null,expected=m.price_cents;
  if(m.vip_retained_at&&(m.price_cents!==5000||discounts.length))throw Error('Retained VIP invoice mismatch');
@@ -96,9 +119,9 @@ export async function settleMembershipInvoice(invoiceId:string){
 export async function reconcileMembershipCheckout(m:Membership){
  if(!m.stripe_session_id)return m;const stripe=fundingStripe(),s=await stripe.checkout.sessions.retrieve(m.stripe_session_id);
  if(s.id!==m.stripe_session_id||s.currency!=='usd'||s.amount_total!==(m.initial_price_cents??m.price_cents)||(s.total_details?.amount_discount??0)!==0||s.mode!=='subscription'||s.metadata?.icash_membership!==m.id||s.livemode!==(m.mode==='live'))throw Error('Checkout binding mismatch');
- if(s.status!=='complete'||s.payment_status!=='paid')return m;
+ if(s.status!=='complete'||(s.payment_status!=='paid'&&!(m.legacy_trial_offer&&s.payment_status==='no_payment_required')))return m;
  const subId=ref(s.subscription);if(!subId||m.stripe_subscription_id&&m.stripe_subscription_id!==subId)throw Error('Subscription binding mismatch');
- const sub=await stripe.subscriptions.retrieve(subId);if(sub.metadata.icash_membership!==m.id||ref(s.customer)!==ref(sub.customer))throw Error('Checkout subscription mismatch');await syncMembershipSubscription(sub);const invoice=ref(sub.latest_invoice);if(invoice)await settleMembershipInvoice(invoice);
+ const sub=await stripe.subscriptions.retrieve(subId);if(sub.metadata.icash_membership!==m.id||ref(s.customer)!==ref(sub.customer))throw Error('Checkout subscription mismatch');if(m.legacy_trial_offer){await matchingMembership(sub);await activateLegacyTrial(m,sub,s);}await syncMembershipSubscription(sub);const invoice=ref(sub.latest_invoice);if(invoice)await settleMembershipInvoice(invoice);
  const [saved]=await db<Membership[]>(`icash_memberships?id=eq.${m.id}&select=*`);if(!saved.payer_phone&&s.customer_details?.phone){await db(`icash_memberships?id=eq.${m.id}`,'PATCH',{payer_phone:s.customer_details.phone.slice(0,40)});saved.payer_phone=s.customer_details.phone;}
  if(saved.mode==='live'&&membershipAccessible(saved)&&s.metadata?.icash_access_sms===purchaseAccessSmsVersion&&s.customer_details?.phone){
   await db('rpc/icash_record_purchase_access_contact','POST',{p_membership:saved.id,p_checkout:s.id,p_phone:s.customer_details.phone,p_version:purchaseAccessSmsVersion});

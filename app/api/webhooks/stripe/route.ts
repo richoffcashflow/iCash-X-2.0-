@@ -1,3 +1,4 @@
+import {sendLegacyTrialReminder} from '@/lib/legacy-trial-reminder';
 import {reconcilePrivateVipCheckout,settlePrivateVipInvoice,syncPrivateVip} from '@/lib/private-vip';
 import {schedulePurchaseAccessEmail} from '@/lib/purchase-access-dispatch';
 export const maxDuration=120;
@@ -22,7 +23,7 @@ export async function POST(req:Request) {
  if(event.type.startsWith('charge.dispute.'))await recordDisputeEvent(event);
  if(event.type==="checkout.session.completed"||event.type==="checkout.session.async_payment_succeeded"){
   const s=event.data.object;
-  if(s.payment_status==="paid"){
+  if(s.payment_status==="paid"||(s.payment_status==="no_payment_required"&&s.metadata?.icash_legacy_trial==='legacy-trial-2026-10-25.1')){
    if(s.metadata?.icash_private_vip)await reconcilePrivateVipCheckout(s.id);
    else if(s.metadata?.icash_vip_change)await reconcileVipCheckout(s.id);
    else if(s.metadata?.icash_membership)await reconcileMembershipSession(s.id);
@@ -30,6 +31,7 @@ export async function POST(req:Request) {
    else if(s.metadata?.icash_funding_order)await settleFunding(await stripe.checkout.sessions.retrieve(s.id));
    else if(mode==="test"&&s.metadata?.icash_test_order)await settleTestSession(await stripe.checkout.sessions.retrieve(s.id));
   }
+ }else if(event.type==='customer.subscription.trial_will_end'){await sendLegacyTrialReminder(event.data.object.id);
  }else if(event.type==="payment_intent.succeeded"&&event.data.object.metadata?.icash_auto_recharge_attempt){await settleAutoRecharge(event.data.object);
  }else if(event.type==="invoice.paid"){if(!await settlePrivateVipInvoice(event.data.object.id)&&!await settleMembershipInvoice(event.data.object.id))await settleDailyInvoice(event.data.object.id);
  }else if(event.type==="invoice.payment_failed"||event.type==="invoice.payment_action_required"){

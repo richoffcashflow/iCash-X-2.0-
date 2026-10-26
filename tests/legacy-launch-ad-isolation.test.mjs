@@ -13,6 +13,11 @@ const request=page=>new Request('https://example.test/api/webinar/pixel'+(page?'
 try{
  token='a'.repeat(64);assert.equal(await legacyAdMeasurementExcluded(request('/join')),true);assert.equal(reads,0);
  token=undefined;rows=[{config:{legacyCampaignId:'campaign'}}];
+ const beforeOfferReads=reads;
+ assert.equal(await legacyAdMeasurementExcluded(request('/legacy-offer')),true);
+ assert.equal(await legacyAdMeasurementExcluded(request('/legacy-offer?session_id=cs_live_trial')),true);
+ assert.equal(reads,beforeOfferReads,'Standalone returning offer is excluded without a visitor/campaign lookup');
+ assert.equal(await legacyAdMeasurementExcluded(request('https://elsewhere.test/legacy-offer')),false);
  assert.equal(await legacyAdMeasurementExcluded(request('/live/100004')),true,'Private recording excluded before a session exists');
  assert.equal(await legacyAdMeasurementExcluded(request('/join?webinar_session=00000000-0000-4000-8000-000000000001')),true);
  assert.equal(await legacyAdMeasurementExcluded(request(), 'visitor'),true,'VIP and checkout returns retain private context');
@@ -26,6 +31,7 @@ try{
  create table icash_webinar_visitors(id uuid primary key,email text,marketing_consent_at timestamptz,measurement jsonb default '{}');
  create table icash_webinar_sessions(id uuid primary key,config jsonb default '{}');
  create table icash_membership_invoices(membership_id uuid,stripe_payment_id text,recorded_at timestamptz);
+ create table icash_memberships(id uuid primary key,legacy_trial_offer text);
  create table icash_plan_changes(membership_id uuid,payment_id text,applied_at timestamptz);
  create table icash_legacy_checkouts(membership_id uuid,created_at timestamptz);
  create table icash_billing_reviews(payment_id text);
@@ -55,6 +61,18 @@ try{
  await pg.exec('select icash_webinar_sync_purchases()');
  assert.equal((await q("select count(*)::int count from icash_webinar_meta_events where state='canceled'")).rows[0].count,3);
  assert.equal((await q('select count(*)::int count from fixture_payments')).rows[0].count,4,'Real receipts retained');
+ await q("insert into icash_memberships values($1,'legacy-trial-2026-10-25.1')",[id(5)]);
+ await q("insert into icash_membership_invoices values($1,'pi_trial_renewal',now())",[id(5)]);
+ await q("insert into icash_plan_changes values($1,'pi_trial_vip',now())",[id(5)]);
+ for(const [payment,kind] of [['pi_trial_renewal','membership'],['pi_trial_vip','vip_upgrade']])await q('insert into fixture_payments values($1,5000,now(),$2,$3,$4)',[payment,id(2),id(1),kind]);
+ await pg.exec('select icash_webinar_sync_purchases()');
+ await pg.exec(readFileSync(new URL('../supabase/migrations/20261026033000_legacy_trial_ad_isolation.sql',import.meta.url),'utf8'));
+ for(const fn of ['icash_webinar_meta_purchases','icash_webinar_attributed_purchases'])assert.deepEqual((await q(`select payment_id from ${fn}()`)).rows.map(r=>r.payment_id),['pi_ad'],'Trial renewals/upgrades cannot enter an earlier ordinary ad session');
+ await pg.exec("update icash_webinar_meta_events set state='pending'");
+ assert.deepEqual((await q('select payment_id from icash_webinar_claim_meta()')).rows.map(r=>r.payment_id),['pi_ad'],'Late trial events remain excluded at dispatch');
+ await pg.exec('select icash_webinar_sync_purchases()');
+ assert.equal((await q("select count(*)::int count from icash_webinar_meta_events where state='canceled'")).rows[0].count,5);
+ assert.equal((await q('select count(*)::int count from fixture_payments')).rows[0].count,6,'All paid evidence retained');
  for(const role of ['anon','authenticated'])assert.equal((await q("select has_function_privilege($1,'icash_legacy_meta_excluded(text,uuid)','execute') allowed",[role])).rows[0].allowed,false);
- console.log('PASS private customer campaign: invitation, recording, signup and VIP pixel isolation; separate purchase reports, Meta queue/claim guards, real receipts and ordinary ad behavior.');
+ console.log('PASS private customer campaign and returning trial: page, invitation, recording, signup and VIP pixel isolation; renewal/upgrade report and dispatch exclusion, real receipts and ordinary ad behavior.');
 }finally{await pg.close();}
