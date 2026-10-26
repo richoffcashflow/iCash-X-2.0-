@@ -5,7 +5,7 @@ import {db} from '@/lib/stripe-test';
 import {discoverForAccount} from '@/lib/discovery-service';
 import {workspaceAcknowledgmentCurrent,type WorkspaceAcknowledgmentRecord} from '@/lib/workspace-acknowledgment';
 export const dynamic='force-dynamic';
-export const maxDuration=60;
+export const maxDuration=120;
 export async function POST(request:Request){
  const headers={'Cache-Control':'private, no-store'};
  if(request.headers.get('origin')!==new URL(request.url).origin)return NextResponse.json({error:'Invalid origin'},{status:403,headers});

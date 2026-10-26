@@ -188,5 +188,6 @@ await db.exec('update icash_dealmachine_request_budget set used=0');
 assert.equal(await val('select icash_admit_owner_batch($1,$2,$3,$4,$5,$6)',[other,extraJob.screeningId,uuid(151),extraItems,{...extraPreview,credits:{...extraPreview.credits,used:1}},conf]),'held');
 assert.equal(await val('select icash_admit_owner_batch($1,$2,$3,$4,$5,$6)',[other,extraJob.screeningId,uuid(152),extraItems,extraPreview,conf]),'claimed');
 assert.deepEqual(await val('select preview_receipt from icash_research_private.owner_batches where id=$1',[uuid(152)]),extraPreview);
+await (await import('./helpers/stalled-search-scenarios.mjs')).stalledSearchScenarios(db,account,other);
 console.log('Research efficiency SQL: versioned quotes, budget fallback, frozen claims, exclusions, pagination, atomic owner batches, exact billing allocation and isolation passed.');
 }finally{await db.close();}

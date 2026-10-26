@@ -11,6 +11,7 @@ class DiscoveryProviderRequestError extends Error{
 }
 /** Called only with a server-resolved authenticated account. All policy lives in service-only DB rows. */
 export async function discoverForAccount(accountId:string){
+ const providerDeadline=AbortSignal.timeout(90000);
  if(!discoveryWorkEnabled())return {status:'live_work_not_ready'};
  if(process.env.ICASH_ACQUISITION_MODE==='hybrid'&&!await db<boolean>('rpc/icash_outbound_search_due','POST',{p_account:accountId}))return {status:'supply_target_met'};
  await syncResearchExclusions(db).catch(()=>null);
@@ -49,7 +50,7 @@ export async function discoverForAccount(accountId:string){
   request:async body=>{
    const stage=(body as {estimate_cost?:boolean}).estimate_cost===true?'estimate':'paid';let httpStatus:number|null=null;
    try{
-    const r=await dealMachineRequest(db,stage==='estimate'?'search_estimate':'property_search',()=>fetch('https://api.v2.dealmachine.com/v1/properties/search',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)}),{accountId,operationKey});
+    const r=await dealMachineRequest(db,stage==='estimate'?'search_estimate':'property_search',()=>fetch('https://api.v2.dealmachine.com/v1/properties/search',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',cache:'no-store',signal:AbortSignal.any([providerDeadline,AbortSignal.timeout(stage==='estimate'?20000:60000)])}),{accountId,operationKey});
     httpStatus=r.status;
     if(!r.ok){
      // An unsupported FREE estimate may retire a test arm. A paid request,
@@ -60,7 +61,10 @@ export async function discoverForAccount(accountId:string){
    }catch(error){if(error instanceof DiscoveryFilterUnavailable)throw error;throw new DiscoveryProviderRequestError(stage,httpStatus);}
   },
   // Scope validation, reservation and one-use claim share one locked DB transaction.
-  reserveAndClaim:()=>queryPolicy?db<boolean>('rpc/icash_reserve_research_discovery','POST',{p_account:accountId,p_scope:scope,p_plan:filterPlan??null,p_policy:queryPolicy}):db<boolean>(filterPlan?'rpc/icash_reserve_and_claim_filtered_discovery':'rpc/icash_reserve_and_claim_property_discovery','POST',{...scope,...(filterPlan?{p_plan:filterPlan}:{})}),
+  reserveAndClaim:()=>{
+   providerDeadline.throwIfAborted();
+   return queryPolicy?db<boolean>('rpc/icash_reserve_research_discovery','POST',{p_account:accountId,p_scope:scope,p_plan:filterPlan??null,p_policy:queryPolicy}):db<boolean>(filterPlan?'rpc/icash_reserve_and_claim_filtered_discovery':'rpc/icash_reserve_and_claim_property_discovery','POST',{...scope,...(filterPlan?{p_plan:filterPlan}:{})});
+  },
   persist:async result=>{const queued=await db<number>(queryPolicy?'rpc/icash_save_research_discovery':filterPlan?'rpc/icash_save_filtered_discovery':'rpc/icash_save_discovery','POST',{p_account:accountId,p_operation:operationKey,p_revision:c.revision,p_page:c.next_page,p_result:result});await db('rpc/icash_settle_dealmachine_usage','POST',{p_operation:operationKey});return queued;},
  });
  if(result.status==='empty')await finishEmpty('empty');

@@ -42,7 +42,7 @@ const gaps=autoTimes.slice(1).map((at,i)=>at-autoTimes[i]);
 assert.deepEqual(gaps.slice(0,5),[30000,60000,120000,240000,300000]);assert(gaps.slice(5).every(gap=>gap===300000));
 // A stuck promise remains visible even when the polling loop is alive.
 let hungTime=0,resolveHung;const hung=createScheduler({now:()=>hungTime,screening:async()=>false,automation:()=>new Promise(resolve=>{resolveHung=resolve;})});
-await step(hung);hungTime=76000;assert.equal(hung.health().code,503);resolveHung(false);await flush();
+await step(hung);hungTime=76000;assert.equal(hung.health().code,200,'Bounded longer research remains healthy');hungTime=141000;assert.equal(hung.health().code,503);resolveHung(false);await flush();
 // Each lane backs off separately. One failure cannot suppress three usable lanes.
 let mixedTime=0,mixedCalls=0;const mixed=createScheduler({now:()=>mixedTime,screening:async()=>false,automation:async()=>{mixedCalls++;if(mixedCalls===1)throw Error('one account held');return false;}});
 for(mixedTime=0;mixedTime<=3000;mixedTime+=1000)await step(mixed);
