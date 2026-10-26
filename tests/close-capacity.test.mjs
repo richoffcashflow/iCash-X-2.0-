@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
-import {voiceCapacitySnapshot,refreshVoiceCapacity,readVoiceCapacityProvider} from '../lib/voice-capacity.ts';
+import {voiceCapacitySnapshot,voiceQuotaEvidence,refreshVoiceCapacity,readVoiceCapacityProvider} from '../lib/voice-capacity.ts';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const pg=await PGlite.create(),q=(s,a=[])=>pg.query(s,a),val=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,account=id(1),other=id(2),rate=id(3);
@@ -109,6 +109,18 @@ try{
  const writes=[],reads=[];
  await refreshVoiceCapacity(async(path,method,body)=>path.includes('targets')?[{agentId:'agent_fixture',branchId:null},{agentId:'agent_incoming',branchId:'agtbrch_incoming'}]:(writes.push(body),null),async(path,region)=>{reads.push({path,region});return path.includes('subscription')?{tier:'pro'}:{...agent,agent_id:path.includes('agent_incoming')?'agent_incoming':'agent_fixture'};},{agentId:'agent_fixture',branchId:'agtbrch_fixture'});
  assert.equal(writes[0].p_limit,10);
+ assert.match(writes[0].p_source,/units=unknown\/unknown;extra=unknown/);
+ assert.equal(reads.length,3,'quota evidence reuses existing provider reads');
+ const quota={character_count:100000,character_limit:100000,max_credit_limit_extension:0,can_extend_character_limit:true,secret:'never log',invoices:[{private:'never log'}]};
+ const daily=n=>({platform_settings:{call_limits:{daily_limit:n}}});
+ assert.equal(voiceQuotaEvidence(quota,[daily(100),daily(-1)]),'units=100000/100000;extra=0;overage=true;daily=100..100+unlimited');
+ assert.equal(voiceQuotaEvidence({...quota,max_credit_limit_extension:'unlimited'},[daily(0)]),'units=100000/100000;extra=unlimited;overage=true;daily=0..0');
+ assert.match(voiceQuotaEvidence({character_count:'untrusted',character_limit:NaN},[daily('untrusted')]),/units=unknown\/unknown.*daily=none\+unknown/);
+ const largest=Number.MAX_SAFE_INTEGER;
+ const bounded='provider subscription business; cap=10; in=2; '+voiceQuotaEvidence({character_count:largest,character_limit:largest,max_credit_limit_extension:largest,can_extend_character_limit:false},[daily(0),daily(largest),daily(-1),daily('bad')]);
+ assert(bounded.length<=200,'private source fits the database evidence limit');
+ assert.doesNotMatch(voiceQuotaEvidence(quota,[daily(100)]),/secret|invoices|never log/);
+
  assert.deepEqual(reads.slice(1),[{path:'/v1/convai/agents/agent_fixture?branch_id=agtbrch_fixture',region:'global'},{path:'/v1/convai/agents/agent_incoming?branch_id=agtbrch_incoming',region:'us'}]);
  const providerReads=[];const fetcher=async(url,options)=>{providerReads.push({url,options});return new Response(JSON.stringify(agent));};
  await readVoiceCapacityProvider(reads[1].path,'global',{ELEVENLABS_API_KEY:'fixture-only'},fetcher);
