@@ -9,6 +9,10 @@ export async function dealMachineRequest(db:ResearchDb,kind:ResearchRequestKind,
  const admitted=await db<boolean>('rpc/icash_take_dealmachine_request','POST',{p_kind:kind,p_account:scope.accountId??null,p_operation:scope.operationKey??null,p_request:id});
  if(admitted===false)throw new DealMachineQuotaError();
  if(admitted!==true)throw new Error('PROVIDER_RATE_LIMIT');
+ return finishAdmittedDealMachineRequest(db,id,request);
+}
+/** Used only after a durable SQL claim has admitted this exact request ID. */
+export async function finishAdmittedDealMachineRequest(db:ResearchDb,id:string,request:()=>Promise<Response>){
  let response:Response;
  try{response=await request();}catch(error){await db('rpc/icash_finish_dealmachine_request','POST',{p_request:id,p_result:{outcome:'unknown'}}).catch(()=>null);throw error;}
  let raw:unknown;try{raw=await response.json();}catch{raw=null;}

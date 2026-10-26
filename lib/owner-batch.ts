@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {dealMachineRequest,DealMachineQuotaError,type ResearchDb} from './dealmachine-request.ts';
+import {dealMachineRequest,finishAdmittedDealMachineRequest,DealMachineQuotaError,type ResearchDb} from './dealmachine-request.ts';
 import {previewAudience,contactsFromReceipt,creditObservation} from './owner-enrichment.ts';
 import {runScreeningJob} from './screening-job.ts';
 import {OwnerPreviewRateLimitError} from './owner-enrichment-deferral.ts';
@@ -52,7 +52,10 @@ export async function enrichOwnerBatch(db:ResearchDb,accountId:string,primary:st
  const batchId=randomUUID(),key=process.env.DEALMACHINE_API_KEY;
  const request=async(path:string,body:object,paid:boolean)=>{
   try{
-   const r=await dealMachineRequest(db,paid?'owner_lookup':'owner_preview',()=>transport('https://api.v2.dealmachine.com/v1'+path,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)}),{accountId,operationKey:'owner-batch:'+batchId});
+   const fetchOnce=()=>transport('https://api.v2.dealmachine.com/v1'+path,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
+   // The paid request slot and all reservations commit in one SQL transaction.
+   // No second limiter race can strand an admitted batch before its purchase.
+   const r=paid?await finishAdmittedDealMachineRequest(db,batchId,fetchOnce):await dealMachineRequest(db,'owner_preview',fetchOnce,{accountId,operationKey:'owner-batch:'+batchId});
    if(!r.ok){
     if(paid&&r.raw!==null)await db('rpc/icash_record_owner_batch_receipt','POST',{p_account:accountId,p_batch:batchId,p_receipt:r.raw}).catch(()=>null);
     throw Error(paid?'OWNER_LOOKUP_FAILED_NO_RETRY':'OWNER_PREVIEW_FAILED_NO_RETRY');
@@ -63,9 +66,12 @@ export async function enrichOwnerBatch(db:ResearchDb,accountId:string,primary:st
  const audience=ownerBatchAudience(preview,candidates,c.contact_credit_cap).filter(a=>a.ids.length>0);
  if(!audience.some(a=>a.screeningId===primary))return {status:'empty',contacts:0};
  const items=audience.map(a=>({screeningId:a.screeningId,snapshot:a.snapshot,ids:[...a.ids]}));
- const claimed=await db<boolean>('rpc/icash_claim_owner_batch','POST',{p_account:accountId,p_primary:primary,p_batch:batchId,p_items:items,p_preview:preview,
+ const admission=await db<string>('rpc/icash_admit_owner_batch','POST',{p_account:accountId,p_primary:primary,p_batch:batchId,p_items:items,p_preview:preview,
   p_config:{rateId:c.contact_rate_id,creditCap:c.contact_credit_cap,unitCostMicros:c.property_credit_micros,rightsUntil:c.data_rights_until}});
- if(!claimed)return {status:'held'};
+ // Only a committed, exact quota refusal with no paid claim can use the
+ // existing bounded unstarted-work deferral. Other failures stay held.
+ if(admission==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary);
+ if(admission!=='claimed')return {status:'held'};
  const raw=await request('/people/ids',{ids:[...new Set(audience.flatMap(a=>[...a.ids]))],enrich:true,include_properties:false},true);
  if(!await db<boolean>('rpc/icash_record_owner_batch_receipt','POST',{p_account:accountId,p_batch:batchId,p_receipt:raw}))throw Error('CONTACT_RECEIPT_REQUIRES_RECONCILIATION');
  const results=allocateOwnerBatch(raw,audience,batchId);
