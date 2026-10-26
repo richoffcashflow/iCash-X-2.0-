@@ -58,7 +58,7 @@ try{
 reset();failedSave=true;await service.consent(request());assert(calls.some(x=>x.provider==='end'));assert(!calls.some(x=>x.provider==='register'));
 reset();await recordingService({...env,ICASH_RECORDED_OUTBOUND_READY:'false'},{db,provider,now:()=>now}).consent(request());assert(!calls.some(x=>x.provider==='start'));
 reset();row.state='recording';row.consent_at=iso;row.recording_sid=re;row.provider_started_at=iso;row.audio_expires_at=new Date(now+1000).toISOString();failedStop=true;
-r=await service.stop(new Request(recordingBaseUrl+'/stop',{method:'POST',headers:{authorization:token},body:JSON.stringify({recordingId:id})}));assert.equal(r.status,200);assert.equal((await r.json()).callEnded,true);assert(calls.some(x=>x.provider==='end'));
+r=await service.stop(new Request(recordingBaseUrl+'/stop',{method:'POST',headers:{authorization:token},body:JSON.stringify({recordingId:id})}));assert.equal(r.status,200);const stopReceipt=await r.json();assert.equal(stopReceipt.callEnded,true);assert.doesNotMatch(stopReceipt.instruction,/permission withdrawn/i,'A voicemail stop must not fabricate withdrawn permission');assert(calls.some(x=>x.provider==='end'));
 reset();row.state='available';row.consent_at=iso;row.recording_sid=re;row.audio_expires_at=new Date(now+1000).toISOString();assert(audioAvailable(row,now));assert(!audioAvailable(row,now+1000));
 r=await service.audio('foreign',id,null);assert.equal(r.status,404);assert(!calls.some(x=>x.provider==='media'));
 r=await service.audio(account,id,'bytes=0-3');assert.equal(r.status,206);assert.equal(await r.text(),'audi');assert.equal(r.headers.get('cache-control'),'private, no-store, max-age=0');
@@ -70,6 +70,26 @@ let network=[];const wire=createRecordingProviders(env,async(url,init)=>{network
 await wire.dial(row.from_phone,row.to_phone,'<Response/>','https://www.geticashx.com/fixture');const body=new URLSearchParams(network[0].init.body);assert.equal(body.get('Record'),'false');assert.equal(body.get('TimeLimit'),'600');assert.equal(network[0].init.redirect,'error');await assert.rejects(wire.media('https://evil.invalid'));assert.equal(network.length,1);
 await wire.media(re);assert(network[1].url.includes('/Recordings/'+re+'.mp3'));assert(!JSON.stringify(network).includes('s3'));
 console.log('PASS provider transport: canonical HTTPS, server-only auth, exact cap, no launch recording, no media URL injection');
+// Every recorded call receives the same final cutoff, including an older saved
+// context that still suggested a voicemail message. Synthetic transport only.
+const voicemailBodies=[];
+const voicemailWire=createRecordingProviders(env,async(url,init)=>{
+ assert.equal(url,'https://api.elevenlabs.io/v1/convai/twilio/register-call');
+ voicemailBodies.push(JSON.parse(init.body));
+ return new Response('<Response><Connect><Stream url="wss://api.elevenlabs.io/fixture"/></Connect></Response>');
+});
+for(const policy of ['direct_recorded_v1','spoken_v1']){
+ reset();Object.assign(row,{entry_policy:policy,state:'recording',consent_at:iso,recording_sid:re,start_claimed_at:iso,provider_started_at:iso});
+ row.call_context.prompt='Earlier saved context: leave one short voicemail message.';
+ await voicemailWire.register(row,600,token);
+ const data=voicemailBodies.at(-1).conversation_initiation_client_data,prompt=data.conversation_config_override.agent.prompt.prompt;
+ assert(prompt.indexOf('VOICEMAIL CUTOFF:')>prompt.indexOf('Earlier saved context'));
+ assert.match(prompt,/immediately call icash_stop_recording/);assert.match(prompt,/callEnded is not true, immediately use end_call/);
+ assert.match(prompt,/live person's mention of voicemail.*not confirmed voicemail/);
+ assert.equal(data.dynamic_variables.icash_recording_id,id);assert.equal(data.dynamic_variables.secret__icash_recording_stop_token,token);
+ assert.equal(data.user_id,'icash-recorded:'+id);assert.equal(data.branch_id,row.branch_id);
+}
+
 // Independent expiry deletion, verified provider absence, retry on403, no live-enable/balance checks.
 reset();row={...row,state:'deletion_pending',recording_sid:re,consent_at:iso,start_claimed_at:iso,provider_started_at:iso,audio_expires_at:iso,deletion_lease_token:id};let gone=false,finished=[];
 const maintenanceDb=async(path,method,b)=>path==='rpc/icash_claim_call_recording_work'?(b.p_kind==='delete'?[row]:[]):(finished.push(b),row);

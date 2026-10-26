@@ -170,13 +170,13 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
     const b=object(JSON.parse((await boundedBytes(request,2048)).toString('utf8')));if(Object.keys(b).length!==1||!uuid(b.recordingId))return Response.json({stopped:false},{status:400,headers:privateHeaders});
     let row=await getRow(db,b.recordingId);if(!row||row.stop_token_hash!==sha(token)||!row.call_sid||!recordingAuthorized(row)||now()-Date.parse(row.created_at)>20*60000)return Response.json({stopped:false},{status:401,headers:privateHeaders});
     const next=await transition(db,row,'stop',{stopTokenHash:sha(token)});if(next)row=next;
-    // Required-recording withdrawal ends the whole call. Partial success is not completion.
+    // Withdrawal or confirmed voicemail ends the whole call. Partial success is not completion.
     const ended=await endBound(row);let stopped=ended;
     if(!ended&&row.recording_sid){try{const p=await provider.stop(row.call_sid!,row.recording_sid);stopped=recordingReceipt(row,p)&&['stopped','completed','processing'].includes(String(p.status));}catch{/* Durable end request remains due. */}}
     if(!ended)return Response.json({stopped,callEnded:false,instruction:'Call termination is not confirmed. End this call now; do not continue talking.'},{status:503,headers:privateHeaders});
     const confirmed=await transition(db,row,'call_ended',{callSid:row.call_sid,providerAccountSid:row.provider_account_sid,status:'completed'});if(confirmed)row=confirmed;
     if(row.recording_sid&&row.provider_started_at)await transition(db,row,'processing',{recordingSid:row.recording_sid,providerStartedAt:row.provider_started_at}).catch(()=>null);
-    return Response.json({stopped:stopped||ended,callEnded:ended,instruction:'Permission withdrawn. End the call; do not continue the conversation.'},{headers:privateHeaders});
+    return Response.json({stopped:stopped||ended,callEnded:ended,instruction:'This call is ended. Do not continue the conversation or restart recording.'},{headers:privateHeaders});
    }catch{return Response.json({stopped:false,instruction:'Stop is not confirmed. End this call now.'},{status:503,headers:privateHeaders});}
   },
   async audio(accountId:string,id:string,range:string|null){

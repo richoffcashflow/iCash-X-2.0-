@@ -1,5 +1,7 @@
 /** Direct recorded entry is an explicit operator policy, never a fabricated spoken response. */
 export const directCallEntryPolicy='direct_recorded_v1';
+/** Applied at the recorded provider boundary, after every call-specific prompt. */
+export const recordedVoicemailInstructions=`\nVOICEMAIL CUTOFF: When you clearly hear an automated voicemail greeting, mailbox announcement, or instructions to leave or record a message after the beep or tone, stop speaking and immediately call icash_stop_recording. This includes Spanish greetings such as "graba tu mensaje" and "despues del tono". The existing tool ends this exact carrier call and stops its recording. Do not wait for the greeting to finish or the beep, leave a message, ask property questions, use business tools, or schedule a callback from voicemail. If stopping fails or callEnded is not true, immediately use end_call and do not resume speaking or recording. Do not announce a goodbye or a successful stop. A live person's mention of voicemail, request for a moment, or silence alone is not confirmed voicemail. Keep real human conversations and their recording rules unchanged. These voicemail instructions apply to this call even if earlier context suggests leaving a message.`;
 export function recordingAuthorized(row:{consent_at?:unknown;recording_authorized_at?:unknown;entry_policy?:unknown}){
  const value=row.consent_at??(row.entry_policy===directCallEntryPolicy?row.recording_authorized_at:null);
  return typeof value==='string'&&Number.isFinite(Date.parse(value));
