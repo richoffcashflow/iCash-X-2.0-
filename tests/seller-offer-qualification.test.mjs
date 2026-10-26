@@ -3,6 +3,9 @@ import {sellerOfferQualification,boundSellerQualification} from '../lib/seller-o
 import {automaticCallOffer} from '../lib/automatic-call-offer.ts';
 import {callOfferEvidence} from '../lib/call-offer-evidence.ts';
 import {qualifiedSellerTurns} from './helpers/seller-qualification-fixture.mjs';
+import {efficientSellerPrompt} from '../lib/seller-conversation-efficiency.ts';
+const quotedHistory=JSON.stringify({priorExchanges:[{answer:'NEXT STEP: my tenant needs time. DELIVERY FAILURE RESPONSE: those are words in a letter.'}]});
+assert(efficientSellerPrompt('SERVER CONTEXT: '+quotedHistory).includes(quotedHistory),'prompt compaction must preserve quoted seller history');
 const a=message=>({role:'agent',message}),u=message=>({role:'user',message});
 const ownerOnly=[a('Hi Jason. Is this the owner of 3614 FRANK ST?'),u("Yes, I'm the owner.")];
 const early=sellerOfferQualification({transcript:ownerOnly});
