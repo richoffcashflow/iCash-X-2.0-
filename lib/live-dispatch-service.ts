@@ -1,5 +1,6 @@
 import {instantLeadPrompt} from './meta-instant-leads.ts';
 import {opportunityConversationInstructions} from './outreach-conversation.ts';
+import {efficientSellerPrompt} from './seller-conversation-efficiency.ts';
 import {instantLeadsEnabled} from './meta-instant-lead-service.ts';
 import {cancellationCallPrompt,type CancellationCallContext} from './cancellation-notice-policy.ts';
 import {conversationAddressFields,conversationAddressInstructions} from './conversation-address.ts';
@@ -161,7 +162,8 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const strategy=(assigned?.variant as keyof typeof acquisitionOpeners|undefined)??(parseInt(createHash('sha256').update(`${accountId}:${p.contact_key}`).digest('hex').slice(0,8),16)%2===0?'cash_interest':'flexible_timing');
  const buildPrompt=()=>{
   const base=!intake&&!cancellation&&p.party==='seller'&&automaticOfferPolicy(recordedReview.offerPolicy)?sellerAgreementDeliveryPrompt(basePrompt()):basePrompt();
-  const instructions=!intake&&!cancellation&&p.party==='seller'&&!automaticOfferPolicy(recordedReview.offerPolicy)?base+'\n'+opportunityConversationInstructions:base;
+  const guide=!intake&&!cancellation&&p.party==='seller'&&!automaticOfferPolicy(recordedReview.offerPolicy)?base+'\n'+opportunityConversationInstructions:base;
+  const instructions=!intake&&!cancellation&&!limited&&p.party==='seller'?efficientSellerPrompt(guide):guide;
   return instructions+(assigned?`\nREVIEWED INTEREST QUESTION (shared-v1/${limited?'limited':'reviewed'}): Only after the required identity and ownership checks, and only if interest is not already answered in the saved conversation, use this exact question: ${acquisitionOpeners[strategy]} Do not repeat it to a returning seller who already answered. All existing consent, stop, human handoff, offer authority and agreement requirements still apply.`:'');
  };
  if(automaticContext&&p.party==='seller'){

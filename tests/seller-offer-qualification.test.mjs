@@ -8,6 +8,20 @@ const ownerOnly=[a('Hi Jason. Is this the owner of 3614 FRANK ST?'),u("Yes, I'm 
 const early=sellerOfferQualification({transcript:ownerOnly});
 assert.equal(early.ready,false);assert.match(early.nextQuestion,/good time/);
 assert(early.missing.includes('situation'));assert(early.missing.includes('condition'));
+for(const request of ['Okay, how much you\'ll give me?','Yeah, sure. What would you give me, though?','What would you give me?','How much would you pay?','What is your cash offer?','Can you send me an offer?']){
+ const progress=sellerOfferQualification({transcript:[...ownerOnly,u(request)]});
+ assert.equal(progress.ready,false);assert.equal(progress.nextQuestion,'What has you thinking about selling?',request);
+ assert(!progress.missing.includes('availability'));assert(!progress.missing.includes('interest'));
+ assert(progress.missing.includes('condition'));assert(progress.missing.includes('listing'));
+}
+for(const request of ['I do not want an offer.','The last buyer asked what would you give me.','What would you give me? Stop calling me.']){
+ const progress=sellerOfferQualification({transcript:[...ownerOnly,u(request)]});
+ assert(progress.missing.includes('availability'),request);
+}
+const priceInsteadOfRepairs=sellerOfferQualification({transcript:[...ownerOnly,a('What repairs does it need?'),u('What would you give me?')]});
+assert(priceInsteadOfRepairs.missing.includes('condition'),'a price question cannot satisfy a pending repair question');
+assert((sellerOfferQualification({transcript:[...ownerOnly,a('Is now a good time?'),u('No, not now.'),u('What would you give me?')]})).stop,'a price question cannot override an explicit current refusal');
+assert(sellerOfferQualification({transcript:[u('What would you give me?')]}).missing.includes('ownership'),'a price request cannot establish ownership');
 assert.equal(sellerOfferQualification({transcript:qualifiedSellerTurns}).ready,true);
 // The October 13 call repeated this answer until the caller finally said "vacant".
 for(const [question,answer] of [
