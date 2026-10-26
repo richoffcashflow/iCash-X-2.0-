@@ -6,14 +6,14 @@ const count=z.number().int().nonnegative().safe();
 export const supportOutreachSchema=z.object({
  screened:count,outboundProperties:count,inboundProperties:count,contactProperties:count,
  textsSent:count,textsDelivered:count,textReplies:count,callsStarted:count,callsBudgetHeld:count,
- progress:z.object({status:z.string(),remainingCents:count,limitCents:count,spentCents:count}).passthrough().nullable(),
+ progress:z.object({status:z.string(),remainingCents:count,limitCents:count.optional(),spentCents:count,pendingCents:count.optional(),spendingMode:z.string().optional(),fundedBaselineCents:count.optional()}).passthrough().nullable(),
 });
 export type SupportOutreachSnapshot=z.infer<typeof supportOutreachSchema>;
 export function supportOutreachEvidence(value:unknown):Omit<SupportEvidence,'key'|'source'|'observedAt'>{
  const outreach=supportOutreachSchema.parse(value);
  if(outreach.textsDelivered>outreach.textsSent||outreach.contactProperties>outreach.screened)throw Error('Invalid outreach counts');
  return {status:outreach.callsBudgetHeld>0?'attention':'ok',code:outreach.callsBudgetHeld>0?'outreach_budget_held':'outreach_checked',outreach,
-  detail:`${outreach.screened} properties checked; owner details saved for ${outreach.contactProperties}. ${outreach.textsSent} texts sent, ${outreach.textsDelivered} delivered, ${outreach.textReplies} text replies, ${outreach.callsStarted} calls started. ${outreach.callsBudgetHeld} call jobs are waiting for new-outreach allowance. These are recorded results, not proof the customer sees them or that a seller is interested.`};
+  detail:`${outreach.screened} properties checked; owner details saved for ${outreach.contactProperties}. ${outreach.textsSent} texts sent, ${outreach.textsDelivered} delivered, ${outreach.textReplies} text replies, ${outreach.callsStarted} calls started. ${outreach.callsBudgetHeld} call jobs have a saved credit hold; this count alone does not establish the current blocker. These are recorded results, not proof the customer sees them or that a seller is interested.`};
 }
 
 /** Verified account evidence wins over guesses from a passing setup check. */
@@ -50,7 +50,7 @@ export function supportOutreachReply(messages:{role:string;content:string}[],evi
  const contacts=o.contactProperties>0?`Owner details are saved for ${o.contactProperties} ${o.contactProperties===1?'property':'properties'}.`:`${o.screened} ${o.screened===1?'property has':'properties have'} been checked, but no saved owner details are recorded yet.`;
  const activity=`Your account has ${o.callsStarted} recorded call ${o.callsStarted===1?'attempt':'attempts'} and ${o.textsSent} ${o.textsSent===1?'text':'texts'} (${o.textsDelivered} delivered) so far${o.textReplies===0?'; no text replies yet':`; ${o.textReplies} text ${o.textReplies===1?'reply':'replies'} recorded`}.`;
  const paused=evidence.some(e=>e.key==='work'&&e.code==='paused')||o.progress?.status==='paused';
- const hold=paused?'Your bot is paused, so queued outreach will stay paused.':o.callsBudgetHeld>0?(o.progress?.status==='settling'?'Calls are waiting for earlier work costs to be confirmed.':o.progress?.status==='paced'?'Calls are waiting for the next spending allowance.':o.progress?.status==='budget_reached'?'Calls are waiting because the allowance for new outreach is used up. The remaining credits are kept for replies and active deals.':'Calls are waiting on the spending limit for new outreach. Having credits left doesn’t mean they’re all available to spend at once.') :'';
+ const hold=paused?'Your bot is paused, so queued outreach will stay paused.':o.callsBudgetHeld>0?(o.progress?.status==='settling'?'Calls are waiting for earlier work costs to be confirmed.':o.progress?.status==='budget_reached'?'Calls are waiting because available credits don’t cover the next task.':'Some call jobs still have a saved credit hold. I haven’t confirmed whether that hold still blocks new calls.') :'';
  const alreadyDirected=messages.some(m=>m.role!=='user'&&/open a property with an owner name/i.test(m.content))||/\b(?:already|tried|still)\b.{0,60}\b(?:Leads|Texts|open|show)/i.test(question);
  const next=o.contactProperties>0?(alreadyDirected?'That doesn’t confirm the messages are displaying correctly for you. I haven’t confirmed why they’re missing.':'In Leads, open a property with an owner name and tap Texts.'):'I haven’t confirmed why owner details are missing yet.';
  // Answer a calling/texting complaint directly. Lifetime counts must not be
