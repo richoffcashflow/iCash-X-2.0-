@@ -49,6 +49,7 @@ try{
  await isolated(async()=>{await add(100,'123 O\'Brien St');await add(200);assert.equal(await selected('icash_next_before_unstarted_sms_recovery'),null,'reproduces a malformed first candidate starving a valid later text');assert.equal(await one('select count(*) from icash_text_messages'),0);});
  const originalQueue=await one("select pg_get_functiondef('icash_queue_seller_opener(uuid,uuid)'::regprocedure)");
  await pg.exec(sql);
+ await pg.exec(read('config/seller-opener-scan-fence.sql'));
  assert.equal(await one("select pg_get_functiondef('icash_queue_seller_opener(uuid,uuid)'::regprocedure)"),originalQueue,'final queue admission is unchanged');
  const actualPreview=await one("select prosrc from pg_proc where proname='icash_seller_opener_candidate_body'");
  const prefix=originalQueue.split('AS $function$\n')[1].split(' choice:=public.icash_assign_seller_opener')[0].replace(/ ?perform 1 from public\.icash_operating_budget where id=1 for update;\n/g,'').replace(' for update;',';');
@@ -79,8 +80,18 @@ try{
   assert.equal(await one("select state from icash_text_messages where thread_id=$1",[unknown]),'needs_review','uncertain sends are never replayed');
  });
  await isolated(async()=>{await add(100);await pg.exec('update icash_operating_budget set enabled=false');assert.equal(await selected('icash_next_before_unstarted_sms_recovery'),null);});
+ for(const fn of ['icash_next_before_unstarted_sms_recovery','icash_next_before_sms_inbound_campaign'])await isolated(async()=>{
+  for(let n=100;n<150;n++)await add(n);
+  await pg.exec(`create table fixture_preflight_calls(thread_id uuid);
+   alter function icash_seller_opener_candidate_body(uuid,uuid) rename to fixture_original_preflight;
+   create function icash_seller_opener_candidate_body(a uuid,t uuid) returns text language plpgsql as $$begin
+    insert into public.fixture_preflight_calls values(t);return public.fixture_original_preflight(a,t);end$$;`);
+  assert.equal(await selected(fn),uid(100));
+  assert.equal(await one('select count(*) from fixture_preflight_calls'),1,'full source/contact proof runs only until a qualifying ordered row is found');
+ });
  assert.equal(Number(await one('select sum(balance_cents) from icash_wallets')),20000);
  for(const role of ['anon','authenticated'])assert.equal(await one("select has_function_privilege($1,'icash_seller_opener_candidate_body(uuid,uuid)','execute')",[role]),false);
  const filename=readdirSync(new URL('../supabase/migrations/',import.meta.url)).find(n=>n.endsWith('_seller_opener_preflight.sql'));assert(filename);assert.equal(sql,read('supabase/migrations/'+filename));
+ const scanFilename=readdirSync(new URL('../supabase/migrations/',import.meta.url)).find(n=>n.endsWith('_seller_opener_scan_fence.sql'));assert.equal(read('config/seller-opener-scan-fence.sql'),read('supabase/migrations/'+scanFilename));
  console.log('Seller opener preflight: malformed/held first records cannot starve later accounts; original queue, invitations, recipient checks, Pause, unknown sends, wallet and private access preserved. Local fixtures only.');
 }finally{await pg.close();}
