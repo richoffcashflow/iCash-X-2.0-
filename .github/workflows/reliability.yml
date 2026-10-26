@@ -53,5 +53,21 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build:verified
       - run: pnpm run test:concurrency
+      - name: Use Ubuntu primary package mirror
+        run: |
+          sudo python3 - <<'PY'
+          from pathlib import Path
+
+          paths = [Path('/etc/apt/apt-mirrors.txt'), Path('/etc/apt/sources.list')]
+          directory = Path('/etc/apt/sources.list.d')
+          paths += list(directory.glob('*.list')) + list(directory.glob('*.sources'))
+          for path in paths:
+              if not path.is_file():
+                  continue
+              source = path.read_text()
+              updated = source.replace('http://azure.archive.ubuntu.com/ubuntu', 'https://archive.ubuntu.com/ubuntu').replace('https://azure.archive.ubuntu.com/ubuntu', 'https://archive.ubuntu.com/ubuntu')
+              if updated != source:
+                  path.write_text(updated)
+          PY
       - run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm run test:browser

@@ -14,6 +14,17 @@ export async function readVoiceCapacityProvider(path:string,region:'global'|'us'
 // Verified against https://elevenlabs.io/pricing/agents on 2026-10-23.
 // Owner approved ten total calls on 2026-10-23; SQL reserves two for incoming.
 const planLimits:Record<string,number>={free:4,starter:6,creator:10,pro:20,scale:30,business:40};
+/** Existing subscription metadata only. This never changes provider billing. */
+export function voiceCreditState(subscription:unknown):'available'|'exhausted'|'unknown'{
+ const s=object(subscription),used=s.character_count,limit=s.character_limit,extra=s.max_credit_limit_extension;
+ if(!Number.isSafeInteger(used)||Number(used)<0||!Number.isSafeInteger(limit)||Number(limit)<0)return 'unknown';
+ if(Number(used)<Number(limit))return 'available';
+ if(s.can_extend_character_limit===false||extra===0)return 'exhausted';
+ if(s.can_extend_character_limit!==true)return 'unknown';
+ if(extra==='unlimited')return 'available';
+ if(!Number.isSafeInteger(extra)||Number(extra)<0||!Number.isSafeInteger(Number(limit)+Number(extra)))return 'unknown';
+ return Number(used)<Number(limit)+Number(extra)?'available':'exhausted';
+}
 /** Retain bounded quota evidence from the metadata reads already required for
  * capacity. Concurrent slots alone cannot explain a provider quota rejection.
  * These observations never change a plan, enable overages or authorize billing. */
@@ -38,7 +49,8 @@ export async function refreshVoiceCapacity(db:Db,read:Reader,review?:{agentId:st
  const targets=await db<{agentId:string;branchId:string|null}[]>('rpc/icash_voice_capacity_targets','POST',{});
  if(!targets.length)return {status:'no_agents'};
  const subscription=await read('/v1/user/subscription');
- const capacities:{agentId:string;limit:number}[]=[],observedAgents:unknown[]=[];let workspaceLimit=1;let tier='';
+ const creditState=voiceCreditState(subscription);
+ const capacities:{agentId:string;limit:number;creditState:ReturnType<typeof voiceCreditState>}[]=[],observedAgents:unknown[]=[];let workspaceLimit=1;let tier='';
  for(const target of targets.slice(0,12)){
   const branch=target.branchId??(review?.agentId===target.agentId?review.branchId:null);
   const agent=await read(`/v1/convai/agents/${encodeURIComponent(target.agentId)}${branch?'?branch_id='+encodeURIComponent(branch):''}`,target.branchId===null?'global':'us');
@@ -47,7 +59,7 @@ export async function refreshVoiceCapacity(db:Db,read:Reader,review?:{agentId:st
   const snapshot=voiceCapacitySnapshot(subscription,agent);if(!snapshot)throw Error('VOICE_CAPACITY_UNVERIFIED');
   workspaceLimit=snapshot.workspaceLimit;tier=String(snapshot.tier);
   const existing=capacities.find(c=>c.agentId===target.agentId);
-  if(existing)existing.limit=Math.min(existing.limit,snapshot.agentLimit);else capacities.push({agentId:target.agentId,limit:snapshot.agentLimit});
+  if(existing)existing.limit=Math.min(existing.limit,snapshot.agentLimit);else capacities.push({agentId:target.agentId,limit:snapshot.agentLimit,creditState});
  }
  if(targets.length>12)throw Error('VOICE_CAPACITY_TARGET_LIMIT');
  await db('rpc/icash_save_voice_capacity','POST',{p_limit:workspaceLimit,p_agents:capacities,p_source:`provider subscription ${tier}; cap=10; in=2; ${voiceQuotaEvidence(subscription,observedAgents)}`});
