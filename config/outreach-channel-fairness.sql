@@ -61,4 +61,3 @@ begin
  execute replace(d,needle,'return public.icash_next_outreach_channel();');
 end $patch$;
 commit;
-
