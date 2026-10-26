@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import {syncResearchExclusions} from '../lib/research-exclusions.ts';
+import {loadService} from './helpers/simulated-journey-services.mjs';
+import {maintenanceBatch} from '../lib/maintenance-batch.ts';
 process.env.DEALMACHINE_API_KEY='dm_sk_live_LOCAL_FIXTURE';
 const token='00000000-0000-4000-8000-000000000001',name='research-exclusions-'+token;
 let claim={action:'create',token,name,listId:null,ids:[]},writes=[],calls=[],allowed=true,timeout=false,providerId='fixture-list',providerStatus='completed',wrongName=false;
@@ -25,3 +27,40 @@ providerId=-1;assert.equal((await syncResearchExclusions(db,fetch)).status,'pend
 claim={...claim,action:'sync',listId:'fixture-list',ids:['prop_1']};assert.equal((await syncResearchExclusions(db,fetch)).status,'synced');assert.deepEqual(writes.at(-1).p_result.ids,['prop_1']);
 claim=null;assert.equal((await syncResearchExclusions(db,fetch)).status,'not_due');
 console.log('Exclusions: numeric/string list IDs, empty containers, exact identity, proven-unstarted quota deferral, unknown-create recovery and idempotent add passed.');
+
+// The ordinary authenticated maintenance cycle must advance the free backfill
+// even when no paid discovery is scheduled. No live provider calls are made.
+let authorized=false,maintenanceRuns=0,claimUnavailable=false;
+const maintenanceDb=async(path,method,body)=>{
+ if(path==='rpc/icash_close_inactive_support')return true;
+ if(claimUnavailable&&path==='rpc/icash_claim_research_exclusions')throw Error('Fixture database unavailable');
+ return db(path,method,body);
+};
+const ok=async()=>Response.json({ok:true});
+const route=await loadService('app/api/internal/maintenance/route.ts',{
+ processSupportCustomerNotifications:async()=>({failed:0}),
+ refreshVoiceCapacity:async()=>({status:'verified'}),readVoiceCapacityProvider:()=>{throw Error('No live provider');},
+ refreshInventoryGeographyBatch:async()=>({status:'idle'}),readRecordingReview:()=>null,
+ processPurchaseAccessEmails:async()=>({ready:true,failed:0}),recoverAccessHelpReplies:async()=>({status:'idle'}),
+ processSupportOwnerNotifications:async()=>({failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),
+ authorizeOutboundBilling:()=>authorized,maintenanceBatch,
+ refreshReliability:async(_db,healthy)=>{assert.equal(healthy,true);maintenanceRuns++;return true;},
+ syncResearchExclusions:db=>syncResearchExclusions(db,fetch),db:maintenanceDb,
+ pruneUsageLoopObservations:async()=>null,outbound:ok,recording:ok,ownerRecording:ok,reception:ok,
+ process:{env:{}},
+});
+const run=()=>route.GET(new Request('https://fixture.invalid/api/internal/maintenance'));
+claim={action:'sync',token,name,listId:'fixture-list',ids:['prop_1']};
+calls=[];assert.equal((await run()).status,401);assert.equal(calls.length,0);assert.equal(maintenanceRuns,0);
+authorized=true;let response=await run();assert.equal(response.status,200);
+assert.equal((await response.json()).researchExclusions.status,'synced');assert.equal(calls.length,1);
+assert(calls[0].url.endsWith('/lists/fixture-list/items'),'Maintenance performs only the existing free list operation');
+assert.equal(maintenanceRuns,1,'Independent maintenance work still completes');
+calls=[];claim=null;response=await run();assert.equal(response.status,200);
+assert.equal((await response.json()).researchExclusions.status,'not_due');assert.equal(calls.length,0,'A disabled or already-claimed sync does no provider work');
+claim={action:'sync',token,name,listId:'fixture-list',ids:['prop_1']};allowed=false;
+response=await run();assert.equal(response.status,200);assert.equal((await response.json()).researchExclusions.status,'pending');assert.equal(calls.length,0,'Maintenance obeys the shared request quota');
+allowed=true;claimUnavailable=true;response=await run();assert.equal(response.status,200);
+assert.equal((await response.json()).researchExclusions.status,'sync_unavailable');assert.equal(maintenanceRuns,4,'An exclusion failure cannot suppress unrelated maintenance');
+assert.equal(calls.length,0);
+console.log('Exclusion maintenance: authenticated free backfill without paid discovery, shared claim/quota guards, and independent maintenance through failures passed.');
