@@ -42,10 +42,10 @@ export async function discoverForAccount(accountId:string){
  const finishEmpty=(reason:'empty'|'unavailable')=>filterPlan
   ?db('rpc/icash_finish_empty_filter','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page,p_plan:filterPlan,p_reason:reason})
   :db('rpc/icash_mark_inventory_empty','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});
- const queryPolicy=c.research_version===1?{version:'research-efficiency-v1' as const,exclusionListId:c.research_list_id??null}:undefined;
+ const queryPolicy=c.research_version===2?{version:'research-efficiency-v2' as const,exclusionListId:c.research_list_id??null}:c.research_version===1?{version:'research-efficiency-v1' as const,exclusionListId:c.research_list_id??null}:undefined;
  const scope={p_account:accountId,p_zip:c.zip,p_revision:c.revision,p_page:c.next_page,p_per_page:c.per_page,p_rate:c.rate_id,p_unit:c.property_credit_micros,p_permission_until:c.data_rights_until,p_setup_revision:setup?.revision??null,p_market_mode:setup?.profile?.marketMode??null,p_market:setup?.profile?.market??null};
  try{
- const result=await discoverPage({zip:c.zip,page:c.next_page,perPage:c.per_page,unitCostMicros:c.property_credit_micros,quotedDataCostMicros:rate.costs_micros.dealmachine,...(filterPlan?{filterPlan}:{}),...(c.research_version===1?{queryPolicy:{version:'research-efficiency-v1' as const,exclusionListId:c.research_list_id??null}}:{})},{
+ const result=await discoverPage({zip:c.zip,page:c.next_page,perPage:c.per_page,unitCostMicros:c.property_credit_micros,quotedDataCostMicros:rate.costs_micros.dealmachine,...(filterPlan?{filterPlan}:{}),...(queryPolicy?{queryPolicy}:{})},{
   request:async body=>{
    const stage=(body as {estimate_cost?:boolean}).estimate_cost===true?'estimate':'paid';let httpStatus:number|null=null;
    try{

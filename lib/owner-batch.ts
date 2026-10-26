@@ -46,6 +46,8 @@ export function allocateOwnerBatch(raw:unknown,audience:ReturnType<typeof ownerB
  });
 }
 export async function enrichOwnerBatch(db:ResearchDb,accountId:string,primary:string,c:Config,quotedDataCostMicros:number,transport:typeof fetch=fetch){
+ let stage='candidates';
+ try{
  if(![c.contact_credit_cap,c.property_credit_micros,quotedDataCostMicros].every(n=>Number.isSafeInteger(n)&&n>0)||c.contact_credit_cap>25||BigInt(c.contact_credit_cap)*BigInt(c.property_credit_micros)>BigInt(quotedDataCostMicros))throw Error('CONTACT_RATE_REQUIRED');
  const candidates=(await db<Candidate[]>('rpc/icash_owner_batch_candidates','POST',{p_account:accountId,p_screening:primary})).filter(x=>runScreeningJob(x.snapshot).financialCheck.status==='eligible');
  if(!candidates.length||candidates.length>5||!candidates.some(x=>x.screeningId===primary))return {status:'held'};
@@ -62,19 +64,27 @@ export async function enrichOwnerBatch(db:ResearchDb,accountId:string,primary:st
    }return r.raw;
   }catch(error){if(!paid&&error instanceof DealMachineQuotaError)throw new OwnerPreviewRateLimitError(accountId,primary);throw error;}
  };
- const preview=await request('/properties/ids',{ids:candidates.map(x=>object(x.snapshot).propertyId),enrich:false,contact_audience:'owners'},false);
+ stage='free_preview';const preview=await request('/properties/ids',{ids:candidates.map(x=>object(x.snapshot).propertyId),enrich:false,contact_audience:'owners'},false);
+ stage='preview_validation';
  const audience=ownerBatchAudience(preview,candidates,c.contact_credit_cap).filter(a=>a.ids.length>0);
  if(!audience.some(a=>a.screeningId===primary))return {status:'empty',contacts:0};
  const items=audience.map(a=>({screeningId:a.screeningId,snapshot:a.snapshot,ids:[...a.ids]}));
- const admission=await db<string>('rpc/icash_admit_owner_batch','POST',{p_account:accountId,p_primary:primary,p_batch:batchId,p_items:items,p_preview:preview,
+ stage='admission';const admission=await db<string>('rpc/icash_admit_owner_batch','POST',{p_account:accountId,p_primary:primary,p_batch:batchId,p_items:items,p_preview:preview,
   p_config:{rateId:c.contact_rate_id,creditCap:c.contact_credit_cap,unitCostMicros:c.property_credit_micros,rightsUntil:c.data_rights_until}});
  // Only a committed, exact quota refusal with no paid claim can use the
  // existing bounded unstarted-work deferral. Other failures stay held.
  if(admission==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary);
- if(admission!=='claimed')return {status:'held'};
- const raw=await request('/people/ids',{ids:[...new Set(audience.flatMap(a=>[...a.ids]))],enrich:true,include_properties:false},true);
+ if(admission!=='claimed'){console.warn('research_owner_batch_hold',{stage,reason:'admission_held'});return {status:'held'};}
+ stage='paid_lookup';const raw=await request('/people/ids',{ids:[...new Set(audience.flatMap(a=>[...a.ids]))],enrich:true,include_properties:false},true);
+ stage='original_receipt';
  if(!await db<boolean>('rpc/icash_record_owner_batch_receipt','POST',{p_account:accountId,p_batch:batchId,p_receipt:raw}))throw Error('CONTACT_RECEIPT_REQUIRES_RECONCILIATION');
- const results=allocateOwnerBatch(raw,audience,batchId);
+ stage='allocation';const results=allocateOwnerBatch(raw,audience,batchId);
+ stage='persist';
  if(!await db<boolean>('rpc/icash_save_owner_batch','POST',{p_account:accountId,p_batch:batchId,p_results:results}))throw Error('CONTACT_RECEIPT_REQUIRES_RECONCILIATION');
  return {status:'contacts_saved',contacts:results.find(r=>r.screeningId===primary)!.result.contacts.length,batchProperties:results.length};
+ }catch(error){
+  const reasons=['CONTACT_RATE_REQUIRED','CONTACT_PREVIEW_INVALID','CONTACT_RECEIPT_REQUIRES_RECONCILIATION','OWNER_LOOKUP_FAILED_NO_RETRY','OWNER_PREVIEW_FAILED_NO_RETRY'];
+  const reason=error instanceof OwnerPreviewRateLimitError?'quota_wait':error instanceof Error&&reasons.includes(error.message)?error.message:'unavailable';
+  console.warn('research_owner_batch_hold',{stage,reason});throw error;
+ }
 }

@@ -164,5 +164,29 @@ assert.equal(Number(await val("select sum(amount) from icash_cost_observations w
 assert.equal((await val('select icash_research_efficiency_summary(24)')).ownerBatches,1);
 assert.equal(await val("select has_function_privilege('authenticated','public.icash_owner_batch_candidates(uuid,uuid)','EXECUTE')"),false);
 assert.equal(await val("select has_schema_privilege('authenticated','icash_research_private','USAGE')"),false);
+// Version upgrades rotate only unclaimed configurations. Original policy and
+// provider receipts remain intact, including additive free-preview metadata.
+await db.exec(read('config/research-provider-compatibility.sql'));
+assert.equal(await prepare(account),false,'The v1 unknown search is still frozen after installing v2');
+assert.equal(await val('select research_version from icash_discovery_configs where account_id=$1',[account]),1);
+await q('select icash_settle_dealmachine_usage($1)',[searchOp]);
+assert.equal(await prepare(account),true);
+const upgraded=(await q('select * from icash_discovery_configs where account_id=$1',[account])).rows[0];
+assert.equal(upgraded.research_version,2);assert.notEqual(upgraded.revision,c.revision);assert.equal(upgraded.per_page,25);
+assert.deepEqual(await val('select policy from icash_research_private.query_claims where operation_key=$1',[searchOp]),policy);
+await q('update icash_research_private.exclusion_items set synced_at=now()');
+await q('select icash_discovery_filter_state_v2($1,$2,1)',[account,upgraded.revision]);
+const v2scope={...scope,p_revision:upgraded.revision,p_rate:upgraded.rate_id},v2policy={...policy,version:'research-efficiency-v2'};
+assert.equal(await val('select icash_reserve_research_discovery($1,$2,$3,$4)',[account,v2scope,plan(),policy]),false,'Old policy cannot purchase against a new revision');
+assert.equal(await val('select icash_reserve_research_discovery($1,$2,$3,$4)',[account,v2scope,plan(),v2policy]),true);
+await q('update icash_accounts set bot_paused=false where id=$1',[other]);await q('update icash_wallets set balance_cents=2500 where account_id=$1',[other]);await prepare(other);
+const extraJob={...jobs[0],screeningId:uuid(150),snapshot:{...jobs[0].snapshot,propertyId:'prop_150',raw:{data:{...jobs[0].snapshot.raw.data,dm_property_id:'prop_150'}}}};
+await q("insert into icash_screening_jobs(id,account_id,event_key,snapshot,result,state,completed_at) values($1,$2,'additive-preview',$3,$4,'complete',now())",[extraJob.screeningId,other,extraJob.snapshot,runScreeningJob(extraJob.snapshot)]);
+const extraPreview={data:[{dm_property_id:'prop_150',found:true,contacts:[{dm_person_id:'per_extra',contact_type:'owner'}]}],totals:{submitted:1,found:1,not_found:0},credits:{used:0,people:0,properties:0,deduplicated:0,additional_metadata:'allowed'}};
+const extraItems=[{screeningId:extraJob.screeningId,snapshot:extraJob.snapshot,ids:['per_extra']}];
+await db.exec('update icash_dealmachine_request_budget set used=0');
+assert.equal(await val('select icash_admit_owner_batch($1,$2,$3,$4,$5,$6)',[other,extraJob.screeningId,uuid(151),extraItems,{...extraPreview,credits:{...extraPreview.credits,used:1}},conf]),'held');
+assert.equal(await val('select icash_admit_owner_batch($1,$2,$3,$4,$5,$6)',[other,extraJob.screeningId,uuid(152),extraItems,extraPreview,conf]),'claimed');
+assert.deepEqual(await val('select preview_receipt from icash_research_private.owner_batches where id=$1',[uuid(152)]),extraPreview);
 console.log('Research efficiency SQL: versioned quotes, budget fallback, frozen claims, exclusions, pagination, atomic owner batches, exact billing allocation and isolation passed.');
 }finally{await db.close();}
