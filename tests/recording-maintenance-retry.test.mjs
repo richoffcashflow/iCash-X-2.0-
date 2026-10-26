@@ -23,7 +23,8 @@ try{
  const forbidden=async()=>{throw Error('No new provider work permitted');};
  const provider={getRecording:async()=>receipt,dial:forbidden,start:forbidden,register:forbidden,end:forbidden};
  assert.deepEqual(await maintainRecordings(db,provider,{TWILIO_ACCOUNT_SID:ac}),{deleted:0,reconciled:1,held:1});
- assert.deepEqual(finishes.map(x=>[x.p_id,x.p_outcome]),[[oldest.id,'available'],[oldest.id,'retry'],[newer.id,'available']]);
+ assert.deepEqual(finishes.filter(x=>x.p_id===oldest.id).map(x=>x.p_outcome),['available','retry']);
+ assert.deepEqual(finishes.filter(x=>x.p_id===newer.id).map(x=>x.p_outcome),['available'],'unrelated rows may finish concurrently');
  assert(Date.parse(oldest.next_reconcile_at)>now);assert.equal(oldest.reconcile_lease_token,null,'Rejected receipt no longer leaves oldest due/leased forever');
  assert(warnings.some(x=>x[1]?.reason==='recording_receipt_not_saved'&&x[1]?.startMatches===true));
  // AI identity recovery is independent of a matched, completed carrier recording.
