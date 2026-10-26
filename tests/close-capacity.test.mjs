@@ -101,14 +101,14 @@ try{
  assert(inbound.indexOf('icash_operating_budget where id=1 for update')<inbound.indexOf('icash_voice_capacity_available'));
  assert(inbound.includes("c.call_profile<>'normal'"),'quick tests retain singleton guard');
  const agent={agent_id:'agent_fixture',platform_settings:{call_limits:{agent_concurrency_limit:-1,bursting_enabled:false}}};
- assert.deepEqual(voiceCapacitySnapshot({tier:'pro'},agent),{workspaceLimit:10,agentLimit:10,tier:'pro'});
+ assert.deepEqual(voiceCapacitySnapshot({tier:'pro'},agent),{workspaceLimit:20,agentLimit:20,tier:'pro'});
  assert.deepEqual(voiceCapacitySnapshot({tier:'creator'},agent),{workspaceLimit:10,agentLimit:10,tier:'creator'});
  assert.deepEqual(voiceCapacitySnapshot({tier:'free'},agent),{workspaceLimit:4,agentLimit:4,tier:'free'});
  for(const bad of [0,-2,1.5,'4',null])assert.equal(voiceCapacitySnapshot({tier:'pro'},{platform_settings:{call_limits:{agent_concurrency_limit:bad,bursting_enabled:false}}}),null);
  assert.equal(voiceCapacitySnapshot({tier:'enterprise'},agent),null);assert.equal(voiceCapacitySnapshot({tier:'pro'},{...agent,platform_settings:{call_limits:{agent_concurrency_limit:4,bursting_enabled:true}}}),null);
  const writes=[],reads=[];
  await refreshVoiceCapacity(async(path,method,body)=>path.includes('targets')?[{agentId:'agent_fixture',branchId:null},{agentId:'agent_incoming',branchId:'agtbrch_incoming'}]:(writes.push(body),null),async(path,region)=>{reads.push({path,region});return path.includes('subscription')?{tier:'pro'}:{...agent,agent_id:path.includes('agent_incoming')?'agent_incoming':'agent_fixture'};},{agentId:'agent_fixture',branchId:'agtbrch_fixture'});
- assert.equal(writes[0].p_limit,10);
+ assert.equal(writes[0].p_limit,20);
  assert.match(writes[0].p_source,/units=unknown\/unknown;extra=unknown/);
  assert.equal(reads.length,3,'quota evidence reuses existing provider reads');
  const quota={character_count:100000,character_limit:100000,max_credit_limit_extension:0,can_extend_character_limit:true,secret:'never log',invoices:[{private:'never log'}]};

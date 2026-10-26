@@ -6,3 +6,13 @@ export const outboundParallelApproval=Object.freeze({
  versionId:'agtvrsn_0901m4exyqk6exta8zt620daaq9d',
  previousLimit:2,limit:8,workspaceLimit:10,
 });
+
+/** Owner approved 1,000 daily outgoing conversations and twenty total slots
+ * on 2026-10-26. Keep two incoming slots and the original reviewed behavior. */
+export const outboundProApproval=Object.freeze({
+ agentId:outboundParallelApproval.agentId,
+ branchId:outboundParallelApproval.branchId,
+ versionId:outboundParallelApproval.versionId,
+ previousLimit:8,limit:18,workspaceLimit:20,
+ previousDailyLimit:100,dailyLimit:1000,
+});

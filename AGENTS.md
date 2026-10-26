@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 26, 2026 the owner approved raising the shared outgoing ElevenLabs agent to 1,000 conversations per day and eighteen simultaneous outgoing calls, with twenty total calls and two slots reserved for incoming. Confirm the Pro-or-higher entitlement without enabling burst pricing, credit overages or changing billing. Apply the exact provider change once from the compatible live release, preserve reviewed prompts/tools/recording and historical hashes, and reconcile uncertain configuration writes without replay. Preserve recipient rules, funded admission, fair account service and all existing call/money holds.
+
 - On October 26, 2026 the owner requested partially masked customer emails for green-screen recordings. Keep emails masked by default in the owner account directory and customer workspace preview, including email-based display names and accessible labels. This is display-only; preserve account identities, lookup, saved contact details and the audited read-only view boundaries.
 
 - On October 26, 2026 the owner required natural, accurate support conversations. Keep short status replies, counts and corrections attached to the current issue; new subjects replace it. Answer lead frequency and outreach hours directly. Do not invent outreach buttons/permission switches, promise that waiting a few hours will fix stalled work, or treat a customer's manual text as bot activity. Correct earlier bad instructions plainly. Keep real failures open and preserve access, cancellation and payment boundaries. Verify changes with offline conversation replays, never paid simulations.

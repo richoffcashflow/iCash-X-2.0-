@@ -41,7 +41,7 @@ const maintenanceDb=async(path,method,body)=>{
 const ok=async()=>Response.json({ok:true});
 const route=await loadService('app/api/internal/maintenance/route.ts',{
  processSupportCustomerNotifications:async()=>({failed:0}),
- refreshVoiceCapacity:async()=>({status:'verified'}),readVoiceCapacityProvider:()=>{throw Error('No live provider');},
+ applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),refreshVoiceCapacity:async()=>({status:'verified'}),readVoiceCapacityProvider:()=>{throw Error('No live provider');},
  refreshInventoryGeographyBatch:async()=>({status:'idle'}),readRecordingReview:()=>null,
  processPurchaseAccessEmails:async()=>({ready:true,failed:0}),recoverAccessHelpReplies:async()=>({status:'idle'}),
  processSupportOwnerNotifications:async()=>({failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),
