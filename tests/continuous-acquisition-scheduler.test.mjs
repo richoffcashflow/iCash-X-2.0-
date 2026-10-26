@@ -88,5 +88,36 @@ try{
  assert.equal((await one('select icash_resume_prospecting_ticket() result')).result,null);
  assert.equal((await one('select outcome from icash_automation_tickets')).outcome,'prospecting_budget_released','A stale discovery capability is woken, not replayed');
  assert.equal((await one("select count(*)::int n from fixture_reads where kind='wake'")).n,1);
- console.log('Continuous scheduler: bounded fair selection, affordable work, cached allowances, parked-ticket scan avoidance, original retry protections and private grants passed.');
+ // Reproduce low-spend accounts reclaiming every five-second poll while an
+ // affordable account has to wait for the five-minute starvation safeguard.
+ await db.exec(`truncate icash_automation_tickets,fixture_reads;
+ alter table icash_accounts add column priority_ratio numeric default 0;
+ create or replace function icash_daily_work_target(uuid) returns jsonb language sql as $$select jsonb_build_object('priorityRatio',priority_ratio) from public.icash_accounts where id=$1$$;
+ update icash_accounts set allowance=200,candidate=null,search_due=false,backlog=0;
+ update icash_discovery_configs set next_run_at=now()+interval '1 day';
+ update icash_discovery_configs set next_run_at=now() where account_id in(select md5(i::text)::uuid from generate_series(1,6)i);
+ update icash_accounts set priority_ratio=0.05,search_due=true where id=md5('6')::uuid;
+ update icash_discovery_configs set exhausted=true where account_id=md5('1')::uuid;
+ update icash_accounts set backlog=10 where id=md5('2')::uuid;
+ update icash_accounts set search_due=true where id in(md5('1')::uuid,md5('2')::uuid);`);
+ assert.equal((await one('select icash_next_acquisition() result')).result,null);
+ await db.exec("update icash_discovery_configs set next_run_at=next_run_at-interval '6 seconds';");
+ assert.equal((await one('select icash_next_acquisition() result')).result,null,'Old five-second no-work cadence repeats the same blocked accounts');
+ assert.equal((await one("select count(distinct account_id)::int n from fixture_reads where kind='refresh'")).n,5);
+ const cooldown=read('config/acquisition-no-work-cooldown.sql');
+ assert.equal(cooldown,read('supabase/migrations/20261026035850_acquisition_no_work_cooldown.sql'));
+ await db.exec(cooldown);
+ await db.exec("truncate fixture_reads;update icash_discovery_configs set next_run_at=now() where account_id in(select md5(i::text)::uuid from generate_series(1,6)i);");
+ assert.equal((await one('select icash_next_acquisition() result')).result,null);
+ assert.equal((await one("select count(*)::int n from fixture_reads where kind='refresh'")).n,5,'The per-transaction scan remains bounded');
+ assert.equal((await one("select count(*)::int n from icash_discovery_configs where account_id in(select md5(i::text)::uuid from generate_series(1,5)i) and next_run_at>now()+interval '50 seconds'")).n,5,'Exhaustion, full buffers and admission holds yield their turn');
+ await db.exec("update icash_discovery_configs set next_run_at=next_run_at-interval '6 seconds';");
+ assert.deepEqual((await one('select icash_next_acquisition() result')).result,{token:'fixture-token'});
+ assert.deepEqual(await one("select kind,account_id=md5('6')::uuid correct_account from icash_automation_tickets"),{kind:'discovery',correct_account:true},'Affordable work proceeds on the next poll without waiting five minutes');
+ assert.equal((await one("select next_run_at between now()+interval '3 seconds' and now()+interval '6 seconds' fast from icash_discovery_configs where account_id=md5('6')::uuid")).fast,true,'Issued work retains the five-second cadence');
+ assert.equal((await one('select sum(balance_cents)::int balance from icash_wallets')).balance,12000,'Scheduling does not fabricate usage or release money');
+ for(const role of ['anon','authenticated','service_role'])assert.equal((await one(`select has_function_privilege('${role}','icash_next_acquisition()','execute') allowed`)).allowed,role==='service_role');
+ await assert.rejects(db.exec(cooldown),/Acquisition no-work cooldown prerequisite changed/);
+ await db.exec('rollback');
+ console.log('Continuous scheduler: bounded fair selection, blocked-account starvation reproduction and cooldown, affordable work, cached allowances, parked-ticket scan avoidance, original retry protections and private grants passed.');
 }finally{await db.close();}
