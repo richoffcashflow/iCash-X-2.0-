@@ -1,4 +1,16 @@
 import {z} from 'zod';
+
+// Display-only privacy for the owner's account switcher and customer previews.
+export function maskOwnerAccountEmail(email:string|null|undefined):string{
+ const value=email?.trim();if(!value)return '';
+ const at=value.lastIndexOf('@');if(at<1||at===value.length-1)return '***';
+ const visible=Math.min(2,at-1);
+ return `${value.slice(0,visible)}***${value.slice(at)}`;
+}
+export function maskOwnerAccountLabel(label:string):string{
+ return label.replace(/[^\s<>@]+@[^\s<>@]+/g,email=>maskOwnerAccountEmail(email));
+}
+
 const count=z.number().int().nonnegative().safe();
 export const ownerAccountSchema=z.object({id:z.guid(),name:z.string(),email:z.string().nullable(),ownAccount:z.boolean(),fundedCents:count,balanceCents:count,reservedCents:count,leadCount:count,paused:z.boolean(),assistantName:z.string().nullable(),createdAt:z.string().datetime({offset:true}),billingModel:z.string(),vip:z.boolean(),membership:z.object({state:z.string(),paidThrough:z.string().nullable()}).nullable()});
 export type OwnerAccount=z.infer<typeof ownerAccountSchema>;
