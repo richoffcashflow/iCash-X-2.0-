@@ -9,6 +9,9 @@ export async function stalledSearchScenarios(db,account,other){
  const patch=read('config/stalled-search-continuation.sql');
  assert.equal(patch,read('supabase/migrations/20261026033032_stalled_search_continuation.sql'));
  await db.exec(patch);
+ const bounded=read('config/bounded-research-market-selection.sql');
+ assert.equal(bounded,read('supabase/migrations/20261026034110_bounded_research_market_selection.sql'));
+ await db.exec(bounded);
  const config=()=>value('select to_jsonb(c) from icash_discovery_configs c where account_id=$1',[account]);
  const original=await config(),op=`discovery:${account}:${original.revision}:${original.next_page}`;
  const resume=()=>value('select icash_continue_stalled_research($1)',[account]);
@@ -85,5 +88,15 @@ export async function stalledSearchScenarios(db,account,other){
   assert.equal(await value("select has_function_privilege($1,'icash_stalled_search_configuration(uuid,text)','execute')",[role]),false);
   assert.equal(await value("select has_table_privilege($1,'icash_research_private.stalled_searches','select')",[role]),false);
  }
+ // Real eligible-market selection remains bounded even with a large catalog.
+ await db.exec(`create table fixture_market_scores(zip text);
+  create or replace function icash_opportunity_market_score(uuid,text) returns numeric language plpgsql as $$begin insert into public.fixture_market_scores values($2);return 0;end$$;
+  insert into icash_market_shortlist(zip,state,city) select (43000+i)::text,'TX','Synthetic' from generate_series(1,200)i;
+ `);
+ await q("insert into icash_inventory_markets(account_id,zip,eligible_until) select $1,(43000+i)::text,now()+interval '1 day' from generate_series(1,200)i",[account]);
+ await q('update icash_discovery_configs set exhausted=true where account_id=$1',[account]);
+ assert.equal(await value('select icash_rotate_inventory_market($1)',[account]),true);
+ assert.equal(await value('select count(*)::int from fixture_market_scores'),64,'Only the bounded eligible shortlist is scored');
+ assert.notEqual((await config()).zip,original.zip,'Bounded selection retains the permanent original-ZIP fence');
  console.log('Stalled search recovery: disjoint scope, immutable holds, no replay, late original receipts, minimum actual progress and private grants passed.');
 }
