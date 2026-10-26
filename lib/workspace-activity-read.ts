@@ -87,7 +87,7 @@ export async function workspaceActivity(req:Request,accountId:string,{refreshOut
    db<Attention[]>(workspaceAttentionQuery('icash_signing_envelopes',accountId,{...queuePage,select:'id,deal_id,kind,test_mode',order:'created_at,id'})),
    db<SmsRouteReview[]>('rpc/icash_sms_route_review_items','POST',{p_account:accountId,p_offset:attentionPage*pageSize,p_limit:pageSize+1}),
    db<Attention[]>(workspaceAttentionQuery('icash_buyer_viewing_requests',accountId,{...queuePage,select:'id,screening_id,deal_id,kind,quote,title_quote,viewing_quote,coordination_quote,timezone,created_at,acknowledged_at',order:'created_at,id'})),
-   db<Attention[]>(workspaceAttentionQuery('icash_seller_gaps',accountId,{...queuePage,select:'id,screening_id,deal_id,reason,quote,updated_at',order:'updated_at,id'})),
+   db<Attention[]>(workspaceAttentionQuery('icash_seller_gaps',accountId,{...queuePage,select:'id,screening_id,deal_id,reason,quote,review_reason,updated_at',order:'updated_at,id'})),
    db<Attention[]>(workspaceAttentionQuery('icash_closing_setup',accountId,{...queuePage,select:'id,screening_id,deal_id,review_reason,state,updated_at',order:'created_at,id'}))
   ]);
   const closingTasks=await attachTaskRecovery(accountId,closingTaskRows.slice(0,pageSize));
