@@ -95,6 +95,6 @@ try{
   for(const fn of ['icash_next_automation_lane(text)','icash_issue_account_followup()','icash_account_followup_context(uuid,uuid)','icash_finish_account_followup(uuid,uuid,boolean)'])assert.equal(await one('select has_function_privilege($1,$2,\'execute\')',[role,fn]),false);
   assert.equal(await one('select has_schema_privilege($1,\'icash_work_private\',\'usage\')',[role]),false);
  }
- assert.equal(migration,read('supabase/migrations/20261027032051_parallel_work_throughput.sql'));
+ assert.equal(migration,read('supabase/migrations/20261027033207_parallel_work_throughput.sql'));
  console.log('Parallel SQL: early hours, capacity/fairness/admission, one-second issuance, durable generations, crash/stale-worker recovery, lane isolation, private access and unchanged money passed. Local fixtures only.');
 }finally{await pg.close();}
