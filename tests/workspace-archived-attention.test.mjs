@@ -1,3 +1,4 @@
+import {isConfirmedVoicemail} from '../lib/call-display-evidence.ts';
 import {instantLeadsEnabled} from '../lib/meta-instant-lead-service.ts';
 process.env.META_INSTANT_LEADS_ENABLED='true';process.env.VERCEL_ENV='production';
 // Local fixtures only: archived agreements remain intact, but never create work.
@@ -27,6 +28,8 @@ const db=async(path,method='GET',body)=>{
   if(path==='rpc/icash_sms_route_review_items')return unmatchedText?[{message_id:uuid(800),needs_review:true,candidates:[]}]:[];
   if(path==='rpc/icash_activity_report')return {days:body.p_days,timezone:'America/Chicago',startAt:'2026-10-01T00:00:00Z',endAt:'2026-10-12T00:00:00Z',leads:0,calls:0,texts:0,contracts:0};
   if(path==='rpc/icash_refresh_opportunity_outcomes')return null;
+  if(path==='rpc/icash_workspace_text_reply_counts')return {properties:0,unreadProperties:0,unreadMessages:0};
+  if(path==='rpc/icash_workspace_seller_texts')return [];
   if(path==='rpc/icash_workspace_response_counts')return {responded:0,total:0};
   if(path==='rpc/icash_workspace_opportunities')return properties.filter(p=>p.account_id===account&&p.state==='complete'&&(!body.p_query||p.result.property.address.includes(body.p_query))).slice(body.p_offset,body.p_offset+body.p_limit);
   if(['rpc/icash_journey_progress','rpc/icash_buyer_reception_calls','rpc/icash_prioritized_work','rpc/icash_meta_workspace_response_leads'].includes(path))return [];
@@ -64,7 +67,7 @@ const db=async(path,method='GET',body)=>{
  if(['icash_owner_contacts','icash_seller_matches','icash_property_controls','icash_live_conversations','icash_live_callbacks','icash_automation_tickets'].includes(table))return [];
  throw Error('Unexpected read '+table);
 };
-const activityDeps={instantLeadsEnabled,db,z,workspaceAttentionQuery,workAccount:async()=>({accountId:account}),attachTaskRecovery:async(_,rows)=>rows,NextResponse:{json:(body,options={})=>({body,status:options.status??200})}};
+const activityDeps={isConfirmedVoicemail,instantLeadsEnabled,db,z,workspaceAttentionQuery,workAccount:async()=>({accountId:account}),attachTaskRecovery:async(_,rows)=>rows,NextResponse:{json:(body,options={})=>({body,status:options.status??200})}};
 const {workspaceActivity}=await loadService('lib/workspace-activity-read.ts',activityDeps);
 const {GET}=await loadService('app/api/work/activity/route.ts',{...activityDeps,workspaceActivity});
 const {workspaceAssistantContext}=await loadService('lib/workspace-assistant-context.ts',{db,workspaceAttentionQuery,workspaceAttentionTables,validActivityReport,currentBotActivity:input=>{assert.deepEqual(input.progress,{status:'budget_reached',callsBudgetHeld:2});return {checkedAt:'2026-10-12T00:00:00Z',label:'New outreach allowance used',active:false};}});
