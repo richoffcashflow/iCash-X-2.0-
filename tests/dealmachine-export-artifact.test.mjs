@@ -14,6 +14,13 @@ assert.deepEqual(result.columns[2].objectKeys,['number','type','do_not_call']);a
 assert.doesNotMatch(JSON.stringify(result),/2025550123|Fixture, Owner|private=fixture/);
 assert.equal((await inspectSavedActiveExport({db,transport})).status,'already_saved');assert.equal(gets,1);
 delete row.artifact;row.receipt.download_urls[0].url='https://example.invalid/file';await assert.rejects(inspectSavedActiveExport({db,transport}),/HOST_INVALID/);assert.equal(gets,1);
+row.receipt.download_urls[0].url='https://storage.googleapis.com/fixture/signed.csv.gz?private=fixture';
+for(const value of [{2025550123:'wireless',FixtureOwner:'private'},[{2025550123:'wireless',FixtureOwner:'private'}]]){
+ delete row.artifact;
+ const dictionaryCsv='dm_person_id,phones\nper_456,"'+JSON.stringify(value).replaceAll('"','""')+'"\n';
+ const summary=await inspectSavedActiveExport({db,transport:async()=>new Response(gzipSync(dictionaryCsv))});
+ assert.equal(summary.columns[1].otherKeyCount,2);assert.doesNotMatch(JSON.stringify(summary),/2025550123|FixtureOwner/);assert.equal(row.artifact.csv,dictionaryCsv);
+}
 let loads=0;assert.equal((await runApprovedActiveExport({VERCEL_ENV:'production'},async()=>{loads++;})).status,'not_requested');assert.equal(loads,0);
 assert.equal((await runApprovedActiveExport({VERCEL_ENV:'preview',VERCEL_GIT_COMMIT_REF:'codex/dealmachine-active-phone-contract-20261027'},async()=>{loads++;})).status,'configuration_unavailable');assert.equal(loads,0);
 console.log('PASS original export artifact: bounded free download, host/redirect controls, private CSV receipt, safe schema output, exact scope, no repeated download, production/foreign configuration blocked.');

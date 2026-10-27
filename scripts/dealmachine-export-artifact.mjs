@@ -22,14 +22,24 @@ export function parseExportCsv(text){
  if(rows.length!==2||rows[0].length!==rows[1].length||rows[0].length>150||new Set(rows[0]).size!==rows[0].length)throw Error('EXPORT_CSV_SCOPE_INVALID');
  return rows;
 }
+const knownPhoneKeys=new Set(['number','phone','phone_number','type','phone_type','do_not_call','dnc','carrier','active','is_active','activity','status','phone_activity','phone_activity_status','last_seen','last_seen_date','last_active','last_activity_date']);
+function schemaKeys(keys){
+ const unique=[...new Set(keys)];
+ // A provider may encode a dictionary keyed by phone number or name. Only
+ // recognized schema labels belong in build logs; the original stays private.
+ return {keys:unique.filter(k=>knownPhoneKeys.has(k)),otherKeyCount:unique.filter(k=>!knownPhoneKeys.has(k)).length};
+}
 function shape(value,personId){
  if(value==='')return {type:'empty'};
  if(value===personId||value===personId.slice(4))return {type:'requested_owner_id'};
  if(/^(?:true|false|yes|no|wireless|landline|mobile|active|inactive|unknown)$/i.test(value))return {type:'literal',value:value.toLowerCase()};
  try{
   const parsed=JSON.parse(value);
-  if(Array.isArray(parsed))return {type:'json_array',length:parsed.length,itemTypes:[...new Set(parsed.map(x=>x===null?'null':Array.isArray(x)?'array':typeof x))],objectKeys:[...new Set(parsed.flatMap(x=>x&&typeof x==='object'&&!Array.isArray(x)?Object.keys(x):[]))]};
-  if(parsed&&typeof parsed==='object')return {type:'json_object',keys:Object.keys(parsed)};
+  if(Array.isArray(parsed)){
+   const {keys,otherKeyCount}=schemaKeys(parsed.flatMap(x=>x&&typeof x==='object'&&!Array.isArray(x)?Object.keys(x):[]));
+   return {type:'json_array',length:parsed.length,itemTypes:[...new Set(parsed.map(x=>x===null?'null':Array.isArray(x)?'array':typeof x))],objectKeys:keys,otherKeyCount};
+  }
+  if(parsed&&typeof parsed==='object')return {type:'json_object',...schemaKeys(Object.keys(parsed))};
  }catch{}
  if(/^[+\d(). -]+$/.test(value))return {type:'numeric_text',digits:value.replace(/\D/g,'').length};
  return {type:'text',length:value.length};
