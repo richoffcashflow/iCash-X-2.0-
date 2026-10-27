@@ -2,11 +2,12 @@ import http from 'node:http';
 import {createRpc,tick,automationTick,workerFailureDetails} from './runner.mjs';
 import {createScheduler} from './scheduler.mjs';
 import {createHeartbeat} from './heartbeat.mjs';
+import {automationPools} from './pools.mjs';
 const configured=Boolean(process.env.SUPABASE_URL&&process.env.SUPABASE_SECRET_KEY);
 const active=configured&&process.env.SCREENING_WORKER_ENABLED==='true';
 let stopping=false,timer,heartbeatTimer;
 const rpc=configured?createRpc(process.env.SUPABASE_URL,process.env.SUPABASE_SECRET_KEY):null;
-const scheduler=createScheduler({screening:()=>tick(rpc),automation:()=>automationTick(rpc),
+const scheduler=createScheduler({screening:()=>tick(rpc),automation:lane=>automationTick(rpc,fetch,lane),automationPools:automationPools(),
  onFailure:(lane,error)=>console.error('Worker operation failed',{lane,...workerFailureDetails(error)})});
 async function loop(){
  if(stopping||!rpc||!active)return;
