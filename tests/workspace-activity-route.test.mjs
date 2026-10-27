@@ -1,3 +1,4 @@
+import {isConfirmedVoicemail} from '../lib/call-display-evidence.ts';
 import {instantLeadsEnabled} from '../lib/meta-instant-lead-service.ts';
 process.env.META_INSTANT_LEADS_ENABLED='true';process.env.VERCEL_ENV='production';
 import assert from 'node:assert/strict';
@@ -18,9 +19,12 @@ const contactRows=[lookup(1,[person,{},null,'invalid',{name:34,phones:'invalid'}
  {...lookup(998,[{name:'Other tenant contact',phones:[]}]),account_id:otherAccount}];
 let paths=[],authorized=true,sellerFixtures=[];
 const paginate=(rows,q)=>rows.slice(Number(q.get('offset')??0),Number(q.get('offset')??0)+Number(q.get('limit')??rows.length));
-const mocks={instantLeadsEnabled,z,workspaceAttentionQuery,attachTaskRecovery:async(id,tasks)=>{assert.equal(id,account);return tasks;},NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
+const mocks={isConfirmedVoicemail,instantLeadsEnabled,z,workspaceAttentionQuery,attachTaskRecovery:async(id,tasks)=>{assert.equal(id,account);return tasks;},NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
  paths.push({path,method,body});
  if(path==='rpc/icash_refresh_opportunity_outcomes'){assert.equal(body.p_account,account);return null;}
+ if(path==='rpc/icash_workspace_text_reply_counts')return {properties:2,unreadProperties:1,unreadMessages:2};
+ if(path==='rpc/icash_workspace_seller_texts')return [];
+ if(path==='rpc/icash_workspace_text_reply_ids')return [19,17].map(n=>({screening_id:uuid(n),state:'complete'}));
  if(path==='rpc/icash_workspace_response_counts'){assert.equal(body.p_account,account);return {responded:3,total:20};}
  if(path==='rpc/icash_workspace_opportunities'){assert.equal(body.p_account,account);assert.equal(body.p_limit,7);const rows=properties.filter(p=>(!body.p_query||p.result.property.address.toLowerCase().includes(body.p_query.toLowerCase()))&&(!body.p_responses_only||[uuid(17),uuid(18),uuid(19)].includes(p.id)));return rows.slice(body.p_offset,body.p_offset+body.p_limit);}
  if(path==='rpc/icash_workspace_ready_opportunities'){assert.equal(body.p_account,account);assert.equal(body.p_limit,7);assert.equal(body.p_responses_only,undefined);return [17,18,19,16,20].map(n=>properties.find(p=>p.id===uuid(n))).slice(body.p_offset,body.p_offset+body.p_limit);}
@@ -34,7 +38,7 @@ const mocks={instantLeadsEnabled,z,workspaceAttentionQuery,attachTaskRecovery:as
  if(table==='icash_screening_jobs'){
   if(q.get('select')?.includes('!inner()'))return [{id:uuid(1)}];
   if(q.get('select')==='id,result:result->property')return properties.filter(p=>q.get('id').includes(p.id)).map(p=>({id:p.id,result:p.result.property}));
-  if(q.get('id'))return properties.filter(p=>q.get('id')===`eq.${p.id}`);
+  if(q.get('id'))return properties.filter(p=>q.get('id')===`eq.${p.id}`||q.get('id').startsWith('in.')&&q.get('id').includes(p.id));
   const search=q.get('result->property->>address')?.slice(7,-1).toLowerCase();
   return paginate(properties.filter(p=>!search||p.result.property.address.toLowerCase().includes(search)),q);
  }
@@ -94,6 +98,7 @@ r=await get('');const shared=r.body.contacts.find(c=>c.source==='HomeOffer Netwo
 r=await get('?view=responses');assert.deepEqual(r.body.properties.map(p=>p.id),[uuid(17),uuid(18),uuid(19)],'Response filtering is passed to the server before pagination');assert.deepEqual(r.body.responseCounts,{responded:3,total:20});
 paths=[];r=await get('?view=opportunities');assert.deepEqual(r.body.properties.map(p=>p.id),[17,18,19,16,20].map(uuid),'The dedicated server predicate supplies ready opportunities before paging');assert.equal(paths.find(p=>p.path==='rpc/icash_meta_workspace_response_leads').body.p_responses_only,true,'An unanswered address-pending intake is not labeled financially eligible');
 paths=[];r=await get('?view=all');assert.equal(r.body.properties[0].id,uuid(1),'Explicit all activity preserves full history');assert.equal(paths.find(p=>p.path==='rpc/icash_meta_workspace_response_leads').body.p_responses_only,false);
+paths=[];r=await get('?view=unread');assert.deepEqual(r.body.properties.map(p=>p.id),[uuid(19),uuid(17)]);assert.deepEqual(r.body.replyOrder,[uuid(19),uuid(17)]);assert.equal(paths.find(p=>p.path==='rpc/icash_workspace_text_reply_ids').body.p_unread_only,true);assert.equal(r.body.textReplyCounts.unreadMessages,2);
 authorized=false;paths=[];r=await get('');assert.notEqual(r.status,200);assert.equal(paths.length,0,'No data access without account ownership');
 delete globalThis.__activityRoute;
 console.log('Activity route: tenant-bound purchased contacts, explicit field projection, DNC states, missing/malformed results, bounded arrays, pagination, retained views, search and authentication passed. Synthetic fixtures only.');

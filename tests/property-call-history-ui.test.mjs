@@ -109,6 +109,12 @@ try {
  view.unmount();assert.equal(timers.size,0);
 
  calls=queuedFetch();view=harness(historySource,'PropertyCallHistory',{screeningId,conversations:[]},dependencies);await view.flush();
+ calls[0].resolve(Response.json({recordings:[{...fixture,voicemail:true}],next:1}));await view.flush();
+ assert.equal(callNodes(view).length,0,'Confirmed voicemail is hidden by default');assert.match(text(view.tree),/Only voicemail in this view/);
+ elements(view.tree).find(n=>n.type==='input'&&n.props.type==='checkbox').props.onChange({target:{checked:true}});await view.flush();
+ assert.equal(callNodes(view).length,1,'Historical audio remains available on request');assert.doesNotMatch(text(view.tree),/Only voicemail in this view/);assert(view.button('Older recordings'));view.unmount();
+
+ calls=queuedFetch();view=harness(historySource,'PropertyCallHistory',{screeningId,conversations:[]},dependencies);await view.flush();
  calls[0].resolve(Response.json({recordings:[],next:null}));await view.flush();assert.match(text(view.tree),/No call recordings yet/);
  document.hidden=true;advancePoll();await view.flush();assert.equal(calls.length,1,'hidden tabs do not poll');document.hidden=false;
  listeners.get('visibilitychange')();await view.flush();assert.equal(calls.length,2,'visible tabs refresh promptly');

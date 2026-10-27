@@ -15,6 +15,7 @@ const cachedPhoto={url:'https://img.dealmachine.com/sv/35,-90.jpg',fallbackUrl:'
 const load=(path,deps)=>{const code=ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const module={exports:{}};new Function('require','module','exports',code)(name=>{assert(name in deps,'Missing dependency '+name);return deps[name];},module,module.exports);return module.exports;};
 const database={db:async(path,method='GET',body)=>{
  calls.push({path,method,body});
+ if(path==='rpc/icash_latest_seller_text_thread')return null;
  if(path==='rpc/icash_owner_account_view')return active?structuredClone(view):null;
  if(path==='rpc/icash_owner_account_view_start'){assert.deepEqual(body,{p_actor:owner,p_session:session,p_account:account});return {id:viewId,expiresAt:view.expiresAt};}
  if(path==='rpc/icash_owner_account_view_end')return true;

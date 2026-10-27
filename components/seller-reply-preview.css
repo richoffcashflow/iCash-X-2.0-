@@ -1,0 +1,11 @@
+.seller-reply-preview{display:block;width:calc(100% - 32px);margin:0 16px 14px;padding:13px 14px;border:1px solid #dedede;border-radius:10px;text-align:left;background:#fafafa;color:#171717;cursor:pointer;overflow:hidden}
+.seller-reply-preview[data-unread=true]{background:#f2f2f2;border-color:#171717;border-left-width:4px}
+.seller-reply-heading{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:13px}.seller-reply-heading time{font-size:11px;font-weight:400;color:#595959;margin-left:auto}
+.seller-reply-body{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;font-size:14px;line-height:1.5;margin-top:8px}
+.seller-reply-open{display:flex;gap:4px;align-items:center;font-size:12px;font-weight:650;margin-top:8px}
+.text-unread-count{display:inline-flex;justify-content:center;align-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:20px;background:#171717;color:#fff;font-size:11px;line-height:1}
+.seller-text-alert{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border:1px solid #171717;border-radius:12px;background:#fafafa;margin:12px 0}.seller-text-alert p{margin:3px 0 0;font-size:13px;color:#555}.seller-text-alert button{flex-shrink:0;border:0;border-radius:8px;background:#171717;color:#fff;min-height:44px;padding:10px 14px;font-weight:600}
+.text-reply-filter{display:flex;align-items:center;gap:8px;font-size:13px;margin:10px 0}.conversation-contact-preview{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;font-size:12px;font-style:normal;color:#555}
+.conversation-call-toggle{display:flex;align-items:center;gap:6px;font-size:12px;white-space:nowrap}.conversation-read-error{font-size:12px;color:#555;margin:6px 0}.voicemail-history{margin-top:14px;border-top:1px solid #dedede;padding-top:12px}.voicemail-history>summary{cursor:pointer;font-size:13px;color:#555}
+.seller-reply-preview:focus-visible,.seller-text-alert button:focus-visible{outline:3px solid #171717;outline-offset:3px}
+@media(max-width:480px){.seller-reply-heading time{width:100%;margin-left:23px}.seller-text-alert{align-items:flex-start;flex-wrap:wrap}.seller-text-alert button{width:100%}.conversation-call-toggle{white-space:normal}}

@@ -1,7 +1,8 @@
 'use client';
+import {subscribeWorkspaceChanges} from '@/lib/workspace-events-client';
 import {useEffect,useRef,useState} from 'react';
 import {Bell,Mail,MessageCircle,X} from 'lucide-react';
-import {botUpdateConsentVersion,type InboxItem,type BotUpdatePreferences as Preferences} from '@/lib/customer-updates';
+import {botUpdateConsentVersion,updateHref,updateUnread,type InboxItem,type BotUpdatePreferences as Preferences} from '@/lib/customer-updates';
 
 export function WorkspaceUpdates({onPreferences,onBudget}:{onPreferences:()=>void;onBudget:()=>void}){
  const [items,setItems]=useState<InboxItem[]>([]),[seenAt,setSeenAt]=useState<string|null>(null),[error,setError]=useState(''),[loaded,setLoaded]=useState(false),[retry,setRetry]=useState(0);
@@ -9,19 +10,19 @@ export function WorkspaceUpdates({onPreferences,onBudget}:{onPreferences:()=>voi
  useEffect(()=>{
   let alive=true,inFlight=false;const controller=new AbortController();
   async function load(){if(document.hidden||inFlight)return;inFlight=true;try{const response=await fetch('/api/notifications/updates',{cache:'no-store',signal:controller.signal});const data=await response.json();if(!response.ok)throw Error(data.error);if(alive){setItems(data.items);setSeenAt(data.preferences.seenAt??null);setError('');setLoaded(true);}}catch{if(alive)setError('Could not refresh updates. Your saved properties are still available.');}finally{inFlight=false;}}
-  void load();const timer=setInterval(load,60000);document.addEventListener('visibilitychange',load);
-  return()=>{alive=false;controller.abort();clearInterval(timer);document.removeEventListener('visibilitychange',load);};
+  void load();const unsubscribe=subscribeWorkspaceChanges(load);const timer=setInterval(load,60000);document.addEventListener('visibilitychange',load);
+  return()=>{alive=false;unsubscribe();controller.abort();clearInterval(timer);document.removeEventListener('visibilitychange',load);};
  },[retry]);
- const unread=items.filter(item=>!seenAt||Date.parse(item.createdAt)>Date.parse(seenAt)).length;
+ const unread=items.filter(item=>updateUnread(item,seenAt)).length;
  async function markSeen(){const before=items[0]?.createdAt;if(!before)return;try{const response=await fetch('/api/notifications/updates',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'seen',before})});if(!response.ok)throw Error();setSeenAt(before);}catch{setError('Could not mark updates read. Please try again.');}}
  return <>
   <button className="workspace-updates-button" aria-label={`Updates${unread?`, ${unread} unread`:''}`} onClick={()=>dialog.current?.showModal()}><Bell size={18} aria-hidden="true"/><span>Updates</span>{unread>0&&<b>{unread>9?'9+':unread}</b>}</button>
   <dialog className="updates-dialog" ref={dialog} aria-labelledby="updates-title"><div className="updates-heading"><div><span className="workspace-eyebrow">Your bot, at a glance</span><h2 id="updates-title">Updates</h2></div><button className="icon-close" aria-label="Close updates" onClick={()=>dialog.current?.close()}><X size={20}/></button></div>
-   <div className="updates-toolbar"><button onClick={()=>{dialog.current?.close();onPreferences();}}>Email & text updates</button>{unread>0&&<button onClick={()=>void markSeen()}>Mark read</button>}</div>
+   <div className="updates-toolbar"><button onClick={()=>{dialog.current?.close();onPreferences();}}>Email & text updates</button>{unread>0&&<button onClick={()=>void markSeen()}>Mark updates read</button>}</div>
    {error&&<p className="updates-error" role="alert">{error} <button onClick={()=>setRetry(value=>value+1)}>Retry</button></p>}
    {!loaded&&!error&&<p className="updates-empty" role="status">Loading your bot’s updates…</p>}
    {loaded&&!items.length&&<div className="updates-empty"><Bell size={24}/><h3>You’re all caught up.</h3><p>Seller replies, completed research and deal milestones will appear here.</p></div>}
-   <ul className="updates-list">{items.map(item=><li key={item.id} data-unread={!seenAt||Date.parse(item.createdAt)>Date.parse(seenAt)}><a onClick={event=>{dialog.current?.close();if(item.kind==='credits_low'){event.preventDefault();onBudget();}}} href={item.kind==='credits_low'?'/#funding':`/?screeningId=${encodeURIComponent(item.screeningId??'')}`}><span className="update-unread-dot" aria-hidden="true"/><span><strong>{item.title}</strong><p>{item.address??item.detail}</p><small>{new Date(item.createdAt).toLocaleString('en-US',{hour12:true,month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</small></span></a></li>)}</ul>
+   <ul className="updates-list">{items.map(item=><li key={item.id} data-unread={updateUnread(item,seenAt)}><a onClick={event=>{dialog.current?.close();if(item.kind==='credits_low'){event.preventDefault();onBudget();}}} href={updateHref(item)}><span className="update-unread-dot" aria-hidden="true"/><span><strong>{item.title}</strong><p>{item.address??item.detail}</p><small>{new Date(item.createdAt).toLocaleString('en-US',{hour12:true,month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</small></span></a></li>)}</ul>
   </dialog>
  </>;
 }

@@ -11,7 +11,7 @@ const timers=new Map();let timerId=0;
 const windowTarget=new EventTarget(),documentTarget=new EventTarget();
 let unsavedId=null;
 Object.assign(windowTarget,{location:{search:''},confirm(){throw Error('Funding must not navigate or discard unsaved work');}});
-Object.assign(documentTarget,{hidden:false,querySelector(){return unsavedId?{}:null;},querySelectorAll(){return unsavedId?[{id:'property-'+unsavedId,querySelector:()=>({})}]:[];},getElementById(){return null;}});
+Object.assign(documentTarget,{hidden:false,querySelector(){return unsavedId?{}:null;},querySelectorAll(){return unsavedId?[{id:'property-'+unsavedId,matches:()=>false,querySelector:()=>({})}]:[];},getElementById(){return null;}});
 globalThis.window=windowTarget;globalThis.document=documentTarget;
 globalThis.setTimeout=(fn,delay)=>{timers.set(++timerId,{fn,delay});return timerId;};globalThis.clearTimeout=id=>timers.delete(id);
 globalThis.setInterval=(fn,delay)=>{timers.set(++timerId,{fn,delay,interval:true});return timerId;};globalThis.clearInterval=id=>timers.delete(id);

@@ -15,7 +15,7 @@ test('actual recording appears without an AI conversation, with exact property o
  const calls=[];
  const db=async path=>{calls.push(path);if(path.startsWith('icash_screening_jobs?'))return [{id:screen}];if(path.startsWith('icash_call_recordings?'))return [fixture()];if(path.startsWith('icash_live_conversations?'))return [];throw Error(path);};
  const result=await propertyCallHistory(db,account,screen,0,now);
- assert.equal(result.recordings.length,1);assert.deepEqual(result.recordings[0],{id,status:'available',createdAt,durationSeconds:42,audioAvailable:true,audioExpiresAt:'2026-11-15T05:00:00Z',source:'outbound',party:'seller',conversationId:null});assert.equal(result.next,null);
+ assert.equal(result.recordings.length,1);assert.deepEqual(result.recordings[0],{id,status:'available',createdAt,durationSeconds:42,audioAvailable:true,audioExpiresAt:'2026-11-15T05:00:00Z',source:'outbound',party:'seller',conversationId:null,voicemail:false});assert.equal(result.next,null);
  for(const path of calls){const query=new URLSearchParams(path.split('?')[1]);assert.equal(query.get('account_id'),'eq.'+account);if(path.startsWith('icash_screening_jobs?'))assert.equal(query.get('id'),'eq.'+screen);else assert.equal(query.get('screening_id'),'eq.'+screen);}
  assert(!JSON.stringify(result).match(/private-nonce|private-capability|provider_account_sid|recording_sid|from_phone|conv_/));
  assert(!calls.find(p=>p.startsWith('icash_call_recordings?')).includes('state=eq.complete'));

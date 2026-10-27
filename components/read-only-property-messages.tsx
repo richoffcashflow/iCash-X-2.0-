@@ -4,8 +4,9 @@ import {webinarRequest} from '@/lib/webinar-client';
 import {overviewTime} from '@/lib/owner-overview';
 import styles from './read-only-property-messages.module.css';
 type Messages={threads:{id:string;recipient:string;party:string}[];threadId:string|null;messages:{id:string;body:string;direction:string;state:string;created_at:string}[];next:{before:string;beforeId:string}|null;nextThread:string|null};
-export function ReadOnlyPropertyMessages({base,screeningId}:{base:string;screeningId:string}){
+export function ReadOnlyPropertyMessages({base,screeningId,preferredThreadId=''}:{base:string;screeningId:string;preferredThreadId?:string}){
  const [data,setData]=useState<Messages|null>(null),[error,setError]=useState(''),[query,setQuery]=useState<Record<string,string>>({}),[refresh,setRefresh]=useState(0);
+ useEffect(()=>{if(preferredThreadId)setQuery({threadId:preferredThreadId});},[preferredThreadId]);
  const key=JSON.stringify(query);
  useEffect(()=>{const controller=new AbortController();setData(null);setError('');void webinarRequest<Messages>(`${base}/messages?${new URLSearchParams({screeningId,...query})}`,{cache:'no-store',signal:controller.signal}).then(d=>{if(!controller.signal.aborted)setData(d);}).catch(()=>{if(!controller.signal.aborted)setError('Messages could not load.');});return()=>controller.abort();},[base,screeningId,key,refresh]);
  return <section aria-label="Customer text messages" className={styles.messages}><div className={styles.toolbar}><h3>Text messages</h3><button onClick={()=>setRefresh(n=>n+1)}>Refresh messages</button></div>

@@ -1,3 +1,5 @@
+import {isConfirmedVoicemail} from './call-display-evidence';
+import type {SellerTextSummary,TextReplyCounts} from './seller-text-summary';
 import {instantLeadsEnabled} from '@/lib/meta-instant-lead-service';
 import type {InstantLeadCardData} from '@/components/instant-lead-card';
 import {NextResponse} from 'next/server';
@@ -39,31 +41,41 @@ export async function workspaceActivity(req:Request,accountId:string,{refreshOut
   // A literal address fragment, never a caller-supplied PostgREST expression or wildcard.
   if(query.length>100||/[^\p{L}\p{N}\s#.,'\-]/u.test(query))return NextResponse.json({error:'Search using a street, city or ZIP code.'},{status:400,headers});
   if(refreshOutcomes)await db('rpc/icash_refresh_opportunity_outcomes','POST',{p_account:accountId});
-  const responseCounts=await db<{responded:number;total:number}>('rpc/icash_workspace_response_counts','POST',{p_account:accountId});
+  const [responseCounts,textReplyCounts]=await Promise.all([db<{responded:number;total:number}>('rpc/icash_workspace_response_counts','POST',{p_account:accountId}),db<TextReplyCounts>('rpc/icash_workspace_text_reply_counts','POST',{p_account:accountId})]);
+  const textsOnly=['texts','unread'].includes(params.get('view')??'');
+  const replyIds=textsOnly&&!screeningId?await db<{screening_id:string;state:string}[]>('rpc/icash_workspace_text_reply_ids','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_unread_only:params.get('view')==='unread'}):[];
+  const replyPage=replyIds.slice(0,pageSize);
   let properties:Property[];
   if(screeningId){
    properties=await db<Property[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=eq.${screeningId}&state=eq.complete&select=id,state,result,completed_at&limit=1`);
+  }else if(textsOnly){
+   const completeIds=replyPage.filter(r=>r.state==='complete').map(r=>r.screening_id);
+   const rows=completeIds.length?await db<Property[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=in.(${completeIds.join(',')})&state=eq.complete&select=id,state,result,completed_at`):[];
+   properties=completeIds.flatMap(id=>rows.filter(p=>p.id===id));
   }else{
    // Rank actual seller responses across the account before paging.
    properties=opportunitiesOnly
     ?await db<Property[]>('rpc/icash_workspace_ready_opportunities','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1})
     :await db<Property[]>('rpc/icash_workspace_opportunities','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_responses_only:responsesOnly});
   }
-  const instantRows=instantLeadsEnabled(process.env)?await db<InstantLeadCardData[]>('rpc/icash_meta_workspace_response_leads','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_screening:screeningId??null,p_responses_only:(responsesOnly||opportunitiesOnly)&&!screeningId}):[];
+  const instantRows=instantLeadsEnabled(process.env)?textsOnly&&!screeningId?(await Promise.all(replyPage.filter(r=>r.state==='awaiting_address').map(r=>db<InstantLeadCardData[]>('rpc/icash_meta_workspace_response_leads','POST',{p_account:accountId,p_screening:r.screening_id,p_offset:0,p_limit:1})))).flat():await db<InstantLeadCardData[]>('rpc/icash_meta_workspace_response_leads','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_screening:screeningId??null,p_responses_only:(responsesOnly||opportunitiesOnly)&&!screeningId}):[];
   const instantLeads=instantRows.slice(0,pageSize);
   const visible=properties.slice(0,pageSize);
+  const replyScreenings=[...visible.map(p=>p.id),...instantLeads.map(l=>l.screeningId)];
+  const sellerTexts=replyScreenings.length?await db<SellerTextSummary[]>('rpc/icash_workspace_seller_texts','POST',{p_account:accountId,p_screenings:replyScreenings}):[];
   const ids=visible.map(p=>p.id).join(',');
   const propertyIds=visible.map(p=>p.result.property.propertyId).filter(id=>/^prop_[a-zA-Z0-9]+$/.test(id)).join(',');
   const [deals,contactRows,controls,conversations,callbacks,sellerRows,buyerCalls]=ids?await Promise.all([
    db<{id:string;screening_id:string}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=in.(${ids})&select=id,screening_id,terms,stage,updated_at`),
    db<ContactRow[]>(`icash_owner_contacts?account_id=eq.${accountId}&screening_id=in.(${ids})&select=account_id,screening_id,created_at,lookup_at:result->>fetchedAt,people:result->contacts&limit=${pageSize}`),
    propertyIds?db<unknown[]>(`icash_property_controls?account_id=eq.${accountId}&property_id=in.(${propertyIds})&manual=eq.true&select=property_id`):Promise.resolve([]),
-   db<unknown[]>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=in.(${ids})&state=eq.complete&select=id,screening_id,party,completed_at,summary:result->>summary,durationSeconds:result->durationSeconds,nextAction:result->>nextAction,interested:result->interested,optedOut:result->optedOut,humanRequested:result->humanRequested&order=completed_at.desc,id.desc&limit=24`),
+   db<{id:string;transcript?:unknown;[key:string]:unknown}[]>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=in.(${ids})&state=eq.complete&select=id,screening_id,party,completed_at,summary:result->>summary,transcript:result->transcript,durationSeconds:result->durationSeconds,nextAction:result->>nextAction,interested:result->interested,optedOut:result->optedOut,humanRequested:result->humanRequested&order=completed_at.desc,id.desc&limit=24`),
    db<unknown[]>(`icash_live_callbacks?account_id=eq.${accountId}&screening_id=in.(${ids})&select=id,screening_id,due_at,timezone,state&order=due_at,id&limit=24`),
    db<{account_id:string;screening_id:string;lead:{name:string|null;phone:string}|null}[]>(`icash_seller_matches?account_id=eq.${accountId}&screening_id=in.(${ids})&select=account_id,screening_id,lead:icash_seller_intakes(name,phone)&limit=${pageSize}`),
    db<unknown[]>('rpc/icash_buyer_reception_calls','POST',{p_account:accountId,p_screenings:visible.map(p=>p.id)})
   ]):[[],[],[],[],[],[],[]];
-  conversations.push(...buyerCalls);
+  const displayConversations=conversations.map(({transcript,...call})=>({...call,voicemail:isConfirmedVoicemail(transcript)}));
+  displayConversations.push(...buyerCalls as typeof displayConversations);
   const contacts=purchasedContacts(contactRows,accountId,visible);
   // Self-reported seller identity is displayed separately from provider owner matches.
   // Neither the form checkbox nor ownership claim grants the customer's calling authority.
@@ -106,6 +118,6 @@ export async function workspaceActivity(req:Request,accountId:string,{refreshOut
   for(const item of allAttention)item.address=item.screening_id?addressById.get(item.screening_id)??null:null;
   const smsRouteReviews=routeRows.slice(0,pageSize);
   const attentionHasMoreByKind={closingTasks:closingTaskRows.length>pageSize,closing:closingRows.length>pageSize,sellerRecovery:recoveryRows.length>pageSize,viewings:viewingRows.length>pageSize,routing:routeRows.length>pageSize,texts:textRows.length>pageSize,calls:callRows.length>pageSize,handoffs:handoffRows.length>pageSize,signatures:signatureRows.length>pageSize};
-  return NextResponse.json({responseCounts,instantLeads,proceedsReceivedDealIds:proceeds.map(p=>p.deal_id),journeys,closingTasks,closingReview,sellerRecovery,viewingRequests,smsRouteReviews,textAttention,signatureActions,signing,signingConfigured:!!(process.env.DOCUSEAL_API_KEY||process.env.DOCUSEAL_TEST_API_KEY),properties:visible,propertyAttentionIds,hasMore:!screeningId&&(properties.length>pageSize||instantRows.length>pageSize),deals,contacts,controls,conversations,callbacks,callRequests,handoffs,page,attentionPage,attentionHasMore:Object.values(attentionHasMoreByKind).some(Boolean),attentionHasMoreByKind,searchSupported:true,query},{headers});
+  return NextResponse.json({responseCounts,textReplyCounts,sellerTexts,replyOrder:textsOnly?replyPage.map(r=>r.screening_id):undefined,instantLeads,proceedsReceivedDealIds:proceeds.map(p=>p.deal_id),journeys,closingTasks,closingReview,sellerRecovery,viewingRequests,smsRouteReviews,textAttention,signatureActions,signing,signingConfigured:!!(process.env.DOCUSEAL_API_KEY||process.env.DOCUSEAL_TEST_API_KEY),properties:visible,propertyAttentionIds,hasMore:!screeningId&&(textsOnly?replyIds.length>pageSize:properties.length>pageSize||instantRows.length>pageSize),deals,contacts,controls,conversations:displayConversations,callbacks,callRequests,handoffs,page,attentionPage,attentionHasMore:Object.values(attentionHasMoreByKind).some(Boolean),attentionHasMoreByKind,searchSupported:true,query},{headers});
  }catch{return NextResponse.json({error:'Could not load your work. Sign in and retry.'},{status:503,headers});}
 }

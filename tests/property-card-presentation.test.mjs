@@ -15,7 +15,7 @@ const source=readFileSync(new URL('../components/live-workspace.tsx',import.meta
 const compiled=ts.transpileModule(source+'\nexport {PropertyCard};',{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
 const headerModule={exports:{}};
 const headerCode=ts.transpileModule(readFileSync(new URL('../components/property-card-header.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
-new Function('require','module','exports',headerCode)(name=>name==='@/lib/property-analysis-view'?analysis:name==='@/components/property-card-header'?{PropertyCardHeader}:name==='./workspace-view'?view:require(name),headerModule,headerModule.exports);
+new Function('require','module','exports',headerCode)(name=>name==='./seller-reply-preview'?{SellerReplyPreview:()=>null}:name==='@/lib/property-analysis-view'?analysis:name==='@/components/property-card-header'?{PropertyCardHeader}:name==='./workspace-view'?view:require(name),headerModule,headerModule.exports);
 const {PropertyCardHeader}=headerModule.exports;
 const mod={exports:{}};
 new Function('require','module','exports',compiled)(name=>name==='react'?{useState:v=>[v,()=>{}],useEffect(){},useRef:v=>({current:v}),Activity:'Activity'}:name==='react/jsx-runtime'?require(name):name==='@/lib/conversation-display'?conversationDisplay:name==='@/components/property-card-header'?{PropertyCardHeader}:name==='./workspace-view'?view:name==='@/lib/deal-card-summary'?cardSummary:name==='@/lib/work-milestone'?milestone:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/property-analysis-view'?analysis:name==='@/lib/property-contract-visibility'?contracts:{},mod,mod.exports);
@@ -36,6 +36,7 @@ assert.equal(all(summary.props.children).filter(n=>n.type==='button').length,0,'
 assert.equal(nodes.filter(n=>n.type==='button'&&n.props.className!=='contact-dialog-close').length,4,'property disclosure, Call, Text and View deal controls are visible while collapsed');
 assert(nodes.some(n=>n.type==='button'&&text(n).trim()==='Take over'),'takeover remains accessible beside contact actions');
 assert.equal(nodes.find(n=>n.type==='svg').props['aria-hidden'],'true');
+assert.equal(nodes.find(n=>n.props?.['aria-label']===`Text conversation for ${property.result.property.address.split(',')[0]}`).props['data-credit-action'],undefined,'Reading seller texts does not require funded credits');
 summary.props.onClick();assert.deepEqual(toggle,[true]);
 for(const button of all(nodes.find(n=>n.props?.className==='property-quick-actions')).filter(n=>n.type==='button'&&!String(n.props['aria-label']).startsWith('Take over')))button.props.onClick();
 assert.deepEqual(toggle,[true],'Call and Text open their conversation panel without toggling details');

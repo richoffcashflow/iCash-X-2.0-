@@ -4,9 +4,10 @@ import {DealMessages} from './deal-messages';
 import {displayContactPhone} from './manual-call-options';
 import {MessageCircle} from 'lucide-react';
 type Contact={phone:string;name:string;phone_type:string;blocked:boolean};
-export function PropertyMessages({screeningId,active,onTakeover}:{screeningId:string;active:boolean;onTakeover:()=>void}){
+export function PropertyMessages({screeningId,active,onTakeover,preferredThreadId=''}:{screeningId:string;active:boolean;preferredThreadId?:string;onTakeover:()=>void}){
  const [contacts,setContacts]=useState<Contact[]>([]),[dealId,setDealId]=useState(''),[threadId,setThreadId]=useState(''),[loaded,setLoaded]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[refresh,setRefresh]=useState(0);
  const lock=useRef(false);
+ useEffect(()=>{if(active&&preferredThreadId)setThreadId(preferredThreadId);},[active,preferredThreadId]);
  async function open(contact:Contact){
   if(lock.current)return;lock.current=true;setBusy(true);setError('');
   try{const r=await fetch('/api/work/text-contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({screeningId,phone:contact.phone})});const d=await r.json();if(!r.ok||!d.dealId)throw Error(d.error||'Could not open this conversation.');setDealId(d.dealId);setThreadId(d.threadId);}
@@ -14,7 +15,7 @@ export function PropertyMessages({screeningId,active,onTakeover}:{screeningId:st
  }
  useEffect(()=>{
   if(!active||loaded)return;const abort=new AbortController();
-  void fetch(`/api/work/text-contact?screeningId=${screeningId}`,{cache:'no-store',signal:abort.signal}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error);if(abort.signal.aborted)return;setContacts(d.contacts);setLoaded(true);setError('');if(d.dealId){setDealId(d.dealId);setThreadId(d.threadId??'');}else {const usable=d.contacts.filter((c:Contact)=>!c.blocked&&c.phone_type!=='landline');if(usable.length===1)void open(usable[0]);}}).catch(()=>{if(!abort.signal.aborted)setError('Could not load saved numbers.');});
+  void fetch(`/api/work/text-contact?screeningId=${screeningId}`,{cache:'no-store',signal:abort.signal}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error);if(abort.signal.aborted)return;setContacts(d.contacts);setLoaded(true);setError('');if(d.dealId){setDealId(d.dealId);setThreadId(preferredThreadId||d.threadId||'');}else {const usable=d.contacts.filter((c:Contact)=>!c.blocked&&c.phone_type!=='landline');if(usable.length===1)void open(usable[0]);}}).catch(()=>{if(!abort.signal.aborted)setError('Could not load saved numbers.');});
   return()=>abort.abort();
  // Opening the one available contact creates an empty conversation; it sends nothing.
  // eslint-disable-next-line react-hooks/exhaustive-deps

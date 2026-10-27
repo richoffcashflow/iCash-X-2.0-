@@ -2,7 +2,7 @@
 type Listener=()=>void;
 const listeners=new Set<Listener>();
 let controller:AbortController|null=null,timer:ReturnType<typeof setTimeout>|undefined,attempt=0,revision:string|null=null;
-function changed(){for(const listener of listeners)listener();}
+export function notifyWorkspaceChanges(){for(const listener of listeners)listener();}
 function stop(){controller?.abort();controller=null;clearTimeout(timer);}
 async function connect(){
  if(typeof document==='undefined'||document.hidden||!listeners.size||controller)return;
@@ -22,7 +22,7 @@ async function connect(){
     if(!frame.startsWith('event: revision\n'))continue;
     const data=JSON.parse(frame.split('\n').find(line=>line.startsWith('data: '))?.slice(6)??'null');
     if(!data||typeof data.revision!=='string'||!/^\d{1,20}$/.test(data.revision))throw Error('Invalid feed');
-    if(revision!==data.revision){revision=data.revision;changed();}
+    if(revision!==data.revision){revision=data.revision;notifyWorkspaceChanges();}
    }
   }
  }catch{/* Saved work remains visible; subscriber fallback refreshes continue. */}
@@ -31,7 +31,7 @@ async function connect(){
   if(listeners.size&&!document.hidden)timer=setTimeout(()=>void connect(),Math.min(60000,2000*2**Math.min(attempt++,5)));
  }
 }
-function visibility(){if(document.hidden)stop();else{changed();void connect();}}
+function visibility(){if(document.hidden)stop();else{notifyWorkspaceChanges();void connect();}}
 /** One authenticated stream per tab, independent of how many panels subscribe. */
 export function subscribeWorkspaceChanges(listener:Listener){
  listeners.add(listener);
