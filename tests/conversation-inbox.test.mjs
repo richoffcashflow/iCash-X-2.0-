@@ -32,15 +32,18 @@ test('one call stays one entry after its transcript arrives, while one failed hi
  records=[{...row,contact_key:'foreign'}];result=await threadConversationCalls(db,account,thread,null,null,true);assert.equal(result.calls[0].recordingId,undefined);assert.equal(result.callsUnavailable,true);records=[row];
 });
 test('text history defaults to seller, labels human/AI authors, preserves first message and rejects another deal thread',async()=>{
- let selectedMissing=false,queueCalls=0;
+ let selectedMissing=false,queueCalls=0,callLoads=0;
  const first={id:recording,thread_id:threadId,direction:'outgoing',body:'First AI text',state:'delivered',created_at:at,customer_author_id:null,request_key:null};
  const manual={...first,id:conversation,body:'My reply',customer_author_id:actor,request_key:recording};
- const route=await loadService('app/api/work/messages/route.ts',{z,NextResponse:{json:(v,init)=>Response.json(v,init)},workAccount:async()=>({accountId:account,userId:actor}),allowedOrigin:()=>true,threadConversationCalls:async(_db,a,t)=>{assert.equal(a,account);assert.equal(t.id,threadId);return {calls:[],callsUnavailable:false};},db:async(path)=>{
+ const route=await loadService('app/api/work/messages/route.ts',{z,NextResponse:{json:(v,init)=>Response.json(v,init)},workAccount:async()=>({accountId:account,userId:actor}),allowedOrigin:()=>true,threadConversationCalls:async(_db,a,t)=>{callLoads++;assert.equal(a,account);assert.equal(t.id,threadId);return {calls:[],callsUnavailable:false};},db:async(path)=>{
   if(path.startsWith('icash_text_threads?')){assert(path.includes('account_id=eq.'+account)&&path.includes('deal_id=eq.'+deal)&&path.includes('retired_at=is.null'));if(path.includes('&id=eq.'))return [];return [{id:recording,party:'buyer',recipient:'+12025550102',paused:false},...selectedMissing?[]:[{...thread,paused:false}]];}
   if(path.startsWith('icash_text_messages?')){assert(path.includes('thread_id=eq.'+threadId)&&path.includes('account_id=eq.'+account));return path.includes('order=created_at.asc')?[first]:[manual,first];}
+  if(path==='rpc/icash_latest_seller_text_thread')return threadId;
+  if(path==='rpc/icash_text_thread_reply_summaries')return [];
   if(path==='rpc/icash_manual_text_reason')return null;
   queueCalls++;throw Error(path);
  }});
  let response=await route.GET(new Request('https://example.invalid/api/work/messages?dealId='+deal));assert.equal(response.status,200);const data=await response.json();assert.equal(data.threadId,threadId);assert.equal(data.messages[0].author,'you');assert.equal(data.messages[1].author,'bot');assert.equal(data.firstMessage.body,first.body);assert(!JSON.stringify(data).includes('customer_author_id'));assert.equal(queueCalls,0,'viewing does not queue or take over');
+ assert.equal(callLoads,0,'The default text view does not fetch recordings');response=await route.GET(new Request('https://example.invalid/api/work/messages?dealId='+deal+'&includeCalls=true'));assert.equal(response.status,200);assert.equal(callLoads,1);
  selectedMissing=true;response=await route.GET(new Request('https://example.invalid/api/work/messages?dealId='+deal+'&threadId='+threadId));assert.equal(response.status,400);
 });

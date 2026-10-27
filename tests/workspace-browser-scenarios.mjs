@@ -342,7 +342,7 @@ export async function verifyWorkspace(browser,base,options,name){
     await page.keyboard.press('Escape');
     await card.getByRole('button',{name:/Text conversation for/}).click();
     const dialog=page.getByRole('dialog');await dialog.waitFor();
-    await dialog.getByRole('button',{name:'Conversation',exact:true}).waitFor();
+    await dialog.getByRole('button',{name:'Texts',exact:true}).waitFor();
     await dialog.getByRole('button',{name:'Calls',exact:true}).click();
     await dialog.getByRole('heading',{name:'Call recordings',exact:true}).waitFor();
     const audio=dialog.locator('audio[aria-label="Call recording"]');await audio.waitFor();assert.equal(await audio.getAttribute('preload'),'none');

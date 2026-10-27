@@ -20,7 +20,7 @@ export const updateCopy={
 export type UpdateKind=keyof typeof updateCopy;
 export type UpdateSource={source_key:string;kind:UpdateKind;screening_id:string|null;event_at:string;priority:number};
 export type BotUpdatePreferences={email?:string|null;phone?:string|null;emailEnabled:boolean;smsEnabled:boolean;timezone:string;seenAt?:string|null;emailAvailable:boolean;smsAvailable:boolean;emailSuppressed?:boolean};
-export type InboxItem={id:string;kind:UpdateKind;screeningId:string|null;createdAt:string;title:string;detail:string;address:string|null};
+export type InboxItem={threadId?:string;read?:boolean;id:string;kind:UpdateKind;screeningId:string|null;createdAt:string;title:string;detail:string;address:string|null};
 export function normalizeUpdatePhone(value:string){const clean=value.replace(/[\s().-]/g,'');return /^\d{10}$/.test(clean)?`+1${clean}`:/^1\d{10}$/.test(clean)?`+${clean}`:clean;}
 export function customerUpdateConfiguration(env:Record<string,string|undefined>,messagingSender?:string){
  let origin:string|null=null;
@@ -31,3 +31,13 @@ export function customerUpdateConfiguration(env:Record<string,string|undefined>,
  const sms=!!(origin&&env.CONTIGUITY_API_KEY&&env.CONTIGUITY_WEBHOOK_SECRET);
  return {origin,from:address,email,sms};
 }
+
+export function updateHref(item:Pick<InboxItem,'kind'|'screeningId'|'threadId'>){
+ if(item.kind==='credits_low')return '/#funding';
+ const query=new URLSearchParams({screeningId:item.screeningId??''});
+ if(item.kind==='seller_reply'||item.kind==='buyer_reply'&&item.threadId){
+  query.set('contactView','texts');if(item.threadId)query.set('threadId',item.threadId);
+ }
+ return `/?${query}`;
+}
+export function updateUnread(item:Pick<InboxItem,'read'|'createdAt'>,seenAt:string|null){return item.read!==true&&(!seenAt||Date.parse(item.createdAt)>Date.parse(seenAt));}

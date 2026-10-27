@@ -1,6 +1,6 @@
 import type {ReceiptResult} from '../components/call-recording';
 export type ConversationCall = {
-  id: string; source: 'outbound'|'reception'; party: string; completedAt: string;
+  voicemail?:boolean; id: string; source: 'outbound'|'reception'; party: string; completedAt: string;
   summary?: string; durationSeconds?: number; nextAction?: string;
   interested?: boolean; optedOut?: boolean; humanRequested?: boolean;
   recordingId?: string; recordingReceipt?: ReceiptResult; transcriptAvailable?: boolean;

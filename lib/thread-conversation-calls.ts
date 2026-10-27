@@ -18,13 +18,13 @@ export async function threadConversationCalls(db:RecordingDb,accountId:string,th
  const recordings=recordingsResult.status==='fulfilled'?recordingsResult.value:[];
  const merged:ConversationCall[]=calls.map(call=>{
   const recording=recordings.find(r=>r.source===call.source&&r.conversationId===call.id);
-  return recording?{...call,recordingId:recording.id,recordingReceipt:recording}:call;
+  return recording?{...call,voicemail:recording.voicemail,recordingId:recording.id,recordingReceipt:recording}:call;
  });
  for(const recording of recordings){
   if(calls.some(c=>c.source===recording.source&&c.id===recording.conversationId))continue;
   merged.push({id:recording.conversationId??recording.id,source:recording.source,party:recording.party,
    completedAt:recording.createdAt,durationSeconds:recording.durationSeconds??undefined,
-   recordingId:recording.id,recordingReceipt:recording,transcriptAvailable:!!recording.conversationId});
+   voicemail:recording.voicemail,recordingId:recording.id,recordingReceipt:recording,transcriptAvailable:!!recording.conversationId});
  }
  return {calls:merged,callsUnavailable:callsResult.status==='rejected'||recordingsResult.status==='rejected'};
 }

@@ -16,11 +16,13 @@ export async function GET(req:Request){
  const afterThread=params.get('afterThread');if(afterThread)z.guid().parse(afterThread);
  const threadRows=await db<Thread[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${dealId}&retired_at=is.null&select=id,recipient,paused,party&order=id.desc&limit=21${afterThread?`&id=lt.${afterThread}`:''}`);
  const threads=threadRows.slice(0,20);
- const threadId=params.get('threadId')?z.guid().parse(params.get('threadId')):(threads.find(t=>t.party==='seller')??threads[0])?.id;
+ const preferred=!params.get('threadId')&&!afterThread?await db<string|null>('rpc/icash_latest_seller_text_thread','POST',{p_account:accountId,p_deal:dealId}):null;
+ const threadId=params.get('threadId')?z.guid().parse(params.get('threadId')):preferred??(threads.find(t=>t.party==='seller')??threads[0])?.id;
  if(threadId&&!threads.some(t=>t.id===threadId)){
   const selected=await db<Thread[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${dealId}&id=eq.${threadId}&retired_at=is.null&select=id,recipient,paused,party&limit=1`);
   if(selected.length!==1||selected[0].id!==threadId)throw Error();threads.push(selected[0]);
  }
+ const summaries=threads.length?await db<{thread_id:string;preview:string;received_at:string;unread_count:number}[]>('rpc/icash_text_thread_reply_summaries','POST',{p_account:accountId,p_threads:threads.map(t=>t.id)}):[];
  const before=params.get('before');if(before)z.string().datetime({offset:true}).parse(before);const beforeId=before?z.guid().parse(params.get('beforeId')):null;
  const requestKey=params.get('requestKey');if(requestKey)z.guid().parse(requestKey);
  const [rows,receipts,firstRows]=threadId?await Promise.all([
@@ -30,9 +32,9 @@ export async function GET(req:Request){
  ]):[[],[],[]];
  const present=({customer_author_id,request_key,...message}:Message)=>({...message,author:message.direction==='incoming'?'contact':customer_author_id?'you':'bot',retryKey:customer_author_id===userId&&message.state==='ready'?request_key:null});
  const messages=rows.slice(0,20).map(present),last=messages.at(-1),current=threads.find(t=>t.id===threadId);
- const callsResult=current?threadConversationCalls(db,accountId,{...current,dealId},before??null,rows.length>20&&last?last.created_at:null,process.env.ICASH_RECORDING_RECEIPTS_READY==='true'):Promise.resolve({calls:[],callsUnavailable:false});
+ const callsResult=current&&params.get('includeCalls')==='true'?threadConversationCalls(db,accountId,{...current,dealId},before??null,rows.length>20&&last?last.created_at:null,process.env.ICASH_RECORDING_RECEIPTS_READY==='true'):Promise.resolve({calls:[],callsUnavailable:false});
  const sendReason=threadId?await db<string|null>('rpc/icash_manual_text_reason','POST',{p_account:accountId,p_thread:threadId}):null;
- return NextResponse.json({...await callsResult,threads:threads.map(t=>({...t,manualReply:true,sendReason:t.id===threadId?sendReason:null})),threadId,messages,firstMessage:firstRows[0]?present(firstRows[0]):null,receipt:requestKey?(receipts[0]??{state:'not_found',request_key:requestKey}):null,nextThread:threadRows.length>20?threadRows[19].id:null,next:rows.length>20&&last?{before:last.created_at,beforeId:last.id}:null},{headers});
+ return NextResponse.json({...await callsResult,threads:threads.map(t=>({...t,reply:summaries.find(s=>s.thread_id===t.id)??null,manualReply:true,sendReason:t.id===threadId?sendReason:null})),threadId,messages,firstMessage:firstRows[0]?present(firstRows[0]):null,receipt:requestKey?(receipts[0]??{state:'not_found',request_key:requestKey}):null,nextThread:threadRows.length>20?threadRows[19].id:null,next:rows.length>20&&last?{before:last.created_at,beforeId:last.id}:null},{headers});
  }catch{return NextResponse.json({error:'Messages unavailable'},{status:400,headers});}
 }
 export async function POST(req:Request){

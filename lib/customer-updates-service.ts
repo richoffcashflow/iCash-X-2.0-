@@ -24,7 +24,7 @@ export async function dispatchCustomerUpdate(accountId:string,{db,env=process.en
   const job=await db<Job|null>('rpc/icash_authorize_customer_update','POST',{p_account:accountId,p_id:id},signal);
   if(!job)return {status:'updates_held'};
   if(job.id!==id||(job.kind!=='credits_low'&&(!job.screeningId||!uuidPattern.test(job.screeningId)))||!Object.hasOwn(updateCopy,job.kind)||!unsubscribePattern.test(job.unsubscribeToken))throw Error('Invalid update');
-  const target=new URL('/',config.origin);if(job.kind==='credits_low')target.hash='funding';else if(job.screeningId)target.searchParams.set('screeningId',job.screeningId);if(job.kind==='signature_needed')target.searchParams.set('attentionKind','signature');
+  const target=new URL('/',config.origin);if(job.kind==='credits_low')target.hash='funding';else if(job.screeningId)target.searchParams.set('screeningId',job.screeningId);if(job.kind==='seller_reply')target.searchParams.set('contactView','texts');if(job.kind==='signature_needed')target.searchParams.set('attentionKind','signature');
   const unsubscribe=new URL('/api/notifications/updates/unsubscribe',config.origin);unsubscribe.searchParams.set('token',job.unsubscribeToken);
   const copy=updateCopy[job.kind];let response:Response;
   if(job.channel==='email'){

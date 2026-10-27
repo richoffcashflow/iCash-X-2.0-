@@ -89,12 +89,16 @@ export async function GET(req:Request,context:{params:Promise<{viewId:string;res
   const [deal]=await db<{id:string}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${screen.id}&select=id&order=created_at.desc,id&limit=1`);
   if(!deal)return json({threads:[],messages:[],threadId:null,next:null,nextThread:null});
   const rows=await db<{id:string;recipient:string;party:string}[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${deal.id}&retired_at=is.null&select=id,recipient,party&order=id.desc&limit=21${f.afterThread?`&id=lt.${f.afterThread}`:''}`);
-  const threads=rows.slice(0,20),threadId=f.threadId??threads[0]?.id;
-  if(threadId&&!threads.some(t=>t.id===threadId))throw new OwnerViewError(404,'Conversation unavailable in this account.');
+  const preferred=!f.threadId&&!f.afterThread?await db<string|null>('rpc/icash_latest_seller_text_thread','POST',{p_account:accountId,p_deal:deal.id}):null;
+  const threads=rows.slice(0,20),threadId=f.threadId??preferred??threads[0]?.id;
+  if(threadId&&!threads.some(t=>t.id===threadId)){
+   const selected=await db<{id:string;recipient:string;party:string}[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${deal.id}&id=eq.${threadId}&retired_at=is.null&select=id,recipient,party&limit=1`);
+   if(selected.length!==1||selected[0].id!==threadId)throw new OwnerViewError(404,'Conversation unavailable in this account.');threads.push(selected[0]);
+  }
   if(!!f.before!==!!f.beforeId)throw new OwnerViewError(400,'Invalid message page.');
   const messages=threadId?await db<{id:string;direction:string;body:string;state:string;created_at:string}[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threadId}&select=id,direction,body,state,created_at&order=created_at.desc,id.desc&limit=21${f.before?`&or=(created_at.lt.${encodeURIComponent(f.before)},and(created_at.eq.${encodeURIComponent(f.before)},id.lt.${f.beforeId}))`:''}`):[];
   const visible=messages.slice(0,20),last=visible.at(-1);
-  return json({threads,threadId:threadId??null,messages:visible,next:messages.length>20&&last?{before:last.created_at,beforeId:last.id}:null,nextThread:rows.length>20?threads.at(-1)!.id:null});
+  return json({threads,threadId:threadId??null,messages:visible,next:messages.length>20&&last?{before:last.created_at,beforeId:last.id}:null,nextThread:rows.length>20?rows[19].id:null});
  }
  if(resource==='conversation'){
   const f=z.object({id,source:z.enum(['outbound','reception']).default('outbound'),before:page.optional()}).strict().parse(query);
