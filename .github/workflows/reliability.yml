@@ -38,7 +38,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
   verify:
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 provides browser dependencies for Ubuntu 24.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       META_INSTANT_LEADS_ENABLED: 'true'
