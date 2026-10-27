@@ -1,10 +1,9 @@
-import {automationChanged} from '@/lib/automation-outcome';
+import {processAutomationFollowup} from '@/lib/automation-followup-service';
 import {ProspectingBudgetError} from '@/lib/voice-budget-failure';
 import {OwnerPreviewRateLimitError} from '@/lib/owner-enrichment-deferral';
 import {dispatchCustomerUpdate} from '@/lib/customer-updates-service';
 import {automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '@/lib/live-work-admission';
 import {dispatchAttentionNotification} from '@/lib/attention-notifications-service';
-import {readVoiceUsagePolicies,settlePendingVoiceUsage} from '@/lib/voice-usage-service';
 import {dispatchTextMessage} from '@/lib/text-message-service';
 import {expandMarket} from '@/lib/market-expansion-service';
 import {processTextAi} from '@/lib/text-ai-service';
@@ -29,22 +28,15 @@ export async function POST(request:Request){
  try{
   ticket=await db('rpc/icash_consume_automation','POST',{p_token:token});
   if(!ticket)return NextResponse.json({error:'Expired or consumed'},{status:401,headers});
+  if(ticket.kind==='account_reconcile')return NextResponse.json(await processAutomationFollowup(db,ticket.accountId,ticket.id),{headers});
   const result=!automationWorkReady(ticket.kind)&&newLiveWorkKinds.has(ticket.kind)?await deferUnstartedAutomation(db,ticket,token):ticket.kind==='customer_updates'?await dispatchCustomerUpdate(ticket.accountId,{db,signal:billingDeadline}):ticket.kind==='customer_attention'?await dispatchAttentionNotification(ticket.accountId,{db,signal:billingDeadline}):['seller_opener','seller_recovery'].includes(ticket.kind)&&ticket.openerMessageId?await dispatchTextMessage(ticket.accountId,ticket.openerMessageId):ticket.kind==='market_research'&&ticket.marketResearchJobId?await expandMarket(ticket.accountId,ticket.marketResearchJobId):ticket.kind==='text_ai'&&ticket.textAiJobId?await processTextAi(ticket.accountId,ticket.textAiJobId):ticket.kind==='title_followup'&&ticket.titleTaskId?await dispatchTitleFollowup(ticket.accountId,ticket.titleTaskId):ticket.kind==='fulfillment'&&ticket.fulfillmentJobId?await prepareFulfillment(ticket.accountId,ticket.fulfillmentJobId):ticket.kind==='voice_dispatch'&&ticket.voiceJobId?await dispatchLiveVoice(ticket.accountId,ticket.voiceJobId):ticket.kind==='signing_result'&&ticket.signingId?await refreshSigning(ticket.accountId,ticket.signingId):ticket.kind==='voice_result'&&ticket.liveCallId?await reconcileLiveConversation(ticket.accountId,ticket.liveCallId):ticket.kind==='discovery'?await discoverForAccount(ticket.accountId):ticket.kind==='contacts'&&ticket.screeningId?await enrichForAccount(ticket.accountId,ticket.screeningId):{status:'held'};
   const success=['no_new_properties','inventory_advancing','inventory_market_changed','inventory_waiting','seller_inventory_unavailable','supply_target_met','updates_disabled','updates_idle','updates_held','updates_accepted','attention_disabled','attention_idle','attention_held','attention_accepted','market_research_saved','waiting_for_daytime_budget','waiting_for_available_credits','waiting_for_active_call','text_ai_drafted','text_ai_handoff','message_accepted','title_followup_sent','fulfillment_prepared','call_started','outside_contact_hours','screening_queued','empty','contacts_saved','conversation_saved','awaiting_conversation','awaiting_counterparty','customer_signature_needed','completed','test_completed'].includes(result.status);
   if(ticket.kind==='contacts')await db('rpc/icash_finish_owner_enrichment','POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_success:success,p_outcome:result.status});
   else await db('rpc/icash_finish_automation','POST',{p_id:ticket.id,p_success:success,p_outcome:result.status});
-  try{await db('rpc/icash_settle_pending_estimates','POST',{p_account:ticket.accountId,p_limit:25});}catch{/* Scheduled reconciliation retries without changing a completed job. */}
-  let billing;
-  try{billing=await settlePendingVoiceUsage(db,ticket.accountId,readVoiceUsagePolicies(process.env.VOICE_USAGE_POLICIES_JSON,process.env.VOICE_USAGE_POLICY_ACTIVATIONS_JSON),reconcileLiveConversation,billingDeadline);}
-  catch{billing={status:'review_required'};} // Billing failure never rewrites a successful primary action.
-  // Optional alerts get only the remaining deadline and cannot change primary work.
-  if(automationChanged(result.status)&&ticket.kind!=='customer_updates'&&!billingDeadline.aborted){
-   try{await dispatchCustomerUpdate(ticket.accountId,{db,signal:billingDeadline});}catch{/* Optional updates never change completed work or repeat a provider attempt. */}
-  }
-  if(automationChanged(result.status)&&ticket.kind!=='customer_attention'&&process.env.ICASH_ATTENTION_EMAIL_ENABLED==='true'&&!billingDeadline.aborted){
-   try{await dispatchAttentionNotification(ticket.accountId,{db,signal:billingDeadline});}catch{/* Durable claims remain held for review; never repeat the primary action. */}
-  }
-  return NextResponse.json({status:result.status,billing},{headers});
+  // Finishing primary work atomically queues account reconciliation in SQL.
+  // Return the worker slot immediately; original receipts and notifications
+  // have independent durable claims and cannot replay this operation.
+  return NextResponse.json({status:result.status,billing:{status:'queued'}},{headers});
  }catch(error){
   if(ticket?.kind==='contacts'&&ticket.screeningId&&error instanceof OwnerPreviewRateLimitError
    &&error.accountId===ticket.accountId&&error.screeningId===ticket.screeningId

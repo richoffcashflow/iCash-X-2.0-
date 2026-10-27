@@ -15,7 +15,7 @@ try{
  const providerController=new AbortController();
  await assert.rejects(elevenRequest('/fixture',undefined,async(_url,options)=>{providerController.abort();assert.equal(options.signal.aborted,true);options.signal.throwIfAborted();},providerController.signal),/VOICE_UNREACHABLE/);
 }finally{globalThis.fetch=savedFetch;}
-// The route's billing-only abort must preserve the primary action's success and finish record.
+// Primary success is returned after its durable finish, without waiting for billing.
 const records=[];let deadlines=[],kind='discovery',voiceStatus='waiting_for_active_call';
 const db=async(path,_method,body)=>{
  records.push({path,body});
@@ -35,7 +35,7 @@ const originalTimeout=AbortSignal.timeout;
 try{
  AbortSignal.timeout=ms=>{deadlines.push(ms);return originalTimeout(ms);};
  const response=await POST(new Request('https://example.invalid/api/internal/automation',{method:'POST',headers:{authorization:'Bearer '+('00000000-0000-0000-0000-000000000000').repeat(2)}}));
- assert.equal(response.body.status,'screening_queued');assert.deepEqual(response.body.billing,{status:'review_required'});
+ assert.equal(response.body.status,'screening_queued');assert.deepEqual(response.body.billing,{status:'queued'});
  assert.deepEqual(deadlines,[45000]);
  const finish=records.filter(r=>r.path==='rpc/icash_finish_automation');
  assert.equal(finish.length,1);assert.deepEqual(finish[0].body,{p_id:'ticket',p_success:true,p_outcome:'screening_queued'});
@@ -49,4 +49,4 @@ try{
  assert.deepEqual(records.filter(r=>r.path==='rpc/icash_finish_automation').at(-1).body,{p_id:'ticket',p_success:true,p_outcome:voiceStatus});
  assert.equal(automationChanged(voiceStatus),false,'skipping an assigned seller is not customer progress or a notification');
 }finally{AbortSignal.timeout=originalTimeout;delete globalThis.__billingRoute;}
-console.log('PASS: billing cancellation reaches DB/provider; primary automation success survives billing timeout');
+console.log('PASS: billing cancellation reaches DB/provider; primary automation queues billing without waiting for provider timeouts');
