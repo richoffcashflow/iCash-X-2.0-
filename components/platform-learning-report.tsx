@@ -19,6 +19,10 @@ export function PlatformLearningReport({refresh=0}:{refresh?:number}){
   {error&&<p role="alert">{error}</p>}
   {!report&&!error&&<p role="status">Loading shared results…</p>}
   {report&&<>
+   {report.ranker&&<div className={styles.note}><strong>Property outcome model · {report.ranker.status==='qualified'?'Limited ranking trial':report.ranker.status==='disabled'?'Paused':report.ranker.status==='rejected'?'Existing ranking retained':report.ranker.status==='expired'?'Waiting for fresh validation':'Collecting evidence'}</strong>
+    <p>{report.ranker.samples.toLocaleString()} property examples · {report.ranker.matureInterest.toLocaleString()} complete interest windows · {report.ranker.observedInterest.toLocaleString()} positive outcomes. Mature examples include {report.ranker.observedContracts.toLocaleString()} verified contracts and {report.ranker.observedClosings.toLocaleString()} verified closings; these are attributed training outcomes, not platform totals.</p>
+    <p>{report.ranker.lastTrainedAt?`Last checked ${new Date(report.ranker.lastTrainedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true})}. `:''}Ranking changes require better predictions on later results. A limited trial retains a comparison group; more closed deals have not yet been demonstrated.</p>
+   </div>}
    <div className={styles.summary}><div><strong>3 accounts</strong><span>Minimum contributors per approach</span></div><div><strong>40% exploration</strong><span>At least, after shared evidence qualifies</span></div><div><strong>{report.lastRefresh?new Date(report.lastRefresh).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true}):'Collecting'}</strong><span>Latest completed refresh</span></div></div>
    {report.failedAccounts>0&&<p role="status">{report.failedAccounts.toLocaleString()} account refreshes need review. Stale evidence is excluded from decisions.</p>}
    {report.dueAccounts>0&&<p className={styles.muted}>{report.dueAccounts.toLocaleString()} account refreshes queued.</p>}

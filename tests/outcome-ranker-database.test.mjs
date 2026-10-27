@@ -1,0 +1,76 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {PGlite} from '@electric-sql/pglite';
+const db=new PGlite(),read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const q=(sql,args=[])=>db.query(sql,args),val=async(sql,args=[])=>Object.values((await q(sql,args)).rows[0]??{})[0];
+const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+try{
+ await db.exec('create role anon;create role authenticated;create role service_role;');
+ await db.exec(read('tests/fixtures/shared-learning-schema.sql'));
+ await db.exec(`alter table icash_screening_jobs add primary key(id);
+ create function icash_opportunity_score(uuid,jsonb,text) returns numeric language sql as $$select case when $2->'financialCheck'->>'status'='eligible' then 0.5 else -1 end$$;
+ create function icash_refresh_learning_account(uuid) returns void language sql as $$select$$;
+ create function icash_seller_sms_interest_at(uuid,uuid,timestamptz,timestamptz) returns timestamptz language sql as $$select null::timestamptz$$;
+ create function icash_platform_learning_report(uuid) returns jsonb language sql as $$select '{}'::jsonb$$;`);
+ await db.exec(read('supabase/migrations/20261021185044_platform_shared_learning_schema.sql'));
+ await db.exec(read('supabase/migrations/20261027034644_outcome_ranker.sql'));
+ assert.equal(await val("select has_schema_privilege('anon','icash_ranker_private','usage')"),false);
+ assert.equal(await val("select has_table_privilege('authenticated','icash_ranker_private.samples','select')"),false);
+ assert.equal(await val("select has_function_privilege('authenticated','icash_claim_ranker_training()','execute')"),false);
+ await assert.rejects(val('select icash_ranker_report($1)',[id(1)]),/Owner required/);
+ assert.equal(await val('select icash_claim_ranker_training()'),null,'Disabled until application rollout');
+ const features=await val(`select icash_ranker_features('{"estimated_value":250000,"estimated_equity_percentage":"50","year_built":1900,"living_area_sqft":"NaN","estimated_repair_cost":-1}')`);
+ assert.deepEqual(features,[0.25,0,0.5,0,0,1,0,1,0.4,0,0,1]);
+ await q('insert into icash_accounts(id) values($1),($2)',[id(1),id(2)]);
+ const make=async(n,age=90)=>q(`insert into icash_screening_jobs(id,account_id,event_key,snapshot,result,state,created_at,completed_at)
+ values($1,$2,$3,jsonb_build_object('propertyId',$4::text,'fetchedAt',now()-($5::text||' days')::interval,'raw',jsonb_build_object('data','{"estimated_value":250000,"estimated_equity_percentage":50,"zip":"75217"}'::jsonb)),
+ jsonb_build_object('financialCheck',jsonb_build_object('status','eligible'),'property',jsonb_build_object('propertyId',$4::text)),'complete',now()-($5::text||' days')::interval,now())`,[id(n),id(1),`discovery:${n}`,`prop_${n}`,age]);
+ await make(10);await make(11);
+ assert.equal(await val('select count(*)::int from icash_ranker_private.samples'),2,'Screening captures features without waiting for a cron');
+ const score=()=>val(`select icash_opportunity_score($1,'{"financialCheck":{"status":"eligible"},"property":{"propertyId":"prop_10"}}','75217')`,[id(1)]);
+ assert.equal(Number(await score()),0.5);
+ await q(`insert into icash_operation_spend(operation_key,account_id,state,dispatched_at) values('real-call',$1,'settled',now()-interval '4 days')`,[id(1)]);
+ await q(`insert into icash_live_conversations(id,account_id,screening_id,party,conversation_id,operation_key,state,result,created_at,completed_at)
+ values($1,$2,$3,'seller','provider-id','real-call','complete','{"interested":true,"optedOut":false}',now()-interval '4 days',now()-interval '4 days')`,[id(20),id(1),id(10)]);
+ await val('select icash_refresh_ranker_samples($1)',[id(1)]);
+ let s=(await q('select * from icash_ranker_private.samples where screening_id=$1',[id(10)])).rows[0];
+ assert.equal(s.interest,1);assert.equal(s.contract,null);assert.equal(s.baseline,null,'A replayed historical fixture cannot pretend to have a prospective baseline');
+ assert.equal(await val('select interest from icash_ranker_private.samples where screening_id=$1',[id(11)]),null,'Uncontacted properties are not failures');
+ await q("update icash_operation_spend set dispatched_at=now()-interval '70 days'");await q("update icash_live_conversations set completed_at=now()-interval '70 days'");
+ await q("insert into icash_deal_files(id,account_id,screening_id,terms) values($1,$2,$3,'{}')",[id(30),id(1),id(10)]);
+ const recipients=[{id:'seller',phone:'+12125550111'},{id:'buyer',phone:'+12125550112'}];
+ for(const [n,kind] of [[31,'purchase'],[32,'assignment']]){
+  const evidence={id:`provider-${n}`,test_mode:false,status:'Completed',apply_signing_order:true,metadata:{icash_envelope:id(n),terms_hash:'bound-hash'},recipients:recipients.map((r,i)=>({...r,status:'signed',signing_order:i+1}))};
+  await q("insert into icash_signing_envelopes(id,account_id,deal_id,kind,state,test_mode,provider_id,terms_hash,recipients,provider_evidence,updated_at) values($1,$2,$3,$4,'completed',false,$5,'bound-hash',$6,$7,now()-interval '50 days')",[id(n),id(1),id(30),kind,`provider-${n}`,JSON.stringify(recipients),JSON.stringify(evidence)]);
+ }
+ await q("insert into icash_title_replies(id,account_id,deal_id,sender_verified,received_at) values($1,$2,$3,true,now()-interval '16 days')",[id(33),id(1),id(30)]);
+ await q("insert into icash_closing_updates(id,account_id,deal_id,reply_id,kind,effective_date,confirmation_source,created_at) values($1,$2,$3,$4,'closed',current_date-15,'verified_title_format',now()-interval '15 days')",[id(34),id(1),id(30),id(33)]);
+ const refresh=async()=>{await q("update icash_ranker_private.samples set refreshed_at='-infinity'");await val('select icash_refresh_ranker_samples($1)',[id(1)]);};
+ await refresh();s=(await q('select contract,closing from icash_ranker_private.samples where screening_id=$1',[id(10)])).rows[0];assert.deepEqual(s,{contract:1,closing:1});
+ await q("update icash_signing_envelopes set terms_hash='changed' where kind='purchase'");await refresh();
+ s=(await q('select contract,closing from icash_ranker_private.samples where screening_id=$1',[id(10)])).rows[0];assert.deepEqual(s,{contract:0,closing:0},'Completed status alone is not a verified contract or closing');
+ await q("update icash_signing_envelopes set terms_hash='bound-hash',updated_at=now()-interval '80 days' where kind='purchase'");await refresh();
+ assert.equal(await val('select exposed_at from icash_ranker_private.samples where screening_id=$1',[id(10)]),null,'Already-contracted properties cannot teach acquisition failure');
+ await q("update icash_signing_envelopes set terms_hash='changed' where kind='purchase'");
+ await q("update icash_operation_spend set dispatched_at=now()-interval '1 day'");await q("update icash_live_conversations set completed_at=now()-interval '1 day'");
+ await q("update icash_ranker_private.samples set refreshed_at='-infinity'");await val('select icash_refresh_ranker_samples($1)',[id(1)]);
+ assert.equal(await val('select interest from icash_ranker_private.samples where screening_id=$1',[id(10)]),null,'Known positives wait for a complete comparable window');
+ await q("update icash_operation_spend set dispatched_at=null");await q("update icash_ranker_private.samples set refreshed_at='-infinity'");await val('select icash_refresh_ranker_samples($1)',[id(1)]);
+ assert.equal(await val('select exposed_at from icash_ranker_private.samples where screening_id=$1',[id(10)]),null,'An unconfirmed provider attempt is not a trial');
+ await q('update icash_ranker_private.settings set enabled=true');
+ let claim=await val('select icash_claim_ranker_training()');assert(claim.token);assert.equal(await val('select icash_claim_ranker_training()'),null,'One lease across overlapping cron requests');
+ assert.equal(await val('select icash_finish_ranker_training($1,$2,1)',[id(99),{status:'collecting',reason:'fixture',model:null,metrics:{}}]),false);
+ await assert.rejects(val('select icash_finish_ranker_training($1,$2,1)',[claim.token,{status:'qualified',model:{version:'property-logistic-v1',objective:'interest',weights:Array(12).fill(0),intercept:0,rate:0.5},metrics:{}}]),/Unqualified model/);
+ const receipt={status:'qualified',reason:'synthetic fixture',model:{version:'property-logistic-v1',objective:'interest',weights:[1,...Array(11).fill(0)],intercept:0,rate:0.5},metrics:{train:200,validation:100,trainPositive:40,validationPositive:20,trainAccounts:3,validationAccounts:3,brier:0.1,baselineBrier:0.2,auc:0.8,baselineAuc:0.5}};
+ assert.equal(await val('select icash_finish_ranker_training($1,$2,1)',[claim.token,receipt]),true);
+ await make(12,0);
+ const fresh=(await q('select * from icash_ranker_private.samples where screening_id=$1',[id(12)])).rows[0];assert.equal(fresh.model_id,claim.token);assert(fresh.prediction>0.5);
+ await q("update icash_ranker_private.samples set model_id=$1,cohort='learned',prediction=0.9 where screening_id=$2",[claim.token,id(10)]);
+ assert(Math.abs(Number(await score())-0.56)<1e-9,'Validated model contributes only 15% of an eligible score');
+ assert.equal(Number(await val(`select icash_opportunity_score($1,'{"financialCheck":{"status":"ineligible"},"property":{"propertyId":"prop_10"}}','75217')`,[id(1)])),-1);
+ assert.equal(Number(await val(`select icash_opportunity_score($1,'{"financialCheck":{"status":"eligible"},"property":{"propertyId":"prop_10"}}','75217')`,[id(2)])),0.5,'Cached scores remain account-bound');
+ await q("update icash_ranker_private.samples set cohort='baseline' where screening_id=$1",[id(10)]);assert.equal(Number(await score()),0.5);
+ await q("update icash_ranker_private.samples set cohort='learned' where screening_id=$1",[id(10)]);await q("update icash_ranker_private.runs set created_at=now()-interval '8 days'");assert.equal(Number(await score()),0.5,'Expired evidence returns to existing ranking');
+ const report=await val('select icash_platform_learning_report($1)',['592171a0-2bb9-484e-8c9a-dd5d2b43b5f7']);assert.equal(report.ranker.status,'expired');assert(!JSON.stringify(report).includes(id(1)));
+ console.log('Outcome ranker database: private vectors, prospective capture, real exposures, mature labels, leases, gated bounded ranking, tenancy, control and expiry passed.');
+}finally{await db.close();}
