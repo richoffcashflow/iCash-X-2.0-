@@ -1,6 +1,7 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
+import {isDeepStrictEqual} from 'node:util';
 import {assertPaidProviderSimulationsAllowed} from './test-automatic-offer-provider.mjs';
 import {finishAdmittedDealMachineRequest} from '../lib/dealmachine-request.ts';
 
@@ -17,8 +18,7 @@ export function activeExportProbeRequest(personId){
 }
 export const activeExportProbeHash=body=>createHash('sha256').update(JSON.stringify(body)).digest('hex');
 
-/** Prepared verification only. A future approved entry point must use the
- * service-role database adapter and a fresh explicit owner approval row.
+/** The approved preview entry point uses the service-role database adapter.
  * Nothing in production/CI calls this. The executable below remains disabled.
  * The unique private integration-check row is claimed by compare-and-swap
  * before the only paid request. A lost claim/response cannot authorize replay.
@@ -30,14 +30,36 @@ export async function verifyActiveExportOnce({db,transport=fetch,env=process.env
  const rows=await db(path+'&select=result');
  if(!Array.isArray(rows)||rows.length!==1||!plain(rows[0]?.result))return {status:'approval_required',paidRequests:0};
  const approval=rows[0].result;
- if(approval.status!=='approved')return {status:'already_consumed_or_unapproved',paidRequests:0};
+ const deferred=approval.status==='waiting_for_quota';
+ if(approval.status!=='approved'&&!deferred)return {status:'already_consumed_or_unapproved',paidRequests:0};
  if(approval.version!==1||approval.maxCredits!==1||approval.explicitOwnerApproval!==true||!uuid(approval.approvalId)
   ||!uuid(approval.accountId)||!uuid(approval.screeningId)||!/^prop_[1-9][0-9]{0,19}$/.test(approval.propertyId??'')
   ||!Number.isFinite(Date.parse(approval.approvedAt))||!Number.isFinite(Date.parse(approval.expiresAt))
-  ||Date.parse(approval.approvedAt)>now||Date.parse(approval.expiresAt)<=now
+  ||Date.parse(approval.approvedAt)>now||Date.parse(approval.expiresAt)<=Date.parse(approval.approvedAt)
   ||Date.parse(approval.expiresAt)-Date.parse(approval.approvedAt)>3600000)throw Error('PROBE_APPROVAL_INVALID');
  const body=activeExportProbeRequest(approval.personId),requestHash=activeExportProbeHash(body);
  if(approval.requestHash!==requestHash)throw Error('PROBE_APPROVAL_INVALID');
+ let executeBefore=Date.parse(approval.expiresAt);
+ if(deferred){
+  const d=approval.quotaDeferral;
+  // A private, manually reviewed deferral is possible only with database proof
+  // that the original local quota claim was NOT admitted. No provider attempt
+  // happened. Preserve that original record; never reset a started/unknown run.
+  if(!plain(d)||d.reason!=='local_quota_before_dispatch'||!uuid(d.id)||!uuid(approval.runId)
+   ||d.originalRunId!==approval.runId||d.originalStartedAt!==approval.startedAt
+   ||d.requestWasAdmitted!==false||d.requestOutcome!=='quota_wait'
+   ||approval.receipt!==undefined||approval.artifact!==undefined
+   ||!plain(approval.request)||!isDeepStrictEqual(approval.request,body)
+   ||!Number.isFinite(Date.parse(approval.startedAt))||Date.parse(approval.startedAt)<Date.parse(approval.approvedAt)
+   ||!Number.isFinite(Date.parse(d.recordedAt))||!Number.isFinite(Date.parse(d.executeAfter))||!Number.isFinite(Date.parse(d.executeBefore))
+   ||Date.parse(d.recordedAt)<Date.parse(approval.startedAt)||Date.parse(d.recordedAt)>Date.parse(approval.expiresAt)
+   ||Date.parse(d.executeAfter)<Date.parse(d.recordedAt)||Date.parse(d.executeBefore)<=Date.parse(d.executeAfter)
+   ||Date.parse(d.executeBefore)-Date.parse(approval.approvedAt)>4*3600000)throw Error('PROBE_DEFERRAL_INVALID');
+  executeBefore=Date.parse(d.executeBefore);
+  if(now>=executeBefore)throw Error('PROBE_APPROVAL_INVALID');
+  if(now<Date.parse(d.executeAfter))return {status:'deferred_not_due',paidRequests:0};
+  if(await db('rpc/icash_dealmachine_capacity_available','POST',{p_requests:1})!==true)return {status:'quota_wait',paidRequests:0};
+ }else if(executeBefore<=now)throw Error('PROBE_APPROVAL_INVALID');
  if(!/^dm_sk_live_[A-Za-z0-9_-]+$/.test(env.DEALMACHINE_API_KEY??''))throw Error('PROBE_CONFIGURATION_REQUIRED');
  const contacts=await db(`icash_owner_contacts?account_id=eq.${approval.accountId}&screening_id=eq.${approval.screeningId}&select=result,created_at`);
  if(!Array.isArray(contacts)||contacts.length!==1)throw Error('PROBE_SOURCE_INVALID');
@@ -52,9 +74,10 @@ export async function verifyActiveExportOnce({db,transport=fetch,env=process.env
  const started=await db('rpc/icash_dealmachine_owner_source_started_at','POST',{p_account:approval.accountId,p_screening:approval.screeningId});
  if(typeof started!=='string'||!Number.isFinite(Date.parse(started))||Date.parse(started)>Date.parse(source.created_at))throw Error('PROBE_SOURCE_INVALID');
  const claimTime=clock();
- if(Date.parse(approval.expiresAt)<=claimTime)return {status:'approval_expired',paidRequests:0};
+ if(executeBefore<=claimTime)return {status:'approval_expired',paidRequests:0};
  const runId=randomUUID(),claim={...approval,status:'started',runId,request:body,startedAt:new Date(claimTime).toISOString(),outreach:false};
- const claimFilter=path+`&result->>status=eq.approved&result->>approvalId=eq.${approval.approvalId}&result->>requestHash=eq.${requestHash}`;
+ const claimFilter=path+`&result->>status=eq.${approval.status}&result->>approvalId=eq.${approval.approvalId}&result->>requestHash=eq.${requestHash}`
+  +(deferred?`&result->>runId=eq.${approval.runId}&result->quotaDeferral->>id=eq.${approval.quotaDeferral.id}`:'');
  const claimed=await db(claimFilter,'PATCH',{checked_at:new Date(claimTime).toISOString(),result:claim});
  if(!Array.isArray(claimed)||claimed.length!==1||claimed[0]?.result?.runId!==runId)return {status:'claim_not_confirmed',paidRequests:0};
  const receiptPath=path+`&result->>status=eq.started&result->>runId=eq.${runId}`;

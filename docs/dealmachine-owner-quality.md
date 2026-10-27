@@ -22,13 +22,25 @@ Full phone-activity scrubbing is therefore **not enabled by this release**. It r
 
 The live, free catalog read on October 27 confirmed `has_active_phone_number` as a non-premium BOOLEAN people filter and field, with no direct person-ID filter or per-number activity field. The existing-export inventory was empty, so no previously purchased export can establish the CSV header/owner-ID/phone format. These checks made only free GET requests; they did not retrieve contacts or create an export.
 
-## Prepared verification, disabled
+## Approved verification, waiting for quota
 
 `scripts/verify-dealmachine-active-export.mjs` prepares one exact-owner export with `active_phones_only`, `require_phone`, `scrub_dnc`, and `property_match: owner`. Its fixed request includes exactly one previously saved property-bound owner ID and people fields only: at most **one DealMachine people data credit**, under the documented per-entity pricing. No new property fields, broad audience, second purchase, automatic retry, call, message, customer-wallet charge, top-up or billing change is included.
 
-The executable still stops at the existing global paid-development-test prohibition and is not a build hook. Enabling it requires fresh explicit owner approval, a reviewed executable, and a service-only approval row with the exact request hash, one-credit cap, owner/source binding and one-hour maximum expiry. A conditional claim consumes the approval once before the request; an uncertain claim, network outcome or receipt write never authorizes replay. The original response, including actual reported credits and errors, is retained in the private integration-check row before interpretation. No approval row or paid request has been created.
+The owner explicitly approved this one-credit verification on October 27. The standalone command retains the global paid-test stop. A narrow preview build entry point, `scripts/run-approved-dealmachine-active-export.mjs`, is restricted to the original repository, exact preview branch, production database identity and private request-hash approval. Production and CI cannot invoke the paid check.
 
-Offline fixtures cover concurrent attempts, absent/expired/changed approval, source mismatch, a lost claim response, a lost export response, failed receipt persistence, exact one-person scope and the executable stop. The export format remains unverified until the bounded test is explicitly approved and run; this preparation does not turn on production scrubbing.
+At 5:16 PM Central, the shared local quota limiter denied admission: 4,900 of 4,900 daily requests had been used. The private request record confirms `admitted: false`, `outcome: quota_wait`, no provider response and no finished request. **No export request was sent and no data credit was used.** The daily window resets at 7:10:37 PM Central on October 27. Do not raise/reset the limiter to complete this test.
+
+The original approval and denied-request record are preserved. A single service-only deferral records the exact original run, database non-admission proof and a 7:10:37–7:45 PM Central execution window; it does not reset the row to `approved`. The deferred preview first checks that capacity is available, then uses a compare-and-swap claim bound to the original run and deferral ID. A lost claim, started request, network uncertainty or saved response permanently prevents another export. The request remains exactly one saved owner, with the same one-credit cap; no calls, texts, wallet charge or provider billing change is allowed.
+
+The original provider response, including reported credits and errors, is saved before interpretation. The free artifact reader accepts only that response's single HTTPS Google Storage download, verifies a bounded one-row CSV and saves the original file privately. Build output contains only field names and value shapes, never contact data or signed download URLs.
+
+Offline fixtures cover concurrent attempts, absent/expired/changed approval, source mismatch, a lost claim response, a lost export response, failed receipt persistence, exact one-person scope, the executable stop, non-admission deferral, quota waits and the inability to defer a provider attempt. The export format remains unverified until the bounded test runs; this preparation does not turn on production scrubbing.
+
+### Resume after reset
+
+Continue from draft PR #482 (`codex/dealmachine-active-phone-contract-20261027`). Read the private integration-check row `dealmachine_active_phone_export_verification_20261027_v1` and exact original request proof before triggering one preview build. Require `waiting_for_quota`, the original unchanged request hash, no admitted request for this operation, available quota and the saved execution window. Do not renew the window, recreate approval, change the audience or repeat an admitted request. The scheduled continuation is intended for 7:15 PM Central, after the normal reset.
+
+Inspect the saved credit receipt and sanitized CSV schema from that build. A saved response permits free inspection of its original download, never a replacement export. Missing/uncertain/error results remain held. Production phone activity support still needs exact owner-to-row mapping, original export receipt/download recovery, organization-wide export concurrency and actual net-credit settlement; it must not be declared active merely because the test completes.
 
 ## Verification
 
