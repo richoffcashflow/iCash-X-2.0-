@@ -8,12 +8,12 @@ const {PGlite}=await import(pathToFileURL(process.argv[2]).href),pg=await PGlite
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const q=(s,a=[])=>pg.query(s,a),one=async(s,a=[])=>(await q(s,a)).rows[0];
 const table=name=>{const s=read('supabase/migrations/20261004170451_seller_intake_and_budgeted_lead_assignment.sql');const start=s.indexOf('create table public.'+name+' (');assert(start>=0);return s.slice(start,s.indexOf(';',start)+1);};
-const owner=randomUUID(),account=randomUUID(),other=randomUUID(),leadRequest=randomUUID();
+const owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7',account='48dfb798-8c1a-404f-88c0-c396cc067062',other=randomUUID(),leadRequest=randomUUID();
 const args=[owner,account,leadRequest,'a'.repeat(64),'Demo Seller','45 Fixture Lane, Dallas, TX 75201','+12145550123',true,'b'.repeat(64),'America/Chicago','c'.repeat(64)];
 const submit=a=>one('select icash_submit_bot_demo_intake($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) id',a);
 try{
  await pg.exec(`create role anon;create role authenticated;create role service_role;
- create table icash_accounts(id uuid primary key,owner_user_id uuid,bot_paused boolean default false,daily_limit_cents bigint default 10000);
+ create table icash_accounts(id uuid primary key,owner_user_id uuid,bot_paused boolean default false,daily_limit_cents bigint default 10000,created_at timestamptz default now());
  create table icash_wallets(account_id uuid,balance_cents bigint);
  create table icash_operating_budget(id integer);insert into icash_operating_budget values(1);
  create table icash_screening_jobs(id uuid primary key default gen_random_uuid(),account_id uuid,event_key text,snapshot jsonb,state text,result jsonb,completed_at timestamptz);
@@ -21,7 +21,13 @@ try{
  create table icash_operation_rates(id uuid primary key default gen_random_uuid(),operation text,version text,charge_cents bigint,costs_micros jsonb,buffer_bps integer,evidence_ref text,verified_at timestamptz,expires_at timestamptz,enabled boolean);
  create table icash_text_suppressions(phone text);create table icash_contact_suppressions(account_id uuid,contact_key text);
  create table icash_live_conversations(account_id uuid,screening_id uuid,contact_key text);
- create table icash_deal_files(id uuid,account_id uuid,screening_id uuid);
+ create table icash_deal_files(id uuid default gen_random_uuid(),account_id uuid,screening_id uuid,terms jsonb);
+ create table icash_discovery_configs(account_id uuid primary key,enabled boolean,auto_enabled boolean,next_run_at timestamptz);
+ create table icash_meta_leads(lead_id uuid primary key,account_id uuid,screening_id uuid,source_id uuid,meta_id text,routed_at timestamptz,next_attempt_at timestamptz);
+ create table icash_meta_import_priorities(source_id uuid,meta_id text);
+ create function icash_meta_pool_receipt_current(uuid) returns boolean language sql as $$select exists(select 1 from public.icash_meta_leads where lead_id=$1)$$;
+ create function icash_outreach_sms_current(uuid) returns boolean language sql as $$select true$$;
+ create function icash_outreach_voice_current(uuid) returns boolean language sql as $$select true$$;
  create table icash_signing_envelopes(account_id uuid,deal_id uuid,kind text,test_mode boolean,state text);
  create table icash_outbound_property_owners(property_id text,account_id uuid);
  create table icash_billing_reviews(account_id uuid,resolved_at timestamptz);
@@ -53,6 +59,15 @@ try{
  await q('insert into icash_accounts(id,owner_user_id) values($1,$2),($3,$4)',[account,owner,other,randomUUID()]);
  await q('insert into icash_wallets values($1,10000),($2,10000)',[account,other]);
  await q("insert into icash_customer_identities values($1,'iCash X'),($2,'Another account')",[account,other]);
+ await q('insert into icash_discovery_configs values($1,true,true,now()),($2,true,true,now())',[account,other]);
+ await pg.exec(read('tests/fixtures/owner-manual-demo-meta-assignment.sql'));
+ await pg.exec('revoke all on function icash_meta_assign_contact(uuid) from public,anon,authenticated;grant execute on function icash_meta_assign_contact(uuid) to service_role;');
+ const allocationPrivileges=await q("select oid::regprocedure::text name,proacl,prosecdef,proconfig from pg_proc where oid in ('icash_assign_seller_lead_for(uuid)'::regprocedure,'icash_meta_assign_contact(uuid)'::regprocedure) order by name");
+ await pg.exec(read('config/owner-manual-demo-only.sql'));
+ await pg.exec(read('config/owner-manual-demo-only.sql'));
+ assert.deepEqual((await q("select oid::regprocedure::text name,proacl,prosecdef,proconfig from pg_proc where oid in ('icash_assign_seller_lead_for(uuid)'::regprocedure,'icash_meta_assign_contact(uuid)'::regprocedure) order by name")).rows,allocationPrivileges.rows,'private allocation permissions remain unchanged');
+ assert.deepEqual(await one('select enabled,auto_enabled from icash_discovery_configs where account_id=$1',[account]),{enabled:false,auto_enabled:false});
+ assert.deepEqual(await one('select enabled,auto_enabled from icash_discovery_configs where account_id=$1',[other]),{enabled:true,auto_enabled:true});
  const {id}=await submit(args);assert.equal((await submit(args)).id,id);
  const saved=await one('select * from icash_seller_intakes where id=$1',[id]);
  assert.equal(saved.consent_text,botDemoConsentText);assert.equal(saved.consent_version,botDemoConsentVersion);
@@ -193,6 +208,19 @@ try{
  // Existing network requests retain their separate routing policy.
  await q("update icash_seller_intakes set contact_consent_scope='homeoffer_network_and_matched_buyers' where id=$1",[id]);
  assert.equal((await one('select icash_assign_seller_lead_for($1) r',[id])).r.accountId,other);
+ // Funded, running owner still accepts only its explicit private input.
+ const ownerScreens=(await one('select count(*)::int n from icash_screening_jobs where account_id=$1',[account])).n;
+ await q('update icash_accounts set bot_paused=true where id=$1',[other]);
+ assert.equal((await one('select icash_assign_seller_lead_for($1) r',[network.id])).r,null,'public seller cannot be assigned to the owner when other customers are paused');
+ await q('insert into icash_meta_leads(lead_id,source_id,meta_id) values($1,$2,$3)',[network.id,randomUUID(),'fixture-meta-owner-isolation']);
+ assert.equal((await one('select icash_meta_assign_contact($1) r',[network.id])).r.status,'waiting_for_funded_buyer','Meta pool excludes funded owner');
+ assert.equal((await one('select count(*)::int n from icash_screening_jobs where account_id=$1',[account])).n,ownerScreens);
+ await q('update icash_accounts set bot_paused=false where id=$1',[other]);
+ assert.equal((await one('select icash_meta_assign_contact($1) r',[network.id])).r.accountId,other,'ordinary customer still receives Meta lead');
+ assert.equal((await one('select icash_meta_assign_contact($1) r',[network.id])).r.accountId,other,'existing Meta assignment stays idempotent');
+ assert.equal((await one('select icash_assign_seller_lead_for($1) r',[network.id])).r.accountId,other,'ordinary seller assignment remains available');
+ assert.equal((await one('select count(*)::int n from icash_screening_jobs where account_id=$1',[account])).n,ownerScreens,'no automatic owner leads');
+ console.log('PASS: owner discovery disabled, private submitted leads work, shared seller and Meta leads excluded, customer routing preserved, unchanged service-only access.');
  for(const role of ['anon','authenticated'])assert.equal((await one("select has_function_privilege($1,'public.icash_submit_bot_demo_intake(uuid,uuid,uuid,text,text,text,text,boolean,text,text,text)','execute') allowed",[role])).allowed,false);
  const input={name:'Demo Seller',address:'45 Fixture Lane',phone:'2145550123',consented:true,consentVersion:botDemoConsentVersion,requestId:leadRequest};
  assert(botDemoSubmission.safeParse(input).success);assert(!botDemoSubmission.safeParse({...input,accountId:other}).success);assert(!botDemoSubmission.safeParse({...input,consented:false}).success);
