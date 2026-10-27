@@ -53,6 +53,9 @@ export const platformLearningReportSchema=z.object({
  version:z.literal('shared-v1'),checkedAt:z.string(),minimumAccounts:z.literal(3),contributionCap:z.literal(200),maxLearnedShare:z.literal(0.6),
  dueAccounts:count.int(),failedAccounts:count.int(),lastRefresh:z.string().nullable(),cohortsTruncated:z.boolean(),recoveryEnabled:count.int(),filterEnabled:z.boolean(),
  cohorts:z.array(z.object({domain:z.string(),context:z.string(),market:z.string(),stats:z.array(sharedLearningStatSchema)})).max(200),
+ ranker:z.object({enabled:z.boolean(),status:z.enum(['disabled','collecting','rejected','qualified','expired']),lastTrainedAt:z.string().nullable(),elapsedMs:count.nullable(),reason:z.string().nullable(),
+  samples:count.int(),matureInterest:count.int(),observedInterest:count.int(),observedContracts:count.int(),observedClosings:count.int(),
+ }).optional(),
 });
 export type PlatformLearningReport=z.infer<typeof platformLearningReportSchema>;
 export type SharedAssignment={variant:string;version:'shared-v1';mode:'explore'|'shared'};
