@@ -21,7 +21,7 @@ function error(e:unknown){
 }
 export async function GET(req:Request){try{
  const {accountId}=await workAccount({requireVip:true}),id=new URL(req.url).searchParams.get('id');if(id)z.guid().parse(id);
- const items=await db<Row[]>(`icash_workspace_questions?account_id=eq.${accountId}${id?'&id=eq.'+id:''}&select=id,question,answer,state,created_at&order=created_at.desc&limit=${id?1:20}`);
+ const items=await db<Row[]>(`icash_workspace_questions?account_id=eq.${accountId}&archived_at=is.null${id?'&id=eq.'+id:''}&select=id,question,answer,state,created_at&order=created_at.desc&limit=${id?1:20}`);
  if(id&&!items.length)return NextResponse.json({error:'Reply not found.'},{status:404,headers});
  return NextResponse.json({items:items.reverse()},{headers});
  }catch(e){return error(e);}}
@@ -37,7 +37,7 @@ export async function POST(req:Request){
   const started=await db<{id:string;fresh:boolean;state:string;answer:AssistantAnswer|null;createdAt:string}>('rpc/icash_begin_workspace_question','POST',{p_account:accountId,p_user:owner.userId,p_request:i.requestId,p_question:question});
   savedId=started.id;
   if(!started.fresh){if(started.state==='error')return NextResponse.json({error:'This reply could not finish. Please send the question again.'},{status:409,headers});return NextResponse.json({id:started.id,question,answer:started.answer,state:started.state,created_at:started.createdAt},{status:started.answer?200:202,headers});}
-  const [context,history]=await Promise.all([workspaceAssistantContext(accountId,i.timezone,question,i.screeningId),db<Row[]>(`icash_workspace_questions?account_id=eq.${accountId}&state=eq.complete&select=id,question,answer,state,created_at&order=created_at.desc&limit=4`)]);
+  const [context,history]=await Promise.all([workspaceAssistantContext(accountId,i.timezone,question,i.screeningId),db<Row[]>(`icash_workspace_questions?account_id=eq.${accountId}&archived_at=is.null&state=eq.complete&select=id,question,answer,state,created_at&order=created_at.desc&limit=4`)]);
   await db(`icash_workspace_questions?account_id=eq.${accountId}&id=eq.${savedId}&state=eq.pending`,'PATCH',{context_snapshot:context});
   const routed=await routeWorkspaceQuestion(question,context,history.reverse().map(h=>({question:h.question,propertyId:h.answer?.propertyId??null})),fetch,{
    before:async()=>{try{return await db<boolean>('rpc/icash_reserve_question','POST',{p_account:accountId,p_question:savedId,p_model:process.env.ICASH_SUPPORT_AI_MODEL});}catch{throw Error('QUESTION_CREDITS_REQUIRED');}},

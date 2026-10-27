@@ -37,6 +37,7 @@ const deps={...policy,z,redactSupportQuestion,NextResponse:{json:(body,o={})=>({
  if(path==='rpc/icash_begin_workspace_question'){assert.equal(body.p_account,id(1));assert.equal(body.p_user,id(2));return {id:id(3),fresh,state:priorState,answer:fresh?null:priorState==='complete'?responseAnswer:null,createdAt:context.checkedAt};}
  assert(path.includes('account_id=eq.'+id(1)),'Every history/context write is tenant scoped');
  if(method==='PATCH')return [{id:id(3),...body}];
+ assert(path.includes('&archived_at=is.null'),'Archived replies must stay out of the visible history and the next model context');
  if(path.includes('id=eq.'+id(99)))return [];
  return [];
 }};
@@ -57,6 +58,7 @@ let r=await route.POST(req(body));assert.equal(r.status,200);assert.match(r.body
 fresh=false;paths=[];r=await route.POST(req(body));assert.equal(r.status,200);assert.equal(contextReads,1);assert.equal(classifications,1);assert.equal(paths.length,1,'Duplicate requests reuse persisted answer without model or work calls');
 priorState='pending';assert.equal((await route.POST(req(body))).status,202);priorState='error';assert.equal((await route.POST(req(body))).status,409);
 assert.equal((await route.GET(new Request('https://www.geticashx.com/api/work/assistant?id='+id(99)))).status,404);
+ assert.equal((await route.GET(new Request('https://www.geticashx.com/api/work/assistant'))).status,200);
 assert.equal((await route.GET(new Request('https://www.geticashx.com/api/work/assistant?id=not-uuid'))).status,400);
 assert(paths.every(p=>p.path.startsWith('icash_workspace_questions')||p.path==='rpc/icash_begin_workspace_question'),'Asking never starts outreach, charges, or modifies a deal');
 console.log('PASS account assistant: exact saved math, bounded routing, no invented actions, membership/tenant/origin checks, persistent replies, replay and rate limits.');
