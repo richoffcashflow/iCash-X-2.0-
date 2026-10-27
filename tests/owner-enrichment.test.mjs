@@ -55,6 +55,43 @@ assert.equal((await enrichOwners(input,h.dependencies,now)).status,'empty');asse
 h=harness([...Array.from({length:30},(_,i)=>({dm_person_id:'per_'+i,contact_type:'family'})),owner('per_99')]);
 await enrichOwners({...input,creditCap:1},h.dependencies,now);assert.deepEqual(h.ids,['per_99'],'Filter weak matches before applying the paid credit cap');
 
+// Observed free-preview availability prevents buying unusable seller contacts.
+// Positive availability is not proof that any particular number is active.
+h=harness([
+ {...owner('per_1'),availability:{phones:0,emails:3}},
+ {...owner('per_2'),availability:{phones:2,emails:0}},
+ {...owner('per_3'),availability:{phones:1,emails:1}},
+]);
+await enrichOwners({...input,creditCap:1},h.dependencies,now);
+assert.deepEqual(h.ids,['per_2'],'Known phone-less owners do not consume or displace the paid allowance');
+assert.equal(h.saved.contacts[0].phones[0].permission,'unverified');
+h=harness([{...owner('per_1'),availability:{phones:0,emails:3}}]);
+assert.equal((await enrichOwners(input,h.dependencies,now)).status,'empty');
+assert.deepEqual(h.events,['preview'],'No reservation or purchase when no owner has an available phone');
+for(const availability of [undefined,null,{}, {phones:null}, {emails:2}]){
+ h=harness([{...owner('per_1'),availability}]);await enrichOwners(input,h.dependencies,now);
+ assert.deepEqual(h.ids,['per_1'],'An older preview with unknown availability is not invented to have zero phones');
+}
+for(const contact_type of ['family','resident','renter','unknown']){
+ h=harness([{...owner('per_1'),contact_type,availability:{phones:3}}]);
+ assert.equal((await enrichOwners(input,h.dependencies,now)).status,'empty');
+ assert.deepEqual(h.events,['preview'],'Contradictory non-owner association cannot authorize an owner purchase');
+}
+for(const contacts of [
+ [{...owner('per_1'),availability:{phones:-1}}],
+ [{...owner('per_1'),availability:{phones:1.5}}],
+ [{...owner('per_1'),availability:{phones:'3'}}],
+ [{...owner('per_1'),availability:[]}],
+ [{...owner('per_1'),contact_type:1}],
+ [{...owner('per_1'),is_likely_renter:'true'}],
+ [{dm_person_id:'per_1',contact_type:'owner',is_likely_owner:'false'}],
+ [{...owner('per_1'),availability:{phones:0}},{...owner('per_1'),availability:{phones:2}}],
+ [owner('per_1'),{...owner('per_1'),contact_type:'resident'}],
+]){
+ h=harness(contacts);await assert.rejects(enrichOwners(input,h.dependencies,now),/CONTACT_PREVIEW_INVALID/);
+ assert.deepEqual(h.events,['preview'],'Malformed/conflicting preview cannot reach a paid lookup');
+}
+
 h=harness([]);assert.equal((await enrichOwners(input,h.dependencies,now)).status,'empty');assert.deepEqual(h.events,['preview']);
 for(const malformed of [null,{},preview([{}]),preview([{dm_person_id:'123'}]),preview([{dm_person_id:'per_'}]),preview([null]),preview([owner('per_1'),{...owner('per_1'),is_likely_owner:false}]),{...preview([owner('per_1')]),data:{dm_property_id:'prop_456',contacts:[owner('per_1')]}},{...preview([owner('per_1')]),credits:{used:0,people:1,properties:0,deduplicated:0}},preview([...Array.from({length:25},(_,i)=>owner('per_'+i)),{}])]){
  h=harness();h.preview=malformed;await assert.rejects(enrichOwners(input,h.dependencies,now),/CONTACT_PREVIEW_INVALID/);assert.deepEqual(h.events,['preview']);

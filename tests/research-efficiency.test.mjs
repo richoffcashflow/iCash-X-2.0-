@@ -12,6 +12,12 @@ const zero={used:0,people:0,properties:0,deduplicated:0};
 const preview={data:candidates.map((c,i)=>({dm_property_id:c.snapshot.propertyId,found:true,contacts:[{dm_person_id:'per_shared',contact_type:'owner'},{dm_person_id:'per_'+i,contact_type:'owner'},{dm_person_id:'per_renter',is_likely_renter:true,is_likely_owner:true}]})),totals:{submitted:3,found:3,not_found:0},credits:zero};
 const audience=ownerBatchAudience(preview,candidates,25),ids=[...new Set(audience.flatMap(a=>a.ids))];
 assert.deepEqual(ids,['per_shared','per_0','per_1','per_2']);
+const availablePreview=structuredClone(preview);
+availablePreview.data[0].contacts[0].availability={phones:0,emails:3};
+availablePreview.data[0].contacts[1].availability={phones:2,emails:0};
+const availableAudience=ownerBatchAudience(availablePreview,candidates,1);
+assert.deepEqual(availableAudience.map(a=>[...a.ids]),[['per_0'],['per_shared'],['per_shared']],
+ 'Phone availability is evaluated per property before the cap; the shared owner stays attached to other properties');
 const receipt={data:ids.map((id,i)=>({dm_person_id:id,found:i!==3,full_name:'Synthetic',phones:[{number:'+12145550123',do_not_call:true}]})),totals:{submitted:4,found:3,not_found:1},credits:{used:2,people:3,properties:0,deduplicated:1}};
 const results=allocateOwnerBatch(receipt,audience,'batch');
 assert.deepEqual(results.map(x=>x.result.creditsUsed),[2,0,0]);
@@ -67,6 +73,9 @@ const db=async(path,method,body)=>{
 };
 const transport=async(url,init)=>{const b=JSON.parse(init.body);if(url.endsWith('/properties/ids')){assert.equal(b.enrich,false);return Response.json(preview);}assert(claimed);paid++;assert.deepEqual(b.ids,ids);if(timeout)throw Error('timeout');return Response.json(receipt);};
 const config={contact_rate_id:'rate',contact_credit_cap:25,property_credit_micros:10000,data_rights_until:'2099-01-01'};
+// The actual batch service must also omit these before its atomic paid claim.
+preview.data[0].contacts.unshift({dm_person_id:'per_nophone',contact_type:'owner',availability:{phones:0,emails:2}});
+preview.data[1].contacts.unshift({dm_person_id:'per_conflicting',contact_type:'renter',is_likely_owner:true});
 denyBatch=true;await assert.rejects(enrichOwnerBatch(db,'account','1',config,250000,transport),OwnerPreviewRateLimitError);assert.equal(paid,0);assert.equal(claimed,false);denyBatch=false;admissions=0;
 assert.equal((await enrichOwnerBatch(db,'account','1',config,250000,transport)).batchProperties,3);assert.equal(paid,1);assert.equal(saved,1);
 assert.equal(admissions,1,'There is no second limiter call after financial admission');

@@ -113,6 +113,11 @@ try{
  reset();const concurrent=await Promise.allSettled([run(),run()]);assert.equal(concurrent.filter(r=>r.status==='fulfilled').length,1);assert.equal(state.paidCount,1);
 
  reset();state.owners=[];assert.equal((await run()).status,'empty');assert.equal(state.reserveCount,0);assert.equal(state.paidCount,0);
+ reset();state.previewTransform=r=>{for(const p of r.data.contacts)p.availability={phones:0,emails:3};};
+ assert.equal((await run()).status,'empty');assert.equal(state.previewCount,1);assert.equal(state.reserveCount,0);assert.equal(state.paidCount,0);
+ reset();state.previewTransform=r=>{r.data.contacts.unshift({dm_person_id:'per_phoneless',contact_type:'owner',availability:{phones:0,emails:3}});};
+ assert.equal((await run()).status,'contacts_saved');assert.equal(state.paidCount,1);
+ assert(!state.saved[0].requestedPersonIds.includes('per_phoneless'),'The actual single-property service skips phone-less contacts before its paid request');
  for(const transform of [r=>{delete r.data.contacts[0].dm_person_id;},r=>{r.data.dm_property_id='prop_456';},r=>{r.data.contacts=null;},r=>{r.credits.people=2;}]){
   reset();state.previewTransform=transform;await assert.rejects(run(),/CONTACT_PREVIEW_INVALID/);assert.equal(state.reserveCount,0);assert.equal(state.paidCount,0);
  }
