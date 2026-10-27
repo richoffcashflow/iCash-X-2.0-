@@ -14,8 +14,10 @@ export async function inspectOwnerCapabilities(env=process.env,transport=fetch){
   const raw=await response.json();
   if(!Array.isArray(raw?.data)||typeof raw?.pagination?.has_next_page!=='boolean')return {status:'catalog_shape_unavailable',paidRequests:0};
   for(const row of raw.data){
-   if(!row||!['dm_person_id','person_id','internal_person_id','id','has_active_phone_number'].includes(row.filter_id))continue;
+   if(!row||typeof row.filter_id!=='string'||! /^[a-zA-Z0-9_]{1,100}$/.test(row.filter_id))continue;
+   if(row.filter_id!=='has_active_phone_number'&&!/(?:^|_)(?:id|identifier)(?:_|$)/.test(row.filter_id)&&!(typeof row.name==='string'&&/\b(?:identifier|record id|person id)\b/i.test(row.name)))continue;
    matches.push({filterId:row.filter_id,type:typeof row.type==='string'&&/^[A-Z_]+$/.test(row.type)?row.type:null,
+    premium:typeof row.is_premium_filter==='boolean'?row.is_premium_filter:null,
     operators:Array.isArray(row.allowed_operators)?row.allowed_operators.filter(x=>typeof x==='string'&&/^[a-z_]{1,60}$/.test(x)).slice(0,20):[]});
   }
   if(!raw.pagination.has_next_page)return {status:'checked',paidRequests:0,pages:page,filters:matches};
