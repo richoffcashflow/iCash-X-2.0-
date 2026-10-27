@@ -213,6 +213,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Development test spending
 
+- On October 27, 2026 the owner explicitly approved the prepared one-owner DealMachine export verification with a maximum of one people data credit and no calls, texts or paid retries. Use its exact service-only request-hash approval, source binding, one-use claim and original receipt. The exception is limited to `dealmachine_active_phone_export_verification_20261027_v1`; all other paid development simulations remain disabled.
+
 - The owner stopped paid provider simulations after test runs exhausted ElevenLabs credits. Keep paid development simulations disabled, including direct CLI commands, deployment hooks and retries.
 - Use local fixtures and saved transcripts. New paid tests require fresh explicit owner approval of a concrete spending limit and a mechanism enforcing that limit. Earlier requests to test or ship are not approval to resume paid tests.
 - Never purchase credits, enable auto-recharge or change provider billing to continue testing without explicit owner authorization. Preserve failed and interrupted evidence; do not call incomplete evaluations passed.
