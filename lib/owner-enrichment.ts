@@ -27,26 +27,40 @@ function requireCredits(raw:unknown,error:string):Credits{
 /** Free preview IDs are the only allowable paid audience; names are never rematched. */
 export function previewAudience(raw:unknown,propertyId:string,cap:number){
  const error='CONTACT_PREVIEW_INVALID';
+ if(!integer(cap)||cap<1||cap>25)throw new Error(error);
  const credits=requireCredits(raw,error);
  if(credits.used!==0||credits.properties!==0||credits.people!==0||credits.deduplicated!==0||!record(raw)||!record(raw.data)||raw.data.dm_property_id!==propertyId||!Array.isArray(raw.data.contacts))throw new Error(error);
- const owners=new Map<string,{likelyOwner:boolean;propertyContactType:'owner'|null;matchFlags:Record<string,boolean|null>}>();
+ const owners=new Map<string,{likelyOwner:boolean;propertyContactType:'owner'|null;matchFlags:Record<string,boolean|null>;availablePhones:number|null;contactType:string|null}>();
  for(const p of raw.data.contacts){
   // Validate the whole preview, including rows beyond the cap, before reserving money.
   if(!record(p)||!personId(p.dm_person_id))throw new Error(error);
+  if(p.contact_type!==undefined&&p.contact_type!==null&&(typeof p.contact_type!=='string'||!p.contact_type))throw new Error(error);
+  for(const field of ['is_likely_owner','is_in_owner_family','is_resident','is_likely_renter']){
+   if(p[field]!==undefined&&p[field]!==null&&typeof p[field]!=='boolean')throw new Error(error);
+  }
   const matchFlags={is_likely_owner:flag(p.is_likely_owner),is_in_owner_family:flag(p.is_in_owner_family),is_resident:flag(p.is_resident),is_likely_renter:flag(p.is_likely_renter)};
   // The live property preview uses contact_type=owner (observed on October 19),
   // while older receipts use is_likely_owner. Only the property-bound preview
   // establishes this association; person-level fields and residents never do.
   const propertyContactType=p.contact_type==='owner'?'owner' as const:null;
-  const likelyOwner=matchFlags.is_likely_renter!==true&&(matchFlags.is_likely_owner===true||matchFlags.is_likely_owner===null&&propertyContactType==='owner');
+  const contactType=typeof p.contact_type==='string'?p.contact_type:null;
+  const likelyOwner=(contactType===null||contactType==='owner')&&matchFlags.is_likely_renter!==true&&(matchFlags.is_likely_owner===true||matchFlags.is_likely_owner===null&&propertyContactType==='owner');
+  // The free property preview reports phone availability without revealing
+  // numbers. Do not buy a known phone-less contact for the calling/text flow.
+  // Older previews without this metadata stay compatible. Availability is NOT
+  // phone activity, DNC clearance, ownership verification or contact permission.
+  if(p.availability!==undefined&&p.availability!==null&&!record(p.availability))throw new Error(error);
+  const phoneCount=record(p.availability)?p.availability.phones:undefined;
+  if(phoneCount!==undefined&&phoneCount!==null&&!integer(phoneCount))throw new Error(error);
+  const availablePhones=integer(phoneCount)?phoneCount:null;
   const prior=owners.get(p.dm_person_id);
-  if(prior&&(JSON.stringify(prior.matchFlags)!==JSON.stringify(matchFlags)||prior.propertyContactType!==propertyContactType))throw new Error(error);
-  if(!prior)owners.set(p.dm_person_id,{likelyOwner,propertyContactType,matchFlags});
+  if(prior&&(JSON.stringify(prior.matchFlags)!==JSON.stringify(matchFlags)||prior.contactType!==contactType||prior.availablePhones!==availablePhones))throw new Error(error);
+  if(!prior)owners.set(p.dm_person_id,{likelyOwner,propertyContactType,matchFlags,availablePhones,contactType});
  }
  // Exclude weak property matches BEFORE the paid lookup and its credit cap.
  // A family member, resident, renter or unclassified person cannot displace
  // an actual owner later in the provider's preview order.
- const ids=Object.freeze([...owners].filter(([,match])=>match.likelyOwner).map(([id])=>id).slice(0,cap));
+ const ids=Object.freeze([...owners].filter(([,match])=>match.likelyOwner&&match.availablePhones!==0).map(([id])=>id).slice(0,cap));
  return {ids,owners};
 }
 export function contactsFromReceipt(raw:unknown,ids:readonly string[],owners:ReturnType<typeof previewAudience>['owners']){
