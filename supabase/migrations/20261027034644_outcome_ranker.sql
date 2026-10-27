@@ -83,8 +83,8 @@ begin
  base:=public.icash_opportunity_score_before_ranker(p_account,p_result,p_zip);
  if p_result->'financialCheck'->>'status' is distinct from 'eligible' then return base;end if;
  select a.prediction into prediction from icash_ranker_private.samples a
- join icash_ranker_private.settings s on s.id=1 and s.enabled and s.active_model=a.model_id
- join icash_ranker_private.runs r on r.id=a.model_id and r.created_at>now()-interval '7 days'
+ join icash_ranker_private.settings s on s.id=1 and s.enabled and s.active_model is not null
+ join icash_ranker_private.runs r on r.id=a.model_id and r.status='qualified' and r.created_at>now()-interval '7 days'
  where a.account_id=p_account and a.property_key=md5(p_result->'property'->>'propertyId') and a.cohort='learned';
  return case when prediction is null then base else 0.85*base+0.15*prediction::numeric end;
 end $$;
@@ -111,7 +111,7 @@ begin
   select min(e.at) into first_at from (
    select o.dispatched_at as at from public.icash_live_conversations c join public.icash_operation_spend o
     on o.operation_key=c.operation_key and o.account_id=c.account_id
-    where c.account_id=p_account and c.screening_id=s.screening_id and c.party='seller' and nullif(c.conversation_id,'') is not null
+    where c.account_id=p_account and c.screening_id=s.screening_id and c.party='seller' and c.operation_key like 'voice:%' and nullif(c.conversation_id,'') is not null
    union all select m.created_at from public.icash_deal_files d join public.icash_text_threads t on t.deal_id=d.id and t.account_id=d.account_id
     join public.icash_text_messages m on m.thread_id=t.id and m.account_id=t.account_id
     where d.account_id=p_account and d.screening_id=s.screening_id and coalesce(d.terms->>'practice','false')<>'true'

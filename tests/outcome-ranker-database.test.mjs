@@ -29,13 +29,17 @@ try{
  assert.equal(await val('select count(*)::int from icash_ranker_private.samples'),2,'Screening captures features without waiting for a cron');
  const score=()=>val(`select icash_opportunity_score($1,'{"financialCheck":{"status":"eligible"},"property":{"propertyId":"prop_10"}}','75217')`,[id(1)]);
  assert.equal(Number(await score()),0.5);
- await q(`insert into icash_operation_spend(operation_key,account_id,state,dispatched_at) values('real-call',$1,'settled',now()-interval '4 days')`,[id(1)]);
+ await q(`insert into icash_operation_spend(operation_key,account_id,state,dispatched_at) values('voice:real-call',$1,'settled',now()-interval '4 days')`,[id(1)]);
  await q(`insert into icash_live_conversations(id,account_id,screening_id,party,conversation_id,operation_key,state,result,created_at,completed_at)
- values($1,$2,$3,'seller','provider-id','real-call','complete','{"interested":true,"optedOut":false}',now()-interval '4 days',now()-interval '4 days')`,[id(20),id(1),id(10)]);
+ values($1,$2,$3,'seller','provider-id','voice:real-call','complete','{"interested":true,"optedOut":false}',now()-interval '4 days',now()-interval '4 days')`,[id(20),id(1),id(10)]);
  await val('select icash_refresh_ranker_samples($1)',[id(1)]);
  let s=(await q('select * from icash_ranker_private.samples where screening_id=$1',[id(10)])).rows[0];
  assert.equal(s.interest,1);assert.equal(s.contract,null);assert.equal(s.baseline,null,'A replayed historical fixture cannot pretend to have a prospective baseline');
  assert.equal(await val('select interest from icash_ranker_private.samples where screening_id=$1',[id(11)]),null,'Uncontacted properties are not failures');
+ await q("insert into icash_operation_spend(operation_key,account_id,state,dispatched_at) values('inbound:fixture',$1,'settled',now()-interval '4 days')",[id(1)]);
+ await q("insert into icash_live_conversations(id,account_id,screening_id,party,conversation_id,operation_key,state,result,completed_at) values($1,$2,$3,'seller','incoming-provider','inbound:fixture','complete','{\"interested\":true}',now()-interval '4 days')",[id(21),id(1),id(11)]);
+ await q("update icash_ranker_private.samples set refreshed_at='-infinity'");await val('select icash_refresh_ranker_samples($1)',[id(1)]);
+ assert.equal(await val('select exposed_at from icash_ranker_private.samples where screening_id=$1',[id(11)]),null,'An inbound-only call cannot establish outbound acquisition exposure');
  await q("update icash_operation_spend set dispatched_at=now()-interval '70 days'");await q("update icash_live_conversations set completed_at=now()-interval '70 days'");
  await q("insert into icash_deal_files(id,account_id,screening_id,terms) values($1,$2,$3,'{}')",[id(30),id(1),id(10)]);
  const recipients=[{id:'seller',phone:'+12125550111'},{id:'buyer',phone:'+12125550112'}];
@@ -67,6 +71,11 @@ try{
  const fresh=(await q('select * from icash_ranker_private.samples where screening_id=$1',[id(12)])).rows[0];assert.equal(fresh.model_id,claim.token);assert(fresh.prediction>0.5);
  await q("update icash_ranker_private.samples set model_id=$1,cohort='learned',prediction=0.9 where screening_id=$2",[claim.token,id(10)]);
  assert(Math.abs(Number(await score())-0.56)<1e-9,'Validated model contributes only 15% of an eligible score');
+ await q('insert into icash_ranker_private.runs(id,status,result,elapsed_ms) values($1,\'qualified\',$2,1)',[id(98),receipt]);
+ await q('update icash_ranker_private.settings set active_model=$1',[id(98)]);
+ assert(Math.abs(Number(await score())-0.56)<1e-9,'Successful retraining preserves the cached model assigned to an existing property');
+ await q('update icash_ranker_private.settings set active_model=null');assert.equal(Number(await score()),0.5,'A failed validation restores the existing score globally');
+ await q('update icash_ranker_private.settings set active_model=$1',[claim.token]);
  assert.equal(Number(await val(`select icash_opportunity_score($1,'{"financialCheck":{"status":"ineligible"},"property":{"propertyId":"prop_10"}}','75217')`,[id(1)])),-1);
  assert.equal(Number(await val(`select icash_opportunity_score($1,'{"financialCheck":{"status":"eligible"},"property":{"propertyId":"prop_10"}}','75217')`,[id(2)])),0.5,'Cached scores remain account-bound');
  await q("update icash_ranker_private.samples set cohort='baseline' where screening_id=$1",[id(10)]);assert.equal(Number(await score()),0.5);
