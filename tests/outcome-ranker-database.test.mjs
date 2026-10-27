@@ -13,7 +13,7 @@ try{
  create function icash_seller_sms_interest_at(uuid,uuid,timestamptz,timestamptz) returns timestamptz language sql as $$select null::timestamptz$$;
  create function icash_platform_learning_report(uuid) returns jsonb language sql as $$select '{}'::jsonb$$;`);
  await db.exec(read('supabase/migrations/20261021185044_platform_shared_learning_schema.sql'));
- await db.exec(read('supabase/migrations/20261027034644_outcome_ranker.sql'));
+ await db.exec(read('supabase/migrations/20261027035912_outcome_ranker.sql'));
  assert.equal(await val("select has_schema_privilege('anon','icash_ranker_private','usage')"),false);
  assert.equal(await val("select has_table_privilege('authenticated','icash_ranker_private.samples','select')"),false);
  assert.equal(await val("select has_function_privilege('authenticated','icash_claim_ranker_training()','execute')"),false);

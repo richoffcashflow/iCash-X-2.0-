@@ -27,7 +27,7 @@ The owner learning report exposes aggregate sample counts, mature verified outco
 ## Release and operations
 
 1. Run the three `outcome-ranker` test suites and the normal production reliability checks. All fixtures are synthetic and offline.
-2. Apply `20261027034644_outcome_ranker.sql` before deploying the matching application. It is backward compatible and starts with model use and training disabled. Feature capture and the existing account refresh begin collecting evidence.
+2. Apply `20261027035912_outcome_ranker.sql` before deploying the matching application. It is backward compatible and starts with model use and training disabled. Feature capture and the existing account refresh begin collecting evidence.
 3. Release through the existing exact-main-SHA Reliability checks and Vercel/Railway gates. Verify both terminal deployment states.
 4. Enable the private singleton only after the authenticated learning route is live: `update icash_ranker_private.settings set enabled=true where id=1;`. The hourly job records `collecting` when evidence is insufficient. Never force a qualified model or synthesize positive business outcomes.
 5. Verify an actual training receipt and owner report. Watch account refresh failures and query time. A training failure leaves ranking available and a lease expires without provider replay.
