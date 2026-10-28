@@ -83,3 +83,10 @@ Sources reviewed:
 - https://api.docs.dealmachine.com/api-reference/people/get-people
 - https://api.docs.dealmachine.com/api-reference/people/export-people
 - https://api.docs.dealmachine.com/api-reference/openapi.json
+
+
+### One paid selected-field lookup above the local cap
+
+After the two free checks, the owner explicitly authorized a paid active-phone test above 4,900 local requests. `scripts/check-approved-active-phone-lookup.mjs` prepares one new operation: one free field-catalog GET, then one `/people/ids` POST for the original exact owner with `enrich:true`, `include_properties:false`, and only `has_active_phone_number` selected. The documented exposure is at most one people data credit. The live catalog's missing `billing_category` remains missing; the check uses its exact non-premium people/contactability classification and the documented one-person lookup pricing, and stops on a contradictory category.
+
+A distinct service-only approval binds the reviewed commit, exact request, historical owner source and prior terminal runs. It expires within one hour and is consumed by full-row compare-and-swap before either provider request. Fresh positive provider quota is required before the paid POST. Original responses and credit fields are saved privately; errors, missing receipts, timeouts and uncertain writes never authorize another purchase. Production/CI skip it, shared quota and customer money remain unchanged, and both old exports stay consumed. This check verifies a person-level response only, not per-number active/DNC scrubbing; it does not enable production filtering.
