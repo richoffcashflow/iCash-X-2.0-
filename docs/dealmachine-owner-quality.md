@@ -64,6 +64,14 @@ Inspect the saved credit receipt and sanitized CSV schema from that build. A sav
 
 ## Verification
 
+### Separately authorized free preview above the local cap — October 28
+
+The owner authorized testing above the app's exhausted 4,900/day safety cap. `scripts/check-approved-active-phone-preview.mjs` is restricted to the same trusted preview repository/branch/database and a separate private approval for its exact reviewed commit. A one-use compare-and-swap occurs before either of its two possible provider requests. It does not reset/increase shared quota or reopen either paid export.
+
+The first request reads the free people-field catalog and records the provider's current per-minute/daily quota headers. Missing/empty quotas, an incomplete catalog or a 429 stop the check. The second request can only read the original owner through `/people/ids` with `enrich:false`, `include_properties:false` and `fields:["has_active_phone_number"]`. The historical source is used only to bind the identity; no source age, DNC or outreach permission is renewed. Raw responses are private. Zero cost requires an explicit zero-credit receipt. An omitted/null/malformed activity field is unknown, never false, and does not prove active-number scrubbing.
+
+This replaces repeated catalog/history reads in this preview's verified build. The ordinary owner-capability inspector skips this exact preview branch so rebuilds cannot add unclaimed catalog requests. The completed export-history snapshots and standalone inspectors remain available; production behavior is unchanged. No provider export, enriched contact purchase, calls, texts or customer-wallet transaction is part of this test. At preparation time the live result is unverified.
+
 Synthetic fixtures cover phone-less, mixed, missing, malformed and contradictory previews; filtering before the paid cap; shared owners across properties; exact paid ID sets; no reservation on an empty audience; and unchanged actual cost and DNC/source evidence. The actual single-property and batch services are exercised with mocked transport. No customer data, wallet, source configuration or outreach controls are rewritten.
 
 Sources reviewed:
