@@ -50,6 +50,8 @@ let seq=0;
 // metadata calls explicitly. research-efficiency-database exercises the new SQL.
 export function legacyResearchFixtureDb(db){
  return (path,method,body)=>{
+  if(path==='rpc/icash_claim_discovery_estimate')return Promise.resolve({status:'request',token:'00000000-0000-4000-8000-000000000001'});
+  if(path==='rpc/icash_finish_discovery_estimate')return Promise.resolve(true);
   if(path==='rpc/icash_prepare_research_efficiency')return Promise.resolve(false);
   if(path==='rpc/icash_claim_research_exclusions')return Promise.resolve(null);
   if(path==='rpc/icash_finish_dealmachine_request')return Promise.resolve(true);

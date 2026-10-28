@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {validOwnerOutreach} from '../lib/owner-outreach.ts';
+import {installInterestEvidence} from './helpers/interest-evidence-fixture.mjs';
 const read=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
 const sql=read('config/owner-outreach-report.sql'),owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7';
 assert.equal(sql,read('supabase/migrations/20261019202647_owner_outreach_report.sql'));
@@ -81,5 +82,22 @@ try{
  for(const values of [[null,7,false,'',1,'all'],[owner,2,false,'',1,'all'],[owner,7,false,'',0,'all'],[owner,7,false,'',1,'invalid']])await assert.rejects(()=>db.query('select public.icash_owner_outreach_report($1,$2,$3,$4,$5,$6)',values));
  const acl=(await db.query(`select has_function_privilege('anon','public.icash_owner_outreach_report(uuid,integer,boolean,text,integer,text)','execute') anon,has_function_privilege('authenticated','public.icash_owner_outreach_report(uuid,integer,boolean,text,integer,text)','execute') authenticated,has_function_privilege('service_role','public.icash_owner_outreach_report(uuid,integer,boolean,text,integer,text)','execute') service,provolatile,prosecdef from pg_proc where oid='public.icash_owner_outreach_report(uuid,integer,boolean,text,integer,text)'::regprocedure`)).rows[0];
  assert.deepEqual(acl,{anon:false,authenticated:false,service:true,provolatile:'s',prosecdef:false});
+ // Apply the full new migration against the exact deployed readers, then
+ // exercise source-only call interest and receipt-bound SMS report counting.
+ await installInterestEvidence(db);
+ await db.exec(`
+ update icash_live_conversations set result='{"interested":false,"transcript":[{"role":"agent","message":"Would you be interested in selling?"},{"role":"user","message":"Yes."}]}' where id=md5('c1')::uuid;
+ delete from icash_live_conversations where id=md5('duplicate')::uuid;
+ insert into icash_sms_seller_openings values(md5('a1')::uuid,md5('t2')::uuid,md5('interest-question')::uuid);
+ insert into icash_text_messages(id,account_id,thread_id,direction,state,body,provider_id,event_id,created_at,last_delivery_at) values
+ (md5('interest-question')::uuid,md5('a1')::uuid,md5('t2')::uuid,'outgoing','delivered','Are you interested in selling?','interest-question',null,now()-interval '5 minutes',now()-interval '4 minutes'),
+ (md5('interest-reply')::uuid,md5('a1')::uuid,md5('t2')::uuid,'incoming','received','Yes',null,'interest-reply',now()-interval '3 minutes',null);
+ `);
+ r=await report();assert.equal(r.totals.interestedProperties,2);
+ assert.equal((await report({status:'interested'})).matchedCount,2);
+ await db.exec("update icash_text_messages set account_id=md5('a2')::uuid where id=md5('interest-reply')::uuid");
+ assert.equal((await report()).totals.interestedProperties,1,'Foreign-account SMS cannot label interest');
+ await db.exec("update icash_text_messages set account_id=md5('a1')::uuid,body='STOP' where id=md5('interest-reply')::uuid");
+ assert.equal((await report()).totals.interestedProperties,1,'Opt-out cannot count as SMS interest');
  console.log('PASS owner outreach database: actual receipts, response/interest/opt-out semantics, dispatch versus draft dates, source/tenant bindings, owner/test exclusion, current queues, filtering before pagination, read-only execution and private ACL.');
 }finally{await db.close();}

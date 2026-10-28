@@ -184,10 +184,17 @@ const extraJob={...jobs[0],screeningId:uuid(150),snapshot:{...jobs[0].snapshot,p
 await q("insert into icash_screening_jobs(id,account_id,event_key,snapshot,result,state,completed_at) values($1,$2,'additive-preview',$3,$4,'complete',now())",[extraJob.screeningId,other,extraJob.snapshot,runScreeningJob(extraJob.snapshot)]);
 const extraPreview={data:[{dm_property_id:'prop_150',found:true,contacts:[{dm_person_id:'per_extra',contact_type:'owner'}]}],totals:{submitted:1,found:1,not_found:0},credits:{used:0,people:0,properties:0,deduplicated:0,additional_metadata:'allowed'}};
 const extraItems=[{screeningId:extraJob.screeningId,snapshot:extraJob.snapshot,ids:['per_extra']}];
+// Keep the original empty property in the raw preview, but use the surviving
+// property's ID for the real admission. Only that property can be charged.
+const emptyJob={...extraJob,screeningId:uuid(153),snapshot:{...extraJob.snapshot,propertyId:'prop_153',raw:{data:{...extraJob.snapshot.raw.data,dm_property_id:'prop_153'}}}};
+await q("insert into icash_screening_jobs(id,account_id,event_key,snapshot,result,state,completed_at) values($1,$2,'empty-primary-preview',$3,$4,'complete',now())",[emptyJob.screeningId,other,emptyJob.snapshot,runScreeningJob(emptyJob.snapshot)]);
+extraPreview.data.unshift({dm_property_id:'prop_153',found:true,contacts:[{dm_person_id:'per_empty',contact_type:'owner',availability:{phones:0}}]});
+extraPreview.totals={submitted:2,found:2,not_found:0};
 await db.exec('update icash_dealmachine_request_budget set used=0');
 assert.equal(await val('select icash_admit_owner_batch($1,$2,$3,$4,$5,$6)',[other,extraJob.screeningId,uuid(151),extraItems,{...extraPreview,credits:{...extraPreview.credits,used:1}},conf]),'held');
 assert.equal(await val('select icash_admit_owner_batch($1,$2,$3,$4,$5,$6)',[other,extraJob.screeningId,uuid(152),extraItems,extraPreview,conf]),'claimed');
 assert.deepEqual(await val('select preview_receipt from icash_research_private.owner_batches where id=$1',[uuid(152)]),extraPreview);
+assert.equal(await val("select count(*)::int from icash_operation_spend where operation_key=$1",['owners:'+emptyJob.screeningId]),0,'The original empty property has no purchase');
 await (await import('./helpers/stalled-search-scenarios.mjs')).stalledSearchScenarios(db,account,other);
 console.log('Research efficiency SQL: versioned quotes, budget fallback, frozen claims, exclusions, pagination, atomic owner batches, exact billing allocation and isolation passed.');
 }finally{await db.close();}

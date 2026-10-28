@@ -22,6 +22,8 @@ Full phone-activity scrubbing is therefore **not enabled by this release**. It r
 
 ## Verification
 
+The October 28 efficiency release also keeps eligible sibling properties when the first property's free preview has no usable owners. It creates no purchase for the empty property and retains the original whole preview and one paid batch receipt. Version-matched static duplicate-page reuse and disabled-list sync suppression are described in `docs/research-efficiency-replies.md`; provider exclusions and active-phone exports remain unverified.
+
 Synthetic fixtures cover phone-less, mixed, missing, malformed and contradictory previews; filtering before the paid cap; shared owners across properties; exact paid ID sets; no reservation on an empty audience; and unchanged actual cost and DNC/source evidence. The actual single-property and batch services are exercised with mocked transport. No customer data, wallet, source configuration or outreach controls are rewritten.
 
 Sources reviewed:

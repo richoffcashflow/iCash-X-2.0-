@@ -33,7 +33,7 @@ function request(event=fixture,{key=secret,stamp=Math.floor(Date.now()/1000)}={}
  return new Request('https://example.invalid/api/webhooks/contiguity',{method:'POST',body,headers:{'contiguity-signature':`t=${stamp},v1=${signature}`}});
 }
 for(const from of ['22395','+22395','123456','+123456']){
- for(const type of ['text.incoming.sms','text.incoming.mms']){
+ for(const type of ['text.incoming.sms','text.incoming.mms','communications.incoming.sms','communications.incoming.mms','communications.incoming.imessage','imessage.incoming']){
   effects=[];
   const event={...fixture,type,data:{...fixture.data,from}};
   assert(isServiceTextSender(from));
@@ -76,4 +76,16 @@ effects=[];
 assert.equal((await POST(request({...fixture,data:{...fixture.data,from:'+12125550123',body:'STOP'}}))).status,200);
 assert(effects.some(x=>x.path==='rpc/icash_ingest_text_event'),'Regular customer STOP messages still reach ingestion');
 assert(!effects.some(x=>['practice','seller'].includes(x.path)),'STOP never triggers replies');
+for(const type of ['communications.incoming.sms','communications.incoming.mms','communications.incoming.imessage','imessage.incoming']){
+ const original={...fixture,type,data:{...fixture.data,from:'+12125550123',body:'STOP'}};
+ const parsed=parseTextWebhook(original);
+ assert.equal(parsed.type,type.endsWith('.mms')?'text.incoming.mms':'text.incoming.sms');
+ assert.equal(parsed.optOut,true);assert.deepEqual(parsed.providerEvent,original,'Original receipt stays intact');
+ effects=[];assert.equal((await POST(request(original))).status,200);
+ const saved=effects.find(x=>x.path==='rpc/icash_ingest_text_event');assert(saved);
+ assert(!effects.some(x=>['practice','seller'].includes(x.path)),'Aliases preserve STOP handling');
+ effects=[];assert.equal((await POST(request(original,{key:'wrong'}))).status,401);assert.equal(effects.length,0);
+ const image={...original,data:{...original.data,body:undefined,attachments:[{url:'https://example.invalid/fixture.jpg',mime:'image/jpeg'}]}};
+ assert.equal(parseTextWebhook(image).data.attachments.length,1,'Attachment-only replies survive normalization');
+}
 console.log('PASS signed short-code webhook: registered destination, no persistence/AI/replies, harmless retries, signature/replay checks, normal STOP handling and strict outbound numbers. Fixtures only.');

@@ -5,6 +5,7 @@ import {discoverPage} from './discovery-pipeline.ts';
 import {selectDiscoveryFilter,DiscoveryFilterUnavailable} from './discovery-filters.ts';
 import {dealMachineRequest} from './dealmachine-request.ts';
 import {syncResearchExclusions} from './research-exclusions.ts';
+import {requestDiscoveryEstimate,DiscoveryEstimateHeld} from './discovery-estimate.ts';
 type Config={account_id:string;enabled:boolean;zip:string;rate_id:string;property_credit_micros:number;data_rights_until:string;per_page:number;next_page:number;revision:string;exhausted:boolean;research_version?:number;research_list_id?:string|null};
 class DiscoveryProviderRequestError extends Error{
  constructor(readonly stage:'estimate'|'paid',readonly httpStatus:number|null){super('DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY');}
@@ -39,7 +40,10 @@ export async function discoverForAccount(accountId:string){
  const state=await db<unknown>('rpc/icash_discovery_filter_state_v2','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});
  const shared=state===null?[]:await db('rpc/icash_discovery_shared_evidence','POST',{p_account:accountId,p_zip:c.zip}).catch(()=>[]);
  const filterPlan=state===null?undefined:selectDiscoveryFilter(state,c.next_page,shared);
- if(filterPlan===null){await db('rpc/icash_mark_inventory_empty','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});return {status:'empty'};}
+ if(filterPlan===null){
+  if(Array.isArray(state)&&state.some(s=>s?.blocked===true&&s?.exhausted===false))return {status:'inventory_held'};
+  await db('rpc/icash_mark_inventory_empty','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});return {status:'empty'};
+ }
  const finishEmpty=(reason:'empty'|'unavailable')=>filterPlan
   ?db('rpc/icash_finish_empty_filter','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page,p_plan:filterPlan,p_reason:reason})
   :db('rpc/icash_mark_inventory_empty','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});
@@ -49,7 +53,7 @@ export async function discoverForAccount(accountId:string){
  const result=await discoverPage({zip:c.zip,page:c.next_page,perPage:c.per_page,unitCostMicros:c.property_credit_micros,quotedDataCostMicros:rate.costs_micros.dealmachine,...(filterPlan?{filterPlan}:{}),...(queryPolicy?{queryPolicy}:{})},{
   request:async body=>{
    const stage=(body as {estimate_cost?:boolean}).estimate_cost===true?'estimate':'paid';let httpStatus:number|null=null;
-   try{
+   const requestOnce=async()=>{try{
     const r=await dealMachineRequest(db,stage==='estimate'?'search_estimate':'property_search',()=>fetch('https://api.v2.dealmachine.com/v1/properties/search',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',cache:'no-store',signal:AbortSignal.any([providerDeadline,AbortSignal.timeout(stage==='estimate'?20000:60000)])}),{accountId,operationKey});
     httpStatus=r.status;
     if(!r.ok){
@@ -58,7 +62,8 @@ export async function discoverForAccount(accountId:string){
      if(filterPlan&&filterPlan.strategy!=='baseline'&&(body as {estimate_cost?:boolean}).estimate_cost===true&&[400,422].includes(r.status))throw new DiscoveryFilterUnavailable();
      throw new Error();
     }return r.raw;
-   }catch(error){if(error instanceof DiscoveryFilterUnavailable)throw error;throw new DiscoveryProviderRequestError(stage,httpStatus);}
+   }catch(error){if(error instanceof DiscoveryFilterUnavailable)throw error;throw new DiscoveryProviderRequestError(stage,httpStatus);}};
+   return stage==='estimate'?requestDiscoveryEstimate(db,accountId,scope,filterPlan,queryPolicy,body,requestOnce):requestOnce();
   },
   // Scope validation, reservation and one-use claim share one locked DB transaction.
   reserveAndClaim:()=>{
@@ -69,5 +74,5 @@ export async function discoverForAccount(accountId:string){
  });
  if(result.status==='empty')await finishEmpty('empty');
  return result;
- }catch(error){if(error instanceof DiscoveryFilterUnavailable){await finishEmpty('unavailable');return {status:'empty'};}throw error;}
+ }catch(error){if(error instanceof DiscoveryEstimateHeld)return {status:'inventory_held'};if(error instanceof DiscoveryFilterUnavailable){await finishEmpty('unavailable');return {status:'empty'};}throw error;}
 }

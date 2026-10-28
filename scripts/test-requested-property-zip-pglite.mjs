@@ -1,3 +1,4 @@
+import {requestDiscoveryEstimate,DiscoveryEstimateHeld} from '../lib/discovery-estimate.ts';
 import {dealMachineRequest,DealMachineQuotaError} from '../lib/dealmachine-request.ts';
 import {syncResearchExclusions} from '../lib/research-exclusions.ts';
 /** SIMULATION ONLY. Exact requested ZIP lookup; actual SQL/services, no external requests. */
@@ -78,7 +79,7 @@ try{
   assert.equal(await market.propertyResearchMarketKnown('94103',account),false);
  }finally{await q('rollback');}
  const costs=await loadService('lib/operating-costs.ts',{db,validateCostManifest,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady});
- const discovery=await loadService('lib/discovery-service.ts',{db:legacyResearchFixtureDb(db),dealMachineRequest,DealMachineQuotaError,syncResearchExclusions,discoveryWorkEnabled,liveWorkReady,dispatchReservedOperation:costs.dispatchReservedOperation,discoverPage,propertyResearchMarketKnown:market.propertyResearchMarketKnown});
+ const discovery=await loadService('lib/discovery-service.ts',{requestDiscoveryEstimate,DiscoveryEstimateHeld,db:legacyResearchFixtureDb(db),dealMachineRequest,DealMachineQuotaError,syncResearchExclusions,discoveryWorkEnabled,liveWorkReady,dispatchReservedOperation:costs.dispatchReservedOperation,discoverPage,propertyResearchMarketKnown:market.propertyResearchMarketKnown});
  assert.equal((await discovery.discoverForAccount(account)).status,'paused');assert.equal(paid,0);
  await q('update icash_operating_budget set enabled=true,require_company_reserve=false');
  await q('update icash_accounts set daily_limit_cents=300 where id=$1',[account]);
