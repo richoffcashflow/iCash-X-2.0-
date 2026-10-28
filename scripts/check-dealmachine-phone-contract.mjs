@@ -55,15 +55,20 @@ export async function inspectPhoneContract(env=process.env,transport=fetch,{save
  if(!Array.isArray(exports?.data)||exports.data.length>5)throw Error('METADATA_UNAVAILABLE');
  const stateCounts={pending:0,processing:0,completed:0,failed:0,unknown:0},samples=[];
  for(const row of exports.data){
-  const status=exportStates.has(row?.status)?row.status:'unknown';stateCounts[status]++;
+  let status=exportStates.has(row?.status)?row.status:'unknown',observed=row;
   let detailChecked=false;
   if(['pending','processing','failed'].includes(status)){
    if(!exportId(row.export_id))throw Error('METADATA_EXPORT_ID_INVALID');
    const detail=await get('/exports/'+row.export_id);
    if(detail?.data?.export_id!==row.export_id)throw Error('METADATA_EXPORT_BINDING_INVALID');
-   detailChecked=true;
+   detailChecked=true;observed=detail.data;
+   status=exportStates.has(observed.status)?observed.status:'unknown';
   }
+  stateCounts[status]++;
+  const progress=typeof observed?.progress_stage==='string'?observed.progress_stage:'';
   samples.push({status,detailChecked,
+    failureReason:status==='failed'?( /\bno records\b/i.test(progress)?'provider_reported_no_records':'provider_failure'):null,
+    activityFilterMentioned:/\bactive[ _-]+phone(?:s|[ _-]+numbers)?(?:[ _-]+only)?\b/i.test(progress),
     // Never echo free-form names, progress messages, URLs or unknown keys.
     creditsKeys:['used','people','properties','deduplicated','licensed'].filter(k=>Object.hasOwn(row.credits??{},k)),
     records:Number.isSafeInteger(row.record_count)?row.record_count:null,

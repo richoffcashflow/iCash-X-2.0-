@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {inspectPhoneContract,inspectSavedPhoneContract,exportMetadataAdmission,exportVerificationFields} from '../scripts/check-dealmachine-phone-contract.mjs';
 const env={VERCEL_ENV:'preview',VERCEL_GIT_COMMIT_REF:'codex/dealmachine-active-phone-contract-20261027',DEALMACHINE_API_KEY:'fixture-secret'};
 const catalog=exportVerificationFields.map(field_id=>({field_id,type:'STRING',billing_category:'people',name:'ignored private name',description:'ignored private text'}));
-function provider({fields=catalog,states=[],hasMore=false,fieldPages=false,wrongDetail=false,error=false}={}){
+function provider({fields=catalog,states=[],hasMore=false,fieldPages=false,wrongDetail=false,error=false,noRecords=false}={}){
  const calls=[],receipts=[];
  const transport=async(url,options)=>{
   calls.push(url);assert.equal(options.method,'GET');assert.equal(options.redirect,'error');assert.equal(options.headers.Authorization,'Bearer fixture-secret');
@@ -13,7 +13,7 @@ function provider({fields=catalog,states=[],hasMore=false,fieldPages=false,wrong
    credits:{used:2,people:3},download_urls:[{filename:'people_export_fixture.csv.gz',url:'https://storage.googleapis.com/private-download?secret=fixture',size:234}],
   })),pagination:{total:states.length,has_more:hasMore}});
   const id=url.split('/').at(-1);assert.match(id,/^private-export-\d$/);
-  return Response.json({data:{export_id:wrongDetail?'different':id,status:'failed',error:{message:'private error 2025550123'},download_urls:[{url:'https://storage.googleapis.com/private-download'}]}});
+  return Response.json({data:{export_id:wrongDetail?'different':id,status:states[Number(id.split('-').at(-1))],progress_stage:noRecords?'Error: No records for this export; active phone numbers only may have removed all results.':'private stage 2025550123',error:{message:'private error 2025550123'},download_urls:[{url:'https://storage.googleapis.com/private-download'}]}});
  };
  return {transport,calls,receipts,run:()=>inspectPhoneContract(env,transport,{saveReceipt:async r=>{receipts.push(r);}})};
 }
@@ -27,6 +27,9 @@ assert.equal(result.admission,'export_in_progress');assert.equal(result.existing
 assert.deepEqual(result.existingExports.samples[3].files,[{size:234,people:true,gzip:true}]);
 assert.doesNotMatch(JSON.stringify(result),/fixture-secret|private-export|private export name|private-download|private stage|private error|2025550123|ignored private/);
 assert.match(JSON.stringify(all.receipts),/private-download/,'Original metadata is retained privately, not discarded');
+const emptyExport=await provider({states:['failed'],noRecords:true}).run();
+assert.equal(emptyExport.existingExports.samples[0].failureReason,'provider_reported_no_records');assert.equal(emptyExport.existingExports.samples[0].activityFilterMentioned,true);
+assert.doesNotMatch(JSON.stringify(emptyExport),/private stage|private error|2025550123/);
 const actualCatalog=provider({fields:[{field_id:'person_full_name',type:'STRING'},{field_id:'has_active_phone_number',type:'BOOLEAN'}]});
 const uncertain=await actualCatalog.run();assert.equal(uncertain.admission,'export_fields_unverified');assert(uncertain.requestedFields.every(f=>f.catalogStatus==='not_listed'));
 for(const fields of [catalog.map(f=>({...f,billing_category:undefined})),catalog.map(f=>({...f,billing_category:'property'})),[...catalog,catalog[0]]]){

@@ -40,6 +40,8 @@ History inspection now omits the completed-only filter and examines at most five
 
 The exact trusted preview saves raw field/history/detail responses in an insert-only, service-only integration-check snapshot keyed by commit. Rebuilding that commit reuses its snapshot. Console output contains only sanitized schema/status/count summaries, never contacts, provider messages, export IDs or signed URLs. Production and CI skip these live metadata reads. The free inspection runs early in the verified preview build; it does not create or reset a paid approval.
 
+The first corrected free history read found two failed exports and no completed, pending or processing entries. Both detail records report no records remaining for export and mention active-phone filtering; no files or credit receipts are supplied. Sanitized diagnostics preserve that reported failure category without printing the free-form provider message. It does not establish an exact owner/request binding, prove which filter excluded the records, or authorize treating HTTP 500 as success or zero cost.
+
 ### Original preparation and quota history
 
 `scripts/verify-dealmachine-active-export.mjs` prepares one exact-owner export with `active_phones_only`, `require_phone`, `scrub_dnc`, and `property_match: owner`. Its fixed request includes exactly one previously saved property-bound owner ID and people fields only: at most **one DealMachine people data credit**, under the documented per-entity pricing. No new property fields, broad audience, second purchase, automatic retry, call, message, customer-wallet charge, top-up or billing change is included.
