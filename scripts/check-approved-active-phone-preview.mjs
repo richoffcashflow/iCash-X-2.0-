@@ -2,7 +2,8 @@ import {createHash,randomUUID} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 
-export const freePhonePreviewProvider='dealmachine_active_phone_free_preview_20261028_v1';
+export const freePhonePreviewProvider='dealmachine_active_phone_free_preview_20261028_v2';
+const previousPreviewProvider='dealmachine_active_phone_free_preview_20261028_v1';
 const originalProvider='dealmachine_active_phone_export_verification_20261027_v1';
 const branch='codex/dealmachine-active-phone-contract-20261027';
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
@@ -10,7 +11,7 @@ const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 const integer=v=>Number.isSafeInteger(v)&&v>=0;
 export function freePhonePreviewRequest(personId){
  if(typeof personId!=='string'||!/^per_[1-9][0-9]{0,30}$/.test(personId))throw Error('PREVIEW_OWNER_INVALID');
- return {ids:[personId],enrich:false,include_properties:false,fields:['has_active_phone_number']};
+ return {ids:[personId],enrich:false,include_properties:false};
 }
 export const freePhonePreviewHash=body=>createHash('sha256').update(JSON.stringify(body)).digest('hex');
 const rateHeaders=response=>Object.fromEntries(['X-RateLimit-Limit','X-RateLimit-Remaining','X-RateLimit-Day-Limit','X-RateLimit-Day-Remaining','Retry-After'].map(key=>{
@@ -49,6 +50,16 @@ export async function checkApprovedActivePhonePreview({env=process.env,db,loadDb
   ||!Number.isFinite(Date.parse(approval.approvedAt))||!Number.isFinite(Date.parse(approval.expiresAt))
   ||Date.parse(approval.approvedAt)>now||Date.parse(approval.expiresAt)<=now
   ||Date.parse(approval.expiresAt)-Date.parse(approval.approvedAt)>7200000)throw Error('PREVIEW_APPROVAL_INVALID');
+ // The saved live v1 rejected field selection in preview mode. Inspect only
+ // the default free response in a distinct, one-use operation; never reset v1.
+ const previousRows=await db('icash_integration_checks?provider=eq.'+previousPreviewProvider+'&select=result');
+ const previous=previousRows?.[0]?.result;
+ if(previousRows?.length!==1||previous?.status!=='preview_http_error'||previous?.summary?.httpStatus!==400
+  ||previous?.requests?.length!==2||previous.requests[1]?.httpStatus!==400
+  ||previous.requests[1]?.raw?.error?.code!=='invalid_request'||previous.requests[1]?.raw?.error?.message!=='fields requires enrich=true'
+  ||previous.request?.enrich!==false||previous.request?.include_properties!==false||previous.request?.ids?.length!==1
+  ||previous.request.ids[0]!==approval.personId||JSON.stringify(previous.request.fields)!==JSON.stringify(['has_active_phone_number'])
+  ||['accountId','screeningId','propertyId','personId'].some(k=>previous[k]!==approval[k]))throw Error('PREVIEW_PREVIOUS_BINDING_INVALID');
  const originals=await db('icash_integration_checks?provider=eq.'+originalProvider+'&select=result');
  const original=originals?.[0]?.result;
  if(originals?.length!==1||original?.status!=='response_saved'||['accountId','screeningId','propertyId','personId'].some(k=>original[k]!==approval[k]))throw Error('PREVIEW_SOURCE_INVALID');

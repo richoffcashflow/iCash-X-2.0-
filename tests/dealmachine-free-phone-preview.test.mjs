@@ -11,6 +11,10 @@ function fixture(options={}){
  const original={...approval,status:'response_saved',httpStatus:500,receipt:{error:{code:'internal_error'}}};
  const source={created_at:new Date(now-2*86400000).toISOString(),result:{propertyId:'prop_123',requestedPersonIds:['per_456'],contacts:[{personId:'per_456',likelyOwner:!options.badSource,propertyContactType:'owner',matchFlags:{is_likely_renter:false}}]}};
  const db=async(path,method='GET',body)=>{
+  if(path.startsWith('icash_integration_checks?provider=eq.dealmachine_active_phone_free_preview_20261028_v1')){
+   assert.equal(method,'GET','The original free result must remain unchanged');
+   return [{result:{...approval,status:'preview_http_error',summary:{httpStatus:400},request:{...freePhonePreviewRequest('per_456'),fields:['has_active_phone_number']},requests:[{}, {httpStatus:400,raw:{error:{code:'invalid_request',message:options.badPrevious?'different failure':'fields requires enrich=true'}}}]}}];
+  }
   if(path.startsWith('icash_owner_contacts?')){assert.equal(method,'GET');return [source];}
   if(path.startsWith('icash_integration_checks?provider=eq.'+originalProvider)){assert.equal(method,'GET','Original export may never be changed');return [{result:original}];}
   assert(path.startsWith('icash_integration_checks?provider=eq.'+freePhonePreviewProvider),'No quota, funding or financial calls');
@@ -35,7 +39,7 @@ function fixture(options={}){
    return Response.json({data:options.missingField?[]:[{field_id:'has_active_phone_number',type:'BOOLEAN',description:'private fixture value'}],pagination:{has_next_page:options.morePages??false}},{status:options.catalogStatus??200,headers:options.headers??headers});
   }
   assert.equal(calls.length,2);assert.equal(init.method,'POST');assert.equal(url,'https://api.v2.dealmachine.com/v1/people/ids');
-  assert.deepEqual(JSON.parse(init.body),{ids:['per_456'],enrich:false,include_properties:false,fields:['has_active_phone_number']});
+  assert.deepEqual(JSON.parse(init.body),{ids:['per_456'],enrich:false,include_properties:false});
   if(options.timeout===2)throw Error('private provider error');
   const person={dm_person_id:options.wrongPerson?'per_999':'per_456',found:true,full_name:'Private Fixture Name',...(options.activity===undefined?{}:{has_active_phone_number:options.activity}),...(options.contactData?{phones:[{number:'2025550123'}]}:{})};
   return Response.json({data:[person],totals:{submitted:1,found:1,not_found:0},...(options.missingCredits?{}:{credits:{used:options.creditsUsed??0,people:0,properties:0,deduplicated:0}})},{status:options.previewStatus??200,headers});
@@ -54,6 +58,7 @@ const parallel=fixture({activity:true});const results=await Promise.all([paralle
 for(const options of [{missing:true},{env:{VERCEL_ENV:'production'}},{env:{VERCEL_GIT_COMMIT_REF:'main'}},{env:{VERCEL_GIT_REPO_OWNER:'foreign'}},{env:{SUPABASE_URL:'https://foreign.invalid'}},{approval:{status:'started'}},{approval:{status:'unknown'}}]){const f=fixture(options);await f.run();assert.equal(f.calls.length,0);}
 for(const change of [{maxCredits:1},{maxProviderRequests:3},{allowAboveAppQuota:false},{reviewedCommit:'b'.repeat(40)},{requestHash:'wrong'},{expiresAt:new Date(now-1).toISOString()},{explicitOwnerApproval:false}]){const f=fixture({approval:change});await assert.rejects(f.run());assert.equal(f.calls.length,0);}
 const bad=fixture({badSource:true});await assert.rejects(bad.run(),/SOURCE_INVALID/);assert.equal(bad.calls.length,0);
+const badPrevious=fixture({badPrevious:true});await assert.rejects(badPrevious.run(),/PREVIOUS_BINDING_INVALID/);assert.equal(badPrevious.calls.length,0);
 for(const options of [{missingField:true},{morePages:true},{catalogStatus:429},{catalogStatus:500},{headers:{}},{headers:{...headers,'X-RateLimit-Day-Remaining':'0'}},{headers:{...headers,'X-RateLimit-Remaining':'0'}},{headers:{...headers,'Retry-After':'10'}}]){const f=fixture(options);const r=await f.run();assert.notEqual(r.status,'person_activity_available');assert.equal(f.calls.length,1);await f.run();assert.equal(f.calls.length,1);}
 for(const options of [{lostClaim:true},{timeout:1},{timeout:2},{failedSave:true}]){const f=fixture(options);await assert.rejects(f.run());const count=f.calls.length;assert(count<=2);await f.run();assert.equal(f.calls.length,count);}
 for(const [options,status] of [[{wrongPerson:true},'preview_identity_unverified'],[{missingCredits:true},'preview_credit_receipt_unverified'],[{creditsUsed:1},'preview_credit_receipt_unverified'],[{contactData:true},'unexpected_enriched_data'],[{previewStatus:429},'provider_rate_limited'],[{previewStatus:500},'preview_http_error']]){const f=fixture(options),r=await f.run();assert.equal(r.status,status);if(options.creditsUsed)assert.equal(r.creditsUsed,1);if(options.missingCredits)assert.equal(r.creditsUsed,null);assert.equal(f.calls.length,2);}
