@@ -14,7 +14,7 @@ Provider rate-limit headers are retained as request observations. A 429 response
 
 If the first property's preview has no usable owners, remaining eligible properties from that same preview can still form one paid batch. The first surviving property becomes the admission primary. The original empty property gets no owner purchase; all saved contacts retain their exact source property, account and original receipt. The five-property limit, owner-only selector, phone-availability checks, DNC/source controls and actual aggregate credit allocation remain enforced.
 
-The signed text webhook now accepts the provider's documented `imessage.incoming` and `communications.incoming.*` names. It normalizes them for the existing incoming-message path and retains the original event in the saved payload. Signature freshness, destination registration, account routing, opt-outs, attachments and duplicate-event handling remain intact. This repairs an unsupported-event gap; it does not prove why every historical recipient failed to reply or reconstruct missing provider events.
+The signed text webhook now accepts the provider's documented `imessage.incoming` and `communications.incoming.*` names. It normalizes them for the existing incoming-message path and retains the original event in the saved payload. Signature freshness, destination registration, account routing, opt-outs, attachments and duplicate-event handling remain intact. Rejected or failed processing emits only fixed diagnostic reasons/stages, never message bodies, phone numbers, secrets or provider errors. This repairs an unsupported-event gap; it does not prove why every historical recipient failed to reply or reconstruct missing provider events.
 
 ## Seller-interest evidence
 
