@@ -4,6 +4,7 @@ import {resolve} from 'node:path';
 import {isDeepStrictEqual} from 'node:util';
 import {assertPaidProviderSimulationsAllowed} from './test-automatic-offer-provider.mjs';
 import {finishAdmittedDealMachineRequest} from '../lib/dealmachine-request.ts';
+import {exportVerificationFields,inspectPhoneContract,exportMetadataAdmission} from './check-dealmachine-phone-contract.mjs';
 
 export const activeExportProbeProvider='dealmachine_active_phone_export_verification_20261027_v1';
 export const activeExportRetryProvider='dealmachine_active_phone_export_verification_20261027_v2';
@@ -14,7 +15,7 @@ const plain=v=>v&&typeof v==='object'&&!Array.isArray(v);
 // filters, locations, lists, fallback purchase, calls or texts are possible.
 export function activeExportProbeRequest(personId){
  if(typeof personId!=='string'||!/^per_[1-9][0-9]{0,30}$/.test(personId))throw Error('PROBE_OWNER_ID_INVALID');
- return {people_ids:[personId],fields:['dm_person_id','full_name','phones'],property_match:'owner',anchor:'person',
+ return {people_ids:[personId],fields:[...exportVerificationFields],property_match:'owner',anchor:'person',
   require_phone:true,scrub_dnc:true,active_phones_only:true};
 }
 export const activeExportProbeHash=body=>createHash('sha256').update(JSON.stringify(body)).digest('hex');
@@ -92,6 +93,10 @@ export async function verifyActiveExportOnce({db,transport=fetch,env=process.env
  // Existing source proof binds the original completed owner batch/receipt.
  const started=await db('rpc/icash_dealmachine_owner_source_started_at','POST',{p_account:approval.accountId,p_screening:approval.screeningId});
  if(typeof started!=='string'||!Number.isFinite(Date.parse(started))||Date.parse(started)>Date.parse(source.created_at))throw Error('PROBE_SOURCE_INVALID');
+ let metadata;
+ try{metadata=await inspectPhoneContract(env,transport);}catch{return {status:'metadata_unavailable',paidRequests:0};}
+ const contract=exportMetadataAdmission(metadata);
+ if(contract!=='ready')return {status:contract,paidRequests:0};
  const claimTime=clock();
  if(executeBefore<=claimTime)return {status:'approval_expired',paidRequests:0};
  const runId=randomUUID(),claim={...approval,status:'started',runId,request:body,startedAt:new Date(claimTime).toISOString(),outreach:false};

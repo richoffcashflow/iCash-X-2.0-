@@ -28,6 +28,18 @@ The first provider attempt ran at 7:11 PM Central on October 27 (00:11 UTC Octob
 
 The owner subsequently said "try again". A separate v2 approval permits one additional attempt with the same exact owner/request and a maximum of one additional people data credit. It must reference v1's saved run and error request ID, retain its source binding, pass the existing quota and claim checks, and expire within one hour. The preview runner now selects only v2; it cannot reset or replay v1. A saved/unknown v2 outcome is terminal. This adds no automatic retry, calls, texts, customer-wallet charge, funding or provider billing change. All other paid development tests remain disabled.
 
+That v2 attempt ran at 9:17 PM Central on October 27 (02:17 UTC October 28) and also returned HTTP 500, request ID `req_d20799be079dfd90`. Both separate approvals are consumed. Neither response supplies an export/download or reported credit usage. Preserve the unreported costs and both raw receipts; this failure does not establish the underlying cause or authorize a third request.
+
+### Free contract checks after the failures
+
+The export request's selected fields are now checked against the complete free people-field catalog before any approval claim or paid quota admission. Each exact selector must be unique and have a confirmed people/address-context billing category. Missing aliases, duplicates, incomplete catalogs and unknown/property billing categories hold without spending. The historical request body/hash is unchanged; the checker never substitutes a guessed alias or reuses an old approval for a new body.
+
+The saved catalog exposed `person_full_name`, but did not list the requested `dm_person_id`, `full_name` or `phones`. The public export examples nevertheless use `full_name` and `phones`. This inconsistency leaves the field contract unverified; it does not prove that the aliases caused the server error. A JSON response identity is not proof of an exported owner-ID column.
+
+History inspection now omits the completed-only filter and examines at most five exports across all states, with bounded metadata detail reads for failed, pending and processing entries. Pagination or unknown states hold admission; an active export also holds. This check is an additional guard, not the organization-wide atomic concurrency mechanism still required for production. History candidates are never associated with an owner merely by time, and no history URL is automatically downloaded.
+
+The exact trusted preview saves raw field/history/detail responses in an insert-only, service-only integration-check snapshot keyed by commit. Rebuilding that commit reuses its snapshot. Console output contains only sanitized schema/status/count summaries, never contacts, provider messages, export IDs or signed URLs. Production and CI skip these live metadata reads. The free inspection runs early in the verified preview build; it does not create or reset a paid approval.
+
 ### Original preparation and quota history
 
 `scripts/verify-dealmachine-active-export.mjs` prepares one exact-owner export with `active_phones_only`, `require_phone`, `scrub_dnc`, and `property_match: owner`. Its fixed request includes exactly one previously saved property-bound owner ID and people fields only: at most **one DealMachine people data credit**, under the documented per-entity pricing. No new property fields, broad audience, second purchase, automatic retry, call, message, customer-wallet charge, top-up or billing change is included.
@@ -40,7 +52,7 @@ The original approval and denied-request record are preserved. A single service-
 
 The original provider response, including reported credits and errors, is saved before interpretation. The free artifact reader accepts only that response's single HTTPS Google Storage download, verifies a bounded one-row CSV and saves the original file privately. Build output contains only field names and value shapes, never contact data or signed download URLs.
 
-Offline fixtures cover concurrent attempts, absent/expired/changed approval, source mismatch, a lost claim response, a lost export response, failed receipt persistence, exact one-person scope, the executable stop, non-admission deferral, quota waits and the inability to defer a provider attempt. The export format remains unverified until the bounded test runs; this preparation does not turn on production scrubbing.
+Offline fixtures cover concurrent attempts, absent/expired/changed approval, source mismatch, a lost claim response, a lost export response, failed receipt persistence, exact one-person scope, the executable stop, non-admission deferral, quota waits and the inability to defer a provider attempt. The export format remains unverified after both failed attempts; this preparation does not turn on production scrubbing.
 
 ### Historical first-attempt continuation (consumed)
 
@@ -56,6 +68,6 @@ Sources reviewed:
 
 - https://api.docs.dealmachine.com/concepts/credit-efficient-queries
 - https://api.docs.dealmachine.com/api-reference/properties/search-properties
-- https://api.docs.dealmachine.com/api-reference/people/get-people-by-ids
+- https://api.docs.dealmachine.com/api-reference/people/get-people
 - https://api.docs.dealmachine.com/api-reference/people/export-people
 - https://api.docs.dealmachine.com/api-reference/openapi.json

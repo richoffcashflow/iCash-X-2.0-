@@ -39,6 +39,13 @@ function fixture(options={}){
   return [{result:structuredClone(row)}];
  };
  const transport=async(url,init)=>{
+  if(init.method==='GET'){
+   assert.equal(init.redirect,'error');
+   if(options.metadataUnavailable)return new Response('unavailable',{status:500});
+   if(url.includes('/fields?'))return Response.json({data:(options.unverifiedFields?['person_full_name']:['dm_person_id','full_name','phones']).map(field_id=>({field_id,billing_category:options.propertyFields?'property':'people'})),pagination:{has_next_page:false}});
+   if(url==='https://api.v2.dealmachine.com/v1/exports?limit=5')return Response.json({data:options.busyExport?[{export_id:'fixture-busy',status:'processing'}]:[],pagination:{total:options.busyExport?1:0,has_more:options.incompleteHistory===true}});
+   assert.equal(url,'https://api.v2.dealmachine.com/v1/exports/fixture-busy');return Response.json({data:{export_id:'fixture-busy',status:'processing'}});
+  }
   calls++;assert.equal(row.status,'started');assert.equal(url,'https://api.v2.dealmachine.com/v1/people/export');
   assert.equal(init.method,'POST');assert.equal(init.redirect,'error');
   assert.deepEqual(JSON.parse(init.body),activeExportProbeRequest('per_456'));
@@ -56,6 +63,10 @@ for(const change of [{maxCredits:2},{explicitOwnerApproval:false},{requestHash:'
  const f=fixture({row:{...approval,...change}});await assert.rejects(f.run(),/APPROVAL_INVALID/);assert.equal(f.calls,0);
 }
 const foreign=fixture({foreign:true});await assert.rejects(foreign.run(),/SOURCE_INVALID/);assert.equal(foreign.calls,0);
+for(const options of [{unverifiedFields:true},{propertyFields:true},{metadataUnavailable:true},{incompleteHistory:true},{busyExport:true}]){
+ const f=fixture(options),result=await f.run();assert.notEqual(result.status,'response_saved');assert.equal(f.calls,0);assert.equal(f.row.status,'approved','Metadata holds precede the approval claim and quota admission');
+}
+assert.deepEqual(activeExportProbeRequest('per_456'),{people_ids:['per_456'],fields:['dm_person_id','full_name','phones'],property_match:'owner',anchor:'person',require_phone:true,scrub_dnc:true,active_phones_only:true});
 const disabled=fixture();assert.equal((await disabled.run({env:{...env,VERCEL_ENV:'production'}})).status,'not_requested');assert.equal(disabled.lookups,0);
 const quota=fixture({quotaDenied:true});assert.equal((await quota.run()).status,'quota_not_admitted');assert.equal(quota.calls,0);await quota.run();assert.equal(quota.calls,0);
 const expiredDuringRead=fixture();let clockReads=0;assert.equal((await expiredDuringRead.run({clock:()=>clockReads++===0?now:now+60001})).status,'approval_expired');assert.equal(expiredDuringRead.calls,0);
