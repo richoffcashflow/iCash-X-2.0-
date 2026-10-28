@@ -20,7 +20,7 @@ The signed text webhook now accepts the provider's documented `imessage.incoming
 
 When provider analysis omits interest extraction, a narrow source predicate can recognize a direct first-person statement about selling or an affirmative reply immediately after an unambiguous selling/cash-offer question. The exact original quote is retained. Ownership confirmations, permission to talk, conditional answers, reported quotes, refusals, opt-outs and automated audio do not qualify. Buyer classification is unchanged.
 
-The same predicate feeds derived opportunity outcomes, learning and ranker labels. The owner outreach report also includes receipt-bound SMS interest within the requested time period. Original transcripts, provider results, payments and contact permissions remain untouched. Existing bounded refreshes recalculate derived history. No model is activated without its original qualification checks, and no improvement in conversion is claimed before it is observed.
+The same predicate feeds derived opportunity outcomes, learning and ranker labels. The owner outreach report also includes receipt-bound SMS interest within the requested time period, aggregated only for threads with an actual interest question rather than queried again for every property. Original transcripts, provider results, payments and contact permissions remain untouched. Existing bounded refreshes recalculate derived history. No model is activated without its original qualification checks, and no improvement in conversion is claimed before it is observed.
 
 ## Release and verification
 

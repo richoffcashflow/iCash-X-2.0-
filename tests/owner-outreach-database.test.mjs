@@ -95,6 +95,9 @@ try{
  `);
  r=await report();assert.equal(r.totals.interestedProperties,2);
  assert.equal((await report({status:'interested'})).matchedCount,2);
+ await db.exec("update icash_text_messages set created_at=now()-interval '40 days',last_delivery_at=now()-interval '40 days' where id=md5('interest-question')::uuid; update icash_text_messages set created_at=now()-interval '39 days' where id=md5('interest-reply')::uuid");
+ assert.equal((await report()).totals.interestedProperties,1,'Historical SMS interest cannot inflate this period');
+ assert.equal((await report({status:'interested'})).matchedCount,2,'Lifetime interest remains visible on a current property');
  await db.exec("update icash_text_messages set account_id=md5('a2')::uuid where id=md5('interest-reply')::uuid");
  assert.equal((await report()).totals.interestedProperties,1,'Foreign-account SMS cannot label interest');
  await db.exec("update icash_text_messages set account_id=md5('a1')::uuid,body='STOP' where id=md5('interest-reply')::uuid");
