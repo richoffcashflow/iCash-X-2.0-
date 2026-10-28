@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {gunzipSync} from 'node:zlib';
-import {activeExportProbeProvider} from './verify-dealmachine-active-export.mjs';
+import {activeExportProbeProvider,activeExportRetryProvider} from './verify-dealmachine-active-export.mjs';
 
 export function parseExportCsv(text){
  if(typeof text!=='string'||Buffer.byteLength(text)>65536)throw Error('EXPORT_FILE_TOO_LARGE');
@@ -45,8 +45,9 @@ function shape(value,personId){
  return {type:'text',length:value.length};
 }
 /** Free read of the original approved export only. No export creation or retry. */
-export async function inspectSavedActiveExport({db,transport=fetch}){
- const path=`icash_integration_checks?provider=eq.${activeExportProbeProvider}`;
+export async function inspectSavedActiveExport({db,transport=fetch,provider=activeExportProbeProvider}){
+ if(![activeExportProbeProvider,activeExportRetryProvider].includes(provider))throw Error('EXPORT_OPERATION_INVALID');
+ const path=`icash_integration_checks?provider=eq.${provider}`;
  const rows=await db(path+'&select=result'),saved=rows?.[0]?.result;
  if(rows?.length!==1||saved?.status!=='response_saved'||saved.httpStatus!==200)return {status:'no_completed_export'};
  if(saved.artifact)return {status:'already_saved',...saved.artifact.summary};

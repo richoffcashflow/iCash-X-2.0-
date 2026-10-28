@@ -6,6 +6,7 @@ import {assertPaidProviderSimulationsAllowed} from './test-automatic-offer-provi
 import {finishAdmittedDealMachineRequest} from '../lib/dealmachine-request.ts';
 
 export const activeExportProbeProvider='dealmachine_active_phone_export_verification_20261027_v1';
+export const activeExportRetryProvider='dealmachine_active_phone_export_verification_20261027_v2';
 const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
 const plain=v=>v&&typeof v==='object'&&!Array.isArray(v);
 // One distinct owner, people fields only: at most one people data credit under
@@ -23,10 +24,11 @@ export const activeExportProbeHash=body=>createHash('sha256').update(JSON.string
  * The unique private integration-check row is claimed by compare-and-swap
  * before the only paid request. A lost claim/response cannot authorize replay.
  */
-export async function verifyActiveExportOnce({db,transport=fetch,env=process.env,clock=Date.now}){
+export async function verifyActiveExportOnce({db,transport=fetch,env=process.env,clock=Date.now,provider=activeExportProbeProvider}){
  const now=clock();
  if(env.VERCEL_ENV!=='preview'||env.VERCEL_GIT_COMMIT_REF!=='codex/dealmachine-active-phone-contract-20261027')return {status:'not_requested',paidRequests:0};
- const path=`icash_integration_checks?provider=eq.${activeExportProbeProvider}`;
+ if(![activeExportProbeProvider,activeExportRetryProvider].includes(provider))throw Error('PROBE_OPERATION_INVALID');
+ const path=`icash_integration_checks?provider=eq.${provider}`;
  const rows=await db(path+'&select=result');
  if(!Array.isArray(rows)||rows.length!==1||!plain(rows[0]?.result))return {status:'approval_required',paidRequests:0};
  const approval=rows[0].result;
@@ -39,6 +41,23 @@ export async function verifyActiveExportOnce({db,transport=fetch,env=process.env
   ||Date.parse(approval.expiresAt)-Date.parse(approval.approvedAt)>3600000)throw Error('PROBE_APPROVAL_INVALID');
  const body=activeExportProbeRequest(approval.personId),requestHash=activeExportProbeHash(body);
  if(approval.requestHash!==requestHash)throw Error('PROBE_APPROVAL_INVALID');
+ if(provider===activeExportRetryProvider){
+  // The owner's later "try again" permits ONE separate attempt, not a reset of
+  // v1 or a general retry policy. Its original HTTP 500 receipt stays immutable;
+  // missing credits on that receipt remain unknown, never inferred zero.
+  const previousRows=await db(`icash_integration_checks?provider=eq.${activeExportProbeProvider}&select=result`);
+  const previous=previousRows?.[0]?.result,ref=approval.retryOf;
+  if(!/^[0-9a-f]{40}$/.test(approval.reviewedCommit??'')||approval.reviewedCommit!==env.VERCEL_GIT_COMMIT_SHA
+   ||deferred||approval.quotaDeferral!==undefined||approval.runId!==undefined||approval.receipt!==undefined||approval.artifact!==undefined
+   ||previousRows?.length!==1||!plain(previous)||!plain(ref)||ref.provider!==activeExportProbeProvider
+   ||!uuid(ref.runId)||ref.runId!==previous.runId||previous.status!=='response_saved'||previous.httpStatus!==500
+   ||previous.receipt?.error?.code!=='internal_error'||typeof ref.providerRequestId!=='string'||!ref.providerRequestId
+   ||ref.providerRequestId!==previous.receipt.error.request_id||previous.receipt.export_id!==undefined||previous.artifact!==undefined
+   ||previous.approvalId===approval.approvalId||!Number.isFinite(Date.parse(previous.startedAt))||Date.parse(previous.startedAt)>=Date.parse(approval.approvedAt)
+   ||['accountId','screeningId','propertyId','personId','requestHash'].some(key=>previous[key]!==approval[key])
+   ||!isDeepStrictEqual(previous.request,body))throw Error('PROBE_RETRY_BINDING_INVALID');
+  if(await db('rpc/icash_dealmachine_capacity_available','POST',{p_requests:1})!==true)return {status:'quota_wait',paidRequests:0};
+ }
  let executeBefore=Date.parse(approval.expiresAt);
  if(deferred){
   const d=approval.quotaDeferral;
@@ -81,7 +100,7 @@ export async function verifyActiveExportOnce({db,transport=fetch,env=process.env
  const claimed=await db(claimFilter,'PATCH',{checked_at:new Date(claimTime).toISOString(),result:claim});
  if(!Array.isArray(claimed)||claimed.length!==1||claimed[0]?.result?.runId!==runId)return {status:'claim_not_confirmed',paidRequests:0};
  const receiptPath=path+`&result->>status=eq.started&result->>runId=eq.${runId}`;
- const admitted=await db('rpc/icash_take_dealmachine_request','POST',{p_kind:'owner_lookup',p_account:approval.accountId,p_operation:activeExportProbeProvider,p_request:runId});
+ const admitted=await db('rpc/icash_take_dealmachine_request','POST',{p_kind:'owner_lookup',p_account:approval.accountId,p_operation:provider,p_request:runId});
  if(admitted!==true){
   await db(receiptPath,'PATCH',{checked_at:new Date().toISOString(),result:{...claim,status:'quota_not_admitted'}});
   return {status:'quota_not_admitted',paidRequests:0};

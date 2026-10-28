@@ -1,21 +1,25 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {activeExportProbeRequest,activeExportProbeHash,verifyActiveExportOnce} from '../scripts/verify-dealmachine-active-export.mjs';
+import {activeExportProbeProvider,activeExportRetryProvider,activeExportProbeRequest,activeExportProbeHash,verifyActiveExportOnce} from '../scripts/verify-dealmachine-active-export.mjs';
 
-const now=Date.now(),env={VERCEL_ENV:'preview',VERCEL_GIT_COMMIT_REF:'codex/dealmachine-active-phone-contract-20261027',DEALMACHINE_API_KEY:'dm_sk_live_FIXTURE'};
+const now=Date.now(),env={VERCEL_ENV:'preview',VERCEL_GIT_COMMIT_REF:'codex/dealmachine-active-phone-contract-20261027',VERCEL_GIT_COMMIT_SHA:'a'.repeat(40),DEALMACHINE_API_KEY:'dm_sk_live_FIXTURE'};
 const approval={version:1,status:'approved',maxCredits:1,explicitOwnerApproval:true,approvalId:'11111111-1111-4111-8111-111111111111',
  accountId:'22222222-2222-4222-8222-222222222222',screeningId:'33333333-3333-4333-8333-333333333333',propertyId:'prop_123',personId:'per_456',
  approvedAt:new Date(now-1000).toISOString(),expiresAt:new Date(now+60000).toISOString(),requestHash:activeExportProbeHash(activeExportProbeRequest('per_456'))};
 const original={export_id:'fixture-export',record_count:1,credits:{used:1,people:1},download_urls:[{url:'https://example.invalid/private-export'}]};
 function fixture(options={}){
  let row=options.row===null?null:structuredClone(options.row??approval),calls=0,lookups=0;
+ const provider=options.provider??activeExportProbeProvider;
  const db=async(path,method='GET',body)=>{
+  if(provider===activeExportRetryProvider&&path.startsWith(`icash_integration_checks?provider=eq.${activeExportProbeProvider}`)){
+   assert.equal(method,'GET','The original attempt must never be rewritten');return options.previous?[{result:structuredClone(options.previous)}]:[];
+  }
   if(path==='rpc/icash_dealmachine_capacity_available'){assert.deepEqual(body,{p_requests:1});return options.capacityUnavailable?false:true;}
-  if(path==='rpc/icash_take_dealmachine_request'){assert.equal(row.status,'started');assert.equal(body.p_kind,'owner_lookup');return options.quotaDenied?false:true;}
+  if(path==='rpc/icash_take_dealmachine_request'){assert.equal(row.status,'started');assert.equal(body.p_kind,'owner_lookup');assert.equal(body.p_operation,provider);return options.quotaDenied?false:true;}
   if(path==='rpc/icash_finish_dealmachine_request')return true;
   if(path.startsWith('icash_owner_contacts?'))return [{created_at:new Date(now-500).toISOString(),result:{propertyId:options.foreign?'prop_999':'prop_123',requestedPersonIds:['per_456'],contacts:[{personId:'per_456',likelyOwner:true,propertyContactType:'owner',matchFlags:{is_likely_renter:false},phones:[{number:'+12025550123',doNotCall:false}]}]}}];
   if(path==='rpc/icash_dealmachine_owner_source_started_at')return new Date(now-800).toISOString();
-  assert.match(path,/^icash_integration_checks\?provider=eq.dealmachine_active_phone_export_verification_20261027_v1/);
+  assert(path.startsWith(`icash_integration_checks?provider=eq.${provider}`));
   if(method==='GET'){lookups++;return row?[{result:structuredClone(row)}]:[];}
   assert.equal(method,'PATCH');
   if(path.includes('result->>status=eq.approved')||path.includes('result->>status=eq.waiting_for_quota')){
@@ -43,7 +47,7 @@ function fixture(options={}){
   if(options.unreadable)return new Response('not json',{status:200});
   return Response.json(options.httpError?{error:{code:'invalid_request'}}:original,{status:options.httpError?400:200});
  };
- return {run:overrides=>verifyActiveExportOnce({db,transport,env,clock:()=>now,...overrides}),get row(){return row;},get calls(){return calls;},get lookups(){return lookups;}};
+ return {run:overrides=>verifyActiveExportOnce({db,transport,env,clock:()=>now,provider,...overrides}),get row(){return row;},get calls(){return calls;},get lookups(){return lookups;}};
 }
 assert.throws(()=>activeExportProbeRequest(['per_456','per_789']),/OWNER_ID/);
 assert.throws(()=>activeExportProbeRequest('per_456?location=all'),/OWNER_ID/);
@@ -85,6 +89,33 @@ for(const options of [{lostClaim:true},{lostReceipt:true},{timeout:true},{unread
  const f=fixture({row:deferred,...options});await f.run({clock:()=>deferredNow}).catch(()=>null);const count=f.calls;await f.run({clock:()=>deferredNow});assert.equal(f.calls,count);
  assert.equal(count,options.lostClaim||options.quotaDenied?0:1);
 }
+// Fresh user approval authorizes one separate v2 attempt after the saved v1
+// HTTP 500. It cannot reset v1, change the owner/request or create a v3 retry.
+const previous={...approval,approvalId:'66666666-6666-4666-8666-666666666666',status:'response_saved',runId:originalRunId,
+ startedAt:new Date(now-2000).toISOString(),request:activeExportProbeRequest('per_456'),httpStatus:500,
+ receipt:{error:{code:'internal_error',request_id:'req_fixture'}}};
+const retryApproval={...approval,reviewedCommit:env.VERCEL_GIT_COMMIT_SHA,retryOf:{provider:activeExportProbeProvider,runId:previous.runId,providerRequestId:'req_fixture'}};
+const retryOptions={provider:activeExportRetryProvider,row:retryApproval,previous};
+const retry=fixture(retryOptions);
+const retryResults=await Promise.all([retry.run(),retry.run()]);
+assert.equal(retry.calls,1);assert.equal(retryResults.filter(r=>r.status==='response_saved').length,1);
+assert.deepEqual(retry.row.retryOf,retryApproval.retryOf);await retry.run();assert.equal(retry.calls,1);
+assert.equal(previous.receipt.credits,undefined,'The earlier missing credit receipt stays unknown');
+for(const change of [{status:'unknown'},{httpStatus:200},{personId:'per_789'},{requestHash:'changed'},{artifact:{}},
+ {receipt:{error:{code:'internal_error',request_id:'req_other'}}},{receipt:{error:{code:'internal_error',request_id:'req_fixture'},export_id:'other'}},
+ {request:{...previous.request,people_ids:['per_789']}},{startedAt:approval.approvedAt}]){
+ const f=fixture({...retryOptions,previous:{...previous,...change}});await assert.rejects(f.run(),/RETRY_BINDING_INVALID/);assert.equal(f.calls,0);
+}
+for(const change of [{reviewedCommit:'b'.repeat(40)},{reviewedCommit:undefined},{retryOf:{...retryApproval.retryOf,runId:approval.approvalId}},{quotaDeferral:deferred.quotaDeferral},
+ {status:'waiting_for_quota',quotaDeferral:deferred.quotaDeferral},{receipt:original},{runId:originalRunId}]){
+ const f=fixture({...retryOptions,row:{...retryApproval,...change}});await assert.rejects(f.run(),/RETRY_BINDING_INVALID/);assert.equal(f.calls,0);
+}
+const retryWait=fixture({...retryOptions,capacityUnavailable:true});assert.equal((await retryWait.run()).status,'quota_wait');assert.equal(retryWait.calls,0);assert.equal(retryWait.row.status,'approved');
+for(const options of [{lostClaim:true},{lostReceipt:true},{timeout:true},{unreadable:true},{quotaDenied:true},{httpError:true}]){
+ const f=fixture({...retryOptions,...options});await f.run().catch(()=>null);const count=f.calls;await f.run();assert.equal(f.calls,count);
+ assert.equal(count,options.lostClaim||options.quotaDenied?0:1);
+}
+const unsupported=fixture();await assert.rejects(unsupported.run({provider:'dealmachine_active_phone_export_verification_20261027_v3'}),/OPERATION_INVALID/);assert.equal(unsupported.lookups,0);
 try{execFileSync(process.execPath,['scripts/verify-dealmachine-active-export.mjs'],{encoding:'utf8',stdio:'pipe'});assert.fail('Executable must remain disabled');}
 catch(error){assert.match(String(error.stderr),/Paid provider simulations are disabled/);}
 console.log('PASS prepared active-export check: no live execution; fresh one-credit approval, exact owner/source binding, one-use concurrent claim, raw receipts and no replay on uncertainty.');

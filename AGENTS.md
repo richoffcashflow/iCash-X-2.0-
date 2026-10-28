@@ -213,6 +213,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Development test spending
 
+- After the first export returned HTTP 500, the owner said "try again" on October 27 Central / October 28 UTC. This authorizes exactly one separately approved v2 attempt, limited to the same owner/request and at most one additional people data credit. Preserve v1's raw receipt and unreported cost; never reset it or renew its expired deferral. Bind v2 to v1's run and provider error request ID, use a fresh one-hour approval and one-use claim, and stop after that attempt. No calls, texts, customer-wallet charge, top-up or provider billing change; all other paid development tests remain disabled.
+
 - On October 27, 2026 the owner explicitly approved the prepared one-owner DealMachine export verification with a maximum of one people data credit and no calls, texts or paid retries. Use its exact service-only request-hash approval, source binding, one-use claim and original receipt. The exception is limited to `dealmachine_active_phone_export_verification_20261027_v1`; all other paid development simulations remain disabled.
 
 - That verification's initial local quota claim was denied before any provider request. A single private deferral may retain the original non-admission evidence and run the first approved export after the daily reset, within four hours of the original approval. Never reset the original approval or admit a deferred run without the exact saved request/source and original non-admitted request proof. Started, unknown or saved provider outcomes cannot be deferred or replayed. Keep the 50/minute and 4,900/day limits unchanged.

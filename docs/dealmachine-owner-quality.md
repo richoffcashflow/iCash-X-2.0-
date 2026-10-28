@@ -22,7 +22,13 @@ Full phone-activity scrubbing is therefore **not enabled by this release**. It r
 
 The live, free catalog read on October 27 confirmed `has_active_phone_number` as a non-premium BOOLEAN people filter and field, with no direct person-ID filter or per-number activity field. The existing-export inventory was empty, so no previously purchased export can establish the CSV header/owner-ID/phone format. These checks made only free GET requests; they did not retrieve contacts or create an export.
 
-## Approved verification, waiting for quota
+## Verification result and separately approved retry
+
+The first provider attempt ran at 7:11 PM Central on October 27 (00:11 UTC October 28), after the local quota reset. DealMachine returned HTTP 500 with `internal_error` and request ID `req_a830c75ddfd7b99b`. Its original raw response is saved privately. It contains no export ID, download or credit receipt: the cost is **unreported**, not zero. The v1 approval is consumed and its original deferral cannot be reused. Phone-activity integration remains unverified.
+
+The owner subsequently said "try again". A separate v2 approval permits one additional attempt with the same exact owner/request and a maximum of one additional people data credit. It must reference v1's saved run and error request ID, retain its source binding, pass the existing quota and claim checks, and expire within one hour. The preview runner now selects only v2; it cannot reset or replay v1. A saved/unknown v2 outcome is terminal. This adds no automatic retry, calls, texts, customer-wallet charge, funding or provider billing change. All other paid development tests remain disabled.
+
+### Original preparation and quota history
 
 `scripts/verify-dealmachine-active-export.mjs` prepares one exact-owner export with `active_phones_only`, `require_phone`, `scrub_dnc`, and `property_match: owner`. Its fixed request includes exactly one previously saved property-bound owner ID and people fields only: at most **one DealMachine people data credit**, under the documented per-entity pricing. No new property fields, broad audience, second purchase, automatic retry, call, message, customer-wallet charge, top-up or billing change is included.
 
@@ -36,9 +42,9 @@ The original provider response, including reported credits and errors, is saved 
 
 Offline fixtures cover concurrent attempts, absent/expired/changed approval, source mismatch, a lost claim response, a lost export response, failed receipt persistence, exact one-person scope, the executable stop, non-admission deferral, quota waits and the inability to defer a provider attempt. The export format remains unverified until the bounded test runs; this preparation does not turn on production scrubbing.
 
-### Resume after reset
+### Historical first-attempt continuation (consumed)
 
-Continue from draft PR #482 (`codex/dealmachine-active-phone-contract-20261027`). Read the private integration-check row `dealmachine_active_phone_export_verification_20261027_v1` and exact original request proof before triggering one preview build. Require `waiting_for_quota`, the original unchanged request hash, no admitted request for this operation, available quota and the saved execution window. Do not renew the window, recreate approval, change the audience or repeat an admitted request. The scheduled continuation is intended for 7:15 PM Central, after the normal reset.
+The original continuation used draft PR #482 (`codex/dealmachine-active-phone-contract-20261027`), the private v1 row and its original non-admission proof. It required `waiting_for_quota`, the unchanged request hash, no admitted request, available quota and the saved execution window. That continuation has completed with the HTTP 500 above; these conditions are historical and do not authorize another export.
 
 Inspect the saved credit receipt and sanitized CSV schema from that build. A saved response permits free inspection of its original download, never a replacement export. Missing/uncertain/error results remain held. Production phone activity support still needs exact owner-to-row mapping, original export receipt/download recovery, organization-wide export concurrency and actual net-credit settlement; it must not be declared active merely because the test completes.
 
