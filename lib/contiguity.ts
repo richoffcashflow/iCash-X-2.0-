@@ -69,6 +69,16 @@ export function isMessageOptOut(text:string){
 const messageEvent=z.object({id:z.string().min(1).max(200),type:z.string().min(1).max(100),timestamp:z.number().finite(),data:z.object({from:z.union([phone,serviceSender]),to:phone,body:z.string().max(20000).optional(),message_id:z.string().max(200).optional(),error:z.string().max(20000).optional().catch(undefined),attachments:z.array(z.object({url:z.string().url().max(3000),mime:z.string().max(150).optional(),filename:z.string().max(250).optional()})).max(20).optional()})});
 export function parseTextWebhook(input:unknown){
  const envelope=z.object({type:z.string(),data:z.unknown()}).passthrough().parse(input);
+ // The provider documents both communications.* aliases and the v2 iMessage
+ // event. Normalize for existing routing while retaining the original receipt.
+ const incomingAliases:Record<string,{type:string;channel:string}>={
+  'communications.incoming.sms':{type:'text.incoming.sms',channel:'sms'},
+  'communications.incoming.mms':{type:'text.incoming.mms',channel:'mms'},
+  'communications.incoming.imessage':{type:'text.incoming.sms',channel:'imessage'},
+  'imessage.incoming':{type:'text.incoming.sms',channel:'imessage'},
+ };
+ const alias=incomingAliases[envelope.type],original=alias?input:undefined;
+ if(alias)input={...envelope,type:alias.type};
  if(envelope.type==='numbers.substitution'){
   const d=z.object({original_number:phone,used_number:phone,message_id:z.string().min(1).max(200)}).parse(envelope.data);
   input={...envelope,data:{from:d.original_number,to:d.used_number,message_id:d.message_id}};
@@ -81,5 +91,5 @@ export function parseTextWebhook(input:unknown){
  // Carrier events may use Unix milliseconds; the database accepts seconds.
  const timestamp=event.timestamp>=1e12?event.timestamp/1000:event.timestamp;
  if(timestamp<0||timestamp>253402300799)throw Error('Invalid text event timestamp');
- return {...event,timestamp,optOut:event.type.startsWith('text.incoming')&&isMessageOptOut(event.data.body??'')};
+ return {...event,timestamp,...(alias?{channel:alias.channel,providerEvent:original}:{}),optOut:event.type.startsWith('text.incoming')&&isMessageOptOut(event.data.body??'')};
 }

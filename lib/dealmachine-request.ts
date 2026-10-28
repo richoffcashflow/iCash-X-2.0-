@@ -20,6 +20,6 @@ export async function finishAdmittedDealMachineRequest(db:ResearchDb,id:string,r
  const c=o.credits&&typeof o.credits==='object'?o.credits as Record<string,unknown>:{};
  const t=o.totals&&typeof o.totals==='object'?o.totals as Record<string,unknown>:{};
  const header=(name:string)=>{const v=response.headers.get(name);return v!==null&&/^\d{1,10}$/.test(v)?Number(v):null;};
- await db('rpc/icash_finish_dealmachine_request','POST',{p_request:id,p_result:{outcome:response.ok&&raw!==null?'response':'http_error',httpStatus:response.status,returned:Array.isArray(o.data)?o.data.length:integer(t.found),creditsUsed:integer(c.used),minuteRemaining:header('X-RateLimit-Remaining'),dayRemaining:header('X-RateLimit-Day-Remaining'),retryAfter:header('Retry-After')}}).catch(()=>null);
+ await db('rpc/icash_finish_dealmachine_request','POST',{p_request:id,p_result:{outcome:response.ok&&raw!==null?'response':'http_error',httpStatus:response.status,returned:Array.isArray(o.data)?o.data.length:integer(t.found),creditsUsed:integer(c.used),minuteRemaining:header('X-RateLimit-Remaining'),dayRemaining:header('X-RateLimit-Day-Remaining'),retryAfter:header('Retry-After'),minuteLimit:header('X-RateLimit-Limit'),minuteReset:header('X-RateLimit-Reset'),dayLimit:header('X-RateLimit-Day-Limit')}}).catch(()=>null);
  return {ok:response.ok,status:response.status,raw};
 }

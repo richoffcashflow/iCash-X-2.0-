@@ -4,7 +4,7 @@ export const discoveryFilterVersion='seller-filters-v1';
 export const discoveryStrategies=['baseline','vacant','absentee','repairs'] as const;
 export type DiscoveryStrategy=typeof discoveryStrategies[number];
 export type DiscoveryFilterPlan={version:typeof discoveryFilterVersion;strategy:DiscoveryStrategy;providerPage:number;mode:'explore'|'learned'};
-export type DiscoveryFilterStat={strategy:DiscoveryStrategy;nextPage:number;exhausted:boolean;pages:number;attempted:number;matureAttempts:number;pendingAttempts:number;interested:number;optedOut:number;costCents:number;costsComplete:boolean;recentUnproductivePages:number};
+export type DiscoveryFilterStat={strategy:DiscoveryStrategy;nextPage:number;exhausted:boolean;blocked?:boolean;pages:number;attempted:number;matureAttempts:number;pendingAttempts:number;interested:number;optedOut:number;costCents:number;costsComplete:boolean;recentUnproductivePages:number};
 const integer=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 export function discoveryFilterPlanValid(p:unknown):p is DiscoveryFilterPlan{
  if(!p||typeof p!=='object')return false;
@@ -42,9 +42,10 @@ export function selectDiscoveryFilter(raw:unknown,sequence:number,shared:unknown
   if(!row||typeof row!=='object')throw Error('DISCOVERY_FILTER_STATE_INVALID');
   const s=row as DiscoveryFilterStat;
   if(!discoveryStrategies.includes(s.strategy)||seen.has(s.strategy)||![s.nextPage,s.pages,s.attempted,s.matureAttempts,s.pendingAttempts,s.interested,s.optedOut,s.costCents,s.recentUnproductivePages].every(integer)||s.nextPage<1||typeof s.exhausted!=='boolean'||typeof s.costsComplete!=='boolean'||s.matureAttempts>s.attempted||s.pendingAttempts>s.attempted-s.matureAttempts||s.interested+s.optedOut>s.attempted-s.pendingAttempts||s.attempted-s.pendingAttempts>s.matureAttempts+s.interested+s.optedOut||s.recentUnproductivePages>3)throw Error('DISCOVERY_FILTER_STATE_INVALID');
+  if(s.blocked!==undefined&&typeof s.blocked!=='boolean')throw Error('DISCOVERY_FILTER_STATE_INVALID');
   seen.add(s.strategy);return s;
  });
- const available=stats.filter(s=>!s.exhausted);
+ const available=stats.filter(s=>!s.exhausted&&!s.blocked);
  if(!available.length)return null;
  const rotation=sequence%4;
  const tie=(s:DiscoveryFilterStat)=>(discoveryStrategies.indexOf(s.strategy)-rotation+4)%4;

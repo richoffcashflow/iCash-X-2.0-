@@ -14,32 +14,37 @@ export async function POST(req:Request){
  const secret=process.env.CONTIGUITY_WEBHOOK_SECRET;if(!secret)return new Response(null,{status:503});
  const raw=Buffer.from(await req.arrayBuffer());if(raw.length>262144)return new Response(null,{status:413});
  if(!verifyContiguityWebhook(raw,req.headers.get('contiguity-signature'),secret))return new Response(null,{status:401});
- let event;try{event=parseTextWebhook(JSON.parse(raw.toString('utf8')));}catch{return NextResponse.json({error:'Unsupported or malformed event'},{status:400});}
+ let event;try{event=parseTextWebhook(JSON.parse(raw.toString('utf8')));}catch{console.warn('text_webhook_rejected',{reason:'unsupported_or_malformed'});return NextResponse.json({error:'Unsupported or malformed event'},{status:400});}
+ let stage='sender_registration';
  try{
  const inbound=event.type.startsWith('text.incoming');const sender=inbound?event.data.to:event.data.from;
- const [known,campaign]=await Promise.all([db<{phone:string}[]>(`icash_text_senders?phone=eq.${encodeURIComponent(sender)}&select=phone`),db<{phone:string}[]>(`icash_webinar_text_senders?phone=eq.${encodeURIComponent(sender)}&select=phone`)]);if(!known.length&&!campaign.length)return new Response(null,{status:400});
+ const [known,campaign]=await Promise.all([db<{phone:string}[]>(`icash_text_senders?phone=eq.${encodeURIComponent(sender)}&select=phone`),db<{phone:string}[]>(`icash_webinar_text_senders?phone=eq.${encodeURIComponent(sender)}&select=phone`)]);if(!known.length&&!campaign.length){console.warn('text_webhook_rejected',{reason:'unregistered_destination'});return new Response(null,{status:400});}
  // Acknowledge authenticated service notices after checking our destination.
  // Never persist verification codes or route short codes into customer work.
  if(inbound&&isServiceTextSender(event.data.from))return NextResponse.json({received:true});
+ stage='lifecycle_routing';
  const role=inbound?await db<string>('rpc/icash_route_lifecycle_text','POST',{p_event:event,p_optout:event.optOut}):null;
  if(inbound)await db('rpc/icash_legacy_reply','POST',{p_phone:event.data.from,p_optout:event.optOut});
 
  if(['text.delivery.confirmed','text.delivery.failed','text.cancelled'].includes(event.type)){
+  stage='delivery_receipt';
   const blocked=await suppressCarrierBlockedSms(db,event);
   await db('rpc/icash_webinar_followup_delivery','POST',{p_channel:'sms',p_provider:event.data.message_id,p_kind:blocked?'suppressed':event.type==='text.delivery.confirmed'?'delivered':'failed'});
   await db('rpc/icash_legacy_delivery','POST',{p_channel:'sms',p_provider:event.data.message_id,p_kind:blocked?'suppressed':event.type==='text.delivery.confirmed'?'delivered':'failed'});
  }
  if(inbound&&role!=='property')return NextResponse.json({received:true});
+ stage='property_ingestion';
  if(event.type==='numbers.substitution')await db(`icash_webinar_text_senders?phone=eq.${encodeURIComponent(event.data.from)}`,'PATCH',{enabled:false});
  if(!known.length)return NextResponse.json({received:true});
  await db('rpc/icash_ingest_text_event','POST',{p_event:event,p_optout:event.optOut});
  if(inbound&&!event.optOut){
+  stage='reply_preparation';
   if(await replyToInstantLeadText({db,sms:dispatchTextMessage,voice:dispatchLiveVoice,env:process.env},event.id))return NextResponse.json({received:true});
   // Queuing is idempotent and provider claims are atomic. A failed immediate
   // attempt remains durable for the automation worker; never replay a send.
-  try{await replyToSellerText(db,dispatchTextMessage,event.id,processTextAi,dispatchLiveVoice);}catch{/* Durable queue is retried only before provider claim. */}
+  try{await replyToSellerText(db,dispatchTextMessage,event.id,processTextAi,dispatchLiveVoice);}catch{console.warn('text_webhook_reply_deferred');/* Durable queue is retried only before provider claim. */}
   await ownerPracticeReply(event.id);
  }
  return NextResponse.json({received:true});
- }catch{return new Response(null,{status:503});}
+ }catch{console.warn('text_webhook_processing_failed',{stage});return new Response(null,{status:503});}
 }

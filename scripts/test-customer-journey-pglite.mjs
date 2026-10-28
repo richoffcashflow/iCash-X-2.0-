@@ -1,3 +1,4 @@
+import {requestDiscoveryEstimate,DiscoveryEstimateHeld} from '../lib/discovery-estimate.ts';
 import {dealMachineRequest,DealMachineQuotaError} from '../lib/dealmachine-request.ts';
 import {syncResearchExclusions} from '../lib/research-exclusions.ts';
 import {instantLeadsEnabled} from '../lib/meta-instant-lead-service.ts';
@@ -139,7 +140,7 @@ try{await (async()=>{
  note('External sign-in and payment','NOT RUN','Supabase OTP/session verification and Stripe charge are fixture boundaries; auth.users is synthetic and funding receipt is not a real payment');
  const operating=await loadService('lib/operating-costs.ts',{db,validateCostManifest,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady});
  const coverage=await loadService('lib/contract-coverage-service.ts',{db,contractCapability,reviewedContractCoverage});
- const discovery=await loadService('lib/discovery-service.ts',{db:legacyResearchFixtureDb(db),dealMachineRequest,DealMachineQuotaError,syncResearchExclusions,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady,dispatchReservedOperation:operating.dispatchReservedOperation,discoverPage,propertyResearchMarketKnown:coverage.propertyResearchMarketKnown});
+ const discovery=await loadService('lib/discovery-service.ts',{requestDiscoveryEstimate,DiscoveryEstimateHeld,db:legacyResearchFixtureDb(db),dealMachineRequest,DealMachineQuotaError,syncResearchExclusions,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady,dispatchReservedOperation:operating.dispatchReservedOperation,discoverPage,propertyResearchMarketKnown:coverage.propertyResearchMarketKnown});
  assert.equal((await coverage.acquisitionContractCoverage('38118')).supported,false);
  assert.equal((await discovery.discoverForAccount(account)).status,'screening_queued');assert.equal(propertyRequests,1);
  assert.equal(await tick(rpc),true);

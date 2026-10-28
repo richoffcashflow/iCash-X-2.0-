@@ -1,3 +1,4 @@
+import {requestDiscoveryEstimate,DiscoveryEstimateHeld} from '../lib/discovery-estimate.ts';
 import {dealMachineRequest,DealMachineQuotaError} from '../lib/dealmachine-request.ts';
 import {syncResearchExclusions} from '../lib/research-exclusions.ts';
 /** SIMULATION ONLY. Actual SQL/services in ephemeral PostgreSQL; synthetic provider requests only. */
@@ -53,7 +54,7 @@ try{
  await q('insert into icash_spend_activations(account_id,enabled,customer_cap_cents) values($1,true,300)',[account]);
  const costs=await loadService('lib/operating-costs.ts',{db,validateCostManifest,discoveryWorkEnabled,contactWorkEnabled,liveWorkReady});
  const market=await loadService('lib/contract-coverage-service.ts',{db});
- const discovery=await loadService('lib/discovery-service.ts',{db:legacyResearchFixtureDb(db),dealMachineRequest,DealMachineQuotaError,syncResearchExclusions,discoveryWorkEnabled,liveWorkReady,dispatchReservedOperation:costs.dispatchReservedOperation,discoverPage,propertyResearchMarketKnown:market.propertyResearchMarketKnown});
+ const discovery=await loadService('lib/discovery-service.ts',{requestDiscoveryEstimate,DiscoveryEstimateHeld,db:legacyResearchFixtureDb(db),dealMachineRequest,DealMachineQuotaError,syncResearchExclusions,discoveryWorkEnabled,liveWorkReady,dispatchReservedOperation:costs.dispatchReservedOperation,discoverPage,propertyResearchMarketKnown:market.propertyResearchMarketKnown});
  globalThis.fetch=async(url,options)=>{
   assert.equal(url,'https://api.v2.dealmachine.com/v1/properties/search');const body=JSON.parse(options.body);
   assert.equal(body.per_page,5);assert.equal(body.contact_audience,'none');assert.equal(body.anchor,'properties');

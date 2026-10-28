@@ -67,9 +67,13 @@ export async function enrichOwnerBatch(db:ResearchDb,accountId:string,primary:st
  stage='free_preview';const preview=await request('/properties/ids',{ids:candidates.map(x=>object(x.snapshot).propertyId),enrich:false,contact_audience:'owners'},false);
  stage='preview_validation';
  const audience=ownerBatchAudience(preview,candidates,c.contact_credit_cap).filter(a=>a.ids.length>0);
- if(!audience.some(a=>a.screeningId===primary))return {status:'empty',contacts:0};
+ if(!audience.length)return {status:'empty',contacts:0};
+ // A phone-less primary must not throw away the same free preview's eligible
+ // siblings. Bind the paid batch to its first surviving property; no charge or
+ // owner operation is created for the empty original property.
+ const paidPrimary=audience.find(a=>a.screeningId===primary)?.screeningId??audience[0].screeningId;
  const items=audience.map(a=>({screeningId:a.screeningId,snapshot:a.snapshot,ids:[...a.ids]}));
- stage='admission';const admission=await db<string>('rpc/icash_admit_owner_batch','POST',{p_account:accountId,p_primary:primary,p_batch:batchId,p_items:items,p_preview:preview,
+ stage='admission';const admission=await db<string>('rpc/icash_admit_owner_batch','POST',{p_account:accountId,p_primary:paidPrimary,p_batch:batchId,p_items:items,p_preview:preview,
   p_config:{rateId:c.contact_rate_id,creditCap:c.contact_credit_cap,unitCostMicros:c.property_credit_micros,rightsUntil:c.data_rights_until}});
  // Only a committed, exact quota refusal with no paid claim can use the
  // existing bounded unstarted-work deferral. Other failures stay held.
@@ -81,7 +85,8 @@ export async function enrichOwnerBatch(db:ResearchDb,accountId:string,primary:st
  stage='allocation';const results=allocateOwnerBatch(raw,audience,batchId);
  stage='persist';
  if(!await db<boolean>('rpc/icash_save_owner_batch','POST',{p_account:accountId,p_batch:batchId,p_results:results}))throw Error('CONTACT_RECEIPT_REQUIRES_RECONCILIATION');
- return {status:'contacts_saved',contacts:results.find(r=>r.screeningId===primary)!.result.contacts.length,batchProperties:results.length};
+ const primaryResult=results.find(r=>r.screeningId===primary);
+ return {status:primaryResult?'contacts_saved':'empty',contacts:primaryResult?.result.contacts.length??0,batchProperties:results.length};
  }catch(error){
   const reasons=['CONTACT_RATE_REQUIRED','CONTACT_PREVIEW_INVALID','CONTACT_RECEIPT_REQUIRES_RECONCILIATION','OWNER_LOOKUP_FAILED_NO_RETRY','OWNER_PREVIEW_FAILED_NO_RETRY'];
   const reason=error instanceof OwnerPreviewRateLimitError?'quota_wait':error instanceof Error&&reasons.includes(error.message)?error.message:'unavailable';
