@@ -12,7 +12,7 @@ const headers={'X-RateLimit-Limit':'60','X-RateLimit-Remaining':'59','X-RateLimi
 const metadata={field_id:'has_active_phone_number',type:'BOOLEAN',source_type:'people',group_id:'contactability',is_premium_filter:false};
 
 function fixture(options={}){
- let row=structuredClone({...approval,...options.approval}),current=now;const calls=[],writes=[];
+ let row=structuredClone({...approval,...options.approval}),current=now,lostReceipt=false;const calls=[],writes=[];
  const db=async(path,method='GET',body)=>{
   if(path.startsWith('icash_owner_contacts?')){
    assert.equal(method,'GET');
@@ -41,6 +41,8 @@ function fixture(options={}){
   assert(path.includes('runId=eq.'+row.runId));
   if(options.failedSave&&body.result.requests.at(-1)?.httpStatus!==null)throw Error('private save failure');
   row=structuredClone(body.result);writes.push(row);
+  if(options.lostReceiptAck&&!lostReceipt&&row.requests.length===2&&row.requests[1].httpStatus===200){lostReceipt=true;throw Error('private lost receipt acknowledgment');}
+  if(options.slowCatalogSave&&row.requests.length===1&&row.requests[0].httpStatus===200)current=now+11000;
   if(options.slowPostAdmission&&row.requests.length===2)current=now+11000;
   return [{result:structuredClone(row)}];
  };
@@ -70,6 +72,8 @@ for(const activity of [true,false]){
 }
 const dedup=fixture({activity:true,credits:{used:0,people:1,properties:0,deduplicated:1}});assert.equal((await dedup.run()).creditsUsed,0);assert.equal(dedup.row.requests[1].raw.credits.deduplicated,1);
 const stale=fixture({slowPostAdmission:true});const staleResult=await stale.run();assert.equal(staleResult.status,'dispatch_window_expired');assert.equal(staleResult.paidRequests,0);assert.equal(stale.calls.length,1);await stale.run();assert.equal(stale.calls.length,1);
+const staleCatalog=fixture({slowCatalogSave:true});assert.equal((await staleCatalog.run()).status,'provider_quota_unavailable');assert.equal(staleCatalog.calls.length,1);
+const lostReceipt=fixture({activity:true,lostReceiptAck:true});await assert.rejects(lostReceipt.run());assert.equal(lostReceipt.row.status,'unknown');assert.equal(lostReceipt.row.requests[1].raw.data[0].has_active_phone_number,true);assert.equal(lostReceipt.row.requests[1].raw.credits.used,1);assert(lostReceipt.row.requests[1].rawText.includes('Private Fixture Name'));await lostReceipt.run();assert.equal(lostReceipt.calls.length,2);
 for(const activity of [undefined,null,'true',1]){const f=fixture({activity}),r=await f.run();assert.equal(r.status,'person_activity_not_returned');assert.equal(r.hasActivePhone,null);}
 const parallel=fixture({activity:true});const concurrent=await Promise.all([parallel.run(),parallel.run()]);assert.equal(parallel.calls.length,2);assert.equal(concurrent.filter(r=>r.status==='person_activity_available').length,1);
 for(const options of [{missing:true},{env:{GITHUB_ACTIONS:'true'}},{env:{VERCEL_ENV:'production'}},{env:{VERCEL_GIT_COMMIT_REF:'main'}},{env:{VERCEL_GIT_REPO_OWNER:'other'}},{env:{SUPABASE_URL:'https://other.invalid'}},{approval:{status:'started'}},{approval:{status:'unknown'}},{changeBeforeClaim:true}]){const f=fixture(options);await f.run();assert.equal(f.calls.length,0);}

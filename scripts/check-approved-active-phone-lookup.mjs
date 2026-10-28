@@ -97,15 +97,19 @@ export async function checkApprovedActivePhoneLookup({env=process.env,db,loadDb=
    await save({...state,requests:[...state.requests.slice(0,-1),{...entry,notDispatched:true}]});
    return {ok:false,status:null,raw:null,localBlocked:true};
   }
-  let response;
+  let response,observedState;
   try{
    response=await transport('https://api.v2.dealmachine.com/v1'+endpoint,{method,headers:{Authorization:'Bearer '+env.DEALMACHINE_API_KEY,...(requestBody?{'Content-Type':'application/json'}:{})},
     ...(requestBody?{body:JSON.stringify(requestBody)}:{}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
    const payload=await boundedBody(response);
-   await save({...state,requests:[...state.requests.slice(0,-1),{...entry,httpStatus:response.status,headers:rateHeaders(response),...payload}]});
-   return {ok:response.ok,status:response.status,raw:payload.raw,headers:rateHeaders(response),receivedAt:clock()};
+   const receivedAt=clock();
+   observedState={...state,requests:[...state.requests.slice(0,-1),{...entry,httpStatus:response.status,headers:rateHeaders(response),...payload}]};
+   await save(observedState);
+   return {ok:response.ok,status:response.status,raw:payload.raw,headers:rateHeaders(response),receivedAt};
   }catch{
-   await save({...state,status:'unknown',reason:'original_response_unavailable'}).catch(()=>null);throw Error('LOOKUP_UNKNOWN_NO_RETRY');
+   // A lost database acknowledgment may have saved the response already.
+   // Never overwrite that evidence with the earlier pre-dispatch state.
+   await save({...(observedState??state),status:'unknown',reason:observedState?'receipt_save_unconfirmed':'original_response_unavailable'}).catch(()=>null);throw Error('LOOKUP_UNKNOWN_NO_RETRY');
   }
  };
  const catalog=await request('GET','/fields?source_type=people&per_page=250&page=1');
