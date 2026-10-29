@@ -46,7 +46,7 @@ function shape(value,personId){
 }
 /** Free read of the original approved export only. No export creation or retry. */
 export async function inspectSavedActiveExport({db,transport=fetch,provider=activeExportProbeProvider}){
- if(![activeExportProbeProvider,activeExportRetryProvider].includes(provider))throw Error('EXPORT_OPERATION_INVALID');
+ if(![activeExportProbeProvider,activeExportRetryProvider,'dealmachine_active_phone_export_verification_20261028_v3'].includes(provider))throw Error('EXPORT_OPERATION_INVALID');
  const path=`icash_integration_checks?provider=eq.${provider}`;
  const rows=await db(path+'&select=result'),saved=rows?.[0]?.result;
  if(rows?.length!==1||saved?.status!=='response_saved'||saved.httpStatus!==200)return {status:'no_completed_export'};
@@ -62,7 +62,7 @@ export async function inspectSavedActiveExport({db,transport=fetch,provider=acti
  const bytes=Buffer.concat(parts),plain=bytes[0]===0x1f&&bytes[1]===0x8b?gunzipSync(bytes,{maxOutputLength:65536}):bytes;
  const csv=plain.toString('utf8'),[headers,values]=parseExportCsv(csv);
  if(headers.some(h=>! /^[a-zA-Z_][a-zA-Z0-9 _()./-]{0,119}$/.test(h)))throw Error('EXPORT_HEADER_INVALID');
- const summary={rowCount:1,columns:headers.map((header,i)=>({header,...shape(values[i],saved.personId)})),creditKeys:Object.keys(receipt.credits??{})};
+ const summary={rowCount:1,columns:headers.map((header,i)=>({header,...shape(values[i],saved.personId)})),creditKeys:['used','people','properties','deduplicated','licensed'].filter(k=>Object.hasOwn(receipt.credits??{},k))};
  const artifact={csv,sha256:createHash('sha256').update(csv).digest('hex'),summary,savedAt:new Date().toISOString()};
  const updated=await db(path+`&result->>status=eq.response_saved&result->>runId=eq.${saved.runId}&result->artifact=is.null`,'PATCH',{checked_at:new Date().toISOString(),result:{...saved,artifact}});
  if(!Array.isArray(updated)||updated.length!==1)throw Error('EXPORT_ARTIFACT_RECONCILIATION_REQUIRED');
