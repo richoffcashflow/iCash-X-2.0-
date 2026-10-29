@@ -16,7 +16,7 @@ export function activePhoneExportV3Request(personId){
  return {people_ids:[personId],fields:[...fields],property_match:'owner',anchor:'person',limit:1,require_phone:true,scrub_dnc:true,active_phones_only:true};
 }
 export const activePhoneExportV3Hash=body=>createHash('sha256').update(JSON.stringify(body)).digest('hex');
-const headersOf=response=>Object.fromEntries(['X-RateLimit-Limit','X-RateLimit-Remaining','X-RateLimit-Day-Limit','X-RateLimit-Day-Remaining','Retry-After'].map(key=>{
+const headersOf=response=>Object.fromEntries(['X-RateLimit-Limit','X-RateLimit-Remaining','X-RateLimit-Reset','X-RateLimit-Day-Limit','X-RateLimit-Day-Remaining','Retry-After'].map(key=>{
  const value=response.headers.get(key);return [key,key==='Retry-After'?value:value!==null&&/^\d{1,10}$/.test(value)?Number(value):null];
 }));
 const creditSummary=raw=>Object.fromEntries(['used','people','properties','deduplicated','licensed'].filter(k=>integer(raw?.credits?.[k])).map(k=>[k,raw.credits[k]]));
@@ -106,7 +106,8 @@ export async function checkApprovedActivePhoneExportV3({env=process.env,db,loadD
    if(method==='POST')observed={...observed,httpStatus:response.status,receipt:payload.raw};
    await save(observed);
    await db('rpc/icash_finish_dealmachine_request','POST',{p_request:id,p_result:{outcome:response.ok?'response':'http_error',httpStatus:response.status,creditsUsed:integer(payload.raw?.credits?.used)?payload.raw.credits.used:null,
-    minuteRemaining:headers['X-RateLimit-Remaining'],dayRemaining:headers['X-RateLimit-Day-Remaining']}}).catch(()=>null);
+    minuteRemaining:headers['X-RateLimit-Remaining'],dayRemaining:headers['X-RateLimit-Day-Remaining'],minuteLimit:headers['X-RateLimit-Limit'],minuteReset:headers['X-RateLimit-Reset'],dayLimit:headers['X-RateLimit-Day-Limit'],
+    retryAfter:typeof headers['Retry-After']==='string'&&/^\d{1,10}$/.test(headers['Retry-After'])?Number(headers['Retry-After']):null}}).catch(()=>null);
    return {ok:response.ok,httpStatus:response.status,...payload,headers,receivedAt};
   }catch{
    await save({...(observed??state),status:'unknown',reason:observed?'receipt_save_unconfirmed':'original_response_unavailable'}).catch(()=>null);

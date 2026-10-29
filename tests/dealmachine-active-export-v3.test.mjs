@@ -19,7 +19,10 @@ function fixture(options={}){
   if(path==='rpc/icash_dealmachine_owner_source_started_at')return sourceTime;
   if(path==='rpc/icash_dealmachine_capacity_available')return !options.fullQuota;
   if(path==='rpc/icash_take_dealmachine_request'){admissions.push(value);if(options.slowAdmission&&admissions.length===3)current+=11000;return admissions.length!==options.denyAdmission;}
-  if(path==='rpc/icash_finish_dealmachine_request')return null;
+  if(path==='rpc/icash_finish_dealmachine_request'){
+   if(value.p_result.httpStatus===200&&!options.headers&&!options.historyHeaders){assert.equal(value.p_result.minuteLimit,60);assert.equal(value.p_result.dayLimit,5000);}
+   return null;
+  }
   for(const [provider,runId] of Object.entries(previousRuns))if(path.includes('provider=eq.'+provider)){assert.equal(method,'GET','Prior receipts are immutable');return [{result:{status:options.badPrevious?'unknown':'response_saved',httpStatus:500,runId}}];}
   assert(path.startsWith('icash_integration_checks?provider=eq.'+activePhoneExportV3),'Only the new private diagnostic can be written');
   if(method==='GET')return options.missing?[]:[{result:structuredClone(row)}];
