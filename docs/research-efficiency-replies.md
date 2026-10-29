@@ -1,5 +1,19 @@
 # Research efficiency and reply corrections — October 28, 2026
 
+## Duplicate-request follow-up — October 29
+
+The 03:00 UTC read-only sample contained 11,265 returned properties and 5,270 duplicates over 24 hours. These are inventory counts, not charged-credit attribution. A separate read-only sample found 110 repeated owner requests within the same account across batches. Current batch ID deduplication does not imply organization-wide reuse of purchased contacts.
+
+`config/research-duplicate-efficiency.sql` shares validated, non-contact free estimates for the same exact JSON query and exclusion-list generation, with the original five-minute age. The existing global admission lock and durable lease coalesce concurrent requests. A matching failed estimate retains its two-minute backoff. Every requester still passes its own current scope, membership, funding, Pause, quota and unknown-operation checks. Only the two validated estimate values are shared, never owner contact data. `estimates.shared_hits` records actual shared cache hits; no projected savings are booked as revenue.
+
+The exact version/ZIP/strategy/page/size duplicate check now runs before estimates and again under final purchase locks. This closes the race where another worker finishes assigning a page while the caller awaits its estimate. Partially assigned pages remain available; changed versions, page sizes and mutable exclusion-list queries cannot borrow a static receipt. Historical receipts, current customer rates, provider cost observations and duplicate-page coverage are unchanged. This does not eliminate overlapping audiences or provide a cache of purchased owners across different properties.
+
+Active exports now check enabled state, the organization slot and capacity for preview/export/original recovery before making a free preview request. Atomic final admission remains authoritative if capacity changes during that request. An HTTP error without an export ID reports `export_receipt_held`, never ordinary recovery-idle success. The original production HTTP 500 from 02:46:38 UTC still has no export ID or credit receipt; its cost is unreported. New active exports remain disabled pending original-operation reconciliation. The documented export/history APIs do not provide a request-ID-to-export-ID lookup that resolves this receipt safely.
+
+Migration `20261029030852_research_duplicate_efficiency` was applied through Supabase MCP; its provider-generated history version names the identical repository SQL. Readback verified service-only access, the new index/final guard and unchanged original-export receipt hash, held slot and disabled flag.
+
+Validation uses synthetic PostgreSQL fixtures and mocked provider transport: cross-account identical estimates, in-flight leases, failed-request backoff, cache age, changed page, account funding/Pause, final duplicate-page refusal before financial admission, partial inventory, export preflight and saved-500 no-retry behavior. PGlite serializes test connections; this is not a claim of a real multi-session contention test. No paid development traffic, new customer charges or provider billing changes are used to validate the release.
+
 This release applies to normal account processing. It does not change wallets, provider billing, automatic-recharge settings, the owner's demonstration setup, or paid development-test permissions.
 
 ## Requests and duplicate property pages

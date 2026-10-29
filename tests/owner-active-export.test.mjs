@@ -28,9 +28,10 @@ assert.throws(()=>activeOwnerExportRequest(['per_alpha']));
 assert.throws(()=>activeOwnerExportRequest(['per_1','per_1']));
 const free={...base,receipt:receipt()};free.receipt.raw.credits.used=0;assert.equal(allocateActiveOwnerExport(free,csv,audience).reduce((n,x)=>n+x.result.creditsUsed,0),0);
 
-let paid=0,downloads=0,gets=0,claimed=false,saved=null,results=null,quota=true,busy=false,timeout=false,artifactFail=false;
+let previews=0,capacity='ready',paid=0,downloads=0,gets=0,claimed=false,saved=null,results=null,quota=true,busy=false,timeout=false,artifactFail=false;
 const config={contact_rate_id:'rate',contact_credit_cap:25,property_credit_micros:10000,data_rights_until:'2099-01-01',research_version:2};
 const db=async(path,method,p)=>{
+ if(path==='rpc/icash_owner_active_export_capacity')return capacity;
  if(path==='rpc/icash_owner_batch_candidates')return candidates;
  if(path==='rpc/icash_take_dealmachine_request')return quota;
  if(path==='rpc/icash_finish_dealmachine_request')return true;
@@ -48,21 +49,30 @@ const db=async(path,method,p)=>{
 };
 const transport=async(url,options)=>{
  url=String(url);assert.equal(options.redirect,'error');assert.equal(options.cache,'no-store');
- if(url.endsWith('/properties/ids'))return Response.json(preview);
+ if(url.endsWith('/properties/ids')){previews++;return Response.json(preview);}
  if(url.endsWith('/people/export')){assert(claimed);assert(!saved.receipt);paid++;if(timeout)throw Error('timeout');const r=receipt().raw;return Response.json(r);}
  if(url.endsWith('/exports/export-fixture')){gets++;assert(saved.receipt);return Response.json({data:{export_id:'export-fixture',status:'completed',record_count:2,download_urls:[{url:'https://storage.googleapis.com/fixture.csv.gz'}]}});}
  if(url==='https://storage.googleapis.com/fixture.csv.gz'){downloads++;assert(!options.headers,'Provider authorization must never reach storage');return new Response(csv);}
  throw Error('Unexpected transport');
 };
-const reset=()=>{paid=0;downloads=0;gets=0;claimed=false;saved=null;results=null;quota=true;busy=false;timeout=false;artifactFail=false;};
+const reset=()=>{previews=0;capacity='ready';paid=0;downloads=0;gets=0;claimed=false;saved=null;results=null;quota=true;busy=false;timeout=false;artifactFail=false;};
 const originalKey=process.env.DEALMACHINE_API_KEY,originalWarn=console.warn;process.env.DEALMACHINE_API_KEY='dm_sk_live_fixture';console.warn=()=>{};
 try{
  assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,'contacts_saved');assert.equal(paid,1);assert.equal(downloads,1);assert.equal(results.length,3);
  assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,'held');assert.equal(paid,1);
+ // Known holds stop even the free preview; final admission still handles races.
+ for(const state of ['export_busy','quota_wait']){reset();capacity=state;await assert.rejects(enrichActiveOwners(db,account,candidates[0],config,250000,transport),OwnerPreviewRateLimitError);assert.equal(previews,0);assert.equal(paid,0);assert.equal(claimed,false);}
+ reset();capacity='disabled';assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,'held');assert.equal(previews,0);
  // Quota and organization contention cannot create a purchase or wallet claim.
  reset();quota=false;await assert.rejects(enrichActiveOwners(db,account,candidates[0],config,250000,transport),OwnerPreviewRateLimitError);assert.equal(paid,0);assert.equal(claimed,false);
  reset();busy=true;await assert.rejects(enrichActiveOwners(db,account,candidates[0],config,250000,transport),OwnerPreviewRateLimitError);assert.equal(paid,0);assert.equal(claimed,false);
  reset();timeout=true;await assert.rejects(enrichActiveOwners(db,account,candidates[0],config,250000,transport),/timeout/);assert.equal(paid,1);assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,'held');assert.equal(paid,1);
+ // An original 500 without export ID remains held, never a recovery-idle success.
+ reset();
+ const noRecovery=async(path,...args)=>path==='rpc/icash_claim_owner_export_recovery'?null:db(path,...args);
+ const errorTransport=async(url,options)=>String(url).endsWith('/people/export')?(paid++,Response.json({error:{code:'internal_error',request_id:'req_fixture'}},{status:500})):transport(url,options);
+ assert.equal((await enrichActiveOwners(noRecovery,account,candidates[0],config,250000,errorTransport)).status,'export_receipt_held');
+ assert.equal(paid,1);assert.equal(gets,0);assert.equal(saved.receipt.httpStatus,500);assert.equal((await enrichActiveOwners(noRecovery,account,candidates[0],config,250000,errorTransport)).status,'held');assert.equal(paid,1);
  // A lost artifact-write acknowledgment resumes from the original saved CSV.
  reset();artifactFail=true;assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,'export_receipt_held');assert(saved.csv);artifactFail=false;
  assert.equal((await recoverOwnerActiveExports(db,transport)).status,'contacts_saved');assert.equal(paid,1);assert.equal(gets,1);assert.equal(downloads,1);
