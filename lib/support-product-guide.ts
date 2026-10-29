@@ -1,4 +1,5 @@
 import type {SupportEvidence} from './support-policy.ts';
+import {onlineAgreementInstructions} from './online-agreement-policy.ts';
 
 /** Curated from the owner's October 17, 2026 course and the current workspace.
  * Keep the private recording/transcript out of the repository and model input.
@@ -20,6 +21,9 @@ Timing: background research can run overnight. New seller calls and first texts 
 Monitoring: the workspace shows leads, calls, texts, contracts and notifications. Open a property for its latest update, call recordings/transcripts, and texts. Notifications flag items needing the customer's attention. Take over pauses new automatic work on that property so the customer can handle calls/texts themselves; already-started work may finish. Return to bot resumes eligible automation. The overall Pause bot control stops new work; it does not cancel a subscription or signed contract.
 
 Agreements: the bot can speak/text with eligible sellers and prepare agreements. After a seller signs, the customer reviews the conversation, numbers, owners and actual agreement, then signs if appropriate. Never say the AI guarantees that the numbers work or that review is unnecessary. Documents contains agreement review/signing and available document controls. Contract cancellation is a separate property-document flow, not subscription cancellation; do not give blanket promises of cancellation rights or legal/tax advice.
+
+${onlineAgreementInstructions}
+Manual agreement controls: open a property in Your leads, choose Take over when handling it yourself, then Documents. Edit agreement opens the draft editor; Save draft saves only the draft. Send for signatures opens Send for signatures & history, where the sending action is Text contract link after reviewing the agreed terms and every required signer. Email for agreement updates is optional. Check signature status checks an existing request; Review & sign is the customer's signature step. A missing or failed link is not resolved by making a duplicate agreement. An expired check does not establish that the contract itself expired. Never invent a contract upload, postal workflow or automatic replacement. Keep unresolved signing/delivery problems open.
 
 Buyers and closing: after the required purchase signatures and checks, the bot can prepare a buyer package, find cash buyers and contact buyers by SMS and email. There are no outbound AI calls to buyers. Review buyer replies, viewing availability and the workspace's requested next steps. Follow document, deposit and title-company requests. An offer, signature or promised payment is not a completed closing or money received. Use verified closing/payment status. Do not repeat sample prices, dates, deposits or earnings as requirements or promises.
 

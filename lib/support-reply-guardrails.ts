@@ -18,6 +18,11 @@ export function supportInstructionCorrection(messages:Turn[],evidence:SupportEvi
 
 /** Catch observed failure modes even when the model ignores its product instructions. */
 export function unsupportedSupportReply(reply:string,messages:Turn[],evidence:SupportEvidence[]){
+ if(/\b(?:contract|agreement|signing)\b/i.test(reply+' '+(messages.filter(m=>m.role==='user').at(-1)?.content??''))){
+  if(/\b(?:mail|mailed|mailing|postal|courier|print|printing|scan|scanning)\b/i.test(reply))return true;
+  if(/\b(?:I|we)(?:[’']ve| have)?\s+(?:sent|texted|emailed|signed|resent)\b/i.test(reply))return true;
+  if(/\b(?:create|upload|make)\b.{0,30}\b(?:new|replacement|another|duplicate)\b.{0,15}\b(?:contract|agreement)\b/i.test(reply))return true;
+ }
  if(inventedControl.test(reply)&&instruction.test(reply))return true;
  if(/\b(?:wait|give it|after|within|in) (?:a (?:few|couple of)|\d+|one|two|three|several) (?:more )?(?:minutes?|hours?)\b|\b(?:should|will) (?:start|begin|resume)\b.{0,55}\b(?:soon|shortly|momentarily)\b/i.test(reply))return true;
  if(/\b(?:normal|just) (?:pause|delay|waiting)|\b(?:everything|all systems) (?:is|are) (?:working|fine|healthy)/i.test(reply))return true;

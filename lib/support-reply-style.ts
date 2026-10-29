@@ -25,7 +25,7 @@ export function currentSupportIssue(messages:Turn[]){
  // Only a short continuation inherits the previous topic. A new question or
  // complaint (including a topic we do not recognize) must not inherit billing.
  const continuation=supportContinuation;
- const named=/\b(?:card|payment|billing|charge|credits?|balance|subscription|bot|leads?|seller|calls?|texts?|contract|course|sign.?in|log.?in|code|refund|cancel|photos?|images?|pictures?|videos?|documents?|notifications?)\b/i;
+ const named=/\b(?:card|payment|billing|charge|credits?|balance|subscription|bot|leads?|seller|calls?|texts?|contracts?|agreements?|signing|signatures?|course|sign.?in|log.?in|code|refund|cancel|photos?|images?|pictures?|videos?|documents?|notifications?)\b/i;
  const detail=/^(?:it(?:[’']s| is) active|(?:my |the )?bot is (?:running|active)|\d+ (?:leads?|matches)|i (?:sent|made) (?:the|that) (?:text|message|call))/i.test(latest.trim());
  if(!continuation(latest)||(named.test(latest)&&!detail))return latest;
  const confirmed=users.findLastIndex(turn=>/\b(?:that worked|it worked|working now|fixed now|all fixed|problem solved)\b/i.test(turn.content)&&!/(?:not|still|but)\b/i.test(turn.content));

@@ -9,6 +9,7 @@ import {supportOutreachReply} from './support-outreach.ts';
 import {missingAccessCodeReply} from './support-access-reply.ts';
 import type {AccessInvestigation} from './support-access-investigation.ts';
 import {supportInstructionCorrection,unsupportedSupportReply} from './support-reply-guardrails.ts';
+import {supportContractAnswer} from './support-contracts.ts';
 
 export type SupportTurn={role:string;content:string};
 export type SupportReply={reply:string;status:'open'|'waiting_on_customer'|'resolved'|'closed';ai:boolean};
@@ -20,7 +21,7 @@ const clean=(text:string)=>redactSupportQuestion(text).replace(/\b\d{6,10}\b/g,'
 function earlierSupportProblem(context:SupportContext){
  const users=context.messages.filter(m=>m.role==='user');
  const lastConfirmed=users.findLastIndex(m=>/\b(?:that worked|it worked|working now|fixed now|all fixed|problem solved)\b/i.test(m.content)&&!/(?:not|still|but)\b/i.test(m.content));
- return context.historyComplete===false||users.slice(lastConfirmed+1,-1).some(m=>/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|not working|not calling|not texting|no calls|no texts|no leads|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
+ return context.historyComplete===false||users.slice(lastConfirmed+1,-1).some(m=>supportContractAnswer([m])?.status==='open'||/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|not working|not calling|not texting|no calls|no texts|no leads|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
 }
 
 /** Local replies also work during provider outages and interruption recovery. */
@@ -32,6 +33,8 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
   return {reply:simple,status:simple!==reply&&status!=='resolved'?'open':status,ai:false};
  };
  if(/\b(?:that worked|it worked|working now|fixed now|all fixed|i(?:’|')?m in|got in|problem solved)\b/i.test(question)&&!/(?:not|isn.t|didn.t|still|but)\b/i.test(question)&&!/[?]|\b(?:how|what|where|when|why|which|also|another|more questions|next question)\b/i.test(question))return result('Glad that worked.','resolved');
+ const contract=supportContractAnswer(context.messages);
+ if(contract)return result(contract.reply,contract.status==='resolved'&&earlierSupportProblem(context)?'open':contract.status);
  const correction=supportInstructionCorrection(context.messages,context.evidence??[]);
  if(correction)return result(correction,'open');
  const productAnswer=supportSimpleProductAnswer(question)??(/^(?:could be anytime|so anytime)[?!.\s]*$/i.test(question.trim())?supportSimpleProductAnswer(currentSupportIssue(context.messages)):null);
@@ -121,6 +124,7 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
 async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fetch=fetch):Promise<SupportReply>{
  const fallback=supportTechnicalFallback(context);
  const relevantEvidence=supportReplyEvidence(context.messages,context.evidence??[]);
+ if(supportContractAnswer(context.messages))return fallback;
  if(supportInstructionCorrection(context.messages,context.evidence??[]))return fallback;
  if(supportSimpleProductAnswer(context.messages.filter(m=>m.role==='user').at(-1)?.content??''))return fallback;
  if(context.kind==='account'&&fallback.status==='open'&&supportOutreachReply(context.messages,context.evidence??[]))return fallback;
