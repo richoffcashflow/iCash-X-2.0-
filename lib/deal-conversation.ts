@@ -3,6 +3,7 @@ import {isContactOptOut} from './contact-intent.ts';
 import {sellerCallDisposition} from './seller-response-policy.ts';
 import {conversationTrustInstructions} from './conversation-trust.ts';
 import {callContactEvidence,hasHumanCallWords,automatedAnswerInstructions} from './call-contact-evidence.ts';
+import {sellerInterestQuote} from './seller-interest-evidence.ts';
 
 /** Stable variants are assigned before contact; never rotate an opener mid-conversation. */
 export const acquisitionOpeners={
@@ -55,9 +56,11 @@ export function liveConversationResult(c:VoiceConversation,expected:{conversatio
  const responseDisposition=expected.party==='seller'?sellerCallDisposition(r.transcript):null;
  const optedOut=expected.party==='seller'?responseDisposition==='opt_out':fields.opted_out?.value===true||r.transcript.some(t=>t.role==='user'&&isContactOptOut(t.message));
  const followupHeld=expected.party==='seller'&&responseDisposition!==null;
- const interested=!followupHeld&&fields.interested?.value===true&&!!quote('interest_quote');
+ const sourceInterest=expected.party==='seller'&&humanResponse?sellerInterestQuote(r.transcript):null;
+ const providerInterest=fields.interested?.value===true?quote('interest_quote'):null;
+ const interested=!followupHeld&&!!(providerInterest||sourceInterest);
  return {summary:humanResponse?r.summary:contactEvidence==='automated_answer'?'Automated answering or call-screening audio; no verified seller response.':'No intelligible caller response was captured.',transcript:r.transcript,durationSeconds:r.durationSeconds,providerCostUsd:r.providerCostUsd,contactEvidence,
-  humanRequested,humanQuote,optedOut,interested,responseDisposition,interestQuote:quote('interest_quote'),party:expected.party,
+  humanRequested,humanQuote,optedOut,interested,responseDisposition,interestQuote:providerInterest||sourceInterest||quote('interest_quote'),party:expected.party,
   callbackStatus:optedOut?'blocked_opt_out':!humanResponse?'not_requested':followupHeld?'held_for_seller_response':humanRequested?'held_for_human':r.callbackStatus==='scheduled_test'?'pending_dispatch_review':r.callbackStatus,
   callbackDueAt:optedOut||followupHeld||!humanResponse?null:r.dueAt,callbackTimezone:optedOut||followupHeld||!humanResponse?null:r.timezone,callbackQuote:humanResponse?r.callbackQuote:null,callbackEvidence:humanResponse?r.callbackEvidence:null,
   nextAction:optedOut?'Do not contact again.':followupHeld?'Automatic follow-up stopped after the seller response; review the original conversation.':humanRequested?`Review the ${expected.party} conversation and contact them personally.`:interested?'Confirm condition, timing, price and all owners before negotiating.':'Review the conversation before the next contact.',

@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import {dealMachineRequest} from '../lib/dealmachine-request.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
+import {requestDiscoveryEstimate,DiscoveryEstimateHeld} from '../lib/discovery-estimate.ts';
 import {discoverPage} from '../lib/discovery-pipeline.ts';
 import {selectDiscoveryFilter,DiscoveryFilterUnavailable,discoveryStrategies} from '../lib/discovery-filters.ts';
 import {ProspectingBudgetError,voiceReservationFailure} from '../lib/voice-budget-failure.ts';
 Object.assign(process.env,{DEALMACHINE_API_KEY:'dm_sk_live_FIXTURE_NO_NETWORK',ICASH_ACQUISITION_MODE:'outbound'});
 let events=[],rpc=[],response=200,failPaid=false,existing=false,disabled=false,empty=false,budgetRejected=false;
 const svc=await loadService('lib/discovery-service.ts',{
- dealMachineRequest,syncResearchExclusions:async()=>null,discoveryWorkEnabled:()=>true,liveWorkReady:()=>true,propertyResearchMarketKnown:async()=>true,discoverPage,selectDiscoveryFilter,DiscoveryFilterUnavailable,
+ requestDiscoveryEstimate,DiscoveryEstimateHeld,dealMachineRequest,syncResearchExclusions:async()=>null,discoveryWorkEnabled:()=>true,liveWorkReady:()=>true,propertyResearchMarketKnown:async()=>true,discoverPage,selectDiscoveryFilter,DiscoveryFilterUnavailable,
  db:async(path,method,body)=>{
   if(path.startsWith('icash_discovery_configs'))return [{enabled:true,zip:'75217',rate_id:'rate',property_credit_micros:10000,data_rights_until:'2099-01-01',per_page:5,next_page:1,revision:'revision'}];
   if(path.startsWith('icash_bot_setups'))return [{revision:1,profile:{marketMode:'city',market:'75217'}}];
@@ -16,6 +17,8 @@ const svc=await loadService('lib/discovery-service.ts',{
   if(path.startsWith('icash_operation_rates'))return [{enabled:true,operation:'property_search',expires_at:'2099-01-01',costs_micros:{dealmachine:50000}}];
   if(path.startsWith('icash_operation_spend'))return existing?[{state:'dispatched'}]:[];
   rpc.push({path,body});
+  if(path==='rpc/icash_claim_discovery_estimate')return {status:'request',token:'00000000-0000-4000-8000-000000000001'};
+  if(path==='rpc/icash_finish_discovery_estimate')return true;
   if(path==='rpc/icash_prepare_discovery_inventory')return 'ready';
   if(path==='rpc/icash_save_filtered_discovery'||path==='rpc/icash_save_discovery')return 0;
   if(path==='rpc/icash_discovery_filter_state_v2')return disabled?null:discoveryStrategies.map(strategy=>({strategy,nextPage:3,exhausted:false,pages:0,attempted:0,pendingAttempts:0,recentUnproductivePages:0,matureAttempts:0,interested:0,optedOut:0,costCents:0,costsComplete:true}));

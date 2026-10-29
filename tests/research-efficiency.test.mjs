@@ -82,4 +82,25 @@ assert.equal(admissions,1,'There is no second limiter call after financial admis
 assert.equal((await enrichOwnerBatch(db,'account','1',config,250000,transport)).status,'held');assert.equal(paid,1);
 claimed=false;timeout=true;await assert.rejects(enrichOwnerBatch(db,'account','1',config,250000,transport),/timeout/);assert.equal(paid,2);
 assert.equal((await enrichOwnerBatch(db,'account','1',config,250000,transport)).status,'held');assert.equal(paid,2);
+// A phone-less primary cannot discard other owners from the same preview.
+const noPrimary=structuredClone(preview);
+for(const contact of noPrimary.data[0].contacts)contact.availability={phones:0};
+const siblingAudience=ownerBatchAudience(noPrimary,candidates,25).filter(a=>a.ids.length);
+const siblingIds=[...new Set(siblingAudience.flatMap(a=>a.ids))];
+const siblingReceipt={data:siblingIds.map(id=>({dm_person_id:id,found:true,phones:[]})),totals:{submitted:siblingIds.length,found:siblingIds.length,not_found:0},credits:{used:siblingIds.length,people:siblingIds.length,properties:0,deduplicated:0}};
+let previews=0,siblingPaid=0,batchSaved;
+const siblingDb=async(path,method,body)=>{
+ if(path==='rpc/icash_owner_batch_candidates')return candidates;
+ if(path==='rpc/icash_take_dealmachine_request'||path==='rpc/icash_finish_dealmachine_request')return true;
+ if(path==='rpc/icash_admit_owner_batch'){assert.equal(body.p_primary,'2');assert.deepEqual(body.p_items.map(x=>x.screeningId),['2','3']);assert.deepEqual(body.p_preview,noPrimary);return 'claimed';}
+ if(path==='rpc/icash_record_owner_batch_receipt'){assert.deepEqual(body.p_receipt,siblingReceipt);return true;}
+ if(path==='rpc/icash_save_owner_batch'){batchSaved=body.p_results;return true;}
+ throw Error(path);
+};
+const siblingTransport=async(url,init)=>{if(url.endsWith('/properties/ids')){previews++;return Response.json(noPrimary);}siblingPaid++;assert.deepEqual(JSON.parse(init.body).ids,siblingIds);return Response.json(siblingReceipt);};
+assert.deepEqual(await enrichOwnerBatch(siblingDb,'account','1',config,250000,siblingTransport),{status:'empty',contacts:0,batchProperties:2});
+assert.equal(previews,1);assert.equal(siblingPaid,1);assert.deepEqual(batchSaved.map(x=>x.screeningId),['2','3']);
+for(const row of noPrimary.data)for(const contact of row.contacts)contact.availability={phones:0};
+assert.deepEqual(await enrichOwnerBatch(siblingDb,'account','1',config,250000,siblingTransport),{status:'empty',contacts:0});
+assert.equal(previews,2);assert.equal(siblingPaid,1,'An all-empty preview never buys contact data');
 console.log('Research efficiency: 25-record query policy, owner batching, exact aggregate allocation, protected contacts, telemetry and no paid replay passed.');
