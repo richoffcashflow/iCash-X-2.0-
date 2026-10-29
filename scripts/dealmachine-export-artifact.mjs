@@ -46,7 +46,7 @@ function shape(value,personId){
 }
 /** Free read of the original approved export only. No export creation or retry. */
 export async function inspectSavedActiveExport({db,transport=fetch,provider=activeExportProbeProvider}){
- if(![activeExportProbeProvider,activeExportRetryProvider,'dealmachine_active_phone_export_verification_20261028_v3'].includes(provider))throw Error('EXPORT_OPERATION_INVALID');
+ if(![activeExportProbeProvider,activeExportRetryProvider,'dealmachine_active_phone_export_verification_20261028_v3','dealmachine_active_phone_export_verification_20261029_v4'].includes(provider))throw Error('EXPORT_OPERATION_INVALID');
  const path=`icash_integration_checks?provider=eq.${provider}`;
  const rows=await db(path+'&select=result'),saved=rows?.[0]?.result;
  if(rows?.length!==1||saved?.status!=='response_saved'||saved.httpStatus!==200)return {status:'no_completed_export'};

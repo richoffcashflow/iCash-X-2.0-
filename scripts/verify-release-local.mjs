@@ -2,6 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
+ 'dealmachine-active-export-v3', 'dealmachine-active-export-v4', 'owner-export-diagnostic-slot',
  'owner-active-export', 'owner-active-export-database', 'owner-active-export-contact-sources',
  'research-request-reuse', 'research-provider-feedback', 'seller-interest-evidence',
  'outcome-ranker', 'outcome-ranker-database', 'outcome-ranker-service',
