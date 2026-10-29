@@ -2,8 +2,8 @@ import {currentSupportIssue,supportContinuation} from './support-reply-style.ts'
 
 type Turn={role:string;content:string};
 type Answer={reply:string;status:'open'|'resolved'|'waiting_on_customer'};
-const agreement=/\b(?:contracts?|agreements?|documents?|signing|signatures?)\b/i;
-const failure=/\b(?:expired|error|failed|missing|blocked|stuck|unavailable|never|not|cannot)\b|\b(?:can|does|did|is|was|will|would)n[’']?t\b/i;
+const agreement=/\b(?:contracts?|agreements?|signing|signatures?)\b|\bdocuments\s+(?:section|tab|button)\b|\b(?:where|find|open)\b.{0,25}\bdocuments\b|^documents[.!?\s]*$/i;
+const failure=/\b(?:expired|error|fails?|failed|missing|blocked|stuck|unavailable|never|not|cannot)\b|\b(?:can|does|did|is|was|wo|would)n[’']?t\b/i;
 const navigation='Open the property in Your leads, then choose Documents.';
 const delivery='Contracts are handled online. The seller gets a secure text link to review and sign in their browser; we don’t mail paper contracts.';
 
@@ -35,6 +35,7 @@ export function supportContractAnswer(messages:Turn[]):Answer|null{
  if(/\b(?:no|without|cannot|can[’']?t|doesn[’']?t|don[’']?t)\b.{0,35}\b(?:smartphone|computer|internet|text)\b/i.test(q))return result(`${delivery} If the seller cannot open the link, keep that signing issue open for review. Don’t promise paper delivery or sign on the seller’s behalf.`,'open');
  if(/\b(?:mail|mailed|mailing|postal|paper|print|printing|courier|online|electronically|digital)\b/i.test(q))return result(correction+delivery);
  if(/\b(?:signed|done|complete|completed)\b/i.test(q)&&!/\b(?:where|download|copy)\b/i.test(q))return result(`${navigation} Use Check signature status on the existing agreement. The seller saying “done” does not confirm all signatures; when the seller signatures are verified, your step is Review & sign.`,'open');
+ if(/\b(?:download|copy|pdf)\b/i.test(q)&&failure.test(q))return result('The contract download problem is still unresolved. '+navigation+' Is the failing button Download purchase draft, Download assignment draft, or Download signed PDF?','open');
  if(/\b(?:download|copy|pdf)\b/i.test(q))return result(`${navigation} ${/\b(?:assignment|buyer)\b/i.test(q)?'Download assignment draft is available after the purchase agreement is fully signed.':'Download purchase draft gives you an unsigned draft.'} Download signed PDF is available for a completed agreement; downloading a draft does not send it or put the property under contract.`);
  if(/\b(?:where|find|section|page|documents|agreement)\b/i.test(q)&&! /\b(?:send|sign|seller|owner|buyer|prepare|review)\b/i.test(q))return result(correction+navigation+' Open Send for signatures & history to see the signing request and its status.',failure.test(q)?'open':'resolved');
  if(/\b(?:send|sending|text|email|prepare|seller|owner|sign|review|take over)\b/i.test(q))return result(correction+delivery+' To send it yourself, choose Take over on the property, then Documents → Edit agreement → Save draft. Open Send for signatures, review the terms and every required signer, then choose Text contract link.',failure.test(q)?'open':'resolved');

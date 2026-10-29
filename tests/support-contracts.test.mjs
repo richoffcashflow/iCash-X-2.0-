@@ -23,6 +23,7 @@ for(const [question,pattern] of [
  ['It says contract check has expired',/does not by itself mean the contract expired/],
  ['The owner says the agreement is signed',/Check signature status/],
  ['The contract has the wrong seller name',/unsent draft/],
+ ['The contract download fails',/download problem is still unresolved/],
  ['The seller wants to send us their own contract',/terms need review/],
 ]){
  const result=await replyToSupport({kind:'account',messages:[user(question)]},noNetwork);
@@ -40,6 +41,6 @@ const faultThenQuestion=await replyToSupport({kind:'account',messages:[user('The
 assert.equal(faultThenQuestion.status,'open','Answering a process question must not close missing delivery');
 const unverifiedSignature=[user('The owner says the agreement is signed'),assistant('Use Check signature status on the existing agreement.'),user('Thanks')];
 assert.notEqual(supportConversationFallback({kind:'account',messages:unverifiedSignature}).status,'resolved','A thank-you does not verify a signature');
-for(const newTopic of ['Cancel my subscription','My card did not save','How do I choose a city for the bot?','I want a human to help with the contract'])assert.equal(supportContractAnswer([user('The owner wants the contract'),assistant('Use Documents.'),user(newTopic)]),null);
+for(const newTopic of ['Cancel my subscription','My card did not save','My document download fails.','How do I choose a city for the bot?','I want a human to help with the contract'])assert.equal(supportContractAnswer([user('The owner wants the contract'),assistant('Use Documents.'),user(newTopic)]),null);
 for(const reply of ['Mail the agreement to the seller.','Print the contract and take it to the post office.','Create a new contract to replace the expired one.','We have sent the contract.'])assert(unsupportedSupportReply(reply,[user('The contract is stuck')],[]));
 assert.equal(calls,0);console.log('Online contract support: exact controls, short follow-ups, unresolved delivery, expired checks, signature evidence, cancellation separation and topic changes passed. No messages or provider calls.');
