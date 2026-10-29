@@ -47,7 +47,7 @@ const route=await loadService('app/api/internal/maintenance/route.ts',{
  processSupportOwnerNotifications:async()=>({failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),
  authorizeOutboundBilling:()=>authorized,maintenanceBatch,
  refreshReliability:async(_db,healthy)=>{assert.equal(healthy,true);maintenanceRuns++;return true;},
- syncResearchExclusions:db=>syncResearchExclusions(db,fetch),db:maintenanceDb,
+ recoverOwnerActiveExports:async()=>({status:'export_recovery_idle'}),syncResearchExclusions:db=>syncResearchExclusions(db,fetch),db:maintenanceDb,
  pruneUsageLoopObservations:async()=>null,outbound:ok,recording:ok,ownerRecording:ok,reception:ok,
  process:{env:{}},
 });

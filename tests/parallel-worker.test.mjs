@@ -29,4 +29,15 @@ const token='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'.repeat(2),calls=[];
 await automationTick(async(name,args)=>{calls.push({name,args});return {token};},async(url,opts)=>{assert.equal(url,'https://www.geticashx.com/api/internal/automation');assert.equal(opts.headers.Authorization,'Bearer '+token);return new Response('{}');},'research');
 assert.deepEqual(calls,[{name:'icash_next_automation_lane',args:{p_lane:'research'}}]);
 await assert.rejects(automationTick(async()=>assert.fail('invalid lane reached DB'),fetch,'unknown'));
+// Research may legitimately wait for a 120-second export plus receipt recovery.
+// Other pools retain the shorter stalled-handler threshold.
+for(const [pool,at,expected] of [['research',180000,200],['general',180000,200],['research',260001,503],['voice',140001,503]]){
+ let clock=0,release;const s=createScheduler({now:()=>clock,automationPools:[pool],screening:async()=>false,automation:()=>new Promise(r=>{release=r;})});
+ s.run();await flush();clock=at;s.run();assert.equal(s.health().code,expected);release(false);await s.stop();
+}
+const actualTimeout=AbortSignal.timeout,deadlines=[];
+try{AbortSignal.timeout=ms=>{deadlines.push(ms);return new AbortController().signal;};
+ for(const lane of ['research','general','voice'])await automationTick(async()=>({token}),async()=>new Response('{}'),lane);
+ assert.deepEqual(deadlines,[235000,235000,115000]);
+}finally{AbortSignal.timeout=actualTimeout;}
 console.log('Parallel worker: 8/16 bounded slots, reserved recovery, round-robin claims, no replay, isolated screening, shutdown and lane validation passed. Offline only.');

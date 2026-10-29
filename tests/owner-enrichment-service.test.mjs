@@ -19,6 +19,7 @@ function reset(){
  state={config:{enabled:true,contacts_enabled:true,contact_rate_id:'rate',contact_credit_cap:25,property_credit_micros:10000,data_rights_until:rights},job:{state:'complete',completed_at:new Date().toISOString(),result:runScreeningJob(snapshot),snapshot:structuredClone(snapshot)},rate:{operation:'owner_enrichment',enabled:true,expires_at:rights,costs_micros:{dealmachine:250000}},manual:false,requests:[],dbCalls:[],observations:[],saved:[],claimed:false,reserved:false,reserveCount:0,paidCount:0,previewCount:0,denyReserve:null,denyClaim:false,denyRateSlot:0,afterPreview:null,beforeFinalClaim:null,previewTransform:null,paidTransform:null,paidError:null,previewError:null,owners:Array.from({length:30},(_,i)=>({dm_person_id:'per_'+i,full_name:'Fixture',is_likely_owner:true,is_in_owner_family:false,is_resident:false,is_likely_renter:false}))};
 }
 const db=async(path,method,body)=>{
+ if(path==='rpc/icash_owner_active_export_enabled')return false;
  state.dbCalls.push({path,method,body});
  if(path==='rpc/icash_finish_dealmachine_request')return true;
  if(path==='rpc/icash_settle_dealmachine_usage'){assert.equal(body.p_operation,operationKey);assert.equal(state.saved.length,1,'Usage settlement follows the persisted receipt');return true;}

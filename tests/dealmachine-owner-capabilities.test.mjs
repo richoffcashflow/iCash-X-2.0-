@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {inspectOwnerCapabilities} from '../scripts/check-dealmachine-owner-capabilities.mjs';
 let calls=0;
 assert.deepEqual(await inspectOwnerCapabilities({},()=>{throw Error('network');}),{status:'unconfigured',paidRequests:0});
+assert.equal((await inspectOwnerCapabilities({VERCEL_ENV:'preview',VERCEL_GIT_COMMIT_REF:'codex/dealmachine-active-phone-contract-20261027',DEALMACHINE_API_KEY:'fixture'},()=>{throw Error('unexpected extra read');})).status,'covered_by_scoped_preview');
 const result=await inspectOwnerCapabilities({DEALMACHINE_API_KEY:'fixture-secret'},async(url,options)=>{
  calls++;assert.equal(options.method,'GET');assert.equal(options.body,undefined);assert.equal(options.redirect,'error');
  assert.equal(options.headers.Authorization,'Bearer fixture-secret');

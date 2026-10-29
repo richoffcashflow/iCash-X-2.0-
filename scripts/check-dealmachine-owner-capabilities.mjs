@@ -4,6 +4,8 @@ import {resolve} from 'node:path';
 // Free catalog reads only. No contacts, searches, exports, lists or credits.
 // This runs in the existing trusted build environment; credentials never leave it.
 export async function inspectOwnerCapabilities(env=process.env,transport=fetch){
+ // The one-time phone preview owns this branch's tightly bounded API reads.
+ if(env.VERCEL_ENV==='preview'&&env.VERCEL_GIT_COMMIT_REF==='codex/dealmachine-active-phone-contract-20261027')return {status:'covered_by_scoped_preview',paidRequests:0};
  if(!env.DEALMACHINE_API_KEY)return {status:'unconfigured',paidRequests:0};
  const matches=[];
  for(let page=1;page<=4;page++){

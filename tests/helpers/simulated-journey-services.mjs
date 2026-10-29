@@ -53,6 +53,9 @@ export function legacyResearchFixtureDb(db){
   if(path==='rpc/icash_claim_discovery_estimate')return Promise.resolve({status:'request',token:'00000000-0000-4000-8000-000000000001'});
   if(path==='rpc/icash_finish_discovery_estimate')return Promise.resolve(true);
   if(path==='rpc/icash_prepare_research_efficiency')return Promise.resolve(false);
+  // Historical journey schemas keep lookup mode; the export SQL/service have
+  // their own actual-engine and transport suites.
+  if(path==='rpc/icash_owner_active_export_enabled')return Promise.resolve(false);
   if(path==='rpc/icash_claim_research_exclusions')return Promise.resolve(null);
   if(path==='rpc/icash_finish_dealmachine_request')return Promise.resolve(true);
   return db(path,method,path==='rpc/icash_take_dealmachine_request'?{}:body);
