@@ -5,7 +5,7 @@ type Credits={used:number;people:number;properties:number;deduplicated:number};
 export type OwnerCreditObservation={used:number|null;people:number|null;properties:number|null;deduplicated:number|null};
 type Dependencies={
  previewOwners:(propertyId:string)=>Promise<unknown>;
- reserveAndClaim:()=>Promise<boolean>;
+ reserveAndClaim:(ids:readonly string[])=>Promise<boolean>;
  fetchPeople:(ids:readonly string[])=>Promise<unknown>;
  recordReceipt:(receipt:OwnerCreditObservation)=>Promise<void>;
  persist:(result:OwnerResult)=>Promise<void>;
@@ -93,7 +93,7 @@ export async function enrichOwners(i:Input,d:Dependencies,now=Date.now()){
  if(![i.creditCap,i.unitCostMicros,i.quotedDataCostMicros].every(n=>Number.isSafeInteger(n)&&n>0)||i.creditCap>25||BigInt(i.creditCap)*BigInt(i.unitCostMicros)>BigInt(i.quotedDataCostMicros))throw new Error('CONTACT_RATE_REQUIRED');
  const {ids,owners}=previewAudience(await d.previewOwners(screening.property.propertyId),screening.property.propertyId,i.creditCap);
  if(ids.length===0)return {status:'empty',contacts:0};
- if(!await d.reserveAndClaim())return {status:'held'};
+ if(!await d.reserveAndClaim(ids))return {status:'held'};
  // One fixed ID set, one paid request. A timeout or invalid receipt must never trigger a replay.
  const raw=await d.fetchPeople(ids);
  // Preserve actual credit evidence even when the paid response fails validation.
