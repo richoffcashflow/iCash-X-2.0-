@@ -31,6 +31,7 @@ assert.equal((await adminRoute.GET(adminReq)).status,503);assert.equal(reportRea
 // healthy status into a failed maintenance tick.
 let lanesRan=false,monitorRan=false,pruneTried=false;
 const maintenance=await load('app/api/internal/maintenance/route.ts','usageMaintenanceTest',{
+ recoverOwnerActiveExports:async()=>{throw Error('Original export receipt unavailable');},
  syncResearchExclusions:async()=>({status:'not_due'}),
  refreshInventoryGeographyBatch:async()=>({status:'not_due'}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),refreshVoiceCapacity:async()=>{throw Error('Provider unavailable');},readRecordingReview:()=>null,readVoiceCapacityProvider:async()=>{throw Error('Unexpected provider request');},
  authorizeOutboundBilling:()=>true,pruneUsageLoopObservations,
@@ -40,7 +41,7 @@ const maintenance=await load('app/api/internal/maintenance/route.ts','usageMaint
  outbound:async()=>{},recording:async()=>{},ownerRecording:async()=>{},reception:async()=>{},
 });
 const maintenanceResult=await maintenance.GET(new Request('https://example.test/api/internal/maintenance'));
-assert.equal(maintenanceResult.status,200);assert.equal((await maintenanceResult.json()).capacity.status,'verification_unavailable');
+assert.equal(maintenanceResult.status,200);const maintenanceBody=await maintenanceResult.json();assert.equal(maintenanceBody.capacity.status,'verification_unavailable');assert.equal(maintenanceBody.ownerExports.status,'export_receipt_held');
 assert(pruneTried&&lanesRan&&monitorRan);
 for(const key of ['usageEventTest','usageAdminTest','usageMaintenanceTest'])delete globalThis[key];
 console.log('PASS usage tracking routes: same-origin/session/mode checks, no client account or conversion fields, owner-only report, and telemetry failure isolated from maintenance.');
