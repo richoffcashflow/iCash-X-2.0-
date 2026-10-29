@@ -7,13 +7,14 @@ const user=content=>({role:'user',content}),assistant=content=>({role:'assistant
 process.env.ICASH_SUPPORT_AI_ENABLED='true';process.env.ICASH_SUPPORT_AI_MODEL='fixture';process.env.OPENAI_API_KEY='fixture';
 let calls=0;const noNetwork=async()=>{calls++;throw Error('Known contract guidance cannot use a model');};
 const evidence=[{key:'credits',status:'attention',code:'no_available_credit',detail:'Unrelated wallet',source:'fixture',observedAt:new Date().toISOString()}];
-for(const question of ['The owner wants us to send the contract','If I take over a deal and the seller wants it how do I get the contract to send them to sign?','How do I email a contract to the seller?','Can we mail the agreement?','Seller wants a paper contract','Do I print and mail the contract?']){
+for(const question of ['The owner wants us to send the contract','If I take over a deal and the seller wants it how do I get the contract to send them to sign?','How do I email a contract to the seller?','Can we mail the agreement?','Can we mail the signed contract?','Seller wants a paper contract','Do I print and mail the contract?']){
  const result=await replyToSupport({kind:'account',messages:[user(question)],evidence},noNetwork);
  assert.match(result.reply,/online/);assert.match(result.reply,/secure text link/);assert.match(result.reply,/don’t mail paper contracts/);
  assert.doesNotMatch(result.reply,/credits|balance|readiness|VIP|Which page/i);assert.equal(result.ai,false);assert.equal(result.status,'resolved');
 }
 for(const question of ['How do I cancel a contract?','I need help cancelling the agreement','Where is the documents section to send the contract?','The owner wants the agreement'])assert.equal(supportTopic(question),'work');
 const cancel=await replyToSupport({kind:'account',messages:[user('How do I cancel a contract?')]},noNetwork);
+assert.match(supportContractAnswer([user('Where do I download the assignment contract?')]).reply,/Download assignment draft is available after the purchase agreement is fully signed/);
 assert.match(cancel.reply,/contract cancellation controls/);assert.doesNotMatch(cancel.reply,/account menu|Cancel subscription/);assert.match(cancel.reply,/does not by itself end/);
 assert.equal(supportTopic('Cancel my subscription'),'cancel');assert.equal(supportTopic('I want a human to review the contract'),'human');
 for(const [question,pattern] of [
