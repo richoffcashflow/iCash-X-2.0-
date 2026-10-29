@@ -151,6 +151,9 @@ export async function recoverOwnerActiveExports(db:ResearchDb,transport:typeof f
 }
 export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:Candidate,c:Config,quotedDataCostMicros:number,transport:typeof fetch=fetch){
  if(![c.contact_credit_cap,c.property_credit_micros,quotedDataCostMicros].every(n=>Number.isSafeInteger(n)&&n>0)||c.contact_credit_cap>25||BigInt(c.contact_credit_cap)*BigInt(c.property_credit_micros)>BigInt(quotedDataCostMicros))throw Error('CONTACT_RATE_REQUIRED');
+ const capacity=await db<string>('rpc/icash_owner_active_export_capacity','POST',{});
+ if(capacity==='export_busy'||capacity==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+ if(capacity!=='ready')return {status:'held'};
  const candidates=c.research_version===1||c.research_version===2?await db<Candidate[]>('rpc/icash_owner_batch_candidates','POST',{p_account:accountId,p_screening:primary.screeningId}):[primary];
  if(!candidates.length||candidates.length>5||!candidates.some(x=>x.screeningId===primary.screeningId)||candidates.some(x=>runScreeningJob(x.snapshot).financialCheck.status!=='eligible'))return {status:'held'};
  const batchId=randomUUID(),key=process.env.DEALMACHINE_API_KEY;
@@ -175,7 +178,10 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
   if(await db<boolean>('rpc/icash_record_owner_export_receipt','POST',{p_account:accountId,p_batch:batchId,p_receipt:{httpStatus:r.status,rawText,raw}})!==true)throw Error('OWNER_EXPORT_RECEIPT_SAVE_UNCONFIRMED');
   return new Response(rawText,{status:r.status,headers:r.headers});
  });
- const result=await recoverOwnerActiveExports(db,transport,batchId);
+ const recovered=await recoverOwnerActiveExports(db,transport,batchId);
+ // A saved error without an export ID cannot enter original-ID recovery. It
+ // remains an unresolved purchase, never ordinary idle work or a retry signal.
+ const result=recovered.status==='export_recovery_idle'?{status:'export_receipt_held'}:recovered;
  if(result.status==='contacts_saved'&&!audience.some(a=>a.screeningId===primary.screeningId))return {...result,status:'empty',contacts:0};
  return result;
 }

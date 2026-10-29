@@ -21,7 +21,7 @@ try{
  create table icash_operation_rates(id uuid,operation text,enabled boolean,expires_at timestamptz);
  create table icash_operation_spend(operation_key text primary key,account_id uuid,state text);
  create table icash_discovery_filter_settings(id int,enabled boolean);insert into icash_discovery_filter_settings values(1,true);
- create table icash_discovery_filter_pages(operation_key text,account_id uuid,zip text,plan jsonb,state text);
+ create table icash_discovery_filter_pages(operation_key text,account_id uuid,zip text,plan jsonb,state text,revision uuid,sequence int);
  create table icash_discovery_filter_cursors(account_id uuid,revision uuid,zip text,strategy text,next_page int,exhausted boolean default false,pages int default 0,skipped_assigned_pages int default 0,primary key(account_id,revision,strategy));
  create table icash_discovery_inventory_receipts(operation_key text,account_id uuid,revision uuid,zip text,strategy text,provider_page int,per_page int,property_ids text[],returned_properties int,queued_properties int,duplicate_properties int,has_next_page boolean,created_at timestamptz default now(),query_policy jsonb);
  create table icash_outbound_property_owners(property_id text primary key,account_id uuid);
@@ -49,6 +49,17 @@ try{
  const migration=read('config/research-request-reuse.sql');
  assert.equal(migration,read('supabase/migrations/20261028221222_research_request_reuse.sql'));
  await db.exec(migration);
+ await db.exec(`create table icash_research_private.query_claims(operation_key text,account_id uuid,policy jsonb);
+ create table icash_research_private.owner_exports(id uuid primary key,terminal_at timestamptz);
+ create table icash_research_private.owner_export_settings(id int primary key,enabled boolean);insert into icash_research_private.owner_export_settings values(1,false);
+ create function icash_owner_active_export_enabled() returns boolean language sql as $$select enabled from icash_research_private.owner_export_settings where id=1$$;
+ create table fixture_reservations(account_id uuid);
+ create function icash_reserve_and_claim_property_discovery(uuid,text,uuid,int,int,uuid,bigint,timestamptz,int,text,text) returns boolean language plpgsql as $$begin insert into public.fixture_reservations values($1);return true;end$$;
+ `);
+ await db.exec(read('config/unique-outbound-inventory.sql').match(/create function public\.icash_known_assigned_discovery_page[\s\S]*?\$\$;/)[0]);
+ for(const f of JSON.parse(read('tests/fixtures/research-duplicate-before.json')))await db.exec(f.definition);
+ assert.equal(read('config/research-duplicate-efficiency.sql'),read('supabase/migrations/20261029030852_research_duplicate_efficiency.sql'));
+ await db.exec(read('config/research-duplicate-efficiency.sql'));
  for(const a of [account,other]){
   await q('insert into icash_accounts values($1,false)',[a]);await q('insert into icash_wallets values($1,2500,0)',[a]);
   await q("insert into icash_discovery_configs(account_id,zip,revision,next_page,per_page,rate_id,property_credit_micros,data_rights_until,research_version) values($1,'75217',$2,1,25,$3,10000,'2099-01-01',2)",[a,revision,rate]);
@@ -69,7 +80,7 @@ try{
  await db.exec('update fixture_admission set stalled=true');assert.equal((await claim()).status,'held');await db.exec('update fixture_admission set stalled=false');
  assert.equal((await value('select icash_claim_discovery_estimate($1,$2,$3,$4,$5)',[account,{...scope,p_page:2},plan,policy,query])).status,'held','Changed scope is rejected');
  await q("insert into icash_operation_spend values('unknown-purchase',$1,'dispatched')",[other]);
- await q("insert into icash_discovery_filter_pages values('unknown-purchase',$1,'75217',$2,'claimed')",[other,plan]);
+ await q("insert into icash_discovery_filter_pages(operation_key,account_id,zip,plan,state) values('unknown-purchase',$1,'75217',$2,'claimed')",[other,plan]);
  assert.equal((await claim()).status,'held','Original unknown query blocks before another free estimate');
  const stats=await value('select icash_discovery_filter_state_v2($1,$2,1)',[account,revision]);
  assert.equal(stats.find(s=>s.strategy==='vacant').blocked,true);
@@ -82,6 +93,49 @@ try{
  await db.exec("update icash_research_private.estimates set retry_at=now()-interval '1 second'");
  lease=await claim();await value('select icash_finish_discovery_estimate($1,$2,$3)',[account,lease.token,estimate]);
  await db.exec("update icash_research_private.estimates set saved_at=now()-interval '6 minutes'");assert.equal((await claim()).status,'request','Expired estimates are never reused');
+ // Exact non-contact estimates coalesce across accounts; each requester still
+ // has to pass its own scope, funding, Pause and unresolved-operation checks.
+ await db.exec('delete from icash_research_private.estimates');
+ await value('select icash_discovery_filter_state_v2($1,$2,1)',[other,revision]);
+ const peerClaim=(body=query)=>value('select icash_claim_discovery_estimate($1,$2,$3,$4,$5)',[other,scope,plan,policy,body]);
+ lease=await claim();assert.equal(lease.status,'request');
+ assert.equal((await peerClaim()).status,'held','Another account does not duplicate the in-flight exact estimate');
+ await value('select icash_finish_discovery_estimate($1,$2,$3)',[account,lease.token,{...estimate,unexpected_private_field:'never share'}]);
+ assert.deepEqual(await peerClaim(),{status:'cached',response:estimate});
+ assert.equal(await value('select sum(shared_hits)::int from icash_research_private.estimates'),1);
+ await q('update icash_accounts set bot_paused=true where id=$1',[other]);assert.equal((await peerClaim()).status,'held');
+ await q('update icash_accounts set bot_paused=false where id=$1',[other]);
+ await q('update icash_wallets set balance_cents=0 where account_id=$1',[other]);assert.equal((await peerClaim()).status,'held');
+ await q('update icash_wallets set balance_cents=2500 where account_id=$1',[other]);
+ assert.equal((await peerClaim({...query,page:2})).status,'request','Different page cannot borrow a price estimate');
+ await db.exec('delete from icash_research_private.estimates');
+ lease=await claim();await value('select icash_finish_discovery_estimate($1,$2,null)',[account,lease.token]);
+ assert.equal((await peerClaim()).status,'held','Free-request backoff also coalesces across workers');
+ await db.exec("update icash_research_private.estimates set retry_at=now()-interval '1 second'");
+ lease=await claim();await value('select icash_finish_discovery_estimate($1,$2,$3)',[account,lease.token,estimate]);
+ await db.exec("update icash_research_private.estimates set saved_at=now()-interval '6 minutes'");
+ assert.equal((await peerClaim()).status,'request','Shared reuse does not renew old evidence');
+ await db.exec('delete from icash_research_private.estimates');
+ // Same query text with a different synchronized exclusion generation must
+ // obtain a new free estimate; source generations are never silently renewed.
+ await db.exec("update icash_discovery_configs set research_list_id='fixture-list';insert into icash_research_private.exclusions(id,list_id,last_synced_at) values(1,'fixture-list',now())");
+ const listPolicy={...policy,exclusionListId:'fixture-list'},listQuery={...query,exclude_lists:{property_list_ids:['fixture-list']}};
+ lease=await claim(plan,listPolicy,listQuery);assert.equal(lease.status,'request');
+ await value('select icash_finish_discovery_estimate($1,$2,$3)',[account,lease.token,estimate]);
+ await db.exec("update icash_research_private.exclusions set last_synced_at=now()+interval '1 second'");
+ assert.equal((await value('select icash_claim_discovery_estimate($1,$2,$3,$4,$5)',[other,scope,plan,listPolicy,listQuery])).status,'request');
+ await db.exec('delete from icash_research_private.estimates;update icash_discovery_configs set research_list_id=null');
+ // An export hold is checked without spending quota or reserving money.
+ assert.equal(await value('select icash_owner_active_export_capacity()'),'disabled');
+ await db.exec('update icash_research_private.owner_export_settings set enabled=true');
+ assert.equal(await value('select icash_owner_active_export_capacity()'),'ready');
+ await q('insert into icash_research_private.owner_exports values($1,null)',[id(90)]);
+ assert.equal(await value('select icash_owner_active_export_capacity()'),'export_busy');
+ assert.equal(await value('select count(*)::int from icash_operation_spend'),1,'Original unknown operation is the only spend row');
+ await q('update icash_research_private.owner_exports set terminal_at=now() where id=$1',[id(90)]);
+ await db.exec('create or replace function icash_dealmachine_capacity_available(integer default 1) returns boolean language sql as $$select false$$');
+ assert.equal(await value('select icash_owner_active_export_capacity()'),'quota_wait');
+ await db.exec('create or replace function icash_dealmachine_capacity_available(integer default 1) returns boolean language sql as $$select true$$');
  // The disabled provider list does no background sync, with pending IDs intact.
  await db.exec("insert into icash_research_private.exclusion_items values('prop_1',null)");
  assert.equal(await value('select icash_claim_research_exclusions()'),null);
@@ -90,9 +144,20 @@ try{
  await q("insert into icash_outbound_property_owners values('prop_1',$1)",[other]);
  await q("insert into icash_discovery_inventory_receipts(operation_key,account_id,revision,zip,strategy,provider_page,per_page,property_ids,returned_properties,queued_properties,duplicate_properties,has_next_page,query_policy) values('saved',$1,$2,'75217','vacant',1,25,array['prop_1'],1,1,0,true,$3)",[other,revision,policy]);
  assert.deepEqual(await value("select icash_known_assigned_research_page('75217','vacant',1,25,$1)",[policy]),{hasNextPage:true});
+ // The page became fully assigned after initial preparation/estimate. The final
+ // admission must refuse it before reaching even the financial fixture.
+ assert.equal((await claim()).status,'held');
+ assert.equal(await value('select icash_reserve_research_discovery($1,$2,$3,$4)',[account,scope,plan,policy]),false);
+ assert.equal(await value('select count(*)::int from fixture_reservations'),0);
+
  for(const p of [null,{...policy,version:'research-efficiency-v1'},{...policy,exclusionListId:'fixture-list'}])assert.equal(await value("select icash_known_assigned_research_page('75217','vacant',1,25,$1)",[p]),null);
  await q("update icash_discovery_inventory_receipts set property_ids=array['prop_1','prop_unassigned'] where operation_key='saved'");
  assert.equal(await value("select icash_known_assigned_research_page('75217','vacant',1,25,$1)",[policy]),null,'Partial assignment cannot be skipped');
+ assert.equal(await value('select icash_reserve_research_discovery($1,$2,$3,$4)',[account,{...scope,p_page:99},plan,policy]),false,'Scope changes stay rejected');
+ assert.equal(await value('select icash_reserve_research_discovery($1,$2,$3,$4)',[account,scope,plan,policy]),true,'Partially assigned pages retain their remaining inventory');
+ assert.equal(await value('select count(*)::int from fixture_reservations'),1);
+ await db.exec('delete from icash_discovery_filter_pages');
+
  await q("update icash_discovery_inventory_receipts set property_ids=array['prop_1'] where operation_key='saved'");
  assert.equal(await value('select icash_prepare_discovery_inventory($1,$2,1)',[account,revision]),'ready');
  assert.equal(await value("select next_page from icash_discovery_filter_cursors where account_id=$1 and strategy='vacant'",[account]),2);
@@ -100,7 +165,7 @@ try{
  await db.exec("update icash_research_private.estimates set updated_at=now()-interval '2 days',lease_until=now()-interval '1 minute'");
  await value('select icash_prune_research_requests()');assert.equal(await value('select count(*)::int from icash_research_private.estimates'),0,'Disposable estimate cache is pruned');
  assert.equal(await value("select state from icash_operation_spend where operation_key='unknown-purchase'"),'dispatched');
- for(const role of ['anon','authenticated'])for(const signature of ['icash_claim_discovery_estimate(uuid,jsonb,jsonb,jsonb,jsonb)','icash_finish_discovery_estimate(uuid,uuid,jsonb)','icash_research_query_ready(uuid,jsonb,jsonb,jsonb)'])assert.equal(await value(`select has_function_privilege('${role}',$1,'execute')`,[signature]),false);
+ for(const role of ['anon','authenticated'])for(const signature of ['icash_claim_discovery_estimate(uuid,jsonb,jsonb,jsonb,jsonb)','icash_finish_discovery_estimate(uuid,uuid,jsonb)','icash_research_query_ready(uuid,jsonb,jsonb,jsonb)','icash_owner_active_export_capacity()'])assert.equal(await value(`select has_function_privilege('${role}',$1,'execute')`,[signature]),false);
  // Real TS wrapper: cached/held/error paths cannot contact the provider.
  let network=0,writes=[],mode='held';
  const transport=async()=>{network++;return estimate;};
@@ -109,5 +174,5 @@ try{
  mode='cached';assert.deepEqual(await requestDiscoveryEstimate(adapter,account,scope,plan,policy,query,transport),estimate);assert.equal(network,0);
  mode='request';await requestDiscoveryEstimate(adapter,account,scope,plan,policy,query,transport);assert.equal(network,1);assert.deepEqual(writes[0].p_response,estimate);
  await assert.rejects(requestDiscoveryEstimate(adapter,account,scope,plan,policy,query,async()=>{network++;throw Error('fixture timeout');}),/timeout/);assert.equal(network,2);assert.equal(writes.at(-1).p_response,null);
- console.log('Research reuse: blocked/cached/concurrent estimates, scope/funding controls, unchanged unknown claims, versioned duplicate pages, unused sync and offline service paths passed.');
+ console.log('Research reuse: exact cross-account estimate leases/expiry, final duplicate purchase prevention, export preflight, scope/funding controls and immutable unknown claims passed.');
 }finally{await db.close();}

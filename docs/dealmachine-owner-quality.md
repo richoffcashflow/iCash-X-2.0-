@@ -1,5 +1,9 @@
 # DealMachine owner data review — October 27, 2026
 
+## Current production state — October 29, 03:00 UTC
+
+The first ordinary funded production export returned HTTP 500 `internal_error` at 02:46:38 UTC with one requested owner. It supplied no export ID, download, record count or credit receipt. Cost is **unreported**, not zero. At 02:49:47 UTC new exports were disabled; the original receipt, organization slot and financial operation remain held. Existing owner-only lookup research resumed. Do not clear that slot, repeat the purchase or claim active-only production filtering is currently enabled. See `docs/research-efficiency-replies.md` for the subsequent request-efficiency and preflight changes.
+
 ## Production export release — October 28 Central / October 29 UTC
 
 V3 completed at 8:23 PM Central on October 28: HTTP 200, one exact property-bound owner, one non-DNC wireless number from three previously saved numbers. The numeric `internal_person_id` CSV value matches the requested `per_` suffix as text. Original-ID recovery and the original Google Storage CSV were verified. The actual receipt is `credits: {used: 0, people: 1}`; `properties`, `deduplicated` and `licensed` are absent. Their absence does not establish a deduplication reason. The other two numbers being absent does not establish why they were removed. This test approval is consumed.
