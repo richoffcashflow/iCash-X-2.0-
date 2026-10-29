@@ -34,7 +34,10 @@ export async function automationTick(rpc,transport=fetch,lane){
  const ticket=await rpc(lane===undefined?'icash_next_automation':'icash_next_automation_lane',lane===undefined?{}:{p_lane:lane});
  if(!ticket)return false;
  if(typeof ticket.token!=='string'||!/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}){2}$/.test(ticket.token))throw new Error('INVALID_AUTOMATION_TICKET');
- const r=await transport('https://www.geticashx.com/api/internal/automation',{method:'POST',headers:{Authorization:'Bearer '+ticket.token},redirect:'error',signal:AbortSignal.timeout(115000)});
+ // Research can include a 120-second synchronous export followed by original
+ // receipt persistence. The capability is still sent exactly once.
+ const timeout=['research','general'].includes(lane)?235000:115000;
+ const r=await transport('https://www.geticashx.com/api/internal/automation',{method:'POST',headers:{Authorization:'Bearer '+ticket.token},redirect:'error',signal:AbortSignal.timeout(timeout)});
  if(!r.ok){await r.body?.cancel();throw new WorkerOperationError('AUTOMATION_HELD','automation_dispatch',r.status);}
  return true;
 }

@@ -17,7 +17,9 @@ import {reconcileLiveConversation} from '@/lib/live-conversation-service';
 import {dispatchLiveVoice} from '@/lib/live-dispatch-service';
 import {enrichForAccount} from '@/lib/owner-enrichment-service';
 export const dynamic='force-dynamic';
-export const maxDuration=120;
+// DealMachine's synchronous export permits 120 seconds, plus bounded original
+// receipt/download and independent persistence deadlines.
+export const maxDuration=240;
 /** Short-lived, one-use DB capabilities; no credentials or account IDs accepted from requests. */
 export async function POST(request:Request){
  const billingDeadline=AbortSignal.timeout(45000);

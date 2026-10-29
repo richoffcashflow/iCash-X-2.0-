@@ -26,7 +26,7 @@ export function createScheduler({screening,automation,automationConcurrency=4,au
  };
  return {
   health(active=true){
-   const stalled=now()-lastLoopAt>180000||lanes.some(lane=>lane.pending&&now()-lane.startedAt>(lane.name==='automation'?140000:75000));
+   const stalled=now()-lastLoopAt>180000||lanes.some(lane=>lane.pending&&now()-lane.startedAt>(['research','general'].includes(lane.pool)?260000:lane.name==='automation'?140000:75000));
    const degraded=stalled||lanes.some(lane=>lane.failures>0);
    const automationHeld=automationLanes.every(lane=>lane.failures>0);
    const pools=[...new Set(automationLanes.map(lane=>lane.pool))].map(name=>{
