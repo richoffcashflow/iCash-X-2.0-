@@ -1,3 +1,4 @@
+import {supportVerifiedLegacyOfferReply} from '../lib/support-legacy-migration.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {randomUUID,randomBytes,createHash} from 'node:crypto';
@@ -84,7 +85,7 @@ try{
  await post(body);assert.equal((await (await route.GET()).json()).conversation.messages.length,2);
  assert.equal((await post({...body,email:'invalid'})).status,400);
  assert.equal((await post({...body,phone:'letters'})).status,400);
- const admin=await loadService('app/api/support/admin/access/route.ts',{scheduleSupportCustomerNotifications:()=>{},db,requireTrustedOperator:async()=>{if(!allowed)throw Error('OPERATOR_REQUIRED');return {userId:owner};},allowedOrigin:()=>allowed,accessHelpUpdate,accessHelpRedact});
+ const admin=await loadService('app/api/support/admin/access/route.ts',{supportVerifiedLegacyOfferReply,scheduleSupportCustomerNotifications:()=>{},db,requireTrustedOperator:async()=>{if(!allowed)throw Error('OPERATOR_REQUIRED');return {userId:owner};},allowedOrigin:()=>allowed,accessHelpUpdate,accessHelpRedact});
  allowed=false;assert.equal((await admin.GET(new Request('https://example.invalid/api/support/admin/access'))).status,403);allowed=true;
  response=await admin.GET(new Request('https://example.invalid/api/support/admin/access?id='+created.id));assert.equal(response.status,200);assert(!JSON.stringify(await response.json()).includes('session_hash'));
  response=await admin.POST(new Request('https://example.invalid/api/support/admin/access',{method:'POST',body:JSON.stringify({id:created.id,requestId:randomUUID(),status:'waiting_on_customer',reply:'Please choose Use my checkout phone on the access page.'})}));assert.equal(response.status,200);
@@ -144,6 +145,18 @@ try{
  const guestNext=randomUUID();await rpc('icash_access_help_submit',{...guestCourse,p_key:guestNext,p_message:'My sign-in code has not arrived'});
  assert.equal((await rpc('icash_access_help_read',{p_hash:guestCourse.p_hash})).status,'open');
  await replyToAccessHelp(db,guestId,guestNext);assert.equal((await rpc('icash_access_help_read',{p_hash:guestCourse.p_hash})).status,'waiting_on_customer');
+ // Verified legacy offers use the actual operator route and existing atomic
+ // reply receipt: one message/email job across a lost-response retry.
+ const legacyHash=hash(randomUUID()),legacyKey=randomUUID();
+ const legacyId=await rpc('icash_access_help_submit',{p_hash:legacyHash,p_key:legacyKey,p_email:'legacy@example.invalid',p_phone:null,p_message:'My original iCash X 1.0 stopped working.'});
+ await replyToAccessHelp(db,legacyId,legacyKey);
+ let legacy=await rpc('icash_access_help_read',{p_hash:legacyHash});assert.match(legacy.messages.at(-1).content,/no longer active/);assert.doesNotMatch(legacy.messages.at(-1).content,/legacy-offer/);
+ const offerKey=randomUUID(),offer={id:legacyId,requestId:offerKey,status:'waiting_on_customer',legacyPurchaseVerified:true};
+ const sendOffer=()=>admin.POST(new Request('https://example.invalid/api/support/admin/access',{method:'POST',body:JSON.stringify(offer)}));
+ assert.equal((await sendOffer()).status,200);assert.equal((await sendOffer()).status,200);
+ legacy=await rpc('icash_access_help_read',{p_hash:legacyHash});assert.equal(legacy.messages.filter(m=>m.content===supportVerifiedLegacyOfferReply).length,1);assert.equal(legacy.status,'waiting_on_customer');
+ assert.equal((await q('select operator_id from icash_access_help_messages where request_id=$1 and role=\'operator\'',[legacyId])).rows[0].operator_id,owner);
+ assert.equal((await q('select count(*)::int as n from icash_support_customer_emails where access_request_id=$1',[legacyId])).rows[0].n,2,'Initial guidance and one reviewed offer, without duplicate notifications');
  for(const role of ['anon','authenticated']){await pg.exec('set role '+role);await assert.rejects(()=>q('select * from icash_access_help_requests'));await assert.rejects(()=>q('select * from icash_purchase_access_attention'));await assert.rejects(()=>rpc('icash_access_help_read',{p_hash:a}));await assert.rejects(()=>rpc('icash_access_help_claim_reply',{p_id:autoId,p_key:autoKey}));await assert.rejects(()=>rpc('icash_access_help_pending_replies',{}));await assert.rejects(()=>rpc('icash_queue_purchase_access_attention',{}));await pg.exec('reset role');}
  console.log('PASS access help: actual private SQL and routes, no-login requests and replies, no purchase disclosure, redacted codes, secure browser binding, operator authorization, replay recovery, rate bounds, expiry, positive payment monitoring, resolved queue, grouped owner notices and deferred customer email jobs. All sends mocked.');
 }finally{await pg.close();}

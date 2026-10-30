@@ -1,6 +1,7 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {supportRequest} from '@/lib/support-client';
+import {SupportLegacyOfferReview} from '@/components/support-legacy-offer-review';
 type RequestRow={id:string;email:string;phone:string|null;status:string;created_at:string;updated_at:string};
 type Investigation={checkedAt:string;recovery:string;emailConfigured:boolean;textConfigured:boolean;textSenderAvailable:boolean;receiptEmailMatch:boolean;purchaseEmail:{status:string;delivery:string|null}|null;phoneChallenge:{status:string;hasReceipt:boolean;requestedAt:string}|null};
 type Message={id:string;role:string;content:string;created_at:string;access_investigation?:Investigation|null};
@@ -22,9 +23,9 @@ export function AccessSupportDashboard(){
   setBusy(true);setError('');try{const {data,ok,status:code}=await supportRequest<{request:RequestRow;messages:Message[];error?:string}>('/api/support/admin/access?id='+id,{cache:'no-store'});if(code===403)clear();if(!ok)throw Error(data.error);setSelected(data.request);setMessages(data.messages);setStatus(data.request.status);setReply('');pending.current=null;}
   catch(e){setError(e instanceof Error?e.message:'Request could not load.');}finally{setBusy(false);}
  }
- async function save(event:React.FormEvent){
-  event.preventDefault();if(!selected||working.current)return;working.current=true;setBusy(true);setError('');setNotice('');
-  const body=JSON.stringify({id:selected.id,status,...(reply.trim()?{reply:reply.trim()}:{})});if(!pending.current||pending.current.body!==body)pending.current={body,id:crypto.randomUUID()};
+ async function save(event?:React.FormEvent,legacyPurchaseVerified=false){
+  event?.preventDefault();if(!selected||working.current||busy)return;working.current=true;setBusy(true);setError('');setNotice('');
+  const body=JSON.stringify({id:selected.id,status:legacyPurchaseVerified?'waiting_on_customer':status,...(legacyPurchaseVerified?{legacyPurchaseVerified:true}:reply.trim()?{reply:reply.trim()}:{})});if(!pending.current||pending.current.body!==body)pending.current={body,id:crypto.randomUUID()};
   try{const {ok,data,status:code}=await supportRequest<{saved?:boolean;error?:string}>('/api/support/admin/access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...JSON.parse(body),requestId:pending.current.id})});if(code===403)clear();if(!ok||!data.saved)throw Error(data.error||'Could not confirm the reply.');await open(selected.id);await load();setNotice('Saved. The buyer can read your reply on their access-help page without signing in.');}
   catch(e){setError(e instanceof Error?e.message:'Could not save. Your draft is still here.');}finally{working.current=false;setBusy(false);}
  }
@@ -44,6 +45,6 @@ export function AccessSupportDashboard(){
    <li>Recent text-code attempt: {investigation.phoneChallenge?`${investigation.phoneChallenge.status} · ${investigation.phoneChallenge.hasReceipt?'Accepted; delivery unconfirmed':'No provider receipt'} · ${when(investigation.phoneChallenge.requestedAt)}`:'No matching record in the last 7 days'}</li>
    <li>Safe account-link check: {investigation.recovery==='checked'?'Completed; access restoration not confirmed':'Could not complete'}</li>
   </ul></details>}
-  <div className="support-messages">{messages.map(message=><article key={message.id} className="support-message"><strong>{message.role==='user'?'Visitor':'Support team'} · {when(message.created_at)}</strong><p>{message.content}</p></article>)}</div><form onSubmit={save}><label>Reply about access<textarea aria-label="Reply about access" value={reply} onChange={event=>setReply(event.target.value)} maxLength={2000} disabled={busy}/></label><label>Access request status<select aria-label="Access request status" value={status} onChange={event=>setStatus(event.target.value)} disabled={busy}>{['open','waiting_on_customer','resolved'].map(value=><option key={value} value={value}>{value.replaceAll('_',' ')}</option>)}</select></label><button disabled={busy} className="support-primary">{busy?'Saving…':'Save access reply'}</button></form></>}
+  <div className="support-messages">{messages.map(message=><article key={message.id} className="support-message"><strong>{message.role==='user'?'Visitor':'Support team'} · {when(message.created_at)}</strong><p>{message.content}</p></article>)}</div><form onSubmit={save}><label>Reply about access<textarea aria-label="Reply about access" value={reply} onChange={event=>setReply(event.target.value)} maxLength={2000} disabled={busy}/></label><label>Access request status<select aria-label="Access request status" value={status} onChange={event=>setStatus(event.target.value)} disabled={busy}>{['open','waiting_on_customer','resolved'].map(value=><option key={value} value={value}>{value.replaceAll('_',' ')}</option>)}</select></label><button disabled={busy} className="support-primary">{busy?'Saving…':'Save access reply'}</button></form><SupportLegacyOfferReview key={selected.id+':'+messages.filter(m=>m.role==='operator').length} disabled={busy} onSend={()=>void save(undefined,true)}/></>}
  </section>;
 }

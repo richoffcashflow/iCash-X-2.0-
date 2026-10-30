@@ -1,3 +1,4 @@
+import * as legacy from '../lib/support-legacy-migration.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
@@ -15,7 +16,7 @@ const hooks={
  useCallback(fn,deps){const i=cursor++,previous=slots[i];if(!previous||deps.some((v,j)=>!Object.is(v,previous.deps[j])))slots[i]={deps,fn};return slots[i].fn;},
  useEffect(fn,deps){const i=cursor++,previous=slots[i];if(!previous||deps.some((v,j)=>!Object.is(v,previous.deps[j]))){slots[i]={deps,cleanup:previous?.cleanup};pending.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}},
 };
-function module(file){const code=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;const mod={exports:{}};new Function('require','module','exports',code)(name=>name==='@/lib/support-coaching'?coaching:name==='@/components/support-message-content'?module('components/support-message-content.tsx'):name==='react'?hooks:name==='@/lib/support-self-service'?guidance:name==='@/lib/support-client'?supportClient:name==='@/components/membership-settings'?{MembershipSettings:'MembershipSettings'}:name==='@/components/account-access'?{AccountAccess:'AccountAccess'}:name==='@/components/support-account-checks'?checks:name.endsWith('.css')?{}:require(name),mod,mod.exports);return mod.exports;}
+function module(file){const code=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;const mod={exports:{}};new Function('require','module','exports',code)(name=>name==='@/lib/support-legacy-migration'?legacy:name==='@/lib/support-coaching'?coaching:name==='@/components/support-message-content'?module('components/support-message-content.tsx'):name==='react'?hooks:name==='@/lib/support-self-service'?guidance:name==='@/lib/support-client'?supportClient:name==='@/components/membership-settings'?{MembershipSettings:'MembershipSettings'}:name==='@/components/account-access'?{AccountAccess:'AccountAccess'}:name==='@/components/support-account-checks'?checks:name.endsWith('.css')?{}:require(name),mod,mod.exports);return mod.exports;}
 globalThis.document={hidden:false,addEventListener(){},removeEventListener(){}};
 globalThis.window={matchMedia:()=>({matches:true})};
 const checks=module('components/support-account-checks.tsx'),{SupportChat}=module('components/support-chat.tsx');

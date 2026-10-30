@@ -10,6 +10,8 @@ import {supportWorkflowReply} from './support-workflow-guidance.ts';
 import {missingAccessCodeReply} from './support-access-reply.ts';
 import type {AccessInvestigation} from './support-access-investigation.ts';
 import {supportInstructionCorrection,unsupportedSupportReply} from './support-reply-guardrails.ts';
+import {supportLegacyMigrationReply} from './support-legacy-migration.ts';
+import {currentAccessConversation} from './support-access-topic.ts';
 
 export type SupportTurn={role:string;content:string};
 export type SupportReply={reply:string;status:'open'|'waiting_on_customer'|'resolved'|'closed';ai:boolean};
@@ -26,7 +28,7 @@ function earlierSupportProblem(context:SupportContext){
 /** Local replies also work during provider outages and interruption recovery. */
 function supportTechnicalFallback(context:SupportContext):SupportReply{
  const users=context.messages.filter(m=>m.role==='user'),question=users.at(-1)?.content??'';
- const history=users.map(m=>m.content).join('\n'),previous=context.messages.filter(m=>m.role==='assistant'||m.role==='operator').at(-1)?.content??'';
+ const previous=context.messages.filter(m=>m.role==='assistant'||m.role==='operator').at(-1)?.content??'';
  const result=(reply:string,status:SupportReply['status']='waiting_on_customer'):SupportReply=>{
   const simple=removeRepeatedSupportQuestions(reply,context.messages);
   return {reply:simple,status:simple!==reply&&status!=='resolved'?'open':status,ai:false};
@@ -56,6 +58,8 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  }
  if(supportTopic(question)==='refund')return result(`${noRefunds}${/\bcancel\b/i.test(question)?' '+supportAnswer('cancel',[],false):' If there’s a payment, access or software problem, tell me what happened so I can help.'}`);
  if(supportTopic(question)==='cancel')return result(context.kind==='account'?supportAnswer('cancel',[],false):'To stop future renewals, sign in and open Cancel subscription in the workspace account menu. Confirm the cancellation there. If you cannot sign in, tell me which sign-in step fails so I can help you get access.');
+ const migration=supportLegacyMigrationReply(context.messages);
+ if(migration)return result(migration.reply,migration.status);
  const course=supportCourseAnswer(context.messages,context.kind==='account'?supportReplyEvidence(context.messages,context.evidence??[]):[]);
  if(course?.answered&&supportListingQuestion(question))return result(course.reply,earlierSupportProblem(context)?'open':'resolved');
  const outreach=context.kind==='account'?supportOutreachReply(context.messages,context.evidence??[]):null;
@@ -69,21 +73,21 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  }
  if(previous&&!previous.includes('?')&&!context.handedOff&&!/(?:still|not yet|pending|checking|troubleshoot)/i.test(previous)&&/^(?:thanks|thank you|got it|understood|that answers (?:it|my question)|that(?:’|')?s all)[.!\s]*(?:(?:thanks|thank you|that(?:’|')?s all)[.!\s]*)?$/i.test(question.trim()))return result('You’re welcome.',earlierSupportProblem(context)?'open':'resolved');
  if(course)return result(course.reply,course.needsRecovery?'open':course.answered?(earlierSupportProblem(context)?'open':'resolved'):'waiting_on_customer');
- if(context.kind==='access'){
-  const delivery=supportCodeDelivery(context.messages);
-  const code=delivery!=='unknown'||/code|sign.?in|log.?in|nothing happened|getting in|access/i.test(history);
+ if(context.kind==='access'||currentAccessConversation(context.messages).length>0){
+  const active=currentAccessConversation(context.messages),history=active.filter(m=>m.role==='user').map(m=>m.content).join('\n');
+  const delivery=supportCodeDelivery(active);
+  const code=active.length>0;
   const bothTried=/(?:tried|used|requested).{0,30}both|both.{0,30}(?:tried|not.*(?:send|arrive)|no code)/i.test(history);
   const channel=/email|inbox|spam/i.test(history)?'email':/text|sms|phone/i.test(history)||bothTried?'text':null;
   if(code){
-   if(!channel)return result('Are you requesting the code by email or text? Please don’t share the code itself.');
+   if(!channel)return result(active.some(m=>m.role!=='user'&&/requesting the code by email or text/i.test(m.content))?'I still need to know whether you’re using email or text to choose the right sign-in step. You can reply with just the method.':'Are you requesting the code by email or text? Please don’t share the code itself.');
    if(delivery==='missing'){const answer=missingAccessCodeReply(context.messages,context.accessInvestigation);return result(answer.reply,answer.status);}
    if(!/safari|chrome|firefox|edge|iphone|android|ipad|desktop|laptop|browser/i.test(history))return result(`Thanks — the ${channel} code. Open the sign-in page directly in Safari or Chrome, enter the newest code, and press the sign-in button. Which device and browser are you using?`);
    if(!previous.includes('error message')&&!/invalid|expired|error|spinning|stuck|blank|no error/i.test(question))return result('What happens after you press the sign-in button: an error message, a loading spinner, or the same page? You can copy the error text, but leave out the code.');
    if(/expired|invalid/i.test(question)&&!previous.includes('Older codes may no longer work'))return result('Request one fresh code and enter that newest code in the same browser where you requested it. Older codes may no longer work. What message appears after you try that?');
    return result(/private|incognito/i.test(history)?'Does sign-in fail before the code is accepted, or does it accept the code and return you to sign-in? That tells me whether to check code delivery or the saved session.':'The code and the saved browser session are separate steps. Open iCash X in a private Safari or Chrome window and try signing in there once. Does it open your workspace or return to sign-in? You do not need to pay again.');
   }
-  if(users.length>2)return result('I’ll keep troubleshooting this here. Which part is failing now: requesting the code, entering it, or opening your workspace after sign-in?');
-  return result('What happens when you try to sign in: no code arrives, the code is rejected, or you get stuck after entering it?');
+  return result('I don’t have enough information to answer that yet. What are you trying to do, and what happens when you try?');
  }
  const topic=supportTopic(issue);
  if(topic==='general')return result('Hi! What can I help you with?');
@@ -91,7 +95,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(previous.includes('exact message'))return result(`${supportAnswer(topic,supportReplyEvidence(context.messages,context.evidence??[]),false)}\n\nDoes this happen every time on that screen, or did it start after a particular step?`);
  if(users.length>1&&/still|same|already|didn.t|doesn.t|not working/i.test(question))return result('Thanks for trying that. What exact message do you see now, and which screen is it on? Leave out passwords and sign-in codes.');
  const answer=supportAnswer(topic,supportReplyEvidence(context.messages,context.evidence??[]),false);
- if(!supportReplyEvidence(context.messages,context.evidence??[]).length&&topic==='work')return result('Which page is this happening on?');
+ if(!supportReplyEvidence(context.messages,context.evidence??[]).length&&topic==='work')return result(/\b(?:error|blank|freeze[sd]?|frozen|broken|stuck|missing|fails?|failed|isn[’']?t|doesn[’']?t|won[’']?t|not working)\b/i.test(issue)?'Which page is this happening on?':'I don’t have a confirmed answer to that yet. What are you trying to do in iCash X?');
  const followup=topic==='billing'?'Which charge or billing message are you asking about? Please leave out card details.':topic==='setup'?'Which sign-in step are you stuck on?':'Which page is this happening on?';
  return result(`${answer}\n\n${followup}`);
 }
@@ -124,6 +128,8 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
 /** Recovery runs separately with fixed account-bound operations. The model only explains verified results. */
 async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fetch=fetch):Promise<SupportReply>{
  const fallback=supportTechnicalFallback(context);
+ if(supportLegacyMigrationReply(context.messages))return fallback;
+ if(currentAccessConversation(context.messages).length>0)return fallback;
  const relevantEvidence=supportReplyEvidence(context.messages,context.evidence??[]);
  if(context.kind==='account'&&supportWorkflowReply(context.messages,context.evidence??[]))return fallback;
  if(supportInstructionCorrection(context.messages,context.evidence??[]))return fallback;
