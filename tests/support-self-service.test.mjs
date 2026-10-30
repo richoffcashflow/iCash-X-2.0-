@@ -48,5 +48,6 @@ checks=await collectSupportDiagnostics(currentAccount);
 assert.match(get('credits').detail,/\$2\.00.*new work/);assert.match(get('credits').detail,/\$8\.00.*earlier work/);assert.doesNotMatch(get('credits').detail,/\$10\.00/);
 assert.equal(get('voice').code,'voice_production_agent_review_required');
 assert(paths.some(p=>p.startsWith('icash_voice_jobs?')&&p.includes('order=updated_at.desc,id.desc&limit=1')));
+assert(paths.some(p=>p.startsWith('icash_voice_jobs?')&&p.includes('state=in.(held,dispatching,dispatched)')),'new queued work must not hide the latest checked call result');
 fail='rpc/icash_support_outreach_diagnostics';checks=await collectSupportDiagnostics(currentAccount);assert.equal(get('credits').status,'unknown','missing commitments cannot make wallet totals spendable');
 fail='icash_voice_jobs';checks=await collectSupportDiagnostics(currentAccount);assert.equal(get('voice').status,'unknown','missing saved call evidence never passes');

@@ -49,7 +49,7 @@ export async function collectSupportDiagnostics(accountId:string):Promise<Suppor
   check('screening','icash_screening_jobs',async()=>{const rows=await db<{state:string}[]>(`icash_screening_jobs?account_id=eq.${accountId}&state=eq.failed&select=state&limit=20`);return {code:rows.length?'screening_review':'screening_clear',status:rows.length?'attention':'ok',detail:rows.length?`${rows.length}${rows.length===20?'+':''} property screening results need review. No work was restarted.`:'No failed property screening results were found in this check.'};}),
   check('voice','icash_live_conversations/icash_voice_jobs',async()=>{const [rows,jobs]=await Promise.all([
    db<{state:string}[]>(`icash_live_conversations?account_id=eq.${accountId}&state=eq.review&select=state&limit=20`),
-   db<{state:string;outcome:string|null;updated_at:string}[]>(`icash_voice_jobs?account_id=eq.${accountId}&select=state,outcome,updated_at&order=updated_at.desc,id.desc&limit=1`),
+   db<{state:string;outcome:string|null;updated_at:string}[]>(`icash_voice_jobs?account_id=eq.${accountId}&state=in.(held,dispatching,dispatched)&select=state,outcome,updated_at&order=updated_at.desc,id.desc&limit=1`),
   ]);return supportVoiceEvidence(jobs,rows.length);}),
   check('readiness','icash_launch_checks',async()=>{const r=await launchReadiness(accountId);return {code:r.ready?'readiness_ready':'readiness_blocked',status:r.ready?'ok':r.blockers.includes('readiness_unavailable')?'unknown':'attention',detail:r.ready?'The launch-readiness check passed. This does not guarantee individual outreach or a completed deal.':`Readiness needs attention: ${r.blockers.map(b=>readinessLabels[b]??'An operational safety check needs review').join('; ')}.`};}),
  ]);
