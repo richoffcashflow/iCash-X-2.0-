@@ -173,7 +173,9 @@ begin
  if jsonb_typeof(credits) is distinct from 'object' or jsonb_typeof(p_rows) is distinct from 'array' or jsonb_array_length(p_rows)>125 or octet_length(p_rows::text)>1048576
   or jsonb_typeof(p_results) is distinct from 'array' or jsonb_array_length(p_results)<>jsonb_array_length(b.items)
   or receipt->'record_count' is distinct from to_jsonb(jsonb_array_length(p_rows)) or receipt->'file_count' is distinct from '1'::jsonb
-  or credits->'people' is distinct from receipt->'record_count' or e.recovery->'raw'->'data'->'record_count' is distinct from receipt->'record_count'
+  or jsonb_typeof(credits->'people') is distinct from 'number' or coalesce(credits->>'people','') !~ '^[0-9]{1,3}$'
+  or (credits->>'people')::integer<jsonb_array_length(p_rows) or (credits->>'people')::integer>jsonb_array_length(e.request->'people_ids')
+  or e.recovery->'raw'->'data'->'record_count' is distinct from receipt->'record_count'
   or coalesce(credits->>'used','') !~ '^[0-9]{1,3}$' or jsonb_typeof(credits->'used') is distinct from 'number'
   or (credits->>'used')::integer>jsonb_array_length(p_rows)
   or (credits ? 'properties' and credits->'properties' is distinct from '0'::jsonb) then raise exception 'Export credit contract mismatch';end if;

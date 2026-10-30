@@ -28,6 +28,20 @@ assert.throws(()=>activeOwnerExportRequest(['per_alpha']));
 assert.throws(()=>activeOwnerExportRequest(['per_1','per_1']));
 const free={...base,receipt:receipt()};free.receipt.raw.credits.used=0;assert.equal(allocateActiveOwnerExport(free,csv,audience).reduce((n,x)=>n+x.result.creditsUsed,0),0);
 
+// Live shape: four evaluated owners, one delivered after scrubbing, one credit.
+const filteredCandidates=[1,2,3,4].map(n=>({screeningId:String(n),snapshot:snapshot('prop_'+n)}));
+const filteredPreview={...preview,data:filteredCandidates.map((c,i)=>({dm_property_id:c.snapshot.propertyId,found:true,contacts:[owner('per_'+(i+1))]})),totals:{submitted:4,found:4,not_found:0}};
+const filteredAudience=ownerBatchAudience(filteredPreview,filteredCandidates,25);
+const filtered={...base,request:activeOwnerExportRequest(['per_1','per_2','per_3','per_4']),receipt:{...receipt(),raw:{...receipt().raw,record_count:1,credits:{used:1,people:4}}}};
+const filteredCsv=csvOf([row('per_2')]),filteredResults=allocateActiveOwnerExport(filtered,filteredCsv,filteredAudience);
+assert.deepEqual(filteredResults.map(a=>[a.result.creditsUsed,a.result.peopleCredits,a.result.contacts.length]),[[0,0,0],[1,1,1],[0,0,0],[0,0,0]]);
+assert(filteredResults.every(a=>JSON.stringify(a.result.providerCredits)==='{"used":1,"people":4}'));
+for(const credits of [{used:1},{used:1,people:0},{used:1,people:5},{used:1,people:'4'},{used:1,people:1.5},{used:2,people:4}]){
+ const bad=structuredClone(filtered);bad.receipt.raw.credits=credits;assert.throws(()=>allocateActiveOwnerExport(bad,filteredCsv,filteredAudience));
+}
+const emptyFiltered=structuredClone(filtered);emptyFiltered.receipt.raw.record_count=0;emptyFiltered.receipt.raw.credits.used=0;
+assert(allocateActiveOwnerExport(emptyFiltered,csvOf([]),filteredAudience).every(a=>a.result.contacts.length===0&&a.result.creditsUsed===0));
+
 let previews=0,capacity='ready',paid=0,downloads=0,gets=0,claimed=false,saved=null,results=null,quota=true,busy=false,timeout=false,artifactFail=false;
 const config={contact_rate_id:'rate',contact_credit_cap:25,property_credit_micros:10000,data_rights_until:'2099-01-01',research_version:2};
 const db=async(path,method,p)=>{
@@ -76,6 +90,10 @@ try{
  // A lost artifact-write acknowledgment resumes from the original saved CSV.
  reset();artifactFail=true;assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,'export_receipt_held');assert(saved.csv);artifactFail=false;
  assert.equal((await recoverOwnerActiveExports(db,transport)).status,'contacts_saved');assert.equal(paid,1);assert.equal(gets,1);assert.equal(downloads,1);
+ // A saved filtered result is recovered entirely from its original artifact.
+ reset();saved={...filtered,accountId:account,items:filteredCandidates.map((c,i)=>({...c,ids:['per_'+(i+1)]})),preview:filteredPreview,csv:filteredCsv,lease:'fixture-lease',recovery:{httpStatus:200,raw:{data:{export_id:'export-fixture',status:'completed',record_count:1}}}};
+ const filteredDb=async(path,method,p)=>path==='rpc/icash_save_owner_active_export'?(assert.deepEqual(p.p_results,filteredResults),assert.equal(p.p_rows.length,1),true):db(path,method,p);
+ assert.equal((await recoverOwnerActiveExports(filteredDb,async()=>{throw Error('Saved artifact must not make provider requests');})).status,'contacts_saved');assert.equal(paid,0);assert.equal(gets,0);assert.equal(downloads,0);
  reset();const hugeRecovery=(url,options)=>String(url).includes('/exports/')?new Response('x'.repeat(131073)):transport(url,options);
  assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,hugeRecovery)).status,'export_receipt_held');assert.equal(paid,1);assert.equal(downloads,0);assert.equal(results,null);
  reset();preview.data[0].contacts[0].availability.phones=0;

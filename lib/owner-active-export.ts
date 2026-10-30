@@ -45,7 +45,9 @@ export function validateOwnerExportReceipt(receipt:Receipt,request:ReturnType<ty
  const r=object(receipt.raw),c=object(r.credits);
  if(receipt.httpStatus!==200||typeof r.export_id!=='string'||!/^[-a-zA-Z0-9_]{1,128}$/.test(r.export_id)
   ||!integer(r.record_count)||r.record_count>request.people_ids.length||r.file_count!==1
-  ||!integer(c.used)||!integer(c.people)||c.people!==r.record_count||c.used>c.people
+  // People evaluated can include owners removed by the active/DNC filters.
+  // Charge only the reported used credits, bounded by delivered unique owners.
+  ||!integer(c.used)||!integer(c.people)||c.people<r.record_count||c.people>request.people_ids.length||c.used>r.record_count
   ||Object.keys(c).some(k=>!['used','people','properties','deduplicated','licensed'].includes(k)||!integer(c[k]))
   ||(Object.hasOwn(c,'properties')&&c.properties!==0)
   ||(Object.hasOwn(c,'deduplicated')&&(c.deduplicated as number)>c.people)
