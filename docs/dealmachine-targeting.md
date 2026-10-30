@@ -1,6 +1,6 @@
 # DealMachine targeting experiments
 
-This release extends reviewed main `96eccd3735859d8652865605103266f2da238c94`, including the PR488/489 active-export fixes, and incorporates the subsequently shipped support changes through `3611e6fa` (PR492/493). It does not change prices, budgets, plans, lead ownership, financial screening, lien/tax checks, suppression or unresolved purchase holds. Existing multi-number outreach remains unchanged; best-number ranking and sequential fallback are not implemented.
+This release extends reviewed main `96eccd3735859d8652865605103266f2da238c94`, including the PR488/489 active-export fixes, and incorporates subsequent main changes through `f339e397` (PR492/493/495). It does not change prices, budgets, plans, lead ownership, financial screening, lien/tax checks, suppression or unresolved purchase holds. Existing multi-number outreach remains unchanged; best-number ranking and sequential fallback are not implemented.
 
 ## Configuration and evidence
 

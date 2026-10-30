@@ -45,16 +45,17 @@ export function voiceCapacitySnapshot(subscription:unknown,agent:unknown){
  return {workspaceLimit:Math.min(20,workspace),agentLimit:limit===-1?Math.min(20,workspace):Math.min(20,workspace,Number(limit)),tier:s.tier};
 }
 /** Read-only provider checks. No calls, simulations, plan changes or burst mode. */
-export async function refreshVoiceCapacity(db:Db,read:Reader,review?:{agentId:string;branchId:string}|null){
+export async function refreshVoiceCapacity(db:Db,read:Reader,review?:{agentId:string;branchId:string}|null,onReviewedAgent?:(agent:unknown)=>Promise<void>){
  const targets=await db<{agentId:string;branchId:string|null}[]>('rpc/icash_voice_capacity_targets','POST',{});
  if(!targets.length)return {status:'no_agents'};
  const subscription=await read('/v1/user/subscription');
  const creditState=voiceCreditState(subscription);
- const capacities:{agentId:string;limit:number;creditState:ReturnType<typeof voiceCreditState>}[]=[],observedAgents:unknown[]=[];let workspaceLimit=1;let tier='';
+ const capacities:{agentId:string;limit:number;creditState:ReturnType<typeof voiceCreditState>}[]=[],observedAgents:unknown[]=[];let workspaceLimit=1;let tier='';let reviewedAgent:unknown;
  for(const target of targets.slice(0,12)){
   const branch=target.branchId??(review?.agentId===target.agentId?review.branchId:null);
   const agent=await read(`/v1/convai/agents/${encodeURIComponent(target.agentId)}${branch?'?branch_id='+encodeURIComponent(branch):''}`,target.branchId===null?'global':'us');
   if(object(agent).agent_id!==target.agentId)throw Error('VOICE_CAPACITY_AGENT_MISMATCH');
+  if(target.branchId===null&&review&&target.agentId===review.agentId&&object(agent).branch_id===review.branchId)reviewedAgent=agent;
   observedAgents.push(agent);
   const snapshot=voiceCapacitySnapshot(subscription,agent);if(!snapshot)throw Error('VOICE_CAPACITY_UNVERIFIED');
   workspaceLimit=snapshot.workspaceLimit;tier=String(snapshot.tier);
@@ -63,5 +64,6 @@ export async function refreshVoiceCapacity(db:Db,read:Reader,review?:{agentId:st
  }
  if(targets.length>12)throw Error('VOICE_CAPACITY_TARGET_LIMIT');
  await db('rpc/icash_save_voice_capacity','POST',{p_limit:workspaceLimit,p_agents:capacities,p_source:`provider subscription ${tier}; cap=20; in=2; ${voiceQuotaEvidence(subscription,observedAgents)}`});
+ if(creditState==='available'&&reviewedAgent&&onReviewedAgent)await onReviewedAgent(reviewedAgent);
  return {status:'verified',workspaceLimit,agents:capacities.length};
 }

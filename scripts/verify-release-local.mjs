@@ -3,6 +3,7 @@
 import {spawnSync} from 'node:child_process';
 const suites = [
  'dealmachine-targeting', 'dealmachine-targeting-database', 'dealmachine-targeting-admin',
+ 'voice-configuration-recovery', 'voice-configuration-recovery-database',
  'owner-export-capacity-recovery', 'owner-export-capacity-recovery-database',
  'owner-active-export', 'owner-active-export-database', 'owner-active-export-contact-sources',
  'research-request-reuse', 'research-provider-feedback', 'seller-interest-evidence',
