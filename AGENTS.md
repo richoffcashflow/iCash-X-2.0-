@@ -1,6 +1,6 @@
 <!-- BEGIN:nextjs-agent-rules -->
 
-# This is NOT the Next.js you know
+## This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
 
@@ -11,6 +11,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 # Product display preference
 
 - On October 30, 2026 the owner requested an app-wide reliability review. Reuse a transaction-local call-capacity snapshot only for queue selection; every final admission must read current holds under its existing locks. Preserve original terminal receipts, quarantines, late-call occupancy, incoming reserve, account capacity, recipient controls and unknown money/retry holds. Filter non-resumable budget tickets before the bounded recovery batch, retaining the same locked checks afterward. Worker error logs may include only allowlisted database codes, never database messages, queries, customer details or capabilities. Validate offline without paid simulations.
+
+- On October 30, 2026 the owner required support to use the account and email already attached to the chat. Keep signed-in identity server-bound; a guest email remains a lookup hint, not authentication. Preserve the current issue and failed steps across follow-ups, especially two-month-offer checkout failures. Check unpaid ordinary checkout reservations as well as paid receipts and trials in private diagnostics. Only the original browser or verified email may recover an ordinary pending checkout, after canonical provider expiry; preserve completed subscriptions, uncertain outcomes, reviews and original consent/receipts.
 
 - Active/DNC-filtered exports can report more evaluated people than delivered rows. Preserve raw `credits.people`; require returned rows <= evaluated people <= requested unique owner IDs and actual `credits.used` <= returned rows. Allocate and settle only reported used credits from the original saved artifact. Filtered-out owners receive no contact allocation or inferred charge. A later provider error requires its own explicit capacity review; never replay the purchase or automatically clear its owner/money holds.
 
