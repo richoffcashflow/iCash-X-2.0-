@@ -39,10 +39,17 @@ try{
  await db.exec(read('config/owner-batch-quota-admission.sql').match(/create function public.icash_admit_owner_batch[\s\S]*?end \$\$;/)[0]);
  await db.exec(JSON.parse(read('tests/fixtures/research-efficiency-before.json')).find(x=>x.proname==='icash_save_contacts').definition);
  await db.exec(read('config/owner-active-export.sql'));
+ // Exercise the production migration against the exact previous guard, and
+ // require it to produce the same function as a clean installation.
+ const currentDefinition=await v("select pg_get_functiondef('public.icash_save_owner_active_export(uuid,uuid,jsonb,jsonb)'::regprocedure)");
+ const migration=read('supabase/migrations/20261030004249_owner_export_filtered_credits.sql');
+ const oldGuard=migration.match(/\$old\$([\s\S]*?)\$old\$/)[1],newGuard=migration.match(/\$new\$([\s\S]*?)\$new\$/)[1];
+ assert(currentDefinition.includes(newGuard));await db.exec(currentDefinition.replace(newGuard,oldGuard));
+ await db.exec(migration);assert.equal(await v("select pg_get_functiondef('public.icash_save_owner_active_export(uuid,uuid,jsonb,jsonb)'::regprocedure)"),currentDefinition);
  await q('insert into icash_accounts(id) values($1),($2)',[account,other]);await q('insert into icash_operating_budget values(1)');
  await q('insert into icash_operation_rates values($1,$2)',[rate,{dealmachine:250000}]);
  for(const a of [account,other])await q('insert into icash_discovery_configs values($1,2,$2,25,10000,$3,true)',[a,rate,'2099-01-01']);
- const items=[screen,second].map((s,i)=>({screeningId:s,snapshot:{propertyId:'prop_'+(i+1)},ids:i===0?['per_9007199254740993123']:['per_9007199254740993123','per_2','per_3']}));
+ const items=[screen,second].map((s,i)=>({screeningId:s,snapshot:{propertyId:'prop_'+(i+1)},ids:i===0?['per_9007199254740993123']:['per_9007199254740993123','per_2','per_3','per_4']}));
  const preview={data:items.map(i=>({dm_property_id:i.snapshot.propertyId,found:true,contacts:i.ids.map(dm_person_id=>({dm_person_id,contact_type:'owner',availability:{phones:3}}))})),totals:{submitted:2,found:2,not_found:0},credits:{used:0,people:0,properties:0,deduplicated:0}};
  for(const i of items)await q('insert into icash_screening_jobs values($1,$2,\'complete\',$3)',[i.screeningId,account,i.snapshot]);
  const config={rateId:rate,creditCap:25,unitCostMicros:10000,rightsUntil:'2099-01-01'},request=activeOwnerExportRequest([...new Set(items.flatMap(i=>i.ids))]);
@@ -66,6 +73,31 @@ try{
  assert.equal(await admit(id(7),other),'export_busy');
  assert.equal(Number(await v('select count(*) from icash_cost_observations')),0,'Missing cost never becomes zero');
  await db.exec('rollback;');
+ // Four evaluated owners can yield one active owner. Preserve raw people=4,
+ // settle only used=1, and save no contacts/charge for the filtered property.
+ const filteredRows=[Object.fromEntries(activeOwnerColumns.map(k=>[k,({internal_person_id:'2',person_full_name:'Synthetic Owner',phone_1:'2145550102',is_phone_1_dnc:'No',people_phone_1_type_id:'Wireless',has_active_phone_number:'Yes'})[k]??'']))];
+ const filteredCsv=[activeOwnerColumns,...filteredRows.map(r=>activeOwnerColumns.map(k=>r[k]))].map(r=>r.join(',')).join('\n')+'\n';
+ for(const credits of [{used:1,people:4},{used:2,people:4},{used:1,people:0},{used:1,people:5},{used:1,people:'4'},{used:1,people:1.5},{used:1}]){
+  await db.exec('begin;');
+  const raw={export_id:'filtered-fixture',record_count:1,file_count:1,credits};
+  assert.equal(await rpc('icash_record_owner_export_receipt',[account,batch,{httpStatus:200,raw,rawText:JSON.stringify(raw)}]),true);
+  const saved=await rpc('icash_claim_owner_export_recovery',[batch]);assert(saved?.lease);
+  assert.equal(await rpc('icash_record_owner_export_recovery',[batch,saved.lease,{httpStatus:200,raw:{data:{...raw,status:'completed'}}}]),true);
+  assert.equal(await rpc('icash_record_owner_export_artifact',[batch,saved.lease,filteredCsv]),true);
+  const validSaved=structuredClone(saved);validSaved.receipt.raw.credits={used:1,people:4};
+  const allocated=allocateActiveOwnerExport(validSaved,filteredCsv,ownerBatchAudience(preview,items,25));
+  if(credits.people===4&&credits.used===1){
+   assert.equal(await rpc('icash_save_owner_active_export',[batch,saved.lease,allocated,filteredRows]),true);
+   assert.deepEqual(allocated.map(a=>[a.result.contacts.length,a.result.creditsUsed]),[[0,0],[1,1]]);
+   assert.equal(Number(await v('select sum(settled_used) from icash_operation_spend')),1);
+   assert.deepEqual(await v('select result->\'providerCredits\' from icash_owner_contacts where screening_id=$1',[second]),credits);
+   assert.deepEqual(await v('select receipt->\'raw\'->\'credits\' from icash_research_private.owner_exports where id=$1',[batch]),credits);
+  }else{
+   await assert.rejects(rpc('icash_save_owner_active_export',[batch,saved.lease,allocated,filteredRows]));
+   await db.exec('rollback;');continue;
+  }
+  await db.exec('rollback;');
+ }
  const raw={export_id:'export-fixture',record_count:2,file_count:1,credits:{used:1,people:2}},receipt={httpStatus:200,raw,rawText:JSON.stringify(raw)};
  assert.equal(await rpc('icash_record_owner_export_receipt',[other,batch,receipt]),false);
  assert.equal(await rpc('icash_record_owner_export_receipt',[account,batch,receipt]),true);
