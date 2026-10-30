@@ -18,7 +18,7 @@ function topic(text:string){
  if(/\b(?:bot|calls?|texts?|outreach|leads?)\b/i.test(text))return 'Bot activity & leads';
  return 'Other questions';
 }
-const empty=(text:string)=>supportSafetyOnly(text)||/^(?:I (?:have the details|couldn.t verify your account|can.t confirm a fix|don.t have a confirmed answer)|There.s no confirmed change|I.ll keep troubleshooting this here\.?$)/i.test(text.trim());
+const empty=(text:string)=>supportSafetyOnly(text)||(!text.includes('?')&&/^(?:I (?:have the details|couldn.t verify your account|can.t confirm a fix|don.t have a confirmed answer)|There.s no confirmed change|I.ll keep troubleshooting this here\.?$)/i.test(text.trim()));
 
 /** Review signals, not verdicts. Never resolve cases, send messages, train from
  * customer claims, or infer that a reported platform failure is repaired. */

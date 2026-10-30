@@ -21,6 +21,8 @@ assert.equal(report.cases.some(c=>c.id===corrected.id),false,'Operator correctio
 assert.equal(report.cases.some(c=>c.id===resolved.id),false,'A resolved case is not stalled');
 assert.deepEqual(report.cases.find(c=>c.id===oldCase.id).flags.map(f=>f.code),['stalled']);
 assert.equal(report.topics.reduce((n,t)=>n+t.conversations,0),5);
+const clarification=conversation([message('user','Something about my page is confusing.',1),message('assistant','I don’t have a confirmed answer yet. Which page are you on?',2)]);
+assert.equal(supportQualityReport([clarification],now).flagged,0,'A useful first clarification is not an empty reply');
 const privateCase=conversation([message('user','My code is for someone@example.invalid. https://evil.invalid/ <script>alert(1)</script>',1),message('assistant','Please don’t share the code itself.',2)]);
 const sanitized=supportQualityReport([privateCase],now).cases[0];assert.doesNotMatch(sanitized.question,/someone@|https:\/\//);
 
