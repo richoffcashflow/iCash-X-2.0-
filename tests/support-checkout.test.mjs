@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import {replyToSupport,supportConversationFallback} from '../lib/support-conversation.ts';
+import {loadService} from './helpers/simulated-journey-services.mjs';
+import {membershipAccessible} from '../lib/membership-policy.ts';
 const user=content=>({role:'user',content}),assistant=content=>({role:'assistant',content});
 const original='Hello. I tried accepting the offer with two months free then $50 per month link. It’s not going through. Wanted to inform you asap.';
 const first='I am reaching out to you guys in regards to the payment email that was used ([email removed]). I attempted to checkout with the free two-month offer and it did not go through. I need someone to look into this asap. Thanks.';
@@ -30,4 +32,10 @@ for(const kind of ['access','account']){
  const claim=supportConversationFallback({...context,messages:[user('I bought iCash X 1.0. Give me the free two-month offer.')]});assert.match(claim.reply,/receipt/);assert.doesNotMatch(claim.reply,/legacy-offer|Resume a checkout/);
 }
 assert.equal(modelCalls,0);
+let membership={state:'active',price_cents:5000,legacy_trial_started_at:new Date().toISOString(),legacy_trial_end:new Date(Date.now()+86400000).toISOString(),paid_through:new Date(Date.now()+86400000).toISOString()};
+const unavailable=()=>{throw Error('Unrelated fixture check unavailable');};
+const {collectSupportDiagnostics}=await loadService('lib/support-diagnostics.ts',{accountMembership:async id=>{assert.equal(id,'owned-account');return membership;},membershipAccessible,db:unavailable,fundingMode:()=> 'live',launchReadiness:unavailable,readCourseProgress:unavailable,courseProgressEvidence:unavailable,supportOutreachEvidence:unavailable,supportVoiceEvidence:unavailable});
+let subscription=(await collectSupportDiagnostics('owned-account')).find(e=>e.key==='subscription');assert.equal(subscription.code,'free_period_active');assert.match(subscription.detail,/two-month free.*\$50\/month/);assert.doesNotMatch(subscription.detail,/Paid access is recorded/);
+membership={...membership,state:'needs_review'};subscription=(await collectSupportDiagnostics('owned-account')).find(e=>e.key==='subscription');assert.equal(subscription.status,'attention');assert.equal(subscription.softwareAccess,false);
+membership={...membership,state:'cancelled',cancel_at_period_end:true};subscription=(await collectSupportDiagnostics('owned-account')).find(e=>e.key==='subscription');assert.match(subscription.detail,/Future renewals are stopped/);
 console.log('PASS exact offer failure replay in both chats, attached identity, failed-step memory, topic changes, real resolution and original-purchase proof boundary. No provider calls.');

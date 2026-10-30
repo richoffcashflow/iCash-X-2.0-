@@ -13,6 +13,8 @@ import {supportInstructionCorrection,unsupportedSupportReply} from './support-re
 import {supportLegacyMigrationReply} from './support-legacy-migration.ts';
 import {currentAccessConversation} from './support-access-topic.ts';
 import {supportCheckoutReply,supportIdentityReply} from './support-checkout.ts';
+import {supportProductClarification} from './support-product-clarifications.ts';
+import {supportPurchaseHelp} from './support-purchase-help.ts';
 
 export type SupportTurn={role:string;content:string};
 export type SupportReply={reply:string;status:'open'|'waiting_on_customer'|'resolved'|'closed';ai:boolean};
@@ -23,7 +25,7 @@ const clean=(text:string)=>redactSupportQuestion(text).replace(/\b\d{6,10}\b/g,'
 function earlierSupportProblem(context:SupportContext){
  const users=context.messages.filter(m=>m.role==='user');
  const lastConfirmed=users.findLastIndex(m=>/\b(?:that worked|it worked|working now|fixed now|all fixed|problem solved)\b/i.test(m.content)&&!/(?:not|still|but)\b/i.test(m.content));
- return context.historyComplete===false||users.slice(lastConfirmed+1,-1).some(m=>/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|not working|not calling|not texting|no calls|no texts|no leads|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
+ return context.historyComplete===false||users.slice(lastConfirmed+1,-1).some(m=>/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|not working|not calling|not texting|no calls|no texts|no leads|no (?:phone )?numbers|no contacts|invalid numbers|wrong email|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
 }
 
 /** Local replies also work during provider outages and interruption recovery. */
@@ -37,6 +39,11 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(/\b(?:that worked|it worked|working now|fixed now|all fixed|i(?:’|')?m in|got in|problem solved)\b/i.test(question)&&!/(?:not|isn.t|didn.t|still|but)\b/i.test(question)&&!/[?]|\b(?:how|what|where|when|why|which|also|another|more questions|next question)\b/i.test(question))return result('Glad that worked.','resolved');
  const correction=supportInstructionCorrection(context.messages,context.evidence??[]);
  if(correction)return result(correction,'open');
+ const clarification=supportProductClarification(context.messages);
+ if(clarification)return result(clarification.reply,clarification.answered&&!earlierSupportProblem(context)?'resolved':'open');
+ const checkout=supportCheckoutReply(context);if(checkout)return checkout;
+ const purchase=supportPurchaseHelp(context.messages);
+ if(purchase)return result(purchase.reply,purchase.status);
  const productAnswer=supportSimpleProductAnswer(question)??(/^(?:could be anytime|so anytime)[?!.\s]*$/i.test(question.trim())?supportSimpleProductAnswer(currentSupportIssue(context.messages)):null);
  if(productAnswer){
   // A side question can be answered without claiming an earlier fault is fixed.
@@ -59,7 +66,6 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  }
  if(supportTopic(question)==='refund')return result(`${noRefunds}${/\bcancel\b/i.test(question)?' '+supportAnswer('cancel',[],false):' If there’s a payment, access or software problem, tell me what happened so I can help.'}`);
  if(supportTopic(question)==='cancel')return result(context.kind==='account'?supportAnswer('cancel',[],false):'To stop future renewals, sign in and open Cancel subscription in the workspace account menu. Confirm the cancellation there. If you cannot sign in, tell me which sign-in step fails so I can help you get access.');
- const checkout=supportCheckoutReply(context);if(checkout)return checkout;
  const identity=supportIdentityReply(context);if(identity)return result(identity,'open');
  const migration=supportLegacyMigrationReply(context.messages);
  if(migration)return result(migration.reply,migration.status);
@@ -132,6 +138,7 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
 async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fetch=fetch):Promise<SupportReply>{
  const fallback=supportTechnicalFallback(context);
  if(supportCheckoutReply(context)||supportIdentityReply(context))return fallback;
+ if(supportProductClarification(context.messages)||supportPurchaseHelp(context.messages))return fallback;
  if(supportLegacyMigrationReply(context.messages))return fallback;
  if(currentAccessConversation(context.messages).length>0)return fallback;
  const relevantEvidence=supportReplyEvidence(context.messages,context.evidence??[]);

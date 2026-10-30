@@ -24,8 +24,8 @@ export function supportCheckoutReply(context:SupportContext):SupportReply|null{
  const priorResume=active.some(m=>m.role!=='user'&&/Resume a checkout from another device/.test(m.content));
  let reply:string;
  if(priorResume&&/still|same|already|doesn[’']?t|didn[’']?t|cannot|can[’']?t|failed|not work|error|contact support|it says/i.test(last))reply=identity+'The offer still isn’t confirmed. I’m keeping this issue open with the failed steps you reported; you don’t need to repeat them or start a separate $50 checkout.';
- else if(/(?:says|message|error).{0,100}(?:support|doesn[’']?t work|does not work|could not open|unavailable)|contact support|reach out to you|resume|another device/i.test(history))reply=identity+'On the original offer page, choose “Resume a checkout from another device” and verify the original purchase email. Then select “Continue to secure checkout.” That verification does not purchase a subscription. Keep using the two-month offer; don’t start a separate $50 checkout.';
- else reply=identity+'I’m keeping the two-month offer checkout as the issue here. What exact message appears when you select “Continue to secure checkout”?';
+ else if(/(?:says|message|error).{0,100}(?:support|doesn[’']?t work|does not work|could not open|unavailable)|contact support|reach out to you|resume|another device/i.test(history))reply=identity+'Your offer checkout has not been confirmed. On the original offer page, choose “Resume a checkout from another device” and verify the original purchase email. Then select “Continue to secure checkout.” That verification does not purchase a subscription. Keep using the two-month offer; don’t start a separate $50 checkout.';
+ else reply=identity+'I’m keeping the two-month offer checkout as the issue here. What exact message appears on the checkout page when you select “Continue to secure checkout”?';
  return {reply,status:users.length>1||priorResume?'open':'waiting_on_customer',ai:false};
 }
 
