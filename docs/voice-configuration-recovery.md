@@ -25,8 +25,13 @@ capability and dispatch rechecks all eligibility, financial, provider and
 recording controls before placing any call. Unknown outcomes, original receipts,
 customer balances and expired contact evidence are never rewritten.
 
-Install `20261030183441_unstarted_voice_configuration_recovery.sql` before the
-matching application release; installation itself queues nothing. The existing
+Install `20261030183441_unstarted_voice_configuration_recovery.sql` and
+`20261030191436_voice_configuration_recovery_schema_access.sql` before the
+matching application release; installation itself queues nothing. The latter
+allows the backend role to reach its explicitly granted audit table; other
+private tables and functions retain their existing permissions. Tests execute
+recovery as that backend role, including the original missing-schema failure.
+The existing
 production Git/CI gate remains required. Inspect maintenance's
 `capacity.recovery` and new original provider call receipts after release. A
 requeued count is not evidence of a completed or answered call.

@@ -4,12 +4,15 @@ import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const sql=read('config/unstarted-voice-configuration-recovery.sql');
+const accessSql=read('config/voice-configuration-recovery-schema-access.sql');
 const pg=await PGlite.create(),q=(s,a=[])=>pg.query(s,a),val=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
 const uid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0'),account=uid(1),hash='a'.repeat(64);
 try{
  await pg.exec(`
  create role anon;create role authenticated;create role service_role bypassrls;create schema icash_recording_private;
- grant usage on schema icash_recording_private to service_role;
+ revoke all on schema icash_recording_private from public,anon,authenticated,service_role;
+ create table icash_recording_private.original_receipts(id int);
+ revoke all on icash_recording_private.original_receipts from public,anon,authenticated,service_role;
  create function icash_recording_private.audit_immutable() returns trigger language plpgsql as $$begin raise exception 'Append only';end$$;
  create table icash_operating_budget(id int primary key,enabled boolean);insert into icash_operating_budget values(1,true);
  create table icash_accounts(id uuid primary key,bot_paused boolean default false);
@@ -36,6 +39,7 @@ try{
  await q('insert into icash_accounts(id) values($1)',[account]);await q('insert into icash_wallets(account_id) values($1)',[account]);
  await q('insert into icash_voice_configs(account_id,agent_config_hash) values($1,$2)',[account,hash]);await q('insert into icash_voice_production_template(id,agent_config_hash) values(1,$1)',[hash]);
  await pg.exec(sql);
+ await pg.exec('grant select on all tables in schema public to service_role;grant update on icash_operating_budget,icash_voice_jobs to service_role;');
  const add=async(n,{contact='contact-'+n,legacy=false}={})=>{
   const id=uid(n);
   await q('insert into icash_screening_jobs(id,account_id) values($1,$2)',[id,account]);
@@ -45,6 +49,22 @@ try{
  };
  const recover=()=>val("select icash_recover_voice_configuration('agent_fixture',$1,$1,$2,clock_timestamp())",[hash,'b'.repeat(40)]);
  const isolated=async fn=>{await q('begin');try{await fn();}finally{await q('rollback');}};
+ await isolated(async()=>{
+  await add(99);await q('set local role service_role');
+  await assert.rejects(recover(),/permission denied for schema icash_recording_private/);
+ });
+ await pg.exec(accessSql);
+ await isolated(async()=>{
+  const id=await add(99);await q('set local role service_role');
+  assert.equal(await recover(),1,'the actual backend role can recover and persist its audit');
+  assert.equal(await val('select state from icash_voice_jobs where id=$1',[id]),'ready');
+  assert.equal(await val('select count(*)::int from icash_recording_private.configuration_recoveries'),1);
+  assert.equal(await recover(),0);
+ });
+ await isolated(async()=>{
+  await q('set local role service_role');
+  await assert.rejects(q('select * from icash_recording_private.original_receipts'),/permission denied/);
+ });
  for(const legacy of [false,true])await isolated(async()=>{
   const id=await add(100,{legacy}),tickets=await val('select jsonb_agg(t) from icash_automation_tickets t');
   assert.equal(await recover(),1);assert.equal(await val('select state from icash_voice_jobs where id=$1',[id]),'ready');
@@ -82,10 +102,12 @@ try{
   for(const timestamp of ["now()-interval '3 minutes'","now()+interval '1 minute'","null"]){assert.equal(await val(`select icash_recover_voice_configuration('agent_fixture',$1,$1,$2,${timestamp})`,[hash,'b'.repeat(40)]),0);}
  });
  for(const role of ['anon','authenticated']){
+  assert.equal(await val("select has_schema_privilege($1,'icash_recording_private','usage')",[role]),false);
   assert.equal(await val("select has_function_privilege($1,'icash_recover_voice_configuration(text,text,text,text,timestamptz)','execute')",[role]),false);
   assert.equal(await val("select has_table_privilege($1,'icash_recording_private.configuration_recoveries','select')",[role]),false);
  }
  assert.equal(await val("select prosecdef from pg_proc where proname='icash_recover_voice_configuration'"),false);
  assert.equal(sql,read('supabase/migrations/20261030183441_unstarted_voice_configuration_recovery.sql'));
+ assert.equal(accessSql,read('supabase/migrations/20261030191436_voice_configuration_recovery_schema_access.sql'));
  console.log('Unstarted voice recovery: provider rejection only; original tickets, unknown operations, wallet, recipient controls, duplicate protection and private audit verified. Offline only.');
 }finally{await pg.close();}
