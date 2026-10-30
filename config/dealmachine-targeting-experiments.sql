@@ -327,22 +327,26 @@ begin
  select count(*) into total from (select distinct account_id,zip from public.icash_discovery_filter_pages where created_at between now()-interval '90 days' and now()) x;
  with cohorts as (
   select account_id,zip from public.icash_discovery_filter_pages where created_at between now()-interval '90 days' and now() group by account_id,zip order by max(created_at) desc limit 100
+ ), signatures as materialized (
+  select a.account_id,o.deal_id,o.purchase_at from (select distinct account_id from cohorts) a
+  cross join lateral public.icash_learning_deal_outcomes(a.account_id) o where o.purchase_at is not null
  ), stats as (
   select c.*,s from cohorts c cross join lateral jsonb_array_elements(public.icash_targeting_feedback(c.account_id,c.zip)) s
  ), samples as (
-  select st.*,a.screening_id,p.created_at,sc.result,oc.result contacts,d.id deal_id
+  select st.*,a.screening_id,p.created_at,sc.result,oc.result contacts,d.id deal_id,signature.purchase_at
   from stats st join public.icash_discovery_filter_pages p on p.account_id=st.account_id and p.zip=st.zip and p.plan->>'strategy'=st.s->>'strategy' and p.created_at between now()-interval '90 days' and now()
   join public.icash_discovery_filter_attribution a on a.operation_key=p.operation_key and a.account_id=p.account_id
   join public.icash_screening_jobs sc on sc.id=a.screening_id and sc.account_id=a.account_id
   left join public.icash_owner_contacts oc on oc.screening_id=a.screening_id and oc.account_id=a.account_id
   left join public.icash_deal_files d on d.screening_id=a.screening_id and d.account_id=a.account_id
+  left join signatures signature on signature.account_id=d.account_id and signature.deal_id=d.id
  ), funnel as (
   select account_id,zip,s->>'strategy' strategy,
    count(distinct screening_id) filter(where created_at<=now()-interval '30 days') mature_contract_samples,
    count(distinct screening_id) filter(where contacts is not null and exists(select 1 from jsonb_array_elements(contacts->'contacts') person cross join lateral jsonb_array_elements(person->'phones') phone where person->'likelyOwner'='true'::jsonb and phone->'doNotCall'='false'::jsonb and phone->>'activity'='active' and length(phone->>'number')=10)) valid_contact_properties,
    count(distinct screening_id) filter(where result->'financialCheck'->>'status'='eligible' and exists(select 1 from icash_research_private.targeting_qualifications e where e.account_id=samples.account_id and e.deal_id=samples.deal_id and e.screening_id=samples.screening_id and e.created_at between samples.created_at and now())) qualified,
    count(distinct screening_id) filter(where exists(select 1 from icash_call_offer_private.events e where e.account_id=samples.account_id and e.deal_id=samples.deal_id and e.action in ('get_offer','update_repairs','accept_offer') and coalesce(e.state->>'quotedPriceCents','') ~ '^[1-9][0-9]*$' and e.created_at between samples.created_at and now())) offers,
-   count(distinct screening_id) filter(where exists(select 1 from public.icash_learning_deal_outcomes(samples.account_id) o where o.deal_id=samples.deal_id and o.purchase_at between samples.created_at and now())) signed_contracts
+   count(distinct screening_id) filter(where purchase_at between samples.created_at and now()) signed_contracts
   from samples group by account_id,zip,s->>'strategy'
  ) select coalesce(jsonb_agg(st.s||jsonb_build_object('accountId',st.account_id,'zip',st.zip,'validContactProperties',coalesce(f.valid_contact_properties,0),
   'qualifiedConversations',coalesce(f.qualified,0),'offers',coalesce(f.offers,0),'signedContracts',coalesce(f.signed_contracts,0),'matureContractSamples',coalesce(f.mature_contract_samples,0),
