@@ -5,6 +5,7 @@ import {PGlite} from '@electric-sql/pglite';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const sql=read('config/unstarted-voice-configuration-recovery.sql');
 const accessSql=read('config/voice-configuration-recovery-schema-access.sql');
+const boundedSql=read('config/bounded-voice-configuration-recovery.sql');
 const pg=await PGlite.create(),q=(s,a=[])=>pg.query(s,a),val=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
 const uid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0'),account=uid(1),hash='a'.repeat(64);
 try{
@@ -54,6 +55,7 @@ try{
   await assert.rejects(recover(),/permission denied for schema icash_recording_private/);
  });
  await pg.exec(accessSql);
+ await pg.exec(boundedSql);
  await isolated(async()=>{
   const id=await add(99);await q('set local role service_role');
   assert.equal(await recover(),1,'the actual backend role can recover and persist its audit');
@@ -93,6 +95,11 @@ try{
   await add(100,{contact:'same-person'});await add(101,{contact:'same-person'});
   assert.equal(await recover(),1);assert.equal(await recover(),0,'another property/contact route cannot duplicate the queued recipient');
  });
+ for(const state of ['ready','issued','dispatching'])await isolated(async()=>{
+  await add(100,{contact:'same-person'});await add(101,{contact:'same-person',legacy:true});
+  await q('update icash_voice_jobs set state=$1 where id=$2',[state,uid(101)]);
+  assert.equal(await recover(),0,'existing queued/active recipients remain excluded across contact sources');
+ });
  await isolated(async()=>{
   for(let n=100;n<145;n++){await add(n);if(n<120)await q("update icash_voice_contact_targets set permission_until=now()-interval '1 day' where id=$1",[uid(n)]);}
   assert.equal(await recover(),20,'ineligible older candidates do not consume the batch');assert.equal(await recover(),5);assert.equal(await recover(),0);
@@ -109,5 +116,6 @@ try{
  assert.equal(await val("select prosecdef from pg_proc where proname='icash_recover_voice_configuration'"),false);
  assert.equal(sql,read('supabase/migrations/20261030183441_unstarted_voice_configuration_recovery.sql'));
  assert.equal(accessSql,read('supabase/migrations/20261030191436_voice_configuration_recovery_schema_access.sql'));
+ assert.equal(boundedSql,read('supabase/migrations/20261030192149_bounded_voice_configuration_recovery.sql'));
  console.log('Unstarted voice recovery: provider rejection only; original tickets, unknown operations, wallet, recipient controls, duplicate protection and private audit verified. Offline only.');
 }finally{await pg.close();}
