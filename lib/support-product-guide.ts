@@ -46,8 +46,10 @@ export function supportHowToQuestion(question:string){
 
 /** A role/workflow question is product guidance, even when phrased as a recap. */
 function supportRoleQuestion(question:string){
+ // Specific account requests and follow-up controls take their own support path.
+ if(/\b(?:contact checks?|contract check|save resolution|resolution note|no reply to delivered question|sign.?in|log.?in|login|password|code|subscription|credits?|balance|funding|human)\b/i.test(question))return false;
  // Do not let a general recap swallow a real failure in the same message.
- if(/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|stopped|unavailable|unresponsive|isn[’']?t|doesn[’']?t|didn[’']?t|won[’']?t|can[’']?t|cannot)\b|\b(?:not|never)\s+(?:working|calling|texting|sending|loading|opening|received|arrived)\b|\bno\s+(?:calls?|texts?|leads?|code|payment)\b/i.test(question))return false;
+ if(/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|stopped|expired|unavailable|unresponsive|isn[’']?t|doesn[’']?t|didn[’']?t|won[’']?t|can[’']?t|haven[’']?t|cannot|still waiting)\b|\b(?:not|never)\s+(?:working|making|doing|calling|texting|sending|loading|opening|receiving|received|arrived)\b|\b(?:no|zero|0)\s+(?:calls?|texts?|leads?|responses?|replies|code|payment)\b/i.test(question))return false;
  const role=/\b(?:all i (?:need|have) to do|(?:can|do|should) i (?:just|only) (?:watch|monitor|wait|handle|follow up)|i (?:just|only) (?:watch|monitor|handle|follow up)|my (?:role|part|responsibilit(?:y|ies))|sit back|hands[ -]?off)\b|\b(?:what|when|where)\b.{0,25}\bi (?:come|step) in\b/i.test(question)
   || /\bwhat (?:do|should) i (?:need to |have to )?do\b/i.test(question)&&/\bwhile\b.{0,30}\b(?:bot|ai|automation)\b/i.test(question);
  const workflow=/\b(?:bot|ai|automation|workflow|leads?|sellers?|buyers?|contracts?|agreements?|title|closing|notifications?|alerts?|messages?|follow.?up)\b/i.test(question);
