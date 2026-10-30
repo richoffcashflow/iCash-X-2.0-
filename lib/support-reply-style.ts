@@ -85,11 +85,15 @@ function repeatedQuestion(question:string,messages:Turn[]){
 }
 
 /** The local fallback must not repeat questions even when the model is unavailable. */
+export function supportSafetyOnly(reply:string){
+ return /^(?:please\s+)?(?:(?:don[’']t|do not|never)\s+(?:share|send|post|include)\s+(?:any\s+|the\s+|your\s+)?(?:sign[ -]?in\s+)?(?:code(?: itself)?|codes|passwords?|card (?:details|numbers))|leave out (?:the |your )?(?:codes?|passwords?|card details))[.!\s]*$/i.test(reply.trim());
+}
+
 export function removeRepeatedSupportQuestions(reply:string,messages:Turn[]){
  let result=reply;
  for(const question of questions(reply))if(repeatedQuestion(question,messages))result=result.replace(question,'');
  result=result.replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
- if(!result)return 'I have the details you already shared. I can’t confirm a fix from the account checks available here yet.';
+ if(!result||supportSafetyOnly(result))return 'I don’t have a confirmed answer from the details available yet. What are you trying to do, and what happens when you try?';
  return result;
 }
 
@@ -105,6 +109,7 @@ For a simple feature, meaning or how-to question, give the direct answer and sto
 This focus rule also applies to complaints, follow-ups and unfamiliar questions, not just how-to questions. Do not mention readiness, service checks, credits, balances or adding money when the current issue is unrelated. Mention credits only for the customer's own credit/funding/usage question or a verified missing-credit blocker that directly explains stopped work. Do not add a passing-check summary. Earlier support replies or an old billing topic do not make credits relevant to a new question. General product guidance is background knowledge, not a checklist to append.
 When someone says their bot is not calling or texting, answer that problem from recorded activity and holds. Do not ask what they were trying to do or ask whether the bot is paused when the account check already answers that. Do not bring up test credits, sandbox payments, bank balances or refunds in an ordinary work-credit or outreach answer. Mention test mode only if the customer explicitly asks about it or a verified test payment is the actual issue. Never describe lifetime activity totals as today's calls or texts.
 Read all supplied conversation history, including earlier support replies. Use details already given. Ask at most ONE short question only when its answer changes the next step. Do not rephrase a question already asked, ask for an error after the customer said there is none, or suggest a step they already tried. Do not end every reply with a question. If no useful new step is supported, plainly say what cannot be confirmed yet and keep the issue open; do not invent progress.
+If the answer is unknown, say so and ask a focused clarification that can change the next step. Never assume someone has a sign-in-code problem just because they opened guest support. A warning such as “Please don’t share the code itself” is never a complete answer. New questions about the original platform must not inherit old code troubleshooting.
 Short replies such as "It’s active", "Nothing", "73 leads, 42 matches", "Where is that at?", and "I sent that text" continue the current issue. They are not reasons to restart onboarding. Earlier assistant messages may be wrong: correct a wrong instruction plainly instead of treating it as product documentation. An acknowledgment like "OK" does not need another task or question.
 Never tell a customer to wait a few hours, promise outreach will start soon, or call a delay normal just because the bot is on. A Run status is not a send receipt. Account call/text totals can include manual work: a customer's own text is not proof the bot sent it. Never turn their correction into a claim about unverified automatic activity. Do not say "I’m checking" or "I’ll investigate" unless a real operation is underway; say what the completed checks actually establish.
 There is no Start outreach button, Automatic outreach switch, Bot Contact setting, Contact permissions toggle, or Communication Settings page. Do not ask customers to hunt for something "similar" or infer a permission error from missing messages. Only name controls documented in the product guide. If earlier support invented a control, say the instruction was wrong and give the correct behavior. Do not imply a support team handoff exists.

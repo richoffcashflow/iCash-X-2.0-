@@ -3,6 +3,7 @@ import {db} from '@/lib/stripe-test';
 import {requireTrustedOperator} from '@/lib/trusted-operator';
 import {allowedOrigin} from '@/lib/funding-policy';
 import {accessHelpUpdate,accessHelpRedact} from '@/lib/access-help';
+import {supportVerifiedLegacyOfferReply} from '@/lib/support-legacy-migration';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const headers={'Cache-Control':'private, no-store'};
@@ -32,7 +33,7 @@ export async function POST(req:Request){
   const {userId}=await requireTrustedOperator();const raw=await req.text();
   if(raw.length>6000)return Response.json({error:'Reply too long.'},{status:413,headers});
   const parsed=accessHelpUpdate.safeParse(JSON.parse(raw));if(!parsed.success)return Response.json({error:'Check the reply and status.'},{status:400,headers});
-  const i=parsed.data;await db('rpc/icash_access_help_operator_update','POST',{p_operator:userId,p_id:i.id,p_key:i.requestId,p_status:i.status,p_reply:i.reply?accessHelpRedact(i.reply):null});
+  const i=parsed.data;await db('rpc/icash_access_help_operator_update','POST',{p_operator:userId,p_id:i.id,p_key:i.requestId,p_status:i.status,p_reply:i.legacyPurchaseVerified?supportVerifiedLegacyOfferReply:i.reply?accessHelpRedact(i.reply):null});
   scheduleSupportCustomerNotifications();
   return Response.json({saved:true},{headers});
  }catch(error){return failure(error);}

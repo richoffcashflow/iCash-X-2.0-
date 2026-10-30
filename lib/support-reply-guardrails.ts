@@ -1,5 +1,5 @@
 import {supportTopic,type SupportEvidence} from './support-policy.ts';
-import {supportContinuation} from './support-reply-style.ts';
+import {supportContinuation,supportSafetyOnly} from './support-reply-style.ts';
 
 type Turn={role:string;content:string};
 const inventedControl=/\b(?:start outreach|automatic outreach|bot contact|contact permissions?|communication settings)\b/i;
@@ -18,6 +18,7 @@ export function supportInstructionCorrection(messages:Turn[],evidence:SupportEvi
 
 /** Catch observed failure modes even when the model ignores its product instructions. */
 export function unsupportedSupportReply(reply:string,messages:Turn[],evidence:SupportEvidence[]){
+ if(supportSafetyOnly(reply))return true;
  if(inventedControl.test(reply)&&instruction.test(reply))return true;
  if(/\b(?:wait|give it|after|within|in) (?:a (?:few|couple of)|\d+|one|two|three|several) (?:more )?(?:minutes?|hours?)\b|\b(?:should|will) (?:start|begin|resume)\b.{0,55}\b(?:soon|shortly|momentarily)\b/i.test(reply))return true;
  if(/\b(?:normal|just) (?:pause|delay|waiting)|\b(?:everything|all systems) (?:is|are) (?:working|fine|healthy)/i.test(reply))return true;

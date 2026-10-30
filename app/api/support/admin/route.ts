@@ -6,6 +6,7 @@ import {db} from '@/lib/stripe-test';
 import {allowedOrigin} from '@/lib/funding-policy';
 import {supportId,supportStatusInput,redactSupportQuestion} from '@/lib/support-policy';
 import {collectSupportDiagnostics,supportDeploymentHealth} from '@/lib/support-diagnostics';
+import {supportVerifiedLegacyOfferReply} from '@/lib/support-legacy-migration';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const headers={'Cache-Control':'private, no-store'};
@@ -29,7 +30,7 @@ export async function GET(req:Request){
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
  try{const {userId}=await requireTrustedOperator();const raw=await req.text();if(raw.length>6000)return NextResponse.json({error:'Reply too long.'},{status:413,headers});const i=supportStatusInput.parse(JSON.parse(raw));
-  await db('rpc/icash_support_operator_update','POST',{p_operator:userId,p_thread:i.threadId,p_request:i.requestId,p_status:i.status,p_reply:i.reply?redactSupportQuestion(i.reply):null});
+  await db('rpc/icash_support_operator_update','POST',{p_operator:userId,p_thread:i.threadId,p_request:i.requestId,p_status:i.status,p_reply:i.legacyPurchaseVerified?supportVerifiedLegacyOfferReply:i.reply?redactSupportQuestion(i.reply):null});
   scheduleSupportCustomerNotifications();
   return NextResponse.json({saved:true},{headers});
  }catch(e){return failure(e);}
