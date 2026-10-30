@@ -1,5 +1,13 @@
 # DealMachine owner data review — October 27, 2026
 
+## Filtered credit counts — October 29 Central / October 30 UTC
+
+The first export after the reviewed capacity release completed with three owners, seven active-filtered phones and three used credits. The next successful provider response evaluated four owners, returned one row after filtering, and reported `credits: {used: 1, people: 4}`. The original response and CSV were saved, but the previous equality check incorrectly held persistence because it equated evaluated people with returned rows. New exports were paused during correction; another admitted request returned HTTP 500 and retains its own unresolved purchase and owner fence.
+
+`credits.people` counts evaluated people, while `credits.used` reports newly charged credits ([provider response contract](https://api.docs.dealmachine.com/concepts/response-format#the-credits-object)). The receipt validator and SQL saver now require returned rows <= evaluated people <= requested unique owners. Actual used credits must still fit the delivered unique owners. Original aggregate fields remain unchanged; filtered-out owners receive no contact allocation or inferred charge. Missing, non-integer, excessive or contradictory counts remain held.
+
+`supabase/migrations/20261030004249_owner_export_filtered_credits.sql` changes only that guard in the existing saver, retaining its grants, receipt bindings, atomic contact persistence and settlement. Recovery uses the original saved CSV without a new provider request or purchase. Offline regression cases exercise four requested owners, one returned owner, one actual credit, zero allocation for an excluded property, invalid counts, and unchanged raw provider evidence.
+
 ## Capacity recovery — October 29
 
 The owner requested activation again and asked to repair the global blockage. The original HTTP 500 does not establish its cost or successful completion. It also must not be confused with evidence that an export is still running. `config/owner-export-capacity-recovery.sql` keeps those facts separate.
