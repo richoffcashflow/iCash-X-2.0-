@@ -16,6 +16,17 @@ function boundSubscription(m:Membership,s:Stripe.Subscription,change?:PlanChange
  if(m.mode!==fundingMode()||s.livemode!==(m.mode==='live')||s.id!==m.stripe_subscription_id||s.metadata.icash_membership!==m.id||ref(s.customer)!==m.stripe_customer_id||s.items.has_more||s.items.data.length!==1||i.quantity!==1||i.price.currency!=='usd'||i.price.recurring?.interval!=='month'||i.price.recurring.interval_count!==1||![m.price_cents,change?.to_price].includes(i.price.unit_amount??-1))throw Error('Subscription binding changed');
  return i;
 }
+/** Only an already-verified legacy introductory period may use trial access.
+ * This never activates a trial or replaces the separate paid upgrade receipt. */
+function planSubscription(m:Membership,s:Stripe.Subscription,action:PlanChange['action']){
+ if(s.cancel_at_period_end||s.cancel_at)throw Error('Restore your subscription renewal before changing plans');
+ if(s.pending_update||s.schedule)throw Error('Resolve the pending subscription change first');
+ if(s.status==='active')return;
+ if(s.status!=='trialing')throw Error('Active subscription required');
+ const end=Date.parse(m.legacy_trial_end??'')/1000,start=Date.parse(m.legacy_trial_started_at??'');
+ if(action==='retain_vip'||m.legacy_trial_offer!=='legacy-trial-2026-10-25.1'||m.consent_version!=='legacy-trial-2026-10-25.1'||m.initial_price_cents!==0||!Number.isFinite(start)||start>Date.now()||s.metadata.icash_legacy_trial!==m.legacy_trial_offer||!Number.isSafeInteger(end)||end<=Date.now()/1000||s.trial_end!==end||!s.trial_start||s.trial_start>=end||end-s.trial_start>62*86400||s.items.data[0]?.current_period_end!==end||Date.parse(m.paid_through??'')!==end*1000)throw Error('Verified introductory subscription required for this plan change');
+ if(action!=='upgrade'&&!vipActive(m))throw Error('Paid VIP access required to change VIP renewal');
+}
 /** Called by the canonical subscription reader during a payment webhook race. */
 export async function authorizedPlanPrice(m:Membership,s:Stripe.Subscription){
  const [c]=await db<PlanChange[]>(`icash_plan_changes?membership_id=eq.${m.id}&state=in.(pending,paid)&select=*&limit=1`);
@@ -73,15 +84,17 @@ async function applyChange(c:PlanChange){
   if(!receipt||receipt.terms_text!==vipRetentionTerms||receipt.amount_cents!==vipRetentionCents)throw Error('Review and accept the VIP retention offer first');
  }
  const s=await stripe.subscriptions.retrieve(m.stripe_subscription_id!,{expand:['discounts.source.coupon','items.data.discounts']}),item=boundSubscription(m,s,c);
- if(s.status!=='active'||s.cancel_at_period_end||s.pending_update||s.schedule)throw Error('Resolve the pending subscription change first');
+ planSubscription(m,s,c.action);
  if(Date.parse(c.period_end)!==item.current_period_end*1000)throw Error('Renewal occurred during the change; payment requires review');
  // Ordinary plan changes preserve discounts. The explicitly accepted retention
  // plan replaces them with the fixed $50 monthly price.
  const priceId=await activePlanPrice(stripe,c,s,item);
  const changed=item.price.id===priceId&&(c.action!=='retain_vip'||!(s.discounts?.length))?s:await stripe.subscriptions.update(s.id,{items:[{id:item.id,price:priceId,quantity:1}],proration_behavior:'none',payment_behavior:'error_if_incomplete',...(c.action==='retain_vip'?{discounts:'' as const}:{})},{idempotencyKey:`vip-apply-active:v1:${c.id}:${priceId}`});
- const next=changed.items.data[0];
+ const next=boundSubscription(m,changed,c);
+ planSubscription(m,changed,c.action);
+ if(changed.status!==s.status||changed.trial_end!==s.trial_end||changed.trial_start!==s.trial_start||changed.billing_cycle_anchor!==s.billing_cycle_anchor)throw Error('Subscription period changed during plan update');
  if(c.action==='retain_vip'&&(changed.discounts?.length??0)!==0)throw Error('Retained VIP price not confirmed');
- if(changed.status!=='active'||changed.cancel_at_period_end||changed.items.has_more||next.quantity!==1||next.price.currency!=='usd'||next.price.recurring?.interval!=='month'||next.price.recurring.interval_count!==1||next.price.id!==priceId||next.price.unit_amount!==c.to_price||next.current_period_end!==item.current_period_end||changed.items.data.length!==1)throw Error('Plan update not confirmed');
+ if(changed.cancel_at_period_end||changed.items.has_more||next.quantity!==1||next.price.currency!=='usd'||next.price.recurring?.interval!=='month'||next.price.recurring.interval_count!==1||next.price.id!==priceId||next.price.unit_amount!==c.to_price||next.current_period_end!==item.current_period_end||changed.items.data.length!==1)throw Error('Plan update not confirmed');
  await db('rpc/icash_apply_plan_change','POST',{p_change:c.id,p_subscription:changed.id,p_price:priceId});
 }
 export async function reconcileVipCheckout(sessionId:string){
@@ -112,7 +125,7 @@ export async function changeVipPlan(m:Membership,action:PlanChange['action'],ori
  if(action==='upgrade'&&vipActive(m))throw Error('VIP is already active. Refresh your plan.');
  const [pending]=action==='retain_vip'?await db<PlanChange[]>(`icash_plan_changes?membership_id=eq.${m.id}&state=in.(pending,paid)&select=*&limit=1`):[];
  const stripe=fundingStripe(),s=await stripe.subscriptions.retrieve(m.stripe_subscription_id!),item=boundSubscription(m,s,pending?.action==='retain_vip'?pending:undefined);
- if(s.status!=='active'||s.cancel_at_period_end||s.pending_update||s.schedule)throw Error('Resolve the pending subscription change first');
+ planSubscription(m,s,action);
  if(m.state!=='active'||m.cancel_at_period_end||!(Date.parse(m.paid_through??'')>Date.now()))throw Error('Active subscription required');
  if(action==='retain_vip'&&m.vip_retained_at&&m.price_cents===vipRetentionCents)return {saved:true,message:'VIP is already active at $50/month. No charge today.'};
  if((action==='upgrade'||action==='retain_vip')&&item.current_period_end*1000-Date.now()<3600_000)throw Error('Your renewal is within an hour. Refresh after renewal to review this offer.');
