@@ -77,7 +77,11 @@ async function activateLegacyTrial(m:Membership,sub:Stripe.Subscription,s:Stripe
  // A confirmed introductory period is immutable history, not a permanent $50
  // restriction on later explicitly authorized paid plans. Validate identity above.
  if((m.legacy_trial_started_at||m.stripe_subscription_id===sub.id)&&sub.status!=='trialing')return;
- if(m.price_cents!==5000||sub.trial_end!==end||!sub.trial_start||end<=sub.trial_start||end-sub.trial_start>62*86400)throw Error('Legacy trial period mismatch');
+ if(sub.trial_end!==end||!sub.trial_start||end<=sub.trial_start||end-sub.trial_start>62*86400)throw Error('Legacy trial period mismatch');
+ // An activated trial can have an explicitly paid VIP price. Replay verifies
+ // its immutable boundary but never reactivates access or resets its price.
+ if(m.legacy_trial_started_at){if(Date.parse(m.paid_through??'')!==end*1000)throw Error('Legacy trial access boundary mismatch');return;}
+ if(m.price_cents!==5000)throw Error('Legacy trial period mismatch');
  // Canonical cancellation/failure must never be revived by an old free invoice.
  if(sub.status!=='trialing'||end<=Date.now()/1000)return;
  await db('rpc/icash_activate_legacy_trial','POST',{p_membership:m.id,p_session:s.id,p_subscription:sub.id,p_customer:ref(sub.customer),p_email:s.customer_details.email,p_phone:s.customer_details.phone??null,p_trial_end:new Date(end*1000).toISOString()});
@@ -88,9 +92,9 @@ export async function settleMembershipInvoice(invoiceId:string){
  if(!subId)return false;const sub=await stripe.subscriptions.retrieve(subId);let m=await matchingMembership(sub);if(!m)return false;
  if(m.legacy_trial_offer&&invoice.total===0){
   if(invoice.id!==invoiceId||invoice.status!=='paid'||invoice.livemode!==sub.livemode||invoice.currency!=='usd'||invoice.amount_remaining!==0||invoice.amount_paid!==0||invoice.subtotal!==0||invoice.billing_reason!=='subscription_create'||ref(invoice.customer)!==ref(sub.customer)||(invoice.total_discount_amounts??[]).some(d=>d.amount!==0)||(invoice.total_taxes??[]).some(t=>t.amount!==0)||!m.stripe_session_id)throw Error('Legacy trial invoice mismatch');
-  if((m.legacy_trial_started_at||m.stripe_subscription_id===sub.id)&&sub.status!=='trialing'){
-   // Replay of the original subscription-create $0 invoice after a paid plan
-   // change: canonical identity is checked, but no access boundary is extended.
+  if(m.legacy_trial_started_at||m.stripe_subscription_id===sub.id&&sub.status!=='trialing'){
+   // Replay of a verified subscription-create $0 invoice after a plan change
+   // (including during the trial): never extend or reactivate access.
    await activateLegacyTrial(m,sub,await stripe.checkout.sessions.retrieve(m.stripe_session_id));await syncMembershipSubscription(sub);return true;
   }
   const lines=await stripe.invoices.listLineItems(invoice.id,{limit:2}),line=lines.data[0];
