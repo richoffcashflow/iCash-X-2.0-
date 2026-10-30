@@ -45,7 +45,7 @@ No automatic winner is selected. At least 100 properties aged 30 days, 20 qualif
 ## Release and rollback
 
 1. Run targeting, admin, existing owner-export, discovery and release suites; run the desktop/mobile browser targeting scenario against the built application. Provider traffic is mocked in tests.
-2. Apply `supabase/migrations/20261030183242_dealmachine_targeting_experiments.sql` using the migration service. Guarded function patches abort if the reviewed production prerequisites changed. The migration is inactive and additive; it preserves every receipt and hold.
+2. Apply `supabase/migrations/20261030185129_dealmachine_targeting_experiments.sql` using the migration service. Guarded function patches abort if the reviewed production prerequisites changed. The migration is inactive and additive; it preserves every receipt and hold.
 3. Merge only after the PR reliability workflow succeeds. Confirm the exact merged main push passed the production release gate, then confirm matching Vercel and Railway deployments and read-only production checks.
 4. Read `/api/admin/targeting` as the owner or `icash_targeting_report` through the trusted service. Confirm switches, capability evidence, exclusion coverage and the actual absence/presence of experiment receipts. A successful build is not a live outcome test.
 

@@ -20,7 +20,7 @@ try{
  `);
  for(const f of JSON.parse(read('tests/fixtures/targeting-exclusions-before.json')).filter(f=>f.proname!=='icash_reserve_research_discovery'))await db.exec(f.definition);
  for(const f of JSON.parse(read('tests/fixtures/targeting-before.json')).filter(f=>!['icash_prepare_research_efficiency','icash_record_discovery_inventory'].includes(f.proname)))await db.exec(f.definition);
- const sql=read('config/dealmachine-targeting-experiments.sql');assert.equal(sql,read('supabase/migrations/20261030183242_dealmachine_targeting_experiments.sql'));
+ const sql=read('config/dealmachine-targeting-experiments.sql');assert.equal(sql,read('supabase/migrations/20261030185129_dealmachine_targeting_experiments.sql'));
  await db.exec(sql);
  await q("insert into icash_discovery_configs(account_id,zip,revision,next_page,per_page,research_version,research_list_id) values($1,'75217',$3,1,25,2,'list-fixture'),($2,'75217',$3,1,25,2,'list-fixture')",[account,other,revision]);
  await db.exec("insert into icash_discovery_filter_settings(id,enabled) values(1,true);insert into icash_operating_budget(id) values(1);insert into icash_research_private.exclusions(id,list_id,state,last_synced_at) values(1,'list-fixture','ready',now());");
