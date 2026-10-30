@@ -9,7 +9,7 @@ export const supportTopics = ['work','billing','setup','cancel','refund','human'
 export type SupportTopic = typeof supportTopics[number];
 export type SupportEvidence = {key:string; source:string; status:'ok'|'attention'|'unknown'; detail:string; observedAt:string; code?:string; outreach?:SupportOutreachSnapshot;course?:CourseProgress;softwareAccess?:boolean;refundCase?:SupportRefundCase};
 export const supportMessageInput = z.object({requestId:supportId,threadId:supportId.optional(),message:z.string().trim().min(1).max(2000)}).strict();
-export const supportStatusInput = z.object({requestId:supportId,threadId:supportId,status:z.enum(['open','escalated','waiting_on_customer','resolved','closed']),reply:z.string().trim().min(1).max(3000).optional()}).strict();
+export const supportStatusInput = z.object({requestId:supportId,threadId:supportId,status:z.enum(['open','escalated','waiting_on_customer','resolved','closed']),reply:z.string().trim().min(1).max(3000).optional(),legacyPurchaseVerified:z.literal(true).optional()}).strict().refine(i=>!i.legacyPurchaseVerified||(!i.reply&&i.status==='waiting_on_customer'),'Verified legacy offers use the approved reply and keep access unconfirmed.');
 /** Only these literal topics influence diagnostics. Model output is never an executable instruction. */
 export function supportDuplicateCharge(text:string){
  return /\b(?:charg(?:e|ed)|billed|paid|debited)\b.{0,40}\b(?:twice|double|two times)\b|\b(?:duplicate|double)\s+(?:card\s+)?charges?\b|\b(?:two|2)\s+(?:charges|payments)\b|\bduplicate\s+payments?\b(?!\s+methods?)/i.test(text);
