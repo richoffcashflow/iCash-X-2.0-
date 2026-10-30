@@ -19,6 +19,8 @@ Timing: background research can run overnight. New seller calls and first texts 
 
 Monitoring: the workspace shows leads, calls, texts, contracts and notifications. Open a property for its latest update, call recordings/transcripts, and texts. Notifications flag items needing the customer's attention. Take over pauses new automatic work on that property so the customer can handle calls/texts themselves; already-started work may finish. Return to bot resumes eligible automation. The overall Pause bot control stops new work; it does not cancel a subscription or signed contract.
 
+Customer role: questions such as "So all I need to do is watch messages, follow up, get contracts to title and get paid?" ask how the workflow works. Answer directly without requiring account checks, inventing a screen error or redirecting to contract buttons. Explain monitoring, needed follow-up, reviewing the seller conversation/numbers/agreements before signing, choosing and verifying title, and completing closing requests. Payment comes from title after closing and disbursement; a signed contract does not guarantee a payout. This explains responsibilities, not the status of a particular account, document delivery or payment. An actual failure reported alongside the question still needs troubleshooting.
+
 Agreements: open a property under Your leads, then Agreements. There is no separate Documents tab in the main workspace. To prepare an agreement manually, choose Take over, then Seller is ready for an agreement if no agreement is ready. Agreements offers Edit agreement and Send for signatures. The assignment draft appears only after the purchase agreement is signed. After a seller signs, review the conversation, numbers, owners and actual agreement before signing. Never guarantee the numbers work or that review is unnecessary. Contract cancellation is a separate property-document flow, not subscription cancellation; do not give blanket promises of cancellation rights or legal/tax advice.
 Seller follow-up: No reply to delivered question means no seller answer is recorded for that follow-up. Open the property and review Texts. Save resolution requires at least 10 characters about completed follow-up. It saves an internal note, not a seller message. Saving a note, refreshing the page and Return to bot do not renew expired contact checks or restart outreach. There is no customer contact-check refresh button. Do not tell someone to write a pretend resolution to clear the alert.
 
@@ -42,10 +44,23 @@ export function supportHowToQuestion(question:string){
   && !/\b(?:get started|first steps|no leads|no calls|no texts|how long|fixed|ready|working yet)\b/i.test(question);
 }
 
+/** A role/workflow question is product guidance, even when phrased as a recap. */
+function supportRoleQuestion(question:string){
+ // Specific account requests and follow-up controls take their own support path.
+ if(/\b(?:contact checks?|contract check|save resolution|resolution note|no reply to delivered question|sign.?in|log.?in|login|password|code|subscription|credits?|balance|funding|human)\b/i.test(question))return false;
+ // Do not let a general recap swallow a real failure in the same message.
+ if(/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|stopped|expired|unavailable|unresponsive|isn[’']?t|doesn[’']?t|didn[’']?t|won[’']?t|can[’']?t|haven[’']?t|cannot|still waiting)\b|\b(?:not|never)\s+(?:working|making|doing|calling|texting|sending|loading|opening|receiving|received|arrived)\b|\b(?:no|zero|0)\s+(?:calls?|texts?|leads?|responses?|replies|code|payment)\b/i.test(question))return false;
+ const role=/\b(?:all i (?:need|have) to do|(?:can|do|should) i (?:just|only) (?:watch|monitor|wait|handle|follow up)|i (?:just|only) (?:watch|monitor|handle|follow up)|my (?:role|part|responsibilit(?:y|ies))|sit back|hands[ -]?off)\b|\b(?:what|when|where)\b.{0,25}\bi (?:come|step) in\b/i.test(question)
+  || /\bwhat (?:do|should) i (?:need to |have to )?do\b/i.test(question)&&/\bwhile\b.{0,30}\b(?:bot|ai|automation)\b/i.test(question);
+ const workflow=/\b(?:bot|ai|automation|workflow|leads?|sellers?|buyers?|contracts?|agreements?|title|closing|notifications?|alerts?|messages?|follow.?up)\b/i.test(question);
+ return role&&workflow;
+}
+
 /** Known, small product answers remain useful without a model or account checks. */
 export function supportSimpleProductAnswer(question:string):string|null{
  const q=question.trim();
  if(/\b(?:refund|cancel|charge(?:d|s)?|payments?|card|billing|bug|error|not working|not calling|not texting)\b|\b(?:isn[’']?t|doesn[’']?t|won[’']?t|cannot|can[’']?t)\b.{0,30}\b(?:call|text|send|run)\b/i.test(q))return null;
+ if(supportRoleQuestion(q))return 'The bot handles the automated lead work. Your part is to watch messages and notifications, follow up when needed, and review the seller conversation, deal numbers and agreements before signing. Choose and verify your title company, complete the closing setup, and respond to its requests. Payment comes from title after closing and disbursement; signing a contract alone does not guarantee a payout.';
  if(/\b(?:city|cities|zip(?: code)?|market|area)\b/i.test(q)&&/\b(?:specific|choose|select|target|change|set|switch|limit|focus)\b/i.test(q)&&/\b(?:bot|call|calling|leads?|properties|target|market|search)\b/i.test(q))return 'You can’t select a specific city in the current workspace. Your bot selects markets automatically.';
  if(/^(?:what(?:[’']s| is)(?: the| my bot[’']s)? outreach|what does outreach mean)[?!.\s]*$/i.test(q))return 'Outreach means your bot contacting sellers by call or text.';
  if(/\b(?:bot|automation)\b/i.test(q)&&/\b(?:close|closing|leave|exit|get off|logged out|log out|sign out|background|keep.{0,12}open)\b/i.test(q)&&/\b(?:app|browser|website|tab|page|background|logged out)\b/i.test(q))return 'Your bot runs in the background. Closing the app doesn’t pause it.';
@@ -55,7 +70,6 @@ export function supportSimpleProductAnswer(question:string):string|null{
  if(/\b(?:when|what time|automatically)\b/i.test(q)&&/\b(?:bot|automation)\b/i.test(q)&&/\b(?:calls?|texts?|contact|reach out)\b/i.test(q)&&!/\b(?:why|no|still|never|not|waiting|stuck|already)\b/i.test(q))return 'Your bot contacts eligible sellers automatically during outreach hours: 9 AM to 9 PM in the seller’s time zone, or Central Time if it’s unknown. A new lead appearing doesn’t mean a call or text has been sent yet.';
  if(/\b(?:what does|what is|what’s|whats)\b/i.test(q)&&/waiting for the next task/i.test(q))return 'It means no task is running at that moment. That label alone doesn’t tell us why it’s waiting or when the next task will start.';
  if(/\b(?:app|iphone|android)\b/i.test(q)&&/\b(?:phone app|mobile app|download|app store|play store)\b/i.test(q))return 'You use iCash X through the browser on your phone or computer. I don’t have a release date for a separate mobile app.';
- if(/\b(?:when|where|what)\b/i.test(q)&&/\b(?:i come in|i step in|my part|my role|do i (?:need to )?do)\b/i.test(q)&&/\b(?:bot|ai|automation)\b/i.test(q))return 'You step in to review the seller conversation, deal numbers and agreement before signing, and handle any viewing, deposit or closing requests that need you. The bot handles the automated work; you still make the final decisions.';
  if(/\b(?:where|how)\b/i.test(q)&&/\b(?:contact permissions?|bot contact|communication settings|start outreach|automatic outreach)\b/i.test(q))return 'There isn’t a separate contact-permission switch or Start outreach button. When your bot is running, it handles eligible outreach automatically.';
  return null;
 }

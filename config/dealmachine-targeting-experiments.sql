@@ -22,14 +22,53 @@ begin
  return new;
 end $$;
 create trigger targeting_immutable before update or delete on icash_research_private.targeting_experiments for each row execute function icash_research_private.targeting_immutable();
+-- Acquisition exclusions are not assignments. Keep the existing ownership FK and
+-- attribution intact, including paid records that never became a customer's lead.
+create table icash_research_private.targeting_acquired_properties(property_id text primary key,operation_key text not null,synced_at timestamptz);
+alter table icash_research_private.targeting_acquired_properties enable row level security;
+revoke all on icash_research_private.targeting_acquired_properties from public,anon,authenticated,service_role;
+create index targeting_acquired_pending on icash_research_private.targeting_acquired_properties(property_id) where synced_at is null;
+insert into icash_research_private.targeting_acquired_properties(property_id,operation_key,synced_at)
+select distinct on (p.property_id) p.property_id,r.operation_key,x.synced_at
+from public.icash_discovery_inventory_receipts r cross join lateral unnest(r.property_ids) p(property_id)
+left join icash_research_private.exclusion_items x on x.property_id=p.property_id
+order by p.property_id,r.created_at,r.operation_key;
+create function icash_research_private.queue_targeting_acquisition() returns trigger language plpgsql security definer set search_path='' as $$
+begin
+ insert into icash_research_private.targeting_acquired_properties(property_id,operation_key,synced_at)
+ select p.property_id,new.operation_key,x.synced_at from unnest(new.property_ids) p(property_id)
+ left join icash_research_private.exclusion_items x on x.property_id=p.property_id on conflict(property_id) do nothing;
+ return new;
+end $$;
+create trigger targeting_exclude_acquired after insert on public.icash_discovery_inventory_receipts for each row execute function icash_research_private.queue_targeting_acquisition();
+-- Keep the existing quota, disabled switch, lease and exact acknowledgement gates.
+-- When experiments have never run and are disabled, ordinary sync is unchanged.
+do $patch$
+declare d text;needle text;
+begin
+ d:=pg_get_functiondef('public.icash_claim_research_exclusions()'::regprocedure);
+ needle:='select property_id from icash_research_private.exclusion_items where synced_at is null order by property_id limit 1000';
+ if strpos(d,needle)=0 then raise exception 'Exclusion claim prerequisite changed';end if;
+ execute replace(d,needle,$insert$select property_id from (
+  select property_id from icash_research_private.exclusion_items where synced_at is null
+  union select property_id from icash_research_private.targeting_acquired_properties where synced_at is null and (
+   exists(select 1 from icash_research_private.targeting_settings where id=1 and enabled)
+   or exists(select 1 from public.icash_discovery_filter_pages where plan->>'version'='seller-targeting-v1' and state not in ('empty','unavailable')))
+ ) pending order by property_id limit 1000$insert$);
+ d:=pg_get_functiondef('public.icash_finish_research_exclusions(uuid,jsonb)'::regprocedure);
+ needle:='  update icash_research_private.exclusion_items set synced_at=now() where property_id=any(s.batch) and synced_at is null;';
+ if strpos(d,needle)=0 then raise exception 'Exclusion acknowledgement prerequisite changed';end if;
+ execute replace(d,needle,needle||E'\n  update icash_research_private.targeting_acquired_properties set synced_at=now() where property_id=any(s.batch) and synced_at is null;');
+end $patch$;
 alter table public.icash_discovery_filter_cursors drop constraint icash_discovery_filter_cursors_strategy_check;
 alter table public.icash_discovery_filter_cursors add constraint icash_discovery_filter_cursors_strategy_check check(strategy in ('baseline','vacant','absentee','repairs') or strategy ~ '^target_[a-f0-9-]{36}$');
+create index targeting_paid_markets on public.icash_discovery_filter_pages(zip,created_at) where plan->>'version'='seller-targeting-v1' and state not in ('empty','unavailable');
 
 create function public.icash_targeting_filters(d jsonb) returns jsonb language plpgsql immutable set search_path='' as $$
 declare segment text:=d->>'segment';cutoff date:=(d->>'asOf')::date;
 begin
  case segment
- when 'off_market' then return '[{"filter_id":"is_off_market","value":true}]';
+ when 'off_market' then return '[{"filter_id":"market_status","operator":"contains_any","value":[6]}]';
  when 'sale_7_10' then return jsonb_build_array(jsonb_build_object('filter_id','last_sale_date','operator','date_range','value',jsonb_build_object('start',to_char(cutoff-interval '10 years','YYYY-MM-DD'),'end',to_char(cutoff-interval '7 years','YYYY-MM-DD'))));
  when 'sale_10_plus' then return jsonb_build_array(jsonb_build_object('filter_id','last_sale_date','operator','is_before','value',to_char(cutoff-interval '10 years','YYYY-MM-DD')));
  when 'buyer_fit' then return (select jsonb_agg(jsonb_build_object('filter_id',key,'operator','range','value',value) order by key) from jsonb_each(d->'ranges'));
@@ -81,8 +120,9 @@ begin
  for f in select value from jsonb_array_elements(public.icash_targeting_filters(d)) loop
   select value into m from jsonb_array_elements(c->'filters') where value->>'filter_id'=f->>'filter_id';
   if (select count(*) from jsonb_array_elements(c->'filters') x where x->>'filter_id'=f->>'filter_id')<>1 or m is null or m->'is_premium_filter' is distinct from 'false'::jsonb
-   or m->>'type' is distinct from (case when jsonb_typeof(f->'value')='boolean' then 'BOOLEAN' when f->>'filter_id'='last_sale_date' then 'DATE' else 'NUMBER' end)
+   or m->>'type' is distinct from (case when jsonb_typeof(f->'value')='boolean' then 'BOOLEAN' when f->>'filter_id'='last_sale_date' then 'DATE' when f->>'filter_id'='market_status' then 'MULTI_SELECT' else 'NUMBER' end)
    or (f ? 'operator' and not coalesce(m->'allowed_operators' ? (f->>'operator'),false)) then return false;end if;
+  if f->>'filter_id'='market_status' and (select count(*) from jsonb_array_elements(m->'options') o where o->'option_id'='6'::jsonb and o->>'label'='Off Market')<>1 then return false;end if;
  end loop;
  if d->>'segment'='mobile' and not exists(select 1 from icash_research_private.targeting_settings where id=1 and mobile_verified) then return false;end if;
  return true;
@@ -93,12 +133,11 @@ end $$;
 -- coverage. A stale/missing list disables experiments, not baseline acquisition.
 create function public.icash_targeting_dedup_ready(p_account uuid) returns boolean language sql stable security definer set search_path='' as $$
  select exists(select 1 from public.icash_discovery_configs c join icash_research_private.exclusions e on e.id=1 and e.list_id=c.research_list_id
-  where c.account_id=p_account and c.research_version=2 and e.state='ready' and e.last_synced_at between now()-interval '1 hour' and now())
+  where c.account_id=p_account and c.research_version=2 and e.state='ready' and e.last_synced_at<=now())
  and not exists(select 1 from icash_research_private.exclusion_items where synced_at is null)
- and not exists(select 1 from public.icash_discovery_inventory_receipts r cross join lateral unnest(r.property_ids) acquired(property_id)
-  where not exists(select 1 from icash_research_private.exclusion_items x where x.property_id=acquired.property_id and x.synced_at is not null))
+ and not exists(select 1 from icash_research_private.targeting_acquired_properties where synced_at is null)
  and not exists(select 1 from public.icash_discovery_filter_pages p join public.icash_operation_spend o using(operation_key,account_id)
-  where p.state='claimed' and o.state not in ('settled','cancelled'));
+  where p.zip=(select zip from public.icash_discovery_configs where account_id=p_account) and p.state='claimed' and o.state not in ('settled','cancelled'));
 $$;
 create function public.icash_targeting_available(p_account uuid,p_zip text,d jsonb) returns boolean language sql stable security definer set search_path='' as $$
  select public.icash_targeting_definition_valid(d) and (d->>'asOf')::date<=current_date
@@ -137,10 +176,11 @@ begin
  if (length(d)-length(replace(d,needle,'')))<>length(needle) then raise exception 'Targeting admission prerequisite changed';end if;
  execute replace(d,needle,$insert$
  if p_plan->>'version'='seller-targeting-v1' and (not public.icash_targeting_available(p_account,p_zip,p_plan->'targeting') or not public.icash_targeting_dedup_ready(p_account)) then return false;end if;
- -- While an experiment is in flight, another acquisition cannot overtake its
- -- unsynchronized property exclusion receipt. Original unknown claims stay held.
- if exists(select 1 from public.icash_discovery_filter_pages fp join public.icash_operation_spend os using(operation_key,account_id)
-  where fp.plan->>'version'='seller-targeting-v1' and fp.state='claimed' and os.state not in ('settled','cancelled')) then return false;end if;
+ -- Overlapping baseline acquisitions cannot overtake an experimental purchase
+ -- or its unsynchronized receipt, even after rollback. Disjoint ZIPs retain supply.
+ if exists(select 1 from public.icash_discovery_filter_pages fp
+  where fp.zip=p_zip and fp.plan->>'version'='seller-targeting-v1' and fp.state not in ('empty','unavailable'))
+  and not public.icash_targeting_dedup_ready(p_account) then return false;end if;
 $insert$||needle);
 end $patch$;
 
@@ -148,7 +188,7 @@ end $patch$;
 -- Disabled experiment cursors must not keep an empty market alive on rollback.
 create function public.icash_targeting_cursor_available(p_account uuid,p_revision uuid,p_zip text,p_strategy text) returns boolean language sql stable security definer set search_path='' as $$
  select p_strategy in ('baseline','vacant','absentee','repairs') or exists(select 1 from icash_research_private.targeting_experiments e
- where 'target_'||e.id=p_strategy and public.icash_targeting_available(p_account,p_zip,e.definition) and public.icash_targeting_dedup_ready(p_account));
+ where 'target_'||e.id=p_strategy and public.icash_targeting_available(p_account,p_zip,e.definition));
 $$;
 do $patch$
 declare d text;name text;needle text:='where account_id=p_account and revision=p_revision and not exhausted';
@@ -182,8 +222,8 @@ $insert$||needle);
  needle:=' remaining:=(credits->>''used'')::integer;';
  if strpos(d,needle)=0 then raise exception 'Export result prerequisite changed';end if;
  execute replace(d,needle,$insert$
- if e.request->'mobile_only'='true'::jsonb and exists(select 1 from jsonb_array_elements(p_rows) r cross join generate_series(1,3) n
-  where coalesce(r->>('phone_'||n),'')<>'' and r->>('people_phone_'||n||'_type_id') is distinct from 'Wireless') then raise exception 'Mobile export returned non-wireless or unknown type';end if;
+ if e.request->'mobile_only'='true'::jsonb and exists(select 1 from jsonb_array_elements(p_rows) mobile_row(value) cross join generate_series(1,3) mobile_slot(n)
+  where coalesce(mobile_row.value->>('phone_'||mobile_slot.n),'')<>'' and mobile_row.value->>('people_phone_'||mobile_slot.n||'_type_id') is distinct from 'Wireless') then raise exception 'Mobile export returned non-wireless or unknown type';end if;
 $insert$||needle);
 end $patch$;
 
@@ -234,7 +274,7 @@ AS $function$
  ), costs as (
   select k.strategy,coalesce(sum(o.charged_cents) filter(where o.state='settled'),0)::bigint cents,
    coalesce(sum(o.actual_micros) filter(where o.state='settled'),0)::bigint provider_micros,
-   coalesce(sum(o.actual_micros) filter(where o.state='settled' and k.operation_key like 'discovery:%'),0)::bigint research_micros,
+   coalesce(sum(o.actual_micros) filter(where o.state='settled' and (k.operation_key like 'discovery:%' or k.operation_key like 'owners:%')),0)::bigint research_micros,
    bool_and(case when o.operation_key is null then not k.required
     else o.state='cancelled' or (o.state='settled' and o.charged_cents is not null and o.charged_cents>=0 and o.actual_micros is not null and o.actual_micros>=0) end) complete
   from operation_keys k left join public.icash_operation_spend o on o.operation_key=k.operation_key and o.account_id=p_account group by k.strategy
@@ -318,7 +358,7 @@ begin
   'capabilities',(select result from public.icash_integration_checks where provider='dealmachine_targeting'),
   'dedupReadyAccounts',(select count(*) from public.icash_discovery_configs c where c.enabled and public.icash_targeting_dedup_ready(c.account_id)),
   'configuredAccounts',(select count(*) from public.icash_discovery_configs where enabled),
-  'dedupPending',(select count(*) from icash_research_private.exclusion_items where synced_at is null),
+  'dedupPending',(select count(*) from (select property_id from icash_research_private.exclusion_items where synced_at is null union select property_id from icash_research_private.targeting_acquired_properties where synced_at is null) pending),
   'definitions',jsonb_build_object('lastSale','Recorded-sale-date proxy, not verified ownership tenure','validContacts','Properties with a saved active, non-DNC likely-owner phone; not proof of consent or ownership','qualified','Prospective financial eligibility plus the existing live seller qualification gate; original conversation binding and evidence hash retained','offers','Saved price quotes returned to a live seller call; not a claim that the seller heard or accepted them','contracts','Original fully signed live purchase envelope','allocation','Fixed exploration; no automatic winner promotion'));
 end $$;
 create function public.icash_configure_targeting(p_actor uuid,p_action text,p_definition jsonb default null,p_enabled boolean default false) returns boolean language plpgsql security definer set search_path='' as $$

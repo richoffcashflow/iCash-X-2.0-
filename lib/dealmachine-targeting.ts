@@ -27,7 +27,7 @@ function yearsBefore(asOf:string,years:number){
 export function targetingFilters(input:TargetingDefinition):Record<string,unknown>[]{
  const d=targetingDefinitionSchema.parse(input),bool=(filter_id:string)=>({filter_id,value:true});
  switch(d.segment){
-  case 'off_market':return [bool('is_off_market')];
+  case 'off_market':return [{filter_id:'market_status',operator:'contains_any',value:[6]}];
   // Provider is_before is strict: 7–10 includes the ten-year boundary; 10+ excludes it.
   case 'sale_7_10':return [{filter_id:'last_sale_date',operator:'date_range',value:{start:yearsBefore(d.asOf,10),end:yearsBefore(d.asOf,7)}}];
   case 'sale_10_plus':return [{filter_id:'last_sale_date',operator:'is_before',value:yearsBefore(d.asOf,10)}];
@@ -39,12 +39,13 @@ export function targetingFilters(input:TargetingDefinition):Record<string,unknow
 }
 /** Catalog presence is not entitlement. Premium/unknown metadata stays disabled. */
 export function targetingCapabilityProblem(d:TargetingDefinition,raw:unknown,now=Date.now()):string|null{
- const parsed=z.object({status:z.literal('verified'),checkedAt:z.string(),plan:z.object({name:z.string(),is_paid:z.literal(true)}),filters:z.array(z.object({filter_id:z.string(),type:z.string(),allowed_operators:z.array(z.string()),is_premium_filter:z.boolean().nullable()}))}).safeParse(raw);
+ const parsed=z.object({status:z.literal('verified'),checkedAt:z.string(),plan:z.object({name:z.string(),is_paid:z.literal(true)}),filters:z.array(z.object({filter_id:z.string(),type:z.string(),allowed_operators:z.array(z.string()),is_premium_filter:z.boolean().nullable(),options:z.array(z.object({option_id:z.union([z.number(),z.string()]),label:z.string()})).optional()}))}).safeParse(raw);
  if(!parsed.success||!(Date.parse(parsed.data.checkedAt)<=now&&Date.parse(parsed.data.checkedAt)>now-7*86400000))return 'account_capabilities_unverified';
  for(const f of targetingFilters(d)){
   const entries=parsed.data.filters.filter(x=>x.filter_id===f.filter_id),meta=entries[0];
-  const type=typeof f.value==='boolean'?'BOOLEAN':f.filter_id==='last_sale_date'?'DATE':'NUMBER';
+  const type=typeof f.value==='boolean'?'BOOLEAN':f.filter_id==='last_sale_date'?'DATE':f.filter_id==='market_status'?'MULTI_SELECT':'NUMBER';
   if(entries.length!==1||meta.type!==type||meta.is_premium_filter!==false||f.operator&&!meta.allowed_operators.includes(String(f.operator)))return 'filter_entitlement_unverified';
+  if(f.filter_id==='market_status'&&meta.options?.filter(o=>o.option_id===6&&o.label==='Off Market').length!==1)return 'filter_entitlement_unverified';
  }
  return null;
 }
@@ -55,13 +56,14 @@ export function selectTargetingPlan(legacy:unknown,sequence:number,shared:unknow
  // Validate legacy state even on an experimental slot; never bypass its holds.
  const original=selectDiscoveryFilter(legacy,sequence,shared),fallback=()=>original;
  const s=raw as TargetingState|null;
- if(!s?.enabled||!s.dedupReady||!Array.isArray(s.experiments))return fallback();
+ if(s?.enabled!==true||s.dedupReady!==true||!Array.isArray(s.experiments))return fallback();
  const eligible=s.experiments.filter(e=>{
+  if(!e||typeof e!=='object')return false;
   const parsed=targetingDefinitionSchema.safeParse(e.definition);if(!parsed.success)return false;
   const d=parsed.data,b=d.buyerEvidence;
-  return Number.isSafeInteger(e.nextPage)&&e.nextPage>0&&Number.isSafeInteger(e.pages)&&e.pages>=0&&!e.exhausted&&!e.blocked
+  return Number.isSafeInteger(e.nextPage)&&e.nextPage>0&&e.nextPage<=999999999&&Number.isSafeInteger(e.pages)&&e.pages>=0&&e.exhausted===false&&e.blocked===false
    &&d.asOf<=new Date(now).toISOString().slice(0,10)&&!targetingCapabilityProblem(d,s.capabilities,now)
-   &&(d.segment!=='mobile'||s.mobileVerified)
+   &&(d.segment!=='mobile'||s.mobileVerified===true)
    &&(!b||b.accountId===accountId&&b.zips.includes(zip)&&Date.parse(b.observedAt)<=now&&Date.parse(b.expiresAt)>now&&Date.parse(b.expiresAt)<=Date.parse(b.observedAt)+30*86400000);
  });
  if(sequence%4===0&&Array.isArray(legacy)){

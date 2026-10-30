@@ -34,13 +34,15 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(/\b(?:that worked|it worked|working now|fixed now|all fixed|i(?:’|')?m in|got in|problem solved)\b/i.test(question)&&!/(?:not|isn.t|didn.t|still|but)\b/i.test(question)&&!/[?]|\b(?:how|what|where|when|why|which|also|another|more questions|next question)\b/i.test(question))return result('Glad that worked.','resolved');
  const correction=supportInstructionCorrection(context.messages,context.evidence??[]);
  if(correction)return result(correction,'open');
- const workflow=context.kind==='account'?supportWorkflowReply(context.messages,context.evidence??[]):null;
- if(workflow)return workflow;
  const productAnswer=supportSimpleProductAnswer(question)??(/^(?:could be anytime|so anytime)[?!.\s]*$/i.test(question.trim())?supportSimpleProductAnswer(currentSupportIssue(context.messages)):null);
  if(productAnswer){
   // A side question can be answered without claiming an earlier fault is fixed.
   return result(productAnswer,earlierSupportProblem(context)?'open':'resolved');
  }
+ // General workflow recaps can mention contracts and "where needed" without
+ // asking for agreement controls or reporting a broken account.
+ const workflow=context.kind==='account'?supportWorkflowReply(context.messages,context.evidence??[]):null;
+ if(workflow)return workflow;
  if(supportDuplicateCharge(currentSupportIssue(context.messages))){
   const checks=(context.evidence??[]).filter(e=>['membership_payments','subscription'].includes(e.key));
   return result(context.kind==='account'&&checks.length?checks.map(e=>e.detail).join('\n\n')+'\n\nDo not pay again. Do both statement entries match these recorded software payments, or is one a different amount or date?' :'Do not pay again. I can help restore access here, and a duplicate-charge report needs its own payment check. What dates and amounts appear for the two charges? Please leave out card numbers.','waiting_on_customer');

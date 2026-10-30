@@ -11,6 +11,7 @@ import {chromium,webkit,devices} from 'playwright';
 import {verifyOwnerAccounts} from './owner-accounts-browser.mjs';
 import {verifyOwnerOutreach} from './owner-outreach-browser.mjs';
 import {verifyPlatformLearning} from './platform-learning-browser.mjs';
+import {verifyTargeting} from './dealmachine-targeting-browser.mjs';
 import {ownerOutreachFixture} from './helpers/owner-outreach-fixture.mjs';
 import {verifyConversationInbox} from './conversation-inbox-browser.mjs';
 import {verifyCloseConversions} from './close-conversion-browser.mjs';
@@ -72,6 +73,7 @@ try{
   if(process.env.BROWSER_ENGINES==='chromium'&&engine!==chromium)continue;
   const browser=await engine.launch({headless:true});
   try{
+   if(process.env.BROWSER_SCENARIOS==='targeting'){await verifyTargeting(browser,base,options,name,fixtureCookies,fixture);continue;}
    if(process.env.BROWSER_SCENARIOS==='platform-learning'){await verifyPlatformLearning(browser,base,options,name,fixtureCookies,fixture);continue;}
    if(process.env.BROWSER_SCENARIOS==='owner-accounts'){await verifyOwnerAccounts(browser,base,options,name,fixtureCookies);continue;}
    if(process.env.BROWSER_SCENARIOS==='admin-outreach'){await verifyOwnerOutreach(browser,base,options,name,fixtureCookies,fixture);continue;}
@@ -93,6 +95,7 @@ try{
    if(process.env.BROWSER_SCENARIOS==='seller'){await verifySellerIntake(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-measurement'){await verifyWebinarMeasurement(browser,base,options,name);continue;}
    await verifyPlatformLearning(browser,base,options,name,fixtureCookies,fixture);
+   await verifyTargeting(browser,base,options,name,fixtureCookies,fixture);
    await verifyCloseConversions(browser,base,options,name);
    await verifyOwnerAccounts(browser,base,options,name,fixtureCookies);
    await verifyOwnerOutreach(browser,base,options,name,fixtureCookies,fixture);

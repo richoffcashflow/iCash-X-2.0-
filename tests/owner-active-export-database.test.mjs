@@ -46,6 +46,13 @@ try{
  const oldGuard=migration.match(/\$old\$([\s\S]*?)\$old\$/)[1],newGuard=migration.match(/\$new\$([\s\S]*?)\$new\$/)[1];
  assert(currentDefinition.includes(newGuard));await db.exec(currentDefinition.replace(newGuard,oldGuard));
  await db.exec(migration);assert.equal(await v("select pg_get_functiondef('public.icash_save_owner_active_export(uuid,uuid,jsonb,jsonb)'::regprocedure)"),currentDefinition);
+ // Apply the exact targeting export additions on top of PR488/489, then run
+ // both mobile cases and every original active-pool/billing regression below.
+ await db.exec(`create table icash_research_private.targeting_settings(id int,mobile_verified boolean);insert into icash_research_private.targeting_settings values(1,false);
+ create table icash_discovery_filter_attribution(account_id uuid,screening_id uuid,operation_key text);
+ create table icash_discovery_filter_pages(account_id uuid,operation_key text,plan jsonb);`);
+ const targeting=read('config/dealmachine-targeting-experiments.sql');
+ await db.exec(targeting.match(/create function public.icash_owner_targeting_pool\([\s\S]*?end \$patch\$;/)[0]);
  await q('insert into icash_accounts(id) values($1),($2)',[account,other]);await q('insert into icash_operating_budget values(1)');
  await q('insert into icash_operation_rates values($1,$2)',[rate,{dealmachine:250000}]);
  for(const a of [account,other])await q('insert into icash_discovery_configs values($1,2,$2,25,10000,$3,true)',[a,rate,'2099-01-01']);
@@ -56,6 +63,39 @@ try{
  const admit=(b=batch,a=account,its=items,pr=preview,req=request)=>rpc('icash_admit_owner_active_export',[a,its[0].screeningId,b,its,pr,config,req]);
  assert.equal(await admit(),'held');assert.equal(Number(await v('select count(*) from icash_operation_spend')),0);
  await db.exec('update icash_research_private.owner_export_settings set enabled=true');
+ for(const returned of [0,1]){
+  await db.exec('begin;');
+  await q("insert into icash_discovery_filter_pages values($1,'mobile',$2)",[account,{version:'seller-targeting-v1',targeting:{segment:'mobile'}}]);
+  await q("insert into icash_discovery_filter_attribution values($1,$2,'mobile')",[account,screen]);
+  const mobileRequest=activeOwnerExportRequest(request.people_ids,true);
+  assert.equal(await admit(batch,account,items,preview,mobileRequest),'held','Unverified mobile option stays inactive');
+  await db.exec('update icash_research_private.targeting_settings set mobile_verified=true');
+  assert.equal(await admit(batch,account,items,preview,mobileRequest),'held','Mixed active/mobile cohorts cannot share a paid batch');
+  await q("insert into icash_discovery_filter_attribution values($1,$2,'mobile')",[account,second]);
+  assert.equal(await admit(),'held','A mobile cohort cannot silently switch back to active phones');
+  assert.equal(await admit(batch,account,items,preview,mobileRequest),'claimed');
+  const raw={export_id:'mobile-fixture',record_count:returned,file_count:1,credits:{used:returned,people:4}};
+  await rpc('icash_record_owner_export_receipt',[account,batch,{httpStatus:200,raw,rawText:JSON.stringify(raw)}]);
+  const saved=await rpc('icash_claim_owner_export_recovery',[batch]);
+  await rpc('icash_record_owner_export_recovery',[batch,saved.lease,{httpStatus:200,raw:{data:{...raw,status:'completed'}}}]);
+  const rows=returned?[Object.fromEntries(activeOwnerColumns.map(k=>[k,({internal_person_id:'9007199254740993123',person_full_name:'Synthetic Owner',phone_1:'2145550100',is_phone_1_dnc:'No',people_phone_1_type_id:'Wireless',has_active_phone_number:'Yes'})[k]??'']))]:[];
+  const csv=[activeOwnerColumns,...rows.map(r=>activeOwnerColumns.map(k=>r[k]))].map(r=>r.join(',')).join('\n')+'\n';
+  if(returned){
+   await db.exec('savepoint invalid_mobile;');
+   const invalidRows=rows.map(r=>({...r,people_phone_1_type_id:'Landline'})),invalidCsv=csv.replace('Wireless','Landline');
+   await rpc('icash_record_owner_export_artifact',[batch,saved.lease,invalidCsv]);
+   const proposed=allocateActiveOwnerExport(saved,csv,ownerBatchAudience(preview,items,25));
+   await assert.rejects(rpc('icash_save_owner_active_export',[batch,saved.lease,proposed,invalidRows]),/non-wireless/);
+   await db.exec('rollback to invalid_mobile;');
+  }
+  await rpc('icash_record_owner_export_artifact',[batch,saved.lease,csv]);
+  const allocated=allocateActiveOwnerExport(saved,csv,ownerBatchAudience(preview,items,25));
+  assert.equal(await rpc('icash_save_owner_active_export',[batch,saved.lease,allocated,rows]),true);
+  assert.equal(Number(await v('select sum(settled_used) from icash_operation_spend')),returned,'Only actual used credits settle, including an empty mobile export');
+  assert.equal(await rpc('icash_claim_owner_export_recovery',[batch]),null,'No fallback purchase after mobile filtering');
+  assert.equal(await rpc('icash_owner_targeting_pool',[other,screen]),'active','Attribution cannot cross accounts');
+  await db.exec('rollback;');
+ }
  await db.exec('begin;update icash_discovery_configs set research_version=0;');
  assert.equal(await admit(),'held','Legacy single-property path cannot acquire a batch');
  assert.equal(await admit(batch,account,[items[0]],preview,activeOwnerExportRequest(items[0].ids)),'claimed');
