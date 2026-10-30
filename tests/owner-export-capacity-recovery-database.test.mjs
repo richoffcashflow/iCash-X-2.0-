@@ -43,6 +43,7 @@ try{
  await db.exec(`create function public.icash_dealmachine_capacity_available(integer default 2) returns boolean language sql as $$select available from public.fixture_quota$$;
  create function public.icash_owner_active_export_capacity() returns text language sql stable as $$select case when not public.icash_owner_active_export_enabled() then 'disabled' when exists(select 1 from icash_research_private.owner_exports where terminal_at is null) then 'export_busy' when not public.icash_dealmachine_capacity_available(3) then 'quota_wait' else 'ready' end$$;`);
  await db.exec(read('config/owner-export-capacity-recovery.sql'));
+ await db.exec(read('supabase/migrations/20261030012215_owner_export_capacity_precision.sql'));
  const failure={httpStatus:500,raw:{error:{code:'internal_error',request_id:'req_original'}},rawText:JSON.stringify({error:{code:'internal_error',request_id:'req_original'}})};
  await q("insert into icash_research_private.owner_batches(id,account_id,created_at) values($1,$2,now()-interval '1 hour')",[batch,account]);
  await q('insert into icash_research_private.owner_exports(id,request,receipt) values($1,$2,$3)',[batch,activeOwnerExportRequest(['per_1']),failure]);
@@ -66,6 +67,43 @@ try{
  }
  await db.exec('begin;');await rpc('icash_claim_export_capacity_review',[]);await db.exec("alter table icash_research_private.owner_export_capacity_reviews disable trigger owner_export_capacity_review_immutable; update icash_research_private.owner_export_capacity_reviews set started_at=now()-interval '1 minute'; alter table icash_research_private.owner_export_capacity_reviews enable trigger owner_export_capacity_review_immutable;"); // Simulate an already-aged fixture; production never changes this timestamp.
  assert.equal(await rpc('icash_record_export_capacity_review',[review,good()]),'held');await db.exec('rollback;');
+ // Provider timestamps discard fractional seconds. Accept the incident's
+ // second, while the immediately preceding second remains old-only evidence.
+ for(const seconds of [0,-1]){
+  await db.exec('begin;');
+  const incident=await v("update icash_research_private.owner_batches set created_at=date_trunc('second',clock_timestamp()-interval '10 seconds')+interval '500 milliseconds' where id=$1 returning created_at",[batch]);
+  await rpc('icash_claim_export_capacity_review',[]);
+  const receipt=good();receipt.raw.data[0].created_at=new Date(Math.floor(new Date(incident).getTime()/1000)*1000+seconds*1000).toISOString();receipt.rawText=JSON.stringify(receipt.raw);
+  assert.equal(await rpc('icash_record_export_capacity_review',[review,receipt]),seconds===0?'capacity_verified':'held');
+  assert.equal(await v('select terminal_at from icash_research_private.owner_exports where id=$1',[batch]),null);
+  assert.equal(await v("select state from icash_operation_spend where operation_key='original'"),'dispatched');
+  if(seconds<0)await assert.rejects(q("insert into icash_research_private.owner_export_capacity_reviews(id,export_id,receipt_hash,reviewed_release,supersedes) select $1,id,md5(receipt::text),repeat('b',40),$3 from icash_research_private.owner_exports where id=$2",[id(107),batch,review]),/precision mismatch/);
+  await db.exec('rollback;');
+ }
+ // Reproduce the old rejection, preserve it unchanged, and admit exactly one
+ // separately claimed free follow-up. No old approval or receipt is reset.
+ await db.exec('begin;');
+ const incident=await v("update icash_research_private.owner_batches set created_at=date_trunc('second',clock_timestamp()-interval '10 seconds')+interval '500 milliseconds' where id=$1 returning created_at",[batch]);
+ const corrected=await v("select pg_get_functiondef('public.icash_record_export_capacity_review(uuid,jsonb)'::regprocedure)");
+ await db.exec(corrected.replace("latest>=date_trunc('second',b.created_at)",'latest>=b.created_at'));
+ await rpc('icash_claim_export_capacity_review',[]);
+ const rounded=good();rounded.raw.data[0].created_at=new Date(Math.floor(new Date(incident).getTime()/1000)*1000).toISOString();rounded.rawText=JSON.stringify(rounded.raw);
+ assert.equal(await rpc('icash_record_export_capacity_review',[review,rounded]),'held');
+ const held=await v('select to_jsonb(r) from icash_research_private.owner_export_capacity_reviews r where id=$1',[review]);
+ await db.exec(corrected);
+ const followup=id(104),insertFollowup=(key,parent=review)=>q("insert into icash_research_private.owner_export_capacity_reviews(id,export_id,receipt_hash,reviewed_release,supersedes) select $1,id,md5(receipt::text),repeat('b',40),$3 from icash_research_private.owner_exports where id=$2",[key,batch,parent]);
+ await insertFollowup(followup);
+ for(const action of [()=>insertFollowup(id(105)),()=>insertFollowup(id(106),followup),()=>q('update icash_research_private.owner_export_capacity_reviews set supersedes=null where id=$1',[followup]),()=>q("update icash_research_private.owner_export_capacity_reviews set state='planned' where id=$1",[review])]){
+  await db.exec('savepoint rejected_followup;');await assert.rejects(action());await db.exec('rollback to savepoint rejected_followup;release savepoint rejected_followup;');
+ }
+ const retried=await rpc('icash_claim_export_capacity_review',[]);assert.equal(retried.reviewId,followup);assert.notEqual(retried.requestId,held.request_id);
+ assert.equal(await rpc('icash_record_export_capacity_review',[followup,good()]),'capacity_verified');
+ assert.deepEqual(await v('select to_jsonb(r) from icash_research_private.owner_export_capacity_reviews r where id=$1',[review]),held);
+ assert.deepEqual(await v('select receipt from icash_research_private.owner_exports where id=$1',[batch]),failure);
+ assert.equal(await v('select completed_at from icash_research_private.owner_exports where id=$1',[batch]),null);
+ assert.equal(await v("select state from icash_operation_spend where operation_key='original'"),'dispatched');
+ assert.equal(await rpc('icash_owner_export_people_available',[['per_1']]),false);
+ await db.exec('rollback;');
  const claimed=await rpc('icash_claim_export_capacity_review',[]);assert(claimed?.requestId);
  const evidence=good();assert.equal(await rpc('icash_record_export_capacity_review',[review,evidence]),'capacity_verified');
  assert.equal(await rpc('icash_record_export_capacity_review',[review,evidence]),'capacity_verified');
@@ -94,5 +132,6 @@ try{
  assert.equal(await rpc('icash_owner_export_people_available',[['per_2']]),false);
  for(const role of ['anon','authenticated'])for(const signature of ['icash_claim_export_capacity_review()','icash_record_export_capacity_review(uuid,jsonb)','icash_owner_export_people_available(jsonb)'])assert.equal(await v('select has_function_privilege($1,$2,\'execute\')',[role,signature]),false);
  assert.equal(await v("select has_table_privilege('service_role','icash_research_private.owner_export_capacity_reviews','select')"),false);
+ assert.equal(await v("select has_function_privilege('service_role','icash_research_private.guard_capacity_precision_followup()','execute')"),false);
  console.log('PASS capacity SQL: single quota-bound read, complete fresh idle inventory, immutable original receipt/money holds, cross-account owner fence, single new export and restricted grants.');
 }finally{await db.close();}
