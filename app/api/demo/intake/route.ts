@@ -18,7 +18,7 @@ export const maxDuration=60;
 const headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer'};
 async function presenter(){const user=await currentUser(true);return user?.id===ownerInboundTarget.ownerUserId?user:null;}
 export async function GET(){
- try{return Response.json({ready:!!await presenter()},{headers});}
+ try{const user=await presenter();return Response.json({ready:!!user,privateDemoPhone:user?ownerInboundTarget.ownerPhone:null},{headers});}
  catch{return Response.json({error:'Sign in to your workspace to start the demo.'},{status:503,headers});}
 }
 export async function POST(req:Request){

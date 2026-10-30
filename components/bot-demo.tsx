@@ -5,15 +5,17 @@ import {SellerAddressInput} from '@/components/seller-address-input';
 import {botDemoConsentText,botDemoConsentVersion} from '@/lib/bot-demo';
 import {optinCallNowText,optinCallNowVersion} from '@/lib/optin-call-now';
 import {sellerSubmissionStatus,type SellerSubmissionStatus} from '@/lib/seller-submission-status';
+import {DemoPhoneField} from './demo-phone-field';
 
 export function BotDemo(){
  const [step,setStep]=useState<'address'|'contact'|'saved'>('address');
  const [address,setAddress]=useState(''),[name,setName]=useState(''),[phone,setPhone]=useState(''),[trap,setTrap]=useState('');
  const [consent,setConsent]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [access,setAccess]=useState<'loading'|'ready'|'signin'|'error'>('loading');
+ const [privatePhone,setPrivatePhone]=useState<string|null>(null);
  const [progress,setProgress]=useState<SellerSubmissionStatus|null>(null),[round,setRound]=useState(0),[polling,setPolling]=useState(false);
  const request=useRef(''),lock=useRef(false),nameInput=useRef<HTMLInputElement>(null),success=useRef<HTMLHeadingElement>(null);
- useEffect(()=>{const c=new AbortController();void fetch('/api/demo/intake',{cache:'no-store',signal:c.signal}).then(async r=>{if(!r.ok)throw Error();const d=await r.json();setAccess(d.ready?'ready':'signin');}).catch(()=>{if(!c.signal.aborted)setAccess('error');});return()=>c.abort();},[]);
+ useEffect(()=>{const c=new AbortController();void fetch('/api/demo/intake',{cache:'no-store',signal:c.signal}).then(async r=>{if(!r.ok)throw Error();const d=await r.json();if(c.signal.aborted)return;const saved=d.ready&&typeof d.privateDemoPhone==='string'?d.privateDemoPhone:null;setPrivatePhone(saved);if(saved)setPhone(value=>value||saved);setAccess(d.ready?'ready':'signin');}).catch(()=>{if(!c.signal.aborted)setAccess('error');});return()=>c.abort();},[]);
  useEffect(()=>{
   if(step!=='saved'||!request.current)return;
   const controller=new AbortController();let attempts=0,timer:ReturnType<typeof setTimeout>|undefined;setPolling(true);
@@ -54,7 +56,7 @@ export function BotDemo(){
      </form>:<form onSubmit={submit}>
       <button type="button" className="demo-back" disabled={busy} onClick={()=>{setStep('address');setError('');}}><ArrowLeft size={15}/><span>{address}</span><u>Edit</u></button>
       <label className="demo-label" htmlFor="demo-name">Your name</label><input ref={nameInput} id="demo-name" autoComplete="name" required maxLength={100} value={name} disabled={busy} onChange={e=>{setName(e.target.value);changed();}} placeholder="First and last name"/>
-      <label className="demo-label" htmlFor="demo-phone">Phone number</label><input id="demo-phone" type="tel" inputMode="tel" autoComplete="tel" required maxLength={30} value={phone} disabled={busy} onChange={e=>{setPhone(e.target.value);changed();}} placeholder="(214) 555-0123"/>
+      <DemoPhoneField value={phone} privatePhone={privatePhone} disabled={busy||access==='loading'} onChange={value=>{setPhone(value);changed();}}/>
       <div className="demo-trap" aria-hidden="true"><label>Leave empty<input tabIndex={-1} autoComplete="off" value={trap} onChange={e=>setTrap(e.target.value)}/></label></div>
       <label className="demo-consent"><input type="checkbox" checked={consent} required disabled={busy} onChange={e=>{setConsent(e.target.checked);changed();}}/><span>{optinCallNowText} {botDemoConsentText}</span></label>
       {access==='signin'?<p className="demo-notice"><a href="/">Sign in to your iCash X account</a> in this browser, then refresh this page to start.</p>:access==='error'?<p className="demo-notice">Couldn’t check your account. Refresh this page to retry.</p>:null}

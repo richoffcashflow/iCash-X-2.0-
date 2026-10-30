@@ -1,4 +1,5 @@
 'use client';
+import {PrivatePhone} from '@/components/owner-phone-privacy';
 import './instant-lead-card.css';
 import {SellerReplyPreview} from './seller-reply-preview';
 import type {SellerTextSummary} from '@/lib/seller-text-summary';
@@ -27,7 +28,7 @@ export function InstantLeadCard({apiBase='/api/work',readOnly=false,lead,sellerT
  return <article hidden={hidden} data-conversation-open={view==='texts'?'true':undefined} className="live-property instant-lead-card" id={`property-${lead.screeningId}`} aria-labelledby={`lead-name-${lead.leadId}`}>
   <div className="instant-lead-topline"><span className="instant-lead-label"><Check size={14} aria-hidden="true"/>Lead generated</span><span className="instant-lead-source">HomeOffer Network · Instant form</span><span className="instant-lead-status">{status}</span></div>
   <div className="instant-lead-body">
-   <div className="instant-lead-identity"><span className="instant-lead-avatar" aria-hidden="true">{initials||<UserRound size={26}/>}</span><div><h4 id={`lead-name-${lead.leadId}`}>{lead.name||'New seller'}</h4><p className="instant-lead-phone">{displayContactPhone(lead.phone)}</p><p className="instant-lead-time">Received {safeLocalTime(lead.submittedAt)}</p></div></div>
+   <div className="instant-lead-identity"><span className="instant-lead-avatar" aria-hidden="true">{initials||<UserRound size={26}/>}</span><div><h4 id={`lead-name-${lead.leadId}`}>{lead.name||'New seller'}</h4><p className="instant-lead-phone"><PrivatePhone>{displayContactPhone(lead.phone)}</PrivatePhone></p><p className="instant-lead-time">Received {safeLocalTime(lead.submittedAt)}</p></div></div>
    <div className="instant-lead-next"><span className="instant-lead-next-label"><MapPin size={14} aria-hidden="true"/>{lead.addressConfirmedAt?'Property lookup':'Next step'}</span><h5>{nextTitle}</h5>{lead.address&&<p className="instant-lead-address">{lead.address}</p>}<p>{nextDetail}</p></div>
   </div>
   <ol className="instant-lead-progress" aria-label="Progress toward a property deal">

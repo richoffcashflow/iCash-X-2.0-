@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 30, 2026 the owner requested their personal demo number display as `21421****` on deal cards, contact panels and the test form, only in their own account. Keep masking presentation-only and server-bound to the exact owner account; preserve full recipients in submissions, calls, texts and storage. Customer views retain their ordinary phone display.
+
 - On October 30, 2026 the owner requested profitable DealMachine pulls and better customer results as provider capacity increases. Use recent settled duplicate-only supply evidence to reduce wasted audience allocation across the same ZIP, retaining periodic probes and all-cooled fallback. Unknown, pending, mismatched or missing-cost receipts cannot cool an audience. Share aggregate supply feedback only, preserve original customer boundaries, pricing and actual-cost settlement, and verify any future provider limit increase before configuring it. See `docs/research-market-duplicate-cooling.md`.
 
 - On October 30, 2026 the owner requested an app-wide reliability review. Reuse a transaction-local call-capacity snapshot only for queue selection; every final admission must read current holds under its existing locks. Preserve original terminal receipts, quarantines, late-call occupancy, incoming reserve, account capacity, recipient controls and unknown money/retry holds. Filter non-resumable budget tickets before the bounded recovery batch, retaining the same locked checks afterward. Worker error logs may include only allowlisted database codes, never database messages, queries, customer details or capabilities. Validate offline without paid simulations.

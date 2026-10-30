@@ -19,6 +19,7 @@ import {nextWorkFunding} from '@/lib/workspace-progress';
 import type {AssistantRequest} from '@/components/workspace-assistant';
 import type {AssistantAction} from '@/lib/workspace-assistant-policy';
 import {OwnerWorkspaceTabs} from '@/components/owner-workspace-tabs';
+import {OwnerPhonePrivacy} from '@/components/owner-phone-privacy';
 import {BotRunBar} from '@/components/bot-run-bar';
 import {FundingOutreachNotice} from '@/components/funding-outreach-notice';
 import {AdminPlanToggle,type AccountPlan} from '@/components/workspace-vip-banner';
@@ -41,7 +42,7 @@ const PostPaymentBotName=dynamic(()=>import('@/components/post-payment-bot-name'
 const WorkspaceAssistant=dynamic(()=>import('@/components/workspace-assistant').then(m=>m.WorkspaceAssistant),{ssr:false});
 const PlatformBuyerNetwork=dynamic(()=>import('@/components/platform-buyer-network').then(m=>m.PlatformBuyerNetwork));
 const BotCustomization=dynamic(()=>import('@/components/bot-customization').then(m=>m.BotCustomization));
-type Account={workspaceAcknowledged?:boolean;vip?:boolean;vipFeatures?:boolean;adminPlan?:AccountPlan|null;readinessPending?:boolean;billingModel?:string;membershipActive?:boolean;isBillingOwner?:boolean;identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;pendingEmail?:string|null;phone?:string;hasCreditHistory?:boolean;balanceCents?:number;reservedCents?:number;dailyLimitCents?:number;assistantName?:string;paused?:boolean;billingActive?:boolean;billingReview?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;activeWork?:boolean};
+type Account={privateDemoPhone?:string|null;workspaceAcknowledged?:boolean;vip?:boolean;vipFeatures?:boolean;adminPlan?:AccountPlan|null;readinessPending?:boolean;billingModel?:string;membershipActive?:boolean;isBillingOwner?:boolean;identity?:Identity|null;botSetup?:{profile:BotProfile;stage:number}|null;signedIn:boolean;signInReady?:boolean;mode?:'test'|'live';email?:string;pendingEmail?:string|null;phone?:string;hasCreditHistory?:boolean;balanceCents?:number;reservedCents?:number;dailyLimitCents?:number;assistantName?:string;paused?:boolean;billingActive?:boolean;billingReview?:boolean;workReady?:boolean;smsWorkReady?:boolean;discoveryWorkReady?:boolean;discoveryBlocker?:string|null;contactWorkReady?:boolean;contactQuote?:{chargeCents:number;maxContacts:number}|null;discoveryQuote?:{chargeCents:number;maxProperties:number}|null;activeWork?:boolean};
 export default function Home(){
  const [account,setAccount]=useState<Account|null>(null),[accountError,setAccountError]=useState(false),[signInOpen,setSignInOpen]=useState(false),[fundingOpen,setFundingOpen]=useState(false),[fundingCode,setFundingCode]=useState(''),[controlBusy,setControlBusy]=useState(false),[controlError,setControlError]=useState(''),[draftBrand,setDraftBrand]=useState<BotProfile|null>(null);
  const [reviewVip,setReviewVip]=useState(false);
@@ -222,7 +223,7 @@ export default function Home(){
      {account.mode==='live'&&account.billingModel==='legacy'&&<SpendActivationReview key={activationKey} onAvailabilityChange={updateActivationAvailability} onSaved={()=>void refreshAccount()}/>}
      <CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}>
      {<SpendingAllowance/>}
-     <LiveWorkspace key={account.email} onLeadPresenceChange={updateLeadPresence} onAttentionChange={setAttentionPending} assistantVipLocked={!featureVip} onOpenAssistant={()=>openAssistant()} propertyRequest={propertyRequest} onAsk={(screeningId,address)=>openAssistant({screeningId,address,nonce:Date.now(),mode:'compose'})} principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/>
+     <OwnerPhonePrivacy phone={account.privateDemoPhone}><LiveWorkspace key={account.email} onLeadPresenceChange={updateLeadPresence} onAttentionChange={setAttentionPending} assistantVipLocked={!featureVip} onOpenAssistant={()=>openAssistant()} propertyRequest={propertyRequest} onAsk={(screeningId,address)=>openAssistant({screeningId,address,nonce:Date.now(),mode:'compose'})} principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/></OwnerPhonePrivacy>
      </CreditActionGate>
      </>}
     </section>

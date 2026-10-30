@@ -1,4 +1,5 @@
 'use client';
+import {PrivatePhone} from '@/components/owner-phone-privacy';
 import {useEffect,useState} from 'react';
 import {BrowserCallControls} from '@/components/browser-call-controls';
 import {Phone} from 'lucide-react';
@@ -28,6 +29,6 @@ export function ManualCallOptions({screeningId,onTakeover,autoStart=false,onAuto
   {data&&!data.contacts.length&&<p className="contact-feedback">{data.reason??'No phone number available.'}</p>}
   {data?.personalCalls?.filter(c=>c.audioAvailable).map(c=><div className="contact-feedback" key={c.id}><strong>Listen to your call</strong><audio controls preload="none" aria-label="Play seller call" style={{width:'100%'}} src={'/api/work/business-call?id='+c.id+'&audio=1'}/></div>)}
   {data?.attempts?.map(a=><div className="contact-feedback" key={a.id}><strong>{a.status}</strong><p>{new Date(a.createdAt).toLocaleString('en-US',{hour12:true})}{a.costPending?' · Final call cost pending':''}</p></div>)}
-  {!!data?.contacts.some(c=>!c.available)&&<details className="contact-unavailable" open={!data.contacts.some(c=>c.available)}><summary>Unavailable numbers</summary>{data.contacts.filter(c=>!c.available).map(c=><div className="seller-contact-card" key={c.phone}><strong>{c.name||'Saved contact'}</strong><span>{displayContactPhone(c.phone)}</span><p>{c.reason}</p></div>)}</details>}
+  {!!data?.contacts.some(c=>!c.available)&&<details className="contact-unavailable" open={!data.contacts.some(c=>c.available)}><summary>Unavailable numbers</summary>{data.contacts.filter(c=>!c.available).map(c=><div className="seller-contact-card" key={c.phone}><strong>{c.name||'Saved contact'}</strong><span><PrivatePhone>{displayContactPhone(c.phone)}</PrivatePhone></span><p>{c.reason}</p></div>)}</details>}
  </section>;
 }
