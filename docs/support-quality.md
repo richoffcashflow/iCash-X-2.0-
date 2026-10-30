@@ -1,0 +1,13 @@
+# Support improvement workflow
+
+The owner requested a broader support improvement pass on October 30, 2026, using the support inbox as the source. Read-only review found recurring confusion about contact availability, contract timing, off-market properties, usage costs, failed offer checkout, and wrong checkout emails. Earlier automated replies sometimes answered a nearby topic or repeated a fallback without advancing the case.
+
+The support conversation engine now has curated, offline answers for those recurring questions. A lead can precede a usable contact; a researched prospect does not establish seller interest; no verified average contract timeline is available; software access and prepaid work credits are separate. Checkout failure does not establish a code-delivery fault. Wrong-email correction requires purchase verification. A held call job is not evidence that a call reached a seller, and a repair time must not be invented. Actual failures remain open even when an adjacent feature question is answered.
+
+**Review support quality** in `/support/admin` groups recent conversations by topic and identifies repeated replies, low-information replies, specific question/answer mismatches, repair claims needing verification, and open cases without an update for at least 24 hours. Each result opens the original conversation. A later operator correction supersedes earlier automatic replies for content flags. Closed and resolved cases are not labeled stalled.
+
+The view samples conversations updated in the past seven days: up to 60 account conversations and 40 guest cases, with bounded recent message reads. A visible limited-sample label appears if a bound is reached. Counts describe the sample and review signals, not confirmed bug counts, resolution rates, or complete support coverage. A failed load shows an error rather than an empty healthy report.
+
+The quality endpoint uses existing trusted-operator authorization and existing private support tables. It performs fixed, bounded reads only, redacts sensitive previews, escapes customer text, and returns `private, no-store`. It does not modify cases, send replies, change access, train on customer claims, or turn a review flag into repair evidence.
+
+Use a recurring pattern to confirm the product fact or failure, add an anonymized regression replay, fix the relevant answer or product path, and verify it before describing it as repaired. Customer messages remain untrusted reports, not product policy or authorization. The tests exercise the actual conversation engine, report builder, collector, protected route and review navigation without real messages, provider activity or paid AI calls.

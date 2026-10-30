@@ -6,6 +6,7 @@ import type {SupportEvidence} from '@/lib/support-policy';
 import {savedRefundCase} from '@/lib/support-refund-evidence';
 import {SupportLegacyOfferReview} from '@/components/support-legacy-offer-review';
 import {SupportMessageContent} from '@/components/support-message-content';
+import {SupportQualityPanel} from '@/components/support-quality-panel';
 type Ticket={id:string;kind:'access'|'account';subject:string;status:string;updated_at:string;account_id?:string;email?:string;phone?:string|null};
 type Message={id:string;role:string;content:string;created_at:string;evidence?:SupportEvidence[]};
 type CancelReview={id:string;account_id:string;mode:string;state:string;result:string|null;receipt_state?:string};
@@ -22,10 +23,11 @@ export function SupportDashboard(){
  const [tickets,setTickets]=useState<Ticket[]>([]),[selected,setSelected]=useState<Ticket|null>(null),[messages,setMessages]=useState<Message[]>([]),[evidence,setEvidence]=useState<SupportEvidence[]>([]);
  const [cancellations,setCancellations]=useState<CancelReview[]>([]),[purchases,setPurchases]=useState<Purchase[]>([]),[deployment,setDeployment]=useState('');
  const [notification,setNotification]=useState<EmailNotice|null>(null);
+ const [qualityOpen,setQualityOpen]=useState(false);
  const [filter,setFilter]=useState('needs'),[search,setSearch]=useState(''),[drafts,setDrafts]=useState<Record<string,string>>({}),[toolsOpen,setToolsOpen]=useState(false);
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const sequence=useRef(0),queueSequence=useRef(0),working=useRef(false),selectedRef=useRef<Ticket|null>(null),pending=useRef<Record<string,{body:string;id:string}>>({});
- const clear=useCallback(()=>{sequence.current++;selectedRef.current=null;pending.current={};setTickets([]);setSelected(null);setMessages([]);setEvidence([]);setNotification(null);setDrafts({});setPurchases([]);setCancellations([]);setDeployment('');setToolsOpen(false);setNotice('');},[]);
+ const clear=useCallback(()=>{sequence.current++;selectedRef.current=null;pending.current={};setTickets([]);setSelected(null);setMessages([]);setEvidence([]);setNotification(null);setDrafts({});setPurchases([]);setCancellations([]);setDeployment('');setToolsOpen(false);setQualityOpen(false);setNotice('');},[]);
  const loadQueue=useCallback(async()=>{
   const seq=++queueSequence.current;
   try{
@@ -66,6 +68,8 @@ export function SupportDashboard(){
  return <section className="support-shell support-admin support-desk" aria-label="Support inbox">
   <header className="desk-heading"><div><p className="support-eyebrow">iCash X</p><h1>Support</h1><p>Conversations, all in one place.</p></div><div><a href="/">Workspace ↗</a><button type="button" disabled={busy||loading} onClick={()=>{void loadQueue();if(selectedRef.current)void open(selectedRef.current,true);}}>Refresh</button></div></header>
   {error&&<p role="alert" className="support-error">{error}</p>}{notice&&<p role="status" className="support-notice">{notice}</p>}
+  <button type="button" disabled={busy} aria-expanded={qualityOpen} aria-controls="support-quality" onClick={()=>setQualityOpen(value=>!value)}>{qualityOpen?'Hide support quality':'Review support quality'}</button>
+  {qualityOpen&&<div id="support-quality"><SupportQualityPanel onDenied={clear} onOpen={item=>{setQualityOpen(false);void open({id:item.id,kind:item.kind,subject:item.subject,status:item.status,updated_at:item.updated_at});}}/></div>}
   <div className={`desk-inbox${selected?' desk-has-selection':''}`}>
    <aside className="desk-sidebar">
     <div className="desk-filters" aria-label="Filter conversations">{[['needs','Open',needs],['waiting','Waiting',waiting],['closed','Closed',tickets.filter(t=>t.status==='closed').length],['all','All',tickets.length]].map(([value,title,count])=><button key={value} type="button" aria-pressed={filter===value} onClick={()=>setFilter(String(value))}>{title}<span>{count}</span></button>)}</div>
