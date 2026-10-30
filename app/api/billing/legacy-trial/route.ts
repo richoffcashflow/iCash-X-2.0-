@@ -10,6 +10,7 @@ import {customerFundingReady} from '@/lib/launch-readiness';
 import {reconcileMembershipCheckout,type Membership} from '@/lib/membership';
 import {legacyTrialVersion,legacyTrialTerms,legacyTrialSummary} from '@/lib/legacy-trial-policy';
 import {recordPurchaseAcceptance} from '@/lib/purchase-acceptance';
+import {recoverOrdinaryCheckout} from '@/lib/legacy-checkout-recovery';
 const headers={'Cache-Control':'private, no-store'};
 export const dynamic='force-dynamic';
 const input=z.object({email:z.string().trim().email().max(254),accepted:z.literal(true),version:z.literal(legacyTrialVersion)}).strict();
@@ -27,6 +28,8 @@ export async function POST(req:Request){
   if(!mode||!email||!await customerFundingReady())throw Error();
   const [account]=user?await db<{id:string}[]>(`icash_accounts?owner_user_id=eq.${user.id}&select=id&limit=1`):[];
   const stripe=fundingStripe(),origin=req.headers.get('origin')!;
+  const completed=await recoverOrdinaryCheckout(db,stripe,{guest:guestHash(token!),userId:user?.email_confirmed_at?user.id:null,mode,email},reconcileMembershipCheckout);
+  if(completed)return NextResponse.json({url:origin+'/access?purchase='+completed},{headers});
   if(user?.email_confirmed_at){
    const old=await db<Membership|null>('rpc/icash_legacy_trial_recovery','POST',{p_user:user.id,p_mode:mode,p_email:email});
    if(old?.legacy_trial_started_at||old?.stripe_subscription_id)return NextResponse.json({url:origin+'/access?purchase='+old.id},{headers});
@@ -57,5 +60,5 @@ export async function POST(req:Request){
   if(s.livemode!==(mode==='live')||!s.url)throw Error();
   const saved=await db<Membership[]>(`icash_memberships?id=eq.${m.id}&state=eq.pending&legacy_trial_attempt=eq.${m.legacy_trial_attempt??1}`,'PATCH',{stripe_session_id:s.id,checkout_url:s.url});if(saved.length!==1)throw Error();
   return NextResponse.json({url:s.url},{headers});
- }catch{return NextResponse.json({error:'We could not open this offer. Use your original purchase email, or contact support if you already have a checkout or subscription.'},{status:409,headers});}
+ }catch{return NextResponse.json({error:'We could not open this offer yet. Use Resume a checkout from another device below to verify your original purchase email, then continue again. If that fails, contact support with the message shown here. Do not start a separate paid checkout.',recover:true},{status:409,headers});}
 }

@@ -1,0 +1,75 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {randomUUID} from 'node:crypto';
+import {PGlite} from '@electric-sql/pglite';
+const read=file=>readFileSync(new URL('../'+file,import.meta.url),'utf8');
+const pg=await PGlite.create();const q=(sql,args=[])=>pg.query(sql,args);const one=async(sql,args)=>(await q(sql,args)).rows[0];
+try{
+ await pg.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;
+ create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz,deleted_at timestamptz,banned_until timestamptz);
+ create table icash_accounts(id uuid primary key,owner_user_id uuid);
+ create table icash_funding_orders(id uuid,payer_email text,state text,mode text);
+ create table icash_daily_plans(account_id uuid,mode text,state text);
+ create table icash_billing_reviews(account_id uuid,resolved_at timestamptz);
+ create table icash_purchase_phone_identities(user_id uuid,email text,membership_id uuid,phone text,revoked_at timestamptz);
+ create function icash_access_phone(text) returns text language sql as 'select $1';
+ create table icash_access_help_requests(id uuid primary key,email text,phone text,status text default 'open',expires_at timestamptz default now()+interval '1 day',needs_operator boolean default false,session_hash text);
+ create table icash_access_help_messages(id uuid primary key default gen_random_uuid(),request_id uuid,request_key uuid,role text,content text,created_at timestamptz default now(),reply_token uuid,reply_claimed_at timestamptz,reply_completed_at timestamptz);
+ create table icash_webinar_text_senders(enabled boolean);
+ create table icash_purchase_access_emails(id uuid,membership_id uuid,recipient text,status text,delivery text,created_at timestamptz,updated_at timestamptz);
+ create table icash_purchase_phone_challenges(id uuid,membership_id uuid,email text,phone text,status text,provider_id text,requested_at timestamptz);
+ grant usage on schema public,auth to service_role;grant all on all tables in schema public,auth to service_role;`);
+ const base=read('supabase/migrations/20261003223200_membership_and_prepaid_credits.sql');await pg.exec(base.slice(0,base.indexOf('create function public.icash_begin_membership'))+'commit;');
+ await pg.exec('alter table icash_memberships add column initial_price_cents bigint;alter table icash_memberships add column checkout_email text;alter table icash_memberships add column checkout_email_reserved_until timestamptz;');
+ for(const file of ['20261025231000_legacy_two_month_trial.sql','20261025234100_legacy_trial_subscription_consumption.sql','20261018131443_verified_phone_identity_email_signin.sql','20261025234000_legacy_trial_pending_signin.sql'])await pg.exec(read('supabase/migrations/'+file));
+ await pg.exec(read('supabase/migrations/20261017213055_support_conversation_replies.sql').match(/create function public\.icash_access_help_claim_reply[\s\S]*?end \$\$;/)[0]);
+ await pg.exec(read('config/access-support-investigation.sql'));
+ await pg.exec(read('supabase/migrations/20261030195801_support_checkout_recovery.sql'));
+ await pg.exec('set role service_role');
+ const email='returning@example.invalid',guest='a'.repeat(64),different='b'.repeat(64),verified=randomUUID(),wrong=randomUUID(),unverified=randomUUID(),account=randomUUID();
+ await q('insert into auth.users(id,email,email_confirmed_at) values($1,$2,now()),($3,$4,now()),($5,$2,null)',[verified,email,wrong,'wrong@example.invalid',unverified]);
+ const m=(await q("insert into icash_memberships(guest_hash,mode,price_cents,offer_revision,consent_version,consent_text,checkout_email,stripe_session_id) values($1,'live',5000,1,'ordinary-terms','Original accepted monthly purchase terms',$2,'cs_live_original') returning *",[guest,email])).rows[0];
+ const begin=()=>q("select * from icash_begin_legacy_trial($1,null,'live',$2,'Two months free then fifty dollars monthly until cancelled','legacy-trial-2026-10-25.1')",[guest,email]);
+ await assert.rejects(begin(),'Reproduces abandoned ordinary checkout blocking the free offer');
+ const candidates=(hash=guest,user=null,em=email,mode='live')=>q('select * from icash_ordinary_checkout_recovery($1,$2,$3,$4)',[hash,user,mode,em]);
+ assert.equal((await candidates()).rows[0].id,m.id);assert.equal((await candidates(different)).rows.length,0,'Visitor email alone cannot release a checkout');
+ assert.equal((await candidates(different,verified)).rows[0].id,m.id);
+ await assert.rejects(candidates(different,wrong));await assert.rejects(candidates(different,unverified));
+ assert.equal((await candidates(guest,null,email,'test')).rows.length,0);
+ const eligible=async em=>(await one("select icash_can_sign_in($1,'live') ok",[em])).ok;
+ assert.equal(await eligible(email),true,'Pending ordinary checkout can request email verification');assert.equal(await eligible('unknown@example.invalid'),false);
+ await q('update auth.users set banned_until=now()+interval \'1 day\' where id=$1',[verified]);assert.equal(await eligible(email),false,'Pending-checkout branch preserves banned-user denial');await q('update auth.users set banned_until=null where id=$1',[verified]);
+ const receipt={id:'cs_live_original',status:'expired',mode:'subscription',livemode:true,subscription:null,payment_intent:null,membership:m.id};
+ const release=(r=receipt,hash=guest,user=null)=>q("select icash_release_ordinary_checkout($1,$2,'live',$3,$4,$5)",[hash,user,email,m.id,JSON.stringify(r)]);
+ for(const change of [{status:'open'},{status:'complete'},{id:'cs_live_wrong'},{livemode:false},{subscription:'sub_real'},{payment_intent:'pi_real'},{membership:randomUUID()},{subscription:undefined},{extra:'not allowed'}])await assert.rejects(release({...receipt,...change}));
+ await assert.rejects(release(receipt,different));await assert.rejects(release(receipt,different,unverified));
+ for(const [column,value] of [['state','active'],['state','needs_review'],['stripe_subscription_id','sub_existing'],['paid_through',new Date().toISOString()]]){
+  await q(`update icash_memberships set ${column}=$1 where id=$2`,[value,m.id]);await assert.rejects(release());
+  await q(`update icash_memberships set ${column}=$1 where id=$2`,[column==='state'?'pending':null,m.id]);
+ }
+ await q("insert into icash_membership_invoices values('in_real',$1,'pi_real',5000,now(),now())",[m.id]);await assert.rejects(release());
+ await pg.exec("reset role;delete from icash_membership_invoices;set role service_role");
+ await q('insert into icash_accounts values($1,$2)',[account,verified]);await q('update icash_memberships set account_id=$1 where id=$2',[account,m.id]);
+ assert.equal((await candidates()).rows.length,0,'Browser alone cannot change an account-owned checkout');
+ await q('insert into icash_billing_reviews values($1,null)',[account]);await assert.rejects(release(receipt,different,verified));
+ await pg.exec('delete from icash_billing_reviews');
+ await q('update auth.users set banned_until=now()+interval \'1 day\' where id=$1',[verified]);await assert.rejects(release(receipt,different,verified));
+ await q('update auth.users set banned_until=null where id=$1',[verified]);await q('update icash_memberships set account_id=null where id=$1',[m.id]);
+ await release(receipt,different,verified);
+ const saved=await one('select * from icash_memberships where id=$1',[m.id]);assert.equal(saved.state,'cancelled');assert.equal(saved.consent_text,m.consent_text);assert.equal(saved.stripe_session_id,m.stripe_session_id);assert.equal(saved.paid_through,null);
+ assert.deepEqual((await one('select receipt from icash_checkout_releases')).receipt,receipt);await assert.rejects(release(),'A release cannot replay');
+ const trial=(await begin()).rows[0];assert.equal(trial.price_cents,5000);assert.equal(trial.initial_price_cents,0);assert.equal(trial.paid_through,null);assert.equal(trial.account_id,null);assert.equal((await one('select count(*)::int n from icash_membership_invoices')).n,0);
+ await assert.rejects(q("select * from icash_begin_legacy_trial($1,null,'live',$2,'Two months free then fifty dollars monthly until cancelled','legacy-trial-2026-10-25.1')",[different,email]));
+ // Real private investigation sees checkout_email even before payer_email exists.
+ const request=randomUUID(),key=randomUUID(),token=randomUUID();
+ await q('insert into icash_access_help_requests(id,email) values($1,$2)',[request,email]);
+ await q("insert into icash_access_help_messages(request_id,request_key,role,content,reply_token,reply_claimed_at) values($1,$2,'user','The two-month offer failed',$3,now())",[request,key,token]);
+ const investigate=t=>one("select icash_access_help_investigate($1,$2,$3,true,false,'checked') result",[request,key,t]);
+ assert.equal((await investigate(randomUUID())).result,null);
+ assert.deepEqual((await investigate(token)).result,{checked:true,email:'configured',phone:'unavailable'},'No account/payment existence leaked to guest');
+ const audit=(await one('select access_investigation from icash_access_help_messages')).access_investigation;
+ assert.equal(audit.checkouts.length,2);assert(audit.checkouts.some(c=>c.offer==='standard'&&c.hasCheckout&&c.state==='cancelled'));assert(audit.checkouts.some(c=>c.offer==='returning'&&!c.hasPaidReceipt));
+ assert.doesNotMatch(JSON.stringify(audit),/returning@|cs_live_|subscription_id|member.*id/);
+ for(const role of ['anon','authenticated']){await pg.exec('reset role;set role '+role);await assert.rejects(candidates());await assert.rejects(release());await assert.rejects(q('select * from icash_checkout_releases'));}
+ console.log('PASS actual SQL: reproduced blocker, browser/verified-email ownership, canonical receipt, review/payment/race holds, preserved consent, no entitlements/payments, once-only free offer, private bounded diagnostics and service-only grants.');
+}finally{await pg.close();}
