@@ -10,6 +10,10 @@ The first export after the reviewed capacity release completed with three owners
 
 ## Capacity recovery — October 29
 
+Provider inventory timestamps can discard fractional seconds. A batch admitted at `01:18:58.133Z` was followed by a fresh complete idle inventory whose newest timestamp was `01:18:58.000Z`; the original comparison incorrectly held capacity. Migration `20261030012215_owner_export_capacity_precision.sql` compares the incident at the provider's whole-second precision. An inventory ending in the preceding second remains invalid, and every other completeness, freshness, quota and idle-state check is unchanged. This timing check never associates a provider history row with an owner or cost.
+
+The already-held review is immutable. An operator can create one distinct follow-up linked through `supersedes`, only when its parent has complete idle evidence and this exact fractional-second mismatch. Root reviews remain unique per export, follow-ups unique per parent, and follow-ups cannot themselves have follow-ups. Each uses the existing one-request quota admission and fresh status check. No approval, counter, original export, owner fence or money hold is reset; future failures are not automatically reviewed.
+
 The owner requested activation again and asked to repair the global blockage. The original HTTP 500 does not establish its cost or successful completion. It also must not be confused with evidence that an export is still running. `config/owner-export-capacity-recovery.sql` keeps those facts separate.
 
 An operator can arm one private review bound to that original completed HTTP response, its immutable receipt hash and the reviewed release. With shared quota available, authenticated production maintenance claims one free `GET /v1/exports?limit=100&offset=0`. Errors, partial/empty inventory, old-only inventory, duplicate IDs, missing quota headers, any pending/processing/unknown state, stale evidence and a lost response keep capacity held. No paid request or download is part of this check. Its raw response is private and immutable. Production code does not automatically arm reviews for later failures.
