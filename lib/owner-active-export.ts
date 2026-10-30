@@ -17,9 +17,9 @@ const integer=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger
 const invalid=()=>{throw Error('OWNER_EXPORT_RECONCILIATION_REQUIRED');};
 export const activeOwnerColumns=['internal_person_id','person_full_name','person_address_full','phone_1','is_phone_1_dnc','people_phone_1_type_id','phone_2','is_phone_2_dnc','people_phone_2_type_id','phone_3','is_phone_3_dnc','people_phone_3_type_id','email_address_1','email_address_2','email_address_3','has_active_phone_number'];
 
-export function activeOwnerExportRequest(ids:string[]){
+export function activeOwnerExportRequest(ids:string[],mobileOnly=false){
  if(!ids.length||ids.length>125||new Set(ids).size!==ids.length||ids.some(id=>!/^per_[0-9]{1,100}$/.test(id)))return invalid();
- return {people_ids:ids,fields:['person_full_name','has_active_phone_number'],property_match:'owner',anchor:'person',limit:ids.length,require_phone:true,scrub_dnc:true,active_phones_only:true};
+ return {people_ids:ids,fields:['person_full_name','has_active_phone_number'],property_match:'owner',anchor:'person',limit:ids.length,require_phone:true,scrub_dnc:true,active_phones_only:true,...(mobileOnly?{mobile_only:true}: {})};
 }
 /** Bounded RFC4180 reader. IDs stay text, including values above MAX_SAFE_INTEGER. */
 export function parseOwnerExportCsv(text:string){
@@ -59,7 +59,7 @@ export function validateOwnerExportReceipt(receipt:Receipt,request:ReturnType<ty
 export function allocateActiveOwnerExport(saved:Pick<SavedExport,'id'|'createdAt'|'request'|'receipt'>,csv:string,audience:Audience){
  const receipt=validateOwnerExportReceipt(saved.receipt,saved.request),rows=parseOwnerExportCsv(csv);
  const ids=[...new Set(audience.flatMap(a=>[...a.ids]))];
- if(!isDeepStrictEqual(saved.request,activeOwnerExportRequest(ids))||rows.length!==receipt.rows)return invalid();
+ if(!isDeepStrictEqual(saved.request,activeOwnerExportRequest(ids,saved.request.mobile_only===true))||rows.length!==receipt.rows)return invalid();
  const byId=new Map<string,typeof rows[number]>();
  for(const row of rows){const id='per_'+row.internal_person_id;
   if(!ids.includes(id)||byId.has(id)||!['Yes','true'].includes(row.has_active_phone_number)||!row.person_full_name||row.person_full_name.length>200)return invalid();
@@ -77,6 +77,7 @@ export function allocateActiveOwnerExport(saved:Pick<SavedExport,'id'|'createdAt
    for(let i=1;i<=3;i++){
     const number=row['phone_'+i],dnc=row['is_phone_'+i+'_dnc'],type=row['people_phone_'+i+'_type_id'];
     if(!number){if(dnc||type)return invalid();continue;}
+    if(saved.request.mobile_only===true&&type!=='Wireless')return invalid();
     if(!/^\d{10}$/.test(number)||!['No','false'].includes(dnc)||!type||type.length>30||seen.has(number))return invalid();
     seen.add(number);phones.push({number,doNotCall:false,type,permission:'unverified',activity:'active',activityBasis:'provider_export_filter'});
    }
@@ -156,8 +157,12 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  const capacity=await db<string>('rpc/icash_owner_active_export_capacity','POST',{});
  if(capacity==='export_busy'||capacity==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
  if(capacity!=='ready')return {status:'held'};
- const candidates=c.research_version===1||c.research_version===2?await db<Candidate[]>('rpc/icash_owner_batch_candidates','POST',{p_account:accountId,p_screening:primary.screeningId}):[primary];
+ let candidates=c.research_version===1||c.research_version===2?await db<Candidate[]>('rpc/icash_owner_batch_candidates','POST',{p_account:accountId,p_screening:primary.screeningId}):[primary];
  if(!candidates.length||candidates.length>5||!candidates.some(x=>x.screeningId===primary.screeningId)||candidates.some(x=>runScreeningJob(x.snapshot).financialCheck.status!=='eligible'))return {status:'held'};
+ const pools=await db<Record<string,string>>('rpc/icash_owner_targeting_pools','POST',{p_account:accountId,p_screenings:candidates.map(x=>x.screeningId)});
+ if(!pools||candidates.some(x=>!['active','mobile'].includes(pools[x.screeningId])))return {status:'held'};
+ const mobileOnly=pools[primary.screeningId]==='mobile';
+ candidates=candidates.filter(x=>pools[x.screeningId]===pools[primary.screeningId]);
  const batchId=randomUUID(),key=process.env.DEALMACHINE_API_KEY;
  let preview:unknown;
  try{
@@ -166,7 +171,7 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  }catch(error){if(error instanceof DealMachineQuotaError)throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);throw error;}
  const audience=ownerBatchAudience(preview,candidates,c.contact_credit_cap).filter(a=>a.ids.length);
  if(!audience.length)return {status:'empty',contacts:0};
- const request=activeOwnerExportRequest([...new Set(audience.flatMap(a=>[...a.ids]))]);
+ const request=activeOwnerExportRequest([...new Set(audience.flatMap(a=>[...a.ids]))],mobileOnly);
  const admission=await db<string>('rpc/icash_admit_owner_active_export','POST',{p_account:accountId,p_primary:audience.find(a=>a.screeningId===primary.screeningId)?.screeningId??audience[0].screeningId,p_batch:batchId,
   p_items:audience.map(a=>({screeningId:a.screeningId,snapshot:a.snapshot,ids:[...a.ids]})),p_preview:preview,p_request:request,
   p_config:{rateId:c.contact_rate_id,creditCap:c.contact_credit_cap,unitCostMicros:c.property_credit_micros,rightsUntil:c.data_rights_until}});
