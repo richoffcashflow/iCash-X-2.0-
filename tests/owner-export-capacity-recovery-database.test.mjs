@@ -1,0 +1,98 @@
+// Real isolated PostgreSQL engine; synthetic accounts and explicit financial
+// admission fixtures. No provider requests, credentials or production writes.
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {PGlite} from '@electric-sql/pglite';
+import {ownerBatchAudience} from '../lib/owner-batch.ts';
+import {activeOwnerColumns,activeOwnerExportRequest,parseOwnerExportCsv,allocateActiveOwnerExport} from '../lib/owner-active-export.ts';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8'),db=new PGlite();
+const q=(s,a=[])=>db.query(s,a),v=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
+const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,account=id(1),other=id(2),rate=id(3),batch=id(4),screen=id(5),second=id(6);
+const rpc=(name,args)=>v('select public.'+name+'('+args.map((_,i)=>'$'+(i+1)).join(',')+')',args);
+try{
+ await db.exec(`create role anon;create role authenticated;create role service_role;
+ create schema icash_research_private;
+ create table public.icash_accounts(id uuid primary key,bot_paused boolean default false);
+ create table public.icash_operating_budget(id integer primary key);
+ create table public.icash_discovery_configs(account_id uuid primary key,research_version integer,contact_rate_id uuid,contact_credit_cap integer,property_credit_micros bigint,data_rights_until timestamptz,contacts_enabled boolean default true);
+ create table public.icash_operation_rates(id uuid primary key,costs_micros jsonb);
+ create table public.icash_operation_spend(operation_key text primary key,account_id uuid,rate_id uuid,state text default 'reserved',settled_used numeric);
+ create table public.icash_screening_jobs(id uuid primary key,account_id uuid,state text,snapshot jsonb);
+ create table public.icash_automation_tickets(screening_id uuid);
+ create table public.icash_owner_contacts(screening_id uuid primary key,account_id uuid,operation_key text,result jsonb,created_at timestamptz default now());
+ create table public.icash_cost_observations(provider text,event_key text primary key,source_ref text,amount numeric,units text);
+ create table icash_research_private.owner_batches(id uuid primary key,account_id uuid,primary_screening uuid,created_at timestamptz default now(),state text default 'claimed',items jsonb,preview_receipt jsonb,paid_receipt jsonb,results jsonb);
+ create table icash_research_private.owner_batch_items(screening_id uuid primary key,batch_id uuid,operation_key text);
+ create table icash_research_private.requests(id uuid primary key,kind text,account_id uuid,operation_key text,admitted boolean,finished_at timestamptz,result jsonb);
+ create table fixture_quota(available boolean);insert into fixture_quota values(true);
+ create function public.icash_membership_work_allowed(uuid) returns boolean language sql as $$select true$$;
+ create function public.icash_take_dealmachine_request(text,uuid,text,uuid) returns boolean language plpgsql as $$declare ok boolean;begin select available into ok from public.fixture_quota;insert into icash_research_private.requests(id,kind,account_id,operation_key,admitted) values($4,$1,$2,$3,ok);return ok;end$$;
+ create function public.icash_reserve_operation(uuid,text,uuid,timestamptz,timestamptz,boolean) returns void language sql as $$insert into public.icash_operation_spend(operation_key,account_id,rate_id) values($2,$1,$3)$$;
+ create function public.icash_claim_owner_enrichment(uuid,uuid,text,jsonb,uuid,integer,bigint,bigint,timestamptz) returns boolean language plpgsql as $$begin update public.icash_operation_spend set state='dispatched' where operation_key=$3 and account_id=$1 and exists(select 1 from public.icash_screening_jobs where id=$2 and account_id=$1 and snapshot=$4 and state='complete');return found;end$$;
+ create function public.icash_record_cost_observation(text,text,text,numeric,text) returns void language sql as $$insert into public.icash_cost_observations values($1,$2,$3,$4,$5) on conflict do nothing$$;
+ create function public.icash_settle_dealmachine_usage(text) returns boolean language plpgsql as $$begin update public.icash_operation_spend o set state='settled',settled_used=(select amount from public.icash_cost_observations where event_key=$1) where operation_key=$1 and exists(select 1 from public.icash_cost_observations where event_key=$1);return found;end$$;
+ create function public.icash_dealmachine_request_started_at(jsonb) returns timestamptz language sql immutable as $$select ($1->>'fetchedAt')::timestamptz$$;
+ `);
+ for(const d of JSON.parse(read('tests/fixtures/owner-export-before.json')))await db.exec(d.definition);
+ const source=read('config/research-request-efficiency.sql');
+ await db.exec(source.match(/create function public.icash_record_owner_batch_receipt[\s\S]*?end \$\$;/)[0]);
+ await db.exec(read('config/owner-batch-quota-admission.sql').match(/create function public.icash_admit_owner_batch[\s\S]*?end \$\$;/)[0]);
+ await db.exec(JSON.parse(read('tests/fixtures/research-efficiency-before.json')).find(x=>x.proname==='icash_save_contacts').definition);
+ await db.exec(read('config/owner-active-export.sql'));
+
+ await db.exec(`create function public.icash_dealmachine_capacity_available(integer default 2) returns boolean language sql as $$select available from public.fixture_quota$$;
+ create function public.icash_owner_active_export_capacity() returns text language sql stable as $$select case when not public.icash_owner_active_export_enabled() then 'disabled' when exists(select 1 from icash_research_private.owner_exports where terminal_at is null) then 'export_busy' when not public.icash_dealmachine_capacity_available(3) then 'quota_wait' else 'ready' end$$;`);
+ await db.exec(read('config/owner-export-capacity-recovery.sql'));
+ const failure={httpStatus:500,raw:{error:{code:'internal_error',request_id:'req_original'}},rawText:JSON.stringify({error:{code:'internal_error',request_id:'req_original'}})};
+ await q("insert into icash_research_private.owner_batches(id,account_id,created_at) values($1,$2,now()-interval '1 hour')",[batch,account]);
+ await q('insert into icash_research_private.owner_exports(id,request,receipt) values($1,$2,$3)',[batch,activeOwnerExportRequest(['per_1']),failure]);
+ await q("insert into icash_research_private.requests values($1,'owner_lookup',$2,'original',true,now(),$3)",[batch,account,{outcome:'http_error',httpStatus:500}]);
+ await q("insert into icash_operation_spend(operation_key,account_id,state) values('original',$1,'dispatched')",[account]);
+ await db.exec('update icash_research_private.owner_export_settings set enabled=true');
+ const review=id(100);
+ await q("insert into icash_research_private.owner_export_capacity_reviews(id,export_id,receipt_hash,reviewed_release) select $1,id,md5(receipt::text),repeat('a',40) from icash_research_private.owner_exports where id=$2",[review,batch]);
+ assert.equal(await rpc('icash_owner_active_export_capacity',[]),'export_busy');
+ await db.exec('update fixture_quota set available=false');assert.equal(await rpc('icash_claim_export_capacity_review',[]),null);
+ assert.equal(await v('select state from icash_research_private.owner_export_capacity_reviews'),'planned');
+ await db.exec('update fixture_quota set available=true');
+ const good=()=>{const raw={data:[{export_id:'provider-export',status:'failed',created_at:new Date().toISOString()}],pagination:{limit:100,offset:0,total:1,has_more:false}};return {httpStatus:200,raw,rawText:JSON.stringify(raw),headers:{minuteRemaining:49,dayRemaining:300}};};
+ for(const mutate of [r=>{r.raw.data=[];r.raw.pagination.total=0;},r=>{r.raw.pagination.has_more=true;},r=>{r.raw.data[0].status='processing';},r=>{r.raw.data[0].status='pending';},r=>{r.raw.data[0].status='unknown';},r=>{r.raw.data[0].created_at='2000-01-01';},r=>{r.raw.data[0].created_at='not-a-date';},r=>{r.raw.pagination.total=2;},r=>{r.raw.data.push(r.raw.data[0]);r.raw.pagination.total=2;},r=>{r.httpStatus=500;},r=>{r.headers.dayRemaining=0;},r=>{delete r.headers.minuteRemaining;},r=>{r.raw.pagination.offset=100;}]){
+  await db.exec('begin;');const c=await rpc('icash_claim_export_capacity_review',[]);assert(c?.requestId);assert.equal(await rpc('icash_claim_export_capacity_review',[]),null);
+  const receipt=good();mutate(receipt);receipt.rawText=JSON.stringify(receipt.raw);
+  assert.equal(await rpc('icash_record_export_capacity_review',[review,receipt]),'held');
+  assert.equal(await v('select capacity_review_id from icash_research_private.owner_exports where id=$1',[batch]),null);
+  assert.equal(await v('select state from icash_research_private.owner_export_capacity_reviews'),'held');
+  assert.equal(await rpc('icash_claim_export_capacity_review',[]),null);await db.exec('rollback;');
+ }
+ await db.exec('begin;');await rpc('icash_claim_export_capacity_review',[]);await db.exec("alter table icash_research_private.owner_export_capacity_reviews disable trigger owner_export_capacity_review_immutable; update icash_research_private.owner_export_capacity_reviews set started_at=now()-interval '1 minute'; alter table icash_research_private.owner_export_capacity_reviews enable trigger owner_export_capacity_review_immutable;"); // Simulate an already-aged fixture; production never changes this timestamp.
+ assert.equal(await rpc('icash_record_export_capacity_review',[review,good()]),'held');await db.exec('rollback;');
+ const claimed=await rpc('icash_claim_export_capacity_review',[]);assert(claimed?.requestId);
+ const evidence=good();assert.equal(await rpc('icash_record_export_capacity_review',[review,evidence]),'capacity_verified');
+ assert.equal(await rpc('icash_record_export_capacity_review',[review,evidence]),'capacity_verified');
+ assert.equal(await rpc('icash_owner_active_export_capacity',[]),'ready');
+ assert.deepEqual(await v('select receipt from icash_research_private.owner_exports where id=$1',[batch]),failure);
+ assert.equal(await v('select terminal_at from icash_research_private.owner_exports where id=$1',[batch]),null);
+ assert.equal(await v('select completed_at from icash_research_private.owner_exports where id=$1',[batch]),null);
+ assert.equal(await v("select state from icash_operation_spend where operation_key='original'"),'dispatched');
+ assert.equal(Number(await v('select count(*) from icash_cost_observations')),0);
+ assert.equal(await rpc('icash_owner_export_people_available',[['per_1']]),false);assert.equal(await rpc('icash_owner_export_people_available',[['per_2']]),true);
+ assert.equal(await rpc('icash_claim_owner_batch',[other,screen,id(101),[{screeningId:screen,ids:['per_1']}],{},{}]),false,'Original person cannot be repurchased for another property/account');
+ await assert.rejects(q('update icash_research_private.owner_exports set capacity_review_id=null where id=$1',[batch]),/immutable/);
+ await assert.rejects(q("update icash_research_private.owner_export_capacity_reviews set state='planned'"),/immutable/);
+ await q('insert into icash_accounts(id) values($1),($2)',[account,other]);await db.exec('insert into icash_operating_budget values(1)');
+ await q('insert into icash_operation_rates values($1,$2)',[rate,{dealmachine:250000}]);
+ await q('insert into icash_discovery_configs values($1,2,$2,25,10000,$3,true)',[other,rate,'2099-01-01']);
+ const item={screeningId:screen,snapshot:{propertyId:'prop_2'},ids:['per_2']};
+ const preview={data:[{dm_property_id:'prop_2',found:true,contacts:[{dm_person_id:'per_2',contact_type:'owner',availability:{phones:1}}]}],credits:{used:0,people:0,properties:0,deduplicated:0}};
+ const config={rateId:rate,creditCap:25,unitCostMicros:10000,rightsUntil:'2099-01-01'};
+ await q("insert into icash_screening_jobs values($1,$2,'complete',$3)",[screen,other,item.snapshot]);
+ const admit=()=>rpc('icash_admit_owner_active_export',[other,screen,id(102),[item],preview,config,activeOwnerExportRequest(['per_2'])]);
+ await db.exec('begin;update icash_discovery_configs set research_version=0;');assert.equal(await admit(),'claimed','Legacy single path admits unrelated owner after verified capacity');await db.exec('rollback;');
+ assert.equal(await admit(),'claimed','Batch path admits unrelated owner after verified capacity');
+ assert.equal(await rpc('icash_admit_owner_active_export',[other,screen,id(103),[item],preview,config,activeOwnerExportRequest(['per_2'])]),'export_busy');
+ assert.equal(await rpc('icash_owner_active_export_capacity',[]),'export_busy');
+ assert.equal(await rpc('icash_owner_export_people_available',[['per_2']]),false);
+ for(const role of ['anon','authenticated'])for(const signature of ['icash_claim_export_capacity_review()','icash_record_export_capacity_review(uuid,jsonb)','icash_owner_export_people_available(jsonb)'])assert.equal(await v('select has_function_privilege($1,$2,\'execute\')',[role,signature]),false);
+ assert.equal(await v("select has_table_privilege('service_role','icash_research_private.owner_export_capacity_reviews','select')"),false);
+ console.log('PASS capacity SQL: single quota-bound read, complete fresh idle inventory, immutable original receipt/money holds, cross-account owner fence, single new export and restricted grants.');
+}finally{await db.close();}

@@ -1,8 +1,18 @@
 # DealMachine owner data review — October 27, 2026
 
-## Current production state — October 29, 03:00 UTC
+## Capacity recovery — October 29
 
-The first ordinary funded production export returned HTTP 500 `internal_error` at 02:46:38 UTC with one requested owner. It supplied no export ID, download, record count or credit receipt. Cost is **unreported**, not zero. At 02:49:47 UTC new exports were disabled; the original receipt, organization slot and financial operation remain held. Existing owner-only lookup research resumed. Do not clear that slot, repeat the purchase or claim active-only production filtering is currently enabled. See `docs/research-efficiency-replies.md` for the subsequent request-efficiency and preflight changes.
+The owner requested activation again and asked to repair the global blockage. The original HTTP 500 does not establish its cost or successful completion. It also must not be confused with evidence that an export is still running. `config/owner-export-capacity-recovery.sql` keeps those facts separate.
+
+An operator can arm one private review bound to that original completed HTTP response, its immutable receipt hash and the reviewed release. With shared quota available, authenticated production maintenance claims one free `GET /v1/exports?limit=100&offset=0`. Errors, partial/empty inventory, old-only inventory, duplicate IDs, missing quota headers, any pending/processing/unknown state, stale evidence and a lost response keep capacity held. No paid request or download is part of this check. Its raw response is private and immutable. Production code does not automatically arm reviews for later failures.
+
+A verified complete idle organization inventory releases only scheduling capacity. It does not associate any history row with the original owner, set that original export's terminal/completed timestamps, release its financial operation, fabricate a credit receipt or settle a charge. The original owner remains excluded from new lookup/export purchases, even through another property or account. The next unrelated export still uses the existing single-export lock/index, exact owner/DNC/activity contract and actual-credit settlement. A later unknown export retains its own capacity hold.
+
+The schema installs without a review or activation. Roll out matching API/worker releases and full offline checks before arming the exact incident and requesting active mode. While quota is exhausted or the provider check is unresolved, a configured switch does not establish live filtering. Verify subsequent ordinary funded export receipts before claiming live results. Keep the 50/minute and 4,900/day limits, consumed paid tests and demonstration funding unchanged.
+
+## Rollback state — October 29, 03:00 UTC
+
+The first ordinary funded production export returned HTTP 500 `internal_error` at 02:46:38 UTC with one requested owner. It supplied no export ID, download, record count or credit receipt. Cost is **unreported**, not zero. At 02:49:47 UTC new exports were disabled; the original receipt, organization slot and financial operation remained held. Existing owner-only lookup research resumed. The later capacity-only recovery above is the sole reviewed exception to the global scheduling hold; it does not reconcile or repeat this purchase. See `docs/research-efficiency-replies.md` for the subsequent request-efficiency and preflight changes.
 
 ## Production export release — October 28 Central / October 29 UTC
 

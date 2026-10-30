@@ -42,7 +42,7 @@ export async function enrichForAccount(accountId:string,screeningId:string){
  };
  try{return await enrichOwners({snapshot:job.snapshot,creditCap:c.contact_credit_cap,unitCostMicros:c.property_credit_micros,quotedDataCostMicros:rate.costs_micros?.dealmachine},{
   previewOwners:id=>request(`https://api.v2.dealmachine.com/v1/properties/${id}?enrich=false&contact_audience=owners`,{method:'GET'},'OWNER_PREVIEW_FAILED_NO_RETRY'),
-  reserveAndClaim:async()=>{
+  reserveAndClaim:async ids=>{
    stage='reservation';providerStatus=null;
    // Recheck server-owned scope after the free network request, before committing funds.
    const [current]=await db<{snapshot:unknown;state:string}[]>(jobPath);
@@ -50,6 +50,7 @@ export async function enrichForAccount(accountId:string,screeningId:string){
    const [config]=await db<typeof c[]>(`icash_discovery_configs?account_id=eq.${accountId}&select=*`);
    if(current?.state!=='complete'||JSON.stringify(current.snapshot)!==frozenSnapshot||manual?.manual||!config?.enabled||!config.contacts_enabled||config.contact_rate_id!==c.contact_rate_id||config.contact_credit_cap!==c.contact_credit_cap||config.property_credit_micros!==c.property_credit_micros||config.data_rights_until!==c.data_rights_until||!future(config.data_rights_until)||!future(rate.expires_at))return false;
    if(runScreeningJob(current.snapshot).financialCheck.status!=='eligible')return false;
+   if(await db<boolean>('rpc/icash_owner_export_people_available','POST',{p_ids:ids})!==true)return false;
    // The atomic dispatcher retains wallet/day/lifetime reservations on uncertain outcomes.
    await reserveOperation({accountId,operationKey,rateId:c.contact_rate_id,permissionUntil:c.data_rights_until,operation:'owner_enrichment',screeningId});
    const claimed=await db<boolean>('rpc/icash_claim_owner_enrichment','POST',{p_account:accountId,p_screening:screeningId,p_operation:operationKey,

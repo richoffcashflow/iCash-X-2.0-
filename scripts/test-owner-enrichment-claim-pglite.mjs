@@ -17,6 +17,10 @@ const previous={key:process.env.DEALMACHINE_API_KEY,ready:process.env.ICASH_LIVE
 try{
  for(const name of ['text-ai','market-expansion','seller-opener-experiments','seller-opener-delivery-order','sms-inbound-campaign','sms-contact-intake','owner-enrichment-claim'])await pg.exec(read('config/'+name+'.sql'));
  await pg.exec(read('supabase/migrations/20261016200100_seller_skip_owner_enrichment.sql'));
+ // Keep the legacy financial schema, but exercise the real new owner fence
+ // against an isolated unresolved-export table before any reservation.
+ await pg.exec('create schema if not exists icash_research_private;create table icash_research_private.owner_exports(id uuid primary key,request jsonb,completed_at timestamptz);');
+ await pg.exec(read('config/owner-export-capacity-recovery.sql').match(/create function public.icash_owner_export_people_available[\s\S]*?\$\$;/)[0]);
  // These legacy reservations keep their original prices. The new settler must
  // recognize the absent DealMachine snapshot and leave them for old reconciliation.
  await pg.exec('alter table icash_operation_spend add column dealmachine_cost_multiplier numeric,add column data_unit_cost_micros bigint,add column data_cost_basis text;');
@@ -117,6 +121,14 @@ try{
   paidCalls++;assert.equal(url,'https://api.v2.dealmachine.com/v1/people/ids');assert.deepEqual(JSON.parse(options.body),{ids:['per_123'],enrich:true,include_properties:false});
   return Response.json({data:[{dm_person_id:'per_123',found:true,full_name:'SIMULATION contact',phones:[{number:'5555555555',do_not_call:false}]}],totals:{submitted:1,found:1,not_found:0},credits:{used:1,people:1,properties:0,deduplicated:0}});
  };
+ await caseInTransaction(async()=>{
+  paidCalls=0;previewCalls=0;
+  await q('insert into icash_research_private.owner_exports(id,request) values($1,$2)',[randomUUID(),{people_ids:['per_123']}]);
+  assert.equal((await enrichForAccount(account,screening)).status,'held');
+  assert.equal(previewCalls,1);assert.equal(paidCalls,0);
+  assert.equal((await one('select count(*)::int n from icash_operation_spend where operation_key=$1',[operation])).n,0,'Unresolved owner is blocked before a new financial reservation');
+  assert.equal(Number((await one('select reserved_cents from icash_wallets where account_id=$1',[account])).reserved_cents),0);
+ });
  for(const [sql,values] of holds.slice(0,9))await caseInTransaction(async()=>{
   paidCalls=0;previewCalls=0;beforeFinalClaim=()=>q(sql,values);
   await assert.rejects(enrichForAccount(account,screening),/held or already dispatched/);

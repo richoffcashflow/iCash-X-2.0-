@@ -20,6 +20,7 @@ function reset(){
 }
 const db=async(path,method,body)=>{
  if(path==='rpc/icash_owner_active_export_enabled')return false;
+ if(path==='rpc/icash_owner_export_people_available')return state.ownerAvailable!==false;
  state.dbCalls.push({path,method,body});
  if(path==='rpc/icash_finish_dealmachine_request')return true;
  if(path==='rpc/icash_settle_dealmachine_usage'){assert.equal(body.p_operation,operationKey);assert.equal(state.saved.length,1,'Usage settlement follows the persisted receipt');return true;}
@@ -97,6 +98,7 @@ try{
  const {reserveOperation,dispatchReservedOperation}=await loadActual('../lib/operating-costs.ts',{db,...liveWorkAdmission},'__ownerCostsFixture');
  const {enrichForAccount}=await loadActual('../lib/owner-enrichment-service.ts',{db,dealMachineRequest,DealMachineQuotaError,enrichOwners,runScreeningJob,reserveOperation,OwnerPreviewRateLimitError,...liveWorkAdmission},'__ownerServiceFixture');
  const run=()=>enrichForAccount(accountId,screeningId);
+ reset();state.ownerAvailable=false;assert.equal((await run()).status,'held');assert.equal(state.paidCount,0);assert.equal(state.reserveCount,0);
  for(const sellerRequest of [{phone:'+12145550123',ownerName:null},null]){
   reset();state.job.snapshot.sellerRequest=sellerRequest;assert.equal((await run()).status,'seller_contact_supplied');
   assert.equal(state.previewCount,0);assert.equal(state.paidCount,0);assert.equal(state.reserveCount,0);
