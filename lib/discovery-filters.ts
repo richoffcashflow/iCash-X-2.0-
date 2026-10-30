@@ -50,12 +50,15 @@ export function selectDiscoveryFilter(raw:unknown,sequence:number,shared:unknown
  const rotation=sequence%4;
  const tie=(s:DiscoveryFilterStat)=>(discoveryStrategies.indexOf(s.strategy)-rotation+4)%4;
  const balanced=(pool:DiscoveryFilterStat[])=>[...pool].sort((a,b)=>a.pages-b.pages||tie(a)-tie(b))[0];
- const cold=available.filter(s=>s.pages===0);
  const productive=available.filter(s=>s.recentUnproductivePages<3);
  const cooled=available.filter(s=>s.recentUnproductivePages===3);
+ // Market-level duplicate evidence survives a new account/revision. A fresh
+ // cursor must not promote a known duplicate-only audience back to cold start.
+ const cold=productive.filter(s=>s.pages===0);
  // One in five slots probes cooled arms. Never permanently discard a market.
- const pool=sequence%5===4&&cooled.length?cooled:productive.length?productive:available;
- const explore=balanced(cold.length?cold:pool);
+ const probe=sequence%5===4&&cooled.length>0;
+ const pool=probe?cooled:productive.length?productive:available;
+ const explore=balanced(probe?pool:cold.length?cold:pool);
  const localWinner=cold.length?null:[...productive].filter(s=>s.attempted>=10&&s.interested>=3&&discoveryInterestScore(s)>0)
   .sort((a,b)=>discoveryInterestScore(b)-discoveryInterestScore(a)||tie(a)-tie(b))[0];
  const evidence=sharedLearningStats(shared).filter(s=>productive.some(p=>p.strategy===s.variant)&&sharedEvidenceReady(s)&&s.costs_complete&&s.effective_cost_cents>0);
