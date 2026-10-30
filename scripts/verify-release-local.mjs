@@ -7,7 +7,7 @@ const suites = [
  'voice-configuration-recovery', 'voice-configuration-recovery-database',
  'owner-export-capacity-recovery', 'owner-export-capacity-recovery-database',
  'owner-active-export', 'owner-active-export-database', 'owner-active-export-contact-sources',
- 'research-request-reuse', 'research-provider-feedback', 'seller-interest-evidence',
+ 'research-request-reuse', 'research-market-duplicate-cooling', 'research-provider-feedback', 'seller-interest-evidence',
  'outcome-ranker', 'outcome-ranker-database', 'outcome-ranker-service',
  'pro-voice-capacity', 'pro-voice-capacity-database',
  'seller-followup-window', 'seller-offer-qualification',
