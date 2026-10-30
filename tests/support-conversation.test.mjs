@@ -105,7 +105,7 @@ assert.notEqual(supportConversationFallback({kind:'access',messages:[user('That 
 assert.notEqual(supportConversationFallback({kind:'access',messages:[user('I got in. Why is the course not opening?')]}).status,'resolved','Confirmation with an unanswered question is not a complete resolution');
 assert.equal(supportConversationFallback({...leadsContext,messages:[user('How do I get clients?'),assistant('Your bot works eligible leads automatically.'),user('Thanks!')]}).status,'resolved');
 assert.notEqual(supportConversationFallback({...leadsContext,messages:[user('Bot stopped'),assistant('Which screen are you on?'),user('Thanks!')]}).status,'resolved');
-assert.equal(supportConversationFallback({kind:'account',messages:[user('I want a human')]}).status,'waiting_on_customer');
+assert.equal(supportConversationFallback({kind:'account',messages:[user('I want a human')]}).status,'open','No transfer or useful question must not mark the customer as blocking the issue');
 assert.match(supportConversationFallback({kind:'account',messages:[user('cancel my subscription')]}).reply,/do not cancel/);
 assert.equal(supportConversationFallback({kind:'account',messages:[{role:'operator',content:'Checking this.'},user('Any update?')]}).status,'waiting_on_customer');
 const refund=supportConversationFallback({kind:'account',messages:[user('I want a refund')]});assert.match(refund.reply,/All sales are final/);assert.doesNotMatch(refund.reply,/team|review queue|escalat/i);

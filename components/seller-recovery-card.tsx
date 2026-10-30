@@ -10,18 +10,19 @@ const next:Record<string,string>={
  delivery_unknown:'Check the existing provider result before trying the action again.',
  viewing:'Confirm availability and the buyer’s preferred window before booking a visit.',
 };
-export function SellerRecoveryCard({item,onResolved}:{item:SellerRecoveryCase;onResolved:()=>void}){
+export function SellerRecoveryCard({item,onResolved,onOpen}:{item:SellerRecoveryCase;onResolved:()=>void;onOpen?:()=>void}){
  const [resolution,setResolution]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
- return <article data-unsaved-draft={resolution.trim()?'true':undefined}><p>{item.review_reason==='contact_checks_expired'?'The contact checks expired before this follow-up could be sent. Refresh and verify the contact checks before contacting this seller again. Saving a note does not restart outreach.':next[item.reason]??'Review the unanswered question and provide an accurate answer or a concrete follow-up.'}</p>
+ return <article data-unsaved-draft={resolution.trim()?'true':undefined}><p>{item.review_reason==='contact_checks_expired'?'This follow-up is blocked because its saved contact checks expired. There is no customer refresh button. Reopening the property, saving a note or choosing Return to bot does not renew these checks.':next[item.reason]??'Review the unanswered question and the seller conversation. Record a resolution only after you have completed the follow-up.'}</p>
  {item.quote&&<blockquote className="reply-quote">{item.quote}</blockquote>}
+ {onOpen&&<button type="button" className="attention-open" onClick={onOpen}>Open property</button>}
  <div className="review-form">
- <label htmlFor={`recovery-${item.id}`}>What resolved this?</label>
+ <label htmlFor={`recovery-${item.id}`}>Resolution note (not sent to the seller)</label>
  <textarea id={`recovery-${item.id}`} aria-describedby={`recovery-help-${item.id}`} value={resolution} maxLength={2000} rows={3} onChange={e=>setResolution(e.target.value)} placeholder="Record the answer or completed follow-up."/>
  <div className="review-actions"><button className="review-primary" disabled={busy||resolution.trim().length<10} onClick={async()=>{
   setBusy(true);setError('');try{
    const response=await fetch('/api/work/seller-recovery',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,version:item.updated_at,resolution:resolution.trim()})});
    const body=await response.json();if(!response.ok)throw Error(body.error??'Could not save the resolution.');onResolved();
   }catch(e){setError(e instanceof Error?e.message:'Could not save the resolution.');setBusy(false);}
- }}>Save resolution</button></div><small id={`recovery-help-${item.id}`}>This records your follow-up. Use the conversation controls to contact the seller.</small>
+ }}>Save resolution</button></div><small id={`recovery-help-${item.id}`}>Describe the completed follow-up in at least 10 characters. This saves a note; it does not send a message or restart outreach.</small>
  {error&&<p role="alert">{error}</p>}</div></article>;
 }

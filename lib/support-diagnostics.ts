@@ -7,6 +7,7 @@ import {readCourseProgress} from '@/lib/course-progress-server';
 import {courseProgressEvidence} from './course-progress';
 import type {SupportEvidence} from './support-policy';
 import {supportOutreachEvidence} from './support-outreach';
+import {supportVoiceEvidence} from './support-voice-evidence';
 const money=(cents:number)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(cents/100);
 const validCents=(value:number)=>Number.isSafeInteger(value)&&value>=0;
 const readinessLabels:Record<string,string>={dataProvider:'Property data access needs attention',voiceProvider:'Calling service access needs attention',emailAccess:'Email access needs attention',billing:'Billing configuration needs attention',cashReserve:'Operating reserve check needs attention',discovery:'Property search configuration needs attention',voice:'Calling configuration needs attention',productionContracts:'Production contract configuration needs review',unresolvedDispatches:'A provider action has an uncertain outcome',readiness_unavailable:'Readiness could not be checked'};
@@ -16,7 +17,7 @@ export async function collectSupportDiagnostics(accountId:string):Promise<Suppor
  const check=async(key:string,source:string,fn:()=>Promise<Omit<SupportEvidence,'key'|'source'|'observedAt'>>):Promise<SupportEvidence>=>{
   try{return {key,source,observedAt,...await fn()};}catch{return {key,source,observedAt,status:'unknown',detail:`The ${key} check is temporarily unavailable. Nothing was changed.`};}
  };
- return Promise.all([
+ const evidence=await Promise.all([
   check('vip','icash_vip_features_active',async()=>{const active=await db<unknown>('rpc/icash_vip_features_active','POST',{p_account:accountId});if(typeof active!=='boolean')throw Error('VIP_UNKNOWN');return {status:'ok',code:active?'vip_active':'vip_inactive',detail:active?'VIP features are active.':'VIP features are not active.'};}),
   check('outreach','icash_support_outreach_diagnostics',async()=>supportOutreachEvidence(await db('rpc/icash_support_outreach_diagnostics','POST',{p_account:accountId}))),
   check('course','icash_course_progress',async()=>{const course=await readCourseProgress(accountId);return {...courseProgressEvidence(course),course};}),
@@ -46,9 +47,20 @@ export async function collectSupportDiagnostics(accountId:string):Promise<Suppor
    return {code:'no_payment_records',status:'ok',detail:`No paid ${mode} funding record was found in the 20 most recent records for this signed-in account. A payment made under another sign-in or not yet linked may not appear here.`};
   }),
   check('screening','icash_screening_jobs',async()=>{const rows=await db<{state:string}[]>(`icash_screening_jobs?account_id=eq.${accountId}&state=eq.failed&select=state&limit=20`);return {code:rows.length?'screening_review':'screening_clear',status:rows.length?'attention':'ok',detail:rows.length?`${rows.length}${rows.length===20?'+':''} property screening results need review. No work was restarted.`:'No failed property screening results were found in this check.'};}),
-  check('voice','icash_live_conversations',async()=>{const rows=await db<{state:string}[]>(`icash_live_conversations?account_id=eq.${accountId}&state=eq.review&select=state&limit=20`);return {code:rows.length?'voice_review':'voice_clear',status:rows.length?'attention':'ok',detail:rows.length?`${rows.length}${rows.length===20?'+':''} call results need review. Chat will not redial or repeat provider actions.`:'No call results marked for review were found.'};}),
+  check('voice','icash_live_conversations/icash_voice_jobs',async()=>{const [rows,jobs]=await Promise.all([
+   db<{state:string}[]>(`icash_live_conversations?account_id=eq.${accountId}&state=eq.review&select=state&limit=20`),
+   db<{state:string;outcome:string|null;updated_at:string}[]>(`icash_voice_jobs?account_id=eq.${accountId}&select=state,outcome,updated_at&order=updated_at.desc,id.desc&limit=1`),
+  ]);return supportVoiceEvidence(jobs,rows.length);}),
   check('readiness','icash_launch_checks',async()=>{const r=await launchReadiness(accountId);return {code:r.ready?'readiness_ready':'readiness_blocked',status:r.ready?'ok':r.blockers.includes('readiness_unavailable')?'unknown':'attention',detail:r.ready?'The launch-readiness check passed. This does not guarantee individual outreach or a completed deal.':`Readiness needs attention: ${r.blockers.map(b=>readinessLabels[b]??'An operational safety check needs review').join('; ')}.`};}),
  ]);
+ const outreach=evidence.find(e=>e.key==='outreach'),progress=outreach?.outreach?.progress;
+ const credits=evidence.find(e=>e.key==='credits');
+ if(credits&&progress?.spendingMode==='available_balance'){
+  Object.assign(credits,{source:'icash_prospecting_progress',code:progress.remainingCents>0?'credit_available':'no_available_credit',status:progress.remainingCents>0?'ok':'attention',detail:`${money(progress.remainingCents)} is available for new work.${progress.pendingCents?` ${money(progress.pendingCents)} is committed to earlier work while its costs are confirmed. This is not a final charge.`:''} A positive balance alone does not confirm a call can start.`});
+ }else if(credits&&outreach?.status==='unknown'){
+  Object.assign(credits,{code:'available_credit_unknown',status:'unknown',detail:'The amount available for new work could not be confirmed because outstanding work commitments could not be checked.'});
+ }
+ return evidence;
 }
 /** Owner-only deployment health. Fixed endpoint and server configuration, never model-controlled URLs. */
 export async function supportDeploymentHealth(fetcher:typeof fetch=fetch){

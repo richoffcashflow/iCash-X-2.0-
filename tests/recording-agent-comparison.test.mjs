@@ -37,6 +37,42 @@ const bothHash='875eb33f2156f6a7e6305606b6ea3dd2868cadbc336c4a269b7497d3a9d3ec82
 const representations=[[false,false],[true,false],[false,true],[true,true]];
 const reviews=representations.map(([empty,list])=>reviewFor(fixture(empty,list)));
 
+test('October serialization defaults must reproduce the original complete approved hash',()=>{
+ const {old,current}=renamedVoiceFixture();
+ for(const a of [old,current])a.platform_settings.widget={variant:'fixture'};
+ const review=reviewFor(old),savedReview=structuredClone(review);
+ current.conversation_config.asr.keyterm_libraries=[];
+ current.platform_settings.widget.transcript_speech_sync_enabled=true;
+ for(const encryptionDefault of [false,true]){
+  const a=structuredClone(current);if(encryptionDefault)a.platform_settings.privacy.encrypt_conversations=false;
+  const saved=structuredClone(a);
+  assert.equal(recordingAgentMatches(review,a),true);
+  assert.deepEqual(a,saved);assert.deepEqual(review,savedReview);
+  assert.equal(recordingAgentMatches({...review,configHash:'0'.repeat(64)},a),false);
+  for(const mutate of [
+   a=>a.conversation_config.asr.keyterm_libraries=['library_other'],
+   a=>a.conversation_config.asr.keyterm_libraries=null,
+   a=>delete a.conversation_config.asr.keyterm_libraries,
+   a=>a.platform_settings.widget.transcript_speech_sync_enabled=false,
+   a=>a.platform_settings.widget.transcript_speech_sync_enabled='true',
+   a=>delete a.platform_settings.widget.transcript_speech_sync_enabled,
+   a=>a.platform_settings.privacy.encrypt_conversations=true,
+   a=>a.platform_settings.privacy.encrypt_conversations=null,
+   a=>a.platform_settings.privacy.encrypt_conversations='false',
+   a=>a.platform_settings.privacy.unknown=false,
+   a=>a.conversation_config.agent.prompt.prompt+=' altered',
+   a=>a.conversation_config.agent.prompt.tool_ids.push('tool_other'),
+   a=>a.platform_settings.auth.enable_auth=false,
+   a=>a.version_id='agtvrsn_other',a=>a.branch_id='agtbrch_other',
+  ]){const changed=structuredClone(a);mutate(changed);assert.equal(recordingAgentMatches(review,changed),false,mutate.toString());}
+ }
+ assert.equal(recordingAgentMatches(reviewFor(current),old),false,'never invent newly approved settings in reverse');
+ const encryptionOnly=structuredClone(old);encryptionOnly.platform_settings.privacy.encrypt_conversations=false;
+ assert.equal(recordingAgentMatches(review,encryptionOnly),true);
+ const explicit=structuredClone(current);explicit.platform_settings.privacy.encrypt_conversations=true;
+ assert.equal(recordingAgentMatches(reviewFor(explicit),explicit),true,'explicit reviews still match exactly');
+});
+
 test('only the approved outgoing identity permits the exact two-to-eight capacity change',()=>{
  const before=fixture();Object.assign(before,{agent_id:parallel.agentId,branch_id:parallel.branchId,version_id:parallel.versionId});
  Object.assign(before.platform_settings.call_limits,{agent_concurrency_limit:2,daily_limit:1000});

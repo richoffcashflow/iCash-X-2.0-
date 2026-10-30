@@ -6,6 +6,7 @@ import {supportCourseAnswer,supportProductGuide,supportSimpleProductAnswer,suppo
 import {supportCodeDelivery} from './support-code-delivery.ts';
 import {currentSupportIssue,supportReplyEvidence,supportCreditRelevant,supportAskedQuestions,removeRepeatedSupportQuestions,repeatsSupportQuestion,supportReplyStyle} from './support-reply-style.ts';
 import {supportOutreachReply} from './support-outreach.ts';
+import {supportWorkflowReply} from './support-workflow-guidance.ts';
 import {missingAccessCodeReply} from './support-access-reply.ts';
 import type {AccessInvestigation} from './support-access-investigation.ts';
 import {supportInstructionCorrection,unsupportedSupportReply} from './support-reply-guardrails.ts';
@@ -13,7 +14,6 @@ import {supportInstructionCorrection,unsupportedSupportReply} from './support-re
 export type SupportTurn={role:string;content:string};
 export type SupportReply={reply:string;status:'open'|'waiting_on_customer'|'resolved'|'closed';ai:boolean};
 export type SupportContext={kind:'access'|'account';messages:SupportTurn[];evidence?:SupportEvidence[];accessInvestigation?:AccessInvestigation;handedOff?:boolean;allowAI?:boolean;historyComplete?:boolean};
-const continueHere='I’ll help you troubleshoot this here. What is still happening, and what was the last step you tried?';
 const noRefunds='All sales are final; we do not offer refunds. I can help fix an access or software issue here.';
 const clean=(text:string)=>redactSupportQuestion(text).replace(/\b\d{6,10}\b/g,'[code removed]');
 
@@ -34,6 +34,8 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(/\b(?:that worked|it worked|working now|fixed now|all fixed|i(?:’|')?m in|got in|problem solved)\b/i.test(question)&&!/(?:not|isn.t|didn.t|still|but)\b/i.test(question)&&!/[?]|\b(?:how|what|where|when|why|which|also|another|more questions|next question)\b/i.test(question))return result('Glad that worked.','resolved');
  const correction=supportInstructionCorrection(context.messages,context.evidence??[]);
  if(correction)return result(correction,'open');
+ const workflow=context.kind==='account'?supportWorkflowReply(context.messages,context.evidence??[]):null;
+ if(workflow)return workflow;
  const productAnswer=supportSimpleProductAnswer(question)??(/^(?:could be anytime|so anytime)[?!.\s]*$/i.test(question.trim())?supportSimpleProductAnswer(currentSupportIssue(context.messages)):null);
  if(productAnswer){
   // A side question can be answered without claiming an earlier fault is fixed.
@@ -56,7 +58,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(course?.answered&&supportListingQuestion(question))return result(course.reply,earlierSupportProblem(context)?'open':'resolved');
  const outreach=context.kind==='account'?supportOutreachReply(context.messages,context.evidence??[]):null;
  if(outreach)return outreach;
- if(supportTopic(question)==='human')return result(continueHere);
+ if(supportTopic(question)==='human')return result('This is automated support, and there isn’t a live transfer in this chat. I can use the recorded account checks here, but I haven’t confirmed a fix for the problem you reported.','open');
  const issue=currentSupportIssue(context.messages);
  if(/\b(?:card|payment method)\b/i.test(issue)&&/\b(?:add|adding|new|save|saved|saving|select|selected|update|change|duplicate|original|old)\b/i.test(issue)){
   const alreadyAsked=context.messages.some(m=>(m.role==='assistant'||m.role==='operator')&&/button (?:beside|next to) (?:the|your) new card/i.test(m.content));
@@ -121,6 +123,7 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
 async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fetch=fetch):Promise<SupportReply>{
  const fallback=supportTechnicalFallback(context);
  const relevantEvidence=supportReplyEvidence(context.messages,context.evidence??[]);
+ if(context.kind==='account'&&supportWorkflowReply(context.messages,context.evidence??[]))return fallback;
  if(supportInstructionCorrection(context.messages,context.evidence??[]))return fallback;
  if(supportSimpleProductAnswer(context.messages.filter(m=>m.role==='user').at(-1)?.content??''))return fallback;
  if(context.kind==='account'&&fallback.status==='open'&&supportOutreachReply(context.messages,context.evidence??[]))return fallback;
