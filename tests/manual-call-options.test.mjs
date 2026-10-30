@@ -47,6 +47,7 @@ delete globalThis.__manualCall;
 const require=createRequire(import.meta.url),component={exports:{}};
 const componentSource=ts.transpileModule(readFileSync(new URL('../components/browser-call-controls.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
 new Function('require','module','exports',componentSource)(name=>{
+ if(name==='@/components/owner-phone-privacy')return {PrivatePhone:({children})=>children};
  if(name==='react')return {useState:v=>[v,()=>{}],useRef:v=>({current:v}),useEffect(){},useEffectEvent:f=>f};
  if(name==='react/jsx-runtime')return require(name);
  if(name==='lucide-react')return {Mic:()=>null,MicOff:()=>null,Phone:()=>null,PhoneOff:()=>null};

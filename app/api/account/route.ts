@@ -30,7 +30,8 @@ export async function GET(req:Request){
   const {membership,...account}=snapshot.account;
   const membershipActive=membershipAccessible(membership);
   const workspaceAcknowledged=workspaceAcknowledgmentCurrent(acknowledgment,user.id);
-  const base={...account,vip:access.vip,vipFeatures:access.vipFeatures,adminPlan:access.adminPlan,workspaceAcknowledged,signedIn:true,mode,email:user.email,pendingEmail:user.new_email&&user.new_email!==user.email?user.new_email:null,membershipActive,isBillingOwner:user.id===ownerInboundTarget.ownerUserId};
+  const privateDemoPhone=user.id===ownerInboundTarget.ownerUserId&&snapshot.accountId===ownerInboundTarget.accountId?ownerInboundTarget.ownerPhone:null;
+  const base={...account,vip:access.vip,vipFeatures:access.vipFeatures,adminPlan:access.adminPlan,workspaceAcknowledged,signedIn:true,mode,email:user.email,pendingEmail:user.new_email&&user.new_email!==user.email?user.new_email:null,membershipActive,isBillingOwner:user.id===ownerInboundTarget.ownerUserId,privateDemoPhone};
   const canCheck=workspaceAcknowledged&&mode==='live'&&account.balanceCents>0&&!account.billingReview&&(account.billingModel!=='membership_credits'||membershipActive);
   const core=req&&new URL(req.url).searchParams.get('view')==='core';
   const held={workReady:false,smsWorkReady:false,discoveryWorkReady:false,contactWorkReady:false,discoveryQuote:null,contactQuote:null,discoveryBlocker:account.balanceCents<=0?'available_credits_required':null};
