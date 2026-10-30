@@ -70,3 +70,22 @@ await assert.rejects(automationTick(async()=>({token:tokens[0]}),async()=>new Re
 });
 assert.deepEqual(workerFailureDetails(Error('secret-token-and-customer-data')),{code:'REQUEST_FAILED'});
 assert.deepEqual(workerFailureDetails(new DOMException('private timeout URL','TimeoutError')),{code:'REQUEST_TIMEOUT'});
+// Fixed error codes expose timeout/permission failures without leaking SQL,
+// account details or response text, and never cause an automatic RPC replay.
+for(const [body,expected] of [
+ [{code:'57014',message:'private query',details:'secret-token'},'57014'],
+ [{code:'42501',hint:'private account'},'42501'],
+ [{code:'PGRST202'},'PGRST202'],
+ [{code:'private-secret'},null],
+ [{code:'57014',details:'x'.repeat(5000)},null],
+ ['not JSON',null],
+]){
+ let attempts=0;
+ const failing=createRpc('https://fixture.supabase.co','secret-fixture',async()=>{attempts++;return typeof body==='string'?new Response(body,{status:500}):Response.json(body,{status:500});});
+ await assert.rejects(failing('icash_next_automation_lane',{p_lane:'voice'}),error=>{
+  const details=workerFailureDetails(error);
+  assert.deepEqual(details,{code:'SCREENING_DATABASE_UNAVAILABLE',operation:'icash_next_automation_lane',httpStatus:500,...(expected?{databaseCode:expected}:{})});
+  assert(!JSON.stringify(details).includes('private'));return true;
+ });
+ assert.equal(attempts,1);
+}

@@ -1,12 +1,30 @@
 import {runScreeningJob} from '../lib/screening-job.ts';
 // Deliberately exclude provider bodies, URLs, tokens and customer data from logs.
 export class WorkerOperationError extends Error{
- constructor(code,operation,httpStatus=null){super(code);this.code=code;this.operation=operation;this.httpStatus=httpStatus;}
+ constructor(code,operation,httpStatus=null,databaseCode=null){super(code);this.code=code;this.operation=operation;this.httpStatus=httpStatus;this.databaseCode=databaseCode;}
 }
 export function workerFailureDetails(error){
  return error instanceof WorkerOperationError
-  ?{code:error.code,operation:error.operation,httpStatus:error.httpStatus}
+  ?{code:error.code,operation:error.operation,httpStatus:error.httpStatus,...(databaseFailureCodes.has(error.databaseCode)?{databaseCode:error.databaseCode}:{})}
   :{code:error?.name==='TimeoutError'||error?.name==='AbortError'?'REQUEST_TIMEOUT':'REQUEST_FAILED'};
+}
+// Only fixed database error codes leave this boundary. Provider messages,
+// query text, details, hints and request tokens never enter operational logs.
+const databaseFailureCodes=new Set(['57014','55P03','40P01','53300','53400','08000','08001','08003','08004','08006','08007','08P01','42501','42883','42P01','42703','PGRST202','PGRST204','PGRST205']);
+async function databaseFailureCode(response){
+ const reader=response.body?.getReader();
+ if(!reader)return null;
+ const decoder=new TextDecoder();let body='',bytes=0;
+ try{
+  while(true){
+   const {done,value}=await reader.read();if(done)break;
+   bytes+=value.byteLength;if(bytes>4096)return null;
+   body+=decoder.decode(value,{stream:true});
+  }
+  body+=decoder.decode();
+  const code=JSON.parse(body)?.code;
+  return databaseFailureCodes.has(code)?code:null;
+ }catch{return null;}finally{try{await reader.cancel();}catch{/* Diagnostic failure preserves the original HTTP failure. */}reader.releaseLock();}
 }
 export async function tick(rpc, screen=runScreeningJob){
  const job=await rpc('icash_claim_screening',{});
@@ -23,7 +41,7 @@ export function createRpc(url,key,transport=fetch){
  return async(name,args)=>{
   if(!['icash_claim_screening','icash_finish_screening','icash_next_automation','icash_next_automation_lane','icash_record_service_heartbeat'].includes(name))throw new Error('Unsupported worker operation');
   const response=await transport(new URL('/rest/v1/rpc/'+name,base),{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify(args),redirect:'error',signal:AbortSignal.timeout(15000)});
-  if(!response.ok){await response.body?.cancel();throw new WorkerOperationError('SCREENING_DATABASE_UNAVAILABLE',name,response.status);}
+  if(!response.ok)throw new WorkerOperationError('SCREENING_DATABASE_UNAVAILABLE',name,response.status,await databaseFailureCode(response));
   const body=await response.text();return body?JSON.parse(body):null;
  };
 }
