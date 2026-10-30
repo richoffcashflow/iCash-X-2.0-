@@ -60,6 +60,10 @@ for(const question of [
  'Do I only handle contracts? I cannot sign in.',
  'Can I just wait for the bot? I was charged twice.',
  'What is my role? Cancel my subscription.',
+ 'Do I just watch notifications? The contact checks expired.',
+ 'Do I just wait for messages? My bot has 0 calls.',
+ 'Do I just watch messages? The bot is not making calls.',
+ 'What is my role with the bot? Help me sign in.',
 ]){
  assert.equal(supportSimpleProductAnswer(question),null,question);
  assert.notEqual(supportConversationFallback({kind:'account',messages:[user(question)],evidence:checks}).status,'resolved',question);
@@ -67,4 +71,7 @@ for(const question of [
 assert.match(supportConversationFallback({kind:'account',messages:[user('Where do I download the assignment contract?')]}).reply,/after the purchase agreement is signed/);
 assert.match(supportConversationFallback({kind:'account',messages:[user('How do I create a contract?')]}).reply,/Take over.*Seller is ready for an agreement/);
 assert.match(supportConversationFallback({kind:'account',messages:[user('What do I need to do to create a contract with the bot?')]}).reply,/Take over.*Seller is ready for an agreement/);
+assert.match(supportConversationFallback({kind:'account',messages:[user('Do I just watch notifications? The contact checks expired.')]}).reply,/saved contact checks expired/);
+const resolution=supportConversationFallback({kind:'account',messages:[user('Is all I need to do save a resolution note for the seller follow-up?')]});
+assert.match(resolution.reply,/internal note/);assert.equal(resolution.status,'open');
 console.log('PASS support role guidance: product answers survive missing checks, bad prior replies and model outages; real failures stay open.');
