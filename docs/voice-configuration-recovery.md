@@ -31,6 +31,9 @@ matching application release; installation itself queues nothing. The latter
 allows the backend role to reach its explicitly granted audit table; other
 private tables and functions retain their existing permissions. Tests execute
 recovery as that backend role, including the original missing-schema failure.
+Apply `20261030192149_bounded_voice_configuration_recovery.sql` as well: it
+materializes queued/active recipient keys once per batch and retains the current
+recipient check inside the loop, avoiding repeated full contact-view scans.
 The existing
 production Git/CI gate remains required. Inspect maintenance's
 `capacity.recovery` and new original provider call receipts after release. A
