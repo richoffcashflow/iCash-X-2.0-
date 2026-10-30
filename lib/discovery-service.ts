@@ -2,7 +2,8 @@ import {discoveryWorkEnabled,liveWorkReady} from './live-work-admission.ts';
 import {propertyResearchMarketKnown} from '@/lib/contract-coverage-service';
 import {db} from '@/lib/stripe-test';
 import {discoverPage} from './discovery-pipeline.ts';
-import {selectDiscoveryFilter,DiscoveryFilterUnavailable} from './discovery-filters.ts';
+import {DiscoveryFilterUnavailable} from './discovery-filters.ts';
+import {selectTargetingPlan} from './dealmachine-targeting.ts';
 import {dealMachineRequest} from './dealmachine-request.ts';
 import {syncResearchExclusions} from './research-exclusions.ts';
 import {requestDiscoveryEstimate,DiscoveryEstimateHeld} from './discovery-estimate.ts';
@@ -39,7 +40,8 @@ export async function discoverForAccount(accountId:string){
  if(inventory!=='ready')return {status:inventory};
  const state=await db<unknown>('rpc/icash_discovery_filter_state_v2','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});
  const shared=state===null?[]:await db('rpc/icash_discovery_shared_evidence','POST',{p_account:accountId,p_zip:c.zip}).catch(()=>[]);
- const filterPlan=state===null?undefined:selectDiscoveryFilter(state,c.next_page,shared);
+ const targeting=state===null?null:await db('rpc/icash_targeting_state','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page}).catch(()=>null);
+ const filterPlan=state===null?undefined:selectTargetingPlan(state,c.next_page,shared,targeting,accountId,c.zip);
  if(filterPlan===null){
   if(Array.isArray(state)&&state.some(s=>s?.blocked===true&&s?.exhausted===false))return {status:'inventory_held'};
   await db('rpc/icash_mark_inventory_empty','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});return {status:'empty'};
@@ -59,7 +61,7 @@ export async function discoverForAccount(accountId:string){
     if(!r.ok){
      // An unsupported FREE estimate may retire a test arm. A paid request,
      // authentication error, rate limit or timeout must never trigger a replay.
-     if(filterPlan&&filterPlan.strategy!=='baseline'&&(body as {estimate_cost?:boolean}).estimate_cost===true&&[400,422].includes(r.status))throw new DiscoveryFilterUnavailable();
+     if(filterPlan&&filterPlan.strategy!=='baseline'&&(body as {estimate_cost?:boolean}).estimate_cost===true&&([400,422].includes(r.status)||(filterPlan.version==='seller-targeting-v1'&&r.status===403&&typeof r.raw==='object'&&r.raw!==null&&'error' in r.raw&&(r.raw as {error?:{code?:string}}).error?.code==='premium_filter_required')))throw new DiscoveryFilterUnavailable();
      throw new Error();
     }return r.raw;
    }catch(error){if(error instanceof DiscoveryFilterUnavailable)throw error;throw new DiscoveryProviderRequestError(stage,httpStatus);}};

@@ -47,6 +47,7 @@ const config={contact_rate_id:'rate',contact_credit_cap:25,property_credit_micro
 const db=async(path,method,p)=>{
  if(path==='rpc/icash_owner_active_export_capacity')return capacity;
  if(path==='rpc/icash_owner_batch_candidates')return candidates;
+ if(path==='rpc/icash_owner_targeting_pools')return Object.fromEntries(p.p_screenings.map(id=>[id,'active']));
  if(path==='rpc/icash_take_dealmachine_request')return quota;
  if(path==='rpc/icash_finish_dealmachine_request')return true;
  if(path==='rpc/icash_admit_owner_active_export'){

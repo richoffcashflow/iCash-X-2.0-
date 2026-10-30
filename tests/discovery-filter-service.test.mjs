@@ -1,3 +1,4 @@
+import {selectTargetingPlan} from '../lib/dealmachine-targeting.ts';
 import assert from 'node:assert/strict';
 import {dealMachineRequest} from '../lib/dealmachine-request.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
@@ -8,7 +9,7 @@ import {ProspectingBudgetError,voiceReservationFailure} from '../lib/voice-budge
 Object.assign(process.env,{DEALMACHINE_API_KEY:'dm_sk_live_FIXTURE_NO_NETWORK',ICASH_ACQUISITION_MODE:'outbound'});
 let events=[],rpc=[],response=200,failPaid=false,existing=false,disabled=false,empty=false,budgetRejected=false;
 const svc=await loadService('lib/discovery-service.ts',{
- requestDiscoveryEstimate,DiscoveryEstimateHeld,dealMachineRequest,syncResearchExclusions:async()=>null,discoveryWorkEnabled:()=>true,liveWorkReady:()=>true,propertyResearchMarketKnown:async()=>true,discoverPage,selectDiscoveryFilter,DiscoveryFilterUnavailable,
+ requestDiscoveryEstimate,DiscoveryEstimateHeld,dealMachineRequest,syncResearchExclusions:async()=>null,discoveryWorkEnabled:()=>true,liveWorkReady:()=>true,propertyResearchMarketKnown:async()=>true,discoverPage,selectDiscoveryFilter,selectTargetingPlan,DiscoveryFilterUnavailable,
  db:async(path,method,body)=>{
   if(path.startsWith('icash_discovery_configs'))return [{enabled:true,zip:'75217',rate_id:'rate',property_credit_micros:10000,data_rights_until:'2099-01-01',per_page:5,next_page:1,revision:'revision'}];
   if(path.startsWith('icash_bot_setups'))return [{revision:1,profile:{marketMode:'city',market:'75217'}}];
