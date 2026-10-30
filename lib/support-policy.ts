@@ -18,7 +18,7 @@ export function supportTopic(text:string):SupportTopic {
  if(/^(hi|hello|hey|thanks|thank you)[.!?\s]*$/i.test(text.trim()))return 'general';
  if(supportDuplicateCharge(text))return 'billing';
  if(/\b(?:refund|money back)\b/i.test(text))return 'refund';
- if(/\b(human|person|owner|agent|escalate)\b/i.test(text))return 'human';
+ if(/\b(?:human|escalate)\b|\b(?:speak|talk|connect|transfer)\b.{0,35}\b(?:person|agent|owner|someone)\b|\b(?:live|real)\s+(?:person|agent)\b/i.test(text))return 'human';
  if(/\b(cancel|delete|refund)\b/i.test(text)||/^(?:please\s+)?stop[.!?\s]*$/i.test(text.trim())||/\b(?:want to|please|help me|can you)\s+stop\b|\bstop (?:my |the |future )?(?:bot|work|renewals|billing|plan|subscription)\b/i.test(text))return 'cancel';
  if(/\b(bill|billing|charge|charged|payment|card|credit|balance|renewal)\b/i.test(text))return 'billing';
  if(/\b(sign.?in|setup|start|login)\b/i.test(text))return 'setup';

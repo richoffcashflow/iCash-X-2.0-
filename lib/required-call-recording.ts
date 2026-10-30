@@ -76,7 +76,7 @@ function recordingEmptyAgentHashMatches(configHash:string,snapshot:Record<string
  return false;
 }
 export function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>):boolean{
- // At most sixteen fixed representations, each with up to four empty-agent
+ // Fixed representations, each with up to four empty-agent
  // variants. Never ignore arbitrary fields or rewrite a saved approval.
  const snapshots=[snapshot],withoutNoise=recordingDisabledNoiseSnapshot(snapshot);
  if(withoutNoise)snapshots.push(withoutNoise);
@@ -106,6 +106,27 @@ export function recordingConfigHashMatches(configHash:string,snapshot:Record<str
   const previousWidget={...widget},previousMemory={...memory},previousPlatform={...platform};
   delete previousWidget.mobile_fullscreen;delete previousMemory.accept_unverified_identities;delete previousPlatform.summary_schedule;
   snapshots.push({...value,platform_settings:{...previousPlatform,widget:previousWidget,privacy:{...privacy,user_memory:previousMemory}}});
+ }
+ // Observed on the same approved version on October 28: an empty ASR
+ // library list and a widget-only transcript setting. Remove only the joint
+ // exact defaults, and still require the entire original approved fingerprint.
+ for(const value of [...snapshots]){
+  const config=object(value.conversation_config),asr=object(config.asr);
+  const platform=object(value.platform_settings),widget=object(platform.widget);
+  if(!Array.isArray(asr.keyterm_libraries)||asr.keyterm_libraries.length!==0
+   ||widget.transcript_speech_sync_enabled!==true)continue;
+  const priorAsr={...asr},priorWidget={...widget};
+  delete priorAsr.keyterm_libraries;delete priorWidget.transcript_speech_sync_enabled;
+  snapshots.push({...value,conversation_config:{...config,asr:priorAsr},platform_settings:{...platform,widget:priorWidget}});
+ }
+ // October 29 added an explicit disabled encryption field to the unchanged
+ // version. This only reconstructs an absent field in a saved hash; it never
+ // changes encryption, accepts true/malformed values, or creates an approval.
+ for(const value of [...snapshots]){
+  const platform=object(value.platform_settings),privacy=object(platform.privacy);
+  if(privacy.encrypt_conversations!==false)continue;
+  const priorPrivacy={...privacy};delete priorPrivacy.encrypt_conversations;
+  snapshots.push({...value,platform_settings:{...platform,privacy:priorPrivacy}});
  }
  return snapshots.some(value=>recordingEmptyAgentHashMatches(configHash,value));
 }

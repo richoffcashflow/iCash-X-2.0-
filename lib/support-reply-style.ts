@@ -12,6 +12,7 @@ export function supportContinuation(text:string){
  return /^(?:yes|no|ok|okay|nothing|done|ready|running|active|pause bot|hello|hi|thanks|thank you|could be anytime|so anytime|where is that(?: at)?|where do i find that|what do you mean|please troubleshoot|please trouble shoot)$/.test(value)
   || /^(?:still\b|same\b|already\b|any update\b|it says\b|it (?:still|just)\b|i (?:already |still )?(?:did|tried)\b|the workspace\b)/.test(value)
   || /^(?:its|it is|the bot is|my bot is) (?:active|running|on|not paused)[.!\s]*$/.test(value)
+  || /^(?:so )?(?:what should i do|how should i reply|how do i reply|is that enough|am i doing something wrong|can you confirm (?:it|that)|well can you confirm (?:it|that)|i know but (?:it|its|it is) (?:not working|still not working))$/.test(value)
   || /^it (?:dont|doesnt|does not) (?:show|say)\b/.test(value)
   || /^(?:ok(?:ay)?(?: because)? )?(?:but )?i want (?:the|my) bot to do the work$/.test(value)
   || /^i (?:sent|made) (?:the|that) (?:text|message|call)\b.*\b(?:wasnt|was not|not) (?:the )?bot\b/.test(value)

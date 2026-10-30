@@ -37,7 +37,7 @@ try{
  assert.equal(response.status,'open');assert.match(response.reply,/7 properties/);assert.doesNotMatch(response.reply,/open a property|What.*status|rewatch/);assert.match(response.reply,/displaying correctly/);
  messages.push(assistant(response.reply),user('I want a human'));
  response=await replyToSupport({kind:'account',messages,evidence},forbidden);
- assert.equal(response.status,'open');assert.match(response.reply,/11 texts/);assert.doesNotMatch(response.reply,/What is still happening|handoff|team/i);
+ assert.equal(response.status,'open');assert.match(response.reply,/automated support.*isn’t a live transfer/);assert.doesNotMatch(response.reply,/What is still happening|handoff|team/i);
  const unknown=await replyToSupport({kind:'account',messages:[user('No seller details or conversations')],evidence:[]},forbidden);
  assert.equal(unknown.status,'open');assert.match(unknown.reply,/can’t verify/);
  for(const bad of [{...facts,textsDelivered:12},{...facts,contactProperties:26},{...facts,textsSent:'11'},{...facts,callsStarted:-1}])assert.throws(()=>supportOutreachEvidence(bad));

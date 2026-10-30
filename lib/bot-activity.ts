@@ -13,7 +13,7 @@ export function currentBotActivity(input:{paused:boolean;tickets:{kind:string;st
  if(ticket)return {active:true,label:botTaskLabels[ticket.kind],checkedAt};
  if(input.screening.some(s=>s.state==='running'&&s.lease_until&&Date.parse(s.lease_until)>now))return {active:true,label:'Checking property numbers',checkedAt};
  if(input.progress?.status==='budget_reached')return {active:false,label:'Waiting for available credits',checkedAt};
+ if(input.progress?.status==='settling')return {active:false,label:'Confirming earlier work costs',checkedAt};
  if(input.progress?.status==='paced')return {active:false,label:'Waiting for eligible work',checkedAt};
- if((input.progress?.callsBudgetHeld??0)>0)return {active:false,label:'Calls waiting for available credits',checkedAt};
  return {active:false,label:'Waiting for the next task',checkedAt};
 }

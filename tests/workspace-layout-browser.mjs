@@ -86,7 +86,7 @@ export async function verifyWorkspaceLayout(browser,base,options,name){
   for(const width of [...new Set([options.viewport.width,320,768])]){
    await page.setViewportSize({width,height:options.viewport.height});
    await openMode('seller');
-   const field=attention.getByLabel('What resolved this?',{exact:true}).first();
+   const field=attention.getByLabel('Resolution note (not sent to the seller)',{exact:true}).first();
    await fieldLayout(field);await fits('seller follow-up');
    const pages=attention.getByRole('navigation',{name:'Request pages'});
    const previous=await pages.getByRole('button',{name:'Previous',exact:true}).boundingBox(),next=await pages.getByRole('button',{name:'Next',exact:true}).boundingBox();
@@ -124,7 +124,7 @@ export async function verifyWorkspaceLayout(browser,base,options,name){
    await fieldLayout(attention.getByLabel('What was confirmed?',{exact:true}));await fits('journey outcome');
   }
   await openMode('seller');failSave=false;
-  const field=attention.getByLabel('What resolved this?',{exact:true}).first();
+  const field=attention.getByLabel('Resolution note (not sent to the seller)',{exact:true}).first();
   await field.fill('Confirmed the next step with the seller.');
   await attention.getByRole('button',{name:'Save resolution',exact:true}).first().click();
   await page.locator(`#recovery-${uuid(8001)}`).waitFor({state:'hidden'});
