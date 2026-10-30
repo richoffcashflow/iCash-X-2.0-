@@ -61,7 +61,7 @@
 .workspace.workspace :global(.workspace-review-heading){display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
 .workspace.workspace :global(.workspace-review-heading h3){margin:0;font-size:18px;font-weight:700;line-height:1.35;letter-spacing:-.3px;color:#171717}
 .workspace.workspace :global(.workspace-review-heading p){margin:4px 0 0;font-size:12px;font-weight:400;line-height:1.5;color:#666;text-align:left}
-.workspace.workspace :global(.workspace-attention){margin:0 0 16px;padding:0;border:0;border-bottom:1px solid #e5e5e5;border-radius:0;background:#fff;overflow:hidden}
+.workspace.workspace :global(.workspace-attention){margin:0 0 16px;padding:0;border:0;border-bottom:1px solid #e5e5e5;border-radius:0;background:#fff;overflow:visible}
 .workspace.workspace :global(.attention-heading){display:flex;align-items:center;gap:10px;min-height:56px;margin:0;padding:10px 0;list-style:none;cursor:pointer}
 .workspace.workspace :global(.attention-heading::-webkit-details-marker){display:none}
 .workspace.workspace :global(.attention-count){display:grid;place-items:center;min-width:24px;height:24px;padding:0 6px;flex:none;border-radius:7px;background:#f2f2f2;color:#595959;font-size:12px;font-weight:600}
@@ -98,13 +98,26 @@
 .workspace.workspace :global(.review-actions .review-secondary:hover:not(:disabled)){background:#f4f4f4}
 .workspace.workspace :global(.review-actions button:disabled){opacity:.5;cursor:default}
 .workspace.workspace :global(.review-form){display:grid;gap:8px;margin:14px 0 0;min-width:0}
-.workspace.workspace :global(.review-form label){margin:0;font-size:13px;font-weight:600;line-height:1.5;color:#292929}
-.workspace.workspace :global(.review-form input[type=date]),.workspace.workspace :global(.review-form textarea){display:block;box-sizing:border-box;width:100%;min-width:0;max-width:100%;min-height:48px;margin:0;padding:12px;border:1px solid #bcbcbc;border-radius:10px;background:#fff;color:#222;color-scheme:light;font:inherit;font-size:16px;line-height:1.5;box-shadow:none}
+.workspace.workspace :global(.review-form label){display:grid;gap:8px;min-width:0;margin:0;font-size:13px;font-weight:600;line-height:1.5;color:#292929}
+.workspace.workspace :global(.review-form input:not([type=hidden]):not([type=checkbox]):not([type=radio])),.workspace.workspace :global(.review-form select),.workspace.workspace :global(.review-form textarea){display:block;box-sizing:border-box;width:100%;min-width:0;max-width:100%;min-height:48px;margin:0;padding:12px;border:1px solid #bcbcbc;border-radius:10px;background:#fff;color:#222;color-scheme:light;font:inherit;font-size:16px;font-weight:400;line-height:1.5;box-shadow:none}
 .workspace.workspace :global(.review-form input[type=date]::-webkit-date-and-time-value){text-align:left;min-height:24px}
 .workspace.workspace :global(.review-form textarea){min-height:100px;resize:vertical}
-.workspace.workspace :global(.review-form input:focus-visible),.workspace.workspace :global(.review-form textarea:focus-visible){outline:2px solid #555;outline-offset:2px}
-.workspace.workspace :global(.review-form small){font-size:12px;line-height:1.5;color:#666}
+.workspace.workspace :global(.review-form input:focus-visible),.workspace.workspace :global(.review-form select:focus-visible),.workspace.workspace :global(.review-form textarea:focus-visible){outline:2px solid #555;outline-offset:2px}
+.workspace.workspace :global(.review-form small){display:block;font-size:12px;line-height:1.5;color:#666;overflow-wrap:anywhere}
 .workspace.workspace :global(.review-form .review-actions){margin-top:6px}
+.workspace.workspace :global(.review-form .review-checkbox){display:flex;align-items:flex-start;gap:10px;min-height:44px;padding:10px 0;font-weight:400;cursor:pointer}
+.workspace.workspace :global(.review-form .review-checkbox input){flex:none;width:18px;height:18px;min-height:18px;margin:1px 0 0;padding:0;accent-color:#171717}
+.workspace.workspace :global(.review-form .date-time-input-label){font-size:13px;font-weight:600;line-height:1.5}
+.workspace.workspace :global(.attention-primary),.workspace.workspace :global(.attention-related){min-width:0;overflow-wrap:anywhere}
+.workspace.workspace :global(.workspace-attention blockquote){max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}
+/* Pagination keeps equally sized buttons and gives the page label its own row on phones. */
+.workspace.workspace :global(:is(.property-library,.workspace-review-section) .live-pages){display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px}
+.workspace.workspace :global(:is(.property-library,.workspace-review-section) .live-pages button){width:100%;min-width:0;margin:0}
+.workspace.workspace :global(:is(.property-library,.workspace-review-section) .live-pages>span){order:0;width:auto;text-align:center}
+@media(max-width:480px){
+ .workspace.workspace :global(:is(.property-library,.workspace-review-section) .live-pages){grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .workspace.workspace :global(:is(.property-library,.workspace-review-section) .live-pages>span){order:1;grid-column:1/-1}
+}
 .workspace.workspace :global(.workspace-attention .attention-open){display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;margin:12px 0 18px;padding:10px 14px;border:1px solid #d7d7d7;border-radius:10px;background:#fff;color:#333;font-size:13px;font-weight:500;line-height:1.5}
 .workspace.workspace :global(.attention-single>.attention-open){margin-bottom:0}
 .workspace.workspace :global(.sms-review-card p){font-size:14px;line-height:1.55;margin:0 0 14px;text-align:left;color:#525252}
@@ -292,7 +305,7 @@
 .workspace.workspace.workspace :global(.property-card-estimates strong){font-size:14px;font-weight:550;line-height:1.4;color:#171717;overflow-wrap:anywhere}
 .workspace.workspace.workspace :global(.property-open-control){grid-row:2;grid-column:3;align-self:center;border:0;background:transparent;color:#777;padding:0}
 .workspace.workspace.workspace :global(.property-quick-actions){padding:0 16px 15px;gap:8px;display:flex}
-.workspace.workspace.workspace :global(.property-quick-actions button){display:flex;align-items:center;justify-content:center;gap:8px;flex:1;min-height:42px;padding:10px 8px;border:1px solid #d8d8d8;border-radius:9px;background:#fff;color:#171717;font-size:13px;font-weight:600}
+.workspace.workspace.workspace :global(.property-quick-actions button){display:flex;align-items:center;justify-content:center;gap:8px;flex:1;min-height:44px;padding:10px 8px;border:1px solid #d8d8d8;border-radius:9px;background:#fff;color:#171717;font-size:13px;font-weight:600}
 .workspace.workspace.workspace :global(.property-quick-actions button:first-child){background:linear-gradient(#222,#080808);border-color:#161616;color:#fff}
 .workspace.workspace.workspace :global(.property-latest-update){margin:0 16px 14px;padding:11px 13px;border:0;border-radius:10px;background:#f5f5f6;font-size:12px;line-height:1.5;color:#5c5c64}
 .workspace.workspace.workspace :global(.property-latest-update>span){display:block;margin:0 0 4px;font-size:10px;font-weight:600;color:#73737c}

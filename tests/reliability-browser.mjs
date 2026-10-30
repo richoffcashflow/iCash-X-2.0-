@@ -15,6 +15,7 @@ import {ownerOutreachFixture} from './helpers/owner-outreach-fixture.mjs';
 import {verifyConversationInbox} from './conversation-inbox-browser.mjs';
 import {verifyCloseConversions} from './close-conversion-browser.mjs';
 import {verifyWorkspace} from './workspace-browser-scenarios.mjs';
+import {verifyWorkspaceLayout} from './workspace-layout-browser.mjs';
 import {verifyWalkthrough} from './workspace-walkthrough-browser.mjs';
 import {verifyPurchaseAccess} from './purchase-access-browser.mjs';
 import {verifyLegacyTrial} from './legacy-trial-browser.mjs';
@@ -77,6 +78,7 @@ try{
    if(process.env.BROWSER_SCENARIOS==='conversation'){await verifyConversationInbox(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='close-conversion'){await verifyCloseConversions(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='workspace'){await verifyWorkspace(browser,base,options,name);continue;}
+   if(process.env.BROWSER_SCENARIOS==='workspace-layout'){await verifyWorkspaceLayout(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='support-coaching'){await verifySupportCoaching(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='access-help'){await verifyAccessHelp(browser,base,options,name,fixtureCookies);continue;}
    if(process.env.BROWSER_SCENARIOS==='walkthrough'){await verifyWalkthrough(browser,base,options,name);continue;}
@@ -165,6 +167,7 @@ try{
    console.log(`PASS ${name}: owner reports and aggregate experience → incident detail → refresh failure → recovery → private data cleared on denied access.`);
    await context.close();
    await verifyWorkspace(browser,base,options,name);
+   await verifyWorkspaceLayout(browser,base,options,name);
    await verifyConversationInbox(browser,base,options,name);
    await verifyCourse(browser,base,options,name);
   }finally{await browser.close();}

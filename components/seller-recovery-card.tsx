@@ -14,13 +14,14 @@ export function SellerRecoveryCard({item,onResolved}:{item:SellerRecoveryCase;on
  const [resolution,setResolution]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
  return <article data-unsaved-draft={resolution.trim()?'true':undefined}><p>{item.review_reason==='contact_checks_expired'?'The contact checks expired before this follow-up could be sent. Refresh and verify the contact checks before contacting this seller again. Saving a note does not restart outreach.':next[item.reason]??'Review the unanswered question and provide an accurate answer or a concrete follow-up.'}</p>
  {item.quote&&<blockquote className="reply-quote">{item.quote}</blockquote>}
+ <div className="review-form">
  <label htmlFor={`recovery-${item.id}`}>What resolved this?</label>
- <textarea id={`recovery-${item.id}`} value={resolution} maxLength={2000} rows={3} onChange={e=>setResolution(e.target.value)} placeholder="Record the answer or completed follow-up."/>
- <button disabled={busy||resolution.trim().length<10} onClick={async()=>{
+ <textarea id={`recovery-${item.id}`} aria-describedby={`recovery-help-${item.id}`} value={resolution} maxLength={2000} rows={3} onChange={e=>setResolution(e.target.value)} placeholder="Record the answer or completed follow-up."/>
+ <div className="review-actions"><button className="review-primary" disabled={busy||resolution.trim().length<10} onClick={async()=>{
   setBusy(true);setError('');try{
    const response=await fetch('/api/work/seller-recovery',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,version:item.updated_at,resolution:resolution.trim()})});
    const body=await response.json();if(!response.ok)throw Error(body.error??'Could not save the resolution.');onResolved();
   }catch(e){setError(e instanceof Error?e.message:'Could not save the resolution.');setBusy(false);}
- }}>Save resolution</button><small>This records your follow-up. Use the conversation controls to contact the seller.</small>
- {error&&<p role="alert">{error}</p>}</article>;
+ }}>Save resolution</button></div><small id={`recovery-help-${item.id}`}>This records your follow-up. Use the conversation controls to contact the seller.</small>
+ {error&&<p role="alert">{error}</p>}</div></article>;
 }
