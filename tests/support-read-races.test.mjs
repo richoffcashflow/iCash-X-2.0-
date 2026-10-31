@@ -17,7 +17,7 @@ function mount(file,exportName){
   useCallback(fn,deps){const i=cursor++;if(!same(slots[i]?.deps,deps))slots[i]={deps,fn};return slots[i].fn;},
   useEffect(fn,deps){const i=cursor++;if(!same(slots[i]?.deps,deps)){const old=slots[i];slots[i]={deps};pending.push(()=>{old?.cleanup?.();slots[i].cleanup=fn();});}},
  };
- const supportRequest=(path,init={})=>new Promise(resolve=>calls.push({path,init,resolve}));
+ const supportRequest=(path,init={})=>new Promise((resolve,reject)=>calls.push({path,init,resolve,reject}));
  const mocks={react:hooks,'@/lib/support-client':{supportRequest},'@/lib/support-refund-evidence':{savedRefundCase:()=>null},'@/components/operator-exceptions':{OperatorExceptions:'OperatorExceptions'},'@/components/support-legacy-offer-review':{SupportLegacyOfferReview:'SupportLegacyOfferReview'},'@/components/support-message-content':{SupportMessageContent:'SupportMessageContent'},'@/components/support-quality-panel':{SupportQualityPanel:'SupportQualityPanel'},'@/components/account-access':{AccountAccess:'AccountAccess'}};
  const code=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
  const mod={exports:{}};
@@ -53,6 +53,12 @@ answer(detail(h,'one'),contents('one'));await h.flush();assert.equal(text(select
 const authStart=h.calls.length;h.refresh();answer(detail(h,'one'),{error:'Denied'},403);await h.flush();queue(h,authStart);await h.flush();
 assert(!text(h.tree).includes('Customer one'));assert(!text(h.tree).includes('Customer two'));assert.match(text(h.tree),/Sign in with a support operator/);h.close();
 const unauthorized=mount('components/support-dashboard.tsx','SupportDashboard');await unauthorized.flush();queue(unauthorized);await unauthorized.flush();const unauthorizedStart=unauthorized.calls.length;unauthorized.refresh();queue(unauthorized,unauthorizedStart,401);await unauthorized.flush();assert(!text(unauthorized.tree).includes('Customer one'));assert.match(text(unauthorized.tree),/Sign in with a support operator/);unauthorized.close();
+
+// One denied queue clears immediately even when its sibling request is stalled
+// and later fails; Promise.all rejection cannot hide authorization loss.
+const mixed=mount('components/support-dashboard.tsx','SupportDashboard');await mixed.flush();queue(mixed);await mixed.flush();const mixedStart=mixed.calls.length;mixed.refresh();
+const pair=mixed.calls.slice(mixedStart);answer(pair[0],{error:'Denied'},403);await mixed.flush();assert(!text(mixed.tree).includes('Customer one'));assert.match(text(mixed.tree),/Sign in with a support operator/);
+pair[1].reject(Error('Temporary network failure'));await mixed.flush();assert.match(text(mixed.tree),/Sign in with a support operator/);mixed.close();
 
 // A customer send can lose its session while an earlier background read is pending.
 const chat=mount('components/support-chat.tsx','SupportChat');await chat.flush();

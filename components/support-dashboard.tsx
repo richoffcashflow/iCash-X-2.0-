@@ -30,10 +30,14 @@ export function SupportDashboard(){
  const clear=useCallback(()=>{sequence.current++;queueSequence.current++;detailReading.current=false;selectedRef.current=null;pending.current={};setTickets([]);setSelected(null);setMessages([]);setEvidence([]);setNotification(null);setDrafts({});setPurchases([]);setCancellations([]);setDeployment('');setToolsOpen(false);setQualityOpen(false);setNotice('');setLoading(false);setBusy(false);},[]);
  const loadQueue=useCallback(async()=>{
   const seq=++queueSequence.current;
+  const read=async<T,>(path:string)=>{
+   const response=await supportRequest<T>(path,{cache:'no-store'});
+   if(seq===queueSequence.current&&[401,403].includes(response.status)){clear();setError('Sign in with a support operator account to open this inbox.');}
+   return response;
+  };
   try{
-   const [a,b]=await Promise.all([supportRequest<Queue>('/api/support/admin',{cache:'no-store'}),supportRequest<AccessQueue>('/api/support/admin/access',{cache:'no-store'})]);
+   const [a,b]=await Promise.all([read<Queue>('/api/support/admin'),read<AccessQueue>('/api/support/admin/access')]);
    if(seq!==queueSequence.current)return;
-   if([401,403].includes(a.status)||[401,403].includes(b.status)){clear();setError('Sign in with a support operator account to open this inbox.');return;}
    if(!a.ok||!b.ok)throw Error(a.data.error||b.data.error||'Could not refresh the inbox.');
    const items:Ticket[]=[...a.data.threads.map(t=>({...t,kind:'account' as const})),...b.data.requests.map(t=>({...t,kind:'access' as const,subject:t.email}))];
    setTickets(items.sort((a,b)=>new Date(b.updated_at).getTime()-new Date(a.updated_at).getTime()));setCancellations(a.data.cancellations);setPurchases(b.data.purchases);setDeployment(a.data.deployment?.detail??'');setError('');
