@@ -68,6 +68,7 @@ try {
  const retiredThread=(await one("insert into icash_text_threads(account_id,deal_id,sender,recipient,paused,retired_at) values($1,$2,$3,$4,true,now()) returning id",[a,d1,sender,phone])).id;
  const retiredMessage=(await one("insert into icash_text_messages(thread_id,account_id,direction,body,state) values($1,$2,'outgoing','Retired queue','ready') returning id",[retiredThread,a])).id;
  await pg.exec(read('config/sms-property-routing.sql'));
+ await pg.exec(read('config/incoming-text-routing-performance.sql'));
  assert.equal(await rpc('icash_sms_message_route_current',[a,legacyOut]),true,'migration preserves existing sole-property queue');
  assert.equal((await one('select route_revision from icash_text_messages where id=$1',[retiredMessage])).route_revision,null,'retired queue never grandfathered');
  await assert.rejects(q('update icash_text_threads set retired_at=null where id=$1',[retiredThread]),/cannot be reopened/);
