@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {readVoiceOutreachContext,withinOutreachHours,outreachHoursPolicyVersion} from '../lib/outreach-hours.ts';
+import {contactEligibility} from '../lib/live-dispatch-policy.ts';
+const now=Date.parse('2026-10-31T05:00:00Z'); // Midnight Central.
+const base={timezone:'America/Chicago',startHour:9,endHour:21,activeConversation:false,policyVersion:outreachHoursPolicyVersion};
+const permission={phone:'+12142185280',timezone:base.timezone,local_start_hour:9,local_end_hour:21,permission_until:new Date(now+86400000).toISOString(),dnc_checked_at:new Date(now-1000).toISOString(),dnc_clear:true,revoked_at:null};
+const context=readVoiceOutreachContext({...base,ownerDemoRequestedUntil:new Date(now+60000).toISOString()});
+assert.equal(withinOutreachHours(base,now),false);
+assert.equal(withinOutreachHours({...base,activeConversation:true},now),false);
+assert.equal(contactEligibility({...permission,sellerCallbackVerified:true},now,base).ready,false);
+assert.equal(withinOutreachHours(context,now),true);
+assert.equal(contactEligibility(permission,now,context).ready,true);
+assert.equal(withinOutreachHours(context,now+60000),false,'expiry does not extend in application memory');
+for(const expiry of [null,true,'bad',new Date(now).toISOString(),new Date(now+300001).toISOString()])assert.equal(withinOutreachHours(readVoiceOutreachContext({...base,ownerDemoRequestedUntil:expiry}),now),false);
+assert.equal(contactEligibility({...permission,revoked_at:new Date(now).toISOString()},now,context).ready,false);
+assert.equal(contactEligibility({...permission,permission_until:new Date(now).toISOString()},now,context).ready,false);
+assert.equal(contactEligibility({...permission,dnc_clear:false},now,context).ready,false);
+assert.equal(withinOutreachHours(base,Date.parse('2026-10-31T14:00:00Z')),true);
+assert.equal(readVoiceOutreachContext({...base,timezone:'invalid'}),null);
+console.log('PASS: fresh server-bound owner demo expiry only; ordinary hours, callback flags, expiry and contact checks remain enforced.');

@@ -69,8 +69,8 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  const suppressed=await db<{phone:string}[]>(`icash_text_suppressions?phone=eq.${encodeURIComponent(p.phone)}&select=phone&limit=1`);if(suppressed.length)return hold('contact_opted_out');
  // This flag is derived exclusively from a fresh server-side database check.
  p.sellerConsentVerified=p.seller_intake_id?await db<boolean>('rpc/icash_seller_voice_permission_current','POST',{p_account:accountId,p_permission:p.id})===true:false;
- // Every new outbound call uses the current window. Conversation evidence
- // remains available for daytime follow-up spacing, never an hours bypass.
+ // Ordinary outbound calls use the current window. Only an exact owner
+ // self-demo with a fresh server-verified request may override that window.
  // Final database admission rechecks the clock before the provider dial.
  const outreach=readVoiceOutreachContext(await db<unknown>('rpc/icash_voice_outreach_context','POST',{p_account:accountId,p_job:j.id}));
  if(!outreach)return hold('contact_hours_required');
