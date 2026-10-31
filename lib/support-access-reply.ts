@@ -9,7 +9,7 @@ export function missingAccessCodeReply(messages:Turn[],check?:AccessInvestigatio
  const question=users.at(-1)??'',history=users.join('\n');
  const asked=(pattern:RegExp)=>replies.some(reply=>pattern.test(reply));
  const already=/already|few times|several times|many times|again|did that|done that|tried that|tried it/i.test(question);
- const bothTried=users.some(text=>/(?:tried|used|requested).{0,40}both|both.{0,50}(?:tried|no code|not.*(?:send|arrive))/i.test(text)
+ const bothTried=users.some(text=>/^both[.!\s]*$/i.test(text)||/(?:tried|used|requested).{0,40}both|both.{0,50}(?:tried|no code|not.*(?:send|arrive))/i.test(text)
   ||(/email/i.test(text)&&/phone|text|sms/i.test(text)&&/no code|no .*code|not gotten|not received|haven't received|already used|tried|nothing/i.test(text)));
  const receiptKnown=asked(/email on your iCash X payment receipt|receipt email match/)
   ||users.some(text=>/(?:email|receipt).{0,30}match|matches.{0,20}receipt/i.test(text));
@@ -30,7 +30,7 @@ export function missingAccessCodeReply(messages:Turn[],check?:AccessInvestigatio
  if(check?.email!=='unavailable'&&!emailTried&&!already)return ask(prefix+'Use the email on your payment receipt to request one fresh code, then check that inbox and its spam or junk folder. Does a code arrive?');
  if(check?.phone==='configured'&&!phoneTried&&!already)return ask('Email hasn’t worked. Choose “Use my checkout phone,” leave the optional receipt email blank, and select “Text me a code.” Does a box labeled “Text code” appear? Don’t share the code.');
  if(!asked(/main button|field labels and button text/)&&!users.some(text=>/no (?:error )?message|nothing (?:appears|happens)|doesn't (?:say|show) anything/i.test(text)))return ask(prefix+'You’ve already tried requesting a code, so please don’t request another yet. What does the main button say now: “Email me a code,” “Text me a code,” “Sign in,” or “One moment…”?');
- if(!asked(/payment date and amount|date and amount on (?:your|the) receipt/)&&!users.some(text=>/\$\s*\d/.test(text)))return ask(prefix+'The code requests haven’t restored access. What are the payment date and amount on your receipt? Leave out card details and codes; you don’t need to pay again.');
+ if(!asked(/payment date and amount|date and amount on (?:your|the) receipt/)&&!users.some(text=>/\$\s*\d|\d\s*\$/.test(text)))return ask(prefix+'The code requests haven’t restored access. What are the payment date and amount on your receipt? Leave out card details and codes; you don’t need to pay again.');
  if(already)return open('You already tried the suggested steps. I don’t have a confirmed delivery or an access fix, so I’m keeping this issue open. No more code requests are needed right now.');
  return open(prefix+(checked?'I checked the available sign-in records, but those checks do not confirm that a code reached you. ':'')+'Access is still unresolved. Your earlier details are saved here; I won’t restart the same instructions.');
 }

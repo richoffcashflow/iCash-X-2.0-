@@ -41,7 +41,7 @@ for(const question of ['Where do leads come from?','No leads yet, what do I do?'
 }
 for(const question of ['How do I add the listing for this?','Where do I add listings?','How can I upload a property?','Do I need to enter leads myself?']){
  const response=await replyToSupport({...leadsContext,messages:[user(question)]},async()=>{throw Error('Listing guidance must not need the model');});
- assert.match(response.reply,/don’t need to add listings or upload properties/);assert.match(response.reply,/incoming leads appear in Leads/);assert.equal(response.ai,false);
+ assert.match(response.reply,/cannot add, upload or import their own leads/);assert.match(response.reply,/appear in Leads/);assert.equal(response.ai,false);
  const held=supportConversationFallback({...leadsContext,messages:[user(question)],evidence:[check('readiness','attention','readiness_blocked')]});
  assert.equal(held.status,'resolved','A feature question needs an answer, not unrelated account troubleshooting');assert.doesNotMatch(held.reply,/Keep it running|readiness|credits/i);
 }
@@ -127,7 +127,7 @@ try{
   assert.deepEqual(JSON.parse(body.messages[1].content).verifiedChecks,[],'A product how-to does not need unrelated account checks');
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'Review the seller conversation, numbers and agreement in Documents, then sign if appropriate. Which step are you on?',answered:false})}}]});
  });
- const context={kind:'account',messages:[user('The bot stopped'),assistant('Which screen?'),user('The workspace, sk_live_abcdefghijkl and me@example.invalid')],evidence:[{key:'work',status:'attention',detail:'The bot is paused.',source:'fixture',observedAt:new Date().toISOString()}]};let calls=0;
+ const context={kind:'account',messages:[user('My workspace freezes while the bot is running.'),assistant('Which screen?'),user('The workspace, sk_live_abcdefghijkl and me@example.invalid')],evidence:[{key:'work',status:'attention',detail:'The bot is paused.',source:'fixture',observedAt:new Date().toISOString()}]};let calls=0;
  const fetcher=async(url,init)=>{calls++;const body=JSON.parse(init.body);assert.equal(url,'https://api.openai.com/v1/chat/completions');assert.equal(body.store,false);assert.equal(body.response_format.json_schema.strict,true);assert.equal(body.tools,undefined);assert(init.signal);assert.match(body.messages[1].content,/Which screen/);assert(!body.messages[1].content.includes('sk_live_abcdefghijkl'));assert(!body.messages[1].content.includes('me@example.invalid'));return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'Your bot is paused. Are you ready to resume it from the workspace?',answered:false})}}]});};
  const response=await replyToSupport(context,fetcher);assert(response.ai);assert.match(response.reply,/paused/);assert.equal(calls,1);
  const modelReply=(reply,answered,needsTeam=false)=>async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply,answered})}}]});
