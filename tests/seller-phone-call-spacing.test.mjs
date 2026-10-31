@@ -269,5 +269,79 @@ try{
   await pg.exec('delete from fixture_requested');await q('insert into fixture_active values($1,$2)',[owner,next.id]);assert.equal(await allow(next.id,owner),true);
   await q('update icash_call_recordings set call_sid=null,call_ended_at=null where id=$1',[record]);assert.equal(await allow(next.id,owner),false,'even real requests do not erase unknown attempts');
  });
+ // Install the exact production context/selectors with a controlled night clock.
+ const hoursBaseline=JSON.parse(read('tests/fixtures/owner-demo-hours-baseline.json'));
+ await pg.exec(`
+ create view icash_timezone_names as select name from pg_timezone_names;
+ create table icash_property_controls(account_id uuid,property_id text,manual boolean);
+ create table fixture_hours(open boolean,spend_allowed boolean,reservations integer);
+ insert into fixture_hours values(false,true,0);
+ create function icash_outreach_timezone(text,text default null) returns text language sql as $$select $1$$;
+ create function icash_outreach_window_open(text,text default null,timestamptz default now()) returns boolean language sql as $$select open from public.fixture_hours$$;
+ create function icash_outreach_active_conversation(uuid,uuid,text,timestamptz) returns boolean language sql as $$select false$$;
+ create function icash_buyer_voice_context(uuid) returns jsonb language sql as $$select null::jsonb$$;
+ create function icash_outgoing_voice_capacity_open() returns boolean language sql as $$select true$$;
+ create function icash_recording_private.voice_capacity_snapshot() returns jsonb language sql as $$select '{}'::jsonb$$;
+ create function icash_recording_private.voice_queue_slot_from_snapshot(uuid,uuid,jsonb) returns boolean language sql as $$select true$$;
+ create function icash_voice_credit_bound(uuid,text,uuid) returns jsonb language sql as $$select null::jsonb$$;
+ create function icash_reserve_operation(uuid,text,uuid,timestamptz,timestamptz,boolean) returns jsonb language plpgsql as $$begin if not (select spend_allowed from public.fixture_hours) then raise exception 'Fixture budget blocked';end if;update public.fixture_hours set reservations=reservations+1;return '{}';end$$;
+ create function icash_claim_operation(text) returns boolean language sql as $$select spend_allowed from public.fixture_hours$$;
+ set check_function_bodies=off;
+ `);
+ for(const definition of Object.values(hoursBaseline))await pg.exec(definition);
+ await pg.exec('set check_function_bodies=on');
+ const hoursSql=read('config/owner-demo-requested-hours.sql');
+ assert.equal(hoursSql,read('supabase/migrations/20261031131902_owner_demo_requested_hours.sql'));
+ await pg.exec(hoursSql);await pg.exec(hoursSql);
+ // Verify both production queue selectors preserve every unrelated byte.
+ for(const name of ['icash_issue_ready_voice_ticket','icash_resume_prospecting_ticket']){
+  const actual=await val('select pg_get_functiondef(oid) from pg_proc where proname=$1',[name]);
+  assert.equal(actual.replace(/\(public\.icash_outreach_window_open\(current_target\.timezone,([\s\S]*?)clock_timestamp\(\)\) or public\.icash_owner_demo_call_current\(v.account_id,v.id\)\)/g,'public.icash_outreach_window_open(current_target.timezone,$1clock_timestamp())'),hoursBaseline[name]);
+ }
+ const hours=(id,account=owner)=>val('select icash_voice_outreach_hours_current($1,$2)',[account,id]);
+ await scenario('night queue selects fresh owner self-demo but not ordinary seller',async()=>{
+  const ordinary=await job(),next=await ownerDemo();
+  await pg.exec("update icash_voice_scheduler set last_dispatch_at=now()-interval '1 minute'");
+  await val('select icash_issue_ready_voice_ticket()');
+  assert.equal(await val('select state from icash_voice_jobs where id=$1',[next.id]),'issued');
+  assert.equal(await val('select state from icash_voice_jobs where id=$1',[ordinary]),'ready');
+ });
+ await scenario('night owner demo reaches reservation, claim and final dial, while money remains required',async()=>{
+  const next=await ownerDemo(),rate=randomUUID();
+  assert.equal(await hours(next.id),true);
+  const context=await val('select icash_voice_outreach_context($1,$2)',[owner,next.id]);
+  assert(Date.parse(context.ownerDemoRequestedUntil)>Date.now());
+  await q("update icash_screening_jobs set snapshot=$2 where id=$1",[next.screen,{propertyId:'fixture-demo'}]);
+  await q("insert into icash_operation_rates(id,operation,voice_max_duration_seconds) values($1,'seller_call',600)",[rate]);
+  await q('update icash_voice_configs set seller_rate_id=$2,max_duration_seconds=600 where account_id=$1',[owner,rate]);
+  await q("update icash_voice_jobs set state='issued' where id=$1",[next.id]);
+  assert.equal(await val("select icash_reserve_paced_voice($1,$2,$3,now()+interval '1 day',now(),true)",[owner,next.id,rate]),true);
+  assert.equal(await val('select reservations from public.fixture_hours'),1);
+  const final=await dialRow(next.id,ownerPhone);
+  await q('update icash_operation_spend set rate_id=$2 where operation_key=$1',['voice:'+next.id,rate]);
+  await pg.exec('update public.fixture_hours set spend_allowed=false');
+  assert.equal(await val('select icash_claim_voice_job($1)',[next.id]),false,'budget failure still prevents claim');
+  await pg.exec('update public.fixture_hours set spend_allowed=true');
+  assert.equal(await val('select icash_claim_voice_job($1)',[next.id]),true);
+  assert((await claim(final,next.id,owner)).dial_claimed_at);
+  assert.equal(await claim(final,next.id,owner),null);
+ });
+ await scenario('night ordinary callers, generic callbacks, expired/altered owner receipts and inflight calls stay blocked',async()=>{
+  const ordinary=await job();assert.equal(await hours(ordinary,a),false);
+  await q('insert into fixture_requested values($1,$2)',[a,ordinary]);assert.equal(await hours(ordinary,a),false);
+  const next=await ownerDemo();assert.equal(await hours(next.id),true);
+  for(const change of [
+   "update icash_optin_call_requests set requested_at=now()-interval '6 minutes',expires_at=now()-interval '1 minute'",
+   "update icash_optin_call_requests set requested_by=gen_random_uuid()",
+   "update icash_optin_call_requests set phone='+12145550999'",
+   "update icash_contact_permissions set revoked_at=now()",
+   "update icash_accounts set bot_paused=true",
+   "insert into icash_text_suppressions values('"+ownerPhone+"')"
+  ]){await pg.exec('savepoint mutation');await pg.exec(change);assert.equal(await hours(next.id),false,change);await pg.exec('rollback to mutation');}
+  await q("update icash_voice_jobs set state='dispatching' where id=$1",[next.id]);
+  const final=await dialRow(next.id,ownerPhone);
+  await pg.exec("update icash_optin_call_requests set requested_at=now()-interval '6 minutes',expires_at=now()-interval '1 minute'");
+  assert.equal(await claim(final,next.id,owner),null,'expiry is rechecked at the final provider boundary');
+ });
  console.log(`Seller phone spacing: ${scenarios} offline database scenarios passed; owner fresh-demo repeats, real callback receipts, expired/unknown-call holds, exact final dial admission, tenant boundaries, private ACLs and no paid traffic.`);
 }finally{await pg.close();}
