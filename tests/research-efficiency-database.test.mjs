@@ -77,7 +77,7 @@ const ownerRate=uuid(9);
 await q("insert into icash_operation_rates(id,operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled) values($1,'property_search','fixture-search',51,'{\"dealmachine\":100000}','SYNTHETIC',now(),now()+interval '10 days',true),($2,'owner_enrichment','fixture-owner',105,'{\"dealmachine\":250000}','SYNTHETIC',now(),now()+interval '10 days',true)",[rate,ownerRate]);
 for(const a of [account,other]){
  await q("insert into icash_wallets(account_id,balance_cents) values($1,2500)",[a]);
- await q("insert into icash_discovery_configs(account_id,enabled,auto_enabled,zip,rate_id,property_credit_micros,data_rights_until,seller_cost_reserve_cents,next_page,revision,contacts_enabled,contact_rate_id,contact_credit_cap) values($1,true,true,'75217',$2,10000,'2099-01-01',0,1,$3,true,$4,25)",[a,rate,revision,ownerRate]);
+ await q("insert into icash_discovery_configs(account_id,enabled,auto_enabled,zip,rate_id,property_credit_micros,data_rights_until,seller_cost_reserve_cents,next_page,revision,contacts_enabled,contact_rate_id,contact_credit_cap) values($1,true,true,'75217',$2,10000,'2099-01-01T00:00:00Z',0,1,$3,true,$4,25)",[a,rate,revision,ownerRate]);
  await q('insert into icash_prospecting_budgets values($1,$2,2500,1250,now())',[a===account?1:2,a]);
 }
 const prepare=a=>val('select icash_prepare_research_efficiency($1)',[a]);
@@ -113,7 +113,7 @@ assert.equal(await val('select icash_finish_research_exclusions($1,$2)',[claim.t
 assert.equal(await val('select icash_finish_research_exclusions($1,$2)',[claim.token,{ok:true,listId:'fixture-list',ids:claim.ids}]),true);
 await prepare(account);c=(await q('select * from icash_discovery_configs where account_id=$1',[account])).rows[0];assert.equal(c.research_list_id,'fixture-list');
 await q('select icash_discovery_filter_state_v2($1,$2,1)',[account,c.revision]);
-const scope={p_zip:c.zip,p_revision:c.revision,p_page:1,p_per_page:25,p_rate:c.rate_id,p_unit:10000,p_permission_until:'2099-01-01',p_setup_revision:null,p_market_mode:null,p_market:null};
+const scope={p_zip:c.zip,p_revision:c.revision,p_page:1,p_per_page:25,p_rate:c.rate_id,p_unit:10000,p_permission_until:'2099-01-01T00:00:00Z',p_setup_revision:null,p_market_mode:null,p_market:null};
 const policy={version:'research-efficiency-v1',exclusionListId:'fixture-list'};
 assert.equal(await val('select icash_reserve_research_discovery($1,$2,$3,$4)',[account,scope,plan(),{...policy,exclusionListId:'wrong'}]),false);
 assert.equal(await val('select icash_reserve_research_discovery($1,$2,$3,$4)',[account,scope,plan(),policy]),true);
