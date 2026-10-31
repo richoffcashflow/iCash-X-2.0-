@@ -48,11 +48,13 @@ try{
  assert.equal(currentSupportIssue(history),'My bot is not working');
  const shifted=await ask([...history,user('Where is the course?')]);assert.match(shifted.reply,/Open Course/);assert.doesNotMatch(shifted.reply,/calling checks|recorded call/);
  const stats=await ask([user('Check my stats')]);assert.match(stats.reply,/3 recorded call attempts and 7 texts \(6 delivered\)/);assert.doesNotMatch(stats.reply,/today|all delivered/);
+ const today=await ask([user('How many calls today?')]);assert.match(today.reply,/not only the period you asked about/);
+ const callProblem=await ask([user('What should I do about calls not working?')]);assert.match(callProblem.reply,/calling checks/);
  const voicemails=[user('What should I do now when the seller replies are voicemail or a business service')];
  const vm=await ask(voicemails);assert.match(vm.reply,/not a seller response/);assert.match(vm.reply,/without leaving a message/);
  const next=await ask([...voicemails,assistant(vm.reply),user('So should I do now')]);assert.equal(next.reply,vm.reply);
  const nothing=await ask([...voicemails,assistant(vm.reply),user('So I have nothing to do right')]);assert.match(nothing.reply,/still need to review/);assert.equal(nothing.status,'open');
- for(const question of ['How long does it take the bot to reach out to leads once they are found?','When will bot start making calls?']){
+ for(const question of ['How long does it take the bot to reach out to leads once they are found?','When will bot start making calls?','How long does it take for it to text or call']){
   const answer=await ask([user(question)]);assert.match(answer.reply,/9 AM to 9 PM/);assert.doesNotMatch(answer.reply,/next lead will appear/);
  }
  for(const question of ['Okay thank you I will','Thanks','Ok']){
