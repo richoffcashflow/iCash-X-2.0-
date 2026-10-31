@@ -8,7 +8,7 @@ export const reliabilitySeverityGuidance={
  critical:'Immediate attention. Core background work is unhealthy or unavailable and automated workflows may be affected.',
 };
 export function reliabilityItemPriority(issue:{kind:string;since:string},now=Date.now()):'minor'|'high'{
- return ['text_receipt','text_review','call_receipt','contract_delivery','contract_preparation'].includes(issue.kind)||now-Date.parse(issue.since)>=30*60000?'high':'minor';
+ return ['text_receipt','text_review','call_receipt','contract_delivery','contract_preparation','owner_export'].includes(issue.kind)||now-Date.parse(issue.since)>=30*60000?'high':'minor';
 }
 /** Keep thresholds aligned with icash_reliability_severity, verified together
  * using the same cases. Missing monitoring is never reported as healthy. */
