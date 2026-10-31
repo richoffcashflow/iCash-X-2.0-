@@ -14,8 +14,9 @@ const definition=name=>one("select pg_get_functiondef($1::regprocedure) definiti
 try {
  await q('delete from icash_dnc_verification_receipts where id=$1',[dnc]);
  await q('delete from icash_dnc_verification_sources where id=$1',[source]);
+ // A literal Z must format UTC, not the executor/database session timezone.
  const operation='owners:'+account+':'+screening;
- await q("update icash_owner_contacts set result=jsonb_set(result,'{fetchedAt}',to_jsonb(to_char(now()-interval '1 hour','YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'))),created_at=now()-interval '56 minutes' where screening_id=$1",[screening]);
+ await q("update icash_owner_contacts set result=jsonb_set(result,'{fetchedAt}',to_jsonb(to_char((now()-interval '1 hour') at time zone 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'))),created_at=now()-interval '56 minutes' where screening_id=$1",[screening]);
  await q("update icash_operation_spend set created_at=now()-interval '59 minutes',dispatched_at=now()-interval '58 minutes',settled_at=now()-interval '57 minutes' where operation_key=$1",[operation]);
  for(const [field,amount] of [['used',1],['people',1],['properties',0],['deduplicated',0]]) {
   const key=operation+(field==='used'?'':':'+field);
@@ -48,7 +49,7 @@ try {
   ["update icash_cost_observations set observed_at=now()-interval '2 hours' where event_key=$1",[operation]],
   ["update icash_owner_contacts set result=result-'fetchedAt' where screening_id=$1",[screening]],
   ["update icash_owner_contacts set result=jsonb_set(result,'{fetchedAt}','\"invalid timestamp\"') where screening_id=$1",[screening]],
-  ["update icash_owner_contacts set result=jsonb_set(result,'{fetchedAt}',to_jsonb(to_char(now()+interval '1 hour','YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'))) where screening_id=$1",[screening]],
+  ["update icash_owner_contacts set result=jsonb_set(result,'{fetchedAt}',to_jsonb(to_char((now()+interval '1 hour') at time zone 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'))) where screening_id=$1",[screening]],
   ["update icash_owner_contacts set result=jsonb_set(result,'{contacts}','null') where screening_id=$1",[screening]],
   ["update icash_owner_contacts set result=jsonb_set(result,'{contacts}',(select jsonb_agg('{}'::jsonb) from generate_series(1,26))) where screening_id=$1",[screening]],
   ["update icash_owner_contacts set result=jsonb_set(result,'{requestedPersonIds}','[]') where screening_id=$1",[screening]],

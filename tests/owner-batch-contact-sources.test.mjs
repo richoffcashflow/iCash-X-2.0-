@@ -15,7 +15,7 @@ try{
  await q('delete from icash_dnc_verification_receipts where id=$1',[dnc]);
  await q('delete from icash_dnc_verification_sources where id=$1',[source]);
  await q("update icash_operation_spend set created_at=now()-interval '59 minutes',dispatched_at=now()-interval '58 minutes',settled_at=now()-interval '57 minutes' where operation_key=$1",[operation]);
- await q("update icash_owner_contacts set result=result||jsonb_build_object('fetchedAt',to_char(now()-interval '57 minutes','YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),'allocation',jsonb_build_object('batchId',$2::text,'method','unique-person-order-v1','sharedContacts',0)),created_at=now()-interval '56 minutes' where screening_id=$1",[screening,batch]);
+ await q("update icash_owner_contacts set result=result||jsonb_build_object('fetchedAt',to_char((now()-interval '57 minutes') at time zone 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),'allocation',jsonb_build_object('batchId',$2::text,'method','unique-person-order-v1','sharedContacts',0)),created_at=now()-interval '56 minutes' where screening_id=$1",[screening,batch]);
  for(const [field,amount] of [['used',1],['people',1],['properties',0],['deduplicated',0]]){
   const key=operation+(field==='used'?'':':'+field);
   await q("insert into icash_cost_observations(provider,event_key,source_ref,amount,units,observed_at) values('dealmachine',$1,'dealmachine:owners:'||$1,$2,'provider_credits',now()-interval '57 minutes')",[key,amount]);
@@ -68,7 +68,7 @@ try{
   assert.equal(result.observations,1,'valid shared contacts can proceed without another lookup');
  });
  await isolated(async()=>{
-  await q("update icash_owner_contacts set result=result-'allocation'||jsonb_build_object('fetchedAt',to_char(now()-interval '1 hour','YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')) where screening_id=$1",[screening]);
+  await q("update icash_owner_contacts set result=result-'allocation'||jsonb_build_object('fetchedAt',to_char((now()-interval '1 hour') at time zone 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')) where screening_id=$1",[screening]);
   assert.equal((await one('select icash_dealmachine_owner_source_started_at($1,$2)=icash_dealmachine_request_started_at(result) value from icash_owner_contacts where screening_id=$2',[account,screening])).value,true,'legacy request timestamp unchanged');
   assert.equal((await rpc('icash_ingest_dealmachine_dnc_observations',{p_account:account,p_user:user,p_screening:screening})).observations,1);
  });
