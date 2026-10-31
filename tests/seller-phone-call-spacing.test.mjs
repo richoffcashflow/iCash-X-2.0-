@@ -10,6 +10,8 @@ const baseline=JSON.parse(read('tests/fixtures/seller-phone-spacing-baseline.jso
 const sql=read('config/seller-phone-call-spacing.sql');
 const demoSql=read('config/owner-demo-call-spacing.sql');
 assert.equal(demoSql,read('supabase/migrations/20261031012000_owner_demo_call_spacing.sql'));
+const callbackSql=read('config/owner-demo-requested-callbacks.sql');
+assert.equal(callbackSql,read('supabase/migrations/20261031012100_owner_demo_requested_callbacks.sql'));
 assert.equal(sql,read('supabase/migrations/20261020000300_seller_phone_call_spacing.sql'));
 const pg=await PGlite.create(),q=(s,p=[])=>pg.query(s,p);
 const one=async(s,p=[])=>(await q(s,p)).rows[0];
@@ -92,6 +94,7 @@ try{
  const before={};for(const name of Object.keys(baseline))before[name]=await val('select pg_get_functiondef(oid) from pg_proc where proname=$1',[name]);
  await pg.exec(sql);
  await pg.exec(demoSql);await pg.exec(demoSql);
+ await pg.exec(callbackSql);await pg.exec(callbackSql);
  for(const role of ['anon','authenticated'])assert.equal(await val("select has_function_privilege($1,'icash_owner_demo_call_current(uuid,uuid)','execute')",[role]),false);
  assert.equal(await val("select has_function_privilege('service_role','icash_owner_demo_call_current(uuid,uuid)','execute')"),true);
  assert.equal(await val("select has_function_privilege('anon','icash_seller_phone_call_current(uuid,uuid)','execute')"),false);
@@ -256,5 +259,15 @@ try{
   const old=await job(owner,ownerPhone);await attempted(old,5,{recipient:ownerPhone});
   const other=await job(b,ownerPhone);assert.equal(await allow(other,b),false);
  });
- console.log(`Seller phone spacing: ${scenarios} offline database scenarios passed; owner fresh-demo repeats, expired/unknown-call holds, exact final dial admission, tenant boundaries, private ACLs and no paid traffic.`);
+ await scenario('real owner conversation and requested callback receipts preserve the existing service path',async()=>{
+  const next=await ownerDemo(),old=await job(owner,ownerPhone),record=await attempted(old,180,{recipient:ownerPhone});
+  await q("update icash_call_recordings set call_ended_at=now()-interval '179 minutes' where id=$1",[record]);
+  await pg.exec("update icash_optin_call_requests set requested_at=now()-interval '6 minutes',expires_at=now()-interval '1 minute'");
+  await q('update icash_voice_jobs set sms_source_message_id=$2 where id=$1',[next.id,randomUUID()]);
+  assert.equal(await allow(next.id,owner),false,'a callback flag alone is still insufficient');
+  await q('insert into fixture_requested values($1,$2)',[owner,next.id]);assert.equal(await allow(next.id,owner),true);
+  await pg.exec('delete from fixture_requested');await q('insert into fixture_active values($1,$2)',[owner,next.id]);assert.equal(await allow(next.id,owner),true);
+  await q('update icash_call_recordings set call_sid=null,call_ended_at=null where id=$1',[record]);assert.equal(await allow(next.id,owner),false,'even real requests do not erase unknown attempts');
+ });
+ console.log(`Seller phone spacing: ${scenarios} offline database scenarios passed; owner fresh-demo repeats, real callback receipts, expired/unknown-call holds, exact final dial admission, tenant boundaries, private ACLs and no paid traffic.`);
 }finally{await pg.close();}
