@@ -20,7 +20,7 @@ export function SupportChat({onClose,active=true,onMembershipChanged,initialThre
  const historyLog=useRef<HTMLDivElement>(null),composer=useRef<HTMLTextAreaElement>(null),readSequence=useRef(0);
  const nearLatest=useRef(true),reading=useRef(false),currentThread=useRef(thread);currentThread.current=thread;
  const [showLatest,setShowLatest]=useState(false);
- const clearAccount=useCallback(()=>{setNeedsSignIn(true);setThreads([]);setMessages([]);setThread(null);setCancellations([]);setConfirmation(null);setAck(false);setDraft('');setNotice('');setError('');request.current=null;},[]);
+ const clearAccount=useCallback(()=>{readSequence.current++;reading.current=false;setLoading(false);setNeedsSignIn(true);setThreads([]);setMessages([]);setThread(null);setCancellations([]);setConfirmation(null);setAck(false);setDraft('');setNotice('');setError('');request.current=null;},[]);
  const load=useCallback(async(id?:string,background=false)=>{
   if(background&&reading.current)return;reading.current=true;
   const sequence=++readSequence.current;if(!background)setLoading(true);

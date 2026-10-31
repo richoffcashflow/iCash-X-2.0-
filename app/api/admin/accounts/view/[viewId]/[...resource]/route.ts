@@ -28,7 +28,7 @@ export async function GET(req:Request,context:{params:Promise<{viewId:string;res
  const params=new URL(req.url).searchParams,query=Object.fromEntries(params);
  if([...params.keys()].some(k=>params.getAll(k).length!==1))throw new OwnerViewError(400,'Invalid account view request.');
  if(resource==='activity'){
-  z.object({view:z.enum(['opportunities','responses','all']).optional(),page:page.optional(),attentionPage:page.optional(),query:z.string().max(100).optional(),screeningId:id.optional()}).strict().parse(query);
+  z.object({view:z.enum(['opportunities','responses','texts','unread','all']).optional(),page:page.optional(),attentionPage:page.optional(),query:z.string().max(100).optional(),screeningId:id.optional()}).strict().parse(query);
   // Same customer data loader, with outcome refresh and all work mutations off.
   const result=await workspaceActivity(req,accountId);
   for(const [key,value] of Object.entries(ownerViewHeaders))result.headers.set(key,value);

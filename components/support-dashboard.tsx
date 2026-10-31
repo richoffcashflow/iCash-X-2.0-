@@ -26,39 +26,45 @@ export function SupportDashboard(){
  const [qualityOpen,setQualityOpen]=useState(false);
  const [filter,setFilter]=useState('needs'),[search,setSearch]=useState(''),[drafts,setDrafts]=useState<Record<string,string>>({}),[toolsOpen,setToolsOpen]=useState(false);
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
- const sequence=useRef(0),queueSequence=useRef(0),working=useRef(false),selectedRef=useRef<Ticket|null>(null),pending=useRef<Record<string,{body:string;id:string}>>({});
- const clear=useCallback(()=>{sequence.current++;selectedRef.current=null;pending.current={};setTickets([]);setSelected(null);setMessages([]);setEvidence([]);setNotification(null);setDrafts({});setPurchases([]);setCancellations([]);setDeployment('');setToolsOpen(false);setQualityOpen(false);setNotice('');},[]);
+ const sequence=useRef(0),queueSequence=useRef(0),detailReading=useRef(false),working=useRef(false),selectedRef=useRef<Ticket|null>(null),pending=useRef<Record<string,{body:string;id:string}>>({});
+ const clear=useCallback(()=>{sequence.current++;queueSequence.current++;detailReading.current=false;selectedRef.current=null;pending.current={};setTickets([]);setSelected(null);setMessages([]);setEvidence([]);setNotification(null);setDrafts({});setPurchases([]);setCancellations([]);setDeployment('');setToolsOpen(false);setQualityOpen(false);setNotice('');setLoading(false);setBusy(false);},[]);
  const loadQueue=useCallback(async()=>{
   const seq=++queueSequence.current;
+  const read=async<T,>(path:string)=>{
+   const response=await supportRequest<T>(path,{cache:'no-store'});
+   if(seq===queueSequence.current&&[401,403].includes(response.status)){clear();setError('Sign in with a support operator account to open this inbox.');}
+   return response;
+  };
   try{
-   const [a,b]=await Promise.all([supportRequest<Queue>('/api/support/admin',{cache:'no-store'}),supportRequest<AccessQueue>('/api/support/admin/access',{cache:'no-store'})]);
+   const [a,b]=await Promise.all([read<Queue>('/api/support/admin'),read<AccessQueue>('/api/support/admin/access')]);
    if(seq!==queueSequence.current)return;
-   if(a.status===403||b.status===403){clear();throw Error('Sign in with a support operator account to open this inbox.');}
    if(!a.ok||!b.ok)throw Error(a.data.error||b.data.error||'Could not refresh the inbox.');
    const items:Ticket[]=[...a.data.threads.map(t=>({...t,kind:'account' as const})),...b.data.requests.map(t=>({...t,kind:'access' as const,subject:t.email}))];
    setTickets(items.sort((a,b)=>new Date(b.updated_at).getTime()-new Date(a.updated_at).getTime()));setCancellations(a.data.cancellations);setPurchases(b.data.purchases);setDeployment(a.data.deployment?.detail??'');setError('');
   }catch(e){if(seq===queueSequence.current)setError(e instanceof Error?e.message:'Could not load support.');}finally{if(seq===queueSequence.current)setLoading(false);}
  },[clear]);
  const open=useCallback(async(ticket:Ticket,quiet=false)=>{
-  const seq=++sequence.current;if(!quiet){setBusy(true);setNotice('');}setError('');
+  // Polling must not replace a foreground selection or overlap a slower read.
+  if(quiet&&(detailReading.current||!selectedRef.current||key(selectedRef.current)!==key(ticket)))return;
+  const seq=++sequence.current;detailReading.current=true;if(!quiet){setBusy(true);setNotice('');}setError('');
   try{
    const path=ticket.kind==='access'?'/api/support/admin/access?id=':'/api/support/admin?threadId=';
    const {ok,status,data}=await supportRequest<Detail>(path+ticket.id,{cache:'no-store'});
    if(seq!==sequence.current)return;
-   if(status===403){clear();throw Error('Sign in with a support operator account to open this inbox.');}if(!ok)throw Error(data.error||'Could not open the conversation.');
+   if([401,403].includes(status)){clear();setError('Sign in with a support operator account to open this inbox.');return;}if(!ok)throw Error(data.error||'Could not open the conversation.');
    const current={...ticket,...(data.thread??data.request),kind:ticket.kind};selectedRef.current=current;setSelected(current);setMessages(data.messages);setEvidence(data.evidence??[]);setNotification(data.notification??null);
-  }catch(e){if(seq===sequence.current||!selectedRef.current)setError(e instanceof Error?e.message:'Could not load the conversation.');}finally{if(!quiet)setBusy(false);}
+  }catch(e){if(seq===sequence.current)setError(e instanceof Error?e.message:'Could not load the conversation.');}finally{if(seq===sequence.current){detailReading.current=false;if(!quiet)setBusy(false);}}
  },[clear]);
  useEffect(()=>{void loadQueue();const refresh=()=>{if(!document.hidden&&!working.current){void loadQueue();if(selectedRef.current)void open(selectedRef.current,true);}};const timer=setInterval(refresh,20000);document.addEventListener('visibilitychange',refresh);return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',refresh);queueSequence.current++;sequence.current++;};},[loadQueue,open]);
  const reply=selected?drafts[key(selected)]??'':'';
  async function save(status:string,send:boolean,legacyPurchaseVerified=false){
   if(!selected||working.current||busy||send&&!reply.trim()&&!legacyPurchaseVerified)return;
-  working.current=true;setBusy(true);setError('');setNotice('');const ticket=selected,k=key(ticket);
+  working.current=true;sequence.current++;detailReading.current=false;setBusy(true);setError('');setNotice('');const ticket=selected,k=key(ticket);
   const body=JSON.stringify({[ticket.kind==='access'?'id':'threadId']:ticket.id,status,...(legacyPurchaseVerified?{legacyPurchaseVerified:true}:send?{reply:reply.trim()}:{})});
   if(pending.current[k]?.body!==body)pending.current[k]={body,id:crypto.randomUUID()};
   try{
    const {ok,status:code,data}=await supportRequest<{saved?:boolean;error?:string}>('/api/support/admin'+(ticket.kind==='access'?'/access':''),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...JSON.parse(body),requestId:pending.current[k].id})});
-   if(code===403){clear();throw Error('Sign in with a support operator account to reply.');}if(!ok||!data.saved)throw Error(data.error||'Could not confirm the update. Your draft is still here.');
+   if([401,403].includes(code)){clear();throw Error('Sign in with a support operator account to reply.');}if(!ok||!data.saved)throw Error(data.error||'Could not confirm the update. Your draft is still here.');
    delete pending.current[k];if(send&&!legacyPurchaseVerified)setDrafts(current=>({...current,[k]:''}));await open(ticket,true);await loadQueue();setNotice(send?'Reply saved. A customer email notification is queued.':status==='closed'?'Conversation closed.':status==='resolved'?'Conversation resolved.':'Conversation reopened.');
   }catch(e){setError(e instanceof Error?e.message:'Could not save. Your draft is still here.');}finally{working.current=false;setBusy(false);}
  }
@@ -78,7 +84,7 @@ export function SupportDashboard(){
     <p className="desk-automation">Support troubleshoots issues and checks account recovery here.</p>
    </aside>
    <section className="desk-conversation" aria-label="Selected conversation">
-    {selected?<><header className="desk-conversation-heading"><button className="desk-back" type="button" onClick={()=>{sequence.current++;selectedRef.current=null;setSelected(null);setMessages([]);}}>← Inbox</button><div><p className="support-eyebrow">{selected.kind==='access'?'Sign-in help':'Account support'}</p><h2>{selected.subject}</h2></div><button type="button" disabled={busy} onClick={()=>void save(['resolved','closed'].includes(selected.status)?'open':'closed',false)}>{['resolved','closed'].includes(selected.status)?'Reopen':'Close chat'}</button></header>
+    {selected?<><header className="desk-conversation-heading"><button className="desk-back" type="button" disabled={busy} onClick={()=>{sequence.current++;detailReading.current=false;selectedRef.current=null;setSelected(null);setMessages([]);}}>← Inbox</button><div><p className="support-eyebrow">{selected.kind==='access'?'Sign-in help':'Account support'}</p><h2>{selected.subject}</h2></div><button type="button" disabled={busy} onClick={()=>void save(['resolved','closed'].includes(selected.status)?'open':'closed',false)}>{['resolved','closed'].includes(selected.status)?'Reopen':'Close chat'}</button></header>
     <details className="desk-details"><summary>{label(selected.status)} · Customer details & checks</summary>{selected.kind==='access'?<p>This visitor’s email and phone are unverified. Use sign-in or public product guidance; verify original purchase proof before sending the legacy offer. Never post codes or private account information.{selected.phone&&<> Phone supplied: {selected.phone}.</>}</p>:<><p>Account: {selected.account_id}</p>{evidence.map(e=><p key={e.key}>{e.detail}<br/><small>{when(e.observedAt)}</small></p>)}</>}<p>Conversation: {selected.id}</p><p>Customer email: {notification?delivery(notification.status,notification.delivery):'No reply email yet'}</p></details>
      <div className="desk-messages" role="log" aria-label="Conversation messages">{messages.filter(m=>m.role!=='system').map(m=><article key={m.id} className={`desk-message desk-message-${m.role}`}><div><strong>{m.role==='user'?'Customer':m.role==='assistant'?'Support':'Owner'}</strong><time dateTime={m.created_at}>{when(m.created_at)}</time></div><p><SupportMessageContent content={m.content} role={m.role}/></p></article>)}</div>
      {selected.kind==='account'&&messages.flatMap(m=>(m.evidence??[]).flatMap(e=>{const packet=e.key==='refund_case'?savedRefundCase(e.refundCase,selected.account_id??'',selected.id):null;return packet?[<details className="desk-details" key={'refund-'+m.id}><summary>Saved refund evidence · {when(packet.preparedAt)}</summary><p>Prepared for review. <a href="/admin/disputes">Open the matching Stripe dispute</a> to download its evidence PDF; saved delivery records are included automatically.</p>{packet.sections.map(s=><div key={s.title}><strong>{s.title}</strong>{s.lines.map((line,i)=><p key={i}>{line}</p>)}</div>)}{packet.gaps.length>0&&<div><strong>Missing records and limits</strong>{packet.gaps.map((gap,i)=><p key={i}>{gap}</p>)}</div>}</details>]:[];})).slice(-1)}

@@ -59,6 +59,12 @@ const get=(resource,query='')=>resources.GET(request('/view/'+viewId+'/'+resourc
 assert.equal((await get('control')).status,404);assert.equal((await get('../account')).status,404);
 assert.equal((await get('leads','?p_account='+session)).status,400);
 assert.equal((await get('leads','?page=0')).status,400);
+for(const view of ['opportunities','responses','texts','unread','all']){
+ const response=await get('activity','?view='+view);assert.equal(response.status,200,'Customer preview supports the '+view+' workspace filter');
+ assert.equal(response.headers.get('cache-control'),'private, no-store');
+}
+assert.equal((await get('activity','?view=invalid')).status,400);
+assert.equal((await get('activity','?view=texts&view=all')).status,400);
 response=await get('leads');assert.equal(response.status,200);
 assert.equal((await get('call-history','?screeningId='+screen)).status,200);
 assert.equal((await get('conversation','?id='+screen)).status,200);

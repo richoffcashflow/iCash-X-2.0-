@@ -2,7 +2,7 @@
 type Listener=()=>void;
 const listeners=new Set<Listener>();
 let controller:AbortController|null=null,timer:ReturnType<typeof setTimeout>|undefined,attempt=0,revision:string|null=null;
-export function notifyWorkspaceChanges(){for(const listener of listeners)listener();}
+export function notifyWorkspaceChanges(){for(const listener of listeners){try{listener();}catch{/* One panel must not interrupt the other subscribers or their stream. */}}}
 function stop(){controller?.abort();controller=null;clearTimeout(timer);}
 async function connect(){
  if(typeof document==='undefined'||document.hidden||!listeners.size||controller)return;
@@ -14,7 +14,7 @@ async function connect(){
   attempt=0;
   const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='';
   while(!current.signal.aborted){
-   const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});
+   const {value,done}=await reader.read();if(done||current.signal.aborted||controller!==current)break;buffer+=decoder.decode(value,{stream:true});
    if(buffer.length>10000)throw Error('Invalid feed');
    let boundary:number;
    while((boundary=buffer.indexOf('\n\n'))>=0){
@@ -27,8 +27,9 @@ async function connect(){
   }
  }catch{/* Saved work remains visible; subscriber fallback refreshes continue. */}
  finally{
-  clearTimeout(timeout);current.abort();if(controller===current)controller=null;
-  if(listeners.size&&!document.hidden)timer=setTimeout(()=>void connect(),Math.min(60000,2000*2**Math.min(attempt++,5)));
+  clearTimeout(timeout);current.abort();
+  // A paused or replaced stream cannot schedule a second reconnect loop.
+  if(controller===current){controller=null;if(listeners.size&&!document.hidden)timer=setTimeout(()=>void connect(),Math.min(60000,2000*2**Math.min(attempt++,5)));}
  }
 }
 function visibility(){if(document.hidden)stop();else{notifyWorkspaceChanges();void connect();}}
