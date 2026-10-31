@@ -43,10 +43,12 @@ try{
  const deferred=await POST(new Request('https://example.invalid/api/internal/automation',{method:'POST',headers:{authorization:'Bearer '+('00000000-0000-0000-0000-000000000000').repeat(2)}}));
  assert.equal(deferred.body.status,'waiting_for_active_call');
  assert.deepEqual(records.filter(r=>r.path==='rpc/icash_finish_automation').at(-1).body,{p_id:'ticket',p_success:true,p_outcome:'waiting_for_active_call'},'contention is a completed scheduling turn, not a failed ticket');
- voiceStatus='seller_inventory_unavailable';
+ for(const status of ['seller_inventory_unavailable','seller_contact_spacing']){
+ voiceStatus=status;
  const inventory=await POST(new Request('https://example.invalid/api/internal/automation',{method:'POST',headers:{authorization:'Bearer '+('00000000-0000-0000-0000-000000000000').repeat(2)}}));
  assert.equal(inventory.body.status,voiceStatus);
  assert.deepEqual(records.filter(r=>r.path==='rpc/icash_finish_automation').at(-1).body,{p_id:'ticket',p_success:true,p_outcome:voiceStatus});
  assert.equal(automationChanged(voiceStatus),false,'skipping an assigned seller is not customer progress or a notification');
+ }
 }finally{AbortSignal.timeout=originalTimeout;delete globalThis.__billingRoute;}
 console.log('PASS: billing cancellation reaches DB/provider; primary automation queues billing without waiting for provider timeouts');

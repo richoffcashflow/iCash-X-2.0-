@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On October 30, 2026 the owner reported a fresh self-demo blocked after clearing an earlier voicemail call. The exact presenting owner and their own demonstration phone may use a new, source-bound five-minute form request after earlier calls finish. Preserve ordinary seller phone spacing, calling hours, all contact/payment gates, one-use jobs and unresolved provider holds. Expired owner requests must not become late calls; never refresh old request receipts or clear historical attempts to make a demonstration work. Report recipient spacing separately from credit shortages and validate with offline fixtures.
+
 - On October 30, 2026 the owner requested their personal demo number display as `21421****` on deal cards, contact panels and the test form, only in their own account. Keep masking presentation-only and server-bound to the exact owner account; preserve full recipients in submissions, calls, texts and storage. Customer views retain their ordinary phone display.
 
 - On October 30, 2026 the owner requested profitable DealMachine pulls and better customer results as provider capacity increases. Use recent settled duplicate-only supply evidence to reduce wasted audience allocation across the same ZIP, retaining periodic probes and all-cooled fallback. Unknown, pending, mismatched or missing-cost receipts cannot cool an audience. Share aggregate supply feedback only, preserve original customer boundaries, pricing and actual-cost settlement, and verify any future provider limit increase before configuring it. See `docs/research-market-duplicate-cooling.md`.

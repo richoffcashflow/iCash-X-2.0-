@@ -83,6 +83,10 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
   }
   return hold(contact.reason);
  }
+ // A repeated/expired recipient request is not a credit shortage. The same
+ // predicate is rechecked by reservation and the serialized final dial claim.
+ const spacingCurrent=()=>db<boolean>('rpc/icash_seller_phone_call_current','POST',{p_account:accountId,p_job:j.id});
+ if(await spacingCurrent()!==true)return {status:'seller_contact_spacing'};
  const eligible=p.party==='seller'&&!cancellation&&!intake?callEligibility(p,snapshot.snapshot,Date.now(),outreach):null;
  const limited=p.party==='seller'&&eligible&&!eligible.ready&&eligible.reason==='financial_hold'&&p.sellerConsentVerified&&await db<boolean>('rpc/icash_seller_limited_contact','POST',{p_account:accountId,p_screening:p.screening_id})===true;
  if(eligible&&!eligible.ready&&!limited)return hold(eligible.reason);
@@ -196,6 +200,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
   // Preserve that saved reason instead of reporting a false credit shortage.
   const [current]=await db<{state:string;outcome:string|null}[]>(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&select=state,outcome`);
   if(current?.state==='held'&&current.outcome==='seller_inventory_unavailable')return {status:'seller_inventory_unavailable'};
+  if(await spacingCurrent()!==true)return {status:'seller_contact_spacing'};
   return {status:cancellation?'cancellation_notice_waiting':process.env.ICASH_FLEXIBLE_VOICE_READY==='true'?'waiting_for_available_credits':'waiting_for_daytime_budget'};
  }
  const claimHold=recordingReleaseHold();if(claimHold)return hold(claimHold);
