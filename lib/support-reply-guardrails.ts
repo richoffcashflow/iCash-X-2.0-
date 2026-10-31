@@ -19,6 +19,7 @@ export function supportInstructionCorrection(messages:Turn[],evidence:SupportEvi
 /** Catch observed failure modes even when the model ignores its product instructions. */
 export function unsupportedSupportReply(reply:string,messages:Turn[],evidence:SupportEvidence[]){
  if(supportSafetyOnly(reply))return true;
+ if(/\b(?:you can|you may|you should|please)\s+(?:add|upload|import|enter|bring)\b.{0,45}\b(?:leads?|listings?|properties|csv)\b|\b(?:use|open|choose|select|click|tap)\b.{0,40}\b(?:lead import|csv upload|upload csv|add listing|add lead|import leads)\b/i.test(reply))return true;
  if(inventedControl.test(reply)&&instruction.test(reply))return true;
  if(/\b(?:wait|give it|after|within|in) (?:a (?:few|couple of)|\d+|one|two|three|several) (?:more )?(?:minutes?|hours?)\b|\b(?:should|will) (?:start|begin|resume)\b.{0,55}\b(?:soon|shortly|momentarily)\b/i.test(reply))return true;
  if(/\b(?:normal|just) (?:pause|delay|waiting)|\b(?:everything|all systems) (?:is|are) (?:working|fine|healthy)/i.test(reply))return true;

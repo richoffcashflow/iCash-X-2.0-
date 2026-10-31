@@ -1,6 +1,8 @@
 import {redactSupportQuestion} from './support-policy.ts';
 import {supportSafetyOnly} from './support-reply-style.ts';
 import {supportContactTimingQuestion,supportContractTimingQuestion} from './support-product-clarifications.ts';
+import {supportLeadImportQuestion} from './support-lead-policy.ts';
+import {supportBotWorkProblem} from './support-reply-style.ts';
 
 export type QualityMessage={role:string;content:string;created_at:string};
 export type QualityConversation={id:string;kind:'account'|'access';subject:string;status:string;updated_at:string;messages:QualityMessage[]};
@@ -34,7 +36,7 @@ export function supportQualityReport(conversations:QualityConversation[],now=new
   let question='';
   const mismatch=recent.some(m=>{
    if(m.role==='user'){question=m.content;return false;}
-   return m.role==='assistant'&&((supportContactTimingQuestion(question)&&/don.t need to add listings|outreach hours/i.test(m.content))||(supportContractTimingQuestion(question)&&/Agreements are inside|choose Take over/i.test(m.content))||(/checkout/i.test(question)&&/not go through|failed|didn.t go through/i.test(question)&&/sign.in.*code|code.*sign.in/i.test(m.content)));
+   return m.role==='assistant'&&((supportContactTimingQuestion(question)&&/don.t need to add listings|outreach hours/i.test(m.content))||(supportContractTimingQuestion(question)&&/Agreements are inside|choose Take over/i.test(m.content))||(/checkout/i.test(question)&&/not go through|failed|didn.t go through/i.test(question)&&/sign.in.*code|code.*sign.in/i.test(m.content))||(supportBotWorkProblem(question)&&/sign.in step|passwords and sign.in codes/i.test(m.content))||(supportLeadImportQuestion(question)&&!/cannot|can.t|not (?:available|supported|a feature)/i.test(m.content)));
   });
   if(mismatch)flags.push({code:'mismatch',label:'Answer may miss the question'});
   if(replies.some(m=>/\b(?:calls?|outreach) will resume automatically\b|\b(?:we|I) (?:are |am |will be )?(?:working on|fixing) (?:it|this|the issue)\b/i.test(m.content)))flags.push({code:'promise',label:'Repair claim needs verification'});

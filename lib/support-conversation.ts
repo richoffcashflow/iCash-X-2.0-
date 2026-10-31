@@ -15,6 +15,7 @@ import {currentAccessConversation} from './support-access-topic.ts';
 import {supportCheckoutReply,supportIdentityReply} from './support-checkout.ts';
 import {supportProductClarification} from './support-product-clarifications.ts';
 import {supportPurchaseHelp} from './support-purchase-help.ts';
+import {supportMissingSellerContactQuestion} from './support-lead-policy.ts';
 
 export type SupportTurn={role:string;content:string};
 export type SupportReply={reply:string;status:'open'|'waiting_on_customer'|'resolved'|'closed';ai:boolean};
@@ -25,7 +26,7 @@ const clean=(text:string)=>redactSupportQuestion(text).replace(/\b\d{6,10}\b/g,'
 function earlierSupportProblem(context:SupportContext){
  const users=context.messages.filter(m=>m.role==='user');
  const lastConfirmed=users.findLastIndex(m=>/\b(?:that worked|it worked|working now|fixed now|all fixed|problem solved)\b/i.test(m.content)&&!/(?:not|still|but)\b/i.test(m.content));
- return context.historyComplete===false||users.slice(lastConfirmed+1,-1).some(m=>/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|not working|not calling|not texting|no calls|no texts|no leads|no (?:phone )?numbers|no contacts|invalid numbers|wrong email|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
+ return context.historyComplete===false||users.slice(lastConfirmed+1,-1).some(m=>supportMissingSellerContactQuestion(m.content)||/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|stopped|waiting for (?:the )?next task|not (?:working|calling|texting|sent|sending|making|doing)|no calls|no texts|no leads|no (?:phone )?numbers|no contacts|invalid numbers|wrong email|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
 }
 
 /** Local replies also work during provider outages and interruption recovery. */
@@ -37,6 +38,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
   return {reply:simple,status:simple!==reply&&status!=='resolved'?'open':status,ai:false};
  };
  if(/\b(?:that worked|it worked|working now|fixed now|all fixed|i(?:’|')?m in|got in|problem solved)\b/i.test(question)&&!/(?:not|isn.t|didn.t|still|but)\b/i.test(question)&&!/[?]|\b(?:how|what|where|when|why|which|also|another|more questions|next question)\b/i.test(question))return result('Glad that worked.','resolved');
+ if(previous&&!previous.includes('?')&&/^(?:(?:ok(?:ay)?|thanks|thank you|got it|understood)[,! .]*)+(?:i will[.! ]*)?$/i.test(question.trim()))return result(/thanks|thank you/i.test(question)?'You’re welcome.':'Understood.',earlierSupportProblem(context)||context.handedOff?'open':'resolved');
  const correction=supportInstructionCorrection(context.messages,context.evidence??[]);
  if(correction)return result(correction,'open');
  const clarification=supportProductClarification(context.messages);
@@ -86,7 +88,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
   const active=currentAccessConversation(context.messages),history=active.filter(m=>m.role==='user').map(m=>m.content).join('\n');
   const delivery=supportCodeDelivery(active);
   const code=active.length>0;
-  const bothTried=/(?:tried|used|requested).{0,30}both|both.{0,30}(?:tried|not.*(?:send|arrive)|no code)/i.test(history);
+  const bothTried=/\bboth\b|email.{0,15}(?:text|phone|sms)|(?:text|phone|sms).{0,15}email/i.test(history);
   const channel=/email|inbox|spam/i.test(history)?'email':/text|sms|phone/i.test(history)||bothTried?'text':null;
   if(code){
    if(!channel)return result(active.some(m=>m.role!=='user'&&/requesting the code by email or text/i.test(m.content))?'I still need to know whether you’re using email or text to choose the right sign-in step. You can reply with just the method.':'Are you requesting the code by email or text? Please don’t share the code itself.');
@@ -102,10 +104,10 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(topic==='general')return result('Hi! What can I help you with?');
  if(supportReplyEvidence(context.messages,context.evidence??[]).some(e=>e.status!=='ok'&&['payment_uncredited','checkout_pending','readiness_blocked','renewal_payment_failed'].includes(e.code??'')))return result(`${supportAnswer(topic,supportReplyEvidence(context.messages,context.evidence??[]),false)}\n\nI can’t confirm a fix yet. What message do you see on that page?`,'open');
  if(previous.includes('exact message'))return result(`${supportAnswer(topic,supportReplyEvidence(context.messages,context.evidence??[]),false)}\n\nDoes this happen every time on that screen, or did it start after a particular step?`);
- if(users.length>1&&/still|same|already|didn.t|doesn.t|not working/i.test(question))return result('Thanks for trying that. What exact message do you see now, and which screen is it on? Leave out passwords and sign-in codes.');
+ if(users.length>1&&/still|same|already|didn.t|doesn.t|not working/i.test(question))return result('I haven’t confirmed the cause yet. What exact message do you see now, and which screen is it on?');
  const answer=supportAnswer(topic,supportReplyEvidence(context.messages,context.evidence??[]),false);
  if(!supportReplyEvidence(context.messages,context.evidence??[]).length&&topic==='work')return result(/\b(?:error|blank|freeze[sd]?|frozen|broken|stuck|missing|fails?|failed|isn[’']?t|doesn[’']?t|won[’']?t|not working)\b/i.test(issue)?'Which page is this happening on?':'I don’t have a confirmed answer to that yet. What are you trying to do in iCash X?');
- const followup=topic==='billing'?'Which charge or billing message are you asking about? Please leave out card details.':topic==='setup'?'Which sign-in step are you stuck on?':'Which page is this happening on?';
+ const followup=topic==='billing'?'Which charge or billing message are you asking about? Please leave out card details.':'Which page is this happening on?';
  return result(`${answer}\n\n${followup}`);
 }
 
@@ -137,6 +139,8 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
 /** Recovery runs separately with fixed account-bound operations. The model only explains verified results. */
 async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fetch=fetch):Promise<SupportReply>{
  const fallback=supportTechnicalFallback(context);
+ const latest=context.messages.filter(m=>m.role==='user').at(-1)?.content??'';
+ if(/^(?:(?:ok(?:ay)?|thanks|thank you|got it|understood)[,! .]*)+(?:i will[.! ]*)?$/i.test(latest.trim())&&!fallback.reply.includes('?'))return fallback;
  if(supportCheckoutReply(context)||supportIdentityReply(context))return fallback;
  if(supportProductClarification(context.messages)||supportPurchaseHelp(context.messages))return fallback;
  if(supportLegacyMigrationReply(context.messages))return fallback;

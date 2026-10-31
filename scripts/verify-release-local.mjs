@@ -11,7 +11,7 @@ const suites = [
  'outcome-ranker', 'outcome-ranker-database', 'outcome-ranker-service',
  'pro-voice-capacity', 'pro-voice-capacity-database',
  'seller-followup-window', 'seller-offer-qualification',
- 'support-quality', 'support-product-clarifications', 'support-checkout', 'support-checkout-database', 'legacy-checkout-recovery', 'legacy-trial-route', 'support-legacy-migration', 'support-natural-conversation', 'support-topic-focus', 'support-workflow-gaps', 'support-role-guidance', 'support-self-service',
+ 'support-quality', 'support-inbox-regressions', 'support-product-clarifications', 'support-checkout', 'support-checkout-database', 'legacy-checkout-recovery', 'legacy-trial-route', 'support-legacy-migration', 'support-natural-conversation', 'support-topic-focus', 'support-workflow-gaps', 'support-role-guidance', 'support-self-service',
  'daily-work-target', 'provider-quota-scheduling', 'stalled-voice-capacity',
  'validation-compatibility',
  'call-contact-evidence', 'customer-phone-maintenance',

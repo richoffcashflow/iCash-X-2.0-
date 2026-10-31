@@ -66,7 +66,7 @@ try{
   assert.doesNotMatch(answer.reply,/sign.in|code|email or text|receipt/);assert.match(answer.reply,/\?/);assert.notEqual(answer.status,'resolved');
  }
  const stripped=removeRepeatedSupportQuestions('Are you requesting the code by email or text? '+misleading,[assistant('Are you requesting the code by email or text?'),user(original)]);
- assert(!supportSafetyOnly(stripped));assert.notEqual(stripped,misleading);assert.match(stripped,/\?/);
+ assert(!supportSafetyOnly(stripped));assert.notEqual(stripped,misleading);assert(!repeatsSupportQuestion(stripped,[assistant('Are you requesting the code by email or text?')]));assert.doesNotMatch(stripped,/What are you trying to do/);
  const codeHistory=[user('I filled out the code but nothing happened'),assistant('Are you requesting the code by email or text? '+misleading),user('I already told you it does not work')];
  const code=supportConversationFallback({kind:'access',messages:codeHistory});
  assert(!supportSafetyOnly(code.reply));assert(!repeatsSupportQuestion(code.reply,codeHistory));assert.notEqual(code.status,'resolved');

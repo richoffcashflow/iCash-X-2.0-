@@ -15,6 +15,8 @@ export function supportContinuation(text:string){
   || /^(?:so )?(?:what should i do|how should i reply|how do i reply|is that enough|am i doing something wrong|can you confirm (?:it|that)|well can you confirm (?:it|that)|i know but (?:it|its|it is) (?:not working|still not working))$/.test(value)
   || /^it (?:dont|doesnt|does not) (?:show|say)\b/.test(value)
   || /^(?:ok(?:ay)?(?: because)? )?(?:but )?i want (?:the|my) bot to do the work$/.test(value)
+  || /^(?:so )?(?:what (?:should i|do i|i|should) do(?: now| next)?|should i do now|how and when will it start(?: back)? up|when will it start(?: back)? up|i(?:m| am) signed in|thanks for trying what|what do you mean by that)$/.test(value)
+  || /^[?\s]+$/.test(text)
   || /^i (?:sent|made) (?:the|that) (?:text|message|call)\b.*\b(?:wasnt|was not|not) (?:the )?bot\b/.test(value)
   || /^(?:\d+ (?:leads?|matches|properties)\s*)+$/.test(value);
 }
@@ -33,7 +35,8 @@ export function currentSupportIssue(messages:Turn[]){
  return users.slice(confirmed+1,-1).findLast(turn=>!continuation(turn.content)&&! /^(?:hi|hello|hey|thanks|thank you)[.!?\s]*$/i.test(turn.content.trim()))?.content??latest;
 }
 
-const workFailure=(issue:string)=>/\b(?:bot|automation|outreach|calls?|calling|texts?|texting|leads?|research)\b.{0,60}\b(?:stopped|stuck|not|never|no|missing|failing|failed|waiting|running|working|status)\b|\b(?:not|no|never|isn[’']?t|doesn[’']?t|won[’']?t|cannot|can[’']?t)\b.{0,60}\b(?:bot|calls?|calling|texts?|texting|leads?|research)\b/i.test(issue);
+export const supportBotWorkProblem=(issue:string)=>/\b(?:bot|automation|program)\b.{0,65}\b(?:not working|isn[’']?t working|doesn[’']?t work|stopped|stuck|waiting|not doing|isn[’']?t doing)\b|\b(?:isn[’']?t|not)\b.{0,25}\b(?:bot|program)\b.{0,20}\bworking\b|\bwaiting for (?:the )?next task\b/i.test(issue);
+const workFailure=(issue:string)=>supportBotWorkProblem(issue)||/\b(?:bot|automation|outreach|calls?|calling|texts?|texting|leads?|research)\b.{0,60}\b(?:stopped|stuck|not|never|no|missing|failing|failed|waiting|running|working|status)\b|\b(?:not|no|never|isn[’']?t|doesn[’']?t|won[’']?t|cannot|can[’']?t)\b.{0,60}\b(?:bot|calls?|calling|texts?|texting|leads?|research)\b/i.test(issue);
 
 export function supportCreditRelevant(messages:Turn[],evidence:SupportEvidence[]){
  const issue=currentSupportIssue(messages);
@@ -56,7 +59,7 @@ export function supportReplyEvidence(messages:Turn[],evidence:SupportEvidence[])
  if(/\b(?:course|training|tutorial|lesson|video|pdf)\b/i.test(issue))keys.add('course');
  if(workFailure(issue)){
   keys.add('work');keys.add('outreach');
-  if(/\b(?:calls?|calling)\b/i.test(issue))keys.add('voice');
+  if(/\b(?:calls?|calling)\b/i.test(issue)||supportBotWorkProblem(issue))keys.add('voice');
   if(/\b(?:leads?|research)\b/i.test(issue))keys.add('screening');
  }
  // Passing background checks are not an answer. Global readiness is relevant
@@ -86,14 +89,15 @@ function repeatedQuestion(question:string,messages:Turn[]){
 
 /** The local fallback must not repeat questions even when the model is unavailable. */
 export function supportSafetyOnly(reply:string){
- return /^(?:please\s+)?(?:(?:don[’']t|do not|never)\s+(?:share|send|post|include)\s+(?:any\s+|the\s+|your\s+)?(?:sign[ -]?in\s+)?(?:code(?: itself)?|codes|passwords?|card (?:details|numbers))|leave out (?:the |your )?(?:codes?|passwords?|card details))[.!\s]*$/i.test(reply.trim());
+ const text=reply.replace(/^Thanks for trying that[.!\s]*/i,'').trim();
+ return /^(?:please\s+)?(?:(?:don[’']t|do not|never)\s+(?:share|send|post|include)\s+(?:any\s+|the\s+|your\s+)?(?:sign[ -]?in\s+)?(?:code(?: itself)?|codes|passwords?|card (?:details|numbers))|leave out (?:the |your )?(?:codes?|passwords?(?: and sign[ -]?in codes)?|card details))[.!\s]*$/i.test(text);
 }
 
 export function removeRepeatedSupportQuestions(reply:string,messages:Turn[]){
  let result=reply;
  for(const question of questions(reply))if(repeatedQuestion(question,messages))result=result.replace(question,'');
  result=result.replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
- if(!result||supportSafetyOnly(result))return 'I don’t have a confirmed answer from the details available yet. What are you trying to do, and what happens when you try?';
+ if(!result||supportSafetyOnly(result))return 'I have the details you already shared. I haven’t confirmed the cause or a fix yet.';
  return result;
 }
 
