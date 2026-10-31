@@ -50,10 +50,10 @@ try{
  assert.deepEqual(supportReplyEvidence(failure.messages,evidence).map(e=>e.key),['credits','work','payments'],'A verified missing-credit blocker stays relevant to stopped work');
  const followup={kind:'account',messages:[user('The photos are blank.'),{role:'assistant',content:'I haven’t confirmed a fix.'},user('How do I add listings?')],evidence};
  const answer=await replyToSupport(followup,async()=>{throw Error('Known feature answer is local');});
- assert.match(answer.reply,/don’t need to add listings/);assert.doesNotMatch(answer.reply,unrelated);assert.equal(answer.status,'open');
+ assert.match(answer.reply,/cannot add, upload or import their own leads/);assert.doesNotMatch(answer.reply,unrelated);assert.equal(answer.status,'open');
  for(const question of ['How do I upload properties? I’m not sure.','I cannot add a listing.']){
   const answer=supportConversationFallback({kind:'account',messages:[user(question)],evidence});
-  assert.match(answer.reply,/don’t need to add listings/);assert.doesNotMatch(answer.reply,unrelated);
+  assert.match(answer.reply,/cannot add, upload or import their own leads/);assert.doesNotMatch(answer.reply,unrelated);
  }
  assert.doesNotMatch(supportConversationFallback({kind:'account',messages:[user('My bot is not making calls or texts.')],evidence:[]}).reply,unrelated);
 }finally{process.env=env;}

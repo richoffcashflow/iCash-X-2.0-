@@ -1,5 +1,6 @@
 import type {SupportEvidence} from './support-policy.ts';
 import {currentSupportIssue} from './support-reply-style.ts';
+import {supportMissingSellerContactQuestion} from './support-lead-policy.ts';
 
 type Turn={role:string;content:string};
 const money=(cents:number)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(cents/100);
@@ -10,6 +11,12 @@ export function supportWorkflowReply(messages:Turn[],evidence:SupportEvidence[])
  const issue=currentSupportIssue(messages);
  if(/\b(?:refund|cancel|billing|charged|payment|card|sign.?in|log.?in)\b/i.test(latest))return null;
  const answer=(reply:string)=>({reply,status:'open' as const,ai:false});
+ if(supportMissingSellerContactQuestion(issue)){
+  const snapshot=evidence.find(e=>e.key==='outreach')?.outreach;
+  return answer('A lead can appear before a usable seller number is available. Without a usable number, that contact cannot be called or texted. '+(snapshot?.contactProperties===0?'Your account check shows no saved owner details yet. ':'')+'Seller numbers are separate from your own number in Settings. I haven’t confirmed why they’re missing yet.');
+ }
+ if(/\b(?:voicemail|answering (?:machine|service)|business (?:service|greeting))\b/i.test(issue)&&/\b(?:seller|calls?|replies|reply|do|mean)\b/i.test(issue))return answer('A voicemail or automated business greeting is not a seller response. The bot ends confirmed voicemail calls without leaving a message. Review the property’s calls and texts for a real reply; don’t record the seller as interested or clear an alert unless the needed follow-up is actually complete.');
+ if(/\b(?:so )?i have nothing to do\b|\bdo i (?:need|have) to do anything\b/i.test(latest))return answer('You still need to review seller replies and any Needs you alerts, check the deal numbers and agreements before signing, and complete title and closing requests. The bot handles eligible outreach, but an unresolved alert still needs attention; this chat has not cleared it.');
  if(/\b(?:contact checks?|contract check)\b.{0,35}\b(?:expired|refresh|renew)|\bexpired\b.{0,35}\bcontact/i.test(issue))return answer('That follow-up is blocked because its saved contact checks expired. There is no customer button to renew them; refreshing the page, saving a resolution note or choosing Return to bot does not renew the checks. I can’t confirm that this follow-up can resume yet.');
  if(/\b(?:save resolution|resolution note|record (?:the |an? )?answer|no reply to delivered question|seller follow.?up)\b/i.test(issue)){
   if(/\b(?:can.t|cannot|won.t|unable|not|disabled|grey|gray)\b.{0,40}\b(?:save|click|press)|\b(?:save|button)\b.{0,25}\b(?:disabled|grey|gray|not working)/i.test(latest))return answer('Save resolution needs a note of at least 10 characters describing what you actually completed. It saves an internal note; it does not send the seller a message or restart outreach. If your completed note is long enough, what error appears when you save it?');
