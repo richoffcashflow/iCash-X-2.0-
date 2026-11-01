@@ -178,6 +178,7 @@ export async function verifyWebinarMeasurement(browser,base,options,name){
   assert.equal((await tracks('AddToCart')).length,0,'Preparing the form is not a cart selection');
   const card=page.getByRole('region',{name:'Secure checkout',exact:true});
   const overview=page.getByRole('region',{name:'Standard plan features',exact:true});
+  await page.getByText('See your workspace in action',{exact:true}).click();
   const preview=page.getByRole('region',{name:'Interactive workspace preview',exact:true});
   await preview.getByRole('button',{name:'Conversations',exact:true}).click();
   await preview.getByText('The kitchen needs updating.',{exact:false}).waitFor();
