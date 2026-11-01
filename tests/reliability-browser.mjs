@@ -9,6 +9,7 @@ import http from 'node:http';
 import https from 'node:https';
 import {chromium,webkit,devices} from 'playwright';
 import {verifyOwnerAccounts} from './owner-accounts-browser.mjs';
+import {verifyCostEvidence} from './owner-cost-evidence-browser.mjs';
 import {verifyOwnerOutreach} from './owner-outreach-browser.mjs';
 import {verifyPlatformLearning} from './platform-learning-browser.mjs';
 import {verifyTargeting} from './dealmachine-targeting-browser.mjs';
@@ -94,6 +95,8 @@ try{
    if(process.env.BROWSER_SCENARIOS==='webinar-autoplay'){await verifyWebinarAutoplay(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='seller'){await verifySellerIntake(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-measurement'){await verifyWebinarMeasurement(browser,base,options,name);continue;}
+   if(process.env.BROWSER_SCENARIOS==='cost-evidence'){await verifyCostEvidence(browser,base,options,name,fixtureCookies,fixture);continue;}
+   await verifyCostEvidence(browser,base,options,name,fixtureCookies,fixture);
    await verifyPlatformLearning(browser,base,options,name,fixtureCookies,fixture);
    await verifyTargeting(browser,base,options,name,fixtureCookies,fixture);
    await verifyCloseConversions(browser,base,options,name);

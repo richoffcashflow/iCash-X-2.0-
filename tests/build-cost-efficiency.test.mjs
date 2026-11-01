@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const command=JSON.parse(read('vercel.json')).buildCommand;
+assert(command.startsWith('node scripts/verify-production-release.mjs && '),'production still verifies its exact main push');
+assert(command.endsWith('&& pnpm build'));
+assert(!command.includes('build:verified'),'paid host does not repeat the offline suite after CI');
+const ci=read('.github/workflows/reliability.yml');
+assert.match(ci,/all-tests:[\s\S]*run: pnpm test/);
+assert.match(ci,/verify:[\s\S]*run: pnpm build[\s\S]*run: pnpm run test:concurrency[\s\S]*run: pnpm run test:browser/);
+assert(!ci.includes('run: pnpm run build:verified'));
+assert.match(read('scripts/test-all.mjs'),/endsWith\('\.test\.mjs'\)/,'all tests are discovered, including future regression suites');
+console.log('Build efficiency: full exact-commit CI, browser/concurrency checks and production gate retained without duplicate offline suites.');

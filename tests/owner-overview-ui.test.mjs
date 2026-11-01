@@ -6,6 +6,7 @@ import {webinarRequest} from '../lib/webinar-client.ts';
 import * as overview from '../lib/owner-overview.ts';
 import * as priority from '../lib/reliability-priority.ts';
 import * as funnel from '../lib/conversion-funnel.ts';
+import * as costEvidenceModule from '../lib/owner-cost-evidence.ts';
 const OwnerOutreachView=()=>null;
 const require=createRequire(import.meta.url),originalFetch=globalThis.fetch;
 const tick=()=>new Promise(resolve=>setTimeout(resolve,2));
@@ -23,11 +24,12 @@ function harness(){
  const hooks={useState(initial){const i=cursor++;if(!(i in slots))slots[i]=initial;return [slots[i],next=>{const v=typeof next==='function'?next(slots[i]):next;if(!Object.is(v,slots[i])){slots[i]=v;dirty=true;}}];},useEffect(fn,deps){const i=cursor++,prior=slots[i];if(!prior||deps.some((v,n)=>!Object.is(v,prior.deps[n]))){slots[i]={deps,cleanup:prior?.cleanup};pending.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}}};
  const code=ts.transpileModule(readFileSync(new URL('../app/admin/overview.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
  const mod={exports:{}},deps={react:hooks,'@/lib/reliability-priority':priority,'@/lib/webinar-client':{webinarRequest:(path,init)=>webinarRequest(path,init,40)},'@/lib/owner-overview':overview,'@/lib/conversion-funnel':funnel,'./outreach':{OwnerOutreachView},'@/components/account-access':{AccountAccess:'AccountAccess'}};
+ deps['@/lib/owner-cost-evidence']=costEvidenceModule;
  new Function('require','module','exports',code)(name=>deps[name]??(name==='react/jsx-runtime'?require(name):{default:{}}),mod,mod.exports);
  return {async flush(){for(let i=0;i<20;i++){if(dirty){cursor=0;dirty=false;tree=mod.exports.OwnerOverviewView();}const effects=pending;pending=[];effects.forEach(fn=>fn());await tick();if(!dirty&&!pending.length)return;}throw Error('Render did not settle');},find(predicate){const node=nodes(tree).find(predicate);assert(node,'Expected UI control');return node;},text:()=>text(tree),focus:()=>listeners.get('focus')?.(),dispose(){slots.forEach(s=>s?.cleanup?.());}};
 }
 let count=0;
-async function scenario(name,fn){await fn();console.log(`PASS ${++count}/7 ${name}`);}
+async function scenario(name,fn){await fn();console.log(`PASS ${++count}/8 ${name}`);}
 try{
  await scenario('Switching periods cancels old reads and never displays old totals under a new filter',async()=>{
   let late,signal;globalThis.fetch=async(path,init)=>{if(path.includes('days=7&')){signal=init.signal;return new Promise(resolve=>{late=resolve;});}return Response.json(fixture(path,path.includes('days=1&')?'Today seller':'Private seller'));};
@@ -56,5 +58,9 @@ try{
  await scenario('Malformed successful responses show an error instead of fake zero totals',async()=>{
   globalThis.fetch=async()=>Response.json({report:{}});const ui=harness();try{await ui.flush();assert.match(ui.text(),/incomplete data/);assert(!ui.text().includes('$0.00'));}finally{ui.dispose();}
  });
+ await scenario('Cost evidence distinguishes estimates, unknown classifications and unmatched breakdowns',async()=>{
+  globalThis.fetch=async path=>{const f=fixture(path),r=f.report;r.costEvidence={days:r.days,includeOwner:r.includeOwner,startAt:r.startAt,endAt:r.endAt,completedCount:2,missingManifestCount:1,mismatchedManifestCount:0,recordedCostMicros:200000,verifiedMicros:25000,estimatedMicros:100000,unclassifiedMicros:75000,dealmachineCredits:12,providers:[{provider:'dealmachine',verifiedMicros:0,estimatedMicros:100000,unclassifiedMicros:75000},{provider:'elevenlabs',verifiedMicros:25000,estimatedMicros:0,unclassifiedMicros:0}]};return Response.json(f);};
+  const ui=harness();try{await ui.flush();const body=ui.text().replace(/\s+/g,' ');assert.match(body,/Verified components \$0.03/);assert.match(body,/Estimated components \$0.10/);assert.match(body,/Unclassified components \$0.08/);assert.match(body,/1 missing cost breakdowns/);assert.match(body,/12 credits for settled operations/);assert.match(body,/Actual profit requires matching provider invoices/);assert.match(body,/ElevenLabs/);}finally{ui.dispose();}
+ });
 }finally{globalThis.fetch=originalFetch;}
-assert.equal(count,7);
+assert.equal(count,8);
