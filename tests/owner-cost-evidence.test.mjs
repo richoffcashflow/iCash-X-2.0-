@@ -12,7 +12,7 @@ try{
  create table icash_cost_manifests(operation_key text primary key,actual_micros bigint,components jsonb);
  create table icash_cost_observations(provider text,event_key text,amount numeric,units text,primary key(provider,event_key));`);
  await pg.exec(read('config/owner-cost-evidence.sql'));
- assert.equal(read('config/owner-cost-evidence.sql'),read('supabase/migrations/20261101213344_owner_cost_evidence.sql'));
+ assert.equal(read('config/owner-cost-evidence.sql'),read('supabase/migrations/20261101214850_owner_cost_evidence.sql'));
  await q('insert into icash_accounts values($1,$2),($3,$4),($5,$6)',[uid(1),uid(11),uid(2),owner,uid(3),uid(13)]);
  await q("insert into icash_funding_orders values($1,'test','paid')",[uid(3)]);
  for(const [key,account,state,cost,components] of [

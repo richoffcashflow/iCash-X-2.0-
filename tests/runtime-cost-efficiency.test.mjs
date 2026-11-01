@@ -27,7 +27,7 @@ try{
  `);
  for(const f of JSON.parse(read('tests/fixtures/runtime-cost-efficiency-baseline.json')))await pg.exec(f.definition);
  const migration=read('config/runtime-cost-efficiency.sql');await pg.exec(migration);
- assert.equal(migration,read('supabase/migrations/20261101213118_runtime_cost_efficiency.sql'));
+ assert.equal(migration,read('supabase/migrations/20261101214847_runtime_cost_efficiency.sql'));
  const finish=async(outcome,success=true,kind='discovery')=>{
   const id=await one('insert into icash_automation_tickets(account_id,kind,state) values($1,$2,\'consumed\') returning id',[uid(1),kind]);
   await q('select icash_finish_automation($1,$2,$3)',[id,success,outcome]);return id;
