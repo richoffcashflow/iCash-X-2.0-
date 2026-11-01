@@ -13,6 +13,7 @@ import {UsageLoopReport} from '@/components/usage-loop-report';
 import {PlatformLearningReport} from '@/components/platform-learning-report';
 import {DealMachineTargetingReport} from '@/components/dealmachine-targeting-report';
 import {OwnerOutreachView} from './outreach';
+import {costEvidenceLabels} from '@/lib/owner-cost-evidence';
 
 export function OwnerOverviewView(){
  const [filters,setFilters]=useState<OverviewFilters>({days:30,includeOwner:false,query:'',page:1});
@@ -119,6 +120,24 @@ export function OwnerOverviewView(){
     <article><h2>Usage costs{estimated&&<span className={styles.tag}>Estimated</span>}</h2><strong>{usage?overviewMoney(usage.costMicros):'—'}</strong><p>{usage?usage.missingCostCount?`${overviewMoney(usage.knownCostMicros)} recorded · ${usage.missingCostCount} missing`:'Recorded cost of completed usage':'Loading costs…'}</p></article>
     <article className={styles.earnings}><h2>Usage margin{estimated&&<span className={styles.tag}>Estimated</span>}</h2><strong>{usage?overviewMoney(usage.marginMicros):'—'}</strong><p>{usage?usage.marginMicros===null?'Waiting for complete costs and charges':'Usage charged minus usage costs':'Loading margin…'}</p></article>
    </section>
+   {report&&<section className={styles.costEvidence} aria-label="Cost evidence">
+    <h2>Cost evidence</h2>
+    <p>Usage margin includes estimates and allocations. Actual profit requires matching provider invoices, plan fees and payment fees.</p>
+    {report.costEvidence?<>
+     <div className={styles.costEvidenceTotals}>
+      <span>Verified components <strong>{overviewMoney(report.costEvidence.verifiedMicros)}</strong></span>
+      <span>Estimated components <strong>{overviewMoney(report.costEvidence.estimatedMicros)}</strong></span>
+      <span>Unclassified components <strong>{overviewMoney(report.costEvidence.unclassifiedMicros)}</strong></span>
+     </div>
+     {(report.costEvidence.missingManifestCount>0||report.costEvidence.mismatchedManifestCount>0)&&<p role="status">{report.costEvidence.missingManifestCount} missing cost breakdowns · {report.costEvidence.mismatchedManifestCount} breakdowns do not reconcile.</p>}
+     <p>DealMachine reported usage: {report.costEvidence.dealmachineCredits.toLocaleString('en-US')} credits for settled operations. Subtotals and duplicate observations are excluded; this is not an invoice total.</p>
+     <details><summary>Cost breakdown by provider and allocation</summary><div className={styles.costEvidenceScroll}>
+      <table><caption className={styles.srOnly}>Recorded cost components in the selected period</caption><thead><tr><th scope="col">Provider / allocation</th><th scope="col">Verified</th><th scope="col">Estimated</th><th scope="col">Unclassified</th></tr></thead>
+       <tbody>{report.costEvidence.providers.map(p=><tr key={p.provider}><th scope="row">{costEvidenceLabels[p.provider]}</th><td>{overviewMoney(p.verifiedMicros)}</td><td>{overviewMoney(p.estimatedMicros)}</td><td>{overviewMoney(p.unclassifiedMicros)}</td></tr>)}</tbody>
+      </table>
+     </div></details>
+    </>:<p role="status">Cost evidence is unavailable. Usage margin remains unverified.</p>}
+   </section>}
    <div className={styles.meta}><span>{includeOwner?'Customers + your account':'Customer usage only'} · Central time</span><span role="status">{report?`${error?'Last successful update':'Updated'} ${overviewTime(report.endAt)} CT`:error?'No totals available':'Loading overview…'}</span></div>
    {usage&&usage.pendingCount>0&&<p className={styles.pending}>{usage.pendingCount} operations started in this period are still awaiting settlement. They are not included in these totals.</p>}
    {usage&&usage.completedCount===0&&!includeOwner&&<p className={styles.pending}>No customer usage in this period. Turn on “Include my account” to see your own usage.</p>}
