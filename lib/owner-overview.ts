@@ -1,3 +1,4 @@
+import {textHealthSchema,type TextHealth} from './text-health.ts';
 import {sellerFunnelStages,validFunnelSteps,type FunnelStep} from './conversion-funnel.ts';
 import {closingOperationsSchema,type ClosingOperations} from './deal-completion.ts';
 import {reliabilitySchema,type ReliabilityReport} from './reliability.ts';
@@ -11,6 +12,7 @@ export type OwnerOverview=OverviewFilters & {
  funnel?:FunnelStep[];
  closing?:ClosingOperations;
  reliability?:ReliabilityReport|null;
+ textHealth?:TextHealth|null;
  leadSupply?:LeadSupplyPlan|null;
  costHealth?:{pendingCount:number;agedCount:number;oldestAt:string|null;unreconciledObservations:number;checkedAt:string}|null;
  costEvidence?:OwnerCostEvidence|null;
@@ -35,6 +37,7 @@ export function validOwnerOverview(value:unknown,filters:OverviewFilters):value 
  if(v.funnel!==undefined&&(!validFunnelSteps(v.funnel,sellerFunnelStages)||v.funnel[0].count!==v.leadCount))return false;
  if(v.costHealth!=null&&!validCostHealth(v.costHealth))return false;
  if(v.costEvidence!=null&&!validOwnerCostEvidence(v.costEvidence,filters))return false;
+ if(v.textHealth!=null&&!textHealthSchema.safeParse(v.textHealth).success)return false;
  if(v.reliability!=null&&!reliabilitySchema.safeParse(v.reliability).success)return false;
  if(v.leadSupply!=null&&!validLeadSupplyPlan(v.leadSupply))return false;
  if(v.closing!==undefined&&!closingOperationsSchema.safeParse(v.closing).success)return false;

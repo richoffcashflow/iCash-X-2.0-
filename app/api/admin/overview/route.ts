@@ -3,6 +3,7 @@ import {ownerInboundTarget} from '@/lib/owner-inbound-acceptance';
 import {db} from '@/lib/stripe-test';
 import {validOwnerOverview,validCostHealth,type OverviewFilters} from '@/lib/owner-overview';
 import {closingOperationsSchema} from '@/lib/deal-completion';
+import {textHealthSchema} from '@/lib/text-health';
 import {reliabilitySchema} from '@/lib/reliability';
 import {leadSupplyStatsSchema,leadSupplyPlan} from '@/lib/lead-supply';
 import {validOwnerCostEvidence} from '@/lib/owner-cost-evidence';
@@ -20,16 +21,17 @@ export async function GET(req:Request){
   const filters:OverviewFilters={days:Number(days) as 1|7|30,includeOwner:include==='true',query,page:Number(page)};
   const report=await db<unknown>('rpc/icash_owner_overview_with_funnel','POST',{p_actor:user.id,p_days:filters.days,p_include_owner:filters.includeOwner,p_query:filters.query,p_page:filters.page},req.signal);
   if(!validOwnerOverview(report,filters)||!report.funnel)throw Error('Incomplete overview');
-  const [closingData,costHealth,reliabilityData,supplyData,costEvidence]=await Promise.all([
+  const [closingData,costHealth,reliabilityData,textHealthData,supplyData,costEvidence]=await Promise.all([
    db('rpc/icash_closing_operations','POST',{p_actor:user.id,p_days:filters.days,p_include_owner:filters.includeOwner},req.signal),
    db<unknown>('rpc/icash_cost_health','POST',{},req.signal).catch(()=>null),
    db<unknown>('rpc/icash_reliability_status','POST',{},req.signal).catch(()=>null),
+   db<unknown>('rpc/icash_owner_text_health','POST',{p_actor:user.id},req.signal).catch(()=>null),
    db<unknown>('rpc/icash_owner_lead_supply','POST',{p_actor:user.id},req.signal).catch(()=>null),
    db<unknown>('rpc/icash_owner_cost_evidence','POST',{p_actor:user.id,p_days:filters.days,p_include_owner:filters.includeOwner},req.signal).catch(()=>null),
   ]);
   const closing=closingOperationsSchema.parse(closingData),reliability=reliabilitySchema.safeParse(reliabilityData);
-  const supply=leadSupplyStatsSchema.safeParse(supplyData);
-  return Response.json({report:{...report,closing,costHealth:validCostHealth(costHealth)?costHealth:null,costEvidence:validOwnerCostEvidence(costEvidence,filters)?costEvidence:null,reliability:reliability.success?reliability.data:null,leadSupply:supply.success?leadSupplyPlan(supply.data):null}},{headers});
+  const supply=leadSupplyStatsSchema.safeParse(supplyData),textHealth=textHealthSchema.safeParse(textHealthData);
+  return Response.json({report:{...report,closing,costHealth:validCostHealth(costHealth)?costHealth:null,costEvidence:validOwnerCostEvidence(costEvidence,filters)?costEvidence:null,reliability:reliability.success?reliability.data:null,textHealth:textHealth.success?textHealth.data:null,leadSupply:supply.success?leadSupplyPlan(supply.data):null}},{headers});
  }catch{
   return Response.json({error:'The overview could not load. Try refreshing in a moment.'},{status:503,headers});
  }
