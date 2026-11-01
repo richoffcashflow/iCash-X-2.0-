@@ -5,7 +5,7 @@ import {AccountAccess} from '@/components/account-access';
 import {FundingDialog} from '@/components/funding-dialog';
 import {MembershipCheckout} from '@/components/membership-checkout';
 import {PlanWorkspacePreview} from '@/components/plan-workspace-preview';
-import {ArrowDown,BookOpen,Building2,FileSignature,Phone} from 'lucide-react';
+import {ArrowDown,ArrowUpRight,BookOpen,Building2,ChevronDown,FileSignature,Phone} from 'lucide-react';
 import {webinarSite} from '@/lib/webinar-site';
 import {allowWebinarNavigation} from '@/lib/webinar-exit-reminder';
 import '@/app/webinar/webinar.css';
@@ -30,7 +30,7 @@ export function WebinarExpressCheckout({preview=false,previewBackHref='/webinar-
  return <div className={'wb-express-page wb-plan-home icash-launch-home'+(showFeatures&&!checkingAccount?' icash-homepage-features':'')} data-public-checkout={!checkingAccount&&!preview?'true':undefined}>
   {preview&&<nav className="wb-preview-tools" aria-label="Owner preview"><span>After webinar · Didn’t buy · Payments disabled</span><a href={previewBackHref}>Back to webinar</a></nav>}
   <header className="wb-express-header">
-   <a className="wb-express-brand" href="/" aria-label="iCash X home"><IcashMark/></a>
+   <a className="wb-express-brand" href="/" aria-label="iCash X home"><IcashMark/>{showFeatures&&!checkingAccount&&<span className="wb-home-wordmark">iCash X<span>2.0</span></span>}</a>
    <button type="button" className="wb-express-sign-in" aria-haspopup="dialog" onClick={()=>setSignInOpen(true)}>Sign in</button>
   </header>
   <main className="wb-express">
@@ -42,12 +42,16 @@ export function WebinarExpressCheckout({preview=false,previewBackHref='/webinar-
      <div className="wb-home-hero">
       <div className="wb-home-copy">
        <p className="wb-home-eyebrow">STANDARD PLAN <span aria-hidden="true">/</span> SOFTWARE + TRAINING</p>
-       <h1>Your AI wholesaling bot.</h1>
+       <h1>Your AI<br/>wholesaling <span>bot.</span></h1>
        <p className="wb-home-description">Research properties. Follow up with sellers. Move deals forward. All in one workspace.</p>
        <a className="wb-home-checkout-link" href="#your-plan">Go to checkout <ArrowDown size={17} aria-hidden="true"/></a>
        <p className="wb-home-access">Already a member? Sign in above.</p>
       </div>
-      <PlanWorkspacePreview/>
+      <figure className="wb-home-artwork">
+       <div className="wb-home-artwork-label"><span>REAL ESTATE. REIMAGINED.</span><ArrowUpRight size={17} aria-hidden="true"/></div>
+       <img src="/icash-x-connected-homes.webp" srcSet="/icash-x-connected-homes-mobile.webp 768w, /icash-x-connected-homes.webp 1536w" sizes="(max-width:760px) calc(100vw - 40px), (max-width:1200px) 50vw, 600px" width={1536} height={1024} alt="Architectural illustration of a modern home connected to smaller homes on silver platforms" loading="eager" fetchPriority="high" decoding="async"/>
+       <figcaption><span className="wb-home-artwork-mark" aria-hidden="true">X</span><span>One workspace.<br/><strong>Your next move.</strong></span><span className="wb-home-artwork-index" aria-hidden="true">iCash X / 2.0</span></figcaption>
+      </figure>
      </div>
      <ul className="wb-home-features" aria-label="Included with Standard">
       <li><Phone size={20} aria-hidden="true"/><div><h2>AI seller follow-up</h2><p>Calls, texts &amp; saved conversations.</p></div></li>
@@ -55,6 +59,10 @@ export function WebinarExpressCheckout({preview=false,previewBackHref='/webinar-
       <li><FileSignature size={20} aria-hidden="true"/><div><h2>Contracts &amp; buyers</h2><p>E-signatures, buyer matching &amp; outreach.</p></div></li>
       <li><BookOpen size={20} aria-hidden="true"/><div><h2>Training included</h2><p>Your course &amp; practice workspace.</p></div></li>
      </ul>
+     <details className="wb-home-preview-panel">
+      <summary><span><strong>See your workspace in action</strong><span>Explore research, conversations &amp; deal tools.</span></span><ChevronDown size={20} aria-hidden="true"/></summary>
+      <div className="wb-home-preview-content"><PlanWorkspacePreview/></div>
+     </details>
     </section>:!purchased?<section className="wb-plan-intro">
      <h1>Your AI wholesaling bot.</h1>
      <p>Property research, seller calls, texts and contracts—all in one workspace.</p>
