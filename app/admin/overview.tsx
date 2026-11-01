@@ -7,6 +7,7 @@ import styles from './overview.module.css';
 import {ClosingOperationsView} from './closing-operations';
 import {reliabilityIssueLabels,reliabilityAcknowledgementLabels} from '@/lib/reliability';
 import {reliabilityPriority,reliabilityItemPriority,reliabilitySeverityLabels,reliabilitySeverityGuidance} from '@/lib/reliability-priority';
+import {incomingStatusLabels} from '@/lib/text-health';
 import {ExperienceHealth} from './experience-health';
 import {UsageLoopReport} from '@/components/usage-loop-report';
 import {PlatformLearningReport} from '@/components/platform-learning-report';
@@ -95,6 +96,20 @@ export function OwnerOverviewView(){
       {(report.reliability.snapshot.acknowledgedCount??0)>0&&<details><summary>Reviewed history · {report.reliability.snapshot.acknowledgedCount} acknowledged alert{report.reliability.snapshot.acknowledgedCount===1?'':'s'}</summary><p>These alerts were removed from the active list after owner review. Unresolved receipts, budget holds and blocked work remain recorded. Receipt checks continue; acknowledgment does not retry work or confirm completion.</p><ul>{report.reliability.snapshot.acknowledgedIssues?.map(issue=><li key={`${issue.kind}:${issue.resourceId}`}><strong>{reliabilityAcknowledgementLabels[issue.disposition]}</strong> · {overviewTime(issue.since)} CT · Reference {issue.resourceId}<br/>Acknowledged {overviewTime(issue.acknowledgedAt)} CT</li>)}</ul>{(report.reliability.snapshot.acknowledgedCount??0)>25&&<p>Showing the 25 oldest acknowledged items. Full history is retained.</p>}</details>}
      </>}
     </>:<span>Monitoring could not be loaded. Refresh to try again.</span>}
+   </section>}
+   {report&&<section className={styles.notice} aria-label="Text number health">
+    <strong>Text number health</strong>
+    {report.textHealth?<>
+     <span>Checked {overviewTime(report.textHealth.checkedAt)} CT. Today uses the Central calendar day; other counts cover the past 24 hours.</span>
+     {report.textHealth.lines.map(line=><div key={line.phone}>
+      <strong>{line.phone} · {incomingStatusLabels[line.incomingStatus]}</strong>
+      <p>Today: {line.propertyAcceptedToday} property texts accepted · {line.customerUpdatesToday} customer updates accepted.</p>
+      <p>Past 24 hours: {line.propertyAccepted24h} property texts accepted to {line.propertyRecipients24h} people · {line.propertyDelivered24h} delivery confirmations · {line.propertyReview24h} sends need review · {line.blockedNotices24h} carrier blocking notices.</p>
+      <p>{line.replyRecipients24h} people replied · {line.interestedRecipients24h} confirmed selling interest · {line.optOutRecipients24h} opted out · {line.refusalRecipients24h} declined or need review · {line.complaintWordingRecipients24h} used complaint wording.</p>
+      <p>{line.lastIncomingAt?`Last saved incoming message: ${overviewTime(line.lastIncomingAt)} CT.`:'No saved incoming message confirms this line.'}</p>
+     </div>)}
+     <span>Delivery confirmations do not verify incoming service. Complaint wording is a review signal; carrier complaint totals are unavailable. No incoming message means unverified, not a confirmed outage.</span>
+    </>:<span>Text number monitoring is unavailable. Line health is unverified.</span>}
    </section>}
    {report&&<div className={styles.notice} role="status">{report.costHealth?<><strong>Platform cost reconciliation</strong><span>{report.costHealth.pendingCount} operations awaiting final costs · {report.costHealth.agedCount} older than 24 hours · {report.costHealth.unreconciledObservations} provider observations awaiting reconciliation.</span>{report.costHealth.oldestAt&&<span>Oldest pending: {overviewTime(report.costHealth.oldestAt)}</span>}</>:<span>Cost reconciliation status is unavailable. Pending costs are not confirmed profit.</span>}</div>}
    {report&&<ExperienceHealth/>}
