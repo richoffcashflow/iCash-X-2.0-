@@ -1,0 +1,680 @@
+[
+  {
+    "name": "icash_customer_update_deliveries",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "channel",
+        "type": "text"
+      },
+      {
+        "name": "source_key",
+        "type": "text"
+      },
+      {
+        "name": "kind",
+        "type": "text"
+      },
+      {
+        "name": "screening_id",
+        "type": "uuid"
+      },
+      {
+        "name": "recipient",
+        "type": "text"
+      },
+      {
+        "name": "preference_revision",
+        "type": "integer"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "authorized_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "provider_id",
+        "type": "text"
+      },
+      {
+        "name": "sender",
+        "type": "text"
+      }
+    ]
+  },
+  {
+    "name": "icash_deal_files",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "screening_id",
+        "type": "uuid"
+      },
+      {
+        "name": "terms",
+        "type": "jsonb"
+      },
+      {
+        "name": "stage",
+        "type": "text"
+      },
+      {
+        "name": "seller_signed_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "assignment_signed_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "title_verified_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "funded_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone"
+      }
+    ]
+  },
+  {
+    "name": "icash_lifecycle_text_inbox",
+    "columns": [
+      {
+        "name": "event_id",
+        "type": "text"
+      },
+      {
+        "name": "role",
+        "type": "text"
+      },
+      {
+        "name": "sender",
+        "type": "text"
+      },
+      {
+        "name": "recipient",
+        "type": "text"
+      },
+      {
+        "name": "body",
+        "type": "text"
+      },
+      {
+        "name": "attachments",
+        "type": "jsonb"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      }
+    ]
+  },
+  {
+    "name": "icash_live_conversations",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "screening_id",
+        "type": "uuid"
+      },
+      {
+        "name": "party",
+        "type": "text"
+      },
+      {
+        "name": "agent_id",
+        "type": "text"
+      },
+      {
+        "name": "conversation_id",
+        "type": "text"
+      },
+      {
+        "name": "operation_key",
+        "type": "text"
+      },
+      {
+        "name": "contact_key",
+        "type": "text"
+      },
+      {
+        "name": "strategy_key",
+        "type": "text"
+      },
+      {
+        "name": "tool_token_hash",
+        "type": "text"
+      },
+      {
+        "name": "tool_expires_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "next_poll_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "poll_attempts",
+        "type": "integer"
+      },
+      {
+        "name": "result",
+        "type": "jsonb"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "completed_at",
+        "type": "timestamp with time zone"
+      }
+    ]
+  },
+  {
+    "name": "icash_operating_budget",
+    "columns": [
+      {
+        "name": "id",
+        "type": "integer"
+      },
+      {
+        "name": "enabled",
+        "type": "boolean"
+      },
+      {
+        "name": "funded_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "protected_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "reserved_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "spent_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "daily_limit_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "minimum_margin_bps",
+        "type": "integer"
+      },
+      {
+        "name": "hold_reason",
+        "type": "text"
+      },
+      {
+        "name": "tax_reserve_bps",
+        "type": "integer"
+      },
+      {
+        "name": "require_company_reserve",
+        "type": "boolean"
+      },
+      {
+        "name": "standard_cost_multiplier",
+        "type": "numeric"
+      },
+      {
+        "name": "elevenlabs_cost_multiplier",
+        "type": "numeric"
+      }
+    ]
+  },
+  {
+    "name": "icash_operation_spend",
+    "columns": [
+      {
+        "name": "operation_key",
+        "type": "text"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "rate_id",
+        "type": "uuid"
+      },
+      {
+        "name": "credit_reservation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "charge_cap_cents",
+        "type": "bigint"
+      },
+      {
+        "name": "reserved_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "permission_until",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "financial_checked_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "actual_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "charged_cents",
+        "type": "bigint"
+      },
+      {
+        "name": "settlement_evidence",
+        "type": "text"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "dispatched_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "settled_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "customer_price_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "standard_cost_multiplier",
+        "type": "numeric"
+      },
+      {
+        "name": "elevenlabs_cost_multiplier",
+        "type": "numeric"
+      },
+      {
+        "name": "required_revenue_micros",
+        "type": "numeric"
+      },
+      {
+        "name": "cost_basis",
+        "type": "text"
+      },
+      {
+        "name": "estimate_checked_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "dealmachine_cost_multiplier",
+        "type": "numeric"
+      },
+      {
+        "name": "data_unit_cost_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "data_cost_basis",
+        "type": "text"
+      },
+      {
+        "name": "prospecting_budget_id",
+        "type": "bigint"
+      }
+    ]
+  },
+  {
+    "name": "icash_seller_gaps",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "deal_id",
+        "type": "uuid"
+      },
+      {
+        "name": "screening_id",
+        "type": "uuid"
+      },
+      {
+        "name": "thread_id",
+        "type": "uuid"
+      },
+      {
+        "name": "source",
+        "type": "text"
+      },
+      {
+        "name": "source_id",
+        "type": "uuid"
+      },
+      {
+        "name": "reason",
+        "type": "text"
+      },
+      {
+        "name": "stage",
+        "type": "text"
+      },
+      {
+        "name": "channel",
+        "type": "text"
+      },
+      {
+        "name": "quote",
+        "type": "text"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "due_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "expires_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "source_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "outgoing_id",
+        "type": "uuid"
+      },
+      {
+        "name": "resolution",
+        "type": "text"
+      },
+      {
+        "name": "resolved_by",
+        "type": "uuid"
+      },
+      {
+        "name": "resolved_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "review_reason",
+        "type": "text"
+      }
+    ]
+  },
+  {
+    "name": "icash_text_messages",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "thread_id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "direction",
+        "type": "text"
+      },
+      {
+        "name": "body",
+        "type": "text"
+      },
+      {
+        "name": "attachments",
+        "type": "jsonb"
+      },
+      {
+        "name": "asset_ids",
+        "type": "uuid[]"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "request_key",
+        "type": "uuid"
+      },
+      {
+        "name": "event_id",
+        "type": "text"
+      },
+      {
+        "name": "provider_id",
+        "type": "text"
+      },
+      {
+        "name": "last_delivery_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "customer_price_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "customer_author_id",
+        "type": "uuid"
+      },
+      {
+        "name": "route_revision",
+        "type": "bigint"
+      }
+    ]
+  },
+  {
+    "name": "icash_text_senders",
+    "columns": [
+      {
+        "name": "phone",
+        "type": "text"
+      },
+      {
+        "name": "enabled",
+        "type": "boolean"
+      }
+    ]
+  },
+  {
+    "name": "icash_text_threads",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "deal_id",
+        "type": "uuid"
+      },
+      {
+        "name": "sender",
+        "type": "text"
+      },
+      {
+        "name": "recipient",
+        "type": "text"
+      },
+      {
+        "name": "permission_until",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "permission_evidence",
+        "type": "text"
+      },
+      {
+        "name": "timezone",
+        "type": "text"
+      },
+      {
+        "name": "dnc_checked_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "dnc_clear",
+        "type": "boolean"
+      },
+      {
+        "name": "sms_rate_id",
+        "type": "uuid"
+      },
+      {
+        "name": "mms_rate_id",
+        "type": "uuid"
+      },
+      {
+        "name": "paused",
+        "type": "boolean"
+      },
+      {
+        "name": "ai_mode",
+        "type": "text"
+      },
+      {
+        "name": "party",
+        "type": "text"
+      },
+      {
+        "name": "sms_review_request_id",
+        "type": "uuid"
+      },
+      {
+        "name": "sms_intake_pending",
+        "type": "boolean"
+      },
+      {
+        "name": "operational_contact_id",
+        "type": "uuid"
+      },
+      {
+        "name": "eligibility_until",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "operational_sms_sender",
+        "type": "text"
+      },
+      {
+        "name": "operational_sms_rate_hash",
+        "type": "text"
+      },
+      {
+        "name": "operational_sms_price_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "manual_only",
+        "type": "boolean"
+      },
+      {
+        "name": "seller_intake_id",
+        "type": "uuid"
+      },
+      {
+        "name": "seller_sms_rate_hash",
+        "type": "text"
+      },
+      {
+        "name": "seller_sms_price_micros",
+        "type": "bigint"
+      },
+      {
+        "name": "retired_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "sender_pool_assigned",
+        "type": "boolean"
+      },
+      {
+        "name": "owner_buyer_test_id",
+        "type": "uuid"
+      }
+    ]
+  }
+]

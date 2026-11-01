@@ -8,6 +8,10 @@ import {validateTextAnalysis} from '../lib/text-ai-policy.ts';
 import {liveConversationResult} from '../lib/deal-conversation.ts';
 import {replyToInstantLeadText} from '../lib/meta-instant-text.ts';
 const fixtures=[
+ ['This is not a scam, but I am tired of these texts','review'],
+ ['Stop asking me cause I will not fucking sale shit','opt_out'],['I am tired of these texts. Stop.','opt_out'],['I have told yall NO','declined'],["I've told you no",'declined'],['I have already told you no','declined'],['I will not sell','declined'],["I won't sell unless you offer $250,000",'review'],['I am tired of these texts','review'],
+ ['I would sell for $250,000',null],['No, but I would consider $250,000',null],['What price can you offer?',null],['Can you stop by tomorrow?',null],["Don't stop asking me about the house",null],['You said "stop asking me" yesterday',null],['I did not say I have told you no',null],['Meet me at the bus stop.',null],
+
  ['Stop text me','opt_out'],['Stop contact me','opt_out'],['Stop call me','opt_out'],['Stop message me','opt_out'],['Stop email me','opt_out'],['Please stop text','opt_out'],
  ['Stop calling me','opt_out'],['Stop texting me','opt_out'],['Stop contacting me','opt_out'],['Stop messaging me','opt_out'],['Stop emailing me','opt_out'],
  ["Please don't stop calling",null],["Please don't stop calling me",null],["Don't stop text me",null],['I did not say stop contact me',null],['You wrote "stop text me" in your message',null],['Stop call it vacant',null],
@@ -29,6 +33,7 @@ try{
  await pg.exec(forward);
  const currentDefinition=(await pg.query("select pg_get_functiondef('icash_seller_response_disposition(text)'::regprocedure) d")).rows[0].d;
  assert.equal(currentDefinition.replace(forward.split('$new$')[1],forward.split('$old$')[1]),originalDefinition,'only the direct stop/quit verb fragment changes');
+ await pg.exec(readFileSync(new URL('../config/seller-natural-refusals.sql',import.meta.url),'utf8'));
  const runtimeSql=(await pg.query("select string_agg(pg_get_functiondef(p.oid),E'\\n') definitions from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('icash_seller_direct_response_match','icash_seller_response_disposition','icash_seller_call_disposition')")).rows[0].definitions;
  for(const pattern of Object.values(sellerResponsePatterns))assert(runtimeSql.includes(pattern.replaceAll('\\b','\\y')),'installed SQL contains the exact mirrored regex');
  for(const [body,expected] of fixtures){

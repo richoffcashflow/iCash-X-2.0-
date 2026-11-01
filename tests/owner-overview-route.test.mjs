@@ -1,3 +1,4 @@
+import {textHealthSchema} from '../lib/text-health.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
@@ -9,7 +10,7 @@ import {leadSupplyStatsSchema,leadSupplyPlan} from '../lib/lead-supply.ts';
 const owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7';
 let user={id:owner},queries=[],bad=false,authFails=false,contactOnly=false;
 const fixture=filters=>({...filters,pageSize:25,timezone:'America/Chicago',startAt:'2026-10-01T05:00:00Z',endAt:'2026-10-10T05:00:00Z',funnel:sellerFunnelStages.map(s=>({key:s.key,count:0})),leadCount:0,reviewCount:0,matchedCount:0,leads:[],usage:{completedCount:0,missingChargeCount:0,chargedCents:0,coveredCents:0,knownCostMicros:0,costMicros:0,marginMicros:0,missingCostCount:0,estimatedCount:0,pendingCount:0}});
-const mocks={validCostHealth,closingOperationsSchema,currentUser:async verify=>{assert.equal(verify,true);if(authFails)throw Error('Provider unavailable');return user;},ownerInboundTarget:{ownerUserId:owner},validOwnerOverview,db:async(path,method,body,signal)=>{queries.push({path,method,body,signal});if(path==='rpc/icash_closing_operations')return {signedContracts:0,closedDeals:0,deposits:0,receivedCents:0,receivedDeals:0,stages:[],issues:[],issueCount:0};const report=fixture({days:body.p_days,includeOwner:body.p_include_owner,query:body.p_query,page:body.p_page});if(contactOnly){report.leadCount=report.matchedCount=1;report.funnel[0].count=1;report.leads=[{id:'contact-only',name:'Instant seller',address:null,phone:'+12145550123',email:null,state:'awaiting_address',source:'meta',campaign:null,assignedTo:null,createdAt:report.endAt}];}return bad?null:report;}};
+const mocks={textHealthSchema,validCostHealth,closingOperationsSchema,currentUser:async verify=>{assert.equal(verify,true);if(authFails)throw Error('Provider unavailable');return user;},ownerInboundTarget:{ownerUserId:owner},validOwnerOverview,db:async(path,method,body,signal)=>{queries.push({path,method,body,signal});if(path==='rpc/icash_closing_operations')return {signedContracts:0,closedDeals:0,deposits:0,receivedCents:0,receivedDeals:0,stages:[],issues:[],issueCount:0};const report=fixture({days:body.p_days,includeOwner:body.p_include_owner,query:body.p_query,page:body.p_page});if(contactOnly){report.leadCount=report.matchedCount=1;report.funnel[0].count=1;report.leads=[{id:'contact-only',name:'Instant seller',address:null,phone:'+12145550123',email:null,state:'awaiting_address',source:'meta',campaign:null,assignedTo:null,createdAt:report.endAt}];}return bad?null:report;}};
 mocks.reliabilitySchema=reliabilitySchema;mocks.leadSupplyStatsSchema=leadSupplyStatsSchema;mocks.leadSupplyPlan=leadSupplyPlan;
 globalThis.__ownerOverview=mocks;
 const code=ts.transpileModule(readFileSync(new URL('../app/api/admin/overview/route.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
@@ -23,6 +24,7 @@ let response=await get('days=7&includeOwner=true&q=%25_&page=2&actor=another-use
 assert.equal(queries[0].path,'rpc/icash_owner_overview_with_funnel');
 assert.deepEqual(queries[0].body,{p_actor:owner,p_days:7,p_include_owner:true,p_query:'%_',p_page:2});assert(queries[0].signal instanceof AbortSignal);
 assert.equal((await response.json()).report.costHealth,null);
+assert.deepEqual(queries.find(q=>q.path==='rpc/icash_owner_text_health').body,{p_actor:owner},'Private number monitoring binds the verified owner');
 assert.deepEqual(queries.find(q=>q.path==='rpc/icash_owner_lead_supply').body,{p_actor:owner},'Supply demand is customer-only and independent of overview filters');
 assert(validCostHealth({pendingCount:2,agedCount:1,oldestAt:'2026-10-01T00:00:00Z',unreconciledObservations:3,checkedAt:'2026-10-13T00:00:00Z'}));
 assert.equal(validCostHealth({pendingCount:0,agedCount:1,oldestAt:null,unreconciledObservations:0,checkedAt:'bad'}),false);
