@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {PGlite} from '@electric-sql/pglite';
+import {reliabilitySchema} from '../lib/reliability.ts';
+import {reliabilityPriority} from '../lib/reliability-priority.ts';
+const pg=await PGlite.create(),q=(s,a=[])=>pg.query(s,a),one=async(s,a=[])=>Object.values((await q(s,a)).rows[0])[0];
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8'),id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+const refresh=async()=>{await one('select icash_refresh_account_work_snapshot()');return reliabilitySchema.parse(await one('select icash_reliability_status()'));};
+try{
+ await pg.exec(read('tests/fixtures/account-work-repair.sql'));
+ for(const name of ['workspace-experience-and-incidents','reliability-incident-severity','reliability-incident-stable-recovery','reliability-component-outages'])await pg.exec(read('config/'+name+'.sql'));
+ await pg.exec(read('tests/fixtures/account-work-monitor-baseline.sql'));
+ await one('select icash_refresh_reviewed_workflow_snapshot()');
+ await one("select icash_refresh_reliability_incident('ready')");
+ const old=await one('select icash_claim_reliability_notification_v2()');await one('select icash_finish_reliability_notification($1,$2)',[old.id,id(990)]);
+ await pg.exec("update icash_reliability_private.incidents set peak_severity='critical',seen_reasons=array['worker','maintenance','workflows']");
+ await pg.exec(read('config/account-work-outages.sql'));
+ for(let n=1;n<=8;n++){
+  await q("insert into icash_accounts(id,owner_user_id,bot_paused,created_at,workspace_ack_version) values($1,$1,$2,now()-interval '2 days','fixture')",[id(n),n===4||n===5]);
+  await q("insert into icash_wallets(account_id,balance_cents,reserved_cents) values($1,$2,0)",[id(n),n===6?10:1000]);
+  await q("insert into icash_operation_rates(id,operation,enabled,expires_at,charge_cents) values($1,'property_search',true,now()+interval '1 day',100)",[id(100+n)]);
+  await q("insert into icash_discovery_configs(account_id,enabled,auto_enabled,contacts_enabled,rate_id,contact_rate_id,data_rights_until) values($1,true,true,true,$2,$2,now()+interval '1 day')",[id(n),id(100+n)]);
+ }
+ await q("update icash_discovery_configs set data_rights_until=now()-interval '1 day' where account_id=$1",[id(1)]);
+ await q("insert into icash_control_events(id,account_id,action,created_at) values($1,$2,'pause',now())",[id(905),id(5)]);
+ await q("insert into icash_operation_spend(operation_key,account_id,state,actual_micros,settled_at) values('recent',$1,'settled',1,now())",[id(7)]);
+ await q("insert into icash_funding_orders(account_id,mode,state,credited_at) values($1,'live','paid',now())",[id(8)]);
+ let report=await refresh();
+ assert.equal(report.components.worker.status,'ok');assert.equal(report.snapshot.accountProgress.affectedAccounts,4);
+ assert.equal(report.snapshot.accountProgress.expiredConfigurations,1);assert.equal(report.snapshot.accountProgress.unexpectedPauses,1);
+ assert.equal(reliabilityPriority(report),'critical');
+ assert.equal(await one('select icash_reliability_severity($1)',[report]),'critical','database and UI agree');
+ assert.equal(report.snapshot.issueCount,5,'legacy issue plus four account failures');
+ assert.equal((await refresh()).snapshot.issueCount,5,'no double count on repeated refresh');
+ assert.equal((await one('select icash_account_work_health($1)',[id(1)])).status,'blocked');
+ assert.equal((await one('select icash_account_work_health($1)',[id(7)])).status,'ok','other account data never leaks');
+ await one("select icash_refresh_reliability_incident('ready')");
+ const alert=await one('select icash_claim_reliability_notification_v2()');assert.ok(alert,'old critical workflow incident cannot suppress a new account outage');
+ assert.equal(alert.severity,'critical');await one('select icash_finish_reliability_notification($1,$2)',[alert.id,id(991)]);
+ await one("select icash_refresh_reliability_incident('ready')");assert.equal(await one('select icash_claim_reliability_notification_v2()'),null,'deduplicated');
+ await pg.exec("update icash_discovery_configs set data_rights_until=now()+interval '1 day';update icash_accounts set bot_paused=false;insert into icash_operation_spend(operation_key,account_id,state,actual_micros,settled_at) select 'completed:'||id,id,'settled',1,now() from icash_accounts;");
+ report=await refresh();assert.equal(report.snapshot.accountProgress.affectedAccounts,0);assert.equal(report.snapshot.issueCount,1,'historical workflow remains unresolved');
+ await one("select icash_refresh_reliability_incident('ready')");
+ await pg.exec("update icash_reliability_private.component_outages set healthy_since=now()-interval '16 minutes',last_observed_at=now()-interval '1 minute' where component='account_progress'");
+ await one("select icash_refresh_reliability_incident('ready')");
+ assert.equal(await one("select opened_at from icash_reliability_private.component_outages where component='account_progress'"),null,'sustained independent recovery rearms');
+ await q("update icash_discovery_configs set data_rights_until=now()-interval '1 day' where account_id=$1",[id(1)]);
+ await refresh();await one("select icash_refresh_reliability_incident('ready')");assert.ok(await one('select icash_claim_reliability_notification_v2()'),'recurrence alerts while old workflow stays open');
+ await pg.exec("update icash_reliability_private.snapshots set checked_at=now()-interval '4 minutes'");
+ assert.equal((await one('select icash_account_work_health($1)',[id(7)])).status,'unavailable','stale monitor never claims healthy work');
+ for(const role of ['anon','authenticated'])assert.equal(await one('select has_function_privilege($1,\'icash_account_work_observations()\',\'execute\')',[role]),false);
+ console.log('PASS healthy worker plus stopped accounts is critical; Pause/funding/new-payment exclusions, scoped status, deduplication, stable recovery, re-alerting and stale monitoring.');
+}catch(e){console.error(e.message,e.where??'');process.exitCode=1;}finally{await pg.close();}

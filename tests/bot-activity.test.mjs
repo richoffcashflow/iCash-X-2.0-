@@ -15,6 +15,12 @@ for(const [progress,label] of [[{status:'budget_reached'},'Waiting for available
  assert.equal(currentBotActivity({...input,paused:true},now).label,'Paused');
 }
 let authorized=true,failed=false,queries=[];
+for(const reason of ['configuration_expired','configuration_disabled','system_paused','no_completed_work','pending_work']){
+ const value=currentBotActivity({paused:false,tickets:[ticket],screening:[],progress:{status:'ready',health:{status:'blocked',reason}}},now);
+ assert.equal(value.blocked,true);assert.equal(value.active,false,'a claimed ticket cannot prove account recovery');
+ assert(!value.label.includes('next task'));
+}
+assert.equal(currentBotActivity({paused:false,tickets:[ticket],screening:[],progress:{health:{status:'unavailable'}}},now).unavailable,true);
 const account='00000000-0000-4000-8000-000000000001';
 const route=await loadService('app/api/work/bot-status/route.ts',{
  currentBotActivity,
