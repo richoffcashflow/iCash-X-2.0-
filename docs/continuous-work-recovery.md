@@ -38,4 +38,16 @@ Install disabled, run the local adversarial cases and native concurrent claim/Pa
 
 Provider contract: https://api.docs.dealmachine.com/api-reference/exports/list-exports documents `pending`, `processing`, `completed`, `failed`, status filters and pagination totals.
 
+## Expired free-check renewal
+
+After the gateway recovery succeeded at 22:31 UTC, all five repaired search accounts completed new research by 22:33. The original five operations retained their exact hashes. The export recovery saved three HTTP 200 receipts, with 225 historical exports and zero pending or processing exports; the original failed purchase and money remained held. Both production hosts ran `9e6c1c5ba4550cc858a1704674f79fc1aff12a97`, whose 671 suites, browser checks and native contention checks passed.
+
+Further investigation found 116 expired positive contact checks across 43 still-stalled accounts. Their fingerprint was unique forever, while positive evidence expired after 30 minutes. The unchanged next attempt therefore returned held indefinitely. Other abandoned free lists had already been deleted but retained the same permanent cache key.
+
+`owner-preflight-renewal.sql` installs a disabled renewal switch and immutable generations. An expired check can have one successor only after its old provider list has confirmed cleanup and its local handler window has ended. Positive evidence retains its 30-minute validity; known-empty evidence retains its 24-hour exclusion. Unconfirmed list creation/deletion cannot renew. A new generation uses a distinct list name, lease and empty receipt set, waits the full 90-second indexing interval, and must obtain fresh exact baseline and eligible-owner counts before the unchanged paid admission permits anything.
+
+Renewal rechecks account Pause after the shared budget lock, membership, configuration, rates, funds, exact current screening, manual property control, phone pool and unknown owner purchases. Existing cohort/sibling arbitration and shared provider quota remain in force. Old records are never reset or deleted, and superseded failures remain in private history while current attempts own the active finding. Deploy disabled, require matching release checks including native competing-renewal and Pause transactions, then activate; rollback disables renewal without altering history or original purchases.
+
+Older billing holds are not repaired by this renewal. Missing original provider charges remain explicit unresolved work, and the critical incident must not close merely because the release or free checks succeeded.
+
 Rate-limit headers and organization scope: https://api.docs.dealmachine.com/rate-limits.
