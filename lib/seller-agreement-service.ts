@@ -9,7 +9,7 @@ import {sellerAgreementIdentityEvidence,sellerAgreementIdentityHold} from './sel
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 export type SellerAgreementScope={callKey:string;accountId:string;ownerUserId:string;ownerEmail:string;dealId:string;screeningId:string;phone:string};
 type Envelope={id:string;state:string;test_mode:boolean;terms:unknown;recipients:{id:string;name:string;phone?:string}[]};
-type Dependencies={db:Database;history:(conversationId:string)=>Promise<unknown>;bind:(token:string,conversationId:string)=>Promise<void>;send:(input:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:'purchase';signers:{name:string;phone:string}[];phoneLinkOnly:true})=>Promise<{id:string;testMode:boolean}>;text:(accountId:string,envelopeId:string,phone:string)=>Promise<{sent:boolean;status:string;instruction:string}>;refresh:(accountId:string,envelopeId:string)=>Promise<{status:string}>;now?:()=>number};
+type Dependencies={db:Database;history:(conversationId:string)=>Promise<unknown>;bind:(token:string,conversationId:string)=>Promise<void>;send:(input:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:'purchase';signers:{name:string;phone:string}[];phoneLinkOnly:true;expectedTerms?:unknown})=>Promise<{id:string;testMode:boolean}>;text:(accountId:string,envelopeId:string,phone:string)=>Promise<{sent:boolean;status:string;instruction:string}>;refresh:(accountId:string,envelopeId:string)=>Promise<{status:string}>;now?:()=>number};
 const instructions:Record<string,string>={
  all_owners_required:'Another owner or decision maker must be included. Ask who else needs to agree and arrange their participation; do not omit a required signer.',
  confirmation_required:'Confirm the exact price and closing date, prepared terms, and whether they want the agreement texted now before sending.',
@@ -58,7 +58,7 @@ export async function sellerAgreementAction(token:string,input:unknown,d:Depende
  const history=await d.history(i.conversationId);
  const identityHold=sellerAgreementIdentityHold(sellerAgreementIdentityEvidence(history,i.confirmation.sellerLegalName));
  if(identityHold)return identityHold;
- const terms=confirmedSellerTerms(current,i.confirmation,{address:result.property.address,principal:identity.principal,legalDescription:result.property.legalDescription??'',ceilingCents:result.preliminarySellerCeilingCents,now:(d.now??Date.now)()});
+ const terms=confirmedSellerTerms(current,i.confirmation,{address:result.property.address,principal:identity.principal,legalDescription:result.property.legalDescription??'',ceilingCents:result.preliminarySellerCeilingCents,now:(d.now??Date.now)(),supportedRenegotiation:!!acceptedCallOffer&&!existing});
  const signers=[{name:terms.seller,phone:scope.phone}];
  signingReadiness('purchase',terms,signers,identity.principal,'draft',(d.now??Date.now)());
  if(existing){
@@ -90,7 +90,7 @@ export async function sellerAgreementAction(token:string,input:unknown,d:Depende
  if(!envelopeId){
   if(!claim.claimed){const deferred=await deferDelivery();if(deferred)return deferred;throw Error('agreement_in_progress');}
   try{
-   const sent=await d.send({accountId:scope.accountId,userId:scope.ownerUserId,customerEmail:scope.ownerEmail,dealId:scope.dealId,kind:'purchase',signers,phoneLinkOnly:true});
+   const sent=await d.send({accountId:scope.accountId,userId:scope.ownerUserId,customerEmail:scope.ownerEmail,dealId:scope.dealId,kind:'purchase',signers,phoneLinkOnly:true,expectedTerms:terms});
    if(sent.testMode)throw Error('live_agreement_required');
    envelopeId=sent.id;
    if(await d.db('rpc/icash_finish_seller_agreement','POST',{p_id:claim.id,p_account:scope.accountId,p_envelope:envelopeId})!==true)throw Error('agreement_in_progress');

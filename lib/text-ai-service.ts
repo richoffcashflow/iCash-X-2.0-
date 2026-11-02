@@ -4,9 +4,13 @@ import {propertyQuestionAllowed,type TextProperty} from './text-property-policy.
 import {db} from '@/lib/stripe-test';
 import {analyzeText,safeTextReplies} from './text-ai-policy.ts';
 import {dispatchTextMessage} from '@/lib/text-message-service';
+import {processSellerTextOffer} from './seller-text-offer-service.ts';
+import type {TextOfferContext} from './seller-text-offer.ts';
+import {sendForSignatures} from './signing-service';
+import {textPendingContract} from './contract-text-service';
 export async function processTextAi(accountId:string,jobId:string){
  const result=await runTextAi(accountId,jobId);
- const failure=['message_accepted','message_delivered'].includes(result.status)?null:result.status==='text_ai_drafted'?'action_not_admitted':result.status==='text_ai_needs_review'?'analysis_failed':result.status;
+ const failure=['message_accepted','message_delivered','text_ai_waiting','seller_agreement_sent','seller_agreement_delivery_pending'].includes(result.status)?null:result.status==='text_ai_drafted'?'action_not_admitted':result.status==='text_ai_needs_review'?'analysis_failed':result.status;
  try{
   const progress=await db<{state:string;reason:string}|null>('rpc/icash_finish_seller_text_progress','POST',{p_account:accountId,p_job:jobId,p_status:failure});
   return {...result,...(progress?{progressState:progress.state,progressReason:progress.reason}:{}),status:progress?.state==='needs_review'&&result.status==='text_ai_drafted'?'text_ai_needs_review':result.status};
@@ -15,9 +19,10 @@ export async function processTextAi(accountId:string,jobId:string){
 async function runTextAi(accountId:string,jobId:string){
  if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
  try{
-  const resume=await db<{mode:string;messageId?:string}|null>('rpc/icash_resume_seller_text_ai','POST',{p_account:accountId,p_job:jobId});
+  const resume=await db<{mode:string;messageId?:string;context?:TextOfferContext}|null>('rpc/icash_resume_seller_text_ai','POST',{p_account:accountId,p_job:jobId});
   if(resume?.mode==='held')return {status:'text_ai_held'};
   if(resume?.mode==='dispatch'&&resume.messageId)return await dispatchTextMessage(accountId,resume.messageId);
+  if(resume?.mode==='seller_offer'&&resume.context)return await processSellerTextOffer(resume.context,{db,dispatch:dispatchTextMessage,send:sendForSignatures,text:textPendingContract});
  }catch{return {status:'text_ai_needs_review'};}
  if(!process.env.OPENAI_API_KEY){
   await db(`icash_text_ai_jobs?id=eq.${jobId}&account_id=eq.${accountId}&state=eq.issued`,'PATCH',{state:'pending',next_attempt_at:new Date(Date.now()+3600000).toISOString()});

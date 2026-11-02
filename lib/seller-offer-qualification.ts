@@ -1,6 +1,7 @@
 import {object} from './required-call-recording.ts';
 import {sellerListingEvidence} from './seller-listing.ts';
 import {sellerRequestsPrice} from './seller-conversation-efficiency.ts';
+import {callSellerPriceEvidence} from './call-offer-evidence.ts';
 
 const questions={
  ownership:'Are you the owner of this property?',
@@ -53,7 +54,7 @@ export function sellerOfferQualification(current:unknown,history:unknown[]=[]):S
    if(availabilityQuestion&&/\b(?:not now|(?:can't|cannot) talk|not a good time|busy right now)\b/i.test(text))facts.availability=false;
    if(/\b(?:i(?:'m| am) (?:the |an? )?owner|i own (?:it|this|the (?:house|property)))\b/i.test(text))facts.ownership=true;
    if(/\b(?:not (?:the )?owner|don['’]?t own|do not own|wrong (?:number|person|property)|no longer own)\b/i.test(text))facts.ownership=false;
-   if(sellerRequestsPrice(text)){
+   if(sellerRequestsPrice(text)||callSellerPriceEvidence({transcript:rows.slice(0,index+1)},{action:'report_change',sellerStatement:text})!==null){
     facts.availability??=true;facts.interest??=true;
     // An offer question is not an answer to a pending repairs/occupancy question.
     question='';continue;
