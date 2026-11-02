@@ -86,7 +86,7 @@ export async function verifyWorkspace(browser,base,options,name){
   if(p==='/api/billing/membership')return route.fulfill({json:{membership:{state:'active',accessible:true,vip,priceCents:vip?10000:5000,paidThrough:'2026-11-16T05:00:00Z',cancelAtPeriodEnd:false}}});
   if(p==='/api/work/activity')return route.fulfill({json:work(url)});
   if(p==='/api/work/buyer-network')return route.fulfill({json:{...network,hasActiveDeal:signed()&&scenario!=='cancelled'&&scenario!=='cancellation_pending',responses:signed()?2:0,buyers:signed()?network.buyers:[]}});
-  if(p==='/api/work/property-photo')return route.fulfill({json:{photo:null}});
+  if(p==='/api/work/property-photo')return route.continue();
   if(p==='/api/work/report')return route.fulfill({json:{days:Number(url.searchParams.get('days')),timezone:'UTC',startAt:'2026-10-14T00:00:00Z',endAt:'2026-10-14T18:00:00Z',leads:1,calls:0,texts:0,contracts:signed()?1:0}});
   if(p==='/api/notifications/updates')return route.fulfill({json:{items:[],preferences:{seenAt:null}}});
   if(p==='/api/work/allowance')return route.fulfill({json:{day:'2026-10-14',limitCents:10000,spentCents:0,reservedCents:0,remainingCents:10000,availableCents:10000,extraCents:0,resetsAt:'2026-10-15T05:00:00Z'}});
@@ -555,6 +555,7 @@ export async function verifyWorkspace(browser,base,options,name){
   await page.getByText('Confirming your credits',{exact:true}).waitFor();
   assert.equal(await page.getByRole('region',{name:'Credits added',exact:true}).count(),0,'pending payment is never described as funded');
   assert(apiReads.includes('/api/work/events'),'workspace attempts its optional update feed while fallback reads remain usable');
+  assert(apiReads.includes('/api/work/property-photo'),'workspace exercises the local HTTP photo fixture');
   assert.deepEqual(errors,[]);assert.deepEqual(writes,[],'navigation never signs, sends, charges or changes controls');assert.deepEqual(external,[]);
   console.log(`PASS ${name}: staged access, title messages, in-panel loading/failure/recovery, preserved drafts, crash containment, cancellation and search; required acknowledgment, takeover recovery and inert contract previews. No live work or provider requests.`);
  }catch(error){console.error({name,scenario,errors,writes,body:(await page.locator('body').innerText()).slice(-7000)});throw error;}
