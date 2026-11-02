@@ -94,6 +94,17 @@ export function recordingConfigHashMatches(configHash:string,snapshot:Record<str
   const previousBuiltins={...builtins};delete previousBuiltins.identity_challenge;
   snapshots.push({...value,conversation_config:{...config,agent:{...agent,prompt:{...prompt,built_in_tools:previousBuiltins}}}});
  }
+ // November 2 replaced the disabled memory identity flag on the same
+ // approved version. Reconstruct only this exact representation while memory
+ // remains disabled; the full saved hash must still match. Extra rules/fields,
+ // enabled memory, or a conflicting legacy flag are never normalized.
+ for(const value of [...snapshots]){
+  const platform=object(value.platform_settings),privacy=object(platform.privacy),memory=object(privacy.user_memory);
+  if(memory.enabled!==false||Object.hasOwn(memory,'accept_unverified_identities')
+   ||JSON.stringify(canonical(memory.identity_policy))!=='{"rules":[{"verification_method":"workspace_asserted"}]}')continue;
+  const previousMemory:Record<string,unknown>={...memory,accept_unverified_identities:false};delete previousMemory.identity_policy;
+  snapshots.push({...value,platform_settings:{...platform,privacy:{...privacy,user_memory:previousMemory}}});
+ }
  // Observed together on the unchanged approved version on 2026-10-24. Only
  // this exact new representation can reconstruct the saved full fingerprint:
  // fullscreen widget, no unverified memory identities, and no summary schedule.

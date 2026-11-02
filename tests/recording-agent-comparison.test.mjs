@@ -73,6 +73,50 @@ test('October serialization defaults must reproduce the original complete approv
  assert.equal(recordingAgentMatches(reviewFor(explicit),explicit),true,'explicit reviews still match exactly');
 });
 
+test('disabled memory identity serialization preserves the complete saved incoming/outgoing approval',()=>{
+ for(const olderPlatformDefaults of [false,true]){
+  const old=fixture(true,true);
+  old.platform_settings.privacy.user_memory={enabled:false,scale:'balanced'};
+  old.platform_settings.widget={variant:'fixture'};
+  if(!olderPlatformDefaults){
+   old.platform_settings.privacy.user_memory.accept_unverified_identities=false;
+   old.platform_settings.widget.mobile_fullscreen=true;
+   old.platform_settings.summary_schedule=null;
+  }
+  const review=reviewFor(old),current=structuredClone(old);
+  delete current.platform_settings.privacy.user_memory.accept_unverified_identities;
+  current.platform_settings.privacy.user_memory.identity_policy={rules:[{verification_method:'workspace_asserted'}]};
+  current.platform_settings.widget.mobile_fullscreen=true;current.platform_settings.summary_schedule=null;
+  current.platform_settings.privacy.encrypt_conversations=false;
+  const saved=JSON.stringify({review,current});
+  assert.equal(recordingAgentMatches(review,current),true);
+  // Incoming hashes include identity fields as well as the configuration.
+  const incoming=a=>({...a,workflow:null,procedures:null});
+  const incomingHash=sha(JSON.stringify(canonical(incoming(old))));
+  assert.equal(recordingConfigHashMatches(incomingHash,incoming(current)),true);
+  assert.equal(JSON.stringify({review,current}),saved);
+  assert.equal(recordingAgentMatches(reviewFor(current),old),false,'never invent newly approved identity settings in reverse');
+  for(const mutate of [
+   a=>a.platform_settings.privacy.user_memory.enabled=true,
+   a=>a.platform_settings.privacy.user_memory.enabled='false',
+   a=>delete a.platform_settings.privacy.user_memory.enabled,
+   a=>a.platform_settings.privacy.user_memory.scale='changed',
+   a=>a.platform_settings.privacy.user_memory.accept_unverified_identities=false,
+   a=>a.platform_settings.privacy.user_memory.identity_policy.rules.push({verification_method:'workspace_asserted'}),
+   a=>a.platform_settings.privacy.user_memory.identity_policy.rules[0].verification_method='unverified',
+   a=>a.platform_settings.privacy.user_memory.identity_policy.rules[0].extra=false,
+   a=>a.platform_settings.privacy.user_memory.identity_policy.extra=null,
+   ...[null,{},[],{rules:[]},{rules:null},{rules:'workspace_asserted'}].map(value=>a=>a.platform_settings.privacy.user_memory.identity_policy=value),
+   a=>a.conversation_config.agent.prompt.prompt+=' altered',
+   a=>a.platform_settings.privacy.record_voice=true,
+   a=>a.platform_settings.auth.enable_auth=false,
+   a=>a.version_id='agtvrsn_other',a=>a.branch_id='agtbrch_other',
+  ]){const changed=structuredClone(current);mutate(changed);assert.equal(recordingAgentMatches(review,changed),false,mutate.toString());assert.equal(recordingConfigHashMatches(incomingHash,incoming(changed)),false,mutate.toString());}
+ }
+ const explicit=fixture();explicit.platform_settings.privacy.user_memory={enabled:true,identity_policy:{rules:[{verification_method:'workspace_asserted'}]}};
+ assert.equal(recordingAgentMatches(reviewFor(explicit),explicit),true,'explicit unchanged reviews retain exact behavior');
+});
+
 test('only the approved outgoing identity permits the exact two-to-eight capacity change',()=>{
  const before=fixture();Object.assign(before,{agent_id:parallel.agentId,branch_id:parallel.branchId,version_id:parallel.versionId});
  Object.assign(before.platform_settings.call_limits,{agent_concurrency_limit:2,daily_limit:1000});

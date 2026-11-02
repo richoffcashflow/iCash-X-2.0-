@@ -10,7 +10,7 @@ export function workerFailureDetails(error){
 }
 // Only fixed database error codes leave this boundary. Provider messages,
 // query text, details, hints and request tokens never enter operational logs.
-const databaseFailureCodes=new Set(['57014','55P03','40P01','53300','53400','08000','08001','08003','08004','08006','08007','08P01','42501','42883','42P01','42703','PGRST202','PGRST204','PGRST205']);
+const databaseFailureCodes=new Set(['57014','55P03','40P01','53300','53400','08000','08001','08003','08004','08006','08007','08P01','42501','42883','42P01','42702','42703','PGRST202','PGRST204','PGRST205']);
 async function databaseFailureCode(response){
  const reader=response.body?.getReader();
  if(!reader)return null;
