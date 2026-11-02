@@ -1,5 +1,7 @@
 # Continuous reliability
 
+The November 2 account-work recovery also covers expired free contact checks. `owner-preflight-renewal.test.mjs` exercises immutable successors, expiry/cleanup, fresh positive admission and control/source changes. `test-owner-preflight-postgres.py` races 24 renewals and a customer Pause across real sessions. The migration remains disabled until the matching web and worker release passes all checks; actual provider recovery must be observed separately.
+
 Reliability means that supported work advances, waits for a real prerequisite, or reports a specific failure with a recovery path. A running worker and a passing build do not establish that customer work completes. No release can prove every possible scenario or guarantee zero bugs.
 
 ## Release contract

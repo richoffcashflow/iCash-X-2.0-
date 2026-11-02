@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV = {**os.environ, "PGPASSWORD": "isolated-fixture-only", "PGCONNECT_TIMEOUT": "5"}
@@ -121,3 +122,65 @@ for trial in range(6):
     ticket = int(sql(f"select count(*) from icash_automation_tickets where screening_id='{sibling['screeningId']}';"))
     assert free + ticket == 1, (trial, free, ticket)
 print("PASS native PostgreSQL: competing ticket issuance and free-list creation cannot claim the same sibling.")
+
+# Expired positive evidence must not trap a funded account indefinitely. Renewal
+# creates one new FREE list, retaining the entire original row and paid fences.
+sql((ROOT / "config/owner-preflight-renewal.sql").read_text())
+
+
+def expired_check(n):
+    a, s, p = uid(n), uid(n + 1), uid(n + 2)
+    snap = {"propertyId": "prop_" + str(n), "propertyType": "house", "raw": {"data": {"state": "TX"}}}
+    its = [{"screeningId": s, "snapshot": snap, "ids": ["per_" + str(n)]}]
+    req = {**request, "people_ids": its[0]["ids"]}
+    sql(f"""insert into icash_accounts(id) values('{a}');
+insert into icash_discovery_configs(account_id,contact_rate_id) values('{a}','{uid(99)}');
+insert into icash_wallets(account_id) values('{a}');
+insert into icash_screening_jobs(id,account_id,state,snapshot) values('{s}','{a}','complete',{literal(snap)});
+insert into icash_research_private.owner_export_preflights(id,account_id,fingerprint,items,request,state,list_name,list_id,created_at,started_at,checked_at,deleted_at,receipts)
+values('{p}','{a}',md5(jsonb_build_array({literal(its)},{literal(req)})::text),{literal(its)},{literal(req)},'ready','original-fixture','"fixture-list"',now()-interval '2 hours',now()-interval '1 hour',now()-interval '1 hour',now()-interval '40 minutes','{{"original":"offline fixture"}}');""")
+    return a, p, f"select icash_claim_owner_preflight('{a}',{literal(its)},{literal(req)});"
+
+
+a, parent, renewal_claim = expired_check(7000)
+before = sql(f"select md5(to_jsonb(p)::text) from icash_research_private.owner_export_preflights p where id='{parent}';")
+assert json.loads(sql(renewal_claim))["status"] == "held"
+sql("update icash_research_private.owner_export_settings set preflight_renewal_enabled=true;")
+with ThreadPoolExecutor(max_workers=12) as pool:
+    claims = list(pool.map(lambda _: json.loads(sql(renewal_claim)), range(24)))
+assert sum(c["status"] == "create" for c in claims) == 1, claims
+assert all(c["status"] in ("create", "pending") for c in claims), claims
+assert sql(f"select count(*) from icash_research_private.owner_export_preflights where supersedes='{parent}' and generation=2;") == "1"
+assert sql(f"select md5(to_jsonb(p)::text) from icash_research_private.owner_export_preflights p where id='{parent}';") == before
+assert sql("select count(*) from fixture_purchases;") == "0"
+
+# Pause commits after the claimant's initial read but before the common budget
+# lock. The renewal recheck must see Pause, with no new list or paid operation.
+a, parent, renewal_claim = expired_check(7100)
+pause = subprocess.Popen(CMD, env=ENV, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+try:
+    pause.stdin.write(f"begin;set local statement_timeout='8s';select id from icash_operating_budget where id=1 for update;update icash_accounts set bot_paused=true where id='{a}';select 'pause_locked';\n")
+    pause.stdin.flush()
+    while pause.stdout.readline().strip() != "pause_locked":
+        if pause.poll() is not None:
+            raise AssertionError(pause.stderr.read())
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(sql, renewal_claim)
+        waiting = False
+        for _ in range(80):
+            waiting = sql(f"select exists(select 1 from pg_stat_activity where pid<>pg_backend_pid() and wait_event_type='Lock' and query like '%icash_claim_owner_preflight%{a}%');") == "t"
+            if waiting:
+                break
+            time.sleep(0.025)
+        assert waiting, "Renewal never reached the locked creation boundary"
+        pause.stdin.write("commit;\n\\q\n")
+        pause.stdin.flush()
+        pause.wait(timeout=5)
+        assert json.loads(future.result())["status"] == "held"
+    assert sql(f"select count(*) from icash_research_private.owner_export_preflights where supersedes='{parent}';") == "0"
+    assert sql("select count(*) from fixture_purchases;") == "0"
+finally:
+    if pause.poll() is None:
+        pause.kill()
+        pause.wait(timeout=5)
+print("PASS native PostgreSQL: 24 competing expired-check renewals create one immutable successor; concurrent customer Pause wins after the initial read; original evidence and paid work unchanged.")
