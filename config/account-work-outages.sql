@@ -124,7 +124,7 @@ begin
  needle:='foreach component_name in array array[''worker'',''maintenance'',''monitor''] loop';
  if strpos(d,needle)=0 then raise exception 'Component loop changed';end if;
  d:=replace(d,needle,'foreach component_name in array array[''worker'',''maintenance'',''monitor'',''account_progress''] loop
-  if component_name=''account_progress'' and report->''snapshot''->''accountProgress'' is null then continue;end if;');
+  if component_name=''account_progress'' and (report->''snapshot''->''accountProgress'' is null or (report->''snapshot''->''accountProgress''->>''checkedAt'')::timestamptz<=now()-interval ''3 minutes'') then continue;end if;');
  needle:='if component_name=any(found_reasons) then';
  if strpos(d,needle)=0 then raise exception 'Component detection changed';end if;
  d:=replace(d,needle,'if component_name=any(found_reasons) or (component_name=''account_progress'' and coalesce((report->''snapshot''->''accountProgress''->>''affectedAccounts'')::integer,0)>0) then');

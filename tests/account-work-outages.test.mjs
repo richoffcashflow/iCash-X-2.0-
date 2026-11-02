@@ -18,6 +18,7 @@ try{
  await pg.exec("update icash_reliability_private.incidents set peak_severity='critical',seen_reasons=array['worker','maintenance','workflows']");
  await pg.exec(read('supabase/migrations/20261102210458_account_work_outages.sql'));
  await pg.exec(read('config/account-work-funding-eligibility.sql'));
+ await pg.exec(read('config/account-work-fresh-recovery.sql'));
  await pg.exec(read('supabase/migrations/20261102211401_account_work_existing_discovery_index.sql'));
  assert.equal(await one("select count(*) from pg_indexes where tablename='icash_discovery_results' and indexname in ('icash_discovery_results_account','icash_account_discovery_completed')"),1,'reuse the existing discovery index');
  for(let n=1;n<=9;n++){
@@ -59,6 +60,10 @@ try{
  report=await refresh();assert.equal(report.snapshot.accountProgress.affectedAccounts,0);assert.equal(report.snapshot.issueCount,1,'historical workflow remains unresolved');
  await one("select icash_refresh_reliability_incident('ready')");
  await pg.exec("update icash_reliability_private.component_outages set healthy_since=now()-interval '16 minutes',last_observed_at=now()-interval '1 minute' where component='account_progress'");
+ await pg.exec("update icash_reliability_private.snapshots set report=jsonb_set(report,'{accountProgress,checkedAt}',to_jsonb(now()-interval '4 minutes'))");
+ await one("select icash_refresh_reliability_incident('ready')");
+ assert.ok(await one("select opened_at from icash_reliability_private.component_outages where component='account_progress'"),'stale clean observations never clear an outage');
+ await refresh();
  await one("select icash_refresh_reliability_incident('ready')");
  assert.equal(await one("select opened_at from icash_reliability_private.component_outages where component='account_progress'"),null,'sustained independent recovery rearms');
  await q("update icash_discovery_configs set data_rights_until=now()-interval '1 day' where account_id=$1",[id(1)]);
