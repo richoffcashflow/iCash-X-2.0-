@@ -48,6 +48,9 @@ globalThis.fetch=fixtureFetch;Date.now=()=>now;process.env.DOCUSEAL_TEST_API_KEY
 const input={accountId:'account',userId:'user',customerEmail:'customer@example.invalid',dealId:'deal',kind:'purchase',signers:[{name:'Fixture seller',email:'seller@example.invalid'}],autoSignature:'Fixture signature'};
 try{
  await sendForSignatures(input);assert.equal(providerWrites,1);
+ const originalWrites=providerWrites;
+ await assert.rejects(()=>sendForSignatures({...input,expectedTerms:{...terms,priceCents:terms.priceCents+100000}}),/confirmed terms changed/);
+ assert.equal(providerWrites,originalWrites,'a human edit after automatic confirmation cannot be signed under the old confirmation');
  const phoneInput={...input,autoSignature:undefined,manualSend:true,signers:[{name:'Fixture seller',phone:'+12125550123',email:'seller@example.invalid'}]};
  providerWrites=0;await sendForSignatures(phoneInput);assert.equal(providerWrites,1,'manual send uses owner-bound consent while property automation is paused');
  assert.equal(payload.submitters[0].email,'seller@example.invalid');

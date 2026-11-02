@@ -118,16 +118,16 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
   const agreed=state.acceptedPriceCents;
   if(agreed&&agreed>calculation.sellerCeilingCents)return blockedOffer('agreed_price_needs_update','The updated numbers do not support the previously discussed price. We need to reconcile that before confirming revised terms.');
   const proposed=state.proposedPriceCents;
-  if(proposed!==undefined&&(!Number.isSafeInteger(proposed)||proposed<=0||proposed>calculation.sellerCeilingCents))return blockedOffer('seller_price_needs_review','The requested price is outside the current calculation. Discuss the current supported cash proposal without accepting the higher ask.');
+  if(proposed!==undefined&&(!Number.isSafeInteger(proposed)||proposed<=0))return blockedOffer('seller_price_needs_review','Clarify the seller asking price before calculating a counteroffer.');
   // Round a new proposal before quoting/saving it so acceptance and the contract
   // share the same amount. Existing accepted and prepared terms remain exact.
-  const price=agreed??roundedSellerPrice(proposed??calculation.sellerCeilingCents);
+  const price=agreed??roundedSellerPrice(Math.min(proposed??calculation.sellerCeilingCents,calculation.sellerCeilingCents));
   if(price<1)return blockedOffer('calculation_required','The current numbers do not support a cash offer. They need review.');
 const financial=sellerCallFinancialGate(base.property.financialScreening,{sellerOfferCents:price,sellerCostReserveCents:Number.isSafeInteger(object(context.snapshot).sellerCostReserveCents)?Number(object(context.snapshot).sellerCostReserveCents):null,checkedAt:now});
   const payoff=sellerPayoffPosition(state.payoffReport,price);
   const conditional=!!state.payoffPending||(payoff?(!payoff.complete||!payoff.canProceed):financial.status!=='eligible');
   const accepted=!!agreed&&!state.acceptanceConditional;
-  const common={quoteAllowed:true as const,party:'seller',priceCents:price,...offerPricePresentation(price),...conversationAddressFields(context.address),repairEstimateCents:repairs,repairSource:state.repairEstimateCents===undefined?'property_research':'seller_reported_total_budget',asIs:true,payment:'cash'};
+  const common={quoteAllowed:true as const,party:'seller',priceCents:price,...offerPricePresentation(price),...conversationAddressFields(context.address),repairEstimateCents:repairs,repairSource:state.repairEstimateCents===undefined?'property_research':'seller_reported_total_budget',asIs:true,payment:'cash',sellerAskingPriceCents:proposed??null,counteroffer:proposed!==undefined&&proposed>price};
   if(payoff){
    const nextQuestion=state.payoffPending?'Can you confirm the current mortgage payoff balance?':!payoff.complete?'Are there any other loans, liens, unpaid taxes or HOA balances besides that mortgage?':payoff.shortfallCents>0&&!payoff.canProceed?state.payoffReport?.coverageDeclined?'Would you like a person to review any other options?':`The difference is ${offerPricePresentation(payoff.shortfallCents).displayPrice}. Would you be willing and able to bring that amount to closing to sell the property?`:null;
    return {...common,payoffVerified:false,titleVerificationRequiredBeforeClosing:true,payoffSource:'seller_reported',reportedPayoff:payoff,conditional,contractAllowed:!conditional,status:conditional?'conditional_proposal':accepted?'verbally_accepted':'calculated_proposal',nextQuestion,

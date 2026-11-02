@@ -159,3 +159,43 @@ finally:
     pause.close()
     resume.close()
 print('PASS native dialogue: concurrent duplicate webhooks, one clarification/dispatch, grounded next explanation and concurrent Pause; no provider or model calls.')
+
+# Numeric negotiation uses the same native transaction/final-provider boundary.
+# Only the already tested pure planner is substituted with its fixture result.
+sql("drop schema if exists auth cascade; drop schema if exists icash_call_offer_private cascade; drop schema if exists icash_seller_agreement_private cascade;" + (ROOT / 'tests/helpers/seller-text-offer-fixture.sql').read_text() + (ROOT / 'tests/fixtures/seller-text-offer-original-functions.sql').read_text() + (ROOT / 'config/seller-text-offer.sql').read_text())
+NA, NT, ND, NS, NU = [f'10000000-0000-4000-8000-{n:012d}' for n in range(1, 6)]
+snapshot = {"propertyId": "prop_123", "propertyType": "house", "sellerCostReserveCents": 0, "raw": {"data": {"dm_property_id": "prop_123", "full_address": "45 Oak Road", "estimated_value": 200000, "estimated_repair_cost": 40000, "total_estimated_loan_balance": 20000, "estimated_equity_percentage": 90}}}
+sql(f"""update icash_seller_progress_settings set offer_enabled=true,offer_enabled_at=now()-interval '1 minute';
+insert into auth.users(id,email) values('{NU}','fixture@example.invalid');
+insert into icash_accounts(id,owner_user_id) values('{NA}','{NU}');
+insert into icash_customer_identities values('{NA}','Fixture Buyer');
+insert into icash_screening_jobs(id,account_id,snapshot,result) values('{NS}','{NA}','{json.dumps(snapshot)}'::jsonb||jsonb_build_object('fetchedAt',now()),'{{"financialCheck":{{"status":"eligible"}}}}');
+insert into icash_deal_files(id,account_id,screening_id,terms) values('{ND}','{NA}','{NS}','{{"address":"45 Oak Road","buyer":"Fixture Buyer","priceCents":21500000,"priceSource":"proposed"}}');
+insert into icash_text_threads(id,account_id,deal_id,recipient) values('{NT}','{NA}','{ND}','+12145550222');
+insert into icash_sms_routes(sender,recipient,account_id) values('+15550000001','+12145550222','{NA}');""")
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    list(pool.map(lambda _: sql(f"insert into icash_text_messages(account_id,thread_id,direction,state,body,event_id) values('{NA}','{NT}','incoming','received','I need $210k','same-offer-webhook') on conflict(event_id) do nothing;"), range(16)))
+NJ, NM = sql(f"select id||'|'||message_id from icash_text_ai_jobs where account_id='{NA}'").split('|')
+nc = json.loads(sql(f"select icash_seller_text_offer_context('{NA}','{NM}')"))
+plan = {'kind': 'message', 'action': 'cash_offer', 'body': 'Our as-is cash proposal is $102,000, based on property value, repairs and holding costs. Does that work?', 'state': {'textThreadId': NT, 'processedSource': NM, 'proposedPriceCents': 21000000, 'quotedPriceCents': 10200000, 'quoteRevision': 'a'*64, 'acceptedPriceCents': None, 'contractBlocked': False}}
+save = f"select icash_save_seller_text_offer('{NA}','{NJ}','{nc['fingerprint']}',{nc['offerVersion']},'{json.dumps(plan)}')"
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    results = list(pool.map(lambda _: sql(save), range(16)))
+assert sum(bool(r) for r in results) == 1, results
+NUMERIC_MESSAGE = json.loads(next(r for r in results if r))['messageId']
+assert sql(f"select count(*) from icash_text_messages where account_id='{NA}' and direction='outgoing'") == '1'
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    claims = list(pool.map(lambda _: sql(f"select icash_claim_text('{NA}','{NUMERIC_MESSAGE}','+15550000001')"), range(16)))
+assert sum(bool(r) for r in claims) == 1
+# Reusing a queued message after a concurrent Pause cannot pass final admission.
+sql(f"update icash_text_messages set state='ready' where id='{NUMERIC_MESSAGE}'")
+pause, claim = Session('offer_pause'), Session('offer_claim')
+try:
+    pause.query(f"begin; select id from icash_operating_budget where id=1 for update; update icash_accounts set bot_paused=true where id='{NA}';")
+    claim.start(f"select icash_claim_text('{NA}','{NUMERIC_MESSAGE}','+15550000001');")
+    pause.query('commit;')
+    assert claim.finish() == ''
+finally:
+    pause.close()
+    claim.close()
+print('PASS native numeric offer: 16 duplicate webhooks, 16 competing plans, one quote and one final operation; concurrent Pause wins without a replay.')
