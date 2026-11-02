@@ -81,7 +81,12 @@ try{
  await pg.exec(`
  create or replace function icash_queue_voice_jobs() returns void language sql as $$select$$;
  create function icash_next_before_voice_dispatch() returns jsonb language sql as $$select null::jsonb$$;
- create or replace function icash_seller_voice_permission_current(p_account uuid,p_permission uuid) returns boolean language sql as $$select exists(select 1 from public.fixture_demo_permission where account_id=p_account and permission_id=p_permission)$$;
+ -- Keep the real permission check's row lock. A pure SELECT stub concealed
+ -- the PostgREST read-only transaction failure in the original hours tests.
+ create or replace function icash_seller_voice_permission_current(p_account uuid,p_permission uuid) returns boolean language plpgsql as $$begin
+  perform 1 from public.icash_contact_permissions where id=p_permission and account_id=p_account for share;
+  return exists(select 1 from public.fixture_demo_permission where account_id=p_account and permission_id=p_permission);
+ end$$;
  set check_function_bodies=on;
  `);
  for(const account of [a,b,owner]){
@@ -343,5 +348,31 @@ try{
   await pg.exec("update icash_optin_call_requests set requested_at=now()-interval '6 minutes',expires_at=now()-interval '1 minute'");
   assert.equal(await claim(final,next.id,owner),null,'expiry is rechecked at the final provider boundary');
  });
- console.log(`Seller phone spacing: ${scenarios} offline database scenarios passed; owner fresh-demo repeats, real callback receipts, expired/unknown-call holds, exact final dial admission, tenant boundaries, private ACLs and no paid traffic.`);
+ // Reproduce PostgREST's documented POST access-mode selection using the
+ // actual installed function volatility. No provider work or production data.
+ const rpcDemo=await ownerDemo();
+ const rpcNames=['icash_voice_outreach_context','icash_voice_outreach_hours_current','icash_seller_phone_call_current'];
+ const metadata=async()=> (await q(`select proname,prosrc,proacl,prosecdef,proconfig,proowner from pg_proc where proname=any($1) order by proname`,[rpcNames])).rows;
+ const originalMetadata=await metadata();
+ const rpc=async(name,account=owner)=>{
+  const mode=await val('select provolatile from pg_proc where proname=$1',[name]);
+  await pg.exec(mode==='v'?'begin read write':'begin read only');
+  try{return await val(`select public.${name}($1,$2)`,[account,rpcDemo.id]);}
+  finally{await pg.exec('rollback');}
+ };
+ for(const name of rpcNames)await assert.rejects(()=>rpc(name),error=>error.code==='25006'&&/SELECT FOR SHARE/.test(error.message),name+' reproduces the failed POST');
+ const transactionSql=read('config/owner-demo-rpc-transaction.sql');
+ assert.equal(transactionSql,read('supabase/migrations/20261102171244_owner_demo_rpc_transaction.sql'));
+ await pg.exec(transactionSql);await pg.exec(transactionSql);
+ assert.deepEqual(await metadata(),originalMetadata,'function bodies, privileges, security mode, owner and search path stay exact');
+ const requestBefore=await val('select row_to_json(r) from icash_optin_call_requests r where lead_id=$1',[rpcDemo.lead]);
+ assert((await rpc(rpcNames[0])).ownerDemoRequestedUntil);
+ assert.equal(await rpc(rpcNames[1]),true);assert.equal(await rpc(rpcNames[2]),true);
+ assert.equal(await rpc(rpcNames[0],b),null);assert.equal(await rpc(rpcNames[1],b),false);assert.equal(await rpc(rpcNames[2],b),false);
+ assert.deepEqual(await val('select row_to_json(r) from icash_optin_call_requests r where lead_id=$1',[rpcDemo.lead]),requestBefore,'RPC inspection never renews the request');
+ assert.equal(await val('select count(*)::int from icash_call_recordings'),0,'RPC inspection never starts a call');
+ await q("update icash_optin_call_requests set requested_at=now()-interval '6 minutes',expires_at=now()-interval '1 minute' where lead_id=$1",[rpcDemo.lead]);
+ assert.equal((await rpc(rpcNames[0])).ownerDemoRequestedUntil,null);
+ assert.equal(await rpc(rpcNames[1]),false);assert.equal(await rpc(rpcNames[2]),false,'expired requests still cannot dial later');
+ console.log(`Seller phone spacing: ${scenarios} offline database scenarios plus all three POST transaction regressions passed; owner fresh-demo repeats, real callback receipts, expired/unknown-call holds, exact final dial admission, tenant boundaries, unchanged private ACLs and no paid traffic.`);
 }finally{await pg.close();}
