@@ -70,6 +70,7 @@ def function(file, name):
 fixture = (ROOT / "tests/helpers/seller-progress-fixture.sql").read_text()
 split = fixture.index("create function icash_queue_ai_reply(")
 setup = fixture[:split] + (ROOT / "tests/fixtures/seller-progress-original-functions.sql").read_text() + fixture[split:]
+setup += (ROOT / "tests/helpers/seller-dialogue-fixture.sql").read_text() + (ROOT / "tests/fixtures/seller-dialogue-original-functions.sql").read_text()
 setup = re.sub(r"create role (anon|authenticated|service_role);", "", setup)
 for file, name in [("seller-response-policy", "icash_seller_direct_response_match"), ("seller-response-policy", "icash_seller_response_disposition"), ("seller-response-policy", "icash_seller_contact_stop")]:
     # The last helper is CREATE OR REPLACE in the policy; use the original helper.
@@ -77,7 +78,7 @@ for file, name in [("seller-response-policy", "icash_seller_direct_response_matc
         file = "seller-gap-recovery"
     setup += function(file, name)
 sql("drop schema public cascade; create schema public; do $$begin create role anon; exception when duplicate_object then null;end$$; do $$begin create role authenticated; exception when duplicate_object then null;end$$; do $$begin create role service_role; exception when duplicate_object then null;end$$;" + setup)
-sql("create trigger icash_text_ai_incoming after insert on icash_text_messages for each row execute function icash_enqueue_text_ai();" + (ROOT / "config/seller-reply-progress.sql").read_text())
+sql("create trigger icash_text_ai_incoming after insert on icash_text_messages for each row execute function icash_enqueue_text_ai();" + (ROOT / "config/seller-reply-progress.sql").read_text() + (ROOT / "config/seller-dialogue.sql").read_text())
 sql(f"update icash_seller_progress_settings set enabled=true; insert into icash_accounts(id) values('{A}'); insert into icash_screening_jobs(id,account_id,snapshot) values('{S}','{A}',jsonb_build_object('propertyId','fixture-property')); insert into icash_deal_files(id,account_id,screening_id) values('{D}','{A}','{S}'); insert into icash_text_threads(id,account_id,deal_id,recipient) values('{T}','{A}','{D}','+15550000002');")
 
 with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
@@ -126,3 +127,35 @@ finally:
     pause.close()
     resume.close()
 print("PASS native PostgreSQL: 16 duplicate webhooks, 16 draft recoveries and 16 final claims create one operation; late receipts and concurrent Pause do not deadlock or replay. No provider calls.")
+
+# The automatic clarification follows the real production final-message and
+# financial guard, with only the final provider operation replaced by a fixture.
+sql(f"update icash_seller_progress_settings set dialogue_enabled=true; update icash_accounts set bot_paused=false; update icash_screening_jobs set result='{{\"financialCheck\":{{\"status\":\"eligible\"}}}}'; insert into icash_sms_routes(sender,recipient,account_id) values('+15550000001','+15550000002','{A}');")
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    list(pool.map(lambda _: sql(f"insert into icash_text_messages(account_id,thread_id,direction,state,body,event_id) values('{A}','{T}','incoming','received','No third parties','same-dialogue-webhook') on conflict(event_id) do nothing;"), range(16)))
+assert sql("select count(*) from icash_text_ai_jobs where analysis->>'dialoguePolicy'='seller-dialogue-v1'") == '1'
+DJ = sql("select id from icash_text_ai_jobs where analysis->>'dialoguePolicy'='seller-dialogue-v1'")
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    resumed = list(pool.map(lambda _: json.loads(sql(f"select icash_resume_seller_text_ai('{A}','{DJ}')")), range(16)))
+assert len({r['messageId'] for r in resumed}) == 1
+DM = resumed[0]['messageId']
+assert 'do you mean no agents' in sql(f"select body from icash_text_messages where id='{DM}'")
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    claims = list(pool.map(lambda _: sql(f"select icash_claim_text('{A}','{DM}','+15550000001')"), range(16)))
+assert sum(bool(r) for r in claims) == 1
+assert sql(f"select count(*) from icash_text_messages where request_key='{DJ}'") == '1'
+sql(f"update icash_text_messages set state='delivered',provider_id='dialogue-receipt' where id='{DM}';")
+answer = sql(f"insert into icash_text_messages(account_id,thread_id,direction,state,body,event_id) values('{A}','{T}','incoming','received','No agents','dialogue-answer') returning id;")
+next_job = sql(f"select id from icash_text_ai_jobs where message_id='{answer}'")
+assert sql(f"select analysis->>'dialogueAction' from icash_text_ai_jobs where id='{next_job}'") == 'explain_assignment'
+pause, resume = Session('dialogue_pause'), Session('dialogue_resume')
+try:
+    pause.query(f"begin; select id from icash_operating_budget where id=1 for update; update icash_accounts set bot_paused=true where id='{A}';")
+    resume.start(f"select icash_resume_seller_text_ai('{A}','{next_job}');")
+    pause.query('commit;')
+    assert json.loads(resume.finish())['mode'] == 'held'
+    assert sql(f"select count(*) from icash_text_messages where request_key='{next_job}'") == '0'
+finally:
+    pause.close()
+    resume.close()
+print('PASS native dialogue: concurrent duplicate webhooks, one clarification/dispatch, grounded next explanation and concurrent Pause; no provider or model calls.')
