@@ -41,6 +41,9 @@ turn=await incoming(rock,'Yes');let ctx=await context(rock,turn.m);assert.equal(
 assert.equal(turn.j.analysis.dialogueAction,'continue_details');sent=await dispatch(rock,turn.j);assert.match(sent.body,/repairs or updates/);
 assert.equal((await one('select count(*)::int n from icash_text_attention where account_id=$1 and state=\'open\'',[rock.a])).n,0,'Clarified condition is not a sticky review');
 assert.equal((await one('select count(*)::int n from icash_offer_authorities where account_id=$1',[rock.a])).n,0);
+turn=await incoming(rock,'I would like to sell next month');const remembered=(await progress(rock,turn.m)).context;
+assert.ok(remembered.priorActions.includes('ask_condition'),'Ordinary model planning remembers the qualification appended to a fixed reply');
+assert.equal(planSellerProgress({action:'ask_callback',facts:[{kind:'timing',quote:'I would like to sell next month'}],humanRequested:false,callbackRequested:false,optedOut:false,declined:false},remembered).action,'ask_price');
 // A direct-buyer requirement is meaningful, not permission to pretend to buy directly.
 const direct=await seed();turn=await incoming(direct,'No wholesalers. Direct buyers only.');assert.equal((await progress(direct,turn.m)).reason,'direct_purchase_required');assert.notEqual(turn.j?.analysis?.dialoguePolicy,'seller-dialogue-v1');
 // A yes to the either/or question is not agreement to assignment.
@@ -69,6 +72,7 @@ const explain=await seed();turn=await incoming(explain,'No third parties');await
 const visit=await seed();turn=await incoming(visit,'Text me to set up a visit');assert.equal(turn.j.analysis.dialogueAction,'ask_visit_details');await dispatch(visit,turn.j);
 turn=await incoming(visit,'Tuesday after 3 PM');assert.equal(turn.j.analysis.dialogueAction,'ask_visit_access');await dispatch(visit,turn.j);
 turn=await incoming(visit,'I will let you in');ctx=await context(visit,turn.m);assert.equal(ctx.visitAvailability,'Tuesday after 3 PM');assert.equal(ctx.visitAccess,'I will let you in');assert.equal((await progress(visit,turn.m)).reason,'visit_attendee_required');
+turn=await incoming(visit,'I need a new visit');ctx=await context(visit,turn.m);assert.equal(ctx.visitAvailability,null);assert.equal(ctx.visitAccess,null);assert.equal(turn.j.analysis.dialogueAction,'ask_visit_details','A new visit request cannot reuse old availability/access');
 // Routine informational questions need no model call or manual review.
 for(const [body,action,expected] of [['Any fees?','explain_fees',/agreed in writing/],['How does this work?','explain_process',/confirm property details/],['How much?','explain_price',/depends on the property/],['Pictures are there','continue_details',/continue without new photos/],['Which part is that?','clarify_question',/Which part/]]){
  const c=await seed();turn=await incoming(c,body);assert.equal(turn.j.analysis.dialogueAction,action,body);assert.equal(turn.j.provider_id,null);assert.equal(turn.j.usage,null);sent=await dispatch(c,turn.j);assert.match(sent.body,expected);

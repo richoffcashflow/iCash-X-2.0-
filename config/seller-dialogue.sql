@@ -60,8 +60,8 @@ begin
    if visit_id is null or visit_access is not null then visit_id:=x.id;visit_times:=null;visit_access:=null;visit_answer:=null;end if;
   end if;
   if b ~ '\m(cancel|withdraw|no) (the )?(visit|showing)\M' then visit_id:=null;visit_times:=null;visit_access:=null;end if;
-  if prior_action='ask_visit_details' and b ~ '\m(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|morning|afternoon|evening|after|before|[0-9]{1,2}(:[0-9]{2})? ?(am|pm))\M' then visit_times:=x.body;visit_answer:=x.id;end if;
-  if prior_action='ask_visit_access' then visit_access:=x.body;visit_answer:=x.id;end if;
+  if prior_anchor=visit_id::text and prior_action='ask_visit_details' and visit_times is null and b ~ '\m(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|morning|afternoon|evening|after|before|[0-9]{1,2}(:[0-9]{2})? ?(am|pm))\M' then visit_times:=x.body;visit_answer:=x.id;end if;
+  if prior_anchor=visit_id::text and prior_action='ask_visit_access' and visit_access is null then visit_access:=x.body;visit_answer:=x.id;end if;
  end loop;
  b:=lower(trim(regexp_replace(replace(m.body,'’',chr(39)),'[[:space:]]+',' ','g')));
  select coalesce(jsonb_agg(distinct f->>'kind'),'[]') into facts from public.icash_text_ai_jobs j cross join lateral jsonb_array_elements(case when jsonb_typeof(j.analysis->'facts')='array' then j.analysis->'facts' else '[]' end) f
@@ -228,6 +228,8 @@ do $patch$declare definition text;old text;replacement text;begin
  if position(old in definition)=0 then raise exception 'Progress ownership changed';end if;definition:=replace(definition,old,replacement);
  old:='''sourceAt'',source_at';replacement:=old||',''dialogue'',dialogue';
  if position(old in definition)=0 then raise exception 'Progress evidence changed';end if;definition:=replace(definition,old,replacement);
+ old:='jsonb_agg(distinct a.analysis->>''action'')';replacement:='jsonb_agg(distinct coalesce(a.analysis->>''dialogueQuestion'',a.analysis->>''action''))';
+ if position(old in definition)=0 then raise exception 'Progress question history changed';end if;definition:=replace(definition,old,replacement);
  execute definition;
  definition:=pg_get_functiondef('public.icash_seller_progress_gate(uuid,uuid)'::regprocedure);
  old:='if r->>''state''=''pending'' then return true;end if;';
