@@ -19,10 +19,13 @@ PGlite covers completion, fresh wakeups, rollback, bounded retries and privilege
 ## Operational findings requiring receipt-based follow-through
 
 - At inspection, 148 funded accounts were running, while the main property text and voice tables showed no new entries in the preceding 24 hours. Research and reconciliation tickets continued. These counts do not include customer-update delivery tables.
-- The organization owner-export capacity returned `export_busy`. This needs original request/receipt review; never replay an uncertain paid export to clear it.
+- The organization owner-export capacity returned `export_busy`. Reviewed the exact completed HTTP 500, original receipt hash, absent export ID, source guards and deployed recovery functions. Armed one original, quota-bound FREE inventory check through existing authenticated maintenance. At 06:28:04 UTC it verified provider idleness; the original receipt, null terminal/completed timestamps and money/owner holds remained unchanged.
+- Ordinary production work then resumed and a new five-person export returned another HTTP 500 `internal_error` at 06:28:13 UTC. Its selectors matched the last successful twelve-person export. No replay or further capacity release was attempted. This provider-side failure remains a live blocker; idle capacity alone does not prove successful delivery or known cost. The private original receipt retains the provider request ID for investigation.
 - The live workflow monitor showed nine unresolved call receipts and one owner export. Do not clear these by age or mark them complete without provider evidence.
 - The 720 business number was enabled; the two 424 lines were disabled. Preserve established conversation routing and provider reputation holds.
 
 ## Release and verification
 
-Apply the additive database fixes only after their offline and native concurrency checks pass. Both are compatible with the existing application. Confirm function definitions, constraint and privileges after migration. Full reliability CI remains the production release gate, including build and desktop/mobile browser checks. No paid test calls, texts, data purchases, customer billing changes or replayed provider operations are part of this audit.
+The original document rejection, real save/reopen routes, isolated shared-learning integration and native PostgreSQL 17 concurrency checks passed. The native test reproduced the old deadlock, passed the repaired interleaving and preserved a concurrent notification while skipping a busy account.
+
+Applied compatible production migrations `20261102062806_contract_document_storage` and `20261102062810_learning_refresh_concurrency`. Readback confirmed the bounded form constraint, non-null generation, exact function bodies and service-only grants. Subsequent scheduled learning refreshes succeeded without new queue errors. Full reliability CI remains the application release gate, including the full offline suite, dependency audit, build, concurrency and desktop/mobile browser checks. No paid development calls, texts, data purchases, customer billing changes or replayed provider operations are part of this audit.
