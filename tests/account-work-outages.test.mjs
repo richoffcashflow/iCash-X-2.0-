@@ -8,6 +8,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8'),id=n=>'00000
 const refresh=async()=>{await one('select icash_refresh_account_work_snapshot()');return reliabilitySchema.parse(await one('select icash_reliability_status()'));};
 try{
  await pg.exec(read('tests/fixtures/account-work-repair.sql'));
+ await pg.exec('create index icash_discovery_results_account on icash_discovery_results(account_id,created_at desc)');
  for(const name of ['workspace-experience-and-incidents','reliability-incident-severity','reliability-incident-stable-recovery','reliability-component-outages'])await pg.exec(read('config/'+name+'.sql'));
  await pg.exec(read('tests/fixtures/account-work-monitor-baseline.sql'));
  await pg.exec("create table fixture_contact_candidates(account_id uuid primary key,screening_id uuid);create function icash_enrichment_before_prospecting_budget(uuid) returns uuid language sql stable set search_path=public as $$select screening_id from fixture_contact_candidates where account_id=$1$$;");
@@ -17,6 +18,8 @@ try{
  await pg.exec("update icash_reliability_private.incidents set peak_severity='critical',seen_reasons=array['worker','maintenance','workflows']");
  await pg.exec(read('supabase/migrations/20261102210458_account_work_outages.sql'));
  await pg.exec(read('config/account-work-funding-eligibility.sql'));
+ await pg.exec(read('supabase/migrations/20261102211401_account_work_existing_discovery_index.sql'));
+ assert.equal(await one("select count(*) from pg_indexes where tablename='icash_discovery_results' and indexname in ('icash_discovery_results_account','icash_account_discovery_completed')"),1,'reuse the existing discovery index');
  for(let n=1;n<=9;n++){
   await q("insert into icash_accounts(id,owner_user_id,bot_paused,created_at,workspace_ack_version) values($1,$1,$2,now()-interval '2 days','fixture')",[id(n),n===4||n===5]);
   await q("insert into icash_wallets(account_id,balance_cents,reserved_cents) values($1,$2,0)",[id(n),n===6?10:1000]);

@@ -10,7 +10,7 @@ create table icash_reliability_private.account_work_states(
 alter table icash_reliability_private.account_work_states enable row level security;
 revoke all on icash_reliability_private.account_work_states from public,anon,authenticated;
 grant select,insert,update,delete on icash_reliability_private.account_work_states to service_role;
-create index icash_account_discovery_completed on public.icash_discovery_results(account_id,created_at desc);
+-- icash_discovery_results_account already indexes (account_id,created_at desc).
 create index icash_account_work_completed on public.icash_operation_spend(account_id,settled_at desc)
  where state='settled' and (actual_micros>0 or charged_cents>0);
 create index icash_account_work_control on public.icash_control_events(account_id,created_at desc,id desc) where property_id is null;
