@@ -12,7 +12,7 @@ type Candidate={screeningId:string;snapshot:unknown};
 type Config={contact_rate_id:string;contact_credit_cap:number;property_credit_micros:number;data_rights_until:string;research_version?:number};
 type Audience=ReturnType<typeof ownerBatchAudience>;
 type Receipt={httpStatus:number;raw:unknown;rawText:string};
-type SavedExport={id:string;accountId:string;createdAt:string;items:Candidate[];preview:unknown;request:ReturnType<typeof activeOwnerExportRequest>;receipt:Receipt;recovery:unknown;csv:string|null;lease:string};
+type SavedExport={id:string;accountId:string;createdAt:string;items:Candidate[];preview:unknown;request:ReturnType<typeof activeOwnerExportRequest>;receipt:Receipt;recovery:unknown;csv:string|null;lease:string;localOnly?:boolean;artifactSha256?:string;recoveryHttpStatus?:number;terminalAt?:string|null};
 const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const integer=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 const invalid=()=>{throw Error('OWNER_EXPORT_RECONCILIATION_REQUIRED');};
@@ -63,7 +63,9 @@ export function allocateActiveOwnerExport(saved:Pick<SavedExport,'id'|'createdAt
  if(!isDeepStrictEqual(saved.request,activeOwnerExportRequest(ids,saved.request.mobile_only===true))||rows.length!==receipt.rows)return invalid();
  const byId=new Map<string,typeof rows[number]>();
  for(const row of rows){const id='per_'+row.internal_person_id;
-  if(!ids.includes(id)||byId.has(id)||!['Yes','true'].includes(row.has_active_phone_number)||!row.person_full_name||row.person_full_name.length>200)return invalid();
+  // Owner identity comes from the exact selected person ID and saved preview.
+  // A missing display name is preserved as supplied, not a failed purchase.
+  if(!ids.includes(id)||byId.has(id)||!['Yes','true'].includes(row.has_active_phone_number)||row.person_full_name.length>200)return invalid();
   byId.set(id,row);
  }
  const assigned=new Set<string>();let remaining=receipt.credits.used;
@@ -112,6 +114,14 @@ async function recoverClaimedExport(db:ResearchDb,saved:SavedExport,transport:ty
  const original=object(saved.receipt.raw),exportId=original.export_id;
  if(typeof exportId!=='string'||!/^[-a-zA-Z0-9_]{1,128}$/.test(exportId))return invalid();
  let recovery=object(saved.recovery),csv=saved.csv;
+ // Exhausted provider recovery may only reprocess its immutable local artifact.
+ // A missing/corrupt saved CSV must never turn this claim into another GET.
+ if(saved.localOnly===true){
+  const data=object(recovery.data);
+  if(!csv||Buffer.byteLength(csv)>1048576||createHash('sha256').update(csv).digest('hex')!==saved.artifactSha256
+   ||saved.receipt.httpStatus!==200||saved.recoveryHttpStatus!==200||!saved.terminalAt
+   ||data.export_id!==exportId||data.status!=='completed'||data.record_count!==original.record_count)return invalid();
+ }
  if(!csv){
   // This is always the original ID, never a search/history match or new export.
   let rawText='';
