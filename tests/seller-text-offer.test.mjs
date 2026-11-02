@@ -15,7 +15,7 @@ const rpc=async(n,args=[])=>Object.values(await one(`select ${n}(${args.map((_,i
 await pg.exec(fixture.slice(0,split)+read('./fixtures/seller-progress-original-functions.sql')+fixture.slice(split)+read('./helpers/seller-dialogue-fixture.sql')+read('./fixtures/seller-dialogue-original-functions.sql')+
  fn('seller-response-policy','icash_seller_direct_response_match')+fn('seller-response-policy','icash_seller_response_disposition')+fn('seller-gap-recovery','icash_seller_contact_stop')+
  'create trigger icash_text_ai_incoming after insert on icash_text_messages for each row execute function icash_enqueue_text_ai();'+read('../config/seller-reply-progress.sql')+read('../config/seller-dialogue.sql')+
- read('./helpers/seller-text-offer-fixture.sql')+read('./fixtures/seller-text-offer-original-functions.sql')+read('../config/seller-text-offer.sql')+read('../config/seller-offer-receipt-wait.sql'));
+ read('./helpers/seller-text-offer-fixture.sql')+read('./fixtures/seller-text-offer-original-functions.sql')+read('../config/seller-text-offer.sql')+read('../config/seller-offer-receipt-wait.sql')+read('../config/seller-offer-source-prices.sql'));
 await pg.exec("update icash_seller_progress_settings set enabled=true,dialogue_enabled=true,offer_enabled=true,offer_enabled_at=now()-interval '2 hours'");
 let tick=0,sends=0,texts=0,dispatches=0,providerFailure=false,deliver=true;
 const at=()=>new Date(Date.now()-3600000+(++tick)*1000).toISOString();
@@ -81,6 +81,11 @@ assert.equal(await rpc('icash_claim_seller_text_agreement',[c.a,r.j.id]),null,'o
 assert.equal((await one('select count(*)::int n from icash_seller_agreement_private.confirmations where account_id=$1',[c.a])).n,1);
 
 const ownerUnknown=await seed({qualified:false});r=await run(ownerUnknown,'How much');assert.equal(r.plan.action,'qualify_ownership');assert.equal(r.plan.state.acceptedPriceCents,null);
+for(const body of ['90,000','I am asking ninety thousand dollars.']){
+ const ordinaryPrice=await seed();
+ await q("insert into icash_text_messages(account_id,thread_id,direction,state,body,provider_id,created_at) values($1,$2,'outgoing','delivered','What price did you have in mind?','fixture-price-question',$3)",[ordinaryPrice.a,ordinaryPrice.t,at()]);
+ r=await run(ordinaryPrice,body);assert.equal(r.plan.action,'cash_offer');assert.equal(r.plan.state.quotedPriceCents,9000000);assert.equal(r.plan.state.acceptedPriceCents,null,'an asking-price answer is not acceptance');
+}
 const receipt=await seed();deliver=false;r=await run(receipt,'I need $210k');deliver=true;
 const before=dispatches;r=await run(receipt,'Yes');assert.equal(r.plan.kind,'wait');assert.equal(dispatches,before);
 assert.equal(r.progress.state,'waiting');assert.equal(r.progress.reason,'offer_receipt_pending');
