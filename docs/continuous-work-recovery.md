@@ -28,6 +28,14 @@ Install both migrations disabled. Require the exact release's full reliability c
 
 Older call, text and legacy-search receipts remain separate investigations. A completed conversation or zero-duration quota rejection alone is not evidence of zero total provider cost. Never fabricate a USD observation, waive an unknown commitment, replay a call or count receipt polling as completed work.
 
+## Explicit legacy-search continuation
+
+Two current search operations predate the provider request ledger. Their exact current operation identities, original dispatch timestamps and finished held automation tickets establish that their local handlers ended; they do not establish the provider outcome or price. `legacy-search-continuation.sql` accepts only a separately enabled explicit service call with hashes of the reviewed current configuration and original operation, plus the original ticket ID. It verifies one matching held handler, an aged pre-October-25 version-zero search, absent provider/result/cost evidence, no active conflicting work, current account controls, existing funds and unchanged original permission expiry.
+
+The existing quarantine table stores a nullable request ID only with explicit `legacy-handler-v1` local evidence. The original configuration, operation and limited ticket fields are saved; no provider receipt or identifier is invented. New work moves to an existing saved alternate ZIP that passes current scope and known-market checks. The original ZIP remains fenced through all existing admission and late-receipt readers. The existing standing-review repair verifies the original immutable rate lineage in the same transaction. Missing lineage rolls back both quarantine and cursor changes. Operation state, reserved caps, wallet balances, pricing and historical receipts stay unchanged.
+
+Install disabled, run the local adversarial cases and native concurrent claim/Pause checks, verify the exact production release, then enable only for the reviewed source-bound repair batch and disable afterward. This explicit repair is not a background policy for arbitrary future missing receipts.
+
 Provider contract: https://api.docs.dealmachine.com/api-reference/exports/list-exports documents `pending`, `processing`, `completed`, `failed`, status filters and pagination totals.
 
 Rate-limit headers and organization scope: https://api.docs.dealmachine.com/rate-limits.
