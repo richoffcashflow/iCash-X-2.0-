@@ -30,7 +30,7 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
     if(path.startsWith(root)&&expired)return route.fulfill({status:410,json:{error:'This account view has ended. Open the account again from Accounts.'}});
     if(path===root){inspecting=true;return route.fulfill({json:{view:{id:activeView,expiresAt:new Date(Date.now()+1800000).toISOString(),account:second?secondAccount:account}}});}
     if(path===root+'/activity')return route.fulfill({json:customerWork(second)});
-    if(path===root+'/bot-status')return route.fulfill({json:{active:false,label:'Waiting for the next task',checkedAt:now}});
+    if(path===root+'/bot-status')return route.fulfill({json:second?{active:false,blocked:true,label:'A service issue is blocking work on your account.',checkedAt:new Date().toISOString()}:{active:false,label:'Waiting for the next task',checkedAt:now}});
     if(path===root+'/progress')return route.fulfill({json:{progress:null}});
     if(path===root+'/report')return route.fulfill({json:report(u)});
     if(path===root+'/property-photo')return route.fulfill({json:{photo:{view:'street_view',source:'DealMachine',url:'https://img.dealmachine.com/sv/35,-90.jpg',fallbackUrl:'https://img.dealmachine.com/sat/35,-90.jpg'}}});
@@ -80,6 +80,9 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
   await page.getByRole('button',{name:'Switch account',exact:true}).click();await page.getByRole('heading',{name:'Accounts',exact:true}).waitFor();expired=false;
   await page.getByRole('button',{name:'Open workspace for Another Customer'}).click();await page.getByText('Viewing Another Customer',{exact:true}).waitFor();await page.getByText('$42.00',{exact:true}).waitFor();await page.locator('.property-summary').getByText('456 Second Street',{exact:true}).waitFor();assert.equal(await page.getByText('123 Example Street',{exact:true}).count(),0,'Another customer cannot inherit the previous workspace');
   const instant=page.locator('#property-'+uuid(2));await instant.getByRole('button',{name:'Texts',exact:true}).click();await instant.getByText('What is your offer?',{exact:true}).waitFor();assert(await instant.getByRole('button',{name:'Resume follow-up',exact:true}).isDisabled());
+  await page.getByRole('heading',{name:'Work delayed',exact:true}).waitFor();
+  await page.getByText('A service issue is blocking work on your account.',{exact:true}).waitFor();
+  assert.equal(await page.locator('.bot-live-status').getAttribute('data-live'),'false','a stalled funded account cannot show a healthy live indicator');
   await page.getByRole('button',{name:'Back to my workspace',exact:true}).click();await page.waitForURL(base+'/');await page.getByText('$125.00',{exact:true}).waitFor();assert.equal(await page.getByText('Viewing Another Customer',{exact:true}).count(),0);
   assert.deepEqual(writes.map(w=>w.method),['POST','DELETE','POST','DELETE']);assert.deepEqual(writes[0].body,{accountId:id});assert.deepEqual(writes[2].body,{accountId:secondId});
   await page.getByRole('navigation',{name:'Workspace navigation'}).getByRole('link',{name:'Accounts',exact:true}).click();await page.getByText('Example Customer',{exact:true}).waitFor();
