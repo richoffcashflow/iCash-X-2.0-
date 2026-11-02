@@ -12,7 +12,7 @@ try{
   await q("insert into icash_operation_rates select (jsonb_populate_record(null::icash_operation_rates,to_jsonb(r)||jsonb_build_object('id',$2::uuid,'version',version||':standing-research-20261026','expires_at',$3::timestamptz))).* from icash_operation_rates r where id=$1",[id(n),id(n+10),standing]);
   await q("insert into icash_owner_review_private.changes select 'rate',a.id::text,to_jsonb(a),to_jsonb(b),'fixture approval',now() from icash_operation_rates a,icash_operation_rates b where a.id=$1 and b.id=$2",[id(n),id(n+10)]);
  }
- for(let n=21;n<=25;n++){
+ for(let n=21;n<=26;n++){
   await q("insert into icash_accounts(id,bot_paused) values($1,$2)",[id(n),n===22]);
   await q("insert into icash_wallets(account_id,balance_cents,reserved_cents) values($1,1000,0)",[id(n)]);
   await q("insert into icash_discovery_configs(account_id,enabled,auto_enabled,contacts_enabled,rate_id,contact_rate_id,zip,revision,next_page,per_page,property_credit_micros,data_rights_until,next_run_at) values($1,true,true,true,$2,$3,'75201',$4,7,25,10000,$5,now()-interval '1 day')",[id(n),id(1),id(2),id(100+n),old]);
@@ -33,6 +33,8 @@ try{
  assert.equal(await one('select icash_repair_standing_research($1)',[id(23)]),false,'current unknown purchase retains original configuration');
  await q("update icash_discovery_configs set enabled=false where account_id=$1",[id(24)]);
  assert.equal(await one('select icash_repair_standing_research($1)',[id(24)]),false,'disabled settings preserved');
+ await q("insert into icash_support_cancel_requests(account_id,confirmed_at) values($1,now())",[id(26)]);
+ assert.equal(await one('select icash_repair_standing_research($1)',[id(26)]),false,'confirmed cancellation preserved');
  await q("update icash_operation_rates set charge_cents=999 where id=$1",[id(11)]);
  assert.equal(await one('select icash_repair_standing_research($1)',[id(25)]),false,'changed economics cannot inherit standing review');
  assert.deepEqual(await one('select jsonb_agg(to_jsonb(o) order by operation_key) from icash_operation_spend o'),before);

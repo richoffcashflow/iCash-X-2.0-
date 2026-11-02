@@ -14,7 +14,8 @@ begin
  if not found or p_account='48dfb798-8c1a-404f-88c0-c396cc067062'
   or not public.icash_membership_work_allowed(p_account)
   or not exists(select 1 from public.icash_wallets where account_id=p_account and balance_cents>reserved_cents)
-  or exists(select 1 from public.icash_billing_reviews where account_id=p_account and resolved_at is null) then return false;end if;
+  or exists(select 1 from public.icash_billing_reviews where account_id=p_account and resolved_at is null)
+  or exists(select 1 from public.icash_support_cancel_requests where account_id=p_account and confirmed_at is not null) then return false;end if;
  select * into c from public.icash_discovery_configs where account_id=p_account for update;
  if not found or not c.enabled or not c.auto_enabled or not c.contacts_enabled or c.data_rights_until<>old_until then return false;end if;
  -- Only quarantined searches in a different ZIP may coexist with this change.
