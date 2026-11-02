@@ -16,14 +16,14 @@ export const sellerAgreementInput=z.discriminatedUnion('action',[
  z.object({action:z.literal('confirm_and_send'),conversationId:z.string().regex(/^conv_[A-Za-z0-9]+$/),confirmation:sellerAgreementConfirmation}).strict(),
  z.object({action:z.literal('status'),conversationId:z.string().regex(/^conv_[A-Za-z0-9]+$/)}).strict(),
 ]);
-export function confirmedSellerTerms(current:unknown,confirmation:SellerAgreementConfirmation,context:{address:string;principal:string;legalDescription:string;ceilingCents:number;now?:number}):DealTerms{
+export function confirmedSellerTerms(current:unknown,confirmation:SellerAgreementConfirmation,context:{address:string;principal:string;legalDescription:string;ceilingCents:number;now?:number;supportedRenegotiation?:boolean}):DealTerms{
  const c=sellerAgreementConfirmation.parse(confirmation),t=dealTermsSchema.parse(current);
  if(!c.soleOwner||!c.allDecisionMakersAgree)throw Error('all_owners_required');
  if(!c.priceAndDateConfirmed||!c.termsConfirmed||!c.sendTextRequested)throw Error('confirmation_required');
  if(c.materialFactsChanged)throw Error('updated_property_review_required');
  if(t.address!==context.address||t.buyer!==context.principal)throw Error('property_binding_changed');
  if(!Number.isSafeInteger(context.ceilingCents)||context.ceilingCents<=0||c.agreedPriceCents>context.ceilingCents)throw Error('price_review_required');
- if(t.priceSource==='seller_reported'&&t.priceCents!==null&&t.priceCents!==c.agreedPriceCents)throw Error('existing_price_changed');
+ if(t.priceSource==='seller_reported'&&t.priceCents!==null&&t.priceCents!==c.agreedPriceCents&&!context.supportedRenegotiation)throw Error('existing_price_changed');
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(context.now??Date.now());
  if(c.closingDate<=today||Date.parse(c.closingDate+'T12:00:00Z')>(context.now??Date.now())+366*86400000)throw Error('closing_date_review_required');
  // A declined visit is a preference, not a financial hold or a waiver of contract rights.

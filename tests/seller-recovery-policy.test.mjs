@@ -19,7 +19,7 @@ const call=p=>automaticCallOffer('a'.repeat(64),{conversationId:'conv_fixture',.
 const lower=await call({action:'report_change',sellerStatement:body});assert.equal(lower.priceCents,9000000);assert.equal(lower.status,'calculated_proposal');
 assert.equal(context.offerState.acceptedPriceCents,null);
 assert.equal((await call({action:'accept_offer',priceCents:9000000,quoteRevision:lower.quoteRevision})).status,'verbally_accepted');
-body='I would take $110,000.';assert.equal((await call({action:'report_change',sellerStatement:body})).quoteAllowed,false);assert.equal(context.offerState.acceptedPriceCents,null,'unsupported counteroffer still invalidates earlier acceptance');
+body='I would take $110,000.';const counter=await call({action:'report_change',sellerStatement:body});assert.equal(counter.quoteAllowed,true);assert.equal(counter.priceCents,10200000,'a higher seller ask receives the supported counteroffer');assert.equal(context.offerState.acceptedPriceCents,null,'a new seller ask still invalidates earlier acceptance');
 body='I would take $95,000.';const revised=await call({action:'report_change',sellerStatement:body});assert.equal(revised.priceCents,9500000);assert.notEqual(revised.quoteRevision,lower.quoteRevision);
 assert.equal((await call({action:'accept_offer',priceCents:9000000,quoteRevision:lower.quoteRevision})).quoteAllowed,false);
 context={...context,snapshot:{...snapshot,raw:{data:{...snapshot.raw.data,total_estimated_loan_balance:95000}}},offerState:{},offerVersion:0};
