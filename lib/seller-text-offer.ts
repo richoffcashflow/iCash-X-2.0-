@@ -19,6 +19,16 @@ export type TextOfferPlan={kind:'message'|'review'|'wait'|'agreement';action:str
 const unqualifiedYes=(s:string)=>/^(?:yes|yeah|yep|sure|correct|okay|ok|that works|sounds good|i agree)[.! ,]*$/i.test(s.trim());
 const no=(s:string)=>/^(?:no|nope|not yet)[.! ,]*$/i.test(s.trim());
 const priceText=(n:number)=>offerPricePresentation(n).displayPrice;
+function closingDateAnswer(body:string){
+ const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+ // A contract date must be an unqualified answer. Date.parse normalizes an
+ // impossible named date (February 30) and must not choose our closing date.
+ const answer=body.trim().replace(/[.!]+$/,'').replace(/^(?:(?:let['’]?s|we can|I can) close(?: on)?|(?:the )?closing date (?:is|should be)|I (?:would prefer|prefer))\s+/i,'').replace(/\s+(?:works(?: for me)?|please)$/i,'');
+ const named=answer.match(/^([A-Za-z]+) (\d{1,2})(?:st|nd|rd|th)?,? (\d{4})$/i);
+ const month=named?months.findIndex(m=>m.toLowerCase()===named[1].toLowerCase()):-1;
+ const date=named&&month>=0?`${named[3]}-${String(month+1).padStart(2,'0')}-${named[2].padStart(2,'0')}`:answer;
+ return validCalendarDate(date)?date:undefined;
+}
 
 /** Deterministic execution policy, not LLM prose. Each answer keeps its delivered
  * question, exact source, current underwriting and recipient. Asking is not acceptance. */
@@ -65,9 +75,7 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
    if(/^[\p{L}][\p{L} .’'-]{1,119}$/u.test(name)&&name.split(/\s+/).length>=2&&!/\b(?:unknown|not sure|no|yes|maybe|trust|llc|corporation)\b/i.test(name))closing.legalName=name;
   }
   if(previous?.action==='closing_date'){
-   const named=source.body.match(/\b(?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2},? \d{4}\b/i)?.[0];
-   const date=source.body.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0]??(named&&Number.isFinite(Date.parse(named))?new Date(named).toISOString().slice(0,10):undefined);
-   if(date&&validCalendarDate(date))closing.date=date;
+   closing.date=closingDateAnswer(source.body);
   }
   if(previous?.action==='inspection'&&(unqualifiedYes(source.body)||no(source.body)))closing.inspection=no(source.body)?'no':'yes';
  }

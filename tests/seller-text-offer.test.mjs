@@ -67,6 +67,13 @@ r=await run(c,'My full legal name is Jane Seller');assert.equal(r.plan.action,'o
 r=await run(c,'Yes, I am the only owner and decision maker');assert.equal(r.plan.action,'closing_date');
 const close=new Date(Date.now()+30*86400000).toISOString().slice(0,10);
 r=await run(c,close);assert.equal(r.plan.action,'inspection');
+for(const body of ['February 30, '+(new Date().getUTCFullYear()+1),'Not '+close,close+' only if you pay more',close+' or '+close]){
+ const context={...r.context,messages:r.context.messages.map(m=>m.id===r.source.id?{...m,body}:m)};
+ const invalid=planSellerTextOffer(context);assert.equal(invalid.state.closing.date,undefined,'never adopt '+body);
+ assert.equal(invalid.action,body.includes('only if')?'cash_offer':'closing_date','clarify '+body);
+}
+const namedClose=new Intl.DateTimeFormat('en-US',{timeZone:'UTC',month:'long',day:'numeric',year:'numeric'}).format(new Date(close+'T12:00:00Z'));
+assert.equal(planSellerTextOffer({...r.context,messages:r.context.messages.map(m=>m.id===r.source.id?{...m,body:'We can close on '+namedClose}:m)}).state.closing.date,close);
 r=await run(c,'Yes');assert.equal(r.plan.action,'confirm_terms');assert(r.plan.body.length<=160);
 r=await run(c,'Yes, send the agreement');assert.equal(r.plan.kind,'agreement');assert.equal(r.result.status,'seller_agreement_sent');assert.equal(sends,1);assert.equal(texts,1);assert.equal(r.progress.state,'waiting');
 assert.equal((await one('select terms from icash_deal_files where id=$1',[c.d])).terms.priceCents,10200000);
