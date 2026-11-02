@@ -98,14 +98,33 @@ try{
    assert(ui.find(n=>n.type==='BotRunBar').props.stale);assert.match(ui.text(),/Could not load your account/);
   }finally{ui.dispose();}
  });
+ await scenario('email-only sign-in preserves existing code, retry and trial recovery controls',async()=>{
+  for(const props of [{},{trialRecovery:true},{ready:false}]){
+   let signedIn=0;const calls=[];
+   globalThis.fetch=async(path,init)=>{calls.push({path,body:JSON.parse(init.body)});return Response.json({signedIn:true});};
+   const ui=harness('components/account-access.tsx',{initialEmail:'fixture@example.invalid',onSignedIn(){signedIn++;},...props});try{
+    await ui.flush();assert.doesNotMatch(ui.text(),/checkout phone|Text me a code|Text code|mobile number/i);
+    assert.equal(ui.find(n=>n.type==='input'&&n.props.type==='email').props.required,true);
+    assert(ui.find(n=>n.type==='a'&&n.props.href==='/access/help'));
+    if(props.ready===false){assert.equal(ui.find(n=>n.type==='button'&&text(n)==='Email me a code').props.disabled,true);assert.match(ui.text(),/temporarily unavailable/);continue;}
+    ui.find(n=>n.type==='button'&&text(n)==='I already have a code').props.onClick();await ui.flush();
+    ui.find(n=>n.type==='input'&&n.props.autoComplete==='one-time-code').props.onChange({target:{value:'123456'}});await ui.flush();
+    await ui.find(n=>n.type==='form').props.onSubmit({preventDefault(){}});await ui.flush();
+    assert.equal(signedIn,1);assert.deepEqual(calls,[{path:'/api/auth/verify',body:{email:'fixture@example.invalid',code:'123456'}}]);
+    ui.find(n=>n.type==='button'&&text(n)==='Use another email or resend').props.onClick();await ui.flush();
+    assert.equal(ui.find(n=>n.type==='input'&&n.props.type==='email').props.disabled,false);
+    assert(ui.find(n=>n.type==='button'&&text(n)==='Email me a code'));
+   }finally{ui.dispose();}
+  }
+ });
  await scenario('a stalled sign-in releases the form and duplicate submits do not send twice',async()=>{
   let calls=0;globalThis.fetch=async()=>{calls++;return new Promise(()=>{});};
   const ui=harness('components/account-access.tsx',{initialEmail:'fixture@example.invalid',onSignedIn(){throw Error('No successful sign-in');}});try{
    await ui.flush();const form=ui.find(n=>n.type==='form');const event={preventDefault(){}};
    await Promise.all([form.props.onSubmit(event),form.props.onSubmit(event)]);await ui.flush();
-   assert.equal(calls,1);assert.equal(ui.find(n=>n.type==='button'&&text(n)==='Sign in').props.disabled,false);assert.match(ui.text(),/Email code/);assert.match(ui.text(),/Use my checkout phone/);assert.match(ui.text(),/too long/);
+   assert.equal(calls,1);assert.equal(ui.find(n=>n.type==='button'&&text(n)==='Sign in').props.disabled,false);assert.match(ui.text(),/Email code/);assert.doesNotMatch(ui.text(),/Use my checkout phone|Text me a code/);assert.match(ui.text(),/too long/);
   }finally{ui.dispose();}
  });
 }finally{globalThis.fetch=originalFetch;}
-assert.equal(count,8);
-console.log('Eight bounded local request-recovery scenarios passed. No external requests or paid providers.');
+assert.equal(count,9);
+console.log('Nine bounded local request-recovery scenarios passed. No external requests or paid providers.');

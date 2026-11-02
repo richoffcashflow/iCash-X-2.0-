@@ -18,6 +18,6 @@ export async function POST(req:Request){
  }catch(error){
   const status=(error as {status?:number})?.status,limited=status===429;
   console.warn('[account-email-code]',{outcome:limited?'rate_limited':'unavailable',providerStatus:status??null});
-  return NextResponse.json({error:limited?'A code may already be in your inbox. Enter it below, use your checkout phone, or wait 10 minutes before requesting another email.':'Email could not be sent right now. Enter a code you already received or use your checkout phone.'},{status:limited?429:503,headers:{'Cache-Control':'no-store',...(limited?{'Retry-After':'600'}:{})}});
+  return NextResponse.json({error:limited?'A code may already be in your inbox. Enter it below or wait 10 minutes before requesting another email.':'Email could not be sent right now. Enter a code you already received, or try again later. Contact support if you still cannot sign in.'},{status:limited?429:503,headers:{'Cache-Control':'no-store',...(limited?{'Retry-After':'600'}:{})}});
  }
 }

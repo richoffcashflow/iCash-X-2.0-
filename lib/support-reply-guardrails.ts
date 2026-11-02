@@ -19,6 +19,9 @@ export function supportInstructionCorrection(messages:Turn[],evidence:SupportEvi
 /** Catch observed failure modes even when the model ignores its product instructions. */
 export function unsupportedSupportReply(reply:string,messages:Turn[],evidence:SupportEvidence[]){
  if(supportSafetyOnly(reply))return true;
+ // Historical conversations and configuration checks do not enable SMS login.
+ if(/\b(?:sign[ -]?in|log[ -]?in|login|verification code|code)\b.{0,60}\b(?:sms|text message|phone number)\b|\b(?:sms|text message|phone number)\b.{0,60}\b(?:sign[ -]?in|log[ -]?in|login|verification code|code)\b/i.test(reply))return true;
+ if(/\b(?:checkout phone|text me a code|email or text)\b|\b(?:use|choose|select|switch|request|send|enter|try|verify)\b.{0,60}\b(?:text code|sms code|sms verification|phone sign[ -]?in|text sign[ -]?in|(?:verification |sign[ -]?in |login )?code (?:by|via|through) (?:sms|text))\b/i.test(reply))return true;
  if(/\b(?:you can|you may|you should|please)\s+(?:add|upload|import|enter|bring)\b.{0,45}\b(?:leads?|listings?|properties|csv)\b|\b(?:use|open|choose|select|click|tap)\b.{0,40}\b(?:lead import|csv upload|upload csv|add listing|add lead|import leads)\b/i.test(reply))return true;
  if(inventedControl.test(reply)&&instruction.test(reply))return true;
  if(/\b(?:wait|give it|after|within|in) (?:a (?:few|couple of)|\d+|one|two|three|several) (?:more )?(?:minutes?|hours?)\b|\b(?:should|will) (?:start|begin|resume)\b.{0,55}\b(?:soon|shortly|momentarily)\b/i.test(reply))return true;

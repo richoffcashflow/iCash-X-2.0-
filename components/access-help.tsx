@@ -23,7 +23,7 @@ export function AccessHelp(){
  }
  return <section aria-label="Help getting into your account" className="access-help">
   <h1>Already paid and need help getting in?</h1><p>Get help here without signing in. Support checks for recoverable account setup and helps troubleshoot here. You do not need to pay again.</p>
-  <p><a href="/access">Try email or checkout-phone sign-in</a></p>
+  <p><a href="/access">Try email sign-in</a></p>
   {error&&<p role="alert">{error} <button type="button" disabled={busy} onClick={()=>void load()}>Refresh support</button></p>}
   {notice&&<p role="status">{notice}</p>}
   {loading?<p role="status">Opening support…</p>:<>

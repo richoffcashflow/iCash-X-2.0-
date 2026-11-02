@@ -62,7 +62,7 @@ export async function verifyAccessHelp(browser,base,options,name,fixtureCookies)
   await desk.getByRole('button',{name:/buyer@example.invalid/}).click();
   await desk.getByLabel('Reply to customer',{exact:true}).fill('Draft kept while navigating');
   if(name.startsWith('mobile')){await desk.getByRole('button',{name:'← Inbox',exact:true}).click();await desk.getByRole('button',{name:/buyer@example.invalid/}).click();assert.equal(await desk.getByLabel('Reply to customer',{exact:true}).inputValue(),'Draft kept while navigating');}
-  await desk.getByLabel('Reply to customer',{exact:true}).fill('Choose Use my checkout phone on the account page. Your payment is saved.');
+  await desk.getByLabel('Reply to customer',{exact:true}).fill('Use your receipt email on the account page. Your payment is saved.');
   await desk.getByRole('button',{name:'Send reply ↗',exact:true}).click();
   await desk.getByText('Reply saved. A customer email notification is queued.',{exact:true}).waitFor();
   assert.equal(await desk.getByLabel('Reply to customer',{exact:true}).inputValue(),'','Confirmed reply clears the draft');
@@ -75,14 +75,14 @@ export async function verifyAccessHelp(browser,base,options,name,fixtureCookies)
   assert.equal(conversation.status,'open');
   denied=true;await desk.getByRole('button',{name:'Refresh',exact:true}).click();await desk.getByText('Sign in with a support operator account to open this inbox.',{exact:true}).waitFor();assert(!(await desk.innerText()).includes('buyer@example.invalid'),'Denied operator read clears previous private ticket');
   await page.goto(base+'/access/help');await page.getByText('Request saved',{exact:true}).waitFor();
-  await page.getByRole('log',{name:'Access support messages'}).getByText('Choose Use my checkout phone on the account page. Your payment is saved.',{exact:true}).waitFor();
+  await page.getByRole('log',{name:'Access support messages'}).getByText('Use your receipt email on the account page. Your payment is saved.',{exact:true}).waitFor();
   // Open the actual standalone return page as a fresh browser, with no account.
   await context.clearCookies();requiresReturn=true;
   await page.goto(base+'/access/help/return#'+returnToken);
   await page.getByRole('button',{name:'Try again',exact:true}).waitFor();
   assert.equal(new URL(page.url()).hash,'');assert.equal(returnCalls,1);
   await page.getByRole('button',{name:'Try again',exact:true}).click();
-  await page.getByRole('log',{name:'Access support messages'}).getByText('Choose Use my checkout phone on the account page. Your payment is saved.',{exact:true}).waitFor();
+  await page.getByRole('log',{name:'Access support messages'}).getByText('Use your receipt email on the account page. Your payment is saved.',{exact:true}).waitFor();
   assert.equal(new URL(page.url()).pathname,'/access/help');assert.equal(returnCalls,2);
   await page.reload();await page.getByRole('log',{name:'Access support messages'}).waitFor();
   await page.goto(base+'/access/help/return#'+'b'.repeat(64));
