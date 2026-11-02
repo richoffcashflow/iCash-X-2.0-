@@ -1,0 +1,10 @@
+create schema icash_private;
+create table public.icash_operation_spend(operation_key text primary key);
+create table public.icash_credit_reservations(operation_key text primary key);
+create table public.icash_cost_observations(provider text not null default 'fixture',event_key text not null,source_ref text,primary key(provider,event_key));
+create table public.icash_cost_manifests(operation_key text primary key);
+create table icash_private.provider_costs(operation_key text primary key);
+create table public.icash_owner_contacts(screening_id uuid,operation_key text);
+create table public.icash_live_conversations(account_id uuid,screening_id uuid,operation_key text);
+create table public.icash_operational_contacts(account_id uuid,screening_id uuid);
+create table public.icash_contact_permissions(account_id uuid,screening_id uuid);
