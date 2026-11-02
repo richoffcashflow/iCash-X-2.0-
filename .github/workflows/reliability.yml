@@ -12,6 +12,28 @@ concurrency:
   group: reliability-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: true
 jobs:
+  database-contention:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17.6-bookworm
+        env:
+          POSTGRES_PASSWORD: isolated-fixture-only
+          POSTGRES_DB: icash_reliability
+        ports:
+          - 55443:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify learning refresh under real concurrent transactions
+        run: python3 scripts/test-learning-refresh-postgres.py
   dependency-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 5

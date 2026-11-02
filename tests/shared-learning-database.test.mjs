@@ -21,6 +21,7 @@ try{
  await db.exec(usage.match(/create function public\.icash_usage_loop_report\([\s\S]*?end \$\$;/)[0]);
  await q('insert into icash_accounts(id,owner_user_id) values($1,$1)',[id(1)]);
  for(const migration of readdirSync(new URL('../supabase/migrations/',import.meta.url)).filter(n=>n.includes('_platform_shared_learning_')).sort())await db.exec(read('supabase/migrations/'+migration));
+ await db.exec(read('config/learning-refresh-concurrency.sql'));
  assert.equal(await val("select has_table_privilege('anon','icash_learning_rollups','select')"),false);
  assert.equal(await val("select has_function_privilege('authenticated','icash_assign_shared_learning(uuid,text,text,text,text)','execute')"),false);
  await assert.rejects(val('select icash_platform_learning_report($1)',[id(1)]),/Owner required/);
