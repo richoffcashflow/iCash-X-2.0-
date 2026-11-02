@@ -31,6 +31,10 @@ try{
  // Use the current recovery claim in all receipt, generation, retry and account
  // boundary scenarios. Native PostgreSQL separately verifies the lock race.
  await pg.exec(read('config/account-recovery-parent-lock.sql'));
+ const patchedIssuer=await q("select pg_get_functiondef(oid),proacl,provolatile,prosecdef from pg_proc where oid='icash_issue_account_followup()'::regprocedure");
+ await pg.exec(read('config/account-recovery-parent-lock.sql'));
+ assert.deepEqual((await q("select pg_get_functiondef(oid),proacl,provolatile,prosecdef from pg_proc where oid='icash_issue_account_followup()'::regprocedure")).rows,patchedIssuer.rows,'recording an already-applied patch does not change code or privileges');
+ assert.equal(read('config/account-recovery-parent-lock.sql'),read('supabase/migrations/20261102210032_account_recovery_parent_lock.sql'));
  const finish=async(outcome,success=true,kind='discovery')=>{
   const id=await one('insert into icash_automation_tickets(account_id,kind,state) values($1,$2,\'consumed\') returning id',[uid(1),kind]);
   await q('select icash_finish_automation($1,$2,$3)',[id,success,outcome]);return id;

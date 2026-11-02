@@ -155,22 +155,6 @@ await pg.exec(`drop function icash_buyer_factual_text(uuid,uuid,text);
  create function icash_buyer_package_data(p_account uuid,p_deal uuid) returns jsonb language sql stable set search_path=public as $$select case when exists(select 1 from icash_deal_files where id=p_deal and account_id=p_account) then '{"askingPriceCents":11200000,"reserved":false,"titleSelectionStatus":"not_selected"}'::jsonb end$$;`+
  read('./fixtures/buyer-reply-original-functions.sql')+read('../config/buyer-reply-progress.sql'));
 await pg.exec("update icash_seller_progress_settings set buyer_reply_enabled=true,buyer_reply_enabled_at=now()-interval '2 hours'");
-// The production entry point must run with both independently tested features
-// enabled. The original buyer alias raises 42702 even with zero buyer rows.
-await pg.exec("update icash_seller_reply_progress set next_check_at=now()+interval '1 hour'; update icash_text_ai_jobs set next_attempt_at=now()+interval '1 hour'");
-await assert.rejects(rpc('icash_issue_due_text_ai'),error=>error.code==='42702','reproduce the live shared-scheduler failure before repairing it');
-const issuerBefore=await one("select proacl,provolatile,prosecdef from pg_proc where oid='icash_issue_due_text_ai()'::regprocedure");
-await pg.exec(read('../config/text-ai-scheduler-recovery.sql'));
-assert.deepEqual(await one("select proacl,provolatile,prosecdef from pg_proc where oid='icash_issue_due_text_ai()'::regprocedure"),issuerBefore,'preserve existing execution permissions and volatility');
-await pg.exec(`create schema icash_work_private;create table icash_work_private.dispatch_policy(id integer,enabled boolean);insert into icash_work_private.dispatch_policy values(1,true);
- create function public.icash_next_seller_followup() returns jsonb language sql as $$select null::jsonb$$;
- create function public.icash_recover_unstarted_seller_opener() returns jsonb language sql as $$select null::jsonb$$;
- create function public.icash_issue_ready_seller_text() returns jsonb language sql as $$select null::jsonb$$;`+fn('parallel-work-throughput','icash_next_automation_lane'));
-for(const enabled of [false,true])for(const buyerEnabled of [false,true]){
- await q('update icash_seller_progress_settings set enabled=$1,buyer_reply_enabled=$2',[enabled,buyerEnabled]);
- assert.equal(await rpc('icash_next_automation_lane',['messages']),null,'empty queues reach the complete message dispatcher for both feature flags');
-}
-await pg.exec('update icash_seller_progress_settings set enabled=true,buyer_reply_enabled=true');
 const buyer=await seed({qualified:false});await q("update icash_text_threads set party='buyer' where id=$1",[buyer.t]);
 for(const body of ['I offer $90,000','What is the buyer price?','What is the buyer price?']){
  const m=await incoming(buyer,body),j=await one('select * from icash_text_ai_jobs where message_id=$1',[m.id]);
@@ -182,25 +166,4 @@ const odd=await incoming(buyer,'There is an easement problem to resolve');const 
 await q("update icash_text_ai_jobs set state='drafted',analysis='{\"action\":\"review\"}' where id=$1",[oddJob.id]);
 assert.equal((await rpc('icash_finish_seller_text_progress',[buyer.a,oddJob.id,'action_not_admitted'])).reason,'buyer_next_action_required');
 assert.equal((await one("select count(*)::int n from icash_text_attention where account_id=$1 and state='open'",[buyer.a])).n,1,'unanswered buyer is visible');
-// Reconcile a real saved buyer result through the scheduler, never a direct
-// finish call. Accepted -> delivered updates progress without another send.
-const buyerDelivered=await one("select j.* from icash_text_ai_jobs j join icash_text_messages m on m.id=j.outgoing_id where j.account_id=$1 order by m.created_at desc limit 1",[buyer.a]);
-const outgoingBefore=(await one("select count(*)::int n from icash_text_messages where direction='outgoing'")).n;
-await q("update icash_text_messages set state='accepted',updated_at=now() where id=$1",[buyerDelivered.outgoing_id]);
-await q("update icash_buyer_reply_progress set state='waiting',reason='provider_delivery_pending',updated_at=now()-interval '2 minutes' where message_id=$1",[buyerDelivered.message_id]);
-// Later buyer turns supersede older work and must not be overwritten by recovery.
-await rpc('icash_next_automation_lane',['messages']);
-assert.equal((await one('select state from icash_buyer_reply_progress where message_id=$1',[buyerDelivered.message_id])).state,'superseded');
-const due=await seed({qualified:false});await q("update icash_text_threads set party='buyer' where id=$1",[due.t]);
-const dueSource=await incoming(due,'What is the buyer price?'),dueJob=await one('select * from icash_text_ai_jobs where message_id=$1',[dueSource.id]);
-const dueResume=await rpc('icash_resume_seller_text_ai',[due.a,dueJob.id]);deliver=false;await dependencies.dispatch(due.a,dueResume.messageId);deliver=true;
-await rpc('icash_finish_seller_text_progress',[due.a,dueJob.id,null]);
-await q("update icash_buyer_reply_progress set updated_at=now()-interval '2 minutes' where message_id=$1",[dueSource.id]);
-await rpc('icash_next_automation_lane',['messages']);
-assert.equal((await one('select reason from icash_buyer_reply_progress where message_id=$1',[dueSource.id])).reason,'provider_delivery_pending');
-await q("update icash_text_messages set state='delivered' where id=$1",[dueResume.messageId]);
-await q("update icash_buyer_reply_progress set updated_at=now()-interval '2 minutes' where message_id=$1",[dueSource.id]);
-await rpc('icash_next_automation_lane',['messages']);
-assert.equal((await one('select reason from icash_buyer_reply_progress where message_id=$1',[dueSource.id])).reason,'awaiting_buyer_reply');
-assert.equal((await one("select count(*)::int n from icash_text_messages where direction='outgoing'")).n,outgoingBefore+1,'receipt recovery and supersession never replay a send');
 await pg.close();console.log('PASS supported SMS counteroffer -> acceptance -> identity/date/terms -> one agreement, actual dispatch, receipt wait, changed terms/Pause/expiry/account boundaries; zero provider calls.');

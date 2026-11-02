@@ -10,6 +10,10 @@ declare definition text; original text;
 begin
  definition:=pg_get_functiondef('public.icash_issue_account_followup()'::regprocedure);
  original:='select f.* into q from icash_work_private.account_followups f';
+ -- A concurrent migration can collide on the history timestamp after DDL
+ -- commits. Accept the exact already-installed patch when recording its history.
+ if position(original||' join public.icash_accounts recovery_account on recovery_account.id=f.account_id' in definition)>0
+  and position('order by f.next_run_at,f.account_id for key share of recovery_account skip locked for update of f skip locked limit 1;' in definition)>0 then return;end if;
  if position(original in definition)=0 or position('order by f.next_run_at,f.account_id for update of f skip locked limit 1;' in definition)=0 then
   raise exception 'Account recovery claim prerequisite changed';
  end if;
