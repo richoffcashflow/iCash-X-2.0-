@@ -1,9 +1,9 @@
 -- Disposable database only. Provider transport is never used by this fixture.
 create role anon;create role authenticated;create role service_role;
 create schema icash_research_private;
-create table icash_research_private.owner_exports(id uuid primary key,request jsonb,receipt jsonb,terminal_at timestamptz,completed_at timestamptz);
+create table icash_research_private.owner_exports(id uuid primary key,request jsonb,receipt jsonb,terminal_at timestamptz,completed_at timestamptz,recovery jsonb,csv text,lease_until timestamptz);
 create unique index owner_export_one_pending on icash_research_private.owner_exports((true)) where terminal_at is null;
-create table icash_research_private.owner_batches(id uuid primary key,account_id uuid,created_at timestamptz default now());
+create table icash_research_private.owner_batches(id uuid primary key,account_id uuid,created_at timestamptz default now(),state text default 'claimed',paid_receipt jsonb);
 create table icash_research_private.requests(id uuid primary key,kind text,account_id uuid,operation_key text,admitted boolean,created_at timestamptz default now(),finished_at timestamptz,result jsonb);
 create table public.icash_operation_spend(operation_key text primary key,state text,charge_cap_cents integer);
 create table public.icash_operating_budget(id integer primary key);insert into public.icash_operating_budget values(1);
