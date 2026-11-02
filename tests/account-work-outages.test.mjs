@@ -10,17 +10,23 @@ try{
  await pg.exec(read('tests/fixtures/account-work-repair.sql'));
  for(const name of ['workspace-experience-and-incidents','reliability-incident-severity','reliability-incident-stable-recovery','reliability-component-outages'])await pg.exec(read('config/'+name+'.sql'));
  await pg.exec(read('tests/fixtures/account-work-monitor-baseline.sql'));
+ await pg.exec("create table fixture_contact_candidates(account_id uuid primary key,screening_id uuid);create function icash_enrichment_before_prospecting_budget(uuid) returns uuid language sql stable set search_path=public as $$select screening_id from fixture_contact_candidates where account_id=$1$$;");
  await one('select icash_refresh_reviewed_workflow_snapshot()');
  await one("select icash_refresh_reliability_incident('ready')");
  const old=await one('select icash_claim_reliability_notification_v2()');await one('select icash_finish_reliability_notification($1,$2)',[old.id,id(990)]);
  await pg.exec("update icash_reliability_private.incidents set peak_severity='critical',seen_reasons=array['worker','maintenance','workflows']");
- await pg.exec(read('config/account-work-outages.sql'));
- for(let n=1;n<=8;n++){
+ await pg.exec(read('supabase/migrations/20261102210458_account_work_outages.sql'));
+ await pg.exec(read('config/account-work-funding-eligibility.sql'));
+ for(let n=1;n<=9;n++){
   await q("insert into icash_accounts(id,owner_user_id,bot_paused,created_at,workspace_ack_version) values($1,$1,$2,now()-interval '2 days','fixture')",[id(n),n===4||n===5]);
   await q("insert into icash_wallets(account_id,balance_cents,reserved_cents) values($1,$2,0)",[id(n),n===6?10:1000]);
   await q("insert into icash_operation_rates(id,operation,enabled,expires_at,charge_cents) values($1,'property_search',true,now()+interval '1 day',100)",[id(100+n)]);
   await q("insert into icash_discovery_configs(account_id,enabled,auto_enabled,contacts_enabled,rate_id,contact_rate_id,data_rights_until) values($1,true,true,true,$2,$2,now()+interval '1 day')",[id(n),id(100+n)]);
  }
+ await q("update icash_wallets set balance_cents=200 where account_id=$1",[id(9)]);
+ await q("update icash_operation_rates set charge_cents=300 where id=$1",[id(109)]);
+ await q("insert into icash_operation_rates(id,operation,enabled,expires_at,charge_cents) values($1,'owner_enrichment',true,now()+interval '1 day',100)",[id(209)]);
+ await q("update icash_discovery_configs set contact_rate_id=$2 where account_id=$1",[id(9),id(209)]);
  await q("update icash_discovery_configs set data_rights_until=now()-interval '1 day' where account_id=$1",[id(1)]);
  await q("insert into icash_control_events(id,account_id,action,created_at) values($1,$2,'pause',now())",[id(905),id(5)]);
  await q("insert into icash_operation_spend(operation_key,account_id,state,actual_micros,settled_at) values('recent',$1,'settled',1,now())",[id(7)]);
@@ -32,6 +38,14 @@ try{
  assert.equal(await one('select icash_reliability_severity($1)',[report]),'critical','database and UI agree');
  assert.equal(report.snapshot.issueCount,5,'legacy issue plus four account failures');
  assert.equal((await refresh()).snapshot.issueCount,5,'no double count on repeated refresh');
+ assert.equal((await one('select icash_account_work_health($1)',[id(9)])).status,'ok','contact-only balance with no eligible contact is a funding limit');
+ await q('insert into fixture_contact_candidates values($1,$2)',[id(9),id(909)]);
+ assert.equal((await refresh()).snapshot.accountProgress.affectedAccounts,5,'an affordable current contact remains monitored');
+ await q('delete from fixture_contact_candidates');
+ await q("insert into icash_operation_spend(operation_key,account_id,state,charge_cap_cents,created_at) values('held-original',$1,'dispatched',150,now()-interval '1 day')",[id(9)]);
+ assert.equal((await refresh()).snapshot.accountProgress.pendingAccounts,1,'a held original operation stays visible despite insufficient fresh-work funding');
+ await q("delete from icash_operation_spend where operation_key='held-original'");
+ await refresh();
  assert.equal((await one('select icash_account_work_health($1)',[id(1)])).status,'blocked');
  assert.equal((await one('select icash_account_work_health($1)',[id(7)])).status,'ok','other account data never leaks');
  await one("select icash_refresh_reliability_incident('ready')");

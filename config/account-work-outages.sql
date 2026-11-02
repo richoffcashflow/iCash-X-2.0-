@@ -25,6 +25,7 @@ language sql stable security invoker set search_path='' as $fn$
    w.balance_cents,public.icash_prospecting_available(a.id) available,
    least(public.icash_research_admission_quote(a.id,'property_search',sr.charge_cents),
     public.icash_research_admission_quote(a.id,'owner_enrichment',cr.charge_cents)) minimum,
+   public.icash_research_admission_quote(a.id,'property_search',sr.charge_cents) search_minimum,
    control.action,control.created_at control_at,funding.credited_at
   from public.icash_accounts a join public.icash_wallets w on w.account_id=a.id
   left join public.icash_discovery_configs d on d.account_id=a.id
@@ -52,7 +53,8 @@ language sql stable security invoker set search_path='' as $fn$
    when enabled is distinct from true or auto_enabled is distinct from true or contacts_enabled is distinct from true or search_enabled is distinct from true or contact_enabled is distinct from true then 'configuration_disabled'
    when least(data_rights_until,search_expires,contact_expires)<=now() then 'configuration_expired'
    when available<coalesce(minimum,1) and pending_at<=now()-interval '30 minutes' then 'pending_work'
-   when last_progress<=now()-interval '30 minutes' then 'no_completed_work'
+   when last_progress<=now()-interval '30 minutes'
+    and (available>=search_minimum or public.icash_enrichment_before_prospecting_budget(id) is not null) then 'no_completed_work'
    end problem
   from observed where balance_cents>=coalesce(minimum,1)
    and (available>=coalesce(minimum,1) or pending_at<=now()-interval '30 minutes')
