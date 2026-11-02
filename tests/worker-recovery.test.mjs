@@ -75,6 +75,7 @@ assert.deepEqual(workerFailureDetails(new DOMException('private timeout URL','Ti
 for(const [body,expected] of [
  [{code:'57014',message:'private query',details:'secret-token'},'57014'],
  [{code:'42501',hint:'private account'},'42501'],
+ [{code:'42702',message:'private ambiguous query',details:'private customer data'},'42702'],
  [{code:'PGRST202'},'PGRST202'],
  [{code:'private-secret'},null],
  [{code:'57014',details:'x'.repeat(5000)},null],
