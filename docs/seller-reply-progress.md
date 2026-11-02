@@ -40,27 +40,46 @@ individual null-return predicate ran on the historical request.
 
 ## Scope and recovery classification
 
-The read-only audit covered all 28 seller text threads with received messages,
-plus all seven completed live seller calls selected by the existing selling-
-interest predicate. Nine text threads and two calls belong to the owner account
-and are excluded from customer recovery counts. Repeated property addresses
-in different accounts were kept separate.
+The audit first inspected all 28 seller text threads with received messages.
+Nine belong to the owner account and are excluded from customer recovery.
+The 19 customer threads comprise six potential continuations, seven refusals/
+opt-outs, five carrier responses and one ambiguous unbound reply. All six
+potential continuations fail current contact checks. Two need price or buyer-
+model decisions, one is account-paused, one is under manual takeover, and two
+need current context/checks before follow-up. Two have stranded drafted jobs;
+the ownership-stage price question and a separate callback statement have no
+AI job. Repeated addresses in different accounts remain separate.
 
-The 19 customer text threads consist of six possible continuations, seven
-refusals/opt-outs, five carrier responses and one ambiguous unbound reply.
-All six possible continuations fail current contact checks: two need price or
-buyer-model decisions, one is account-paused, one is under manual takeover,
-and two need current context/contact checks before any follow-up. The two
-stranded drafted jobs are included in those six. The ownership-stage price
-question and a separate callback statement had no AI job.
+The expanded call audit scanned 1,538 completed customer outbound conversations
+and all 23 customer inbound call-history records, rather than trusting the
+interested flag. It inspected 236 outbound conversations containing an answer
+after a selling/offer question, the 71 remaining substantive candidates after
+removing silence and standard carrier responses, and seller-authored price/
+offer terms. Six outbound property/account cases contain interest or a price
+request without a later refusal (one overlaps the text audit). Three further
+outbound cases need address/intent clarification. Four have a later refusal or
+restrictive contact condition and are excluded from continuation.
 
-The five customer interest-signal calls include one overlapping text case and
-four additional properties. One additional call contains a later refusal and
-must not be counted as safely interested. The other three require qualification
-and current checks; their existing seller-gap records and delivery history must
-be reviewed rather than duplicated. These are nine potentially continuable
-customer property/account cases in total, not nine qualified or contract-ready
-deals. Zero are eligible for blind historical replay.
+Two inbound calls on one additional property request an offer. Three other
+inbound cases contain only an ambiguous response, an information/callback
+request without ownership confirmation, or ownership confirmation without
+selling interest. A fourth asks to defer contact for months; its existing hold
+must remain. The other inbound records contain silence, unrelated speech or
+refusals. No ambiguous response is verified ownership, consent or qualification.
+
+That yields **12 potential customer property/account continuations**, **six
+additional clarification cases**, and **five refusal/restriction/defer cases**
+in the expanded candidate review. These are not qualified or contract-ready
+deals. Every candidate's current SMS checks fail and none has current offer
+authority. Zero are eligible for blind historical replay. Existing call review
+items are retained; missing call reviews can use the existing source-bound
+seller-gap workflow without scheduling or sending a recovery message.
+
+The broader audit also demonstrates why a positive-interest activity counter
+is inadequate: the existing predicate misses “Of course,” a repeated “Yes,”
+and direct offer requests, and one positive match contains a later refusal.
+This release does not relabel those transcripts as consent or automatically
+restart their voice jobs. Their classifications require source review.
 
 ## Implementation and invariants
 
