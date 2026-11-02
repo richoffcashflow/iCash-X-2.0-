@@ -166,4 +166,27 @@ const odd=await incoming(buyer,'There is an easement problem to resolve');const 
 await q("update icash_text_ai_jobs set state='drafted',analysis='{\"action\":\"review\"}' where id=$1",[oddJob.id]);
 assert.equal((await rpc('icash_finish_seller_text_progress',[buyer.a,oddJob.id,'action_not_admitted'])).reason,'buyer_next_action_required');
 assert.equal((await one("select count(*)::int n from icash_text_attention where account_id=$1 and state='open'",[buyer.a])).n,1,'unanswered buyer is visible');
+
+// Exercise the actual maintenance entry point with both flags enabled. The
+// original buyer migration reused its enclosing job variable as a table alias,
+// which failed even with no due buyers. Direct resume tests missed that branch.
+await pg.exec("update icash_text_ai_jobs set next_attempt_at=now()+interval '1 day';update icash_seller_reply_progress set next_check_at=now()+interval '1 day'");
+await assert.rejects(rpc('icash_issue_due_text_ai'),e=>e.code==='42702' && /ambiguous/.test(e.message));
+await pg.exec(read('../config/buyer-receipt-dispatch.sql'));
+assert.equal(await rpc('icash_issue_due_text_ai'),null,'enabled empty buyer maintenance reaches the existing dispatcher');
+const receiptBuyer=await seed({qualified:false});await q("update icash_text_threads set party='buyer' where id=$1",[receiptBuyer.t]);
+const bm=await incoming(receiptBuyer,'I offer $90,000'),bj=await one('select * from icash_text_ai_jobs where message_id=$1',[bm.id]);
+const br=await rpc('icash_resume_seller_text_ai',[receiptBuyer.a,bj.id]);
+deliver=false;await dependencies.dispatch(receiptBuyer.a,br.messageId);deliver=true;
+assert.equal((await rpc('icash_finish_seller_text_progress',[receiptBuyer.a,bj.id,null])).reason,'provider_delivery_pending');
+const receiptCount=(await one('select count(*)::int n from icash_text_messages where account_id=$1',[receiptBuyer.a])).n;
+const dueBuyer=()=>q("update icash_buyer_reply_progress set updated_at=now()-interval '2 minutes' where message_id=$1",[bm.id]);
+await dueBuyer();await rpc('icash_issue_due_text_ai');
+assert.equal((await one('select reason from icash_buyer_reply_progress where message_id=$1',[bm.id])).reason,'provider_delivery_pending');
+await q("update icash_text_messages set state='delivered' where id=$1",[br.messageId]);
+await dueBuyer();await rpc('icash_issue_due_text_ai');
+assert.equal((await one('select reason from icash_buyer_reply_progress where message_id=$1',[bm.id])).reason,'awaiting_buyer_reply','scheduler reconciles the original late receipt');
+assert.equal((await one('select count(*)::int n from icash_text_messages where account_id=$1',[receiptBuyer.a])).n,receiptCount,'receipt maintenance never resends');
+assert.equal((await one("select has_function_privilege('anon','public.icash_issue_due_text_ai()','execute') ok")).ok,false);
+assert.equal((await one("select has_function_privilege('service_role','public.icash_issue_due_text_ai()','execute') ok")).ok,true);
 await pg.close();console.log('PASS supported SMS counteroffer -> acceptance -> identity/date/terms -> one agreement, actual dispatch, receipt wait, changed terms/Pause/expiry/account boundaries; zero provider calls.');
