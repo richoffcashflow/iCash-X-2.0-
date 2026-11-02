@@ -39,6 +39,9 @@ try{
  await db.exec(read('config/owner-batch-quota-admission.sql').match(/create function public.icash_admit_owner_batch[\s\S]*?end \$\$;/)[0]);
  await db.exec(JSON.parse(read('tests/fixtures/research-efficiency-before.json')).find(x=>x.proname==='icash_save_contacts').definition);
  await db.exec(read('config/owner-active-export.sql'));
+ const cachedRecovery=read('config/owner-export-cached-artifact-recovery.sql');
+ assert.equal(cachedRecovery,read('supabase/migrations/20261102232054_owner_export_cached_artifact_recovery.sql'));
+ await db.exec(cachedRecovery);
  // Exercise the production migration against the exact previous guard, and
  // require it to produce the same function as a clean installation.
  const currentDefinition=await v("select pg_get_functiondef('public.icash_save_owner_active_export(uuid,uuid,jsonb,jsonb)'::regprocedure)");
@@ -145,16 +148,29 @@ try{
  const saved=await rpc('icash_claim_owner_export_recovery',[batch]);assert(saved?.lease);assert.equal(await rpc('icash_claim_owner_export_recovery',[batch]),null);
  assert.equal(await rpc('icash_record_owner_export_recovery',[batch,id(99),{httpStatus:200,raw:{data:raw}}]),false);
  assert.equal(await rpc('icash_record_owner_export_recovery',[batch,saved.lease,{httpStatus:200,raw:{data:{...raw,status:'completed'}}}]),true);
- const rows=['9007199254740993123','2'].map((n,i)=>Object.fromEntries(activeOwnerColumns.map(k=>[k,({internal_person_id:n,person_full_name:'Synthetic Owner',phone_1:'214555010'+i,is_phone_1_dnc:'No',people_phone_1_type_id:'Wireless',has_active_phone_number:'Yes'})[k]??''])));
+ const rows=['9007199254740993123','2'].map((n,i)=>Object.fromEntries(activeOwnerColumns.map(k=>[k,({internal_person_id:n,person_full_name:i===0?'':'Synthetic Owner',phone_1:'214555010'+i,is_phone_1_dnc:'No',people_phone_1_type_id:'Wireless',has_active_phone_number:'Yes'})[k]??''])));
  const csv=[activeOwnerColumns,...rows.map(r=>activeOwnerColumns.map(k=>r[k]))].map(r=>r.join(',')).join('\n')+'\n';
  assert.equal(await rpc('icash_record_owner_export_artifact',[batch,saved.lease,csv]),true);
+ const originalEvidence=await v("select jsonb_build_object('request',request,'receipt',receipt,'recovery',recovery,'history',recovery_history,'csv',csv,'hash',artifact_sha256,'terminal',terminal_at) from icash_research_private.owner_exports where id=$1",[batch]);
+ await q("update icash_research_private.owner_exports set recovery_attempts=6,lease_until=now()-interval '1 second',next_recover_at=now()-interval '1 second' where id=$1",[batch]);
+ assert.equal(await rpc('icash_claim_owner_export_recovery',[batch]),null,'Exhausted artifact remains held while staged rollout is disabled');
+ await db.exec('update icash_research_private.owner_export_settings set cached_artifact_recovery_enabled=true');
+ const cached=await rpc('icash_claim_owner_export_recovery',[batch]);assert(cached?.localOnly);assert.equal(cached.csv,csv);assert.equal(cached.artifactSha256,originalEvidence.hash);
+ assert.equal(await rpc('icash_claim_owner_export_recovery',[batch]),null,'Local recovery retains the original exclusive lease');
+ assert.deepEqual(await q('select recovery_attempts,cached_artifact_attempts from icash_research_private.owner_exports where id=$1',[batch]).then(r=>r.rows[0]),{recovery_attempts:6,cached_artifact_attempts:1});
+ await assert.rejects(q('update icash_research_private.owner_exports set cached_artifact_attempts=0 where id=$1',[batch]),/immutable/);
+ await assert.rejects(q('update icash_research_private.owner_exports set recovery_attempts=5 where id=$1',[batch]),/immutable/);
  const allocated=allocateActiveOwnerExport(saved,csv,ownerBatchAudience(preview,items,25));
+ assert.equal(await rpc('icash_save_owner_active_export',[batch,saved.lease,allocated,rows]),false,'Superseded lease cannot settle');
  const changed=structuredClone(allocated);changed[1].result.creditsUsed=1;
- await assert.rejects(rpc('icash_save_owner_active_export',[batch,saved.lease,changed,rows]),/allocation or source/);assert.equal(Number(await v('select count(*) from icash_owner_contacts')),0);
+ await assert.rejects(rpc('icash_save_owner_active_export',[batch,cached.lease,changed,rows]),/allocation or source/);assert.equal(Number(await v('select count(*) from icash_owner_contacts')),0);
  const fabricated=structuredClone(allocated);fabricated[0].result.providerCredits.deduplicated=1;
- await assert.rejects(rpc('icash_save_owner_active_export',[batch,saved.lease,fabricated,rows]),/allocation or source/);
- assert.equal(await rpc('icash_save_owner_active_export',[batch,saved.lease,allocated,parseOwnerExportCsv(csv)]),true);
- assert.equal(await rpc('icash_save_owner_active_export',[batch,saved.lease,allocated,rows]),true);
+ await assert.rejects(rpc('icash_save_owner_active_export',[batch,cached.lease,fabricated,rows]),/allocation or source/);
+ assert.equal(await rpc('icash_save_owner_active_export',[batch,cached.lease,allocated,parseOwnerExportCsv(csv)]),true);
+ assert.equal(await v("select result->'contacts'->0->>'name' from icash_owner_contacts where screening_id=$1",[screen]),'','A source-bound blank display name saves without fabrication');
+ assert.equal(await rpc('icash_save_owner_active_export',[batch,cached.lease,allocated,rows]),true);
+ assert.deepEqual(await v("select jsonb_build_object('request',request,'receipt',receipt,'recovery',recovery,'history',recovery_history,'csv',csv,'hash',artifact_sha256,'terminal',terminal_at) from icash_research_private.owner_exports where id=$1",[batch]),originalEvidence);
+ assert.equal(Number(await v('select count(*) from icash_research_private.requests')),1,'Local artifact recovery creates no provider request');
  assert.equal(Number(await v('select sum(settled_used) from icash_operation_spend')),1);
  assert.equal(Number(await v('select count(*) from icash_cost_observations')),2,'Only actual allocated used credits, no invented dedup observations');
  assert.equal(await rpc('icash_dealmachine_saved_owner_result_valid',[allocated[1].result]),true);

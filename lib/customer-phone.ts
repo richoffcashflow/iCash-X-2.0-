@@ -2,7 +2,7 @@ import {createHash,createHmac} from 'node:crypto';
 import {db} from '@/lib/stripe-test';
 import {boundedBytes,createRecordingProviders} from '@/lib/required-call-recording-provider';
 import {verifiedTwilioForm,object,sid,uuid} from '@/lib/required-call-recording';
-import {twilioUsdChargeMicros} from '@/lib/twilio-usd-cost';
+import {twilioUsdChargeMicros,twilioUnansweredCall} from '@/lib/twilio-usd-cost';
 import {reconcilePendingCustomerPhoneCalls} from './customer-phone-maintenance.ts';
 export const customerPhoneBase='https://www.geticashx.com/api/customer-phone';
 export const customerPhoneRecordingPolicy='customer-phone-recorded-v1';
@@ -52,6 +52,18 @@ function bound(c:CustomerPhoneCall,r:Record<string,unknown>,child=false){
 function receipt(r:Record<string,unknown>){
  return {sid:r.sid,status:r.status,currency:'USD',costMicros:twilioUsdChargeMicros(r.price,r.price_unit),receiptHash:hash(JSON.stringify(r))};
 }
+/** Only a never-connected browser parent can use the documented unanswered
+ * connectivity cost. Canonical child and recording inventories are checked
+ * again below; saved contradictory evidence must keep its financial hold. */
+function unansweredBrowserParent(c:CustomerPhoneCall,parent:Record<string,unknown>){
+ const prior=object(c.parent_receipt),child=object(c.child_receipt),audio=object(c.recording_receipt);
+ return c.connection_type==='browser'&&c.recording_required&&twilioUnansweredCall(parent)
+  &&!c.connected_at&&!c.recipient_answered_at&&!c.child_sid&&!c.recording_sid&&!c.recording_deleted_at
+  &&['pending','absent'].includes(c.recording_state)
+  &&(!Object.keys(prior).length||(prior.sid===c.parent_sid&&prior.currency==='USD'&&['busy','failed','no-answer','canceled'].includes(String(prior.status))&&[null,0].includes(prior.costMicros as null|number)))
+  &&(!Object.keys(child).length||(child.kind==='verified_empty_child_list_after_parent_end'&&child.costMicros===0&&child.currency==='USD'&&!child.sid))
+  &&(!Object.keys(audio).length||(audio.status==='absent'&&audio.costMicros===0&&audio.currency==='USD'&&audio.callSid===c.parent_sid&&audio.providerAccountSid===c.provider_account_sid&&audio.policy===customerPhoneRecordingPolicy));
+}
 /** Provider metadata, not a callback URL, binds playback and costs to this call. */
 export function customerPhoneRecordingReceipt(c:CustomerPhoneCall,r:Record<string,unknown>){
  if(!c.recording_required||!sid(c.parent_sid,'CA')||!sid(r.sid,'RE')||c.recording_sid&&c.recording_sid!==r.sid||r.account_sid!==c.provider_account_sid||r.call_sid!==c.parent_sid||r.source!=='OutboundAPI'||r.channels!==2||!['completed','absent'].includes(String(r.status)))return null;
@@ -92,20 +104,24 @@ export async function reconcileCustomerPhoneCall(c:CustomerPhoneCall,p=customerP
   if(matches.length===1){await db(`icash_customer_phone_calls?id=eq.${c.id}&parent_sid=is.null`,'PATCH',{parent_sid:matches[0].sid,updated_at:new Date().toISOString()});c=(await getCustomerPhoneCall(c.id,c.account_id))??c;}
  }
  if(!c.parent_sid)return c;
- const parent=await p.call(c.parent_sid);if(!bound(c,parent))return c;
+ const parent=await p.call(c.parent_sid);if(parent.sid!==c.parent_sid||!bound(c,parent))return c;
+ // Do not overwrite contradictory saved evidence on one poll and then accept
+ // the same unanswered receipt on a later poll after that evidence is lost.
+ if(c.connection_type==='browser'&&c.recording_required&&twilioUnansweredCall(parent)&&!unansweredBrowserParent(c,parent))return c;
  // A delayed bridge receipt is not proof that no seller leg exists. Discover
  // canonical children before terminalizing, including when connected_at is absent.
- let child:Record<string,unknown>|null=null,noChildReceipt:Record<string,unknown>|null=null;
+ let child:Record<string,unknown>|null=null,noChildReceipt:Record<string,unknown>|null=null,noChildInventoryComplete=false;
  {const list=await p.children(c.parent_sid);if(!Array.isArray(list.calls)||list.next_page_uri||list.calls.length>1)return c;
-  if(list.calls.length){child=object(list.calls[0]);if(!bound(c,child,true))return c;}else if(terminal.has(String(parent.status))&&Date.now()-Date.parse(String(parent.end_time))>30000){noChildReceipt={currency:'USD',costMicros:0,kind:'verified_empty_child_list_after_parent_end',receiptHash:hash(JSON.stringify(list))};}
+  if(list.calls.length){child=object(list.calls[0]);if(!bound(c,child,true))return c;}else if(terminal.has(String(parent.status))&&Date.now()-Date.parse(String(parent.end_time))>30000){noChildInventoryComplete=list.next_page_uri===null;noChildReceipt={currency:'USD',costMicros:0,kind:'verified_empty_child_list_after_parent_end',receiptHash:hash(JSON.stringify(list))};}
  }
  const parentEnded=terminal.has(String(parent.status)),childEnded=child&&terminal.has(String(child.status));
  const patch:Record<string,unknown>={updated_at:new Date().toISOString()};
  if(noChildReceipt)patch.child_receipt=noChildReceipt;
  if(child){patch.child_sid=child.sid;if(child.status==='in-progress'||child.status==='completed'&&Number(child.duration)>0)patch.recipient_answered_at=c.recipient_answered_at??new Date().toISOString();if(childEnded)patch.child_receipt=receipt(child);}
  if(parentEnded){patch.parent_receipt=receipt(parent);if(childEnded||noChildReceipt){patch.ended_at=c.ended_at??new Date().toISOString();patch.state=child?.status==='completed'?'completed':'failed';}}
+ let recordingList:Record<string,unknown>|null=null;
  if(parentEnded&&c.recording_required&&!c.recording_receipt&&!c.recording_deleted_at){
-  const list=object(await p.recordings.listRecordings(c.parent_sid).catch(()=>null));
+  const list=recordingList=object(await p.recordings.listRecordings(c.parent_sid).catch(()=>null));
   if(Array.isArray(list.recordings)&&!list.next_page_uri&&list.recordings.length===1){
    const rec=customerPhoneRecordingReceipt(c,object(list.recordings[0]));
    if(rec)Object.assign(patch,{recording_sid:rec.sid,recording_receipt:rec,recording_state:rec.status==='completed'?'available':'absent',recording_expires_at:rec.expiresAt});
@@ -113,7 +129,27 @@ export async function reconcileCustomerPhoneCall(c:CustomerPhoneCall,p=customerP
    Object.assign(patch,{recording_state:'absent',recording_receipt:{status:'absent',callSid:c.parent_sid,providerAccountSid:c.provider_account_sid,kind:'unanswered_parent_with_empty_recordings',currency:'USD',costMicros:0,policy:customerPhoneRecordingPolicy,receiptHash:hash(JSON.stringify({parent,list}))}});
   }
  }
- await db(`icash_customer_phone_calls?id=eq.${c.id}&account_id=eq.${c.account_id}`,'PATCH',patch);
+ if(noChildReceipt&&noChildInventoryComplete&&unansweredBrowserParent(c,parent)){
+  // A null price alone never releases money. Twilio's exact unanswered status
+  // proves only this parent's connectivity cost; a fresh empty inventory must
+  // independently exclude recording usage, including when absence was saved.
+  const list=recordingList??object(await p.recordings.listRecordings(c.parent_sid).catch(()=>null));
+  if(Array.isArray(list.recordings)&&list.recordings.length===0&&list.next_page_uri===null){
+   patch.parent_receipt={...receipt(parent),costMicros:0,kind:'verified_unanswered_browser_parent',
+    costEvidence:{policy:'twilio-unanswered-connectivity-v1',duration:parent.duration,price:parent.price,priceUnit:parent.price_unit,
+     childInventoryHash:noChildReceipt.receiptHash,recordingInventoryHash:hash(JSON.stringify(list)),
+     childrenComplete:true,childrenCount:0,recordingsComplete:true,recordingsCount:0,observedAt:new Date().toISOString(),
+     accountSid:parent.account_sid,fromPhone:parent.from,toPhone:parent.to,direction:parent.direction,
+     createdAt:parent.date_created,endedAt:parent.end_time}};
+  }
+ }
+ let patchPath=`icash_customer_phone_calls?id=eq.${c.id}&account_id=eq.${c.account_id}`;
+ if(object(patch.parent_receipt).kind==='verified_unanswered_browser_parent'){
+  patchPath+=`&parent_sid=eq.${c.parent_sid}&connected_at=is.null&recipient_answered_at=is.null&child_sid=is.null&recording_sid=is.null&recording_deleted_at=is.null&settled_at=is.null`;
+  for(const key of ['parent_receipt','child_receipt','recording_receipt'] as const)patchPath+=`&${key}=${c[key]==null?'is.null':'eq.'+encodeURIComponent(JSON.stringify(c[key]))}`;
+ }
+ const saved=await db<CustomerPhoneCall[]>(patchPath,'PATCH',patch);
+ if(!saved.length)return await getCustomerPhoneCall(c.id,c.account_id)??c;
  if(patch.ended_at)await db('rpc/icash_settle_customer_phone_call','POST',{p_id:c.id}).catch(()=>false);
  return await getCustomerPhoneCall(c.id,c.account_id)??c;
 }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {createHash,createHmac} from 'node:crypto';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {object,sid,uuid,verifiedTwilioForm} from '../lib/required-call-recording.ts';
-import {twilioUsdChargeMicros} from '../lib/twilio-usd-cost.ts';
+import {twilioUsdChargeMicros,twilioUnansweredCall} from '../lib/twilio-usd-cost.ts';
 import {boundedBytes,createRecordingProviders} from '../lib/required-call-recording-provider.ts';
 const originalFetch=globalThis.fetch,oldAccount=process.env.TWILIO_ACCOUNT_SID,oldSecret=process.env.TWILIO_AUTH_TOKEN;
 const ac='AC'+'a'.repeat(32),ca='CA'+'b'.repeat(32),child='CA'+'c'.repeat(32),secret='fixture-auth-token-for-browser',account='11111111-1111-4111-8111-111111111111',actor='22222222-2222-4222-8222-222222222222',screen='33333333-3333-4333-8333-333333333333',id='44444444-4444-4444-8444-444444444444',business='+12025550101',recipient='+12025550102',callback='client:icash_'+'a'.repeat(64),created=new Date().toISOString();
@@ -26,7 +26,7 @@ try{
   if(path==='rpc/icash_connect_customer_phone_call'){claims++;if(row.connected_at)return false;row.connected_at=created;row.state='connecting';return true;}
   throw Error('Unexpected fixture database call '+path);
  };
- const m=await loadService('lib/customer-phone.ts',{createHash,createHmac,db,boundedBytes,createRecordingProviders,verifiedTwilioForm,object,sid,uuid,twilioUsdChargeMicros});
+ const m=await loadService('lib/customer-phone.ts',{createHash,createHmac,db,boundedBytes,createRecordingProviders,verifiedTwilioForm,object,sid,uuid,twilioUsdChargeMicros,twilioUnansweredCall});
  const input={accountId:account,userId:actor,screeningId:screen,phone:recipient,callbackPhone:callback,requestKey:id,browser:true};
  const started=await m.startCustomerPhoneCall(input);assert.equal(started.parentSid,ca);assert.equal(dials,1);await m.startCustomerPhoneCall(input);assert.equal(dials,1,'Repeated start never dials twice');await assert.rejects(()=>m.endCustomerBrowserCall(id,'other'),/PHONE_CALL_REQUIRED/);
  const nonce=createHmac('sha256',secret).update('customer-phone-v1\0'+id).digest('hex');

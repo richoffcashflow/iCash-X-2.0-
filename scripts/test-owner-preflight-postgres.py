@@ -184,3 +184,33 @@ finally:
         pause.kill()
         pause.wait(timeout=5)
 print("PASS native PostgreSQL: 24 competing expired-check renewals create one immutable successor; concurrent customer Pause wins after the initial read; original evidence and paid work unchanged.")
+
+# A batch sibling has a paid ledger entry but intentionally no separate ticket.
+# The real selector must skip that held operation BEFORE ranking, preserving
+# the original row while moving the account to independent eligible work.
+sql((ROOT / "tests/fixtures/owner-candidate-started-work.sql").read_text())
+sql((ROOT / "tests/fixtures/owner-candidate-installed.sql").read_text())
+a = uid(8000)
+sql(f"insert into icash_accounts(id) values('{a}');insert into icash_discovery_configs(account_id,contact_rate_id) values('{a}','{uid(99)}');insert into icash_wallets(account_id) values('{a}');")
+for n, prop, score in [(8001, 100, 100), (8002, 200, 50), (8003, 100, 90), (8004, 300, 40)]:
+    snap = {"propertyId": "prop_"+str(prop), "propertyType": "house", "raw": {"data": {"state": "TX"}}}
+    result = {"financialCheck": {"status": "eligible"}, "score": score}
+    sql(f"insert into icash_screening_jobs(id,account_id,state,snapshot,result) values('{uid(n)}','{a}','complete',{literal(snap)},{literal(result)});")
+sql(f"insert into icash_operation_spend values('owners:{a}:{uid(8001)}','dispatched');")
+selection = f"select icash_enrichment_before_prospecting_budget('{a}');"
+assert sql(selection) == uid(8001)
+assert sql(f"select icash_owner_batch_candidates('{a}','{uid(8001)}');") == "[]"
+before = sql("select md5(jsonb_agg(to_jsonb(o) order by operation_key)::text) from icash_operation_spend o;")
+sql((ROOT / "config/owner-candidate-started-work.sql").read_text())
+with ThreadPoolExecutor(max_workers=12) as pool:
+    selections = list(pool.map(lambda _: sql(selection), range(24)))
+assert set(selections) == {uid(8002)}, selections
+assert sql("select md5(jsonb_agg(to_jsonb(o) order by operation_key)::text) from icash_operation_spend o;") == before
+sql(f"insert into icash_property_controls values('{a}','prop_200',true);")
+assert sql(selection) == uid(8004)
+sql(f"update icash_accounts set bot_paused=true where id='{a}';")
+its = [{"screeningId": uid(8004), "snapshot": {"propertyId": "prop_300", "propertyType": "house", "raw": {"data": {"state": "TX"}}}, "ids": ["per_8004"]}]
+req = {**request, "people_ids": ["per_8004"]}
+assert json.loads(sql(f"select icash_claim_owner_preflight('{a}',{literal(its)},{literal(req)});"))["status"] == "held"
+assert sql("select count(*) from fixture_purchases;") == "0"
+print("PASS native PostgreSQL: 24 selectors skip ticketless held batch siblings and same-property uncertainty; independent work wins, manual control and final Pause still win, original money is unchanged.")

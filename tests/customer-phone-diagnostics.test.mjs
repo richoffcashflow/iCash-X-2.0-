@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {createHash,createHmac} from 'node:crypto';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {object,sid,uuid,verifiedTwilioForm} from '../lib/required-call-recording.ts';
-import {twilioUsdChargeMicros} from '../lib/twilio-usd-cost.ts';
+import {twilioUsdChargeMicros,twilioUnansweredCall} from '../lib/twilio-usd-cost.ts';
 import {boundedBytes,createRecordingProviders} from '../lib/required-call-recording-provider.ts';
 const originalFetch=globalThis.fetch,originalWarn=console.warn,oldAccount=process.env.TWILIO_ACCOUNT_SID,oldSecret=process.env.TWILIO_AUTH_TOKEN;
 const ac='AC'+'a'.repeat(32),ca='CA'+'b'.repeat(32),childSid='CA'+'c'.repeat(32),secret='synthetic-private-provider-secret',id='44444444-4444-4444-8444-444444444444',nonce='e'.repeat(64),created=new Date(Date.now()-60000).toISOString();
@@ -20,7 +20,7 @@ try{
  process.env.TWILIO_ACCOUNT_SID=ac;process.env.TWILIO_AUTH_TOKEN=secret;
  console.warn=(...args)=>logs.push(args);
  globalThis.fetch=async(url)=>{reads++;assert.equal(url,`https://api.twilio.com/2010-04-01/Accounts/${ac}/Calls/${ca}.json`);if(providerError)throw Error(secret+' '+base.recipient_phone);return Response.json(parent);};
- const m=await loadService('lib/customer-phone.ts',{createHash,createHmac,db,boundedBytes,createRecordingProviders,verifiedTwilioForm,object,sid,uuid,twilioUsdChargeMicros});
+ const m=await loadService('lib/customer-phone.ts',{createHash,createHmac,db,boundedBytes,createRecordingProviders,verifiedTwilioForm,object,sid,uuid,twilioUsdChargeMicros,twilioUnansweredCall});
  const request=(part='answer',{valid=true,token=nonce,params={},contentType='application/x-www-form-urlencoded'}={})=>{
   const url=`${m.customerPhoneBase}/${part}?id=${id}&nonce=${token}`,form={AccountSid:ac,CallSid:ca,...params};
   const signature=createHmac('sha1',secret).update(url+Object.keys(form).sort().map(k=>k+form[k]).join('')).digest('base64');

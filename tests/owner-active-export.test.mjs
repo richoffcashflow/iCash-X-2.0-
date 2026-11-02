@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {activeOwnerColumns,activeOwnerExportRequest,parseOwnerExportCsv,allocateActiveOwnerExport,enrichActiveOwners,recoverOwnerActiveExports} from '../lib/owner-active-export.ts';
 import {ownerBatchAudience} from '../lib/owner-batch.ts';
 import {OwnerPreviewRateLimitError} from '../lib/owner-enrichment-deferral.ts';
@@ -18,6 +19,18 @@ assert.deepEqual(allocated.map(a=>[a.result.creditsUsed,a.result.peopleCredits,a
 assert.equal(allocated[0].result.contacts[0].personId,ids[0]);assert.equal(allocated[0].result.contacts[0].name,'Synthetic, Owner');
 assert.equal(allocated[0].result.contacts[0].phones[0].activityBasis,'provider_export_filter');
 for(const a of allocated){assert.deepEqual(a.result.providerCredits,{used:1,people:2});assert.equal(a.result.outreachAuthorized,false);assert(!('deduplicated' in a.result.providerCredits));}
+// A paid export may omit one owner's display name. Preserve the blank value,
+// exact owner/phone evidence and actual credits instead of freezing the batch.
+const unnamedRow={...row(ids[0]),person_full_name:''};
+const unnamedCsv=csvOf([unnamedRow,row(ids[1],'2145550101')]);
+const unnamedResults=allocateActiveOwnerExport(base,unnamedCsv,audience);
+assert.equal(unnamedResults[0].result.contacts[0].name,'');
+assert.equal(unnamedResults[1].result.contacts[0].name,'','Shared owner retains the original blank name');
+assert.equal(unnamedResults.reduce((n,x)=>n+x.result.creditsUsed,0),1);
+assert(unnamedResults.every(x=>x.result.outreachAuthorized===false));
+for(const mutate of [r=>{r.person_full_name='x'.repeat(201);},r=>{r.internal_person_id='999';},r=>{r.is_phone_1_dnc='Yes';},r=>{r.has_active_phone_number='No';},r=>{r.phone_1='';}]){
+ const bad={...unnamedRow};mutate(bad);assert.throws(()=>allocateActiveOwnerExport(base,csvOf([bad,row(ids[1])]),audience));
+}
 for(const mutate of [r=>{delete r.raw.credits.used;},r=>{r.raw.credits.used=3;},r=>{r.raw.credits.properties=1;},r=>{r.httpStatus=500;},r=>{r.raw.credits.premium=1;},r=>{r.raw.record_count=3;}]){const bad=structuredClone(base);mutate(bad.receipt);assert.throws(()=>allocateActiveOwnerExport(bad,csv,audience));}
 for(const mutate of [r=>{r.internal_person_id='4';},r=>{r.is_phone_1_dnc='Yes';},r=>{r.is_phone_1_dnc='';},r=>{r.has_active_phone_number='No';},r=>{r.phone_1='';},r=>{r.phone_2=r.phone_1;r.is_phone_2_dnc='No';r.people_phone_2_type_id='Wireless';}]){const bad=row(ids[0]);mutate(bad);assert.throws(()=>allocateActiveOwnerExport(base,csvOf([bad,row(ids[1])]),audience));}
 assert.throws(()=>allocateActiveOwnerExport(base,csvOf([row(ids[0]),row(ids[0])]),audience));
@@ -98,6 +111,16 @@ try{
  reset();saved={...filtered,accountId:account,items:filteredCandidates.map((c,i)=>({...c,ids:['per_'+(i+1)]})),preview:filteredPreview,csv:filteredCsv,lease:'fixture-lease',recovery:{httpStatus:200,raw:{data:{export_id:'export-fixture',status:'completed',record_count:1}}}};
  const filteredDb=async(path,method,p)=>path==='rpc/icash_save_owner_active_export'?(assert.deepEqual(p.p_results,filteredResults),assert.equal(p.p_rows.length,1),true):db(path,method,p);
  assert.equal((await recoverOwnerActiveExports(filteredDb,async()=>{throw Error('Saved artifact must not make provider requests');})).status,'contacts_saved');assert.equal(paid,0);assert.equal(gets,0);assert.equal(downloads,0);
+ // Repair the originally saved nameless artifact without another provider call.
+ reset();saved={...base,accountId:account,items:audience.map(a=>({screeningId:a.screeningId,snapshot:a.snapshot,ids:a.ids})),preview,csv:unnamedCsv,lease:'fixture-lease',recovery:{data:{export_id:'export-fixture',status:'completed',record_count:2}},localOnly:true,artifactSha256:createHash('sha256').update(unnamedCsv).digest('hex'),recoveryHttpStatus:200,terminalAt:now};
+ const unchangedArtifact=JSON.stringify(saved);
+ assert.equal((await recoverOwnerActiveExports(db,async()=>{throw Error('Saved artifact must not make provider requests');})).status,'contacts_saved');
+ assert.deepEqual(results,unnamedResults);assert.equal(JSON.stringify(saved),unchangedArtifact);assert.equal(paid+gets+downloads,0);
+ for(const mutate of [s=>{s.csv=null;},s=>{s.csv='';},s=>{s.csv+='\n';},s=>{delete s.artifactSha256;},s=>{s.artifactSha256='0'.repeat(64);},s=>{s.recoveryHttpStatus=500;},s=>{s.receipt.httpStatus=500;},s=>{s.terminalAt=null;},s=>{s.recovery.data.export_id='another-export';},s=>{s.recovery.data.status='processing';},s=>{s.recovery.data.record_count=1;}]){
+  saved=JSON.parse(unchangedArtifact);mutate(saved);results=null;let networkCalls=0;
+  assert.equal((await recoverOwnerActiveExports(db,async()=>{networkCalls++;throw Error('Local-only claim cannot use any provider transport');})).status,'export_receipt_held');
+  assert.equal(networkCalls,0);assert.equal(results,null,'Malformed local evidence must not reach settlement');
+ }
  reset();const hugeRecovery=(url,options)=>String(url).includes('/exports/')?new Response('x'.repeat(131073)):transport(url,options);
  assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,hugeRecovery)).status,'export_receipt_held');assert.equal(paid,1);assert.equal(downloads,0);assert.equal(results,null);
  reset();preview.data[0].contacts[0].availability.phones=0;

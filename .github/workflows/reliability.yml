@@ -36,6 +36,14 @@ jobs:
         run: python3 scripts/test-learning-refresh-postgres.py
       - name: Verify one-use owner preflights under real concurrent transactions
         run: python3 scripts/test-owner-preflight-postgres.py
+      - name: Verify delayed contact checks survive concurrent cleanup
+        run: python3 scripts/test-preflight-waiting-postgres.py
+      - name: Verify historical cleanup recovery and concurrent customer Pause
+        run: python3 scripts/test-cleanup-ticket-recovery-postgres.py
+      - name: Verify bounded saved export recovery without provider retries
+        run: python3 scripts/test-owner-export-artifact-postgres.py
+      - name: Verify unanswered call settlement and late child races
+        run: python3 scripts/test-customer-phone-unanswered-postgres.py
       - name: Verify seller recovery, receipts and Pause under concurrent transactions
         run: python3 scripts/test-seller-progress-postgres.py
       - name: Verify automatic export recovery under concurrent transactions

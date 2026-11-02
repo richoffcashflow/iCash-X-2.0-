@@ -206,6 +206,79 @@ try{
   assert.equal(await one("select icash_finish_owner_enrichment($1,$2,$3,$4,true,'contacts_saved')",[ticket,account,screen,work.token]),true);
   assert.equal(await one('select state from icash_automation_tickets where id=$1',[ticket]),'complete');
  });
+
+ // Historical early cleanup: actual source/funds/unstarted gates and renewal
+ // eligibility. Only external phone-pool/owner-fence boundaries are controlled.
+ await pg.exec(read('tests/fixtures/owner-cleanup-ticket-recovery.sql'));
+ const renewal=read('config/owner-preflight-renewal.sql');
+ await pg.exec(renewal.slice(renewal.indexOf('create function icash_research_private.owner_preflight_renewable'),renewal.indexOf('create function icash_research_private.guard_owner_preflight_generation')));
+ const cleanupSql=read('config/owner-cleanup-ticket-recovery.sql');
+ assert.equal(cleanupSql,read('supabase/migrations/20261102233121_owner_cleanup_ticket_recovery.sql'));
+ await pg.exec(cleanupSql);
+ const preflight=id(90);
+ const prepareCleaned=async()=>{
+  await pg.exec(`update icash_research_private.owner_export_settings set cleanup_ticket_recovery_enabled=true;
+   update icash_automation_tickets set state='held',outcome='held',owner_preview_deferrals=3,completed_at=now()-interval '20 minutes',expires_at=now()-interval '20 minutes',
+    owner_preview_retry_until=now()+interval '3 hours',owner_preview_screening_hash=(select icash_owner_enrichment_screening_hash(s) from icash_screening_jobs s where id='${screen}');
+   insert into icash_owner_review_private.changes select 'rate',to_jsonb(r),now()-interval '2 hours' from icash_operation_rates r;
+   insert into icash_research_private.owner_export_preflights(id,account_id,items,request,state,list_name,list_id,receipts,created_at,started_at,deleted_at)
+    select '${preflight}','${account}',jsonb_build_array(jsonb_build_object('screeningId',id,'snapshot',snapshot)),'{"people_ids":["per_123"]}','waiting','SYNTHETIC list','"list-123"',
+    '{"create":{"httpStatus":200,"raw":{"data":{"list_id":"list-123","name":"SYNTHETIC list","source_type":"people","status":"completed","total_count":1}}}}',
+    now()-interval '40 minutes',now()-interval '40 minutes',now()-interval '25 minutes' from icash_screening_jobs where id='${screen}';`);
+ };
+ const cleanupArgs=async()=>[ticket,preflight,...(await q(`select icash_owner_enrichment_ticket_hash(t) th,md5(to_jsonb(p)::text) ph,md5((to_jsonb(c)-'next_run_at')::text) ch,md5(to_jsonb(r)::text) rh
+  from icash_automation_tickets t join icash_discovery_configs c on c.account_id=t.account_id join icash_operation_rates r on r.id=c.contact_rate_id
+  cross join icash_research_private.owner_export_preflights p where t.id=$1 and p.id=$2`,[ticket,preflight])).rows.map(row=>Object.values(row))[0]];
+ const cleanupRecover=args=>one('select icash_recover_cleaned_owner_ticket($1,$2,$3,$4,$5,$6)',args);
+ await isolated(async()=>{
+  await prepareCleaned();const args=await cleanupArgs();
+  const original=await one('select to_jsonb(t) from icash_automation_tickets t where id=$1',[ticket]);
+  const receipt=await one('select to_jsonb(p) from icash_research_private.owner_export_preflights p where id=$1',[preflight]);
+  assert.equal(await cleanupRecover(args),true);assert.equal(await cleanupRecover(args),false);
+  const recovered=await one('select to_jsonb(t) from icash_automation_tickets t where id=$1',[ticket]);
+  const stripRetry=t=>Object.fromEntries(Object.entries(t).filter(([k])=>!['outcome','owner_preview_retry_after'].includes(k)));
+  assert.deepEqual(stripRetry(recovered),stripRetry(original));assert.equal(recovered.outcome,'owner_preview_rate_limited');
+  assert.deepEqual(await one('select before_ticket from icash_research_private.cleanup_ticket_recoveries'),original);
+  assert.deepEqual(await one('select to_jsonb(p) from icash_research_private.owner_export_preflights p where id=$1',[preflight]),receipt);
+  assert.equal(Number(await one('select approved_max_charge_cents from icash_owner_enrichment_recoveries')),105);
+  assert.equal(await eligible(),screen,'Recovered original can enter the normal scheduler');
+  await rejected(()=>pg.exec('update icash_research_private.cleanup_ticket_recoveries set before_ticket=\'{}\''),/immutable/);
+  await rejected(()=>pg.exec('delete from icash_research_private.cleanup_ticket_recoveries'),/immutable/);
+  await pg.exec('update icash_operation_rates set charge_cents=106');assert.equal(await eligible(),null,'Original quote cap remains enforced');
+ });
+ const cleanupBlockers=[
+  'update icash_research_private.owner_export_settings set cleanup_ticket_recovery_enabled=false',
+  'update icash_accounts set bot_paused=true','update fixture_policy set member=false','update icash_wallets set balance_cents=0',
+  'update icash_operating_budget set enabled=false','update icash_discovery_configs set contacts_enabled=false',
+  'update fixture_cleanup_policy set people_available=false','update fixture_cleanup_policy set mobile=true',
+  "update icash_operation_rates set charge_cents=106","delete from icash_owner_review_private.changes",
+  "update icash_owner_review_private.changes set recorded_at=now()",
+  "update icash_automation_tickets set owner_preview_deferrals=8","update icash_automation_tickets set owner_preview_retry_until=now()-interval '1 second'",
+  "update icash_automation_tickets set state='consumed'","update icash_automation_tickets set outcome='held_for_reconciliation'",
+  "update icash_research_private.owner_export_preflights set deleted_at=null",
+  "update icash_research_private.owner_export_preflights set created_at=now()-interval '29 minutes',deleted_at=now()-interval '25 minutes'",
+  "update icash_research_private.owner_export_preflights set started_at=now()",
+  "update icash_research_private.owner_export_preflights set deleted_at=now()-interval '19 minutes'",
+  "update icash_research_private.owner_export_preflights set deleted_at=created_at+interval '31 minutes'",
+  "update icash_research_private.owner_export_preflights set receipts=receipts||'{\"baseline\":{}}'",
+  "update icash_research_private.owner_export_preflights set receipts=jsonb_set(receipts,'{create,httpStatus}','500')",
+  "update icash_research_private.owner_export_preflights set list_id='\"other\"'",
+  "update icash_screening_jobs set snapshot=snapshot||'{\"changed\":true}'",
+  `insert into icash_property_controls(account_id,property_id,manual) values('${account}','prop_123',true)`,
+  `insert into icash_cost_observations(provider,event_key,source_ref,amount,units) values('dealmachine','${op}:people','SYNTHETIC original evidence',0,'provider_credits')`,
+  `insert into icash_research_private.owner_export_preflights(id,supersedes) values('${id(91)}','${preflight}')`,
+ ];
+ for(const mutation of cleanupBlockers)await isolated(async()=>{
+  await prepareCleaned();await pg.exec(mutation);assert.equal(await cleanupRecover(await cleanupArgs()),false,mutation);
+  assert.equal(Number(await one('select count(*) from icash_research_private.cleanup_ticket_recoveries')),0);
+ });
+ for(const mutation of ["update icash_automation_tickets set completed_at=completed_at-interval '1 second'","update icash_research_private.owner_export_preflights set receipts=receipts||'{\"other\":true}'","update icash_discovery_configs set revision=gen_random_uuid()","update icash_operation_rates set version='changed'"]){
+  await isolated(async()=>{await prepareCleaned();const args=await cleanupArgs();await pg.exec(mutation);assert.equal(await cleanupRecover(args),false,'Stale reviewed hash: '+mutation);});
+ }
+ for(const role of ['anon','authenticated'])assert.equal(await one("select has_function_privilege($1,'icash_recover_cleaned_owner_ticket(uuid,uuid,text,text,text,text)','execute')",[role]),false);
+ assert.equal(await one("select has_table_privilege('service_role','icash_research_private.cleanup_ticket_recoveries','insert')"),false);
+ await isolated(async()=>{await prepareCleaned();const args=await cleanupArgs();await pg.exec('set local role service_role');assert.equal(await cleanupRecover(args),true,'Only service RPC can archive and recover');});
+ console.log('PASS cleaned preflight ticket recovery: exact source/rate/cleanup evidence, actual renewable/current/unstarted gates, immutable approval and history, retained deadline/count/token, capped ordinary scheduling and service-only ACL.');
  // Reconstruct prerequisite production privileges that schema-only fixtures omit.
  await pg.exec(`grant usage on schema public,icash_private to service_role;grant select on icash_private.provider_costs to service_role;
  do $$declare table_name text;begin for table_name in select tablename from pg_tables where schemaname='public' and tablename<>'icash_owner_enrichment_recoveries' loop
