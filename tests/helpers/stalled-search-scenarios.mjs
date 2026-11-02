@@ -12,6 +12,7 @@ export async function stalledSearchScenarios(db,account,other){
  const bounded=read('config/bounded-research-market-selection.sql');
  assert.equal(bounded,read('supabase/migrations/20261026034110_bounded_research_market_selection.sql'));
  await db.exec(bounded);
+ await db.exec(read('config/failed-search-continuity.sql'));
  const config=()=>value('select to_jsonb(c) from icash_discovery_configs c where account_id=$1',[account]);
  const original=await config(),op=`discovery:${account}:${original.revision}:${original.next_page}`;
  const resume=()=>value('select icash_continue_stalled_research($1)',[account]);
@@ -24,6 +25,28 @@ export async function stalledSearchScenarios(db,account,other){
  await db.exec('update icash_research_private.settings set stalled_search_continuation_enabled=true');
  assert.equal(await resume(),false,'The failing filter must be rolled back before continuing');
  await db.exec('update icash_research_private.settings set exclusions_enabled=false');
+ // The provider also returns completed 500 errors without the old exclusion
+ // list. Exercise that production case through the same exact-source fences.
+ await db.exec('begin;');
+ await q('update icash_discovery_configs set research_list_id=null where account_id=$1',[account]);
+ await q("update icash_research_private.query_claims set policy=jsonb_set(policy,'{exclusionListId}','null') where operation_key=$1",[op]);
+ await q("update icash_research_private.requests set result='{\"outcome\":\"http_error\",\"httpStatus\":500}' where id=$1",[request]);
+ assert.equal(await resume(),false,'Completed-error continuation is staged disabled');
+ await db.exec('update icash_research_private.settings set completed_error_continuation_enabled=true');
+ for(const result of [{outcome:'unknown'},{outcome:'response',httpStatus:200},{outcome:'http_error',httpStatus:429}]){
+  await q('update icash_research_private.requests set result=$2 where id=$1',[request,result]);
+  assert.equal(await resume(),false,'Other incomplete outcomes do not inherit the completed-500 policy');
+ }
+ await q("update icash_research_private.requests set result='{\"outcome\":\"http_error\",\"httpStatus\":500}' where id=$1",[request]);
+ await q('update icash_accounts set bot_paused=true where id=$1',[account]);assert.equal(await resume(),false);
+ await q('update icash_accounts set bot_paused=false where id=$1',[account]);
+ const failedConfig=await config();const failedMoney=(await q('select * from icash_operation_spend order by operation_key')).rows;
+ assert.equal(await resume(),true,'A completed 500 can continue only in a different eligible ZIP');
+ assert.notEqual((await config()).zip,failedConfig.zip);
+ assert.deepEqual(await value('select configuration from icash_research_private.stalled_searches where operation_key=$1',[op]),failedConfig);
+ assert.deepEqual((await q('select * from icash_operation_spend order by operation_key')).rows,failedMoney);
+ assert.equal(await value('select icash_stalled_research_zip($1,$2)',[account,failedConfig.zip]),true);
+ await db.exec('rollback;');
  await q('update icash_accounts set bot_paused=true where id=$1',[account]);
  assert.equal(await resume(),false,'Pause remains authoritative');
  await q('update icash_accounts set bot_paused=false where id=$1',[account]);
