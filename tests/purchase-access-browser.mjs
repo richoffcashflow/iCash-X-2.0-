@@ -11,13 +11,8 @@ export async function verifyPurchaseAccess(browser,base,options,name){
    if(url.origin!==base){external++;return route.abort();}
    const json=(body,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
    if(url.pathname==='/api/account/access')return wrongAccount?json({signedIn:true,error:'Sign in with the same email you used for this purchase. Your checkout is saved; do not start another checkout.'},403):json(signedIn?{signedIn:true,destination:url.searchParams.get('destination')==='vip'?'/live/100002':'/'}:{signedIn:false,signInReady:true});
-   if(url.pathname==='/api/auth/email'){codeRequests++;assert.deepEqual(route.request().postDataJSON().email,'buyer@example.invalid');if(failEmail)return json({error:'Email could not be sent right now. Enter a code you already received or use your checkout phone.'},503);return json({sent:true,message:'A sign-in code is on its way.'});}
-   if(url.pathname==='/api/auth/phone'){
-    const body=route.request().postDataJSON();assert.equal(body.email,'');assert.equal(body.phone,'2125551234');
-    if(body.action==='send'){textRequests++;assert.equal(body.accepted,true);return json({sent:true,message:'A text code is on its way.'});}
-    if(body.code!=='12345678')return json({error:'That code could not be verified. Check the code or request a new text.'},400);
-    signedIn=true;return json({signedIn:true});
-   }
+   if(url.pathname==='/api/auth/email'){codeRequests++;assert.deepEqual(route.request().postDataJSON().email,'buyer@example.invalid');if(failEmail)return json({error:'Email could not be sent right now. Enter a code you already received, or try again later. Contact support if you still cannot sign in.'},503);return json({sent:true,message:'A sign-in code is on its way.'});}
+   if(url.pathname==='/api/auth/phone'){textRequests++;throw Error('Disabled phone sign-in must not be requested');}
    if(url.pathname==='/api/auth/verify'){
     if(route.request().postDataJSON().code!=='123456')return json({error:'That code could not be verified. Request a new code and try again.'},400);
     signedIn=true;return json({signedIn:true});
@@ -53,21 +48,14 @@ export async function verifyPurchaseAccess(browser,base,options,name){
   signedIn=false;wrongAccount=false;failEmail=true;
   await page.goto(base+'/access');await page.getByLabel('Email',{exact:true}).fill('buyer@example.invalid');
   await page.getByRole('button',{name:'Email me a code',exact:true}).click();
-  await page.getByText('Email could not be sent right now. Enter a code you already received or use your checkout phone.',{exact:true}).waitFor();
+  await page.getByText('Email could not be sent right now. Enter a code you already received, or try again later. Contact support if you still cannot sign in.',{exact:true}).waitFor();
   await page.getByLabel('Email code',{exact:true}).fill('123456');await page.getByRole('button',{name:'Sign in',exact:true}).click();
   await page.waitForURL(base+'/');
   signedIn=false;
   await page.goto(base+'/access');await page.getByLabel('Email',{exact:true}).fill('buyer@example.invalid');
-  await page.getByRole('button',{name:'Use my checkout phone',exact:true}).click();
-  const optionalEmail=page.getByLabel('Receipt email (optional)',{exact:true});
-  assert.equal(await optionalEmail.evaluate(input=>input.required),false,'Checkout phone recovery does not require remembering the receipt email');
-  await optionalEmail.fill('');
-  await page.getByLabel('Checkout mobile number',{exact:true}).fill('2125551234');
-  await page.getByRole('button',{name:'Text me a code',exact:true}).click();
-  await page.getByLabel('Text code',{exact:true}).fill('00000000');await page.getByRole('button',{name:'Sign in',exact:true}).click();
-  await page.getByText('That code could not be verified. Check the code or request a new text.',{exact:true}).waitFor();
-  await page.getByLabel('Text code',{exact:true}).fill('12345678');await page.getByRole('button',{name:'Sign in',exact:true}).click();
-  await page.waitForURL(base+'/');assert.equal(textRequests,1);
+  assert.equal(await page.getByRole('button',{name:'Use my checkout phone',exact:true}).count(),0);
+  assert.equal(await page.getByLabel('Checkout mobile number',{exact:true}).count(),0);
+  assert.equal(textRequests,0);
   const beforeRecovery=codeRequests;
   paidView='setup';signedIn=false;
   await page.goto(base+'/join?setup=1');
@@ -82,6 +70,6 @@ export async function verifyPurchaseAccess(browser,base,options,name){
   await page.goto(base+'/join?membership=paid');await page.getByRole('button',{name:'Restore access with my payment email',exact:true}).click();
   await page.waitForURL(base+'/');assert.equal(codeRequests,beforeRecovery,'An existing verified session opens without another email code');
   assert.equal(external,0);assert.deepEqual(errors,[]);
-  console.log(`PASS ${name}: direct account link, wrong-code/email/phone recovery, account switching, VIP destination, and workspace entry despite optional setup failure or delayed confirmation. No real emails or texts.`);
+  console.log(`PASS ${name}: direct account link, wrong-code/email recovery without disabled phone sign-in, account switching, VIP destination, and workspace entry despite optional setup failure or delayed confirmation. No real emails or texts.`);
  }finally{await context.close();}
 }

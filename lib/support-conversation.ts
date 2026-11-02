@@ -88,12 +88,9 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
   const active=currentAccessConversation(context.messages),history=active.filter(m=>m.role==='user').map(m=>m.content).join('\n');
   const delivery=supportCodeDelivery(active);
   const code=active.length>0;
-  const bothTried=/\bboth\b|email.{0,15}(?:text|phone|sms)|(?:text|phone|sms).{0,15}email/i.test(history);
-  const channel=/email|inbox|spam/i.test(history)?'email':/text|sms|phone/i.test(history)||bothTried?'text':null;
   if(code){
-   if(!channel)return result(active.some(m=>m.role!=='user'&&/requesting the code by email or text/i.test(m.content))?'I still need to know whether you’re using email or text to choose the right sign-in step. You can reply with just the method.':'Are you requesting the code by email or text? Please don’t share the code itself.');
-   if(delivery==='missing'){const answer=missingAccessCodeReply(context.messages,context.accessInvestigation);return result(answer.reply,answer.status);}
-   if(!/safari|chrome|firefox|edge|iphone|android|ipad|desktop|laptop|browser/i.test(history))return result(`Thanks — the ${channel} code. Open the sign-in page directly in Safari or Chrome, enter the newest code, and press the sign-in button. Which device and browser are you using?`);
+   if(delivery==='missing'||(/\b(?:text|sms)\b|\b(?:phone sign[ -]?in|checkout phone)\b/i.test(history)&&!/email|inbox|spam/i.test(history))){const answer=missingAccessCodeReply(context.messages,context.accessInvestigation);return result(answer.reply,answer.status);}
+   if(!/safari|chrome|firefox|edge|iphone|android|ipad|desktop|laptop|browser/i.test(history))return result(`For email sign-in, open the sign-in page directly in Safari or Chrome, enter the newest code, and press the sign-in button. Which device and browser are you using?`);
    if(!previous.includes('error message')&&!/invalid|expired|error|spinning|stuck|blank|no error/i.test(question))return result('What happens after you press the sign-in button: an error message, a loading spinner, or the same page? You can copy the error text, but leave out the code.');
    if(/expired|invalid/i.test(question)&&!previous.includes('Older codes may no longer work'))return result('Request one fresh code and enter that newest code in the same browser where you requested it. Older codes may no longer work. What message appears after you try that?');
    return result(/private|incognito/i.test(history)?'Does sign-in fail before the code is accepted, or does it accept the code and return you to sign-in? That tells me whether to check code delivery or the saved session.':'The code and the saved browser session are separate steps. Open iCash X in a private Safari or Chrome window and try signing in there once. Does it open your workspace or return to sign-in? You do not need to pay again.');

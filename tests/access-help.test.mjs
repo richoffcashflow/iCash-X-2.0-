@@ -44,7 +44,7 @@ try{
  assert.equal(await rpc('icash_access_help_read',{p_hash:b}),null,'Another browser cannot discover a case by email or ID');
  await assert.rejects(()=>rpc('icash_access_help_submit',{...args,p_message:'Changed replay'}));
  await assert.rejects(()=>rpc('icash_access_help_submit',{...args,p_email:'other@example.invalid',p_key:randomUUID()}));
- const update={p_operator:owner,p_id:id,p_key:randomUUID(),p_status:'waiting_on_customer',p_reply:'Open the account link and choose Use my checkout phone.'};
+ const update={p_operator:owner,p_id:id,p_key:randomUUID(),p_status:'waiting_on_customer',p_reply:'Open the account link and use your receipt email.'};
  await assert.rejects(()=>rpc('icash_access_help_operator_update',{...update,p_operator:other}));
  await rpc('icash_access_help_operator_update',update);await rpc('icash_access_help_operator_update',update);
  let readback=await rpc('icash_access_help_read',{p_hash:a});assert.equal(readback.messages.length,2);assert.equal(readback.status,'waiting_on_customer');
@@ -88,7 +88,7 @@ try{
  const admin=await loadService('app/api/support/admin/access/route.ts',{supportVerifiedLegacyOfferReply,scheduleSupportCustomerNotifications:()=>{},db,requireTrustedOperator:async()=>{if(!allowed)throw Error('OPERATOR_REQUIRED');return {userId:owner};},allowedOrigin:()=>allowed,accessHelpUpdate,accessHelpRedact});
  allowed=false;assert.equal((await admin.GET(new Request('https://example.invalid/api/support/admin/access'))).status,403);allowed=true;
  response=await admin.GET(new Request('https://example.invalid/api/support/admin/access?id='+created.id));assert.equal(response.status,200);assert(!JSON.stringify(await response.json()).includes('session_hash'));
- response=await admin.POST(new Request('https://example.invalid/api/support/admin/access',{method:'POST',body:JSON.stringify({id:created.id,requestId:randomUUID(),status:'waiting_on_customer',reply:'Please choose Use my checkout phone on the access page.'})}));assert.equal(response.status,200);
+ response=await admin.POST(new Request('https://example.invalid/api/support/admin/access',{method:'POST',body:JSON.stringify({id:created.id,requestId:randomUUID(),status:'waiting_on_customer',reply:'Please use your receipt email on the access page.'})}));assert.equal(response.status,200);
  assert.equal((await (await route.GET()).json()).conversation.messages.at(-1).role,'operator');
  await q("update icash_access_help_requests set expires_at=now()-interval '1 second' where id=$1",[created.id]);
  assert.equal((await (await route.GET()).json()).conversation,null);assert.notEqual(jar.get(accessHelpCookie),secret,'Expired browser conversations rotate their proof');
@@ -101,9 +101,9 @@ try{
  assert.equal(await rpc('icash_access_help_finish_reply',{p_id:autoId,p_key:autoKey,p_token:randomUUID(),p_reply:'Wrong claim',p_status:'waiting_on_customer',p_handoff:false}),false);
  await q("update icash_access_help_messages set reply_claimed_at=now()-interval '2 minutes' where request_id=$1",[autoId]);
  await recoverAccessHelpReplies(db);
- let auto=await rpc('icash_access_help_read',{p_hash:autoHash});assert.match(auto.messages.at(-1).content,/email or text/);assert.equal(auto.status,'waiting_on_customer');
+ let auto=await rpc('icash_access_help_read',{p_hash:autoHash});assert.match(auto.messages.at(-1).content,/email sign-in/);assert.equal(auto.status,'waiting_on_customer');
  await replyToAccessHelp(db,autoId,autoKey);assert.equal((await rpc('icash_access_help_read',{p_hash:autoHash})).messages.length,2,'Retry never duplicates an automatic reply');
- for(const [question,expected] of [['email',/device and browser/],['iPhone Safari',/error message/],['No error, still nothing',/saved browser session/]]){
+ for(const [question,expected] of [['iPhone Safari',/error message/],['No error, still nothing',/saved browser session/]]){
   const nextKey=randomUUID();await rpc('icash_access_help_submit',{...autoArgs,p_key:nextKey,p_message:question});await replyToAccessHelp(db,autoId,nextKey);auto=await rpc('icash_access_help_read',{p_hash:autoHash});assert.match(auto.messages.at(-1).content,expected);
  }
  assert.equal(auto.status,'waiting_on_customer','Unresolved problems stay in automatic troubleshooting');
