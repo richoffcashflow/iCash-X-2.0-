@@ -36,6 +36,7 @@ foundation = (ROOT / "tests/fixtures/owner-preflight-foundation.sql").read_text(
 foundation = re.sub(r"create role (anon|authenticated|service_role);", "", foundation)
 sql(foundation)
 sql((ROOT / "config/owner-export-preflight.sql").read_text())
+sql((ROOT / "config/owner-export-preflight-indexing.sql").read_text())
 sql(f"insert into icash_accounts(id) values('{account}'),('{other}');insert into icash_screening_jobs values('{uid(3)}','{account}','complete',{literal(items[0]['snapshot'])});update icash_research_private.owner_export_settings set preflight_enabled=true;")
 with ThreadPoolExecutor(max_workers=12) as pool:
     claims = list(pool.map(lambda _: json.loads(sql(claim)), range(24)))
@@ -54,6 +55,7 @@ creation = record(c, "create", {"data": {"list_id": "fixture-list", "name": c["n
 with ThreadPoolExecutor(max_workers=8) as pool:
     receipts = list(pool.map(lambda _: sql(creation), range(16)))
 assert set(receipts) == {"pending"}, receipts
+assert sql("select next_check_at>=started_at+interval '90 seconds' from icash_research_private.owner_export_preflights;") == "t"
 assert sql("select jsonb_object_length from (select count(*) jsonb_object_length from icash_research_private.owner_export_preflights p,jsonb_object_keys(p.receipts)) q;") == "1"
 assert json.loads(sql(claim))["status"] == "pending"
 sql("update icash_research_private.owner_export_preflights set next_check_at=now()-interval '1 second';")
