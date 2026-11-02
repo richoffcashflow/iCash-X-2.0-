@@ -28,11 +28,12 @@ export function BotRunBar({apiBase='/api/work',readOnly=false,hasLeads,botName,v
  },[running,stale,principalKey,apiBase]);
  const current=activity?.principalKey===principalKey&&activity&&Date.now()-Date.parse(activity.checkedAt)<25000?activity:null;
  const funded=(balanceCents??0)>0;
- const live=running&&funded&&!stopped&&!paymentRequired&&!stale&&!busy&&!!current&&current.label!=='Paused';
+ const blocked=current?.blocked===true,healthUnavailable=current?.unavailable===true;
+ const live=running&&funded&&!stopped&&!paymentRequired&&!stale&&!busy&&!!current&&current.label!=='Paused'&&!blocked&&!healthUnavailable;
  const active=live&&current?.active===true;
- const liveLabel=stale||busy||running&&funded&&!paymentRequired&&!stopped&&!current?'Checking status':live?'Live':'Not live';
- const title=stale?'Checking status':paymentRequired?'Restore access':active?'Bot working':!funded?(balanceCents===undefined?'Ready when you are':hasCreditHistory?'Out of credits':'Add money to start your bot'):stopped?'Bot paused':running?(readOnly?'Run enabled':'Bot running'):'Bot ready';
- const detail=stale?'Reconnecting…':paymentRequired?'Update your subscription to continue.':active?current!.label:!funded?(hasCreditHistory?'Add money to continue. Your properties and conversations are saved.':'Choose an amount. Your bot starts after payment.'):running?(live&&hasLeads===false?'Looking for a deal':current?.label??'Checking for the next task…'):stopped?'Your properties and conversations are saved.':'Waiting for eligible work.';
+ const liveLabel=blocked?'Work delayed':healthUnavailable||stale||busy||running&&funded&&!paymentRequired&&!stopped&&!current?'Checking status':live?'Live':'Not live';
+ const title=stale||healthUnavailable?'Checking status':paymentRequired?'Restore access':blocked?'Work delayed':active?'Bot working':!funded?(balanceCents===undefined?'Ready when you are':hasCreditHistory?'Out of credits':'Add money to start your bot'):stopped?'Bot paused':running?(readOnly?'Run enabled':'Bot running'):'Bot ready';
+ const detail=stale?'Reconnecting…':paymentRequired?'Update your subscription to continue.':blocked||healthUnavailable?current!.label:active?current!.label:!funded?(hasCreditHistory?'Add money to continue. Your properties and conversations are saved.':'Choose an amount. Your bot starts after payment.'):running?(live&&hasLeads===false?'Looking for a deal':current?.label??'Checking for the next task…'):stopped?'Your properties and conversations are saved.':'Waiting for eligible work.';
  const displayTitle=botName?.trim()&&title.startsWith('Bot ')?`${botName.trim()} is ${title.slice(4)}`:title;
  return <section id="workspace-tour-controls" className={`bot-run-bar bot-run-centered${active?' is-active':''}`} aria-label="Bot controls">
   <div className="bot-run-status"><IcashMark className="bot-orb"/><div><div className="bot-run-title"><h2>{displayTitle}</h2><span className="bot-live-status" data-live={live} role="status"><i aria-hidden="true"/><span className="sr-only">{liveLabel}</span></span>{vip&&<span className="workspace-vip-badge" aria-label="VIP access"><Crown size={24} strokeWidth={2} aria-hidden="true"/><span>VIP</span></span>}</div><p aria-live="polite">{detail}</p></div></div>

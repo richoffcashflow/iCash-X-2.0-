@@ -6,6 +6,8 @@ export const reliabilitySchema=z.object({status:z.enum(['ok','degraded']),fresh:
  checkedAt:z.string().datetime({offset:true}),issueCount:count,
  issues:z.array(issue).max(25),
  acknowledgedCount:count.optional(),
+ accountProgress:z.object({checkedAt:z.string().datetime({offset:true}),affectedAccounts:count,expiredConfigurations:count,unexpectedPauses:count,stalledAccounts:count,pendingAccounts:count,
+  samples:z.array(z.object({accountId:z.guid(),reason:z.enum(['configuration_expired','configuration_disabled','system_paused','no_completed_work','pending_work']),since:z.string().datetime({offset:true}),lastCompletedAt:z.string().datetime({offset:true}).nullable(),availableCents:count})).max(25)}).optional(),
  acknowledgedIssues:z.array(issue.extend({disposition:z.enum(['provider_failure_confirmed','terminal_call_receipt_pending','provider_outcome_unknown','outreach_blocked']),acknowledgedAt:z.string().datetime({offset:true})})).max(25).optional(),
  texts:z.object({accepted:count,delivered:count,review:count}),contracts:z.object({created:count,completed:count,review:count}),
 }).nullable()});

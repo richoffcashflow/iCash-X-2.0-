@@ -148,6 +148,14 @@ try{
    await panel.getByText('Provider outcome still unknown',{exact:true}).waitFor();
    assert.match(await panel.innerText(),/acknowledgment does not retry work or confirm completion/);
    const activeIssues=reliability.snapshot.issues;
+   reliability.snapshot.accountProgress={checkedAt:new Date().toISOString(),affectedAccounts:3,expiredConfigurations:1,unexpectedPauses:1,stalledAccounts:1,pendingAccounts:0,samples:[{accountId:'00000000-0000-4000-8000-000000000099',reason:'configuration_expired',since:new Date(Date.now()-3600000).toISOString(),lastCompletedAt:null,availableCents:1000}]};
+   reliability.snapshot.issueCount=4;
+   await page.getByRole('button',{name:'Refresh',exact:true}).click();
+   await panel.getByText('Workflow reliability · Critical priority',{exact:true}).waitFor();
+   await panel.getByText('3 funded accounts with blocked or stalled work',{exact:true}).waitFor();
+   await panel.getByText('Review affected accounts',{exact:true}).click();
+   await panel.getByText('Research configuration expired',{exact:true}).waitFor();
+   delete reliability.snapshot.accountProgress;
    reliability.status='ok';reliability.snapshot.issueCount=0;reliability.snapshot.issues=[];
    await page.getByRole('button',{name:'Refresh',exact:true}).click();
    await panel.getByText('Workflow reliability · No new alerts',{exact:true}).waitFor();

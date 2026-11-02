@@ -5,7 +5,7 @@ export const reliabilitySeverityLabels={minor:'Minor',high:'High',critical:'Crit
 export const reliabilitySeverityGuidance={
  minor:'An isolated workflow is delayed. Core background checks are healthy; recovery can continue.',
  high:'Prioritize investigation. A send or contract needs review, monitoring is incomplete, or delays are persistent or widespread.',
- critical:'Immediate attention. Core background work is unhealthy or unavailable and automated workflows may be affected.',
+ critical:'Immediate attention. Background services are unhealthy or multiple funded accounts are blocked or failing to complete work.',
 };
 export function reliabilityItemPriority(issue:{kind:string;since:string},now=Date.now()):'minor'|'high'{
  return ['text_receipt','text_review','call_receipt','contract_delivery','contract_preparation','owner_export'].includes(issue.kind)||now-Date.parse(issue.since)>=30*60000?'high':'minor';
@@ -14,6 +14,7 @@ export function reliabilityItemPriority(issue:{kind:string;since:string},now=Dat
  * using the same cases. Missing monitoring is never reported as healthy. */
 export function reliabilityPriority(report:ReliabilityReport|null,now=Date.now()):ReliabilitySeverity|null{
  if(!report)return 'high';
+ if((report.snapshot?.accountProgress?.affectedAccounts??0)>=3)return 'critical';
  const components=[report.components.worker,report.components.maintenance];
  if(components.some(c=>c.status==='degraded'||c.status==='unavailable'))return 'critical';
  if(!report.fresh||!report.snapshot||components.some(c=>c.status!=='ok'))return 'high';
