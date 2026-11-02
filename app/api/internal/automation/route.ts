@@ -1,6 +1,7 @@
 import {processAutomationFollowup} from '@/lib/automation-followup-service';
 import {ProspectingBudgetError} from '@/lib/voice-budget-failure';
 import {OwnerPreviewRateLimitError} from '@/lib/owner-enrichment-deferral';
+import {OwnerExportPreflightPendingError} from '@/lib/owner-export-preflight';
 import {dispatchCustomerUpdate} from '@/lib/customer-updates-service';
 import {automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '@/lib/live-work-admission';
 import {dispatchAttentionNotification} from '@/lib/attention-notifications-service';
@@ -45,7 +46,7 @@ export async function POST(request:Request){
    &&error.operationKey===`owners:${ticket.accountId}:${ticket.screeningId}`){
    // The RPC checks the exact consumed capability and absence of all paid-work
    // evidence under lock. It schedules a new capability, never reuses this token.
-   try{if(await db<boolean>('rpc/icash_defer_owner_enrichment','POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_operation:error.operationKey})===true)return NextResponse.json({status:'owner_preview_rate_limited'},{headers});}catch{/* An uncertain database outcome is never treated as a retry grant. */}
+   try{if(await db<boolean>(error instanceof OwnerExportPreflightPendingError?'rpc/icash_defer_owner_preflight':'rpc/icash_defer_owner_enrichment','POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_operation:error.operationKey})===true)return NextResponse.json({status:error instanceof OwnerExportPreflightPendingError?'owner_export_preflight_pending':'owner_preview_rate_limited'},{headers});}catch{/* An uncertain database outcome is never treated as a retry grant. */}
    // A lost deferral response may already have led to a fresh issued/consumed
    // capability. Never let this stale worker finish that newer attempt by ID.
    try{await db('rpc/icash_finish_owner_enrichment','POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_success:false,p_outcome:'held_for_reconciliation'});}catch{/* Preserve the original capability on an uncertain completion; never repeat it. */}

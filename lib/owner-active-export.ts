@@ -6,6 +6,7 @@ import {ownerBatchAudience} from './owner-batch.ts';
 import {previewAudience} from './owner-enrichment.ts';
 import {runScreeningJob} from './screening-job.ts';
 import {OwnerPreviewRateLimitError} from './owner-enrichment-deferral.ts';
+import {preflightOwnerExport,OwnerExportPreflightPendingError} from './owner-export-preflight.ts';
 
 type Candidate={screeningId:string;snapshot:unknown};
 type Config={contact_rate_id:string;contact_credit_cap:number;property_credit_micros:number;data_rights_until:string;research_version?:number};
@@ -172,8 +173,17 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  const audience=ownerBatchAudience(preview,candidates,c.contact_credit_cap).filter(a=>a.ids.length);
  if(!audience.length)return {status:'empty',contacts:0};
  const request=activeOwnerExportRequest([...new Set(audience.flatMap(a=>[...a.ids]))],mobileOnly);
+ const items=audience.map(a=>({screeningId:a.screeningId,snapshot:a.snapshot,ids:[...a.ids]}));
+ const preflight=await preflightOwnerExport(db,accountId,items,request,transport);
+ if(preflight.status==='empty')return {status:'empty',contacts:0};
+ if(preflight.status==='pending'){
+  if(!audience.some(a=>a.screeningId===primary.screeningId))return {status:'empty',contacts:0};
+  throw new OwnerExportPreflightPendingError(accountId,primary.screeningId);
+ }
+ if(preflight.status==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+ if(!['disabled','ready'].includes(preflight.status))return {status:'held'};
  const admission=await db<string>('rpc/icash_admit_owner_active_export','POST',{p_account:accountId,p_primary:audience.find(a=>a.screeningId===primary.screeningId)?.screeningId??audience[0].screeningId,p_batch:batchId,
-  p_items:audience.map(a=>({screeningId:a.screeningId,snapshot:a.snapshot,ids:[...a.ids]})),p_preview:preview,p_request:request,
+  p_items:items,p_preview:preview,p_request:request,
   p_config:{rateId:c.contact_rate_id,creditCap:c.contact_credit_cap,unitCostMicros:c.property_credit_micros,rightsUntil:c.data_rights_until}});
  if(['quota_wait','export_busy'].includes(admission))throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
  if(admission!=='claimed')return {status:'held'};
