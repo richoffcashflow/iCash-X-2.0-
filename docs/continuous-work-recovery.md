@@ -18,6 +18,16 @@ Offline checks cover source/HTTP/identity requirements, stale and malformed inve
 
 Other observed constraints remain real: the 424 sender is disabled, old contact checks expire, and uncertain calls/messages retain their original reconciliation requirements. Continuous operation means selecting eligible work and recovering safe failures; it does not override pauses, recipient controls, available credits or provider limits.
 
+## Gateway failure and completed-search recovery
+
+The later November 2 audit found a new completed HTTP 504 gateway response occupying the global export slot, blocking contact enrichment for 14 otherwise eligible stalled accounts. `gateway-export-capacity.sql` adds a separately disabled `gateway_enabled` switch and `gateway-idle-v1` policy. It requires the original admitted, account/operation-bound owner lookup to have finished at least five minutes ago, the exact saved DealMachine Cloudflare gateway HTML, an unchanged receipt, an unexpired original hold with no known export/CSV/recovery, and no active local lease or other blocking export. It reuses all three free inventory checks, provider quota admission, immutable attempts and bounded backoff. Only organization capacity can be released; the original owners and customer money remain held.
+
+Three other funded accounts had current property searches with completed HTTP 500 receipts but no exclusion list. The original continuation handled only unknown exclusion-list requests, so these exact failures froze otherwise available independent research. `failed-search-continuity.sql` adds a disabled `completed_error_continuation_enabled` switch. With it enabled, the existing continuation accepts these finished error receipts and null-list configurations while retaining aged request proof, exact query claims, original rate/configuration snapshots, permanent original-ZIP fences, saved market restrictions, affordability, account locking, Pause checks and late original receipt recovery. It never retries the failed search or releases its money.
+
+Install both migrations disabled. Require the exact release's full reliability checks and native export contention for both the original 500 and new 504 cases, then verify matching web/worker releases before activating the private switches. Rollback disables those switches without editing source records or historical capacity/continuation decisions. Offline cases cover incomplete/recent/mismatched requests, other HTTP outcomes, active leases, known recovery, active provider exports, Pause, old-policy compatibility, immutable original operations, idempotency and private grants.
+
+Older call, text and legacy-search receipts remain separate investigations. A completed conversation or zero-duration quota rejection alone is not evidence of zero total provider cost. Never fabricate a USD observation, waive an unknown commitment, replay a call or count receipt polling as completed work.
+
 Provider contract: https://api.docs.dealmachine.com/api-reference/exports/list-exports documents `pending`, `processing`, `completed`, `failed`, status filters and pagination totals.
 
 Rate-limit headers and organization scope: https://api.docs.dealmachine.com/rate-limits.
