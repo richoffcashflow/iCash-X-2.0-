@@ -1,9 +1,12 @@
 import {finishAdmittedDealMachineRequest,type ResearchDb} from './dealmachine-request.ts';
+import {recoverAutomaticOwnerExportCapacity} from './automatic-export-capacity.ts';
 
 /** One reviewed FREE inventory read. Never repeats an export, downloads a file,
  * releases money, or attributes a history item to the unknown original owner. */
 export async function recoverOwnerExportCapacity(db:ResearchDb,transport:typeof fetch=fetch,env=process.env){
  if(env.VERCEL_ENV!=='production'||!/^dm_sk_live_[A-Za-z0-9_-]+$/.test(env.DEALMACHINE_API_KEY??''))return {status:'not_requested'};
+ const automatic=await recoverAutomaticOwnerExportCapacity(db,transport,env);
+ if(automatic)return automatic;
  const claim=await db<{reviewId:string;requestId:string}|null>('rpc/icash_claim_export_capacity_review','POST',{});
  if(!claim)return {status:'capacity_review_idle'};
  let received=false,status='capacity_review_held';
