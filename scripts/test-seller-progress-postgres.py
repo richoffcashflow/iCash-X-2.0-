@@ -199,3 +199,32 @@ finally:
     pause.close()
     claim.close()
 print('PASS native numeric offer: 16 duplicate webhooks, 16 competing plans, one quote and one final operation; concurrent Pause wins without a replay.')
+
+# Activate the buyer maintenance branch through the real issuer, not just the
+# direct reply service. Its old alias collides with the enclosing PL/pgSQL row.
+sql("drop function icash_buyer_factual_text(uuid,uuid,text);" + (ROOT / 'tests/fixtures/buyer-reply-original-functions.sql').read_text() + (ROOT / 'config/buyer-reply-progress.sql').read_text())
+sql("update icash_seller_progress_settings set buyer_reply_enabled=true,buyer_reply_enabled_at=now()-interval '1 hour';update icash_text_ai_jobs set next_attempt_at=now()+interval '1 day';update icash_seller_reply_progress set next_check_at=now()+interval '1 day';")
+try:
+    sql("select icash_issue_due_text_ai();")
+except AssertionError as error:
+    assert 'j.account_id' in str(error) and 'ambiguous' in str(error), error
+else:
+    raise AssertionError('Original enabled buyer dispatcher must reproduce its production ambiguity')
+sql((ROOT / 'config/buyer-receipt-dispatch.sql').read_text())
+assert sql('select icash_issue_due_text_ai();') == ''
+BT, BM, BO = [f'20000000-0000-4000-8000-{n:012d}' for n in range(1, 4)]
+sql(f"""insert into icash_text_threads(id,account_id,deal_id,party,recipient) values('{BT}','{NA}','{ND}','buyer','+12145550333');
+insert into icash_text_messages(id,account_id,thread_id,direction,state,body,event_id) values('{BM}','{NA}','{BT}','incoming','received','What is the buyer price?','native-buyer-source');
+insert into icash_text_messages(id,account_id,thread_id,direction,state,body,provider_id) values('{BO}','{NA}','{BT}','outgoing','accepted','The buyer price is $112,000.','native-original-receipt');
+update icash_text_ai_jobs set outgoing_id='{BO}',state='queued' where message_id='{BM}';
+insert into icash_buyer_reply_progress(message_id,account_id,thread_id,state,reason,next_step,outgoing_id,updated_at) values('{BM}','{NA}','{BT}','waiting','provider_delivery_pending','Await original receipt','{BO}',now()-interval '2 minutes');""")
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    list(pool.map(lambda _: sql('select icash_issue_due_text_ai();'), range(16)))
+assert sql(f"select reason from icash_buyer_reply_progress where message_id='{BM}'") == 'provider_delivery_pending'
+sql(f"update icash_text_messages set state='delivered' where id='{BO}';update icash_buyer_reply_progress set updated_at=now()-interval '2 minutes' where message_id='{BM}';")
+assert sql('select icash_issue_due_text_ai();') == ''
+assert sql(f"select reason from icash_buyer_reply_progress where message_id='{BM}'") == 'awaiting_buyer_reply'
+assert sql(f"select count(*) from icash_text_messages where thread_id='{BT}'") == '2'
+assert sql("select has_function_privilege('anon','public.icash_issue_due_text_ai()','execute')") == 'f'
+assert sql("select has_function_privilege('service_role','public.icash_issue_due_text_ai()','execute')") == 't'
+print('PASS native enabled buyer dispatcher: original ambiguity reproduced; empty queue, 16 reconciliation races and late original receipt succeed with no message replay.')
