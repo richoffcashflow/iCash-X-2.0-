@@ -1,0 +1,50 @@
+create role anon;create role authenticated;create role service_role;
+create table icash_operating_budget(id integer primary key,enabled boolean default true);insert into icash_operating_budget values(1,true);
+create table icash_accounts(id uuid primary key,bot_paused boolean default false);
+create table icash_screening_jobs(id uuid primary key,account_id uuid,state text default 'complete',snapshot jsonb default '{}',result jsonb default '{}',completed_at timestamptz default now());
+create table icash_deal_files(id uuid primary key,account_id uuid,screening_id uuid,stage text default 'draft',terms jsonb default '{}');
+create table icash_text_threads(id uuid primary key,account_id uuid,deal_id uuid,party text default 'seller',recipient text,sender text default '+15550000001',paused boolean default false,manual_only boolean default false,ai_mode text default 'auto',retired_at timestamptz,timezone text default 'America/Chicago',seller_intake_id uuid,permission_until timestamptz default now()+interval '1 day');
+create table icash_text_events(id text primary key,payload jsonb);
+create table icash_text_messages(id uuid primary key default gen_random_uuid(),account_id uuid,thread_id uuid,direction text,state text,body text,request_key uuid unique,event_id text unique,provider_id text,customer_author_id uuid,route_revision bigint,attachments jsonb default '[]',created_at timestamptz default now(),updated_at timestamptz default now());
+create function icash_sms_reply_time(mid uuid) returns numeric language sql set search_path=public as $$select coalesce((e.payload->>'timestamp')::numeric,extract(epoch from m.created_at)) from icash_text_messages m left join icash_text_events e on e.id=m.event_id where m.id=mid$$;
+create table icash_text_ai_jobs(id uuid primary key default gen_random_uuid(),account_id uuid,thread_id uuid,message_id uuid unique,state text default 'pending',analysis jsonb,reply text,provider_id text,usage jsonb,outgoing_id uuid,next_attempt_at timestamptz default now(),created_at timestamptz default now(),updated_at timestamptz default now());
+create table icash_text_attention(id uuid primary key default gen_random_uuid(),account_id uuid,thread_id uuid,deal_id uuid,screening_id uuid,message_id uuid,kind text constraint icash_text_attention_kind_check check(kind in ('callback','campaign_reply','human','declined','withdrawal')),party text,quote text,timezone text,state text default 'open',created_at timestamptz default now(),updated_at timestamptz default now(),unique(thread_id,kind));
+create table icash_offer_authorities(account_id uuid,screening_id uuid,max_offer_cents bigint,expires_at timestamptz);
+create table icash_signing_envelopes(id uuid primary key default gen_random_uuid(),account_id uuid,deal_id uuid,kind text default 'purchase',test_mode boolean default false,state text,provider_id text,created_at timestamptz default now());
+create table icash_property_controls(account_id uuid,property_id text,manual boolean);
+create table icash_conversations(account_id uuid,deal_id uuid,human_takeover boolean);
+create table icash_text_suppressions(phone text primary key);
+create table icash_sms_seller_openings(account_id uuid,thread_id uuid,owner_question_id uuid,owner_reply_id uuid,interest_message_id uuid);
+create table icash_sms_call_requests(account_id uuid,thread_id uuid,message_id uuid,state text);
+create table icash_owner_buyer_tests(thread_id uuid);
+create table icash_meta_leads(lead_id uuid,account_id uuid,screening_id uuid);
+create table icash_operation_rates(id uuid primary key,enabled boolean default true,expires_at timestamptz default now()+interval '1 day');
+create table icash_text_ai_settings(id integer,enabled boolean,rate_id uuid);
+insert into icash_operation_rates(id) values('00000000-0000-4000-8000-000000000090');insert into icash_text_ai_settings values(1,true,'00000000-0000-4000-8000-000000000090');
+create table icash_automation_tickets(id uuid primary key default gen_random_uuid(),account_id uuid,kind text,text_ai_job_id uuid,token text default gen_random_uuid()::text,created_at timestamptz default now());
+create table fixture_flags(conversation boolean default true,viewing boolean default false,queue boolean default true,campaign boolean default true);insert into fixture_flags default values;
+create function icash_sms_thread_review_current(a uuid,t uuid,b boolean) returns boolean language sql set search_path=public as $$select permission_until>now() from icash_text_threads where id=t and account_id=a$$;
+create function icash_seller_conversation_context(a uuid,t uuid) returns jsonb language sql set search_path=public as $$select case when conversation then jsonb_build_object('sellerConversation',true,'sellerViewingAvailability',viewing) end from fixture_flags$$;
+create function icash_outreach_sms_current(a uuid) returns boolean language sql set search_path=public as $$select campaign from fixture_flags$$;
+create function icash_seller_sms_call_current(a uuid,m uuid) returns boolean language sql set search_path=public as $$select false$$;
+create function icash_queue_seller_sms_call(a uuid,m uuid) returns uuid language sql set search_path=public as $$select null::uuid$$;
+create function icash_seller_limited_contact(a uuid,s uuid) returns boolean language sql set search_path=public as $$select false$$;
+create function icash_prepare_limited_seller_text(a uuid,t uuid,m uuid) returns uuid language sql set search_path=public as $$select null::uuid$$;
+create function icash_prepare_sms_reply_before_owner_question(a uuid,t uuid,m uuid) returns uuid language sql set search_path=public as $$select null::uuid$$;
+create function icash_text_property_context(a uuid,t uuid) returns jsonb language sql set search_path=public as $$select null::jsonb$$;
+create function icash_queue_text(a uuid,t uuid,k uuid,b text,assets uuid[]) returns uuid language plpgsql set search_path=public as $$declare mid uuid;begin
+ if not (select queue from fixture_flags) then return null;end if;
+ insert into icash_text_messages(account_id,thread_id,direction,state,body,request_key) values(a,t,'outgoing','ready',b,k) on conflict(request_key) do nothing returning id into mid;
+ if mid is null then select id into mid from icash_text_messages where request_key=k and account_id=a and thread_id=t;end if;return mid;
+end$$;
+create function icash_queue_ai_reply(p_account uuid,p_job uuid,p_reply text) returns uuid language sql set search_path=public as $$select public.icash_queue_ai_reply_before_campaign(p_account,p_job,p_reply)$$;
+create function icash_queue_seller_conversation_reply(p_account uuid,p_job uuid) returns uuid language plpgsql set search_path=public as $$declare action text;begin
+ select analysis->>'action' into action from icash_text_ai_jobs where id=p_job and account_id=p_account;
+ return icash_queue_ai_reply_before_campaign(p_account,p_job,case action when 'ask_callback' then 'When is a good time to talk about a cash offer?' when 'ask_condition' then 'What repairs or updates does the property need?' when 'ask_price' then 'What price did you have in mind?' end);
+end$$;
+create function icash_claim_text_ai(p_account uuid,p_job uuid) returns jsonb language plpgsql set search_path=public as $$begin
+ update icash_text_ai_jobs set state='analyzing' where id=p_job and account_id=p_account and state='issued';if not found then return null;end if;return '{"context":{},"messages":[]}'::jsonb;
+end$$;
+create function icash_claim_text(p_account uuid,p_message uuid,p_sender text) returns jsonb language plpgsql set search_path=public as $$begin
+ update icash_text_messages set state='dispatching' where id=p_message and account_id=p_account and state='ready' and provider_id is null;if not found then return null;end if;return jsonb_build_object('id',p_message);
+end$$;

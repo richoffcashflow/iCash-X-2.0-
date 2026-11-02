@@ -3,12 +3,16 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {analyzeText,safeTextReplies} from '../lib/text-ai-policy.ts';
+import {planSellerProgress} from '../lib/seller-progress-policy.ts';
 import {propertyQuestionAllowed} from '../lib/text-property-policy.ts';
 
 // Run the actual service with local database/provider fakes. No emails, SMS or paid AI calls.
+let resume={mode:'analyze'},progress=null,deliveryFailure=false;
 let party='seller',incoming='The house needs a roof.',action='ask_price',records=[],packages=0,dispatches=0,modelCalls=0,buyerReplyAllowed=false,sellerConversation=false,sellerReplyAllowed=true,viewingCoordination=false;
 const db=async(path,method,body)=>{
  records.push({path,method,body});
+ if(path==='rpc/icash_resume_seller_text_ai')return resume;
+ if(path==='rpc/icash_finish_seller_text_progress')return progress;
  if(path==='rpc/icash_claim_text_ai')return {model:'fixture',context:{stage:'draft',sellerConversation,sellerViewingAvailability:viewingCoordination},messages:[{direction:'incoming',body:incoming}]};
  if(path.startsWith('icash_text_ai_jobs')&&method!=='PATCH')return [{thread_id:'thread'}];
  if(path.startsWith('icash_text_threads'))return party?[{deal_id:'deal',party}]:[];
@@ -34,9 +38,9 @@ const analyze=async(input)=>analyzeText(input,'fixture',async(_url,options)=>{
  // Deliberately wrong buyer/refusal action: runtime validation must prevent an automatic seller reply.
  return Response.json({id:'fixture',choices:[{finish_reason:'stop',message:{content:JSON.stringify({action,reply:'Guaranteed sale. I already booked your callback.',summary:'Funds verified and all owners agreed.',facts:[]})}}]});
 });
-globalThis.__textTrustFixture={db,analyzeText:analyze,safeTextReplies,propertyQuestionAllowed,sendRequestedBuyerPackages:async()=>{packages++;return {accepted:1};},dispatchTextMessage:async()=>{dispatches++;return {status:'message_accepted'};}};
+globalThis.__textTrustFixture={db,analyzeText:analyze,safeTextReplies,propertyQuestionAllowed,planSellerProgress,sendRequestedBuyerPackages:async()=>{packages++;return {accepted:1};},dispatchTextMessage:async()=>{dispatches++;if(deliveryFailure)throw Error('provider unavailable');return {status:'message_accepted'};}};
 let source=ts.transpileModule(readFileSync(new URL('../lib/text-ai-service.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-source='const {db,analyzeText,safeTextReplies,propertyQuestionAllowed,sendRequestedBuyerPackages,dispatchTextMessage}=globalThis.__textTrustFixture;\n'+source;
+source='const {db,analyzeText,safeTextReplies,propertyQuestionAllowed,planSellerProgress,sendRequestedBuyerPackages,dispatchTextMessage}=globalThis.__textTrustFixture;\n'+source;
 const {processTextAi}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const priorKey=process.env.OPENAI_API_KEY;process.env.OPENAI_API_KEY='fixture';
 const reset=()=>{records=[];packages=0;dispatches=0;modelCalls=0;};
@@ -98,6 +102,14 @@ try{
  assert.equal(saved().callRequested,false);
  viewingCoordination=false;sellerConversation=false;
 
+ reset();party='seller';resume={mode:'dispatch',messageId:'original-message'};delete process.env.OPENAI_API_KEY;
+ assert.equal((await processTextAi('account','job')).status,'message_accepted');assert.equal(modelCalls,0);assert.equal(dispatches,1);
+ assert(!records.some(r=>r.path==='rpc/icash_save_text_ai'),'Saved drafts do not repeat analysis');
+ reset();deliveryFailure=true;progress={state:'needs_review',reason:'provider_receipt_unresolved'};
+ let delivery=await processTextAi('account','job');assert.equal(delivery.progressReason,'provider_receipt_unresolved');assert.equal(dispatches,1);assert.equal(modelCalls,0);
+ reset();deliveryFailure=false;resume={mode:'held'};
+ delivery=await processTextAi('account','job');assert.equal(delivery.status,'text_ai_held');assert.equal(dispatches,0);assert.equal(modelCalls,0);
+ resume={mode:'analyze'};progress=null;process.env.OPENAI_API_KEY='fixture';
  for(const missingOrOther of ['', 'title']){
   reset();party=missingOrOther;
   assert.equal((await processTextAi('account','job')).status,'text_ai_needs_review');

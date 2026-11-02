@@ -1,10 +1,24 @@
+import {planSellerProgress,type SellerProgressContext} from './seller-progress-policy.ts';
 import {sendRequestedBuyerPackages} from './buyer-package-email';
 import {propertyQuestionAllowed,type TextProperty} from './text-property-policy.ts';
 import {db} from '@/lib/stripe-test';
 import {analyzeText,safeTextReplies} from './text-ai-policy.ts';
 import {dispatchTextMessage} from '@/lib/text-message-service';
 export async function processTextAi(accountId:string,jobId:string){
+ const result=await runTextAi(accountId,jobId);
+ const failure=['message_accepted','message_delivered'].includes(result.status)?null:result.status==='text_ai_drafted'?'action_not_admitted':result.status==='text_ai_needs_review'?'analysis_failed':result.status;
+ try{
+  const progress=await db<{state:string;reason:string}|null>('rpc/icash_finish_seller_text_progress','POST',{p_account:accountId,p_job:jobId,p_status:failure});
+  return {...result,...(progress?{progressState:progress.state,progressReason:progress.reason}:{}),status:progress?.state==='needs_review'&&result.status==='text_ai_drafted'?'text_ai_needs_review':result.status};
+ }catch{return {...result,progressState:'recording_required'};}
+}
+async function runTextAi(accountId:string,jobId:string){
  if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
+ try{
+  const resume=await db<{mode:string;messageId?:string}|null>('rpc/icash_resume_seller_text_ai','POST',{p_account:accountId,p_job:jobId});
+  if(resume?.mode==='held')return {status:'text_ai_held'};
+  if(resume?.mode==='dispatch'&&resume.messageId)return await dispatchTextMessage(accountId,resume.messageId);
+ }catch{return {status:'text_ai_needs_review'};}
  if(!process.env.OPENAI_API_KEY){
   await db(`icash_text_ai_jobs?id=eq.${jobId}&account_id=eq.${accountId}&state=eq.issued`,'PATCH',{state:'pending',next_attempt_at:new Date(Date.now()+3600000).toISOString()});
   return {status:'text_ai_configuration_required'};
@@ -22,9 +36,11 @@ export async function processTextAi(accountId:string,jobId:string){
   const viewingCoordination=conversationEnabled&&(input.context as Record<string,unknown>).sellerViewingAvailability===true;
   const [identity]=await db<{principal:string;company_name?:string}[]>(`icash_customer_identities?account_id=eq.${accountId}&select=principal,company_name`);
   const property=party==='seller'?await db<TextProperty|null>('rpc/icash_text_property_context','POST',{p_account:accountId,p_thread:job.thread_id}):null;
-  const {analysis,usage,providerId}=await analyzeText({...input,party,conversationEnabled,viewingCoordination,context:{principal:identity?.principal??null,buyerKind:identity?.company_name?.trim()?'company':'individual',qualification:input.context,property,preliminarySellerCeilingCents:property?.ceilingCents??null,offerAuthorized:false}},process.env.OPENAI_API_KEY);
+  const {analysis:rawAnalysis,usage,providerId}=await analyzeText({...input,party,conversationEnabled,viewingCoordination,context:{principal:identity?.principal??null,buyerKind:identity?.company_name?.trim()?'company':'individual',qualification:input.context,property,preliminarySellerCeilingCents:property?.ceilingCents??null,offerAuthorized:false}},process.env.OPENAI_API_KEY);
+  let analysis=rawAnalysis;
   if(property?.contactOnly&&!analysis.humanRequested&&!analysis.callbackRequested&&!analysis.optedOut&&!analysis.declined)analysis.action='ask_payoff';
   if(!propertyQuestionAllowed(analysis.action,property,input.messages))analysis.action='review';
+  if(party==='seller'&&!viewingCoordination&&!property?.contactOnly)analysis=planSellerProgress(analysis,(input.context as {sellerProgress?:SellerProgressContext}|null)?.sellerProgress);
   await db('rpc/icash_save_text_ai','POST',{p_account:accountId,p_job:jobId,p_analysis:analysis,p_reply:analysis.reply,p_provider:providerId,p_usage:usage});
   if(party==='buyer'&&!analysis.humanRequested&&!analysis.callbackRequested&&!analysis.optedOut&&!analysis.declined)try{await sendRequestedBuyerPackages(accountId,thread.deal_id);}catch{/* Buyer email status remains in the mailbox; never blindly retry a send. */}
   if(analysis.humanRequested||analysis.callbackRequested)return {status:'text_ai_handoff'};
@@ -32,20 +48,20 @@ export async function processTextAi(accountId:string,jobId:string){
    // SQL derives exact prose from the latest whole incoming question and current
    // approved package; neither the model reply nor a caller-provided price is sent.
    const id=await db<string|null>('rpc/icash_queue_buyer_factual_reply','POST',{p_account:accountId,p_job:jobId});
-   if(id)return dispatchTextMessage(accountId,id);
+   if(id)return await dispatchTextMessage(accountId,id);
    return {status:'text_ai_drafted'};
   }
   if(conversationEnabled&&!analysis.optedOut&&!analysis.declined){
    // The database derives exact copy and rechecks the latest source message, intake,
    // manual/STOP controls, property routing and current send authority. AI prose is never sent.
    const id=await db<string|null>('rpc/icash_queue_seller_conversation_reply','POST',{p_account:accountId,p_job:jobId});
-   if(id)return dispatchTextMessage(accountId,id);
+   if(id)return await dispatchTextMessage(accountId,id);
    return {status:'text_ai_drafted'};
   }
   const safe=safeTextReplies[analysis.action];
   if(safe){
    const id=await db<string|null>('rpc/icash_queue_ai_reply','POST',{p_account:accountId,p_job:jobId,p_reply:safe});
-   if(id)return dispatchTextMessage(accountId,id);
+   if(id)return await dispatchTextMessage(accountId,id);
   }
   return {status:'text_ai_drafted'};
  }catch{

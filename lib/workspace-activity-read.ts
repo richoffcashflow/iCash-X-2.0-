@@ -92,7 +92,7 @@ export async function workspaceActivity(req:Request,accountId:string,{refreshOut
   const queuePage={limit:pageSize+1,offset:attentionPage*pageSize};
   const [closingTaskRows,textRows,callRows,handoffRows,signing,signatureRows,routeRows,viewingRows,recoveryRows,closingRows]=await Promise.all([
    db<Attention[]>('rpc/icash_closing_task_attention','POST',{p_account:accountId,p_offset:attentionPage*pageSize,p_limit:pageSize+1}),
-   db<Attention[]>(workspaceAttentionQuery('icash_text_attention',accountId,{...queuePage,select:'id,message_id,screening_id,deal_id,kind,party,quote,timezone',order:'created_at,id'})),
+   db<Attention[]>(workspaceAttentionQuery('icash_text_attention',accountId,{...queuePage,select:'id,message_id,screening_id,deal_id,kind,party,quote,timezone,progress_reason,next_step',order:'created_at,id'})),
    db<Attention[]>(workspaceAttentionQuery('icash_sms_call_requests',accountId,{...queuePage,select:'id,screening_id,requested_at,state',order:'requested_at,id'})),
    db<Attention[]>(workspaceAttentionQuery('icash_handoffs',accountId,{...queuePage,select:'id,screening_id,party,reason,summary,next_action,state,assigned_to,due_at,resolution',order:'created_at,id'})),
    dealIds?db<unknown[]>(`icash_signing_envelopes?account_id=eq.${accountId}&deal_id=in.(${dealIds})&select=id,deal_id,kind,state,test_mode,provider_status,updated_at`):Promise.resolve([]),
