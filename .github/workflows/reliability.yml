@@ -34,6 +34,8 @@ jobs:
           persist-credentials: false
       - name: Verify learning refresh under real concurrent transactions
         run: python3 scripts/test-learning-refresh-postgres.py
+      - name: Verify one-use owner preflights under real concurrent transactions
+        run: python3 scripts/test-owner-preflight-postgres.py
   dependency-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 5
