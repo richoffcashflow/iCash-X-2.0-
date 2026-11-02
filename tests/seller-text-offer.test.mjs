@@ -15,7 +15,7 @@ const rpc=async(n,args=[])=>Object.values(await one(`select ${n}(${args.map((_,i
 await pg.exec(fixture.slice(0,split)+read('./fixtures/seller-progress-original-functions.sql')+fixture.slice(split)+read('./helpers/seller-dialogue-fixture.sql')+read('./fixtures/seller-dialogue-original-functions.sql')+
  fn('seller-response-policy','icash_seller_direct_response_match')+fn('seller-response-policy','icash_seller_response_disposition')+fn('seller-gap-recovery','icash_seller_contact_stop')+
  'create trigger icash_text_ai_incoming after insert on icash_text_messages for each row execute function icash_enqueue_text_ai();'+read('../config/seller-reply-progress.sql')+read('../config/seller-dialogue.sql')+
- read('./helpers/seller-text-offer-fixture.sql')+read('./fixtures/seller-text-offer-original-functions.sql')+read('../config/seller-text-offer.sql'));
+ read('./helpers/seller-text-offer-fixture.sql')+read('./fixtures/seller-text-offer-original-functions.sql')+read('../config/seller-text-offer.sql')+read('../config/seller-offer-receipt-wait.sql'));
 await pg.exec("update icash_seller_progress_settings set enabled=true,dialogue_enabled=true,offer_enabled=true,offer_enabled_at=now()-interval '2 hours'");
 let tick=0,sends=0,texts=0,dispatches=0,providerFailure=false,deliver=true;
 const at=()=>new Date(Date.now()-3600000+(++tick)*1000).toISOString();
@@ -76,8 +76,17 @@ assert.equal((await one('select count(*)::int n from icash_seller_agreement_priv
 const ownerUnknown=await seed({qualified:false});r=await run(ownerUnknown,'How much');assert.equal(r.plan.action,'qualify_ownership');assert.equal(r.plan.state.acceptedPriceCents,null);
 const receipt=await seed();deliver=false;r=await run(receipt,'I need $210k');deliver=true;
 const before=dispatches;r=await run(receipt,'Yes');assert.equal(r.plan.kind,'wait');assert.equal(dispatches,before);
+assert.equal(r.progress.state,'waiting');assert.equal(r.progress.reason,'offer_receipt_pending');
+assert.match((await one('select wait_trigger from icash_seller_reply_progress where message_id=$1',[r.source.id])).wait_trigger,/original call\/message completion receipt/);
+assert.equal((await rpc('icash_refresh_seller_reply_progress',[receipt.a,r.source.id,null])).state,'waiting','maintenance preserves the explicit wait');
 await q("update icash_text_messages set state='delivered' where account_id=$1 and state='accepted'",[receipt.a]);
 const resumed=await rpc('icash_resume_seller_text_ai',[receipt.a,r.j.id]);assert.equal(resumed.mode,'seller_offer');assert.equal(planSellerTextOffer(resumed.context).action,'legal_name');
+assert.equal((await processSellerTextOffer(resumed.context,dependencies)).status,'message_delivered');
+assert.equal((await rpc('icash_finish_seller_text_progress',[receipt.a,r.j.id,null])).reason,'awaiting_seller_reply');assert.equal(dispatches,before+1,'receipt wakes the same source exactly once');
+const active=await seed();await q("insert into icash_call_recordings values($1,$2,'seller',now(),null)",[active.a,active.s]);
+r=await run(active,'I need $210k');assert.equal(r.progress.state,'waiting');assert.equal(r.progress.reason,'seller_call_active');
+await q('update icash_accounts set bot_paused=true where id=$1',[active.a]);
+assert.equal((await rpc('icash_finish_seller_text_progress',[active.a,r.j.id,null])).state,'needs_review','Pause overrides a stored wait');
 
 const changes=await seed();r=await run(changes,'I am asking $210k');
 const source=await incoming(changes,'Yes'),job=await one('select * from icash_text_ai_jobs where message_id=$1',[source.id]);

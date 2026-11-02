@@ -162,7 +162,7 @@ print('PASS native dialogue: concurrent duplicate webhooks, one clarification/di
 
 # Numeric negotiation uses the same native transaction/final-provider boundary.
 # Only the already tested pure planner is substituted with its fixture result.
-sql("drop schema if exists auth cascade; drop schema if exists icash_call_offer_private cascade; drop schema if exists icash_seller_agreement_private cascade;" + (ROOT / 'tests/helpers/seller-text-offer-fixture.sql').read_text() + (ROOT / 'tests/fixtures/seller-text-offer-original-functions.sql').read_text() + (ROOT / 'config/seller-text-offer.sql').read_text())
+sql("drop schema if exists auth cascade; drop schema if exists icash_call_offer_private cascade; drop schema if exists icash_seller_agreement_private cascade;" + (ROOT / 'tests/helpers/seller-text-offer-fixture.sql').read_text() + (ROOT / 'tests/fixtures/seller-text-offer-original-functions.sql').read_text() + (ROOT / 'config/seller-text-offer.sql').read_text() + (ROOT / 'config/seller-offer-receipt-wait.sql').read_text())
 NA, NT, ND, NS, NU = [f'10000000-0000-4000-8000-{n:012d}' for n in range(1, 6)]
 snapshot = {"propertyId": "prop_123", "propertyType": "house", "sellerCostReserveCents": 0, "raw": {"data": {"dm_property_id": "prop_123", "full_address": "45 Oak Road", "estimated_value": 200000, "estimated_repair_cost": 40000, "total_estimated_loan_balance": 20000, "estimated_equity_percentage": 90}}}
 sql(f"""update icash_seller_progress_settings set offer_enabled=true,offer_enabled_at=now()-interval '1 minute';
