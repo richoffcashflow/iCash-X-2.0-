@@ -131,7 +131,8 @@ the disposable localhost fixture database. The reliability workflow runs it
 on PostgreSQL 17.6. Local verification also ran it on an isolated PostgreSQL 18
 instance without provider traffic.
 
-Install the migration inactive, deploy the matching API through the exact-main-
+Migration `20261102154942_seller_reply_progress.sql` matches the recorded
+production migration version. Install it inactive, deploy the matching API through the exact-main-
 commit reliability gate, then enable `icash_seller_progress_settings`. Verify
 the deployed commit, function permissions, latest-source review reasons,
 unchanged customer controls and no historical outbound creations. Historical
