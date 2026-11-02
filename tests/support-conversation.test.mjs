@@ -61,8 +61,7 @@ assert.match(supportConversationFallback({...leadsContext,messages:[user('Where 
 assert.match(supportConversationFallback({kind:'access',messages:[user('How do I get clients?')],evidence:ready}).reply,/bot finds and works eligible seller leads/,'Guests can get feature guidance without account checks');
 assert.match(supportConversationFallback({...leadsContext,messages:[user('How do I get clients?'),assistant('Watch the course.'),user('Cancel my subscription')]}).reply,/do not cancel/);
 let history=[user('Filled out the code & nothing happened.')];
-let answer=supportConversationFallback({kind:'access',messages:history});assert.match(answer.reply,/email or text/);
-history.push(assistant(answer.reply),user('Email'));answer=supportConversationFallback({kind:'access',messages:history});assert.match(answer.reply,/device and browser/);assert.doesNotMatch(answer.reply,/email or text/);
+let answer=supportConversationFallback({kind:'access',messages:history});assert.match(answer.reply,/email sign-in/);assert.doesNotMatch(answer.reply,/email on your iCash X payment receipt/);
 history.push(assistant(answer.reply),user('iPhone Safari'));answer=supportConversationFallback({kind:'access',messages:history});assert.match(answer.reply,/error message/);
 history.push(assistant(answer.reply),user('Nothing, no error'));answer=supportConversationFallback({kind:'access',messages:history});assert.equal(answer.status,'waiting_on_customer');
 // Missing delivery is a distinct step: never tell a customer to enter an absent code.
@@ -72,13 +71,13 @@ for(const question of ['The email code has not arrived',"I haven't received the 
  assert.equal(missing.status,'waiting_on_customer');assert.match(missing.reply,/email on your iCash X payment receipt/);
  assert.doesNotMatch(missing.reply,/enter the newest code|device and browser|code is on its way/i);
 }
-assert.match(supportConversationFallback({kind:'access',messages:[user('It never sent me the code')]}).reply,/email or text/);
+assert.match(supportConversationFallback({kind:'access',messages:[user('It never sent me the code')]}).reply,/email on your iCash X payment receipt/);
 const missingHistory=[user('The email code has not arrived')];
 let missingAnswer=supportConversationFallback({kind:'access',messages:missingHistory,accessInvestigation:configured});
 missingHistory.push(assistant(missingAnswer.reply),user('Yes, the email matches my receipt'));
 missingAnswer=supportConversationFallback({kind:'access',messages:missingHistory,accessInvestigation:configured});assert.match(missingAnswer.reply,/request one fresh code/);assert.match(missingAnswer.reply,/spam or junk/);
 missingHistory.push(assistant(missingAnswer.reply),user('Still no email code'));
-missingAnswer=supportConversationFallback({kind:'access',messages:missingHistory,accessInvestigation:configured});assert.match(missingAnswer.reply,/optional receipt email blank/);
+missingAnswer=supportConversationFallback({kind:'access',messages:missingHistory,accessInvestigation:configured});assert.match(missingAnswer.reply,/main button/);assert.doesNotMatch(missingAnswer.reply,/checkout phone|Text me a code/);
 for(const question of ['No code came to the phone or email',"I've already used my email and checkout phone number",'I have tried both methods it will not send me a login code']){
  const answer=supportConversationFallback({kind:'access',messages:[user('No sign-in code arrived'),user(question)],accessInvestigation:configured});
  assert.doesNotMatch(answer.reply,/request one fresh|Text me a code.” Does a box|receipt email match/);assert.notEqual(answer.status,'resolved');

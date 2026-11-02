@@ -91,6 +91,6 @@ try{
   if(path.endsWith('investigate'))return {checked:true,email:'configured',phone:'unavailable'};
  },'case','turn');
  assert.deepEqual(calls.map(c=>c.path),['rpc/icash_access_help_claim_reply','rpc/icash_access_help_recover','rpc/icash_access_help_investigate','rpc/icash_access_help_finish_reply']);
- assert.match(calls.at(-1).body.p_reply,/Text sign-in is currently unavailable/);assert.equal(calls.at(-1).body.p_token,'lease');assert.equal(calls.at(-1).body.p_handoff,false);
+ assert.match(calls.at(-1).body.p_reply,/email on your iCash X payment receipt/);assert.doesNotMatch(calls.at(-1).body.p_reply,/text sign-in|checkout phone/i);assert.equal(calls.at(-1).body.p_token,'lease');assert.equal(calls.at(-1).body.p_handoff,false);
  console.log('PASS real access investigation SQL, private non-enumerating evidence, unknown delivery, unavailable channels, leases/ACLs/operator precedence and actual repeated-code conversation. No real sends.');
 }finally{await pg.close();}

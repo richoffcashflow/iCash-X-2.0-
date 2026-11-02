@@ -2,7 +2,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 export function AccountAccess({initialEmail='',onSignedIn,ready=true,trialRecovery=false}:{initialEmail?:string;onSignedIn:()=>void;ready?:boolean;trialRecovery?:boolean}){
- const [email,setEmail]=useState(initialEmail),[phone,setPhone]=useState(''),[channel,setChannel]=useState<'email'|'sms'>('email');
+ const [email,setEmail]=useState(initialEmail);
  const [code,setCode]=useState(''),[sent,setSent]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[cooldown,setCooldown]=useState(0);
  const inFlight=useRef(false);
  useEffect(()=>{if(cooldown<=0)return;const timer=setTimeout(()=>setCooldown(value=>Math.max(0,value-1)),1000);return()=>clearTimeout(timer);},[cooldown]);
@@ -10,8 +10,8 @@ export function AccountAccess({initialEmail='',onSignedIn,ready=true,trialRecove
   if(inFlight.current||action==='send'&&cooldown>0)return;
   inFlight.current=true;setBusy(true);setMessage('');
   try{
-   const path=channel==='sms'?'/api/auth/phone':action==='verify'?'/api/auth/verify':'/api/auth/email';
-   const body=channel==='sms'?{action,email,phone,code,accepted:action==='send'}:{email,code};
+   const path=action==='verify'?'/api/auth/verify':'/api/auth/email';
+   const body={email,code};
    const data=await workspaceRequest<{message?:string}>(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
    if(action==='verify')onSignedIn();else{setSent(true);setCode('');setCooldown(60);setMessage(data.message??'Check for your code.');}
   }catch(error){
@@ -20,24 +20,22 @@ export function AccountAccess({initialEmail='',onSignedIn,ready=true,trialRecove
    setMessage(error instanceof Error?error.message:'Please try again.');
   }finally{inFlight.current=false;setBusy(false);}
  }
- function choose(next:'email'|'sms'){setChannel(next);setSent(false);setCode('');setMessage('');setCooldown(0);}
+ function changeEmail(){setSent(false);setCode('');setMessage('');setCooldown(0);}
  const emailInbox=/@(icloud|me|mac)\.com$/i.test(email.trim())?'https://www.icloud.com/mail':/@gmail\.com$/i.test(email.trim())?'https://mail.google.com':null;
  return <form className="account-access" onSubmit={async event=>{event.preventDefault();await perform(sent?'verify':'send');}}>
-  <p>{trialRecovery?'Verify the email used for your unfinished introductory checkout. This verifies your email only; it does not activate access or charge your payment method.':channel==='sms'?'Use the mobile number from checkout. Your receipt email is optional and helps if this phone has more than one purchase.':'Already paid? Use the email on your payment receipt. Returning users can use their account email. No password needed.'}</p>
-  {!ready&&channel==='email'&&<p role="status">Email sign-in is temporarily unavailable. Try your checkout phone below.</p>}
-  <label>{channel==='sms'?'Receipt email (optional)':'Email'}<input type="email" autoComplete="email" required={channel==='email'} value={email} disabled={sent||busy} onChange={event=>setEmail(event.target.value)}/></label>
-  {channel==='sms'&&<><label>Checkout mobile number<input type="tel" autoComplete="tel" required value={phone} disabled={sent||busy} onChange={event=>setPhone(event.target.value)} placeholder="(555) 555-1234"/></label><p className="sign-in-help">Choose “Text me a code” to request one sign-in text. Reply STOP to opt out.</p></>}
+  <p>{trialRecovery?'Verify the email used for your unfinished introductory checkout. This verifies your email only; it does not activate access or charge your payment method.':'Already paid? Use the email on your payment receipt. Returning users can use their account email. No password needed.'}</p>
+  {!ready&&<p role="status">Email sign-in is temporarily unavailable. Please try again later or contact support below.</p>}
+  <label>Email<input type="email" autoComplete="email" required value={email} disabled={sent||busy} onChange={event=>setEmail(event.target.value)}/></label>
   {sent&&<>
-   <p className="sign-in-help">{channel==='email'?<>Check the inbox and Junk/Spam for <strong>{email}</strong>. Look for <strong>“Your iCash X sign-in code”</strong> from <strong>signin@geticashx.com</strong>. {emailInbox&&<a href={emailInbox} target="_blank" rel="noopener noreferrer">Open your email inbox</a>}</>:<>Enter the 8-digit code sent to your checkout mobile number. It expires in 10 minutes.</>} Use the newest code. {trialRecovery?'Return to the offer after verification to resume your checkout.':'Your payment is saved—do not pay again.'}</p>
-   <label>{channel==='sms'?'Text code':'Email code'}<input inputMode="numeric" autoComplete="one-time-code" pattern={channel==='sms'?'[0-9]{8}':'[0-9]{6,10}'} required maxLength={channel==='sms'?8:10} value={code} onChange={event=>setCode(event.target.value.replace(/\s/g,''))}/></label>
+   <p className="sign-in-help">Check the inbox and Junk/Spam for <strong>{email}</strong>. Look for <strong>“Your iCash X sign-in code”</strong> from <strong>signin@geticashx.com</strong>. {emailInbox&&<a href={emailInbox} target="_blank" rel="noopener noreferrer">Open your email inbox</a>} Use the newest code. {trialRecovery?'Return to the offer after verification to resume your checkout.':'Your payment is saved—do not pay again.'}</p>
+   <label>Email code<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,10}" required maxLength={10} value={code} onChange={event=>setCode(event.target.value.replace(/\s/g,''))}/></label>
   </>}
-  <button className="fund-button full" disabled={busy||!sent&&cooldown>0||channel==='email'&&!ready}>{busy?'One moment…':sent?'Sign in':channel==='sms'?'Text me a code':'Email me a code'}</button>
+  <button className="fund-button full" disabled={busy||!sent&&cooldown>0||!ready}>{busy?'One moment…':sent?'Sign in':'Email me a code'}</button>
   {sent?<>
-   <p className="sign-in-help">{trialRecovery?'No code? Check the email used for your unfinished checkout and your spam folder.':channel==='sms'?'No code? Check the checkout mobile number above. If you share it across purchases, add the matching receipt email.':'No code? Check that the email above matches your payment receipt, or use your checkout phone instead.'}</p>
+   <p className="sign-in-help">{trialRecovery?'No code? Check the email used for your unfinished checkout and your spam folder.':'No code? Check that the email above matches your payment receipt and check Junk/Spam. If the receipt email is wrong or inaccessible, contact support for purchase verification.'}</p>
    <button type="button" className="demo-button" disabled={busy||cooldown>0} onClick={()=>void perform('send')}>{cooldown>0?`Resend in ${Math.floor(cooldown/60)}:${String(cooldown%60).padStart(2,'0')}`:'Send a new code'}</button>
-   <button type="button" className="demo-button" disabled={busy} onClick={()=>choose(channel)}>{channel==='sms'?'Check my checkout details':'Use another email or resend'}</button>
+   <button type="button" className="demo-button" disabled={busy} onClick={changeEmail}>Use another email or resend</button>
   </>:<button type="button" className="demo-button" disabled={busy} onClick={()=>setSent(true)}>I already have a code</button>}
-  {!trialRecovery&&<button type="button" className="demo-button" disabled={busy} onClick={()=>choose(channel==='email'?'sms':'email')}>{channel==='email'?'Use my checkout phone':'Use email instead'}</button>}
   {message&&<p role="status">{message}</p>}
   <p className="sign-in-help"><a href="/access/help">Still need help getting in?</a></p>
  </form>;
