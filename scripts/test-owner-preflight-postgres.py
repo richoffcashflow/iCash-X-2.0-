@@ -72,3 +72,52 @@ assert sum(bool(x) for x in cleanup) == 1, cleanup
 assert sql("select count(*) from fixture_purchases;") == "0"
 assert sql(f"select icash_pending_opportunity_count('{account}');") == "0"
 print("PASS native PostgreSQL: 24 competing workers create one list, 16 identical receipts persist once, one delayed count claim and one cleanup claim; no purchase or lost empty exclusion.")
+
+# Use the real candidate selector with isolated dependencies to reproduce
+# overlapping batches, instead of assuming serial single-cohort callers.
+sql((ROOT / "tests/fixtures/owner-preflight-cohorts.sql").read_text())
+source = (ROOT / "config/research-request-efficiency.sql").read_text()
+candidate = source[source.index("create function public.icash_owner_batch_candidates("):source.index("create function public.icash_claim_owner_batch(")]
+candidate = candidate.replace("create function", "create or replace function", 1)
+candidate = candidate.replace("where s.account_id=p_account", "where s.account_id=p_account and not public.icash_owner_preflight_empty(s.account_id,s.id,s.snapshot)")
+sql(candidate)
+sql((ROOT / "config/owner-export-preflight-cohorts.sql").read_text())
+sql(f"insert into icash_operation_rates(id) values('{uid(99)}');insert into icash_discovery_configs(account_id,contact_rate_id) values('{account}','{uid(99)}');insert into icash_wallets(account_id) values('{account}');")
+cohort_items = [{"screeningId": uid(n), "snapshot": {"propertyId": "prop_"+str(n), "propertyType": "house", "raw": {"data": {"state": "TX"}}}, "ids": ["per_"+str(n)]} for n in (300, 301, 302)]
+for item in cohort_items:
+    sql(f"insert into icash_screening_jobs(id,account_id,state,snapshot) values('{item['screeningId']}','{account}','complete',{literal(item['snapshot'])});")
+cohorts = [[cohort_items[0], cohort_items[1]], [cohort_items[0], cohort_items[2]], [cohort_items[1], cohort_items[2]]]
+queries = []
+for cohort in cohorts:
+    body = {**request, "people_ids": [x["ids"][0] for x in cohort], "limit": 2}
+    queries.append(f"select icash_claim_owner_preflight('{account}',{literal(cohort)},{literal(body)});")
+with ThreadPoolExecutor(max_workers=12) as pool:
+    raced = list(pool.map(lambda n: json.loads(sql(queries[n % 3])), range(36)))
+assert sum(r["status"] == "create" for r in raced) == 1, raced
+assert all(r["status"] in ("create", "pending", "quota_wait") for r in raced), raced
+assert sql("select count(*) from icash_research_private.owner_export_preflights where state='creating';") == "1"
+winner = json.loads(sql("select items from icash_research_private.owner_export_preflights where state='creating';"))
+leader = winner[0]["screeningId"]
+pinned = json.loads(sql(f"select icash_owner_batch_candidates('{account}','{leader}');"))
+assert [x["screeningId"] for x in pinned] == [x["screeningId"] for x in winner], pinned
+assert sql("select count(*) from fixture_purchases;") == "0"
+print("PASS native PostgreSQL: 36 competing overlapping cohorts create one list and retain its exact original batch without a paid admission.")
+
+# Reproduce the ticket issuer's budget lock and the actual selection predicate.
+# Either the free cohort wins or the sibling ticket wins, never both.
+for trial in range(6):
+    pair = [{"screeningId": uid(n), "snapshot": {"propertyId": "prop_"+str(n), "propertyType": "house", "raw": {"data": {"state": "TX"}}}, "ids": ["per_"+str(n)]} for n in (400+trial*2, 401+trial*2)]
+    for item in pair:
+        sql(f"insert into icash_screening_jobs(id,account_id,state,snapshot) values('{item['screeningId']}','{account}','complete',{literal(item['snapshot'])});")
+    body = {**request, "people_ids": [x["ids"][0] for x in pair], "limit": 2}
+    free_claim = f"select icash_claim_owner_preflight('{account}',{literal(pair)},{literal(body)});"
+    sibling = pair[1]
+    issue_ticket = f"begin;select id from icash_operating_budget where id=1 for update;select pg_sleep(0.03);insert into icash_automation_tickets select '{sibling['screeningId']}'::uuid where not public.icash_owner_preflight_sibling_waiting('{account}','{sibling['screeningId']}',{literal(sibling['snapshot'])},'{sibling['screeningId']}');commit;"
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(sql, x) for x in ([free_claim, issue_ticket] if trial % 2 else [issue_ticket, free_claim])]
+        for future in futures:
+            future.result()
+    free = int(sql(f"select count(*) from icash_research_private.owner_export_preflights where items->0->>'screeningId'='{pair[0]['screeningId']}';"))
+    ticket = int(sql(f"select count(*) from icash_automation_tickets where screening_id='{sibling['screeningId']}';"))
+    assert free + ticket == 1, (trial, free, ticket)
+print("PASS native PostgreSQL: competing ticket issuance and free-list creation cannot claim the same sibling.")
