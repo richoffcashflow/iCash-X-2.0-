@@ -42,6 +42,14 @@ const proxy=https.createServer({key:readFileSync(join(tlsDir,'key.pem')),cert:re
  // Serve the fixture through HTTP instead of WebKit's mocked-download transport.
  if(new URL(request.url,upstream).pathname==='/api/course/assets/pdf'){response.writeHead(200,{'Content-Type':'application/pdf','Content-Length':String(coursePdf.length),'Content-Disposition':'attachment; filename="iCash-X-Course-Guide.pdf"','Cache-Control':'no-store'});response.end(coursePdf);return;}
  if(new URL(request.url,upstream).pathname==='/api/fixture-course-upload'){serveCourseUpload(request,response);return;}
+ // Use real local HTTP for the optional photo read. An abandoned WebKit
+ // route.fulfill during document replacement can report an access-control
+ // page error even though the component catches the cancelled fetch. Keep
+ // the same empty-photo fixture; never reach the application/provider API.
+ if(request.method==='GET'&&new URL(request.url,upstream).pathname==='/api/work/property-photo'){
+  const body='{"photo":null}';response.writeHead(200,{'Content-Type':'application/json','Content-Length':String(Buffer.byteLength(body)),'Cache-Control':'no-store'});
+  response.end(body);return;
+ }
  // Workspace navigation exercises the fallback reads while the optional event
  // feed is unavailable. A bodyless response avoids WebKit's closed-stream abort
  // race; live revision delivery/cancellation has its own focused client tests.
