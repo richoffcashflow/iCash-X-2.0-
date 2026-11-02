@@ -15,6 +15,7 @@ const admit=(its=items,r=request)=>v('select icash_admit_owner_active_export($1,
 try{
  await pg.exec(read('tests/fixtures/owner-preflight-foundation.sql'));
  const sql=read('config/owner-export-preflight.sql');assert.equal(sql,read('supabase/migrations/20261102071159_owner_export_preflight.sql'));await pg.exec(sql);
+ const indexing=read('config/owner-export-preflight-indexing.sql');assert.equal(indexing,read('supabase/migrations/20261102075238_owner_export_preflight_indexing.sql'));await pg.exec(indexing);
  await q('insert into icash_accounts(id) values($1),($2)',[account,other]);
  for(const i of items)await q("insert into icash_screening_jobs values($1,$2,'complete',$3)",[i.screeningId,account,i.snapshot]);
  assert.equal((await claim()).status,'disabled');assert.equal(await admit(),'claimed');await pg.exec('truncate fixture_purchases;update icash_research_private.owner_export_settings set preflight_enabled=true');
@@ -22,6 +23,7 @@ try{
  await pg.exec('update fixture_settings set quota=false');assert.equal((await claim()).status,'quota_wait');await pg.exec('update fixture_settings set quota=true');
  const c=await claim();assert.equal(c.status,'create');assert.equal((await claim()).status,'pending','One durable creation only');assert.equal(await record({...c,lease:id(99)},'create',created(c)),'held');
  assert.equal(await record(c,'create',created(c)),'pending');assert.equal(await record(c,'create',created(c)),'pending','Same original receipt is idempotent');
+ assert.equal(await v("select next_check_at>=started_at+interval '90 seconds' from icash_research_private.owner_export_preflights where id=$1",[c.id]),true,'Newly completed lists receive the production-observed indexing allowance');
  assert.equal((await claim()).status,'pending','Completed list is not immediately searchable');
  assert.equal(await v('select icash_defer_owner_preflight($1,$2,$3,$4,$5)',[id(10),account,items[0].screeningId,'token','owners:'+account+':'+items[0].screeningId]),true);
  assert.equal(await v('select icash_defer_owner_preflight($1,$2,$3,$4,$5)',[id(10),other,items[0].screeningId,'token','owners:'+other+':'+items[0].screeningId]),false);
