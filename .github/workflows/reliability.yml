@@ -66,6 +66,8 @@ jobs:
         run: python3 scripts/test-urgent-voice-source-gate-postgres.py
       - name: Verify legacy voice history is excluded before native eligibility checks
         run: python3 scripts/test-legacy-voice-candidate-fence-postgres.py
+      - name: Verify indexed global voice contact exclusion preserves unknown calls
+        run: python3 scripts/test-voice-global-contact-index-postgres.py
       - name: Verify empty batch previews preserve source and concurrent controls
         run: python3 scripts/test-owner-preview-empty-postgres.py
       - name: Verify reviewed preview rejection recovery under concurrent admission

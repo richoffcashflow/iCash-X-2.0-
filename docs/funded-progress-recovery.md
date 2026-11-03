@@ -1,5 +1,29 @@
 # Funded account progress and provider waits
 
+## Global voice lookup checkpoint, November 3 19:15 UTC
+
+The unchanged global busy-contact query scanned 30,654 operational contacts
+for a candidate. Its partial contact-key index installed as 20261103190835;
+live readback confirms a valid/ready index and unchanged slot-function and
+contact-view hashes. The exact same bounded READ ONLY production probe then
+used the index and measured 1.555 ms versus 14.148 ms, with 113 buffer hits
+plus one read versus 1,725 hits. This is one targeted probe, not a systemwide
+latency or completion guarantee. Cross-account unknown calls and the original
+DNC/source joins remain authoritative. See `voice-global-contact-index.md`.
+
+All thirteen installed recovery sources now have their exact ledger versions
+and SQL hashes. The integrated native workflow includes the urgent issuer,
+legacy candidate fence and global-contact index regressions; require its exact
+final result rather than extrapolating from predecessor CI. The two recovery
+switches were observed enabled at 19:11 UTC after the verified #542 release.
+
+The fixed 19:03 audit still had 42 stalled and 69 pending accounts. Research
+remains at its unchanged 9,800-request ceiling until 00:12:49 UTC November 4;
+the original 233 dispatched operations remain unresolved. The two other
+canonical browser settlements after the urgent-filter installation do not
+represent new seller conversations. Neither installations, passing checks nor
+worker uptime establish complete recovery.
+
 ## Voice scan installation checkpoint, November 3 19:13 UTC
 
 The final voice follow-up preserves the now-merged diagnostic reconciliation

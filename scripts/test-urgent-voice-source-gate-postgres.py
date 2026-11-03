@@ -19,6 +19,8 @@ def uid(n):
 
 
 def setup():
+    for flag, expected in [('-h', '127.0.0.1'), ('-p', '55443'), ('-U', 'postgres'), ('-d', 'icash_reliability')]:
+        assert base.CMD[base.CMD.index(flag)+1] == expected
     assert sql('select current_database();') == 'icash_reliability'
     sql('drop schema if exists icash_recording_private cascade;drop schema public cascade;create schema public;')
     fixture = (ROOT/'tests/fixtures/urgent-voice-source-gate-setup.sql').read_text()
