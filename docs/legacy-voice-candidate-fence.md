@@ -1,5 +1,10 @@
 # Exclude existing legacy voice routes before contact evidence
 
+Installed as `20261103191344` after all 33 native PostgreSQL scripts passed
+for PR #545 head `c8edce32`, run 41700506801. Production function MD5
+`ec49f01374bce7d4239740e442f7e909` matches the tested replacement. Preserve the
+exact migration identity and SQL; do not replay this installed DDL.
+
 A production statement timeout at November 3 19:02:43 UTC entered
 `icash_meta_pool_receipt_current` through the legacy permission branch of
 `icash_queue_voice_jobs_before_operational`. The general worker logged the

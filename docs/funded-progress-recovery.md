@@ -1,5 +1,19 @@
 # Funded account progress and provider waits
 
+## Voice scan installation checkpoint, November 3 19:13 UTC
+
+The final voice follow-up preserves the now-merged diagnostic reconciliation
+from PR #544 (`b16925a2b2bd5e65024d6a4ae9d8718dde567f1a`). PR #545's initial
+head `c8edce32` passed all 33 native PostgreSQL scripts in run 41700506801,
+including both new voice plan/concurrency regressions. The legacy candidate
+fence is installed as `20261103191344`, SQL MD5
+`bca111eeb7af2a24fb83af89c3f40162`; its live function MD5
+`ec49f01374bce7d4239740e442f7e909` matches the offline tested definition.
+The urgent gate retains its already-installed version `20261103184920`.
+All twelve recovery migration identities and exact configuration copies are
+recorded without replay aliases. Final-head PR/main checks and matching
+production services remain required before claiming the release complete.
+
 ## Release and activation checkpoint, November 3 19:04 UTC
 
 PR #542 is merged as `e14d77475413dcd7ea7a9f0e205bca4e100f7e5b`, with

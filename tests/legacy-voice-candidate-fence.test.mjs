@@ -74,7 +74,7 @@ try{
  assert.equal(await v('select md5(string_agg(to_jsonb(j)::text,\',\' order by id)) from icash_voice_jobs j'),saved,'saved jobs untouched');
  for(const role of ['anon','authenticated'])assert.equal(await v("select has_function_privilege($1,'icash_queue_voice_jobs_before_operational()','execute')",[role]),false);
  assert.equal(await v("select has_function_privilege('service_role','icash_queue_voice_jobs_before_operational()','execute')"),true);
- assert.equal(migration,read('supabase/migrations/20261103191000_legacy_voice_candidate_fence.sql'));
+ assert.equal(migration,read('supabase/migrations/20261103191344_legacy_voice_candidate_fence.sql'));
  await assert.rejects(db.exec(migration),/Legacy voice candidate fence prerequisite changed/);await q('rollback');
  console.log('Legacy voice fence: prior permission/operational history bypasses expensive evidence; all original guards, late eligible accounts, LIMIT100, callbacks, saved receipts and ACLs preserved.');
 }finally{await db.close();}

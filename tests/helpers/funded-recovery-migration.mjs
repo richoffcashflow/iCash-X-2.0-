@@ -14,6 +14,7 @@ export const fundedRecoveryMigrations={
  'identity-bound-opportunity-buffer':'20261103183400_identity_bound_opportunity_buffer.sql',
  'research-quota-minimum-capacity':'20261103183653_research_quota_minimum_capacity.sql',
  'urgent-voice-source-gate':'20261103184920_urgent_voice_source_gate.sql',
+ 'legacy-voice-candidate-fence':'20261103191344_legacy_voice_candidate_fence.sql',
 };
 export function assertMigrationConfig(name,source){
  assert.ok(Object.hasOwn(fundedRecoveryMigrations,name),'Known independently deployable recovery step');
