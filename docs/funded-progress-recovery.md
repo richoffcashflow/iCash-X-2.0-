@@ -1,13 +1,14 @@
 # Funded account progress and provider waits
 
-## Completion checkpoint, November 3 18:35 UTC
+## Completion checkpoint, November 3 18:37 UTC
 
-All nine reviewed database configurations are installed. Their repository
+All ten reviewed database configurations are installed. Their repository
 migration filenames match production history: reception backoff 20261103162508,
 bounded opener 20261103162517, literal identity 20261103181852, receipt fairness
 20261103181900, retry priority 20261103181911, list indexing 20261103182413,
-local quota continuation 20261103182541, quota monitor 20261103183354 and
-identity-bound buffer 20261103183400. Exact live function readback verified the
+local quota continuation 20261103182541, quota monitor 20261103183354,
+identity-bound buffer 20261103183400 and minimum-capacity diagnostics
+20261103183653. Exact live function readback verified the
 receipt/retry/identity changes and the two new monitor/buffer functions. Both
 preflight recovery policies remain disabled until matching release checks.
 
@@ -18,6 +19,21 @@ reporting periods and recurring scheduler-failure monitoring. Repeat exact PR
 and main checks for that combined tree, then verify web and worker before
 activating the prospective policies. Earlier installation confirmations expired;
 production readback now proves installation and supersedes that blocker.
+
+The minimum-capacity status function matches the reviewed
+`d3020a625709af735bc3eec9b5dd0021` hash. Its separate guarded migration preserves
+the original installed monitor and wrapper; only the read-only projection adds
+`day_insufficient` and `minute_insufficient` for the existing two-request gate.
+The matching application schema/UI is included in this combined release.
+All ten installed sources are pinned to production hashes. There is no pending
+DDL in this recovery family; never replay the superseded bundle or old aliases.
+Unrelated opportunity-progress migrations remain unchanged.
+
+These are database installation results, not an application release. Require
+independent review and exact-head CI, matching production web/worker commits
+and successful exact main CI before enabling only preflight_indexing_enabled
+and preflight_quota_recovery_enabled. Neither policy may reset limits, replay
+unknown operations or clear financial holds.
 
 At 18:34 UTC the normal monitor had already saved the exhausted 9,800/9,800
 research allowance and its next local window at 00:12:49 UTC on November 4
