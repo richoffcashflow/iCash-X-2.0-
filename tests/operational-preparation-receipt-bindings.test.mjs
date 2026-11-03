@@ -23,7 +23,14 @@ try{
   await q("insert into icash_cost_observations(provider,event_key,source_ref,amount,units,observed_at) values('dealmachine',$1,'dealmachine:owners:'||$1,$2,'provider_credits',now()-interval '57 minutes')",[key,amount]);
  }
  await pg.exec(read('config/dealmachine-dnc-observations.sql'));
- await pg.exec('create table icash_timezone_names as select name from pg_timezone_names');
+ await pg.exec(`create table public.icash_timezone_names(name text primary key);
+ alter table public.icash_timezone_names enable row level security;
+ revoke all on public.icash_timezone_names from public,anon,authenticated;
+ grant select on public.icash_timezone_names to service_role;
+ insert into public.icash_timezone_names(name) select name from pg_catalog.pg_timezone_names;`);
+ assert.equal((await one("select has_table_privilege('service_role','public.icash_timezone_names','select') allowed")).allowed,true);
+ for(const role of ['anon','authenticated'])assert.equal((await one("select has_table_privilege($1,'public.icash_timezone_names','select') allowed",[role])).allowed,false);
+ assert.equal((await one("select relrowsecurity enabled from pg_class where oid='public.icash_timezone_names'::regclass")).enabled,true);
  await pg.exec(read('tests/fixtures/operational-preparation-before-receipt-bindings.sql'));
  await q("update icash_dnc_verification_sources set enabled=true,expires_at=now()+interval '1 day' where observation_provider='dealmachine'");
  const result=await rpc('icash_ingest_dealmachine_dnc_observations',{p_account:account,p_user:user,p_screening:screening});
@@ -158,7 +165,7 @@ create function icash_dealmachine_credit_manifest_hash(operation text) returns t
   assert.equal(sourceIndexed.Plan['Actual Rows'],1);assert.equal(originalBoth.Plan['Actual Rows'],1);
   assert.deepEqual((await select(replacement,null)).rows,cold);
   const paired=await repeatPlans(plan,original,replacement);
-  writeFileSync('/tmp/icash-preparation-receipt-binding-plans.json',JSON.stringify({oldPlan,newUnindexed,newIndexed,oldIndexed,sourceIndexed},null,2));
+  writeFileSync('/tmp/icash-preparation-receipt-binding-plans.json',JSON.stringify({oldPlan,newUnindexed,newIndexed,oldIndexed,sourceIndexed,originalBoth,paired},null,2));
   assert.equal(oldPlan.Plan['Actual Rows'],1);assert.equal(newIndexed.Plan['Actual Rows'],1);
   sparseTiming={originalMs:oldPlan['Execution Time'],projectionMs:newUnindexed['Execution Time'],indexedProjectionMs:newIndexed['Execution Time'],indexOnlyMs:oldIndexed['Execution Time'],sourceIndexedMs:sourceIndexed['Execution Time'],originalBothIndexesMs:originalBoth['Execution Time'],paired,sourceIndexUsed:JSON.stringify(sourceIndexed).includes('fixture_dnc_national_source'),indexUsed:JSON.stringify(newIndexed).includes('fixture_dnc_phone_expiry')};
  });
@@ -227,7 +234,7 @@ create function icash_dealmachine_credit_manifest_hash(operation text) returns t
   assert.deepEqual((await select(replacement,null)).rows,cold);
   const paired=await repeatPlans(plan,original,replacement);
   assert.deepEqual((await select(original,null)).rows,cold);
-  writeFileSync('/tmp/icash-preparation-warm-plans.json',JSON.stringify({originalWarm,receiptWarm,indexWarm,sourceIndexedWarm},null,2));
+  writeFileSync('/tmp/icash-preparation-warm-plans.json',JSON.stringify({originalWarm,receiptWarm,indexWarm,sourceIndexedWarm,originalBothWarm,paired},null,2));
   warmTiming={sources:3000,phoneEntries:12000,originalMs:originalWarm['Execution Time'],receiptMs:receiptWarm['Execution Time'],indexOnlyMs:indexWarm['Execution Time'],sourceIndexedMs:sourceIndexedWarm['Execution Time'],originalBothIndexesMs:originalBothWarm['Execution Time'],paired,sourceIndexUsed:JSON.stringify(sourceIndexedWarm).includes('fixture_warm_national_source')};
  });
  await dropFixtureIndexes();

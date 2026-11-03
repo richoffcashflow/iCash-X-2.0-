@@ -5,6 +5,10 @@ on:
     branches: [main]
 permissions:
   contents: read
+concurrency:
+  # Cancel superseded PR checks without canceling exact-main release evidence.
+  group: preparation-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: true
 jobs:
   native-preparation:
     runs-on: ubuntu-24.04
@@ -39,3 +43,13 @@ jobs:
           PREPARATION_PERFORMANCE_TEST: '1'
           PREPARATION_PG_MODULE: ${{ runner.temp }}/preparation-pg/node_modules/pg
         run: node --experimental-strip-types tests/operational-preparation-receipt-bindings.test.mjs
+      - name: Retain complete native benchmark plans
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: preparation-native-plans-${{ github.sha }}
+          path: |
+            /tmp/icash-preparation-receipt-binding-plans.json
+            /tmp/icash-preparation-warm-plans.json
+          if-no-files-found: warn
+          retention-days: 14
