@@ -11,8 +11,11 @@ research ticket. The sixth account also had independent contact-check holds.
 Worker uptime did not explain this stop. The reliability snapshot now includes
 an operator-only `researchQuota` observation with effective local day/minute
 usage, limits, remaining requests, and the next local admission time. Day
-exhaustion and provider retry holds contribute one workflow warning; ordinary
-minute pacing remains visible without an outage warning. Existing funded
+exhaustion, insufficient remaining daily capacity for the ordinary two-request
+acquisition gate, and provider retry holds contribute one workflow warning.
+Minute pacing below that same minimum remains visible without an outage warning.
+One remaining slot may still serve an eligible free read; it is not represented
+as capacity for a new ordinary research candidate. Existing funded
 account failures retain their own critical classification.
 
 The read does not update counters, move window starts, raise limits, claim
