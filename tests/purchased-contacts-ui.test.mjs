@@ -54,6 +54,6 @@ assert.equal(all(opened).find(n=>n.props.className==='workspace-quiet property-a
 const next=mod.exports.PropertyNextStep({property,work:signedWork,stale:false,onRefresh(){}});
 assert.match(next.props.detail,/Waiting for the buyer’s legal name/);assert.equal(next.props.title,'Waiting for the buyer');assert.match(text(next),/View buyer progress/);
 assert.equal(all(next).filter(n=>n.type==='button').length,1,'The waiting stage exposes one relevant next action');
-let refreshed=false;const stale=mod.exports.PropertyNextStep({property,work:signedWork,stale:true,onRefresh(){refreshed=true;}});
-const refresh=all(stale).find(n=>n.type==='button');assert.equal(text(refresh),'Refresh status');refresh.props.onClick();assert(refreshed);
+const stale=mod.exports.PropertyNextStep({property,work:signedWork,stale:true});
+assert.equal(stale,null,'A background refresh failure does not replace saved property details with a status warning');
 console.log('PASS screenshot regression: readable caller quotes, no duplicate progress row, collapse-only label, buyer action, stale recovery and VIP review.');

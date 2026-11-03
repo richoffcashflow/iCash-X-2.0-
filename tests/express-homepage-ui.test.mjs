@@ -52,8 +52,8 @@ test('homepage account loading and retry never mount the purchase form premature
  let retried=0;const props={checkingAccount:true,accountError:false,onRetry:()=>retried++};const render=harness(props);
  assert.equal(find(render(),'MembershipCheckout'),undefined);assert.match(text(render()),/Getting everything ready/);
  props.accountError=true;let tree=render();assert.equal(find(tree,'MembershipCheckout'),undefined);
- assert.match(text(tree),/couldn’t load your account/);
- all(tree).find(node=>node.type==='button'&&text(node)==='Try again').props.onClick();assert.equal(retried,1);
+ assert.doesNotMatch(text(tree),/couldn’t load|try that again/i);
+ all(tree).find(node=>node.type==='button'&&text(node)==='Refresh').props.onClick();assert.equal(retried,1);
  props.checkingAccount=false;props.accountError=false;assert.ok(find(render(),'MembershipCheckout'));
 });
 

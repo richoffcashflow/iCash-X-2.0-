@@ -1,6 +1,8 @@
 /** A panel owns its recovery controls so a modal never hides the way to retry. */
-export function WorkspaceLoadStatus({label,loading,error,hasData,updatedAt,onRetry}:{label:'buyer'|'closing'|'deal';loading:boolean;error:boolean;hasData:boolean;updatedAt:string|null;onRetry:()=>void}){
- if(error)return <div className="workspace-load-notice" role="alert"><p>{hasData?`Showing saved ${label} details. Updates could not be refreshed.`:`Could not load ${label} details.`}{hasData&&updatedAt&&<small>Last updated {new Date(updatedAt).toLocaleString('en-US',{hour12:true})}.</small>}</p><button type="button" className="workspace-quiet" disabled={loading} onClick={onRetry}>{loading?'Refreshing…':'Try again'}</button></div>;
- if(loading)return <p className="workspace-load-pending" role="status">{hasData?'Refreshing…':`Loading ${label} details…`}</p>;
+export function WorkspaceLoadStatus({label,loading,error,hasData,onRetry}:{label:'buyer'|'closing'|'deal';loading:boolean;error:boolean;hasData:boolean;updatedAt:string|null;onRetry:()=>void}){
+ // A background read never replaces saved details with a technical warning.
+ if(hasData)return null;
+ if(error)return <button type="button" className="workspace-quiet" aria-label={`Refresh ${label} details`} disabled={loading} onClick={onRetry}>Refresh</button>;
+ if(loading)return <p className="workspace-load-pending" role="status">Loading {label} details…</p>;
  return null;
 }

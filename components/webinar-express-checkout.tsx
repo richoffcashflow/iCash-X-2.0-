@@ -35,8 +35,8 @@ export function WebinarExpressCheckout({preview=false,previewBackHref='/webinar-
   </header>
   <main className="wb-express">
    {checkingAccount?<section className="wb-express-status" aria-label="Account status">
-    <h1>{accountError?'Let’s try that again.':'One moment…'}</h1>
-    {accountError?<><p role="alert">We couldn’t load your account.</p><button type="button" className="wb-express-retry" onClick={onRetry}>Try again</button><a className="wb-text" href={webinarSite.supportPath}>Need help?</a></>:<p role="status">Getting everything ready for you.</p>}
+    {!accountError&&<h1>One moment…</h1>}
+    {accountError?<><button type="button" className="wb-express-retry" onClick={onRetry}>Refresh</button><a className="wb-text" href={webinarSite.supportPath}>Need help?</a></>:<p role="status">Getting everything ready for you.</p>}
    </section>:<div className="wb-plan-layout">
     {showFeatures&&!purchased?<section className="wb-home-overview" aria-label="Standard plan features">
      <div className="wb-home-hero">

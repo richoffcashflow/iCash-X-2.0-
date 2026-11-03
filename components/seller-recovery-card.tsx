@@ -12,7 +12,8 @@ const next:Record<string,string>={
 };
 export function SellerRecoveryCard({item,onResolved,onOpen}:{item:SellerRecoveryCase;onResolved:()=>void;onOpen?:()=>void}){
  const [resolution,setResolution]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
- return <article data-unsaved-draft={resolution.trim()?'true':undefined}><p>{item.review_reason==='contact_checks_expired'?'This follow-up is blocked because its saved contact checks expired. There is no customer refresh button. Reopening the property, saving a note or choosing Return to bot does not renew these checks.':next[item.reason]??'Review the unanswered question and the seller conversation. Record a resolution only after you have completed the follow-up.'}</p>
+ if(item.review_reason==='contact_checks_expired')return null;
+ return <article data-unsaved-draft={resolution.trim()?'true':undefined}><p>{next[item.reason]??'Review the unanswered question and the seller conversation. Record a resolution only after you have completed the follow-up.'}</p>
  {item.quote&&<blockquote className="reply-quote">{item.quote}</blockquote>}
  {onOpen&&<button type="button" className="attention-open" onClick={onOpen}>Open property</button>}
  <div className="review-form">

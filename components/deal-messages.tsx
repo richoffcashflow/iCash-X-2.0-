@@ -14,7 +14,7 @@ type Message={author?:'bot'|'you'|'contact';id:string;thread_id:string;direction
 type Data={threads:Thread[];messages:Message[];firstMessage?:Message|null;calls?:ConversationCall[];callsUnavailable?:boolean;receipt?:TextReceipt|null;threadId?:string;nextThread:string|null;next:{before:string;beforeId:string}|null};
 export function DealMessages({dealId,initialThreadId='',contactNames={},active=true,onTakeover,historyOnly=false}:{dealId:string;historyOnly?:boolean;initialThreadId?:string;contactNames?:Record<string,string>;active?:boolean;onTakeover?:()=>void}){
  const [data,setData]=useState<(Data&{scope:string})|null>(null),[error,setError]=useState(''),[threadId,setThreadId]=useState(initialThreadId),[afterThread,setAfterThread]=useState(''),[page,setPage]=useState<{before:string;beforeId:string}|null>(null),[refresh,setRefresh]=useState(0),[drafts,setDrafts]=useState<Record<string,string>>({});
- const [includeCalls,setIncludeCalls]=useState(false),[readError,setReadError]=useState('');
+ const [includeCalls,setIncludeCalls]=useState(false);
  const container=useRef<HTMLDivElement>(null);
  const readIds=useRef(new Set<string>()),readInFlight=useRef(false);
  const attempts=useRef<Record<string,SendAttempt>>({});
@@ -45,29 +45,27 @@ export function DealMessages({dealId,initialThreadId='',contactNames={},active=t
   const candidates=data.messages.filter(m=>m.direction==='incoming'&&m.state==='received'&&!readIds.current.has(m.id)).map(m=>m.id);
   if(!candidates.length)return;
   const log=container.current?.querySelector<HTMLElement>('.message-history');if(!log)return;
-  let alive=true;
   const save=async()=>{if(document.hidden||readInFlight.current)return;
    const bounds=log.getBoundingClientRect();
    const ids=candidates.filter(id=>{const node=log.querySelector<HTMLElement>(`[data-message-id="${id}"]`);if(!node)return false;const box=node.getBoundingClientRect();return box.width>0&&box.height>0&&box.bottom>Math.max(0,bounds.top)&&box.top<Math.min(window.innerHeight,bounds.bottom);});
    if(!ids.length)return;readInFlight.current=true;try{
     const response=await fetch('/api/work/messages/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:current.id,messageIds:ids}),signal:AbortSignal.timeout(10000)});
-    if(!response.ok)throw Error();ids.forEach(id=>readIds.current.add(id));if(alive)setReadError('');notifyWorkspaceChanges();
-   }catch{if(alive)setReadError('Could not save read status. Your messages are still here.');}finally{readInFlight.current=false;}};
+    if(!response.ok)throw Error();ids.forEach(id=>readIds.current.add(id));notifyWorkspaceChanges();
+   }catch{/* Keep unconfirmed messages unread; the next view or refresh can retry. */}finally{readInFlight.current=false;}};
   let timer:ReturnType<typeof setTimeout>;
   const schedule=()=>{clearTimeout(timer);timer=setTimeout(()=>void save(),300);};
   schedule();document.addEventListener('visibilitychange',schedule);log.addEventListener('scroll',schedule);window.addEventListener('resize',schedule);
-  return()=>{alive=false;clearTimeout(timer);document.removeEventListener('visibilitychange',schedule);log.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
+  return()=>{clearTimeout(timer);document.removeEventListener('visibilitychange',schedule);log.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
  },[active,current,data,scope,error]);
  const firstMessage=data?.scope===scope&&data.firstMessage&&!data.messages.some(m=>m.id===data.firstMessage!.id)?data.firstMessage:null;
  function choose(id:string){setThreadId(id);setPage(null);setError('');}
  return <div ref={container} className="deal-texts" data-unsaved-draft={Object.values(drafts).some(d=>d.trim())?'true':undefined}>
- {readError&&<p className="conversation-read-error" role="status">{readError} <button type="button" className="workspace-quiet" onClick={()=>setRefresh(v=>v+1)}>Retry</button></p>}
- {error&&<p className="conversation-load-error" role="status">{error} <button className="workspace-quiet" onClick={()=>setRefresh(v=>v+1)}>Retry</button></p>}
+ {error&&data?.scope!==scope&&<button type="button" className="workspace-quiet" onClick={()=>setRefresh(v=>v+1)}>Refresh messages</button>}
  {data?.scope===scope&&!data.threads.length&&<div className="conversation-empty"><MessageCircle size={26}/><strong>No text conversation yet</strong><p>Choose a saved contact to start a conversation.</p></div>}
  <div className={`conversation-inbox${data?.threads.length===1&&!data.nextThread&&!afterThread?' single-contact':''}`}>
  {!!data?.threads.length&&(data.threads.length>1||data.nextThread||afterThread)&&<aside className="conversation-contacts" aria-label="Text contacts"><div className="conversation-contacts-title">Contacts</div>{data.threads.map(t=><button type="button" key={t.id} aria-pressed={(threadId||data.threadId)===t.id} onClick={()=>choose(t.id)}><span className="conversation-contact-avatar">{t.party==='buyer'?'B':'S'}</span><span><strong>{contactNames[t.recipient]??(t.party==='buyer'?'Buyer':'Seller')}</strong><small><PrivatePhone>{t.recipient}</PrivatePhone></small>{t.reply&&<><span className="conversation-contact-preview">{t.reply.preview||'Sent an attachment'}</span>{t.reply.unread_count>0&&<b className="text-unread-count">{t.reply.unread_count}</b>}</>}{drafts[t.id]?.trim()&&<em>Draft saved</em>}</span></button>)}<div className="history-pages">{afterThread&&<button onClick={()=>{setAfterThread('');setThreadId('');setPage(null);setData(null);}}>First contacts</button>}{data.nextThread&&<button onClick={()=>{setAfterThread(data.nextThread!);setThreadId('');setPage(null);setData(null);}}>More contacts</button>}</div></aside>}
  <div className="conversation-thread-pane">
- {!current&&(!data||data.scope!==scope)&&<p className="conversation-loading" role="status">Loading conversation…</p>}
+ {!current&&!error&&(!data||data.scope!==scope)&&<p className="conversation-loading" role="status">Loading conversation…</p>}
  {current&&<><div className="conversation-thread-heading"><div><strong>{contactNames[current.recipient]??(current.party==='buyer'?'Buyer':'Seller')}</strong><span><PrivatePhone>{current.recipient}</PrivatePhone></span></div><label className="conversation-call-toggle"><input type="checkbox" checked={includeCalls} onChange={e=>setIncludeCalls(e.target.checked)}/>Include calls</label></div><div className="history-pages">{page&&<button onClick={()=>setPage(null)}>Latest activity</button>}{data?.next&&<button onClick={()=>setPage(data.next)}>Older messages</button>}</div><Conversation firstMessage={firstMessage} historyOnly={historyOnly} calls={active&&includeCalls?(data?.calls??[]).filter(c=>!c.voicemail):[]} callsUnavailable={includeCalls&&(data?.callsUnavailable??false)} onTakeover={onTakeover} key={current.id} attempts={attempts.current} stale={!!error||!active} draft={drafts[current.id]??''} onDraft={value=>setDrafts(d=>({...d,[current.id]:value}))} thread={current} messages={data?.messages.slice().reverse()??[]} onSent={()=>{setPage(null);setRefresh(v=>v+1);}}/></>}
  </div></div>
  </div>;
@@ -77,8 +75,7 @@ function Conversation({firstMessage,historyOnly=false,calls,callsUnavailable,onT
  const log=useRef<HTMLDivElement>(null),nearLatest=useRef(true),[showLatest,setShowLatest]=useState(false);
  useEffect(()=>{if(nearLatest.current&&log.current)log.current.scrollTop=log.current.scrollHeight;},[timeline.at(-1)?.key,timeline.length]);
  return <div className="conversation-body">{firstMessage&&<details className="conversation-first-message"><summary>First message · {safeLocalTime(firstMessage.created_at)}</summary><strong>{messageSpeaker(firstMessage.direction,thread.party,firstMessage.author)}</strong><p>{firstMessage.body}</p><small>{firstMessage.direction==='outgoing'?textStateLabel(firstMessage.state):'Received'}</small></details>}<div className="conversation-log-wrap"><div ref={log} className="message-history" role="log" aria-live="polite" aria-label="Conversation history" onScroll={()=>{const node=log.current;if(node){nearLatest.current=node.scrollHeight-node.scrollTop-node.clientHeight<64;setShowLatest(!nearLatest.current);}}}>
-  {callsUnavailable&&<p role="status">Call history could not refresh. <button type="button" className="workspace-quiet" onClick={onSent}>Retry call history</button></p>}
-  {!timeline.length&&<p>No conversation yet.</p>}
+  {!timeline.length&&!callsUnavailable&&<p>No conversation yet.</p>}
   {timeline.map((entry,index)=>{const day=new Date(entry.at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});const previous=index?new Date(timeline[index-1].at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):null;const divider=day!==previous?<div className="conversation-date"><span>{day}</span></div>:null;if(entry.kind==='call')return <Fragment key={entry.key}>{divider}<CallConversation {...entry.call} onRefreshRecording={onSent}/></Fragment>;const message=entry.message;return <Fragment key={entry.key}>{divider}<article data-message-id={message.id} className={`message-bubble ${message.direction==='outgoing'?'message-outgoing':'message-incoming'}`}>
    <strong className="message-speaker">{messageSpeaker(message.direction,thread.party,message.author)}</strong><p className="message-body" style={{whiteSpace:'pre-wrap'}}>{message.body}</p>
    {message.direction==='incoming'&&message.attachments?.map((attachment,index)=>{
