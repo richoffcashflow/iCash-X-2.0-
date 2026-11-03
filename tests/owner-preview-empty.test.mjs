@@ -20,6 +20,16 @@ try{
  const migration=read('config/owner-preview-empty.sql');
  assert.equal(migration,read('supabase/migrations/20261103041149_owner_preview_empty.sql'));await pg.exec(migration);
  assert.equal(phoneLessOwnerPreviews(ownerBatchAudience(c.preview,c.items,25)).length,5);
+ assert.equal(await save(c),false,'Reproduce the real five-key zero-credit preview rejected before the fix');
+ assert.equal(await count(),0);
+ const originalDefinition=await v("select pg_get_functiondef('public.icash_record_empty_owner_preview(uuid,uuid,uuid,jsonb,jsonb)'::regprocedure)");
+ const creditShape=read('config/owner-preview-empty-credit-shape.sql');
+ assert.equal(creditShape,read('supabase/migrations/20261103053426_owner_preview_empty_credit_shape.sql'));await pg.exec(creditShape);
+ const patchedDefinition=await v("select pg_get_functiondef('public.icash_record_empty_owner_preview(uuid,uuid,uuid,jsonb,jsonb)'::regprocedure)");
+ const oldCredit="  or p_preview->'credits' is distinct from '{\"used\":0,\"people\":0,\"properties\":0,\"deduplicated\":0}'::jsonb";
+ const newCredit="  or (p_preview->'credits' is distinct from '{\"used\":0,\"people\":0,\"properties\":0,\"deduplicated\":0}'::jsonb\n   and p_preview->'credits' is distinct from '{\"used\":0,\"people\":0,\"properties\":0,\"deduplicated\":0,\"licensed\":0}'::jsonb)";
+ assert.equal(patchedDefinition.replace(newCredit,oldCredit),originalDefinition,'Every source, receipt, account, expiry and admission-lock predicate is unchanged');
+ await assert.rejects(pg.exec(creditShape),/prerequisite changed/);await pg.exec('rollback');
  await pg.exec('set role service_role');
  try{
   assert.equal(await save(c),true,'The real service role can resolve and execute the RPC in a recreated public schema');
@@ -30,10 +40,19 @@ try{
  for(let i=0;i<5;i++)assert.equal(await empty(c,i),true,'One original preview excludes all five exact source snapshots');
  assert.equal(await v('select count(*)::integer from icash_research_private.owner_empty_preview_items'),5);
  const original=await v('select jsonb_build_object(\'receipt\',to_jsonb(r),\'items\',(select jsonb_agg(to_jsonb(i) order by screening_id) from icash_research_private.owner_empty_preview_items i)) from icash_research_private.owner_empty_preview_receipts r');
+ assert.deepEqual(original.receipt.receipt,c.preview,'The original five-key response is preserved without normalization');
  assert.equal(await save(c),true);assert.equal(await count(),1);
  assert.deepEqual(await v('select jsonb_build_object(\'receipt\',to_jsonb(r),\'items\',(select jsonb_agg(to_jsonb(i) order by screening_id) from icash_research_private.owner_empty_preview_items i)) from icash_research_private.owner_empty_preview_receipts r'),original,'Idempotent acknowledgment never renews evidence');
  assert.equal(await empty(c,0,{...c.items[0].snapshot,propertyId:'prop_changed'}),false);
  assert.equal(await v('select icash_owner_preflight_empty(gen_random_uuid(),$1,$2)',[c.items[0].screeningId,c.items[0].snapshot]),false);
+ const legacy=await seed();delete legacy.preview.credits.licensed;assert.equal(await save(legacy),true,'Original four-key zero-credit receipts remain valid');
+ for(const licensed of [1,-1,'0',null,true]){
+  const bad=await seed();bad.preview.credits.licensed=licensed;
+  const before=await count();assert.equal(await save(bad),false,'Only explicit numeric licensed=0 is accepted');assert.equal(await count(),before);
+ }
+ for(const mutate of [c=>{c.preview.credits.unknown=0;},c=>{delete c.preview.credits.licensed;c.preview.credits.unknown=0;},c=>{delete c.preview.credits.people;}]){
+  const bad=await seed();mutate(bad);const before=await count();assert.equal(await save(bad),false,'Unknown credit fields or incomplete known counters remain unconfirmed');assert.equal(await count(),before);
+ }
  const mixed=await seed();mixed.preview.data[1].contacts[0].availability.phones=2;delete mixed.preview.data[2].contacts[0].availability;delete mixed.preview.data[3].contacts[0].availability.phones;mixed.preview.data[4].contacts[0].contact_type='renter';
  const parsed=ownerBatchAudience(mixed.preview,mixed.items,25);assert.deepEqual(phoneLessOwnerPreviews(parsed).map(x=>x.screeningId),[mixed.items[0].screeningId]);
  assert.equal(await save(mixed),true);for(let i=0;i<5;i++)assert.equal(await empty(mixed,i),i===0,'Positive/unknown phones and weak owner matches remain unclassified');

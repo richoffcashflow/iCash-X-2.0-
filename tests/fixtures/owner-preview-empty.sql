@@ -37,5 +37,6 @@ begin
   data:=data||jsonb_build_array(jsonb_build_object('dm_property_id','prop_'||n||i,'found',true,'contacts',jsonb_build_array(jsonb_build_object('dm_person_id','per_'||n||i,'contact_type','owner','availability',jsonb_build_object('phones',0)))));
  end loop;
  insert into icash_research_private.requests values(r,'owner_preview',a,'owner-batch:'||b,true,now()-interval '5 seconds',now()-interval '2 seconds',jsonb_build_object('outcome','response','httpStatus',200,'returned',total,'creditsUsed',0));
- return jsonb_build_object('account',a,'batch',b,'request',r,'items',items,'preview',jsonb_build_object('data',data,'totals',jsonb_build_object('submitted',total,'found',total,'not_found',0),'credits','{"used":0,"people":0,"properties":0,"deduplicated":0}'::jsonb));
+ -- Current original provider shape: licensed is an explicit fifth zero counter.
+ return jsonb_build_object('account',a,'batch',b,'request',r,'items',items,'preview',jsonb_build_object('data',data,'totals',jsonb_build_object('submitted',total,'found',total,'not_found',0),'credits','{"used":0,"people":0,"properties":0,"deduplicated":0,"licensed":0}'::jsonb));
 end $$;
