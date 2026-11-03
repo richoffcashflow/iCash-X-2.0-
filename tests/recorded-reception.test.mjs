@@ -395,6 +395,26 @@ function settlementInput(f) {
   const row=f.row,user='icash-recorded-reception:'+id;
   return {row,call:{sid:callSid,account_sid:accountSid,from:caller,to:row.to_phone,direction:'inbound',start_time:iso,status:'completed',price_unit:'USD',price:'-0.100000',duration:'600'},conversation:{conversation_id:row.conversation_id,agent_id:row.agent_id,branch_id:row.branch_id,version_id:row.version_id,user_id:user,status:'done',conversation_initiation_client_data:{user_id:user,branch_id:row.branch_id,dynamic_variables:{icash_reception_recording_id:id}},metadata:{call_duration_secs:590,cost_fiat:0.2,phone_call:{call_sid:callSid,direction:'inbound',external_number:caller,agent_number:row.to_phone}}},recording:{sid:recordingSid,account_sid:accountSid,call_sid:callSid,status:'completed'}};
 }
+test('original missing or mismatched incoming identities save explicit review reasons without replay or billing',async()=>{
+ for(const [mode,reason] of [['empty','conversation_identity_required'],['mismatch','conversation_binding_required'],['provider','provider_reconciliation_required']]){
+  const f=await fixture().ready(),s=settlementInput(f),finishes=[];Object.assign(f.row,{conversation_id:null,end_requested_at:iso,provider_recording_price_micros:2500});
+  f.setCall(s.call);const before=clone(f.row);f.events.length=0;
+  const rpc=async(name,body)=>{
+   if(name==='icash_claim_recorded_reception_work')return body.p_kind==='reconcile'?[{...clone(f.row),reconcile_lease_token:rateId}]:[];
+   if(name==='icash_finish_recorded_reception_work'){finishes.push(body);return clone(f.row);}
+   assert(!['icash_settle_recorded_reception','icash_call_credit_available'].includes(name),'Missing identity cannot settle or start work');
+   return f.rpc(name,body);
+  };
+  const provider={...f.provider,getRecording:async()=>s.recording,
+   conversations:async()=>{if(mode==='provider')throw Error('PRIVATE_PROVIDER_BODY');return {has_more:false,conversations:mode==='empty'?[]:[{conversation_id:s.conversation.conversation_id}]};},
+   conversation:async()=>({...s.conversation,version_id:'foreign-version'}),
+  };
+  const result=await maintainRecordedReception(rpc,provider,env,now);
+  assert.equal(result.held,1);assert.equal(result.settled,0);assert.equal(finishes.at(-1).p_payload.reason,reason);
+  assert.equal(providerWrites(f).length,0,'No registration, call, termination or audio operation is replayed');
+  assert.deepEqual(f.row,before,'Original identities and known carrier/audio state are retained');
+ }
+});
 test('settlement keeps carrier/AI observations separate from recording/storage/speech/stream estimates',async()=>{
   const s=settlementInput(await fixture().ready());const a=receptionSettlementAttestation(s.row,s.call,s.conversation,s.recording);assert(a);assert.equal(a.mode,'recorded');assert.equal(a.binding.direction,'inbound');assert.equal(a.providers.twilio.amountMicros,100000);assert.equal(a.providers.elevenlabs.amountMicros,200000);assert.deepEqual(a.recording,{policyVersion:recordedReceptionPolicy,speechGatherMicros:20000,recordingMicros:25000,storageMicros:5358,streamMicros:44000,recordingEstimated:true});
   const calls=[];assert.deepEqual(await settleRecordedReception(async(name,body)=>{calls.push({name,body});return {settled:true,chargedCents:100,costBasis:'estimated'};},s.row,s.call,s.conversation,s.recording),{settled:true,chargedCents:100,costBasis:'estimated'});assert.equal(calls[0].name,'icash_settle_recorded_reception');assert.equal(calls[0].body.p_account,s.row.account_id);assert.equal(calls[0].body.p_operation,operation);

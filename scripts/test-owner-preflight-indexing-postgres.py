@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 from threading import Barrier
 
@@ -90,6 +91,56 @@ def row(c):
     return json.loads(sql(f"select to_jsonb(p) from icash_research_private.owner_export_preflights p where id='{c['id']}';"))
 
 
+def held_evidence(c):
+    """The entire original capability, receipts, controls and financial scope."""
+    return json.loads(sql(f"""select jsonb_build_object(
+      'preflight',(select to_jsonb(p) from icash_research_private.owner_export_preflights p where p.id='{c['id']}'),
+      'account',(select to_jsonb(a) from icash_accounts a where a.id='{c['account']}'),
+      'wallet',(select to_jsonb(w) from icash_wallets w where w.account_id='{c['account']}'),
+      'rate',(select to_jsonb(r) from icash_operation_rates r where r.id='{c['rate']}'),
+      'config',(select to_jsonb(d) from icash_discovery_configs d where d.account_id='{c['account']}'),
+      'tickets',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]') from icash_automation_tickets t where t.account_id='{c['account']}'),
+      'operations',(select coalesce(jsonb_agg(to_jsonb(o) order by o.operation_key),'[]') from icash_operation_spend o where o.account_id='{c['account']}'),
+      'reservations',(select coalesce(jsonb_agg(to_jsonb(r) order by r.operation_key),'[]') from icash_credit_reservations r where r.account_id='{c['account']}'),
+      'original_costs',(select coalesce(jsonb_agg(to_jsonb(o) order by o.provider,o.event_key),'[]') from icash_cost_observations o
+        where o.event_key='owners:{c['account']}:{c['screening']}:original'));
+    """))
+
+
+def assert_blocked_contention(c, kind):
+    saved = held_evidence(c)
+    assert json.loads(sql(claim(c))) == {'status': 'held'}, kind+' must be held without contention'
+    # Prove the deliberate early-return branch instead of treating "pending"
+    # as an admission. With the original account lock held, every contender must
+    # return before the Pause/receipt checks and without returning a capability.
+    blocker = subprocess.Popen(fixture.CMD, env=fixture.ENV, stdin=subprocess.PIPE,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+    try:
+        blocker.stdin.write(f"begin;set local statement_timeout='8s';do $$begin perform pg_advisory_xact_lock(hashtextextended('owner-preflight:{c['account']}',0));end$$;select 'indexing_account_locked';\n")
+        blocker.stdin.flush()
+        fixture.wait_for_marker(blocker, 'indexing_account_locked')
+        locked_results = [json.loads(value) for value in concurrent(claim(c))]
+        assert locked_results == [{'status': 'pending'}]*24, (kind, locked_results)
+        assert held_evidence(c) == saved, kind+' locked contenders changed original evidence or caps'
+        blocker.stdin.write('commit;\n\\q\n')
+        blocker.stdin.flush()
+        blocker.wait(timeout=5)
+        assert blocker.returncode == 0, blocker.stderr.read()
+    finally:
+        if blocker.poll() is None:
+            blocker.kill()
+            blocker.wait(timeout=5)
+    # Uncoordinated competing callers may lose the advisory lock, but the lock
+    # winner must still reject. No create/check status, lease or other capability
+    # fields are permitted in either outcome.
+    results = [json.loads(value) for value in concurrent(claim(c))]
+    assert {'status': 'held'} in results and all(result in ({'status': 'held'}, {'status': 'pending'}) for result in results), (kind, results)
+    assert json.loads(sql(claim(c))) == {'status': 'held'}, kind+' must remain held after all contenders'
+    assert held_evidence(c) == saved, kind+' changed receipts, lease, counters, customer controls or financial evidence'
+    assert sql(f"select count(*) from icash_automation_tickets where account_id='{c['account']}' and state in ('issued','consumed');") == '0'
+    print(f"PASS native indexing {kind}: 24 locked contenders return only pending; unlocked winner held; no capability or original-evidence changes.")
+
+
 def run():
     setup()
     c = seed(20001)
@@ -134,9 +185,7 @@ def run():
             sql(f"update icash_accounts set bot_paused=true where id='{held['account']}';")
         else:
             sql(f"insert into icash_cost_observations(provider,event_key,source_ref,amount,units) values('dealmachine','owners:{held['account']}:{held['screening']}:original','synthetic-original',null,'credits');")
-        saved = row(held)
-        assert all(json.loads(value)['status'] == 'held' for value in concurrent(claim(held)))
-        assert row(held) == saved
+        assert_blocked_contention(held, kind)
     # Competing issuers with a large waiting backlog advance independent work.
     sql('update icash_discovery_configs set enabled=false;')
     for n in range(21000, 21130):

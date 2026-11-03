@@ -101,7 +101,7 @@ begin
 end $$;
 
 do $patch$
-declare d text;needle text;
+declare d text;needle text;proof_table text;exclusions text:='';
 begin
  d:=pg_get_functiondef('public.icash_claim_owner_preflight(uuid,jsonb,jsonb)'::regprocedure);
  needle:='if p.items is distinct from p_items or p.request is distinct from p_request then return ''{"status":"held"}'';end if;';
@@ -125,7 +125,15 @@ $locks$);
  d:=pg_get_functiondef('public.icash_prune_research_requests()'::regprocedure);
  needle:='select id from icash_research_private.requests where created_at<now()-interval ''30 days'' order by created_at limit 10000';
  if (length(d)-length(replace(d,needle,'')))<>length(needle) then raise exception 'Request diagnostic pruning prerequisite changed';end if;
- execute replace(d,needle,'select request.id from icash_research_private.requests request where request.created_at<now()-interval ''30 days'' and not exists(select 1 from icash_research_private.owner_preflight_quota_deferrals denial where denial.request_id=request.id) order by request.created_at limit 10000');
+ -- Permanent proofs retain their exact source request. Build static indexed
+ -- anti-joins for tables installed on this branch; nullable quota feedback
+ -- intentionally retains its existing ON DELETE SET NULL behavior.
+ foreach proof_table in array array['owner_preflight_quota_deferrals','preview_rejection_recoveries','stalled_searches','owner_empty_preview_receipts','export_capacity_probes'] loop
+  if to_regclass('icash_research_private.'||proof_table) is not null then
+   exclusions:=exclusions||format(' and not exists(select 1 from icash_research_private.%I proof where proof.request_id=request.id)',proof_table);
+  end if;
+ end loop;
+ execute replace(d,needle,'select request.id from icash_research_private.requests request where request.created_at<now()-interval ''30 days'''||exclusions||' order by request.created_at limit 10000');
 end $patch$;
 revoke all on function icash_research_private.guard_owner_preflight_quota_deferral(),icash_research_private.owner_preflight_quota_resume(uuid,jsonb,jsonb) from public,anon,authenticated,service_role;
 revoke all on function public.icash_defer_owner_preflight_quota(uuid,uuid,text,uuid) from public,anon,authenticated,service_role;

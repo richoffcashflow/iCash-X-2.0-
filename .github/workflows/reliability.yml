@@ -60,6 +60,8 @@ jobs:
         run: python3 scripts/test-owner-preview-empty-postgres.py
       - name: Verify original text receipt recovery and callback races
         run: python3 scripts/test-text-delivery-recovery-postgres.py
+      - name: Verify original incoming identity recovery and late receipt races
+        run: python3 scripts/test-recorded-reception-retry-postgres.py
       - name: Verify prospective pre-dial abort and late provider admission
         run: python3 scripts/test-voice-predial-abort-postgres.py
       - name: Verify historical cleanup recovery and concurrent customer Pause

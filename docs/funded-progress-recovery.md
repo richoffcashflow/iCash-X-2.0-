@@ -2,9 +2,12 @@
 
 The November 3 follow-up starts from production PRs #538 and #539, and preserves
 the independently prepared #540 empty-preview credit-shape repair. Scheduler
-statement timeouts were absent from the bounded 05:00–05:41 UTC log window;
-the investigation does not rebuild that optimization or infer progress from a
-healthy worker heartbeat.
+statement timeouts were absent from the bounded 05:00–05:38 UTC log window.
+Newer, delayed-ingestion logs then showed scheduler timeouts at 05:41, 05:42 and
+05:46 UTC, plus receipt writers waiting on the shared operating-budget lock.
+The new stacks enter the still-unbounded seller-opener scan and research-wait
+predicate. Preserve the installed indexes and optimize only the newly measured
+path; process health is not proof that either query or customer work completes.
 
 The initial account snapshot at 05:43:25 UTC had 21 `no_completed_work` and 60
 `pending_work` observations. These monitor reasons are mutually exclusive, but
@@ -42,6 +45,22 @@ deployments are not controlled evidence of this patch's effect.
   displays generic search copy. A plain waiting explanation uses that existing
   status, preserves Run/Pause and completed metrics, and does not ask customers
   to add money or repair a provider issue.
+- A seller-opener scan can evaluate hundreds of blocked candidates while holding
+  shared scheduling resources. A persistent bounded scan must advance past
+  blocked candidates and wrap, preserving every existing eligibility test and
+  final message admission rather than repeatedly inspecting the same prefix.
+- Old terminal incoming calls without a verifiable AI identity retry every
+  minute. Their financial holds remain valid; exact identity-review reasons and
+  bounded polling reduce waste while new provider evidence still wakes recovery.
+
+At 05:49:24 UTC all 220 funded customer accounts were classified, including
+67 customer pauses, 61 blocked by pending operation exposure, 11 with too little
+available balance and no pending operation, 22 unable to afford a new search
+and lacking a current contact candidate, 22 with sufficient funds but no recent
+work, and 37 with recent completed work. Membership and review flags overlap
+these categories. Do not attribute zero conversations universally to contact
+hours: 880 prospective fresh seller threads were in an open Honolulu window;
+their remaining admission gates still need to pass.
 
 ## Financial and delivery boundaries
 
