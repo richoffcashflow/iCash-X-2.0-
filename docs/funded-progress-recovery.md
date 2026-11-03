@@ -1,5 +1,28 @@
 # Funded account progress and provider waits
 
+## Release and activation checkpoint, November 3 19:04 UTC
+
+PR #542 is merged as `e14d77475413dcd7ea7a9f0e205bca4e100f7e5b`, with
+the reviewed tree `fd4f5f0c5464d76552380c26b6e2d5b333bd8f1f`. Exact main CI
+run 41697623649 passed all 715 suites, 31 native PostgreSQL scripts, production
+build, concurrency, Chromium/WebKit and dependency audit. Production web
+`dpl_HWBzCdvJrAVoP4NFw9vW5SW4memk` and worker
+`4e8fe005-8b26-4185-8a8e-46969777bb9d` both report that main commit; the worker
+verified the same CI run and started active with 16 automation lanes.
+
+Both prospective preflight recovery flags were activated at 19:04:15 UTC after
+the exact release checks. At 19:04:22, ordinary production history recorded
+72 delivered outgoing texts across five accounts since 18:19 UTC. The shared
+research allowance remains 9,800/9,800, with its next local window at November 3
+6:12 PM Central. Incoming SMS remains unverified, health remains 503 for
+workflow degradation, and the critical incident is still open. Activation and
+outgoing delivery do not establish new research or closed deals.
+
+A post-release statement timeout at 19:02:43 UTC reached the legacy voice
+queue's existing-permission evidence check. Its isolated correction is documented
+in `legacy-voice-candidate-fence.md`; this is a separate path from the urgent
+voice source gate. Its installation and exact release still require verification.
+
 ## Completion checkpoint, November 3 18:37 UTC
 
 All ten reviewed database configurations are installed. Their repository
