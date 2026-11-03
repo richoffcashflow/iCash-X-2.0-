@@ -21,19 +21,29 @@ export function supportOutreachReply(messages:{role:string;content:string}[],evi
  const question=messages.filter(m=>m.role==='user').at(-1)?.content??'';
  if(/\b(?:documents?|agreements?|contracts?|human|live agent)\b/i.test(question))return null;
  const textDelivery=/\b(?:texts?|messages?|sms)\b.{0,60}\b(?:deliver(?:ed|ing|y)?|receiv(?:e|ed|ing))\b|\b(?:deliver(?:ed|ing|y)?|receiv(?:e|ed|ing))\b.{0,60}\b(?:texts?|messages?|sms)\b/i.test(question);
- const source=/\b(?:cold|motivated)\b.{0,35}\b(?:leads?|sellers?)\b|\bwhere\b.{0,50}\b(?:properties|leads?)\b.{0,30}\b(?:from|coming)\b/i.test(question);
+ const sourceQuestion=(text:string)=>/\b(?:cold|motivated)\b.{0,35}\b(?:leads?|sellers?)\b|\bwhere\b.{0,50}\b(?:properties|leads?)\b.{0,30}\b(?:from|coming)\b/i.test(text);
+ const source=sourceQuestion(question);
  const stats=/\b(?:check|show|what)\b.{0,30}\b(?:stats|statistics|call count|text count)\b|\bhow many\b.{0,30}\b(?:calls|texts)\b/i.test(question);
  const problemPattern=/\b(?:seller|owner)\b.{0,50}\b(?:info|information|details|contact)\b|\b(?:leads?|propert(?:y|ies)|calls?|called|calling|texts?|texting|outreach|messages?|messaging)\b.{0,60}\b(?:not|no|missing|stuck|waiting|communication)\b|\b(?:0|zero|no|missing|not|never|isn[’']?t|doesn[’']?t|hasn[’']?t|aren[’']?t|didn[’']?t|won[’']?t)\b.{0,60}\b(?:leads?|seller|owner|calls?|called|calling|texts?|texting|conversations?|outreach|messages?|messaging|reach(?:ing)? out|contact(?:ing)?)\b|\bonly (?:sending )?texts\b|\bwhen will (?:the|my) bot (?:work|start|begin)\b/i;
  let issue=currentSupportIssue(messages);
  // Status answers and short follow-ups stay attached to the unresolved report,
  // including when a lead-source question came between them. New topics do not.
- if(!problemPattern.test(issue)&&!supportBotWorkProblem(issue)&&(supportContinuation(question)||/^(?:yes|no|ready|running|pause bot|still\b|same\b|already\b|it says\b|i (?:still |already )?(?:need|want|have|did|tried)\b|human\b|any update\b)/i.test(question.trim()))&&!/\b(?:card|charge|billing|payment|refund|cancel|course|sign.?in|log.?in|code)\b/i.test(question)){
+ if(!problemPattern.test(issue)&&!supportBotWorkProblem(issue)&&(supportContinuation(issue)||sourceQuestion(issue))&&(supportContinuation(question)||/^(?:yes|no|ready|running|pause bot|still\b|same\b|already\b|it says\b|i (?:still |already )?(?:need|want|have|did|tried)\b|human\b|any update\b)/i.test(question.trim()))&&!/\b(?:card|charge|billing|payment|refund|cancel|course|sign.?in|log.?in|code)\b/i.test(question)){
   const lastConfirmed=messages.findLastIndex(m=>m.role==='user'&&/\b(?:that worked|it worked|working now|fixed now|all fixed|problem solved)\b/i.test(m.content));
-  issue=messages.slice(lastConfirmed+1).filter(m=>m.role==='user').findLast(m=>problemPattern.test(m.content)||supportBotWorkProblem(m.content))?.content??issue;
+  const prior=messages.slice(lastConfirmed+1).filter(m=>m.role==='user').findLast(m=>!supportContinuation(m.content)&&!sourceQuestion(m.content));
+  if(prior&&(problemPattern.test(prior.content)||supportBotWorkProblem(prior.content)))issue=prior.content;
  }
- const problem=problemPattern.test(issue)||supportBotWorkProblem(issue);
- if(!source&&!problem&&!textDelivery&&!stats)return null;
+ const problem=problemPattern.test(issue)||supportBotWorkProblem(issue)||/\b(?:calls?|texts?|outreach)\b.{0,25}\b(?:restarted|resumed)\b|\b(?:restart|resume)\b.{0,25}\b(?:calls?|texts?|outreach)\b/i.test(issue);
+ const statusCheck=!problem&&/\b(?:check|verify|review|show|what(?:[’']s| is))\b.{0,45}\b(?:bot|outreach|call|text)\b.{0,25}\b(?:status|activity|running|active)\b|\b(?:is (?:my|the) bot (?:on|running|active)|bot status)\b/i.test(issue);
+ if(!source&&!problem&&!textDelivery&&!stats&&!statusCheck)return null;
  const check=evidence.find(e=>e.key==='outreach');
+ if(statusCheck){
+  const work=evidence.find(e=>e.key==='work');
+  const state=work?.code==='paused'?'Your bot is paused.':work?.status==='ok'&&work.code==='not_paused'?'Your bot is switched on.':'I can’t confirm your bot’s current Run/Pause status from these checks.';
+  const o=check?.outreach;
+  const activity=o?`Your account has ${o.callsStarted} recorded call ${o.callsStarted===1?'attempt':'attempts'} and ${o.textsSent} ${o.textsSent===1?'text':'texts'} (${o.textsDelivered} delivered) so far. These totals can include manual activity; they don’t confirm recent automatic outreach.`:'I can’t verify recent calls or texts from the available activity checks yet.';
+  return {reply:state+' '+activity,status:'open' as const,ai:false};
+ }
  if(textDelivery){
   const o=check?.outreach;
   const reply=!o?'I can’t verify text delivery right now, so I can’t confirm why those messages aren’t showing as delivered.':o.textsSent===0?'No sent texts are recorded for your account yet. I haven’t confirmed what is stopping them.':o.textsDelivered===0?`${o.textsSent} ${o.textsSent===1?'text was':'texts were'} accepted for sending, but none has a delivery confirmation yet. I can’t confirm that they reached the sellers or why delivery hasn’t been confirmed.`:`${o.textsDelivered} of ${o.textsSent} sent texts have a delivery confirmation. ${o.textsDelivered<o.textsSent?'I can’t confirm delivery or the reason for the missing confirmations on the others yet.':'Delivery does not confirm that a seller has read or replied to a message.'}`;
