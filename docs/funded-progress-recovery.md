@@ -1,5 +1,37 @@
 # Funded account progress and provider waits
 
+## Completion checkpoint, November 3 18:15 UTC
+
+PR head 3731709 passed all four exact Reliability jobs (41671804844),
+including all native contention checks and Chromium/WebKit. The shared native
+fixture now restores the production service role's BYPASSRLS attribute, and
+photo reads use the local HTTPS fixture without Playwright routing. Production
+readback confirms the reception backoff and bounded opener migrations at
+20261103162508 and 20261103162517. Their repository filenames match that history.
+
+The remaining five reviewed changes and read-only research quota monitor are
+packaged in one atomic migration, `funded_recovery_completion`; the indexing
+dependency precedes quota continuation. Original config sections are checked
+byte-for-byte. Both new preflight switches remain false. Installation requires
+the database service's confirmation; an expired confirmation is not a deploy.
+Reconcile the generated migration timestamp after installation, rerun exact
+checks, verify matching web/worker releases, then enable the two policies.
+
+At 16:02 UTC the shared local research window had consumed 9,800 of 9,800
+requests and next resets at 00:12:49 UTC on November 4 (6:12 PM Central on
+November 3). Five of six stalled accounts had a due research candidate before
+that quota gate. Historical provider remaining counts jumped repeatedly and
+cannot establish a safe daily reset. Do not reset counters or increase limits
+from those observations. The monitor now reports this cause separately from
+healthy worker heartbeats without changing admission or customer controls.
+
+The sixth account's saved contact evidence was bound to an earlier sending
+identity. Final checks stopped the distinct attempts before calling; there was
+no repeated redial of the same jobs. Its stale-identity inventory and unknown
+original purchases need a separate, evidence-preserving recovery. Incoming SMS
+also remains unverified despite outgoing delivery receipts. These findings are
+remaining blockers, not successful outcomes of this unreleased patch.
+
 The November 3 follow-up starts from production PRs #538 and #539, and preserves
 the independently prepared #540 empty-preview credit-shape repair. Scheduler
 statement timeouts were absent from the bounded 05:00–05:38 UTC log window.

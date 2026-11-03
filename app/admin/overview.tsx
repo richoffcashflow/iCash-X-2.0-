@@ -92,6 +92,15 @@ export function OwnerOverviewView(){
      {!report.reliability.fresh&&<span>Monitoring is overdue. The saved results do not confirm current health.</span>}
      {report.reliability.snapshot&&<>
       <span>{report.reliability.snapshot.issueCount} active alerts · Checked {overviewTime(report.reliability.snapshot.checkedAt)} CT</span>
+      {report.reliability.snapshot.researchQuota&&<div>
+       <strong>Research request capacity · {{available:'Available',day_exhausted:'Daily allowance exhausted',minute_exhausted:'Waiting for the next minute',provider_hold:'Provider retry hold',unavailable:'Monitoring unavailable'}[report.reliability.snapshot.researchQuota.status]}</strong>
+       {!report.reliability.snapshot.researchQuota.fresh?<p>The quota check failed. Saved counts do not confirm current capacity.</p>:<>
+        {report.reliability.snapshot.researchQuota.dayLimit!==undefined&&<p>{report.reliability.snapshot.researchQuota.dayUsed?.toLocaleString('en-US')} of {report.reliability.snapshot.researchQuota.dayLimit.toLocaleString('en-US')} requests used in the current local window · {report.reliability.snapshot.researchQuota.dayRemaining?.toLocaleString('en-US')} remaining.</p>}
+        {report.reliability.snapshot.researchQuota.status==='day_exhausted'&&<p>New property and owner research is blocked by the shared request allowance. Healthy worker checks do not mean research can run.</p>}
+        {report.reliability.snapshot.researchQuota.nextAvailableAt&&<p>Next local admission window: {overviewTime(report.reliability.snapshot.researchQuota.nextAvailableAt)} CT. Provider availability is checked again before a request.</p>}
+        {report.reliability.snapshot.researchQuota.providerObservedAt&&report.reliability.snapshot.researchQuota.providerDayRemaining!=null&&<p>Last provider observation: {report.reliability.snapshot.researchQuota.providerDayRemaining.toLocaleString('en-US')} requests remaining at {overviewTime(report.reliability.snapshot.researchQuota.providerObservedAt)} CT. This historical count does not reset the local allowance.</p>}
+       </>}
+      </div>}
       {report.reliability.snapshot.incomingTexts&&(!report.reliability.snapshot.incomingTexts.fresh||report.reliability.snapshot.incomingTexts.warningCount>0)&&<div>
        <strong>{report.reliability.snapshot.incomingTexts.fresh?'Incoming text delivery needs review':'Incoming text monitoring unavailable'}</strong>
        <p>{report.reliability.snapshot.incomingTexts.fresh?'An enabled line has sent property texts in the past 24 hours with unverified incoming delivery or a saved carrier blocking notice. Outgoing delivery confirmations do not verify incoming service.':'The latest incoming-text health check could not be verified. Earlier warnings remain active while other workflow checks continue.'}</p>

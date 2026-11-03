@@ -12,7 +12,7 @@ try{
  const original=await saved(),money=await one('select to_jsonb(o) from icash_operation_spend o');
  await isolate(async()=>{await claim();await one(finishSql);assert((await delay())<61,'original forever-minute loop reproduced');});
  await db.exec(migration);
- assert.equal(migration,readFileSync(new URL('../supabase/migrations/20261103054850_recorded_reception_identity_backoff.sql',import.meta.url),'utf8'));
+ assert.equal(migration,readFileSync(new URL('../supabase/migrations/20261103162508_recorded_reception_identity_backoff.sql',import.meta.url),'utf8'));
  const definition=await one("select pg_get_functiondef('icash_finish_recorded_reception_work(uuid,uuid,text,text,uuid,bigint,text,jsonb)'::regprocedure)");
  await db.exec(migration);assert.equal(await one("select pg_get_functiondef('icash_finish_recorded_reception_work(uuid,uuid,text,text,uuid,bigint,text,jsonb)'::regprocedure)"),definition);
  for(const [attempts,seconds] of [[1,60],[2,300],[5,900],[11,3600],[8000,3600]])await isolate(async()=>{
