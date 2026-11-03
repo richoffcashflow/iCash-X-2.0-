@@ -141,21 +141,22 @@ export async function verifyPreparationInstallation(f,{indexStatements,patchSql,
    const url='postgresql://postgres:isolated-preparation-only@127.0.0.1:55444/icash_preparation_test?sslmode=disable&application_name=preparation-cli-migration&options='+encodeURIComponent('-c lock_timeout=5s -c statement_timeout=60s');
    // The query command uses one prepared statement. Check startup settings here;
    // the event trigger below proves the migration runner retains them after RESET ALL.
-   const timeoutProof="select case when current_setting('lock_timeout')='5s' and current_setting('statement_timeout')='60s' and current_setting('application_name')='preparation-cli-migration' then 'bounded-fixture-startup-ok' else 'fixture-startup-timeouts-not-honored' end as verified";
+   const timeoutProof="select current_setting('lock_timeout') as lock_timeout,current_setting('statement_timeout') as statement_timeout,current_setting('application_name') as application_name,extract(epoch from current_setting('lock_timeout')::interval)::int as lock_seconds,extract(epoch from current_setting('statement_timeout')::interval)::int as statement_seconds,case when current_setting('lock_timeout')::interval=interval '5 seconds' and current_setting('statement_timeout')::interval=interval '60 seconds' and current_setting('application_name')='preparation-cli-migration' then 'bounded-fixture-startup-ok' else 'fixture-startup-timeouts-not-honored' end as verified";
    const startup=await run(['db','query',timeoutProof,'--remote='+url,'--yes','--workdir='+directory]);
-   assert(startup.includes('bounded-fixture-startup-ok'),'CLI must execute timeout proof on its own connection');
+   assert(startup.includes('bounded-fixture-startup-ok'),'CLI startup settings were not honored: '+startup);
    // Disposable event trigger verifies the actual CREATE INDEX sessions, not
    // merely a separate connection using the same URL. No migration bytes change.
-   await q(`create table public.fixture_preparation_cli_timeouts(identity text,application text,lock_timeout text,statement_timeout text);
+   await q(`create table public.fixture_preparation_cli_timeouts(identity text,application text,lock_timeout text,statement_timeout text,lock_seconds integer,statement_seconds integer);
     create function public.fixture_preparation_cli_timeouts() returns event_trigger language plpgsql as $fixture$
     declare command record;
     begin
      if current_setting('application_name')='preparation-cli-migration' and tg_tag='CREATE INDEX' then
-      if current_setting('lock_timeout')<>'5s' or current_setting('statement_timeout')<>'60s' then
-       raise exception 'Actual CLI index session did not honor bounded startup timeouts';
+      if current_setting('lock_timeout')::interval<>interval '5 seconds' or current_setting('statement_timeout')::interval<>interval '60 seconds' then
+       raise exception 'Actual CLI index timeout mismatch: lock=% (% seconds), statement=% (% seconds), application=%',
+        current_setting('lock_timeout'),extract(epoch from current_setting('lock_timeout')::interval),current_setting('statement_timeout'),extract(epoch from current_setting('statement_timeout')::interval),current_setting('application_name');
       end if;
       for command in select * from pg_event_trigger_ddl_commands() loop
-       insert into public.fixture_preparation_cli_timeouts values(command.object_identity,current_setting('application_name'),current_setting('lock_timeout'),current_setting('statement_timeout'));
+       insert into public.fixture_preparation_cli_timeouts values(command.object_identity,current_setting('application_name'),current_setting('lock_timeout'),current_setting('statement_timeout'),extract(epoch from current_setting('lock_timeout')::interval)::int,extract(epoch from current_setting('statement_timeout')::interval)::int);
       end loop;
      end if;
     end $fixture$;
@@ -182,7 +183,7 @@ export async function verifyPreparationInstallation(f,{indexStatements,patchSql,
    await run(args);
    const firstLedger=await ledger();
    const timeoutRows=(await q('select * from public.fixture_preparation_cli_timeouts order by identity')).rows;
-   assert.deepEqual(timeoutRows,names.map(name=>({identity:'public.'+name,application:'preparation-cli-migration',lock_timeout:'5s',statement_timeout:'60s'})).sort((a,b)=>a.identity.localeCompare(b.identity)),'Both actual CLI concurrent builds honor configured timeouts');
+   assert.deepEqual(timeoutRows.map(({identity,application,lock_seconds,statement_seconds})=>({identity,application,lock_seconds,statement_seconds})),names.map(name=>({identity:'public.'+name,application:'preparation-cli-migration',lock_seconds:5,statement_seconds:60})).sort((a,b)=>a.identity.localeCompare(b.identity)),'Both actual CLI concurrent builds honor configured timeouts');
    assert.equal(firstLedger.length,3,'Only the three staged migration versions are recorded');
    for(let i=0;i<3;i++){
     const match=migrations[i].name.match(/^(\d{14})_(.+)\.sql$/);
