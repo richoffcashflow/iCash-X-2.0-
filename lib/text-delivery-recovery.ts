@@ -36,7 +36,7 @@ export async function recoverTextDeliveryReceipts(db:Database,env:Environment={V
   try{
    if(!lease||lease.status!==200||!leased(claim.request.sender))receipt.reason='leased_identity_unverified';
    else if(!/^[A-Za-z0-9_-]{1,200}$/.test(claim.request.provider_id))receipt.reason='original_message_identity_invalid';
-   else receipt.message=await readReceipt(`/conversations/history/message/${claim.request.provider_id}`,env.CONTIGUITY_API_KEY!,fetcher,now);
+   else receipt.message=await readReceipt(`/conversations/history/message/${claim.request.provider_id}?tracking=true`,env.CONTIGUITY_API_KEY!,fetcher,now);
   }catch{receipt.reason='canonical_read_unavailable';}
   try{
    const outcome=await db<string>('rpc/icash_finish_text_delivery_recheck','POST',{p_id:claim.id,p_receipt:receipt},AbortSignal.timeout(6000));

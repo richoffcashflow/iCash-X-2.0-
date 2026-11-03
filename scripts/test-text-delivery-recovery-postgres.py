@@ -39,6 +39,7 @@ def setup():
         sql(observer['function_definition']+';'+observer['definition']+';')
     sql(read('config/text-delivery-recovery.sql'))
     sql(read('config/text-delivery-source-binding.sql'))
+    sql(read('config/text-delivery-tracking.sql'))
     assert sql('set role service_role;select count(*) from icash_text_receipt_private.control;') == '1', 'Fixture service role must see the private recovery control'
     sql(read('tests/fixtures/text-delivery-recovery-callback.sql')+';')
     sql("""create table fixture_changes(message_id uuid);
@@ -61,7 +62,7 @@ def receipt(job):
     timing=json.loads(sql("select jsonb_build_object('now',now(),'sent',extract(epoch from dispatched_at)*1000,'delivered',dispatched_at+interval '10 seconds') from icash_operation_spend where operation_key='text:"+req['id']+"';"))
     raw={'object':'response','data':{'id':req['provider_id'],'from':req['sender'],'to':req['recipient'],'message':req['body'],'attachments':req['attachments'],'timestamp':float(timing['sent']),'status':'delivered','tracking':[{'event':'text.delivery.confirmed','timestamp':timing['delivered']}]}}
     lease={'object':'response','data':{'numbers':[{'number':{'e164':req['sender']},'lease_status':'active'}]}}
-    return {'source':'contiguity_canonical_get','message':{'url':'https://api.contiguity.com/conversations/history/message/'+req['provider_id'],'status':200,'raw':raw,'rawText':json.dumps(raw),'checkedAt':timing['now']},'lease':{'url':'https://api.contiguity.com/numbers/leased','status':200,'raw':lease,'rawText':json.dumps(lease),'checkedAt':timing['now']}}
+    return {'source':'contiguity_canonical_get','message':{'url':'https://api.contiguity.com/conversations/history/message/'+req['provider_id']+'?tracking=true','status':200,'raw':raw,'rawText':json.dumps(raw),'checkedAt':timing['now']},'lease':{'url':'https://api.contiguity.com/numbers/leased','status':200,'raw':lease,'rawText':json.dumps(lease),'checkedAt':timing['now']}}
 
 def finish_query(job, evidence):
     encoded=json.dumps(evidence).replace("'", "''")
@@ -119,20 +120,24 @@ def run():
     sql("select icash_ingest_text_event_before_operational('"+json.dumps(later_callback)+"'::jsonb,false);")
     assert sql('select count(*) from fixture_opened_gaps;')=='1','Later duplicate callback must retain historical replay fence'
     assert sql('select first_outreach_at is null from icash_meta_leads;')=='t'
-    for n, invalid_source in [(13, None), (14, 'other_source')]:
+    for n, invalid_source in [(13, None), (14, 'other_source'), (15, 'missing_tracking_query'), (16, 'false_tracking_query')]:
         seed(n)
         held_job=json.loads(sql('set role service_role;select icash_claim_text_delivery_rechecks();'))[0]
         invalid_evidence=receipt(held_job)
         if invalid_source is None:
             del invalid_evidence['source']
+        elif invalid_source=='missing_tracking_query':
+            invalid_evidence['message']['url']=invalid_evidence['message']['url'].replace('?tracking=true','')
+        elif invalid_source=='false_tracking_query':
+            invalid_evidence['message']['url']=invalid_evidence['message']['url'].replace('?tracking=true','?tracking=false')
         else:
             invalid_evidence['source']=invalid_source
         before_changes=sql('select count(*) from fixture_changes;')
         assert sql(finish_query(held_job,invalid_evidence))=='held'
         assert sql(f"select state from icash_text_messages where id='{uid(n)}';")=='accepted'
         assert sql(f"select last_delivery_at is null from icash_text_messages where id='{uid(n)}';")=='t'
-        assert sql('select count(*) from fixture_changes;')==before_changes,'Invalid source cannot mutate the message'
-        assert sql('select count(*) from fixture_opened_gaps;')=='1','Invalid source cannot create historical follow-up'
+        assert sql('select count(*) from fixture_changes;')==before_changes,'Invalid source or URL cannot mutate the message'
+        assert sql('select count(*) from fixture_opened_gaps;')=='1','Invalid source or URL cannot create historical follow-up'
         assert sql('select first_outreach_at is null from icash_meta_leads;')=='t'
         assert json.loads(sql(f"select receipt from icash_text_receipt_private.attempts where id='{held_job['id']}';"))==invalid_evidence
     seed(12)
