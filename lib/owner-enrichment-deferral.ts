@@ -14,3 +14,12 @@ export class OwnerPreviewRateLimitError extends Error {
   this.operationKey=`owners:${accountId}:${screeningId}`;
  }
 }
+/** A definite shared export-slot collision, not provider request quota. This
+ * keeps the same scoped, bounded deferral family and grants no paid retry. */
+export class OwnerExportCapacityBusyError extends OwnerPreviewRateLimitError {
+ constructor(accountId:string,screeningId:string){
+  super(accountId,screeningId);
+  this.name='OwnerExportCapacityBusyError';
+  this.message='OWNER_EXPORT_CAPACITY_BUSY';
+ }
+}

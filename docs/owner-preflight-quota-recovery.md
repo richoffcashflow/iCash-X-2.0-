@@ -1,0 +1,13 @@
+# Local quota refusals during owner checks
+
+A preflight can claim a create/count handler while capacity is available and then lose the shared request slot before its provider request. The old service persisted a null provider receipt and permanently held that free check even though the request ledger proved it was never admitted.
+
+The new path preserves an immutable record of the exact local refusal, returns the existing pending status and resumes only the missing free step. It requires the original account, operation, request ID, lease, start time and unchanged receipts. An admitted request, provider error, lost response, changed source, stale handler, customer Pause, membership loss, reserved balance or original-operation hold cannot use this path. Existing ticket backoff and the seven resumable deferrals remain bounded; creation retains its five-minute handler scope and counts retain the original thirty-minute preflight lifetime. An eligible count cannot renew its original baseline's ninety-second handler window.
+
+The account advisory lock serializes denial registration with claims. A retry claim takes the existing operating-budget and account locks before the preflight row, then repeats the original current eligibility check. Immutable denial requests are excluded from ordinary diagnostic pruning. No provider quota, paid admission, customer prices, money holds, contact restrictions or historical receipts are changed.
+
+`preflight_quota_recovery_enabled` is installed false. Apply the compatible indexing migration before this migration; retain both flags disabled until the matching web/worker commit and required native PostgreSQL/browser/reliability checks pass. Enable only after that release check. Disabling the flag prevents registration and resumption of these capabilities without deleting their evidence.
+
+Offline service and PGlite tests cover the exact local-refusal race and original current-function/indexing composition, metadata/baseline/eligible resumption, source/Pause/membership/reserved-headroom guards, immutable evidence, old-handler compatibility, original baseline freshness and pruning. The native PostgreSQL scenario adds twenty-four competing workers, one hundred waiting accounts, current Pause contention, repeated retries, stale sources and known provider admission. Native execution is required in CI; PGlite is not a multi-session concurrency test.
+
+The production snapshot reviewed at 05:42 UTC had no local denied requests or provider 429s in the preceding hour. Its held rows were provider/list evidence problems; the sole null create receipt was an admitted request that timed out. This prospective race fix must not be credited with recovering those historical holds.

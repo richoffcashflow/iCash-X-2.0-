@@ -134,7 +134,9 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
    // Fixed stage/code fields only: no provider body, numbers, headers or secrets.
    const code=error instanceof Error&&/^[A-Z0-9_]{1,100}$/.test(error.message)?error.message:'RECONCILIATION_REQUIRED';
    console.warn('recorded_reception_reconciliation_held',{sessionId:row.id,stage,code,...(error instanceof RecordingProviderError?{httpStatus:error.status}:{})});
-   await finish(initial,'reconcile','retry',{reason:'provider_reconciliation_required'}).catch(()=>null);result.held++;
+   const reason=stage==='conversation_readback'&&['UNIQUE_CONVERSATION_REQUIRED','CONVERSATION_ID_REQUIRED'].includes(code)?'conversation_identity_required'
+    :stage==='conversation_readback'&&code==='CONVERSATION_BINDING_REQUIRED'?'conversation_binding_required':'provider_reconciliation_required';
+   await finish(initial,'reconcile','retry',{reason}).catch(()=>null);result.held++;
   }
  }
  return result;

@@ -5,8 +5,9 @@ function fixture(options={}){
  const calls=[],receipts=[],metrics=[];let status=options.status??'create',saved={},lost=false,cleanupClaimed=false;
  const db=async(path,method,p)=>{
   assert.equal(method,'POST');
-  if(path==='rpc/icash_claim_owner_preflight')return {...base,status,mobileOnly:options.mobile??false};
+  if(path==='rpc/icash_claim_owner_preflight')return {...base,status,mobileOnly:options.mobile??false,nextStep:options.nextStep};
   if(path==='rpc/icash_take_dealmachine_request')return options.quota!==false;
+  if(path==='rpc/icash_defer_owner_preflight_quota'){assert.match(p.p_request,/^[0-9a-f-]{36}$/);assert.equal(p.p_lease,base.lease);status=options.refuseDeferral?'held':'pending';return !options.refuseDeferral;}
   if(path==='rpc/icash_finish_dealmachine_request'){metrics.push(p);return true;}
   if(path==='rpc/icash_record_owner_preflight'){
    receipts.push(p);assert.equal(p.p_id,base.id);assert.equal(p.p_lease,base.lease);
@@ -45,9 +46,11 @@ try{
  const create=fixture();assert.equal((await create.run()).status,'pending');assert.equal(create.calls.length,1);assert.equal((await create.run()).status,'pending');assert.equal(create.calls.length,1,'Waiting on indexing does not create another list');
  for(const status of ['disabled','ready','empty','pending','quota_wait','held']){const f=fixture({status});assert.equal((await f.run()).status,status);assert.equal(f.calls.length,0);}
  for(const options of [{},{empty:true},{mobile:true}]){const f=fixture({status:'check',...options});assert.equal((await f.run()).status,options.empty?'empty':'ready');assert.equal(f.calls.length,3);assert.equal(f.receipts.length,3);assert.equal(f.metrics.length,3);}
+ const remaining=fixture({status:'check',nextStep:'eligible'});assert.equal((await remaining.run()).status,'ready');assert.equal(remaining.calls.filter(x=>x.path==='/v1/people/search/count').length,1,'Locally denied eligible step reuses the original baseline');
  const lost=fixture({lostAck:true});assert.equal((await lost.run()).status,'pending');assert.equal(lost.calls.length,1);assert.equal(lost.receipts.length,2);
  for(const options of [{timeout:true},{big:true},{httpError:true}]){const f=fixture({...options,noCleanup:true});assert.equal((await f.run()).status,'held');assert.equal(f.calls.length,1);assert.equal((await f.run()).status,'held');assert.equal(f.calls.length,1);assert(!JSON.stringify(await f.run()).includes('private'));}
- const quota=fixture({quota:false,noCleanup:true});assert.equal((await quota.run()).status,'held');assert.equal(quota.calls.length,0);
+ const quota=fixture({quota:false,noCleanup:true});assert.equal((await quota.run()).status,'pending');assert.equal(quota.calls.length,0);assert.equal(quota.receipts.length,0,'A proved local refusal is not a provider receipt');
+ const denied=fixture({quota:false,noCleanup:true,refuseDeferral:true});assert.equal((await denied.run()).status,'held');assert.equal(denied.calls.length,0);
  const cleanup=fixture({status:'held'});await cleanup.cleanup();await cleanup.cleanup();assert.equal(cleanup.calls.length,1);
  console.log('PASS owner preflight transport: separate creation/count capabilities, original receipt-before-interpretation, lost-save acknowledgment, free bounded cleanup, active/mobile filters, no export or repeat after unknown outcome.');
 }finally{if(key===undefined)delete process.env.DEALMACHINE_API_KEY;else process.env.DEALMACHINE_API_KEY=key;}

@@ -33,8 +33,8 @@ export function OpportunityProgress({apiBase='/api/work',days=1,timezone='UTC',p
  if(!progress)return null;
  const p=progress;
  const status=paused?'paused':p.status;
- const heading=status==='paused'?'Your search is paused':status==='membership_required'?'Your work is saved':status==='budget_reached'?'Your work is waiting for credits':'Your opportunity search';
- const detail=status==='paused'?'Resume your bot whenever you’re ready.':status==='membership_required'?'Restore your membership to continue.':status==='budget_reached'?'New work resumes when available credits can cover it.':`${p.queued?`${p.queued.toLocaleString()} ${p.queued===1?'property':'properties'} queued for screening. `:''}Your recorded research and seller responses are below.`;
+ const heading=status==='paused'?'Your search is paused':status==='membership_required'?'Your work is saved':status==='budget_reached'?'Your work is waiting for credits':status==='settling'?'Earlier work is awaiting confirmation':'Your opportunity search';
+ const detail=status==='paused'?'Resume your bot whenever you’re ready.':status==='membership_required'?'Restore your membership to continue.':status==='budget_reached'?'New work resumes when available credits can cover it.':status==='settling'?'Earlier work is awaiting confirmation before those credits can be used again. No action is needed from you for this check.':`${p.queued?`${p.queued.toLocaleString()} ${p.queued===1?'property':'properties'} queued for screening. `:''}Your recorded research and seller responses are below.`;
  const steps=[{value:p.screened,label:'Properties screened',Icon:Search},{value:p.eligible,label:'Eligible matches',Icon:Check},{value:p.contacted,label:'Sellers contacted',Icon:Phone},{value:p.responded,label:'Sellers replied',Icon:MessageCircle}];
  return <section className={styles.panel} aria-label="Opportunity progress">
   <div className={styles.top}><span className={styles.eyebrow}>Your opportunity search</span><span className={styles.period}>{activityPeriods.find(period=>period.days===days)?.label}</span></div>

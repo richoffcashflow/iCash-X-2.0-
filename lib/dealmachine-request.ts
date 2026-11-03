@@ -1,13 +1,13 @@
 import {randomUUID} from 'node:crypto';
 export type ResearchDb=<T=unknown>(path:string,method?:string,body?:unknown)=>Promise<T>;
 export type ResearchRequestKind='search_estimate'|'property_search'|'owner_preview'|'owner_lookup'|'exclusion_create'|'exclusion_sync'|'geography'|'buyer_estimate'|'buyer_search'|'property_lookup'|'photo';
-export class DealMachineQuotaError extends Error {constructor(){super('DEALMACHINE_QUOTA_WAIT');}}
+export class DealMachineQuotaError extends Error {readonly requestId:string;constructor(requestId:string){super('DEALMACHINE_QUOTA_WAIT');this.requestId=requestId;}}
 const integer=(v:unknown)=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0?v:null;
 /** One admission, one provider request. Metrics never retry a provider action. */
 export async function dealMachineRequest(db:ResearchDb,kind:ResearchRequestKind,request:()=>Promise<Response>,scope:{accountId?:string;operationKey?:string}={}){
  const id=randomUUID();
  const admitted=await db<boolean>('rpc/icash_take_dealmachine_request','POST',{p_kind:kind,p_account:scope.accountId??null,p_operation:scope.operationKey??null,p_request:id});
- if(admitted===false)throw new DealMachineQuotaError();
+ if(admitted===false)throw new DealMachineQuotaError(id);
  if(admitted!==true)throw new Error('PROVIDER_RATE_LIMIT');
  return finishAdmittedDealMachineRequest(db,id,request);
 }
