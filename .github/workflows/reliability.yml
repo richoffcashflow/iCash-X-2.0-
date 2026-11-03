@@ -14,7 +14,7 @@ concurrency:
 jobs:
   database-contention:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:17.6-bookworm
@@ -38,6 +38,8 @@ jobs:
         run: python3 scripts/test-owner-preflight-postgres.py
       - name: Verify local quota refusal recovery under concurrent transactions
         run: python3 scripts/test-preflight-quota-postgres.py
+      - name: Verify new-user research reserve under concurrent transactions
+        run: python3 scripts/test-new-user-request-reserve-postgres.py
       - name: Verify delayed contact checks survive concurrent cleanup
         run: python3 scripts/test-preflight-waiting-postgres.py
       - name: Verify original list indexing, bounded polling and fair concurrent progress
@@ -58,10 +60,20 @@ jobs:
         run: python3 scripts/test-seller-opener-bounded-postgres.py
       - name: Verify literal seller identity and concurrent one-use opener preparation
         run: python3 scripts/test-seller-opener-ampersand-postgres.py
+      - name: Verify literal address copy and concurrent final source review
+        run: python3 scripts/test-seller-opener-literal-address-postgres.py
       - name: Verify ordinary calling hours avoid unrelated owner evidence locks
         run: python3 scripts/test-outreach-predicates-postgres.py
       - name: Verify bounded configuration recovery and concurrent admission
         run: python3 scripts/test-voice-configuration-target-lookup-postgres.py
+      - name: Verify urgent voice source filtering and concurrent fair issuance
+        run: python3 scripts/test-urgent-voice-source-gate-postgres.py
+      - name: Verify legacy voice history is excluded before native eligibility checks
+        run: python3 scripts/test-legacy-voice-candidate-fence-postgres.py
+      - name: Verify indexed global voice contact exclusion preserves unknown calls
+        run: python3 scripts/test-voice-global-contact-index-postgres.py
+      - name: Verify ordinary phone filtering preserves concurrent capacity and fairness
+        run: python3 scripts/test-ordinary-voice-phone-fence-postgres.py
       - name: Verify empty batch previews preserve source and concurrent controls
         run: python3 scripts/test-owner-preview-empty-postgres.py
       - name: Verify reviewed preview rejection recovery under concurrent admission

@@ -165,7 +165,7 @@ export async function recoverOwnerActiveExports(db:ResearchDb,transport:typeof f
 }
 export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:Candidate,c:Config,quotedDataCostMicros:number,transport:typeof fetch=fetch){
  if(![c.contact_credit_cap,c.property_credit_micros,quotedDataCostMicros].every(n=>Number.isSafeInteger(n)&&n>0)||c.contact_credit_cap>25||BigInt(c.contact_credit_cap)*BigInt(c.property_credit_micros)>BigInt(quotedDataCostMicros))throw Error('CONTACT_RATE_REQUIRED');
- const capacity=await db<string>('rpc/icash_owner_active_export_capacity','POST',{});
+ const capacity=await db<string>('rpc/icash_owner_active_export_capacity','POST',{p_account:accountId});
  if(capacity==='export_busy')throw new OwnerExportCapacityBusyError(accountId,primary.screeningId);
  if(capacity==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
  if(capacity!=='ready')return {status:'held'};

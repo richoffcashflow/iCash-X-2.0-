@@ -24,7 +24,7 @@ async function saveOriginal<T>(db:ResearchDb,path:string,payload:unknown):Promis
 }
 export async function cleanupOwnerPreflight(db:ResearchDb,transport:typeof fetch=fetch,id:string|null=null){
  const key=process.env.DEALMACHINE_API_KEY;if(!key)return {status:'unconfigured'};
- const c=await db<{id:string;token:string;listId:string|number}|null>('rpc/icash_claim_owner_preflight_cleanup','POST',{p_id:id});
+ const c=await db<{id:string;token:string;listId:string|number;accountId:string}|null>('rpc/icash_claim_owner_preflight_cleanup','POST',{p_id:id});
  if(!c)return {status:'idle'};if(!listId(c.listId))return {status:'held'};
  let receipt:Receipt={httpStatus:null,raw:null,rawText:null};
  try{
@@ -33,7 +33,7 @@ export async function cleanupOwnerPreflight(db:ResearchDb,transport:typeof fetch
    receipt={httpStatus:r.status,...await readBody(r,65536)};
    await saveOriginal(db,'rpc/icash_record_owner_preflight_cleanup',{p_id:c.id,p_token:c.token,p_receipt:receipt});
    return new Response(receipt.rawText,{status:r.status,headers:r.headers});
-  },{operationKey:'owner-preflight-cleanup:'+c.id});
+  },{accountId:c.accountId,operationKey:'owner-preflight-cleanup:'+c.id});
   return {status:'checked'};
  }catch{
   await saveOriginal(db,'rpc/icash_record_owner_preflight_cleanup',{p_id:c.id,p_token:c.token,p_receipt:receipt}).catch(()=>null);
