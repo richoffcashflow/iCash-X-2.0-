@@ -41,6 +41,8 @@ try{
   if(path==='rpc/icash_finish_text_delivery_recheck'){
    if(mode==='missing_source')delete body.p_receipt.source;
    if(mode==='wrong_source')body.p_receipt.source='other_source';
+   if(mode==='missing_tracking_query')body.p_receipt.message.url=body.p_receipt.message.url.replace('?tracking=true','');
+   if(mode==='false_tracking_query')body.p_receipt.message.url=body.p_receipt.message.url.replace('?tracking=true','?tracking=false');
    return one('select icash_finish_text_delivery_recheck($1,$2)',[body.p_id,body.p_receipt]);
   }
   throw Error(path);
@@ -57,11 +59,35 @@ try{
   if(mode==='no_delivery_time')data.tracking=[];if(mode==='contradictory')data.tracking.push({event:'text.delivery.failed',timestamp:stamp});
   if(mode==='future')data.tracking[0].timestamp=new Date(Date.now()+3600000).toISOString();
   if(mode==='pending')data.status='pending';if(mode==='other_attachment')data.attachments=['https://example.test/other.jpg'];
+  // The provider omits tracking by default even when its status is delivered.
+  if(new URL(url).searchParams.get('tracking')!=='true'||mode==='omitted_tracking')delete data.tracking;
   if(race)await race();
   return Response.json({object:'response',data});
  };
  const env={VERCEL_ENV:'production',CONTIGUITY_API_KEY:'fixture-key',CONTIGUITY_WEBHOOK_SECRET:'fixture-secret'};
- for(const [n,scenario,expected] of [[10,'delivered','delivered'],[11,'failed','needs_review'],[12,'wrong_id','accepted'],[13,'wrong_to','accepted'],[14,'wrong_body','accepted'],[15,'no_delivery_time','accepted'],[16,'contradictory','accepted'],[17,'future','accepted'],[18,'pending','accepted'],[19,'other_attachment','accepted'],[20,'other_org','accepted'],[24,'missing_source','accepted'],[25,'wrong_source','accepted']]){
+ // Reproduce the first live response before the URL fix: valid delivered status,
+ // no timeline because the legacy exact-ID GET omitted the opt-in query.
+ await seed(9);
+ const legacyClaim=(await one('select icash_claim_text_delivery_rechecks()'))[0];
+ const originalUrl='https://api.contiguity.com/conversations/history/message/'+legacyClaim.request.provider_id;
+ const observe=async url=>{const response=await fetcher(url,{method:'GET',redirect:'error',credentials:'omit',headers:{Authorization:'Token fixture-key'}});const rawText=await response.text();return {url,status:response.status,rawText,raw:JSON.parse(rawText),checkedAt:new Date().toISOString()};};
+ const legacyReceipt={source:'contiguity_canonical_get',lease:await observe('https://api.contiguity.com/numbers/leased'),message:await observe(originalUrl)};
+ assert.equal(legacyReceipt.message.raw.data.status,'delivered');
+ assert.equal(Object.hasOwn(legacyReceipt.message.raw.data,'tracking'),false,'Real provider default omits the timeline');
+ assert.equal(await one('select icash_finish_text_delivery_recheck($1,$2)',[legacyClaim.id,legacyReceipt]),'held');
+ assert.equal(await one('select state from icash_text_messages where id=$1',[current]),'accepted');
+ const existingEvidence=await one('select to_jsonb(a) from icash_text_receipt_private.attempts a where id=$1',[legacyClaim.id]);
+ const existingSchedule=await one('select to_jsonb(s) from icash_text_receipt_private.schedule s where message_id=$1',[current]);
+ const existingControl=await one('select to_jsonb(c) from icash_text_receipt_private.control c');
+ const trackingMigration=read('config/text-delivery-tracking.sql');
+ assert.equal(trackingMigration,read('supabase/migrations/20261103050331_text_delivery_tracking.sql'));
+ await pg.exec(trackingMigration);
+ assert.deepEqual(await one('select to_jsonb(a) from icash_text_receipt_private.attempts a where id=$1',[legacyClaim.id]),existingEvidence,'The URL fix preserves original held evidence');
+ assert.deepEqual(await one('select to_jsonb(s) from icash_text_receipt_private.schedule s where message_id=$1',[current]),existingSchedule,'The URL fix never resets backoff or attempt counts');
+ assert.deepEqual(await one('select to_jsonb(c) from icash_text_receipt_private.control c'),existingControl,'The global read quota is unchanged');
+ assert.equal(await one('select icash_finish_text_delivery_recheck($1,$2)',[legacyClaim.id,{source:'changed'}]),'held','Old attempts remain immutable');
+
+ for(const [n,scenario,expected] of [[10,'delivered','delivered'],[11,'failed','needs_review'],[12,'wrong_id','accepted'],[13,'wrong_to','accepted'],[14,'wrong_body','accepted'],[15,'no_delivery_time','accepted'],[16,'contradictory','accepted'],[17,'future','accepted'],[18,'pending','accepted'],[19,'other_attachment','accepted'],[20,'other_org','accepted'],[24,'missing_source','accepted'],[25,'wrong_source','accepted'],[26,'missing_tracking_query','accepted'],[27,'false_tracking_query','accepted'],[28,'omitted_tracking','accepted']]){
   await seed(n);mode=scenario;fetches=[];
   const before=await one('select to_jsonb(o) from icash_operation_spend o where operation_key=$1',['text:'+current]);
   const result=await recoverTextDeliveryReceipts(db,env,fetcher);
@@ -75,6 +101,7 @@ try{
   }
   assert.deepEqual(await one('select to_jsonb(o) from icash_operation_spend o where operation_key=$1',['text:'+current]),before,'Financial history stays unchanged');
   assert.equal(fetches.length,scenario==='other_org'?1:2);
+  if(scenario!=='other_org')assert.equal(new URL(fetches[1]).search,'?tracking=true','Collector requests the exact original timeline explicitly');
   const attempt=(await q('select * from icash_text_receipt_private.attempts where message_id=$1',[current])).rows[0];
   assert(attempt.receipt);assert.equal(await one('select icash_finish_text_delivery_recheck($1,$2)',[attempt.id,{changed:true}]),attempt.outcome,'Repeating finish retains original evidence');
   assert.deepEqual(await one('select receipt from icash_text_receipt_private.attempts where id=$1',[attempt.id]),attempt.receipt);
