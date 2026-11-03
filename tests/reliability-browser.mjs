@@ -46,7 +46,9 @@ const proxy=https.createServer({key:readFileSync(join(tlsDir,'key.pem')),cert:re
  // route.fulfill during document replacement can report an access-control
  // page error even though the component catches the cancelled fetch. Keep
  // the same empty-photo fixture; never reach the application/provider API.
- if(request.method==='GET'&&new URL(request.url,upstream).pathname==='/api/work/property-photo'){
+ if(new URL(request.url,upstream).pathname==='/api/work/property-photo'){
+  // This endpoint bypasses interception; never forward an unexpected mutation.
+  if(request.method!=='GET'){response.writeHead(403);response.end();return;}
   const body='{"photo":null}';response.writeHead(200,{'Content-Type':'application/json','Content-Length':String(Buffer.byteLength(body)),'Cache-Control':'no-store'});
   response.end(body);return;
  }

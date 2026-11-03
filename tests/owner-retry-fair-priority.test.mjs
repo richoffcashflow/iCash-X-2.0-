@@ -14,7 +14,10 @@ const evidence=c=>v(`select jsonb_build_object('ticket',to_jsonb(t),'preflight',
 const isolated=async fn=>{await pg.exec('begin');try{await fn();}finally{await pg.exec('rollback');}};
 try{
  await pg.exec(read('tests/fixtures/opportunity-schema.sql'));
+ // Reproduce the plain role left by the earlier native concurrency suite.
+ await pg.exec('create role service_role nobypassrls');
  await pg.exec(read('tests/fixtures/owner-cleanup-ticket-recovery-native.sql'));
+ assert.equal(await v("select rolbypassrls from pg_roles where rolname='service_role'"),true,'Shared fixture must restore the production service-role RLS behavior');
  for(const [file,stop] of [['config/owner-enrichment-deferral.sql','create function public.icash_defer_owner_enrichment'],['config/owner-export-preflight.sql','create function public.icash_claim_owner_preflight']]){const source=read(file);await pg.exec(source.slice(0,source.indexOf(stop))+'commit;');}
  await pg.exec(read('tests/fixtures/owner-preflight-priority-foundation.sql'));
  const foundation=JSON.parse(read('tests/fixtures/owner-preflight-priority-before.json'));

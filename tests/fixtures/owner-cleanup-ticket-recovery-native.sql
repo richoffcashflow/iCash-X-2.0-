@@ -5,6 +5,10 @@ do $$begin
  if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated;end if;
  if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role bypassrls;end if;
 end $$;
+-- Earlier native suites share this disposable database and can create a plain
+-- service_role. Match the production service role even when it already exists;
+-- otherwise RLS silently hides the immutable recovery cap from invoker checks.
+alter role service_role bypassrls;
 grant usage on schema public to anon,authenticated,service_role;
 create schema icash_private;
 create schema icash_research_private;

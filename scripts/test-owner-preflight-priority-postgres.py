@@ -32,6 +32,7 @@ def setup():
     sql("drop schema if exists icash_research_private cascade;drop schema if exists icash_owner_review_private cascade;drop schema if exists icash_private cascade;drop schema public cascade;create schema public;")
     sql(read("tests/fixtures/opportunity-schema.sql"))
     sql(read("tests/fixtures/owner-cleanup-ticket-recovery-native.sql"))
+    assert sql("select rolbypassrls from pg_roles where rolname='service_role';") == 't', "Recovery evidence must be visible to the production-equivalent service role"
     source = read("config/owner-enrichment-deferral.sql")
     sql(source[:source.index("create function public.icash_defer_owner_enrichment")]+"\ncommit;")
     source = read("config/owner-export-preflight.sql")

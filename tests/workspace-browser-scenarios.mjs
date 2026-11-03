@@ -50,7 +50,17 @@ export async function verifyWorkspace(browser,base,options,name){
   if(url.searchParams.get('query')){emptySearch=true;data.properties=[];data.deals=[];data.signing=[];}
   return data;
  }
- await context.route('**/*',async route=>{
+ // Let photo requests use the actual local HTTPS fixture without entering
+ // the client routing roundtrip, including when refresh remounts a card.
+ // Observe every read and preserve preview/mutation assertions independently.
+ const localPhoto=url=>url.origin===base&&url.pathname==='/api/work/property-photo';
+ page.on('request',request=>{
+  const url=new URL(request.url());if(!localPhoto(url))return;
+  if(preview)writes.push(`Preview requested ${url.pathname}`);
+  if(request.method()!=='GET')writes.push(url.pathname);else apiReads.push(url.pathname);
+ });
+ const routedUrls=new RegExp(`^(?!${base.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}/api/work/property-photo(?:\\?|$))`);
+ await context.route(routedUrls,async route=>{
   const request=route.request(),url=new URL(request.url());
   if(url.origin!==base){external.push(url.origin);return route.abort();}
   if(!url.pathname.startsWith('/api/'))return route.continue();
@@ -86,7 +96,6 @@ export async function verifyWorkspace(browser,base,options,name){
   if(p==='/api/billing/membership')return route.fulfill({json:{membership:{state:'active',accessible:true,vip,priceCents:vip?10000:5000,paidThrough:'2026-11-16T05:00:00Z',cancelAtPeriodEnd:false}}});
   if(p==='/api/work/activity')return route.fulfill({json:work(url)});
   if(p==='/api/work/buyer-network')return route.fulfill({json:{...network,hasActiveDeal:signed()&&scenario!=='cancelled'&&scenario!=='cancellation_pending',responses:signed()?2:0,buyers:signed()?network.buyers:[]}});
-  if(p==='/api/work/property-photo')return route.continue();
   if(p==='/api/work/report')return route.fulfill({json:{days:Number(url.searchParams.get('days')),timezone:'UTC',startAt:'2026-10-14T00:00:00Z',endAt:'2026-10-14T18:00:00Z',leads:1,calls:0,texts:0,contracts:signed()?1:0}});
   if(p==='/api/notifications/updates')return route.fulfill({json:{items:[],preferences:{seenAt:null}}});
   if(p==='/api/work/allowance')return route.fulfill({json:{day:'2026-10-14',limitCents:10000,spentCents:0,reservedCents:0,remainingCents:10000,availableCents:10000,extraCents:0,resetsAt:'2026-10-15T05:00:00Z'}});
