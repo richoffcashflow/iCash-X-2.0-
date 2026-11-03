@@ -2,6 +2,7 @@ import {z} from 'zod';
 import {workspaceActivity} from '@/lib/workspace-activity-read';
 import {currentBotActivity} from '@/lib/bot-activity';
 import {validActivityReport,type ActivityDays} from '@/lib/activity-report';
+import {opportunityPeriod,readOpportunityProgress} from '@/lib/opportunity-progress-read';
 import {dealMachinePhoto} from '@/lib/property-photo';
 import {savedPropertyPhoto} from '@/lib/persistent-property-photo';
 import {db} from '@/lib/stripe-test';
@@ -34,10 +35,14 @@ export async function GET(req:Request,context:{params:Promise<{viewId:string;res
   for(const [key,value] of Object.entries(ownerViewHeaders))result.headers.set(key,value);
   return result;
  }
- if(resource==='progress'||resource==='bot-status'){
+ if(resource==='progress'){
+  const period=opportunityPeriod(params);
+  if(!period)throw new OwnerViewError(400,'Choose Today, 7 days or 30 days and a valid timezone.');
+  return json({progress:await readOpportunityProgress(accountId,period.days,period.timezone,req.signal)});
+ }
+ if(resource==='bot-status'){
   z.object({}).strict().parse(query);
   const progress=await db<{status?:string;callsBudgetHeld?:number}|null>('rpc/icash_prospecting_progress','POST',{p_account:accountId});
-  if(resource==='progress')return json({progress});
   const [tickets,screening]=await Promise.all([
    db<{kind:string;state:string;expires_at:string}[]>(`icash_automation_tickets?account_id=eq.${accountId}&state=eq.consumed&expires_at=gt.${new Date().toISOString()}&select=kind,state,expires_at&order=created_at.desc&limit=10`),
    db<{state:string;lease_until:string|null}[]>(`icash_screening_jobs?account_id=eq.${accountId}&state=eq.running&select=state,lease_until&limit=10`)

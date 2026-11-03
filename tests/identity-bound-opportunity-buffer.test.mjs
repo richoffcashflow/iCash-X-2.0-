@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import {assertMigrationConfig} from './helpers/funded-recovery-migration.mjs';
 import {PGlite} from '@electric-sql/pglite';
 import {setupIndexingFixture,read} from './fixtures/owner-preflight-indexing-setup.mjs';
 const pg=new PGlite(),q=(s,a=[])=>pg.query(s,a),one=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
@@ -92,6 +91,6 @@ try{
  await isolate(async()=>{const token=await one('select icash_next_acquisition()');assert(token?.token);assert.equal(await one("select kind from icash_automation_tickets where token=$1",[token.token]),'discovery','Normal scheduler selects only independent new research');});
  assert.deepEqual(await inventory(),before);
  assert.equal(await one("select provolatile::text||':'||prosecdef::text from pg_proc where oid='icash_pending_opportunity_count(uuid)'::regprocedure"),'s:false');
- assertMigrationConfig('identity-bound-opportunity-buffer',migration);
+ assert.equal(migration,read('supabase/migrations/20261103183400_identity_bound_opportunity_buffer.sql'));
  console.log('PASS identity-bound buffer: reproduced29 blocked slots→10, seven original unknowns retained, exact old-source scope, current/legacy alternatives, same-property uncertainty, unchanged money/records, ordinary controls and independent scheduler admission. Offline only.');
 }finally{await pg.close();}

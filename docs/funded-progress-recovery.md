@@ -1,47 +1,36 @@
 # Funded account progress and provider waits
 
-## Completion checkpoint, November 3 18:15 UTC
+## Completion checkpoint, November 3 18:35 UTC
 
-PR head 3731709 passed all four exact Reliability jobs (41671804844),
-including all native contention checks and Chromium/WebKit. The shared native
-fixture now restores the production service role's BYPASSRLS attribute, and
-photo reads use the local HTTPS fixture without Playwright routing. Production
-readback confirms the reception backoff and bounded opener migrations at
-20261103162508 and 20261103162517. Their repository filenames match that history.
+All nine reviewed database configurations are installed. Their repository
+migration filenames match production history: reception backoff 20261103162508,
+bounded opener 20261103162517, literal identity 20261103181852, receipt fairness
+20261103181900, retry priority 20261103181911, list indexing 20261103182413,
+local quota continuation 20261103182541, quota monitor 20261103183354 and
+identity-bound buffer 20261103183400. Exact live function readback verified the
+receipt/retry/identity changes and the two new monitor/buffer functions. Both
+preflight recovery policies remain disabled until matching release checks.
 
-The remaining read-only research quota monitor and identity-bound pending-buffer
-correction are
-packaged in one atomic migration, `funded_recovery_completion`; the indexing
-dependency precedes quota continuation. Production also installed literal identity (20261103181852), text receipt fairness
-(20261103181900) and due retry priority (20261103181911) during this review.
-Their exact live function bodies were verified against the reviewed patches,
-and their repository migration filenames now match. Unrelated opportunity
-progress migrations are preserved. Preflight indexing (20261103182413) and local quota continuation (20261103182541)
-were subsequently installed with both switches still false. Their standalone
-migration files now match the production history. Original config sections are checked
-byte-for-byte. Both new preflight switches remain false. Installation requires
-the database service's confirmation; an expired confirmation is not a deploy.
-Reconcile the generated migration timestamp after installation, rerun exact
-checks, verify matching web/worker releases, then enable the two policies.
+Runtime head 3836484 passed all 711 suites, 31 native PostgreSQL scenarios,
+production build, concurrency, Chromium/WebKit and dependency audit in run
+41693224774. The final integration also preserves PR #543's opportunity history,
+reporting periods and recurring scheduler-failure monitoring. Repeat exact PR
+and main checks for that combined tree, then verify web and worker before
+activating the prospective policies. Earlier installation confirmations expired;
+production readback now proves installation and supersedes that blocker.
 
-At 16:02 UTC the shared local research window had consumed 9,800 of 9,800
-requests and next resets at 00:12:49 UTC on November 4 (6:12 PM Central on
-November 3). Five of six stalled accounts had a due research candidate before
-that quota gate. Historical provider remaining counts jumped repeatedly and
-cannot establish a safe daily reset. Do not reset counters or increase limits
-from those observations. The monitor now reports this cause separately from
-healthy worker heartbeats without changing admission or customer controls.
+At 18:34 UTC the normal monitor had already saved the exhausted 9,800/9,800
+research allowance and its next local window at 00:12:49 UTC on November 4
+(6:12 PM Central on November 3). It changes no counters or limits. The fresh
+snapshot reported 44 stalled and 69 pending accounts. Provider remaining counts
+fluctuated and cannot establish a safe early reset.
 
-The sixth account's saved contact evidence was bound to an earlier sending
-identity. Final checks stopped the distinct attempts before calling; there was
-no repeated redial of the same jobs. The added buffer correction excludes only
-settled, exactly bound old-identity records without a current contact or legacy
-permission alternative. A read-only comparison reduced its pending count from
-29 to 10, retaining all seven unknown purchases; regression verifies unchanged
-historical evidence and independent new-research admission. It does not repair
-or replay the old contacts. Incoming SMS remains unverified despite outgoing
-delivery receipts. These diagnostics do not prove this unreleased patch has
-restored production work.
+The identity-buffer correction excludes only settled, exactly bound old-identity
+contacts without a current or legacy permission alternative. A read-only
+comparison reduced one account's count from 29 to 10 while retaining seven
+unknown purchases. Original contacts, costs and duplicate-property guards remain
+unchanged. Incoming SMS is still unverified. These diagnostics do not establish
+completed new research, seller conversations or deals after this release.
 
 The November 3 follow-up starts from production PRs #538 and #539, and preserves
 the independently prepared #540 empty-preview credit-shape repair. Scheduler

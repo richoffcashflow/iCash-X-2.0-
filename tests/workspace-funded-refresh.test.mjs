@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import ts from 'typescript';
+import * as activityReport from '../lib/activity-report.ts';
+import * as opportunityProgress from '../lib/opportunity-progress.ts';
 import * as views from '../components/workspace-view.ts';
 import * as guidance from '../lib/workspace-guidance.ts';
 import {workspaceLeadPresence} from '../lib/workspace-lead-presence.ts';
@@ -65,11 +67,11 @@ try{
  cells=[];cursor=0;dirty=true;pending=[];requests.length=0;timers.clear();
  const progressCode=ts.transpileModule(readFileSync(new URL('../components/opportunity-progress.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
  const progressModule={exports:{}};
- new Function('require','module','exports',progressCode)(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/webinar-client'?{webinarRequest:workspaceRequest}:name==='@/lib/workspace-events-client'?{subscribeWorkspaceChanges:fn=>{changes.add(fn);return()=>changes.delete(fn);}}:name.endsWith('.css')?{default:{}}:new Proxy({},{get:(_o,key)=>String(key)}),progressModule,progressModule.exports);
+ new Function('require','module','exports',progressCode)(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/webinar-client'?{webinarRequest:workspaceRequest}:name==='@/lib/workspace-events-client'?{subscribeWorkspaceChanges:fn=>{changes.add(fn);return()=>changes.delete(fn);}}:name==='@/lib/activity-report'?activityReport:name==='@/lib/opportunity-progress'?opportunityProgress:name.endsWith('.css')?{default:{}}:new Proxy({},{get:(_o,key)=>String(key)}),progressModule,progressModule.exports);
  let activities=0,progressProps={botAvailable:true,paused:false,stale:false,onResponses(){},onActivity(){activities++;}};
  renderComponent=()=>progressModule.exports.OpportunityProgress(progressProps);
  await flush();requests.at(-1).reject(Error('Progress unavailable'));await flush();assert.equal(tree,null,'Initial technical failure stays blank rather than inventing zero counts');
- const progress={budgetId:1,startedAt:'2026-11-02T18:00:00Z',spentCents:200,pendingCents:0,remainingCents:800,queued:2,screened:5,eligible:2,contacted:1,responded:0,status:'working'};
+ const progress={days:1,timezone:'UTC',startAt:'2026-11-03T00:00:00Z',endAt:'2026-11-03T18:00:00Z',budgetId:1,startedAt:'2026-11-02T18:00:00Z',spentCents:200,pendingCents:0,remainingCents:800,queued:2,screened:5,eligible:2,contacted:1,responded:0,status:'working'};
  for(const fn of changes)fn();await flush();requests.at(-1).resolve({progress});await flush();
  const savedProgressText=label(tree);assert.match(savedProgressText,/Your opportunity search/);assert.doesNotMatch(savedProgressText,/Working now|Live|delayed|unavailable/i);
  assert(elements(tree).some(n=>n.type==='strong'&&n.props.children==='5'),'Confirmed screening count is retained');
@@ -98,5 +100,21 @@ try{
  requests.at(-1).resolve({progress:{...progress,status:'paused'}});await flush();
  progressProps={...progressProps,paused:false,stale:false,botAvailable:true};dirty=true;await flush();requests.at(-1).resolve({progress:{...progress,responded:1}});await flush();
  assert.match(label(tree),/A seller replied/);assert.equal(activities,1,'Fresh seller response still triggers the connected workspace refresh');
+ // Changing the period must hide old counts before the next network response.
+ const periodRequest=requests.length;progressProps={...progressProps,days:7,timezone:'America/Chicago'};dirty=true;await flush();
+ assert.equal(tree,null,'Prior-period results are never relabeled as the newly selected period');
+ assert.equal(query(periodRequest).get('days'),'7');assert.equal(query(periodRequest).get('timezone'),'America/Chicago');
+ requests.at(-1).resolve({progress:{...progress,days:1,timezone:'America/Chicago'}});await flush();assert.equal(tree,null,'Wrong-period response is rejected');
+ for(const fn of changes)fn();await flush();const sevenDay={...progress,days:7,timezone:'America/Chicago',screened:96,eligible:30,contacted:59,responded:2};requests.at(-1).resolve({progress:sevenDay});await flush();
+ assert.match(label(tree),/7 days/);assert(elements(tree).some(n=>n.type==='strong'&&n.props.children==='96'));assert.equal(activities,1,'Switching periods is not a new seller response');
+ const sevenDayText=label(tree);funded();await flush();requests.at(-1).resolve({progress:{...sevenDay,budgetId:422,startedAt:'2026-11-03T18:00:00Z'}});await flush();
+ assert.equal(label(tree),sevenDayText,'A top-up keeps the recorded period metrics');
+ for(const malformed of [{...sevenDay,screened:null},{...sevenDay,responded:-1},{...sevenDay,status:'broken'},{...sevenDay,startAt:'invalid'},{...sevenDay,timezone:'UTC'}]){
+  for(const fn of changes)fn();await flush();requests.at(-1).resolve({progress:malformed});await flush();assert.equal(label(tree),sevenDayText,'Malformed refresh never replaces confirmed metrics');
+ }
+ for(const fn of changes)fn();await flush();const oldRequest=requests.at(-1);
+ progressProps={...progressProps,apiBase:'/api/admin/accounts/view/other'};dirty=true;await flush();assert.equal(tree,null,'Changing account scope hides prior-account metrics');
+ oldRequest.resolve({progress:{...sevenDay,screened:1000}});await flush();assert.equal(tree,null,'A late former-account response cannot repopulate the panel');
+ requests.at(-1).reject(Error('Unavailable'));await flush();assert.equal(tree,null,'Failed new account read never restores former-account data');
  console.log('PASS funded workspace: saved candidates, coalesced refresh, explicit view/search/page choices, open drafts, quiet failed reads, stable progress, actual Pause and reply recovery. No provider work.');
 }finally{cells.forEach(cell=>cell?.cleanup?.());Object.assign(globalThis,saved);}

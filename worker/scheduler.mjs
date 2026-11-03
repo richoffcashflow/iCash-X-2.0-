@@ -11,6 +11,16 @@ export function createScheduler({screening,automation,automationConcurrency=4,au
  const screeningLane=lane('screening',screening);
  const automationLanes=Array.from({length:automationConcurrency},(_,i)=>lane('automation',()=>automation(automationPools?.[i]),automationPools?.[i]??'automation'));
  const lanes=[screeningLane,...automationLanes];
+ // Idle or successful polls reset retry backoff, but cannot erase repeated
+ // database scheduling failures. Keep only the three newest times per pool:
+ // enough to detect recurrence without retaining unbounded operational history.
+ const schedulerFailureWindow=15*60000,schedulerFailureThreshold=3;
+ const schedulerFailures=new Map();
+ const recentSchedulerFailures=(pool,at)=>{
+  const recent=(schedulerFailures.get(pool)??[]).filter(time=>time>at-schedulerFailureWindow);
+  if(recent.length)schedulerFailures.set(pool,recent);else schedulerFailures.delete(pool);
+  return recent;
+ };
  let stopped=false,lastLoopAt=now(),nextAutomationAt=0,cursor=0;
  const start=lane=>{
   lane.startedAt=now();
@@ -19,6 +29,10 @@ export function createScheduler({screening,automation,automationConcurrency=4,au
    const delay=worked?(lane.name==='screening'?250:automationPools?100:1000):Math.min(lane.name==='automation'?15000:60000,(lane.name==='automation'?5000:15000)*2**(lane.idle-1));
    lane.nextAt=now()+delay;
   },error=>{
+   if(error?.code==='SCREENING_DATABASE_UNAVAILABLE'&&['icash_next_automation','icash_next_automation_lane'].includes(error.operation)){
+    const at=now(),recent=recentSchedulerFailures(lane.pool,at);
+    schedulerFailures.set(lane.pool,[...recent,at].slice(-schedulerFailureThreshold));
+   }
    lane.failures=Math.min(lane.failures+1,6);
    lane.nextAt=now()+(lane.name==='screening'?Math.min(60000,1000*2**lane.failures):Math.min(300000,15000*2**lane.failures));
    try{onFailure(lane.pool,error);}catch{/* Reporting must never poison the scheduler. */}
@@ -26,8 +40,9 @@ export function createScheduler({screening,automation,automationConcurrency=4,au
  };
  return {
   health(active=true){
+   const recurringSchedulerFailurePools=[...schedulerFailures.keys()].filter(pool=>recentSchedulerFailures(pool,now()).length>=schedulerFailureThreshold);
    const stalled=now()-lastLoopAt>180000||lanes.some(lane=>lane.pending&&now()-lane.startedAt>(['research','general'].includes(lane.pool)?260000:lane.name==='automation'?140000:75000));
-   const degraded=stalled||lanes.some(lane=>lane.failures>0);
+   const degraded=stalled||lanes.some(lane=>lane.failures>0)||recurringSchedulerFailurePools.length>0;
    const automationHeld=automationLanes.every(lane=>lane.failures>0);
    const pools=[...new Set(automationLanes.map(lane=>lane.pool))].map(name=>{
     const group=automationLanes.filter(lane=>lane.pool===name);
@@ -37,6 +52,7 @@ export function createScheduler({screening,automation,automationConcurrency=4,au
    return {code:active&&(stalled||failed)?503:200,
     body:{status:active?(degraded?'degraded':'screening'):'standby',outreachEnabled:false,
      automation:active?(stalled||automationHeld?'held':'available'):'standby',
+     recurringSchedulerFailurePools,
      automationConcurrency,automationInFlight:automationLanes.filter(lane=>lane.pending).length,...(automationPools?{pools}:{}),
      screeningInFlight:!!screeningLane.pending}};
   },

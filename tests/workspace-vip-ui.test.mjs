@@ -21,6 +21,8 @@ const props=(tree,name)=>all(tree).find(n=>n.type===component(name))?.props;
 const account={workspaceAcknowledged:true,signedIn:true,email:'admin-fixture@example.com',mode:'live',balanceCents:0,assistantName:'Fixture bot',identity:{principal:'Fixture company'},paused:true,billingModel:'membership_credits',membershipActive:true,vip:false,isBillingOwner:false};
 const regular=mount(account);let tree=regular.render();
 assert(!props(tree,'WorkspaceVipBanner'),'Workspace starts with bot controls');
+assert.equal(props(tree,'BudgetSummary').days,props(tree,'LiveWorkspace').activityDays);assert.equal(props(tree,'BudgetSummary').timezone,props(tree,'LiveWorkspace').activityTimezone);
+props(tree,'BudgetSummary').onDaysChange(7);tree=regular.render();assert.equal(props(tree,'BudgetSummary').days,7);assert.equal(props(tree,'LiveWorkspace').activityDays,7,'Selected reporting period reaches the opportunity panel without remounting work');
 const button=(root,label)=>all(root).find(n=>n.type==='button'&&text(n)===label);
 assert(button(tree,'Explore VIP'),'Non-VIP members can review VIP from the menu without credits');
 assert(!props(tree,'PlatformBuyerNetwork'),'Standard accounts do not fetch VIP network data');
