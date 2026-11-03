@@ -1,33 +1,53 @@
 import {discoveryFields} from './discovery-pipeline.ts';
 import {qualifySellerProperty} from './seller-qualification.ts';
 import {dealMachineAddress,sellerAddressReceipt,type DealMachineAddress} from './dealmachine-address.ts';
+import {finishAdmittedDealMachineRequest} from './dealmachine-request.ts';
 export type SellerDb=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
-type Lookup={id:string;token:string;address:string;assignmentFeeCents:number;sellerCostReserveCents:number};
+type Lookup={id:string;token:string;address:string;assignmentFeeCents:number;sellerCostReserveCents:number;quotaRequestId?:string;demoExpiresAt?:string;noAddressFallback?:boolean};
 /** At most one charged property per claim. A definitive zero-credit no-match can
  * use one alternate address format. A timeout or charged result is never replayed. */
 export async function processSellerIntake(db:SellerDb,key:string|undefined,transport:typeof fetch=fetch,leadId?:string,lookupBudgetMs=15000){
  if(!key||!/^dm_sk_live_[A-Za-z0-9_-]+$/.test(key))return {status:'provider_not_configured'};
  // Rate admission precedes the claim so local throttling cannot strand a paid hold.
- if(!await db<boolean>('rpc/icash_take_dealmachine_request','POST',{}))return {status:'rate_limited'};
- const claim=await db<Lookup|null>(leadId?'rpc/icash_claim_seller_lookup_for':'rpc/icash_claim_seller_lookup','POST',leadId?{p_id:leadId}:{});
+ const ordinary=await db<boolean>('rpc/icash_take_dealmachine_request','POST',{});
+ // The owner-only exception returns an atomically reserved lookup. It cannot
+ // renew an old request or spend another customer's reserved research capacity.
+ if(!ordinary&&!leadId)return {status:'rate_limited'};
+ const claim=ordinary
+  ?await db<Lookup|null>(leadId?'rpc/icash_claim_seller_lookup_for':'rpc/icash_claim_seller_lookup','POST',leadId?{p_id:leadId}:{})
+  :await db<Lookup|null>('rpc/icash_claim_owner_demo_lookup','POST',{p_id:leadId});
+ if(!ordinary&&!claim)return {status:'rate_limited'};
  if(!claim)return {status:'idle_or_setup_required'};
- const deadline=Date.now()+Math.max(1000,Math.min(15000,lookupBudgetMs));
+ const demoExpires=ordinary?Infinity:Date.parse(claim.demoExpiresAt??'');
+ const deadline=Math.min(Date.now()+Math.max(1000,Math.min(15000,lookupBudgetMs)),demoExpires);
  let stage='format',httpStatus:number|null=null,raw:unknown=null,input:DealMachineAddress|null=null;
  const attempts:{lookup:ReturnType<typeof sellerAddressReceipt>;creditsUsed:number}[]=[];
  try{
+  if(!ordinary&&(claim.id!==leadId||claim.noAddressFallback!==true||!Number.isFinite(demoExpires)
+   ||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(claim.quotaRequestId??'')))throw Error('OWNER_DEMO_LOOKUP_CLAIM_INVALID');
   const lookup=async()=>{
    stage='provider_request';raw=null;httpStatus=null;
-   const r=await transport('https://api.v2.dealmachine.com/v1/enrichment/address',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({data:[input],fields:[...discoveryFields,'property_type'],contact_audience:'none'}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(Math.max(1,deadline-Date.now()))});
-   httpStatus=r.status;
-   if(!r.ok)throw Error('Provider response needs review');
-   stage='provider_decode';raw=await r.json();stage='qualification';
+   const request=()=>{
+    if(!ordinary&&Date.now()>=demoExpires)throw Error('OWNER_DEMO_LOOKUP_REQUEST_EXPIRED');
+    return transport('https://api.v2.dealmachine.com/v1/enrichment/address',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({data:[input],fields:[...discoveryFields,'property_type'],contact_audience:'none'}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(Math.max(1,deadline-Date.now()))});
+   };
+   if(ordinary){
+    const r=await request();httpStatus=r.status;
+    if(!r.ok)throw Error('Provider response needs review');
+    stage='provider_decode';raw=await r.json();
+   }else{
+    const r=await finishAdmittedDealMachineRequest(db,claim.quotaRequestId!,request);
+    httpStatus=r.status;raw=r.raw;
+    if(!r.ok)throw Error('Provider response needs review');
+   }
+   stage='qualification';
    const output=qualifySellerProperty(raw,{assignmentFeeCents:claim.assignmentFeeCents,sellerCostReserveCents:claim.sellerCostReserveCents});
    attempts.push({lookup:sellerAddressReceipt(input!,raw),creditsUsed:output.creditsUsed});
    return output;
   };
   input=dealMachineAddress(claim.address);
   let output=await lookup();
-  if(deadline-Date.now()>1000&&output.status==='unmatched'&&output.creditsUsed===0&&'street' in input&&['not_found','no_match'].includes(attempts[0].lookup.failureCode??'')&&await db<boolean>('rpc/icash_take_dealmachine_request','POST',{})){
+  if(ordinary&&deadline-Date.now()>1000&&output.status==='unmatched'&&output.creditsUsed===0&&'street' in input&&['not_found','no_match'].includes(attempts[0].lookup.failureCode??'')&&await db<boolean>('rpc/icash_take_dealmachine_request','POST',{})){
    const alternate={full_address:[input.street+(input.unit?' '+input.unit:''),input.city,input.state+(input.zip?' '+input.zip:'')].join(', ')};
    // Store the definitive no-charge receipt before the only fallback. A lost
    // response remains held by the original claim, including after a crash.
@@ -48,6 +68,7 @@ export async function processSellerIntake(db:SellerDb,key:string|undefined,trans
   // Keep a bounded private receipt so format/qualification failures can be
   // repaired from evidence without spending another provider credit.
   try{
+   if(!ordinary&&claim.id!==leadId)return {status:'lookup_requires_review'};
    const providerResponse=raw&&JSON.stringify(raw).length<=48000?raw:null;
    await db(`icash_seller_intakes?id=eq.${claim.id}&claim_token=eq.${claim.token}&state=eq.checking`,'PATCH',{
     state:'review',hold_reason:`Lookup needs review at ${stage}; no automatic retry`,
