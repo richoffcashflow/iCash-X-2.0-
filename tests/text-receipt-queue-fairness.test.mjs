@@ -1,4 +1,3 @@
-import {assertMigrationConfig} from './helpers/funded-recovery-migration.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
@@ -22,7 +21,7 @@ try{
  const originalSchedule=await one('select jsonb_agg(to_jsonb(s) order by message_id) from icash_text_receipt_private.schedule s');
  const originalControl=await one('select to_jsonb(c) from icash_text_receipt_private.control c');
  const patch=read('config/text-receipt-queue-fairness.sql');
- assertMigrationConfig('text-receipt-queue-fairness',patch);
+ assert.equal(patch,read('supabase/migrations/20261103181900_text_receipt_queue_fairness.sql'));
  await pg.exec(patch);
  assert.deepEqual(await one('select jsonb_agg(to_jsonb(s) order by message_id) from icash_text_receipt_private.schedule s'),originalSchedule,'Migration cannot reset retry counters/deadlines');
  assert.deepEqual(await one('select to_jsonb(c) from icash_text_receipt_private.control c'),originalControl,'Migration cannot reset global read quota');

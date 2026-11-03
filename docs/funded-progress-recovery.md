@@ -9,10 +9,14 @@ photo reads use the local HTTPS fixture without Playwright routing. Production
 readback confirms the reception backoff and bounded opener migrations at
 20261103162508 and 20261103162517. Their repository filenames match that history.
 
-The remaining five reviewed changes, read-only research quota monitor and
+The two remaining preflight changes, read-only research quota monitor and
 identity-bound pending-buffer correction are
 packaged in one atomic migration, `funded_recovery_completion`; the indexing
-dependency precedes quota continuation. Original config sections are checked
+dependency precedes quota continuation. Production also installed literal identity (20261103181852), text receipt fairness
+(20261103181900) and due retry priority (20261103181911) during this review.
+Their exact live function bodies were verified against the reviewed patches,
+and their repository migration filenames now match. Unrelated opportunity
+progress migrations are preserved. Original config sections are checked
 byte-for-byte. Both new preflight switches remain false. Installation requires
 the database service's confirmation; an expired confirmation is not a deploy.
 Reconcile the generated migration timestamp after installation, rerun exact

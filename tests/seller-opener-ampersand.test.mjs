@@ -1,4 +1,3 @@
-import {assertMigrationConfig} from './helpers/funded-recovery-migration.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
@@ -18,7 +17,7 @@ try{
  assert.equal(await one('select icash_sms_single_segment($1)',[expected]),true,'Existing financial segment checker already permits literal ampersand');
  assert.deepEqual(smsLength(expected),{units:expected.length,limit:160,fits:true});
  await pg.exec(migration);
- assertMigrationConfig('seller-opener-literal-ampersand',migration);
+ assert.equal(migration,readFileSync(new URL('../supabase/migrations/20261103181852_seller_opener_literal_ampersand.sql',import.meta.url),'utf8'));
  const changed=await definitions();
  for(const [name,before] of Object.entries(original))assert.equal(changed[name],before.replaceAll('[^A-Za-z0-9 .,!?]','[^A-Za-z0-9 .,!?&]'),'Only the literal one-unit character allowance changes: '+name);
  await pg.exec(migration);assert.deepEqual(await definitions(),changed,'Exact reapplication is a no-op');
