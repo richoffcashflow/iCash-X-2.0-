@@ -1,0 +1,23 @@
+# Remaining outage recovery — November 3, 2026
+
+The owner requested continued repair after the earlier call and research recoveries. At 03:54 UTC, production still reported 22 accounts without completed work, 56 accounts blocked by pending operations, and an unverified incoming-text line. Worker uptime and passing tests do not establish full recovery.
+
+## Confirmed causes
+
+- The calling scheduler repeatedly planned the full owner-demonstration proof for ordinary accounts, including during outside-hours scans. Database logs showed timeouts in this predicate and the calling-hours helper. Return false for a different account or null job before planning the unchanged owner proof; resolve the validated timezone and local hour once. Keep the original owner evidence, clock boundaries, locks, function identities and access grants.
+- Acquisition admission inspected hundreds of historical tickets per account to exclude a small number of active tickets. Index the exact existing issued/consumed predicate without changing selection, expiry, fairness or locks. Property-evidence lookups also need an index on the existing property identifier expression, with account and screening identity available, rather than repeated scans of historical snapshots.
+- A free batch preview with explicit zero available owner phones was discarded before recording evidence for its siblings. Retain the original admitted, successful, zero-credit preview for every exactly bound empty sibling. Only explicit numeric zero for every identified owner qualifies. Unknown availability, ambiguous owners and missing cost metadata remain unknown. Exclude the original snapshot only through its existing bounded freshness window; never backfill a historical preview or alter a paid-operation hold.
+- A repeated configuration check can stop an already-claimed voice handler before recording creation or dialing. Preserve an explicit synchronous pre-create result and bind it to the current consumed ticket, original dispatch time and operation. A locked finalizer may settle that proven unstarted operation at zero while keeping the job held. It cannot release an older hold from absence of a recording, accept an expired handler, or override any original provider evidence.
+- Accepted outgoing texts can lack terminal webhook delivery receipts. A bounded canonical GET of an original message ID can recover delivery evidence without sending again. Bind the response to the original sender, recipient, body, attachments, timestamp and settled operation; retain raw observations and reject contradictory terminal states. Historical delivery recovery must not start seller or Meta follow-up work, change billing, ingest incoming messages or claim that incoming reception is healthy.
+
+## Verification and release
+
+Use the actual SQL predicates and message observers in regression fixtures. Compare calling hours across timezones and DST boundaries, retain original source and financial hashes, and exercise account/source changes, manual Pause, late provider receipts, callbacks and competing workers. The native PostgreSQL tests run in the reliability workflow's isolated database; no paid provider demonstrations are authorized.
+
+All release checks must pass for the exact PR and merged production commit. Verify both web and background-worker deployments and then inspect ordinary production results. Performance measurements from different live account cohorts must not be presented as a controlled end-to-end speedup.
+
+## Evidence that remains unresolved
+
+The remaining historical calls are not the answered-parent/unanswered-child cohort repaired earlier. Completed browser parents still lack final connectivity prices. Some recorded calls and incoming sessions lack an exactly matching AI conversation; a candidate with a different carrier call or provider version cannot be adopted. Older quota-failed conversations also lack an explicit final USD receipt. Preserve these original financial obligations.
+
+At the initial check, 720 remained enabled with delivered outgoing messages but no recent property reply; 424 remained disabled following the owner's carrier-blocking report. A genuine earlier owner verification message and outgoing delivery receipts do not prove the full incoming customer path. Keep the incident and incoming warning truthful until original evidence supports recovery. No signed customer agreement or closed deal is implied by these engineering changes.

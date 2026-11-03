@@ -100,6 +100,13 @@ try{
  await pg.exec(sql);
  await pg.exec(demoSql);await pg.exec(demoSql);
  await pg.exec(callbackSql);await pg.exec(callbackSql);
+ // Exercise every existing owner-demo/spacing/final-admission scenario with
+ // the production fast guard, including the real permission row lock.
+ await pg.exec('set check_function_bodies=off');
+ for(const row of JSON.parse(read('tests/fixtures/outreach-predicates-before.json')))
+  if(row.signature!=='icash_owner_demo_call_current(uuid,uuid)')await pg.exec(row.definition);
+ await pg.exec(read('config/outreach-predicate-performance.sql'));
+ await pg.exec('drop function icash_outreach_window_open(text,text,timestamptz);drop function icash_outreach_timezone(text,text);set check_function_bodies=on');
  for(const role of ['anon','authenticated'])assert.equal(await val("select has_function_privilege($1,'icash_owner_demo_call_current(uuid,uuid)','execute')",[role]),false);
  assert.equal(await val("select has_function_privilege('service_role','icash_owner_demo_call_current(uuid,uuid)','execute')"),true);
  assert.equal(await val("select has_function_privilege('anon','icash_seller_phone_call_current(uuid,uuid)','execute')"),false);

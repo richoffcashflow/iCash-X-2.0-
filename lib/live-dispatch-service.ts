@@ -29,12 +29,13 @@ import {elevenRequest} from '@/lib/elevenlabs';
 import {buyerCallInstructions,buyerFirstMessage,type BuyerCallContext} from './buyer-call-policy.ts';
 import {contactEligibility,callEligibility,nextContactWindow,type VoicePermission} from './live-dispatch-policy.ts';
 import {readVoiceOutreachContext} from './outreach-hours.ts';
+import {finishVoicePredialAbort,type VoiceAutomationClaim} from './voice-predial-abort.ts';
 import {sellerFirstMessage,sellerCallPrompt,sellerCallContext,compactSellerProgress,type SellerRequestContext} from './seller-call-context.ts';
 type Job={id:string;account_id:string;permission_id:string|null;operational_contact_id?:string|null;callback_id:string|null;sms_source_message_id?:string|null;cancellation_notice_id?:string|null;state:string};
 type Config={approved_voice_ids:string[];enabled:boolean;agent_id:string;phone_number_id:string;agent_config_hash:string;reviewed_until:string;seller_rate_id:string;buyer_rate_id:string|null;max_duration_seconds:number;required_tool_ids:string[]};
 type Permission=VoicePermission&{id:string;account_id:string;screening_id:string;party:'seller'|'buyer';contact_key:string;seller_intake_id?:string|null};
 const outboundVoiceParties:ReadonlySet<string>=new Set(['seller']);
-export async function dispatchLiveVoice(accountId:string,jobId:string){
+export async function dispatchLiveVoice(accountId:string,jobId:string,automation?:VoiceAutomationClaim){
  if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready'};
  const [j]=await db<Job[]>(`icash_voice_jobs?id=eq.${jobId}&account_id=eq.${accountId}&select=*`);if(!j||j.state!=='issued')return {status:'held'};
  let ownsDispatch=false;
@@ -215,8 +216,10 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
  if(!claimed)return hold('dispatch_permission_changed');
  ownsDispatch=true;
  try{
+ const [dispatchOperation]=automation?await db<{dispatched_at:string|null}[]>(`icash_operation_spend?operation_key=eq.${encodeURIComponent(operationKey)}&account_id=eq.${accountId}&state=eq.dispatched&select=dispatched_at`):[];
+ const finishPredial=(result:{status:string;dispatchBoundary?:string})=>finishVoicePredialAbort(db,{accountId,jobId,automation,dispatchedAt:dispatchOperation?.dispatched_at??null,result});
  await db(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&state=eq.dispatching`,'PATCH',{sms_context:smsContext});
- const dispatchHold=recordingReleaseHold();if(dispatchHold)return hold(dispatchHold);
+ const dispatchHold=recordingReleaseHold();if(dispatchHold){await finishPredial({status:dispatchHold,dispatchBoundary:'before_recording_create_v1'});return hold(dispatchHold);}
  const result=await recordingServer().dispatch({accountId,operationKey,fromPhone:businessNumber,maxTotalSeconds:fundedCall.maxSeconds,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:callVoiceId,firstMessage:cancellation?`Hello, this is ${account.assistant_name}, an AI assistant calling for ${identity.principal} about an agreement update. Am I speaking with the property seller?`:sellerGreeting??buyerFirstMessage(buyerContext!),prompt,strategyKey:strategy});
  // A started call is connecting; only the recording service can confirm capture.
  if(result.status==='recording_consent_pending'){
@@ -227,6 +230,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string){
   return {status:'call_started'};
  }
  if(result.status==='recording_dial_unknown_no_retry')return {status:'provider_outcome_unknown_no_retry'}; // Keep the durable claim recoverable; never redial.
+ await finishPredial(result);
  return hold(result.status);
  }catch{return hold('provider_outcome_unknown_no_retry');}
 }

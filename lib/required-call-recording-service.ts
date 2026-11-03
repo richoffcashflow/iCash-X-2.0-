@@ -57,14 +57,17 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
   /** Internal adapter only. SQL requires already-reserved/dispatched operation and reviewed contact gates.
    * Wired only after normal dispatcher reserve/claim; recorded rate/config rollout is required first. */
   async dispatch(input:{fromPhone?:string;maxTotalSeconds?:number;buyerKind?:'company'|'individual';accountId:string;operationKey:string;principal:string;assistantName:string;voiceId?:string;firstMessage:string;prompt:string;strategyKey:'cash_interest'|'flexible_timing'}){
-   if(!dispatchAllowed())return {status:'recording_release_required'};
-   const review=await readReview();if(!review||!await checkAgent(review))return {status:'recording_review_required'};
+   // This marker is returned only before the first recording admission RPC.
+   // Identical status text after create/claim must retain its uncertain hold.
+   const beforeCreate=(status:string)=>({status,dispatchBoundary:'before_recording_create_v1' as const});
+   if(!dispatchAllowed())return beforeCreate('recording_release_required');
+   const review=await readReview();if(!review||!await checkAgent(review))return beforeCreate('recording_review_required');
    const fromPhone=input.fromPhone??review.fromPhone;
    if(fromPhone!==review.fromPhone){
-    if(review.fromPhone!==primaryBusinessPhone||!isAdditionalBusinessPhone(fromPhone))return {status:'business_number_verification_required'};
-    try{if(!await secondaryCallingReady(db,env,fetch,fromPhone))return {status:'business_number_verification_required'};}catch{return {status:'business_number_verification_required'};}
+    if(review.fromPhone!==primaryBusinessPhone||!isAdditionalBusinessPhone(fromPhone))return beforeCreate('business_number_verification_required');
+    try{if(!await secondaryCallingReady(db,env,fetch,fromPhone))return beforeCreate('business_number_verification_required');}catch{return beforeCreate('business_number_verification_required');}
    }
-   if(!dispatchAllowed())return {status:'recording_release_required'};
+   if(!dispatchAllowed())return beforeCreate('recording_release_required');
    if(!uuid(input.accountId)||!/^voice:[0-9a-f-]{36}$/i.test(input.operationKey)||input.prompt.length>24000||input.firstMessage.length>2000)throw Error('RECORDING_CONTEXT_REQUIRED');
    const maxSeconds=input.maxTotalSeconds??600;if(!Number.isInteger(maxSeconds)||maxSeconds<120||maxSeconds>600||maxSeconds%60!==0)throw Error('CALL_CAP_REQUIRED');
    const disclosure=recordingDisclosure(input.principal,input.assistantName,input.buyerKind),nonce=randomBytes(32).toString('hex'),stop=recordingStopToken(input.operationKey,env);

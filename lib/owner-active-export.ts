@@ -2,7 +2,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {gunzipSync} from 'node:zlib';
 import {isDeepStrictEqual} from 'node:util';
 import {dealMachineRequest,finishAdmittedDealMachineRequest,DealMachineQuotaError,type ResearchDb} from './dealmachine-request.ts';
-import {ownerBatchAudience} from './owner-batch.ts';
+import {ownerBatchAudience,savePhoneLessOwnerPreviews} from './owner-batch.ts';
 import {previewAudience} from './owner-enrichment.ts';
 import {runScreeningJob} from './screening-job.ts';
 import {OwnerPreviewRateLimitError} from './owner-enrichment-deferral.ts';
@@ -175,12 +175,14 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  const mobileOnly=pools[primary.screeningId]==='mobile';
  candidates=candidates.filter(x=>pools[x.screeningId]===pools[primary.screeningId]);
  const batchId=randomUUID(),key=process.env.DEALMACHINE_API_KEY;
- let preview:unknown;
+ let preview:unknown,previewRequestId='';
  try{
   const r=await dealMachineRequest(db,'owner_preview',()=>transport('https://api.v2.dealmachine.com/v1/properties/ids',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({ids:candidates.map(x=>object(x.snapshot).propertyId),enrich:false,contact_audience:'owners'}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)}),{accountId,operationKey:'owner-batch:'+batchId});
-  if(!r.ok)throw Error('OWNER_PREVIEW_FAILED_NO_RETRY');preview=r.raw;
+  if(!r.ok)throw Error('OWNER_PREVIEW_FAILED_NO_RETRY');preview=r.raw;previewRequestId=r.requestId;
  }catch(error){if(error instanceof DealMachineQuotaError)throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);throw error;}
- const audience=ownerBatchAudience(preview,candidates,c.contact_credit_cap).filter(a=>a.ids.length);
+ const allAudience=ownerBatchAudience(preview,candidates,c.contact_credit_cap);
+ await savePhoneLessOwnerPreviews(db,accountId,batchId,previewRequestId,preview,candidates,allAudience);
+ const audience=allAudience.filter(a=>a.ids.length);
  if(!audience.length)return {status:'empty',contacts:0};
  const request=activeOwnerExportRequest([...new Set(audience.flatMap(a=>[...a.ids]))],mobileOnly);
  const items=audience.map(a=>({screeningId:a.screeningId,snapshot:a.snapshot,ids:[...a.ids]}));
