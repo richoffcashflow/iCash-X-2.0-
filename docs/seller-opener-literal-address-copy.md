@@ -1,5 +1,11 @@
 # Literal seller copy and contact-proof ordering
 
+Installed November 3 at 20:46:25 UTC as `20261103204625` after all four
+jobs in exact revision `6d5c21b` run `41705498034` passed. The installed SQL
+MD5 is `2e8e5ab828bde871f2ab5fdd6b4529c9`. The migration filename now matches
+that actual ledger entry; no original send, charge or uncertain receipt was
+replayed. Actual new deliveries and settlements still require verification.
+
 A read-only review on November 3 found 95 fresh opener candidates in the earlier
 unbounded invitation/opener selector, before the existing 32-row cursor. All 95
 were within current dispatch hours; 70 passed the current cadence check and

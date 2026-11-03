@@ -1,5 +1,34 @@
 # Funded account progress and provider waits
 
+## Remaining voice and text installation, November 3 20:46 UTC
+
+PR #545 revision `6d5c21bde367fa73696e46477a3a881db561710f` passed all four
+jobs in run `41705498034`: the full suite, production build/concurrency/browser
+checks, dependency audit and all 36 native PostgreSQL scripts. The ordinary
+voice test uses the captured production worker entry, keeps the 1,000-job
+backlog, 24 workers and original eight-second deadline, and retains a direct
+full scan plus late-hold and fairness checks. The earlier two native failures
+are preserved in the incident evidence; neither authorized installation.
+
+The guarded ordinary phone fence installed as `20261103204619`, SQL MD5
+`5d324c7f605e87df0ae5d2f30a1d0048`; the live issuer MD5 is
+`be5503735965b3de7e627d9924162e56`. Literal address/identity copy installed as
+`20261103204625`, SQL MD5 `2e8e5ab828bde871f2ab5fdd6b4529c9`. Readback at
+20:46:40 UTC verified both exact statements and all five changed definitions;
+the worker-lane entry remains MD5 `3463e54ab56e8a7732a3af2febf9dc88`.
+All fifteen recovery migrations now use their actual installed versions and
+hashes. Preserve independently reviewed request-reserve and contact-preparation
+work; those separate PRs and activation gates are outside this repair.
+
+Serving web and worker were still #544 (`b16925a2`) at this installation.
+Final reconciled-head/main checks, matching services and actual completed work
+remain required. The 19:25 checkpoint had 45 stalled and 68 monitor-pending
+accounts (29 stalled accounts also had unresolved operations), $0.82 net usage
+across seven accounts in its fixed hour, and two scheduler timeouts in the
+19:14-19:24 window. These are pre-installation observations, not recovery
+results. The existing local research allowance and original uncertain receipts
+remain binding; no counter, customer budget or financial hold was changed.
+
 ## Remaining live scan evidence, November 3 19:16 UTC
 
 Readback found a separately installed global voice contact index under migration

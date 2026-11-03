@@ -1,5 +1,12 @@
 # Check ordinary phone spacing before capacity
 
+Installed November 3 at 20:46:19 UTC as `20261103204619` after all four
+jobs in exact revision `6d5c21b` run `41705498034` passed. The installed SQL
+MD5 is `5d324c7f605e87df0ae5d2f30a1d0048`; the issuer definition is
+`be5503735965b3de7e627d9924162e56`. Repository migration history retains that
+exact version so deployment will not replay it. Production results are tracked
+separately in `funded-progress-recovery.md`.
+
 The November 3 ordinary voice timeout remained after the global contact index.
 Read-only profiling of the actual fallback SELECT found 159 inexpensive
 candidates across 34 accounts. Of these, 150 passed the slot predicate but only

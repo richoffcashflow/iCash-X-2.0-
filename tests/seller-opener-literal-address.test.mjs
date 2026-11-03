@@ -76,6 +76,6 @@ try{
  });
  await isolated(async()=>{await pg.exec("insert into icash_text_messages(account_id,thread_id,state,direction,body) select account_id,id,'needs_review','outgoing','Original uncertain receipt' from icash_text_threads;");assert.equal(await one(queueSql),null);assert.equal(await one(candidate),null);assert.equal(await one('select state from icash_text_messages'),'needs_review');});
  for(const role of ['public','anon','authenticated'])assert.equal(await one("select has_function_privilege($1,'icash_queue_seller_opener(uuid,uuid)','execute')",[role]),false);
- assert.equal(migration,read('supabase/migrations/20261103192500_seller_opener_literal_address_copy.sql'));
+ assert.equal(migration,read('supabase/migrations/20261103204625_seller_opener_literal_address_copy.sql'));
  console.log('PASS literal # / - identity and address, unchanged 160-unit pricing/actual queue/routing; impossible copy avoids proof and every valid copy retains full review; saved controls, holds and money preserved.');
 }finally{await pg.close();}

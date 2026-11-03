@@ -16,6 +16,8 @@ export const fundedRecoveryMigrations={
  'urgent-voice-source-gate':'20261103184920_urgent_voice_source_gate.sql',
  'voice-global-contact-index':'20261103190835_voice_global_contact_index.sql',
  'legacy-voice-candidate-fence':'20261103191344_legacy_voice_candidate_fence.sql',
+ 'ordinary-voice-phone-fence':'20261103204619_ordinary_voice_phone_fence.sql',
+ 'seller-opener-literal-address-copy':'20261103204625_seller_opener_literal_address_copy.sql',
 };
 export function assertMigrationConfig(name,source){
  assert.ok(Object.hasOwn(fundedRecoveryMigrations,name),'Known independently deployable recovery step');
