@@ -6,7 +6,7 @@ function fixture(options={}){
  const db=async(path,method,p)=>{
   assert.equal(method,'POST');
   if(path==='rpc/icash_claim_owner_preflight')return {...base,status,mobileOnly:options.mobile??false,nextStep:options.nextStep};
-  if(path==='rpc/icash_take_dealmachine_request')return options.quota!==false;
+  if(path==='rpc/icash_take_dealmachine_request'){assert.equal(p.p_account,account,'All starter lifecycle reads retain their account');return options.quota!==false;}
   if(path==='rpc/icash_defer_owner_preflight_quota'){assert.match(p.p_request,/^[0-9a-f-]{36}$/);assert.equal(p.p_lease,base.lease);status=options.refuseDeferral?'held':'pending';return !options.refuseDeferral;}
   if(path==='rpc/icash_finish_dealmachine_request'){metrics.push(p);return true;}
   if(path==='rpc/icash_record_owner_preflight'){
@@ -20,7 +20,7 @@ function fixture(options={}){
   }
   if(path==='rpc/icash_claim_owner_preflight_cleanup'){
    if(options.noCleanup||cleanupClaimed||status==='pending')return null;
-   cleanupClaimed=true;return {id:base.id,token:'cleanup-token',listId:base.listId};
+   cleanupClaimed=true;return {id:base.id,token:'cleanup-token',listId:base.listId,accountId:account};
   }
   if(path==='rpc/icash_record_owner_preflight_cleanup'){receipts.push(p);return true;}
   throw Error('Unexpected write '+path);

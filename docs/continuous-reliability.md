@@ -1,5 +1,12 @@
 # Continuous reliability
 
+The November 3 new-user reserve protects starter research capacity at the shared
+limiter, with account-aware scheduling and operator capacity reporting. See
+`new-user-request-reserve.md`. Offline and native contention coverage must verify
+the ordinary boundary, global cap, per-account allowance, original one-use
+requests, provider holds and nonrenewable first-funding eligibility before
+activation; queued research is not a completed starter outcome.
+
 The November 3 reporting repair decouples completed activity from credit refills, shares calendar periods across the workspace, and retains recurring scheduler database failures across successful/idle polls. See `opportunity-progress-reliability.md`. Regression coverage validates original event dates, tenant/practice boundaries, missing metrics, stale response races and bounded health recovery.
 
 The November 3 continuation addresses ordinary scheduler scans entering owner-only evidence, historical-ticket/property scans, configuration-recovery contact joins, global text-thread history scans, repeated explicit empty owner previews, proven current pre-dial abort holds and missing outgoing-text delivery receipts. See `remaining-outage-recovery.md` and `text-delivery-recovery.md`. Nine native PostgreSQL scenarios cover predicate isolation, both acquisition indexes, configuration lookup and competing recovery, the text-thread index, concurrent empty-preview persistence, reviewed local-rejection recovery, abort/create races and canonical text recovery versus callbacks. They complement actual-service PGlite tests; none sends paid development outreach.

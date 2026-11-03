@@ -16,7 +16,7 @@ export async function discoverForAccount(accountId:string){
  const providerDeadline=AbortSignal.timeout(90000);
  if(!discoveryWorkEnabled())return {status:'live_work_not_ready'};
  if(process.env.ICASH_ACQUISITION_MODE==='hybrid'&&!await db<boolean>('rpc/icash_outbound_search_due','POST',{p_account:accountId}))return {status:'supply_target_met'};
- await syncResearchExclusions(db).catch(()=>null);
+ await syncResearchExclusions(db,fetch,accountId).catch(()=>null);
  await db('rpc/icash_prepare_research_efficiency','POST',{p_account:accountId});
  const [c]=await db<Config[]>(`icash_discovery_configs?account_id=eq.${accountId}&select=*`);
  if(!c?.enabled||c.exhausted||!(Date.parse(c.data_rights_until)>Date.now()))return {status:'not_ready'};

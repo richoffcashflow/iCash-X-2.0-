@@ -1,5 +1,5 @@
 import {dealMachineRequest,DealMachineQuotaError,type ResearchDb} from './dealmachine-request.ts';
-type Claim={action:'create'|'recover'|'sync';token:string;name:string;listId:string|null;ids:string[]};
+type Claim={action:'create'|'recover'|'sync';token:string;name:string;listId:string|null;ids:string[];accountId?:string};
 const listId=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9_-]{1,100}$/.test(v);
 const providerListId=(v:unknown)=>listId(v)?v:typeof v==='number'&&Number.isSafeInteger(v)&&v>0?String(v):null;
 // List membership uses numeric internal IDs, while property lookups and our
@@ -8,17 +8,18 @@ const internalPropertyId=(v:string)=>{const id=Number(v.slice(5));if(!/^prop_[1-
 const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 /** Only provider property IDs are filed; no customer identity, conversations or
  * prospect creation. Adding an existing ID is documented as free/idempotent. */
-export async function syncResearchExclusions(db:ResearchDb,request:typeof fetch=fetch){
+export async function syncResearchExclusions(db:ResearchDb,request:typeof fetch=fetch,accountId?:string){
  const key=process.env.DEALMACHINE_API_KEY;if(!key)return {status:'unconfigured'};
- const c=await db<Claim|null>('rpc/icash_claim_research_exclusions','POST',{});
+ const c=await db<Claim|null>(accountId?'rpc/icash_claim_starter_research_exclusions':'rpc/icash_claim_research_exclusions','POST',accountId?{p_account:accountId}:{});
  if(!c)return {status:'not_due'};
  if(!['create','recover','sync'].includes(c.action)||!listId(c.token)||!/^research-exclusions-[a-f0-9-]{36}$/.test(c.name)||!Array.isArray(c.ids)||c.ids.length>1000||c.ids.some(x=>!/^prop_[0-9]{1,20}$/.test(x))||c.action==='sync'&&!listId(c.listId))throw Error('RESEARCH_EXCLUSION_CLAIM_INVALID');
+ if(c.accountId!==undefined&&(c.accountId!==accountId||c.action!=='sync'))throw Error('RESEARCH_EXCLUSION_ACCOUNT_INVALID');
  const finish=(result:object)=>db('rpc/icash_finish_research_exclusions','POST',{p_token:c.token,p_result:result});
  let stage='request';
  try{
   const endpoint=c.action==='sync'?`/lists/${c.listId}/items`:c.action==='recover'?'/lists?page=1&per_page=100':'/lists';
   const body=c.action==='create'?{name:c.name,source_type:'properties',add_as_prospects:false}:c.action==='sync'?{ids:c.ids.map(internalPropertyId),id_type:'internal_property_id',add_as_prospects:false}:null;
-  const r=await dealMachineRequest(db,c.action==='create'?'exclusion_create':'exclusion_sync',()=>request('https://api.v2.dealmachine.com/v1'+endpoint,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(10000)}));
+  const r=await dealMachineRequest(db,c.action==='create'?'exclusion_create':'exclusion_sync',()=>request('https://api.v2.dealmachine.com/v1'+endpoint,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(10000)}),c.accountId?{accountId:c.accountId,operationKey:'starter-exclusion:'+c.token}:{});
   if(!r.ok)throw Error('RESEARCH_EXCLUSION_RESPONSE');
   stage='identity';const raw=object(r.raw);let data=object(raw.data);
   if(c.action==='recover'){
