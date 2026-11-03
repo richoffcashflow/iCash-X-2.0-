@@ -26,7 +26,16 @@ The offline test uses the captured live issuer and synthetic guard boundaries
 that raise if capacity is reached for a rejected ordinary phone. It verifies
 large rejected prefixes, later eligible work, unchanged account fairness,
 urgent priority, Pause/funds/hours/source rejection, ACLs and financial records.
-The native script exercises custom/generic prepared queries, 24 competing
-issuers and a capacity hold committed
-while an issuer waits on the original scheduler lock. Native execution and the
-exact release remain required; no paid calls or provider tests are involved.
+The native script exercises custom/generic prepared queries, a full 1,000-job
+inner scan under the original eight-second statement deadline, and 24 workers
+through the captured production voice-lane entry. That entry's existing
+nonblocking advisory admission returns when another worker is selecting work;
+calling the inner issuer directly from every worker instead accumulated
+artificial scheduler-row waits in the first two native runs. The test keeps the
+same workload and deadline, verifies busy admission without issuing a ticket,
+then verifies one later eligible ticket. Separate direct-inner tests retain the
+capacity hold committed while an issuer waits on the original scheduler lock
+and the original account-fairness checks. The synthetic guard lookup remains
+indexed; no production function or scheduling policy changes for this fixture
+correction. Native execution and the exact release remain required; no paid
+calls or provider tests are involved.

@@ -11,6 +11,7 @@ voice = module_from_spec(SPEC)
 SPEC.loader.exec_module(voice)
 sql, uid = voice.sql, voice.uid
 PATCH = (ROOT/'config/ordinary-voice-phone-fence.sql').read_text()
+LANE = "set role service_role;set application_name='ordinary-voice-lane-contender';select coalesce(icash_next_automation_lane('voice')::text,'null');"
 
 
 def setup():
@@ -19,6 +20,15 @@ def setup():
     sql((ROOT/'tests/fixtures/ordinary-voice-phone-instrumentation.sql').read_text())
     sql('grant usage,select,update on sequence fixture_slot_checks to service_role;')
     sql(PATCH)
+    # Capture the actual worker entry, including its existing nonblocking
+    # admission. Concurrent workers do not call the inner issuer directly.
+    sql('drop schema if exists icash_work_private cascade;create schema icash_work_private;'
+        'create table icash_work_private.dispatch_policy(id integer primary key,enabled boolean);'
+        'insert into icash_work_private.dispatch_policy values(1,true);')
+    sql((ROOT/'tests/fixtures/automation-lane-current.sql').read_text())
+    assert sql("select md5(pg_get_functiondef('icash_next_automation_lane(text)'::regprocedure));") == '3463e54ab56e8a7732a3af2febf9dc88'
+    sql('revoke all on function icash_next_automation_lane(text) from public,anon,authenticated;'
+        'grant execute on function icash_next_automation_lane(text) to service_role;')
 
 
 setup()
@@ -45,10 +55,27 @@ ordinary = issuer[start:end].replace('into j ', '').replace('for update of v ski
 for mode in ('force_custom_plan', 'force_generic_plan'):
     assert sql('set role service_role;set plan_cache_mode='+mode+';prepare ordinary_phone_plan(jsonb) as select count(*) from ('+ordinary+") permitted;execute ordinary_phone_plan('{}'::jsonb);") == '0'
     assert sql('select is_called from fixture_slot_checks;') == 'f', 'Prepared plans retain the phone fence'
-assert voice.contenders() == [None]*24
+# Independently bound one full inner scan by the original helper's 8-second
+# deadline. The 24-worker race then follows the real nonblocking lane entry.
+assert json.loads(sql(voice.ISSUE)) is None
+assert voice.contenders(LANE) == [None]*24
 assert sql('select is_called from fixture_slot_checks;') == 'f', 'Phone-blocked jobs cannot reach expensive capacity'
 late = voice.seed(5000, 'ordinary', account=2, age=1)
-results = voice.contenders()
+# Admission already held by another worker must return promptly even with
+# eligible work. This is the production function, not a test-only try-lock shim.
+admission = subprocess.Popen(voice.base.CMD, env=voice.base.ENV, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+try:
+    admission.stdin.write("begin;select pg_advisory_xact_lock(726341927);select 'voice_lane_locked';\n")
+    admission.stdin.flush()
+    voice.base.wait_for_marker(admission, 'voice_lane_locked')
+    assert voice.contenders(LANE) == [None]*24
+    assert sql('select count(*) from icash_automation_tickets;') == '0'
+    admission.stdin.write('rollback;\n\\q\n');admission.stdin.flush();admission.wait(timeout=5)
+    assert admission.returncode == 0, admission.stderr.read()
+finally:
+    if admission.poll() is None:
+        admission.kill();admission.wait(timeout=5)
+results = voice.contenders(LANE)
 assert sum(bool(r) for r in results) == 1
 assert sql(f"select count(*) from icash_automation_tickets where voice_job_id='{late}';") == '1'
 assert sql('select last_value from fixture_slot_checks;') == '1'
@@ -97,7 +124,7 @@ for mutation in ("update icash_accounts set bot_paused=true;", "update icash_wal
     voice.seed(8000, 'ordinary')
     sql(mutation)
     money = voice.money()
-    assert voice.contenders() == [None]*24
+    assert voice.contenders(LANE) == [None]*24
     assert voice.money() == money
     assert sql('select count(*) from icash_automation_tickets;') == '0'
-print('PASS native ordinary phone fence:24 contenders skip1000 phone-blocked capacity checks; one later eligible ticket; late committed capacity hold, original scheduler locks, ordinary fairness, Pause, reservations and expired-source rejection preserved. No providers.')
+print('PASS native ordinary phone fence:single full inner scan within original8s deadline;24 real-lane contenders skip1000 phone-blocked capacity checks; busy production admission returns without issue; one later eligible ticket; direct-inner late capacity hold, original scheduler locks, ordinary fairness, Pause, reservations and expired-source rejection preserved. No providers.')

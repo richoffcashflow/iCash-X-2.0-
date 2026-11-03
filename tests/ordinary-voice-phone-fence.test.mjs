@@ -19,6 +19,9 @@ try{
  await pg.exec(read('tests/fixtures/urgent-voice-source-gate-setup.sql'));
  await pg.exec(read('tests/fixtures/ordinary-voice-phone-instrumentation.sql'));
  await pg.exec(read('tests/fixtures/ordinary-voice-phone-before.sql'));
+ await pg.exec('create schema icash_work_private;create table icash_work_private.dispatch_policy(id integer primary key,enabled boolean);insert into icash_work_private.dispatch_policy values(1,true);');
+ await pg.exec(read('tests/fixtures/automation-lane-current.sql'));
+ assert.equal(await one("select md5(pg_get_functiondef('icash_next_automation_lane(text)'::regprocedure))"),'3463e54ab56e8a7732a3af2febf9dc88','Native workers use the captured production entry, including its original admission');
  await pg.exec('revoke all on function icash_issue_ready_voice_ticket() from public,anon,authenticated;grant execute on function icash_issue_ready_voice_ticket() to service_role;');
  for(const account of[a,b]){await q('insert into icash_accounts(id) values($1)',[account]);await q('insert into icash_wallets(account_id) values($1)',[account]);await q('insert into icash_voice_configs(account_id) values($1)',[account]);}
  const before=await one("select pg_get_functiondef('icash_issue_ready_voice_ticket()'::regprocedure)"),acl=await one("select proacl::text from pg_proc where oid='icash_issue_ready_voice_ticket()'::regprocedure");
@@ -29,6 +32,15 @@ try{
  assert.equal(await one("select proacl::text from pg_proc where oid='icash_issue_ready_voice_ticket()'::regprocedure"),acl);
  const money=()=>one("select jsonb_build_object('wallets',(select jsonb_agg(to_jsonb(w) order by account_id) from icash_wallets w),'spend',(select jsonb_agg(to_jsonb(s) order by operation_key) from icash_operation_spend s))");
  const saved=await money();
+ await isolated(async()=>{
+  const id=await seed(90);
+  await q('update icash_work_private.dispatch_policy set enabled=false');
+  assert.equal(await one("select icash_next_automation_lane('voice')"),null,'Disabled dispatch policy blocks the real worker entry');
+  assert.equal(await one('select count(*)::int from icash_automation_tickets'),0);
+  await q('update icash_work_private.dispatch_policy set enabled=true');
+  const ticket=await one("select icash_next_automation_lane('voice')");
+  assert.equal(await one('select voice_job_id from icash_automation_tickets where token=$1',[ticket.token]),id,'Enabled production voice entry reaches the unchanged issuer');
+ });
  await isolated(async()=>{
   for(let n=100;n<260;n++){const id=await seed(n);await guard(id,'phone');await guard(id,'explode_slot');}
   await q('alter sequence fixture_slot_checks restart with 1');
