@@ -1,6 +1,7 @@
 """Actual ordinary issuer under native races; synthetic boundaries, no providers."""
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+import json
 import subprocess
 import time
 
@@ -28,6 +29,15 @@ sql(f"""insert into icash_contact_permissions(id,account_id,screening_id,contact
  insert into fixture_guards select id,'explode_slot' from icash_voice_jobs;
  analyze icash_voice_jobs;analyze icash_contact_permissions;analyze fixture_guards;""")
 money = voice.money()
+# Keep the synthetic guard boundary cheap at the original 1,000-job scale.
+# This plan assertion uses its exact lookup predicate and does not change the
+# production issuer, predicate implementation or original contender timeouts.
+lookup = json.loads(sql("explain(analyze,format json) select not exists(select 1 from public.fixture_guards where job_id=md5('ordinary-j1')::uuid and kind='phone');"))[0]['Plan']
+def nodes(plan):
+    yield plan
+    for child in plan.get('Plans', []):
+        yield from nodes(child)
+assert any(node.get('Index Name') == 'fixture_guards_job_kind' and node.get('Actual Loops', 0) > 0 for node in nodes(lookup)), 'Synthetic phone boundary uses its exact job/kind index'
 issuer = sql("select pg_get_functiondef('icash_issue_ready_voice_ticket()'::regprocedure);")
 start = issuer.index(' select permitted.* into j')
 end = issuer.index(' limit 1;', start)+len(' limit 1;')

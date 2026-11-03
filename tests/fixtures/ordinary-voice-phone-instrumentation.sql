@@ -1,4 +1,7 @@
 -- Synthetic boundary instrumentation; production guards remain unchanged.
+-- The synthetic phone predicate is an exact job/kind lookup, not a second
+-- unindexed backlog scan for every candidate and serialized contender.
+create index fixture_guards_job_kind on fixture_guards(job_id,kind);
 create sequence fixture_slot_checks;
 create or replace function icash_recording_private.voice_queue_slot_from_snapshot(uuid,uuid,jsonb)
 returns boolean language plpgsql stable set search_path='' as $f$
