@@ -1,5 +1,110 @@
 # Funded account progress and provider waits
 
+## Remaining voice and text installation, November 3 20:46 UTC
+
+PR #545 revision `6d5c21bde367fa73696e46477a3a881db561710f` passed all four
+jobs in run `41705498034`: the full suite, production build/concurrency/browser
+checks, dependency audit and all 36 native PostgreSQL scripts. The ordinary
+voice test uses the captured production worker entry, keeps the 1,000-job
+backlog, 24 workers and original eight-second deadline, and retains a direct
+full scan plus late-hold and fairness checks. The earlier two native failures
+are preserved in the incident evidence; neither authorized installation.
+
+The guarded ordinary phone fence installed as `20261103204619`, SQL MD5
+`5d324c7f605e87df0ae5d2f30a1d0048`; the live issuer MD5 is
+`be5503735965b3de7e627d9924162e56`. Literal address/identity copy installed as
+`20261103204625`, SQL MD5 `2e8e5ab828bde871f2ab5fdd6b4529c9`. Readback at
+20:46:40 UTC verified both exact statements and all five changed definitions;
+the worker-lane entry remains MD5 `3463e54ab56e8a7732a3af2febf9dc88`.
+All fifteen recovery migrations now use their actual installed versions and
+hashes. Preserve independently reviewed request-reserve and contact-preparation
+work; those separate PRs and activation gates are outside this repair.
+
+Serving web and worker were still #544 (`b16925a2`) at this installation.
+Final reconciled-head/main checks, matching services and actual completed work
+remain required. The 19:25 checkpoint had 45 stalled and 68 monitor-pending
+accounts (29 stalled accounts also had unresolved operations), $0.82 net usage
+across seven accounts in its fixed hour, and two scheduler timeouts in the
+19:14-19:24 window. These are pre-installation observations, not recovery
+results. The existing local research allowance and original uncertain receipts
+remain binding; no counter, customer budget or financial hold was changed.
+
+## Remaining live scan evidence, November 3 19:16 UTC
+
+Readback found a separately installed global voice contact index under migration
+`20261103190835`, SQL MD5 `69f2a3333c30bfaebca5993043b45b3a`. Its repository
+source and native regression are included with that exact identity. The release
+now records thirteen installed recovery migrations. Do not replay the index.
+
+The installed legacy queue selector returned zero candidates in 11.13 ms with
+620 shared buffer hits and no writes in a bounded read-only plan. Later-ingested
+logs nevertheless show ordinary voice selection timing out at 19:12 UTC and
+the bounded SMS eligibility scan timing out at 19:14 UTC. These are distinct
+remaining paths; healthy process heartbeats or the isolated query improvement
+do not establish complete recovery. Investigate their cumulative work without
+weakening contact, customer-control or unknown-receipt protections.
+
+## Global voice lookup checkpoint, November 3 19:15 UTC
+
+The unchanged global busy-contact query scanned 30,654 operational contacts
+for a candidate. Its partial contact-key index installed as 20261103190835;
+live readback confirms a valid/ready index and unchanged slot-function and
+contact-view hashes. The exact same bounded READ ONLY production probe then
+used the index and measured 1.555 ms versus 14.148 ms, with 113 buffer hits
+plus one read versus 1,725 hits. This is one targeted probe, not a systemwide
+latency or completion guarantee. Cross-account unknown calls and the original
+DNC/source joins remain authoritative. See `voice-global-contact-index.md`.
+
+All thirteen installed recovery sources now have their exact ledger versions
+and SQL hashes. The integrated native workflow includes the urgent issuer,
+legacy candidate fence and global-contact index regressions; require its exact
+final result rather than extrapolating from predecessor CI. The two recovery
+switches were observed enabled at 19:11 UTC after the verified #542 release.
+
+The fixed 19:03 audit still had 42 stalled and 69 pending accounts. Research
+remains at its unchanged 9,800-request ceiling until 00:12:49 UTC November 4;
+the original 233 dispatched operations remain unresolved. The two other
+canonical browser settlements after the urgent-filter installation do not
+represent new seller conversations. Neither installations, passing checks nor
+worker uptime establish complete recovery.
+
+## Voice scan installation checkpoint, November 3 19:13 UTC
+
+The final voice follow-up preserves the now-merged diagnostic reconciliation
+from PR #544 (`b16925a2b2bd5e65024d6a4ae9d8718dde567f1a`). PR #545's initial
+head `c8edce32` passed all 33 native PostgreSQL scripts in run 41700506801,
+including both new voice plan/concurrency regressions. The legacy candidate
+fence is installed as `20261103191344`, SQL MD5
+`bca111eeb7af2a24fb83af89c3f40162`; its live function MD5
+`ec49f01374bce7d4239740e442f7e909` matches the offline tested definition.
+The urgent gate retains its already-installed version `20261103184920`.
+All twelve recovery migration identities and exact configuration copies are
+recorded without replay aliases. Final-head PR/main checks and matching
+production services remain required before claiming the release complete.
+
+## Release and activation checkpoint, November 3 19:04 UTC
+
+PR #542 is merged as `e14d77475413dcd7ea7a9f0e205bca4e100f7e5b`, with
+the reviewed tree `fd4f5f0c5464d76552380c26b6e2d5b333bd8f1f`. Exact main CI
+run 41697623649 passed all 715 suites, 31 native PostgreSQL scripts, production
+build, concurrency, Chromium/WebKit and dependency audit. Production web
+`dpl_HWBzCdvJrAVoP4NFw9vW5SW4memk` and worker
+`4e8fe005-8b26-4185-8a8e-46969777bb9d` both report that main commit; the worker
+verified the same CI run and started active with 16 automation lanes.
+
+Both prospective preflight recovery flags were activated at 19:04:15 UTC after
+the exact release checks. At 19:04:22, ordinary production history recorded
+72 delivered outgoing texts across five accounts since 18:19 UTC. The shared
+research allowance remains 9,800/9,800, with its next local window at November 3
+6:12 PM Central. Incoming SMS remains unverified, health remains 503 for
+workflow degradation, and the critical incident is still open. Activation and
+outgoing delivery do not establish new research or closed deals.
+
+A post-release statement timeout at 19:02:43 UTC reached the legacy voice
+queue's existing-permission evidence check. Its isolated correction is documented
+in `legacy-voice-candidate-fence.md`; this is a separate path from the urgent
+voice source gate. Its installation and exact release still require verification.
+
 ## Completion checkpoint, November 3 18:37 UTC
 
 All ten reviewed database configurations are installed. Their repository
