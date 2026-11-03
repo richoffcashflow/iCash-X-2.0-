@@ -1,5 +1,6 @@
 import {db} from './stripe-test';
 import {discoveryWorkEnabled} from './live-work-admission.ts';
+import {dealMachineRequest,DealMachineQuotaError} from './dealmachine-request.ts';
 export const usStateCodes=new Set('AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC'.split(' '));
 type Geo={location_id:string;type:'zip_code';code:string;name:string;state:string;property_count:number};
 /** Exact provider geography only; never infer state from a prefix or accept a suggested neighboring ZIP. */
@@ -22,17 +23,19 @@ export async function resolveRequestedPropertyMarket(accountId:string,userId:str
   const claim=await db<{status:string;zip?:string;token?:string}>('rpc/icash_claim_requested_property_zip','POST',{p_user:userId,p_account:accountId});
   if(claim.status==='lookup_required'){
    if(!/^\d{5}$/.test(claim.zip??'')||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(claim.token??''))throw Error('Invalid lookup claim');
-   if(!await db<boolean>('rpc/icash_take_dealmachine_request','POST',{}))return {status:'held'};
    const query=new URLSearchParams({q:claim.zip!,type:'zip_code',per_page:'100',page:'1'});
-   const response=await fetch('https://api.v2.dealmachine.com/v1/locations?'+query,{headers:{Authorization:`Bearer ${key}`},method:'GET',redirect:'error',cache:'no-store',signal:AbortSignal.timeout(10000)});
+   const response=await dealMachineRequest(db,'geography',async()=>{
+    const result=await fetch('https://api.v2.dealmachine.com/v1/locations?'+query,{headers:{Authorization:`Bearer ${key}`},method:'GET',redirect:'error',cache:'no-store',signal:AbortSignal.timeout(10000)});
+    const raw=await result.text();if(raw.length>256000)throw Error('Location response too large');
+    return new Response(raw,{status:result.status,headers:result.headers});
+   },{accountId,operationKey:'requested-zip:'+claim.token+':'+claim.zip});
    if(!response.ok)throw Error('Location provider unavailable');
-   const raw=await response.text();if(raw.length>256000)throw Error('Location response too large');
-   const location=requestedZipLocation(JSON.parse(raw),claim.zip!);
+   const location=requestedZipLocation(response.raw,claim.zip!);
    const saved=await db<{status:string}>('rpc/icash_save_requested_property_zip','POST',{p_user:userId,p_account:accountId,p_zip:claim.zip,p_token:claim.token,p_location:location});
    if(saved.status!=='known')return {status:saved.status};
   }else if(claim.status!=='known')return {status:claim.status};
   // This function creates configuration only. It never unpauses or reserves spend.
   const result=await db<{status:string}>('rpc/icash_provision_funded_account','POST',{p_account:accountId});
   return {status:result.status};
- }catch{return {status:'market_lookup_unavailable'};}
+ }catch(error){return {status:error instanceof DealMachineQuotaError?'held':'market_lookup_unavailable'};}
 }
