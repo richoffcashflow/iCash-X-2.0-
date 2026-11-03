@@ -81,13 +81,13 @@ export async function verifyWorkspace(browser,base,options,name){
   if(p==='/api/work/events')return route.continue();
   if(p==='/api/account')return route.fulfill({json:{...fixtureAccount,...(fundingFixture?{paused:fundingFixture.paused,workReady:true}:{}),...(instantVariant?{paused:false}:{}),...(opportunityProgress?{paused:opportunityProgress.status==='paused'}:{}),workspaceAcknowledged:acknowledged,mode:'live',vip,vipFeatures:vip,billingModel:'membership_credits',membershipActive:true}});
   if(p==='/api/funding/status')return route.fulfill({json:{enabled:true,mode:'live',paidCents:fundingFixture?.paidCents??0,needsClaim:false,packs:[]}});
-  if(p==='/api/work/progress')return route.fulfill({json:{progress:opportunityProgress}});
+  if(p==='/api/work/progress')return route.fulfill({json:{progress:opportunityProgress?{...opportunityProgress,days:Number(url.searchParams.get('days')),timezone:url.searchParams.get('timezone'),startAt:'2026-10-14T00:00:00Z',endAt:'2026-10-14T18:00:00Z'}:null}});
   if(p==='/api/work/assistant')return route.fulfill({json:{items:[]}});
   if(p==='/api/billing/membership')return route.fulfill({json:{membership:{state:'active',accessible:true,vip,priceCents:vip?10000:5000,paidThrough:'2026-11-16T05:00:00Z',cancelAtPeriodEnd:false}}});
   if(p==='/api/work/activity')return route.fulfill({json:work(url)});
   if(p==='/api/work/buyer-network')return route.fulfill({json:{...network,hasActiveDeal:signed()&&scenario!=='cancelled'&&scenario!=='cancellation_pending',responses:signed()?2:0,buyers:signed()?network.buyers:[]}});
   if(p==='/api/work/property-photo')return route.continue();
-  if(p==='/api/work/report')return route.fulfill({json:{days:Number(url.searchParams.get('days')),timezone:'UTC',startAt:'2026-10-14T00:00:00Z',endAt:'2026-10-14T18:00:00Z',leads:1,calls:0,texts:0,contracts:signed()?1:0}});
+  if(p==='/api/work/report')return route.fulfill({json:{days:Number(url.searchParams.get('days')),timezone:url.searchParams.get('timezone'),startAt:'2026-10-14T00:00:00Z',endAt:'2026-10-14T18:00:00Z',leads:1,calls:0,texts:0,contracts:signed()?1:0}});
   if(p==='/api/notifications/updates')return route.fulfill({json:{items:[],preferences:{seenAt:null}}});
   if(p==='/api/work/allowance')return route.fulfill({json:{day:'2026-10-14',limitCents:10000,spentCents:0,reservedCents:0,remainingCents:10000,availableCents:10000,extraCents:0,resetsAt:'2026-10-15T05:00:00Z'}});
   if(p==='/api/work/next-action')return route.fulfill({json:{offer:null,balanceCents:12500,paused:true,checkedAt:new Date().toISOString()}});
@@ -276,6 +276,7 @@ export async function verifyWorkspace(browser,base,options,name){
   const momentum=page.getByRole('region',{name:'Opportunity progress'});await momentum.getByRole('heading',{name:'Your opportunity search'}).waitFor();
   assert.match(await momentum.innerText(),/40[\s\S]*Eligible matches[\s\S]*3/);assert.doesNotMatch(await momentum.innerText(),/\$|Your search plan|Up to .*per 24 hours/,'Progress omits spending allowance dollar amounts');assert.equal(await momentum.getByRole('button',{name:'View responses'}).count(),0);
   assert(await momentum.evaluate(node=>{const b=node.getBoundingClientRect();return b.left>=0&&b.right<=innerWidth+1;}),'Live counters fit desktop and mobile');
+  await page.getByRole('group',{name:'Activity period'}).getByRole('button',{name:'7 days',exact:true}).click();await momentum.getByText('7 days',{exact:true}).waitFor();
   opportunityProgress={...opportunityProgress,responded:1};await page.evaluate(()=>window.dispatchEvent(new Event('icash:credits-funded')));
   await momentum.getByText('A seller replied.',{exact:true}).waitFor();await momentum.getByRole('button',{name:'View responses'}).click();
   assert.equal(await page.getByRole('button',{name:'Seller responses',exact:true}).getAttribute('aria-pressed'),'true');

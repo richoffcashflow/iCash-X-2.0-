@@ -1,6 +1,7 @@
 'use client';
 import {useCallback,useEffect,useState} from 'react';
 import dynamic from 'next/dynamic';
+import type {ActivityDays} from '@/lib/activity-report';
 import {webinarRequest} from '@/lib/webinar-client';
 import {maskOwnerAccountEmail,maskOwnerAccountLabel,ownerViewSchema,type OwnerView} from '@/lib/owner-accounts';
 import {overviewTime} from '@/lib/owner-overview';
@@ -17,6 +18,8 @@ const noAction=()=>{};
 export function CustomerAccountView({viewId}:{viewId:string}){
  const base=`/api/admin/accounts/view/${viewId}`;
  const [view,setView]=useState<OwnerView|null>(null),[error,setError]=useState(''),[ended,setEnded]=useState(false),[returning,setReturning]=useState(false),[refresh,setRefresh]=useState(0),[hasLeads,setHasLeads]=useState<boolean|undefined>();
+ const [activityDays,setActivityDays]=useState<ActivityDays>(1);
+ const [activityTimezone]=useState(()=>Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC');
  const accessLost=useCallback(()=>{setView(null);setEnded(true);setError('This account view has ended. Open the account again from Accounts.');},[]);
  useEffect(()=>{
   if(ended)return;const controller=new AbortController();let inFlight=false;
@@ -46,8 +49,8 @@ export function CustomerAccountView({viewId}:{viewId:string}){
    {account&&<>
     <h1 className="sr-only">{accountLabel}’s workspace</h1>
     <BotRunBar key={`bot:${viewId}`} apiBase={base} readOnly hasLeads={hasLeads} botName={account.assistantName??undefined} vip={account.vip} running={running} paymentRequired={paymentRequired} stopped={account.paused&&account.balanceCents>0} busy={false} stale={!!error} balanceCents={account.balanceCents} hasCreditHistory={account.fundedCents>0} canPause={!account.paused&&account.balanceCents>0} principalKey={viewId} onBudget={noAction} onPause={noAction} onResume={noAction}/>
-    <div className={workspaceStyles.activity}><BudgetSummary key={`report:${viewId}`} apiBase={base} vip={account.vip}/></div>
-    <section className="operation-panel" aria-label="Your AI real estate bot"><LiveWorkspace key={`work:${viewId}`} apiBase={base} readOnly onAccessLost={accessLost} onLeadPresenceChange={setHasLeads} principal={accountLabel} botPaused={account.paused} botAvailable={running} accountStale={!!error} showCoach={false}/></section>
+    <div className={workspaceStyles.activity}><BudgetSummary days={activityDays} onDaysChange={setActivityDays} timezone={activityTimezone} key={`report:${viewId}`} apiBase={base} vip={account.vip}/></div>
+    <section className="operation-panel" aria-label="Your AI real estate bot"><LiveWorkspace activityDays={activityDays} activityTimezone={activityTimezone} key={`work:${viewId}`} apiBase={base} readOnly onAccessLost={accessLost} onLeadPresenceChange={setHasLeads} principal={accountLabel} botPaused={account.paused} botAvailable={running} accountStale={!!error} showCoach={false}/></section>
    </>}
   </main>
  </div>;
