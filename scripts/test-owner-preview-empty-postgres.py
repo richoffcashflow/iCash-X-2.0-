@@ -79,6 +79,9 @@ def run():
     setup()
     case = seed(1)
     before = evidence(case)
+    assert sql(save_query(case)) == 'f', 'Reproduce current licensed:0 response rejection'
+    assert sql("select count(*) from icash_research_private.owner_empty_preview_receipts;") == '0'
+    sql(fixture.read("config/owner-preview-empty-credit-shape.sql"))
     barrier = Barrier(24)
 
     def save(_):
@@ -90,12 +93,29 @@ def run():
     assert results == ['t']*24, results
     assert sql("select count(*) from icash_research_private.owner_empty_preview_receipts;") == '1'
     assert sql("select count(*) from icash_research_private.owner_empty_preview_items;") == '5'
+    assert json.loads(sql(f"select receipt from icash_research_private.owner_empty_preview_receipts where request_id='{case['request']}';")) == case['preview']
     assert evidence(case) == before
     for item in case['items']:
         assert sql(f"set role service_role;select public.icash_owner_preflight_empty('{case['account']}'::uuid,'{item['screeningId']}'::uuid,{literal(item['snapshot'])});") == 't'
     conflicting = json.loads(json.dumps(case))
     conflicting['preview']['data'][0]['contacts'][0]['availability']['phones'] = 1
     assert sql(save_query(conflicting)) == 'f'
+    legacy = seed(10)
+    del legacy['preview']['credits']['licensed']
+    assert sql(save_query(legacy)) == 't'
+    for n, licensed in enumerate((1, -1, '0', None, True), start=11):
+        invalid = seed(n)
+        invalid['preview']['credits']['licensed'] = licensed
+        assert sql(save_query(invalid)) == 'f', 'Unknown/nonzero licensed counter stays held'
+    for n, mutation in enumerate(('extra', 'missing', 'legacy_extra'), start=20):
+        invalid = seed(n)
+        if mutation == 'missing':
+            del invalid['preview']['credits']['people']
+        else:
+            invalid['preview']['credits']['unknown'] = 0
+            if mutation == 'legacy_extra':
+                del invalid['preview']['credits']['licensed']
+        assert sql(save_query(invalid)) == 'f', 'Unknown fields or missing known credit proof stay held'
     paused = seed(2)
     late_guard(paused, f"update icash_accounts set bot_paused=true where id='{paused['account']}';")
     observed = seed(3)

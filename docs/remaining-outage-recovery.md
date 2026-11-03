@@ -14,6 +14,8 @@ The owner requested continued repair after the earlier call and research recover
 
 ## Verification and release
 
+Live verification exposed a second empty-preview failure: all 52 retained batch previews inspected after the first release included `licensed: 0` alongside the four existing zero-credit fields. The JavaScript parser accepted this response, but the new database recorder required an exact four-key object. An offline replay of the observed shape reproduced the rejection. A guarded additive migration accepts exactly the legacy four-key object or the observed five-key object with numeric zero for every field. Unknown fields and missing, nonnumeric or nonzero credit values remain invalid; original raw receipts, source freshness, admission locks and financial holds are unchanged. The actual service and native competing-save fixtures use the observed shape. No historical raw preview is fabricated or backfilled.
+
 Use the actual SQL predicates and message observers in regression fixtures. Compare calling hours across timezones and DST boundaries, retain original source and financial hashes, and exercise account/source changes, manual Pause, late provider receipts, callbacks and competing workers. The native PostgreSQL tests run in the reliability workflow's isolated database; no paid provider demonstrations are authorized.
 
 All release checks must pass for the exact PR and merged production commit. Verify both web and background-worker deployments and then inspect ordinary production results. Performance measurements from different live account cohorts must not be presented as a controlled end-to-end speedup.
