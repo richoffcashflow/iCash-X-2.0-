@@ -25,7 +25,7 @@ export function supportWorkflowReply(messages:Turn[],evidence:SupportEvidence[])
  if(/\bneeds? (?:you|me)\b/i.test(issue))return answer('Needs you marks a property that needs your review, such as an agreement, seller question or blocked follow-up. Open that property and read its alert. Save resolution records completed follow-up; it does not send a seller message or restart the bot.');
  if(/\b(?:agreements?|contracts?|documents?)\b/i.test(issue)&&/\b(?:where|how|find|open|tab|section|button|create|prepare|send|download|missing|no|can.t|cannot|isn.t|don.t)\b/i.test(issue)){
   // A failed download/send needs troubleshooting; directions alone do not fix it.
-  if(/\b(?:fails?|failed|error|blank|spinning)\b|\b(?:can.t|cannot|won.t|unable to)\b.{0,20}\b(?:download|send|save|sign)\b/i.test(issue))return null;
+  if(/\b(?:fails?|failed|error|blank|spinning|blocked|disabled|unavailable|unresponsive|greyed out|grayed out)\b|\b(?:can.t|cannot|won.t|unable to)\b.{0,20}\b(?:download|send|save|sign)\b/i.test(issue))return null;
   if(/\b(?:assignment|buyer|buyers)\b/i.test(issue))return answer('The cash buyer signs an assignment agreement; the purchase agreement is with the seller. Open the property under Your leads, then Agreements. The assignment draft becomes available after the purchase agreement is signed. Review it before using Send for signatures.');
   return answer('Agreements are inside each property, not a separate Documents tab. Open the property under Your leads. To prepare an agreement yourself, choose Take over, then Seller is ready for an agreement; review it under Agreements using Edit agreement and Send for signatures.');
  }

@@ -11,7 +11,7 @@ function capabilityAnswer(question:string):string|null{
  const q=question.replace(/\bassingment\b/gi,'assignment').replace(/\bdollarsfor\b/gi,'dollars for');
  // Keep actual faults and disputed charges in diagnostics, even when the same
  // message contains a familiar product term or dollar amount.
- if(/\b(?:refund|cancel|billed|charged|duplicate|declined|failed|error|broken|missing|stuck|not working|not calling|not texting|not sending|not received|no calls|no texts|no repl(?:y|ies)|no response|never calls|never sends)\b|\b(?:can[’']?t|cannot|won[’']?t|doesn[’']?t|didn[’']?t|haven[’']?t|will not|does not|did not|have not)\b.{0,30}\b(?:save|send|download|open|load|work|call|text|receive[ds]?|respond(?:ed)?)\b/i.test(q))return null;
+ if(/\b(?:refund|cancel|billed|charged|duplicate|declined|failed|error|broken|missing|stuck|blank|blocked|disabled|spinning|unavailable|unresponsive|greyed out|grayed out|not loading|not working|not calling|not texting|not sending|not received|no calls|no texts|no repl(?:y|ies)|no response|never calls|never sends)\b|\b(?:can[’']?t|cannot|won[’']?t|doesn[’']?t|didn[’']?t|haven[’']?t|will not|does not|did not|have not)\b.{0,30}\b(?:save|send|download|open|load|work|call|text|receive[ds]?|respond(?:ed)?)\b/i.test(q))return null;
  if(!/\bvip\b/i.test(q)&&/\b(?:subscription|membership|monthly payment|monthly fee)\b/i.test(q)&&/\b(?:what(?:[’']s| is| does)|cover|include)\b/i.test(q)&&!/\b(?:my|charged|billed|ended|expired|inactive|cancelled|canceled|access|working)\b/i.test(q))return 'The software subscription pays for access to iCash X and its bot features. Property research, contact lookup, calls, texts and other paid AI work use separately purchased work credits; the subscription includes $0 in work credits. An account’s actual payment or access status needs its own recorded check.';
  if(/\b(?:company|business|name)\b/i.test(q)&&/\b(?:say|use|tell|coming from|introduce|represent)\b/i.test(q)&&/\b(?:leads?|sellers?|buyers?|talking|speaking|calling|introduce|represent)\b/i.test(q))return 'Use the individual or company name you saved in Settings. You’re representing yourself or your business as the buyer; iCash X is the software you use to work the deal.';
  const planPayment=/\b(?:subscription|membership|monthly|per month|vip|upgrade)\b/i.test(q)&&!/\b(?:credits?|usage|add money|adding money)\b/i.test(q);
@@ -56,7 +56,10 @@ export function supportProductClarification(messages:Turn[]){
  if(supportRoleQuestion(q))return null;
  if(/\b(?:arv|value after repairs)\b/i.test(q)&&/\bthem\b/i.test(q)&&/\b(?:send|share|tell|give)\b/i.test(q)&&!/\b(?:buyers?|sellers?|failed|error|missing|not|never)\b/i.test(q)){
   const previous=messages.filter(m=>m.role==='user').slice(0,-1).at(-1)?.content??'';
-  if(/\bbuyers?\b/i.test(previous)&&!/\bsellers?\b/i.test(previous))return {reply:capabilityAnswer(q.replace(/\bthem\b/i,'buyers'))!,answered:true};
+  if(/\bbuyers?\b/i.test(previous)&&!/\bsellers?\b/i.test(previous)){
+   const buyerAnswer=capabilityAnswer(q.replace(/\bthem\b/i,'buyers'));
+   return buyerAnswer?{reply:buyerAnswer,answered:true}:null;
+  }
   return {reply:'Do you mean sharing the ARV estimate with the seller or with a cash buyer?',answered:false};
  }
  const capability=capabilityAnswer(q);if(capability)return {reply:capability,answered:true};

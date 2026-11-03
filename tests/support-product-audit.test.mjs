@@ -57,6 +57,18 @@ try{
  assert.match(arv.reply,/buyer package can show/);
  const ambiguous=await replyToSupport({kind:'account',messages:[user('does 2.0 tell them their ARV ?')]},noModel);
  assert.match(ambiguous.reply,/seller or with a cash buyer/);assert.notEqual(ambiguous.status,'resolved');
+ for(const fault of ['The page is broken.','It is stuck.','The page will not load.']){
+  const answer=await replyToSupport({kind:'account',allowAI:false,messages:[user('How do I contact buyers?'),assistant('Use the buyer package.'),user('Can it send them the ARV? '+fault)]},noModel);
+  assert.equal(typeof answer.reply,'string');assert.notEqual(answer.status,'resolved');
+ }
+ for(const question of ['The buyer agreement is blank. How do I download it?','How do I send the buyer contract? The button is disabled.','How do I submit to title? It is blocked.','How do I view the ARV? The page keeps spinning.']){
+  const answer=await replyToSupport({kind:'account',allowAI:false,messages:[user(question)]},noModel);
+  assert.notEqual(answer.status,'resolved',question);assert.doesNotMatch(answer.reply,/buyer signs an assignment|handle title submission in the app|current cash-offer formula/i,question);
+ }
+ for(const question of ['How much wholesale fee should I charge on this deal?','How much should my wholesale fee be for this property?','How do I maximize the wholesale fee on my deal?']){
+  const answer=await replyToSupport({kind:'account',messages:[user(question)]},noModel);
+  assert.match(answer.reply,/Ask AI Bot/);assert.equal(answer.status,'open');assert.doesNotMatch(answer.reply,/default target wholesale fee/);
+ }
  assert.match((await replyToSupport({kind:'account',messages:[user('How long till a lead usually comes through')]},noModel)).reply,/fixed schedule/);
  for(const question of ['Need help customer service','What company do I say I’m coming from when I’m talking to leads'])assert.equal(supportCourseAnswer([user(question)]),null,question);
  assert.equal(modelCalls,0);

@@ -9,11 +9,13 @@ const technical=/\b(?:bug|error|broken|blocked|stuck|blank|spinning|unavailable|
 export function classifySupportCoaching(question:string){
  // Splitting keeps a coaching side-question out of technical diagnostics/model input.
  const parts=question.split(/(?<=[.!?;])\s+|\n+|,\s*(?=(?:what|how|where|why|my|i |the |can |help |please |analy[sz]e|review))|\s+(?:and|also|but)\s+(?=(?:what|how|where|why|my|i |the |can |help |please |analy[sz]e|review))/i).map(p=>p.trim()).filter(Boolean);
- const coachingParts=parts.filter(p=>coaching.test(p));
+ const feeAdvice=/\b(?:what|how much)\b.{0,30}\bshould\b.{0,45}\b(?:assignment|wholesale) fee\b|\b(?:assignment|wholesale) fee\b.{0,35}\bshould\b.{0,25}\b(?:charge|ask|set|be)\b|\b(?:maximize|increase|negotiate)\b.{0,35}\b(?:assignment|wholesale) fee\b/i;
+ const isCoaching=(part:string)=>coaching.test(part)||feeAdvice.test(part);
+ const coachingParts=parts.filter(isCoaching);
  if(!coachingParts.length)return {kind:'support' as const,technicalQuestion:question};
- const supportParts=parts.filter(p=>!coaching.test(p)||technical.test(p));
+ const supportParts=parts.filter(p=>!isCoaching(p)||technical.test(p));
  // A failed deal-analysis feature is never itself a reason to upsell.
- if(coachingParts.every(p=>technical.test(p))&&!parts.some(p=>coaching.test(p)&&!technical.test(p)))return {kind:'support' as const,technicalQuestion:question};
+ if(coachingParts.every(p=>technical.test(p))&&!parts.some(p=>isCoaching(p)&&!technical.test(p)))return {kind:'support' as const,technicalQuestion:question};
  return {kind:supportParts.length?'mixed' as const:'coaching' as const,technicalQuestion:supportParts.join(' ')};
 }
 
