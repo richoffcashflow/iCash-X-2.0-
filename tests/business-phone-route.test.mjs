@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {z} from 'zod';
-import {additionalBusinessPhones,secondaryBusinessPhone,newBusinessPhone} from '../lib/business-phone-policy.ts';
+import {additionalBusinessPhones,secondaryBusinessPhone,newBusinessPhone,inboundBusinessPhones} from '../lib/business-phone-policy.ts';
 let owner=true,origin=true,reads=[],writes=[];
 class WebinarError extends Error{constructor(status,message){super(message);this.status=status;}}
 class BusinessPhoneError extends Error{}
@@ -19,6 +19,10 @@ const post=body=>route.POST(new Request(url,{method:'POST',body:JSON.stringify(b
 let result=await get(newBusinessPhone);assert.equal(result.status,200);assert.deepEqual(await result.json(),{phone:newBusinessPhone,incoming:true,callerIdVerified:true});assert.deepEqual(reads,[newBusinessPhone]);assert.equal(writes.length,0);
 assert.equal((await post({action:'connect',phone:newBusinessPhone})).status,200);assert.deepEqual(writes,[newBusinessPhone]);
 await post({action:'connect'});assert.equal(writes.at(-1),secondaryBusinessPhone,'An older page still targets only its displayed legacy number');
+for(const phone of inboundBusinessPhones){
+ assert.equal((await get(phone)).status,200);assert.equal(reads.at(-1),phone);
+ assert.equal((await post({action:'connect',phone})).status,200);assert.equal(writes.at(-1),phone);
+}
 for(const phone of ['+12125550199','bad']){assert.equal((await get(phone)).status,400);assert.equal((await post({action:'connect',phone})).status,400);}
 const count=writes.length;owner=false;assert.equal((await get(newBusinessPhone)).status,403);assert.equal((await post({action:'connect',phone:newBusinessPhone})).status,403);owner=true;origin=false;assert.equal((await post({action:'connect',phone:newBusinessPhone})).status,403);assert.equal(writes.length,count);
 delete globalThis.__phoneRoute;
