@@ -55,6 +55,10 @@ def setup():
     assert sql('select current_database();') == 'icash_reliability'
     sql('drop schema if exists icash_recording_private cascade;drop schema public cascade;create schema public;')
     sql((ROOT/'tests/fixtures/voice-configuration-recovery-foundation.sql').read_text())
+    # Roles survive schema resets in the shared native job. Match the verified
+    # production service-role attribute even if an earlier suite created it.
+    sql('alter role service_role bypassrls;')
+    assert sql("select rolbypassrls from pg_roles where rolname='service_role';") == 't'
     sql((ROOT/'tests/fixtures/voice-configuration-target-lookup-union.sql').read_text())
     sql('create view public.icash_voice_contact_targets as '+ORIGINAL['target_view'])
     for path in ['config/unstarted-voice-configuration-recovery.sql', 'config/voice-configuration-recovery-schema-access.sql', 'config/bounded-voice-configuration-recovery.sql']:
