@@ -9,7 +9,8 @@ photo reads use the local HTTPS fixture without Playwright routing. Production
 readback confirms the reception backoff and bounded opener migrations at
 20261103162508 and 20261103162517. Their repository filenames match that history.
 
-The remaining five reviewed changes and read-only research quota monitor are
+The remaining five reviewed changes, read-only research quota monitor and
+identity-bound pending-buffer correction are
 packaged in one atomic migration, `funded_recovery_completion`; the indexing
 dependency precedes quota continuation. Original config sections are checked
 byte-for-byte. Both new preflight switches remain false. Installation requires
@@ -27,10 +28,14 @@ healthy worker heartbeats without changing admission or customer controls.
 
 The sixth account's saved contact evidence was bound to an earlier sending
 identity. Final checks stopped the distinct attempts before calling; there was
-no repeated redial of the same jobs. Its stale-identity inventory and unknown
-original purchases need a separate, evidence-preserving recovery. Incoming SMS
-also remains unverified despite outgoing delivery receipts. These findings are
-remaining blockers, not successful outcomes of this unreleased patch.
+no repeated redial of the same jobs. The added buffer correction excludes only
+settled, exactly bound old-identity records without a current contact or legacy
+permission alternative. A read-only comparison reduced its pending count from
+29 to 10, retaining all seven unknown purchases; regression verifies unchanged
+historical evidence and independent new-research admission. It does not repair
+or replay the old contacts. Incoming SMS remains unverified despite outgoing
+delivery receipts. These diagnostics do not prove this unreleased patch has
+restored production work.
 
 The November 3 follow-up starts from production PRs #538 and #539, and preserves
 the independently prepared #540 empty-preview credit-shape repair. Scheduler
