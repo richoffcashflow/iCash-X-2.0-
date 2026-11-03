@@ -22,6 +22,18 @@ export function ownerBatchAudience(raw:unknown,candidates:Candidate[],cap:number
   return {...c,propertyId,...previewAudience({data:row.found?row:{...row,contacts:[]},credits:zero},propertyId,cap)};
  });
 }
+/** A free preview can prove only explicit absence of phones for the matching
+ * owners. Missing availability or an ambiguous owner association is unknown. */
+export function phoneLessOwnerPreviews(audience:ReturnType<typeof ownerBatchAudience>){
+ return audience.filter(a=>{
+  const owners=[...a.owners.values()].filter(o=>o.likelyOwner);
+  return !a.ids.length&&owners.length>0&&owners.every(o=>o.availablePhones===0);
+ });
+}
+export async function savePhoneLessOwnerPreviews(db:ResearchDb,accountId:string,batchId:string,requestId:string,preview:unknown,candidates:Candidate[],audience:ReturnType<typeof ownerBatchAudience>){
+ if(!phoneLessOwnerPreviews(audience).length)return;
+ if(await db<boolean>('rpc/icash_record_empty_owner_preview','POST',{p_account:accountId,p_batch:batchId,p_request:requestId,p_items:candidates,p_preview:preview})!==true)throw Error('OWNER_PREVIEW_SAVE_UNCONFIRMED');
+}
 /** The provider reports aggregate credits, not which individual was deduplicated.
  * Assign each unique person to the first property, then allocate reported used
  * credits in that fixed order. Preserve the original receipt separately; this
@@ -51,7 +63,7 @@ export async function enrichOwnerBatch(db:ResearchDb,accountId:string,primary:st
  if(![c.contact_credit_cap,c.property_credit_micros,quotedDataCostMicros].every(n=>Number.isSafeInteger(n)&&n>0)||c.contact_credit_cap>25||BigInt(c.contact_credit_cap)*BigInt(c.property_credit_micros)>BigInt(quotedDataCostMicros))throw Error('CONTACT_RATE_REQUIRED');
  const candidates=(await db<Candidate[]>('rpc/icash_owner_batch_candidates','POST',{p_account:accountId,p_screening:primary})).filter(x=>runScreeningJob(x.snapshot).financialCheck.status==='eligible');
  if(!candidates.length||candidates.length>5||!candidates.some(x=>x.screeningId===primary))return {status:'held'};
- const batchId=randomUUID(),key=process.env.DEALMACHINE_API_KEY;
+ const batchId=randomUUID(),key=process.env.DEALMACHINE_API_KEY;let previewRequestId='';
  const request=async(path:string,body:object,paid:boolean)=>{
   try{
    const fetchOnce=()=>transport('https://api.v2.dealmachine.com/v1'+path,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
@@ -61,12 +73,14 @@ export async function enrichOwnerBatch(db:ResearchDb,accountId:string,primary:st
    if(!r.ok){
     if(paid&&r.raw!==null)await db('rpc/icash_record_owner_batch_receipt','POST',{p_account:accountId,p_batch:batchId,p_receipt:r.raw}).catch(()=>null);
     throw Error(paid?'OWNER_LOOKUP_FAILED_NO_RETRY':'OWNER_PREVIEW_FAILED_NO_RETRY');
-   }return r.raw;
+   }if(!paid)previewRequestId=r.requestId;return r.raw;
   }catch(error){if(!paid&&error instanceof DealMachineQuotaError)throw new OwnerPreviewRateLimitError(accountId,primary);throw error;}
  };
  stage='free_preview';const preview=await request('/properties/ids',{ids:candidates.map(x=>object(x.snapshot).propertyId),enrich:false,contact_audience:'owners'},false);
  stage='preview_validation';
- const audience=ownerBatchAudience(preview,candidates,c.contact_credit_cap).filter(a=>a.ids.length>0);
+ const allAudience=ownerBatchAudience(preview,candidates,c.contact_credit_cap);
+ await savePhoneLessOwnerPreviews(db,accountId,batchId,previewRequestId,preview,candidates,allAudience);
+ const audience=allAudience.filter(a=>a.ids.length>0);
  if(!audience.length)return {status:'empty',contacts:0};
  // A phone-less primary must not throw away the same free preview's eligible
  // siblings. Bind the paid batch to its first surviving property; no charge or

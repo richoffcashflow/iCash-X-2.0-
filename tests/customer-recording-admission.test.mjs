@@ -25,11 +25,11 @@ async function fixture(changeAt,change=env=>env.ICASH_RECORDED_OUTBOUND_READY='f
  return {result,events};
 }
 for(const stage of ['before','agent','tool','create','claim_dial'])for(const change of [env=>env.ICASH_RECORDED_OUTBOUND_READY='false',env=>env.ICASH_RECORDING_RECEIPTS_READY='false',env=>env.ICASH_LIVE_WORK_READY='false',env=>env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify({...review,reviewedUntil:new Date(now-1).toISOString()})]){
- const {result,events}=await fixture(stage,change);assert.equal(result.status,'recording_release_required',stage);assert(!events.includes('dial'),stage);if(['before','agent','tool'].includes(stage))assert(!events.includes('create'));if(stage==='create')assert(!events.includes('claim_dial'));
+ const {result,events}=await fixture(stage,change);assert.equal(result.status,'recording_release_required',stage);assert(!events.includes('dial'),stage);if(['before','agent','tool'].includes(stage)){assert(!events.includes('create'));assert.equal(result.dispatchBoundary,'before_recording_create_v1');}else assert.equal(result.dispatchBoundary,undefined);if(stage==='create')assert(!events.includes('claim_dial'));
 }
 const changed=await fixture('tool',env=>env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify({...review,versionId:'agtvrsn_changed'}));assert.equal(changed.result.status,'recording_release_required');assert(!changed.events.includes('create'));
-const invalid=await fixture(null,undefined,true);assert.equal(invalid.result.status,'recording_review_required');assert(!invalid.events.includes('create'));assert(!invalid.events.includes('dial'));
-const ready=await fixture(null);assert.equal(ready.result.status,'recording_consent_pending');assert.deepEqual(ready.events,['agent','tool','create','claim_dial','dial','bind_call']);
+const invalid=await fixture(null,undefined,true);assert.equal(invalid.result.status,'recording_review_required');assert.equal(invalid.result.dispatchBoundary,'before_recording_create_v1');assert(!invalid.events.includes('create'));assert(!invalid.events.includes('dial'));
+const ready=await fixture(null);assert.equal(ready.result.status,'recording_consent_pending');assert.equal(ready.result.dispatchBoundary,undefined);assert.deepEqual(ready.events,['agent','tool','create','claim_dial','dial','bind_call']);
 for(const date_created of [null,undefined,new Date(now+2000).toUTCString()]){
  const f=await fixture(null,undefined,false,{date_created});assert.equal(f.result.status,'recording_consent_pending');assert.equal(f.events.filter(x=>x==='dial').length,1);assert(!f.events.includes('dial_unknown'));
  assert.equal(canonicalCall({call_sid:null,provider_account_sid:ac,from_phone:review.fromPhone,to_phone:'+12125550102'},

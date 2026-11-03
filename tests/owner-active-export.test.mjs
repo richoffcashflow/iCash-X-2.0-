@@ -59,6 +59,7 @@ let previews=0,capacity='ready',preflightStatus='disabled',paid=0,downloads=0,ge
 const config={contact_rate_id:'rate',contact_credit_cap:25,property_credit_micros:10000,data_rights_until:'2099-01-01',research_version:2};
 const db=async(path,method,p)=>{
  if(path==='rpc/icash_owner_active_export_capacity')return capacity;
+ if(path==='rpc/icash_record_empty_owner_preview'){assert.deepEqual(p.p_items,candidates);assert.deepEqual(p.p_preview,preview);assert.match(p.p_request,/^[0-9a-f-]{36}$/);return true;}
  if(path==='rpc/icash_claim_owner_preflight')return {status:preflightStatus};
  if(path==='rpc/icash_owner_batch_candidates')return candidates;
  if(path==='rpc/icash_owner_targeting_pools')return Object.fromEntries(p.p_screenings.map(id=>[id,'active']));

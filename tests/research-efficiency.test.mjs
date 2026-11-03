@@ -91,6 +91,7 @@ const siblingReceipt={data:siblingIds.map(id=>({dm_person_id:id,found:true,phone
 let previews=0,siblingPaid=0,batchSaved;
 const siblingDb=async(path,method,body)=>{
  if(path==='rpc/icash_owner_batch_candidates')return candidates;
+ if(path==='rpc/icash_record_empty_owner_preview'){assert.deepEqual(body.p_items,candidates);assert.deepEqual(body.p_preview,noPrimary);assert.match(body.p_request,/^[0-9a-f-]{36}$/);return true;}
  if(path==='rpc/icash_take_dealmachine_request'||path==='rpc/icash_finish_dealmachine_request')return true;
  if(path==='rpc/icash_admit_owner_batch'){assert.equal(body.p_primary,'2');assert.deepEqual(body.p_items.map(x=>x.screeningId),['2','3']);assert.deepEqual(body.p_preview,noPrimary);return 'claimed';}
  if(path==='rpc/icash_record_owner_batch_receipt'){assert.deepEqual(body.p_receipt,siblingReceipt);return true;}

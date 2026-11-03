@@ -42,6 +42,22 @@ jobs:
         run: python3 scripts/test-owner-preflight-priority-postgres.py
       - name: Verify verified contact cohorts retain their original admission window
         run: python3 scripts/test-owner-preflight-ready-postgres.py
+      - name: Verify indexed acquisition selection preserves active ticket guards
+        run: python3 scripts/test-acquisition-active-ticket-index-postgres.py
+      - name: Verify indexed property evidence preserves all original holds
+        run: python3 scripts/test-acquisition-property-history-index-postgres.py
+      - name: Verify global text history exclusion uses the thread index
+        run: python3 scripts/test-text-message-thread-index-postgres.py
+      - name: Verify ordinary calling hours avoid unrelated owner evidence locks
+        run: python3 scripts/test-outreach-predicates-postgres.py
+      - name: Verify bounded configuration recovery and concurrent admission
+        run: python3 scripts/test-voice-configuration-target-lookup-postgres.py
+      - name: Verify empty batch previews preserve source and concurrent controls
+        run: python3 scripts/test-owner-preview-empty-postgres.py
+      - name: Verify original text receipt recovery and callback races
+        run: python3 scripts/test-text-delivery-recovery-postgres.py
+      - name: Verify prospective pre-dial abort and late provider admission
+        run: python3 scripts/test-voice-predial-abort-postgres.py
       - name: Verify historical cleanup recovery and concurrent customer Pause
         run: python3 scripts/test-cleanup-ticket-recovery-postgres.py
       - name: Verify bounded saved export recovery without provider retries

@@ -29,8 +29,9 @@ assert.equal((await adminRoute.GET(adminReq)).status,503);assert.equal(reportRea
 
 // A retention outage must not block the other maintenance lanes or turn their
 // healthy status into a failed maintenance tick.
-let lanesRan=false,monitorRan=false,pruneTried=false;
+let lanesRan=false,monitorRan=false,pruneTried=false,receiptRuns=0;
 const maintenance=await load('app/api/internal/maintenance/route.ts','usageMaintenanceTest',{
+ recoverTextDeliveryReceipts:async()=>{receiptRuns++;return {status:'idle',errors:0};},
  recoverOwnerActiveExports:async()=>{throw Error('Original export receipt unavailable');},
  recoverOwnerExportCapacity:async()=>{throw Error('Capacity evidence unavailable');},
  cleanupOwnerPreflight:async()=>{throw Error('Cleanup unavailable');},
@@ -38,7 +39,7 @@ const maintenance=await load('app/api/internal/maintenance/route.ts','usageMaint
  refreshInventoryGeographyBatch:async()=>({status:'not_due'}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),refreshVoiceCapacity:async()=>{throw Error('Provider unavailable');},readRecordingReview:()=>null,readVoiceCapacityProvider:async()=>{throw Error('Unexpected provider request');},
  authorizeOutboundBilling:()=>true,pruneUsageLoopObservations,
  db:async path=>{assert.equal(path,'rpc/icash_prune_usage_loop_observations');pruneTried=true;throw Error('telemetry unavailable');},
- maintenanceBatch:async lanes=>{assert.deepEqual(Object.keys(lanes),['supportCustomerEmail','supportCopies','purchaseEmail','purchaseFollowups','outbound','recording','ownerRecording','reception']);lanesRan=true;return {ok:true};},
+ maintenanceBatch:async lanes=>{assert.deepEqual(Object.keys(lanes),['textReceipts','supportCustomerEmail','supportCopies','purchaseEmail','purchaseFollowups','outbound','recording','ownerRecording','reception']);const receipt=await lanes.textReceipts();assert.equal(receipt.status,200);assert.equal((await receipt.json()).status,'idle');lanesRan=true;return {ok:true};},
  refreshReliability:async(_db,ok)=>{assert.equal(ok,true);monitorRan=true;return true;},
  outbound:async()=>{},recording:async()=>{},ownerRecording:async()=>{},reception:async()=>{},
 });
@@ -46,6 +47,6 @@ const maintenanceResult=await maintenance.GET(new Request('https://example.test/
 assert.equal(maintenanceResult.status,200);const maintenanceBody=await maintenanceResult.json();assert.equal(maintenanceBody.capacity.status,'verification_unavailable');assert.equal(maintenanceBody.ownerExports.status,'export_receipt_held');
 assert.equal(maintenanceBody.ownerExportCapacity.status,'capacity_review_held');
  assert.equal(maintenanceBody.ownerPreflightCleanup.status,'cleanup_pending');
-assert(pruneTried&&lanesRan&&monitorRan);
+assert(pruneTried&&lanesRan&&monitorRan);assert.equal(receiptRuns,1,'Telemetry failure cannot suppress receipt recovery');
 for(const key of ['usageEventTest','usageAdminTest','usageMaintenanceTest'])delete globalThis[key];
 console.log('PASS usage tracking routes: same-origin/session/mode checks, no client account or conversion fields, owner-only report, and telemetry failure isolated from maintenance.');
