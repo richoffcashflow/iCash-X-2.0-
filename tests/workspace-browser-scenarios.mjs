@@ -161,6 +161,7 @@ export async function verifyWorkspace(browser,base,options,name){
   const requested=page.waitForRequest(request=>new URL(request.url()).pathname==='/api/work/fulfillment');
   await panel.getByRole('button',{name:/^Refresh (buyer|closing) details$/}).click();await requested;
   const refreshing=panel.getByRole('button',{name:/^Refresh (buyer|closing) details$/});await refreshing.waitFor();
+  await page.waitForFunction(button=>button?.disabled,await refreshing.elementHandle());
   assert(await refreshing.isDisabled(),'pending recovery cannot start duplicate requests');
   fulfillmentMode='ok';releaseFulfillment();
   await refreshing.waitFor({state:'hidden'});
