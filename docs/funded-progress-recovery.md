@@ -18,7 +18,9 @@ hours, current source evidence and uncertain provider costs remain separate.
 
 The financial baseline at 05:43:57 UTC was $53.81 net settled customer usage
 across 50 accounts in the preceding hour: $54.53 gross usage postings less $0.72
-of coverage/correction credits. A separate $10 credit top-up is not usage.
+of platform coverage for searches whose immutable inventory receipts showed no
+new inventory. There were no duplicate-inventory correction grants in this
+window. A separate $10 credit top-up is not usage.
 There were 394 positive-cost or positive-charge settled operations. Contacts
 were saved by 91 tickets across 43 accounts and property screening was queued
 by 47 tickets across 35 accounts. These are research results, not qualified
@@ -90,3 +92,30 @@ readback, matching production web/worker commits and ordinary completed work.
 Compare the saved before cohort with fresh account, receipt and ledger data.
 Report code, deployment, resumed accounts and remaining provider blockers
 separately. No claim of complete recovery follows from CI or process health.
+
+## Verification checkpoint, November 3 06:10 UTC
+
+The existing #540 change passed its exact PR and main Reliability workflows and
+was verified on both production web and worker at commit 81781c6. The separately
+prepared #541 merged afterward and is preserved by this branch. Do not attribute
+results from either release to this prospective recovery change.
+
+At 06:07:43 UTC the monitor reported 20 stalled funded accounts and 60 pending
+accounts. Seven of the original 21 stalled accounts had positive settled work;
+14 remained stalled and six other accounts crossed the 30-minute threshold. Of
+the original 234 pending operations, one settled before #540 deployed and 233
+remained dispatched. All 60 pending accounts remained in that monitor category.
+
+The rolling hour ending 06:08:16 recorded $52.55 net customer usage across 49
+accounts ($53.94 gross less $1.39 platform coverage), with no top-ups. Since the
+05:43:25 cohort baseline, 322 screenings completed, 196 were financially eligible
+and 128 owner-contact records were saved. There were zero completed seller
+conversations and zero incoming seller messages in that window.
+
+The exact recovery commit 3eb492c passed all four Reliability jobs, including
+native PostgreSQL concurrent scheduling and receipt races, browser checks and
+the full test suite. The two native database installation confirmation requests
+expired; installation was not confirmed and no recovery switch was enabled.
+These observations are a follow-up measurement before this patch, not an
+after-deployment result. Reconcile migration versions and repeat exact checks
+after installation before merging and enabling the release.

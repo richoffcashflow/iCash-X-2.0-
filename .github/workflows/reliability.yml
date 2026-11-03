@@ -60,6 +60,8 @@ jobs:
         run: python3 scripts/test-voice-configuration-target-lookup-postgres.py
       - name: Verify empty batch previews preserve source and concurrent controls
         run: python3 scripts/test-owner-preview-empty-postgres.py
+      - name: Verify reviewed preview rejection recovery under concurrent admission
+        run: python3 scripts/test-owner-preview-rejection-recovery-postgres.py
       - name: Verify original text receipt recovery and callback races
         run: python3 scripts/test-text-delivery-recovery-postgres.py
       - name: Verify original incoming identity recovery and late receipt races
