@@ -6,6 +6,7 @@ async function run(first,second,{receiptSaved=true,rateAllowed=true}={}){
  let available=true,calls=0,saved,writes=[],rates=0;
  const db=async(path,method,body)=>{
   if(path==='rpc/icash_take_dealmachine_request')return ++rates===1||rateAllowed;
+  if(path==='rpc/icash_claim_owner_demo_lookup')return null; // ordinary seller
   if(path==='rpc/icash_claim_seller_lookup_for'){if(!available)return null;available=false;return {id:'fixture',token:'claim',address:'650 Gladiola Lp, Kyle, TX 78640, USA',assignmentFeeCents:1000000,sellerCostReserveCents:100000};}
   if(path==='rpc/icash_finish_seller_lookup'){saved=body.p_output;return true;}
   if(method==='PATCH'){writes.push(body);return receiptSaved?[{id:'fixture'}]:[];}
