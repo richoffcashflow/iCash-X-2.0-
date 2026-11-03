@@ -145,12 +145,15 @@ export async function verifyPreparationInstallation(f,{indexStatements,patchSql,
    const startup=await run(['db','query',timeoutProof,'--remote='+url,'--yes','--workdir='+directory]);
    assert(startup.includes('bounded-fixture-startup-ok'),'CLI startup settings were not honored: '+startup);
    // Disposable event trigger verifies the actual CREATE INDEX sessions, not
-   // merely a separate connection using the same URL. No migration bytes change.
+   // merely a separate connection using the same URL. Observe every CREATE INDEX
+   // during this isolated CLI run, since the CLI may change application_name.
+   // Exact index identities and timeout durations are still required below.
+   // No migration bytes change.
    await q(`create table public.fixture_preparation_cli_timeouts(identity text,application text,lock_timeout text,statement_timeout text,lock_seconds integer,statement_seconds integer);
     create function public.fixture_preparation_cli_timeouts() returns event_trigger language plpgsql as $fixture$
     declare command record;
     begin
-     if current_setting('application_name')='preparation-cli-migration' and tg_tag='CREATE INDEX' then
+     if tg_tag='CREATE INDEX' then
       if current_setting('lock_timeout')::interval<>interval '5 seconds' or current_setting('statement_timeout')::interval<>interval '60 seconds' then
        raise exception 'Actual CLI index timeout mismatch: lock=% (% seconds), statement=% (% seconds), application=%',
         current_setting('lock_timeout'),extract(epoch from current_setting('lock_timeout')::interval),current_setting('statement_timeout'),extract(epoch from current_setting('statement_timeout')::interval),current_setting('application_name');
@@ -183,7 +186,7 @@ export async function verifyPreparationInstallation(f,{indexStatements,patchSql,
    await run(args);
    const firstLedger=await ledger();
    const timeoutRows=(await q('select * from public.fixture_preparation_cli_timeouts order by identity')).rows;
-   assert.deepEqual(timeoutRows.map(({identity,application,lock_seconds,statement_seconds})=>({identity,application,lock_seconds,statement_seconds})),names.map(name=>({identity:'public.'+name,application:'preparation-cli-migration',lock_seconds:5,statement_seconds:60})).sort((a,b)=>a.identity.localeCompare(b.identity)),'Both actual CLI concurrent builds honor configured timeouts');
+   assert.deepEqual(timeoutRows.map(({identity,lock_seconds,statement_seconds})=>({identity,lock_seconds,statement_seconds})),names.map(name=>({identity:'public.'+name,lock_seconds:5,statement_seconds:60})).sort((a,b)=>a.identity.localeCompare(b.identity)),'Both actual CLI concurrent builds honor configured timeouts: '+JSON.stringify(timeoutRows));
    assert.equal(firstLedger.length,3,'Only the three staged migration versions are recorded');
    for(let i=0;i<3;i++){
     const match=migrations[i].name.match(/^(\d{14})_(.+)\.sql$/);
