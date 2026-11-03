@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import {boundedBytes} from './required-call-recording-provider.ts';
-import {primaryBusinessPhone,secondaryBusinessPhone,businessVoiceIngress,isAdditionalBusinessPhone} from './business-phone-policy.ts';
+import {primaryBusinessPhone,secondaryBusinessPhone,businessVoiceIngress,isAdditionalBusinessPhone,isInboundOnlyBusinessPhone} from './business-phone-policy.ts';
 export {primaryBusinessPhone,secondaryBusinessPhone,businessVoiceIngress} from './business-phone-policy.ts';
 
 const phone=z.string().regex(/^\+[1-9]\d{7,14}$/);
@@ -64,11 +64,11 @@ export async function connectBusinessPhone(database:Database,env:Env,fetcher:typ
  if(before.differentDestination)throw new BusinessPhoneError('This number already forwards somewhere else. Review that destination first.');
  if(!before.incoming&&!before.incomingPending)await businessVoiceProviders(env,fetcher,targetPhone).enable();
  const checked=await inspectBusinessPhone(env,fetcher,targetPhone);
- await database('rpc/icash_save_business_voice_number','POST',{p_phone:targetPhone,p_account_sid:checked.providerAccountSid,p_caller_id_sid:checked.callerIdSid,p_forwarding:checked.incoming,p_enabled:checked.incoming&&checked.callerIdVerified});
+ await database('rpc/icash_save_business_voice_number','POST',{p_phone:targetPhone,p_account_sid:checked.providerAccountSid,p_caller_id_sid:checked.callerIdSid,p_forwarding:checked.incoming,p_enabled:!isInboundOnlyBusinessPhone(targetPhone)&&checked.incoming&&checked.callerIdVerified});
  return checked;
 }
 export async function secondaryCallingReady(database:Database,env:Env,fetcher:typeof fetch=fetch,targetPhone:string=secondaryBusinessPhone){
- if(!isAdditionalBusinessPhone(targetPhone))return false;
+ if(!isAdditionalBusinessPhone(targetPhone)||isInboundOnlyBusinessPhone(targetPhone))return false;
  const [row]=await database<{outbound_enabled:boolean;forwarding_ready:boolean;provider_account_sid:string;caller_id_sid:string|null}[]>(`icash_business_voice_numbers?phone=eq.${encodeURIComponent(targetPhone)}&select=outbound_enabled,forwarding_ready,provider_account_sid,caller_id_sid`);
  if(!row?.outbound_enabled||!row.forwarding_ready||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!row.caller_id_sid)return false;
  const p=businessVoiceProviders(env,fetcher,targetPhone),[lease,id,forwarding,ingress]=await Promise.all([p.leased(),p.callerId(),p.forwarding(),p.ingress()]);return lease&&id===row.caller_id_sid&&ingress&&forwarding.enabled&&forwarding.to===businessVoiceIngress&&forwarding.status==='active';

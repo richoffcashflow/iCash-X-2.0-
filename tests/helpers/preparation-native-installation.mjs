@@ -1,7 +1,7 @@
 // Disposable localhost PostgreSQL only; uses the production index statements and
 // guarded function patch supplied by the shared fixture. Never installs remotely.
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,readdir,lstat,realpath,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,isAbsolute} from 'node:path';
 import {execFile} from 'node:child_process';
@@ -117,8 +117,9 @@ export async function verifyPreparationInstallation(f,{indexStatements,patchSql,
   assert(!/^\s*(?:begin|commit)\s*;/im.test(patchSql),'CLI owns the function-and-ledger transaction');
   await pg.exec('begin;\n'+patchSql+'\nrollback;');
   await preserved();
-  // Exercise the actual pinned CLI runner on ONLY the reviewed three-stage
-  // chain and this captured predecessor, not the unrelated historical chain.
+  // Exercise the actual pinned CLI runner on the reviewed three-stage chain
+  // and one synthetic later migration. This is NOT a full historical replay or
+  // evidence that --include-all is safe against the repository/production history.
   const cli=process.env.PREPARATION_SUPABASE_CLI;
   assert(cli&&isAbsolute(cli),'Explicit absolute pinned Supabase CLI path required');
   assert.equal(migrations.length,3);
@@ -203,15 +204,110 @@ export async function verifyPreparationInstallation(f,{indexStatements,patchSql,
    assert.deepEqual(await ledger(),firstLedger,'Second CLI run does not replay or change ledger entries');
    assert.deepEqual((await q('select * from public.fixture_preparation_cli_timeouts order by identity')).rows,timeoutRows,'Second CLI run does not build indexes again');
    assert.deepEqual(await snapshot(),installed,'Second CLI run leaves installed function and evidence unchanged');
-   await writeFile('/tmp/icash-preparation-cli-migrations.json',JSON.stringify({scope:'Three-stage chain on captured predecessor only; not full historical replay',version:'3.0.0',ledger:firstLedger,timeoutRows,runs},null,2));
+   // Simulate the real older-pending shape without importing unrelated history:
+   // apply one later, fixture-only migration through this same CLI, retain its
+   // matching local file, then reset ONLY our three synthetic installation rows.
+   const laterName='20261103235959_fixture_later_recorded.sql';
+   const laterVersion=laterName.slice(0,14);
+   assert(migrations.every(m=>m.name.slice(0,14)<laterVersion));
+   const laterSql="create table public.fixture_preparation_later_evidence(id integer primary key,value text not null);\ninsert into public.fixture_preparation_later_evidence values(1,'later migration evidence must survive');\n";
+   await writeFile(join(migrationDirectory,laterName),laterSql);
+   await run(args);
+   const laterRow=(await ledger()).find(row=>row.version===laterVersion);
+   assert(laterRow);assert.deepEqual(laterRow.statements.flatMap(sqlTokens),sqlTokens(laterSql));
+   const laterEvidence=async()=>(await q('select to_jsonb(e) value from public.fixture_preparation_later_evidence e order by id')).rows;
+   const laterBefore=await laterEvidence();assert.equal(laterBefore.length,1);
+   const preserveLater=async()=>{
+    assert.deepEqual((await ledger()).find(row=>row.version===laterVersion),laterRow,'Later migration ledger remains byte-for-byte unchanged');
+    assert.deepEqual(await laterEvidence(),laterBefore,'Later migration evidence remains unchanged');
+   };
+   await pg.exec(before.definition);
+   for(const name of names)await builder.query('drop index concurrently public.'+name);
+   const removed=await q('delete from supabase_migrations.schema_migrations where version in ($1,$2,$3)',migrations.map(m=>m.name.slice(0,14)));
+   assert.equal(removed.rowCount,3,'Reset only the three fixture preparation versions');
+   await q('delete from public.fixture_preparation_cli_timeouts');
+   await preserved();await preserveLater();
+   // Build an immutable release-only artifact from the exact installed ledger,
+   // then byte-verify its materialization in a separate initialized CLI workdir.
+   // Keeping CLI config outside the artifact preserves the builder's closed tree.
+   const {planPreparationReleaseManifest,buildPreparationReleaseManifest,validatePreparationReleaseManifest}=await import('../../scripts/build-preparation-release-manifest.mjs');
+   const capturedLedger=await ledger();assert.deepEqual(capturedLedger,[laterRow]);
+   const pinnedMigrations=migrations.map(m=>{const match=m.name.match(/^(\d{14})_(.+)\.sql$/);return {version:match[1],name:match[2],bytes:Buffer.from(m.sql)};});
+   const artifactDirectory=join(directory,'release-artifact');
+   const release=await buildPreparationReleaseManifest({ledgerRows:capturedLedger,migrations:pinnedMigrations,outputDirectory:artifactDirectory});
+   assert.deepEqual(release.pendingVersions,migrations.map(m=>m.name.slice(0,14)),'Release prototype permits exactly the three reviewed pending versions');
+   const releasePlan=planPreparationReleaseManifest({ledgerRows:capturedLedger,migrations:pinnedMigrations});
+   const releaseCliDirectory=join(directory,'release-cli');await mkdir(releaseCliDirectory);
+   await run(['init','--yes','--workdir='+releaseCliDirectory]);
+   const releaseCliMigrations=join(releaseCliDirectory,'supabase','migrations');await mkdir(releaseCliMigrations,{recursive:true});
+   const mappedFiles=[...releasePlan.files].filter(([path])=>path.startsWith('migrations/'));
+   for(const [path,bytes] of mappedFiles)await writeFile(join(releaseCliMigrations,path.slice(11)),bytes,{flag:'wx',mode:0o600});
+   const pendingChecks=[];
+   const validateRelease=async expectedPending=>{
+    await validatePreparationReleaseManifest({directory:artifactDirectory,ledgerRows:capturedLedger,migrations:pinnedMigrations,expectedLedgerSha256:release.ledgerSha256});
+    for(const ancestor of [directory,releaseCliDirectory,join(releaseCliDirectory,'supabase'),releaseCliMigrations]){
+     const stat=await lstat(ancestor);assert(stat.isDirectory()&&!stat.isSymbolicLink(),'CLI directory ancestor must be a real directory');
+     assert.equal(await realpath(ancestor),ancestor,'CLI directory aliases are refused');
+    }
+    const entries=await readdir(releaseCliMigrations);assert.deepEqual(entries.sort(),mappedFiles.map(([path])=>path.slice(11)).sort());
+    for(const [path,bytes] of mappedFiles){const file=join(releaseCliMigrations,path.slice(11)),stat=await lstat(file);assert(stat.isFile()&&!stat.isSymbolicLink()&&stat.nlink===1);assert((await readFile(file)).equals(bytes),'CLI materialization retains exact release bytes');}
+    // Revalidate live fixture history, permitting only exact previously observed
+    // preparation rows in prefix order. This is a snapshot, not a deployment lock.
+    const current=await ledger();
+    const applied=current.filter(row=>release.pendingVersions.includes(row.version));
+    assert.deepEqual(current.filter(row=>!release.pendingVersions.includes(row.version)),capturedLedger,'No unrelated ledger drift is accepted');
+    assert.deepEqual(applied,firstLedger.slice(0,applied.length),'Applied release history must be the exact reviewed prefix');
+    const pending=release.pendingVersions.slice(applied.length);
+    assert.deepEqual(pending,expectedPending,'Only expected reviewed files remain pending');
+    pendingChecks.push({installedVersions:current.map(row=>row.version),pendingVersions:pending});
+   };
+   const releaseArgs=args.map(arg=>arg.startsWith('--workdir=')?'--workdir='+releaseCliDirectory:arg);
+   const runRelease=async(includeAll,expectedPending)=>{await validateRelease(expectedPending);return run(includeAll?[...releaseArgs,'--include-all']:releaseArgs);};
+   await assert.rejects(runRelease(false,release.pendingVersions),error=>{
+    const output=String(error.stdout??'')+String(error.stderr??'');
+    return output.includes('Found local migration files to be inserted before the last migration on remote database')&&output.includes('--include-all');
+   },'Default CLI refuses older pending migrations and points to explicit include-all');
+   assert.deepEqual(await ledger(),[laterRow],'Default refusal cannot rewrite migration history');
+   await preserved();await preserveLater();
+   for(const name of names)assert.equal((await one('select to_regclass($1) relation',['public.'+name])).relation,null,'Default refusal does not create an older index');
+   assert.equal((await q('select * from public.fixture_preparation_cli_timeouts')).rows.length,0);
+   // Audit committed ledger insertion order and reject the final insert again,
+   // now with a later migration already present. Rejected work must not replay it.
+   await q(`create table public.fixture_preparation_cli_order(ordinal bigint generated always as identity primary key,version text not null);
+    create function public.fixture_preparation_cli_order() returns trigger language plpgsql as $fixture$
+    begin insert into public.fixture_preparation_cli_order(version) values(new.version);return new;end $fixture$;
+    create trigger fixture_preparation_cli_order after insert on supabase_migrations.schema_migrations for each row execute function public.fixture_preparation_cli_order();
+    create function public.fixture_preparation_reject_ledger() returns trigger language plpgsql as $fixture$
+    begin if new.version='${functionVersion}' then raise exception 'Fixture forced function ledger failure';end if;return new;end $fixture$;
+    create trigger fixture_preparation_reject_ledger before insert on supabase_migrations.schema_migrations for each row execute function public.fixture_preparation_reject_ledger()`);
+   const order=async()=>(await q('select version from public.fixture_preparation_cli_order order by ordinal')).rows.map(row=>row.version);
+   await assert.rejects(runRelease(true,release.pendingVersions),error=>(String(error.stdout??'')+String(error.stderr??'')).includes('Fixture forced function ledger failure'),'Explicit include-all still rolls back function and ledger together');
+   assert.deepEqual((await ledger()).map(row=>row.version),[...migrations.slice(0,2).map(m=>m.name.slice(0,14)),laterVersion]);
+   assert.deepEqual(await order(),migrations.slice(0,2).map(m=>m.name.slice(0,14)));
+   await preserved();await preserveLater();
+   await q('drop trigger fixture_preparation_reject_ledger on supabase_migrations.schema_migrations;drop function public.fixture_preparation_reject_ledger()');
+   await runRelease(true,[functionVersion]);
+   const olderPendingLedger=await ledger();
+   assert.deepEqual(olderPendingLedger,[...firstLedger,laterRow],'Include-all applies exactly the three reviewed migrations and preserves the later row');
+   const applyOrder=await order();assert.deepEqual(applyOrder,migrations.map(m=>m.name.slice(0,14)),'Only intended preparation versions apply, in order');
+   await preserveLater();assert.deepEqual(await snapshot(),installed);
+   const olderPendingTimeoutRows=(await q('select * from public.fixture_preparation_cli_timeouts order by identity')).rows;
+   assert.deepEqual(olderPendingTimeoutRows.map(({identity,lock_seconds,statement_seconds})=>({identity,lock_seconds,statement_seconds})),names.map(name=>({identity:'public.'+name,lock_seconds:5,statement_seconds:60})).sort((a,b)=>a.identity.localeCompare(b.identity)),'Older-pending CLI builds retain exact timeout protection');
+   for(const name of names)assert.deepEqual(await ready(name),{indisvalid:true,indisready:true});
+   await runRelease(true,[]);await runRelease(false,[]);
+   assert.deepEqual(await ledger(),olderPendingLedger);
+   assert.deepEqual(await order(),applyOrder,'Neither rerun replays an already recorded migration');
+   assert.deepEqual((await q('select * from public.fixture_preparation_cli_timeouts order by identity')).rows,olderPendingTimeoutRows);
+   await preserveLater();assert.deepEqual(await snapshot(),installed);
+   await writeFile('/tmp/icash-preparation-cli-migrations.json',JSON.stringify({scope:'Three-stage chain on captured predecessor plus one later recorded fixture migration; not full historical replay',version:'3.0.0',ledger:firstLedger,timeoutRows,olderPending:{laterRow,laterEvidence:laterBefore,ledger:olderPendingLedger,applyOrder,timeoutRows:olderPendingTimeoutRows,releaseManifest:release.manifest,pendingChecks},runs},null,2));
    // Test-only reset for the subsequent independent drift/direct-apply checks.
    await pg.exec(before.definition);await preserved();
   }finally{
-   await q("drop event trigger if exists fixture_preparation_cli_timeouts;drop function if exists public.fixture_preparation_cli_timeouts();drop table if exists public.fixture_preparation_cli_timeouts;drop function if exists public.fixture_preparation_reject_ledger() cascade");
-   await writeFile('/tmp/icash-preparation-cli-runner.json',JSON.stringify({scope:'Disposable localhost three-stage chain',runs},null,2));
+   await q("drop event trigger if exists fixture_preparation_cli_timeouts;drop function if exists public.fixture_preparation_cli_timeouts();drop table if exists public.fixture_preparation_cli_timeouts;drop function if exists public.fixture_preparation_reject_ledger() cascade;drop function if exists public.fixture_preparation_cli_order() cascade;drop table if exists public.fixture_preparation_cli_order");
+   await writeFile('/tmp/icash-preparation-cli-runner.json',JSON.stringify({scope:'Disposable localhost three-stage chain plus synthetic later record; no full-history or raw-repository include-all claim',runs},null,2));
    await rm(directory,{recursive:true,force:true});
   }
-  console.log('PASS pinned CLI3: three-stage migration chain on captured predecessor, exact ledger SQL tokens, forced function/ledger rollback, valid indexes, preserved evidence and no-op second run.');
+  console.log('PASS pinned CLI3: three-stage migration chain on captured predecessor, exact ledger SQL tokens, forced function/ledger rollback, valid indexes, preserved evidence, later-recorded default refusal/include-all order and no-op reruns. Isolated fixture only, not full-history or raw-repository release validation.');
   console.log('PASS native installation: missing/wrong/invalid index guards, canceled build residue, explicit retry rejection, concurrent receipt writer progress, sequential valid/ready indexes and transactional function-patch rollback.');
  }finally{
   await Promise.all([oldWriter.query('rollback').catch(()=>{}),freshWriter.query('rollback').catch(()=>{})]);
