@@ -51,10 +51,10 @@ def seed(number, age="1 hour"):
 
 def reset_window(used):
     # This mutates only this disposable fixture, never live counters.
-    sql(f"""truncate icash_research_private.request_reserve_admissions,icash_research_private.requests;
+    sql(f"""truncate icash_research_private.request_reserve_admissions,icash_research_private.requests,icash_research_private.quota_feedback;
+      insert into icash_research_private.quota_feedback(id) values(1);
       update public.icash_dealmachine_request_budget set minute_start=now(),minute_used=0,
-        minute_limit=60,day_start=now(),day_used={used},day_limit=9800 where id=1;
-      update icash_research_private.quota_feedback set blocked_until=null where id=1;""")
+        minute_limit=60,day_start=now(),day_used={used},day_limit=9800 where id=1;""")
 
 
 def request(account=None, request_id=None, kind="owner_preview", operation=None):
