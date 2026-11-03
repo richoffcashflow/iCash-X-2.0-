@@ -38,6 +38,19 @@ try{
  assert.equal(parse(await refresh()).issueCount,4,'repeated refresh cannot inflate warnings');
  assert.deepEqual(await one('select to_jsonb(b) from icash_dealmachine_request_budget b'),before,'installation and monitoring never mutate counters');
 
+ // Use the original scheduler capacity predicate, not a synthetic admission.
+ const capacity=read('config/provider-quota-scheduling.sql');
+ await pg.exec(capacity.slice(capacity.indexOf('create function public.icash_dealmachine_capacity_available'),capacity.indexOf('alter function public.icash_outbound_search_due')));
+ await pg.exec('update icash_dealmachine_request_budget set day_used=9799');
+ const partial=await one('select to_jsonb(b) from icash_dealmachine_request_budget b');
+ report=parse(await refresh());assert.equal(report.researchQuota.status,'day_insufficient');
+ assert.equal(report.researchQuota.dayRemaining,1);assert.equal(report.issueCount,4);
+ assert.equal(report.researchQuota.nextAvailableAt,report.researchQuota.dayResetsAt);
+ assert.equal(await one('select icash_dealmachine_capacity_available()'),false,'One slot cannot admit ordinary research');
+ assert.equal(await one('select icash_dealmachine_capacity_available(1)'),true,'Do not claim all free requests are blocked');
+ assert.deepEqual(await one('select to_jsonb(b) from icash_dealmachine_request_budget b'),partial);
+ await pg.exec('update icash_dealmachine_request_budget set day_used=9800');
+
  await pg.exec("update icash_dealmachine_request_budget set day_start=now()-interval '25 hours'");
  const expired=await one('select to_jsonb(b) from icash_dealmachine_request_budget b');
  report=parse(await refresh());assert.equal(report.researchQuota.status,'available');
@@ -45,6 +58,11 @@ try{
  assert.equal(report.issueCount,3,'only the quota warning recovers; independent issues stay');
  assert.deepEqual(await one('select to_jsonb(b) from icash_dealmachine_request_budget b'),expired,'an elapsed window is calculated, never reset by the monitor');
 
+ await pg.exec("update icash_dealmachine_request_budget set minute_start=now(),minute_used=59");
+ report=parse(await refresh());assert.equal(report.researchQuota.status,'minute_insufficient');assert.equal(report.issueCount,3);
+ assert.equal(await one('select icash_dealmachine_capacity_available()'),false);
+ assert.equal(await one('select icash_dealmachine_capacity_available(1)'),true);
+ assert.ok(report.researchQuota.nextAvailableAt);
  await pg.exec("update icash_dealmachine_request_budget set minute_start=now(),minute_used=60");
  report=parse(await refresh());assert.equal(report.researchQuota.status,'minute_exhausted');assert.equal(report.issueCount,3,'ordinary minute pacing is visible without an outage alert');
  assert.ok(report.researchQuota.nextAvailableAt);
