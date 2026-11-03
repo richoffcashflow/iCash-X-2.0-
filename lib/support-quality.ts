@@ -3,6 +3,7 @@ import {supportSafetyOnly} from './support-reply-style.ts';
 import {supportContactTimingQuestion,supportContractTimingQuestion} from './support-product-clarifications.ts';
 import {supportLeadImportQuestion} from './support-lead-policy.ts';
 import {supportBotWorkProblem} from './support-reply-style.ts';
+import {supportProductConflict} from './support-product-conflicts.ts';
 
 export type QualityMessage={role:string;content:string;created_at:string};
 export type QualityConversation={id:string;kind:'account'|'access';subject:string;status:string;updated_at:string;messages:QualityMessage[]};
@@ -36,6 +37,10 @@ export function supportQualityReport(conversations:QualityConversation[],now=new
   let question='';
   const mismatch=recent.some(m=>{
    if(m.role==='user'){question=m.content;return false;}
+   if(m.role==='assistant'&&supportProductConflict(m.content,question))return true;
+   if(m.role==='assistant'&&/\b(?:company|business|my name|introduce myself)\b/i.test(question)&&/don.t need to add listings|upload properties/i.test(m.content))return true;
+   if(m.role==='assistant'&&/\bbuyer\b/i.test(question)&&/\b(?:purchase agreement|contract)\b/i.test(question)&&/Seller is ready for an agreement/i.test(m.content))return true;
+   if(m.role==='assistant'&&/\b(?:can you check|please check|check it|check that|what (?:is|are) (?:the|this|that)?\s*\$?10|what.*dollars.*for)\b/i.test(question)&&/what are you trying to do|don.t have a confirmed answer/i.test(m.content))return true;
    return m.role==='assistant'&&((supportContactTimingQuestion(question)&&/don.t need to add listings|outreach hours/i.test(m.content))||(supportContractTimingQuestion(question)&&/Agreements are inside|choose Take over/i.test(m.content))||(/checkout/i.test(question)&&/not go through|failed|didn.t go through/i.test(question)&&/sign.in.*code|code.*sign.in/i.test(m.content))||(supportBotWorkProblem(question)&&/sign.in step|passwords and sign.in codes/i.test(m.content))||(supportLeadImportQuestion(question)&&!/cannot|can.t|not (?:available|supported|a feature)/i.test(m.content)));
   });
   if(mismatch)flags.push({code:'mismatch',label:'Answer may miss the question'});

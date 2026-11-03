@@ -10,6 +10,8 @@ export function supportInstructionCorrection(messages:Turn[],evidence:SupportEvi
  const question=messages.filter(m=>m.role==='user').at(-1)?.content??'';
  if(['cancel','refund','billing','human','setup'].includes(supportTopic(question)))return null;
  const previous=messages.filter(m=>m.role==='assistant'||m.role==='operator').at(-1)?.content??'';
+ const deniedSellerCalling=previous.split(/[.!?\n]/).some(sentence=>/\b(?:ai|bot|icash\s*x)\b.{0,55}\b(?:does not|doesn[’']t|cannot|can[’']t|will not|won[’']t|never)\s+(?:(?:makes?|places?|handle)\s+)?calls?\b/i.test(sentence)&&! /\b(?:buyers?|title|you|your phone|support|because|while|until|without|when|if|currently|right now|paused|stopped|disabled|blocked|held|credits?|no usable|no valid|opted out|suppressed)\b|\bon your account\b/i.test(sentence));
+ if(deniedSellerCalling&&(supportContinuation(question)||/\b(?:bot|ai|call|calling|calls)\b/i.test(question))&&!/\b(?:buyers?|card|photo|course|sign.?in|log.?in)\b/i.test(question))return 'My earlier reply was wrong: the bot can call eligible sellers automatically. That describes the feature, not proof that a call happened on your account; actual calls need to be checked in the recorded activity.';
  if(!inventedControl.test(previous)||!instruction.test(previous)||/there (?:isn.t|is no)|doesn.t exist/i.test(previous))return null;
  if(!supportContinuation(question)&&!(/\b(?:where|find|see|show|button|setting|permission)\b/i.test(question)&&inventedControl.test(question)))return null;
  const running=evidence.some(e=>e.key==='work'&&e.status==='ok'&&e.code==='not_paused');
