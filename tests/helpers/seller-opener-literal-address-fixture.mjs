@@ -1,0 +1,10 @@
+import {readFileSync} from 'node:fs';
+import {pathToFileURL} from 'node:url';
+import {setupSql as baseSetup,migration as ampersand,queueSql} from './seller-opener-ampersand-fixture.mjs';
+const read=p=>readFileSync(new URL('../../'+p,import.meta.url),'utf8');
+export const setupSql=baseSetup+ampersand;
+export const migration=read('config/seller-opener-literal-address-copy.sql');
+export const seedSql="select fixture_seed_admission(1,1);update icash_customer_identities set company_name='A-B Homes';update icash_deal_files set terms=jsonb_set(terms,'{address}','\"123 Main St #4/2\"');";
+export const expected='Hi, contacting you for A-B Homes about a cash offer. Do you own 123 Main St #4/2? Reply STOP to opt out.';
+export {queueSql};
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)console.log(JSON.stringify({setupSql,migration,seedSql,queueSql,expected}));
