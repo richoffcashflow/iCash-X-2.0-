@@ -81,6 +81,27 @@ assert.equal(await rpc('icash_claim_seller_text_agreement',[c.a,r.j.id]),null,'o
 assert.equal((await one('select count(*)::int n from icash_seller_agreement_private.confirmations where account_id=$1',[c.a])).n,1);
 
 const ownerUnknown=await seed({qualified:false});r=await run(ownerUnknown,'How much');assert.equal(r.plan.action,'qualify_ownership');assert.equal(r.plan.state.acceptedPriceCents,null);
+// A new price question reopens negotiation even after an earlier yes. It is
+// neither a legal-name answer nor acceptance of the current or requested price.
+for(const [body,asking,quoted] of [
+ ['Could you do $120,000?',12000000,10200000],
+ ['Can you pay me $90,000?',9000000,9000000],
+ ['Would you offer one hundred twenty thousand dollars?',12000000,10200000],
+ ['Will you do $102,000?',10200000,10200000],
+]){
+ const counter=await seed();await run(counter,'I need $210k');
+ r=await run(counter,'Yes');assert.equal(r.plan.action,'legal_name');
+ r=await run(counter,body);assert.equal(r.plan.action,'cash_offer',body);
+ assert.equal(r.plan.state.acceptedPriceCents,null,body+' is not acceptance');
+ assert.equal(r.plan.state.proposedPriceCents,asking);assert.equal(r.plan.state.quotedPriceCents,quoted);
+ assert.equal(r.progress.reason,'awaiting_seller_reply');
+ r=await run(counter,'Yes');assert.equal(r.plan.action,'legal_name');
+ assert.equal(r.plan.state.acceptedPriceCents,quoted,'a fresh answer to the delivered proposal is required');
+}
+for(const body of ['Could you do $120k net?','Could you do $120k if we close Friday?','Could you do $120k or $130k?','Could you not do $120k?','Could you offer a $120k repair budget?','Can you pay my $120k mortgage?','Could you do a $120k deposit?']){
+ assert.equal(callSellerPriceEvidence({transcript:[{role:'user',message:body}]},{action:'report_change',sellerStatement:body}),null,body);
+}
+assert.equal(callSellerPriceEvidence({transcript:[{role:'user',message:'Could you do $120k net?'}]},{action:'report_change',sellerStatement:'Could you do $120k?'}),null,'the whole latest source must match');
 for(const body of ['90,000','I am asking ninety thousand dollars.']){
  const ordinaryPrice=await seed();
  await q("insert into icash_text_messages(account_id,thread_id,direction,state,body,provider_id,created_at) values($1,$2,'outgoing','delivered','What price did you have in mind?','fixture-price-question',$3)",[ordinaryPrice.a,ordinaryPrice.t,at()]);

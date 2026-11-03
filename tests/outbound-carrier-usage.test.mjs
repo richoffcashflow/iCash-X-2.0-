@@ -59,6 +59,39 @@ apiReset();settlement=[];assert.equal((await settleBoundVoiceUsage(integrationDb
 apiReset();call.to='+12125559999';assert.equal((await settleBoundVoiceUsage(integrationDb,'account','call',[policy],{env,fetcher:apiFetch})).reason,'cost_evidence_incomplete');
 console.log('PASS: transient carrier/pricing unavailability is retryable; identity/tariff-policy violations remain fail-closed review holds');
 
+// Inclusive AI USD can arrive after the bounded destination-tariff window.
+// Capture the original approved snapshot now, without treating missing AI cost
+// as zero or settling any customer money; reuse that snapshot on a later receipt.
+const missingAiDb=async(path,method,body)=>path.startsWith('icash_cost_observations')?[]:integrationDb(path,method,body);
+apiReset();settlement=[];
+assert.deepEqual(await settleBoundVoiceUsage(missingAiDb,'account','call',[policy],{env,fetcher:apiFetch}),{status:'held',reason:'provider_receipt_missing'});
+assert.equal(snapshotWrites,1,'Missing AI USD must not discard the original carrier-pricing window');
+assert.equal(priceReads,1);assert.equal(settlement.length,0);
+const originalSnapshot=structuredClone(stored),lateClock=Date.now;
+try{
+ Date.now=()=>lateClock()+2*86400000;
+ pricing.outbound_call_prices[0].current_price='0.099';
+ assert.deepEqual(await settleBoundVoiceUsage(integrationDb,'account','call',[policy],{env,fetcher:apiFetch}),{status:'settled',costBasis:'estimated'});
+ assert.equal(priceReads,1,'A late AI receipt must reuse the original tariff');assert.equal(snapshotWrites,1);assert.deepEqual(stored,originalSnapshot);
+ assert.equal(settlement[0].p_components.twilio.amountMicros,195100);assert.equal(settlement[0].p_components.elevenlabs.amountMicros,10000);
+ assert.equal(Object.keys(settlement[0].p_components).length,16);
+}finally{Date.now=lateClock;}
+// Capture errors remain missing-AI holds, so the existing reconciliation path
+// can still fetch a genuine late USD receipt. No old tariff is reconstructed.
+for(const change of [()=>{call.end_time=new Date(Date.now()-86401000).toUTCString();},()=>{call.to='+12125559999';},()=>{pricing.iso_country='CA';},()=>{pricing.price_unit='EUR';},()=>{pricing.outbound_call_prices[0].current_price='0.100001';},()=>{el.metadata.phone_call.call_sid='CA'+'c'.repeat(32);},()=>{jobRow.state='dispatching';}]){
+ apiReset();settlement=[];change();
+ assert.deepEqual(await settleBoundVoiceUsage(missingAiDb,'account','call',[policy],{env,fetcher:apiFetch}),{status:'held',reason:'provider_receipt_missing'});
+ assert.equal(snapshotWrites,0);assert.equal(settlement.length,0);
+}
+apiReset();settlement=[];
+assert.deepEqual(await settleBoundVoiceUsage(missingAiDb,'account','call',[policy],{env,fetcher:async()=>Response.json({},{status:503})}),{status:'held',reason:'provider_receipt_missing'});
+assert.equal(snapshotWrites,0);assert.equal(settlement.length,0);
+for(const policies of [[{...policy,enabled:false}],[{...policy,reviewedAt:'2026-10-03'}],[{...policy,validUntil:'2026-10-01'}],[policy,policy],[]]){
+ apiReset();settlement=[];assert.equal((await settleBoundVoiceUsage(missingAiDb,'account','call',policies,{env,fetcher:apiFetch})).status,'held');
+ assert.equal(seen.length,0);assert.equal(snapshotWrites,0);assert.equal(settlement.length,0);
+}
+console.log('PASS: delayed AI USD preserves the bounded original carrier snapshot without settlement; late receipts reuse it and invalid/expired evidence stays held');
+
 apiReset();const shared=structuredClone(apiRule);delete shared.accountId;shared.accountScope='operation_owner';assert.equal((await outboundCarrierInput(apiDb,'account',binding,shared,env,apiFetch)).kind,'fixed_estimate');
 apiReset();call.end_time=new Date(Date.now()-86401000).toUTCString();await assert.rejects(outboundCarrierInput(apiDb,'account',binding,apiRule,env,apiFetch));assert.equal(priceReads,0);
 console.log('PASS: explicit operation-owner shared policy scope; no current pricing lookup outside approved terminal-time window');

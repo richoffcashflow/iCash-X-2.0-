@@ -143,13 +143,18 @@ export function callSellerStatement(value:unknown,input:Record<string,unknown>):
  return latest;
 }
 
+const sellerPriceQuestionPrefix=/^(?:can|could|would|will) you (?:do|pay|offer)(?: me| us)?\s+/i;
+/** A price question reopens negotiation even when it repeats the last quote.
+ * This only invalidates acceptance; extraction still needs the full checks below. */
+export function sellerAskingPriceQuestion(text:string){return sellerPriceQuestionPrefix.test(text.trim())&&spokenMoneyAmounts(text).length>0;}
 /** An exact, unconditional seller asking price can seed a fresh proposal. It
  * never becomes acceptance until the server quotes it and the seller confirms. */
 export function callSellerPriceEvidence(value:unknown,input:Record<string,unknown>):number|null{
  if(input.action!=='report_change'||!callOfferEvidence(value,input))return null;
  const text=String(input.sellerStatement??'').trim(),amounts=spokenMoneyAmounts(text);
  if(amounts.length!==1||amounts[0]<=0||/\b(not|no|but|if|unless|maybe|between|at least|more than|less than|mortgage|owe|repair|tax|lien|deposit|net|after fees)\b/i.test(text))return null;
- const prefix=/^(?:my asking price is|i am asking|i['’]m asking|i (?:need|want)|i would (?:take|accept)|i['’]d (?:take|accept)|i can (?:take|accept)|i will (?:take|accept)|i['’]ll (?:take|accept))\s+/i.exec(text);
+ const counterQuestion=sellerPriceQuestionPrefix.exec(text);
+ const prefix=counterQuestion??/^(?:my asking price is|i am asking|i['’]m asking|i (?:need|want)|i would (?:take|accept)|i['’]d (?:take|accept)|i can (?:take|accept)|i will (?:take|accept)|i['’]ll (?:take|accept))\s+/i.exec(text);
  const turns=(object(value).transcript as unknown[]).map(object).filter(t=>['user','agent'].includes(String(t.role))&&typeof t.message==='string');
  const index=turns.findLastIndex(t=>t.role==='user');
  const previous=String(turns.slice(0,index).findLast(t=>t.role==='agent')?.message??'');
@@ -158,7 +163,7 @@ export function callSellerPriceEvidence(value:unknown,input:Record<string,unknow
  const askedPrice=/\b(?:asking price|what price|how much.*(?:want|asking|sell)|price.*(?:mind|looking))\b/i.test(question);
  const works=/\s+(?:works for me|is my (?:asking )?price)[.!]*$/i.test(text);
  if(!prefix&&!askedPrice&&!works)return null;
- const rest=text.slice(prefix?.[0].length??0).replace(/\s+(?:works for me|is my (?:asking )?price)[.!]*$/i,'').replace(/[.!]+$/,'').trim();
+ const rest=text.slice(prefix?.[0].length??0).replace(/\s+(?:works for me|is my (?:asking )?price)[.!]*$/i,'').replace(counterQuestion?/[.!?]+$/:/[.!]+$/,'').trim();
  const words=Object.keys(units).concat('hundred','thousand','million','and').join('|');
  const moneyOnly=new RegExp(`^(?:\\$?\\d[\\d,]*(?:\\.\\d{1,2})?\\s*(?:k|thousand|million)?(?: dollars?)?|(?:${words})(?:[ -]+(?:${words}))*(?: dollars?)?)$`,'i');
  if(!moneyOnly.test(rest))return null;

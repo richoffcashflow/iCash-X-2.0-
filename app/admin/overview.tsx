@@ -92,6 +92,13 @@ export function OwnerOverviewView(){
      {!report.reliability.fresh&&<span>Monitoring is overdue. The saved results do not confirm current health.</span>}
      {report.reliability.snapshot&&<>
       <span>{report.reliability.snapshot.issueCount} active alerts · Checked {overviewTime(report.reliability.snapshot.checkedAt)} CT</span>
+      {report.reliability.snapshot.incomingTexts&&(!report.reliability.snapshot.incomingTexts.fresh||report.reliability.snapshot.incomingTexts.warningCount>0)&&<div>
+       <strong>{report.reliability.snapshot.incomingTexts.fresh?'Incoming text delivery needs review':'Incoming text monitoring unavailable'}</strong>
+       <p>{report.reliability.snapshot.incomingTexts.fresh?'An enabled line has sent property texts in the past 24 hours with unverified incoming delivery or a saved carrier blocking notice. Outgoing delivery confirmations do not verify incoming service.':'The latest incoming-text health check could not be verified. Earlier warnings remain active while other workflow checks continue.'}</p>
+       {report.reliability.snapshot.incomingTexts.lines.map(line=><p key={line.phone}>{line.phone} · {incomingStatusLabels[line.incomingStatus]} · {line.propertyAccepted24h} accepted · {line.propertyDelivered24h} delivery confirmations · Last incoming: {line.lastIncomingAt?overviewTime(line.lastIncomingAt)+' CT':'not observed'}.</p>)}
+       {report.reliability.snapshot.incomingTexts.warningCount>report.reliability.snapshot.incomingTexts.lines.length&&report.reliability.snapshot.incomingTexts.fresh&&<p>Showing {report.reliability.snapshot.incomingTexts.lines.length} of {report.reliability.snapshot.incomingTexts.warningCount} lines.</p>}
+       <p>Verify incoming delivery with the messaging provider before treating this line as healthy.</p>
+      </div>}
       {report.reliability.snapshot.accountProgress&&<div>
        <strong>{report.reliability.snapshot.accountProgress.affectedAccounts} funded accounts with blocked or stalled work</strong>
        <p>{report.reliability.snapshot.accountProgress.expiredConfigurations} expired configurations · {report.reliability.snapshot.accountProgress.unexpectedPauses} unexpected pauses · {report.reliability.snapshot.accountProgress.stalledAccounts} without recent completed work · {report.reliability.snapshot.accountProgress.pendingAccounts} awaiting earlier work.</p>

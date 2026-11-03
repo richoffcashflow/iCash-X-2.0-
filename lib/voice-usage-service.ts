@@ -58,7 +58,20 @@ export async function settleBoundVoiceUsage(db:VoiceUsageDb,accountId:string,cal
  const from=Date.parse(policy.validFrom),until=Date.parse(policy.validUntil);
  if(!ref(policy.evidenceRef)||!ref(policy.version)||![created,reviewed,from,until].every(Number.isFinite)||reviewed>created||from>created||until<=created||from>=until)return hold('reviewed_policy_invalid');
  const observations=await db<{amount:unknown;units:string}[]>(`icash_cost_observations?provider=eq.elevenlabs&event_key=eq.${eq(call.conversation_id)}&source_ref=eq.${eq(call.operation_key)}&select=amount,units`);
- if(observations.length!==1||observations[0].units?.toLowerCase()!=='usd')return hold('provider_receipt_missing');
+ if(observations.length!==1||observations[0].units?.toLowerCase()!=='usd'){
+  // AI USD can arrive after the approved carrier-pricing window closes. Save
+  // that independently bound original snapshot while it is still available;
+  // missing AI cost remains unknown and can never reach customer settlement.
+  const rule=policy.components?.twilio;
+  if(carrier&&['seller_call','buyer_call'].includes(policy.operation)&&Object.keys(policy.components??{}).length===costCategories.length-1
+   &&rule?.kind==='outbound_carrier_estimate'&&rule.source?.kind==='twilio_pricing_api'){
+   try{await outboundCarrierInput(db,accountId,call,rule,carrier.env,carrier.fetcher,carrier.signal);}catch{
+    // Retain the missing-AI reason so canonical late receipt recovery continues.
+    // Expired windows or failed bindings never produce a substitute tariff.
+   }
+  }
+  return hold('provider_receipt_missing');
+ }
  let manifest:ReturnType<typeof voiceCostManifest>;
  try{
   if(!policy.components||Object.keys(policy.components).length!==costCategories.length-1)throw Error('Incomplete policy');
