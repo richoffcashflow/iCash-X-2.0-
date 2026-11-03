@@ -6,6 +6,13 @@ import {fileURLToPath} from 'node:url';
 import {createOperationalContactFixture} from './helpers/operational-contact-fixture.mjs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const sql=read('config/operational-preparation-receipt-bindings.sql');
+const migrationNames=['20261103211342_operational_preparation_phone_index.sql','20261103214105_operational_preparation_national_index.sql','20261103214109_operational_preparation_receipt_bindings.sql'];
+const migrations=migrationNames.map(name=>({name,sql:read('supabase/migrations/'+name)}));
+const indexStatements=['phone','national'].map(kind=>read('config/operational-preparation-'+kind+'-index.sql'));
+assert.deepEqual(migrations.map(m=>m.sql),[...indexStatements,sql],'CLI-generated three-stage chain exactly mirrors reviewed configs');
+// Only isolated fixture engines use ordinary builds; native installation below
+// executes the unmodified concurrent staging statements one at a time.
+const fixtureIndexStatements=indexStatements.map(statement=>statement.replace(/\bconcurrently\b/gi,''));
 const original=sql.match(/old_query text:=\$old\$([\s\S]*?)\$old\$/)[1];
 const replacement=sql.match(/new_query text:=\$new\$([\s\S]*?)\$new\$/)[1];
 const native=process.env.PREPARATION_NATIVE_TEST==='1';
@@ -37,7 +44,7 @@ try{
  assert.equal(result.observations,1);
  const before=(await one("select pg_get_functiondef('icash_prepare_operational_contacts_before_dm_observations(uuid)'::regprocedure) definition")).definition;
  const validator=(await one("select pg_get_functiondef('icash_operational_contact_current(uuid,uuid,text,boolean)'::regprocedure) definition")).definition;
- const fixtureIndexes=sql.slice(sql.indexOf('create index icash_dnc_clear_phone_expiry'),sql.lastIndexOf('commit;'))
+ const fixtureIndexes=fixtureIndexStatements.join('\n')
   .replaceAll('icash_dnc_clear_phone_expiry','fixture_test_phone_expiry').replaceAll('icash_dnc_clear_national_screening_expiry','fixture_test_national_expiry');
  await pg.exec(fixtureIndexes);
  const dropFixtureIndexes=()=>pg.exec('drop index fixture_test_phone_expiry;drop index fixture_test_national_expiry');
@@ -242,10 +249,39 @@ create function icash_dealmachine_credit_manifest_hash(operation text) returns t
  const costs=(await one('select count(*) n from icash_operation_spend')).n;
  const unchangedState=async()=>({
   budget:(await one('select to_jsonb(b) value from icash_operating_budget b where id=1')).value,
+  functionSecurity:(await q("select oid::regprocedure::text signature,proowner,proacl,prosecdef,proconfig,provolatile,proparallel,proleakproof from pg_proc where oid in ('icash_prepare_operational_contacts_before_dm_observations(uuid)'::regprocedure,'icash_operational_source_phone(jsonb,text)'::regprocedure,'icash_operational_contact_current(uuid,uuid,text,boolean)'::regprocedure) order by 1")).rows,
   receipts:(await q('select to_jsonb(r) value from icash_dnc_verification_receipts r order by id')).rows,
   entrypoints:(await q("select oid::regprocedure::text signature,pg_get_functiondef(oid) definition from pg_proc where oid in ('icash_queue_voice_jobs()'::regprocedure,'icash_prepare_operational_contacts(uuid)'::regprocedure,'icash_project_operational_sms_contacts(uuid)'::regprocedure) order by 1")).rows
  });
  const preserved=await unchangedState();
+ if(native){
+  await (await import('./helpers/preparation-native-installation.mjs')).verifyPreparationInstallation(f,{indexStatements,patchSql:sql,migrations});
+ }else{
+  const refuse=async()=>{
+   await assert.rejects(pg.exec(sql),/Preparation receipt binding indexes are absent, invalid, or changed/);
+   await pg.exec('rollback');
+   assert.deepEqual(await unchangedState(),preserved);
+   assert.equal((await one("select pg_get_functiondef('icash_prepare_operational_contacts_before_dm_observations(uuid)'::regprocedure) definition")).definition,before);
+  };
+  await refuse();
+  await pg.exec('create index icash_dnc_clear_phone_expiry on public.icash_dnc_verification_receipts(id)');
+  await pg.exec(fixtureIndexStatements[1]);
+  await refuse();
+  await pg.exec('drop index icash_dnc_clear_phone_expiry');
+  await pg.exec(fixtureIndexStatements[0]);
+ }
+ for(const signature of ['icash_prepare_operational_contacts_before_dm_observations(uuid)','icash_operational_source_phone(jsonb,text)']){
+  const definition=(await one('select pg_get_functiondef($1::regprocedure) definition',[signature])).definition;
+  const drift=definition.replace('AS $function$','AS $function$\n-- Isolated prerequisite drift');
+  assert.notEqual(drift,definition,'Fixture must actually alter the function body');
+  await pg.exec(drift);
+  const changed=(await one('select pg_get_functiondef($1::regprocedure) definition',[signature])).definition;
+  await assert.rejects(pg.exec(sql),/Preparation receipt binding prerequisite changed/);
+  await pg.exec('rollback');
+  assert.equal((await one('select pg_get_functiondef($1::regprocedure) definition',[signature])).definition,changed,'Refused migration must not overwrite the changed prerequisite');
+  await pg.exec(definition);
+  assert.deepEqual(await unchangedState(),preserved,'Restored fixture retains owner, ACL and security metadata');
+ }
  await pg.exec(sql);
  assert.equal((await one("select pg_get_functiondef('icash_prepare_operational_contacts_before_dm_observations(uuid)'::regprocedure) definition")).definition,before.replace(original,replacement),'only selector changes; insertion loop remains exact');
  assert.equal((await one("select pg_get_functiondef('icash_operational_contact_current(uuid,uuid,text,boolean)'::regprocedure) definition")).definition,validator);

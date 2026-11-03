@@ -1,14 +1,12 @@
--- ISOLATED PROPOSAL ONLY. No production migration or activation.
--- National observations first bind their exact source. The unchanged full source
--- phone proof implies membership in the old JSON expansion before final LIMIT.
--- Legacy receipts retain the original phone-expansion selector unchanged.
--- Installation still requires separate review: these nonconcurrent indexes can
--- briefly block receipt writes. Do not apply during the overlapping repair.
-begin;
-set local lock_timeout='5s';
-set local statement_timeout='30s';
+-- Function-only patch after both verified index migrations; caller owns transaction.
+-- No explicit transaction control: the CLI owns the patch plus ledger transaction.
+-- This file never builds indexes, runs preparation, or changes customer evidence.
+-- National observations bind exact saved sources; legacy and full proof are unchanged.
+set local lock_timeout='2s';
+set local statement_timeout='10s';
+set local search_path=pg_catalog,public;
 do $patch$
-declare definition text;old_query text:=$old$with candidates as materialized (
+declare definition text;before_metadata jsonb;old_query text:=$old$with candidates as materialized (
   select oc.account_id,oc.screening_id,a.owner_user_id,i.principal,public.icash_operational_phone(ph->>'number') phone,
  encode(sha256(convert_to(oc.result::text,'UTF8')),'hex') source_hash,
  receipt.id dnc_id,case when zone.name is not null and length(trim(coalesce(receipt.timezone_source_reference,'')))>=12 then zone.name else 'Pacific/Honolulu' end timezone,
@@ -153,6 +151,25 @@ new_query text:=$new$with candidates as materialized (
  and public.icash_operational_source_phone(oc.result,receipt.phone)
  order by candidate.account_id,candidate.screening_id,candidate.dnc_id limit 100$new$;
 begin
+ if exists (
+  select 1 from (values
+   ('icash_dnc_clear_phone_expiry', $index$CREATE INDEX icash_dnc_clear_phone_expiry ON public.icash_dnc_verification_receipts USING btree (phone, expires_at) WHERE (clear AND (revoked_at IS NULL))$index$),
+   ('icash_dnc_clear_national_screening_expiry', $index$CREATE INDEX icash_dnc_clear_national_screening_expiry ON public.icash_dnc_verification_receipts USING btree (((observation_provenance ->> 'screeningId'::text)), expires_at) WHERE ((evidence_kind = 'national_provider_observation'::text) AND clear AND (revoked_at IS NULL))$index$)
+  ) expected(name,definition)
+  left join pg_class idx on idx.oid=to_regclass('public.'||expected.name)
+  left join pg_index ind on ind.indexrelid=idx.oid
+  left join pg_am am on am.oid=idx.relam
+  where idx.oid is null or idx.relkind<>'i' or idx.relpersistence<>'p' or am.amname<>'btree'
+   or ind.indrelid is distinct from 'public.icash_dnc_verification_receipts'::regclass
+   or ind.indisvalid is distinct from true or ind.indisready is distinct from true or ind.indislive is distinct from true
+   or ind.indisunique or ind.indisprimary or ind.indisexclusion or ind.indnatts<>2 or ind.indnkeyatts<>2
+   or pg_get_indexdef(idx.oid) is distinct from expected.definition
+ ) then
+  raise exception 'Preparation receipt binding indexes are absent, invalid, or changed';
+ end if;
+ select jsonb_build_object('oid',oid,'owner',proowner,'acl',proacl,'security_definer',prosecdef,'config',proconfig)
+ into before_metadata from pg_proc
+ where oid='public.icash_prepare_operational_contacts_before_dm_observations(uuid)'::regprocedure;
  definition:=pg_get_functiondef('public.icash_prepare_operational_contacts_before_dm_observations(uuid)'::regprocedure);
  if md5(definition)<>'f5cf10274a2bcc289a5e1d1149acd224'
   or md5(pg_get_functiondef('public.icash_operational_source_phone(jsonb,text)'::regprocedure))<>'8d0ad5753ae14838c26fcdecc58a1932'
@@ -160,11 +177,12 @@ begin
   raise exception 'Preparation receipt binding prerequisite changed';
  end if;
  execute replace(definition,old_query,new_query);
+ if pg_get_functiondef('public.icash_prepare_operational_contacts_before_dm_observations(uuid)'::regprocedure)
+   is distinct from replace(definition,old_query,new_query)
+  or before_metadata is distinct from (
+   select jsonb_build_object('oid',oid,'owner',proowner,'acl',proacl,'security_definer',prosecdef,'config',proconfig)
+   from pg_proc where oid='public.icash_prepare_operational_contacts_before_dm_observations(uuid)'::regprocedure
+  ) then
+  raise exception 'Preparation receipt binding postcondition changed';
+ end if;
 end $patch$;
-create index icash_dnc_clear_phone_expiry
- on public.icash_dnc_verification_receipts(phone,expires_at)
- where clear and revoked_at is null;
-create index icash_dnc_clear_national_screening_expiry
- on public.icash_dnc_verification_receipts((observation_provenance->>'screeningId'),expires_at)
- where evidence_kind='national_provider_observation' and clear and revoked_at is null;
-commit;

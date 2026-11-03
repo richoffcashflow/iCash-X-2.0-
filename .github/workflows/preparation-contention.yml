@@ -37,8 +37,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install pinned native test driver outside project
         run: npm install --prefix "$RUNNER_TEMP/preparation-pg" --ignore-scripts --no-audit --no-fund pg@8.16.3
+      - name: Install pinned migration runner outside project
+        run: npm install --prefix "$RUNNER_TEMP/preparation-cli" --no-audit --no-fund supabase@3.0.0
       - name: Native generic/custom equivalence, hostile cases and lock races
         env:
+          PREPARATION_SUPABASE_CLI: ${{ runner.temp }}/preparation-cli/node_modules/.bin/supabase
           PREPARATION_NATIVE_TEST: '1'
           PREPARATION_PERFORMANCE_TEST: '1'
           PREPARATION_PG_MODULE: ${{ runner.temp }}/preparation-pg/node_modules/pg
@@ -51,5 +54,7 @@ jobs:
           path: |
             /tmp/icash-preparation-receipt-binding-plans.json
             /tmp/icash-preparation-warm-plans.json
+            /tmp/icash-preparation-cli-migrations.json
+            /tmp/icash-preparation-cli-runner.json
           if-no-files-found: warn
           retention-days: 14

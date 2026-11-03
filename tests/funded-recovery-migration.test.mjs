@@ -16,6 +16,11 @@ const installed={
  '20261103183354_research_quota_monitoring.sql':'7aa29388c804ec3f2921cf81392673f9',
  '20261103183400_identity_bound_opportunity_buffer.sql':'9d0b14e056a0c702988f004d979e051f',
  '20261103183653_research_quota_minimum_capacity.sql':'1c053b4d0284a03007a78f3661713feb',
+ '20261103184920_urgent_voice_source_gate.sql':'d54d8ff08ce066c6f3c27489692dcce2',
+ '20261103190835_voice_global_contact_index.sql':'69f2a3333c30bfaebca5993043b45b3a',
+ '20261103191344_legacy_voice_candidate_fence.sql':'bca111eeb7af2a24fb83af89c3f40162',
+ '20261103204619_ordinary_voice_phone_fence.sql':'5d324c7f605e87df0ae5d2f30a1d0048',
+ '20261103204625_seller_opener_literal_address_copy.sql':'2e8e5ab828bde871f2ab5fdd6b4529c9',
 };
 for(const [file,hash] of Object.entries(installed)){
  const source=readFileSync(new URL('../supabase/migrations/'+file,import.meta.url));
@@ -35,17 +40,17 @@ const files=readdirSync(new URL('../supabase/migrations/',import.meta.url))
 assert.deepEqual(files,expectedFiles,'Each recovery keeps one exact migration identity, with no old aliases or replay bundle');
 assert.equal(new Set(files.map(version)).size,files.length,'Recovery migration versions are unique');
 
-// These are the ten actual installed ledger versions. Other migration
+// These are the fifteen actual installed ledger versions. Other migration
 // families are outside this focused test.
 const ledger=new Set(Object.keys(installed).map(version));
 const unapplied=()=>files.filter(file=>!ledger.has(version(file)));
 assert.deepEqual(unapplied(),[],'The current production ledger selects no recovery DDL for replay');
 ledger.delete(version(followUp));
-assert.deepEqual(unapplied(),[followUp],'The earlier nine-install ledger selects only the guarded diagnostic follow-up');
+assert.deepEqual(unapplied(),[followUp],'A ledger missing only the diagnostic selects only that guarded follow-up');
 ledger.delete('20261103183400');
 assert.deepEqual(unapplied(),[fundedRecoveryMigrations['identity-bound-opportunity-buffer'],followUp],'A partial earlier installation skips the immutable original monitor');
 ledger.add('20261103183400');
 assert.deepEqual(unapplied(),[followUp],'Resuming the earlier installation leaves only the guarded diagnostic');
 ledger.add(version(followUp));
 assert.deepEqual(unapplied(),[],'A completed release has no recovery DDL to replay');
-console.log('PASS ten exact installed migration hashes and version-ledger selection: no pending recovery DDL, safe earlier partial resume, no installed DDL replay.');
+console.log('PASS fifteen exact installed migration hashes and version-ledger selection: no pending recovery DDL, safe earlier partial resume, no installed DDL replay.');
