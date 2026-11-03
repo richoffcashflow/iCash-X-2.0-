@@ -8,7 +8,7 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
  const now=new Date().toISOString(),account={id,name:'Example Customer',email:'customer@example.invalid',ownAccount:false,fundedCents:50000,balanceCents:12345,reservedCents:200,leadCount:27,paused:true,assistantName:'Alex',createdAt:now,billingModel:'membership_credits',vip:true,membership:{state:'active',paidThrough:'2099-01-01T00:00:00Z'}};
  const secondAccount={...account,id:secondId,name:'Another Customer',email:'another@example.invalid',balanceCents:4200,vip:false,paused:false,assistantName:'Taylor'};
  let expired=false,denied=false,inspecting=false;const writes=[],reads=[],errors=[];
- const report=u=>({days:Number(u.searchParams.get('days')??1),timezone:'America/Chicago',startAt:now,endAt:now,leads:27,calls:14,texts:22,contracts:1,vipSavingsCents:0});
+ const report=u=>({days:Number(u.searchParams.get('days')??1),timezone:u.searchParams.get('timezone')??'UTC',startAt:now,endAt:now,leads:27,calls:14,texts:22,contracts:1,vipSavingsCents:0});
  function customerWork(second){const data=makeWorkspaceFixture({count:1});data.properties[0].result.property.address=second?'456 Second Street, Austin, TX':'123 Example Street, Dallas, TX';data.contacts[0].contacts[0].name=second?'Another Seller':'Fixture Seller';data.conversations=[];data.textAttention=[];data.propertyAttentionIds=[];data.responseCounts={responded:1,total:27};if(second)data.instantLeads=[{leadId:uuid(2),screeningId:uuid(2),dealId:uuid(1002),name:'Saved Instant Seller',phone:'+12025550129',address:null,state:'awaiting_address',paused:true,declinedAt:null,submittedAt:now,firstOutreachAt:now,responseAt:now,addressConfirmedAt:null,formId:'fixture',campaignId:null,holdReason:null}];return data;}
  try{
   await context.route('**/*',async route=>{
@@ -31,7 +31,7 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
     if(path===root){inspecting=true;return route.fulfill({json:{view:{id:activeView,expiresAt:new Date(Date.now()+1800000).toISOString(),account:second?secondAccount:account}}});}
     if(path===root+'/activity')return route.fulfill({json:customerWork(second)});
     if(path===root+'/bot-status')return route.fulfill({json:second?{active:false,blocked:true,label:'A service issue is blocking work on your account.',checkedAt:new Date().toISOString()}:{active:false,label:'Waiting for the next task',checkedAt:now}});
-    if(path===root+'/progress')return route.fulfill({json:{progress:null}});
+    if(path===root+'/progress')return route.fulfill({json:{progress:{days:Number(u.searchParams.get('days')??1),timezone:u.searchParams.get('timezone')??'UTC',startAt:now,endAt:now,queued:0,screened:27,eligible:12,contacted:14,responded:1,status:second?'ready':'paused'}}});
     if(path===root+'/report')return route.fulfill({json:report(u)});
     if(path===root+'/property-photo')return route.fulfill({json:{photo:{view:'street_view',source:'DealMachine',url:'https://img.dealmachine.com/sv/35,-90.jpg',fallbackUrl:'https://img.dealmachine.com/sat/35,-90.jpg'}}});
     if(path===root+'/call-history')return route.fulfill({json:{recordings:[{id:recording,source:'outbound',party:'seller',conversationId:screen,createdAt:now,status:'available',durationSeconds:60,audioExpiresAt:'2099-01-01T00:00:00Z'}],next:null}});
@@ -62,6 +62,8 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'account directory fits viewport');
   await page.getByRole('button',{name:'Open workspace for Example Customer'}).click();await page.getByText('Viewing Example Customer',{exact:true}).waitFor();
   await page.getByText('$123.45',{exact:true}).waitFor();await page.getByRole('heading',{name:'Bot activity',exact:true}).waitFor();await page.getByRole('heading',{name:'Your leads',exact:true}).waitFor();
+  await page.getByRole('group',{name:'Activity period'}).getByRole('button',{name:'7 days',exact:true}).click();await page.getByRole('region',{name:'Opportunity progress'}).getByText('7 days',{exact:true}).waitFor();
+  const progressRead=reads.findLast(u=>u.pathname===`/api/admin/accounts/view/${viewId}/progress`&&u.searchParams.get('days')==='7'),reportRead=reads.findLast(u=>u.pathname===`/api/admin/accounts/view/${viewId}/report`&&u.searchParams.get('days')==='7');assert(progressRead&&reportRead);assert.equal(progressRead.searchParams.get('timezone'),reportRead.searchParams.get('timezone'),'Owner inspection uses the same period and timezone in both panels');
   await Promise.all([page.waitForResponse(r=>r.url().includes('/activity?view=responses')),page.getByRole('button',{name:'Seller responses',exact:true}).click()]);
   await Promise.all([page.waitForResponse(r=>r.url().includes('/activity?view=all')),page.getByRole('button',{name:'All activity',exact:true}).click()]);
   const card=page.locator('#property-'+screen);await card.getByRole('img',{name:'Street view of 123 Example Street, Dallas, TX'}).waitFor();
