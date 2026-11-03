@@ -20,7 +20,13 @@ try{
  const migration=read('config/owner-preview-empty.sql');
  assert.equal(migration,read('supabase/migrations/20261103041149_owner_preview_empty.sql'));await pg.exec(migration);
  assert.equal(phoneLessOwnerPreviews(ownerBatchAudience(c.preview,c.items,25)).length,5);
- assert.equal(await save(c),true);assert.equal(await count(),1);
+ await pg.exec('set role service_role');
+ try{
+  assert.equal(await save(c),true,'The real service role can resolve and execute the RPC in a recreated public schema');
+  assert.equal(await empty(c),true,'The real service role can read the exclusion only through its granted RPC');
+  await assert.rejects(q('select * from icash_research_private.owner_empty_preview_receipts'),/permission denied/);
+ }finally{await pg.exec('reset role');}
+ assert.equal(await count(),1);
  for(let i=0;i<5;i++)assert.equal(await empty(c,i),true,'One original preview excludes all five exact source snapshots');
  assert.equal(await v('select count(*)::integer from icash_research_private.owner_empty_preview_items'),5);
  const original=await v('select jsonb_build_object(\'receipt\',to_jsonb(r),\'items\',(select jsonb_agg(to_jsonb(i) order by screening_id) from icash_research_private.owner_empty_preview_items i)) from icash_research_private.owner_empty_preview_receipts r');

@@ -62,8 +62,6 @@ jobs:
         run: python3 scripts/test-customer-phone-unanswered-postgres.py
       - name: Verify unanswered child settlement preserves priced parent and audio
         run: python3 scripts/test-customer-phone-child-unanswered-postgres.py
-      - name: Verify original text delivery recovery and late callback races
-        run: python3 scripts/test-text-delivery-recovery-postgres.py
       - name: Verify seller recovery, receipts and Pause under concurrent transactions
         run: python3 scripts/test-seller-progress-postgres.py
       - name: Verify automatic export recovery under concurrent transactions

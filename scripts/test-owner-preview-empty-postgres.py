@@ -32,7 +32,7 @@ def literal(value):
 
 def save_query(case):
     return ("set role service_role;set application_name='empty-preview-contender';"
-            f"select icash_record_empty_owner_preview('{case['account']}','{case['batch']}','{case['request']}',"
+            f"select public.icash_record_empty_owner_preview('{case['account']}'::uuid,'{case['batch']}'::uuid,'{case['request']}'::uuid,"
             f"{literal(case['items'])},{literal(case['preview'])});")
 
 
@@ -92,7 +92,7 @@ def run():
     assert sql("select count(*) from icash_research_private.owner_empty_preview_items;") == '5'
     assert evidence(case) == before
     for item in case['items']:
-        assert sql(f"set role service_role;select icash_owner_preflight_empty('{case['account']}','{item['screeningId']}',{literal(item['snapshot'])});") == 't'
+        assert sql(f"set role service_role;select public.icash_owner_preflight_empty('{case['account']}'::uuid,'{item['screeningId']}'::uuid,{literal(item['snapshot'])});") == 't'
     conflicting = json.loads(json.dumps(case))
     conflicting['preview']['data'][0]['contacts'][0]['availability']['phones'] = 1
     assert sql(save_query(conflicting)) == 'f'
@@ -106,7 +106,8 @@ def run():
     operation = f"owners:{paid['account']}:{paid['items'][0]['screeningId']}"
     late_guard(paid, f"insert into icash_operation_spend(operation_key,account_id) values('{operation}','{paid['account']}');")
     for role in ('anon', 'authenticated', 'service_role'):
-        assert sql(f"select has_function_privilege('{role}','icash_record_empty_owner_preview(uuid,uuid,uuid,jsonb,jsonb)','execute');") == ('t' if role == 'service_role' else 'f')
+        assert sql(f"select has_schema_privilege('{role}','public','usage');") == 't'
+        assert sql(f"select has_function_privilege('{role}','public.icash_record_empty_owner_preview(uuid,uuid,uuid,jsonb,jsonb)','execute');") == ('t' if role == 'service_role' else 'f')
         assert sql(f"select has_table_privilege('{role}','icash_research_private.owner_empty_preview_receipts','select');") == 'f'
     assert sql("select count(*) from icash_credit_reservations;") == '0'
     assert sql("select count(*) from icash_owner_contacts;") == '0'

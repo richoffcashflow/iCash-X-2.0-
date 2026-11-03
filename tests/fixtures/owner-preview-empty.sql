@@ -1,6 +1,9 @@
 -- Disposable local fixture: actual unstarted-evidence predicate is installed by the runner.
 do $$ declare x text;begin foreach x in array array['anon','authenticated','service_role'] loop
  if not exists(select 1 from pg_roles where rolname=x) then execute format('create role %I',x);end if;end loop;end $$;
+-- Native runners recreate public, so restore its production API visibility.
+-- Private-schema/table access remains denied; only granted RPCs may execute.
+grant usage on schema public to anon,authenticated,service_role;
 create schema icash_research_private;
 create schema icash_private;
 revoke all on schema icash_research_private from public,anon,authenticated,service_role;
