@@ -40,6 +40,8 @@ jobs:
         run: python3 scripts/test-preflight-waiting-postgres.py
       - name: Verify due contact list priority, competing issuers and late holds
         run: python3 scripts/test-owner-preflight-priority-postgres.py
+      - name: Verify verified contact cohorts retain their original admission window
+        run: python3 scripts/test-owner-preflight-ready-postgres.py
       - name: Verify historical cleanup recovery and concurrent customer Pause
         run: python3 scripts/test-cleanup-ticket-recovery-postgres.py
       - name: Verify bounded saved export recovery without provider retries
