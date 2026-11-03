@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {PGlite} from '@electric-sql/pglite';
+import {pricingBlock} from './helpers/two-times-pricing-fixture.mjs';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8'),pg=new PGlite();
+const q=(s,a=[])=>pg.query(s,a),v=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0],id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+const ca='CA'+'a'.repeat(32),ch='CA'+'d'.repeat(32),re='RE'+'e'.repeat(32),ac='AC'+'b'.repeat(32),from='+12025550101',to='+12025550102',created=new Date(Date.now()-120000).toISOString();
+const parent={sid:ca,status:'completed',currency:'USD',costMicros:4000,receiptHash:'c'.repeat(64)};
+const original={sid:ch,status:'no-answer',currency:'USD',costMicros:null,receiptHash:'a'.repeat(64)};
+const audio={sid:re,status:'completed',currency:'USD',costMicros:3000,callSid:ca,providerAccountSid:ac,policy:'customer-phone-recorded-v1',receiptHash:'d'.repeat(64)};
+const proof=()=>({policy:'twilio-unanswered-child-connectivity-v1',accountSid:ac,parentSid:ca,fromPhone:from,toPhone:to,direction:'outbound-dial',duration:'0',price:null,priceUnit:'USD',parentChildrenComplete:true,parentChildrenCount:1,parentChildrenHash:'a'.repeat(64),descendantsComplete:true,descendantsCount:0,descendantsHash:'b'.repeat(64),recordingsComplete:true,recordingsCount:0,recordingInventoryHash:'c'.repeat(64),createdAt:created,endedAt:new Date(Date.now()-60000).toISOString(),observedAt:new Date().toISOString(),originalParentReceipt:parent,originalChildReceipt:original,originalRecordingReceipt:audio});
+const child=()=>({...original,costMicros:0,kind:'verified_unanswered_browser_child',costEvidence:proof()});
+let serial=10;
+async function seed(p=child(),row={}){
+ const n=serial++,call=id(n),a=id(1),rate=id(2),op='customer-phone:'+call;
+ const cols={id:call,account_id:a,operation_key:op,rate_id:rate,created_at:created,connection_type:'browser',connected_at:created,ended_at:new Date().toISOString(),parent_sid:ca,child_sid:ch,provider_account_sid:ac,business_phone:from,recipient_phone:to,callback_phone:'client:fixture',parent_receipt:parent,child_receipt:p,recording_required:true,recording_state:'available',recording_sid:re,recording_receipt:audio,...row};
+ const keys=Object.keys(cols);await q('insert into icash_customer_phone_calls('+keys.join(',')+') values('+keys.map((_,i)=>'$'+(i+1)).join(',')+')',Object.values(cols));
+ await q("insert into icash_operation_spend values($1,$2,'dispatched',100,2)",[op,a]);return {call,op,settle:()=>v('select icash_settle_customer_phone_call($1)',[call])};
+}
+try{
+ await pg.exec(read('tests/fixtures/customer-phone-unanswered-foundation.sql'));await pg.exec('alter table icash_customer_phone_calls add column recipient_phone text;');
+ const old=read('supabase/migrations/20261008173746_customer_phone_recordings.sql');await pg.exec(old.slice(old.indexOf('create or replace function public.icash_settle_customer_phone_call'),old.lastIndexOf('commit;')));await pg.exec(pricingBlock('settle_customer_phone_call'));await pg.exec(read('config/customer-phone-unanswered-settlement.sql'));
+ assert.equal(await v("select md5(pg_get_functiondef('public.icash_settle_customer_phone_call(uuid)'::regprocedure))"),'4f891f3e51feb3d3ffcf5ef54c6c2343');
+ const sql=read('config/customer-phone-child-unanswered-settlement.sql');assert.equal(sql,read('supabase/migrations/20261103002128_customer_phone_child_unanswered_settlement.sql'));await pg.exec(sql);
+ await q("insert into icash_operation_rates values($1,'customer_phone_call','customer-phone-recorded-2x-v1:fixture','{\"twilio\":100000,\"other\":33000,\"vercel\":2000}')",[id(2)]);
+ const a=await seed();assert.equal(await a.settle(),true);assert.equal(await a.settle(),true);assert.equal(await v('select count(*) from settlements where operation=$1',[a.op]),1);const paid=await v('select components from settlements where operation=$1',[a.op]);assert.equal(paid.twilio.amountMicros,4000);assert.equal(paid.other.amountMicros,3000);assert.equal(paid.vercel.amountMicros,2000);assert.equal(await v('select charge from settlements where operation=$1',[a.op]),2);
+ assert.deepEqual(await v('select parent_receipt from icash_customer_phone_calls where id=$1',[a.call]),parent);assert.deepEqual(await v('select recording_receipt from icash_customer_phone_calls where id=$1',[a.call]),audio);
+ for(const change of [{connection_type:'phone'},{connected_at:null},{recipient_answered_at:created},{child_sid:'CA'+'f'.repeat(32)},{recording_sid:'RE'+'f'.repeat(32)},{recording_state:'absent'},{recording_required:false},{parent_receipt:{...parent,costMicros:5000}},{recording_receipt:{...audio,costMicros:6000}},{recipient_phone:'+12025550999'}]){const b=await seed(child(),change);assert.equal(await b.settle(),false,JSON.stringify(change));assert.equal(await v('select state from icash_operation_spend where operation_key=$1',[b.op]),'dispatched');}
+ for(const change of [{policy:'other'},{duration:'1'},{duration:0},{duration:undefined},{price:'-0.004'},{price:'bad'},{price:undefined},{priceUnit:'EUR'},{accountSid:'AC'+'e'.repeat(32)},{parentSid:ch},{fromPhone:'+12025550999'},{toPhone:'+12025550999'},{direction:'inbound'},{parentChildrenComplete:false},{parentChildrenCount:2},{descendantsComplete:false},{descendantsCount:1},{recordingsComplete:false},{recordingsCount:1},{parentChildrenHash:null},{descendantsHash:null},{recordingInventoryHash:null},{originalParentReceipt:null},{originalRecordingReceipt:null},{originalChildReceipt:{...original,status:'completed'}},{originalChildReceipt:{...original,costMicros:1}},{originalChildReceipt:{...original,receiptHash:null}},{createdAt:'infinity'},{createdAt:'bad'},{endedAt:new Date().toISOString()},{observedAt:new Date(Date.now()-180000).toISOString()},{observedAt:'bad'},{observedAt:undefined}]){const p=child();Object.assign(p.costEvidence,change);const b=await seed(p);assert.equal(await b.settle(),false,JSON.stringify(change));}
+ for(const change of [{sid:ca},{status:'completed'},{status:undefined},{costMicros:1},{currency:'EUR'},{receiptHash:null}]){const b=await seed({...child(),...change});assert.equal(await b.settle(),false,JSON.stringify(change));}
+ const cap=await seed();await q('update icash_operation_spend set charge_cap_cents=1 where operation_key=$1',[cap.op]);assert.equal(await cap.settle(),false,'Original cap remains binding');
+ const discount=await seed();await q('update icash_operation_spend set standard_cost_multiplier=1.6 where operation_key=$1',[discount.op]);assert.equal(await discount.settle(),true);assert.equal(await v('select charge from settlements where operation=$1',[discount.op]),2);
+ console.log('PASS unanswered child settlement database: exact fresh proof, unchanged real parent/audio costs, original multiplier/cap/allocations, contradictory state held and exactly-once settlement.');
+}finally{await pg.close();}

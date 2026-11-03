@@ -5,6 +5,8 @@ const issue=z.object({kind:z.enum(['text_receipt','text_review','contract_delive
 export const reliabilitySchema=z.object({status:z.enum(['ok','degraded']),fresh:z.boolean(),components:z.object({worker:component,maintenance:component}),snapshot:z.object({
  checkedAt:z.string().datetime({offset:true}),issueCount:count,
  issues:z.array(issue).max(25),
+ incomingTexts:z.object({checkedAt:z.string().datetime({offset:true}).nullable(),fresh:z.boolean(),warningCount:count,
+  lines:z.array(z.object({phone:z.string().regex(/^\+[1-9][0-9]{7,14}$/),incomingStatus:z.enum(['unverified','blocking_reported']),lastIncomingAt:z.string().datetime({offset:true}).nullable(),propertyAccepted24h:count,propertyDelivered24h:count})).max(50)}).optional(),
  acknowledgedCount:count.optional(),
  accountProgress:z.object({checkedAt:z.string().datetime({offset:true}),affectedAccounts:count,expiredConfigurations:count,unexpectedPauses:count,stalledAccounts:count,pendingAccounts:count,
   samples:z.array(z.object({accountId:z.guid(),reason:z.enum(['configuration_expired','configuration_disabled','system_paused','no_completed_work','pending_work']),since:z.string().datetime({offset:true}),lastCompletedAt:z.string().datetime({offset:true}).nullable(),availableCents:count})).max(25)}).optional(),

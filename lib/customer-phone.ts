@@ -64,6 +64,23 @@ function unansweredBrowserParent(c:CustomerPhoneCall,parent:Record<string,unknow
   &&(!Object.keys(child).length||(child.kind==='verified_empty_child_list_after_parent_end'&&child.costMicros===0&&child.currency==='USD'&&!child.sid))
   &&(!Object.keys(audio).length||(audio.status==='absent'&&audio.costMicros===0&&audio.currency==='USD'&&audio.callSid===c.parent_sid&&audio.providerAccountSid===c.provider_account_sid&&audio.policy===customerPhoneRecordingPolicy));
 }
+/** The browser and its recording can be billable even when the seller never
+ * answers. Only the exact unanswered child gets zero connectivity cost; retain
+ * the already observed parent/audio receipts and reject contradictory history. */
+function unansweredBrowserChild(c:CustomerPhoneCall,parent:Record<string,unknown>,child:Record<string,unknown>){
+ const prior=object(c.child_receipt),bridge=object(c.parent_receipt),audio=object(c.recording_receipt);
+ return c.connection_type==='browser'&&c.recording_required&&!!c.connected_at&&!c.recipient_answered_at&&!c.settled_at
+  &&c.child_sid===child.sid&&twilioUnansweredCall(child)&&parent.status==='completed'
+  &&bridge.sid===c.parent_sid&&bridge.status==='completed'&&bridge.currency==='USD'
+  &&Number.isSafeInteger(bridge.costMicros)&&Number(bridge.costMicros)>0&&bridge.costMicros===twilioUsdChargeMicros(parent.price,parent.price_unit)
+  &&/^[a-f0-9]{64}$/.test(String(bridge.receiptHash))
+  &&prior.sid===c.child_sid&&['busy','failed','no-answer','canceled'].includes(String(prior.status))
+  &&prior.currency==='USD'&&[null,0].includes(prior.costMicros as null|number)&&/^[a-f0-9]{64}$/.test(String(prior.receiptHash))
+  &&['available','deleted'].includes(c.recording_state)&&sid(c.recording_sid,'RE')&&audio.sid===c.recording_sid
+  &&audio.status==='completed'&&audio.callSid===c.parent_sid&&audio.providerAccountSid===c.provider_account_sid
+  &&audio.currency==='USD'&&Number.isSafeInteger(audio.costMicros)&&Number(audio.costMicros)>=0
+  &&audio.policy===customerPhoneRecordingPolicy&&/^[a-f0-9]{64}$/.test(String(audio.receiptHash));
+}
 /** Provider metadata, not a callback URL, binds playback and costs to this call. */
 export function customerPhoneRecordingReceipt(c:CustomerPhoneCall,r:Record<string,unknown>){
  if(!c.recording_required||!sid(c.parent_sid,'CA')||!sid(r.sid,'RE')||c.recording_sid&&c.recording_sid!==r.sid||r.account_sid!==c.provider_account_sid||r.call_sid!==c.parent_sid||r.source!=='OutboundAPI'||r.channels!==2||!['completed','absent'].includes(String(r.status)))return null;
@@ -110,9 +127,15 @@ export async function reconcileCustomerPhoneCall(c:CustomerPhoneCall,p=customerP
  if(c.connection_type==='browser'&&c.recording_required&&twilioUnansweredCall(parent)&&!unansweredBrowserParent(c,parent))return c;
  // A delayed bridge receipt is not proof that no seller leg exists. Discover
  // canonical children before terminalizing, including when connected_at is absent.
- let child:Record<string,unknown>|null=null,noChildReceipt:Record<string,unknown>|null=null,noChildInventoryComplete=false;
- {const list=await p.children(c.parent_sid);if(!Array.isArray(list.calls)||list.next_page_uri||list.calls.length>1)return c;
+ let child:Record<string,unknown>|null=null,noChildReceipt:Record<string,unknown>|null=null,noChildInventoryComplete=false,childInventory:Record<string,unknown>;
+ {const list=childInventory=await p.children(c.parent_sid);if(!Array.isArray(list.calls)||list.next_page_uri||list.calls.length>1)return c;
   if(list.calls.length){child=object(list.calls[0]);if(!bound(c,child,true))return c;}else if(terminal.has(String(parent.status))&&Date.now()-Date.parse(String(parent.end_time))>30000){noChildInventoryComplete=list.next_page_uri===null;noChildReceipt={currency:'USD',costMicros:0,kind:'verified_empty_child_list_after_parent_end',receiptHash:hash(JSON.stringify(list))};}
+ }
+ if(child&&c.connection_type==='browser'&&twilioUnansweredCall(child)){
+  const prior=object(c.child_receipt);
+  if(c.recipient_answered_at||c.child_sid&&c.child_sid!==child.sid
+   ||Object.keys(prior).length&&(prior.sid!==child.sid||!['busy','failed','no-answer','canceled'].includes(String(prior.status))
+    ||prior.currency!=='USD'||![null,0].includes(prior.costMicros as null|number)))return c;
  }
  const parentEnded=terminal.has(String(parent.status)),childEnded=child&&terminal.has(String(child.status));
  const patch:Record<string,unknown>={updated_at:new Date().toISOString()};
@@ -143,10 +166,40 @@ export async function reconcileCustomerPhoneCall(c:CustomerPhoneCall,p=customerP
      createdAt:parent.date_created,endedAt:parent.end_time}};
   }
  }
+ if(child&&c.connection_type==='browser'&&c.recording_required&&twilioUnansweredCall(child)&&c.child_sid
+  &&c.parent_receipt&&c.child_receipt&&c.recording_receipt&&object(c.parent_receipt).costMicros!==null){
+  // Never erase a prior answer/charge and then accept zero on a later poll.
+  if(!unansweredBrowserChild(c,parent,child))return c;
+  const [canonical,descendants,childAudio]=await Promise.all([
+   p.call(c.child_sid),p.children(c.child_sid),p.recordings.listRecordings(c.child_sid).catch(()=>null),
+  ]);
+  const audio=object(childAudio);
+  if(!bound(c,canonical,true)||canonical.sid!==c.child_sid||!unansweredBrowserChild(c,parent,canonical)
+   ||childInventory.next_page_uri!==null||canonical.status!==child.status||canonical.duration!==child.duration
+   ||!Number.isFinite(Date.parse(String(canonical.end_time)))||Date.parse(String(canonical.end_time))<Date.parse(String(canonical.date_created))
+   ||!Number.isFinite(Date.parse(String(parent.end_time)))||Date.parse(String(canonical.end_time))>Date.parse(String(parent.end_time))
+   ||Date.now()-Date.parse(String(parent.end_time))<=30000)return c;
+  if(!Array.isArray(descendants.calls)||descendants.calls.length||descendants.next_page_uri!==null
+   ||!Array.isArray(audio.recordings)||audio.recordings.length||audio.next_page_uri!==null)return c;
+  patch.parent_receipt=c.parent_receipt;
+  patch.child_receipt={...receipt(canonical),costMicros:0,kind:'verified_unanswered_browser_child',costEvidence:{
+   policy:'twilio-unanswered-child-connectivity-v1',duration:canonical.duration,price:canonical.price,priceUnit:canonical.price_unit,
+   accountSid:canonical.account_sid,parentSid:canonical.parent_call_sid,fromPhone:canonical.from,toPhone:canonical.to,direction:canonical.direction,
+   createdAt:canonical.date_created,endedAt:canonical.end_time,observedAt:new Date().toISOString(),
+   parentChildrenComplete:true,parentChildrenCount:1,parentChildrenHash:hash(JSON.stringify(childInventory)),
+   descendantsComplete:true,descendantsCount:0,descendantsHash:hash(JSON.stringify(descendants)),
+   recordingsComplete:true,recordingsCount:0,recordingInventoryHash:hash(JSON.stringify(audio)),
+   originalParentReceipt:c.parent_receipt,originalChildReceipt:object(c.child_receipt).kind==='verified_unanswered_browser_child'?object(object(c.child_receipt).costEvidence).originalChildReceipt:c.child_receipt,
+   originalRecordingReceipt:c.recording_receipt}};
+ }
  let patchPath=`icash_customer_phone_calls?id=eq.${c.id}&account_id=eq.${c.account_id}`;
  if(object(patch.parent_receipt).kind==='verified_unanswered_browser_parent'){
   patchPath+=`&parent_sid=eq.${c.parent_sid}&connected_at=is.null&recipient_answered_at=is.null&child_sid=is.null&recording_sid=is.null&recording_deleted_at=is.null&settled_at=is.null`;
   for(const key of ['parent_receipt','child_receipt','recording_receipt'] as const)patchPath+=`&${key}=${c[key]==null?'is.null':'eq.'+encodeURIComponent(JSON.stringify(c[key]))}`;
+ }
+ if(object(patch.child_receipt).kind==='verified_unanswered_browser_child'){
+  patchPath+=`&parent_sid=eq.${c.parent_sid}&child_sid=eq.${c.child_sid}&recipient_answered_at=is.null&settled_at=is.null&connected_at=eq.${encodeURIComponent(c.connected_at!)}&recording_sid=eq.${c.recording_sid}&recording_state=eq.${c.recording_state}`;
+  for(const key of ['parent_receipt','child_receipt','recording_receipt'] as const)patchPath+=`&${key}=eq.${encodeURIComponent(JSON.stringify(c[key]))}`;
  }
  const saved=await db<CustomerPhoneCall[]>(patchPath,'PATCH',patch);
  if(!saved.length)return await getCustomerPhoneCall(c.id,c.account_id)??c;

@@ -1,5 +1,5 @@
 import {calculateAutomaticCallOffer,offerPricePresentation,type AutomaticOfferState} from './automatic-call-offer.ts';
-import {callOfferEvidence,callSellerPriceEvidence,spokenMoneyAmounts} from './call-offer-evidence.ts';
+import {callOfferEvidence,callSellerPriceEvidence,sellerAskingPriceQuestion,spokenMoneyAmounts} from './call-offer-evidence.ts';
 import {sellerOfferQualification} from './seller-offer-qualification.ts';
 import {sellerPayoffEvidence} from './seller-payoff.ts';
 import {sellerListingEvidence} from './seller-listing.ts';
@@ -60,6 +60,7 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
   const debt=sellerPayoffEvidence(transcript,input);
   if(debt){state.payoffReport={...state.payoffReport,...debt};state.payoffPending=false;}
   if(sellerPrice!==null){state.proposedPriceCents=sellerPrice;if(sellerPrice!==state.quotedPriceCents)state.acceptedPriceCents=null;}
+  if(sellerAskingPriceQuestion(source.body))state.acceptedPriceCents=null;
   if(/\b(?:changed my mind|do not accept|don['’]?t accept|withdraw|cancel|hold off|wait|only if|but I need)\b/i.test(source.body))state.acceptedPriceCents=null;
   // Material changes invalidate acceptance; clear only with actual new evidence.
   if(/\b(?:wrong (?:property|address)|another owner|ownership changed|fire damage|foundation (?:damage|problem)|new (?:damage|repair))\b/i.test(source.body)){state.acceptedPriceCents=null;state.factsPending=true;}
