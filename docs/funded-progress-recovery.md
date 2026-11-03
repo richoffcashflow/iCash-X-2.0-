@@ -1,5 +1,20 @@
 # Funded account progress and provider waits
 
+## Remaining live scan evidence, November 3 19:16 UTC
+
+Readback found a separately installed global voice contact index under migration
+`20261103190835`, SQL MD5 `69f2a3333c30bfaebca5993043b45b3a`. Its repository
+source and native regression are included with that exact identity. The release
+now records thirteen installed recovery migrations. Do not replay the index.
+
+The installed legacy queue selector returned zero candidates in 11.13 ms with
+620 shared buffer hits and no writes in a bounded read-only plan. Later-ingested
+logs nevertheless show ordinary voice selection timing out at 19:12 UTC and
+the bounded SMS eligibility scan timing out at 19:14 UTC. These are distinct
+remaining paths; healthy process heartbeats or the isolated query improvement
+do not establish complete recovery. Investigate their cumulative work without
+weakening contact, customer-control or unknown-receipt protections.
+
 ## Global voice lookup checkpoint, November 3 19:15 UTC
 
 The unchanged global busy-contact query scanned 30,654 operational contacts

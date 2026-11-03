@@ -17,8 +17,8 @@ const installed={
  '20261103183400_identity_bound_opportunity_buffer.sql':'9d0b14e056a0c702988f004d979e051f',
  '20261103183653_research_quota_minimum_capacity.sql':'1c053b4d0284a03007a78f3661713feb',
  '20261103184920_urgent_voice_source_gate.sql':'d54d8ff08ce066c6f3c27489692dcce2',
- '20261103191344_legacy_voice_candidate_fence.sql':'bca111eeb7af2a24fb83af89c3f40162',
  '20261103190835_voice_global_contact_index.sql':'69f2a3333c30bfaebca5993043b45b3a',
+ '20261103191344_legacy_voice_candidate_fence.sql':'bca111eeb7af2a24fb83af89c3f40162',
 };
 for(const [file,hash] of Object.entries(installed)){
  const source=readFileSync(new URL('../supabase/migrations/'+file,import.meta.url));

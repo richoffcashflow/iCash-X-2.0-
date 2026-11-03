@@ -58,6 +58,8 @@ jobs:
         run: python3 scripts/test-seller-opener-bounded-postgres.py
       - name: Verify literal seller identity and concurrent one-use opener preparation
         run: python3 scripts/test-seller-opener-ampersand-postgres.py
+      - name: Verify literal address copy and concurrent final source review
+        run: python3 scripts/test-seller-opener-literal-address-postgres.py
       - name: Verify ordinary calling hours avoid unrelated owner evidence locks
         run: python3 scripts/test-outreach-predicates-postgres.py
       - name: Verify bounded configuration recovery and concurrent admission
@@ -68,6 +70,8 @@ jobs:
         run: python3 scripts/test-legacy-voice-candidate-fence-postgres.py
       - name: Verify indexed global voice contact exclusion preserves unknown calls
         run: python3 scripts/test-voice-global-contact-index-postgres.py
+      - name: Verify ordinary phone filtering preserves concurrent capacity and fairness
+        run: python3 scripts/test-ordinary-voice-phone-fence-postgres.py
       - name: Verify empty batch previews preserve source and concurrent controls
         run: python3 scripts/test-owner-preview-empty-postgres.py
       - name: Verify reviewed preview rejection recovery under concurrent admission

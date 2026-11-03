@@ -1,5 +1,11 @@
 # Global voice contact lookup
 
+Production already installed this exact SQL as migration `20261103190835`
+(MD5 `69f2a3333c30bfaebca5993043b45b3a`). This release reconciles that ledger
+identity and its tests; do not replay the migration. A later ordinary voice
+timeout at 19:12 UTC occurred after installation, so this index alone does not
+establish full scheduler recovery.
+
 The November 3 scheduler timeout review found that the existing global
 busy-contact exclusion scanned 30,654 operational contacts for each candidate.
 The measured read-only target query took 14.148 ms and 1,725 buffer hits. Its
