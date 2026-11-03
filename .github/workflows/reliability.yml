@@ -46,8 +46,12 @@ jobs:
         run: python3 scripts/test-acquisition-active-ticket-index-postgres.py
       - name: Verify indexed property evidence preserves all original holds
         run: python3 scripts/test-acquisition-property-history-index-postgres.py
+      - name: Verify global text history exclusion uses the thread index
+        run: python3 scripts/test-text-message-thread-index-postgres.py
       - name: Verify ordinary calling hours avoid unrelated owner evidence locks
         run: python3 scripts/test-outreach-predicates-postgres.py
+      - name: Verify bounded configuration recovery and concurrent admission
+        run: python3 scripts/test-voice-configuration-target-lookup-postgres.py
       - name: Verify empty batch previews preserve source and concurrent controls
         run: python3 scripts/test-owner-preview-empty-postgres.py
       - name: Verify original text receipt recovery and callback races
