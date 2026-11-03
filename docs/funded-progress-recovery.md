@@ -9,18 +9,26 @@ photo reads use the local HTTPS fixture without Playwright routing. Production
 readback confirms the reception backoff and bounded opener migrations at
 20261103162508 and 20261103162517. Their repository filenames match that history.
 
-The two remaining preflight changes, read-only research quota monitor and
-identity-bound pending-buffer correction are
-packaged in one atomic migration, `funded_recovery_completion`; the indexing
-dependency precedes quota continuation. Production also installed literal identity (20261103181852), text receipt fairness
-(20261103181900) and due retry priority (20261103181911) during this review.
-Their exact live function bodies were verified against the reviewed patches,
-and their repository migration filenames now match. Unrelated opportunity
-progress migrations are preserved. Original config sections are checked
-byte-for-byte. Both new preflight switches remain false. Installation requires
-the database service's confirmation; an expired confirmation is not a deploy.
-Reconcile the generated migration timestamp after installation, rerun exact
-checks, verify matching web/worker releases, then enable the two policies.
+Production subsequently installed literal identity (20261103181852), text
+receipt fairness (20261103181900) and due retry priority (20261103181911).
+At 18:24–18:25 UTC, the separately approved indexing and quota-continuation
+migrations installed as 20261103182413 and 20261103182541. Independent readback
+verified both switches remain false, exact reviewed source hashes, private ACLs,
+immutable denial evidence and unchanged request counters.
+
+The repository now preserves those seven exact installed versions and SQL
+bytes. Do not apply the superseded four-section completion bundle or rewrite
+production migration history. Research quota monitoring and the identity-bound
+pending-buffer projection remain separate pending migrations; review their
+predecessor guards and install through the normal confirmation flow. Reconcile
+only their filenames with the returned versions if the service generates new
+ones. Unrelated opportunity-progress migrations remain unchanged.
+
+These are database installation results, not an application release. Require
+independent review and exact-head CI after reconciliation, then matching
+production web/worker commits and successful exact main CI before enabling
+only preflight_indexing_enabled and preflight_quota_recovery_enabled. Neither
+policy may reset limits, replay unknown operations or clear financial holds.
 
 At 16:02 UTC the shared local research window had consumed 9,800 of 9,800
 requests and next resets at 00:12:49 UTC on November 4 (6:12 PM Central on
