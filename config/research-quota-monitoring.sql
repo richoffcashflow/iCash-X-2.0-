@@ -19,18 +19,14 @@ begin
  -- computes effective capacity without changing those stored counters.
  day_used:=case when b.day_start<=now()-interval '24 hours' then 0 else b.day_used end;
  minute_used:=case when b.minute_start<=now()-interval '1 minute' then 0 else b.minute_used end;
- -- Ordinary acquisition reserves room for two requests. One remaining slot
- -- can serve a free receipt read, but cannot admit a new research candidate.
  state:=case when day_used>=b.day_limit then 'day_exhausted'
-  when day_used+2>b.day_limit then 'day_insufficient'
   when f.blocked_until>now() then 'provider_hold'
-  when minute_used>=b.minute_limit then 'minute_exhausted'
-  when minute_used+2>b.minute_limit then 'minute_insufficient' else 'available' end;
- next_at:=greatest(case when day_used+2>b.day_limit then b.day_start+interval '24 hours' end,
-  case when minute_used+2>b.minute_limit then b.minute_start+interval '1 minute' end,
+  when minute_used>=b.minute_limit then 'minute_exhausted' else 'available' end;
+ next_at:=greatest(case when day_used>=b.day_limit then b.day_start+interval '24 hours' end,
+  case when minute_used>=b.minute_limit then b.minute_start+interval '1 minute' end,
   case when f.blocked_until>now() then f.blocked_until end);
  return jsonb_build_object('checkedAt',now(),'fresh',true,'status',state,
-  'warningCount',case when state in ('day_exhausted','day_insufficient','provider_hold') then 1 else 0 end,
+  'warningCount',case when state in ('day_exhausted','provider_hold') then 1 else 0 end,
   'dayUsed',day_used,'dayLimit',b.day_limit,'dayRemaining',greatest(0,b.day_limit-day_used),
   'minuteUsed',minute_used,'minuteLimit',b.minute_limit,'minuteRemaining',greatest(0,b.minute_limit-minute_used),
   'dayStartedAt',b.day_start,'dayResetsAt',case when b.day_start>now()-interval '24 hours' then b.day_start+interval '24 hours' end,

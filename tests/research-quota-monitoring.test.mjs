@@ -28,6 +28,17 @@ try{
  assert.equal(await one("select md5(pg_get_functiondef('public.icash_refresh_account_work_snapshot()'::regprocedure))"),'73dae59d66460dddd1ab6c77c7286341','use the actual current monitor prerequisite');
  const before=await one('select to_jsonb(b) from icash_dealmachine_request_budget b');
  await pg.exec(read('config/research-quota-monitoring.sql'));
+ assert.equal(await one("select md5(pg_get_functiondef('public.icash_research_quota_status()'::regprocedure))"),'6b557e815334c045d1b420de643b2c77','start from the actual installed original monitor');
+ const installed=await one("select pg_get_functiondef('public.icash_research_quota_status()'::regprocedure)");
+ const wrapper=await one("select pg_get_functiondef('public.icash_refresh_account_work_snapshot()'::regprocedure)");
+ const minimum=read('config/research-quota-minimum-capacity.sql');
+ await pg.exec("begin;create or replace function public.icash_research_quota_status() returns jsonb language plpgsql stable security definer set search_path='' as $$begin return '{}'::jsonb;end$$;");
+ await assert.rejects(pg.exec(minimum),/Research minimum capacity prerequisite changed/);
+ await pg.exec('rollback');
+ assert.equal(await one("select pg_get_functiondef('public.icash_research_quota_status()'::regprocedure)"),installed,'a changed prerequisite cannot be overwritten');
+ await pg.exec(minimum);
+ assert.equal(await one("select pg_get_functiondef('public.icash_refresh_account_work_snapshot()'::regprocedure)"),wrapper,'follow-up replaces only the read-only quota projection');
+ assert.deepEqual(await one('select to_jsonb(b) from icash_dealmachine_request_budget b'),before,'guarded diagnostic installation never mutates counters');
  let report=parse(await refresh());
  assert.equal(report.researchQuota.status,'day_exhausted');
  assert.equal(report.researchQuota.dayUsed,9800);assert.equal(report.researchQuota.dayRemaining,0);

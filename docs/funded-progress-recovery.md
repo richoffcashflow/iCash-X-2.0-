@@ -16,13 +16,21 @@ migrations installed as 20261103182413 and 20261103182541. Independent readback
 verified both switches remain false, exact reviewed source hashes, private ACLs,
 immutable denial evidence and unchanged request counters.
 
-The repository now preserves those seven exact installed versions and SQL
-bytes. Do not apply the superseded four-section completion bundle or rewrite
-production migration history. Research quota monitoring and the identity-bound
-pending-buffer projection remain separate pending migrations; review their
-predecessor guards and install through the normal confirmation flow. Reconcile
-only their filenames with the returned versions if the service generates new
-ones. Unrelated opportunity-progress migrations remain unchanged.
+Research quota monitoring and the identity-bound pending-buffer projection
+then installed independently at 18:33–18:34 UTC as 20261103183354 and
+20261103183400. Their full SQL hashes match the original reviewed configs.
+The later minimum-capacity diagnostic installed as 20261103183653 at 18:36 UTC;
+its status function matches the reviewed `d3020a625709af735bc3eec9b5dd0021` hash.
+The repository preserves all ten exact installed versions and bytes. Do not
+apply the superseded completion bundle, old aliases or rewritten history.
+
+The two-request diagnostic improvement is a separate installed
+`research_quota_minimum_capacity` migration. It guards the exact original
+status-function hash and replaces only that read-only projection; the original
+monitor and wrapper remain intact. The new `day_insufficient` and
+`minute_insufficient` states require the matching application schema/UI release.
+There is no pending DDL in this recovery family. Unrelated opportunity-progress
+migrations remain unchanged.
 
 These are database installation results, not an application release. Require
 independent review and exact-head CI after reconciliation, then matching
