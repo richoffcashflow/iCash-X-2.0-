@@ -84,7 +84,7 @@ export async function workspaceActivity(req:Request,accountId:string,{refreshOut
   // or the separately selected attention page. Empty embeds avoid transferring messages.
   const propertyAttentionRows=ids?await Promise.all([
    ['icash_text_attention','open'],['icash_handoffs','open'],['icash_sms_call_requests','needs_review'],['icash_buyer_viewing_requests','needs_confirmation'],['icash_seller_gaps','needs_review'],['icash_closing_setup','needs_review']
-  ].map(([table,state])=>db<{id:string}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=in.(${ids})&select=id,${table}!inner()&${table}.account_id=eq.${accountId}&${table}.state=${table==='icash_handoffs'?'neq.resolved':`eq.${state}`}&limit=${pageSize}`))):[];
+  ].map(([table,state])=>db<{id:string}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=in.(${ids})&select=id,${table}!inner()&${table}.account_id=eq.${accountId}&${table}.state=${table==='icash_handoffs'?'neq.resolved':`eq.${state}`}${table==='icash_seller_gaps'?'&icash_seller_gaps.or=(review_reason.is.null,review_reason.neq.contact_checks_expired)':''}&limit=${pageSize}`))):[];
   const propertyAttentionIds=[...new Set(propertyAttentionRows.flat().map(p=>p.id))];
   const journeys=ids?await db('rpc/icash_journey_progress','POST',{p_account:accountId,p_screenings:visible.map(p=>p.id)}):[];
   const dealIds=deals.map(d=>d.id).join(',');

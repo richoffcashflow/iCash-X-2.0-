@@ -8,17 +8,15 @@ type Context = WorkspaceEvidence & {
  conversations: {screening_id: string; party: string; summary?: string; completed_at?: string}[];
 };
 export type BotState = {label: string; tone: 'green' | 'amber' | 'gray'; detail: string};
-/** A green dot means this property can be bot-managed, never that a call is happening. */
+/** Display the saved control mode, never transport health or a claim of live activity. */
 export function propertyBotStatus(input: {manual: boolean; paused: boolean; available: boolean; stale: boolean; attention: boolean; stage?: string; practice: boolean}): BotState {
  if(input.practice) return {label: 'Practice', tone: 'gray', detail: 'Example only. No live work.'};
- if(input.stale) return {label: 'Checking status', tone: 'amber', detail: 'Refresh to confirm the latest bot status.'};
  if(['closed','canceled','cancelled'].includes(input.stage ?? '')) return {label: input.stage === 'closed' ? 'Completed' : 'Stopped', tone: 'gray', detail: 'No new work is expected for this property.'};
  if(input.stage==='cancellation_pending') return {label:'Cancellation pending',tone:'gray',detail:'Automatic work is paused until cancellation is resolved.'};
  if(input.manual) return {label: 'You’re in control', tone: 'gray', detail: 'New automatic work is paused for this property.'};
  if(input.attention) return {label: 'Needs you', tone: 'amber', detail: 'A saved request needs your attention.'};
  if(input.paused) return {label: 'AI paused', tone: 'gray', detail: 'Your account’s bot is paused.'};
- if(!input.available) return {label: 'AI waiting', tone: 'amber', detail: 'Waiting for setup, credits or the next eligible task.'};
- return {label: 'AI active', tone: 'green', detail: 'Bot-managed. Each next action follows your current setup and budget.'};
+ return {label: 'AI on', tone: 'green', detail: 'Automatic mode is on. Each next action follows your current setup and budget.'};
 }
 
 export type DealSection='contracts'|'signature'|'fulfillment'|'coordination'|'cancellation'|'attention'|'closing'|'property';

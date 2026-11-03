@@ -4,11 +4,13 @@ import {IcashMark} from '@/components/icash-mark';
 import {Play,Pause,Plus,Crown,Coins} from 'lucide-react';
 import {creditAmount} from '@/lib/workspace-progress';
 import type {BotActivity} from '@/lib/bot-activity';
-type Props={apiBase?:string;readOnly?:boolean;hasLeads?:boolean;botName?:string;vip?:boolean;running:boolean;stopped:boolean;paymentRequired:boolean;busy:boolean;stale:boolean;hasCreditHistory?:boolean;balanceCents?:number;principalKey?:string;canPause?:boolean;onVip?:()=>void;onBudget:()=>void;onResume:()=>void;onPause:()=>void};
-export function BotRunBar({apiBase='/api/work',readOnly=false,hasLeads,botName,vip=false,running,stopped,paymentRequired,busy,stale,balanceCents,hasCreditHistory=false,principalKey,canPause=false,onVip,onBudget,onPause,onResume}:Props){
+type Props={apiBase?:string;readOnly?:boolean;hasLeads?:boolean;botName?:string;vip?:boolean;enabled?:boolean;running:boolean;stopped:boolean;paymentRequired:boolean;busy:boolean;stale:boolean;hasCreditHistory?:boolean;balanceCents?:number;principalKey?:string;canPause?:boolean;onVip?:()=>void;onBudget:()=>void;onResume:()=>void;onPause:()=>void};
+export function BotRunBar({apiBase='/api/work',readOnly=false,hasLeads,botName,vip=false,enabled,running,stopped,paymentRequired,busy,stale,balanceCents,hasCreditHistory=false,principalKey,canPause=false,onVip,onBudget,onPause,onResume}:Props){
  const [activity,setActivity]=useState<(BotActivity&{principalKey?:string})|null>(null);
+ // Customer status describes the saved Run/Pause choice, not infrastructure health.
+ const modeRunning=enabled??running;
  useEffect(()=>{
-  if(!running||stale){setActivity(null);return;}
+  if(!(readOnly?running:modeRunning)||stale){setActivity(null);return;}
   let disposed=false,inFlight=false;let controller:AbortController|undefined;
   async function refresh(){
    if(disposed||inFlight||document.hidden)return;
@@ -25,23 +27,25 @@ export function BotRunBar({apiBase='/api/work',readOnly=false,hasLeads,botName,v
   const visibility=()=>{if(document.hidden){controller?.abort();setActivity(null);}else void refresh();};
   document.addEventListener('visibilitychange',visibility);
   return()=>{disposed=true;clearInterval(timer);controller?.abort();document.removeEventListener('visibilitychange',visibility);};
- },[running,stale,principalKey,apiBase]);
+ },[running,modeRunning,stale,principalKey,apiBase,readOnly]);
  const current=activity?.principalKey===principalKey&&activity&&Date.now()-Date.parse(activity.checkedAt)<25000?activity:null;
  const funded=(balanceCents??0)>0;
  const blocked=current?.blocked===true,healthUnavailable=current?.unavailable===true;
- const live=running&&funded&&!stopped&&!paymentRequired&&!stale&&!busy&&!!current&&current.label!=='Paused'&&!blocked&&!healthUnavailable;
- const active=live&&current?.active===true;
- const liveLabel=blocked?'Work delayed':healthUnavailable||stale||busy||running&&funded&&!paymentRequired&&!stopped&&!current?'Checking status':live?'Live':'Not live';
- const title=stale||healthUnavailable?'Checking status':paymentRequired?'Restore access':blocked?'Work delayed':active?'Bot working':!funded?(balanceCents===undefined?'Ready when you are':hasCreditHistory?'Out of credits':'Add money to start your bot'):stopped?'Bot paused':running?(readOnly?'Run enabled':'Bot running'):'Bot ready';
- const detail=stale?'Reconnecting…':paymentRequired?'Update your subscription to continue.':blocked||healthUnavailable?current!.label:active?current!.label:!funded?(hasCreditHistory?'Add money to continue. Your properties and conversations are saved.':'Choose an amount. Your bot starts after payment.'):running?(live&&hasLeads===false?'Looking for a deal':current?.label??'Checking for the next task…'):stopped?'Your properties and conversations are saved.':'Waiting for eligible work.';
+ const observedLive=running&&funded&&!stopped&&!paymentRequired&&!stale&&!busy&&!!current&&current.label!=='Paused'&&!blocked&&!healthUnavailable;
+ const active=observedLive&&current?.active===true;
+ const runEnabled=modeRunning&&funded&&!stopped&&!paymentRequired;
+ const live=readOnly?observedLive:runEnabled;
+ const liveLabel=!readOnly?(runEnabled?'Run enabled':stopped?'Paused':'Not running'):blocked?'Work delayed':healthUnavailable||stale||busy||running&&funded&&!paymentRequired&&!stopped&&!current?'Checking status':live?'Live':'Not live';
+ const title=readOnly&&(stale||healthUnavailable)?'Checking status':paymentRequired?'Restore access':readOnly&&blocked?'Work delayed':readOnly&&active?'Bot working':!funded?(balanceCents===undefined?'Ready when you are':hasCreditHistory?'Out of credits':'Add money to start your bot'):stopped||readOnly&&current?.label==='Paused'?'Bot paused':(readOnly?running:modeRunning)?(readOnly?'Run enabled':'Bot running'):'Bot ready';
+ const detail=readOnly&&stale?'Reconnecting…':paymentRequired?'Update your subscription to continue.':readOnly&&(blocked||healthUnavailable)?current!.label:active?current!.label:!funded?(hasCreditHistory?'Add money to continue. Your properties and conversations are saved.':'Choose an amount. Your bot starts after payment.'):(readOnly?running:modeRunning)?(!stale&&!busy&&!blocked&&!healthUnavailable&&current?(observedLive&&hasLeads===false?'Looking for a deal':readOnly?current.label:''):readOnly?'Checking for the next task…':''):stopped?'Your properties and conversations are saved.':'Waiting for eligible work.';
  const displayTitle=botName?.trim()&&title.startsWith('Bot ')?`${botName.trim()} is ${title.slice(4)}`:title;
  return <section id="workspace-tour-controls" className={`bot-run-bar bot-run-centered${active?' is-active':''}`} aria-label="Bot controls">
-  <div className="bot-run-status"><IcashMark className="bot-orb"/><div><div className="bot-run-title"><h2>{displayTitle}</h2><span className="bot-live-status" data-live={live} role="status"><i aria-hidden="true"/><span className="sr-only">{liveLabel}</span></span>{vip&&<span className="workspace-vip-badge" aria-label="VIP access"><Crown size={24} strokeWidth={2} aria-hidden="true"/><span>VIP</span></span>}</div><p aria-live="polite">{detail}</p></div></div>
+  <div className="bot-run-status"><IcashMark className="bot-orb"/><div><div className="bot-run-title"><h2>{displayTitle}</h2><span className="bot-live-status" data-live={live} role="status"><i aria-hidden="true"/><span className="sr-only">{liveLabel}</span></span>{vip&&<span className="workspace-vip-badge" aria-label="VIP access"><Crown size={24} strokeWidth={2} aria-hidden="true"/><span>VIP</span></span>}</div>{detail&&<p aria-live="polite">{detail}</p>}</div></div>
   <div className="bot-run-actions">
    {(!funded||paymentRequired)&&<button className="bot-main-action" type="button" aria-haspopup="dialog" disabled={busy||stale||readOnly} onClick={onBudget}><Plus size={18} aria-hidden="true"/>{busy?'One moment…':paymentRequired?'Restore access':'Add money to start'}</button>}
    {funded&&!paymentRequired&&(canPause||stopped)&&<button className="bot-run-budget" type="button" disabled={busy||stale||readOnly} onClick={canPause?onPause:onResume}>{canPause?<Pause size={14} aria-hidden="true"/>:<Play size={14} aria-hidden="true"/>}{canPause?'Pause bot':'Run bot'}</button>}
   </div>
-  <div className="bot-wallet"><span className="bot-wallet-icon" aria-hidden="true"><Coins size={23}/></span><div className="bot-wallet-amount"><span>{hasCreditHistory||funded?'Credits left':'Work credits'}</span><strong>{stale||balanceCents===undefined?'—':creditAmount(balanceCents)}</strong></div><button id="workspace-funding-toggle" type="button" aria-haspopup="dialog" disabled={busy||stale||readOnly} onClick={onBudget}>{busy?'One moment…':paymentRequired?'Restore access':'Add money'}</button></div>
+  <div className="bot-wallet"><span className="bot-wallet-icon" aria-hidden="true"><Coins size={23}/></span><div className="bot-wallet-amount"><span>{hasCreditHistory||funded?'Credits left':'Work credits'}</span><strong>{readOnly&&stale||balanceCents===undefined?'—':creditAmount(balanceCents)}</strong></div><button id="workspace-funding-toggle" type="button" aria-haspopup="dialog" disabled={busy||stale||readOnly} onClick={onBudget}>{busy?'One moment…':paymentRequired?'Restore access':'Add money'}</button></div>
   {onVip&&<div className="bot-plan-row">
    {onVip&&<button type="button" className="workspace-vip-switch" aria-haspopup="dialog" disabled={busy||stale||readOnly} onClick={onVip}><Crown size={16} aria-hidden="true"/>{vip?'VIP settings':'Switch to VIP'}</button>}
   </div>}

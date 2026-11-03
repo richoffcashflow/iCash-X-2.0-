@@ -25,6 +25,9 @@ export function workspaceAttentionQuery(table:WorkspaceAttentionTable,accountId:
  });
  if(throughDeal)params.set('active_deal.account_id',`eq.${accountId}`);
  if(table==='icash_handoffs')params.set('portal_journey_id','is.null');
+ // Expired background contact checks have no customer action. Keep their saved
+ // state for diagnostics, but omit them before paging customer attention.
+ if(table==='icash_seller_gaps')params.set('or','(review_reason.is.null,review_reason.neq.contact_checks_expired)');
  if(options.order)params.set('order',options.order);
  params.set('limit',String(options.limit));
  if(options.offset!==undefined)params.set('offset',String(options.offset));

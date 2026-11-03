@@ -6,18 +6,19 @@ import type {NetworkWorkspace} from '@/lib/buyer-network';
 import styles from './buyer-network.module.css';
 import {WorkspacePanel} from './workspace-panel';
 import {BuyerDemandPanel} from './buyer-demand';
+import {recordWorkspaceExperience} from '@/lib/workspace-experience-client';
 
 export function PlatformBuyerNetwork(){
  const locked=useRef(false);
  const [networkOpen,setNetworkOpen]=useState(false);
  const [data,setData]=useState<NetworkWorkspace|null>(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[editing,setEditing]=useState(false),[address,setAddress]=useState(''),[enabled,setEnabled]=useState(true);
  async function refresh(signal?:AbortSignal){const next=await webinarRequest<NetworkWorkspace>('/api/work/buyer-network',{cache:'no-store',signal});if(!signal?.aborted)setData(next);return next;}
- useEffect(()=>{const abort=new AbortController();let inFlight=false;const load=async()=>{if(document.hidden||inFlight)return;inFlight=true;try{await refresh(abort.signal);if(!abort.signal.aborted)setError('');}catch(e){if(!abort.signal.aborted)setError(e instanceof Error?e.message:'Could not refresh the buyer network.');}finally{inFlight=false;}};void load();const timer=setInterval(load,60000);return()=>{abort.abort();clearInterval(timer);};},[]);
+ useEffect(()=>{const abort=new AbortController();let inFlight=false;const load=async()=>{if(document.hidden||inFlight)return;inFlight=true;try{await refresh(abort.signal);}catch{if(!abort.signal.aborted)recordWorkspaceExperience({event:'panel_error',stage:'buyers'});}finally{inFlight=false;}};void load();const timer=setInterval(load,60000);return()=>{abort.abort();clearInterval(timer);};},[]);
  function edit(){setAddress(data?.settings?.mailingAddress??'');setEnabled(data?.settings?.enabled??true);setEditing(v=>!v);}
  async function save(e:FormEvent){e.preventDefault();if(locked.current)return;locked.current=true;setBusy(true);setError('');try{await webinarPost('/api/work/buyer-network',{enabled,mailingAddress:address});await refresh();setEditing(false);setNotice(enabled?'Saved. Your bot will email eligible matching buyers when it runs.':'Network delivery paused.');}catch(e){setError(e instanceof Error?e.message:'Could not save.');}finally{locked.current=false;setBusy(false);}}
  async function handled(matchId:string){if(locked.current)return;locked.current=true;setBusy(true);setError('');try{await webinarRequest('/api/work/buyer-network',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({matchId})});await refresh();setNotice('Response marked handled. A new reply will appear for review.');}catch(e){setError(e instanceof Error?e.message:'Could not save.');}finally{locked.current=false;setBusy(false);}}
  if(!data?.hasActiveDeal&&!data?.responses&&!error)return null;
- return <WorkspacePanel id="platform-buyer-network" title="Buyer network" onOpenChange={setNetworkOpen} label={<>Buyer network <span className={styles.vipLabel}>VIP</span><span>{error?' · Needs review':data?.responses?` · ${data.responses} ${data.responses===1?'reply':'replies'}`:!data?.settings?' · Set up emails':''}</span></>}>
+ return <WorkspacePanel id="platform-buyer-network" title="Buyer network" onOpenChange={setNetworkOpen} label={<>Buyer network <span className={styles.vipLabel}>VIP</span><span>{data?.responses?` · ${data.responses} ${data.responses===1?'reply':'replies'}`:!data?.settings?' · Set up emails':''}</span></>}>
   <div className={styles.workspaceBody}>
    <>
     {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}

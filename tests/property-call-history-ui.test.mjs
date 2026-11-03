@@ -90,7 +90,7 @@ try {
  row=callNodes(view)[0];assert.equal(row.props.recordingReceipt.status,'available');assert.equal(row.key,`recording:outbound:${recordingId}`);
  assert.equal(row.props.transcriptAvailable,false,'audio becomes available without a completed transcript');
  advancePoll();await view.flush();calls[2].resolve(new Response(null,{status:503}));await view.flush();
- assert.match(text(view.tree),/Call recordings could not refresh/);assert.equal(callNodes(view)[0].props.recordingReceipt.status,'available','metadata failure keeps previously available audio');
+ assert.doesNotMatch(text(view.tree),/could not refresh|Retry call recordings/);assert.equal(callNodes(view)[0].props.recordingReceipt.status,'available','metadata failure keeps previously available audio silently');
  view.props({screeningId:otherScreeningId,conversations:[]});assert.equal(callNodes(view).length,0,'switching properties never shows previous audio');
  await view.flush();assert.equal(calls[2].options.signal.aborted,true);assert.match(calls[3].url,new RegExp(otherScreeningId));
  view.unmount();assert.equal(calls[3].options.signal.aborted,true);assert.equal(timers.size,0);assert.equal(listeners.size,0);

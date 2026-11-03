@@ -95,7 +95,16 @@ try{
   browserFixture();globalThis.fetch=async(path)=>{if(path==='/api/auth/logout')throw Error('Connection lost');assert.equal(path,'/api/account?view=core');return Response.json(fixture);};
   const ui=harness('app/page.tsx');try{
    await ui.flush();ui.find(n=>n.type==='button'&&text(n)==='Sign out').props.onClick();await ui.flush();
-   assert(ui.find(n=>n.type==='BotRunBar').props.stale);assert.match(ui.text(),/Could not load your account/);
+   assert.equal(ui.find(n=>n.type==='BotRunBar').props.stale,false);assert.match(ui.text(),/Could not sign out/);
+  }finally{ui.dispose();}
+ });
+ await scenario('a failed background account refresh keeps saved mode without a technical banner',async()=>{
+  const listeners=browserFixture();let reads=0;
+  globalThis.fetch=async path=>{assert.equal(path,'/api/account?view=core');if(++reads>1)throw Error('Connection lost');return Response.json(fixture);};
+  const ui=harness('app/page.tsx');try{
+   await ui.flush();listeners.get('visibilitychange')();await ui.flush();
+   const bar=ui.find(n=>n.type==='BotRunBar');assert.equal(bar.props.enabled,true);assert.equal(bar.props.stale,true);assert.equal(bar.props.balanceCents,1000);
+   assert.doesNotMatch(ui.text(),/Could not load your account|Your account could not refresh/);
   }finally{ui.dispose();}
  });
  await scenario('email-only sign-in preserves existing code, retry and trial recovery controls',async()=>{
@@ -126,5 +135,5 @@ try{
   }finally{ui.dispose();}
  });
 }finally{globalThis.fetch=originalFetch;}
-assert.equal(count,9);
-console.log('Nine bounded local request-recovery scenarios passed. No external requests or paid providers.');
+assert.equal(count,10);
+console.log('Ten bounded local request-recovery scenarios passed. No external requests or paid providers.');

@@ -9,7 +9,7 @@ export class WorkspaceErrorBoundary extends Component<{telemetry?:boolean;childr
  componentDidCatch(){if(this.props.telemetry!==false)recordWorkspaceExperience({event:'panel_error',stage:this.props.stage});}
  retry=()=>{if(this.props.telemetry!==false)recordWorkspaceExperience({event:'panel_retry',stage:this.props.stage});this.setState({failed:false});};
  render(){
-  if(this.state.failed)return <section role="alert" className="workspace-panel-recovery"><h4>This section couldn’t open</h4><p>You can try again or close this panel to return to your property.</p><button type="button" className="workspace-quiet" onClick={this.retry}>Try opening again</button></section>;
+  if(this.state.failed)return <section className="workspace-panel-recovery"><button type="button" className="workspace-quiet" aria-label="Refresh section" onClick={this.retry}>Refresh</button></section>;
   return this.props.children;
  }
 }

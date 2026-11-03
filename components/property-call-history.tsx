@@ -88,7 +88,6 @@ export function PropertyCallHistory({screeningId, conversations, apiBase='/api/w
   const shownHistory=showVoicemail?history:visibleHistory;
   return <section aria-label="Call recordings">
     <div className="workspace-section-heading"><h4 className="call-history-title">Call recordings</h4><button type="button" className="workspace-quiet" onClick={reload}>Refresh recordings</button></div>
-    {error === scope && <p role="status">Call recordings could not refresh. <button type="button" className="workspace-quiet" onClick={reload}>Retry call recordings</button></p>}
     {!current && error !== scope && <p role="status">Loading call recordings…</p>}
     {current && !shownHistory.length && <div className="conversation-empty"><strong>{voicemailHistory.length?'Only voicemail in this view':'No call recordings yet'}</strong><p>{voicemailHistory.length?'Use Show voicemail below to view saved recordings.':'Recorded calls will appear here when audio is ready.'}</p></div>}
     {shownHistory.map(({key, recording, conversation}) => <CallConversation key={key} apiBase={apiBase}

@@ -44,7 +44,7 @@ assert.equal(all(tree).filter(n=>n.type==='details').length,0,'report is always 
 assert.deepEqual(all(tree).filter(n=>n.type==='button').map(text),['Today','7 days','30 days']);
 assert.doesNotMatch(text(tree),/Your progress|preliminary|All-time|Download PDF/);
 tree=budget(summary,7);assert.doesNotMatch(text(tree),/17.50|Leads\s+5/,'previous-period values never appear under a new selected period');assert.match(text(tree),/Loading/);
-tree=budget(null,1,'Could not refresh activity.');assert.doesNotMatch(text(tree),/\$0.00|Leads\s+0/,'failed or missing activity is not presented as zero');assert.match(text(tree),/Retry/);
+tree=budget(null,1,'Could not refresh activity.');assert.doesNotMatch(text(tree),/\$0.00|Leads\s+0|Could not refresh/,'failed or missing activity is not presented as zero or a technical warning');assert.match(text(tree),/Refresh/);
 tree=page({...account,balanceCents:0,smsWorkReady:true},{...campaign,released:true});assert.equal(all(tree).find(n=>n.type===component('BotRunBar')).props.running,false,'zero-balance budget entry stays visible without implying the bot is running');
 const source=readFileSync(new URL('../components/live-workspace.tsx',import.meta.url),'utf8');
 assert(source.indexOf('<PropertyNextStep readOnly={readOnly} property={p}')>source.indexOf('<div className="property-details"'),'detailed next steps moved inside property disclosure');

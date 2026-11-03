@@ -25,7 +25,8 @@ const workspaceRequest=(url,options)=>new Promise((resolve,reject)=>{requests.pu
 const code=ts.transpileModule(readFileSync(new URL('../components/live-workspace.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
 const mod={exports:{}};
 new Function('require','module','exports',code)(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/webinar-client'?{webinarRequest:workspaceRequest}:name==='@/lib/workspace-events-client'?{subscribeWorkspaceChanges:fn=>{changes.add(fn);return()=>changes.delete(fn);}}:name==='./workspace-view'?views:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/workspace-lead-presence'?{workspaceLeadPresence}:new Proxy({},{get:(_o,key)=>String(key)}),mod,mod.exports);
-function render(){cursor=0;dirty=false;tree=mod.exports.LiveWorkspace({principal:'Synthetic investor',botAvailable:true,showCoach:false});}
+let renderComponent=()=>mod.exports.LiveWorkspace({principal:'Synthetic investor',botAvailable:true,showCoach:false});
+function render(){cursor=0;dirty=false;tree=renderComponent();}
 async function flush(){for(let i=0;i<12;i++){if(dirty)render();const batch=pending;pending=[];for(const fn of batch)fn();await Promise.resolve();}}
 const uuid=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const property=n=>({id:uuid(n),completed_at:'2026-10-19T18:00:00Z',engagement:{responded:false,interested:false,optedOut:false},result:{property:{propertyId:'prop_'+n,address:n+' Sample Lane'},financialCheck:{status:'eligible',reason:'Saved eligible research'},preliminarySellerCeilingCents:10000000}});
@@ -52,6 +53,36 @@ try{
  requests.at(-1).resolve(work([2]));await flush();const searchIndex=requests.length;funded();await flush();assert.equal(query(searchIndex).get('query'),'2 Sample','Funding respects an explicit search');requests[searchIndex].resolve(work([2]));await flush();
  assert.equal(button('Seller responses').props['aria-pressed'],true);
  const beforeChange=requests.length;for(const fn of changes)fn();await flush();assert.equal(requests.length,beforeChange+1,'A revision refreshes the current view');requests.at(-1).resolve(work([2]));await flush();
+ const savedProperty=card(uuid(2)).props.property,savedText=label(tree);
+ for(const fn of changes)fn();await flush();requests.at(-1).reject(Error('Internal activity query failed'));await flush();
+ assert.equal(card(uuid(2)).props.property,savedProperty,'A failed background refresh keeps the last confirmed property');
+ assert.equal(label(tree),savedText,'A failed background refresh adds no customer error banner or replacement status');
+ assert.equal(elements(tree).some(n=>n.props?.role==='alert'),false);
+ assert.equal(card(uuid(2)).props.stale,true,'Failed refresh still guards controls internally');
+ for(const fn of changes)fn();await flush();requests.at(-1).resolve(work([2]));await flush();assert.equal(card(uuid(2)).props.stale,false,'The next confirmed refresh restores control availability');
  cells.forEach(cell=>cell?.cleanup?.());assert.equal(changes.size,0,'Unmount removes the revision subscription');const stopped=requests.length;funded();await flush();assert.equal(requests.length,stopped,'Unmount removes the funding listener');
- console.log('PASS funded workspace: saved candidates visible on hydration, immediate/count-independent refresh, in-flight coalescing, explicit response/search/page choices and open drafts preserved. No provider work.');
+ // Exercise the actual progress component through missing data, failed polling and recovery.
+ cells=[];cursor=0;dirty=true;pending=[];requests.length=0;timers.clear();
+ const progressCode=ts.transpileModule(readFileSync(new URL('../components/opportunity-progress.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
+ const progressModule={exports:{}};
+ new Function('require','module','exports',progressCode)(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/webinar-client'?{webinarRequest:workspaceRequest}:name==='@/lib/workspace-events-client'?{subscribeWorkspaceChanges:fn=>{changes.add(fn);return()=>changes.delete(fn);}}:name.endsWith('.css')?{default:{}}:new Proxy({},{get:(_o,key)=>String(key)}),progressModule,progressModule.exports);
+ let activities=0,progressProps={botAvailable:true,paused:false,stale:false,onResponses(){},onActivity(){activities++;}};
+ renderComponent=()=>progressModule.exports.OpportunityProgress(progressProps);
+ await flush();requests.at(-1).reject(Error('Progress unavailable'));await flush();assert.equal(tree,null,'Initial technical failure stays blank rather than inventing zero counts');
+ const progress={budgetId:1,startedAt:'2026-11-02T18:00:00Z',spentCents:200,pendingCents:0,remainingCents:800,queued:2,screened:5,eligible:2,contacted:1,responded:0,status:'working'};
+ for(const fn of changes)fn();await flush();requests.at(-1).resolve({progress});await flush();
+ const savedProgressText=label(tree);assert.match(savedProgressText,/Your opportunity search/);assert.doesNotMatch(savedProgressText,/Working now|Live|delayed|unavailable/i);
+ assert(elements(tree).some(n=>n.type==='strong'&&n.props.children==='5'),'Confirmed screening count is retained');
+ for(const status of ['settling','paced','ready','waiting']){
+  for(const fn of changes)fn();await flush();requests.at(-1).resolve({progress:{...progress,status}});await flush();
+  assert.equal(label(tree),savedProgressText,'Routine work status '+status+' does not replace the stable progress display');
+ }
+ progressProps={...progressProps,stale:true,botAvailable:false};dirty=true;await flush();
+ for(const fn of changes)fn();await flush();requests.at(-1).reject(Error('Progress unavailable'));await flush();
+ assert.equal(label(tree),savedProgressText,'Transport errors retain confirmed progress without flipping visible status');assert.equal(activities,0);
+ progressProps={...progressProps,paused:true};dirty=true;await flush();assert.match(label(tree),/Your search is paused/,'An actual Pause still updates immediately');
+ requests.at(-1).resolve({progress:{...progress,status:'paused'}});await flush();
+ progressProps={...progressProps,paused:false,stale:false,botAvailable:true};dirty=true;await flush();requests.at(-1).resolve({progress:{...progress,responded:1}});await flush();
+ assert.match(label(tree),/A seller replied/);assert.equal(activities,1,'Fresh seller response still triggers the connected workspace refresh');
+ console.log('PASS funded workspace: saved candidates, coalesced refresh, explicit view/search/page choices, open drafts, quiet failed reads, stable progress, actual Pause and reply recovery. No provider work.');
 }finally{cells.forEach(cell=>cell?.cleanup?.());Object.assign(globalThis,saved);}
