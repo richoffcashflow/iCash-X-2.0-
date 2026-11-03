@@ -29,12 +29,17 @@ def setup():
     assert sql("select current_database();") == "icash_reliability"
     sql("drop schema if exists icash_text_receipt_private cascade;drop schema public cascade;create schema public;")
     sql("do $$begin if not exists(select 1 from pg_roles where rolname='anon') then create role anon;end if;if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated;end if;if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role bypassrls;end if;end$$;")
+    # Earlier suites retain the role across schema resets. Match Supabase's service
+    # role even when another fixture originally created it without BYPASSRLS.
+    sql('alter role service_role bypassrls;')
+    assert sql("select rolbypassrls from pg_roles where rolname='service_role';") == 't'
     sql(read('tests/fixtures/text-delivery-recovery-base.sql').replace('create role anon;create role authenticated;create role service_role bypassrls;', ''))
     sql(read('tests/fixtures/text-delivery-recovery-observers.sql'))
     for observer in json.loads(read('tests/fixtures/text-delivery-recovery-triggers.json')):
         sql(observer['function_definition']+';'+observer['definition']+';')
     sql(read('config/text-delivery-recovery.sql'))
     sql(read('config/text-delivery-source-binding.sql'))
+    assert sql('set role service_role;select count(*) from icash_text_receipt_private.control;') == '1', 'Fixture service role must see the private recovery control'
     sql(read('tests/fixtures/text-delivery-recovery-callback.sql')+';')
     sql("""create table fixture_changes(message_id uuid);
       create function fixture_changed() returns trigger language plpgsql as $$begin insert into public.fixture_changes values(new.id);return new;end$$;
