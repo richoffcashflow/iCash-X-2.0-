@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
-import {OwnerPreviewRateLimitError} from '../lib/owner-enrichment-deferral.ts';
+import {OwnerPreviewRateLimitError,OwnerExportCapacityBusyError} from '../lib/owner-enrichment-deferral.ts';
 import {OwnerExportPreflightPendingError} from '../lib/owner-export-preflight.ts';
 import {ProspectingBudgetError} from '../lib/voice-budget-failure.ts';
 
@@ -12,7 +12,7 @@ const ticketBase={id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',accountId:'cccccccc-
 const privateData={accountId:ticketBase.accountId,screeningId:ticketBase.screeningId,token,email:'private@example.invalid',raw:{phone:'+15555550123'},requestUrl:'https://provider.invalid/private?key=secret'};
 let ticket,failure,consumed,calls,logs,finishThrows;
 function reset(error,kind='contacts'){ticket={...ticketBase,kind};failure=error;consumed=false;calls=[];logs=[];finishThrows=false;}
-const mocks={OwnerPreviewRateLimitError,OwnerExportPreflightPendingError,ProspectingBudgetError,
+const mocks={OwnerPreviewRateLimitError,OwnerExportCapacityBusyError,OwnerExportPreflightPendingError,ProspectingBudgetError,
  automationWorkReady:()=>true,newLiveWorkKinds:new Set(),
  NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},
  enrichForAccount:async()=>{throw failure;},discoverForAccount:async()=>{throw failure;},
@@ -46,7 +46,7 @@ async function assertHeld(reason,kind='contacts'){
  const repeated=await POST(request());assert.equal(repeated.status,401);
  assert.equal(calls.filter(c=>c.path.startsWith('rpc/icash_finish_')).length,1,'A repeated capability never retries original work');
 }
-const reasons=['OWNER_PREVIEW_FAILED_NO_RETRY','OWNER_PREVIEW_SAVE_UNCONFIRMED','OWNER_LOOKUP_FAILED_NO_RETRY','OWNER_EXPORT_RECONCILIATION_REQUIRED','OWNER_EXPORT_RECEIPT_SAVE_UNCONFIRMED','OWNER_EXPORT_RESPONSE_UNAVAILABLE','OWNER_EXPORT_RESPONSE_TOO_LARGE','OWNER_EXPORT_DOWNLOAD_UNAVAILABLE'];
+const reasons=['OWNER_PREVIEW_FAILED_NO_RETRY','OWNER_PREVIEW_SAVE_UNCONFIRMED','OWNER_LOOKUP_FAILED_NO_RETRY','OWNER_EXPORT_RECONCILIATION_REQUIRED','OWNER_EXPORT_RECEIPT_SAVE_UNCONFIRMED','OWNER_EXPORT_RESPONSE_UNAVAILABLE','OWNER_EXPORT_RESPONSE_TOO_LARGE','OWNER_EXPORT_DOWNLOAD_UNAVAILABLE','OWNER_EXPORT_CAPACITY_BUSY'];
 for(const reason of reasons){
  reset(Object.assign(Error(reason,{cause:privateData}),privateData,{stage:'paid',httpStatus:500}));
  await assertHeld(reason);
@@ -54,6 +54,7 @@ for(const reason of reasons){
 }
 for(const error of [
  Error('OWNER_EXPORT_UNKNOWN_PRIVATE_CODE'),
+ Error('OWNER_EXPORT_CAPACITY_BUSY '+JSON.stringify(privateData)),
  Error('OWNER_PREVIEW_SAVE_UNCONFIRMED '+JSON.stringify(privateData)),
  Error('OWNER_PREVIEW_FAILED_NO_RETRY\n'+token),
  Error(JSON.stringify(privateData)),

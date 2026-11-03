@@ -119,3 +119,60 @@ expired; installation was not confirmed and no recovery switch was enabled.
 These observations are a follow-up measurement before this patch, not an
 after-deployment result. Reconcile migration versions and repeat exact checks
 after installation before merging and enabling the release.
+
+## Later fixed observation, 06:42 UTC
+
+Both production services had advanced to the separately merged #541: worker
+success at 06:10:14 and web readiness at 06:10:16. This branch was still
+undeployed. The monitor now showed 25 stalled and 63 pending accounts. Twelve of
+the original 21 stalled accounts had positive settled work after the baseline,
+but two had stalled again; 11 were currently stalled. All 60 original pending
+accounts remained pending. New monitor membership does not prove a newly
+created financial hold.
+
+The rolling hour ending 06:42:04 had $44.73 net customer usage across 46 accounts
+($48.53 gross less $3.80 platform coverage); the $10 top-up is separate. All
+coverage again matched immutable no-new-inventory search results. Between
+05:43:25 and 06:42:56, 599 screenings completed, 358 passed the financial check
+and 286 contact records were saved. No completed seller conversation or incoming
+seller message was observed. These research results are not viable deals.
+
+The 05:56–06:38:34 log window contained 3,395 scheduler RPC requests, all HTTP
+200 with zero observed scheduler timeouts. It also contained six text-receipt
+write timeouts among 84 requests, waiting for the shared budget row. Later live
+read-only sampling identified scheduler transactions holding that row for
+roughly four seconds; it does not identify the earlier timeout lock holders.
+HTTP 200 includes idle polls and is not a work-completion metric.
+
+The deep cohort audit identified additional exact blockers:
+
+- Export-capacity waits occurred before transport admission while a different
+  account's original export held the shared slot. They were labelled as preview
+  rate limits even though there was no provider 429. Keep the existing bounded
+  renewal family, distinguish the operator reason and preserve the export slot.
+- A due contact retry without a live saved preflight loses saved-list priority.
+  An ordering hint may include that existing bounded family, while final source,
+  ownership, financial and unstarted-work checks remain authoritative. Ordinary
+  account aging and the five-candidate limit remain in place.
+- The receipt queue placed 200 never-checked messages ahead of 165 due retries.
+  A retry due at 05:58 remained unselected at 06:42. Bounded interleaving must
+  service both classes within the unchanged three-per-minute and eight-attempt
+  controls. These are original receipt reads, not new messages or charges.
+- All 102 finished text rechecks in the sampled hour had a top-level delivered
+  label but no terminal delivery event or timestamp in the provider timeline.
+  Their holds remain valid. Nine expired writes retain safe original-ID retries.
+- Nine unsent, hours-open source candidates on two accounts contained a literal
+  ampersand in their saved buyer identity. Five opener validation predicates
+  rejected it although the ordinary SMS queue counts it as one GSM unit. Permit
+  that literal character without rewriting identity or relaxing the 160-unit,
+  source, consent, financial or duplicate-work checks. These nine candidates
+  are not nine independently verified dispatch authorizations.
+
+At their bounded read times, 16 of the 25 stalled accounts had a contact
+candidate, one had a search due and eight had reached the existing pipeline
+limit without a new contact candidate. That is a gate inventory, not proof of
+completed final selection. Ordinary calling hours were closed for the deep
+cohort; the SMS exceptions and existing delivered messages were reviewed
+separately. Twelve of the earlier 20-account stalled cohort also had unresolved
+financial operations, demonstrating why monitor categories cannot be summed as
+an exhaustive count of accounts with pending receipts.

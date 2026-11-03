@@ -18,3 +18,26 @@ Official references verified November 2 Central:
 - https://docs.contiguity.com/api-reference/webhook/events — failed delivery may mean no carrier confirmation; cancellation is not proof of unsending.
 
 This repair does not prove incoming seller texts work. The active 720 line still has no new observed customer replies; its separate reliability warning remains open. Resolving that requires actual original inbound provider evidence or a genuine received message, not outgoing delivery counts.
+
+The November 3 follow-up found a queue fairness gap: `next_check_at NULLS FIRST`
+put every never-checked message ahead of due retries. Sustained fresh backlog
+could therefore delay an expired read even after its existing backoff elapsed.
+`text-receipt-queue-fairness.sql` selects at most three candidates from each
+class, guarantees one from each nonempty class, then fills the third slot from
+the oldest remaining eligible candidate. Ranking covers at most six rows. The due class uses an inner schedule join and
+its non-null `attempts < 8` predicate directly, so PostgreSQL can use the partial
+due index; the former `coalesce` expression could not prove that predicate.
+Load-plan tests compare identical selected sources with 5,000 exhausted checks
+and confirm index use with the default planner. The
+existing global advisory/control lock, three checks per minute, eight-attempt
+ceiling and backoff are unchanged. The final request contains exactly the
+original source fields; the canonical tracking finalizer and financial history
+are untouched. Skipped locked rows remain eligible on the next batch.
+
+Offline coverage reproduces the old ordering with 200 fresh and 200 due messages,
+then sustains arrivals across twelve accounts. The native PostgreSQL CI scenario
+adds competing claimers/finishers, an immutable expired original attempt, exact
+provider IDs, locked-head revisit, single-class capacity and every retry interval.
+Incomplete terminal tracking still stays held. These tests do not demonstrate
+provider receipt availability or production recovery; verify the exact deployed
+release and real completed receipt attempts separately.

@@ -5,7 +5,7 @@ import {dealMachineRequest,finishAdmittedDealMachineRequest,DealMachineQuotaErro
 import {ownerBatchAudience,savePhoneLessOwnerPreviews} from './owner-batch.ts';
 import {previewAudience} from './owner-enrichment.ts';
 import {runScreeningJob} from './screening-job.ts';
-import {OwnerPreviewRateLimitError} from './owner-enrichment-deferral.ts';
+import {OwnerPreviewRateLimitError,OwnerExportCapacityBusyError} from './owner-enrichment-deferral.ts';
 import {preflightOwnerExport,OwnerExportPreflightPendingError} from './owner-export-preflight.ts';
 
 type Candidate={screeningId:string;snapshot:unknown};
@@ -166,7 +166,8 @@ export async function recoverOwnerActiveExports(db:ResearchDb,transport:typeof f
 export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:Candidate,c:Config,quotedDataCostMicros:number,transport:typeof fetch=fetch){
  if(![c.contact_credit_cap,c.property_credit_micros,quotedDataCostMicros].every(n=>Number.isSafeInteger(n)&&n>0)||c.contact_credit_cap>25||BigInt(c.contact_credit_cap)*BigInt(c.property_credit_micros)>BigInt(quotedDataCostMicros))throw Error('CONTACT_RATE_REQUIRED');
  const capacity=await db<string>('rpc/icash_owner_active_export_capacity','POST',{});
- if(capacity==='export_busy'||capacity==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+ if(capacity==='export_busy')throw new OwnerExportCapacityBusyError(accountId,primary.screeningId);
+ if(capacity==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
  if(capacity!=='ready')return {status:'held'};
  let candidates=c.research_version===1||c.research_version===2?await db<Candidate[]>('rpc/icash_owner_batch_candidates','POST',{p_account:accountId,p_screening:primary.screeningId}):[primary];
  if(!candidates.length||candidates.length>5||!candidates.some(x=>x.screeningId===primary.screeningId)||candidates.some(x=>runScreeningJob(x.snapshot).financialCheck.status!=='eligible'))return {status:'held'};
@@ -197,7 +198,8 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  const admission=await db<string>('rpc/icash_admit_owner_active_export','POST',{p_account:accountId,p_primary:audience.find(a=>a.screeningId===primary.screeningId)?.screeningId??audience[0].screeningId,p_batch:batchId,
   p_items:items,p_preview:preview,p_request:request,
   p_config:{rateId:c.contact_rate_id,creditCap:c.contact_credit_cap,unitCostMicros:c.property_credit_micros,rightsUntil:c.data_rights_until}});
- if(['quota_wait','export_busy'].includes(admission))throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+ if(admission==='export_busy')throw new OwnerExportCapacityBusyError(accountId,primary.screeningId);
+ if(admission==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
  if(admission!=='claimed')return {status:'held'};
  // Durable SQL admission owns this one attempt forever, even after disconnect.
  // Save the exact response before parsing, metrics, download or settlement.

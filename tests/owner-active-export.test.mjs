@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {activeOwnerColumns,activeOwnerExportRequest,parseOwnerExportCsv,allocateActiveOwnerExport,enrichActiveOwners,recoverOwnerActiveExports} from '../lib/owner-active-export.ts';
 import {ownerBatchAudience} from '../lib/owner-batch.ts';
-import {OwnerPreviewRateLimitError} from '../lib/owner-enrichment-deferral.ts';
+import {OwnerPreviewRateLimitError,OwnerExportCapacityBusyError} from '../lib/owner-enrichment-deferral.ts';
 const now=new Date().toISOString(),account='00000000-0000-4000-8000-000000000001';
 const owner=id=>({dm_person_id:id,contact_type:'owner',availability:{phones:3}});
 const snapshot=id=>({propertyId:id,propertyType:'house',fetchedAt:now,sellerCostReserveCents:100000,raw:{data:{dm_property_id:id,full_address:'Fixture',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}}});
@@ -91,13 +91,17 @@ try{
  assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,'contacts_saved');assert.equal(paid,1);assert.equal(downloads,1);assert.equal(results.length,3);
  assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,'held');assert.equal(paid,1);
  // Known holds stop even the free preview; final admission still handles races.
- for(const state of ['export_busy','quota_wait']){reset();capacity=state;await assert.rejects(enrichActiveOwners(db,account,candidates[0],config,250000,transport),OwnerPreviewRateLimitError);assert.equal(previews,0);assert.equal(paid,0);assert.equal(claimed,false);}
+ for(const state of ['export_busy','quota_wait']){reset();capacity=state;await assert.rejects(enrichActiveOwners(db,account,candidates[0],config,250000,transport),error=>{
+  assert(error instanceof OwnerPreviewRateLimitError);assert.equal(error instanceof OwnerExportCapacityBusyError,state==='export_busy');
+  assert.equal(error.message,state==='export_busy'?'OWNER_EXPORT_CAPACITY_BUSY':'OWNER_PREVIEW_RATE_LIMITED');
+  assert.equal(error.accountId,account);assert.equal(error.screeningId,candidates[0].screeningId);assert.equal(error.operationKey,`owners:${account}:${candidates[0].screeningId}`);return true;
+ });assert.equal(previews+paid+downloads+gets,0,'Known slot/quota hold makes no provider request');assert.equal(claimed,false);assert.equal(saved,null);}
  reset();capacity='disabled';assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,'held');assert.equal(previews,0);
  for(const status of ['empty','held']){reset();preflightStatus=status;assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,status);assert.equal(paid,0);assert.equal(claimed,false,'No wallet admission before preflight');}
  for(const status of ['pending','quota_wait']){reset();preflightStatus=status;await assert.rejects(enrichActiveOwners(db,account,candidates[0],config,250000,transport),OwnerPreviewRateLimitError);assert.equal(paid,0);assert.equal(claimed,false);}
  // Quota and organization contention cannot create a purchase or wallet claim.
  reset();quota=false;await assert.rejects(enrichActiveOwners(db,account,candidates[0],config,250000,transport),OwnerPreviewRateLimitError);assert.equal(paid,0);assert.equal(claimed,false);
- reset();busy=true;await assert.rejects(enrichActiveOwners(db,account,candidates[0],config,250000,transport),OwnerPreviewRateLimitError);assert.equal(paid,0);assert.equal(claimed,false);
+ reset();busy=true;await assert.rejects(enrichActiveOwners(db,account,candidates[0],config,250000,transport),OwnerExportCapacityBusyError);assert.equal(previews,1);assert.equal(paid+downloads+gets,0);assert.equal(claimed,false);assert.equal(saved,null,'Late shared-slot collision creates no paid export or charge');
  reset();timeout=true;await assert.rejects(enrichActiveOwners(db,account,candidates[0],config,250000,transport),/timeout/);assert.equal(paid,1);assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,'held');assert.equal(paid,1);
  // An original 500 without export ID remains held, never a recovery-idle success.
  reset();

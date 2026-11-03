@@ -44,6 +44,8 @@ jobs:
         run: python3 scripts/test-owner-preflight-indexing-postgres.py
       - name: Verify due contact list priority, competing issuers and late holds
         run: python3 scripts/test-owner-preflight-priority-postgres.py
+      - name: Verify fair due-retry progress and bounded generic-plan history lookup
+        run: python3 scripts/test-owner-retry-priority-postgres.py
       - name: Verify verified contact cohorts retain their original admission window
         run: python3 scripts/test-owner-preflight-ready-postgres.py
       - name: Verify indexed acquisition selection preserves active ticket guards
@@ -54,6 +56,8 @@ jobs:
         run: python3 scripts/test-text-message-thread-index-postgres.py
       - name: Verify bounded opener scans, concurrent cursors and late customer holds
         run: python3 scripts/test-seller-opener-bounded-postgres.py
+      - name: Verify literal seller identity and concurrent one-use opener preparation
+        run: python3 scripts/test-seller-opener-ampersand-postgres.py
       - name: Verify ordinary calling hours avoid unrelated owner evidence locks
         run: python3 scripts/test-outreach-predicates-postgres.py
       - name: Verify bounded configuration recovery and concurrent admission
@@ -64,6 +68,8 @@ jobs:
         run: python3 scripts/test-owner-preview-rejection-recovery-postgres.py
       - name: Verify original text receipt recovery and callback races
         run: python3 scripts/test-text-delivery-recovery-postgres.py
+      - name: Verify bounded receipt queue fairness and competing recovery workers
+        run: python3 scripts/test-text-receipt-fairness-postgres.py
       - name: Verify original incoming identity recovery and late receipt races
         run: python3 scripts/test-recorded-reception-retry-postgres.py
       - name: Verify prospective pre-dial abort and late provider admission

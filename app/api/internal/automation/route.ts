@@ -1,6 +1,6 @@
 import {processAutomationFollowup} from '@/lib/automation-followup-service';
 import {ProspectingBudgetError} from '@/lib/voice-budget-failure';
-import {OwnerPreviewRateLimitError} from '@/lib/owner-enrichment-deferral';
+import {OwnerPreviewRateLimitError,OwnerExportCapacityBusyError} from '@/lib/owner-enrichment-deferral';
 import {OwnerExportPreflightPendingError} from '@/lib/owner-export-preflight';
 import {dispatchCustomerUpdate} from '@/lib/customer-updates-service';
 import {automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '@/lib/live-work-admission';
@@ -44,6 +44,7 @@ export async function POST(request:Request){
   if(ticket?.kind==='contacts'&&ticket.screeningId&&error instanceof OwnerPreviewRateLimitError
    &&error.accountId===ticket.accountId&&error.screeningId===ticket.screeningId
    &&error.operationKey===`owners:${ticket.accountId}:${ticket.screeningId}`){
+   if(error instanceof OwnerExportCapacityBusyError)console.info('automation_waiting',{kind:'contacts',reason:'OWNER_EXPORT_CAPACITY_BUSY'});
    // The RPC checks the exact consumed capability and absence of all paid-work
    // evidence under lock. It schedules a new capability, never reuses this token.
    try{if(await db<boolean>(error instanceof OwnerExportPreflightPendingError?'rpc/icash_defer_owner_preflight':'rpc/icash_defer_owner_enrichment','POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_operation:error.operationKey})===true)return NextResponse.json({status:error instanceof OwnerExportPreflightPendingError?'owner_export_preflight_pending':'owner_preview_rate_limited'},{headers});}catch{/* An uncertain database outcome is never treated as a retry grant. */}
@@ -59,7 +60,7 @@ export async function POST(request:Request){
   // Active owner exports bypass the legacy enrichment logger. Preserve their
   // exact fixed failure code for operators, without interpreting it as retry
   // permission or changing the durable reconciliation outcome below.
-  const contactReasons=['OWNER_PREVIEW_FAILED_NO_RETRY','OWNER_PREVIEW_SAVE_UNCONFIRMED','OWNER_LOOKUP_FAILED_NO_RETRY','OWNER_EXPORT_RECONCILIATION_REQUIRED','OWNER_EXPORT_RECEIPT_SAVE_UNCONFIRMED','OWNER_EXPORT_RESPONSE_UNAVAILABLE','OWNER_EXPORT_RESPONSE_TOO_LARGE','OWNER_EXPORT_DOWNLOAD_UNAVAILABLE'];
+  const contactReasons=['OWNER_PREVIEW_FAILED_NO_RETRY','OWNER_PREVIEW_SAVE_UNCONFIRMED','OWNER_LOOKUP_FAILED_NO_RETRY','OWNER_EXPORT_RECONCILIATION_REQUIRED','OWNER_EXPORT_RECEIPT_SAVE_UNCONFIRMED','OWNER_EXPORT_RESPONSE_UNAVAILABLE','OWNER_EXPORT_RESPONSE_TOO_LARGE','OWNER_EXPORT_DOWNLOAD_UNAVAILABLE','OWNER_EXPORT_CAPACITY_BUSY'];
   const reason=error instanceof Error&&(['Database request failed','DISCOVERY_RATE_LIMIT','DISCOVERY_CONFIGURATION_INVALID','DISCOVERY_FILTER_INVALID','DISCOVERY_ESTIMATE_INVALID','DISCOVERY_RATE_TOO_LOW','DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY','DISCOVERY_RESPONSE_REQUIRES_RECONCILIATION','DISCOVERY_DELIVERY_REQUIRES_RECONCILIATION'].includes(error.message)||ticket?.kind==='contacts'&&contactReasons.includes(error.message))?error.message:'unclassified';
   const provider=error as {stage?:unknown;httpStatus?:unknown}|null;
   console.error('automation_held',{kind:ticket?.kind??'unclaimed',reason,...(reason==='DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY'?{stage:provider?.stage==='estimate'?'estimate':provider?.stage==='paid'?'paid':'unknown',httpStatus:typeof provider?.httpStatus==='number'&&Number.isInteger(provider.httpStatus)&&provider.httpStatus>=100&&provider.httpStatus<=599?provider.httpStatus:null}:{})});
