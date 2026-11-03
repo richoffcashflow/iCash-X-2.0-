@@ -56,7 +56,11 @@ export async function POST(request:Request){
    try{if(await db<boolean>('rpc/icash_hold_prospecting_ticket','POST',{p_id:ticket.id,p_account:ticket.accountId,p_quote:error.quoteCents}))return NextResponse.json({status:'prospecting_budget_held'},{headers});}catch{/* Unknown outcomes retain reconciliation. */}
   }
   // Fixed codes only: never log provider bodies, account details or capabilities.
-  const reason=error instanceof Error&&['Database request failed','DISCOVERY_RATE_LIMIT','DISCOVERY_CONFIGURATION_INVALID','DISCOVERY_FILTER_INVALID','DISCOVERY_ESTIMATE_INVALID','DISCOVERY_RATE_TOO_LOW','DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY','DISCOVERY_RESPONSE_REQUIRES_RECONCILIATION','DISCOVERY_DELIVERY_REQUIRES_RECONCILIATION'].includes(error.message)?error.message:'unclassified';
+  // Active owner exports bypass the legacy enrichment logger. Preserve their
+  // exact fixed failure code for operators, without interpreting it as retry
+  // permission or changing the durable reconciliation outcome below.
+  const contactReasons=['OWNER_PREVIEW_FAILED_NO_RETRY','OWNER_PREVIEW_SAVE_UNCONFIRMED','OWNER_LOOKUP_FAILED_NO_RETRY','OWNER_EXPORT_RECONCILIATION_REQUIRED','OWNER_EXPORT_RECEIPT_SAVE_UNCONFIRMED','OWNER_EXPORT_RESPONSE_UNAVAILABLE','OWNER_EXPORT_RESPONSE_TOO_LARGE','OWNER_EXPORT_DOWNLOAD_UNAVAILABLE'];
+  const reason=error instanceof Error&&(['Database request failed','DISCOVERY_RATE_LIMIT','DISCOVERY_CONFIGURATION_INVALID','DISCOVERY_FILTER_INVALID','DISCOVERY_ESTIMATE_INVALID','DISCOVERY_RATE_TOO_LOW','DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY','DISCOVERY_RESPONSE_REQUIRES_RECONCILIATION','DISCOVERY_DELIVERY_REQUIRES_RECONCILIATION'].includes(error.message)||ticket?.kind==='contacts'&&contactReasons.includes(error.message))?error.message:'unclassified';
   const provider=error as {stage?:unknown;httpStatus?:unknown}|null;
   console.error('automation_held',{kind:ticket?.kind??'unclaimed',reason,...(reason==='DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY'?{stage:provider?.stage==='estimate'?'estimate':provider?.stage==='paid'?'paid':'unknown',httpStatus:typeof provider?.httpStatus==='number'&&Number.isInteger(provider.httpStatus)&&provider.httpStatus>=100&&provider.httpStatus<=599?provider.httpStatus:null}:{})});
   if(ticket)try{

@@ -36,8 +36,12 @@ jobs:
         run: python3 scripts/test-learning-refresh-postgres.py
       - name: Verify one-use owner preflights under real concurrent transactions
         run: python3 scripts/test-owner-preflight-postgres.py
+      - name: Verify local quota refusal recovery under concurrent transactions
+        run: python3 scripts/test-preflight-quota-postgres.py
       - name: Verify delayed contact checks survive concurrent cleanup
         run: python3 scripts/test-preflight-waiting-postgres.py
+      - name: Verify original list indexing, bounded polling and fair concurrent progress
+        run: python3 scripts/test-owner-preflight-indexing-postgres.py
       - name: Verify due contact list priority, competing issuers and late holds
         run: python3 scripts/test-owner-preflight-priority-postgres.py
       - name: Verify verified contact cohorts retain their original admission window

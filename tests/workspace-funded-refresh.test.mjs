@@ -73,10 +73,24 @@ try{
  for(const fn of changes)fn();await flush();requests.at(-1).resolve({progress});await flush();
  const savedProgressText=label(tree);assert.match(savedProgressText,/Your opportunity search/);assert.doesNotMatch(savedProgressText,/Working now|Live|delayed|unavailable/i);
  assert(elements(tree).some(n=>n.type==='strong'&&n.props.children==='5'),'Confirmed screening count is retained');
- for(const status of ['settling','paced','ready','waiting']){
+ for(const status of ['paced','ready','waiting']){
   for(const fn of changes)fn();await flush();requests.at(-1).resolve({progress:{...progress,status}});await flush();
   assert.equal(label(tree),savedProgressText,'Routine work status '+status+' does not replace the stable progress display');
  }
+ for(const fn of changes)fn();await flush();requests.at(-1).resolve({progress:{...progress,status:'settling',pendingCents:700,remainingCents:100}});await flush();
+ const settlingText=label(tree);assert.match(settlingText,/Earlier work is awaiting confirmation/);assert.match(settlingText,/No action is needed from you for this check/);
+ assert.doesNotMatch(settlingText,/Add money|Working now|provider|error|reconciliat/i,'A pending confirmation is not a funding demand or a technical failure banner');
+ assert(elements(tree).some(n=>n.type==='strong'&&n.props.children==='5'),'Pending receipts never manufacture or clear completed work');
+ assert.equal(activities,0,'Waiting alone does not announce new results');
+ for(const fn of changes)fn();await flush();requests.at(-1).reject(Error('Progress unavailable'));await flush();
+ assert.equal(label(tree),settlingText,'A failed refresh preserves the last confirmed wait reason');
+ progressProps={...progressProps,paused:true};dirty=true;await flush();assert.match(label(tree),/Your search is paused/);assert.doesNotMatch(label(tree),/No action is needed|awaiting confirmation/,'Current customer Pause wins over a saved settling result');
+ requests.at(-1).resolve({progress:{...progress,status:'settling'}});await flush();
+ progressProps={...progressProps,paused:false};dirty=true;await flush();requests.at(-1).resolve({progress:{...progress,status:'membership_required'}});await flush();
+ assert.match(label(tree),/Restore your membership to continue/);assert.doesNotMatch(label(tree),/No action is needed/,'Membership attention does not inherit reassurance from a prior wait');
+ for(const fn of changes)fn();await flush();requests.at(-1).resolve({progress:{...progress,status:'budget_reached',remainingCents:0,pendingCents:0}});await flush();
+ assert.match(label(tree),/Your work is waiting for credits/);assert.doesNotMatch(label(tree),/No action is needed/,'An exhausted balance remains explicit');
+ for(const fn of changes)fn();await flush();requests.at(-1).resolve({progress});await flush();assert.equal(label(tree),savedProgressText,'Confirmed recovery restores the ordinary progress view');
  progressProps={...progressProps,stale:true,botAvailable:false};dirty=true;await flush();
  for(const fn of changes)fn();await flush();requests.at(-1).reject(Error('Progress unavailable'));await flush();
  assert.equal(label(tree),savedProgressText,'Transport errors retain confirmed progress without flipping visible status');assert.equal(activities,0);

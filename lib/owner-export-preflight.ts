@@ -1,4 +1,4 @@
-import {dealMachineRequest,type ResearchDb} from './dealmachine-request.ts';
+import {dealMachineRequest,DealMachineQuotaError,type ResearchDb} from './dealmachine-request.ts';
 import {OwnerPreviewRateLimitError} from './owner-enrichment-deferral.ts';
 
 /** Only a durably saved, free preflight may wait on the existing unstarted
@@ -6,7 +6,7 @@ import {OwnerPreviewRateLimitError} from './owner-enrichment-deferral.ts';
 export class OwnerExportPreflightPendingError extends OwnerPreviewRateLimitError {
  constructor(accountId:string,screeningId:string){super(accountId,screeningId);this.name='OwnerExportPreflightPendingError';this.message='OWNER_EXPORT_PREFLIGHT_PENDING';}
 }
-type Claim={status:string;id:string;lease:string;listId:string|number;name:string;ids:string[];mobileOnly:boolean};
+type Claim={status:string;id:string;lease:string;listId:string|number;name:string;ids:string[];mobileOnly:boolean;nextStep?:'create'|'metadata'|'baseline'|'eligible'|null};
 type Receipt={httpStatus:number|null;raw:unknown;rawText:string|null};
 const listId=(v:unknown)=>typeof v==='string'&&/^[A-Za-z0-9_-]{1,100}$/.test(v)||typeof v==='number'&&Number.isSafeInteger(v)&&v>0;
 const internalId=(id:string)=>{const n=Number(id.slice(4));if(!/^per_[1-9][0-9]{0,15}$/.test(id)||!Number.isSafeInteger(n)||String(n)!==id.slice(4))throw Error('OWNER_PREFLIGHT_ID_INVALID');return n;};
@@ -56,7 +56,13 @@ export async function preflightOwnerExport(db:ResearchDb,accountId:string,items:
     outcome=await saveOriginal<string>(db,'rpc/icash_record_owner_preflight',{p_id:c.id,p_lease:c.lease,p_step:name,p_receipt:receipt});
     return new Response(receipt.rawText,{status:r.status,headers:r.headers});
    },{accountId,operationKey:'owner-preflight:'+c.id+':'+name});
-  }catch{
+  }catch(error){
+   // A durable local refusal proves this exact request never reached the provider.
+   // Keep its step unrecorded so a later, separately claimed handler can resume.
+   if(error instanceof DealMachineQuotaError){
+    const deferred=await saveOriginal<boolean>(db,'rpc/icash_defer_owner_preflight_quota',{p_id:c.id,p_lease:c.lease,p_step:name,p_request:error.requestId}).catch(()=>false);
+    if(deferred)return 'pending';
+   }
    outcome=await saveOriginal<string>(db,'rpc/icash_record_owner_preflight',{p_id:c.id,p_lease:c.lease,p_step:name,p_receipt:receipt}).catch(()=>'held');
   }
   return outcome;
@@ -69,7 +75,8 @@ export async function preflightOwnerExport(db:ResearchDb,accountId:string,items:
   }else{
    if(!listId(c.listId))throw Error('OWNER_PREFLIGHT_CLAIM_INVALID');
    const scope={include_lists:{people_list_ids:[c.listId]}};
-   result=await step('baseline','POST','/people/search/count',scope);
+   result=c.nextStep==='metadata'?await step('metadata','GET','/lists/'+c.listId,undefined):'checking';
+   if(result==='checking'&&c.nextStep!=='eligible')result=await step('baseline','POST','/people/search/count',scope);
    if(result==='checking')result=await step('eligible','POST','/people/search/count',{...scope,filters:['has_active_phone_number','has_non_dnc_phone',...(c.mobileOnly?['has_wireless_phone']:[])].map(filter_id=>({filter_id,value:true}))});
   }
  }catch{result='held';}
