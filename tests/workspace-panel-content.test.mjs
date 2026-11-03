@@ -19,9 +19,10 @@ assert.match(renderToStaticMarkup(Messages({replies:[{...replies[0],received_at:
 const base={label:'closing',loading:false,error:false,hasData:false,updatedAt:null,onRetry:()=>{}};
 assert.equal(Status({...base,hasData:true}),null);
 assert.match(renderToStaticMarkup(Status({...base,loading:true})),/Loading closing details…/);
-assert.match(renderToStaticMarkup(Status({...base,error:true})),/Could not load closing details\./);
+assert.match(renderToStaticMarkup(Status({...base,error:true})),/aria-label="Refresh closing details"/);
 const stale=renderToStaticMarkup(Status({...base,error:true,hasData:true,updatedAt:'2026-10-14T18:15:00Z'}));
-assert.match(stale,/Showing saved closing details\. Updates could not be refreshed\./);assert.match(stale,/Last updated/);assert.match(stale,/Try again/);
-const pending=renderToStaticMarkup(Status({...base,error:true,loading:true}));assert.match(pending,/disabled=""/);assert.match(pending,/Refreshing…/);
-let retried=0;const node=Status({...base,label:'buyer',error:true,onRetry:()=>retried++});node.props.children[1].props.onClick();assert.equal(retried,1,'retry performs the explicit callback once');
+assert.equal(stale,'','Saved details remain visible without a background warning or replacement status');
+assert.equal(Status({...base,hasData:true,loading:true}),null,'Background refresh does not alter saved panel display');
+const pending=renderToStaticMarkup(Status({...base,error:true,loading:true}));assert.match(pending,/disabled=""/);assert.match(pending,/>Refresh</);assert.doesNotMatch(pending,/alert|could not|failed/i);
+let retried=0;const node=Status({...base,label:'buyer',error:true,onRetry:()=>retried++});node.props.onClick();assert.equal(retried,1,'retry performs the explicit callback once');
 console.log('Panel contents: newest title reply, full history, safe text, empty messages and loading/error/stale/retry states passed.');

@@ -46,7 +46,7 @@ export async function verifyWorkspace(browser,base,options,name){
   deal.terms={...deal.terms,seller:'Example Seller',priceSource:scenario==='lead'?'proposed':'seller_reported',priceCents:9000000,assignmentFeeCents:1000000,assignmentDepositCents:200000};
   if(scenario!=='lead')data.signing=[{id:'sample-purchase',deal_id:deal.id,kind:'purchase',state:scenario==='signature'?'customer_signature_needed':signed()?'completed':'awaiting_counterparty',test_mode:false}];
   if(inboundLead){data.properties[0].result.financialCheck.status='eligible';data.contacts=[{screening_id:deal.screening_id,source:'HomeOffer Network · seller-submitted',contacts:[{name:'Example Seller',phones:[]}]}];}
-  if(instantVariant){data.properties=[];data.deals=[];data.signing=[];data.instantLeads=[{leadId:'11111111-1111-4111-8111-111111111111',screeningId:'22222222-2222-4222-8222-222222222222',dealId:'33333333-3333-4333-8333-333333333333',name:'Jordan Example',phone:'+12025550101',address:null,state:'awaiting_address',paused:instantVariant==='paused',declinedAt:instantVariant==='stopped'?'2026-10-18T22:00:00Z':null,submittedAt:'2026-10-18T21:00:00Z',firstOutreachAt:instantVariant==='new'?null:'2026-10-18T21:00:15Z',responseAt:instantVariant==='replied'?'2026-10-18T21:05:00Z':null,addressConfirmedAt:null,formId:'fixture-form',campaignId:null,holdReason:instantVariant==='review'?'Text delivery needs review.':null}];}
+  if(instantVariant){data.properties=[];data.deals=[];data.signing=[];data.instantLeads=[{leadId:'11111111-1111-4111-8111-111111111111',screeningId:'22222222-2222-4222-8222-222222222222',dealId:'33333333-3333-4333-8333-333333333333',name:'Jordan Example',phone:'+12025550101',address:null,state:'awaiting_address',paused:instantVariant==='paused',declinedAt:instantVariant==='stopped'?'2026-10-18T22:00:00Z':null,submittedAt:'2026-10-18T21:00:00Z',firstOutreachAt:instantVariant==='new'?null:'2026-10-18T21:00:15Z',responseAt:instantVariant==='replied'?'2026-10-18T21:05:00Z':null,addressConfirmedAt:null,formId:'fixture-form',campaignId:null,holdReason:instantVariant==='review'?'Text delivery needs review.':instantVariant==='human'?'Seller requested a person; automatic follow-up paused':null}];}
   if(url.searchParams.get('query')){emptySearch=true;data.properties=[];data.deals=[];data.signing=[];}
   return data;
  }
@@ -159,11 +159,11 @@ export async function verifyWorkspace(browser,base,options,name){
  async function retryInside(panel){
   fulfillmentMode='hold';
   const requested=page.waitForRequest(request=>new URL(request.url()).pathname==='/api/work/fulfillment');
-  await panel.getByRole('button',{name:'Try again',exact:true}).click();await requested;
-  const refreshing=panel.getByRole('button',{name:'Refreshing…',exact:true});await refreshing.waitFor();
+  await panel.getByRole('button',{name:/^Refresh (buyer|closing) details$/}).click();await requested;
+  const refreshing=panel.getByRole('button',{name:/^Refresh (buyer|closing) details$/});await refreshing.waitFor();
   assert(await refreshing.isDisabled(),'pending recovery cannot start duplicate requests');
   fulfillmentMode='ok';releaseFulfillment();
-  await panel.getByRole('alert').waitFor({state:'hidden'});
+  await refreshing.waitFor({state:'hidden'});
  }
  try{
   await visit(base+'/preview/workspace?preview=1');
@@ -247,14 +247,15 @@ export async function verifyWorkspace(browser,base,options,name){
   await recovery.getByRole('button',{name:'Break sample panel',exact:true}).click();intentionalCrash=true;
   await recovery.getByRole('button',{name:'Open recovery example',exact:true}).click();
   const failedPanel=page.getByRole('dialog',{name:'Recovery example',exact:true});
-  await failedPanel.getByRole('heading',{name:'This section couldn’t open',exact:true}).waitFor();
+  await failedPanel.getByRole('button',{name:'Refresh section',exact:true}).waitFor();
+  assert.equal(await failedPanel.getByRole('alert').count(),0,'Optional render failure retains only neutral recovery controls');
   await failedPanel.getByRole('button',{name:'Close Recovery example',exact:true}).click();
   await page.getByRole('button',{name:'Property details',exact:true}).click();
   await page.getByRole('dialog',{name:'Property details',exact:true}).getByText('Owner’s estimated equity',{exact:true}).waitFor();
   await page.keyboard.press('Escape');
   await recovery.getByRole('button',{name:'Restore sample panel',exact:true}).click();
   await recovery.getByRole('button',{name:'Open recovery example',exact:true}).click();
-  await failedPanel.getByRole('button',{name:'Try opening again',exact:true}).click();
+  await failedPanel.getByRole('button',{name:'Refresh section',exact:true}).click();
   await failedPanel.getByText('Sample panel opened. Your other work is still here.',{exact:true}).waitFor();
   await page.keyboard.press('Escape');intentionalCrash=false;
   assert.deepEqual(writes,[],'preview recovery never calls APIs');
@@ -271,14 +272,14 @@ export async function verifyWorkspace(browser,base,options,name){
   await prepareNavigation();await page.reload();assert.equal(await page.evaluate(()=>document.hidden),false);await page.locator('.live-property').first().waitFor();assert.equal(await page.getByRole('heading',{name:'Before you use iCash X'}).count(),0);
   opportunityProgress={budgetId:1,startedAt:new Date().toISOString(),limitCents:5000,spentCents:120,pendingCents:977,remainingCents:3903,queued:2,screened:40,eligible:3,contacted:2,responded:0,status:'working'};
   await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
-  const momentum=page.getByRole('region',{name:'Opportunity progress'});await momentum.getByRole('heading',{name:'Finding your next opportunity'}).waitFor();
+  const momentum=page.getByRole('region',{name:'Opportunity progress'});await momentum.getByRole('heading',{name:'Your opportunity search'}).waitFor();
   assert.match(await momentum.innerText(),/40[\s\S]*Eligible matches[\s\S]*3/);assert.doesNotMatch(await momentum.innerText(),/\$|Your search plan|Up to .*per 24 hours/,'Progress omits spending allowance dollar amounts');assert.equal(await momentum.getByRole('button',{name:'View responses'}).count(),0);
   assert(await momentum.evaluate(node=>{const b=node.getBoundingClientRect();return b.left>=0&&b.right<=innerWidth+1;}),'Live counters fit desktop and mobile');
   opportunityProgress={...opportunityProgress,responded:1};await page.evaluate(()=>window.dispatchEvent(new Event('icash:credits-funded')));
   await momentum.getByText('A seller replied.',{exact:true}).waitFor();await momentum.getByRole('button',{name:'View responses'}).click();
   assert.equal(await page.getByRole('button',{name:'Seller responses',exact:true}).getAttribute('aria-pressed'),'true');
   await page.screenshot({path:`/tmp/icash-opportunity-progress-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
-  opportunityProgress={...opportunityProgress,status:'paced'};await page.evaluate(()=>window.dispatchEvent(new Event('icash:credits-funded')));await momentum.getByRole('heading',{name:'Your search continues automatically'}).waitFor();assert.match(await momentum.innerText(),/continues automatically as eligible work becomes available/);
+  opportunityProgress={...opportunityProgress,status:'paced'};await page.evaluate(()=>window.dispatchEvent(new Event('icash:credits-funded')));await momentum.getByRole('heading',{name:'Your opportunity search'}).waitFor();assert.match(await momentum.innerText(),/Your recorded research and seller responses are below/);
   opportunityProgress={...opportunityProgress,status:'paused'};await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await momentum.getByRole('heading',{name:'Your search is paused'}).waitFor();
   opportunityProgress=null;await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await momentum.waitFor({state:'hidden'});
   const collapsed=page.locator('.live-property').first();assert.equal(await collapsed.locator('.property-summary').getAttribute('aria-expanded'),'false');
@@ -471,18 +472,22 @@ export async function verifyWorkspace(browser,base,options,name){
   const recoveringClosing=page.getByRole('dialog',{name:'Closing',exact:true});
   await recoveringClosing.getByText('Loading closing details…',{exact:true}).waitFor();
   fulfillmentMode='fail';releaseFulfillment();
-  await recoveringClosing.getByRole('alert').getByText('Could not load closing details.',{exact:true}).waitFor();
+  await recoveringClosing.getByRole('button',{name:'Refresh closing details',exact:true}).waitFor();
+  assert.equal(await recoveringClosing.getByRole('alert').count(),0);
   assert.equal(await recoveringClosing.getByRole('region',{name:'Title company messages',exact:true}).count(),0,'failed initial data is not shown as an empty inbox');
   await retryInside(recoveringClosing);
   await checkTitleMessages(recoveringClosing,true);
   await recoveringClosing.getByRole('button',{name:'Set payment preference',exact:true}).click();
   const payee=recoveringClosing.getByLabel('Legal payee name');await payee.fill('Unsaved fixture payee');
-  fulfillmentMode='fail';await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
-  await recoveringClosing.getByRole('alert').getByText('Showing saved closing details. Updates could not be refreshed.',{exact:false}).waitFor();
+  const closingFailure=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/work/fulfillment'&&response.status()===503);
+  fulfillmentMode='fail';await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await closingFailure;
+  await page.waitForFunction(()=>document.querySelector('.workspace-confirmed-controls')?.disabled);
+  assert.equal(await recoveringClosing.getByRole('alert').count(),0,'Saved closing details do not gain a passive warning');
   assert(await payee.isDisabled(),'stale closing data cannot submit a payment preference');
   assert.equal(await payee.inputValue(),'Unsaved fixture payee','failed refresh preserves entered closing details');
   await recoveringClosing.getByRole('region',{name:'Title company messages',exact:true}).locator('.title-latest-reply').getByText('Documents needed',{exact:true}).waitFor();
-  await retryInside(recoveringClosing);
+  fulfillmentMode='ok';await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+  await page.waitForFunction(()=>!document.querySelector('.workspace-confirmed-controls')?.disabled);
   assert.equal(await payee.inputValue(),'Unsaved fixture payee','successful recovery preserves entered closing details');
   assert(await payee.isEnabled());await page.keyboard.press('Escape');
 
@@ -493,15 +498,17 @@ export async function verifyWorkspace(browser,base,options,name){
   const recoveringBuyers=page.getByRole('dialog',{name:'Buyers',exact:true});
   await recoveringBuyers.getByText('Loading buyer details…',{exact:true}).waitFor();
   fulfillmentMode='fail';releaseFulfillment();
-  await recoveringBuyers.getByRole('alert').getByText('Could not load buyer details.',{exact:true}).waitFor();
+  await recoveringBuyers.getByRole('button',{name:'Refresh buyer details',exact:true}).waitFor();
+  assert.equal(await recoveringBuyers.getByRole('alert').count(),0);
   await retryInside(recoveringBuyers);
   await recoveringBuyers.getByRole('button',{name:'View buyer Avery Morgan',exact:true}).click();
   const recoveringBuyer=page.getByRole('dialog',{name:'Avery Morgan',exact:true});await recoveringBuyer.waitFor();
-  fulfillmentMode='fail';await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
-  await recoveringBuyer.getByRole('alert').getByText('Showing saved buyer details. Updates could not be refreshed.',{exact:false}).waitFor();
+  const buyerFailure=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/work/fulfillment'&&response.status()===503);
+  fulfillmentMode='fail';await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await buyerFailure;
+  assert.equal(await recoveringBuyer.getByRole('alert').count(),0,'Saved buyer details do not gain a passive warning');
   assert.match(await recoveringBuyer.innerText(),/Can I visit Thursday afternoon/,'failed refresh keeps the buyer reply visible');
   network.buyers[0].reply='Friday afternoon works for my viewing instead.';
-  await retryInside(recoveringBuyer);
+  fulfillmentMode='ok';await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
   await recoveringBuyer.getByText('Friday afternoon works for my viewing instead.',{exact:true}).waitFor();
   assert.doesNotMatch(await recoveringBuyer.innerText(),/Can I visit Thursday afternoon/,'recovered selection uses the fresh reply rather than its old object');
   await page.keyboard.press('Escape');await recoveringBuyer.waitFor({state:'hidden'});
@@ -513,13 +520,15 @@ export async function verifyWorkspace(browser,base,options,name){
   await generated.locator('.property-lead-generated').getByText('Lead generated',{exact:true}).waitFor();
   await generated.getByText('This seller is in your pipeline. Texts, calls and replies stay with this property as the conversation develops.',{exact:true}).waitFor();
   inboundLead=false;
-  for(const [variant,status,completed] of [['new','New lead',1],['waiting','Awaiting seller reply',2],['replied','Seller replied',3],['paused','Follow-up paused',2],['stopped','Contact stopped',2],['review','Needs review',2]]){
+  for(const [variant,status,completed] of [['new','New lead',1],['waiting','Awaiting seller reply',2],['replied','Seller replied',3],['paused','Follow-up paused',2],['stopped','Contact stopped',2],['review','Awaiting seller reply',2],['human','Needs review',2]]){
    await page.waitForLoadState('networkidle');instantVariant=variant;await visit(base+'/');
    const lead=page.locator('.instant-lead-card');await lead.waitFor();
    await lead.locator('.instant-lead-label').getByText('Lead generated',{exact:true}).waitFor();
    await lead.locator('.instant-lead-status').getByText(status,{exact:true}).waitFor();
    assert.equal(await lead.locator('.instant-lead-progress .is-complete').count(),completed,'only saved milestones advance');
    assert.equal(await lead.getByRole('alert').count(),0);
+   if(variant==='review')assert.doesNotMatch(await lead.innerText(),/Text delivery needs review|Needs review/,'Internal delivery checks stay out of the customer card');
+   if(variant==='human')assert.match(await lead.innerText(),/Seller requested a person/,'A real seller request still asks for user action');
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'lead card fits mobile and desktop');
    if(variant==='waiting'){
     await lead.screenshot({path:'/tmp/icash-lead-waiting-'+(name.includes('desktop')?'desktop':'mobile')+'.png'});
