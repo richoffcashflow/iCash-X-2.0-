@@ -1,4 +1,3 @@
-import {assertMigrationConfig} from './helpers/funded-recovery-migration.mjs';
 import assert from 'node:assert/strict';
 import {PGlite} from '@electric-sql/pglite';
 import {preflightOwnerExport} from '../lib/owner-export-preflight.ts';
@@ -26,7 +25,7 @@ try{
  assert.ok(await v('select icash_claim_owner_preflight_cleanup($1)',[before.id]),'Old path immediately deletes the confirmed pending list');
  const baseline=await seed(2002);await record(baseline,'create',metadata(baseline));await due(baseline);Object.assign(baseline,await claim(baseline));
  assert.equal(await record(baseline,'baseline',count(0)),'held','Reproduce lagging search index treated as a permanent failed check');
- const migration=read('config/owner-preflight-list-indexing.sql');assertMigrationConfig('owner-preflight-list-indexing',migration);await pg.exec(migration);
+ const migration=read('config/owner-preflight-list-indexing.sql');assert.equal(migration,read('supabase/migrations/20261103182413_owner_preflight_list_indexing.sql'));await pg.exec(migration);
  assert.equal(await v('select preflight_indexing_enabled from icash_research_private.owner_export_settings'),false);
  const disabled=await seed(2003);assert.equal(await record(disabled,'create',metadata(disabled,'idle',0)),'held','Compatible deployment stays disabled until matching releases');
  await pg.exec('update icash_research_private.owner_export_settings set preflight_indexing_enabled=true');
