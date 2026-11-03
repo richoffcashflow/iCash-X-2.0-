@@ -139,9 +139,9 @@ export async function verifyPreparationInstallation(f,{indexStatements,patchSql,
    for(const name of names)await builder.query('drop index concurrently public.'+name);
    await preserved();
    const url='postgresql://postgres:isolated-preparation-only@127.0.0.1:55444/icash_preparation_test?sslmode=disable&application_name=preparation-cli-migration&options='+encodeURIComponent('-c lock_timeout=5s -c statement_timeout=60s');
-   // Verify CLI connection startup settings survive the RESET ALL used by its
-   // migration runner. Do not infer option support merely from URL acceptance.
-   const timeoutProof="reset all; do $check$ begin if current_setting('lock_timeout')<>'5s' or current_setting('statement_timeout')<>'60s' then raise exception 'Fixture CLI startup timeout options not honored'; end if; end $check$; select 'bounded-fixture-startup-ok' as verified";
+   // The query command uses one prepared statement. Check startup settings here;
+   // the event trigger below proves the migration runner retains them after RESET ALL.
+   const timeoutProof="select case when current_setting('lock_timeout')='5s' and current_setting('statement_timeout')='60s' and current_setting('application_name')='preparation-cli-migration' then 'bounded-fixture-startup-ok' else 'fixture-startup-timeouts-not-honored' end as verified";
    const startup=await run(['db','query',timeoutProof,'--remote='+url,'--yes','--workdir='+directory]);
    assert(startup.includes('bounded-fixture-startup-ok'),'CLI must execute timeout proof on its own connection');
    // Disposable event trigger verifies the actual CREATE INDEX sessions, not
