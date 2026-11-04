@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {inboundBusinessPhones} from '../lib/business-phone-policy.ts';
+import {voiceOnlyBusinessPhones} from '../lib/business-phone-policy.ts';
 import {businessVoiceProviders,inspectBusinessPhone,connectBusinessPhone,selectBusinessCaller,secondaryCallingReady,primaryBusinessPhone as first,secondaryBusinessPhone as second,businessVoiceIngress as ingress} from '../lib/business-voice-numbers.ts';
 const ac='AC'+'a'.repeat(32),pn='PN'+'b'.repeat(32);
 const env={CONTIGUITY_API_KEY:'test-only-contiguity',TWILIO_ACCOUNT_SID:ac,TWILIO_AUTH_TOKEN:'test-only-carrier-token',VERCEL_ENV:'production'};
@@ -36,15 +36,15 @@ assert.throws(()=>selectBusinessCaller(first,[{sender:target}]));
 reset();assert.throws(()=>businessVoiceProviders(env,fetcher,'+12125550199'));assert.equal(requests.length,0);
 reset();await assert.rejects(inspectBusinessPhone(env,async(url,init)=>{const response=await fetcher(url,init);if(url.includes('call_forwarding')){const data=await response.json();data.data.number=second;return Response.json(data);}return response;},target));
 
-for(const phone of inboundBusinessPhones){
+for(const phone of voiceOnlyBusinessPhones){
  target=phone;reset();
  const connected=await connectBusinessPhone(db,env,fetcher,phone);
  assert.equal(connected.phone,phone);assert.equal(connected.incoming,true);assert.equal(connected.callerIdVerified,false);
  assert.deepEqual(writes.at(-1).body,{p_phone:phone,p_account_sid:ac,p_caller_id_sid:null,p_forwarding:true,p_enabled:false});
  assert.equal(await secondaryCallingReady(readyDb,env,fetcher,phone),false,'Missing caller ID always blocks outgoing calls');
  verified=true;await connectBusinessPhone(db,env,fetcher,phone);
- assert.equal(writes.at(-1).body.p_caller_id_sid,pn);assert.equal(writes.at(-1).body.p_enabled,false,'Incoming-only setup never enables outgoing even after caller ID verification');
- assert.equal(await secondaryCallingReady(readyDb,env,fetcher,phone),false,'Incoming-only policy rejects even a verified enabled legacy row');
+ assert.equal(writes.at(-1).body.p_caller_id_sid,pn);assert.equal(writes.at(-1).body.p_enabled,true,'Verified caller ID and active forwarding enable outgoing');
+ assert.equal(await secondaryCallingReady(readyDb,env,fetcher,phone),true,'Verified active number is ready for outgoing calls');verified=false;assert.equal(await secondaryCallingReady(readyDb,env,fetcher,phone),false,'Caller ID revocation blocks further calls');verified=true;f.enabled=false;assert.equal(await secondaryCallingReady(readyDb,env,fetcher,phone),false,'Forwarding revocation blocks further calls');
  reset();f={enabled:true,to:ingress,status:'queued',estimated_completion:null};
  const pending=await connectBusinessPhone(db,env,fetcher,phone);
  assert.equal(pending.incoming,false);assert.equal(pending.incomingPending,true);
@@ -53,4 +53,4 @@ for(const phone of inboundBusinessPhones){
  reset();f={enabled:true,to:first,status:'active',estimated_completion:null};
  await assert.rejects(connectBusinessPhone(db,env,fetcher,phone));assert.equal(writes.length,0);assert(requests.every(r=>r.method==='GET'));
 }
-console.log('PASS both incoming leases: exact forwarding target, no unverified outbound, queued idempotency, and existing-destination protection.');
+console.log('PASS both new business numbers: verified outbound only, provider revocation, exact forwarding, queued idempotency and existing-destination protection.');

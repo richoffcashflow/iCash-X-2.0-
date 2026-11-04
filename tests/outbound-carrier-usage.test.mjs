@@ -118,5 +118,7 @@ const secondaryResult=await outboundCarrierInput(secondaryDb,'account',binding,s
 for(const key of ['caller_id_sid','provider_account_sid','call_sid','conversation_id','from_phone']){const saved=secondaryReceipt[key];secondaryReceipt[key]=null;await assert.rejects(outboundCarrierInput(secondaryDb,'account',binding,secondaryRule,env,apiFetch));secondaryReceipt[key]=saved;}
 console.log('PASS secondary usage requires exact caller receipt and prices the actual originating number');
 
-apiReset();call.from="+17208134296";pricing.origination_number=call.from;secondaryReceipt={...secondaryReceipt,from_phone:call.from};
-const newNumberUsage=await outboundCarrierInput(secondaryDb,"account",binding,secondaryRule,env,apiFetch);assert.equal(newNumberUsage.amountMicros,195100);assert.equal(stored[0].snapshot.from,call.from);
+for(const from of ['+17208134296','+14154208230','+16195364770']){
+ apiReset();call.from=from;pricing.origination_number=call.from;secondaryReceipt={...secondaryReceipt,from_phone:call.from};
+ const newNumberUsage=await outboundCarrierInput(secondaryDb,"account",binding,secondaryRule,env,apiFetch);assert.equal(newNumberUsage.amountMicros,195100);assert.equal(stored[0].snapshot.from,call.from);
+}

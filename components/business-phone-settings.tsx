@@ -2,12 +2,11 @@
 import {useEffect,useState} from 'react';
 import Link from 'next/link';
 import {webinarRequest} from '@/lib/webinar-client';
-import {additionalBusinessPhones,newBusinessPhone,businessVoiceIngress,isInboundOnlyBusinessPhone} from '@/lib/business-phone-policy';
+import {additionalBusinessPhones,newBusinessPhone,businessVoiceIngress} from '@/lib/business-phone-policy';
 type Status={phone:string;leaseActive:boolean;incoming:boolean;incomingPending:boolean;callerIdVerified:boolean;callerIdError?:string|null;ingressReady:boolean;differentDestination:boolean};
 const formatted=(phone:string)=>phone.replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3');
 
 function PhoneConnection({phone}:{phone:string}){
- const incomingOnly=isInboundOnlyBusinessPhone(phone);
  const [status,setStatus]=useState<Status|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[saved,setSaved]=useState(false);
  const endpoint='/api/messaging/admin/calls?phone='+encodeURIComponent(phone);
  async function check(connect=false){
@@ -21,18 +20,18 @@ function PhoneConnection({phone}:{phone:string}){
   <h2 style={{marginTop:0}}>{formatted(phone)}</h2>
   <dl style={{display:'grid',gridTemplateColumns:'1fr auto',gap:20}}>
    <dt>Incoming calls</dt><dd style={{margin:0}}>{!status?error?'Not connected':'Checking…':status.incoming?'Connected':status.incomingPending?'Connecting…':'Needs connection'}</dd>
-   <dt>Outgoing calls</dt><dd style={{margin:0}}>{incomingOnly?'Incoming only':!status?error?'Not connected':'Checking…':status.callerIdVerified?'Caller ID verified':'Needs verification'}</dd>
+   <dt>Outgoing caller ID</dt><dd style={{margin:0}}>{!status?error?'Not connected':'Checking…':status.callerIdVerified?'Verified':'Needs verification'}</dd>
   </dl>
   <p style={{color:'#555',fontSize:14,lineHeight:1.6}}>Incoming calls forward to your iCash X reception at {formatted(businessVoiceIngress)}. Your existing bot and eligible custom voice handle the call.</p>
   {status&&!status.leaseActive&&<p role="status">This number is no longer an active lease.</p>}
   {status?.differentDestination&&<p role="status">This number forwards somewhere else. Review its current forwarding destination before connecting it.</p>}
   {status&&!status.ingressReady&&<p role="status">Your reception connection needs review before forwarding can be enabled.</p>}
-  {status&&!incomingOnly&&!status.callerIdVerified&&<p style={{color:'#555',fontSize:14,lineHeight:1.6}}>{status.callerIdError??'Twilio needs to verify ownership of this number before it can make outgoing calls.'} Complete its caller ID verification, then press Connect calls here.</p>}
+  {status&&!status.callerIdVerified&&<p style={{color:'#555',fontSize:14,lineHeight:1.6}}>{status.callerIdError??'Twilio needs to verify ownership of this number before it can make outgoing calls.'} Complete its caller ID verification, then press Connect calls here.</p>}
   <div style={{display:'flex',gap:12,flexWrap:'wrap',marginTop:24}}>
-   <button type="button" disabled={busy||!status||!status.leaseActive||!status.ingressReady||status.differentDestination} onClick={()=>void check(true)} style={{background:'#111',color:'#fff',padding:'13px 20px',border:0,borderRadius:10,cursor:'pointer',opacity:busy?0.6:1}}>{busy?'Checking…':status?.incoming&&(incomingOnly||status.callerIdVerified)?'Confirm connection':'Connect calls'}</button>
+   <button type="button" disabled={busy||!status||!status.leaseActive||!status.ingressReady||status.differentDestination} onClick={()=>void check(true)} style={{background:'#111',color:'#fff',padding:'13px 20px',border:0,borderRadius:10,cursor:'pointer',opacity:busy?0.6:1}}>{busy?'Checking…':status?.incoming&&status.callerIdVerified?'Confirm connection':'Connect calls'}</button>
    <button type="button" disabled={busy} onClick={()=>void check()} style={{background:'#fff',color:'#111',padding:'13px 20px',border:'1px solid #ddd',borderRadius:10,cursor:'pointer'}}>Refresh</button>
   </div>
-  {saved&&<p role="status" style={{fontSize:14}}>{status?.incoming&&incomingOnly?'Incoming calls are connected.':status?.incoming&&status.callerIdVerified?'Incoming and outgoing calls are connected.':status?.incoming?'Incoming calls are connected. Outgoing calls need caller ID verification.':'The provider is connecting this number. Refresh shortly.'}</p>}
+  {saved&&<p role="status" style={{fontSize:14}}>{status?.incoming&&status.callerIdVerified?'Incoming and outgoing calls are connected.':status?.incoming?'Incoming calls are connected. Outgoing calls need caller ID verification.':'The provider is connecting this number. Refresh shortly.'}</p>}
   {error&&<p role="alert" style={{fontSize:14}}>{error}</p>}
  </section>;
 }
