@@ -129,7 +129,7 @@ try{
   }
   await q('update icash_wallets set balance_cents=0 where account_id=$1',[account]);assert.equal(await reserve(),null,'empty wallet still blocks admission');
   await q('update icash_wallets set balance_cents=110 where account_id=$1',[account]);
-  const durationPatch=read('supabase/migrations/20261104195354_seller_clarification_call_duration.sql').match(/do \$patch\$[\s\S]*?end \$patch\$;/)[0];
+  const durationPatch=read('supabase/migrations/20261104200508_seller_clarification_call_duration.sql').match(/do \$patch\$[\s\S]*?end \$patch\$;/)[0];
   await q('savepoint original_bound');
   try{
    assert.equal((await reserve()).maxSeconds,120,'historical short authorization');
