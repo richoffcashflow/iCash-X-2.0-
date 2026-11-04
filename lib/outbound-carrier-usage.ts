@@ -22,7 +22,9 @@ export class CarrierUsageUnavailable extends Error {constructor(){super('carrier
 const unavailable=()=>{throw new CarrierUsageUnavailable();};
 export async function outboundCarrierInput(db:VoiceUsageDb,accountId:string,b:Binding,r:OutboundCarrierRule,
  env:CarrierEnv,fetcher:typeof fetch=fetch,signal?:AbortSignal):Promise<VoiceCostInput>{
- const fail=()=>{throw Error('Bound outbound carrier evidence required');};
+ // Fixed internal stages only: never log provider payloads, identifiers or values.
+ let stage='policy';
+ const fail=()=>{try{console.warn('outbound_carrier_evidence_held',{stage});}catch{/* Diagnostics cannot change evidence admission. */}throw Error('Bound outbound carrier evidence required');};
  if(typeof window!=='undefined'||!sid(env.TWILIO_ACCOUNT_SID,'AC')||!env.TWILIO_AUTH_TOKEN||!env.ELEVENLABS_API_KEY)fail();
  const created=Date.parse(b.created_at),from=Date.parse(r.validFrom),until=Date.parse(r.validUntil),reviewed=Date.parse(r.reviewedAt);
  if((r.accountScope==='operation_owner'?r.accountId!==undefined:r.accountScope!==undefined||r.accountId!==accountId)||r.agentId!==b.agent_id||r.twilioAccountSid!==env.TWILIO_ACCOUNT_SID||(r.source?.kind==='reviewed_destination_allowlist'&&!phone(r.destination))||!phone(r.from)||!ref(r.snapshotId)||!ref(r.evidenceRef)||![created,from,until,reviewed].every(Number.isFinite)||reviewed>created||from>created||until<=created||from>=until||!safe(r.voice?.microsPerMinute)||r.voice.rounding!=='up'||!safe(r.voice.minimumMinutes)||!safe(r.stream?.microsPerMinute)||!['exact','up'].includes(r.stream.rounding)||!safe(r.stream.minimumMinutes)||!ref(r.stream.assumption))fail();
@@ -30,6 +32,7 @@ export async function outboundCarrierInput(db:VoiceUsageDb,accountId:string,b:Bi
  if(r.source?.kind==='reviewed_destination_allowlist'){if(!ref(r.source.reviewer)||!/^https:\/\//.test(r.source.documentUrl)||createHash('sha256').update(r.destination!).digest('hex')!==b.contact_key)fail();}
  else if(r.source?.kind==='twilio_pricing_api'){if(!ref(r.source.policyVersion)||!Array.isArray(r.source.allowedCountries)||!r.source.allowedCountries.length||!r.source.allowedCountries.every(x=>/^[A-Z]{2}$/.test(x))||!safe(r.source.maxMicrosPerMinute)||!safe(r.source.maxPricingLagSeconds)||r.source.maxPricingLagSeconds<1||r.source.maxPricingLagSeconds>86400)fail();}
  else fail();
+ stage='original_job';
  const rows=await db<{provider_call_sid:string;conversation_id:string;state:string}[]>(`icash_voice_jobs?id=eq.${eq(b.operation_key.slice(6))}&account_id=eq.${eq(accountId)}&select=provider_call_sid,conversation_id,state`);
  const j=rows[0];if(rows.length!==1||!j||j.state!=='dispatched'||j.conversation_id!==b.conversation_id||!sid(j.provider_call_sid,'CA'))fail();
  const deadline=signal?AbortSignal.any([signal,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000);
@@ -42,11 +45,14 @@ export async function outboundCarrierInput(db:VoiceUsageDb,accountId:string,b:Bi
   try{for(;;){const part=await reader!.read().catch(()=>{throw new CarrierUsageUnavailable();});if(part.done)break;n+=part.value.byteLength;if(n>262144)fail();chunks.push(part.value);}}finally{await reader!.cancel();}
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
  }
+ stage='conversation_receipt';
  const c=await get(`https://api.elevenlabs.io/v1/convai/conversations/${eq(b.conversation_id)}`,{'xi-api-key':env.ELEVENLABS_API_KEY!});
  if(c.conversation_id!==b.conversation_id||c.agent_id!==b.agent_id||c.metadata?.phone_call?.call_sid!==j.provider_call_sid)fail();
  if(c.status!=='done')unavailable();
+ stage='carrier_receipt';
  const call=await get(`https://api.twilio.com/2010-04-01/Accounts/${r.twilioAccountSid}/Calls/${j.provider_call_sid}.json`,{Authorization:'Basic '+Buffer.from(r.twilioAccountSid+':'+env.TWILIO_AUTH_TOKEN).toString('base64')});
  if(call.from!==r.from){
+  stage='sender_binding';
   // The immutable recording row carries the caller ID receipt captured at
   // admission. Later number retirement must not prevent actual usage settlement.
   if(r.from!==primaryBusinessPhone||!isAdditionalBusinessPhone(call.from)||r.source.kind!=='twilio_pricing_api')fail();
@@ -55,7 +61,9 @@ export async function outboundCarrierInput(db:VoiceUsageDb,accountId:string,b:Bi
   if(bindings.length!==1||binding.from_phone!==call.from||binding.provider_account_sid!==r.twilioAccountSid||!sid(binding.caller_id_sid,'PN')||binding.call_sid!==call.sid||binding.conversation_id!==b.conversation_id)fail();
   r={...r,from:binding.from_phone};
  }
+ stage='carrier_identity';
  if(call.sid!==j.provider_call_sid||call.account_sid!==r.twilioAccountSid||!phone(call.to)||(r.source.kind==='reviewed_destination_allowlist'&&call.to!==r.destination)||createHash('sha256').update(call.to).digest('hex')!==b.contact_key||call.from!==r.from||call.direction!=='outbound-api')fail();
+ stage='terminal_receipt';
  if(['queued','initiated','ringing','in-progress'].includes(call.status))unavailable();
  if(call.status!=='completed')fail();
  if(call.duration===null||call.duration===undefined||call.end_time===null||call.end_time===undefined)unavailable();
@@ -69,6 +77,7 @@ export async function outboundCarrierInput(db:VoiceUsageDb,accountId:string,b:Bi
   if(!snapshots.length){
    const pricingLag=Date.now()-Date.parse(call.end_time);if(pricingLag<0)fail();
    if(pricingLag>source.maxPricingLagSeconds*1000){
+    stage='historical_usd';
     // An old call cannot use today's tariff. Its canonical explicit USD debit
     // is actual connectivity evidence; the original stream rule stays estimated.
     const connectivity=twilioUsdChargeMicros(call.price,call.price_unit);
@@ -77,11 +86,13 @@ export async function outboundCarrierInput(db:VoiceUsageDb,accountId:string,b:Bi
     // Preserve the reviewed country restriction without looking up a current
     // price or guessing that every +1 number is US. Basic Lookup has no paid
     // Fields packages: https://www.twilio.com/docs/lookup/v2-api/formatting-validation
+    stage='destination_country';
     const country=await get(`https://lookups.twilio.com/v2/PhoneNumbers/${eq(call.to)}`,{Authorization:'Basic '+Buffer.from(r.twilioAccountSid+':'+env.TWILIO_AUTH_TOKEN).toString('base64')});
     if(country.phone_number!==call.to||country.valid!==true||!source.allowedCountries.includes(country.country_code))fail();
     const fetchedAt=new Date().toISOString();
     await db('rpc/icash_record_outbound_price_snapshot','POST',{p_operation:b.operation_key,p_account:accountId,p_snapshot:{policyHash:hash,accountSid:r.twilioAccountSid,callSid:call.sid,conversationId:b.conversation_id,agentId:b.agent_id,destinationHash:b.contact_key,from:call.from,isoCountry:country.country_code,unit:'USD',connectivityMicros:connectivity,price:call.price,priceUnit:call.price_unit,status:'completed',durationSeconds:Number(call.duration),terminalAt:new Date(call.end_time).toISOString(),fetchedAt,countrySource:'twilio_basic_lookup',source:'twilio_call_receipt'}});
    }else{
+   stage='original_tariff';
    const url=`https://pricing.twilio.com/v2/Voice/Numbers/${eq(call.to)}?OriginationNumber=${eq(call.from)}`;
    const p=await get(url,{Authorization:'Basic '+Buffer.from(r.twilioAccountSid+':'+env.TWILIO_AUTH_TOKEN).toString('base64')});
    if(p.destination_number!==call.to||p.origination_number!==call.from||p.price_unit!=='USD'||!source.allowedCountries.includes(p.iso_country)||!Array.isArray(p.outbound_call_prices)||p.outbound_call_prices.length!==1)fail();
@@ -98,6 +109,7 @@ export async function outboundCarrierInput(db:VoiceUsageDb,accountId:string,b:Bi
    }
    snapshots=await readSnapshot();
   }
+  stage='immutable_snapshot';
   if(snapshots.length!==1)fail();const p=snapshots[0].snapshot;
   if(p.policyHash!==hash||p.accountSid!==r.twilioAccountSid||p.callSid!==call.sid||p.conversationId!==b.conversation_id||p.agentId!==b.agent_id||p.destinationHash!==b.contact_key||p.from!==call.from||p.unit!=='USD'||!source.allowedCountries.includes(String(p.isoCountry))||!Number.isFinite(Date.parse(String(p.fetchedAt)))||Date.parse(String(p.fetchedAt))<Date.parse(call.end_time))fail();
   if(p.source==='twilio_call_receipt'){
@@ -115,6 +127,7 @@ export async function outboundCarrierInput(db:VoiceUsageDb,accountId:string,b:Bi
    pricingRef=`immutable Twilio Pricing API snapshot:${b.operation_key}; country:${p.isoCountry}; fetched:${p.fetchedAt}`;
   }
  }
+ stage='combined_estimate';
  const duration=Number(call.duration);
  const amount=(p:{microsPerMinute:number;rounding:string;minimumMinutes:number})=>{
   const units=p.rounding==='up'?BigInt(Math.ceil(duration/60))*BigInt(60):BigInt(duration);
