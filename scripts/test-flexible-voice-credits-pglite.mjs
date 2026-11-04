@@ -128,8 +128,20 @@ try{
    }finally{await q('rollback to savepoint duration_case');await q('release savepoint duration_case');}
   }
   await q('update icash_wallets set balance_cents=0 where account_id=$1',[account]);assert.equal(await reserve(),null,'empty wallet still blocks admission');
-  await q('update icash_wallets set balance_cents=110 where account_id=$1',[account]);assert.equal((await reserve()).maxSeconds,120,'financially limited intake keeps its separate hard limit');
-  console.log('PASS positive-credit seller calls keep 600 seconds; retries, actual-zero stop, no wallet hold, and limited intake preserved.');
+  await q('update icash_wallets set balance_cents=110 where account_id=$1',[account]);
+  const durationPatch=read('supabase/migrations/20261104200508_seller_clarification_call_duration.sql').match(/do \$patch\$[\s\S]*?end \$patch\$;/)[0];
+  await q('savepoint original_bound');
+  try{
+   assert.equal((await reserve()).maxSeconds,120,'historical short authorization');
+   await pg.exec(durationPatch);
+   assert.equal((await reserve()).maxSeconds,120,'existing authorizations are never extended');
+  }finally{await q('rollback to savepoint original_bound');await q('release savepoint original_bound');}
+  await pg.exec(durationPatch);await pg.exec(durationPatch);
+  assert.equal((await reserve()).maxSeconds,600,'fresh clarification call uses normal duration');
+  assert.equal((await reserve()).maxSeconds,600,'retry retains the same authorization');
+  assert.equal((await one('select result from icash_screening_jobs where id=$1',[screening])).result.financialCheck.status,'hold','longer conversation does not authorize an offer');
+  assert.equal((await one('select count(*)::int n from icash_operation_spend where operation_key=$1',['voice:'+job.id])).n,1,'no duplicate reservation');
+  console.log('PASS positive-credit seller calls keep 600 seconds; retries, actual-zero stop, no wallet hold, and clarification duration fixed without changing financial authority.');
  });
  for(const vip of [false,true])await isolated(async()=>{
   await pg.exec(pricingBlock('reserve_before_fractional'));await pg.exec(pricingBlock('reserve_flexible_voice'));
