@@ -90,12 +90,24 @@ def assert_no_paid_work():
 
 def wait_for_marker(process, marker):
     deadline = time.monotonic()+5
+    pending = b''
+    expected = marker.encode()
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise AssertionError(process.stderr.read())
         if select.select([process.stdout], [], [], 0.1)[0]:
-            if process.stdout.readline().strip() == marker:
-                return
+            # TextIO.readline may read both a query result and the next marker
+            # into its own buffer. select then sees an empty OS pipe and never
+            # notices the already-buffered marker. Read bytes and frame lines
+            # here so batched output cannot cause a false lock-ready timeout.
+            chunk = os.read(process.stdout.fileno(), 65536)
+            if not chunk:
+                continue
+            pending += chunk
+            while b'\n' in pending:
+                line, pending = pending.split(b'\n', 1)
+                if line.strip() == expected:
+                    return
     raise AssertionError('Budget-lock holder did not become ready')
 
 
