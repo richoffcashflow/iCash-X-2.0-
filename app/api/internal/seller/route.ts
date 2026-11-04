@@ -2,6 +2,7 @@ import {processInstantLeadWork} from '@/lib/meta-instant-lead-service';
 import {db} from '@/lib/stripe-test';
 import {authorizeOutboundBilling} from '@/lib/outbound-billing-service';
 import {processSellerIntake} from '@/lib/seller-pipeline';
+import {recoverPendingOwnerDemoLookup} from '@/lib/owner-demo-lookup-recovery';
 import {processSellerResearchRefresh} from '@/lib/seller-research-refresh';
 import {processSellerContactRefresh} from '@/lib/seller-contact-refresh';
 import {deliverSellerEvent} from '@/lib/seller-conversions';
@@ -45,6 +46,18 @@ export async function GET(req:Request){
   const [controls]=await db<{enabled:boolean}[]>('icash_seller_controls?id=eq.1&select=enabled');
   if(!controls?.enabled)return Response.json({status:'seller_setup_required',sellerEmails:await sellerEmails,instantLeads:await instantWork,responses:await responseWork,measurement:await measurementWork,agreementRecovery:await agreementRecovery,researchRefresh:await researchRefresh,contactRefresh:await contactRefresh},{status:responseFailed?503:200,headers});
   let lookupFailed=false;
+  // A minute-limit/cooldown denial on the form's immediate attempt must not
+  // strand its still-fresh owner request behind the ordinary intake backlog.
+  // Target the same lead through assignment and response before ordinary work.
+  const ownerDemo=await (async()=>{
+   const recovered=await recoverPendingOwnerDemoLookup(db,process.env.DEALMACHINE_API_KEY);
+   if(!('leadId' in recovered)||!recovered.leadId)return recovered;
+   await db('rpc/icash_assign_seller_lead_for','POST',{p_lead:recovered.leadId});
+   // Another handler may already have assigned it; response claims remain
+   // idempotent and must still get the exact freshly recovered lead.
+   const responses=await processSellerResponses(db,dispatchTextMessage,dispatchLiveVoice,recovered.leadId);
+   return {...recovered,responses};
+  })().catch(()=>{lookupFailed=true;return {status:'owner_demo_recovery_unavailable'};});
   const lookup=await processSellerIntake(db,process.env.DEALMACHINE_API_KEY).catch(()=>{
    lookupFailed=true;return {status:'seller_lookup_unavailable'};
   });
@@ -54,6 +67,6 @@ export async function GET(req:Request){
   const immediate=allocation?.status==='assigned'?await processSellerResponses(db,dispatchTextMessage,dispatchLiveVoice,allocation.leadId):[];
   const responses=[...await responseWork,...immediate];
   const measurement=await measurementWork;
-  return Response.json({sellerEmails:await sellerEmails,instantLeads:await instantWork,lookup,allocation,responses,measurement,agreementRecovery:await agreementRecovery,researchRefresh:await researchRefresh,contactRefresh:await contactRefresh},{status:lookupFailed||responseFailed?503:200,headers});
+  return Response.json({sellerEmails:await sellerEmails,instantLeads:await instantWork,lookup,ownerDemo,allocation,responses,measurement,agreementRecovery:await agreementRecovery,researchRefresh:await researchRefresh,contactRefresh:await contactRefresh},{status:lookupFailed||responseFailed?503:200,headers});
  }catch{await Promise.all([sellerEmails,agreementRecovery,measurementWork,responseWork,instantWork,researchRefresh,contactRefresh]);return Response.json({status:'seller_processing_requires_review'},{status:503,headers});}
 }

@@ -42,3 +42,13 @@ account isolation, ordinary limiter behavior, rollback on claim refusal, and
 one provider attempt even after a zero-credit result or timeout. Live calls,
 texts and contracts require a new owner form submission; offline verification
 does not prove live delivery.
+
+The every-minute seller maintenance route checks one still-fresh, unclaimed
+owner self-demo before the generic intake backlog. This recovers a form's
+initial minute-limit or temporary provider-cooldown denial without renewing its
+five-minute receipt. The targeted lookup uses ordinary capacity first and the
+unchanged atomic owner claim only if ordinary admission refuses. A recovered
+lead immediately receives targeted assignment and response preparation. No
+candidate means no extra quota admission; expired, started or unknown lookups
+remain excluded. Other seller work continues if this recovery fails. No new
+request allowance, provider retry, SQL change or consent is introduced.
