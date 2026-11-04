@@ -23,6 +23,12 @@ export function sellerListingEvidence(value:unknown,input:Record<string,unknown>
  const question=String(turns.slice(0,i).findLast(t=>t.role==='agent')?.message??'');
  const listingQuestion=asksListingStatus(question);
  if(/\b(?:but|however|although|except)\b/i.test(answer)&&/\b(?:agent|realtor|broker|agreement|listed|listing)\b/i.test(answer))return null;
+ // Speech transcripts include fillers and complete short replies such as
+ // "No, it's not." Bind these only to the actual positive listing question;
+ // never interpret an unrelated no or a contradictory added clause as evidence.
+ const shortAnswer=answer.replace(/’/g,"'").replace(/\b(?:um|uh)\b/gi,' ').replace(/[,!.]/g,' ').replace(/\s+/g,' ').trim();
+ if(listingQuestion&&/^(?:no|nope)(?: (?:no|nope))?(?: (?:it(?:'s| is) not|it isn't|not currently|not anymore))?$/i.test(shortAnswer))return false;
+ if(listingQuestion&&/^(?:yes|yeah|yep|correct)(?: it is)?$/i.test(shortAnswer))return true;
  if(listingQuestion&&/^(no|nope|not currently|not anymore)[.! ]*$/i.test(answer))return false;
  if(listingQuestion&&/^(yes|yeah|yep|correct|it is)[.! ]*$/i.test(answer))return true;
  if(/\b(not|isn['’]t|is not|no longer)\s+(currently\s+)?listed\b/i.test(answer))return false;

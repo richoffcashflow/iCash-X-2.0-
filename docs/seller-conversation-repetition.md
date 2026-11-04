@@ -1,0 +1,11 @@
+# Seller conversation repetition
+
+The November 4 owner call answered the listing question with “No, it’s not.” The listing evidence parser accepted bare “No” but not that natural reply. The tool saved a generic changed-facts hold instead, and the bot later repeated the listing question. A negative answer to a routine other-owner question could create another generic hold. The transcript also repeated repair questions after a usable description and prefixed consecutive turns with acknowledgments.
+
+Natural short listing replies now bind to the actual positive listing question and exact latest seller statement. Unrelated replies, negative questions and contradictory clauses remain unclassified. A tightly bound negative initial co-owner answer no longer creates a material-change hold; it does not establish legal ownership, waive signer checks, restore acceptance or clear existing holds. Prior co-owner disclosures and corrections remain outside that path. Qualification distinguishes ownership from sole ownership.
+
+The existing runtime seller wrapper asks directly for missing facts, uses multiple facts volunteered in one answer, avoids repeated thank-you/name/repair readbacks and sends repair descriptions through the existing tool without requiring an invented estimate. Mandatory acknowledgment was removed from qualification responses. The wrapper is smaller than its predecessor, preserving the existing transcript budget. Frozen provider prompts and approval hashes remain unchanged.
+
+Regression tests replay an anonymized version of the actual failed conversation, ordinary versus contradictory listing answers, sole-owner negatives, exact-bound co-owner reports, retained material holds and acceptance/signature protections. Existing dispatch and agreement tests cover the runtime prompt and provider gates. No paid call, provider configuration change, historical replay or database repair is included.
+
+Release through exact-head and exact-main Reliability checks and the normal Vercel Git deployment. No migration or worker runtime change is required: the worker invokes the web handlers. Read-only production verification establishes deployment and configuration readiness; a future live conversation remains untested until real use supplies evidence. Historical false holds are preserved for separate evidence-based review.

@@ -63,3 +63,10 @@ assert(liveAgreement.includes('What closing date would work for you?'));
 assert(liveAgreement.includes('Are you the only owner and decision maker'));
 assert(liveAgreement.includes('A declined visit alone is not a deal killer'));
 console.log('Seller phone flow: ordered property sequence, actual principal/form evidence, time-to-talk gate, bounded supported negotiation, saved contract terms and direct first question passed. Synthetic context only.');
+
+// Runtime wording must not steal more room from bound conversation history.
+const delivery=sellerAgreementDeliveryPrompt('');
+assert(delivery.length<=3427,'preserve the prior runtime history budget');
+assert.match(delivery,/Do not prefix every turn/);
+assert.match(delivery,/Track all facts in each answer/);
+assert.match(delivery,/omit an unknown repairEstimateCents/);
