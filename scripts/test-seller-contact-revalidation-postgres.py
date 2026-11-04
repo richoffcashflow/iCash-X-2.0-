@@ -28,6 +28,11 @@ def read(path):
 def setup():
     assert sql("select current_database();") == 'icash_reliability'
     sql("drop schema if exists icash_seller_recovery_private cascade;drop schema public cascade;create schema public;")
+    sql("""do $$begin
+      if not exists(select 1 from pg_roles where rolname='anon') then create role anon;end if;
+      if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated;end if;
+      if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role bypassrls;end if;
+    end$$;""")
     sql(read('tests/fixtures/seller-contact-revalidation-native.sql'))
     cadence = read('config/seller-text-cadence.sql')
     sql(cadence[cadence.index('create function public.icash_seller_text_cadence_current'):cadence.index('-- Evaluate again')])
