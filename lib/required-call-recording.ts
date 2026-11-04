@@ -78,8 +78,19 @@ function recordingEmptyAgentHashMatches(configHash:string,snapshot:Record<string
 export function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>):boolean{
  // Fixed representations, each with up to four empty-agent
  // variants. Never ignore arbitrary fields or rewrite a saved approval.
- const snapshots=[snapshot],withoutNoise=recordingDisabledNoiseSnapshot(snapshot);
- if(withoutNoise)snapshots.push(withoutNoise);
+ const snapshots=[snapshot];
+ // November 4 added these two inactive defaults together on the unchanged
+ // reviewed version. Reconstruct only that exact pair, then require the SAME
+ // complete saved fingerprint. Partial, enabled, extended or malformed values
+ // remain exact; no tool, connector, prompt or approval is created or changed.
+ const platform=object(snapshot.platform_settings),config=object(snapshot.conversation_config),agent=object(config.agent),prompt=object(agent.prompt),builtins=object(prompt.built_in_tools),connectors=platform.app_connectors;
+ if(Object.hasOwn(builtins,'ask_teammate')&&builtins.ask_teammate===null
+  &&connectors!==null&&typeof connectors==='object'&&!Array.isArray(connectors)
+  &&Object.keys(connectors).length===1&&Object.hasOwn(connectors,'enabled')&&object(connectors).enabled===false){
+  const previousPlatform={...platform},previousBuiltins={...builtins};delete previousPlatform.app_connectors;delete previousBuiltins.ask_teammate;
+  snapshots.push({...snapshot,platform_settings:previousPlatform,conversation_config:{...config,agent:{...agent,prompt:{...prompt,built_in_tools:previousBuiltins}}}});
+ }
+ for(const value of [...snapshots]){const withoutNoise=recordingDisabledNoiseSnapshot(value);if(withoutNoise)snapshots.push(withoutNoise);}
  for(const value of [...snapshots]){
   const renamed=recordingRenamedDisabledTtsSnapshot(value);
   if(renamed)snapshots.push(renamed);
