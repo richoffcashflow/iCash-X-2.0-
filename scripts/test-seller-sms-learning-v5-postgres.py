@@ -49,9 +49,20 @@ def assert_one_v5(wallet):
     assert sql('select to_jsonb(w) from icash_wallets w;') == wallet
 
 
+def assert_one_v4(wallet):
+    assert sql('select count(*) from icash_text_messages;') == '1'
+    assert sql('select count(*) from icash_seller_opener_assignments;') == '1'
+    assert sql('select body from icash_text_messages;') == data['legacyBody']
+    assert sql("select a.learning_context='identity-v4' and a.learning_decision_id is null and a.message_id=m.id and a.account_id=m.account_id and a.thread_id=m.thread_id and a.body=m.body and o.owner_question_id=m.id from icash_seller_opener_assignments a join icash_text_messages m on m.id=a.message_id join icash_sms_seller_openings o on o.thread_id=a.thread_id;") == 't'
+    assert sql('select count(*) from icash_learning_policy_private.decisions;') == '0'
+    assert sql('select count(*) from icash_operation_spend;') == '0'
+    assert sql('select to_jsonb(w) from icash_wallets w;') == wallet
+
+
 def run():
-    # New queue waits for the existing budget lock and observes the complete
-    # migration/activation together, including exact v5 copy and decision binding.
+    # This invocation compiled the OLD queue before waiting on the budget lock.
+    # It must finish with the unchanged legacy helper/copy after migration, not
+    # mix an old v4 renderer with a newly created immutable v5 assignment.
     wallet = setup(migrated=False)
     holder = fixture.holder(PATCH+data['enableSql'], 'sms_v5_migration_ready')
     try:
@@ -60,7 +71,20 @@ def run():
             wait_for_lock('sms-v5-queue')
             fixture.release(holder)
             assert future.result()
-        assert_one_v5(wallet)
+        assert_one_v4(wallet)
+        original_message = sql('select to_jsonb(m) from icash_text_messages m;')
+        original_assignment = sql('select to_jsonb(a) from icash_seller_opener_assignments a;')
+        sql('select fixture_seed_admission(2,2);')
+        wallets = sql('select jsonb_agg(to_jsonb(w) order by account_id) from icash_wallets w;')
+        assert sql(QUEUE)
+        assert sql('select count(*) from icash_text_messages;') == '2'
+        assert sql('select count(*) from icash_seller_opener_assignments;') == '2'
+        assert sql('select count(*) from icash_learning_policy_private.decisions;') == '1'
+        assert sql("select a.learning_context='identity-v5' and a.learning_policy_version='evidence-v2' and a.message_id=m.id and a.account_id=m.account_id and a.thread_id=m.thread_id and a.body=m.body and o.owner_question_id=m.id and p.id=a.learning_decision_id from icash_seller_opener_assignments a join icash_text_messages m on m.id=a.message_id join icash_sms_seller_openings o on o.thread_id=a.thread_id join icash_learning_policy_private.decisions p on p.id=a.learning_decision_id where a.learning_context='identity-v5';") == 't'
+        assert sql("select to_jsonb(m) from icash_text_messages m join icash_seller_opener_assignments a on a.message_id=m.id where a.learning_context='identity-v4';") == original_message
+        assert sql("select to_jsonb(a) from icash_seller_opener_assignments a where a.learning_context='identity-v4';") == original_assignment
+        assert sql('select count(*) from icash_operation_spend;') == '0'
+        assert sql('select jsonb_agg(to_jsonb(w) order by account_id) from icash_wallets w;') == wallets
     finally:
         fixture.stop(holder)
 
@@ -74,10 +98,7 @@ def run():
             wait_for_lock('sms-v5-migration')
             fixture.release(holder)
             future.result()
-        assert sql('select body from icash_text_messages;') == data['legacyBody']
-        assert sql("select learning_context='identity-v4' and learning_decision_id is null from icash_seller_opener_assignments;") == 't'
-        assert sql('select count(*) from icash_learning_policy_private.decisions;') == '0'
-        assert sql('select to_jsonb(w) from icash_wallets w;') == wallet
+        assert_one_v4(wallet)
     finally:
         fixture.stop(holder)
 
@@ -116,7 +137,7 @@ def run():
         assert sql('select to_jsonb(w) from icash_wallets w;') == wallet
     finally:
         fixture.stop(holder)
-    print('PASS native SMS v5: migration/queue both lock orders, immutable v4 history, concurrent one-assignment/one-decision queue, deactivation and competing Pause; original price/route/wallet and no provider work.')
+    print('PASS native SMS v5: old compiled queue finishes v4 across migration, future queue creates v5, both lock orders, immutable history, concurrent one-assignment/one-decision queue, deactivation and competing Pause; original price/route/wallet and no provider work.')
 
 
 if __name__ == '__main__':

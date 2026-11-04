@@ -123,9 +123,12 @@ begin
   'context','identity-v5','stats',stats,'choices',to_jsonb(choices),'decision',decision,'mode',mode);
 end $function$;
 
-create or replace function public.icash_assign_seller_opener(p_account uuid,p_thread uuid) returns jsonb
+-- Keep the legacy helper unchanged: a queue invocation compiled before this
+-- migration may resume after its budget lock is released. Only a newly compiled
+-- queue calls this versioned entry point and can create a v5 assignment.
+create function public.icash_assign_seller_opener_v5(p_account uuid,p_thread uuid) returns jsonb
 language plpgsql security invoker set search_path='' as $function$
-declare existing public.icash_seller_opener_assignments;chosen public.icash_seller_opener_variants;
+declare existing public.icash_seller_opener_assignments;
  plan jsonb;choices text[];decision_id bigint;saved_decision jsonb;
 begin
  perform 1 from public.icash_operating_budget where id=1 for update;
@@ -145,11 +148,7 @@ begin
   values(p_thread,p_account,plan->>'variant',plan->>'body','identity-v5',decision_id,'evidence-v2',plan->>'mode');
   return jsonb_build_object('variant',plan->>'variant','body',plan->>'body','context','identity-v5');
  end if;
- select * into chosen from public.icash_seller_opener_variants where key='identity-v4' and enabled;
- if not found then return null;end if;
- insert into public.icash_seller_opener_assignments(thread_id,account_id,variant,body,learning_context)
- values(p_thread,p_account,chosen.key,chosen.body,'identity-v4');
- return jsonb_build_object('variant',chosen.key,'body',chosen.body,'context','identity-v4');
+ return public.icash_assign_seller_opener(p_account,p_thread);
 end $function$;
 
 create function public.icash_guard_seller_sms_learning_assignment() returns trigger
@@ -178,6 +177,9 @@ begin
    message_body:=choice->>'body';
   else message_body:=public.icash_seller_identity_opener(principal,address);end if;$new$);
   if signature='public.icash_queue_seller_opener(uuid,uuid)' then
+   needle:='choice:=public.icash_assign_seller_opener(p_account,t.id);';
+   if (length(definition)-length(replace(definition,needle,'')))<>length(needle) then raise exception 'Seller SMS queue assignment entry point changed';end if;
+   definition:=replace(definition,needle,'choice:=public.icash_assign_seller_opener_v5(p_account,t.id);');
    needle:=$old$if choice->>'context'='interest-v2' then$old$;
    if (length(definition)-length(replace(definition,needle,'')))<>length(needle) then raise exception 'Seller SMS assigned expansion changed';end if;
    definition:=replace(definition,needle,$new$if choice->>'context'='identity-v5' then
@@ -201,10 +203,10 @@ begin
  end if;
  update icash_learning_policy_private.sms_settings set enabled=p_enabled where id=1;
 end $function$;
-revoke all on function public.icash_seller_identity_opener_v5(text,text,text),public.icash_seller_sms_learning_eligible(uuid,uuid),
+revoke all on function public.icash_assign_seller_opener_v5(uuid,uuid),public.icash_seller_identity_opener_v5(text,text,text),public.icash_seller_sms_learning_eligible(uuid,uuid),
  public.icash_seller_sms_learning_active(uuid,uuid),public.icash_seller_sms_learning_plan(uuid,uuid),public.icash_set_seller_sms_learning_enabled(boolean),public.icash_guard_seller_sms_learning_assignment()
  from public,anon,authenticated;
-grant execute on function public.icash_seller_identity_opener_v5(text,text,text),public.icash_seller_sms_learning_eligible(uuid,uuid),
+grant execute on function public.icash_assign_seller_opener_v5(uuid,uuid),public.icash_seller_identity_opener_v5(text,text,text),public.icash_seller_sms_learning_eligible(uuid,uuid),
  public.icash_seller_sms_learning_active(uuid,uuid),public.icash_seller_sms_learning_plan(uuid,uuid),public.icash_set_seller_sms_learning_enabled(boolean)
  to service_role;
 commit;

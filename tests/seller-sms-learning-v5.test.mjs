@@ -32,7 +32,10 @@ try{
  const originalMessage=await value('select to_jsonb(m) from icash_text_messages m where id=$1',[historical]);
  const originalAssignment=await value('select to_jsonb(a) from icash_seller_opener_assignments a where message_id=$1',[historical]);
  const originalTemplates=await value('select jsonb_agg(to_jsonb(v) order by key) from icash_seller_opener_variants v');
+ const originalAssign=await one("select pg_get_functiondef(oid) definition,proacl::text acl from pg_proc where oid='icash_assign_seller_opener(uuid,uuid)'::regprocedure");
  await pg.exec(migration);
+ assert.deepEqual(await one("select pg_get_functiondef(oid) definition,proacl::text acl from pg_proc where oid='icash_assign_seller_opener(uuid,uuid)'::regprocedure"),originalAssign,'Old compiled queue invocations retain their exact legacy assignment helper and grants');
+ assert.match(await value("select pg_get_functiondef('icash_queue_seller_opener(uuid,uuid)'::regprocedure)"),/choice:=public\.icash_assign_seller_opener_v5\(p_account,t\.id\);/);
  assert.equal(await value('select enabled from icash_learning_policy_private.sms_settings'),false);
  assert.deepEqual(await value('select to_jsonb(m) from icash_text_messages m where id=$1',[historical]),originalMessage);
  assert.deepEqual(await value("select to_jsonb(a)-array['learning_decision_id','learning_policy_version','learning_selection_mode'] from icash_seller_opener_assignments a where message_id=$1",[historical]),originalAssignment);
@@ -63,8 +66,14 @@ try{
   assert.equal(await value('select count(*)::int from icash_operation_spend'),0);assert.deepEqual(await value('select to_jsonb(w) from icash_wallets w where account_id=$1',[c.account]),wallet);
   assert.equal(await queue(c),null);assert.equal(await value('select count(*)::int from icash_learning_policy_private.decisions'),1);
   await pg.exec("update fixture_sms_policy set decision=jsonb_set(decision,'{allowedChoices}','[]');select icash_set_seller_sms_learning_enabled(false);");
-  assert.deepEqual(await value('select icash_assign_seller_opener($1,$2)',[c.account,c.thread]),{variant:a.variant,body:a.body,context:'identity-v5'});
+  assert.deepEqual(await value('select icash_assign_seller_opener_v5($1,$2)',[c.account,c.thread]),{variant:a.variant,body:a.body,context:'identity-v5'});
   assert.deepEqual(await assignment(c),a,'Existing assignment survives changed policy and deactivation');
+ });
+ await scope(async c=>{
+  const a=await value('select icash_assign_seller_opener($1,$2)',[c.account,c.thread]);
+  assert.equal(a.context,'identity-v4','The unchanged helper keeps old compiled queues on their matching copy version even after activation');
+  assert.equal(await value('select count(*)::int from icash_learning_policy_private.decisions'),0);
+  assert.deepEqual(await value('select icash_assign_seller_opener_v5($1,$2)',[c.account,c.thread]),a,'New entry point preserves an existing legacy assignment');
  });
  await scope(async c=>{
   await pg.exec('select icash_set_seller_sms_learning_enabled(false)');
@@ -119,6 +128,7 @@ try{
   for(const r of rows)if(r.mode!=='control')assert.equal(r.variant==='identity_cash_v5',r.bucket<6000,'Winner allocation remains bounded at60% with exploration in the other40%');
  });
  for(const role of ['anon','authenticated'])assert.equal(await value('select has_function_privilege($1,$2,\'execute\')',[role,'public.icash_set_seller_sms_learning_enabled(boolean)']),false);
+ for(const role of ['anon','authenticated','service_role'])assert.equal(await value("select has_function_privilege($1,'public.icash_assign_seller_opener_v5(uuid,uuid)','execute')",[role]),role==='service_role');
  assert.equal(originalMessage.body,legacyBody);
  console.log(`PASS ${count} prospective SMS learning scenarios: disabled rollout, source exclusions, exact one-segment copy, read-only preview, fixed assignments, safety holds, bounded allocation, original queue gates and receipts.`);
 }finally{await pg.close();}

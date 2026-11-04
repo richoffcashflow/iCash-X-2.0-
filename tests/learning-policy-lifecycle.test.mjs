@@ -59,7 +59,15 @@ try{
  await assert.rejects(q("update icash_learning_assignments set learning_selection_mode='explore' where subject=$1",[first.subject]),/immutable/);
  const foreign=await decision('buyer_search','order-v1','90210');await assign(foreign);
  const sms=await decision('seller_sms','identity-v5','*'),thread=uuid(901),account=uuid(902);
+ // An already-compiled legacy queue can finish after the prospective migration.
+ // Its v4 assignment/body remain historical and cannot mint a v5 application.
+ const legacyThread=uuid(900),priorApplications=await v('select count(*)::int from icash_learning_private.policy_applications');
+ await q("insert into icash_seller_opener_assignments values($1,$2,'Legacy template','identity-v4','identity-v4',null,null,null)",[legacyThread,account]);
+ await q("update icash_seller_opener_assignments set body='Original expanded legacy copy' where thread_id=$1",[legacyThread]);
+ assert.equal(await v('select count(*)::int from icash_learning_private.policy_applications'),priorApplications,'Legacy queue completion is not a policy application');
+ await assert.rejects(q("update icash_seller_opener_assignments set learning_context='identity-v5',learning_decision_id=$2,learning_policy_version='evidence-v2',learning_selection_mode='shared' where thread_id=$1",[legacyThread,sms.id]),/Historical allocation cannot be relabelled/);
  await q('insert into fixture_sms_plans values($1,$2,$3)',[account,thread,{variant:'a',mode:'shared',body:'Reviewed fixture copy',stats:[],decision:sms.result}]);
+ await assert.rejects(q("insert into icash_seller_opener_assignments values($1,$2,'Wrong expanded copy','identity-v5','a',$3,'evidence-v2','shared')",[thread,account,sms.id]),/Seller SMS allocation mismatch/);
  await q("insert into icash_seller_opener_assignments values($1,$2,'Reviewed fixture copy','identity-v5','a',$3,'evidence-v2','shared')",[thread,account,sms.id]);
  assert.equal(await v('select count(*)::int from icash_learning_private.policy_applications'),3);
  assert.equal((await review()).reviewed,3);assert.equal((await review()).reviewed,0,'Hourly cadence per cohort');
