@@ -37,6 +37,44 @@ const bothHash='875eb33f2156f6a7e6305606b6ea3dd2868cadbc336c4a269b7497d3a9d3ec82
 const representations=[[false,false],[true,false],[false,true],[true,true]];
 const reviews=representations.map(([empty,list])=>reviewFor(fixture(empty,list)));
 
+test('November inactive teammate and connector defaults preserve only the complete original approval',()=>{
+ for(const olderDefaults of [false,true]){
+  const pair=olderDefaults?renamedVoiceFixture():{old:fixture(),current:fixture()};
+  for(const a of [pair.old,pair.current])a.conversation_config.agent.prompt.built_in_tools={end_call:null};
+  const review=reviewFor(pair.old),current=pair.current;
+  current.conversation_config.agent.prompt.built_in_tools.ask_teammate=null;
+  current.platform_settings.app_connectors={enabled:false};
+  if(olderDefaults){
+   current.conversation_config.agent.prompt.built_in_tools.identity_challenge=null;
+   current.platform_settings.privacy.encrypt_conversations=false;
+  }
+  const before=structuredClone({review,current});
+  assert.equal(recordingAgentMatches(review,current),true);
+  const incoming=a=>({...a,workflow:null,procedures:null});
+  const incomingHash=sha(JSON.stringify(canonical(incoming(pair.old))));
+  assert.equal(recordingConfigHashMatches(incomingHash,incoming(current)),true);
+  assert.deepEqual({review,current},before);
+  assert.equal(recordingAgentMatches({...review,configHash:'0'.repeat(64)},current),false);
+  assert.equal(recordingAgentMatches(reviewFor(current),pair.old),false,'new approvals are never reconstructed in reverse');
+  for(const mutate of [
+   a=>delete a.conversation_config.agent.prompt.built_in_tools.ask_teammate,
+   a=>a.conversation_config.agent.prompt.built_in_tools.ask_teammate=false,
+   a=>a.conversation_config.agent.prompt.built_in_tools.ask_teammate={type:'system'},
+   a=>delete a.platform_settings.app_connectors,
+   ...[null,[],{},false,{enabled:true},{enabled:'false'},{enabled:false,extra:null}].map(value=>a=>a.platform_settings.app_connectors=value),
+   a=>a.conversation_config.agent.prompt.prompt+=' changed',
+   a=>a.conversation_config.agent.prompt.tool_ids.push('tool_other'),
+   a=>a.platform_settings.privacy.record_voice=true,
+   a=>a.platform_settings.auth.enable_auth=false,
+   a=>a.version_id='agtvrsn_other',a=>a.branch_id='agtbrch_other',
+  ]){
+   const changed=structuredClone(current);mutate(changed);
+   assert.equal(recordingAgentMatches(review,changed),false,mutate.toString());
+   assert.equal(recordingConfigHashMatches(incomingHash,incoming(changed)),false,mutate.toString());
+  }
+ }
+});
+
 test('October serialization defaults must reproduce the original complete approved hash',()=>{
  const {old,current}=renamedVoiceFixture();
  for(const a of [old,current])a.platform_settings.widget={variant:'fixture'};
