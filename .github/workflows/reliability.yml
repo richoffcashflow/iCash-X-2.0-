@@ -127,6 +127,8 @@ jobs:
         run: python3 scripts/test-acquisition-settlement-isolation-postgres.py
       - name: Verify bounded acquisition aging across shared export waits
         run: python3 scripts/test-export-capacity-wait-fairness-postgres.py
+      - name: Verify settled billing entries cannot starve receipt recovery
+        run: python3 scripts/test-outbound-billing-drain-postgres.py
   dependency-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 5
