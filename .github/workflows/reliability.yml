@@ -125,6 +125,8 @@ jobs:
         run: python3 scripts/test-seller-contact-refresh-postgres.py
       - name: Verify one busy historical receipt cannot block independent acquisition
         run: python3 scripts/test-acquisition-settlement-isolation-postgres.py
+      - name: Verify bounded acquisition aging across shared export waits
+        run: python3 scripts/test-export-capacity-wait-fairness-postgres.py
   dependency-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 5
