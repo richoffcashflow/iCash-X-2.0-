@@ -2,7 +2,10 @@ import {journeyNextAction} from './deal-journey-progress.ts';
 import type {WorkspaceProperty, WorkspaceEvidence} from '../components/workspace-view.ts';
 import {needsAttention} from '../components/workspace-view.ts';
 
-type Context = WorkspaceEvidence & {
+type Context = Omit<WorkspaceEvidence,'deals'|'signing'> & {
+ controls?:{property_id:string}[];
+ deals:(WorkspaceEvidence['deals'][number]&{terms?:unknown})[];
+ signing:(WorkspaceEvidence['signing'][number]&{kind?:string})[];
  proceedsReceivedDealIds?:string[];
  callbacks: {screening_id: string; due_at: string; timezone: string; state: string}[];
  conversations: {screening_id: string; party: string; summary?: string; completed_at?: string}[];
@@ -19,7 +22,22 @@ export function propertyBotStatus(input: {manual: boolean; paused: boolean; avai
  return {label: 'AI on', tone: 'green', detail: 'Automatic mode is on. Each next action follows your current setup and budget.'};
 }
 
-export type DealSection='contracts'|'signature'|'fulfillment'|'coordination'|'cancellation'|'attention'|'closing'|'property';
+export const buyerHandbackDetail='Your seller agreement is signed. Buyer search is paused while you control this property. Return this property to the bot for buyer search and deal follow-up.';
+/** Presentation only. An explicit return uses the existing account/property controls. */
+export function propertyBuyerHandback(property:WorkspaceProperty,work:Context,manual=work.controls?.some(c=>c.property_id===property.result.property.propertyId)??false){
+ const deal=work.deals.find(d=>d.screening_id===property.id);
+ const practice=(deal?.terms as {practice?:unknown}|undefined)?.practice;
+ // Routine setup and contract-date reviews are seeded at signing and can be
+ // completed while the bot looks for buyers. They retain their own visible
+ // actions; the independent summary still catches off-page human requests.
+ const attention={...work,closingReview:work.closingReview?.filter(c=>c.review_reason!=='setup'),closingTasks:work.closingTasks?.filter(t=>t.kind!=='deadline'||t.recovery!=null||t.email_state==='needs_review'),propertyAttentionIds:work.propertyNonSetupAttentionIds??work.propertyAttentionIds};
+ if(!manual||!deal||deal.stage!=='under_contract'||property.result.property.propertyId.startsWith('practice_')||practice===true||practice==='true'||needsAttention(property.id,attention))return false;
+ if(work.journeys?.some(j=>j.screening_id===property.id&&j.state!=='closed'))return false;
+ const live=work.signing.filter(s=>s.deal_id===deal.id&&s.test_mode===false);
+ return live.some(s=>s.kind==='purchase'&&s.state==='completed')
+  &&!live.some(s=>['creating','awaiting_counterparty','customer_signature_needed','needs_review'].includes(s.state)||(s.kind==='assignment'&&s.state==='completed'));
+}
+export type DealSection='contracts'|'signature'|'fulfillment'|'coordination'|'cancellation'|'attention'|'closing'|'property'|'control';
 export function propertyNextAction(property: WorkspaceProperty, work: Context):{detail:string;label:string|null;target:DealSection|null} {
  const deal = work.deals.find(item => item.screening_id === property.id);
  const action=(detail:string,label:string|null=null,target:DealSection|null=null)=>({detail,label,target});
@@ -35,6 +53,8 @@ export function propertyNextAction(property: WorkspaceProperty, work: Context):{
  if(journey){const next=journeyNextAction(journey);return action(next.detail,next.label,next.target);}
  if(work.viewingRequests?.some(v=>v.screening_id===property.id))return action('A buyer needs a response. Review their request, follow up and record the outcome.','Review buyer request','attention');
  if(work.closingTasks?.some(t=>t.screening_id===property.id))return action('Review the closing tasks. Confirm dates from the signed agreement or respond to the title office.','Review closing tasks','closing');
+ if(work.propertyNonSetupAttentionIds?.includes(property.id))return action('Read the saved request and complete the action it asks for.','Review request','attention');
+ if(propertyBuyerHandback(property,work))return action(buyerHandbackDetail,'Review bot control','control');
  if(closing)return action('Choose your title company and save how you want to receive your proceeds.','Set up closing','closing');
  if(needsAttention(property.id, work)) return action('Read the saved request and complete the action it asks for.','Review request','attention');
  const callback = work.callbacks.find(item => item.screening_id === property.id && ['pending','scheduled','ready','held_for_human'].includes(item.state));

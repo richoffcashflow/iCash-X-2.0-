@@ -11,7 +11,7 @@ export async function verifyWorkspace(browser,base,options,name){
  const page=await context.newPage(),errors=[],writes=[],external=[],diagnostics=[];
  page.setDefaultTimeout(12000);page.setDefaultNavigationTimeout(20000);page.on('dialog',dialog=>void dialog.accept());
  let recoveryFixture=null;const recoveryWrites=[];
- let contractFlow=false;const contractWrites=[];
+ let contractFlow=false,handbackFlow=false;const contractWrites=[];
  let acknowledged=true,ackFail=false,manual=false,controlFail=false,vip=true;const acceptedWrites=[],controlWrites=[],assistantWrites=[],apiReads=[];
  let instantVariant=null,inboundLead=false,callOutcome=null;
  let opportunityProgress=null;
@@ -45,6 +45,7 @@ export async function verifyWorkspace(browser,base,options,name){
   if(journey){const {label,dialog,...progress}=journey;data.journeys=[{id:'sample-journey',deal_id:deal.id,screening_id:deal.screening_id,state:'collecting',wants_assignment:false,wants_viewing:false,review_reason:null,deposit_due_at:null,last_progress_at:new Date().toISOString(),envelopeState:null,messageReview:false,hasSlots:true,showingState:null,titleState:null,titleSelected:false,closingKind:null,...progress}];}
   deal.terms={...deal.terms,seller:'Example Seller',priceSource:scenario==='lead'?'proposed':'seller_reported',priceCents:9000000,assignmentFeeCents:1000000,assignmentDepositCents:200000};
   if(scenario!=='lead')data.signing=[{id:'sample-purchase',deal_id:deal.id,kind:'purchase',state:scenario==='signature'?'customer_signature_needed':signed()?'completed':'awaiting_counterparty',test_mode:false}];
+  if(handbackFlow)Object.assign(data,{closingReview:[{id:'closing-setup',screening_id:deal.screening_id,deal_id:deal.id,review_reason:'setup'}],closingTasks:[{id:'closing-date',screening_id:deal.screening_id,deal_id:deal.id,kind:'deadline',label:'Confirm the signed contract closing deadline',state:'needs_review',due_date:null,evidence:'Check the executed purchase agreement.'}],propertyAttentionIds:[deal.screening_id],propertyNonSetupAttentionIds:[]});
   if(inboundLead){data.properties[0].result.financialCheck.status='eligible';data.contacts=[{screening_id:deal.screening_id,source:'HomeOffer Network · seller-submitted',contacts:[{name:'Example Seller',phones:[]}]}];}
   if(instantVariant){data.properties=[];data.deals=[];data.signing=[];data.instantLeads=[{leadId:'11111111-1111-4111-8111-111111111111',screeningId:'22222222-2222-4222-8222-222222222222',dealId:'33333333-3333-4333-8333-333333333333',name:'Jordan Example',phone:'+12025550101',address:null,state:'awaiting_address',paused:instantVariant==='paused',declinedAt:instantVariant==='stopped'?'2026-10-18T22:00:00Z':null,submittedAt:'2026-10-18T21:00:00Z',firstOutreachAt:instantVariant==='new'?null:'2026-10-18T21:00:15Z',responseAt:instantVariant==='replied'?'2026-10-18T21:05:00Z':null,addressConfirmedAt:null,formId:'fixture-form',campaignId:null,holdReason:instantVariant==='review'?'Text delivery needs review.':instantVariant==='human'?'Seller requested a person; automatic follow-up paused':null}];}
   if(url.searchParams.get('query')){emptySearch=true;data.properties=[];data.deals=[];data.signing=[];}
@@ -339,6 +340,24 @@ export async function verifyWorkspace(browser,base,options,name){
   assert.equal(contractWrites.filter(w=>w.path==='/api/work/signing').length,1);assert.equal(contractWrites.filter(w=>w.path==='/api/work/deals').length,2);
   await page.screenshot({path:`/tmp/icash-manual-contract-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
   await manualAgreement.getByRole('button',{name:'Close Agreements',exact:true}).click();contractFlow=false;manual=false;
+
+  manual=true;handbackFlow=true;const signedManualCard=await openProperty('buyers'),beforeHandback=controlWrites.length;
+  await signedManualCard.locator('.property-summary').click();
+  const handback=signedManualCard.getByRole('region',{name:'Buyer search control'});
+  await handback.getByRole('heading',{name:'Buyer search is paused',exact:true}).waitFor();
+  assert.equal(await signedManualCard.locator('.property-summary').getAttribute('aria-expanded'),'false','The post-signing handback is visible on a collapsed card');
+  assert.match(await handback.innerText(),/account is paused/,'Property handback does not imply account Run');
+  assert.equal(controlWrites.length,beforeHandback,'A signed purchase never silently returns manual control');
+  await page.screenshot({path:`/tmp/icash-buyer-handback-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
+  controlFail=true;await handback.getByRole('button',{name:/^Let bot find a buyer ·/}).click();
+  await signedManualCard.getByRole('status').getByText('Could not confirm the control change.',{exact:false}).waitFor();
+  await handback.getByRole('button',{name:/^Let bot find a buyer ·/}).waitFor();
+  assert.equal(manual,true,'A failed handback keeps the property manual');
+  controlFail=false;await handback.getByRole('button',{name:/^Let bot find a buyer ·/}).click();
+  await handback.waitFor({state:'hidden'});await signedManualCard.getByRole('button',{name:/^Take over ·/}).waitFor();
+  await signedManualCard.getByRole('status').getByText('Your account remains paused until you choose Run.',{exact:false}).waitFor();
+  assert.deepEqual(controlWrites.slice(beforeHandback).map(write=>write.action),['return_to_bot','return_to_bot'],'Only explicit property-return requests are sent; account Pause is untouched');
+  handbackFlow=false;
 
   for(const state of ['lead','waiting','signature','buyers',...Object.keys(waitingStages),'closing','closing_waiting','cancelled','cancellation_pending']){
    const card=await openProperty(state);

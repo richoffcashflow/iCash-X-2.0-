@@ -17,7 +17,7 @@ const person={name:'Synthetic Person',personId:'per_private',emails:['private@ex
  {number:'+12025550102',type:'Landline',doNotCall:false},{number:'+12025550103',doNotCall:null},{number:'+12025550104',doNotCall:'false'},{}]};
 const contactRows=[lookup(1,[person,{},null,'invalid',{name:34,phones:'invalid'}]),lookup(7,[{name:'Page two contact',phones:[]}]),lookup(20,[{name:'Retained contact',phones:[]}]),
  {...lookup(998,[{name:'Other tenant contact',phones:[]}]),account_id:otherAccount}];
-let paths=[],authorized=true,sellerFixtures=[];
+let paths=[],authorized=true,sellerFixtures=[],attentionFixtures=null;
 const paginate=(rows,q)=>rows.slice(Number(q.get('offset')??0),Number(q.get('offset')??0)+Number(q.get('limit')??rows.length));
 const mocks={isConfirmedVoicemail,instantLeadsEnabled,z,workspaceAttentionQuery,attachTaskRecovery:async(id,tasks)=>{assert.equal(id,account);return tasks;},NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
  paths.push({path,method,body});
@@ -36,7 +36,12 @@ const mocks={isConfirmedVoicemail,instantLeadsEnabled,z,workspaceAttentionQuery,
  const [table,params]=path.split('?');const q=new URLSearchParams(params);
  assert.equal(q.get(table==='icash_seller_intakes'?'assigned_account':'account_id'),`eq.${account}`,'Every read is tenant scoped');
  if(table==='icash_screening_jobs'){
-  if(q.get('select')?.includes('!inner()'))return [{id:uuid(1)}];
+  if(q.get('select')?.includes('!inner(')){
+   const related=/,([^,]+)!inner\(/.exec(q.get('select'))?.[1];
+   assert.equal(q.get(`${related}.account_id`),`eq.${account}`);assert.equal(q.get('limit'),'6');
+   assert.equal(q.get('select'),`id,${related}!inner(${related==='icash_closing_setup'?'review_reason':''})`,'Only the closing reason is projected, never request content');
+   return attentionFixtures?attentionFixtures[related]??[]:[{id:uuid(1),...(related==='icash_closing_setup'?{icash_closing_setup:[{review_reason:'setup'}]}:{})}];
+  }
   if(q.get('select')==='id,result:result->property')return properties.filter(p=>q.get('id').includes(p.id)).map(p=>({id:p.id,result:p.result.property}));
   if(q.get('id'))return properties.filter(p=>q.get('id')===`eq.${p.id}`||q.get('id').startsWith('in.')&&q.get('id').includes(p.id));
   const search=q.get('result->property->>address')?.slice(7,-1).toLowerCase();
@@ -99,6 +104,14 @@ r=await get('?view=responses');assert.deepEqual(r.body.properties.map(p=>p.id),[
 paths=[];r=await get('?view=opportunities');assert.deepEqual(r.body.properties.map(p=>p.id),[17,18,19,16,20].map(uuid),'The dedicated server predicate supplies ready opportunities before paging');assert.equal(paths.find(p=>p.path==='rpc/icash_meta_workspace_response_leads').body.p_responses_only,true,'An unanswered address-pending intake is not labeled financially eligible');
 paths=[];r=await get('?view=all');assert.equal(r.body.properties[0].id,uuid(1),'Explicit all activity preserves full history');assert.equal(paths.find(p=>p.path==='rpc/icash_meta_workspace_response_leads').body.p_responses_only,false);
 paths=[];r=await get('?view=unread');assert.deepEqual(r.body.properties.map(p=>p.id),[uuid(19),uuid(17)]);assert.deepEqual(r.body.replyOrder,[uuid(19),uuid(17)]);assert.equal(paths.find(p=>p.path==='rpc/icash_workspace_text_reply_ids').body.p_unread_only,true);assert.equal(r.body.textReplyCounts.unreadMessages,2);
+attentionFixtures={icash_closing_setup:[{id:uuid(1),icash_closing_setup:[{review_reason:'setup'}]},{id:uuid(2),icash_closing_setup:[{review_reason:'payment_change'}]},{id:uuid(3),icash_closing_setup:[{}]},{id:uuid(4)}]};
+paths=[];r=await get('?attentionPage=1');
+assert.deepEqual(r.body.propertyAttentionIds,[1,2,3,4].map(uuid),'Routine setup remains in ordinary attention');
+assert.deepEqual(r.body.propertyNonSetupAttentionIds,[2,3,4].map(uuid),'Only explicit setup-only reasons are excluded from handback blockers');
+assert.equal(paths.filter(p=>p.path.includes('!inner(')&&p.path.startsWith('icash_screening_jobs')).length,6,'The summary reuses existing bounded reads');
+attentionFixtures.icash_handoffs=[{id:uuid(1)}];r=await get('?attentionPage=2');
+assert(r.body.propertyNonSetupAttentionIds.includes(uuid(1)),'A human request outside the selected queue page still blocks routine-setup handback');
+attentionFixtures=null;
 authorized=false;paths=[];r=await get('');assert.notEqual(r.status,200);assert.equal(paths.length,0,'No data access without account ownership');
 delete globalThis.__activityRoute;
 console.log('Activity route: tenant-bound purchased contacts, explicit field projection, DNC states, missing/malformed results, bounded arrays, pagination, retained views, search and authentication passed. Synthetic fixtures only.');

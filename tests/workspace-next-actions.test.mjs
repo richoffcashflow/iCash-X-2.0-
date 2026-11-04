@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {journeyNextAction} from '../lib/deal-journey-progress.ts';
-import {propertyNextAction} from '../lib/workspace-guidance.ts';
+import {propertyBuyerHandback,propertyNextAction} from '../lib/workspace-guidance.ts';
 import {closingSetupNext} from '../lib/closing-setup.ts';
 import {openDealSection,revealWorkspaceSection} from '../lib/workspace-navigation.ts';
 import {makeWorkspaceFixture} from './fixtures/workspace-volume.mjs';
@@ -18,6 +18,43 @@ assert.equal(next({handoffs:[{screening_id:'another-property',state:'open'}]}).t
 assert.equal(next({deals:[{...deal,stage:'cancellation_pending'}],signing:[{deal_id:deal.id,state:'customer_signature_needed'}]}).target,'cancellation');
 assert.equal(next({deals:[{...deal,stage:'closed'}],closingReview:[{screening_id:property.id}]}).label,'Review closing record');
 assert.equal(next({deals:[{...deal,stage:'cancelled'}]}).target,'contracts');
+const signedPurchase={deal_id:deal.id,kind:'purchase',state:'completed',test_mode:false};
+const manualPurchase={signing:[signedPurchase],controls:[{property_id:property.result.property.propertyId}]};
+assert.equal(next(manualPurchase).target,'control','a manually controlled signed purchase must explain that buyer work is paused');
+assert.match(next(manualPurchase).detail,/Buyer search is paused/);
+const seededSetup={closingReview:[{screening_id:property.id,review_reason:'setup'}],propertyAttentionIds:[property.id],propertyNonSetupAttentionIds:[]};
+assert.equal(next({...manualPurchase,...seededSetup}).target,'control','routine closing setup seeded at signing does not hide buyer handback');
+assert.equal(propertyBuyerHandback(property,{...work,...manualPurchase,...seededSetup,closingReview:[]}),true,'independent summary supports setup outside the selected attention page');
+assert.equal(propertyBuyerHandback(property,{...work,...manualPurchase,...seededSetup,propertyNonSetupAttentionIds:[property.id]}),false,'off-page human attention still blocks even when the visible request is routine setup');
+assert.equal(next({...manualPurchase,...seededSetup,propertyNonSetupAttentionIds:[property.id]}).target,'attention','off-page human requests take priority over routine setup');
+assert.equal(propertyBuyerHandback(property,{...work,...manualPurchase,...seededSetup,propertyNonSetupAttentionIds:undefined}),false,'older activity data without the new summary retains conservative aggregate attention');
+assert.equal(propertyBuyerHandback(property,{...work,...manualPurchase,...seededSetup,closingReview:[{screening_id:property.id}]}),false,'unknown closing reasons remain blocking');
+const seededDeadlines={...manualPurchase,...seededSetup,closingTasks:[{screening_id:property.id,kind:'deadline',state:'needs_review'}]};
+assert.equal(propertyBuyerHandback(property,{...work,...seededDeadlines}),true,'routine contract-date reviews seeded at signing do not hide property control');
+assert.equal(next(seededDeadlines).target,'closing','deadline review retains priority as the current action');
+for(const patch of [{kind:'document_update'},{recovery:{journeyId:'human-request'}},{email_state:'needs_review'}])assert.equal(propertyBuyerHandback(property,{...work,...seededDeadlines,closingTasks:[{...seededDeadlines.closingTasks[0],...patch}]}),false,'nonroutine closing/recovery attention still blocks handback');
+for(const [reason,patch] of [
+ ['automatic property',{controls:[]}],
+ ['another property under manual control',{controls:[{property_id:'other-property'}]}],
+ ['stage alone is not proof of signing',{signing:[]}],
+ ['practice envelope',{signing:[{...signedPurchase,test_mode:true}]}],
+ ['unknown envelope mode',{signing:[{...signedPurchase,test_mode:undefined}]}],
+ ['assignment alone',{signing:[{...signedPurchase,kind:'assignment'}]}],
+ ['another deal signed',{signing:[{...signedPurchase,deal_id:'other-deal'}]}],
+ ['pending seller signature',{signing:[{...signedPurchase,state:'awaiting_counterparty'}]}],
+ ['signature under review',{signing:[signedPurchase,{...signedPurchase,state:'needs_review'}]}],
+ ['buyer already secured',{signing:[signedPurchase,{...signedPurchase,kind:'assignment'}]}],
+ ['buyer already progressing',{journeys:[{screening_id:property.id,state:'collecting'}]}],
+ ['human request',{handoffs:[{screening_id:property.id,state:'open'}]}],
+ ['customer signature still required',{signing:[signedPurchase,{...signedPurchase,state:'customer_signature_needed'}]}],
+ ['cancellation pending',{deals:[{...deal,stage:'cancellation_pending'}]}],
+ ['closing in progress',{deals:[{...deal,stage:'closing'}]}],
+ ['practice deal',{deals:[{...deal,terms:{practice:true}}]}],
+ ['legacy practice deal',{deals:[{...deal,terms:{practice:'true'}}]}],
+])assert.equal(propertyBuyerHandback(property,{...work,...manualPurchase,...patch}),false,reason);
+assert.equal(propertyBuyerHandback({...property,result:{...property.result,property:{...property.result.property,propertyId:'practice_example'}}},{...work,...manualPurchase},true),false,'practice property never offers real buyer search');
+assert.equal(propertyBuyerHandback(property,{...work,...manualPurchase},false),false,'a confirmed local return hides the prompt before the next poll');
+assert.equal(propertyBuyerHandback(property,{...work,...manualPurchase,journeys:[{screening_id:'other-property',state:'collecting'}]}),true,'another property does not suppress handback');
 
 const empty={setup:null,verifiedContact:null,directory:[],buyerSuggestions:[],titleEmailInAgreement:null};
 assert.equal(closingSetupNext(empty).action,'title');
