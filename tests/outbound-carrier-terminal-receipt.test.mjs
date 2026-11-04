@@ -61,10 +61,19 @@ try{
  console.warn=(...args)=>diagnostics.push(args);
  reset();el.metadata.phone_call.call_sid='private-provider-value';
  assert.deepEqual(await settle(),{status:'held',reason:'cost_evidence_incomplete'});
- assert.deepEqual(diagnostics,[['outbound_carrier_evidence_held',{stage:'conversation_receipt'}],['voice_cost_evidence_held',{stage:'twilio',reason:'cost_evidence_incomplete'}]]);
+ assert.deepEqual(diagnostics,[['outbound_carrier_evidence_held',{stage:'conversation_carrier'}],['voice_cost_evidence_held',{stage:'twilio',reason:'cost_evidence_incomplete'}]]);
  assert.equal(settlements.length,0);assert.equal(writes.length,0);
  const printed=JSON.stringify(diagnostics);
  for(const secret of [account,ca,to,from,env.ELEVENLABS_API_KEY,env.TWILIO_AUTH_TOKEN,'private-provider-value'])assert.equal(printed.includes(secret),false);
+ for(const [mutate,stage] of [[()=>{el=null;},'conversation_shape'],[()=>{el.conversation_id='private-provider-value';},'conversation_id'],[()=>{el.agent_id='private-provider-value';},'conversation_agent']]){
+  reset();diagnostics.length=0;mutate();assert.deepEqual(await settle(),{status:'held',reason:'cost_evidence_incomplete'});
+  assert.deepEqual(diagnostics,[['outbound_carrier_evidence_held',{stage}],['voice_cost_evidence_held',{stage:'twilio',reason:'cost_evidence_incomplete'}]]);
+  assert.equal(settlements.length,0);assert.equal(writes.length,0);assert.equal(JSON.stringify(diagnostics).includes('private-provider-value'),false);
+ }
+ reset();diagnostics.length=0;
+ assert.deepEqual(await settleBoundVoiceUsage(db,account,'offline-call',[policy],{env,fetcher:async()=>new Response('private-provider-value',{status:403})}),{status:'held',reason:'cost_evidence_incomplete'});
+ assert.deepEqual(diagnostics,[['outbound_carrier_evidence_held',{stage:'conversation_http',httpStatus:403}],['voice_cost_evidence_held',{stage:'twilio',reason:'cost_evidence_incomplete'}]]);
+ assert.equal(settlements.length,0);assert.equal(writes.length,0);assert.equal(JSON.stringify(diagnostics).includes('private-provider-value'),false);
  console.warn=()=>{throw Error('logging unavailable');};
  reset();jobRow.state='dispatching';
  assert.deepEqual(await settle(),{status:'held',reason:'cost_evidence_incomplete'});
