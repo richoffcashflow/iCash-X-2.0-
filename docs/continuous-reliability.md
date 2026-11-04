@@ -40,6 +40,40 @@ each channel retains its own authority, funding, one-use receipt and unknown-sen
 checks. The ordered service fixture covers checkpoint failure, channel failure
 and final-summary failure without sending messages.
 
+The live follow-up at 17:09 UTC found a separate, current global blockage: one
+finished HTTP 400 `invalid_request` response saying no records matched the
+filtered export still occupied organization capacity. All 61 stalled funded
+accounts had available shared request capacity and enabled configurations;
+none was customer-paused. Existing automatic capacity recovery handled the
+reviewed 500/504 families, so this filtered-empty case never obtained a review.
+The request finished at 00:46 UTC and had no provider export ID, CSV, recovery
+receipt or active lease. Its saved batch receipt was the same error object,
+not a credit receipt.
+
+The filtered-empty capacity policy reuses the existing three separately admitted
+free inventory reads and their fresh, complete idle-evidence requirements. It
+binds the exact provider error, matching raw JSON/text and request identity,
+original finished request, batch error and immutable source hash. The failed
+purchase and its financial hold remain unresolved; original owners stay fenced
+from repeat purchases. Verified current capacity permits independent eligible
+work without replaying that export or removing phone filters. The policy is
+installed disabled, with activation gated on native concurrency coverage and
+the exact production web/worker release. Its tests must reject unknown 400s,
+contradictory receipts, busy/incomplete inventories and changed source evidence.
+
+For this exact no-records rejection, successful historical exports may predate
+the failure: requiring a later completed export would depend on the very slot
+being recovered. The policy instead requires original provider Date/Age evidence
+from each of the three cache-revalidated inventory responses, bounded by that
+probe's database timestamps. Missing, invalid, stale or cached evidence remains
+held. The earlier 500/504 policies retain their original terminal-history rule.
+
+The release also exposed a worker deployment filter that skipped the test-only
+fix needed to pass the production gate. Production worker watch paths now include
+the required test suites, test scripts and reliability workflow in addition to
+the original worker/runtime/configuration paths. The exact-main pre-deploy gate,
+automatic restart policy, concurrency and health checks remain unchanged.
+
 The November 4 access-message correction removes the disabled checkout-phone
 sign-in recommendation left in purchase confirmations, reminder emails and
 permission-bound access texts after the UI/support repair. Both email formats

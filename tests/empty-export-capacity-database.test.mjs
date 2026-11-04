@@ -15,13 +15,13 @@ async function probes(c,mutate=()=>{}){
   // rejected request, while each status query is newly admitted and received.
   const data=probe==='inventory'?[{export_id:'prior-export',status:'completed',created_at:'2026-01-01T00:00:00Z'}]:[];
   const raw={data,pagination:{limit:100,offset:0,total:data.length,has_more:false}};
-  const receipt={httpStatus:200,raw,rawText:JSON.stringify(raw),headers:{minuteRemaining:49,dayRemaining:300}};
+  const receipt={httpStatus:200,raw,rawText:JSON.stringify(raw),headers:{minuteRemaining:49,dayRemaining:300,serverDate:new Date().toUTCString(),age:'0'}};
   mutate(receipt,probe);receipt.rawText=JSON.stringify(receipt.raw);
   assert.equal(await rpc('icash_record_export_capacity_probe',c.reviewId,probe,receipt),true);
  }
 }
 try{
- for(const file of ['tests/fixtures/automatic-export-foundation.sql','config/owner-export-capacity-recovery.sql','supabase/migrations/20261030012215_owner_export_capacity_precision.sql','config/automatic-export-capacity.sql','config/gateway-export-capacity.sql','config/empty-export-capacity.sql'])await db.exec(read(file));
+ for(const file of ['tests/fixtures/automatic-export-foundation.sql','config/owner-export-capacity-recovery.sql','supabase/migrations/20261030012215_owner_export_capacity_precision.sql','config/automatic-export-capacity.sql','config/gateway-export-capacity.sql','config/empty-export-capacity.sql','config/empty-export-capacity-freshness.sql'])await db.exec(read(file));
  await q("insert into icash_research_private.owner_batches(id,account_id,created_at,paid_receipt) values($1,$2,now()-interval '8 minutes',$3)",[batch,account,raw]);
  await q('insert into icash_research_private.owner_exports(id,request,receipt) values($1,$2,$3)',[batch,{people_ids:['held-owner']},failure]);
  await q("insert into icash_research_private.requests(id,kind,account_id,operation_key,admitted,created_at,finished_at,result) values($1,'owner_lookup',$2,$3,true,now()-interval '8 minutes',now()-interval '6 minutes',$4)",[batch,account,'owner-batch:'+batch,{outcome:'http_error',httpStatus:400}]);
