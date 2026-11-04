@@ -9,7 +9,8 @@ The repair preserves the original stored due time in a small private table only
 after a selected account is observed waiting on exact `export_busy` with a funded
 contact candidate. It retains the original 60-second polling cooldown and
 five-account scan. The existing aging sort uses the preserved time; real issuance
-or confirmed unrelated ineligibility clears it. Ordinary discovery continues
+or confirmed unrelated ineligibility clears it. A later quota or unknown-capacity
+wait preserves existing age without creating a new marker. Ordinary discovery continues
 through the same bounded scan. Candidate errors roll back the transaction.
 
 The table stays separate from discovery configuration so existing review hashes

@@ -62,7 +62,8 @@ begin
  -- no-work cooldown; do not erase age because another account won the export.
  needle:='  update public.icash_discovery_configs set next_run_at=now()+interval ''60 seconds'' where account_id=c.account_id;';
  replacement:=E'  if icash_work_private.record_export_wait(c.account_id,c.next_run_at) then continue;end if;\n'
-  ||E'  delete from icash_work_private.acquisition_export_waits where account_id=c.account_id;\n'||needle;
+  ||E'  delete from icash_work_private.acquisition_export_waits where account_id=c.account_id\n'
+  ||E'   and public.icash_owner_active_export_capacity(c.account_id) in (''ready'',''disabled'',''export_busy'');\n'||needle;
  if (length(d)-length(replace(d,needle,'')))/length(needle)<>2 then raise exception 'Acquisition no-work cooldown changed';end if;
  d:=replace(d,needle,replacement);
  needle:=' update public.icash_discovery_configs set next_run_at=now()+interval ''5 seconds'' where account_id=c.account_id;';

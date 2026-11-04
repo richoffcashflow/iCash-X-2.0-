@@ -81,16 +81,29 @@ try{
   assert.equal(await one('select count(*)::int from icash_work_private.acquisition_export_waits'),0);
  });
  await isolated(async()=>{
+  const c=await seed(33);await pg.exec("update fixture_export_wait_policy set export_capacity='export_busy'");
+  await claim();const saved=await one('select to_jsonb(w) from icash_work_private.acquisition_export_waits w where account_id=$1',[c.account]);assert(saved);
+  await pg.exec('alter table fixture_export_wait_policy alter column export_capacity drop not null');
+  for(const capacity of ['quota_wait',null,'unknown']){
+   await q('update fixture_export_wait_policy set export_capacity=$1',[capacity]);
+   await q("update icash_discovery_configs set next_run_at=now()-interval '1 second' where account_id=$1",[c.account]);
+   assert.equal(await claim(),null);
+   assert.deepEqual(await one('select to_jsonb(w) from icash_work_private.acquisition_export_waits w where account_id=$1',[c.account]),saved,'A different transient capacity wait preserves existing age without creating authority');
+  }
+ });
+ await isolated(async()=>{
   const c=await seed(40);
   await pg.exec(`create or replace function public.icash_enrichment_candidate(uuid) returns uuid language plpgsql as $$begin update public.fixture_export_wait_policy set export_capacity='export_busy';return null;end$$;`);
   assert.equal(await claim(),null);
   assert.equal(await one('select count(*)::int from icash_work_private.acquisition_export_waits where account_id=$1',[c.account]),1,'Capacity won by a concurrent account after selection still preserves age');
  });
  await isolated(async()=>{
-  await seed(50);await pg.exec("update fixture_export_wait_policy set export_capacity='export_busy'");
+  const c=await seed(50);await pg.exec("update fixture_export_wait_policy set export_capacity='export_busy'");
+  await claim();const saved=await one('select to_jsonb(w) from icash_work_private.acquisition_export_waits w where account_id=$1',[c.account]);assert(saved);
+  await q("update icash_discovery_configs set next_run_at=now()-interval '1 second' where account_id=$1",[c.account]);
   await pg.exec(`create or replace function public.icash_enrichment_before_provider_quota(uuid) returns uuid language plpgsql as $$begin raise exception 'synthetic transient candidate failure';end$$;`);
   await pg.exec('savepoint candidate_error');await assert.rejects(claim(),/synthetic transient candidate failure/);await pg.exec('rollback to candidate_error');
-  assert.equal(await one('select count(*)::int from icash_work_private.acquisition_export_waits'),0,'Errors do not create or clear durable scheduling evidence');
+  assert.deepEqual(await one('select to_jsonb(w) from icash_work_private.acquisition_export_waits w where account_id=$1',[c.account]),saved,'Errors do not clear durable scheduling evidence');
  });
  for(const role of ['anon','authenticated']){
   assert.equal(await one("select has_function_privilege($1,'icash_work_private.record_export_wait(uuid,timestamptz)','execute')",[role]),false);
