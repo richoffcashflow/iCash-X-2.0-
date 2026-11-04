@@ -36,17 +36,19 @@ export async function outboundCarrierInput(db:VoiceUsageDb,accountId:string,b:Bi
  const rows=await db<{provider_call_sid:string;conversation_id:string;state:string}[]>(`icash_voice_jobs?id=eq.${eq(b.operation_key.slice(6))}&account_id=eq.${eq(accountId)}&select=provider_call_sid,conversation_id,state`);
  const j=rows[0];if(rows.length!==1||!j||j.state!=='dispatched'||j.conversation_id!==b.conversation_id||!sid(j.provider_call_sid,'CA'))fail();
  const deadline=signal?AbortSignal.any([signal,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000);
- async function get(url:string,headers:Record<string,string>){
+ async function get(url:string,headers:Record<string,string>,maxBytes=262144){
   let res:Response;try{res=await fetcher(url,{method:'GET',headers,redirect:'error',cache:'no-store',credentials:'omit',signal:deadline});}catch{throw new CarrierUsageUnavailable();}
   if([404,408,425,429].includes(res.status)||res.status>=500)unavailable();
   if(!res.ok||(res.url&&res.url!==url))fail(res.status);
   // Bound response reads; provider payloads are never logged or placed in evidence.
   const reader=res.body?.getReader();if(!reader)fail(undefined,'body_missing');let n=0;const chunks:Uint8Array[]=[];
-  try{for(;;){const part=await reader!.read().catch(()=>{throw new CarrierUsageUnavailable();});if(part.done)break;n+=part.value.byteLength;if(n>262144)fail(undefined,'body_limit');chunks.push(part.value);}}finally{await reader!.cancel();}
+  try{for(;;){const part=await reader!.read().catch(()=>{throw new CarrierUsageUnavailable();});if(part.done)break;n+=part.value.byteLength;if(n>maxBytes)fail(undefined,'body_limit');chunks.push(part.value);}}finally{await reader!.cancel();}
   try{return JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{fail(undefined,'json_invalid');}
  }
  stage='conversation_http';
- const c=await get(`https://api.elevenlabs.io/v1/convai/conversations/${eq(b.conversation_id)}`,{'xi-api-key':env.ELEVENLABS_API_KEY!});
+ // Completed conversations include full per-turn metadata. Keep a finite 1 MiB
+ // ceiling for this document; carrier/Lookup receipts retain their 256 KiB cap.
+ const c=await get(`https://api.elevenlabs.io/v1/convai/conversations/${eq(b.conversation_id)}`,{'xi-api-key':env.ELEVENLABS_API_KEY!},1048576);
  stage='conversation_shape';if(!c||typeof c!=='object'||Array.isArray(c))fail();
  stage='conversation_id';if(c.conversation_id!==b.conversation_id)fail();
  stage='conversation_agent';if(c.agent_id!==b.agent_id)fail();
