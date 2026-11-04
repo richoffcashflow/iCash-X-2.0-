@@ -1,0 +1,23 @@
+# Continuous improvement operations
+
+`20261104052306_learning_operations_review.sql` adds private refresh telemetry and a bounded hourly review to the existing shared-learning cron. It makes no provider requests and changes no contact, funds, send, quote or signature authority.
+
+Refresh history retains seven days, with bounded cleanup. Account refreshes preserve generation-bound wakeups and record actual successful aggregation separately from queue completion. Conversion-cache failures persist SQLSTATE and the last success; exception text is never stored. Learning health joins the existing reliability snapshot and owner learning report. It flags missed two-minute refresh cadence, conversion evidence older than 15 minutes, account failures, six-hour stale/uninitialized accounts, overdue queue work and failed review attempts. Existing decision freshness limits remain unchanged.
+
+The hourly review reads bounded counts of persisted unresolved support cases, fresh workflow snapshot categories, learning health and (after the policy migration exists) the latest canonical policy decision. Three observations across at least two hours promote an observation to a candidate. Customer text is not a verified product fact. These categories establish saved operational problems, not successful repairs or business outcomes.
+
+Proposals and append-only transition events retain evidence/version history. A terminal category recurring after a day gets a successor version. Only a canonical receipt registrar can write validation receipts: the ordinary service role cannot insert, update or delete them. The transition RPC checks proposal/version, exact stage, receipt source, release/policy lineage and a one-day unconsumed-receipt lifetime. Duplicate receipts are idempotent. Offline validation alone cannot activate or promote a policy; a limited experiment, verified outcome decision and applied rollback each require their own registered evidence. Support/code proposals wait for an actual reviewed implementation and validation.
+
+The unresolved support view now covers all ages using bounded keyset pages. Immutable creation timestamps and IDs preserve progress when new replies update a case; restart includes newly created/reopened cases. Each case gets its own bounded history, preventing a verbose thread from exhausting the page allowance. A separate recent-history view retains closed-case review. All routes remain operator-only and private.
+
+Validation: `tests/learning-operations-review.test.mjs`, support pagination tests and the existing native learning-refresh contention script exercise the actual forward functions. Native PostgreSQL covers concurrent wakeups, busy accounts and competing hourly reviews. No paid tests or customer messages are required.
+
+## Canonical policy lifecycle
+
+The follow-on `20261104053328_learning_policy_lifecycle.sql` replaces the single global policy proposal with separate domain/context/market/policy-version cohorts. A new activated release receives a successor proposal version; old evidence remains unchanged. Reviews process at most 20 due cohorts per tick, at most once per cohort-hour, and isolate failed cohorts with private SQLSTATE telemetry.
+
+Only a privileged deployment operator can insert the immutable `icash_learning_private.policy_releases` row after the exact main-push Reliability workflow succeeds. The row records the actual SHA, CI run and attempt, repository, workflow, branch, event and completion time. There is no client-provided verification RPC and the service role cannot insert release, validation or application receipts. `icash_activate_learning_policy` additionally requires post-CI evidence invalidation before enabling the shared policy and reviewed SMS variant switch together; it does not dispatch customer work.
+
+Assignment triggers bind the actual deterministic generic choice or current SMS plan to the canonical decision and current saved aggregates. Historical allocations cannot be relabeled. Generic zero-choice safety holds have a separate canonical applied-hold receipt. A planned or unconsumed decision alone does not establish an applied change.
+
+Offline validation, actual limited activation and adoption remain distinct. Promotion requires at least 72 hours since activation, a fresh latest cohort decision backed by observed outcomes, and an actual shared allocation for that decision. It records bounded observational adoption, never causal business lift or `businessSuccess`. An actual subsequent fallback or halt after a shared allocation records rollback with its real reason; incomplete evidence is not relabeled harm. Normal challenger and control allocations under a still-qualified decision are not regressions.

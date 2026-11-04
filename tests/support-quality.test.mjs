@@ -8,7 +8,7 @@ import {supportQualityReport,collectSupportQuality} from '../lib/support-quality
 import {loadService} from './helpers/simulated-journey-services.mjs';
 const now=new Date('2026-10-30T20:00:00Z'),old='2026-10-28T12:00:00Z';
 const message=(role,content,minute)=>({role,content,created_at:`2026-10-30T19:${String(minute).padStart(2,'0')}:00Z`});
-const conversation=(messages,extra={})=>({id:randomUUID(),kind:'account',subject:'Help',status:'open',updated_at:now.toISOString(),messages,...extra});
+const conversation=(messages,extra={})=>({id:randomUUID(),kind:'account',subject:'Help',status:'open',created_at:now.toISOString(),updated_at:now.toISOString(),messages,...extra});
 const repeated=conversation([message('user','Does the contact show up the same time as the lead?',1),message('assistant','You don’t need to add listings or upload properties.',2),message('user','Does the contact show up the same time as the lead?',3),message('assistant','You don’t need to add listings or upload properties.',4)]);
 const empty=conversation([message('user','My original icashx stopped working',1),message('assistant','Please don’t share the code itself.',2)],{kind:'access'});
 const resolved=conversation([message('user','Where is Course?',1),message('assistant','Open Course in your workspace.',2)],{status:'resolved',updated_at:old});
@@ -37,24 +37,25 @@ const db=async(path,method,body)=>{
  assert.fail('Unexpected query');
 };
 report=await collectSupportQuality(db,now);assert.equal(report.flagged,2);assert.equal(paths.length,4);
-assert(paths[0].includes('limit=61')&&paths[1].includes('limit=41'));assert(paths[2].includes('limit=600')&&paths[3].includes('limit=400'));
-assert(paths[2].includes('thread_id=in.('+repeated.id+')'));assert.doesNotMatch(JSON.stringify(report),/Foreign case text/);
-const limited=await collectSupportQuality(async path=>path.startsWith('icash_support_threads?')?Array.from({length:61},()=>({...repeated,id:randomUUID()})):[],now);assert.equal(limited.sampled,60);assert.equal(limited.limited,true);
+assert(paths[0].includes('limit=11')&&paths[1].includes('limit=11'));assert(paths[2].includes('limit=41')&&paths[3].includes('limit=41'));
+assert.equal(new URLSearchParams(paths[2].split('?')[1]).get('thread_id'),'eq.'+repeated.id);assert.doesNotMatch(JSON.stringify(report),/Foreign case text/);
+const limited=await collectSupportQuality(async path=>path.startsWith('icash_support_threads?')?Array.from({length:61},()=>({...repeated,id:randomUUID()})):[],now);assert.equal(limited.sampled,10);assert.equal(limited.limited,true);
 await assert.rejects(()=>collectSupportQuality(async path=>path.startsWith('icash_support_threads?')?[{...repeated,id:'bad),or=(true'}]:[],now),/Invalid conversation/);
 
 let authorized=false,reads=0,broken=false;
 const route=await loadService('app/api/support/admin/quality/route.ts',{requireTrustedOperator:async()=>{if(!authorized)throw Error('OPERATOR_REQUIRED');},db,collectSupportQuality:async()=>{reads++;if(broken)throw Error('Unavailable');return report;}});
 assert.equal((await route.GET()).status,403);assert.equal(reads,0);
-authorized=true;let response=await route.GET();assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'private, no-store');assert.equal((await response.json()).sampled,2);
+authorized=true;const beforeInvalid=reads;assert.equal((await route.GET(new Request('https://example.invalid/api/support/admin/quality?scope=unexpected'))).status,400);assert.equal(reads,beforeInvalid);let response=await route.GET();assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'private, no-store');assert.equal((await response.json()).sampled,2);
 broken=true;response=await route.GET();assert.equal(response.status,503);assert.equal((await response.json()).sampled,undefined,'A failed review is never shown as zero issues');
 
 // Render the actual review panel and exercise the conversation-open control.
-let selected=null,index=0;const states=[{...report,cases:[sanitized]},false,'','all'];
-globalThis.__qualityPanel={React,useCallback:f=>f,useEffect:()=>{},useRef:v=>({current:v}),useState:()=>[states[index++],()=>{}],supportRequest:async()=>{throw Error('No transport during render');}};
+let selected=null,index=0,requested;const nextCursor=JSON.stringify({version:1,scope:'unresolved',snapshotAt:now.toISOString(),account:{at:old,id:repeated.id},access:'done'});const states=[{...report,cases:[sanitized],page:{scope:'unresolved',snapshotAt:now.toISOString(),nextCursor,messagesLimited:false}},false,'','all'];
+globalThis.__qualityPanel={React,useCallback:f=>f,useEffect:()=>{},useRef:v=>({current:v}),useState:()=>[states[index++],()=>{}],supportRequest:async path=>{requested=path;return {ok:true,status:200,data:report};}};
 const source=ts.transpileModule(readFileSync(new URL('../components/support-quality-panel.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.React}}).outputText.replace(/^import .*;\s*$/gm,'');
 const {SupportQualityPanel}=await import('data:text/javascript;base64,'+Buffer.from('const {React,useCallback,useEffect,useRef,useState,supportRequest}=globalThis.__qualityPanel;'+source).toString('base64'));
 const tree=SupportQualityPanel({onOpen:value=>{selected=value;},onDenied:()=>{}});
 const markup=renderToStaticMarkup(tree);assert.match(markup,/Support quality/);assert.match(markup,/Review conversation/);assert.doesNotMatch(markup,/<script>/);
 const elements=node=>!node||typeof node!=='object'?[]:[node,...React.Children.toArray(node.props?.children).flatMap(elements)];
 elements(tree).find(n=>n.type==='button'&&n.props.children==='Review conversation').props.onClick();assert.equal(selected.id,privateCase.id);
+elements(tree).find(n=>n.type==='button'&&n.props.children==='Next review page').props.onClick();assert.equal(new URL(requested,'https://example.invalid').searchParams.get('cursor'),nextCursor);assert.equal(new URL(requested,'https://example.invalid').searchParams.get('scope'),'unresolved');
 console.log('PASS support quality: real reply signals, operator corrections, honest sample bounds, redacted previews, operator-only read routes, failure handling and review navigation. No writes or sends.');

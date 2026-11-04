@@ -5,6 +5,7 @@ import {discoverPage} from './discovery-pipeline.ts';
 import {DiscoveryFilterUnavailable} from './discovery-filters.ts';
 import {selectTargetingPlan} from './dealmachine-targeting.ts';
 import {dealMachineRequest} from './dealmachine-request.ts';
+import {researchQueryPolicyValid,type ResearchQueryPolicy} from './research-query-policy.ts';
 import {syncResearchExclusions} from './research-exclusions.ts';
 import {requestDiscoveryEstimate,DiscoveryEstimateHeld} from './discovery-estimate.ts';
 type Config={account_id:string;enabled:boolean;zip:string;rate_id:string;property_credit_micros:number;data_rights_until:string;per_page:number;next_page:number;revision:string;exhausted:boolean;research_version?:number;research_list_id?:string|null};
@@ -40,7 +41,7 @@ export async function discoverForAccount(accountId:string){
  if(inventory!=='ready')return {status:inventory};
  const state=await db<unknown>('rpc/icash_discovery_filter_state_v2','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});
  const shared=state===null?[]:await db('rpc/icash_discovery_shared_evidence','POST',{p_account:accountId,p_zip:c.zip}).catch(()=>[]);
- const targeting=state===null?null:await db('rpc/icash_targeting_state','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page}).catch(()=>null);
+ const targeting=await db<{queryContext?:{required:boolean;ready:boolean;policy:unknown}}> ('rpc/icash_targeting_state','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page}).catch(()=>null);
  const filterPlan=state===null?undefined:selectTargetingPlan(state,c.next_page,shared,targeting,accountId,c.zip);
  if(filterPlan===null){
   if(Array.isArray(state)&&state.some(s=>s?.blocked===true&&s?.exhausted===false))return {status:'inventory_held'};
@@ -49,7 +50,13 @@ export async function discoverForAccount(accountId:string){
  const finishEmpty=(reason:'empty'|'unavailable')=>filterPlan
   ?db('rpc/icash_finish_empty_filter','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page,p_plan:filterPlan,p_reason:reason})
   :db('rpc/icash_mark_inventory_empty','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});
- const queryPolicy=c.research_version===2?{version:'research-efficiency-v2' as const,exclusionListId:c.research_list_id??null}:c.research_version===1?{version:'research-efficiency-v1' as const,exclusionListId:c.research_list_id??null}:undefined;
+ // Existing deployments omit this additive field. Final DB admission still
+ // fences an old worker once the independent query policy is activated.
+ const targetingQuery=targeting?.queryContext;
+ if(targetingQuery!==undefined&&(!targetingQuery||typeof targetingQuery.required!=='boolean'||typeof targetingQuery.ready!=='boolean'))return {status:'inventory_held'};
+ const targetPolicyRequired=targetingQuery?.required===true||filterPlan?.version==='seller-targeting-v1';
+ if(targetPolicyRequired&&(!targetingQuery?.ready||!researchQueryPolicyValid(targetingQuery.policy)))return {status:'inventory_held'};
+ const queryPolicy:ResearchQueryPolicy|undefined=targetPolicyRequired?targetingQuery!.policy as ResearchQueryPolicy:c.research_version===2?{version:'research-efficiency-v2' as const,exclusionListId:c.research_list_id??null}:c.research_version===1?{version:'research-efficiency-v1' as const,exclusionListId:c.research_list_id??null}:undefined;
  const scope={p_account:accountId,p_zip:c.zip,p_revision:c.revision,p_page:c.next_page,p_per_page:c.per_page,p_rate:c.rate_id,p_unit:c.property_credit_micros,p_permission_until:c.data_rights_until,p_setup_revision:setup?.revision??null,p_market_mode:setup?.profile?.marketMode??null,p_market:setup?.profile?.market??null};
  try{
  const result=await discoverPage({zip:c.zip,page:c.next_page,perPage:c.per_page,unitCostMicros:c.property_credit_micros,quotedDataCostMicros:rate.costs_micros.dealmachine,...(filterPlan?{filterPlan}:{}),...(queryPolicy?{queryPolicy}:{})},{

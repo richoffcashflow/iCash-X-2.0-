@@ -15,5 +15,8 @@ export async function installInterestEvidence(db){
   const migration=read('config/seller-interest-evidence.sql');
   assert.equal(migration,read('supabase/migrations/20261028221449_seller_interest_evidence.sql'));
   await db.exec(migration);
+  const reviewedQuestion=read('config/seller-interest-reviewed-question.sql');
+  assert.equal(reviewedQuestion,read('supabase/migrations/20261104052316_seller_interest_reviewed_question.sql'));
+  await db.exec(reviewedQuestion);
  }finally{await db.exec('set check_function_bodies=true');}
 }

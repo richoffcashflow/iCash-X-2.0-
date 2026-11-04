@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {validOwnerOutreach} from '../lib/owner-outreach.ts';
+import {acquisitionOpeners} from '../lib/deal-conversation.ts';
 import {installInterestEvidence} from './helpers/interest-evidence-fixture.mjs';
 const read=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
 const sql=read('config/owner-outreach-report.sql'),owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7';
@@ -102,5 +103,19 @@ try{
  assert.equal((await report()).totals.interestedProperties,1,'Foreign-account SMS cannot label interest');
  await db.exec("update icash_text_messages set account_id=md5('a1')::uuid,body='STOP' where id=md5('interest-reply')::uuid");
  assert.equal((await report()).totals.interestedProperties,1,'Opt-out cannot count as SMS interest');
+ // Existing derived readers must verify historical source turns, independent
+ // of the original provider flag, without changing that saved evidence.
+ for(const [question,providerInterested,expectedInterest] of [
+  [acquisitionOpeners.cash_interest,false,1],
+  [acquisitionOpeners.flexible_timing,false,1],
+  ['Are you the owner of this property?',true,0],
+  ['Is this a good time to talk?',true,0],
+ ]){
+  const original={interested:providerInterested,interestQuote:'Yes',optedOut:false,transcript:[{role:'agent',message:question},{role:'user',message:'Yes'}]};
+  await db.query("update icash_live_conversations set result=$1 where id=md5('c1')::uuid",[original]);
+  assert.equal((await report()).totals.interestedProperties,expectedInterest,'Reports derive interest from the saved question and answer');
+  const saved=(await db.query("select result from icash_live_conversations where id=md5('c1')::uuid")).rows[0].result;
+  assert.deepEqual(saved,original,'Read-only reporting leaves historical provider evidence intact');
+ }
  console.log('PASS owner outreach database: actual receipts, response/interest/opt-out semantics, dispatch versus draft dates, source/tenant bindings, owner/test exclusion, current queues, filtering before pagination, read-only execution and private ACL.');
 }finally{await db.close();}

@@ -1,0 +1,23 @@
+# Seller SMS identity-v5 outcome evidence
+
+Identity-v5 learns from prospective property outreach. The experiment unit is one account-bound provider property ID, even when that property has several screening records, recipients or message threads. The first eligible delivered v5 introduction owns the trial, ordered by its original dispatch time and then its assignment's thread ID across all variants. Later variants cannot receive another trial or reuse the same signed deal. Known earlier seller sends, started or uncertain dials, and provider conversations exclude a property from this fresh cohort. Original source records remain unchanged.
+
+An exposure requires the assignment's exact body, account, thread and message; a delivered provider receipt; and the account-bound `text:<message ID>` operation's dispatch time. Assignment and queue creation must precede dispatch, and delivery evidence cannot be in the future. The queue timestamp and the arrival of a delayed delivery receipt do not start or extend an outcome window. Owner, practice, test-only funded and inbound seller records are excluded by the shared v5 eligibility predicate.
+
+| Measure | Required evidence |
+| --- | --- |
+| Pending | Every property whose original dispatch is less than 72 hours old, including an early positive reply. |
+| Selling interest | A whole affirmative reply to the exact, delivered footer-free selling question linked through `interest_message_id`, after its original dispatch and within 72 hours. The 72-hour observation window must finish before this becomes a positive experiment label. |
+| Negative feedback | Source-backed refusal or opt-out overrides a positive. Opt-outs reach the safety statistics immediately, including during the pending window. |
+| Contract | The existing verified signing reader establishes a nonpractice purchase within 30 days; the complete 30-day window is required. |
+| Closing | The existing verified purchase, assignment and title-receipt reader establishes closing within 60 days; the complete 60-day window is required. |
+
+Ownership confirmation is never selling interest. Acceptance without delivery, a queued question, a provider interest flag, a conditional reply, or an intervening question cannot create a reward. An outgoing intervening turn is ordered by its original dispatch, including when it was queued before the selling question. A missing dispatch clock with an intervening delivery remains ambiguous. Calls do not substitute for this SMS selling-question reward, but source-backed contact refusals still prevent a positive.
+
+Contact costs include every incurred seller text, text-AI operation and call for the selected property during its 72-hour window, across recipient threads. Unknown calls remain included even without a carrier ID. Duplicate projections of one operation count once. A missing operation, unsettled work, estimated cost basis, absent original settlement evidence or missing amounts makes cost completeness false. The cost total is **settled customer contact usage charges** (`charged_cents`), with verified underlying settlement evidence; it is not platform profit or a complete property's lifetime cost. Before the window ends, completeness describes costs incurred through the current time and does not claim knowledge of future charges.
+
+Verified conversions are grouped across the property's account-bound screening/deal records, then attributed once to its first exposure. Existing deal stage labels, modeled interest, customer assertions and practice signatures cannot manufacture conversions. These are bounded observational allocation statistics, not proof that the copy caused more closings.
+
+`config/seller-sms-learning-v5-outcomes.sql` is mirrored by migration `20261104053101_seller_sms_learning_v5_outcomes.sql`, after the v5 assignment migration. It replaces only the new context's derived rollups. Its guarded append preserves the exact existing legacy refresh body and private execute grants. It does not send messages, purchase data, change financial records, rewrite assignments or modify provider receipts. Activation remains governed by the separate v5 settings and exact-release checks.
+
+`tests/seller-sms-learning-v5-outcomes.test.mjs` executes the real SQL against synthetic PostgreSQL fixtures. Coverage includes source/clock mismatches, delayed receipts, prequeued intervening questions, early interest and opt-outs, verified and unknown costs, owner/test/inbound exclusion, duplicate property screenings and variants, deterministic dispatch ties, prior outreach, signed outcomes on a later same-property deal, private ACLs, legacy-definition drift rejection and unchanged source snapshots. No paid provider test is involved.

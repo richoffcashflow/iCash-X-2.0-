@@ -3,6 +3,9 @@ import {hasHumanCallWords} from './call-contact-evidence.ts';
 
 // Deliberately narrow source evidence. Ownership, permission to talk, price
 // questions, model summaries and a conditional/maybe answer are not interest.
+// This reviewed opener asks about interest under ordinary deal terms. Keep its
+// exception exact; arbitrary hypothetical questions still do not establish it.
+const reviewedTimingQuestion='would you be open to a cash offer if the price and timing worked for you?';
 export const sellerInterestPatterns={
  affirmative:"^(yes|yeah|yep|sure|interested|i am interested|i'm interested|yes i am|yes,? i am interested|yes,? interested)[.! ,]*$",
  explicit:"^((i am|i'm|we are|we're) (interested in|open to) selling|(i|we) (want|would like) to sell)( (my|our|the) (house|home|property))?[.! ]*$",
@@ -20,8 +23,9 @@ export function sellerInterestQuote(transcript:{role:string;message?:string|null
   const body=normalize(turn.message);
   if(hasHumanCallWords(turn.message)&&(
    new RegExp(sellerInterestPatterns.explicit).test(body)||
-   (new RegExp(sellerInterestPatterns.affirmative).test(body)&&new RegExp(sellerInterestPatterns.question).test(question)
-    &&question.endsWith('?')&&(question.match(/\?/g)?.length??0)===1&&!new RegExp(sellerInterestPatterns.ambiguousQuestion).test(question))
+   (new RegExp(sellerInterestPatterns.affirmative).test(body)&&(question===reviewedTimingQuestion||(
+    new RegExp(sellerInterestPatterns.question).test(question)&&question.endsWith('?')
+    &&(question.match(/\?/g)?.length??0)===1&&!new RegExp(sellerInterestPatterns.ambiguousQuestion).test(question))))
   ))evidence=turn.message;
   question='';
  }

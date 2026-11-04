@@ -79,7 +79,7 @@ def wait_for_lock(observer, name):
 
 
 def setup(observer, fixed):
-    observer.query("drop schema public cascade; create schema public;")
+    observer.query("drop schema if exists icash_learning_policy_private cascade; drop schema if exists icash_learning_private cascade; drop schema if exists icash_reliability_private cascade; drop schema public cascade; create schema public;")
     fixture = (ROOT / "tests/fixtures/learning-refresh-concurrency.sql").read_text()
     fixture = re.sub(r"create role (anon|authenticated|service_role);", "", fixture)
     observer.query(fixture)
@@ -89,6 +89,10 @@ def setup(observer, fixed):
         observer.query(definition)
     if fixed:
         observer.query((ROOT / "config/learning-refresh-concurrency.sql").read_text())
+        observer.query((ROOT / "tests/fixtures/learning-operations-monitor.sql").read_text())
+        observer.query((ROOT / "config/learning-operations-review.sql").read_text())
+        observer.query((ROOT / "tests/fixtures/learning-policy-lifecycle.sql").read_text())
+        observer.query((ROOT / "config/learning-policy-lifecycle.sql").read_text())
     observer.query("create trigger learning_change after insert or update on icash_discovery_configs for each row execute function icash_learning_changed();")
     observer.query(f"insert into icash_accounts values('{ACCOUNT}'),('{OTHER}'); insert into fixture_outcomes(account_id) values('{ACCOUNT}'),('{OTHER}'); insert into icash_discovery_configs(account_id) values('{ACCOUNT}'),('{OTHER}'); update icash_learning_queue set due_at=now()-interval '2 minutes' where account_id='{ACCOUNT}';")
 
@@ -132,9 +136,45 @@ try:
         holder.query("commit;")
         result = json.loads(learner.query("select icash_refresh_shared_learning(1);"))
         assert result["refreshed"] == 1 and result["failed"] == 0 and result["due"] == 0
-        print("Busy-account skip, later recovery, and native concurrent generation fence passed.")
+        assert observer.query("select count(*)>0 from icash_learning_private.refresh_runs;") == "t"
+        assert observer.query("select count(*)=1 from icash_learning_private.components where component='review';") == "t"
+        print("Busy-account skip, later recovery, native generation fence and durable operations telemetry passed.")
     finally:
         holder.close()
         learner.close()
+    # Concurrent review ticks cannot count one hour twice or duplicate candidates.
+    first, second = Session("learning_review_first"), Session("learning_review_second")
+    try:
+        observer.query("update icash_learning_private.components set last_attempt_at=now()-interval '61 minutes' where component='review';")
+        before = int(observer.query("select coalesce(sum(observations),0) from icash_learning_private.improvement_proposals;"))
+        first.query("begin;")
+        reviewed = json.loads(first.query("select icash_review_learning_operations();"))
+        skipped = json.loads(second.query("select icash_review_learning_operations();"))
+        assert reviewed["reviewed"] is True and skipped["reviewed"] is False
+        first.query("commit;")
+        skipped = json.loads(second.query("select icash_review_learning_operations();"))
+        assert skipped["reviewed"] is False
+        after = int(observer.query("select coalesce(sum(observations),0) from icash_learning_private.improvement_proposals;"))
+        assert after - before == reviewed["categories"]
+        print("Native competing hourly reviews counted exactly one operational observation.")
+    finally:
+        first.close()
+        second.close()
+    # Canonical cohort registration and hourly review contend independently of
+    # source accounts; only one observation may count in a cohort-hour.
+    first, second = Session("policy_review_first"), Session("policy_review_second")
+    try:
+        observer.query("insert into icash_learning_policy_private.decisions(domain,context,market,policy_version,decision,stats,choices,require_contracts,evidence_hash) values('seller_calls','reviewed','*','evidence-v2','{\"status\":\"explore\"}','[]',array['a','b'],false,'native');")
+        first.query("begin;")
+        reviewed = json.loads(first.query("select icash_review_policy_cohorts();"))
+        skipped = json.loads(second.query("select icash_review_policy_cohorts();"))
+        assert reviewed["reviewed"] == 1 and skipped["reviewed"] == 0
+        first.query("commit;")
+        assert json.loads(second.query("select icash_review_policy_cohorts();"))["reviewed"] == 0
+        assert observer.query("select observations from icash_learning_private.improvement_proposals where category='learning_policy';") == "1"
+        print("Native cohort registration and competing hourly lifecycle review preserved one observation.")
+    finally:
+        first.close()
+        second.close()
 finally:
     observer.close()
