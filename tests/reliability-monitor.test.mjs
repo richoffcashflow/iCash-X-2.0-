@@ -11,6 +11,47 @@ try{
  assert.equal(calls[1].path,'rpc/icash_repair_expired_research_configs');
  assert.equal(calls[2].path,'rpc/icash_refresh_account_work_snapshot','account stalls cannot hide behind healthy worker checks or reviewed historical receipts');
  assert.equal(await refreshReliability(async()=>{throw Error('secret')},true),false);assert(!logs.join('').includes('secret'));
+ // Exercise the real alert dispatcher through its incident RPC with delivery
+ // disabled. No owner email/provider request is allowed in these fixtures.
+ const priorProduction=process.env.VERCEL_ENV,priorAlerts=process.env.ICASH_RELIABILITY_EMAIL_ENABLED;
+ process.env.VERCEL_ENV='production';process.env.ICASH_RELIABILITY_EMAIL_ENABLED='false';
+ try{
+  for(const failure of ['heartbeat','snapshot','invalid_snapshot','snapshot_and_degraded_heartbeat','incident']){
+   const stages=[];let heartbeat='ok',heartbeatWrites=0;
+   const savedSnapshot={checkedAt:'2026-01-01T00:00:00Z',issueCount:0};
+   const evidence=JSON.stringify(savedSnapshot);
+   const monitorDb=async(path,method,body)=>{
+    stages.push(path);assert.equal(method,'POST');
+    if(path==='rpc/icash_record_service_heartbeat'){
+     heartbeatWrites++;
+     if(failure==='heartbeat'||failure==='snapshot_and_degraded_heartbeat'&&heartbeatWrites===2)throw Error('private heartbeat failure');
+     heartbeat=body.p_status;return null;
+    }
+    if(path==='rpc/icash_repair_expired_research_configs')return 0;
+    if(path==='rpc/icash_refresh_account_work_snapshot'){
+     if(failure.startsWith('snapshot'))throw Error('private snapshot failure');
+     return failure==='invalid_snapshot'?{issueCount:'invalid'}:{issueCount:0};
+    }
+    if(path==='rpc/icash_refresh_reliability_incident'){
+     assert.equal(body.p_configuration,'disabled');
+     assert.equal(JSON.stringify(savedSnapshot),evidence,'A refresh failure never invents or replaces persisted snapshot evidence');
+     if(['snapshot','invalid_snapshot'].includes(failure))assert.equal(heartbeat,'degraded','Current failure cannot look recovered from an older healthy snapshot');
+     if(failure==='incident')throw Error('private incident failure');
+     return false;
+    }
+    assert.fail('Unexpected monitor/provider action '+path);
+   };
+   assert.equal(await refreshReliability(monitorDb,true),false,'Heartbeat/snapshot/incident observation failure remains an unsuccessful monitor cycle');
+   assert(stages.includes('rpc/icash_repair_expired_research_configs'),'A heartbeat failure cannot suppress independent recovery');
+   assert(stages.includes('rpc/icash_refresh_account_work_snapshot'),'A heartbeat failure cannot suppress snapshot work');
+   assert.equal(stages.filter(path=>path==='rpc/icash_refresh_reliability_incident').length,1,'Incident observation still runs once after heartbeat/snapshot/degraded-write failure');
+   assert.equal(heartbeatWrites,['snapshot','invalid_snapshot','snapshot_and_degraded_heartbeat'].includes(failure)?2:1);
+  }
+  assert(!logs.join('').includes('private'),'Only fixed monitor diagnostics leave the failure boundary');
+ }finally{
+  if(priorProduction===undefined)delete process.env.VERCEL_ENV;else process.env.VERCEL_ENV=priorProduction;
+  if(priorAlerts===undefined)delete process.env.ICASH_RELIABILITY_EMAIL_ENABLED;else process.env.ICASH_RELIABILITY_EMAIL_ENABLED=priorAlerts;
+ }
  let authorized=false,ran=0,recovered=0,preflightCleanups=0,textReceiptErrors=0;
  const route=await loadService('app/api/internal/maintenance/route.ts',{recoverTextDeliveryReceipts:async actualDb=>{assert.equal(actualDb,db);ran++;return {status:'checked',errors:textReceiptErrors};},processSupportCustomerNotifications:async()=>{ran++;return {state:'ready',failed:0};},recoverAccessHelpReplies:async()=>{recovered++;return 0;},processSupportOwnerNotifications:async()=>{ran++;return {state:'ready',failed:0};},processPurchaseAccessEmails:async()=>{ran++;return {ready:true,failed:0};},processPurchaseAccessFollowups:async()=>{ran++;return {ready:true,failed:0};},refreshInventoryGeographyBatch:async()=>({pages:[{status:'not_due'}]}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),refreshVoiceCapacity:async()=>({status:'verified',workspaceLimit:4,agents:1}),readRecordingReview:()=>null,readVoiceCapacityProvider:async()=>{throw Error('Unexpected provider request');},authorizeOutboundBilling:()=>authorized,process:{env:{}},maintenanceBatch,refreshReliability,pruneUsageLoopObservations,db,
   recoverOwnerActiveExports:async()=>({status:'export_recovery_idle'}),recoverOwnerExportCapacity:async()=>({status:'capacity_review_idle'}),cleanupOwnerPreflight:async()=>{preflightCleanups++;throw Error('private cleanup failure');},syncResearchExclusions:async()=>({status:'not_due'}),outbound:async()=>{ran++;throw Error('Temporary outage');},recording:async()=>{ran++;return new Response();},ownerRecording:async()=>{ran++;return new Response();},reception:async()=>{ran++;return new Response();}});

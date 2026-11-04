@@ -56,6 +56,14 @@ export async function automationTick(rpc,transport=fetch,lane){
  // receipt persistence. The capability is still sent exactly once.
  const timeout=['research','general'].includes(lane)?235000:115000;
  const r=await transport('https://www.geticashx.com/api/internal/automation',{method:'POST',headers:{Authorization:'Bearer '+ticket.token},redirect:'error',signal:AbortSignal.timeout(timeout)});
- if(!r.ok){await r.body?.cancel();throw new WorkerOperationError('AUTOMATION_HELD','automation_dispatch',r.status);}
+ if(!r.ok){
+  await r.body?.cancel();
+  // A failed job remains held and visible in operator diagnostics. Once the
+  // API confirms that exact one-use attempt was durably held, it must not put
+  // unrelated jobs behind worker-slot infrastructure backoff. No ticket is
+  // reused; the next poll still asks the database for a fresh capability.
+  if(r.status===503&&r.headers.get('x-icash-automation-outcome')==='job-held')return true;
+  throw new WorkerOperationError('AUTOMATION_HELD','automation_dispatch',r.status);
+ }
  return true;
 }

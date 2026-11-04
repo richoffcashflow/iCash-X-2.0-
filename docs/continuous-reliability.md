@@ -1,5 +1,45 @@
 # Continuous reliability
 
+The November 4 failure-isolation repair separates a known failed research job
+from a failed worker. The automation API keeps its failed HTTP outcome, original
+held ticket and operator diagnostics. Only an allowlisted provider/receipt
+failure with an exact durable hold receives the worker acknowledgement; the
+worker then claims a new capability at its normal cadence. Missing or uncertain
+completion, database errors and invalid shared configuration retain infrastructure
+backoff. No failed capability is replayed and no financial hold is released.
+`automation-failure-isolation.test.mjs` composes the actual API, runner and
+scheduler to verify repeated failed research jobs followed by independent work,
+continued voice/text dispatch, stale acknowledgements and infrastructure errors.
+
+With dedicated recovery enabled, acquisition no longer executes the global
+pending research settlement sweep before selecting an account. Existing durable
+account follow-ups retain actual-receipt settlement and orphan recovery; legacy
+dispatch retains its original fallback. This removes one bad or busy saved
+receipt from the shared selection path. It does not remove the shared scheduler
+lock or establish that every remaining selector has a strict runtime bound.
+Production read-only evidence before this repair showed eight held research
+jobs alongside completed research, texts, signing checks and account recovery in
+the same two-hour window. That demonstrates partial progress, not a total stop
+or proof that every funded account was working. Exact-release CI and deployed
+web/worker/database verification remain required before claiming this repair live.
+
+The same isolation review found that a failed maintenance heartbeat or account
+snapshot skipped subsequent incident detection and alert dispatch. Monitoring
+now attempts its independent stages even after another stage fails, retains an
+unsuccessful monitor result, and lets the existing incident logic evaluate the
+last persisted evidence. It never invents a fresh snapshot or recovery. The
+actual monitor fixture covers heartbeat, snapshot and alert failures without
+provider calls; existing stale-evidence and notification idempotency checks stay
+authoritative.
+
+Fulfillment also keeps buyer delivery independent of its optional intermediate
+progress checkpoint. A failed checkpoint logs a fixed operator diagnostic and
+continues the existing separately admitted buyer text/email paths; the complete
+final summary is still required. Documents remain durably prepared first, and
+each channel retains its own authority, funding, one-use receipt and unknown-send
+checks. The ordered service fixture covers checkpoint failure, channel failure
+and final-summary failure without sending messages.
+
 The November 4 access-message correction removes the disabled checkout-phone
 sign-in recommendation left in purchase confirmations, reminder emails and
 permission-bound access texts after the UI/support repair. Both email formats

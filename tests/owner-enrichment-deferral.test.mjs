@@ -55,8 +55,10 @@ assert.equal(calls.length,2);assert.equal(calls[1].path,'rpc/icash_defer_owner_e
 assert.deepEqual(logs,[['automation_waiting',{kind:'contacts',reason:'OWNER_EXPORT_CAPACITY_BUSY'}]],'Only the fixed operator reason is exposed');
 assert.equal((await POST(request())).status,401,'No repeated capability or provider attempt');
 
-for(const ErrorType of [OwnerPreviewRateLimitError,OwnerExportCapacityBusyError])for(const value of [false,null,undefined,'true',{},[]]){
+for(const ErrorType of [OwnerPreviewRateLimitError,OwnerExportCapacityBusyError,OwnerExportPreflightPendingError])for(const value of [false,null,undefined,'true',{},[]]){
  reset();failure=new ErrorType(account,screening);deferralResult=value;response=await POST(request());assert.equal(response.status,503);assert.equal(response.body.status,'held_for_reconciliation');assert.equal(durable.outcome,'held_for_reconciliation');assert(!calls.some(c=>c.path==='rpc/icash_finish_automation'),'Deferral fallback never finishes by ticket ID alone');
+ assert.equal(response.headers['X-iCash-Automation-Outcome'],'job-held','The exact current token was durably held, so independent jobs can continue');
+ assert.deepEqual(logs.at(-1),['automation_held',{kind:'contacts',reason:ErrorType===OwnerExportPreflightPendingError?'OWNER_PREFLIGHT_DEFERRAL_HELD':'OWNER_PREVIEW_DEFERRAL_HELD'}],'Acknowledged deferral fallback remains visible without exposing account/source/capability data');
 }
 reset();deferralThrows=true;response=await POST(request());assert.equal(response.status,503);assert.equal(calls.filter(c=>c.path==='rpc/icash_defer_owner_enrichment').length,1,'Never retry an uncertain atomic deferral');
 for(const result of [false,undefined,'unknown']){
@@ -66,6 +68,7 @@ for(const result of [false,undefined,'unknown']){
  const freshToken='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'.repeat(2);
  afterDeferral=()=>{durable={token:freshToken,state:'consumed',outcome:null};};
  response=await POST(request());assert.equal(response.status,503);
+ assert.equal(response.headers['X-iCash-Automation-Outcome'],undefined,'A stale capability cannot acknowledge the newer worker attempt');
  assert.deepEqual(durable,{token:freshToken,state:'consumed',outcome:null},'Stale failure cannot finish a newer consumed capability');
  assert(!calls.some(c=>c.path==='rpc/icash_finish_automation'));
 }

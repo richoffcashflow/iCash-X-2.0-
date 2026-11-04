@@ -45,7 +45,11 @@ export async function prepareFulfillment(accountId:string,jobId:string){
  try{buyerNetwork=await processBuyerNetwork(accountId,job.deal_id);}catch{buyerNetwork={status:'network_needs_review',accepted:0,canContinue:false};}
  // Document preparation is durable before attempting delivery; ambiguous sends stay held.
  let titleOpening:{status:string};try{titleOpening=await coordinateTitleOpening(accountId,job.deal_id);}catch{titleOpening={status:'title_request_held'};}
- await db(`icash_fulfillment_jobs?id=eq.${job.id}&account_id=eq.${accountId}&state=eq.complete`,'PATCH',{result:{...result,buyerNetwork,titleStatus:titleOpening.status}});
+ // Keep the network continuation checkpoint when available, but its summary
+ // write must not suppress independently admitted buyer deliveries. The final
+ // complete summary write below is still required and exposes any lasting fault.
+ try{await db(`icash_fulfillment_jobs?id=eq.${job.id}&account_id=eq.${accountId}&state=eq.complete`,'PATCH',{result:{...result,buyerNetwork,titleStatus:titleOpening.status}});}
+ catch{console.error('fulfillment_summary_deferred');}
  let buyerTexts:{status:string;accepted:number};try{buyerTexts=await sendBuyerPackageTexts(accountId,job.deal_id);}catch{buyerTexts={status:'buyer_text_needs_review',accepted:0};}
  let buyerEmail:{status:string;accepted:number};try{buyerEmail=await sendRequestedBuyerPackages(accountId,job.deal_id);}catch{buyerEmail={status:'buyer_email_needs_review',accepted:0};}
  await db(`icash_fulfillment_jobs?id=eq.${job.id}&account_id=eq.${accountId}&state=eq.complete`,'PATCH',{result:{...result,buyerNetwork,titleStatus:titleOpening.status,buyerTexts,buyerEmail}});
