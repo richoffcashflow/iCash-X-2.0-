@@ -20,6 +20,19 @@ try{
  await assert.rejects(record(account,{...snapshot,agentId:'other'}),/Unbound outbound snapshot/);
  await record(account,snapshot);await record(account,{...snapshot,microsPerMinute:1});
  assert.equal((await pg.query('select snapshot from public.icash_outbound_price_snapshots')).rows[0].snapshot.microsPerMinute,94500);
+ // New terminal receipt shape shares the same immutable boundary. It cannot
+ // replace an old tariff, and an old worker cannot replace a receipt with a tariff.
+ const terminal={...snapshot,source:'twilio_call_receipt',unit:'USD',price:'-0.028',priceUnit:'USD',connectivityMicros:28000,durationSeconds:61,status:'completed'};
+ await record(account,terminal);
+ assert.equal((await pg.query('select snapshot from public.icash_outbound_price_snapshots')).rows[0].snapshot.microsPerMinute,94500);
+ await pg.exec('reset role');
+ await pg.query('insert into public.icash_operation_spend values($1,$2,$3)', ['voice:terminal',account,'dispatched']);
+ await pg.query('insert into public.icash_live_conversations values($1,$2,$3,$4,$5,$6)', ['voice:terminal',account,'complete','conv_fixture','agent_fixture','contact_fixture']);
+ await pg.exec('set role service_role');
+ const terminalRecord=(a,s)=>pg.query('select public.icash_record_outbound_price_snapshot($1,$2,$3)', ['voice:terminal',a,s]);
+ await assert.rejects(terminalRecord(other,terminal),/Unbound outbound snapshot/);
+ await terminalRecord(account,terminal);await terminalRecord(account,snapshot);
+ assert.deepEqual((await pg.query("select snapshot from public.icash_outbound_price_snapshots where operation_key='voice:terminal'")).rows[0].snapshot,terminal);
  for(const sql of ["update public.icash_outbound_price_snapshots set snapshot='{}'",'delete from public.icash_outbound_price_snapshots','truncate public.icash_outbound_price_snapshots',`insert into public.icash_outbound_price_snapshots values('other','${account}','{}',now())`])await assert.rejects(pg.exec(sql),/permission denied/);
  await pg.exec('reset role;set role authenticated');await assert.rejects(record(account,snapshot),/permission denied/);await assert.rejects(pg.query('select * from public.icash_outbound_price_snapshots'),/permission denied/);
  console.log('PASS: isolated PostgreSQL migration, tenant/conversation binding, first-writer immutable snapshot, service write restrictions, authenticated denial');
