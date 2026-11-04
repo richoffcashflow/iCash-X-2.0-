@@ -61,15 +61,38 @@ try{
  console.warn=(...args)=>diagnostics.push(args);
  reset();el.metadata.phone_call.call_sid='private-provider-value';
  assert.deepEqual(await settle(),{status:'held',reason:'cost_evidence_incomplete'});
- assert.deepEqual(diagnostics,[['outbound_carrier_evidence_held',{stage:'conversation_receipt'}],['voice_cost_evidence_held',{stage:'twilio',reason:'cost_evidence_incomplete'}]]);
+ assert.deepEqual(diagnostics,[['outbound_carrier_evidence_held',{stage:'conversation_carrier'}],['voice_cost_evidence_held',{stage:'twilio',reason:'cost_evidence_incomplete'}]]);
  assert.equal(settlements.length,0);assert.equal(writes.length,0);
  const printed=JSON.stringify(diagnostics);
  for(const secret of [account,ca,to,from,env.ELEVENLABS_API_KEY,env.TWILIO_AUTH_TOKEN,'private-provider-value'])assert.equal(printed.includes(secret),false);
+ for(const [mutate,stage] of [[()=>{el=null;},'conversation_shape'],[()=>{el.conversation_id='private-provider-value';},'conversation_id'],[()=>{el.agent_id='private-provider-value';},'conversation_agent']]){
+  reset();diagnostics.length=0;mutate();assert.deepEqual(await settle(),{status:'held',reason:'cost_evidence_incomplete'});
+  assert.deepEqual(diagnostics,[['outbound_carrier_evidence_held',{stage}],['voice_cost_evidence_held',{stage:'twilio',reason:'cost_evidence_incomplete'}]]);
+  assert.equal(settlements.length,0);assert.equal(writes.length,0);assert.equal(JSON.stringify(diagnostics).includes('private-provider-value'),false);
+ }
+ reset();diagnostics.length=0;
+ assert.deepEqual(await settleBoundVoiceUsage(db,account,'offline-call',[policy],{env,fetcher:async()=>new Response('private-provider-value',{status:403})}),{status:'held',reason:'cost_evidence_incomplete'});
+ assert.deepEqual(diagnostics,[['outbound_carrier_evidence_held',{stage:'conversation_http',httpStatus:403}],['voice_cost_evidence_held',{stage:'twilio',reason:'cost_evidence_incomplete'}]]);
+ assert.equal(settlements.length,0);assert.equal(writes.length,0);assert.equal(JSON.stringify(diagnostics).includes('private-provider-value'),false);
+ for(const [body,responseFailure] of [['x'.repeat(1048577),'body_limit'],[null,'body_missing'],['private-provider-value','json_invalid']]){
+  reset();diagnostics.length=0;
+  assert.deepEqual(await settleBoundVoiceUsage(db,account,'offline-call',[policy],{env,fetcher:async()=>new Response(body,{status:200})}),{status:'held',reason:'cost_evidence_incomplete'});
+  assert.deepEqual(diagnostics,[['outbound_carrier_evidence_held',{stage:'conversation_http',responseFailure}],['voice_cost_evidence_held',{stage:'twilio',reason:'cost_evidence_incomplete'}]]);
+  assert.equal(settlements.length,0);assert.equal(writes.length,0);assert.equal(JSON.stringify(diagnostics).includes('private-provider-value'),false);
+ }
  console.warn=()=>{throw Error('logging unavailable');};
  reset();jobRow.state='dispatching';
  assert.deepEqual(await settle(),{status:'held',reason:'cost_evidence_incomplete'});
  assert.equal(settlements.length,0);assert.equal(writes.length,0);
 }finally{console.warn=originalWarn;}
+
+// Large completed conversation metadata remains bounded and fully bound.
+reset();el.transcript=[{provider_metadata:'x'.repeat(300000)}];
+assert.equal((await collect()).amountMicros,18440);assert.equal(writes.length,1);
+reset();el.transcript=[{provider_metadata:'x'.repeat(300000)}];el.metadata.phone_call.call_sid='other';
+await assert.rejects(collect());assert.equal(writes.length,0);
+reset();call.provider_metadata='x'.repeat(300000);
+await assert.rejects(collect());assert.equal(writes.length,0,'Carrier response ceiling stays 256 KiB');
 
 reset();const recovered=await collect();
 assert.equal(recovered.kind,'fixed_estimate');assert.equal(recovered.amountMicros,18440,'12,340 actual connectivity + 6,100 original stream estimate');

@@ -24,7 +24,7 @@ export async function outboundCarrierInput(db:VoiceUsageDb,accountId:string,b:Bi
  env:CarrierEnv,fetcher:typeof fetch=fetch,signal?:AbortSignal):Promise<VoiceCostInput>{
  // Fixed internal stages only: never log provider payloads, identifiers or values.
  let stage='policy';
- const fail=()=>{try{console.warn('outbound_carrier_evidence_held',{stage});}catch{/* Diagnostics cannot change evidence admission. */}throw Error('Bound outbound carrier evidence required');};
+ const fail=(httpStatus?:number,responseFailure?:'body_limit'|'body_missing'|'json_invalid')=>{try{console.warn('outbound_carrier_evidence_held',{stage,...(Number.isInteger(httpStatus)&&httpStatus!>=100&&httpStatus!<=599?{httpStatus}:{}),...(responseFailure?{responseFailure}:{})});}catch{/* Diagnostics cannot change evidence admission. */}throw Error('Bound outbound carrier evidence required');};
  if(typeof window!=='undefined'||!sid(env.TWILIO_ACCOUNT_SID,'AC')||!env.TWILIO_AUTH_TOKEN||!env.ELEVENLABS_API_KEY)fail();
  const created=Date.parse(b.created_at),from=Date.parse(r.validFrom),until=Date.parse(r.validUntil),reviewed=Date.parse(r.reviewedAt);
  if((r.accountScope==='operation_owner'?r.accountId!==undefined:r.accountScope!==undefined||r.accountId!==accountId)||r.agentId!==b.agent_id||r.twilioAccountSid!==env.TWILIO_ACCOUNT_SID||(r.source?.kind==='reviewed_destination_allowlist'&&!phone(r.destination))||!phone(r.from)||!ref(r.snapshotId)||!ref(r.evidenceRef)||![created,from,until,reviewed].every(Number.isFinite)||reviewed>created||from>created||until<=created||from>=until||!safe(r.voice?.microsPerMinute)||r.voice.rounding!=='up'||!safe(r.voice.minimumMinutes)||!safe(r.stream?.microsPerMinute)||!['exact','up'].includes(r.stream.rounding)||!safe(r.stream.minimumMinutes)||!ref(r.stream.assumption))fail();
@@ -36,18 +36,23 @@ export async function outboundCarrierInput(db:VoiceUsageDb,accountId:string,b:Bi
  const rows=await db<{provider_call_sid:string;conversation_id:string;state:string}[]>(`icash_voice_jobs?id=eq.${eq(b.operation_key.slice(6))}&account_id=eq.${eq(accountId)}&select=provider_call_sid,conversation_id,state`);
  const j=rows[0];if(rows.length!==1||!j||j.state!=='dispatched'||j.conversation_id!==b.conversation_id||!sid(j.provider_call_sid,'CA'))fail();
  const deadline=signal?AbortSignal.any([signal,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000);
- async function get(url:string,headers:Record<string,string>){
+ async function get(url:string,headers:Record<string,string>,maxBytes=262144){
   let res:Response;try{res=await fetcher(url,{method:'GET',headers,redirect:'error',cache:'no-store',credentials:'omit',signal:deadline});}catch{throw new CarrierUsageUnavailable();}
   if([404,408,425,429].includes(res.status)||res.status>=500)unavailable();
-  if(!res.ok||(res.url&&res.url!==url))fail();
+  if(!res.ok||(res.url&&res.url!==url))fail(res.status);
   // Bound response reads; provider payloads are never logged or placed in evidence.
-  const reader=res.body?.getReader();if(!reader)fail();let n=0;const chunks:Uint8Array[]=[];
-  try{for(;;){const part=await reader!.read().catch(()=>{throw new CarrierUsageUnavailable();});if(part.done)break;n+=part.value.byteLength;if(n>262144)fail();chunks.push(part.value);}}finally{await reader!.cancel();}
-  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  const reader=res.body?.getReader();if(!reader)fail(undefined,'body_missing');let n=0;const chunks:Uint8Array[]=[];
+  try{for(;;){const part=await reader!.read().catch(()=>{throw new CarrierUsageUnavailable();});if(part.done)break;n+=part.value.byteLength;if(n>maxBytes)fail(undefined,'body_limit');chunks.push(part.value);}}finally{await reader!.cancel();}
+  try{return JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{fail(undefined,'json_invalid');}
  }
- stage='conversation_receipt';
- const c=await get(`https://api.elevenlabs.io/v1/convai/conversations/${eq(b.conversation_id)}`,{'xi-api-key':env.ELEVENLABS_API_KEY!});
- if(c.conversation_id!==b.conversation_id||c.agent_id!==b.agent_id||c.metadata?.phone_call?.call_sid!==j.provider_call_sid)fail();
+ stage='conversation_http';
+ // Completed conversations include full per-turn metadata. Keep a finite 1 MiB
+ // ceiling for this document; carrier/Lookup receipts retain their 256 KiB cap.
+ const c=await get(`https://api.elevenlabs.io/v1/convai/conversations/${eq(b.conversation_id)}`,{'xi-api-key':env.ELEVENLABS_API_KEY!},1048576);
+ stage='conversation_shape';if(!c||typeof c!=='object'||Array.isArray(c))fail();
+ stage='conversation_id';if(c.conversation_id!==b.conversation_id)fail();
+ stage='conversation_agent';if(c.agent_id!==b.agent_id)fail();
+ stage='conversation_carrier';if(c.metadata?.phone_call?.call_sid!==j.provider_call_sid)fail();
  if(c.status!=='done')unavailable();
  stage='carrier_receipt';
  const call=await get(`https://api.twilio.com/2010-04-01/Accounts/${r.twilioAccountSid}/Calls/${j.provider_call_sid}.json`,{Authorization:'Basic '+Buffer.from(r.twilioAccountSid+':'+env.TWILIO_AUTH_TOKEN).toString('base64')});
