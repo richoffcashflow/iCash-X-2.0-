@@ -17,21 +17,28 @@ revision. Paid failures remain unresolved and cannot trigger a fallback request.
 
 New groups receive balanced page batches, including at least one batch for each
 available audience in the current revision. Feedback is reevaluated before each
-new batch. A group with at least 10 actual attempted properties, three confirmed
-interested properties and complete costs can receive two learned slots in every
-five batches immediately. Once at least 30 attempts are resolved, that can rise
-to three slots. The remaining slots keep exploring; another group's slow results
-or unsettled charges cannot freeze a fully settled candidate. One reply cannot win.
+new batch. Local promotion requires at least 100 resolved attempted properties
+for every compared productive audience, ten confirmed interests for the winner,
+and complete positive settled costs throughout the comparison. The winner's
+95% Wilson lower bound, expressed as interests per settled customer cent and
+penalized by half its opt-out count, must exceed every competitor's upper bound
+by more than 5%. A qualifying winner receives three of five slots; otherwise
+ordinary balanced exploration continues. Missing costs, sparse positives and
+overlapping comparisons never earn extra allocation.
 
-Ranking shrinks small samples using the Wilson lower endpoint with z=1.645 on
-confirmed interest divided by all actual attempts. Multiply by attempts, subtract
-half the opt-out count, floor at zero, and divide by settled customer cents plus
-1,000 cents. Pending attempts earn no assumed reward and are never saved as failed
-outcomes. The endpoint follows NIST's worked formula:
-https://www.itl.nist.gov/div898/handbook/prc/section2/prc241.htm.
-This is an allocation heuristic, not a significance test on adaptive samples or
-an answer-rate guarantee. The objective is interested properties per dollar;
-raw replies, ownership confirmations and call volume cannot earn promotion.
+Shared promotion uses the same `evidence-v2` decision helper as other learning
+policies, with its additional multi-account and mature-outcome requirements.
+Pending attempts are excluded from both the resolved success-rate denominator
+and the matching reward multiplier. They remain unknown rather than failures.
+An audience with at least 20 attempts, three opt-outs and an opt-out rate over 5%
+is excluded from both learned and exploratory allocation while that evidence
+holds. Local and shared evidence cannot bypass each other's safety exclusions.
+
+These observational confidence bounds are not a causal significance test on
+adaptive samples or an answer-rate guarantee. Costs are settled customer charges,
+not net profit. Raw replies, ownership confirmations and call volume do not earn
+promotion; contracts and closings take priority only with sufficient mature,
+verified shared evidence.
 
 Three consecutive settled pages containing only duplicates or completed empty
 owner previews reduce that audience to periodic probes. Cooled audiences share
@@ -47,7 +54,7 @@ and opt-outs are available immediately. An unanswered actual call/text attempt
 remains pending for 72 hours; only then does it mature. SMS maturity starts from
 the latest saved send/delivery receipt timestamp, never queue creation. Late
 webhooks conservatively extend the window. Interest requires a completed call
-with a seller response and a saved positive interest result, or a strict affirmative
+with a seller response and a source-verified selling-interest quote, or a strict affirmative
 reply directly after the receipt-backed selling-interest SMS. A YES to ownership,
 voicemail, queued message or STOP never counts as interested. Counts describe
 unique properties, not dial attempts. Costs include unsuccessful and overlapping
@@ -91,7 +98,7 @@ Legacy baseline discovery resumes using the global operation sequence, so rollba
 may skip baseline pages; re-enabling uses the saved per-filter cursors.
 
 Local verification uses synthetic provider responses and isolated PGlite. It
-checks owner selection, early/established allocation, bounded cooling/recovery,
+checks owner selection, evidence-gated allocation, pending-yield consistency, bounded cooling/recovery,
 budget delegation, cursor scope, immutable claims, deduplication, free empty results,
 immediate SMS/call evidence, delayed negatives, missing/settled costs, account/ZIP
 isolation and opt-outs without spending provider credits.

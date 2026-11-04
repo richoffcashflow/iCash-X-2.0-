@@ -19,6 +19,16 @@ export function PlatformLearningReport({refresh=0}:{refresh?:number}){
   {error&&<p role="alert">{error}</p>}
   {!report&&!error&&<p role="status">Loading shared results…</p>}
   {report&&<>
+   {report.health&&<div className={styles.note}><strong>Learning refresh · {report.health.status==='ok'?'Current':'Needs attention'}</strong>
+    <p>{report.health.queue.due} queued · {report.health.queue.failed} failed · {report.health.queue.stale} older than six hours · {report.health.queue.neverRefreshed} awaiting their first refresh.</p>
+    <p>Oldest successful account refresh: {report.health.queue.oldestSuccessAt?new Date(report.health.queue.oldestSuccessAt).toLocaleString():'Not yet observed'}. Conversion evidence: {report.health.conversion.updatedAt?new Date(report.health.conversion.updatedAt).toLocaleString():'Not yet observed'}.</p>
+    {(report.health.refresh.lastErrorAt||report.health.conversion.lastErrorAt)&&<p role="status">A refresh error is recorded. Existing freshness limits and fallback decisions remain in effect.</p>}
+   </div>}
+   {report.improvementReview&&<details className={styles.method}><summary>Continuous improvement review</summary>
+    <p>Recurring saved operational failures become review candidates. Offline checks, a limited experiment and verified outcome evidence are separate stages; a candidate or passing test does not establish better business results.</p>
+    <p>Last completed review: {report.improvementReview.lastReviewedAt?new Date(report.improvementReview.lastReviewedAt).toLocaleString():'Not yet observed'}.</p>
+    {report.improvementReview.proposals.length?<ul>{report.improvementReview.proposals.map(p=><li key={p.id}>{p.category.replaceAll('_',' ')} · version {p.version} · {p.status.replaceAll('_',' ')} · {p.observations} observations</li>)}</ul>:<p>No recurring failure candidates recorded yet.</p>}
+   </details>}
    {report.ranker&&<div className={styles.note}><strong>Property outcome model · {report.ranker.status==='qualified'?'Limited ranking trial':report.ranker.status==='disabled'?'Paused':report.ranker.status==='rejected'?'Existing ranking retained':report.ranker.status==='expired'?'Waiting for fresh validation':'Collecting evidence'}</strong>
     <p>{report.ranker.samples.toLocaleString()} property examples · {report.ranker.matureInterest.toLocaleString()} complete interest windows · {report.ranker.observedInterest.toLocaleString()} positive outcomes. Mature examples include {report.ranker.observedContracts.toLocaleString()} verified contracts and {report.ranker.observedClosings.toLocaleString()} verified closings; these are attributed training outcomes, not platform totals.</p>
     <p>{report.ranker.lastTrainedAt?`Last checked ${new Date(report.ranker.lastTrainedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true})}. `:''}Ranking changes require better predictions on later results. A limited trial retains a comparison group; more closed deals have not yet been demonstrated.</p>

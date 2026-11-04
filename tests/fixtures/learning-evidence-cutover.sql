@@ -1,0 +1,17 @@
+create schema icash_learning_policy_private;create schema icash_ranker_private;
+ create table public.icash_operating_budget(id int primary key);insert into public.icash_operating_budget values(1);
+ create table icash_learning_policy_private.settings(id int primary key,enabled boolean,evidence_after timestamptz);
+ insert into icash_learning_policy_private.settings values(1,false,now()-interval '1 day');
+ create table icash_ranker_private.settings(id int primary key,enabled boolean,active_model uuid,lease_token uuid,lease_until timestamptz,last_trained_at timestamptz);
+ insert into icash_ranker_private.settings values(1,true,null,'00000000-0000-4000-8000-000000000001',now()+interval '3 minutes',now()-interval '1 hour');
+ create table icash_ranker_private.runs(id uuid,status text,result jsonb,elapsed_ms int);
+ create table icash_ranker_private.samples(id int,refreshed_at timestamptz,interest int,features jsonb);
+ insert into icash_ranker_private.samples values(1,now(),1,'[0,1]');
+ create table public.icash_learning_rollups(id int,updated_at timestamptz,positive int);
+ insert into public.icash_learning_rollups values(1,now(),1);
+ create table public.icash_learning_queue(account_id int,due_at timestamptz,generation bigint,last_refreshed_at timestamptz);
+ insert into public.icash_learning_queue values(1,now()+interval '1 hour',42,now());
+ create table public.original_provider_evidence(id int,result jsonb,charged_cents int);
+ insert into public.original_provider_evidence values(1,'{"interested":true}',123);
+ create function public.icash_activate_learning_policy(uuid,text,boolean) returns void language sql as $$select$$;
+ create function public.icash_refresh_seller_interest_v5(uuid) returns void language sql as $$select$$;

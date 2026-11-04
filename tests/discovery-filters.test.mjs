@@ -8,22 +8,21 @@ for(let sequence=1;sequence<=40;sequence++){
  const arm=s.find(x=>x.strategy===p.strategy);assert.equal(p.providerPage,arm.nextPage);arm.nextPage++;arm.pages++;
 }
 assert.deepEqual(s.map(x=>x.pages),[10,10,10,10],'Cold start balances all four groups');
-// Evidence arrives independently. A slow arm must not freeze useful learning.
-s=stats().map(x=>({...x,pages:2,attempted:30,matureAttempts:30,interested:3,costCents:3000}));s[1].interested=9;
+// Allocation waits for resolved, cost-complete comparisons; discovery continues exploring.
+s=stats().map(x=>({...x,pages:2,attempted:300,matureAttempts:300,interested:30,costCents:30000}));s[1].interested=150;
 for(const sequence of [5,6,7]){const p=selectDiscoveryFilter(s,sequence);assert.equal(p.strategy,'vacant');assert.equal(p.mode,'learned');}
 for(const sequence of [8,9])assert.equal(selectDiscoveryFilter(s,sequence).mode,'explore');
-s[2].costsComplete=false;assert.equal(selectDiscoveryFilter(s,5).strategy,'vacant','Another arm cannot block a fully settled winner');
-s[1].costsComplete=false;assert.notEqual(selectDiscoveryFilter(s,5).strategy,'vacant','Unknown winner costs cannot earn promotion');s[1].costsComplete=true;
+s[2].costsComplete=false;assert.equal(selectDiscoveryFilter(s,5).mode,'explore','An incomplete comparison cannot establish cost superiority');s[2].costsComplete=true;
+s[1].costsComplete=false;assert.equal(selectDiscoveryFilter(s,5).mode,'explore','Unknown winner costs cannot earn promotion');s[1].costsComplete=true;
 s[1].optedOut=21;assert.notEqual(selectDiscoveryFilter(s,5).strategy,'vacant','Opt-outs penalize the winner');
 s=stats().map(x=>({...x,pages:2}));Object.assign(s[1],{attempted:10,interested:3,pendingAttempts:7,costCents:1000});
-for(const sequence of [5,6])assert.equal(selectDiscoveryFilter(s,sequence).mode,'learned','Confirmed same-day interest can earn limited promotion');
-for(const sequence of [7,8,9])assert.equal(selectDiscoveryFilter(s,sequence).mode,'explore','Small samples retain 60% exploration');
+for(const sequence of [5,6,7,8,9])assert.equal(selectDiscoveryFilter(s,sequence).mode,'explore','Three early responses cannot bypass the resolved evidence comparison');
 s[1].interested=1;s[1].pendingAttempts=9;assert.equal(selectDiscoveryFilter(s,5).mode,'explore','One lucky reply cannot win');
 s[1].interested=3;s[1].pendingAttempts=7;s[0].pages=0;assert.equal(selectDiscoveryFilter(s,5).strategy,'baseline','Every available arm receives an initial batch');
-s=stats().map(x=>({...x,pages:2,attempted:40,matureAttempts:40,interested:5,costCents:4000}));s[1].costCents=2000;
+s=stats().map(x=>({...x,pages:2,attempted:300,matureAttempts:300,interested:60,costCents:30000}));s[1].costCents=15000;
 assert.equal(selectDiscoveryFilter(s,5).strategy,'vacant','Equal interest at lower actual cost wins');
 const cautious={...s[0],attempted:200,interested:26,optedOut:0,costCents:1000};
-assert(Math.abs(discoveryInterestScore(cautious)*2000/200-0.09577)<0.00001,'Wilson endpoint matches the NIST worked example');
+assert(Math.abs(discoveryInterestScore(cautious)*1000/200-0.0902814)<0.0000001,'Resolved interest uses the 95% Wilson lower endpoint');
 assert(discoveryInterestScore({...s[0],attempted:10,interested:3,costCents:1000})<discoveryInterestScore({...s[0],attempted:30,interested:9,costCents:3000}),'Evidence shrinkage prevents a small perfect-looking group from dominating');
 // Repeated duplicate/no-owner searches earn periodic probes, not retirement.
 s=stats().map(x=>({...x,pages:3}));s[1].recentUnproductivePages=3;
@@ -45,4 +44,4 @@ for(const [strategy,extra] of [['baseline',null],['vacant','is_vacant_home'],['a
  request:async body=>{calls.push(body);return body.estimate_cost?{estimated_credits:{this_page:1,breakdown:{people:0}}}:{data:[],credits:{used:0,people:0},pagination:{has_next_page:true}};},reserveAndClaim:async()=>true,persist:async r=>{saved=r;return r.rows.length;}});
  assert.equal(calls[0].page,7,'Provider cursor is independent of operation sequence');assert.deepEqual({...calls[0],estimate_cost:false},calls[1]);assert.deepEqual(saved.filterPlan,plan);
 }
-console.log('Filter cohorts: balanced exploration, same-day learning, delayed outcomes, cost/opt-out scoring, bounded cooling, independent cursors and identical estimated/paid inputs passed.');
+console.log('Filter cohorts: balanced exploration, evidence-gated learning, delayed outcomes, cost/opt-out scoring, bounded cooling, independent cursors and identical estimated/paid inputs passed.');

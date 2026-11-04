@@ -6,6 +6,8 @@ import {targetingDefinitionSchema} from '../lib/dealmachine-targeting.ts';
 import {targetingReportSchema} from '../lib/targeting-report.ts';
 const owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7';
 const report={version:'seller-targeting-v1',checkedAt:new Date().toISOString(),cohortsTruncated:false,dedupPending:0,dedupReadyAccounts:0,configuredAccounts:0,settings:{enabled:false,mobile_verified:false},capabilities:null,experiments:[],cohorts:[]};
+const prospective={...report,learningPolicy:'seller-targeting-learning-v1',learnedPages:12,learningStartedAt:'2026-11-04T00:00:00Z'};
+assert.deepEqual(targetingReportSchema.parse(prospective),prospective,'Prospective policy diagnostics survive API/schema parsing');
 let user={id:owner},queries=[],savedReport=report;
 const mocks={z,targetingDefinitionSchema,targetingReportSchema,ownerInboundTarget:{ownerUserId:owner},dashboardCurrentUser:async verified=>{assert.equal(verified,true);return user;},db:async(path,method,body)=>{queries.push({path,method,body});return path.endsWith('report')?savedReport:true;}};
 globalThis.__targetingAdmin=mocks;

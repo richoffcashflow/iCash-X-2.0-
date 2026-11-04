@@ -1,6 +1,6 @@
 import {db} from './stripe-test.ts';
 import {discoverBuyerPage,nextBuyerSearch} from './buyer-discovery.ts';
-import {assignSharedLearning} from './shared-learning.ts';
+import {assignSharedLearning,SharedLearningSafetyHold,type SharedAssignment} from './shared-learning.ts';
 import type {BuyerSearchStrategy} from './buyer-discovery.ts';
 type Config={enabled:boolean;rate_id:string;unit_cost_micros:number;rights_until:string;revision:string;since:string;zip:string;max_pages:number;per_page:number};
 export async function discoverBuyersForDeal(accountId:string,dealId:string){
@@ -17,7 +17,9 @@ export async function discoverBuyersForDeal(accountId:string,dealId:string){
  if(typeof dealZip!=='string'||!/^\d{5}(?:-\d{4})?$/.test(dealZip))return {status:'buyer_property_zip_required',canContinue:false};
  const controls=await db<unknown[]>(`icash_property_controls?account_id=eq.${accountId}&property_id=eq.${screen.snapshot.propertyId}&manual=eq.true&select=property_id`);if(controls.length)return {status:'buyer_search_held',canContinue:false};
  const [last]=await db<{page:number;has_next_page:boolean;receipt:{strategy?:string;providerPage?:number;learningVersion?:string;firstStrategy?:string}}[]>(`icash_buyer_search_receipts?deal_id=eq.${dealId}&revision=eq.${config.revision}&select=page,has_next_page,receipt&order=page.desc&limit=1`);
- const assignment=await assignSharedLearning(db,{account:accountId,domain:'buyer_search',subject:`${dealId}:${config.revision}`,context:'order-v1',market:dealZip.slice(0,5)});
+ let assignment:SharedAssignment|null;
+ try{assignment=await assignSharedLearning(db,{account:accountId,domain:'buyer_search',subject:`${dealId}:${config.revision}`,context:'order-v1',market:dealZip.slice(0,5)});}
+ catch(error){if(error instanceof SharedLearningSafetyHold)return {status:'learning_safety_hold',canContinue:false};throw error;}
  const firstStrategy=assignment?.variant as BuyerSearchStrategy|undefined;
  const cursor=nextBuyerSearch(last,config.max_pages,firstStrategy);
  if(!cursor)return {status:'buyer_search_complete',canContinue:false};

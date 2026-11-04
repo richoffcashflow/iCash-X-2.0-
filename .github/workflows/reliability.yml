@@ -34,6 +34,13 @@ jobs:
           persist-credentials: false
       - name: Verify learning refresh under real concurrent transactions
         run: python3 scripts/test-learning-refresh-postgres.py
+      - name: Verify corrected evidence rejects concurrent stale training results
+        run: python3 scripts/test-learning-evidence-cutover-postgres.py
+      - name: Verify prospective text learning under concurrent queues and customer Pause
+        run: python3 scripts/test-seller-sms-learning-v5-postgres.py
+      - name: Verify independent targeting query receipts under concurrent admission
+        if: ${{ !cancelled() }}
+        run: python3 scripts/test-targeting-query-binding-postgres.py
       - name: Verify one-use owner preflights under real concurrent transactions
         run: python3 scripts/test-owner-preflight-postgres.py
       - name: Verify local quota refusal recovery under concurrent transactions

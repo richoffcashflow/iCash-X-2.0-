@@ -1,4 +1,4 @@
-import {sharedLearningStats,sharedEvidenceReady,learningObjective,learningScore} from './shared-learning.ts';
+import {sharedLearningDecision,learningBounds} from './shared-learning.ts';
 /** Reviewed property audiences only. Learning can allocate work, never invent filters. */
 export const discoveryFilterVersion='seller-filters-v1';
 export const discoveryStrategies=['baseline','vacant','absentee','repairs'] as const;
@@ -19,22 +19,24 @@ export function discoveryFilters(strategy:DiscoveryStrategy='baseline'){
  else if(strategy!=='baseline')throw Error('DISCOVERY_FILTER_INVALID');
  return filters;
 }
-/** Shrink small samples using the Wilson lower endpoint (z=1.645).
- * This is an allocation heuristic, not a significance test on adaptive samples.
- * Unanswered young attempts remain pending; only confirmed interest earns reward.
- */
+/** Confidence-adjusted resolved interest per settled customer cost. Pending
+ * outcomes never increase yield; this observational score does not prove lift. */
 export function discoveryInterestScore(s:DiscoveryFilterStat){
- if(s.attempted===0||s.costCents<=0||!s.costsComplete)return 0;
- const n=s.attempted,p=s.interested/n,z=1.645,z2=z*z;
- const lower=(p+z2/(2*n)-z*Math.sqrt(p*(1-p)/n+z2/(4*n*n)))/(1+z2/n);
- return Math.max(0,lower*n-0.5*s.optedOut)/(s.costCents+1000);
+ const trials=s.attempted-s.pendingAttempts;
+ if(trials<=0||s.costCents<=0||!s.costsComplete)return 0;
+ return Math.max(0,learningBounds(s.interested,trials).lower*trials-0.5*s.optedOut)/s.costCents;
 }
-/** Use confirmed positives immediately, without waiting for every other arm.
- * Ten attempts and three interested properties can earn 40% learned slots;
- * 30 resolved attempts can earn 60%. The rest continue exploring.
- * Three settled duplicate/no-owner pages reduce an arm to periodic probes.
- * Shared evidence pools comparable ZIPs; cursors, costs and permissions stay owned.
- */
+function localDiscoveryWinner(stats:DiscoveryFilterStat[]){
+ if(stats.length<2||stats.some(s=>s.attempted-s.pendingAttempts<100||!s.costsComplete||s.costCents<=0))return undefined;
+ const ranked=stats.map(s=>({stat:s,lower:discoveryInterestScore(s),
+  upper:learningBounds(s.interested,s.attempted-s.pendingAttempts).upper*(s.attempted-s.pendingAttempts)/s.costCents}))
+  .sort((a,b)=>b.lower-a.lower||a.stat.strategy.localeCompare(b.stat.strategy));
+ const winner=ranked[0];
+ return winner.stat.interested>=10&&winner.lower>0&&ranked.slice(1).every(s=>winner.lower>s.upper*1.05)?winner.stat:undefined;
+}
+/** Local and shared promotion require resolved evidence, complete costs and a
+ * 95% cost-adjusted comparison. Otherwise balance the existing audiences.
+ * Three duplicate/no-owner pages still earn periodic probes, not retirement. */
 export function selectDiscoveryFilter(raw:unknown,sequence:number,shared:unknown=[]):DiscoveryFilterPlan|null{
  if(!integer(sequence)||sequence<1||!Array.isArray(raw)||raw.length!==4)throw Error('DISCOVERY_FILTER_STATE_INVALID');
  const seen=new Set<string>();
@@ -45,7 +47,9 @@ export function selectDiscoveryFilter(raw:unknown,sequence:number,shared:unknown
   if(s.blocked!==undefined&&typeof s.blocked!=='boolean')throw Error('DISCOVERY_FILTER_STATE_INVALID');
   seen.add(s.strategy);return s;
  });
- const available=stats.filter(s=>!s.exhausted&&!s.blocked);
+ const safety=sharedLearningDecision(shared,discoveryStrategies);
+ const available=stats.filter(s=>!s.exhausted&&!s.blocked&&safety.allowedChoices.includes(s.strategy)
+  &&!(s.attempted>=20&&s.optedOut>=3&&s.optedOut/s.attempted>0.05));
  if(!available.length)return null;
  const rotation=sequence%4;
  const tie=(s:DiscoveryFilterStat)=>(discoveryStrategies.indexOf(s.strategy)-rotation+4)%4;
@@ -58,17 +62,17 @@ export function selectDiscoveryFilter(raw:unknown,sequence:number,shared:unknown
  // One in five slots probes cooled arms. Never permanently discard a market.
  const probe=sequence%5===4&&cooled.length>0;
  const pool=probe?cooled:productive.length?productive:available;
- const explore=balanced(probe?pool:cold.length?cold:pool);
- const localWinner=cold.length?null:[...productive].filter(s=>s.attempted>=10&&s.interested>=3&&discoveryInterestScore(s)>0)
-  .sort((a,b)=>discoveryInterestScore(b)-discoveryInterestScore(a)||tie(a)-tie(b))[0];
- const evidence=sharedLearningStats(shared).filter(s=>productive.some(p=>p.strategy===s.variant)&&sharedEvidenceReady(s)&&s.costs_complete&&s.effective_cost_cents>0);
- const objective=learningObjective(evidence);
- const value=(s:typeof evidence[number])=>Math.max(0,learningScore(s,objective)*s.effective_attempts-0.5*s.effective_opted_out)/(s.effective_cost_cents+1000);
- const peer=evidence.length>=2?[...evidence].sort((a,b)=>value(b)-value(a)||a.variant.localeCompare(b.variant))[0]:undefined;
- const sharedWinner=peer&&value(peer)>0?productive.find(s=>s.strategy===peer.variant):undefined;
+ const explorePool=probe?pool:cold.length?cold:pool;
+ const localWinner=cold.length?undefined:localDiscoveryWinner(productive);
+ const decision=sharedLearningDecision(shared,productive.map(s=>s.strategy));
+ const sharedWinner=decision.status==='shared'?productive.find(s=>s.strategy===decision.winner):undefined;
  const winner=sharedWinner??localWinner;
- const learnedSlots=sharedWinner||winner&&winner.attempted-winner.pendingAttempts>=30?3:2;
- const learned=!!winner&&sequence%5<learnedSlots;
+ const learned=!!winner&&sequence%5<3;
+ // Qualified winners do not also consume challenger slots. Cold-start and
+ // duplicate-waste probes keep their existing preference among challengers.
+ const preferredChallengers=winner?explorePool.filter(s=>s.strategy!==winner.strategy):explorePool;
+ const otherChallengers=winner?pool.filter(s=>s.strategy!==winner.strategy):pool;
+ const explore=balanced(preferredChallengers.length?preferredChallengers:otherChallengers.length?otherChallengers:explorePool);
  const chosen=learned?winner!:explore;
  return {version:discoveryFilterVersion,strategy:chosen.strategy,providerPage:chosen.nextPage,mode:learned?'learned':'explore'};
 }

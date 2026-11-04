@@ -17,7 +17,7 @@ import {loadSellerClosingContext} from './seller-closing-context.ts';
 import {recordingServer} from './required-call-recording-server.ts';
 import {object,readRecordingReview,recordingAgentMatches,recordingPolicy} from './required-call-recording.ts';
 import {createHash} from 'node:crypto';
-import {assignSharedLearning} from './shared-learning.ts';
+import {assignSharedLearning,SharedLearningSafetyHold,type SharedAssignment} from './shared-learning.ts';
 import {acquisitionOpeners} from './deal-conversation.ts';
 import {sameBusinessNumber,consistentTextSenders} from './number-continuity.ts';
 import {selectBusinessCaller,secondaryCallingReady} from './business-voice-numbers.ts';
@@ -163,7 +163,9 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
  const basePrompt=()=>intake?sellerPrompt!:cancellation?cancellationCallPrompt(cancellation,identity.principal,account.assistant_name):(automaticOfferPolicy(recordedReview.offerPolicy)
   ?(recordedReview.offerPolicy==='automatic_offer_v5'?legacyAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v6'?streamingAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v7'?payoffAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v8'?progressAutomaticOfferReceptionPrompt:automaticOfferReceptionPrompt).replace('{{icash_property_context}}',JSON.stringify({...automaticContext,...conversationAddressFields(address),principal:identity.principal,companyName:identity.company_name?.trim()||null,assistantName:account.assistant_name}))+'\nOUTBOUND CAPABILITIES: Use the callback tool only for an explicitly agreed date, time and timezone; use the handoff tool when requested. Claim either action only after its successful result. Do not claim an immediate transfer unless the tool confirms one.'
   :buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!)+ '\n'+conversationAddressInstructions;
- const assigned=!intake&&!cancellation&&p.party==='seller'?await assignSharedLearning(db,{account:accountId,domain:'seller_calls',subject:`${p.screening_id}:${p.contact_key}`,context:limited?'limited':'reviewed',market:'*'}):null;
+ let assigned:SharedAssignment|null=null;
+ try{assigned=!intake&&!cancellation&&p.party==='seller'?await assignSharedLearning(db,{account:accountId,domain:'seller_calls',subject:`${p.screening_id}:${p.contact_key}`,context:limited?'limited':'reviewed',market:'*'}):null;}
+ catch(error){if(error instanceof SharedLearningSafetyHold)return hold('learning_safety_hold');throw error;}
  const strategy=(assigned?.variant as keyof typeof acquisitionOpeners|undefined)??(parseInt(createHash('sha256').update(`${accountId}:${p.contact_key}`).digest('hex').slice(0,8),16)%2===0?'cash_interest':'flexible_timing');
  const buildPrompt=()=>{
   const base=!intake&&!cancellation&&p.party==='seller'&&automaticOfferPolicy(recordedReview.offerPolicy)?sellerAgreementDeliveryPrompt(basePrompt()):basePrompt();

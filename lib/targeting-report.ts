@@ -3,6 +3,7 @@ import {targetingDefinitionSchema} from './dealmachine-targeting.ts';
 const count=z.number().int().nonnegative(),rate=z.number().nonnegative().nullable();
 export const targetingReportSchema=z.object({
  version:z.literal('seller-targeting-v1'),checkedAt:z.string(),cohortsTruncated:z.boolean(),dedupPending:count,dedupReadyAccounts:count,configuredAccounts:count,
+ learningPolicy:z.literal('seller-targeting-learning-v1').optional(),learnedPages:count.optional(),learningStartedAt:z.string().nullable().optional(),
  settings:z.object({enabled:z.boolean(),mobile_verified:z.boolean()}),capabilities:z.unknown(),
  experiments:z.array(z.object({id:z.uuid(),enabled:z.boolean(),definition:targetingDefinitionSchema})),
  cohorts:z.array(z.object({accountId:z.uuid(),zip:z.string().regex(/^\d{5}$/),strategy:z.string(),properties:count,attempted:count,pendingAttempts:count,

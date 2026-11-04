@@ -13,7 +13,7 @@ assert.notEqual(selectDiscoveryFilter(local.map(s=>s.strategy==='vacant'?{...s,r
 assert.equal(selectDiscoveryFilter(local,1,shared.map(s=>({...s,costs_complete:false}))).mode,'explore');
 assert.equal(selectDiscoveryFilter(local,1,shared.map(s=>({...s,contributors:2}))).mode,'explore');
 assert.equal(sharedLearningStats([{...shared[0],effective_contracts:2,effective_contract_trials:1}]).length,0);
-const contracts=shared.slice(0,2).map((s,i)=>({...s,contract_trials:300,contracts:i===0?60:10,effective_contract_trials:300,effective_contracts:i===0?60:10}));
+const contracts=shared.map((s,i)=>({...s,contract_trials:300,contracts:i===0?60:10,effective_contract_trials:300,effective_contracts:i===0?60:10}));
 assert.equal(sharedLearningWinner(contracts,['baseline','vacant']).variant,'baseline','Verified mature contracts take priority over reply volume');
 assert.equal(selectDiscoveryFilter(local,1,contracts).strategy,'baseline');
 assert.equal(sharedLearningWinner(shared.slice(0,2),['baseline','vacant'],true),null,'Recovery cannot promote on replies alone');

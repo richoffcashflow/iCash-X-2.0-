@@ -1,0 +1,61 @@
+import assert from 'node:assert/strict';
+import {PGlite} from '@electric-sql/pglite';
+import * as f from './helpers/targeting-query-binding-fixture.mjs';
+const db=new PGlite();await db.exec('create role anon;create role authenticated;create role service_role;');
+await db.exec(f.setupSql);await db.exec(f.migration);await db.exec(f.seedSql);
+const q=async(sql,args=[]) => (await db.query(sql,args)).rows[0];
+const context=async()=> (await q('select icash_targeting_query_context($1,$2,1) v',[f.account,f.revision])).v;
+const reserve=async(plan=f.plan,policy=f.policy,scope=f.scope,account=f.account)=>(await q('select icash_reserve_research_discovery($1,$2,$3,$4) v',[account,scope,plan,policy])).v;
+const params=[f.account,...['p_zip','p_revision','p_page','p_per_page','p_rate','p_unit','p_permission_until','p_setup_revision','p_market_mode','p_market'].map(k=>f.scope[k])];
+const direct=async(plan)=>(await q(`select icash_reserve_and_claim_${plan?'filtered':'property'}_discovery(${params.map((_,i)=>'$'+(i+1)).join(',')}${plan?',$12':''}) v`,plan?[...params,plan]:params)).v;
+const scenario=async(fn)=>{await db.exec('begin');try{await fn();}finally{await db.exec('rollback');}};
+const baseline={version:'seller-filters-v1',strategy:'baseline',providerPage:1,mode:'explore'};
+const legacy={version:'research-efficiency-v2',exclusionListId:null};
+assert.deepEqual(await context(),{required:false,ready:false,policy:null});
+assert.equal(await reserve(),false,'Default-off must not admit experimental purchase');
+await scenario(async()=>assert.equal(await reserve(null,legacy),true,'Default-off ordinary research continues'));
+await db.exec(f.activateSql);
+assert.deepEqual(await context(),{required:false,ready:true,policy:f.policy},'Ready capability must not force list on ordinary first acquisition');
+await scenario(async()=>{
+ await db.exec("delete from icash_discovery_filter_cursors where strategy like 'target_%';update icash_discovery_filter_cursors set exhausted=true");
+ assert.equal((await q('select icash_prepare_discovery_inventory($1,$2,1) v',[f.account,f.revision])).v,'ready','First eligible target survives exhausted ordinary cursors');
+ assert.equal((await q("select count(*)::int n from icash_discovery_filter_cursors where strategy like 'target_%' and not exhausted")).n,1);
+});
+const state=(await q('select icash_targeting_state($1,$2,1) v',[f.account,f.revision])).v;
+assert.deepEqual(state.queryContext,await context());
+await scenario(async()=>assert.equal(await reserve(null,legacy),true,'Active ready experiment does not force baseline list before first target'));
+assert.equal(await direct(f.plan),false,'First direct target cannot bypass private exact-policy authority');
+assert.equal(await reserve(f.plan,legacy),false);
+assert.equal(await reserve(f.plan,{...f.policy,exclusionListId:'other-list'}),false);
+assert.equal(await reserve(f.plan,f.policy,{...f.scope,p_per_page:6}),false);
+assert.equal(await reserve(f.plan,f.policy,f.scope,f.other),false);
+await scenario(async()=>{await db.exec("insert into icash_research_private.exclusion_items values('pending',null)");assert.equal((await context()).required,false);assert.equal(await reserve(),false);assert.equal(await reserve(null,legacy),true);});
+for(const mutate of ["update icash_accounts set bot_paused=true", "update fixture_gates set allowed=false where name in ('membership','funds')", "update icash_operation_rates set enabled=false", "update fixture_gates set allowed=true where name='stalled'", "update icash_discovery_configs set revision=gen_random_uuid()", "update icash_research_private.targeting_experiments set enabled=false"]){await scenario(async()=>{await db.exec(mutate);let admitted=false;try{admitted=await reserve();}catch(error){assert.match(error.message,/Fixture financial hold/);}assert.equal(admitted,false,mutate);});}
+await scenario(async()=>{await db.exec(`insert into icash_operation_spend(operation_key,account_id,state) values('discovery:${f.account}:${f.revision}:1','${f.account}','dispatched')`);assert.equal(await reserve(),false);});
+for(const [key,zip,blocked] of [['discovery:'+f.other+':'+f.other+':1',null,true],['discovery:'+f.other+':00000000-0000-4000-8000-000000000099:1','75217',true],['discovery:'+f.other+':00000000-0000-4000-8000-000000000099:1','90210',false],['discovery:'+f.other+':00000000-0000-4000-8000-000000000099:1',null,true]]){
+ await scenario(async()=>{await db.query("insert into icash_operation_spend(operation_key,account_id,state) values($1,$2,'dispatched')",[key,f.other]);
+  if(zip)await db.query('insert into icash_research_private.estimates values($1,$2,$3)',[key,f.other,{locations:[{type:'zip_code',code:zip}]}]);
+  assert.equal((await context()).ready,!blocked,'Unfiltered unknown needs original ZIP evidence; disjoint known ZIP retains supply');
+  if(blocked)assert.equal(await reserve(),false);
+ });
+}
+await scenario(async()=>{
+ assert.equal(await reserve(),true);assert.equal(await reserve(),false,'No duplicate original operation');
+ assert.equal((await q('select count(*)::int n from icash_research_private.targeting_query_admissions')).n,0,'Transient authority is consumed');
+ assert.equal((await q('select count(*)::int n from icash_research_private.query_claims')).n,1);
+ assert.equal((await context()).required,true);assert.equal((await context()).ready,false,'Unknown target blocks overlapping purchase');
+ const otherScope={...f.scope,p_revision:f.other};assert.equal(await reserve(null,legacy,otherScope,f.other),false);
+ await db.exec("update icash_operation_spend set state='settled';update icash_discovery_filter_pages set state='complete';update icash_research_private.targeting_settings set enabled=false");
+ assert.equal((await context()).required,true,'History protects ZIP after experiment pause');
+ const paused=(await q('select icash_targeting_state($1,$2,1) v',[f.account,f.revision])).v;assert.equal(paused.queryContext.required,true,'Disabled state still advertises historical protection');
+ assert.equal(await reserve(null,legacy,otherScope,f.other),false);
+ assert.equal((await q('select icash_reserve_and_claim_property_discovery($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) v',[f.other,...params.slice(1,2),f.other,...params.slice(3)])).v,false,'Legacy core cannot bypass post-target list');
+ await db.exec("insert into icash_research_private.exclusion_items values('pending',null)");assert.equal(await reserve(null,f.policy,otherScope,f.other),false);
+ await db.exec('delete from icash_research_private.exclusion_items');assert.equal(await reserve(null,f.policy,otherScope,f.other),true,'Paused experiments retain exact-list ordinary supply once synchronized');
+});
+await db.exec('grant usage on schema public to service_role;grant select,update on all tables in schema public to service_role');
+await scenario(async()=>{await db.exec('set local role service_role');assert.equal(await direct(f.plan),false,'Service invoker reaches only the public narrow proof reader');});
+await scenario(async()=>{await db.exec("set local role service_role");await assert.rejects(db.exec('insert into icash_research_private.targeting_query_admissions(operation_key) values(\'forged\')'),/permission denied/);});
+assert.equal((await q('select bool_and(research_list_id is null and research_version=2) v from icash_discovery_configs')).v,true);
+assert.equal((await q('select exclusions_enabled from icash_research_private.settings')).exclusions_enabled,false);
+await db.close();console.log('Target query binding: default-off and pre-target baseline supply, exact policy/scope, direct bypass denial, private authority, unknown/paused/history/sync gates passed.');

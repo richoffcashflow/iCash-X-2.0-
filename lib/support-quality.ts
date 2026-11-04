@@ -9,7 +9,8 @@ export type QualityMessage={role:string;content:string;created_at:string};
 export type QualityConversation={id:string;kind:'account'|'access';subject:string;status:string;updated_at:string;messages:QualityMessage[]};
 export type QualityFlag={code:'repeat'|'empty'|'mismatch'|'stalled'|'promise';label:string};
 export type QualityCase=Omit<QualityConversation,'messages'>&{question:string;lastReply:string;flags:QualityFlag[];topic:string};
-export type SupportQualityReport={checkedAt:string;days:number;sampled:number;limited:boolean;flagged:number;needsReview:number;topics:{topic:string;conversations:number;flagged:number}[];cases:QualityCase[]};
+export type QualityScope='unresolved'|'recent';
+export type SupportQualityReport={checkedAt:string;days:number;sampled:number;limited:boolean;flagged:number;needsReview:number;topics:{topic:string;conversations:number;flagged:number}[];cases:QualityCase[];page?:{scope:QualityScope;snapshotAt:string;nextCursor:string|null;messagesLimited:boolean}};
 const normalize=(text:string)=>text.toLowerCase().replace(/[’']/g,'').replace(/[^a-z0-9]+/g,' ').trim();
 const active=(status:string)=>!['closed','resolved'].includes(status);
 function topic(text:string){
@@ -25,7 +26,7 @@ const empty=(text:string)=>supportSafetyOnly(text)||(!text.includes('?')&&/^(?:I
 
 /** Review signals, not verdicts. Never resolve cases, send messages, train from
  * customer claims, or infer that a reported platform failure is repaired. */
-export function supportQualityReport(conversations:QualityConversation[],now=new Date(),limited=false):SupportQualityReport{
+export function supportQualityReport(conversations:QualityConversation[],now=new Date(),limited=false,includeUnflagged=false):SupportQualityReport{
  const all=conversations.map(conversation=>{
   const messages=[...conversation.messages].sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at));
   // A later operator response supersedes earlier automation for review signals.
@@ -52,28 +53,64 @@ export function supportQualityReport(conversations:QualityConversation[],now=new
  });
  const topics=new Map<string,{topic:string;conversations:number;flagged:number}>();
  for(const row of all){const t=topics.get(row.topic)??{topic:row.topic,conversations:0,flagged:0};t.conversations++;if(row.flags.length)t.flagged++;topics.set(row.topic,t);}
- const cases=all.filter(row=>row.flags.length).sort((a,b)=>Number(active(b.status))-Number(active(a.status))||b.flags.length-a.flags.length||Date.parse(a.updated_at)-Date.parse(b.updated_at));
- return {checkedAt:now.toISOString(),days:7,sampled:all.length,limited,flagged:cases.length,needsReview:cases.filter(c=>active(c.status)).length,topics:[...topics.values()].sort((a,b)=>b.flagged-a.flagged||b.conversations-a.conversations),cases};
+ const flagged=all.filter(row=>row.flags.length);
+ const cases=(includeUnflagged?all:flagged).sort((a,b)=>Number(active(b.status))-Number(active(a.status))||b.flags.length-a.flags.length||Date.parse(a.updated_at)-Date.parse(b.updated_at));
+ return {checkedAt:now.toISOString(),days:7,sampled:all.length,limited,flagged:flagged.length,needsReview:flagged.filter(c=>active(c.status)).length,topics:[...topics.values()].sort((a,b)=>b.flagged-a.flagged||b.conversations-a.conversations),cases};
 }
 
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
-type Row={id:string;subject?:string;status:string;updated_at:string};
+type Row={id:string;subject?:string;status:string;created_at:string;updated_at:string};
 type MessageRow=QualityMessage&{thread_id?:string;request_id?:string};
+type Boundary={at:string;id:string};
+type Position=Boundary|'done'|null;
+type QualityCursor={version:1;scope:QualityScope;snapshotAt:string;account:Position;access:Position};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export async function collectSupportQuality(db:Database,now=new Date()){
- const cutoff=new Date(now.getTime()-7*86400000).toISOString();
- const [accounts,access]=await Promise.all([
-  db<Row[]>(`icash_support_threads?updated_at=gte.${cutoff}&select=id,subject,status,updated_at&order=updated_at.desc&limit=61`),
-  db<Row[]>(`icash_access_help_requests?updated_at=gte.${cutoff}&select=id,status,updated_at&order=updated_at.desc&limit=41`),
- ]);
- const a=accounts.slice(0,60),b=access.slice(0,40);
- if([...a,...b].some(row=>!uuid.test(row.id)))throw Error('Invalid conversation identifier');
- const [accountMessages,accessMessages]=await Promise.all([
-  a.length?db<MessageRow[]>(`icash_support_messages?thread_id=in.(${a.map(r=>r.id).join(',')})&role=in.(user,assistant,operator)&select=thread_id,role,content,created_at&order=created_at.desc&limit=600`):[],
-  b.length?db<MessageRow[]>(`icash_access_help_messages?request_id=in.(${b.map(r=>r.id).join(',')})&role=in.(user,assistant,operator)&select=request_id,role,content,created_at&order=created_at.desc&limit=400`):[],
- ]);
- return supportQualityReport([
-  ...a.map(row=>({...row,kind:'account' as const,subject:row.subject??'Account support',messages:accountMessages.filter(m=>m.thread_id===row.id)})),
-  ...b.map(row=>({...row,kind:'access' as const,subject:'Guest support',messages:accessMessages.filter(m=>m.request_id===row.id)})),
- ],now,accounts.length>60||access.length>40||accountMessages.length===600||accessMessages.length===400);
+const timestamp=(value:unknown):value is string=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value));
+const pageSize=10,messageLimit=40;
+function readCursor(scope:QualityScope,raw:string|undefined,now:Date):QualityCursor{
+ if(!raw)return {version:1,scope,snapshotAt:now.toISOString(),account:null,access:null};
+ try{
+  if(raw.length>1200)throw Error();
+  const value=JSON.parse(raw) as QualityCursor;
+  const position=(v:Position)=>v===null||v==='done'||(v&&typeof v==='object'&&Object.keys(v).sort().join(',')==='at,id'&&timestamp(v.at)&&uuid.test(v.id)&&Date.parse(v.at)<=Date.parse(value.snapshotAt));
+  if(Object.keys(value).sort().join(',')!=='access,account,scope,snapshotAt,version'||value.version!==1||value.scope!==scope||!timestamp(value.snapshotAt)||Date.parse(value.snapshotAt)>now.getTime()||!position(value.account)||!position(value.access))throw Error();
+  return value;
+ }catch{throw Error('Invalid support quality cursor');}
+}
+/** Read-only keyset pages over persisted cases. Creation time and ID are immutable:
+ * a new reply cannot move an unreviewed case behind the cursor. Restart includes
+ * cases created or reopened during the review. Each case gets its own bounded
+ * message read so one long conversation cannot consume another case's allowance. */
+export async function collectSupportQuality(db:Database,now=new Date(),options:{scope?:QualityScope;cursor?:string}={}){
+ const scope=options.scope??'unresolved';
+ if(!['unresolved','recent'].includes(scope))throw Error('Invalid support quality scope');
+ const cursor=readCursor(scope,options.cursor,now);
+ const cutoff=new Date(Date.parse(cursor.snapshotAt)-7*86400000).toISOString();
+ const readPage=async(kind:'account'|'access')=>{
+  const position=cursor[kind];if(position==='done')return [];
+  const params=new URLSearchParams({select:kind==='account'?'id,subject,status,created_at,updated_at':'id,status,created_at,updated_at',order:'created_at.asc,id.asc',limit:String(pageSize+1),created_at:'lte.'+cursor.snapshotAt});
+  if(scope==='unresolved')params.set('status','in.(open,escalated,waiting_on_customer)');else params.set('updated_at','gte.'+cutoff);
+  if(position)params.set('or',`(created_at.gt.${position.at},and(created_at.eq.${position.at},id.gt.${position.id}))`);
+  const rows=await db<Row[]>(`${kind==='account'?'icash_support_threads':'icash_access_help_requests'}?${params}`);
+  if(rows.some(row=>!uuid.test(row.id)||!timestamp(row.created_at)))throw Error('Invalid conversation identifier');
+  return rows;
+ };
+ const [accounts,access]=await Promise.all([readPage('account'),readPage('access')]);
+ const selected=[...accounts.slice(0,pageSize).map(row=>({...row,kind:'account' as const})),...access.slice(0,pageSize).map(row=>({...row,kind:'access' as const}))];
+ const conversations:QualityConversation[]=[];let messagesLimited=false;
+ for(let offset=0;offset<selected.length;offset+=5){
+  const batch=await Promise.all(selected.slice(offset,offset+5).map(async row=>{
+   const column=row.kind==='account'?'thread_id':'request_id';
+   const params=new URLSearchParams({[column]:'eq.'+row.id,role:'in.(user,assistant,operator)',select:column+',role,content,created_at',order:'created_at.desc,id.desc',limit:String(messageLimit+1)});
+   const messages=await db<MessageRow[]>(`${row.kind==='account'?'icash_support_messages':'icash_access_help_messages'}?${params}`);
+   const own=messages.filter(message=>message[column]===row.id);messagesLimited ||= own.length>messageLimit;
+   return {...row,subject:row.subject??(row.kind==='account'?'Account support':'Guest support'),messages:own.slice(0,messageLimit)};
+  }));
+  conversations.push(...batch);
+ }
+ const after=(rows:Row[]):Position=>rows.length>pageSize?{at:rows[pageSize-1].created_at,id:rows[pageSize-1].id}:'done';
+ const next={...cursor,account:after(accounts),access:after(access)};
+ const nextCursor=next.account==='done'&&next.access==='done'?null:JSON.stringify(next);
+ const report=supportQualityReport(conversations,now,!!nextCursor||messagesLimited,scope==='unresolved');
+ return {...report,page:{scope,snapshotAt:cursor.snapshotAt,nextCursor,messagesLimited}};
 }

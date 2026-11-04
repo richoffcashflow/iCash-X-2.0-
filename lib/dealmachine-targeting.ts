@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {selectDiscoveryFilter,type DiscoveryFilterPlan} from './discovery-filters.ts';
+import {targetingLearningDecision} from './dealmachine-targeting-learning.ts';
 
 export const targetingVersion='seller-targeting-v1';
 const range=z.object({min:z.number().nonnegative(),max:z.number().nonnegative()}).strict().refine(v=>v.min<=v.max);
@@ -14,10 +15,10 @@ export const targetingDefinitionSchema=z.object({
  if(d.segment!=='buyer_fit'&&(d.ranges||d.buyerEvidence))c.addIssue({code:'custom',message:'Buyer criteria belong only to buyer-fit experiments'});
 });
 export type TargetingDefinition=z.infer<typeof targetingDefinitionSchema>;
-export type TargetingPlan={version:typeof targetingVersion;strategy:string;providerPage:number;mode:'explore';targeting:TargetingDefinition};
+export type TargetingPlan={version:typeof targetingVersion;strategy:string;providerPage:number;mode:'explore'|'learned';targeting:TargetingDefinition};
 export type AnyDiscoveryPlan=DiscoveryFilterPlan|TargetingPlan;
 export function isTargetingPlan(p:unknown):p is TargetingPlan{
- const r=z.object({version:z.literal(targetingVersion),strategy:z.string(),providerPage:z.number().int().min(1).max(999999999),mode:z.literal('explore'),targeting:targetingDefinitionSchema}).strict().safeParse(p);
+ const r=z.object({version:z.literal(targetingVersion),strategy:z.string(),providerPage:z.number().int().min(1).max(999999999),mode:z.enum(['explore','learned']),targeting:targetingDefinitionSchema}).strict().safeParse(p);
  return r.success&&r.data.strategy==='target_'+r.data.targeting.id;
 }
 function yearsBefore(asOf:string,years:number){
@@ -49,14 +50,15 @@ export function targetingCapabilityProblem(d:TargetingDefinition,raw:unknown,now
  }
  return null;
 }
-export type TargetingState={enabled:boolean;capabilities:unknown;dedupReady:boolean;mobileVerified:boolean;experiments:{definition:TargetingDefinition;nextPage:number;pages:number;exhausted:boolean;blocked:boolean}[]};
-/** Fixed exploration, never a winner from replies. Half of new slots retain the
- * existing audiences; every fourth slot explicitly retains the baseline. */
+export type TargetingState={enabled:boolean;capabilities:unknown;dedupReady:boolean;mobileVerified:boolean;learningContext?:unknown;experiments:{definition:TargetingDefinition;nextPage:number;pages:number;exhausted:boolean;blocked:boolean;learningEvidence?:unknown}[]};
+/** Half of new slots retain existing audiences; every fourth retains baseline.
+ * A supported winner gets at most three of five experimental slots. */
 export function selectTargetingPlan(legacy:unknown,sequence:number,shared:unknown,raw:unknown,accountId:string,zip:string,now=Date.now()):AnyDiscoveryPlan|null{
  // Validate legacy state even on an experimental slot; never bypass its holds.
  const original=selectDiscoveryFilter(legacy,sequence,shared),fallback=()=>original;
  const s=raw as TargetingState|null;
  if(s?.enabled!==true||s.dedupReady!==true||!Array.isArray(s.experiments))return fallback();
+ const learningContext=s.learningContext&&typeof s.learningContext==='object'?{...s.learningContext,accountId,zip}:null;
  const eligible=s.experiments.filter(e=>{
   if(!e||typeof e!=='object')return false;
   const parsed=targetingDefinitionSchema.safeParse(e.definition);if(!parsed.success)return false;
@@ -64,13 +66,20 @@ export function selectTargetingPlan(legacy:unknown,sequence:number,shared:unknow
   return Number.isSafeInteger(e.nextPage)&&e.nextPage>0&&e.nextPage<=999999999&&Number.isSafeInteger(e.pages)&&e.pages>=0&&e.exhausted===false&&e.blocked===false
    &&d.asOf<=new Date(now).toISOString().slice(0,10)&&!targetingCapabilityProblem(d,s.capabilities,now)
    &&(d.segment!=='mobile'||s.mobileVerified===true)
-   &&(!b||b.accountId===accountId&&b.zips.includes(zip)&&Date.parse(b.observedAt)<=now&&Date.parse(b.expiresAt)>now&&Date.parse(b.expiresAt)<=Date.parse(b.observedAt)+30*86400000);
+   &&(!b||b.accountId===accountId&&b.zips.includes(zip)&&Date.parse(b.observedAt)<=now&&Date.parse(b.expiresAt)>now&&Date.parse(b.expiresAt)<=Date.parse(b.observedAt)+30*86400000)
+   &&!targetingLearningDecision(e.learningEvidence,learningContext,'target_'+d.id,now).hold;
  });
  if(sequence%4===0&&Array.isArray(legacy)){
-  const baseline=legacy.find(x=>x.strategy==='baseline'&&!x.exhausted&&!x.blocked);
-  if(baseline)return {version:'seller-filters-v1',strategy:'baseline',providerPage:baseline.nextPage,mode:'explore'};
+  const baseline=selectDiscoveryFilter(legacy.map(x=>({...x,blocked:x.blocked===true||x.strategy!=='baseline'})),sequence,shared);
+  if(baseline)return {...baseline,mode:'explore'};
  }
  if(!eligible.length||sequence%2===0&&original)return fallback();
  eligible.sort((a,b)=>a.pages-b.pages||a.definition.id.localeCompare(b.definition.id));
- const e=eligible[0];return {version:targetingVersion,strategy:'target_'+e.definition.id,providerPage:e.nextPage,mode:'explore',targeting:e.definition};
+ const objectiveOrder={interest:0,contracts:1,closings:2};
+ const supported=eligible.map(e=>({e,decision:targetingLearningDecision(e.learningEvidence,learningContext,'target_'+e.definition.id,now)}))
+  .filter(x=>x.decision.status==='candidate_supported').sort((a,b)=>objectiveOrder[b.decision.objective]-objectiveOrder[a.decision.objective]||b.decision.value-a.decision.value||a.e.definition.id.localeCompare(b.e.definition.id));
+ const winner=supported[0]?.e,learned=!!winner&&(original?Math.floor(sequence/2):sequence)%5<3;
+ const challengers=winner?eligible.filter(e=>e!==winner):eligible;
+ if(winner&&!learned&&!challengers.length&&original)return fallback();
+ const e=learned?winner:challengers[0]??eligible[0];return {version:targetingVersion,strategy:'target_'+e.definition.id,providerPage:e.nextPage,mode:learned?'learned':'explore',targeting:e.definition};
 }

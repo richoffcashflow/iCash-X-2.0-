@@ -58,9 +58,12 @@ export function liveConversationResult(c:VoiceConversation,expected:{conversatio
  const followupHeld=expected.party==='seller'&&responseDisposition!==null;
  const sourceInterest=expected.party==='seller'&&humanResponse?sellerInterestQuote(r.transcript):null;
  const providerInterest=fields.interested?.value===true?quote('interest_quote'):null;
- const interested=!followupHeld&&!!(providerInterest||sourceInterest);
+ // A verbatim provider quote can answer ownership or permission, not selling.
+ // Seller interest requires the complete source question-and-answer evidence.
+ const interested=!followupHeld&&!!(expected.party==='seller'?sourceInterest:providerInterest);
+ const interestQuote=expected.party==='seller'?sourceInterest:providerInterest||quote('interest_quote');
  return {summary:humanResponse?r.summary:contactEvidence==='automated_answer'?'Automated answering or call-screening audio; no verified seller response.':'No intelligible caller response was captured.',transcript:r.transcript,durationSeconds:r.durationSeconds,providerCostUsd:r.providerCostUsd,contactEvidence,
-  humanRequested,humanQuote,optedOut,interested,responseDisposition,interestQuote:providerInterest||sourceInterest||quote('interest_quote'),party:expected.party,
+  humanRequested,humanQuote,optedOut,interested,responseDisposition,interestQuote,party:expected.party,
   callbackStatus:optedOut?'blocked_opt_out':!humanResponse?'not_requested':followupHeld?'held_for_seller_response':humanRequested?'held_for_human':r.callbackStatus==='scheduled_test'?'pending_dispatch_review':r.callbackStatus,
   callbackDueAt:optedOut||followupHeld||!humanResponse?null:r.dueAt,callbackTimezone:optedOut||followupHeld||!humanResponse?null:r.timezone,callbackQuote:humanResponse?r.callbackQuote:null,callbackEvidence:humanResponse?r.callbackEvidence:null,
   nextAction:optedOut?'Do not contact again.':followupHeld?'Automatic follow-up stopped after the seller response; review the original conversation.':humanRequested?`Review the ${expected.party} conversation and contact them personally.`:interested?'Confirm condition, timing, price and all owners before negotiating.':'Review the conversation before the next contact.',
