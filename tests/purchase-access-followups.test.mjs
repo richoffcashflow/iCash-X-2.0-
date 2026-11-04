@@ -52,9 +52,15 @@ try{
  const due=async(id,channel='email')=>q("update icash_purchase_access_followups set due_at=now()-interval '1 second',next_attempt_at=now()-interval '1 second' where membership_id=$1 and channel=$2",[id,channel]);
  const buyer=await purchase();assert.equal((await rows(buyer.id)).length,2);
  await send(buyer.id);assert.equal(sent.length,1);assert(sent[0].url.includes('contiguity'));assert.equal(sent[0].body.to,buyer.phone);assert(sent[0].body.message.includes('https://www.geticashx.com/access'));assert(sent[0].body.message.includes('checkout email'));assert(sent[0].body.message.length<=160);
+ assert.doesNotMatch(sent[0].body.message,/checkout phone|text me a code|text code|sms|phone sign[ -]?in/i);
+ assert.match(sent[0].body.message,/https:\/\/www\.geticashx\.com\/access\/help/);assert.match(sent[0].body.message,/Reply STOP to opt out\./);
  assert.equal((await row(buyer.id,'email')).status,'pending','Second email waits');
  await first(buyer.id);assert.equal(sent.length,2);const scheduled=await row(buyer.id,'email');assert(new Date(scheduled.due_at).getTime()>Date.now()+14*60000,'Fifteen minutes follows actual first acceptance');
  await send(buyer.id);assert.equal(sent.length,2);await due(buyer.id);await send(buyer.id);assert.equal(sent.length,3);assert(sent[2].body.subject.includes('save this email'));assert(sent[2].body.html.includes('>https://www.geticashx.com/access</a>'));
+ for(const format of ['text','html']){
+  assert.doesNotMatch(sent[2].body[format],/checkout phone|text me a code|text code|sms|phone sign[ -]?in/i);
+  assert.match(sent[2].body[format],/Email me a code/);assert.match(sent[2].body[format],/spam or junk folder/);
+ }
  await send(buyer.id);await first(buyer.id);assert.equal(sent.length,3,'Exactly two emails and one text across repeat wakes');
  await q("insert into icash_membership_invoices values($1,$2,5000,$3,'2099-03-01',now())",['renewal_'+buyer.id,buyer.id,'pi_renewal']);await q("update icash_memberships set paid_through='2099-03-01' where id=$1",[buyer.id]);assert.equal((await rows(buyer.id)).length,2,'Renewal creates no extra access messages');
  for(const options of [{consent:false},{guest:false},{phoneMatch:false},{emailMatch:false},{oldConsent:true}]){const p=await purchase(options);assert.equal((await rows(p.id)).filter(r=>r.channel==='sms').length,0,'Only permission on the payment-bound phone qualifies');}

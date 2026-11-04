@@ -1,13 +1,14 @@
 import {z} from 'zod';
 import {learningHealthSchema} from './learning-health.ts';
+import {textIngressHealthSchema} from './text-health.ts';
 const component=z.object({status:z.enum(['ok','degraded','unavailable','standby']),checkedAt:z.string().datetime({offset:true}).nullable()});
 const count=z.number().int().nonnegative();
 const issue=z.object({kind:z.enum(['text_receipt','text_review','contract_delivery','contract_preparation','screening_lease','call_receipt','seller_response','buyer_fulfillment','owner_export']),resourceId:z.guid(),accountId:z.guid(),since:z.string().datetime({offset:true})});
 export const reliabilitySchema=z.object({status:z.enum(['ok','degraded']),fresh:z.boolean(),components:z.object({worker:component,maintenance:component}),snapshot:z.object({
  checkedAt:z.string().datetime({offset:true}),issueCount:count,learning:learningHealthSchema.optional(),
  issues:z.array(issue).max(25),
- incomingTexts:z.object({checkedAt:z.string().datetime({offset:true}).nullable(),fresh:z.boolean(),warningCount:count,
-  lines:z.array(z.object({phone:z.string().regex(/^\+[1-9][0-9]{7,14}$/),incomingStatus:z.enum(['unverified','blocking_reported']),lastIncomingAt:z.string().datetime({offset:true}).nullable(),propertyAccepted24h:count,propertyDelivered24h:count})).max(50)}).optional(),
+ incomingTexts:z.object({checkedAt:z.string().datetime({offset:true}).nullable(),fresh:z.boolean(),warningCount:count,lineWarningCount:count.nullish(),ingress:textIngressHealthSchema.nullish(),
+  lines:z.array(z.object({phone:z.string().regex(/^\+[1-9][0-9]{7,14}$/),incomingStatus:z.enum(['unverified','blocking_reported']),lastIncomingAt:z.string().datetime({offset:true}).nullable(),propertyAccepted24h:count,propertyDelivered24h:count,lastPropertyIncomingAt:z.string().datetime({offset:true}).nullable().optional(),propertyReplyRecipients24h:count.optional(),otherIncoming24h:count.optional()})).max(50)}).optional(),
  acknowledgedCount:count.optional(),
  researchQuota:z.object({checkedAt:z.string().datetime({offset:true}).nullable(),fresh:z.boolean(),status:z.enum(['available','reserved_for_new_users','day_exhausted','day_insufficient','minute_exhausted','minute_insufficient','provider_hold','unavailable']),warningCount:count,
   dayUsed:count.optional(),dayLimit:count.optional(),dayRemaining:count.optional(),minuteUsed:count.optional(),minuteLimit:count.optional(),minuteRemaining:count.optional(),

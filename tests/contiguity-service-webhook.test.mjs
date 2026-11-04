@@ -11,7 +11,8 @@ const fixture={id:'fixture-service-message',type:'text.incoming.sms',timestamp:M
 let registered=true,campaignOnly=false,effects=[],failurePath=null,diagnostics=[];
 const deps={replyToInstantLeadText,NextResponse:{json:Response.json},verifyContiguityWebhook,parseTextWebhook,isServiceTextSender,suppressCarrierBlockedSms,
  console:{warn:(...args)=>diagnostics.push(args)},
- db:async(path,method,body)=>{
+ db:async(path,method,body,signal)=>{
+  if(path==='rpc/icash_record_text_ingress_failure')assert(signal instanceof AbortSignal,'Diagnostics have an independent bounded deadline');
   if(path===failurePath)throw Error('PRIVATE provider error '+destination+' '+secret);
   effects.push({path,method,body});
   if(path.startsWith('icash_text_senders?'))return registered&&!campaignOnly?[{phone:destination}]:[];
@@ -62,10 +63,10 @@ assert.equal((await POST(request())).status,503);assert.deepEqual(effects,[]);
 process.env.CONTIGUITY_WEBHOOK_SECRET=secret;
 registered=false;effects=[];
 assert.equal((await POST(request())).status,400,'Unknown destinations remain rejected');
-assert.equal(effects.length,2);registered=true;
+assert.equal(effects.length,3);assert.deepEqual(effects[2].body,{p_kind:'unregistered_destination',p_stage:'sender_registration'});registered=true;
 
 for(const from of ['+12','1234567','Twilio','+1-22395']){
- effects=[];assert.equal((await POST(request({...fixture,data:{...fixture.data,from}}))).status,400);assert.deepEqual(effects,[]);
+ effects=[];assert.equal((await POST(request({...fixture,data:{...fixture.data,from}}))).status,400);assert.deepEqual(effects.map(e=>e.body),[{p_kind:'authenticated_rejected',p_stage:'parse_incoming'}]);
 }
 for(const type of ['text.delivery.confirmed','text.delivery.failed','text.cancelled']){
  assert.throws(()=>parseTextWebhook({...fixture,type,data:{...fixture.data,message_id:'fixture-message'}}),'A short code is never an outgoing business sender');
@@ -95,5 +96,10 @@ assert.equal((await POST(request({...fixture,data:{...fixture.data,from:'+121255
 assert.deepEqual(diagnostics,[['text_webhook_processing_failed',{stage:'property_ingestion'}]],'Log only the fixed failure stage, never the source body, phone, secret or exception');
 failurePath=null;diagnostics=[];
 assert.equal((await POST(request({...fixture,type:'private-event-'+secret}))).status,400);
-assert.deepEqual(diagnostics,[['text_webhook_rejected',{reason:'unsupported_or_malformed'}]]);
+assert.deepEqual(diagnostics,[['text_webhook_rejected',{reason:'unsupported_or_malformed',eventClass:'other_or_unknown'}]]);
+assert.deepEqual(effects.at(-1).body,{p_kind:'authenticated_rejected',p_stage:'parse_other'});
+failurePath='rpc/icash_record_text_ingress_failure';diagnostics=[];
+assert.equal((await POST(request({...fixture,type:'unsupported'}))).status,400,'Monitoring failure never changes the original response or replays work');
+assert.deepEqual(diagnostics,[['text_webhook_rejected',{reason:'unsupported_or_malformed',eventClass:'other_or_unknown'}],['text_webhook_monitoring_failed']]);
+failurePath=null;
 console.log('PASS signed short-code webhook: registered destination, no persistence/AI/replies, harmless retries, signature/replay checks, normal STOP handling and strict outbound numbers. Fixtures only.');

@@ -1,5 +1,17 @@
 # Continuous reliability
 
+The November 4 access-message correction removes the disabled checkout-phone
+sign-in recommendation left in purchase confirmations, reminder emails and
+permission-bound access texts after the UI/support repair. Both email formats
+direct buyers to their checkout email, spam/junk folder and existing support
+link. `purchase-access-email.test.mjs` covers initial/reminder and VIP/non-VIP
+variants; `purchase-access-followups.test.mjs` verifies dispatched reminder and
+single-segment text copy, opt-out wording and the existing immutable-retry gates.
+No auth, consent, queue or migration behavior changes. Already attempted payloads
+remain frozen for provider idempotency; do not resend historical messages to
+demonstrate the correction. Exact-commit CI and the matching production release
+must pass before calling it live.
+
 The November 3 new-user reserve protects starter research capacity at the shared
 limiter, with account-aware scheduling and operator capacity reporting. See
 `new-user-request-reserve.md`. Offline and native contention coverage must verify

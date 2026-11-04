@@ -5,6 +5,18 @@ import {PGlite} from '@electric-sql/pglite';
 import {databaseAdapter} from './helpers/simulated-journey-services.mjs';
 import {purchaseAccessMessage,processPurchaseAccessEmails,recordPurchaseEmailDelivery} from '../lib/purchase-access-email.ts';
 
+for(const reminder of [false,true])for(const vip of [false,true]){
+ const message=purchaseAccessMessage({id:randomUUID(),claimToken:randomUUID(),membershipId:randomUUID(),recipient:'buyer@example.invalid',vip,message:null},reminder);
+ for(const format of ['text','html']){
+  assert.doesNotMatch(message[format],/checkout phone|text me a code|text code|sms|phone sign[ -]?in/i,`${format} ${reminder?'reminder':'confirmation'} must use email-only sign-in`);
+  assert.match(message[format],/same email you used at checkout/);
+  assert.match(message[format],/Email me a code/);
+  assert.match(message[format],/spam or junk folder/);
+  assert.match(message[format],/https:\/\/www\.geticashx\.com\/access\/help/);
+  assert.equal(message[format].includes('destination=vip'),vip,'Only eligible messages include the protected VIP destination');
+ }
+}
+
 const pg=await PGlite.create();
 const {db,rpc,q}=databaseAdapter(pg);
 const env={VERCEL_ENV:'production',ICASH_AUTH_EMAIL_READY:'true',RESEND_API_KEY:'fixture',RESEND_RECEIVING_WEBHOOK_SECRET:'fixture'};

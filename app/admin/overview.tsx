@@ -5,9 +5,10 @@ import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {overviewMoney,overviewTime,overviewLeadStatus,validOwnerOverview,type OwnerOverview,type OverviewFilters} from '@/lib/owner-overview';
 import styles from './overview.module.css';
 import {ClosingOperationsView} from './closing-operations';
+import {DealOutcomesView} from './deal-outcomes';
 import {reliabilityIssueLabels,reliabilityAcknowledgementLabels} from '@/lib/reliability';
 import {reliabilityPriority,reliabilityItemPriority,reliabilitySeverityLabels,reliabilitySeverityGuidance} from '@/lib/reliability-priority';
-import {incomingStatusLabels} from '@/lib/text-health';
+import {incomingStatusLabels,propertyIncomingStatusLabels,textIngressStageLabels} from '@/lib/text-health';
 import {ExperienceHealth} from './experience-health';
 import {UsageLoopReport} from '@/components/usage-loop-report';
 import {PlatformLearningReport} from '@/components/platform-learning-report';
@@ -105,10 +106,11 @@ export function OwnerOverviewView(){
       </div>}
       {report.reliability.snapshot.incomingTexts&&(!report.reliability.snapshot.incomingTexts.fresh||report.reliability.snapshot.incomingTexts.warningCount>0)&&<div>
        <strong>{report.reliability.snapshot.incomingTexts.fresh?'Incoming text delivery needs review':'Incoming text monitoring unavailable'}</strong>
-       <p>{report.reliability.snapshot.incomingTexts.fresh?'An enabled line has sent property texts in the past 24 hours with unverified incoming delivery or a saved carrier blocking notice. Outgoing delivery confirmations do not verify incoming service.':'The latest incoming-text health check could not be verified. Earlier warnings remain active while other workflow checks continue.'}</p>
-       {report.reliability.snapshot.incomingTexts.lines.map(line=><p key={line.phone}>{line.phone} · {incomingStatusLabels[line.incomingStatus]} · {line.propertyAccepted24h} accepted · {line.propertyDelivered24h} delivery confirmations · Last incoming: {line.lastIncomingAt?overviewTime(line.lastIncomingAt)+' CT':'not observed'}.</p>)}
-       {report.reliability.snapshot.incomingTexts.warningCount>report.reliability.snapshot.incomingTexts.lines.length&&report.reliability.snapshot.incomingTexts.fresh&&<p>Showing {report.reliability.snapshot.incomingTexts.lines.length} of {report.reliability.snapshot.incomingTexts.warningCount} lines.</p>}
-       <p>Verify incoming delivery with the messaging provider before treating this line as healthy.</p>
+       <p>{report.reliability.snapshot.incomingTexts.fresh?'Review missing routed property replies, saved carrier notices and authenticated webhook failures. Missing replies alone do not confirm an outage; generic inbox messages do not verify property routing.':'The latest incoming-text health check could not be verified. Earlier warnings remain active while other workflow checks continue.'}</p>
+       {report.reliability.snapshot.incomingTexts.lines.map(line=><p key={line.phone}>{line.phone} · {propertyIncomingStatusLabels[line.incomingStatus]} · {line.propertyAccepted24h} accepted · {line.propertyDelivered24h} delivery confirmations · Last routed property reply: {line.lastPropertyIncomingAt?overviewTime(line.lastPropertyIncomingAt)+' CT':'not observed'}. {line.otherIncoming24h??0} other inbox messages in 24 hours.</p>)}
+       {(report.reliability.snapshot.incomingTexts.lineWarningCount??report.reliability.snapshot.incomingTexts.warningCount)>report.reliability.snapshot.incomingTexts.lines.length&&report.reliability.snapshot.incomingTexts.fresh&&<p>Showing {report.reliability.snapshot.incomingTexts.lines.length} of {report.reliability.snapshot.incomingTexts.lineWarningCount??report.reliability.snapshot.incomingTexts.warningCount} lines.</p>}
+       {report.reliability.snapshot.incomingTexts.ingress&&report.reliability.snapshot.incomingTexts.ingress.failedRequests24h>0&&<p>{report.reliability.snapshot.incomingTexts.ingress.failedRequests24h} authenticated webhook requests failed since {overviewTime(report.reliability.snapshot.incomingTexts.ingress.windowStartedAt)} CT. Requests include provider retries; these are not unique lost seller messages.</p>}
+       <p>Verify provider receipt, authenticated ingestion and property routing independently before treating reception as proven.</p>
       </div>}
       {report.reliability.snapshot.accountProgress&&<div>
        <strong>{report.reliability.snapshot.accountProgress.affectedAccounts} funded accounts with blocked or stalled work</strong>
@@ -132,8 +134,10 @@ export function OwnerOverviewView(){
       <p>Today: {line.propertyAcceptedToday} property texts accepted · {line.customerUpdatesToday} customer updates accepted.</p>
       <p>Past 24 hours: {line.propertyAccepted24h} property texts accepted to {line.propertyRecipients24h} people · {line.propertyDelivered24h} delivery confirmations · {line.propertyReview24h} sends need review · {line.blockedNotices24h} carrier blocking notices.</p>
       <p>{line.replyRecipients24h} people replied · {line.interestedRecipients24h} confirmed selling interest · {line.optOutRecipients24h} opted out · {line.refusalRecipients24h} declined or need review · {line.complaintWordingRecipients24h} used complaint wording.</p>
+      {line.propertyIncomingStatus&&<p>{propertyIncomingStatusLabels[line.propertyIncomingStatus]} · {line.propertyReplyRecipients24h??0} people with routed property replies · {line.otherIncoming24h??0} other inbox messages. Last routed reply: {line.lastPropertyIncomingAt?overviewTime(line.lastPropertyIncomingAt)+' CT':'not observed'}.</p>}
       <p>{line.lastIncomingAt?`Last saved incoming message: ${overviewTime(line.lastIncomingAt)} CT.`:'No saved incoming message confirms this line.'}</p>
      </div>)}
+     {report.textHealth.ingress&&<div><strong>Authenticated webhook diagnostics</strong><p>Monitoring started {overviewTime(report.textHealth.ingress.monitoredSince)} CT. The current hourly window starts {overviewTime(report.textHealth.ingress.windowStartedAt)} CT; counts may cover less than 24 hours.</p><p>{report.textHealth.ingress.failedRequests24h} failed requests. Provider retries count separately. A diagnostic write can itself fail; zero recorded failures does not prove complete receipt coverage.</p>{report.textHealth.ingress.failures.map(f=><p key={f.kind+f.stage}>{textIngressStageLabels[f.stage]} · {f.requests} requests · Last observed {overviewTime(f.lastAt)} CT.</p>)}</div>}
      <span>Delivery confirmations do not verify incoming service. Complaint wording is a review signal; carrier complaint totals are unavailable. No incoming message means unverified, not a confirmed outage.</span>
     </>:<span>Text number monitoring is unavailable. Line health is unverified.</span>}
    </section>}
@@ -166,6 +170,7 @@ export function OwnerOverviewView(){
    <div className={styles.meta}><span>{includeOwner?'Customers + your account':'Customer usage only'} · Central time</span><span role="status">{report?`${error?'Last successful update':'Updated'} ${overviewTime(report.endAt)} CT`:error?'No totals available':'Loading overview…'}</span></div>
    {usage&&usage.pendingCount>0&&<p className={styles.pending}>{usage.pendingCount} operations started in this period are still awaiting settlement. They are not included in these totals.</p>}
    {usage&&usage.completedCount===0&&!includeOwner&&<p className={styles.pending}>No customer usage in this period. Turn on “Include my account” to see your own usage.</p>}
+   {report&&<DealOutcomesView data={report.dealOutcomes}/>}
    {report?.closing&&<ClosingOperationsView data={report.closing} chargedCents={report.usage.chargedCents}/>}
    {report&&<PlatformLearningReport refresh={refresh}/>}
    {report&&<DealMachineTargetingReport refresh={refresh}/>}

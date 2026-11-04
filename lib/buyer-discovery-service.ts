@@ -1,5 +1,5 @@
 import {db} from './stripe-test.ts';
-import {discoverBuyerPage,nextBuyerSearch} from './buyer-discovery.ts';
+import {discoverBuyerPage,nextBuyerSearchFromReceipts,type BuyerSearchReceipt} from './buyer-discovery.ts';
 import {assignSharedLearning,SharedLearningSafetyHold,type SharedAssignment} from './shared-learning.ts';
 import type {BuyerSearchStrategy} from './buyer-discovery.ts';
 type Config={enabled:boolean;rate_id:string;unit_cost_micros:number;rights_until:string;revision:string;since:string;zip:string;max_pages:number;per_page:number};
@@ -16,14 +16,17 @@ export async function discoverBuyersForDeal(accountId:string,dealId:string){
  const dealZip=screen.snapshot.raw?.data?.zip;
  if(typeof dealZip!=='string'||!/^\d{5}(?:-\d{4})?$/.test(dealZip))return {status:'buyer_property_zip_required',canContinue:false};
  const controls=await db<unknown[]>(`icash_property_controls?account_id=eq.${accountId}&property_id=eq.${screen.snapshot.propertyId}&manual=eq.true&select=property_id`);if(controls.length)return {status:'buyer_search_held',canContinue:false};
- const [last]=await db<{page:number;has_next_page:boolean;receipt:{strategy?:string;providerPage?:number;learningVersion?:string;firstStrategy?:string}}[]>(`icash_buyer_search_receipts?deal_id=eq.${dealId}&revision=eq.${config.revision}&select=page,has_next_page,receipt&order=page.desc&limit=1`);
+ const receipts=await db<BuyerSearchReceipt[]>(`icash_buyer_search_receipts?deal_id=eq.${dealId}&revision=eq.${config.revision}&select=page,has_next_page,receipt&order=page.asc&limit=6`);
  let assignment:SharedAssignment|null;
  try{assignment=await assignSharedLearning(db,{account:accountId,domain:'buyer_search',subject:`${dealId}:${config.revision}`,context:'order-v1',market:dealZip.slice(0,5)});}
  catch(error){if(error instanceof SharedLearningSafetyHold)return {status:'learning_safety_hold',canContinue:false};throw error;}
  const firstStrategy=assignment?.variant as BuyerSearchStrategy|undefined;
- const cursor=nextBuyerSearch(last,config.max_pages,firstStrategy);
+ const cursor=nextBuyerSearchFromReceipts(receipts,config.max_pages,firstStrategy);
  if(!cursor)return {status:'buyer_search_complete',canContinue:false};
  const {page,providerPage,strategy}=cursor,operationKey=`buyers:${dealId}:${config.revision}:${page}${strategy==='corporate_owners'?':corporate':''}`;
+ // Check installed database cursor semantics before any provider request. An
+ // older database holds the new fallback instead of rejecting a paid receipt.
+ if(assignment&&!await db<boolean>('rpc/icash_shared_buyer_cursor','POST',{p_account:accountId,p_deal:dealId,p_revision:config.revision,p_page:page,p_strategy:strategy,p_provider_page:providerPage}))return {status:'buyer_cursor_review_required',canContinue:false};
  const [existing]=await db<{state:string}[]>(`icash_operation_spend?operation_key=eq.${operationKey}&select=state`);
  if(existing&&existing.state!=='reserved')return {status:'buyer_receipt_reconciliation_required',canContinue:false};
  const [rate]=await db<{operation:string;enabled:boolean;expires_at:string;costs_micros:{dealmachine:number}}[]>(`icash_operation_rates?id=eq.${config.rate_id}&select=operation,enabled,expires_at,costs_micros`);
@@ -38,5 +41,7 @@ export async function discoverBuyersForDeal(accountId:string,dealId:string){
  persist:async receipt=>{await db('rpc/icash_save_buyer_search','POST',{p_account:accountId,p_deal:dealId,p_revision:config.revision,p_page:page,p_operation:operationKey,p_receipt:{...receipt,strategy,providerPage,zip:dealZip.slice(0,5),...(assignment?{learningVersion:assignment.version,firstStrategy}: {})}});await db('rpc/icash_settle_dealmachine_usage','POST',{p_operation:operationKey});},
  empty:async()=>{await db('rpc/icash_save_empty_buyer_search','POST',{p_account:accountId,p_deal:dealId,p_revision:config.revision,p_page:page,p_strategy:strategy,p_provider_page:providerPage,p_zip:dealZip.slice(0,5)});}
  });
- return {...result,strategy,canContinue:page<config.max_pages&&(result.canContinue||(assignment?page===1:strategy==='recent_corporate')&&['no_candidates','buyers_saved'].includes(result.status))};
+ const completed=['no_candidates','buyers_saved'].includes(result.status);
+ const next=completed?nextBuyerSearchFromReceipts([...receipts,{page,has_next_page:result.canContinue,receipt:{strategy,providerPage,...(assignment?{learningVersion:assignment.version,firstStrategy}:{})}}],config.max_pages,firstStrategy):null;
+ return {...result,strategy,canContinue:completed&&next!==null};
 }
