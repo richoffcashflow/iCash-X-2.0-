@@ -150,6 +150,12 @@ def current_late_guard(bounded, mutation, paused):
 def run():
     setup()
     sql('select fixture_seed(n,1+n%7,false) from generate_series(1,2048)n;')
+    # Fresh bulk-loaded tables otherwise depend on when autovacuum happens to
+    # analyze them. Use the existing production screening index with measured
+    # cardinalities before 24 callers share the unchanged eight-second limit.
+    sql('analyze public.icash_accounts;analyze public.icash_wallets;'
+        'analyze public.icash_screening_jobs;analyze public.icash_deal_files;'
+        'analyze public.icash_text_threads;analyze public.icash_timezone_names;')
     wallet_before = sql("select md5(string_agg(to_jsonb(w)::text,',' order by account_id)) from icash_wallets w;")
     assert concurrent_issue(24) == [None]*24
     assert sql("select count(*) from fixture_checks where phase='hours';") == '768'

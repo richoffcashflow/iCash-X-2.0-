@@ -9,7 +9,9 @@ end$$;
 create table public.icash_accounts(id uuid primary key,bot_paused boolean not null default false);
 create table public.icash_wallets(account_id uuid primary key references public.icash_accounts,balance_cents bigint not null,reserved_cents bigint not null);
 create table public.icash_screening_jobs(id uuid primary key,account_id uuid not null references public.icash_accounts,state text not null,result jsonb not null,snapshot jsonb not null,completed_at timestamptz);
-create table public.icash_deal_files(id uuid primary key,account_id uuid not null references public.icash_accounts,screening_id uuid references public.icash_screening_jobs,stage text not null,terms jsonb not null);
+-- Match the production screening lookup, including its unique index. Without
+-- this constraint the synthetic join scans every deal for each account.
+create table public.icash_deal_files(id uuid primary key,account_id uuid not null references public.icash_accounts,screening_id uuid references public.icash_screening_jobs,stage text not null,terms jsonb not null,unique(account_id,screening_id));
 create index icash_deal_files_account on public.icash_deal_files(account_id);
 create table public.icash_timezone_names(name text primary key);
 insert into public.icash_timezone_names values('UTC');
