@@ -25,13 +25,20 @@ receipts, missing costs, customer holds and owner fences stay intact. There
 is no export replay, inferred zero charge, customer unpause or historical
 outreach. Existing immutable attempts, backoff and late-evidence checks apply.
 
-The guarded migration installs `empty_enabled=false`. Activate only after
-reviewed PGlite and native PostgreSQL fixtures pass and the live maintenance
-service is confirmed to contain the existing three-probe implementation.
-Production application SHA `ec2453ce30392317e94b78c686149621497c92dc` and
-current main have identical `lib/automatic-export-capacity.ts`; this repair
-does not require changing the worker source configuration. Exact release CI
-and live ordinary-work receipts are still separate evidence from installation.
+The guarded base migration installs `empty_enabled=false`. The follow-up
+freshness migration requires that switch to remain disabled during installation
+and binds each response's original provider Date/Age headers to the probe's
+database timestamps. The maintenance transport requests cache revalidation and
+saves those headers without substituting local time. Missing, invalid, stale,
+future or cached responses remain held; older terminal history is sufficient
+only alongside all three fresh responses for this exact empty-result family.
+HTTP 500/504 retain their post-incident terminal-history requirement.
+
+Activate only after the native concurrency fixtures, full exact-release CI and
+matching production application/worker verification pass. The live maintenance
+service must include the Date/Age capture before activation. Original-operation
+invariance, the automatic capacity review and ordinary subsequent work must be
+observed separately from installation; no provider demonstrations are needed.
 
 Verification covers competing claims, three one-use probes, late source and
 policy changes, malformed/unknown errors, historical inventory only for 400,

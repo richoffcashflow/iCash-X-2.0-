@@ -7,6 +7,7 @@ const suites = [
  'dealmachine-targeting', 'dealmachine-targeting-database', 'dealmachine-targeting-admin',
  'voice-configuration-recovery', 'voice-configuration-recovery-database',
  'owner-export-capacity-recovery', 'owner-export-capacity-recovery-database', 'owner-export-scheduling', 'owner-export-monitoring',
+ 'automatic-export-capacity', 'automatic-export-capacity-database', 'empty-export-capacity-database', 'empty-export-capacity-freshness',
  'owner-active-export', 'owner-active-export-database', 'owner-active-export-contact-sources',
  'owner-export-preflight', 'owner-export-preflight-database', 'owner-export-preflight-review', 'owner-export-preflight-cohorts',
  'research-request-reuse', 'research-market-duplicate-cooling', 'research-provider-feedback', 'seller-interest-evidence',
