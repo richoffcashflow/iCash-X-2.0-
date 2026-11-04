@@ -16,6 +16,7 @@ import {runScreeningJob} from './screening-job.ts';
 import {loadSellerClosingContext} from './seller-closing-context.ts';
 import {recordingServer} from './required-call-recording-server.ts';
 import {object,readRecordingReview,recordingAgentMatches,recordingPolicy} from './required-call-recording.ts';
+import {voiceApprovalDiagnostics} from './voice-approval-diagnostics.ts';
 import {createHash} from 'node:crypto';
 import {assignSharedLearning,SharedLearningSafetyHold,type SharedAssignment} from './shared-learning.ts';
 import {acquisitionOpeners} from './deal-conversation.ts';
@@ -130,6 +131,9 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
  // override, tool-set and canonical full-projection validation before reserve.
  if(!recordingAgentMatches(recordedReview,agent)){
   console.warn('production_agent_preflight_held',{stage:'review_match',code:'VOICE_AGENT_CONFIGURATION_MISMATCH'});
+  try{const diagnostic=voiceApprovalDiagnostics(recordedReview,agent);
+   if(diagnostic)console.warn('production_agent_review_diagnostic',diagnostic);
+  }catch{/* Diagnostic failure must not prevent the original durable hold. */}
   return hold('production_agent_review_required');
  }
  const customVoice=await selectedCustomCallVoice(accountId);
