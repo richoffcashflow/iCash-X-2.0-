@@ -30,7 +30,7 @@ def contend(query, count=24):
 assert sql("select current_database();") == "icash_reliability"
 for status in [500, 504, 400]:
     sql("drop schema if exists icash_research_private cascade; drop schema public cascade; create schema public;")
-    for file in ["tests/fixtures/automatic-export-foundation.sql", "config/owner-export-capacity-recovery.sql", "supabase/migrations/20261030012215_owner_export_capacity_precision.sql", "config/automatic-export-capacity.sql", "config/gateway-export-capacity.sql", "config/empty-export-capacity.sql"]:
+    for file in ["tests/fixtures/automatic-export-foundation.sql", "config/owner-export-capacity-recovery.sql", "supabase/migrations/20261030012215_owner_export_capacity_precision.sql", "config/automatic-export-capacity.sql", "config/gateway-export-capacity.sql", "config/empty-export-capacity.sql", "config/empty-export-immediate-capacity.sql"]:
         source = (ROOT/file).read_text()
         if "foundation" in file:
             source = re.sub(r"create role (anon|authenticated|service_role);", "", source)
@@ -41,20 +41,26 @@ for status in [500, 504, 400]:
         raw = {"error": {"code": "invalid_request", "request_id": "req_fixture", "message": 'No records matched this export. Filters and scrub settings (like "Active phone numbers only") may have excluded every record — adjust them and try again.'}}
     failure = {"httpStatus": status, "raw": raw, "rawText": json.dumps(raw)} if status != 504 else {"httpStatus": 504, "raw": None, "rawText": "<title>dealmachine.com | 504: Gateway time-out</title><p>api.v2.dealmachine.com</p>"}
     paid_receipt = literal(raw) if status == 400 else "null"
-    sql(f"""insert into icash_research_private.owner_batches(id,account_id,created_at,paid_receipt) values('{batch}','{account}',now()-interval '8 minutes',{paid_receipt});
+    created = "now()-interval '1 second'" if status == 400 else "now()-interval '8 minutes'"
+    completed = "now()" if status == 400 else "now()-interval '6 minutes'"
+    sql(f"""insert into icash_research_private.owner_batches(id,account_id,created_at,paid_receipt) values('{batch}','{account}',{created},{paid_receipt});
     insert into icash_research_private.owner_exports(id,request,receipt) values('{batch}','{{"people_ids":["held-owner"]}}',{literal(failure)});
-    insert into icash_research_private.requests(id,kind,account_id,operation_key,admitted,created_at,finished_at,result) values('{batch}','owner_lookup','{account}','owner-batch:{batch}',true,now()-interval '8 minutes',now()-interval '6 minutes','{{"outcome":"http_error","httpStatus":{status}}}');
+    insert into icash_research_private.requests(id,kind,account_id,operation_key,admitted,created_at,finished_at,result) values('{batch}','owner_lookup','{account}','owner-batch:{batch}',true,{created},{completed},'{{"outcome":"http_error","httpStatus":{status}}}');
     insert into icash_operation_spend values('original','dispatched',100);
     update icash_research_private.export_capacity_automation set enabled=true,gateway_enabled=true;""")
     if status == 400:
         assert sql("select icash_claim_automatic_export_capacity(repeat('a',40));") == "", "The new response family is staged disabled"
         assert sql("select count(*) from icash_research_private.owner_export_capacity_reviews;") == "0"
         sql("update icash_research_private.export_capacity_automation set empty_enabled=true;")
+        immediate = sql("begin;update icash_research_private.requests set finished_at=now();"
+                        + f"select icash_research_private.capacity_source_policy('{batch}',md5(receipt::text)) from icash_research_private.owner_exports where id='{batch}';rollback;")
+        assert immediate == "empty-idle-v1", "Exact completed no-records evidence is eligible immediately"
         # An unrelated 400, malformed source, interrupted handler or changed
         # batch cannot inherit the exact observed no-records recovery family.
         for change in [
             "update icash_research_private.requests set finished_at=null",
-            "update icash_research_private.requests set finished_at=now()",
+            "update icash_research_private.requests set finished_at=now()+interval '1 minute'",
+            "update icash_research_private.requests set finished_at=created_at-interval '1 second'",
             "update icash_research_private.requests set admitted=false",
             "update icash_research_private.requests set kind='owner_preview'",
             "update icash_research_private.requests set operation_key='wrong'",
@@ -71,6 +77,12 @@ for status in [500, 504, 400]:
         ]:
             result = sql("begin;"+change+";select icash_claim_automatic_export_capacity(repeat('a',40));rollback;")
             assert result == "", (change, result)
+        assert sql(f"select finished_at>now()-interval '1 minute' from icash_research_private.requests where id='{batch}';") == "t", "The concurrent 400 exercise must not wait out the previous five-minute guard"
+    else:
+        for completion in ["now()", "now()+interval '1 minute'", "null"]:
+            refused = sql(f"begin;update icash_research_private.requests set finished_at={completion};"
+                          + "select icash_claim_automatic_export_capacity(repeat('a',40));rollback;")
+            assert refused == "", f"HTTP {status} retains its original completed-handler age guard"
     original = sql("select md5((to_jsonb(e)-'capacity_review_id')::text) from icash_research_private.owner_exports e;")
     original_request = sql(f"select md5(to_jsonb(r)::text) from icash_research_private.requests r where id='{batch}';")
     original_batch = sql("select md5(to_jsonb(b)::text) from icash_research_private.owner_batches b;")
@@ -102,6 +114,8 @@ for status in [500, 504, 400]:
             "update icash_research_private.export_capacity_automation set enabled=false",
             "update icash_research_private.owner_batches set paid_receipt='{}'",
             "update icash_research_private.requests set result='{}' where kind='owner_lookup'",
+            "update icash_research_private.requests set finished_at=null where kind='owner_lookup'",
+            "update icash_research_private.requests set finished_at=now()+interval '1 minute' where kind='owner_lookup'",
             "update icash_research_private.owner_exports set lease_until=now()+interval '1 minute'",
         ]:
             held = sql("begin;"+change+f";select icash_finish_automatic_export_capacity('{claim['reviewId']}');rollback;")

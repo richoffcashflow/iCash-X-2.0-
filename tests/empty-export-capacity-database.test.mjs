@@ -21,10 +21,10 @@ async function probes(c,mutate=()=>{}){
  }
 }
 try{
- for(const file of ['tests/fixtures/automatic-export-foundation.sql','config/owner-export-capacity-recovery.sql','supabase/migrations/20261030012215_owner_export_capacity_precision.sql','config/automatic-export-capacity.sql','config/gateway-export-capacity.sql','config/empty-export-capacity.sql'])await db.exec(read(file));
+ for(const file of ['tests/fixtures/automatic-export-foundation.sql','config/owner-export-capacity-recovery.sql','supabase/migrations/20261030012215_owner_export_capacity_precision.sql','config/automatic-export-capacity.sql','config/gateway-export-capacity.sql','config/empty-export-capacity.sql','config/empty-export-immediate-capacity.sql'])await db.exec(read(file));
  await q("insert into icash_research_private.owner_batches(id,account_id,created_at,paid_receipt) values($1,$2,now()-interval '8 minutes',$3)",[batch,account,raw]);
  await q('insert into icash_research_private.owner_exports(id,request,receipt) values($1,$2,$3)',[batch,{people_ids:['held-owner']},failure]);
- await q("insert into icash_research_private.requests(id,kind,account_id,operation_key,admitted,created_at,finished_at,result) values($1,'owner_lookup',$2,$3,true,now()-interval '8 minutes',now()-interval '6 minutes',$4)",[batch,account,'owner-batch:'+batch,{outcome:'http_error',httpStatus:400}]);
+ await q("insert into icash_research_private.requests(id,kind,account_id,operation_key,admitted,created_at,finished_at,result) values($1,'owner_lookup',$2,$3,true,now()-interval '1 second',now(),$4)",[batch,account,'owner-batch:'+batch,{outcome:'http_error',httpStatus:400}]);
  await db.exec("insert into public.icash_operation_spend values('original','dispatched',100);update icash_research_private.export_capacity_automation set enabled=true,gateway_enabled=true");
  assert.equal(await rpc('icash_owner_active_export_capacity'),'export_busy','Reproduce platform-wide blockage');
  assert.equal(await rpc('icash_claim_automatic_export_capacity',release),null,'New policy installs disabled');
@@ -33,7 +33,7 @@ try{
  for(const mutate of [
   "update icash_research_private.requests set admitted=false",
   "update icash_research_private.requests set finished_at=null",
-  "update icash_research_private.requests set finished_at=now()",
+  "update icash_research_private.requests set finished_at=now()+interval '1 second'",
   "update icash_research_private.requests set finished_at=created_at-interval '1 second'",
   "update icash_research_private.requests set operation_key='wrong'",
   "update icash_research_private.requests set account_id=null",
@@ -80,15 +80,19 @@ try{
   await db.exec('begin;');const r=status===500?{httpStatus:500,raw:{error:{code:'internal_error',request_id:'req_fixture'}},rawText:JSON.stringify({error:{code:'internal_error',request_id:'req_fixture'}})}:{httpStatus:504,raw:null,rawText:'dealmachine.com | 504: Gateway time-out api.v2.dealmachine.com'};
   await q('update icash_research_private.owner_exports set receipt=$1',[r]);await db.exec('update icash_research_private.owner_batches set paid_receipt=null');
   await q("update icash_research_private.requests set result=$1 where kind='owner_lookup'",[{outcome:'http_error',httpStatus:status}]);
+  assert.equal(await rpc('icash_claim_automatic_export_capacity',release),null,'500/504 retain their completion-age requirement');
+  await db.exec("update icash_research_private.requests set created_at=now()-interval '8 minutes',finished_at=now()-interval '6 minutes' where kind='owner_lookup'");
   const c=await rpc('icash_claim_automatic_export_capacity',release);assert(c?.requestId);await probes(c);
   assert.equal(await rpc('icash_finish_automatic_export_capacity',c.reviewId),'capacity_review_held','Historical inventory exception belongs only to exact empty rejection');await db.exec('rollback;');
  }
- const c=await rpc('icash_claim_automatic_export_capacity',release);assert(c?.requestId);await probes(c);
+ await db.exec("update icash_research_private.requests set finished_at=clock_timestamp() where kind='owner_lookup'");
+ const freshBefore=await snapshot();
+ const c=await rpc('icash_claim_automatic_export_capacity',release);assert(c?.requestId,'A just-completed exact400 can begin free verification without waiting five minutes');await probes(c);
  assert.equal(await rpc('icash_finish_automatic_export_capacity',c.reviewId),'capacity_verified');
  assert.equal(await rpc('icash_finish_automatic_export_capacity',c.reviewId),'capacity_verified');
  assert.equal(await rpc('icash_owner_active_export_capacity'),'ready');
  assert.equal(await rpc('icash_owner_export_people_available',['held-owner']),false);
- const after=await snapshot();assert.deepEqual({...after,export:{...after.export,capacity_review_id:null}},before,'Only capacity binding changes; receipts, money and original owners remain held');
+ const after=await snapshot();assert.deepEqual({...after,export:{...after.export,capacity_review_id:null}},freshBefore,'Only capacity binding changes; receipts, money and original owners remain held');
  assert.equal(await v('select auto_policy from icash_research_private.owner_export_capacity_reviews'),'empty-idle-v1');
  assert.equal(await v('select count(*)::integer from icash_research_private.export_capacity_probes'),3);
  for(const role of ['anon','authenticated','service_role'])for(const name of ['capacity_source_policy','capacity_source_before_empty'])assert.equal(await v('select has_function_privilege($1,$2,\'execute\')',[role,'icash_research_private.'+name+'(uuid,text)']),false);
