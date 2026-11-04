@@ -4,6 +4,7 @@ import {callOfferEvidence,callPayoffEvidence,callSellerStatement,spokenMoneyAmou
 import {automaticOfferGuardrails,automaticOfferGuardrailMatches} from '../lib/automatic-offer-policy.ts';
 import {automaticOfferToolConfig,sellerAgreementToolMatches} from '../lib/seller-agreement-tool.ts';
 import {receptionLiveConversationMatches} from '../lib/recorded-reception.ts';
+import {sellerRoutineOwnershipAnswer} from '../lib/seller-ownership-answer.ts';
 const now=Date.now(),address='45 Oak Road',conversationId='conv_fixture',token='a'.repeat(64);
 const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:0,raw:{data:{dm_property_id:'prop_123',full_address:address,estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:20000,estimated_equity_percentage:90}}};
 const context={party:'seller',accountId:'account',dealId:'deal',address,snapshot,offerState:null,offerVersion:0};
@@ -115,3 +116,33 @@ assert.equal(current.offerState.repairEstimateCents,undefined,'no invented selle
 const wrong=await automaticCallOffer(token,{action:'update_repairs',conversationId,sellerStatement:'Repairs are sixty thousand dollars.',repairEstimateCents:6000000},{...d,resolveStatement:async i=>callSellerStatement(transcript,i),verifyInput:async i=>callOfferEvidence(transcript,i)});
 assert.equal(wrong.quoteAllowed,false,'canonical transcript cannot manufacture an unspoken dollar amount');
 console.log('PASS real provider null-estimate request and paraphrased repair transcript regression.');
+
+// A normal answer sent through report_change must not manufacture a material
+// change. Existing holds and pending contracts remain independently binding.
+const ownershipQuestion='Does anyone else own the property with you who would need to agree to sell?';
+let ownershipTranscript={transcript:[{role:'agent',message:ownershipQuestion},{role:'user',message:'No, um, no.'}]};
+const ownershipDeps={...d,verifyInput:async i=>callOfferEvidence(ownershipTranscript,i),verifyRoutineOwnershipAnswer:async i=>sellerRoutineOwnershipAnswer(ownershipTranscript,i)};
+const reportOwnership=()=>automaticCallOffer(token,{action:'report_change',conversationId,sellerStatement:'No, um, no.'},ownershipDeps);
+current=structuredClone(context);
+const ordinary=await reportOwnership();assert.equal(ordinary.quoteAllowed,true);assert.equal(ordinary.priceCents,10200000);
+assert.equal(current.offerState.factsPending,undefined,'ordinary answer does not add a material-change hold');
+assert.equal(current.offerState.sellerStatement,'No, um, no.');assert.deepEqual(current.snapshot,snapshot);
+for(const oldState of [{factsPending:true},{factsPending:true,payoffPending:true},{conditionPending:true},{agreementRevisionRequired:true}]){
+ current={...structuredClone(context),offerState:oldState};
+ const before=calculateAutomaticCallOffer(current,oldState,now),after=await reportOwnership();
+ assert.equal(after.quoteAllowed,before.quoteAllowed);assert.equal(after.contractAllowed,before.contractAllowed);
+ for(const [key,value] of Object.entries(oldState))assert.equal(current.offerState[key],value,'existing '+key+' is never cleared');
+}
+current={...structuredClone(context),offerState:{acceptedPriceCents:9000000}};
+await reportOwnership();assert.equal(current.offerState.acceptedPriceCents,null,'existing acceptance invalidation is preserved');
+current={...structuredClone(context),pendingAgreement:{priceCents:9000000}};
+assert.equal((await reportOwnership()).quoteAllowed,false);assert.equal(current.offerState.agreementRevisionRequired,true);
+for(const question of ['Are you the owner?','Are you the only owner?','Is the property currently listed with an agent?']){
+ ownershipTranscript={transcript:[{role:'agent',message:question},{role:'user',message:'No, um, no.'}]};
+ current=structuredClone(context);assert.equal((await reportOwnership()).quoteAllowed,false);assert.equal(current.offerState.factsPending,true);
+}
+ownershipTranscript={transcript:[{role:'agent',message:ownershipQuestion},{role:'user',message:'No, um, no.'}]};
+current=structuredClone(context);
+assert.equal((await automaticCallOffer(token,{action:'report_change',conversationId,sellerStatement:'No, um, no.'},{...ownershipDeps,verifyInput:async()=>false})).quoteAllowed,false,'unverified input cannot use the exception');
+assert.equal(current.offerState.factsPending,true);
+console.log('PASS connected report_change: routine negative co-owner answer avoids a false hold; original holds, acceptance invalidation, changed agreement and evidence gates remain.');

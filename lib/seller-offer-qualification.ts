@@ -45,7 +45,7 @@ export function sellerOfferQualification(current:unknown,history:unknown[]=[]):S
    const text=row.message.trim();
    if(row.role==='agent'){question=latestQualificationQuestion(text);continue;}
    if(row.role!=='user'||!answerable(text))continue;
-   const ownerQuestion=/\b(?:owner|do you own|is (?:this|that|it|.+?) your property)\b/i.test(question)&&/\?/.test(question);
+   const ownerQuestion=/\b(?:owner|do you own|is (?:this|that|it|.+?) your property)\b/i.test(question)&&/\?/.test(question)&&!/(?:\b(?:only|sole|other|another) owner\b|\b(?:anyone|anybody) else\b)/i.test(question);
    const availabilityQuestion=/\b(?:good time|time to (?:talk|chat)|(?:have|got) (?:a (?:quick )?minute|a (?:couple|few) (?:of )?minutes))\b/i.test(question);
    const interestQuestion=/\b(?:interested in selling|(?:want|looking|ready|like) to sell|consider(?:ing)? selling)\b/i.test(question)&&/\?/.test(question);
    const situationQuestion=/\b(?:what(?:'s| is) going on|what.*(?:thinking|looking|want|decid)|why.*sell|reason.*sell|tell me.*situation)\b/i.test(question);
@@ -84,7 +84,7 @@ export function sellerOfferQualification(current:unknown,history:unknown[]=[]):S
 
 export function sellerQualificationHold(result:Exclude<SellerQualification,{ready:true}>){
  return {quoteAllowed:false as const,priceCents:null,contractAllowed:false,sent:false,status:'qualification',reason:'seller_qualification_required',nextQuestion:result.nextQuestion,
-  instruction:result.stop?result.nextQuestion:`This is a normal conversation step, not a failed calculation. No numerical offer is authorized yet. Briefly acknowledge the seller's last answer, introduce the saved company/principal if still missing, and ask only: "${result.nextQuestion}" Then listen. Do not retry the tool until they answer; do not invent facts or repeat completed questions.`,missing:result.missing};
+  instruction:result.stop?result.nextQuestion:`This is a normal conversation step, not a failed calculation. No numerical offer is authorized yet. Introduce the saved company/principal only if still missing. Ask the next question directly, without a routine thank-you or repeating their answer: "${result.nextQuestion}" Then listen. Do not retry the tool until they answer; do not invent facts or repeat completed questions.`,missing:result.missing};
 }
 
 type Db=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;

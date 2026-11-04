@@ -7,6 +7,13 @@ const question='Is the property currently listed with a real estate agent?';
 const evidence=(answer,previous=question,statement=answer)=>sellerListingEvidence({transcript:[{role:'agent',message:previous},{role:'user',message:answer}]},{action:'report_change',sellerStatement:statement});
 for(const answer of ['Yes.','It is listed with my agent.','My property is listed with a realtor.'])assert.equal(evidence(answer),true);
 for(const answer of ['No.','It is not currently listed.','My listing has expired.'])assert.equal(evidence(answer),false);
+for(const answer of ["No, it's not.",'No, it’s not.',"No, it isn't.",'No, it is not.','No, um, no.','Uh, no.'])assert.equal(evidence(answer),false,answer);
+for(const answer of ['Yes, it is.','Yeah, it is.','Um, yes.'])assert.equal(evidence(answer),true,answer);
+for(const answer of ["No, it's not.",'No, um, no.','Yes, it is.']){
+ assert.equal(evidence(answer,'Is anyone living there?'),null,'short answer must bind to listing question');
+ assert.equal(evidence(answer,'Is the property not listed with an agent?'),null,'negative question remains ambiguous');
+}
+for(const answer of ["No, it's not, but I have an agent agreement.","No, it's not my property.",'No, maybe it is listed with an agent.'])assert.equal(evidence(answer),null,'extra clauses cannot become a short answer');
 assert.equal(evidence('Yes.','Do you want to sell?'),null);
 assert.equal(evidence('It is not listed with my agent.',question,'It is listed with my agent.'),null);
 assert.equal(evidence('I might list it with an agent.'),null);

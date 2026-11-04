@@ -26,6 +26,26 @@ assert(priceInsteadOfRepairs.missing.includes('condition'),'a price question can
 assert((sellerOfferQualification({transcript:[...ownerOnly,a('Is now a good time?'),u('No, not now.'),u('What would you give me?')]})).stop,'a price question cannot override an explicit current refusal');
 assert(sellerOfferQualification({transcript:[u('What would you give me?')]}).missing.includes('ownership'),'a price request cannot establish ownership');
 assert.equal(sellerOfferQualification({transcript:qualifiedSellerTurns}).ready,true);
+for(const question of ['Are you the only owner?','Are you the sole owner and decision maker?','Is there another owner?','Are there any other owners?']){
+ const sharedOwnership={transcript:[...qualifiedSellerTurns,a(question),u('No, um, no.')]};
+ assert.equal(sellerOfferQualification(sharedOwnership).ready,true,'a co-owner answer must not revoke confirmed ownership: '+question);
+ assert.equal(sellerOfferQualification({transcript:[...sharedOwnership.transcript,u('I am not the owner; wrong person.')]}).stop,true,'explicit ownership denial still stops');
+}
+// Anonymized November 4 call: the natural unlisted answer was discarded,
+// which sent the caller back through already answered repair/listing questions.
+const novemberReplay=[
+ a('Is this the owner of 123 Example Drive?'),u('Yes.'),
+ a('Would you be interested in selling your property for all cash?'),u('Yes. How much can you give me?'),
+ a('One moment. Thanks for letting me know. What has you thinking about selling the property?'),u("Yes, I'm just... I just want to get rid of the property. I mean, you know, it's been in bad condition and, you know, I just want to get rid of it."),
+ a('Can you tell me what kind of repairs or updates the property needs?'),u("Yeah, so the property is, like, almost gutted. I haven't lived in there in, like, over 20 years, and it's just sitting up. It's vacant. Um, yeah, I just wanna get rid of it."),
+ a('When are you hoping to sell the property?'),u('I wanna sell within the next 30 days, as soon as possible.'),
+ a('Is the property currently listed with a real estate agent?'),u("No, it's not."),
+];
+assert.deepEqual(sellerOfferQualification({transcript:novemberReplay}),{ready:true},'the first natural listing answer completes qualification');
+novemberReplay.push(a('Does anyone else own the property with you who would need to agree to sell?'),u('No, um, no.'));
+assert.deepEqual(sellerOfferQualification({transcript:novemberReplay}),{ready:true},'the co-owner answer retains prior condition, occupancy, timing and listing evidence');
+novemberReplay.push(a('Just to be sure, does the property need any specific repairs or updates beyond being gutted? If you have an estimated total repair cost, that would help too.'),u('No, I, I told you everything. I told you all the repairs that it needs.'));
+assert.deepEqual(sellerOfferQualification({transcript:novemberReplay}),{ready:true},'no extra repairs does not restart qualification');
 // The October 13 call repeated this answer until the caller finally said "vacant".
 for(const [question,answer] of [
  ['Does anyone currently live in the property?','No one lives in the property.'],
