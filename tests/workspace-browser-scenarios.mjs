@@ -178,8 +178,30 @@ export async function verifyWorkspace(browser,base,options,name){
  }
  try{
   await visit(base+'/preview/workspace?preview=1');
-  await page.getByRole('heading',{name:'One property. One clear next step.'}).waitFor();
-  await page.getByRole('region',{name:'Course walkthrough'}).waitFor();
+  await page.getByRole('heading',{name:'See your workspace in action.'}).waitFor();
+  const sampleStages=page.getByRole('navigation',{name:'Sample deal stages',exact:true});
+  const sampleStageLabels={lead:'New lead',waiting:'Agreement sent',buyers:'Under contract',deposit:'Buyer deposit',closing:'Closing',closed:'Closed'};
+  assert.equal(await sampleStages.getByRole('button').count(),6,'All six sample stages are visible without opening a menu');
+  for(const label of Object.values(sampleStageLabels))assert.equal(await sampleStages.getByRole('button',{name:label,exact:true}).count(),1);
+  async function chooseSampleStage(stage){
+   const button=sampleStages.getByRole('button',{name:sampleStageLabels[stage],exact:true});await button.click();
+   assert.equal(await button.getAttribute('aria-pressed'),'true');assert.equal(await sampleStages.locator('[aria-pressed=true]').count(),1);
+   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Sample workspace fits mobile and desktop');
+  }
+  assert.equal(await sampleStages.getByRole('button',{name:'New lead',exact:true}).getAttribute('aria-pressed'),'true');
+  const referenceSummary=page.getByText('More help & sample contracts',{exact:true});
+  const reference=page.locator('details').filter({has:referenceSummary});
+  assert.equal(await reference.evaluate(node=>node.open),false,'Reference help starts collapsed below the workspace');
+  assert.equal(await page.getByRole('region',{name:'Course walkthrough',includeHidden:true}).isVisible(),false);
+  const sampleImage=page.getByRole('img',{name:'Illustrative house photo for this fictional property',exact:true});
+  await sampleImage.waitFor();await page.waitForFunction(()=>{const photo=document.querySelector('img[src="/practice-home.webp"]');return photo?.complete&&photo.naturalWidth>0;});
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Sample workspace fits mobile and desktop');
+  assert((await page.locator('#sample-workspace').boundingBox()).y<(await referenceSummary.boundingBox()).y,'The workspace precedes optional reference material');
+  for(const name of ['Text conversation for 128 Sample Lane','Call history for 128 Sample Lane']){
+   await page.getByRole('button',{name,exact:true}).click();await page.getByRole('dialog',{name:'128 Sample Lane',exact:true}).waitFor();
+   await page.getByRole('button',{name:'Close preview panel',exact:true}).click();
+  }
+  await referenceSummary.click();await page.getByRole('region',{name:'Course walkthrough'}).waitFor();
   for(const kind of ['purchase','assignment']){
    await page.getByRole('button',{name:`Preview ${kind} contract`,exact:true}).click();
    const contract=page.getByRole('dialog',{name:`Sample ${kind} contract`,exact:true});await contract.waitFor();
@@ -201,19 +223,20 @@ export async function verifyWorkspace(browser,base,options,name){
   await workflow.getByText('Sample cancellation requested.',{exact:true}).waitFor();assert.deepEqual(writes,[],'edit/send/cancel demonstration has no APIs');
   await page.screenshot({path:`/tmp/icash-contract-workflow-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
   await page.getByRole('button',{name:'Hide contract walkthrough',exact:true}).click();
+  await referenceSummary.click();assert.equal(await reference.evaluate(node=>node.open),false);
   assert.equal(await page.getByRole('button',{name:'Preview first-entry acknowledgment'}).count(),0);
-  await page.getByLabel('Explore a step').selectOption('buyers');
+  await chooseSampleStage('buyers');
 
   await page.getByRole('region',{name:'Buyer activity',exact:true}).getByText('Avery Morgan',{exact:true}).first().waitFor();
   await page.getByRole('button',{name:'View buyer package',exact:true}).click();
   await page.getByRole('dialog').waitFor();assert.match(await page.getByRole('dialog').innerText(),/\$100,000/);assert.doesNotMatch(await page.getByRole('dialog').innerText(),/\$90,000|assignment fee/i);
   await page.getByRole('button',{name:'Close preview panel'}).click();
-  await page.getByLabel('Explore a step').selectOption('waiting');
+  await chooseSampleStage('waiting');
   assert.equal(await page.getByRole('region',{name:'Buyers',exact:true}).count(),0);
   await page.getByText('Waiting for seller signatures',{exact:true}).waitFor();
-  await page.getByLabel('Explore a step').selectOption('lead');
+  await chooseSampleStage('lead');
   assert.equal(await page.getByRole('button',{name:'Documents',exact:true}).count(),0);
-  await page.getByLabel('Explore a step').selectOption('buyers');
+  await chooseSampleStage('buyers');
   assert.equal(await page.locator('.property-milestones').count(),0);
   assert.equal(await page.locator('.property-details summary:visible').count(),0,'buyer view has no accordion menu');
   const buyerButton=page.getByRole('button',{name:'View buyer Avery Morgan',exact:true});await buyerButton.focus();await page.keyboard.press('Enter');
@@ -228,13 +251,13 @@ export async function verifyWorkspace(browser,base,options,name){
   await page.screenshot({path:`/tmp/icash-property-details-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
   await page.keyboard.press('Escape');
   await details.waitFor({state:'hidden'});
-  await page.getByLabel('Explore a step').selectOption('deposit');
+  await chooseSampleStage('deposit');
   await page.getByRole('button',{name:'Review buyer progress',exact:true}).click();
   const depositPreview=page.getByRole('dialog',{name:'Visits & buyer deposit',exact:true});await depositPreview.waitFor();
   assert.match(await depositPreview.innerText(),/\$2,000 due.*No receipt has been verified/s);
   assert.match(await depositPreview.innerText(),/leaving \$8,000 at closing/);
   await page.keyboard.press('Escape');await depositPreview.waitFor({state:'hidden'});
-  await page.getByLabel('Explore a step').selectOption('closing');
+  await chooseSampleStage('closing');
   const closingButton=await checkClosingButton(page.locator('.live-property'));
   await page.screenshot({path:`/tmp/icash-closing-preview-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
   await closingButton.click();
@@ -244,14 +267,14 @@ export async function verifyWorkspace(browser,base,options,name){
   await page.screenshot({path:`/tmp/icash-title-messages-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
   await page.keyboard.press('Escape');
   await closingDialog.waitFor({state:'hidden'});
-  await page.getByLabel('Explore a step').selectOption('closed');
+  await chooseSampleStage('closed');
   await page.getByRole('button',{name:'Review payment',exact:true}).click();
   const paymentPreview=page.getByRole('dialog',{name:'Closing',exact:true});await paymentPreview.waitFor();
   assert.match(await paymentPreview.innerText(),/Closing funds disbursed.*\$8,000.*\$2,000.*\$10,000/s);
   await page.keyboard.press('Escape');await paymentPreview.waitFor({state:'hidden'});
   await visit(base+'/preview/workspace?stage=lead');
   await page.getByText('Latest from the seller',{exact:true}).waitFor();
-  assert.equal(await page.getByLabel('Explore a step').inputValue(),'lead');
+  assert.equal(await sampleStages.getByRole('button',{name:'New lead',exact:true}).getAttribute('aria-pressed'),'true');
   assert.deepEqual(writes,[],'sample preview never calls account/work APIs');
   await visit(base+'/preview/workspace?preview=1&recovery=1');
   const recovery=page.getByRole('region',{name:'Recovery example',exact:true});await recovery.waitFor();

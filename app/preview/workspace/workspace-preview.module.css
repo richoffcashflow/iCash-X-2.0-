@@ -1,0 +1,49 @@
+.preview.preview.preview.preview :global(.console-header) {
+  width: min(820px, calc(100% - 40px));
+  min-height: 76px;
+  margin-inline: auto;
+}
+
+.preview.preview.preview.preview :global(.console-main) {
+  width: 100%;
+  max-width: 860px;
+  padding: 24px 20px 40px;
+}
+
+.intro { margin-bottom: 24px; }
+.eyebrow { font-size: 10px; font-weight: 700; letter-spacing: .1em; color: #707070; }
+.preview .intro h1 { margin: 12px 0 10px; font-size: clamp(27px, 5vw, 38px); line-height: 1.14; letter-spacing: -.045em; text-align: left; }
+.preview .intro p { margin: 0; font-size: 15px; line-height: 1.6; color: #555; text-align: left; }
+.intro small { display: block; margin-top: 8px; font-size: 12px; line-height: 1.5; color: #777; }
+
+.stages { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; padding: 6px; border: 1px solid #e8e8e8; border-radius: 14px; background: #fafafa; }
+.stages button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 70px; padding: 10px 5px; border: 0; border-radius: 9px; background: transparent; color: #666; font-size: 11px; line-height: 1.4; font-weight: 600; cursor: pointer; }
+.stages button span { font-size: 12px; font-weight: 700; opacity: .65; }
+.stages button:hover { background: #efefef; color: #111; }
+.stages button[aria-pressed=true] { background: #171717; color: #fff; }
+.stages button[aria-pressed=true] span { opacity: 1; }
+.stages button:focus-visible, .reference>summary:focus-visible { outline: 2px solid #111; outline-offset: 3px; }
+.preview .hint { margin: 12px 0 28px; text-align: left; color: #777; font-size: 12px; line-height: 1.6; }
+
+/* Keep the actual card styles; a single reference deal fills its own column. */
+.preview.preview.preview.preview :global(.property-list) { grid-template-columns: minmax(0, 1fr); margin-top: 14px; }
+.preview.preview.preview.preview :global(.leads-heading h3) { font-size: 22px; }
+.preview.preview.preview.preview :global(.property-thumbnail) { height: 220px; aspect-ratio: auto; min-height: 0; }
+.preview.preview.preview.preview :global(.property-thumbnail>img) { object-position: center 55%; }
+.preview.preview.preview.preview :global(.property-cash-preview) { display: flex; flex-direction: column; }
+.preview.preview.preview.preview :global(.property-focus) { margin-top: 0; }
+.preview.preview.preview.preview :global(.property-secondary-actions) { margin-bottom: 0; }
+
+.reference { margin-top: 24px; border-top: 1px solid #e7e7e7; color: #626262; }
+.reference>summary { width: fit-content; max-width: 100%; min-height: 48px; padding: 16px 0; font-size: 13px; line-height: 1.5; cursor: pointer; }
+.reference :global(.course-stage-guide) { margin-top: 0; }
+
+@media (max-width: 600px) {
+  .preview.preview.preview.preview :global(.console-main) { padding-top: 18px; }
+  .intro { margin-bottom: 20px; }
+  .stages { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .stages button { flex-direction: row; gap: 7px; min-height: 46px; padding: 8px 5px; }
+  .stages button span { font-size: 10px; }
+  .preview .hint { margin-bottom: 22px; }
+  .preview.preview.preview.preview :global(.property-thumbnail) { height: 190px; }
+}
