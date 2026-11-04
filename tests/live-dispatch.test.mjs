@@ -8,7 +8,7 @@ import {instantLeadsEnabled} from '../lib/meta-instant-lead-service.ts';
 import {instantLeadPrompt} from '../lib/meta-instant-leads.ts';
 import {conversationAddressFields,conversationAddressInstructions} from '../lib/conversation-address.ts';
 import {selectBusinessCaller,secondaryBusinessPhone} from '../lib/business-voice-numbers.ts';
-import {isAdditionalBusinessPhone,newBusinessPhone} from '../lib/business-phone-policy.ts';
+import {isAdditionalBusinessPhone,newBusinessPhone,voiceOnlyBusinessPhones} from '../lib/business-phone-policy.ts';
 import {sellerOfferPresentation} from '../lib/seller-offer-presentation.ts';
 import {VoiceActivationBudgetError} from '../lib/voice-budget-failure.ts';
 import {loadSellerClosingContext} from '../lib/seller-closing-context.ts';
@@ -312,10 +312,14 @@ reset();sellerConsentCurrent=true;textThreads=[];resolvedSender=newBusinessPhone
 reset();sellerConsentCurrent=true;textThreads=[{sender:newBusinessPhone,sender_pool_assigned:true}];secondEnabled=true;secondVerified=false;assert.equal((await dispatchLiveVoice('account','job')).status,'business_number_verification_required');assert.equal(postCount,0);
 
 // Fresh assignments from the shared resolver support either active number.
-for(const sender of ['+14243948384',newBusinessPhone]){
+for(const sender of ['+14243948384',newBusinessPhone,...voiceOnlyBusinessPhones]){
  reset();textThreads=[];resolvedSender=sender;secondEnabled=true;secondVerified=true;
  assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(outboundBody.fromPhone,sender);
  assert(!records.some(r=>r.path?.startsWith('icash_webinar_text_senders')),'Voice never independently picks the preferred number');
+}
+for(const sender of voiceOnlyBusinessPhones){
+ reset();textThreads=[];resolvedSender=sender;secondEnabled=true;secondVerified=false;
+ assert.equal((await dispatchLiveVoice('account','job')).status,'business_number_verification_required');noAdmission();
 }
 for(const sender of [null,'+19999999999',newBusinessPhone]){
  reset();resolvedSender=sender;secondEnabled=true;secondVerified=true;

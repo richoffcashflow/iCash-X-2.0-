@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
-import {inboundBusinessPhones} from '../lib/business-phone-policy.ts';
+import {voiceOnlyBusinessPhones} from '../lib/business-phone-policy.ts';
 const db=await PGlite.create(),ac='AC'+'a'.repeat(32),pn='PN'+'b'.repeat(32);
 const q=(sql,args=[])=>db.query(sql,args),rows=async(sql,args=[])=>(await q(sql,args)).rows;
 try{
@@ -24,7 +24,7 @@ try{
  assert.equal(sql,readFileSync('supabase/migrations/'+migration,'utf8'));await db.exec(sql);
  assert.deepEqual(await rows('select * from icash_business_voice_numbers order by phone'),previous,'Migration never fabricates provider verification or changes old readiness');
  assert.deepEqual(await rows("select oid::regprocedure::text name,pg_get_functiondef(oid) definition,proacl from pg_proc where proname in ('icash_save_business_voice_number','bind_business_caller_id','icash_customer_call_sender') order by name"),functions,'Existing routing and permissions are unchanged');
- for(const phone of inboundBusinessPhones){
+ for(const phone of voiceOnlyBusinessPhones){
   assert.deepEqual(await rows('select enabled from icash_text_senders where phone=$1',[phone]),[{enabled:false}]);
   await save(phone,false,false);await save(phone,true,false);await save(phone,true,false);
   assert.deepEqual(await rows('select forwarding_ready,outbound_enabled,caller_id_sid from icash_business_voice_numbers where phone=$1',[phone]),[{forwarding_ready:true,outbound_enabled:false,caller_id_sid:null}]);
@@ -40,7 +40,7 @@ try{
  }
  assert.equal((await rows("select relrowsecurity from pg_class where oid='icash_business_voice_numbers'::regclass"))[0].relrowsecurity,true);
  // Reapplying the configuration leaves any separately authorized future state intact.
- await q('update icash_text_senders set enabled=true where phone=$1',[inboundBusinessPhones[0]]);await db.exec(sql);
- assert.equal((await rows('select enabled from icash_text_senders where phone=$1',[inboundBusinessPhones[0]]))[0].enabled,true);
+ await q('update icash_text_senders set enabled=true where phone=$1',[voiceOnlyBusinessPhones[0]]);await db.exec(sql);
+ assert.equal((await rows('select enabled from icash_text_senders where phone=$1',[voiceOnlyBusinessPhones[0]]))[0].enabled,true);
  console.log('PASS inbound-number migration: exact leases, incoming-only setup, repeated Connect keeps SMS disabled, unverified outbound rejected, old state/functions/ACL/RLS preserved.');
 }finally{await db.close();}

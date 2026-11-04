@@ -14,6 +14,10 @@ user={id:'someone',user_metadata:{owner:true}};assert.equal((await post({phone:'
 user={id:owner};for(const body of ['{',null,{}, {phone:'no number'},{phone:'2125550199',businessNumber:'+12125550100'},'x'.repeat(513)])assert.equal((await post(body)).status,400);
 const res=await post({phone:'(212) 555-0199',businessNumber:'+14243948384',actor:'not-owner'});assert.equal(res.status,200);assert.equal(res.headers.get('cache-control'),'private, no-store');
 assert.deepEqual(queries[0],{path:'rpc/icash_owner_callback_context',method:'POST',body:{p_actor:owner,p_phone:'+12125550199',p_business:'+14243948384'}});
+for(const businessNumber of ['+14154208230','+16195364770']){
+ assert.equal((await post({phone:'2125550199',businessNumber})).status,200);
+ assert.equal(queries.at(-1).body.p_business,businessNumber);
+}
 bad=true;assert.equal((await post({phone:'2125550199'})).status,503);
 assert.equal(validSellerCallbackContext({phone:'+12125550199',businessNumber:null,status:'matched',matches:[]},'+12125550199',null),false);
 console.log('PASS callback lookup authorization, bounded phone input, server-derived owner, exact response binding and private errors.');

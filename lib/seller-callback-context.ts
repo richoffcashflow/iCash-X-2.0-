@@ -1,5 +1,6 @@
 import {z} from 'zod';
-export const callbackBusinessNumbers=['+14243948384','+17208134296','+14244377030'] as const;
+import {primaryBusinessPhone,additionalBusinessPhones} from './business-phone-policy.ts';
+export const callbackBusinessNumbers=[primaryBusinessPhone,...additionalBusinessPhones] as const;
 export function callbackPhone(value:string){const digits=value.replace(/[() .+-]/g,'');const phone=digits.length===10?'+1'+digits:'+'+digits;return /^\+1[2-9]\d{9}$/.test(phone)?phone:null;}
 const phone=z.string().regex(/^\+1[2-9]\d{9}$/);
 const report=z.object({phone,businessNumber:phone.nullable(),status:z.enum(['unknown','matched','ambiguous']),matches:z.array(z.object({account:z.string().min(1),accountId:z.guid(),address:z.string().min(1),screeningId:z.guid(),businessNumber:phone,lastContactAt:z.string().refine(v=>Number.isFinite(Date.parse(v))),available:z.boolean()})).max(51)});
