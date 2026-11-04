@@ -51,7 +51,7 @@ export async function verifyCourse(browser,base,options,name){
   assert.match(await page.locator('main').innerText(),/\$50\s+more today.*\$100\/month total/s);
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Course fits mobile and desktop');
   await page.screenshot({path:`/tmp/icash-course-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
-  await practice.click();await page.getByRole('heading',{name:'One property. One clear next step.'}).waitFor();assert.equal(await page.getByLabel('Explore a step').inputValue(),'lead');
+  await practice.click();await page.getByRole('heading',{name:'See your workspace in action.'}).waitFor();assert.equal(await page.getByRole('navigation',{name:'Sample deal stages',exact:true}).getByRole('button',{name:'New lead',exact:true}).getAttribute('aria-pressed'),'true');
   await page.getByRole('link',{name:'Back to course',exact:true}).click();await page.getByRole('link',{name:'Download PDF',exact:true}).waitFor();assert.equal(writes.length,0);
   vip=true;await page.reload();await page.getByText('Included in your plan',{exact:true}).waitFor();assert.equal(await page.getByRole('link',{name:'Upgrade to VIP',exact:true}).count(),0);
   vip=false;owner=true;ready=false;await page.reload();
