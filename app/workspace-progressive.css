@@ -54,6 +54,7 @@
 .personalized-workspace .property-focus>div:first-child{flex:1 1 260px;min-width:0;overflow-wrap:anywhere}
 .personalized-workspace .property-focus h3{font-size:17px;line-height:1.4;margin:0 0 6px;text-align:left;letter-spacing:-.3px}
 .personalized-workspace .property-focus p{font-size:13px;line-height:1.65;color:#666;margin:0;text-align:left}
+.personalized-workspace .property-focus[data-deal-section="control"]{padding:16px;margin:12px 0 0;border-top:1px solid #eee}
 .personalized-workspace .property-focus-action{flex:0 1 auto;max-width:100%;min-width:0}
 .personalized-workspace .property-focus-action button{min-height:44px}
 .icash-brand-workspace.icash-brand-workspace .property-focus-action .demo-button{min-width:0;min-height:44px;padding:12px 16px;border:1px solid #171717;border-radius:10px;background:#171717;color:#fff;font-size:14px;font-weight:600;line-height:1.4;white-space:normal}

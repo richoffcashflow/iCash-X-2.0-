@@ -1,5 +1,29 @@
 export type BuyerSearchStrategy='recent_corporate'|'corporate_owners';
 export type BuyerSearch={zip:string;page:number;perPage:number;since:string;unitCostMicros:number;quotedCostMicros:number;strategy?:BuyerSearchStrategy};
+export type BuyerSearchReceipt={page:number;has_next_page:boolean;receipt?:{strategy?:string;providerPage?:number;learningVersion?:string;firstStrategy?:string}};
+/** Use only complete, immutable shared-search history. Legacy unlabelled pages
+ * retain their old cursor rather than inventing which provider pages they used. */
+export function nextBuyerSearchFromReceipts(receipts:BuyerSearchReceipt[],maxPages:number,firstStrategy?:BuyerSearchStrategy){
+ if(!Number.isInteger(maxPages)||maxPages<1||maxPages>5||!Array.isArray(receipts)||receipts.length>5)throw Error('BUYER_CURSOR_REVIEW_REQUIRED');
+ if(!firstStrategy)return nextBuyerSearch(receipts.at(-1),maxPages);
+ if(!['recent_corporate','corporate_owners'].includes(firstStrategy))throw Error('BUYER_CURSOR_REVIEW_REQUIRED');
+ const second:BuyerSearchStrategy=firstStrategy==='recent_corporate'?'corporate_owners':'recent_corporate';
+ const latest=new Map<BuyerSearchStrategy,BuyerSearchReceipt>();
+ for(const [index,row] of receipts.entries()){
+  const r=row.receipt,strategy=r?.strategy as BuyerSearchStrategy,prior=latest.get(strategy);
+  if(row.page!==index+1||typeof row.has_next_page!=='boolean'||r?.learningVersion!=='shared-v1'||r.firstStrategy!==firstStrategy
+   ||!['recent_corporate','corporate_owners'].includes(strategy)||!Number.isInteger(r.providerPage)||r.providerPage!==((prior?.receipt?.providerPage??0)+1)
+   ||prior&&!prior.has_next_page||index===0&&strategy!==firstStrategy||index===1&&strategy!==second)throw Error('BUYER_CURSOR_REVIEW_REQUIRED');
+  latest.set(strategy,row);
+ }
+ if(receipts.length>=maxPages)return null;
+ if(!receipts.length)return {page:1,providerPage:1,strategy:firstStrategy};
+ if(receipts.length===1)return {page:2,providerPage:1,strategy:second};
+ // Keep the existing second-strategy order; resume the first only when the
+ // second is exhausted and its own last receipt explicitly has another page.
+ const strategy=latest.get(second)?.has_next_page?second:latest.get(firstStrategy)?.has_next_page?firstStrategy:null;
+ return strategy?{page:receipts.length+1,providerPage:latest.get(strategy)!.receipt!.providerPage!+1,strategy}:null;
+}
 export function nextBuyerSearch(last:{page:number;has_next_page:boolean;receipt?:{strategy?:string;providerPage?:number;learningVersion?:string;firstStrategy?:string}}|undefined,maxPages:number,firstStrategy?:BuyerSearchStrategy){
  if(last&&last.page>=maxPages)return null;
  if(firstStrategy){

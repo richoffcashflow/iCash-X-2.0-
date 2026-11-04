@@ -10,15 +10,27 @@ import {processTextAi} from '@/lib/text-ai-service';
 import {dispatchLiveVoice} from '@/lib/live-dispatch-service';
 export const runtime='nodejs';
 export const maxDuration=60;
+async function recordIngressFailure(kind:string,stage:string){
+ // Separate bounded diagnostic write. Never include source content or replay work.
+ try{await db('rpc/icash_record_text_ingress_failure','POST',{p_kind:kind,p_stage:stage},AbortSignal.timeout(1000));}
+ catch{console.warn('text_webhook_monitoring_failed');}
+}
 export async function POST(req:Request){
  const secret=process.env.CONTIGUITY_WEBHOOK_SECRET;if(!secret)return new Response(null,{status:503});
  const raw=Buffer.from(await req.arrayBuffer());if(raw.length>262144)return new Response(null,{status:413});
  if(!verifyContiguityWebhook(raw,req.headers.get('contiguity-signature'),secret))return new Response(null,{status:401});
- let event;try{event=parseTextWebhook(JSON.parse(raw.toString('utf8')));}catch{console.warn('text_webhook_rejected',{reason:'unsupported_or_malformed'});return NextResponse.json({error:'Unsupported or malformed event'},{status:400});}
+ let input:unknown,event;try{input=JSON.parse(raw.toString('utf8'));event=parseTextWebhook(input);}catch{
+  const type=input&&typeof input==='object'&&'type' in input?input.type:null;
+  const incomingTypes=['text.incoming.sms','text.incoming.mms','communications.incoming.sms','communications.incoming.mms','communications.incoming.imessage','imessage.incoming'];
+  const eventClass=typeof type==='string'&&incomingTypes.includes(type)?'incoming':'other_or_unknown';
+  console.warn('text_webhook_rejected',{reason:'unsupported_or_malformed',eventClass});
+  await recordIngressFailure('authenticated_rejected',eventClass==='incoming'?'parse_incoming':'parse_other');
+  return NextResponse.json({error:'Unsupported or malformed event'},{status:400});
+ }
  let stage='sender_registration';
  try{
  const inbound=event.type.startsWith('text.incoming');const sender=inbound?event.data.to:event.data.from;
- const [known,campaign]=await Promise.all([db<{phone:string}[]>(`icash_text_senders?phone=eq.${encodeURIComponent(sender)}&select=phone`),db<{phone:string}[]>(`icash_webinar_text_senders?phone=eq.${encodeURIComponent(sender)}&select=phone`)]);if(!known.length&&!campaign.length){console.warn('text_webhook_rejected',{reason:'unregistered_destination'});return new Response(null,{status:400});}
+ const [known,campaign]=await Promise.all([db<{phone:string}[]>(`icash_text_senders?phone=eq.${encodeURIComponent(sender)}&select=phone`),db<{phone:string}[]>(`icash_webinar_text_senders?phone=eq.${encodeURIComponent(sender)}&select=phone`)]);if(!known.length&&!campaign.length){console.warn('text_webhook_rejected',{reason:'unregistered_destination'});await recordIngressFailure('unregistered_destination','sender_registration');return new Response(null,{status:400});}
  // Acknowledge authenticated service notices after checking our destination.
  // Never persist verification codes or route short codes into customer work.
  if(inbound&&isServiceTextSender(event.data.from))return NextResponse.json({received:true});
@@ -46,5 +58,5 @@ export async function POST(req:Request){
   await ownerPracticeReply(event.id);
  }
  return NextResponse.json({received:true});
- }catch{console.warn('text_webhook_processing_failed',{stage});return new Response(null,{status:503});}
+ }catch{console.warn('text_webhook_processing_failed',{stage});await recordIngressFailure('processing_failed',stage);return new Response(null,{status:503});}
 }

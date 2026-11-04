@@ -6,9 +6,10 @@ export type WorkspaceDeal = {id:string;screening_id:string;stage:string};
 export type WorkspaceEvidence = {
  proceedsReceivedDealIds?:string[];
  journeys?:import('../lib/deal-journey-progress.ts').JourneyProgress[];
- closingTasks?:{screening_id:string}[];
+ closingTasks?:{screening_id:string;kind?:string;recovery?:unknown;email_state?:string}[];
  closingReview?:{screening_id:string;review_reason?:string}[];
  propertyAttentionIds?:string[];
+ propertyNonSetupAttentionIds?:string[];
  viewingRequests?:{screening_id:string}[];
  deals:WorkspaceDeal[];
  handoffs:{screening_id:string;state:string}[];

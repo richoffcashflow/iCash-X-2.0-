@@ -55,12 +55,12 @@ const db=async(path,method='GET',body)=>{
   if(q.has('id'))rows=rows.filter(p=>q.get('id').includes(p.id));
   const fragment=q.get('result->property->>address');if(fragment)rows=rows.filter(p=>p.result.property.address.includes(fragment.slice(7,-1)));
   if(q.get('select')==='id,result:result->property')return rows.map(p=>({id:p.id,result:p.result.property}));
-  if(q.get('select').includes('!inner()')){
-   const related=workspaceAttentionTables.find(name=>q.get('select').includes(`${name}!inner()`));
+  if(q.get('select').includes('!inner(')){
+   const related=workspaceAttentionTables.find(name=>q.get('select').includes(`${name}!inner(`));
    if(!related||(onlyTable&&onlyTable!==related))return [];
    let children=queues[related].filter(r=>q.get(`${related}.account_id`)===`eq.${r.account_id}`&&(q.get(`${related}.state`)==='neq.resolved'?r.state!=='resolved':q.get(`${related}.state`)===`eq.${r.state}`));
    if(related==='icash_seller_gaps')children=contactReviewRows(children,q.get(`${related}.or`));
-   return page(rows.filter(p=>children.some(r=>r.screening_id===p.id)),q).map(p=>({id:p.id}));
+   return page(rows.filter(p=>children.some(r=>r.screening_id===p.id)),q).map(p=>({id:p.id,...(related==='icash_closing_setup'?{icash_closing_setup:children.filter(r=>r.screening_id===p.id).map(r=>({review_reason:r.review_reason}))}:{})}));
   }
   return page(rows,q);
  }

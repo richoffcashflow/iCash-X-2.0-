@@ -4,6 +4,7 @@ import {closingOperationsSchema,type ClosingOperations} from './deal-completion.
 import {reliabilitySchema,type ReliabilityReport} from './reliability.ts';
 import {validLeadSupplyPlan,type LeadSupplyPlan} from './lead-supply.ts';
 import {validOwnerCostEvidence,type OwnerCostEvidence} from './owner-cost-evidence.ts';
+import {ownerDealOutcomesSchema,type OwnerDealOutcomes} from './owner-deal-outcomes.ts';
 export type OverviewFilters={days:1|7|30;includeOwner:boolean;query:string;page:number};
 export type OverviewLead={id:string;name:string|null;address:string|null;phone:string;email:string|null;state:string;source:string;campaign:string|null;assignedTo:string|null;createdAt:string};
 export type OwnerOverview=OverviewFilters & {
@@ -16,6 +17,7 @@ export type OwnerOverview=OverviewFilters & {
  leadSupply?:LeadSupplyPlan|null;
  costHealth?:{pendingCount:number;agedCount:number;oldestAt:string|null;unreconciledObservations:number;checkedAt:string}|null;
  costEvidence?:OwnerCostEvidence|null;
+ dealOutcomes?:OwnerDealOutcomes|null;
  usage:{completedCount:number;missingChargeCount:number;chargedCents:number|null;coveredCents:number;knownCostMicros:number;costMicros:number|null;marginMicros:number|null;missingCostCount:number;estimatedCount:number;pendingCount:number};
 };
 const record=(v:unknown):Record<string,unknown>=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
@@ -37,6 +39,7 @@ export function validOwnerOverview(value:unknown,filters:OverviewFilters):value 
  if(v.funnel!==undefined&&(!validFunnelSteps(v.funnel,sellerFunnelStages)||v.funnel[0].count!==v.leadCount))return false;
  if(v.costHealth!=null&&!validCostHealth(v.costHealth))return false;
  if(v.costEvidence!=null&&!validOwnerCostEvidence(v.costEvidence,filters))return false;
+ if(v.dealOutcomes!=null){const parsed=ownerDealOutcomesSchema.safeParse(v.dealOutcomes);if(!parsed.success||parsed.data.days!==filters.days)return false;}
  if(v.textHealth!=null&&!textHealthSchema.safeParse(v.textHealth).success)return false;
  if(v.reliability!=null&&!reliabilitySchema.safeParse(v.reliability).success)return false;
  if(v.leadSupply!=null&&!validLeadSupplyPlan(v.leadSupply))return false;

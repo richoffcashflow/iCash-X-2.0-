@@ -1,5 +1,17 @@
 # Continuous reliability
 
+The November 4 access-message correction removes the disabled checkout-phone
+sign-in recommendation left in purchase confirmations, reminder emails and
+permission-bound access texts after the UI/support repair. Both email formats
+direct buyers to their checkout email, spam/junk folder and existing support
+link. `purchase-access-email.test.mjs` covers initial/reminder and VIP/non-VIP
+variants; `purchase-access-followups.test.mjs` verifies dispatched reminder and
+single-segment text copy, opt-out wording and the existing immutable-retry gates.
+No auth, consent, queue or migration behavior changes. Already attempted payloads
+remain frozen for provider idempotency; do not resend historical messages to
+demonstrate the correction. Exact-commit CI and the matching production release
+must pass before calling it live.
+
 The November 3 new-user reserve protects starter research capacity at the shared
 limiter, with account-aware scheduling and operator capacity reporting. See
 `new-user-request-reserve.md`. Offline and native contention coverage must verify
@@ -91,3 +103,16 @@ Use `pnpm test` to run every `tests/*.test.mjs`; follow `.github/workflows/relia
 Current operational targets are inherited from the installed monitor and lease policies: worker/maintenance evidence younger than three minutes; call or text dispatch older than five minutes must surface as unresolved; contract delivery older than ten minutes must surface; expired recovery leases get a new receipt-reconciliation capability without replaying primary work. For this release, a new 42702, a repeated recovery 40P01, failed original voice-approval comparison, stale heartbeat or wrong deployed commit is a rollback/investigation trigger. Latency and qualified-deal-cost targets require a representative live cohort; this short outage investigation does not establish them.
 
 The initial read-only snapshot was degraded, including older unresolved receipt/export evidence. Do not acknowledge, delete or settle those records just to change the health result. A new outage-free observation window does not prove historical customer work succeeded. Paid calls, texts, data purchases and signature submissions are not authorized development tests by this release request.
+
+## November 4 hidden workflow gaps
+
+| Failure observed | Change | Closure evidence |
+| --- | --- | --- |
+| A buyer strategy has more pages but the other strategy ends | [Independent saved cursors](buyer-search-continuation.md) continue the original strategy inside the same five-page budget. | 62 complete histories, SQL/application parity, actual empty/paid receipt fixtures, unchanged original receipts and mixed-release admission. |
+| Generic inbox traffic makes property reception look healthy | [Property-reception evidence](property-text-reception-health.md) distinguishes routed property replies and reports private authenticated webhook failures. | Account/event binding, no generic false recovery, preserved webhook responses, native concurrent diagnostics and bounded lock waits. This does not prove provider delivery or recover missing messages. |
+| Owner demonstrations obscure customer outcomes | [Customer outcome reporting](owner-deal-outcomes.md) separates the owner column and requires matching signatures, title evidence and received-proceeds confirmation. | Real verifier, canceled assignment replacement, tenant/practice/period isolation, unavailable/partial states, responsive browser view. |
+| A manually signed purchase does not make the buyer handback obvious | [Explicit buyer handback](buyer-handback.md) exposes the existing return-to-bot control on collapsed cards, including ordinary signing-seeded closing setup and date reviews. | Actual component callbacks, off-page attention summary, save failures, explicit clicks, account Pause, unchanged server admission and desktop/mobile browser scenarios. |
+| The single cold reminder becomes due after the original phone observation expires | [Fresh contact observation](seller-contact-refresh.md) obtains one new exact-phone check for an eligible prospective gap, then uses the original PR #547 revalidation. | Actual production predecessor fixtures, immutable one-use claims/receipts, real billing and shared quota, native races, Pause/STOP/source binding and no historical replay. An unknown paid outcome stays held. |
+| Access messages recommend a disabled phone sign-in route | Incorporate the reviewed email-only access correction from PR #551. | Existing receipt/idempotency tests, email-only support regression and unchanged account credentials. |
+
+These fixes preserve the newer bounded learning release in PR #554. Deploy only after the exact release passes all Reliability checks and the matching application and worker are live. Schema changes are individually reviewed; migration-history differences are not permission for a blanket database push. Missing incoming-provider history, old unresolved costs and historical expired-contact holds remain separate evidence gaps.
