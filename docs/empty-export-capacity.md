@@ -36,3 +36,18 @@ and live ordinary-work receipts are still separate evidence from installation.
 Verification covers competing claims, three one-use probes, late source and
 policy changes, malformed/unknown errors, historical inventory only for 400,
 unchanged original money/owner evidence, and private ACLs. No paid tests.
+
+## Immediate completed-rejection checks
+
+The first recovery passed all three live checks, then another ordinary empty
+export exposed an inherited five-minute wait. The exact 400 family now starts
+its free capacity verification as soon as the saved request is finished.
+`enrichActiveOwners` saves the raw rejection before `finishAdmittedDealMachineRequest`
+records completion. The remaining handler can only recover an original export
+ID; this rejection has none, and its one-use POST cannot run again.
+
+The guarded follow-up changes only this family's completion-age predicate.
+Missing, future or inconsistent completion, an active recovery lease and every
+source/artifact check still block recovery. HTTP500/504 retain their original
+minimum ages. The same three fresh idle probes remain mandatory; completing a
+rejection never itself releases scheduling capacity or money.

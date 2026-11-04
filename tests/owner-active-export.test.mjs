@@ -109,6 +109,22 @@ try{
  const errorTransport=async(url,options)=>String(url).endsWith('/people/export')?(paid++,Response.json({error:{code:'internal_error',request_id:'req_fixture'}},{status:500})):transport(url,options);
  assert.equal((await enrichActiveOwners(noRecovery,account,candidates[0],config,250000,errorTransport)).status,'export_receipt_held');
  assert.equal(paid,1);assert.equal(gets,0);assert.equal(saved.receipt.httpStatus,500);assert.equal((await enrichActiveOwners(noRecovery,account,candidates[0],config,250000,errorTransport)).status,'held');assert.equal(paid,1);
+ // The exact empty rejection is saved before request completion. Once that
+ // ledger proof exists, the remaining local handler cannot issue another POST.
+ reset();const order=[];
+ const emptyError={error:{code:'invalid_request',message:'No records matched this export. Filters and scrub settings (like "Active phone numbers only") may have excluded every record — adjust them and try again.',request_id:'req_fixture'}};
+ const emptyDb=async(path,method,p)=>{
+  if(path==='rpc/icash_record_owner_export_receipt')order.push('receipt');
+  if(path==='rpc/icash_finish_dealmachine_request'&&p.p_request===saved?.id){
+   assert.deepEqual(saved.receipt.raw,emptyError);assert.equal(p.p_result.httpStatus,400);assert.equal(p.p_result.outcome,'http_error');order.push('finished');
+  }
+  if(path==='rpc/icash_claim_owner_export_recovery'){assert.deepEqual(order,['receipt','finished']);assert.equal(saved.receipt.raw.export_id,undefined);order.push('original-only recovery');return null;}
+  return db(path,method,p);
+ };
+ const emptyTransport=async(url,options)=>String(url).endsWith('/people/export')?(paid++,Response.json(emptyError,{status:400})):transport(url,options);
+ assert.equal((await enrichActiveOwners(emptyDb,account,candidates[0],config,250000,emptyTransport)).status,'export_receipt_held');
+ assert.deepEqual(order,['receipt','finished','original-only recovery']);assert.equal(paid,1);assert.equal(gets+downloads,0);assert.equal(results,null);
+ assert.equal((await enrichActiveOwners(emptyDb,account,candidates[0],config,250000,emptyTransport)).status,'held');assert.equal(paid,1);
  // A lost artifact-write acknowledgment resumes from the original saved CSV.
  reset();artifactFail=true;assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,'export_receipt_held');assert(saved.csv);artifactFail=false;
  assert.equal((await recoverOwnerActiveExports(db,transport)).status,'contacts_saved');assert.equal(paid,1);assert.equal(gets,1);assert.equal(downloads,1);
