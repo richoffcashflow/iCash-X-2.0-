@@ -24,7 +24,7 @@ export async function outboundCarrierInput(db:VoiceUsageDb,accountId:string,b:Bi
  env:CarrierEnv,fetcher:typeof fetch=fetch,signal?:AbortSignal):Promise<VoiceCostInput>{
  // Fixed internal stages only: never log provider payloads, identifiers or values.
  let stage='policy';
- const fail=(httpStatus?:number)=>{try{console.warn('outbound_carrier_evidence_held',{stage,...(Number.isInteger(httpStatus)&&httpStatus!>=100&&httpStatus!<=599?{httpStatus}:{})});}catch{/* Diagnostics cannot change evidence admission. */}throw Error('Bound outbound carrier evidence required');};
+ const fail=(httpStatus?:number,responseFailure?:'body_limit'|'body_missing'|'json_invalid')=>{try{console.warn('outbound_carrier_evidence_held',{stage,...(Number.isInteger(httpStatus)&&httpStatus!>=100&&httpStatus!<=599?{httpStatus}:{}),...(responseFailure?{responseFailure}:{})});}catch{/* Diagnostics cannot change evidence admission. */}throw Error('Bound outbound carrier evidence required');};
  if(typeof window!=='undefined'||!sid(env.TWILIO_ACCOUNT_SID,'AC')||!env.TWILIO_AUTH_TOKEN||!env.ELEVENLABS_API_KEY)fail();
  const created=Date.parse(b.created_at),from=Date.parse(r.validFrom),until=Date.parse(r.validUntil),reviewed=Date.parse(r.reviewedAt);
  if((r.accountScope==='operation_owner'?r.accountId!==undefined:r.accountScope!==undefined||r.accountId!==accountId)||r.agentId!==b.agent_id||r.twilioAccountSid!==env.TWILIO_ACCOUNT_SID||(r.source?.kind==='reviewed_destination_allowlist'&&!phone(r.destination))||!phone(r.from)||!ref(r.snapshotId)||!ref(r.evidenceRef)||![created,from,until,reviewed].every(Number.isFinite)||reviewed>created||from>created||until<=created||from>=until||!safe(r.voice?.microsPerMinute)||r.voice.rounding!=='up'||!safe(r.voice.minimumMinutes)||!safe(r.stream?.microsPerMinute)||!['exact','up'].includes(r.stream.rounding)||!safe(r.stream.minimumMinutes)||!ref(r.stream.assumption))fail();
@@ -41,9 +41,9 @@ export async function outboundCarrierInput(db:VoiceUsageDb,accountId:string,b:Bi
   if([404,408,425,429].includes(res.status)||res.status>=500)unavailable();
   if(!res.ok||(res.url&&res.url!==url))fail(res.status);
   // Bound response reads; provider payloads are never logged or placed in evidence.
-  const reader=res.body?.getReader();if(!reader)fail();let n=0;const chunks:Uint8Array[]=[];
-  try{for(;;){const part=await reader!.read().catch(()=>{throw new CarrierUsageUnavailable();});if(part.done)break;n+=part.value.byteLength;if(n>262144)fail();chunks.push(part.value);}}finally{await reader!.cancel();}
-  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  const reader=res.body?.getReader();if(!reader)fail(undefined,'body_missing');let n=0;const chunks:Uint8Array[]=[];
+  try{for(;;){const part=await reader!.read().catch(()=>{throw new CarrierUsageUnavailable();});if(part.done)break;n+=part.value.byteLength;if(n>262144)fail(undefined,'body_limit');chunks.push(part.value);}}finally{await reader!.cancel();}
+  try{return JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{fail(undefined,'json_invalid');}
  }
  stage='conversation_http';
  const c=await get(`https://api.elevenlabs.io/v1/convai/conversations/${eq(b.conversation_id)}`,{'xi-api-key':env.ELEVENLABS_API_KEY!});
