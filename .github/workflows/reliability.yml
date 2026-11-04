@@ -32,6 +32,10 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Verify exact fresh-contact revalidation under concurrent controls
+        run: python3 scripts/test-seller-contact-revalidation-postgres.py
+      - name: Verify one-use phone checks and immutable receipts under concurrent claims
+        run: python3 scripts/test-seller-contact-refresh-postgres.py
       - name: Verify learning refresh under real concurrent transactions
         run: python3 scripts/test-learning-refresh-postgres.py
       - name: Verify corrected evidence rejects concurrent stale training results
@@ -109,10 +113,6 @@ jobs:
         run: python3 scripts/test-customer-phone-child-unanswered-postgres.py
       - name: Verify seller recovery, receipts and Pause under concurrent transactions
         run: python3 scripts/test-seller-progress-postgres.py
-      - name: Verify exact fresh-contact revalidation under concurrent controls
-        run: python3 scripts/test-seller-contact-revalidation-postgres.py
-      - name: Verify one-use phone checks and immutable receipts under concurrent claims
-        run: python3 scripts/test-seller-contact-refresh-postgres.py
       - name: Verify automatic export recovery under concurrent transactions
         run: python3 scripts/test-automatic-export-postgres.py
       - name: Verify indexed owner evidence under concurrent reads

@@ -5,6 +5,7 @@ import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {costCategories} from '../lib/cost-guard.ts';
 const pg=await PGlite.create(),fixtureSql=[];
+const nativeFixture=()=>fixtureSql.map(s=>s+'\n;').join('\n');
 const literal=v=>v===null?'NULL':typeof v==='number'||typeof v==='boolean'?String(v):"'"+(typeof v==='string'?v:JSON.stringify(v)).replaceAll("'","''")+"'";
 const execute=async s=>{fixtureSql.push(s);return pg.exec(s);};
 const q=(s,a=[])=>{fixtureSql.push(s.replace(/\$(\d+)/g,(_,i)=>literal(a[Number(i)-1]))+';');return pg.query(s,a);},one=async(s,a=[])=>Object.values((await q(s,a)).rows[0])[0];
@@ -91,8 +92,9 @@ try{
  await q("insert into icash_seller_gaps(id,account_id,reason,state,review_reason,outgoing_id,stage,thread_id) values($1,$2,'no_response','needs_review','contact_checks_expired',null,'draft',$1)",[gap,account]);
  await q('insert into icash_operational_contacts values($1,$2,$3)',[contact,account,phone]);
  await q('insert into icash_text_threads values($1,$2,$3)',[gap,account,contact]);
- if(process.argv.includes('--print-fixture')){process.stdout.write(fixtureSql.join('\n'));}else{
- assert.equal(fixtureSql.join('\n'),read('tests/fixtures/seller-contact-refresh-native.sql'),'Native concurrency fixture must match the actual migration-derived billing fixture');
+ if(process.argv.includes('--print-fixture')){process.stdout.write(nativeFixture());}else{
+ assert.equal(nativeFixture(),read('tests/fixtures/seller-contact-refresh-native.sql'),'Native concurrency fixture must match the actual migration-derived billing fixture');
+ const exported=await PGlite.create();try{await exported.exec(nativeFixture());const result=await exported.query('select icash_claim_seller_contact_refresh() claimed');assert(result.rows[0].claimed,'The complete exported SQL stream must parse and claim once');}finally{await exported.close();}
  await isolated(async()=>{
   const original=await one('select to_jsonb(r) from icash_operation_rates r where id=$1',[base]),r=await claim();
   assert.equal(r.reservedMicros,60000);assert.equal(await one('select charge_cap_cents from icash_operation_spend where operation_key=$1',[operation]),14);

@@ -379,6 +379,7 @@ end $function$;
 
 grant select,insert,update,delete on all tables in schema public to service_role;
 
+;
 
  create schema icash_seller_recovery_private;
  create table icash_seller_recovery_private.contact_refreshes(id uuid primary key default gen_random_uuid(),gap_id uuid unique,account_id uuid,operation_key text unique,rate_id uuid,unit_cost_micros bigint,request_id uuid,requested_at timestamptz,response jsonb,http_status integer,response_at timestamptz,state text default 'requested',original_contact_id uuid,original_snapshot jsonb,outcome text);
@@ -422,6 +423,7 @@ grant select,insert,update,delete on all tables in schema public to service_role
  create function icash_reserve_operation(p_account uuid,p_operation text,p_rate uuid,p_permission_until timestamptz,p_financial_checked_at timestamptz default null,p_financial_eligible boolean default false) returns jsonb language plpgsql as $$begin return public.icash_reserve_before_fractional(p_account,p_operation,p_rate,p_permission_until,p_financial_checked_at,p_financial_eligible);end$$;
  create function icash_settle_estimated_operation(text) returns boolean language sql as $$select public.icash_settle_estimate_before_sms_tokens($1)$$;
  
+;
 CREATE OR REPLACE FUNCTION public.icash_reserve_before_fractional(p_account uuid, p_operation text, p_rate uuid, p_permission_until timestamp with time zone, p_financial_checked_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_financial_eligible boolean DEFAULT false)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -489,6 +491,7 @@ begin
  update public.icash_operating_budget set reserved_micros=reserved_micros+held where id=1;
  return jsonb_build_object('operationKey',p_operation,'state','reserved','reservedMicros',held);
 end $function$;
+;
 CREATE OR REPLACE FUNCTION public.icash_claim_operation(p_operation text)
  RETURNS boolean
  LANGUAGE plpgsql
@@ -506,6 +509,7 @@ begin
  update public.icash_operation_spend set state='dispatched',dispatched_at=now() where operation_key=p_operation;
  return true;
 end $function$;
+;
 CREATE OR REPLACE FUNCTION public.icash_reserve_credit(p_account uuid, p_operation text, p_amount bigint)
  RETURNS uuid
  LANGUAGE plpgsql
@@ -535,6 +539,7 @@ begin
 
  return result;
 end; $function$;
+;
 CREATE OR REPLACE FUNCTION public.icash_finish_credit(p_account uuid, p_operation text, p_charge bigint, p_evidence text)
  RETURNS text
  LANGUAGE plpgsql
@@ -570,6 +575,7 @@ begin
  update public.icash_credit_reservations set status=desired,settled_cents=case when p_charge>0 then p_charge else null end where id=r.id;
  return desired;
 end; $function$;
+;
 CREATE OR REPLACE FUNCTION public.icash_settle_operation(p_operation text, p_charge bigint, p_actual_micros bigint, p_evidence text)
  RETURNS void
  LANGUAGE plpgsql
@@ -596,6 +602,7 @@ begin
  update public.icash_accounts set bot_paused=true where id=o.account_id;
  end if;
 end $function$;
+;
 create or replace function public.icash_settle_complete_costs(p_operation text,p_charge bigint,p_components jsonb,p_evidence text) returns void language plpgsql set search_path='' as $$
 declare cat text;n numeric;total numeric:=0;old public.icash_cost_manifests;
 begin
@@ -615,6 +622,7 @@ begin
  if row(old.charge_cents,old.actual_micros,old.components,old.evidence_ref) is distinct from row(p_charge,total::bigint,p_components,p_evidence) then raise exception 'Cost manifest conflict';end if;
  perform public.icash_settle_operation(p_operation,p_charge,total::bigint,p_evidence);
 end $$;
+;
 create or replace function public.icash_record_cost_observation(p_provider text,p_event text,p_source text,p_amount numeric,p_units text) returns void
 language plpgsql security invoker set search_path='' as $$
 declare o public.icash_cost_observations;
@@ -624,6 +632,7 @@ begin
  select * into o from public.icash_cost_observations where provider=p_provider and event_key=p_event;
  if row(o.source_ref,o.amount,o.units) is distinct from row(p_source,p_amount,p_units) then raise exception 'Cost receipt conflict'; end if;
 end $$;
+;
 create or replace function public.icash_new_prospect_operation(p_account uuid,p_operation text,p_rate uuid) returns boolean
 language plpgsql stable set search_path='' as $$
 declare kind text;screen uuid;
@@ -651,6 +660,7 @@ begin
   join public.icash_text_messages m on m.thread_id=t.id and m.account_id=t.account_id
   where d.account_id=p_account and d.screening_id=screen and t.party='seller' and m.direction='incoming' and m.state='received' and (m.provider_id is not null or m.event_id is not null));
 end $$;
+;
 create or replace function public.icash_guard_prospecting_spend() returns trigger
 language plpgsql set search_path='' as $$
 declare kind text;required bigint;
@@ -674,6 +684,7 @@ begin
  if new.prospecting_budget_id is null then raise exception 'Prospecting budget reached' using detail=jsonb_build_object('quoteCents',required)::text;end if;
  return new;
 end $$;
+;
 create or replace function public.icash_research_admission_quote(p_account uuid,p_kind text,p_price bigint) returns bigint
 language sql stable security invoker set search_path='' as $$
  select p_price+public.icash_prospecting_outreach_floor(p_account)
@@ -681,7 +692,9 @@ language sql stable security invoker set search_path='' as $$
    join public.icash_operation_rates r on r.id=c.contact_rate_id where c.account_id=p_account and c.contacts_enabled
     and r.enabled and r.expires_at>now() and r.operation='owner_enrichment'),0) else 0 end;
 $$;
+;
 create trigger prospecting_guard before insert on icash_operation_spend for each row execute function icash_guard_prospecting_spend()
+;
 CREATE OR REPLACE FUNCTION public.icash_reserve_before_fractional(p_account uuid, p_operation text, p_rate uuid, p_permission_until timestamp with time zone, p_financial_checked_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_financial_eligible boolean DEFAULT false)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -750,6 +763,7 @@ begin
  return jsonb_build_object('operationKey',p_operation,'state','reserved','reservedMicros',held);
 end $function$
 
+;
 CREATE OR REPLACE FUNCTION public.icash_new_prospect_operation(p_account uuid, p_operation text, p_rate uuid)
  RETURNS boolean
  LANGUAGE plpgsql
@@ -782,6 +796,7 @@ begin
   where d.account_id=p_account and d.screening_id=screen and t.party='seller' and m.direction='incoming' and m.state='received' and (m.provider_id is not null or m.event_id is not null));
 end $function$
 
+;
 CREATE OR REPLACE FUNCTION public.icash_guard_prospecting_spend()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -809,6 +824,7 @@ begin
  return new;
 end $function$
 
+;
 -- One-phone follow-up checks use the existing DealMachine credit allocation,
 -- 3x data/VIP policy, customer wallet and prospecting allowance. No legacy
 -- owner purchase, rate, reservation or settlement is changed.
@@ -970,6 +986,7 @@ revoke all on function public.icash_settle_estimated_operation(text) from public
 grant execute on function public.icash_settle_estimated_operation(text) to service_role;
 commit;
 
+;
 create or replace function public.icash_claim_seller_contact_refresh() returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare item record;f icash_seller_recovery_private.contact_refreshes;bill jsonb;req uuid;stamp timestamptz;
@@ -1035,12 +1052,22 @@ begin
  end if;
  return null;
 end $$;
+;
 revoke all on function public.icash_claim_seller_contact_refresh() from public,anon,authenticated,service_role;grant execute on function public.icash_claim_seller_contact_refresh() to service_role;grant usage on schema public,icash_seller_recovery_private to service_role;
+;
 insert into icash_accounts(id,owner_user_id,bot_paused) values('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001',false);
+;
 insert into icash_wallets(account_id,balance_cents,reserved_cents) values('00000000-0000-4000-8000-000000000001',1000,0);
+;
 insert into icash_prospecting_budgets(id,account_id) values(1,'00000000-0000-4000-8000-000000000001');
+;
 insert into icash_operation_rates(id,operation,version,charge_cents,costs_micros,buffer_bps,evidence_ref,verified_at,expires_at,enabled) values('00000000-0000-4000-8000-000000000002','owner_enrichment','synthetic-owner',105,'{"dealmachine":250000,"elevenlabs":0,"twilio":0,"messaging":0,"email":0,"llm":0,"vercel":0,"railway":0,"supabase":0,"github":0,"payments":0,"title_and_signing":0,"support_and_overhead":40000,"acquisition":0,"refund_and_dispute_reserve":0,"other":0}',2000,'synthetic original reviewed costs',now()-interval '1 day',now()+interval '1 day',true);
+;
 insert into icash_discovery_configs(account_id,enabled,auto_enabled,contacts_enabled,contact_rate_id,property_credit_micros,data_rights_until) values('00000000-0000-4000-8000-000000000001',true,true,true,'00000000-0000-4000-8000-000000000002',10000,now()+interval '1 day');
+;
 insert into icash_seller_gaps(id,account_id,reason,state,review_reason,outgoing_id,stage,thread_id) values('00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','no_response','needs_review','contact_checks_expired',null,'draft','00000000-0000-4000-8000-000000000003');
+;
 insert into icash_operational_contacts values('00000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','+12145550123');
+;
 insert into icash_text_threads values('00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000004');
+;
