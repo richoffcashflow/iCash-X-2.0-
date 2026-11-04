@@ -25,17 +25,9 @@ def sql(query):
     return result.stdout.strip()
 
 
-def fixture():
-    result = subprocess.run(
-        ["node", "--experimental-strip-types", "tests/seller-contact-refresh-billing.test.mjs", "--print-fixture"],
-        cwd=ROOT, text=True, capture_output=True, timeout=30,
-    )
-    assert result.returncode == 0, result.stderr
-    assert "icash_claim_seller_contact_refresh" in result.stdout
-    return result.stdout
-
-
-FIXTURE = fixture()
+# The ordinary billing suite checks this export byte-for-byte against its real
+# migration-derived fixture. Native database CI needs only psql and Python.
+FIXTURE = (ROOT / "tests/fixtures/seller-contact-refresh-native.sql").read_text()
 
 
 def setup():

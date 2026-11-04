@@ -92,6 +92,7 @@ try{
  await q('insert into icash_operational_contacts values($1,$2,$3)',[contact,account,phone]);
  await q('insert into icash_text_threads values($1,$2,$3)',[gap,account,contact]);
  if(process.argv.includes('--print-fixture')){process.stdout.write(fixtureSql.join('\n'));}else{
+ assert.equal(fixtureSql.join('\n'),read('tests/fixtures/seller-contact-refresh-native.sql'),'Native concurrency fixture must match the actual migration-derived billing fixture');
  await isolated(async()=>{
   const original=await one('select to_jsonb(r) from icash_operation_rates r where id=$1',[base]),r=await claim();
   assert.equal(r.reservedMicros,60000);assert.equal(await one('select charge_cap_cents from icash_operation_spend where operation_key=$1',[operation]),14);
