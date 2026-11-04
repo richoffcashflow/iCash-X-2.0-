@@ -72,13 +72,14 @@ export async function settleBoundVoiceUsage(db:VoiceUsageDb,accountId:string,cal
   }
   return hold('provider_receipt_missing');
  }
- let manifest:ReturnType<typeof voiceCostManifest>;
+ let manifest:ReturnType<typeof voiceCostManifest>;let costStage='components';
  try{
   if(!policy.components||Object.keys(policy.components).length!==costCategories.length-1)throw Error('Incomplete policy');
   const inputs={} as VoiceCostInputs;
   inputs.elevenlabs={kind:'receipt',amountMicros:usdMicros(observations[0].amount),evidenceRef:`elevenlabs inclusive USD observation:${call.conversation_id}:${call.operation_key}`};
   for(const category of costCategories){
    if(category==='elevenlabs')continue;
+   costStage=category;
    const rule=policy.components[category];
    if(!rule||!ref(rule.evidenceRef))throw Error('Missing rule');
    if(rule.kind==='recording_addon_estimate'){
@@ -96,7 +97,11 @@ export async function settleBoundVoiceUsage(db:VoiceUsageDb,accountId:string,cal
    else throw Error('Unsupported usage source');
   }
   manifest=voiceCostManifest(inputs);
- }catch(error){return hold(error instanceof CarrierUsageUnavailable?'carrier_usage_unavailable':'cost_evidence_incomplete');}
+ }catch(error){
+  const reason=error instanceof CarrierUsageUnavailable?'carrier_usage_unavailable':'cost_evidence_incomplete';
+  try{console.warn('voice_cost_evidence_held',{stage:costStage,reason});}catch{/* Preserve the original financial hold if logging fails. */}
+  return hold(reason);
+ }
  // SQL rechecks account/conversation/receipt binding, quote ceiling, and immutable retries.
  // Do not swallow conflicts: automation must surface them for reconciliation.
  const ok=await db<boolean>('rpc/icash_settle_voice_usage','POST',{p_operation:call.operation_key,p_components:manifest.components,p_evidence:`voice usage policy:${policy.version}; ${policy.evidenceRef}`});

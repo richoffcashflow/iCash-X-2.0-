@@ -54,6 +54,23 @@ const fetcher=async(url,init)=>{
 const collect=(r=rule,b=binding,a=account)=>outboundCarrierInput(db,a,b,r,env,fetcher);
 const settle=()=>settleBoundVoiceUsage(db,account,'offline-call',[policy],{env,fetcher});
 
+// Runtime diagnostics identify the rejected evidence boundary without exposing
+// credentials, account/call/phone identifiers or untrusted provider content.
+const originalWarn=console.warn,diagnostics=[];
+try{
+ console.warn=(...args)=>diagnostics.push(args);
+ reset();el.metadata.phone_call.call_sid='private-provider-value';
+ assert.deepEqual(await settle(),{status:'held',reason:'cost_evidence_incomplete'});
+ assert.deepEqual(diagnostics,[['outbound_carrier_evidence_held',{stage:'conversation_receipt'}],['voice_cost_evidence_held',{stage:'twilio',reason:'cost_evidence_incomplete'}]]);
+ assert.equal(settlements.length,0);assert.equal(writes.length,0);
+ const printed=JSON.stringify(diagnostics);
+ for(const secret of [account,ca,to,from,env.ELEVENLABS_API_KEY,env.TWILIO_AUTH_TOKEN,'private-provider-value'])assert.equal(printed.includes(secret),false);
+ console.warn=()=>{throw Error('logging unavailable');};
+ reset();jobRow.state='dispatching';
+ assert.deepEqual(await settle(),{status:'held',reason:'cost_evidence_incomplete'});
+ assert.equal(settlements.length,0);assert.equal(writes.length,0);
+}finally{console.warn=originalWarn;}
+
 reset();const recovered=await collect();
 assert.equal(recovered.kind,'fixed_estimate');assert.equal(recovered.amountMicros,18440,'12,340 actual connectivity + 6,100 original stream estimate');
 assert.match(recovered.evidenceRef,/connectivity 12340 micros verified/);assert.match(recovered.evidenceRef,/stream 6000\/minute exact/);
