@@ -30,7 +30,7 @@ import {readVoiceOutreachContext,outreachHoursPolicyVersion} from '../lib/outrea
 const outreachContext=(timezone='America/Chicago',activeConversation=false)=>({timezone,startHour:9,endHour:21,activeConversation,policyVersion:outreachHoursPolicyVersion});
 import {evaluateLaunch} from '../lib/launch-readiness-policy.ts';
 import {canonical,object,readRecordingReview,recordingAgentMatches,recordingPolicy,sha} from '../lib/required-call-recording.ts';
-let diagnosticThrows=false;const voiceApprovalDiagnostics=()=>{if(diagnosticThrows)throw Error('private diagnostic error');return ({observedHash:'a'.repeat(64),failedChecks:['approved_configuration_fingerprint'],matchingRemovalPath:'platform_settings.privacy.fixture_default',checkedCandidates:1,bounded:false});};
+let diagnosticThrows=false;const voiceApprovalDiagnostics=()=>{if(diagnosticThrows)throw Error('private diagnostic error');return ({observedHash:'a'.repeat(64),failedChecks:['approved_configuration_fingerprint'],matchingRemovalPath:'platform_settings.privacy.fixture_default',matchingRemovalKind:'disabled_boolean',checkedCandidates:1,bounded:false});};
 import {sellerFirstMessage,sellerCallPrompt,sellerCallContext,compactSellerProgress} from '../lib/seller-call-context.ts';
 const dstPermission={phone:'+12125550123',timezone:'America/Chicago',local_start_hour:9,local_end_hour:20,permission_until:'2026-12-01T00:00:00Z',dnc_checked_at:'2026-10-31T00:00:00Z',dnc_clear:true,revoked_at:null};
 assert.equal(nextContactWindow(dstPermission,Date.parse('2026-11-01T02:30:00Z'),outreachContext()),'2026-11-01T15:00:00.000Z','DST fall-back schedules local 9 AM');

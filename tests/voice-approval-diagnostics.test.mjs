@@ -11,7 +11,7 @@ const review=a=>({agentId:a.agent_id,branchId:a.branch_id,versionId:a.version_id
  const before=structuredClone(current),saved=structuredClone(approval),inspect=createVoiceApprovalDiagnostics();
  assert.equal(recordingAgentMatches(approval,current),false);
  const result=inspect(approval,current);assert.equal(result.observedHash,hash(current));
- assert.equal(result.matchingRemovalPath,'platform_settings.privacy.new_disabled_feature');
+ assert.equal(result.matchingRemovalPath,'platform_settings.privacy.new_disabled_feature');assert.equal(result.matchingRemovalKind,'disabled_boolean');
  assert.deepEqual(result.failedChecks,['approved_configuration_fingerprint']);
  assert.equal(recordingAgentMatches(approval,current),false,'diagnosis must never approve the original drift');
  assert.deepEqual(current,before);assert.deepEqual(approval,saved);
@@ -19,6 +19,10 @@ const review=a=>({agentId:a.agent_id,branchId:a.branch_id,versionId:a.version_id
  assert(!JSON.stringify(result).includes('PRIVATE_REVIEWED_PROMPT'));
  current.conversation_config.agent.prompt.prompt='DIFFERENT_PRIVATE_PROMPT';
  assert.equal(createVoiceApprovalDiagnostics()(approval,current).matchingRemovalPath,null,'cannot hide changed prompts');
+}
+for(const [value,kind] of [[null,'optional_null'],[false,'disabled_boolean'],[0,'zero_numeric']]){
+ const a=fixture(),approval=review(a);a.platform_settings.privacy.new_disabled_feature=value;const result=createVoiceApprovalDiagnostics()(approval,a);
+ assert.equal(result.matchingRemovalKind,kind);assert.deepEqual(Object.keys(result).sort(),['bounded','checkedCandidates','failedChecks','matchingRemovalKind','matchingRemovalPath','observedHash']);assert(!Object.hasOwn(result,'value'));
 }
 for(const [change,label] of [[a=>a.version_id='agtvrsn_changed','version_identity'],[a=>a.platform_settings.privacy.record_voice=true,'recording_disabled'],[a=>a.conversation_config.agent.prompt.tool_ids.push('tool_other'),'reviewed_tool_set']]){
  const a=fixture(),approval=review(a);a.platform_settings.privacy.new_disabled_feature=false;change(a);
@@ -30,7 +34,7 @@ for(const path of [['platform_settings'],['conversation_config'],['platform_sett
 }
 for(const key of ['secret_payload','api_key','token_private','authorization','password','phone_number','sk_private','constructor','__proto__']){
  const a=fixture(),approval=review(a);Object.defineProperty(a.platform_settings.privacy,key,{value:false,enumerable:true,configurable:true});
- const result=createVoiceApprovalDiagnostics()(approval,a);assert.equal(result.matchingRemovalPath,null);assert(!JSON.stringify(result).includes(key));
+ const result=createVoiceApprovalDiagnostics()(approval,a);assert.equal(result.matchingRemovalPath,null);assert.equal(result.matchingRemovalKind,null);assert(!JSON.stringify(result).includes(key));
 }
 {
  const a=fixture(),approval=review(a);a.platform_settings.privacy.private_text='DO_NOT_LOG_+15555550100';a.platform_settings.privacy.dynamic_variables={private_name:false};

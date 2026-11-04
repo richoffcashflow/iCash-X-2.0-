@@ -1,7 +1,7 @@
 import {automaticOfferGuardrailMatches,automaticOfferPolicy} from './automatic-offer-policy.ts';
 import {canonical,object,recordingAgentMatches,sha,type RecordingReview} from './required-call-recording.ts';
 
-type Diagnostic={observedHash:string|null;failedChecks:string[];matchingRemovalPath:string|null;checkedCandidates:number;bounded:boolean};
+type Diagnostic={observedHash:string|null;failedChecks:string[];matchingRemovalPath:string|null;matchingRemovalKind:'optional_null'|'disabled_boolean'|'zero_numeric'|null;checkedCandidates:number;bounded:boolean};
 const cooldownMs=60_000,maxBytes=65_536,maxNodes=1_500,maxCandidates=64,budgetMs=750;
 const excluded=/^(?:__proto__|constructor|prototype)$|secret|token|password|credential|authorization|api_key|phone|header|dynamic_variable|placeholder|metadata|data_collection|webhook|^sk_/i;
 // These are provider configuration containers, not caller-defined maps. Values,
@@ -30,14 +30,14 @@ export function createVoiceApprovalDiagnostics(now:()=>number=()=>performance.no
  return (review:RecordingReview,raw:unknown):Diagnostic|null=>{
   const started=now();if(started<nextAt)return null;nextAt=started+cooldownMs;
   try{
-   if(!shapeBounded(raw))return {observedHash:null,failedChecks:['diagnostic_shape_bound'],matchingRemovalPath:null,checkedCandidates:0,bounded:true};
+   if(!shapeBounded(raw))return {observedHash:null,failedChecks:['diagnostic_shape_bound'],matchingRemovalPath:null,matchingRemovalKind:null,checkedCandidates:0,bounded:true};
    const a=object(raw),snapshot={conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null};
    const encoded=JSON.stringify(snapshot);
-   if(Buffer.byteLength(encoded)>maxBytes)return {observedHash:null,failedChecks:['diagnostic_size_bound'],matchingRemovalPath:null,checkedCandidates:0,bounded:true};
+   if(Buffer.byteLength(encoded)>maxBytes)return {observedHash:null,failedChecks:['diagnostic_size_bound'],matchingRemovalPath:null,matchingRemovalKind:null,checkedCandidates:0,bounded:true};
    const observedHash=sha(JSON.stringify(canonical(snapshot))),key=review.configHash+':'+observedHash;
    const state=seen.get(key)??{cursor:0,done:false};if(state.done)return null;
    seen.set(key,state);if(seen.size>32)seen.delete(seen.keys().next().value!);
-   const failedChecks=invariants(review,a),result:Diagnostic={observedHash,failedChecks:failedChecks.length?failedChecks:['approved_configuration_fingerprint'],matchingRemovalPath:null,checkedCandidates:0,bounded:false};
+   const failedChecks=invariants(review,a),result:Diagnostic={observedHash,failedChecks:failedChecks.length?failedChecks:['approved_configuration_fingerprint'],matchingRemovalPath:null,matchingRemovalKind:null,checkedCandidates:0,bounded:false};
    // Never probe a response with changed identity, tools, policy or call controls.
    if(failedChecks.length){state.done=true;return result;}
    const candidates:string[][]=[];
@@ -53,15 +53,15 @@ export function createVoiceApprovalDiagnostics(now:()=>number=()=>performance.no
    for(;state.cursor<boundedCandidates.length;state.cursor++){
     if(now()-started>=budgetMs){result.bounded=true;break;}
     const path=boundedCandidates[state.cursor],candidate=structuredClone(a);let node:Record<string,unknown>=candidate;
-    for(const segment of path.slice(0,-1))node=object(node[segment]);delete node[path.at(-1)!];
+    for(const segment of path.slice(0,-1))node=object(node[segment]);const removed=node[path.at(-1)!];delete node[path.at(-1)!];
     result.checkedCandidates++;
     // The unchanged production validator, original review and complete remaining
     // provider response must agree. This result is evidence only, never a gate.
-    if(recordingAgentMatches(review,candidate)){result.matchingRemovalPath=path.join('.');state.done=true;break;}
+    if(recordingAgentMatches(review,candidate)){result.matchingRemovalPath=path.join('.');result.matchingRemovalKind=removed===null?'optional_null':removed===false?'disabled_boolean':'zero_numeric';state.done=true;break;}
    }
    if(state.cursor>=boundedCandidates.length)state.done=true;
    return result;
-  }catch{return {observedHash:null,failedChecks:['diagnostic_unavailable'],matchingRemovalPath:null,checkedCandidates:0,bounded:true};}
+  }catch{return {observedHash:null,failedChecks:['diagnostic_unavailable'],matchingRemovalPath:null,matchingRemovalKind:null,checkedCandidates:0,bounded:true};}
  };
 }
 export const voiceApprovalDiagnostics=createVoiceApprovalDiagnostics();
