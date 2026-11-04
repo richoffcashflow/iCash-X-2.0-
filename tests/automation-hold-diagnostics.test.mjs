@@ -21,6 +21,7 @@ const mocks={OwnerPreviewRateLimitError,OwnerExportCapacityBusyError,OwnerExport
   calls.push({path,method,body});
   if(path==='rpc/icash_consume_automation'){if(consumed)return null;consumed=true;return ticket;}
   if(['rpc/icash_finish_owner_enrichment','rpc/icash_finish_automation'].includes(path)){if(finishThrows)throw Error('Unknown database acknowledgment');return true;}
+  if(path.startsWith('icash_automation_tickets?'))return [{id:ticket.id,account_id:ticket.accountId,kind:ticket.kind,token,state:'held',outcome:'held_for_reconciliation'}];
   throw Error('Unexpected action: '+path);
  },
 };
@@ -34,7 +35,8 @@ async function assertHeld(reason,kind='contacts'){
  assert.equal(response.status,503);assert.deepEqual(response.body,{status:'held_for_reconciliation'});
  assert.equal(response.headers['Cache-Control'],'private, no-store');
  assert.deepEqual(logs,[['automation_held',{kind,reason}]]);
- assert.equal(calls.length,2,'Classification adds no database, provider, billing or retry calls');
+ assert.equal(response.headers['X-iCash-Automation-Outcome'],!finishThrows&&kind==='contacts'&&reasons.includes(reason)?'job-held':undefined,'Only a known request failure with a confirmed durable hold releases the worker slot from failure backoff');
+ assert.equal(calls.length,2,'Unknown/shared failures do not read back or acknowledge a job-local hold; no provider, billing or retry calls');
  const finish=calls[1];assert.equal(finish.method,'POST');
  if(kind==='contacts'){
   assert.equal(finish.path,'rpc/icash_finish_owner_enrichment');

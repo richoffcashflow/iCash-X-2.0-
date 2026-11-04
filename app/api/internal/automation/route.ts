@@ -28,6 +28,20 @@ export async function POST(request:Request){
  const token=request.headers.get('authorization')?.replace(/^Bearer /,'');
  if(!token||!/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}){2}$/.test(token))return NextResponse.json({error:'Unauthorized'},{status:401,headers});
  let ticket:{id:string;accountId:string;kind:string;screeningId:string|null;liveCallId:string|null;signingId:string|null;voiceJobId:string|null;fulfillmentJobId:string|null;titleTaskId:string|null;textAiJobId:string|null;marketResearchJobId:string|null;openerMessageId:string|null}|null=null;
+ const finishHeldAttempt=async(confirmForWorker:boolean)=>{
+  if(!ticket)return false;
+  try{
+   if(ticket.kind==='contacts')return await db<boolean>('rpc/icash_finish_owner_enrichment','POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_success:false,p_outcome:'held_for_reconciliation'})===true&&confirmForWorker;
+   await db('rpc/icash_finish_automation','POST',{p_id:ticket.id,p_success:false,p_outcome:'held_for_reconciliation'});
+   if(!confirmForWorker)return false;
+   // The legacy finish RPC returns void even when its conditional update did
+   // not match. Confirm this exact consumed capability reached its durable hold
+   // before telling the worker it can continue with another independent job.
+   const saved=await db<Array<{id:string;account_id:string;kind:string;token:string;state:string;outcome:string}>>(`icash_automation_tickets?id=eq.${encodeURIComponent(ticket.id)}&account_id=eq.${encodeURIComponent(ticket.accountId)}&token=eq.${encodeURIComponent(token)}&select=id,account_id,kind,token,state,outcome&limit=1`);
+   return Array.isArray(saved)&&saved.length===1&&saved[0].id===ticket.id&&saved[0].account_id===ticket.accountId&&saved[0].kind===ticket.kind&&saved[0].token===token&&saved[0].state==='held'&&saved[0].outcome==='held_for_reconciliation';
+  }catch{return false;}
+ };
+ const heldResponse=(acknowledged:boolean)=>NextResponse.json({status:'held_for_reconciliation'},{status:503,headers:{...headers,...(acknowledged?{'X-iCash-Automation-Outcome':'job-held'}:{})}});
  try{
   ticket=await db('rpc/icash_consume_automation','POST',{p_token:token});
   if(!ticket)return NextResponse.json({error:'Expired or consumed'},{status:401,headers});
@@ -50,8 +64,8 @@ export async function POST(request:Request){
    try{if(await db<boolean>(error instanceof OwnerExportPreflightPendingError?'rpc/icash_defer_owner_preflight':'rpc/icash_defer_owner_enrichment','POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_operation:error.operationKey})===true)return NextResponse.json({status:error instanceof OwnerExportPreflightPendingError?'owner_export_preflight_pending':'owner_preview_rate_limited'},{headers});}catch{/* An uncertain database outcome is never treated as a retry grant. */}
    // A lost deferral response may already have led to a fresh issued/consumed
    // capability. Never let this stale worker finish that newer attempt by ID.
-   try{await db('rpc/icash_finish_owner_enrichment','POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_success:false,p_outcome:'held_for_reconciliation'});}catch{/* Preserve the original capability on an uncertain completion; never repeat it. */}
-   return NextResponse.json({status:'held_for_reconciliation'},{status:503,headers});
+   console.error('automation_held',{kind:'contacts',reason:error instanceof OwnerExportPreflightPendingError?'OWNER_PREFLIGHT_DEFERRAL_HELD':'OWNER_PREVIEW_DEFERRAL_HELD'});
+   return heldResponse(await finishHeldAttempt(true));
   }
   if(ticket&&error instanceof ProspectingBudgetError){
    try{if(await db<boolean>('rpc/icash_hold_prospecting_ticket','POST',{p_id:ticket.id,p_account:ticket.accountId,p_quote:error.quoteCents}))return NextResponse.json({status:'prospecting_budget_held'},{headers});}catch{/* Unknown outcomes retain reconciliation. */}
@@ -64,10 +78,11 @@ export async function POST(request:Request){
   const reason=error instanceof Error&&(['Database request failed','DISCOVERY_RATE_LIMIT','DISCOVERY_CONFIGURATION_INVALID','DISCOVERY_FILTER_INVALID','DISCOVERY_ESTIMATE_INVALID','DISCOVERY_RATE_TOO_LOW','DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY','DISCOVERY_RESPONSE_REQUIRES_RECONCILIATION','DISCOVERY_DELIVERY_REQUIRES_RECONCILIATION'].includes(error.message)||ticket?.kind==='contacts'&&contactReasons.includes(error.message))?error.message:'unclassified';
   const provider=error as {stage?:unknown;httpStatus?:unknown}|null;
   console.error('automation_held',{kind:ticket?.kind??'unclaimed',reason,...(reason==='DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY'?{stage:provider?.stage==='estimate'?'estimate':provider?.stage==='paid'?'paid':'unknown',httpStatus:typeof provider?.httpStatus==='number'&&Number.isInteger(provider.httpStatus)&&provider.httpStatus>=100&&provider.httpStatus<=599?provider.httpStatus:null}:{})});
-  if(ticket)try{
-   if(ticket.kind==='contacts')await db('rpc/icash_finish_owner_enrichment','POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_success:false,p_outcome:'held_for_reconciliation'});
-   else await db('rpc/icash_finish_automation','POST',{p_id:ticket.id,p_success:false,p_outcome:'held_for_reconciliation'});
-  }catch{/* Preserve consumed capability on database failure. */}
-  return NextResponse.json({status:'held_for_reconciliation'},{status:503,headers});
+  // Only recognized request/receipt failures are scoped to this job. Unknown
+  // exceptions, database failures and invalid shared configuration retain the
+  // worker's infrastructure backoff even if the ticket hold was saved.
+  const isolatedJobFailure=ticket?.kind==='contacts'&&contactReasons.includes(reason)
+   ||ticket?.kind==='discovery'&&['DISCOVERY_RATE_LIMIT','DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY','DISCOVERY_RESPONSE_REQUIRES_RECONCILIATION','DISCOVERY_DELIVERY_REQUIRES_RECONCILIATION'].includes(reason);
+  return heldResponse(await finishHeldAttempt(isolatedJobFailure));
  }
 }
