@@ -1,5 +1,13 @@
 # Continuous reliability
 
+The November 5 [production follow-through](reliability-followthrough-2026-11-05.md)
+records real outreach after the restored scheduler/voice release and the remaining
+account/quota findings. It also removes repeated JSON extraction and duplicate
+same-result disposition scans from the owner outreach report, preserving the
+canonical classifier and every report predicate. Actual before/after report,
+malformed-source, permissions and atomic migration checks cover this read-path
+change; it never changes holds, money or provider actions.
+
 The November 4 custom-voice preview stores a short, private sample for repeated
 playback without customer-credit usage. The actual SQL/service/route fixture
 covers account and VIP isolation, zero-balance playback, one-use generation,
