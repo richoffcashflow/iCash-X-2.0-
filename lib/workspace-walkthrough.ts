@@ -7,6 +7,9 @@ export const walkthroughSteps=[
  {target:'workspace-properties',title:'Follow your deals here.',detail:'Your properties and updates appear here. Open a property for Calls, Texts and Documents. When a decision needs your attention, look for “Needs you.”'},
  {target:'workspace-tour-menu',title:'Help is always close.',detail:'Open this menu for Help, settings or this walkthrough. The Training course button stays at the top whenever you need a refresher.'},
 ] as const;
-export const walkthroughInput=z.object({step:z.number().int().min(0).max(walkthroughSteps.length-1),state:z.enum(['active','dismissed','completed'])}).strict().refine(value=>value.state!=='completed'||value.step===walkthroughSteps.length-1);
+export const walkthroughInput=z.union([
+ z.object({step:z.number().int().min(0).max(walkthroughSteps.length-1),state:z.enum(['active','dismissed','completed'])}).strict().refine(value=>value.state!=='completed'||value.step===walkthroughSteps.length-1),
+ z.object({action:z.literal('course_opened')}).strict(),
+]);
 export const walkthroughState=z.object({step:z.number().int().min(0).max(walkthroughSteps.length-1),state:z.enum(['new','available','active','dismissed','completed'])}).strict();
 export type WalkthroughState=z.infer<typeof walkthroughState>;

@@ -6,6 +6,7 @@ import {WorkspaceVipBanner} from '@/components/workspace-vip-banner';
 import type {CourseOverview} from '@/lib/course-policy';
 import {useCourseProgress} from '@/lib/use-course-progress';
 import {uploadCourseFile} from '@/lib/course-upload';
+import {webinarRequest} from '@/lib/webinar-client';
 import styles from './course.module.css';
 
 function CourseUpload({kind,revision,name,onSaved}:{kind:'video'|'pdf';revision:number;name:string|null;onSaved:()=>Promise<void>}){
@@ -28,7 +29,11 @@ export function CoursePortal(){
  const progress=savedProgress??course?.progress;
  const refresh=useCallback(async()=>{
   controller.current?.abort();const request=new AbortController();controller.current=request;setLoading(true);setError('');
-  try{const res=await fetch('/api/course',{cache:'no-store',signal:request.signal});const data=await res.json();if(request.signal.aborted)return;if(!res.ok){setCourse(null);setSignIn(res.status===401);throw Error(data.error||'Could not load your course.');}setCourse(data);setSignIn(false);}
+  try{const res=await fetch('/api/course',{cache:'no-store',signal:request.signal});const data=await res.json();if(request.signal.aborted)return;if(!res.ok){setCourse(null);setSignIn(res.status===401);throw Error(data.error||'Could not load your course.');}setCourse(data);setSignIn(false);
+   // Record discovery separately from playback, regardless of which course link was used.
+   // Keepalive lets a quick return to the workspace finish this idempotent preference save.
+   void webinarRequest('/api/account/walkthrough',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'course_opened'}),keepalive:true},8000).catch(()=>{/* Discovery must never block course access. */});
+  }
   catch(e){if(!request.signal.aborted)setError(e instanceof Error?e.message:'Could not load your course.');}
   finally{if(!request.signal.aborted)setLoading(false);}
  },[]);

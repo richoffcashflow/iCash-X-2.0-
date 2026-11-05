@@ -22,6 +22,7 @@ export async function verifyCourse(browser,base,options,name){
  await context.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url());if(url.origin!==base)throw Error('Unexpected external request: '+url.origin);
   if(url.pathname==='/api/course')return route.fulfill({status:signedIn?200:401,json:signedIn?{owner,canUpload:owner&&unlocked,vip,assets:{video:{ready,name:ready?'Course.webm':null,revision:ready?1:0},pdf:{ready,name:ready?'Course.pdf':null,revision:ready?1:0}}}:{error:'Sign in to watch your course.'}});
+  if(url.pathname==='/api/account/walkthrough'){assert.equal(req.method(),'POST');assert.deepEqual(req.postDataJSON(),{action:'course_opened'});assert(signedIn);return route.fulfill({json:{courseOpened:true}});}
   if(url.pathname==='/api/course/progress'){const body=req.postDataJSON();if(!signedIn)return route.fulfill({status:401,json:{error:'Sign in'}});assert.equal(body.revision,1);assert(body.ranges.length>0);assert(!('accountId' in body));progressWrites.push(body);return route.fulfill({json:{revision:1,state:'in_progress',percent:1}});}
   if(url.pathname==='/api/course/assets/video'){
    const range=req.headers().range;
@@ -73,7 +74,7 @@ export async function verifyCourse(browser,base,options,name){
   await page.getByRole('button',{name:'Upload & publish',exact:true}).first().click();await page.getByText('Published. Customers can now open this file.',{exact:true}).waitFor();assert.equal(writes[0].kind,'video');assert(courseUploadReceipts.some(r=>r.id.includes(encodeURIComponent(name+'-video'))&&r.body.equals(courseVideo)));assert(writes.some(w=>w.ticket==='fixture-ticket'));
   await page.getByLabel('Choose PDF',{exact:true}).setInputFiles({name:'Course.pdf',mimeType:'application/pdf',buffer:coursePdf});await page.getByRole('button',{name:'Upload & publish',exact:true}).nth(1).click();await page.waitForFunction(()=>[...document.querySelectorAll('[role="status"]')].filter(n=>n.textContent.includes('Published.')).length===2);
   assert(courseUploadReceipts.some(r=>r.id.includes(encodeURIComponent(name+'-pdf'))&&r.body.equals(coursePdf)));
-  signedIn=false;await page.reload();await page.getByRole('heading',{name:'Welcome to your course'}).waitFor();assert.equal(await page.locator('video').count(),0);assert.equal(await page.getByText('Manage course files',{exact:true}).count(),0);
+  await page.waitForLoadState('networkidle');signedIn=false;await page.reload();await page.getByRole('heading',{name:'Welcome to your course'}).waitFor();assert.equal(await page.locator('video').count(),0);assert.equal(await page.getByText('Manage course files',{exact:true}).count(),0);
   assert.deepEqual(errors,[]);console.log(`PASS ${name}: course playback, PDF download, ordered practice link, VIP entitlement, visible owner controls, locked upload entry, video/PDF uploads and signed-out privacy.`);
  }finally{await context.close();}
 }

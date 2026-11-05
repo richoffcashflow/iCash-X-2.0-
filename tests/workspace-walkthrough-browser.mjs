@@ -6,6 +6,7 @@ export async function verifyWalkthrough(browser,base,options,name){
  const errors=[],writes=[],external=[],reads=[];
  let account='new',acknowledged=true,locked=false,failSave=false,failLoad=false;
  let course={revision:1,state:'unrecorded',percent:null};
+ const opened=new Set();
  const saved=new Map([['existing',{step:0,state:'available'}]]);
  page.setDefaultTimeout(12000);page.on('pageerror',error=>errors.push(error.message));
  await context.route('**/*',async route=>{
@@ -16,9 +17,10 @@ export async function verifyWalkthrough(browser,base,options,name){
    if(req.method()==='POST'){
     const body=req.postDataJSON();writes.push({path,body});
     if(failSave)return route.fulfill({status:503,json:{error:'Fixture save outage'}});
+    if(body.action==='course_opened'){opened.add(account);return route.fulfill({json:{courseOpened:true}});}
     saved.set(account,body);return route.fulfill({json:{tour:body}});
    }
-   return route.fulfill({status:failLoad?503:200,json:failLoad?{error:'Fixture read outage'}:{tour:saved.get(account)??{step:0,state:'new'},course}});
+   return route.fulfill({status:failLoad?503:200,json:failLoad?{error:'Fixture read outage'}:{tour:saved.get(account)??{step:0,state:'new'},course,courseOpened:opened.has(account)}});
   }
   if(!['GET','HEAD'].includes(req.method())){writes.push({path,body:req.postDataJSON()});return route.fulfill({status:403,json:{error:'No live actions in this fixture'}});}
   if(path==='/api/account')return route.fulfill({json:{...fixtureAccount,email:account+'@example.invalid',balanceCents:0,workspaceAcknowledged:acknowledged,mode:'live',billingModel:'membership_credits',membershipActive:!locked}});
@@ -46,22 +48,32 @@ export async function verifyWalkthrough(browser,base,options,name){
   await tour.getByRole('button',{name:'Watch course',exact:true}).click();
   await page.waitForURL(base+'/course');await page.getByRole('link',{name:'Continue workspace walkthrough',exact:true}).waitFor();
   assert.deepEqual(saved.get('new'),{step:1,state:'active'});
+  await page.waitForLoadState('networkidle');assert(opened.has('new'));
+  await page.getByRole('link',{name:'My workspace',exact:true}).click();
+  await page.getByRole('region',{name:'Bot controls'}).waitFor();await page.waitForLoadState('networkidle');
+  assert.equal(await tour.count(),0,'Opening course suppresses automatic tour');
+  assert.equal(await page.getByRole('region',{name:'Getting started'}).count(),0,'Opening course hides the reminder without playback');
+  await page.reload();await page.getByRole('region',{name:'Bot controls'}).waitFor();await page.waitForLoadState('networkidle');
+  assert.equal(await tour.count(),0);assert.equal(await page.getByRole('region',{name:'Getting started'}).count(),0);
+  await page.locator('#workspace-tour-course').click();await page.getByRole('link',{name:'Continue workspace walkthrough',exact:true}).waitFor();await page.waitForLoadState('networkidle');
   assert.equal(course.state,'unrecorded','Opening Course is not counted as watching');
   await page.getByRole('link',{name:'Continue workspace walkthrough',exact:true}).click();await ready('Your bot, at a glance.');
   await page.keyboard.press('Escape');await tour.waitFor({state:'hidden'});
-  await page.getByRole('region',{name:'Getting started'}).waitFor();
+  await page.getByRole('region',{name:'Bot controls'}).waitFor();
   await page.waitForFunction(()=>!document.querySelector('[role="status"] button[disabled]'));
   await page.waitForLoadState('networkidle');await page.reload();
-  await page.getByRole('region',{name:'Getting started'}).waitFor();assert.equal(await tour.count(),0,'Dismissed guide does not pop up again');
-  await page.getByRole('button',{name:'Continue walkthrough',exact:true}).click();await ready('Your bot, at a glance.');
+  await page.getByRole('region',{name:'Bot controls'}).waitFor();assert.equal(await tour.count(),0,'Dismissed guide does not pop up again');
+  await page.goto(base+'/?walkthrough=1');await ready('Your bot, at a glance.');
   await tour.getByRole('button',{name:'Next',exact:true}).click();await ready('Follow your deals here.');
-  await page.reload();await ready('Follow your deals here.');
+  await page.reload();await page.getByRole('region',{name:'Bot controls'}).waitFor();await page.waitForLoadState('networkidle');assert.equal(await tour.count(),0,'Course discovery suppresses an active saved tour too');
+  await page.goto(base+'/?walkthrough=1');await ready('Your bot, at a glance.');await tour.getByRole('button',{name:'Next',exact:true}).click();await ready('Follow your deals here.');
   await tour.getByRole('button',{name:'Next',exact:true}).click();await ready('Help is always close.');
   await tour.getByRole('button',{name:'Finish walkthrough',exact:true}).click();await tour.waitFor({state:'hidden'});await page.waitForLoadState('networkidle');
   await page.reload();await page.getByRole('region',{name:'Bot controls'}).waitFor();await page.waitForLoadState('networkidle');assert.equal(await tour.count(),0);assert.equal(saved.get('new').state,'completed');
   const courseCard=page.getByRole('region',{name:'Getting started'});
-  await courseCard.getByRole('heading',{name:'Start here: Watch the course.',exact:true}).waitFor();
-  assert.equal(await courseCard.getByRole('link',{name:'Watch course',exact:true}).getAttribute('href'),'/course','Completing the tour keeps the course visible');
+  assert.equal(await courseCard.count(),0,'Finishing or replaying a tour never restores the course prompt');
+  account='existing';await page.reload();await courseCard.getByRole('heading',{name:'Start here: Watch the course.',exact:true}).waitFor();
+  assert.equal(await courseCard.getByRole('link',{name:'Watch course',exact:true}).getAttribute('href'),'/course','Users who have not opened the course still see its reminder');
   assert.equal(await page.locator('#workspace-tour-course').innerText(),'Training course');
   assert.equal(await page.locator('#workspace-tour-course').evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(23, 23, 23)');
   for(const width of [...new Set([options.viewport.width,320])]){
@@ -78,14 +90,21 @@ export async function verifyWalkthrough(browser,base,options,name){
   failSave=false;await page.getByRole('status').filter({hasText:'We couldn’t save your place.'}).getByRole('button',{name:'Retry',exact:true}).click();await page.getByText('We couldn’t save your place.',{exact:false}).waitFor({state:'hidden'});
   await page.waitForLoadState('networkidle');account='existing';await page.reload();await page.getByRole('region',{name:'Bot controls'}).waitFor();await page.waitForLoadState('networkidle');assert.equal(await tour.count(),0,'Existing users are not forced through a new guide');
   await courseCard.getByRole('link',{name:'Watch course',exact:true}).waitFor();
-  course={revision:1,state:'in_progress',percent:35};await page.reload();await courseCard.getByRole('link',{name:'Continue course',exact:true}).waitFor();assert.match(await courseCard.innerText(),/35% watched/);
-  course={revision:1,state:'completed',percent:100};await page.reload();await courseCard.getByRole('link',{name:'Revisit course',exact:true}).waitFor();assert.equal(await courseCard.getByText('Start here: Watch the course.',{exact:true}).count(),0);
+  course={revision:1,state:'in_progress',percent:35};await page.reload();await page.waitForLoadState('networkidle');assert.equal(await courseCard.count(),0,'Existing playback also dismisses reminders');
+  course={revision:1,state:'completed',percent:100};await page.reload();await page.waitForLoadState('networkidle');assert.equal(await courseCard.count(),0);
   course={revision:2,state:'unrecorded',percent:null};await page.reload();await courseCard.getByRole('link',{name:'Watch course',exact:true}).waitFor();
+  await page.getByLabel('Account menu',{exact:true}).click();await page.locator('.workspace-account-options').getByRole('link',{name:'Training course',exact:true}).click();
+  await page.getByRole('link',{name:'My workspace',exact:true}).waitFor();await page.waitForLoadState('networkidle');assert(opened.has('existing'));
+  await page.getByRole('link',{name:'My workspace',exact:true}).click();await page.waitForLoadState('networkidle');assert.equal(await courseCard.count(),0);
+  course={revision:3,state:'unrecorded',percent:null};await page.reload();await page.waitForLoadState('networkidle');assert.equal(await courseCard.count(),0,'A replacement video does not restore a dismissed discovery prompt');
+  account='card-user';saved.set(account,{step:0,state:'available'});await page.reload();await courseCard.getByRole('link',{name:'Watch course',exact:true}).click();
+  await page.getByRole('link',{name:'My workspace',exact:true}).waitFor();await page.waitForLoadState('networkidle');assert(opened.has('card-user'));
+  await page.getByRole('link',{name:'My workspace',exact:true}).click();await page.waitForLoadState('networkidle');assert.equal(await courseCard.count(),0);
   account='other-new';await page.reload();await ready('First, watch the course.');
   assert(!saved.has('other-new'),'Another account does not inherit completion');
   await page.keyboard.press('Escape');await tour.waitFor({state:'hidden'});await page.waitForLoadState('networkidle');
-  course={revision:1,state:'completed',percent:100};await page.reload();await page.getByRole('button',{name:'Continue walkthrough',exact:true}).click();await ready('Your course is watched.');await page.keyboard.press('Escape');await tour.waitFor({state:'hidden'});await page.waitForLoadState('networkidle');
-  failLoad=true;await page.reload();await page.getByRole('region',{name:'Bot controls'}).waitFor();await courseCard.getByRole('link',{name:'Watch course',exact:true}).waitFor();assert(!/watched/.test(await courseCard.innerText()),'Unavailable progress never invents recorded viewing');
+  course={revision:1,state:'completed',percent:100};await page.reload();await page.getByLabel('Account menu',{exact:true}).click();await page.getByRole('button',{name:'Take a walkthrough',exact:true}).click();await ready('Your course is watched.');await page.keyboard.press('Escape');await tour.waitFor({state:'hidden'});await page.waitForLoadState('networkidle');
+  failLoad=true;await page.reload();await page.getByRole('region',{name:'Bot controls'}).waitFor();await page.waitForLoadState('networkidle');assert.equal(await courseCard.count(),0,'Unavailable progress does not bring back a potentially dismissed prompt');assert.equal(await page.locator('#workspace-tour-course').getAttribute('href'),'/course');
   await page.getByLabel('Account menu',{exact:true}).click();assert.equal(await page.locator('.workspace-account-options').getByRole('link',{name:'Training course',exact:true}).getAttribute('href'),'/course');await page.getByRole('button',{name:'Take a walkthrough',exact:true}).click();await ready('First, watch the course.');
   failSave=true;await tour.getByRole('button',{name:'Watch course',exact:true}).click();await page.waitForURL(base+'/course');
   // Verify the destination finishes loading before starting the next scenario.

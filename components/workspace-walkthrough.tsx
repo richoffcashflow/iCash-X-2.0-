@@ -61,18 +61,24 @@ function TourDialog({step,course,busy,error,onMove,onClose,onCourse,onFinish}:{s
 
 export function WorkspaceWalkthrough({openRequest,blocked,onOpenChange}:{openRequest:number;blocked:boolean;onOpenChange:(open:boolean)=>void}){
  const [tour,setTour]=useState<WalkthroughState|null>(null),[course,setCourse]=useState<CourseProgress|null>(null),[open,setOpen]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[occupied,setOccupied]=useState(false);
+ const [courseOpened,setCourseOpened]=useState<boolean|null>(null);
  const queue=useRef<Promise<unknown>>(Promise.resolve()),revision=useRef(0),mounted=useRef(false),manual=useRef(false),retry=useRef<SaveState|null>(null),writeController=useRef<AbortController|null>(null);
  useEffect(()=>{
   mounted.current=true;const controller=new AbortController();writeController.current=new AbortController();
   const url=new URL(window.location.href),returning=url.searchParams.get('walkthrough')==='1';
   if(returning){manual.current=true;setTour({step:1,state:'active'});setOpen(true);url.searchParams.delete('walkthrough');window.history.replaceState(window.history.state,'',url.pathname+url.search+url.hash);}
-  void webinarRequest<{tour:unknown;course:unknown}>('/api/account/walkthrough',{cache:'no-store',signal:controller.signal},10000).then(data=>{
+  const load=(initial:boolean)=>void webinarRequest<{tour:unknown;course:unknown;courseOpened:boolean}>('/api/account/walkthrough',{cache:'no-store',signal:controller.signal},10000).then(data=>{
    if(controller.signal.aborted)return;
    const saved=walkthroughState.parse(data.tour),progress=courseProgressSchema.safeParse(data.course);
    setCourse(progress.success?progress.data:null);
-   if(!manual.current){setTour(saved);setOpen(saved.state==='new'||saved.state==='active');}
+   const discovered=data.courseOpened===true||(progress.success&&['in_progress','completed'].includes(progress.data.state));
+   setCourseOpened(discovered);
+   if(!manual.current){setTour(saved);if(discovered)setOpen(false);else if(initial)setOpen(saved.state==='new'||saved.state==='active');}
   }).catch(()=>{/* A guide outage must not block the customer's workspace; the menu can still open it. */});
-  return()=>{mounted.current=false;controller.abort();writeController.current?.abort();};
+  load(true);
+  const refresh=()=>load(false),restore=(event:PageTransitionEvent)=>{if(event.persisted)refresh();};
+  window.addEventListener('focus',refresh);window.addEventListener('pageshow',restore);
+  return()=>{mounted.current=false;controller.abort();writeController.current?.abort();window.removeEventListener('focus',refresh);window.removeEventListener('pageshow',restore);};
  },[]);
  useEffect(()=>{if(openRequest>0){manual.current=true;setTour({step:0,state:'active'});setOpen(true);setError('');}},[openRequest]);
  useEffect(()=>{
@@ -98,12 +104,11 @@ export function WorkspaceWalkthrough({openRequest,blocked,onOpenChange}:{openReq
  }
  function close(){setOpen(false);void save({step:tour?.step??0,state:'dismissed'});}
  async function watchCourse(){await save({step:1,state:'active'});if(mounted.current)window.location.assign('/course');}
- const watched=course?.state==='completed',started=course?.state==='in_progress';
  const resumeTour=tour?.state==='active'||tour?.state==='dismissed';
  return <>
-  {!visible&&!blocked&&<section className={`${styles.reminder}${watched?' '+styles.reviewed:''}`} aria-label="Getting started">
-   <div className={styles.reminderCopy}><span className={styles.kicker}>{watched?'YOUR TRAINING':'LEARN HOW TO USE ICASH X'}</span><h2>{watched?'Your course is always here.':started?'Continue your course.':'Start here: Watch the course.'}</h2><p>{watched?'Revisit the steps whenever you need a refresher.':'Learn how to set up your bot, follow your leads and move deals forward.'}</p>{started&&<p className={styles.saved}>{course.percent}% watched</p>}</div>
-   <div className={styles.reminderActions}><a href="/course"><BookOpen size={17} aria-hidden="true"/>{watched?'Revisit course':started?'Continue course':'Watch course'}<ArrowRight size={16} aria-hidden="true"/></a>{resumeTour&&<button type="button" onClick={()=>setOpen(true)}>Continue walkthrough<ArrowRight size={15} aria-hidden="true"/></button>}</div>
+  {!visible&&!blocked&&courseOpened===false&&<section className={styles.reminder} aria-label="Getting started">
+   <div className={styles.reminderCopy}><span className={styles.kicker}>LEARN HOW TO USE ICASH X</span><h2>Start here: Watch the course.</h2><p>Learn how to set up your bot, follow your leads and move deals forward.</p></div>
+   <div className={styles.reminderActions}><a href="/course"><BookOpen size={17} aria-hidden="true"/>Watch course<ArrowRight size={16} aria-hidden="true"/></a>{resumeTour&&<button type="button" onClick={()=>setOpen(true)}>Continue walkthrough<ArrowRight size={15} aria-hidden="true"/></button>}</div>
   </section>}
   {!visible&&error&&<p className={styles.saveError} role="status">{error} <button type="button" disabled={busy} onClick={()=>{if(retry.current)void save(retry.current);}}>Retry</button></p>}
   {visible&&<TourDialog step={tour?.step??0} course={course} busy={busy} error={error} onMove={step=>void save({step,state:'active'})} onClose={close} onCourse={()=>void watchCourse()} onFinish={()=>{setOpen(false);void save({step:walkthroughSteps.length-1,state:'completed'});}}/>}
