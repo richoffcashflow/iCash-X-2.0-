@@ -87,7 +87,11 @@ export async function verifyWalkthrough(browser,base,options,name){
   course={revision:1,state:'completed',percent:100};await page.reload();await page.getByRole('button',{name:'Continue walkthrough',exact:true}).click();await ready('Your course is watched.');await page.keyboard.press('Escape');await tour.waitFor({state:'hidden'});await page.waitForLoadState('networkidle');
   failLoad=true;await page.reload();await page.getByRole('region',{name:'Bot controls'}).waitFor();await courseCard.getByRole('link',{name:'Watch course',exact:true}).waitFor();assert(!/watched/.test(await courseCard.innerText()),'Unavailable progress never invents recorded viewing');
   await page.getByLabel('Account menu',{exact:true}).click();assert.equal(await page.locator('.workspace-account-options').getByRole('link',{name:'Training course',exact:true}).getAttribute('href'),'/course');await page.getByRole('button',{name:'Take a walkthrough',exact:true}).click();await ready('First, watch the course.');
-  failSave=true;await tour.getByRole('button',{name:'Watch course',exact:true}).click();await page.waitForURL(base+'/course');failSave=false;failLoad=false;
+  failSave=true;await tour.getByRole('button',{name:'Watch course',exact:true}).click();await page.waitForURL(base+'/course');
+  // Verify the destination finishes loading before starting the next scenario.
+  // Navigating away immediately can abort its mocked course fetch in WebKit.
+  await page.getByRole('link',{name:'Continue workspace walkthrough',exact:true}).waitFor();
+  await page.waitForLoadState('networkidle');failSave=false;failLoad=false;
   await page.goto(base+'/');await page.getByRole('region',{name:'Bot controls'}).waitFor();
   locked=true;await page.reload();await page.getByRole('heading',{name:'Renew subscription',exact:true}).waitFor();assert.equal(await tour.count(),0);locked=false;
   acknowledged=false;await page.reload();await page.getByRole('button',{name:'I agree & open workspace',exact:true}).waitFor();assert.equal(await tour.count(),0,'The guide cannot bypass acknowledgment');
