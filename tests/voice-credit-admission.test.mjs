@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
-import {voiceCreditState,refreshVoiceCapacity} from '../lib/voice-capacity.ts';
+import {voiceCreditState,voiceCapacitySnapshot,refreshVoiceCapacity} from '../lib/voice-capacity.ts';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const sql=read('config/voice-credit-admission.sql'),baseline=JSON.parse(read('tests/fixtures/voice-credit-admission-baseline.json'));
 const base={tier:'creator',character_count:100,character_limit:100,max_credit_limit_extension:0,can_extend_character_limit:false};
@@ -20,6 +20,47 @@ await refreshVoiceCapacity(async(path,method,body)=>path.includes('targets')?[{a
 assert.equal(calls.length,2,'only the existing subscription and agent reads occur');
 assert.equal(writes.length,1);assert.equal(writes[0].p_agents[0].creditState,'exhausted');
 assert.equal(writes[0].p_limit,10,'credit metadata never changes concurrency entitlement');
+// A real plan upgrade must refresh the exhausted snapshot through normal reads.
+// Canonical provider IDs differ from the marketing labels in older responses.
+for(const tier of ['scale_2024_08_10','growing_business']){
+ const agents=[{agentId:'agent_outgoing',branchId:null},{agentId:'agent_incoming',branchId:'agtbrch_incoming'}];
+ const reads=[],saved=[],recovered=[];
+ const subscription={...base,tier,character_count:600000,character_limit:tier==='scale_2024_08_10'?1800000:6000000};
+ const get=async(path,region)=>{
+  reads.push({path,region});
+  if(path==='/v1/user/subscription')return subscription;
+  const incoming=path.includes('agent_incoming');
+  return {agent_id:incoming?'agent_incoming':'agent_outgoing',branch_id:incoming?'agtbrch_incoming':'agtbrch_outgoing',platform_settings:{call_limits:{agent_concurrency_limit:incoming?2:18,bursting_enabled:false,daily_limit:incoming?100:1000}}};
+ };
+ const result=await refreshVoiceCapacity(async(path,method,body)=>{
+  if(path==='rpc/icash_voice_capacity_targets')return agents;
+  assert.equal(path,'rpc/icash_save_voice_capacity');assert.equal(method,'POST');saved.push(body);
+ },get,{agentId:'agent_outgoing',branchId:'agtbrch_outgoing'},async agent=>{
+  assert.equal(saved.length,1,'Verified capacity is persisted before configuration recovery');recovered.push(agent.agent_id);
+ });
+ assert.deepEqual(result,{status:'verified',workspaceLimit:20,agents:2});
+ assert.deepEqual(saved[0].p_agents,[{agentId:'agent_outgoing',limit:18,creditState:'available'},{agentId:'agent_incoming',limit:2,creditState:'available'}]);
+ assert.equal(saved[0].p_limit,20,'An upgrade does not raise the owner-approved twenty-call ceiling');
+ assert(saved[0].p_source.startsWith('provider subscription '+tier+';'));
+ assert(saved[0].p_source.includes(';extra=0;overage=false;'));
+ assert.deepEqual(recovered,['agent_outgoing']);
+ assert.deepEqual(reads,[{path:'/v1/user/subscription',region:undefined},{path:'/v1/convai/agents/agent_outgoing?branch_id=agtbrch_outgoing',region:'global'},{path:'/v1/convai/agents/agent_incoming?branch_id=agtbrch_incoming',region:'us'}]);
+ const validAgent={platform_settings:{call_limits:{agent_concurrency_limit:-1,bursting_enabled:false}}};
+ assert.deepEqual(voiceCapacitySnapshot(subscription,validAgent),{workspaceLimit:20,agentLimit:20,tier});
+}
+for(const tier of ['enterprise','scale_2024_08_10_extra','Scale','__proto__','constructor','toString','']){
+ const agent={agent_id:'agent_fixture',platform_settings:{call_limits:{agent_concurrency_limit:18,bursting_enabled:false}}};
+ assert.equal(voiceCapacitySnapshot({...base,tier},agent),null);
+ let writes=0,recoveries=0;
+ await assert.rejects(()=>refreshVoiceCapacity(async path=>path.includes('targets')?[{agentId:'agent_fixture',branchId:null}]:writes++,async path=>path.includes('subscription')?{...base,tier}:agent,undefined,async()=>{recoveries++;}),/VOICE_CAPACITY_TIER_UNVERIFIED/);
+ assert.equal(writes,0);assert.equal(recoveries,0);
+}
+for(const call_limits of [{agent_concurrency_limit:18,bursting_enabled:true},{agent_concurrency_limit:'18',bursting_enabled:false},{agent_concurrency_limit:0,bursting_enabled:false},{}]){
+ let writes=0;
+ await assert.rejects(()=>refreshVoiceCapacity(async path=>path.includes('targets')?[{agentId:'agent_fixture',branchId:null}]:writes++,async path=>path.includes('subscription')?{...base,tier:'scale_2024_08_10',character_limit:1800000}:{agent_id:'agent_fixture',platform_settings:{call_limits}}),/VOICE_CAPACITY_AGENT_LIMIT_UNVERIFIED/);
+ assert.equal(writes,0,'An upgraded plan cannot override unverified agent limits or burst mode');
+}
+console.log('PASS canonical ElevenLabs upgrade IDs: verified replenishment, original caps/regions, recovery ordering, unknown IDs, inherited names and agent-limit holds. No provider requests.');
 const pg=await PGlite.create(),q=(s,a=[])=>pg.query(s,a),one=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
 const account='00000000-0000-4000-8000-000000000001';
 try{
