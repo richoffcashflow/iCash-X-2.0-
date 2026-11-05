@@ -13,7 +13,13 @@ export async function readVoiceCapacityProvider(path:string,region:'global'|'us'
 }
 // Verified against https://elevenlabs.io/pricing/agents on 2026-10-23.
 // Owner approved twenty total calls on 2026-10-26; SQL reserves two for incoming.
-const planLimits:Record<string,number>={free:4,starter:6,creator:10,pro:20,scale:30,business:40};
+// The subscription API uses these canonical IDs for Scale and Business.
+// Keep the existing display-name variants for older saved/provider responses.
+const planLimits:Record<string,number>={free:4,starter:6,creator:10,pro:20,scale:30,scale_2024_08_10:30,business:40,growing_business:40};
+function voicePlanLimit(subscription:unknown){
+ const tier=object(subscription).tier;
+ return typeof tier==='string'&&Object.hasOwn(planLimits,tier)?planLimits[tier]:undefined;
+}
 /** Existing subscription metadata only. This never changes provider billing. */
 export function voiceCreditState(subscription:unknown):'available'|'exhausted'|'unknown'{
  const s=object(subscription),used=s.character_count,limit=s.character_limit,extra=s.max_credit_limit_extension;
@@ -39,7 +45,7 @@ export function voiceQuotaEvidence(subscription:unknown,agents:unknown[]){
 }
 export function voiceCapacitySnapshot(subscription:unknown,agent:unknown){
  const s=object(subscription),a=object(agent),limits=object(object(a.platform_settings).call_limits);
- const workspace=typeof s.tier==='string'?planLimits[s.tier]:undefined;
+ const workspace=voicePlanLimit(subscription);
  const limit=limits.agent_concurrency_limit;
  if(!workspace||!Number.isInteger(limit)||Number(limit)<-1||limit===0||limits.bursting_enabled!==false)return null;
  return {workspaceLimit:Math.min(20,workspace),agentLimit:limit===-1?Math.min(20,workspace):Math.min(20,workspace,Number(limit)),tier:s.tier};
@@ -57,7 +63,8 @@ export async function refreshVoiceCapacity(db:Db,read:Reader,review?:{agentId:st
   if(object(agent).agent_id!==target.agentId)throw Error('VOICE_CAPACITY_AGENT_MISMATCH');
   if(target.branchId===null&&review&&target.agentId===review.agentId&&object(agent).branch_id===review.branchId)reviewedAgent=agent;
   observedAgents.push(agent);
-  const snapshot=voiceCapacitySnapshot(subscription,agent);if(!snapshot)throw Error('VOICE_CAPACITY_UNVERIFIED');
+  const snapshot=voiceCapacitySnapshot(subscription,agent);
+  if(!snapshot)throw Error(voicePlanLimit(subscription)===undefined?'VOICE_CAPACITY_TIER_UNVERIFIED':'VOICE_CAPACITY_AGENT_LIMIT_UNVERIFIED');
   workspaceLimit=snapshot.workspaceLimit;tier=String(snapshot.tier);
   const existing=capacities.find(c=>c.agentId===target.agentId);
   if(existing)existing.limit=Math.min(existing.limit,snapshot.agentLimit);else capacities.push({agentId:target.agentId,limit:snapshot.agentLimit,creditState});
