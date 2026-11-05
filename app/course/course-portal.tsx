@@ -1,6 +1,6 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {ArrowLeft,ArrowUpRight,BookOpen,Download,FileText,Play,Upload} from 'lucide-react';
+import {ArrowLeft,ArrowUpRight,BookOpen,Download,FileText,Gem,MessageCircle,Play,Upload,Users,Volume2} from 'lucide-react';
 import {AccountAccess} from '@/components/account-access';
 import {WorkspaceVipBanner} from '@/components/workspace-vip-banner';
 import type {CourseOverview} from '@/lib/course-policy';
@@ -34,9 +34,9 @@ export function CoursePortal(){
  },[]);
  useEffect(()=>{void refresh();return()=>controller.current?.abort();},[refresh]);
  return <div className={styles.portal}>
+  {course?.vip===false&&<WorkspaceVipBanner fullWidth href="/?upgrade=vip"/>}
   <header className={styles.header}><a href="/" className={styles.brand}>iCash X<span>MEMBER COURSE</span></a><a href="/" className={styles.back}><ArrowLeft size={16}/>My workspace</a></header>
   <main className={styles.main}>
-   {course?.vip===false&&<WorkspaceVipBanner href="/?upgrade=vip"/>}
    <div className={styles.intro}><span className={styles.eyebrow}>START HERE</span><h1>Learn it. See it. Put it to work.</h1><p>Your guide to iCash X, from the first seller conversation to closing.</p></div>
    {loading&&!course?<div className={styles.notice} role="status">Loading your course…</div>:!course?<section className={styles.notice}>{signIn?<><h2>Welcome to your course</h2><p>Sign in with the email you used to join iCash X.</p><AccountAccess onSignedIn={()=>void refresh()}/></>:<><p role="alert">{error}</p><button onClick={()=>void refresh()}>Try again</button><a href="/">Open my workspace</a></>}</section>:<>
     {error&&<p role="alert">{error}</p>}
@@ -49,6 +49,7 @@ export function CoursePortal(){
      <div className={styles.resource}><span className={styles.resourceIcon}><BookOpen size={24}/></span><div><span className={styles.step}>02 · TRY IT YOURSELF</span><h3>Explore the practice workspace</h3><p>Follow a sample deal, review contracts and see each step through closing.</p></div><a href="/preview/workspace" className={styles.resourceButton}>Open practice workspace<ArrowUpRight size={17}/></a></div>
      <div className={styles.resource}><span className={styles.resourceIcon}><ArrowUpRight size={24}/></span><div><span className={styles.step}>YOUR NEXT STEP</span><h3>Get to know your workspace</h3><p>Take a guided tour of your bot controls, properties and Help.</p></div><a href="/?walkthrough=1" className={styles.resourceButton}>Continue workspace walkthrough<ArrowUpRight size={17}/></a></div>
     </section>
+    {course.vip===false&&<section className={styles.vip} aria-labelledby="course-vip-title"><div className={styles.vipTop}><span className={styles.vipBadge}><Gem size={17}/>iCash X VIP</span></div><div className={styles.vipHeading}><div><h2 id="course-vip-title">Give your workspace the VIP upgrade.</h2><p>More guidance. More reach. Your own AI voice.</p></div><div className={styles.price}><strong>$50<span> more today</span></strong><p>Then $100/month total on your existing renewal date.</p></div></div><div className={styles.benefits}><div><MessageCircle size={22}/><h3>Ask AI Bot</h3><p>Ask about a deal and your next move.</p></div><div><Users size={22}/><h3>A wider buyer network</h3><p>Access eligible buyers across the platform.</p></div><div><Volume2 size={22}/><h3>Your voice. More value.</h3><p>Custom AI voice, priority eligible leads and 30% off AI work and leads.</p></div></div><div className={styles.vipBottom}><a href="/?upgrade=vip" className={styles.vipCta}>Upgrade to VIP<ArrowUpRight size={18}/></a><p>Review your plan and payment before confirming.</p></div></section>}
    </>}
    <footer className={styles.footer}><span>iCash X · Learn at your own pace.</span><a href="/">Go to my workspace<ArrowUpRight size={15}/></a></footer>
   </main>

@@ -12,3 +12,5 @@
 .banner .cta:focus-visible{outline:3px solid #684a14;outline-offset:4px}
 @media(max-width:900px){.banner{grid-template-columns:minmax(0,1fr) auto;gap:18px;padding:22px}.banner .icon{display:none}.banner h2{font-size:22px}.banner p{display:grid;gap:2px}}
 @media(max-width:600px){.banner{grid-template-columns:minmax(0,1fr);gap:18px;padding:20px;margin-bottom:20px;border-radius:14px}.banner h2{font-size:23px}.banner .cta{width:100%;min-height:48px;font-size:15px}.banner p{font-size:12px}}
+
+.banner.fullWidth{width:100%;margin:0;padding-left:max(24px,calc((100% - 1064px)/2));padding-right:max(24px,calc((100% - 1064px)/2));border-width:0 0 1px;border-radius:0;box-shadow:none}
