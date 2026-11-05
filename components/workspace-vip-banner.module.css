@@ -13,4 +13,8 @@
 @media(max-width:900px){.banner{grid-template-columns:minmax(0,1fr) auto;gap:18px;padding:22px}.banner .icon{display:none}.banner h2{font-size:22px}.banner p{display:grid;gap:2px}}
 @media(max-width:600px){.banner{grid-template-columns:minmax(0,1fr);gap:18px;padding:20px;margin-bottom:20px;border-radius:14px}.banner h2{font-size:23px}.banner .cta{width:100%;min-height:48px;font-size:15px}.banner p{font-size:12px}}
 
-.banner.fullWidth{width:100%;margin:0;padding-left:max(24px,calc((100% - 1064px)/2));padding-right:max(24px,calc((100% - 1064px)/2));border-width:0 0 1px;border-radius:0;box-shadow:none}
+.banner.fullWidth{display:flex;align-items:center;justify-content:center;gap:20px;width:100%;min-height:56px;margin:0;padding:5px max(20px,calc((100% - 1064px)/2));border-width:0 0 1px;border-radius:0;background:linear-gradient(110deg,#f8e8b8,#efd78a);box-shadow:none}
+.fullWidth .barCopy{display:flex;align-items:center;gap:12px;min-width:0;font-size:13px;line-height:18px;color:#4e3b1a}
+.fullWidth .barCopy strong{font-weight:800;color:#241b0c;white-space:nowrap}
+.banner.fullWidth .cta{flex:none;gap:6px;width:auto;min-height:44px;padding:0 14px;border-radius:7px;font-size:13px;box-shadow:none}
+@media(max-width:600px){.banner.fullWidth{justify-content:space-between;gap:10px;padding:5px 12px}.fullWidth .barCopy{flex-direction:column;align-items:flex-start;gap:0;font-size:11px;line-height:16px}.fullWidth .barCopy strong{font-size:12px}.banner.fullWidth .cta{padding:0 10px;font-size:12px}}

@@ -50,7 +50,8 @@ export async function verifyCourse(browser,base,options,name){
   assert.equal(await page.getByRole('link',{name:'Upgrade to VIP',exact:true}).first().getAttribute('href'),'/?upgrade=vip');
   const vipBanner=page.getByRole('region',{name:'Upgrade to VIP',exact:true});
   assert.match(await vipBanner.innerText(),/30% off AI work \+ leads/);
-  assert(await vipBanner.evaluate(node=>{const b=node.getBoundingClientRect(),header=document.querySelector('header').getBoundingClientRect();return Math.abs(b.left)<1&&Math.abs(b.width-innerWidth)<1&&b.bottom<=header.top;}),'VIP banner spans the viewport above navigation');
+  await page.evaluate(()=>scrollTo(0,0));
+  assert(await vipBanner.evaluate(node=>{const b=node.getBoundingClientRect(),header=document.querySelector('header').getBoundingClientRect(),cta=node.querySelector('a').getBoundingClientRect();return Math.abs(b.top)<1&&Math.abs(b.left)<1&&Math.abs(b.width-innerWidth)<1&&b.bottom<=header.top&&b.height<=64&&cta.height>=44&&cta.left>=0&&cta.right<=innerWidth;}),'Slim VIP bar spans the very top above navigation with a usable upgrade button');
   assert.equal(await page.getByRole('link',{name:'Upgrade to VIP',exact:true}).count(),2,'Course keeps both upgrade placements');
   const lowerOffer=page.getByRole('region',{name:'Give your workspace the VIP upgrade.',exact:true});
   assert((await lowerOffer.boundingBox()).y>(await practice.boundingBox()).y,'The detailed VIP offer remains below the course');

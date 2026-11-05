@@ -4,10 +4,12 @@ import styles from './workspace-vip-banner.module.css';
 
 type VipBannerAction={onUpgrade:()=>void;disabled?:boolean;href?:never}|{href:string;onUpgrade?:never;disabled?:never};
 export function WorkspaceVipBanner({disabled=false,onUpgrade,href,fullWidth=false}:VipBannerAction&{fullWidth?:boolean}){
- const action=<>Upgrade to VIP <ArrowRight size={19} aria-hidden="true"/></>;
+ const action=<>Upgrade to VIP <ArrowRight size={fullWidth?15:19} aria-hidden="true"/></>;
  return <section className={`${styles.banner}${fullWidth?' '+styles.fullWidth:''}`} aria-label="Upgrade to VIP">
-  <span className={styles.icon} aria-hidden="true"><Gem size={30} strokeWidth={1.7}/></span>
-  <div className={styles.copy}><span className={styles.eyebrow}>iCash X VIP</span><h2>Unlock VIP. Get more from every credit.</h2><p><strong>30% off AI work + leads</strong><span>Ask AI Bot · Buyer Network · Custom AI voice</span></p></div>
+  {fullWidth?<div className={styles.barCopy}><strong>iCash X VIP</strong><span>30% off AI work + leads</span></div>:<>
+   <span className={styles.icon} aria-hidden="true"><Gem size={30} strokeWidth={1.7}/></span>
+   <div className={styles.copy}><span className={styles.eyebrow}>iCash X VIP</span><h2>Unlock VIP. Get more from every credit.</h2><p><strong>30% off AI work + leads</strong><span>Ask AI Bot · Buyer Network · Custom AI voice</span></p></div>
+  </>}
   {href?<a className={styles.cta} href={href}>{action}</a>:<button className={styles.cta} type="button" disabled={disabled} aria-haspopup="dialog" onClick={onUpgrade}>{action}</button>}
  </section>;
 }
