@@ -36,7 +36,7 @@ const maintenance=await load('app/api/internal/maintenance/route.ts','usageMaint
  recoverOwnerExportCapacity:async()=>{throw Error('Capacity evidence unavailable');},
  cleanupOwnerPreflight:async()=>{throw Error('Cleanup unavailable');},
  syncResearchExclusions:async()=>({status:'not_due'}),
- refreshInventoryGeographyBatch:async()=>({status:'not_due'}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),refreshVoiceCapacity:async()=>{throw Error('Provider unavailable');},readRecordingReview:()=>null,readVoiceCapacityProvider:async()=>{throw Error('Unexpected provider request');},
+ refreshInventoryGeographyBatch:async()=>({status:'not_due'}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'awaiting_activation'}),refreshVoiceCapacity:async()=>{throw Error('Provider unavailable');},readRecordingReview:()=>null,readVoiceCapacityProvider:async()=>{throw Error('Unexpected provider request');},
  authorizeOutboundBilling:()=>true,pruneUsageLoopObservations,
  db:async path=>{assert.equal(path,'rpc/icash_prune_usage_loop_observations');pruneTried=true;throw Error('telemetry unavailable');},
  maintenanceBatch:async lanes=>{assert.deepEqual(Object.keys(lanes),['textReceipts','supportCustomerEmail','supportCopies','purchaseEmail','purchaseFollowups','outbound','recording','ownerRecording','reception']);const receipt=await lanes.textReceipts();assert.equal(receipt.status,200);assert.equal((await receipt.json()).status,'idle');lanesRan=true;return {ok:true};},

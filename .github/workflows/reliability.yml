@@ -81,6 +81,8 @@ jobs:
         run: python3 scripts/test-voice-configuration-target-lookup-postgres.py
       - name: Verify configuration recovery capacity snapshot under contention
         run: python3 scripts/test-voice-configuration-target-lookup-postgres.py --capacity-snapshot
+      - name: Verify eighty-percent voice capacity claim under contention
+        run: python3 scripts/test-eighty-percent-voice-capacity-postgres.py
       - name: Verify urgent voice source filtering and concurrent fair issuance
         run: python3 scripts/test-urgent-voice-source-gate-postgres.py
       - name: Verify legacy voice history is excluded before native eligibility checks

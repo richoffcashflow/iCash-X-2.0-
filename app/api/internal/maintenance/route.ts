@@ -3,6 +3,7 @@ import {processSupportCustomerNotifications} from '@/lib/support-customer-notifi
 import {refreshVoiceCapacity,readVoiceCapacityProvider} from '@/lib/voice-capacity';
 import {recoverVoiceConfiguration} from '@/lib/voice-configuration-recovery';
 import {applyApprovedProVoiceCapacity} from '@/lib/approved-pro-voice-capacity';
+import {applyApprovedEightyPercentVoiceCapacity} from '@/lib/approved-eighty-percent-voice-capacity';
 import {refreshInventoryGeographyBatch} from '@/lib/inventory-geographies';
 import {readRecordingReview} from '@/lib/required-call-recording';
 import {processPurchaseAccessEmails} from '@/lib/purchase-access-email';
@@ -30,13 +31,14 @@ export async function GET(request:Request){
  if(!authorizeOutboundBilling(request,process.env.CRON_SECRET))return Response.json({error:'Unauthorized'},{status:401,headers});
  const capacity=(async()=>{
   const change=await applyApprovedProVoiceCapacity(db).catch(error=>{console.error('Approved Pro voice capacity unavailable',error instanceof Error&&/^PRO_VOICE_CAPACITY_[A-Z0-9_]+$/.test(error.message)?error.message:'verification_unavailable');return {status:'verification_unavailable'};});
+  const eightyPercentChange=await applyApprovedEightyPercentVoiceCapacity(db).catch(error=>{console.error('Approved eighty-percent voice capacity unavailable',error instanceof Error&&/^EIGHTY_VOICE_CAPACITY_[A-Z0-9_]+$/.test(error.message)?error.message:'verification_unavailable');return {status:'verification_unavailable'};});
   // Fresh capacity reads still run when the one-time change is held.
   let recovery:{status:string;requeued:number}={status:'not_checked',requeued:0};
   const verified=await refreshVoiceCapacity(db,readVoiceCapacityProvider,readRecordingReview(process.env.RECORDED_OUTBOUND_REVIEW_JSON),async agent=>{
    recovery=await recoverVoiceConfiguration(db,agent).catch(()=>({status:'recovery_unavailable',requeued:0}));
    if(recovery.status==='recovery_unavailable')console.error('Voice configuration recovery unavailable');
   });
-  return {...verified,change,recovery};
+  return {...verified,change,eightyPercentChange,recovery};
  })().catch(error=>{console.error('Voice capacity verification unavailable',error instanceof Error&&/^VOICE_CAPACITY_[A-Z0-9_]+$/.test(error.message)?error.message:'read_unavailable');return {status:'verification_unavailable'};});
  const inventory=refreshInventoryGeographyBatch(db).catch(()=>({status:'metadata_unavailable'}));
  const researchExclusions=syncResearchExclusions(db).catch(()=>({status:'sync_unavailable'}));

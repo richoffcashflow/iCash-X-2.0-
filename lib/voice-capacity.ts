@@ -12,7 +12,7 @@ export async function readVoiceCapacityProvider(path:string,region:'global'|'us'
  return JSON.parse((await boundedBytes(response,262144)).toString('utf8')) as unknown;
 }
 // Verified against https://elevenlabs.io/pricing/agents on 2026-10-23.
-// Owner approved twenty total calls on 2026-10-26; SQL reserves two for incoming.
+// Owner approved 80% of Business (32 total calls) on 2026-11-05; SQL reserves two for incoming.
 // The subscription API uses these canonical IDs for Scale and Business.
 // Keep the existing display-name variants for older saved/provider responses.
 const planLimits:Record<string,number>={free:4,starter:6,creator:10,pro:20,scale:30,scale_2024_08_10:30,business:40,growing_business:40};
@@ -48,7 +48,7 @@ export function voiceCapacitySnapshot(subscription:unknown,agent:unknown){
  const workspace=voicePlanLimit(subscription);
  const limit=limits.agent_concurrency_limit;
  if(!workspace||!Number.isInteger(limit)||Number(limit)<-1||limit===0||limits.bursting_enabled!==false)return null;
- return {workspaceLimit:Math.min(20,workspace),agentLimit:limit===-1?Math.min(20,workspace):Math.min(20,workspace,Number(limit)),tier:s.tier};
+ return {workspaceLimit:Math.min(32,workspace),agentLimit:limit===-1?Math.min(32,workspace):Math.min(32,workspace,Number(limit)),tier:s.tier};
 }
 /** Read-only provider checks. No calls, simulations, plan changes or burst mode. */
 export async function refreshVoiceCapacity(db:Db,read:Reader,review?:{agentId:string;branchId:string}|null,onReviewedAgent?:(agent:unknown)=>Promise<void>){
@@ -70,7 +70,7 @@ export async function refreshVoiceCapacity(db:Db,read:Reader,review?:{agentId:st
   if(existing)existing.limit=Math.min(existing.limit,snapshot.agentLimit);else capacities.push({agentId:target.agentId,limit:snapshot.agentLimit,creditState});
  }
  if(targets.length>12)throw Error('VOICE_CAPACITY_TARGET_LIMIT');
- await db('rpc/icash_save_voice_capacity','POST',{p_limit:workspaceLimit,p_agents:capacities,p_source:`provider subscription ${tier}; cap=20; in=2; ${voiceQuotaEvidence(subscription,observedAgents)}`});
+ await db('rpc/icash_save_voice_capacity','POST',{p_limit:workspaceLimit,p_agents:capacities,p_source:`provider subscription ${tier}; cap=32; in=2; ${voiceQuotaEvidence(subscription,observedAgents)}`});
  if(creditState==='available'&&reviewedAgent&&onReviewedAgent)await onReviewedAgent(reviewedAgent);
  return {status:'verified',workspaceLimit,agents:capacities.length};
 }
