@@ -9,8 +9,13 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('native_fixture', ROOT/'scripts/test-owner-preflight-priority-postgres.py')
 fixture = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixture)
-sql, read = fixture.sql, fixture.read
+read = fixture.read
 COUNT = "select icash_pending_opportunity_count(fixture_phone_id(1000));"
+
+
+def sql(query):
+    # Match verified production configuration; the Docker database defaults to JIT on.
+    return fixture.sql('set jit=off;'+query)
 
 
 def run():
@@ -18,6 +23,11 @@ def run():
     sql('drop schema public cascade;create schema public;')
     sql(read('tests/fixtures/opportunity-schema.sql'))
     sql(read('tests/fixtures/phone-inventory-buffer.sql'))
+    tables = ('icash_screening_jobs', 'icash_opportunity_outcomes', 'icash_automation_tickets',
+              'icash_property_controls', 'icash_owner_contacts', 'icash_operation_spend',
+              'icash_customer_identities', 'icash_operational_contacts', 'icash_inventory_claims',
+              'icash_contact_permissions', 'icash_deal_files')
+    sql('analyze '+','.join('public.'+table for table in tables)+';')
     for item in json.loads(read('tests/fixtures/phone-inventory-buffer-before.json')):
         sql(item['definition'])
         assert sql(f"select md5(pg_get_functiondef('{item['signature']}'::regprocedure));") == item['hash']
@@ -32,6 +42,17 @@ def run():
     assert sql("select proacl::text||':'||provolatile::text||':'||prosecdef::text from pg_proc where oid='icash_pending_opportunity_count(uuid)'::regprocedure;") == metadata
     for role in ('anon', 'authenticated'):
         assert sql(f"select has_function_privilege('{role}','icash_pending_opportunity_count(uuid)','execute');") == 'f'
+    # Explain the installed SQL body so the plan includes its nested predicates.
+    definition = sql("select pg_get_functiondef('icash_pending_opportunity_count(uuid)'::regprocedure);")
+    projection = definition.split('AS $function$\n', 1)[1].rsplit('\n$function$', 1)[0].strip().rstrip(';')
+    projection = projection.replace('p_account', 'fixture_phone_id(1000)')
+    plan = json.loads(sql("set statement_timeout='2s';explain (analyze,buffers,settings,format json) "+projection+';'))[0]
+    assert plan['Settings']['jit'] == 'off', 'Native fixture must match verified production JIT setting'
+    print('Phone inventory projection plan: '+json.dumps({
+        'executionMs': plan['Execution Time'], 'planningMs': plan['Planning Time'],
+        'totalCost': plan['Plan']['Total Cost'], 'sharedHits': plan['Plan']['Shared Hit Blocks'],
+        'sharedReads': plan['Plan']['Shared Read Blocks'], 'settings': plan['Settings'],
+    }), flush=True)
     with ThreadPoolExecutor(max_workers=8) as pool:
         assert set(pool.map(lambda _: sql("set statement_timeout='2s';"+COUNT), range(16))) == {'11'}
     assert sql('select fixture_phone_evidence();') == before
@@ -40,7 +61,7 @@ def run():
     try:
         # Uncommitted release remains invisible; a plain projection must not
         # block on the other account's inventory lock or change its evidence.
-        holder.stdin.write("begin;set local statement_timeout='10s';update icash_inventory_claims set cooldown_until=now()-interval '1 second' where screening_id=fixture_phone_id(1);select 'inventory_locked';\n")
+        holder.stdin.write("set jit=off;begin;set local statement_timeout='10s';update icash_inventory_claims set cooldown_until=now()-interval '1 second' where screening_id=fixture_phone_id(1);select 'inventory_locked';\n")
         holder.stdin.flush()
         fixture.wait_for_marker(holder, 'inventory_locked')
         assert sql("set statement_timeout='1s';"+COUNT) == '11'
