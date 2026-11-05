@@ -9,5 +9,5 @@ const source=readFileSync(new URL('../lib/live-dispatch-service.ts',import.meta.
 assert(source.indexOf('instanceof VoiceActivationBudgetError')>source.indexOf('rpc/icash_reserve_paced_voice'));
 assert(source.indexOf('rpc/icash_hold_voice_activation_budget')<source.indexOf("const claimed="));
 assert(source.includes("if(!held)throw error"));
-assert(source.indexOf("return {status:'activation_budget_held'}")<source.indexOf('recordingServer().dispatch'));
+assert(source.indexOf("return {status:'activation_budget_held'}")<source.indexOf("recordingServer(undefined,'dispatch').dispatch"));
 console.log('PASS: exact atomic reservation error only; other errors remain uncertain; budget hold precedes provider claim and dial.');
