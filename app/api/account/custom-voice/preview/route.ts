@@ -16,7 +16,12 @@ export async function GET(){
 }
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Invalid origin'},{status:403,headers});
- // The sample text and voice are server-owned. No user text or target IDs.
- if(req.body)return NextResponse.json({error:'Invalid preview request'},{status:400,headers});
- try{const {accountId,userId}=await workAccount({requireVip:true});await limitRequest(req,'custom-voice-preview',accountId,10,60);return reply(await prepareCustomVoicePreview(accountId,userId));}catch{return failed();}
+ try{
+  const {accountId,userId}=await workAccount({requireVip:true});
+  await limitRequest(req,'custom-voice-preview',accountId,10,60);
+  // Next wraps even a bodyless HTTP POST in a stream. Accept its empty EOF;
+  // reject and cancel any content without buffering arbitrary user input.
+  if(req.body){const reader=req.body.getReader();const {done}=await reader.read();await reader.cancel();if(!done)return NextResponse.json({error:'Invalid preview request'},{status:400,headers});}
+  return reply(await prepareCustomVoicePreview(accountId,userId));
+ }catch{return failed();}
 }

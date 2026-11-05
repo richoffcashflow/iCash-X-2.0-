@@ -110,7 +110,9 @@ try{
  let response=await route.GET();assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'private, no-store');assert.deepEqual(new Uint8Array(await response.arrayBuffer()),bytes);assert.equal(posts,0);
  const request=(origin='https://geticashx.com',body)=>new Request('https://geticashx.com/api/account/custom-voice/preview',{method:'POST',headers:{origin},...(body?{body}:{})});
  assert.equal((await route.POST(request())).status,200);assert.equal(posts,1);
- assert.equal((await route.POST(request('https://evil.example'))).status,403);assert.equal((await route.POST(request(undefined,'{"accountId":"another"}'))).status,400);assert.equal(posts,1);
- authenticated=false;assert.equal((await route.GET()).status,409);assert.equal((await route.POST(request())).status,409);assert.equal(posts,1);assert.equal(reads,1);
+ const emptyStream=new Request('https://geticashx.com/api/account/custom-voice/preview',{method:'POST',headers:{origin:'https://geticashx.com'},body:new ReadableStream({start(controller){controller.close();}}),duplex:'half'});
+ assert(emptyStream.body);assert.equal((await route.POST(emptyStream)).status,200);assert.equal(posts,2,'Next empty HTTP body stream is accepted');
+ assert.equal((await route.POST(request('https://evil.example'))).status,403);assert.equal((await route.POST(request(undefined,'{"accountId":"another"}'))).status,400);assert.equal(posts,2);
+ authenticated=false;assert.equal((await route.GET()).status,409);assert.equal((await route.POST(request())).status,409);assert.equal(posts,2);assert.equal(reads,1);
  console.log('PASS custom voice preview: actual SQL/service/routes, zero balance and Pause, private cached audio, tenant/VIP checks, no call toggles, exact history recovery, no unknown retries, bounded rejected attempts, audio size/type, fixed text, ACL and request origin. Native races run separately.');
 }finally{await pg.close();delete process.env.ELEVENLABS_API_KEY;}
